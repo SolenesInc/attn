@@ -6,7 +6,8 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 export type MarkdownTarget =
   | { kind: 'external'; value: string }
   | { kind: 'fragment'; value: string }
-  | { kind: 'local'; value: string };
+  | { kind: 'local'; value: string }
+  | { kind: 'seed'; value: string };
 
 // `file:` is deliberately absent: those links go through resolveMarkdownTarget's
 // host check plus the safe-extension gate below instead of being dropped.
@@ -51,6 +52,34 @@ export function isSafeLocalMarkdownTarget(path: string): boolean {
 
 export function isSafeLocalMarkdownImageTarget(path: string): boolean {
   return safeLocalImageExtensions.has(localTargetExtension(path));
+}
+
+export function resolveSeedMarkdownTarget(target: string): MarkdownTarget | null {
+  const trimmed = target.trim();
+  if (!trimmed || trimmed.startsWith('//') || stringsLikeScheme(trimmed) || stringsLikeAbsolutePath(trimmed)) {
+    return null;
+  }
+  if (trimmed.includes('/') || trimmed.includes('\\') || trimmed.includes('?') || trimmed.includes('#')) {
+    return null;
+  }
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(trimmed);
+  } catch {
+    return null;
+  }
+  if (!decoded || decoded === '.' || decoded === '..' || decoded.startsWith('.') || decoded.includes('/') || decoded.includes('\\')) {
+    return null;
+  }
+  return { kind: 'seed', value: trimmed };
+}
+
+function stringsLikeScheme(value: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:/i.test(value);
+}
+
+function stringsLikeAbsolutePath(value: string): boolean {
+  return value.startsWith('/') || /^[a-z]:[\\/]/i.test(value);
 }
 
 function decodedPath(url: URL): string {
@@ -103,7 +132,7 @@ export function resolveMarkdownTarget(documentPath: string, target: string): Mar
 }
 
 export function openMarkdownTarget(target: MarkdownTarget): void {
-  if (target.kind === 'fragment') {
+  if (target.kind === 'fragment' || target.kind === 'seed') {
     return;
   }
   if (target.kind === 'local' && !isSafeLocalMarkdownTarget(target.value)) {

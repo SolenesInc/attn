@@ -51,7 +51,7 @@
 .pane-seed-chip-id {
   flex: none;
   color: var(--color-text-dimmed);
-  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', 'DejaVu Sans Mono', monospace;
   font-size: 0.9em;
   font-weight: 500;
   white-space: nowrap;

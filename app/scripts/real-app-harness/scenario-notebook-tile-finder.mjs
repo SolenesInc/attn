@@ -9,8 +9,8 @@ import {
   printCommonHelp,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { MacOSDriver } from './macosDriver.mjs';
-import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
+import { createWindowDriver } from './platform.mjs';
+import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import {
   waitForFirstWorkspacePane,
   waitForPaneShellReady,
@@ -111,7 +111,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = new MacOSDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath });
   let sessionId = null;
 
   runner.log(`[RealAppHarness] wsUrl=${options.wsUrl}`);
@@ -184,7 +184,7 @@ async function main() {
 
     await runner.step('finder_auto_opens', async () => {
       await waitForFinder(client, true, 'fresh notebook tile auto-opens its finder');
-      await captureFrontWindowScreenshot(path.join(runner.runDir, 'finder-open.png'), { client }).catch((error) => {
+      await captureScreenshotData(path.join(runner.runDir, 'finder-open.png'), { client }).catch((error) => {
         runner.log(`[RealAppHarness] finder-open screenshot failed: ${error}`);
       });
     });
@@ -199,7 +199,7 @@ async function main() {
       await driver.activateApp();
       await driver.pressKey('p', { command: true });
       await waitForFinder(client, true, 'native Cmd+P re-summons the finder after Esc');
-      await captureFrontWindowScreenshot(path.join(runner.runDir, 'finder-resummoned.png'), { client }).catch((error) => {
+      await captureScreenshotData(path.join(runner.runDir, 'finder-resummoned.png'), { client }).catch((error) => {
         runner.log(`[RealAppHarness] finder-resummoned screenshot failed: ${error}`);
       });
     });

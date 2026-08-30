@@ -48,6 +48,19 @@ for gate in pr-gate acceptance; do
   fi
 done
 
+branch_health_job="$(sed -n '/^  branch-health:/,$p' "$workflow")"
+for contract in \
+  'id: branch-health-issue' \
+  'continue-on-error: true' \
+  "if: steps.branch-health-issue.outcome == 'failure'" \
+  'Acceptance is' \
+  'authoritative; the branch-health issue could not be updated.'; do
+  if ! grep -Fq "$contract" <<<"$branch_health_job"; then
+    echo "branch-health reporter is missing: $contract" >&2
+    exit 1
+  fi
+done
+
 success='{"changes":{"result":"success"},"backend":{"result":"success"}}'
 filtered='{"changes":{"result":"success"},"backend":{"result":"skipped"}}'
 failed='{"changes":{"result":"success"},"backend":{"result":"failure"}}'

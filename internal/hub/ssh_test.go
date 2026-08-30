@@ -30,6 +30,37 @@ func TestRemoteShellCommandExportsRemoteOverrideEnv(t *testing.T) {
 	}
 }
 
+func TestRemoteShellCommandArmsTheRemoteAgentTripwire(t *testing.T) {
+	t.Setenv("ATTN_REMOTE_PATH_PREFIX", "/home/attn/.attn/real-app-harness/agent-fixtures/bin")
+	t.Setenv("ATTN_REMOTE_DATA_DIR", "/home/attn/.attn/harness/run")
+	t.Setenv("ATTN_REMOTE_HEADLESS_TASKS", "off")
+	t.Setenv("ATTN_REMOTE_AGENT_TRIPWIRE", "TR-502|fixture-bin")
+	t.Setenv("ATTN_REMOTE_AGENT_TRIPWIRE_LEDGER", "/home/attn/.attn/harness/run/agent-tripwire.ledger")
+	t.Setenv("ATTN_REMOTE_AGENT_TRIPWIRE_SCENARIO", "TR-502")
+	t.Setenv("ATTN_REMOTE_CLAUDE_EXECUTABLE", "/fixture/claude")
+	t.Setenv("ATTN_REMOTE_CODEX_EXECUTABLE", "/fixture/codex")
+	t.Setenv("ATTN_REMOTE_COPILOT_EXECUTABLE", "/fixture/copilot")
+	t.Setenv("ATTN_REMOTE_PI_EXECUTABLE", "/fixture/pi")
+
+	script := remoteShellEnvScript("")
+	for _, fragment := range []string{
+		`export PATH='/home/attn/.attn/real-app-harness/agent-fixtures/bin':"$PATH"`,
+		"export ATTN_DATA_DIR='/home/attn/.attn/harness/run'",
+		"export ATTN_HEADLESS_TASKS='off'",
+		"export ATTN_AGENT_TRIPWIRE='TR-502|fixture-bin'",
+		"export ATTN_AGENT_TRIPWIRE_LEDGER='/home/attn/.attn/harness/run/agent-tripwire.ledger'",
+		"export ATTN_AGENT_TRIPWIRE_SCENARIO='TR-502'",
+		"export ATTN_CLAUDE_EXECUTABLE='/fixture/claude'",
+		"export ATTN_CODEX_EXECUTABLE='/fixture/codex'",
+		"export ATTN_COPILOT_EXECUTABLE='/fixture/copilot'",
+		"export ATTN_PI_EXECUTABLE='/fixture/pi'",
+	} {
+		if !strings.Contains(script, fragment) {
+			t.Fatalf("remoteShellEnvScript() missing %q in %q", fragment, script)
+		}
+	}
+}
+
 func TestRemoteShellCommandCarriesTheKittyDisableToTheRemote(t *testing.T) {
 	t.Setenv("ATTN_KITTY_STORAGE_LIMIT", "0")
 

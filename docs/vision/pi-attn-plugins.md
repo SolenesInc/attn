@@ -3,9 +3,7 @@
 > The what and the why. Each capability below gets its own implementation-level
 > document when its turn comes; none of that detail lives here. Grounding for
 > the decisions: pi's extension surface ([earendil-works/pi](https://github.com/earendil-works/pi)),
-> openclaw's history of embedding pi ([openclaw/openclaw](https://github.com/openclaw/openclaw)),
-> and attn's plugin system ([docs/plans/2026-04-16-plugin-system.md](../plans/2026-04-16-plugin-system.md),
-> with the earlier pi plan [2026-04-07-pi-integration.md](../plans/2026-04-07-pi-integration.md)).
+> and openclaw's history of embedding pi ([openclaw/openclaw](https://github.com/openclaw/openclaw)).
 
 ## End state (the why)
 

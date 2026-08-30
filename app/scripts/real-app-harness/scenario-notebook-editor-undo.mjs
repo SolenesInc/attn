@@ -12,8 +12,8 @@ import {
   printCommonHelp,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { MacOSDriver } from './macosDriver.mjs';
-import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
+import { createWindowDriver } from './platform.mjs';
+import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import {
   waitForFirstWorkspacePane,
   waitForPaneShellReady,
@@ -150,7 +150,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = new MacOSDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath });
   let sessionId = null;
   let probeFilePath = null;
 
@@ -252,7 +252,7 @@ async function main() {
       await waitForDomSelector(client, FINDER_SELECTOR, false, 'Enter picks the probe note and closes the finder');
 
       await waitForDomSelector(client, EDITOR_SELECTOR, true, 'note opens into the live markdown editor');
-      await captureFrontWindowScreenshot(path.join(runner.runDir, 'editor-open.png'), { client }).catch((error) => {
+      await captureScreenshotData(path.join(runner.runDir, 'editor-open.png'), { client }).catch((error) => {
         runner.log(`[RealAppHarness] editor-open screenshot failed: ${error}`);
       });
     });
@@ -294,7 +294,7 @@ async function main() {
         'native Cmd+Z to undo the probe text back to original content',
       );
       runner.log('[RealAppHarness] native Cmd+Z undid the probe text (menu no longer swallows it).');
-      await captureFrontWindowScreenshot(path.join(runner.runDir, 'after-undo.png'), { client }).catch((error) => {
+      await captureScreenshotData(path.join(runner.runDir, 'after-undo.png'), { client }).catch((error) => {
         runner.log(`[RealAppHarness] after-undo screenshot failed: ${error}`);
       });
     });
@@ -309,7 +309,7 @@ async function main() {
         'native Shift+Cmd+Z to redo the probe text',
       );
       runner.log('[RealAppHarness] native Shift+Cmd+Z redid the probe text (menu no longer swallows it).');
-      await captureFrontWindowScreenshot(path.join(runner.runDir, 'after-redo.png'), { client }).catch((error) => {
+      await captureScreenshotData(path.join(runner.runDir, 'after-redo.png'), { client }).catch((error) => {
         runner.log(`[RealAppHarness] after-redo screenshot failed: ${error}`);
       });
     });

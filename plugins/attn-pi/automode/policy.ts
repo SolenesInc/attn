@@ -1,4 +1,4 @@
-// Order is the policy: docs/plans/2026-08-16-pi-auto-mode.md, "Decision path".
+// Order is the policy.
 import { classifyBashCommand } from "./bash";
 import { matchesAnyPattern, type AutoModeConfig } from "./config";
 import { locatePath } from "./paths";

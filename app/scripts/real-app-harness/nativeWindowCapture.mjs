@@ -3,6 +3,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { assertProductionRunAllowed, bundleIdentifierForProfile } from './harnessProfile.mjs';
+import { appPlatform, createWindowDriver } from './platform.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -93,12 +94,38 @@ end tell
   return parseWindowBoundsOutput(output, bundleId);
 }
 
+// A split half under ATTENTION_MIN_WIDTH (480px) plus its 24px restore gutter
+// collapses; behind the 240px sidebar that floor is a 1248px window.
+export const SPLIT_FRIENDLY_WINDOW = { width: 1440, height: 900 };
+
+export async function widenWindowForSplitPanes(client, target = SPLIT_FRIENDLY_WINDOW) {
+  const current = await getFrontWindowBounds(client.bundleId, { client });
+  if ((current?.width || 0) >= target.width && (current?.height || 0) >= target.height) {
+    return current;
+  }
+  return setFrontWindowBounds({
+    x: 80,
+    y: 80,
+    width: Math.max(current?.width || 0, target.width),
+    height: Math.max(current?.height || 0, target.height),
+  }, { client });
+}
+
 export async function getFrontWindowBounds(bundleId = null, options = {}) {
   const targetBundleId = bundleId || options.client?.bundleId || bundleIdentifierForProfile();
   assertProductionRunAllowed({ bundleId: targetBundleId });
   const automationBounds = await readUiAutomationWindowBounds(options.client);
   if (automationBounds) {
     return automationBounds;
+  }
+
+  if (appPlatform.os === 'linux') {
+    const appPath = options.appPath || options.client?.appPath;
+    const driver = options.driver || createWindowDriver({ appPath });
+    return {
+      ...await driver.windowGeometry(),
+      processName: 'attn-app-window',
+    };
   }
 
   let lastError = null;
@@ -178,6 +205,15 @@ export async function setFrontWindowBounds(targetBounds, options = {}) {
     boundsWithinTolerance(automationResult, normalizedTarget, options.settleTolerancePx ?? 8)
   ) {
     return automationResult;
+  }
+
+  if (appPlatform.os === 'linux') {
+    const appPath = options.appPath || options.client?.appPath;
+    const driver = options.driver || createWindowDriver({ appPath });
+    return {
+      ...await driver.setWindowBounds(normalizedTarget),
+      processName: 'attn-app-window',
+    };
   }
 
   let lastError = null;
@@ -283,7 +319,23 @@ export function parseSipsPixelDimensions(stdout) {
   };
 }
 
+export function parseIdentifyPixelDimensions(stdout) {
+  const [width, height] = String(stdout || '').trim().split(/\s+/).map(Number);
+  if (![width, height].every(Number.isInteger) || width <= 0 || height <= 0) {
+    throw new Error(`Failed to parse ImageMagick pixel dimensions from output: ${stdout}`);
+  }
+  return { width, height };
+}
+
 async function readPngPixelDimensions(filePath) {
+  if (appPlatform.os === 'linux') {
+    const { stdout } = await execFileAsync(
+      'identify',
+      ['-format', '%w %h', filePath],
+      { timeout: 10_000 },
+    );
+    return parseIdentifyPixelDimensions(stdout);
+  }
   const { stdout } = await execFileAsync(
     '/usr/bin/sips',
     ['-g', 'pixelWidth', '-g', 'pixelHeight', filePath],
@@ -292,12 +344,73 @@ async function readPngPixelDimensions(filePath) {
   return parseSipsPixelDimensions(stdout);
 }
 
+export async function captureScreenshotData(outputPath, { client, selector } = {}) {
+  if (!client || typeof client.request !== 'function') {
+    throw new Error('captureScreenshotData requires a UI automation client');
+  }
+  const result = await client.request('capture_screenshot_data', selector ? { selector } : {});
+  if (typeof result?.pngBase64 !== 'string' || result.pngBase64.length === 0) {
+    throw new Error('capture_screenshot_data returned no PNG data');
+  }
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, Buffer.from(result.pngBase64, 'base64'));
+  return {
+    source: 'dom',
+    path: outputPath,
+    ...(selector ? { selector } : {}),
+  };
+}
+
 export async function captureFrontWindowScreenshot(outputPath, options = {}) {
   const bundleId = options.bundleId || options.client?.bundleId || bundleIdentifierForProfile();
   assertProductionRunAllowed({ bundleId });
   const bounds = await getFrontWindowBounds(bundleId, options);
   const captureRect = resolveCaptureRect(bounds, options.crop || null);
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+
+  if (appPlatform.os === 'linux') {
+    const appPath = options.appPath || options.client?.appPath;
+    const driver = options.driver || createWindowDriver({ appPath });
+    const needsTransform = Boolean(options.crop) || (options.maxDim !== undefined && options.maxDim !== null);
+    const capturedPath = needsTransform ? `${outputPath}.full.png` : outputPath;
+    await driver.screenshot(capturedPath);
+
+    if (options.maxDim !== undefined && options.maxDim !== null) {
+      const maxDim = options.maxDim;
+      if (!Number.isInteger(maxDim) || maxDim <= 0) {
+        throw new Error(`Invalid maxDim: ${JSON.stringify(options.maxDim)}`);
+      }
+    }
+
+    if (needsTransform) {
+      const args = [capturedPath];
+      if (options.crop) {
+        const cropX = captureRect.x - bounds.x;
+        const cropY = captureRect.y - bounds.y;
+        args.push('-crop', `${captureRect.width}x${captureRect.height}+${cropX}+${cropY}`, '+repage');
+      }
+      if (options.maxDim !== undefined && options.maxDim !== null) {
+        args.push('-resize', `${options.maxDim}x${options.maxDim}>`);
+      }
+      args.push(outputPath);
+      try {
+        await execFileAsync('convert', args, { timeout: 10_000 });
+      } finally {
+        fs.rmSync(capturedPath, { force: true });
+      }
+    }
+
+    const pixelDimensions = await readPngPixelDimensions(outputPath);
+    return {
+      source: 'native_window',
+      bundleId,
+      bounds,
+      captureRect,
+      pixelDimensions,
+      path: outputPath,
+    };
+  }
+
   await execFileAsync('/usr/sbin/screencapture', [
     '-x',
     '-R',

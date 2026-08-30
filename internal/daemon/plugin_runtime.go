@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/automode"
+	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/plugins"
 	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/store"
@@ -56,12 +57,11 @@ func bundledPluginDirForExecutable() string {
 	if err != nil {
 		return ""
 	}
-	macOSDir := filepath.Dir(executable)
-	contentsDir := filepath.Dir(macOSDir)
-	if filepath.Base(macOSDir) != "MacOS" || filepath.Base(contentsDir) != "Contents" {
+	resources := config.InstallResourcesDir(executable)
+	if resources == "" {
 		return ""
 	}
-	return filepath.Join(contentsDir, "Resources", "plugins")
+	return filepath.Join(resources, "plugins")
 }
 
 func loadPluginManifest(path string) (pluginManifest, error) {

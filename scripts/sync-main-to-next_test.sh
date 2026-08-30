@@ -59,7 +59,7 @@ setup_fixture() {
 
   local main_at_cut
   main_at_cut="$(git -C "$fixture_repo" rev-parse HEAD)"
-  git -C "$fixture_repo" switch -q -c next
+  git -C "$fixture_repo" switch -q -C next
   printf '%s\n' 'kind: added' 'area: release' 'change: frozen change' \
     >"$fixture_repo/changelog.d/frozen.yaml"
   printf '%s\n' 'frozen feature' >"$fixture_repo/frozen-feature.txt"

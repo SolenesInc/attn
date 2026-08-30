@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// Design: docs/plans/2026-08-16-snapshot-restore.md
 
 import {
   createSessionAndWaitForInitialPane,
@@ -11,6 +10,7 @@ import {
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+import { widenWindowForSplitPanes } from './nativeWindowCapture.mjs';
 import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
 import {
   captureSessionArtifacts,
@@ -35,7 +35,7 @@ async function main() {
   const options = parseCommonArgs(args);
   const runner = createScenarioRunner(options, {
     scenarioId: 'SNAPSHOT-SCROLLBACK-RESTORE',
-    tier: 'tier2-local-real-agent',
+    tier: 'tier2-local-mock-agent',
     prefix: 'scenario-snapshot-scrollback-restore',
     metadata: { focus: 'deep scrollback survives a relaunch restore' },
   });
@@ -50,6 +50,7 @@ async function main() {
   try {
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
+      await widenWindowForSplitPanes(client);
     });
 
     sessionId = await runner.step('create_session', async () => createSessionAndWaitForInitialPane({
@@ -84,6 +85,7 @@ async function main() {
 
     await runner.step('relaunch_and_read_restored_scrollback', async () => {
       await relaunchAppAndConnect(client, observer);
+      await widenWindowForSplitPanes(client);
       await client.request('select_session', { sessionId });
       await waitForSessionWorkspace(
         client,
@@ -116,7 +118,7 @@ async function main() {
       await captureSessionArtifacts(client, runner.runDir, '02-restored', sessionId);
     });
     if (sessionId) {
-      await cleanupSessionViaAppClose(runner, client, sessionId).catch(() => {});
+      await cleanupSessionViaAppClose(client, observer, sessionId).catch(() => {});
     }
     await runner.finishSuccess({ sessionId, shellPaneId });
   } catch (error) {

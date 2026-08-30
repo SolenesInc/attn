@@ -15,12 +15,12 @@ receipt: its merged PR and, where one exists, its plan doc's own status line.
 
 | Stage | Status | Receipt |
 | --- | --- | --- |
-| A1 event bus core | Shipped 2026-08-02 | #710; [plan](2026-08-01-ext-a1-event-bus.md) |
+| A1 event bus core | Shipped 2026-08-02 | #710 |
 | A2 broadcaster migration | Believed complete; **unverified** | No dedicated plan doc or PR receipt. Migrations rode A1/A3-era bus work (e.g. #871 pins projections to the wire). Verify remaining legacy broadcasters before relying on "all of it". |
-| A3 doc store + live queries | Shipped 2026-08-03–08-06 | [plan](2026-08-03-ext-a3-doc-store.md) + sub-plans a3.1–a3.4 |
-| A4 registry + shared runtime | Shipped 2026-08-11 | epic merge #843; [plan](2026-08-06-ext-a4-app-registry-and-runtime.md) |
-| A5 UI host + app SDK | Shipped 2026-08-18 | epic merge #943 (exit proof recorded on the PR); [plan](2026-08-13-ext-a5-ui-host-and-app-sdk.md) |
-| B1 durable job queue | Shipped 2026-08-03 | #734; [plan](2026-08-01-ext-b1-job-queue.md). Gate answers recorded there; the cron-ownership gate question resolved itself — `automation_schedule` is a job kind on the queue. |
+| A3 doc store + live queries | Shipped 2026-08-03–08-06 | plan and sub-plans a3.1–a3.4 shipped |
+| A4 registry + shared runtime | Shipped 2026-08-11 | epic merge #843 |
+| A5 UI host + app SDK | Shipped 2026-08-18 | epic merge #943 (exit proof recorded on the PR) |
+| B1 durable job queue | Shipped 2026-08-03 | #734. The cron-ownership gate question resolved itself — `automation_schedule` is a job kind on the queue. |
 | B2 workflow layer | Not started | Gate discussion is the next step. |
 | C1 hook points | Not started | Gate discussion pending; independent of B2. |
 | C2 delegation approval gate | Blocked on B2 + C1 | A5 dependency met 2026-08-18. |
@@ -127,14 +127,11 @@ a query and receives updates on change.
 - Depends on: A1 (change events ride the bus).
 - Exit: write → change event → subscribed query update, durable across
   restart; namespace isolation enforced.
-- Plan: [2026-08-03-ext-a3-doc-store.md](2026-08-03-ext-a3-doc-store.md). The
-  gate answered indexes with **declared fields, scanned**; measurement then
+- The gate answered indexes with **declared fields, scanned**; measurement then
   overturned scan-first before anything wrote to the store, and
   **A3.1** rebuilds the physical schema — a table per collection with an
   indexed virtual column per declared field, inside `attn.db` — with the
-  query surface unchanged:
-  [2026-08-03-ext-a3.1-doc-store-physical-schema.md](2026-08-03-ext-a3.1-doc-store-physical-schema.md).
-  A3.1 lands before A4, because A4 is where extensions start declaring
+  query surface unchanged. A3.1 lands before A4, because A4 is where extensions start declaring
   collections.
 
 ### A4. Extension registry + shared runtime

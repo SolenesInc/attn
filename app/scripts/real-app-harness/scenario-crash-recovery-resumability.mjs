@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -27,6 +26,7 @@ import {
   ensureClaudeInitialPanePromptReady,
   ensureCodexInitialPanePromptReady,
 } from './scenarioAgents.mjs';
+import { agentHomeRoots, writeMockAgentFixture } from './mockAgent.mjs';
 import { currentHarnessProfile, dataDirForProfile } from './harnessProfile.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -50,7 +50,7 @@ async function readPersistedResumeId(dataDir, sessionId) {
 // A rollout's first line carries the session_meta naming its id, which is how
 // the daemon's own codex driver locates it.
 function findCodexRollout(resumeId) {
-  const root = path.join(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'sessions');
+  const root = agentHomeRoots().codexSessions;
   const stack = [root];
   while (stack.length > 0) {
     const dir = stack.pop();
@@ -66,7 +66,9 @@ function findCodexRollout(resumeId) {
         stack.push(full);
         continue;
       }
-      if (!entry.name.endsWith('.jsonl')) continue;
+      // internal/transcript/discovery.go narrows on the file name first; without
+      // it this reads every rollout the machine has ever written.
+      if (!entry.name.endsWith(`${resumeId}.jsonl`)) continue;
       let head = '';
       try {
         head = fs.readFileSync(full, 'utf8').split('\n', 1)[0] || '';
@@ -152,7 +154,7 @@ async function main() {
   const dataDir = dataDirForProfile(profile);
   const runner = createScenarioRunner(options, {
     scenarioId: 'CRASH-REC',
-    tier: 'tier2-local-real-agent',
+    tier: 'tier2-local-mock-agent',
     prefix: 'scenario-crash-recovery-resumability',
     metadata: { agents: 'codex+claude+shell', focus: 'crash keeps what it can bring back' },
   });
@@ -160,6 +162,7 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
   const token = `CRASHREC${Date.now()}`;
+  const claudeDir = path.join(runner.sessionDir, 'never-prompted');
   let codexSessionId = null;
   let codexResumeId = null;
   let claudeSessionId = null;
@@ -170,6 +173,11 @@ async function main() {
     });
 
     codexSessionId = await runner.step('create_codex_session_with_a_conversation', async () => {
+      writeMockAgentFixture(runner.sessionDir, {
+        name: 'crash recovery codex',
+        resumable: true,
+        turns: [{ includes: token, actions: [{ type: 'reply', text: token }] }],
+      });
       const sessionId = await createSessionAndWaitForInitialPane({
         client,
         observer,
@@ -201,10 +209,13 @@ async function main() {
     });
 
     claudeSessionId = await runner.step('create_claude_session_that_never_took_a_turn', async () => {
+      // Resumable, and still nothing on disk: claude writes its transcript on the
+      // first turn, and this session never takes one.
+      writeMockAgentFixture(claudeDir, { name: 'crash recovery claude', resumable: true, turns: [] });
       return createSessionAndWaitForInitialPane({
         client,
         observer,
-        cwd: runner.sessionDir,
+        cwd: claudeDir,
         label: `crashrec-claude-${runner.runId}`,
         agent: 'claude',
         promptReadyFn: ensureClaudeInitialPanePromptReady,
@@ -213,11 +224,7 @@ async function main() {
 
     await runner.step('record_state_before_the_crash', async () => {
       const claudeResumeId = await readPersistedResumeId(dataDir, claudeSessionId);
-      const claudeTranscript = path.join(
-        process.env.ATTN_TOOL_HOME || os.homedir(),
-        '.claude',
-        'projects',
-      );
+      const claudeTranscript = agentHomeRoots().claudeProjects;
       const claudeHasTranscript = fs.existsSync(claudeTranscript)
         && fs.readdirSync(claudeTranscript).some((dir) => fs.existsSync(path.join(claudeTranscript, dir, `${claudeResumeId}.jsonl`)));
       if (claudeHasTranscript) {

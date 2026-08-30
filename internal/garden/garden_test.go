@@ -49,13 +49,17 @@ func TestValidateIDNamesTheShape(t *testing.T) {
 
 func TestStepSlug(t *testing.T) {
 	cases := map[string]string{
-		"Plant and see":                    "plant-and-see",
-		"  Edges & ready!  ":               "edges-ready",
-		"The plan lives in the garden":     "the-plan-lives-in-the-garden",
-		"attn seed plant (one line)":       "attn-seed-plant-one-line",
-		"...":                              "seed",
-		"Slice 5 — plots and dispatch":     "slice-5-plots-and-dispatch",
-		"CamelCase Title With 123 Numbers": "camelcase-title-with-123-numbers",
+		"Plant and see":                         "plant-see",
+		"  Edges & ready!  ":                    "edges-ready",
+		"The plan lives in the garden":          "plan-lives-garden",
+		"attn seed plant (one line)":            "attn-seed-plant-one-line",
+		"...":                                   "seed",
+		"Slice 5 — plots and dispatch":          "slice-5-plots-dispatch",
+		"CamelCase Title With 123 Numbers":      "camelcase-title-123-numbers",
+		"Mermaid rendered in the grid, in Rust": "mermaid-rendered-grid-rust",
+		"Spike 1: cells on the GPU":             "spike-1-cells-gpu",
+		"The One":                               "one",
+		"Of the":                                "of-the",
 	}
 	for title, want := range cases {
 		if got := StepSlug(title); got != want {

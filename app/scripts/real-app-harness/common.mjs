@@ -1,8 +1,10 @@
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import WebSocket from 'ws';
 import { waitForFirstWorkspacePane, waitForPaneVisible } from './scenarioAssertions.mjs';
+import { MOCK_AGENT_EXECUTABLE, mockPinnedAgents } from './mockAgent.mjs';
 import {
   assertProductionRunAllowed,
   currentHarnessProfile,
@@ -98,6 +100,10 @@ export function emitVerdict(verdict) {
   console.log(formatVerdictLine(verdict));
 }
 
+export function harnessArtifactsRoot(env = process.env) {
+  return env.ATTN_REAL_APP_ARTIFACTS_DIR || path.join(os.tmpdir(), 'attn-real-app-harness');
+}
+
 export function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
 }
@@ -159,46 +165,24 @@ export async function sweepStaleHarnessSessions(observer, {
   return { swept: stale.length };
 }
 
-// Models mirror the "(cheap)" launch-catalog entries. Low effort keeps each
-// pinned recipe compatible and cheap regardless of the user's defaults.
-const CHEAP_LAUNCH_RECIPES = {
-  claude: { model: 'haiku', effort: 'low' },
-  codex: { model: 'gpt-5.4-mini', effort: 'low' },
-};
-
-function launchRecipeFor(agent) {
-  const override = (process.env[`ATTN_HARNESS_LAUNCH_MODEL_${agent.toUpperCase()}`] || '').trim();
-  if (override === 'inherit') {
-    return null;
-  }
-  const recipe = CHEAP_LAUNCH_RECIPES[agent];
-  return { ...recipe, model: override || recipe.model };
-}
-
 // Restores go straight to the daemon, not through the app: by the time the
 // last scenario cleanup runs the app is usually gone.
 const pendingSettingRestores = [];
 
-async function pinCheapLaunchRecipes(client, observer) {
-  for (const agent of Object.keys(CHEAP_LAUNCH_RECIPES)) {
-    const recipe = launchRecipeFor(agent);
-    if (!recipe) {
+// The tripwire pins the mock in the environment the daemon inherits; the app
+// sends this setting with every spawn, so both halves have to name it.
+async function pinMockAgentExecutables(client, observer, executableOverrides = {}) {
+  for (const agent of mockPinnedAgents()) {
+    const key = `${agent}_executable`;
+    const executable = executableOverrides[agent] || MOCK_AGENT_EXECUTABLE;
+    const previous = observer.getSetting(key) || '';
+    if (previous === executable) {
       continue;
     }
-    const settings = [
-      { key: `default_model_${agent}`, value: recipe.model },
-      { key: `default_effort_${agent}`, value: recipe.effort },
-    ];
-    for (const { key, value } of settings) {
-      const previous = observer.getSetting(key);
-      if (previous === value) {
-        continue;
-      }
-      await client.request('set_setting', { key, value });
-      console.log(`[harness] pinned ${key}=${value} (was ${previous ? previous : 'unconfigured'})`);
-      if (!pendingSettingRestores.some((restore) => restore.key === key)) {
-        pendingSettingRestores.push({ key, value: previous });
-      }
+    await client.request('set_setting', { key, value: executable });
+    console.log(`[harness] pinned ${key} at the mock agent (was ${previous ? previous : 'unconfigured'})`);
+    if (!pendingSettingRestores.some((restore) => restore.key === key)) {
+      pendingSettingRestores.push({ key, value: previous });
     }
   }
   installSettingRestoreHook();
@@ -274,7 +258,10 @@ async function writeDaemonSettings(entries, { wsUrl = defaultWSURLForProfile(), 
   }
 }
 
-export async function launchFreshAppAndConnect(client, observer, { sweepStaleSessions = true } = {}) {
+export async function launchFreshAppAndConnect(client, observer, {
+  sweepStaleSessions = true,
+  agentExecutables = {},
+} = {}) {
   await client.launchFreshApp();
   await client.waitForManifest(20_000);
   await client.waitForReady(20_000);
@@ -283,17 +270,17 @@ export async function launchFreshAppAndConnect(client, observer, { sweepStaleSes
   // swallows native HID clicks; dismiss it so scenarios start on a clean UI.
   await client.request('dismiss_whats_new', {}).catch(() => {});
   await observer.connect();
-  await pinCheapLaunchRecipes(client, observer);
+  await pinMockAgentExecutables(client, observer, agentExecutables);
   if (sweepStaleSessions) {
     await sweepStaleHarnessSessions(observer);
   }
 }
 
-export async function relaunchAppAndConnect(client, observer) {
+export async function relaunchAppAndConnect(client, observer, { agentExecutables = {} } = {}) {
   await client.quitApp();
   // Relaunch scenarios (e.g. tr205) depend on sessions surviving the
   // relaunch, so the stale-session sweep must not run here.
-  await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false });
+  await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false, agentExecutables });
 }
 
 export async function createSessionAndWaitForInitialPane({
@@ -326,6 +313,34 @@ export async function createSessionAndWaitForInitialPane({
     await waitForPaneVisible(client, result.sessionId, pane.paneId, paneWaitMs);
   }
   return result.sessionId;
+}
+
+// `attn ticket new` is retired; the daemon commands behind it are not, and this
+// is the only way left to a legacy ticket.
+export async function legacyTicketRequest(socketPath, message, timeoutMs = 10_000) {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection(socketPath);
+    let raw = '';
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error(`timed out waiting for ${message.cmd}`));
+    }, timeoutMs);
+    socket.setEncoding('utf8');
+    socket.once('connect', () => socket.write(`${JSON.stringify(message)}\n`));
+    socket.on('data', (chunk) => {
+      raw += chunk;
+      if (!raw.includes('\n')) return;
+      clearTimeout(timer);
+      socket.end();
+      const value = JSON.parse(raw.split('\n', 1)[0]);
+      if (!value.ok) reject(new Error(value.error || `${message.cmd} failed`));
+      else resolve(value);
+    });
+    socket.once('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
 }
 
 export function timestampSlug() {

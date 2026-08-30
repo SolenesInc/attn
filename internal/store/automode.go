@@ -11,8 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/config"
 )
 
-// Design: docs/plans/2026-08-16-pi-auto-mode.md.
-
 type AutoModeProposal struct {
 	ID         int64
 	Kind       string

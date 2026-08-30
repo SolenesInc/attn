@@ -57,6 +57,7 @@ import {
 import { SessionActivitySettings } from './SessionActivitySettings';
 import { SessionCostPriceSettings } from './SessionCostPriceSettings';
 import './SettingsModal.css';
+import { formatShortcut, keyCombo } from '../shortcuts/formatShortcut';
 
 const OPEN_SENT_FILES_ENABLED_SETTING = 'open_sent_files_enabled';
 
@@ -1059,7 +1060,8 @@ export function SettingsModal({
             <div>
               <p className="settings-row-title">App</p>
               <p className="settings-row-copy">
-                The whole interface, including terminals. Also adjustable with ⌘+ and ⌘−.
+                The whole interface, including terminals. Also adjustable with {keyCombo('accel', '+')} and{' '}
+                {keyCombo('accel', '−')}.
               </p>
             </div>
             <div className="settings-font-scale" data-testid="settings-app-font-scale">
@@ -2462,8 +2464,9 @@ export function SettingsModal({
               <p className="settings-row-title">Settle a turn once you have steered the agent</p>
               <p className="settings-row-copy">
                 When an agent you owe a turn goes back to work and stays there, its terminal
-                tile runs a countdown and then settles the turn for you — the same thing ⌘⇧E
-                does. Press ⌘. to keep the turn instead. Anything that makes the agent want you
+                tile runs a countdown and then settles the turn for you — the same thing{' '}
+                {formatShortcut('session.settle')}
+                does. Press {formatShortcut('session.cancelCountdown')} to keep the turn instead. Anything that makes the agent want you
                 again — a question, an approval, an error, a finished run — cancels it. Off by
                 default.
               </p>
@@ -2529,7 +2532,8 @@ export function SettingsModal({
               />
               <SavedMark shown={savedFlash.saved(AUTO_SETTLE_COUNTDOWN_SETTING)} testID="settings-auto-settle-countdown-saved" />
               <p className="settings-hint">
-                How long the countdown runs on the tile — your window to press ⌘. and keep the
+                How long the countdown runs on the tile — your window to press{' '}
+                {formatShortcut('session.cancelCountdown')} and keep the
                 turn.
               </p>
             </div>

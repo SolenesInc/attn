@@ -107,12 +107,12 @@ func TestFprintTransitionPrimesOnTend(t *testing.T) {
 	left := seedNote("n-aaaaaa", garden.NoteKindHandoff, "start at the docstore compiler")
 	var buf bytes.Buffer
 	fprintTransition(&buf, &protocol.SeedTransitionResult{
-		Seed:    protocol.Seed{ID: "s-7k3f9m", Status: "growing", TenderMember: "alder"},
+		Seed:    protocol.Seed{ID: "s-7k3f9m", StepSlug: "docstore-compiler", Status: "growing", TenderMember: "alder"},
 		Handoff: &left,
 	})
 	out := buf.String()
 
-	if !strings.HasPrefix(out, "s-7k3f9m is growing, tended by Alder\n") {
+	if !strings.HasPrefix(out, "s-7k3f9m (docstore-compiler) is growing, tended by Alder\n") {
 		t.Fatalf("the claim is not confirmed first:\n%s", out)
 	}
 	if !strings.Contains(out, "start at the docstore compiler") {

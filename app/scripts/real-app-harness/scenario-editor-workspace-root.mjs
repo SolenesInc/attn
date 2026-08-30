@@ -11,8 +11,8 @@ import {
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessProfile } from './harnessProfile.mjs';
-import { MacOSDriver } from './macosDriver.mjs';
-import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
+import { createWindowDriver } from './platform.mjs';
+import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import {
   waitForFirstWorkspacePane,
   waitForPaneShellReady,
@@ -188,7 +188,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = new MacOSDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath });
   let tempSessionId = null;
   let notebookSessionId = null;
   let positiveControlPath = null;
@@ -249,7 +249,7 @@ async function main() {
         'tile title becomes the opened file\'s basename',
         10_000,
       );
-      await captureFrontWindowScreenshot(path.join(runner.runDir, 'off-root-open.png'), { client }).catch((error) => {
+      await captureScreenshotData(path.join(runner.runDir, 'off-root-open.png'), { client }).catch((error) => {
         runner.log(`[RealAppHarness] off-root-open screenshot failed: ${error}`);
       });
     });
@@ -273,7 +273,7 @@ async function main() {
       await openNoteViaFinder(client, driver, positiveControlBasename);
       await waitForDomSelector(client, RAIL_SELECTOR, true, 'on-root (Notebook) tile CAN render the backlinks/outline rail', 10_000);
       runner.log('[RealAppHarness] on-root (Notebook) tile: rail rendered (positive control).');
-      await captureFrontWindowScreenshot(path.join(runner.runDir, 'on-root-rail.png'), { client }).catch((error) => {
+      await captureScreenshotData(path.join(runner.runDir, 'on-root-rail.png'), { client }).catch((error) => {
         runner.log(`[RealAppHarness] on-root-rail screenshot failed: ${error}`);
       });
     });

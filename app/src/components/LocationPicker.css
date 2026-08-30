@@ -60,7 +60,7 @@
 }
 
 .picker-agent-label {
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.14em;
@@ -88,7 +88,7 @@
   border: 0;
   background: transparent;
   color: var(--color-text-tertiary);
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
   padding: 6px 12px;
   border-radius: 999px;
@@ -198,7 +198,7 @@
 .picker-agent-warning {
   padding: 8px 16px;
   border-bottom: 1px solid var(--color-border-subtle);
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
   font-size: calc(10px * var(--ui-scale));
   color: #ff9f7a;
   background: rgba(255, 107, 53, 0.06);
@@ -222,7 +222,7 @@
 }
 
 .picker-endpoint-label {
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.14em;
@@ -231,7 +231,7 @@
 }
 
 .picker-endpoint-hint {
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
   font-size: calc(10px * var(--ui-scale));
   color: var(--color-text-muted);
   line-height: 1;
@@ -264,7 +264,7 @@
   align-items: flex-start;
   gap: 3px;
   position: relative;
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
   cursor: pointer;
   transition: all 0.12s ease-out;
 }
@@ -362,7 +362,7 @@
 }
 
 .picker-title {
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
   font-size: calc(10px * var(--ui-scale));
   font-weight: 500;
   letter-spacing: 0.15em;
@@ -373,7 +373,7 @@
 
 /* Breadcrumb */
 .picker-breadcrumb {
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
   padding: 8px 2px 0;
   display: flex;
@@ -403,7 +403,7 @@
   border-radius: 4px;
   background: rgba(255, 107, 53, 0.06);
   color: #ffb391;
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
 }
 
@@ -443,7 +443,7 @@
 }
 
 .picker-section-title {
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -512,7 +512,7 @@
 }
 
 .picker-path {
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   white-space: nowrap;
@@ -531,7 +531,7 @@
   font-size: var(--font-size-md);
   text-align: center;
   padding: 48px 20px;
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
 }
 
 /* Footer */
@@ -557,7 +557,7 @@
   border: 1px solid var(--color-border);
   border-radius: 3px;
   padding: 3px 6px;
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
   font-size: calc(10px * var(--ui-scale));
   color: var(--color-text-tertiary);
   min-width: 20px;

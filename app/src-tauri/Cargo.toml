@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.11.1"
+version = "0.11.2"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -36,6 +36,14 @@ libc = "0.2"
 base64 = "0.22"
 getrandom = "0.2"
 image = { version = "0.25", default-features = false, features = ["png", "tiff"] }
+
+# Linux delivers a deep link as argv to a NEW process; the deep-link feature makes
+# this plugin hand that argv to the already-running app instead.
+[target.'cfg(target_os = "linux")'.dependencies]
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+# Same requirement and default features the plugin declares, so the fence shares
+# its resolved zbus instead of building a second one.
+zbus = "5.9"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"

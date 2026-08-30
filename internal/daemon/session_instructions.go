@@ -12,6 +12,7 @@ import (
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioninstructions"
 )
@@ -42,6 +43,9 @@ func (d *Daemon) handleSessionInstructions(conn net.Conn, msg *protocol.SessionI
 type daemonSessionInstructionsModel struct{ daemon *Daemon }
 
 func (m daemonSessionInstructionsModel) Run(ctx context.Context, request sessioninstructions.ModelRequest) (sessioninstructions.ModelAnswer, error) {
+	if m.daemon.headlessTaskRefused("session_instructions") {
+		return sessioninstructions.ModelAnswer{}, headless.Refusal("session_instructions")
+	}
 	driver := agentdriver.Get("codex")
 	provider, ok := driver.(agentdriver.HeadlessTaskProvider)
 	if !ok {

@@ -15,7 +15,7 @@
     0 0 0 1px rgba(255, 255, 255, 0.03),
     0 0 32px rgba(255, 107, 53, 0.08);
   color: var(--color-text-primary);
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
 }
 
 .open-pr-launcher-header {

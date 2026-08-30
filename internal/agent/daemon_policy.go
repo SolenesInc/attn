@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -116,6 +117,9 @@ func ClassifyWithDriver(d Driver, text, executable, workDir string, timeout time
 	cp, hasClassifier := GetClassifier(d)
 	if !hasClassifier {
 		return "", nil, false
+	}
+	if !headless.Enabled() {
+		return "unknown", headless.Refusal("classifier"), true
 	}
 	if ecp, supportsExecutable := cp.(ExecutableClassifierProvider); supportsExecutable {
 		state, err = ecp.ClassifyWithExecutable(text, strings.TrimSpace(executable), strings.TrimSpace(workDir), timeout)

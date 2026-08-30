@@ -68,7 +68,9 @@ func runSeed() {
 func writeSeedHelp(w io.Writer) {
 	fmt.Fprintf(w, `usage: attn seed <command>
 
-A seed is the unit of work: one document, one short id, planted in the garden.
+A seed is the unit of work: one document, one short id, one slug made of the
+title's key words, planted in the garden. Commands take the id; the slug is
+how the seed is spoken of.
 Anything worth handing off, parking, or attributing is a seed.
 
 The garden lives at the home daemon. On an outpost every command here refuses,
@@ -76,7 +78,7 @@ naming the home to run it on.
 
 commands:
   plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [resume flags] [flags]
-        plant a seed and print its id. -m takes markdown, or - to read stdin —
+        plant a seed and print its id, slug and title. -m takes markdown, or - to read stdin —
         if the seed gains children, that body is the plot's plan. --part-of
         plants it under a plot. --resume-session-id, --cwd and --agent
         together make a dead conversation resumable without a dispatch record.
@@ -155,13 +157,15 @@ commands:
         prints it on the claim, so it is read before any work.
         --ring tells watchers to look; ordinary notes stay quiet.
 
-  attach <id> (--path <file> [--repo <repo>] | --notebook <id> | --url <u>) [-m "<why>"]
-        associate a document with the seed. Where the document lives does not
-        change — the seed records the association, and the seed's current
-        artifacts are every attach that has not been detached.
+  attach <id> --path <file> (--move | --copy)
+        put a local regular file in durable seed-owned storage. Move is the
+        recommended choice and leaves one editable canonical file; Copy keeps
+        an independent source snapshot. Git-tracked files must use Copy.
+        Notebook, URL and repository references remain associations.
 
-  detach <id> (--path <file> [--repo <repo>] | --notebook <id> | --url <u>) [-m "<why>"]
-        take an association back. Name the same document the attach named.
+  detach <id> --path <filename> --to <destination>
+        move a managed artifact back out without overwriting. An old linked
+        path association can be removed explicitly with --reference instead.
 
   notes <id> [--limit <n>] [--json]
         the whole log, newest first. show renders the newest few and says
@@ -195,10 +199,14 @@ flags:
   -f <path>          the plot payload to read (plot; default stdin)
   --handoff          write a note to whoever tends the seed next (note)
   --ring             ring watchers after this note lands (note)
-  --path <file>      a markdown document at this path (attach, detach)
+  --path <file>      local source, managed filename, or linked path
   --repo <name>      the repository that path lives in (attach, detach)
   --notebook <id>    a Notebook document (attach, detach)
   --url <url>        anything reachable by URL (attach, detach)
+  --move             transfer a local source into seed ownership (attach)
+  --copy             snapshot a local source into seed ownership (attach)
+  --to <path>        destination that receives a managed artifact (detach)
+  --reference        remove an old linked path association (detach)
   --force            act even though somebody else holds the seed; the log
                      records it (tend, park, harvest, wither, replant)
   --member <name>    the crew member asking, recorded as planter, tender or
@@ -237,7 +245,7 @@ func seedPrimeTailFromReady(ready *protocol.SeedReadyResult) string {
 			ready.Crown.ID, ready.Crown.Title, ready.Crown.ID)
 		handoffs := freshestHandoffs(ready.Handoffs)
 		for _, seed := range ready.Seeds {
-			fmt.Fprintf(&tail, "\n- `%s` %s", seed.ID, seed.Title)
+			fmt.Fprintf(&tail, "\n- `%s` %s: %s", seed.ID, seed.StepSlug, seed.Title)
 			if handoff, ok := handoffs[seed.ID]; ok && strings.TrimSpace(handoff.Body) != "" {
 				author := crew.HolderName(handoff.AuthorMember, handoff.AuthorSession)
 				if author == "" {
@@ -293,6 +301,10 @@ type seedFlags struct {
 	repo           *string
 	notebook       *string
 	url            *string
+	move           *bool
+	copy           *bool
+	to             *string
+	reference      *bool
 	resumeID       *string
 	cwd            *string
 	agent          *string
@@ -325,6 +337,10 @@ func newSeedFlags(verb string) *seedFlags {
 		repo:           fs.String("repo", "", "the repository the path lives in"),
 		notebook:       fs.String("notebook", "", "a Notebook document, by its id"),
 		url:            fs.String("url", "", "anything reachable by URL"),
+		move:           fs.Bool("move", false, "move a local file into seed ownership"),
+		copy:           fs.Bool("copy", false, "copy a local file into seed ownership"),
+		to:             fs.String("to", "", "destination for a detached managed artifact"),
+		reference:      fs.Bool("reference", false, "operate on an old linked path association"),
 		resumeID:       fs.String("resume-session-id", "", "agent-native conversation id"),
 		cwd:            fs.String("cwd", "", "directory to reopen in"),
 		agent:          fs.String("agent", "", "agent driver to reopen with"),
@@ -439,7 +455,20 @@ func runSeedPlant(args []string) {
 		writeJSON(result.Seed)
 		return
 	}
-	fmt.Println(result.Seed.ID)
+	fmt.Println(seedLine(result.Seed))
+}
+
+// The line an agent echoes: the id is what commands take, the slug is what the
+// user hears, the title is what both mean.
+func seedLine(seed protocol.Seed) string {
+	return fmt.Sprintf("%s  %s  %s", seed.ID, seed.StepSlug, seed.Title)
+}
+
+func seedHandle(seed protocol.Seed) string {
+	if seed.StepSlug == "" {
+		return seed.ID
+	}
+	return seed.ID + " (" + seed.StepSlug + ")"
 }
 
 func runSeedList(args []string) {
@@ -471,10 +500,10 @@ func runSeedList(args []string) {
 		return
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tSTATUS\tTENDER\tPLANTED\tTITLE")
+	fmt.Fprintln(w, "ID\tSLUG\tSTATUS\tTENDER\tPLANTED\tTITLE")
 	for _, row := range seedRows(result.Seeds, *f.flat) {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s%s%s\n",
-			row.seed.ID, row.seed.Status, orDash(crew.HolderName(row.seed.TenderMember, row.seed.TenderSession)),
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s%s%s\n",
+			row.seed.ID, row.seed.StepSlug, row.seed.Status, orDash(crew.HolderName(row.seed.TenderMember, row.seed.TenderSession)),
 			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, plotProgressSuffix(row.seed))
 	}
 	w.Flush()
@@ -528,7 +557,7 @@ func runSeedPlot(args []string) {
 		writeJSON(result)
 		return
 	}
-	fmt.Println(result.Crown.ID)
+	fmt.Println(seedLine(result.Crown))
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	for _, child := range result.Children {
 		fmt.Fprintf(w, "  %s\t%s\t%s\n", child.ID, child.StepSlug, child.Title)
@@ -640,8 +669,15 @@ func runSeedSetResume(args []string) {
 	fprintSeed(os.Stdout, result.Seed)
 }
 
-func fprintArtifacts(w io.Writer, artifacts []protocol.SeedArtifactReference) {
+func fprintArtifacts(w io.Writer, artifacts []protocol.SeedArtifact) {
 	fmt.Fprintln(w, "artifacts:")
+	for _, artifact := range artifacts {
+		fmt.Fprintf(w, "  file  %s  %d bytes\n", artifact.Filename, artifact.Size)
+	}
+}
+
+func fprintArtifactReferences(w io.Writer, artifacts []protocol.SeedArtifactReference) {
+	fmt.Fprintln(w, "linked artifacts:")
 	for _, artifact := range artifacts {
 		line := protocol.Deref(artifact.Path)
 		if line == "" {
@@ -670,6 +706,10 @@ func fprintSeedShow(w io.Writer, result *protocol.SeedShowResult) {
 	if len(result.Artifacts) > 0 {
 		fmt.Fprintln(w)
 		fprintArtifacts(w, result.Artifacts)
+	}
+	if len(result.References) > 0 {
+		fmt.Fprintln(w)
+		fprintArtifactReferences(w, result.References)
 	}
 	entries := withoutNote(result.Notes, result.Handoff)
 	if len(entries) > 0 {
@@ -758,7 +798,7 @@ func runSeedReady(args []string) {
 
 func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 	if result.Crown != nil {
-		fmt.Fprintf(out, "%s  %s%s\n\n", result.Crown.ID, result.Crown.Title, plotProgressSuffix(*result.Crown))
+		fmt.Fprintf(out, "%s%s\n\n", seedLine(*result.Crown), plotProgressSuffix(*result.Crown))
 	}
 	if len(result.Seeds) == 0 {
 		fmt.Fprintf(out, "nothing is ready %s — `attn seed ls` shows what is planted and what holds it\n", readyScopeName(result))
@@ -766,7 +806,7 @@ func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 	}
 	handoffs := freshestHandoffs(result.Handoffs)
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tSTATUS\tPLANTED\tTITLE")
+	fmt.Fprintln(w, "ID\tSLUG\tSTATUS\tPLANTED\tTITLE")
 	rows := make([]seedRow, 0, len(result.Plots)+len(result.Seeds))
 	if result.Scope == "garden" && len(result.Plots) > 0 {
 		rows = seedRows(append(slices.Clone(result.Plots), result.Seeds...), false)
@@ -784,10 +824,10 @@ func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 		if plotIDs[seed.ID] {
 			status = "plot"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s%s%s\n", seed.ID, status, shortStamp(seed.CreatedAt),
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s%s%s\n", seed.ID, seed.StepSlug, status, shortStamp(seed.CreatedAt),
 			strings.Repeat("  ", row.depth), seed.Title, plotProgressSuffix(seed))
 		if handoff, ok := handoffs[seed.ID]; ok {
-			fmt.Fprintf(w, "\t\t\t↳ %s: %s\n",
+			fmt.Fprintf(w, "\t\t\t\t↳ %s: %s\n",
 				orDash(crew.HolderName(handoff.AuthorMember, handoff.AuthorSession)), firstLine(handoff.Body))
 		}
 	}
@@ -822,8 +862,8 @@ func readyScopeName(result *protocol.SeedReadyResult) string {
 func fprintSeed(out io.Writer, seed protocol.Seed, watching ...bool) {
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "%s\t%s\n", seed.ID, seed.Title)
+	fmt.Fprintf(w, "slug\t%s\n", seed.StepSlug)
 	fmt.Fprintf(w, "status\t%s\n", seed.Status)
-	fmt.Fprintf(w, "step\t%s\n", seed.StepSlug)
 	fmt.Fprintf(w, "planted\t%s by %s\n", shortStamp(seed.CreatedAt), orDash(crew.HolderName(seed.PlanterMember, seed.PlanterSession)))
 	fmt.Fprintf(w, "tender\t%s\n", orDash(crew.HolderName(seed.TenderMember, seed.TenderSession)))
 	if p := seed.PlotProgress; p != nil {
@@ -907,7 +947,7 @@ func openPlotSeeds(seed protocol.Seed) int {
 }
 
 func transitionLine(seed protocol.Seed) string {
-	line := fmt.Sprintf("%s is %s", seed.ID, seed.Status)
+	line := fmt.Sprintf("%s is %s", seedHandle(seed), seed.Status)
 	if tender := crew.HolderName(seed.TenderMember, seed.TenderSession); tender != "" {
 		line += fmt.Sprintf(", tended by %s", tender)
 	}
@@ -974,6 +1014,37 @@ func runSeedArtifact(verb string, args []string) {
 	if len(positionals) != 1 {
 		seedFail(verb, fmt.Errorf("needs exactly one seed id, got %d: attn seed %s s-7k3f9m --path docs/plans/thing.md", len(positionals), verb))
 	}
+	seedID := positionals[0]
+	plan, handled, err := f.artifactTransferPlan(verb)
+	if err != nil {
+		seedFail(verb, err)
+	}
+	if handled {
+		result, err := seedClient().SeedArtifactTransfer(
+			f.sessionID(), seedID, plan.operation, plan.source, plan.filename, plan.destination, nil,
+		)
+		if err != nil {
+			seedFail(verb, err)
+		}
+		if *f.json {
+			writeJSON(result)
+			return
+		}
+		fmt.Printf("%s %s\n", plan.operation, result.SourcePath)
+		fmt.Printf("to %s\n", result.DestinationPath)
+		if plan.operation != "detach" {
+			fmt.Printf("markdown target %s\n", result.RelativeTarget)
+		}
+		return
+	}
+	path := *f.path
+	repo := strings.TrimSpace(*f.repo)
+	if *f.reference && verb != "detach" {
+		seedFail(verb, fmt.Errorf("--reference only removes an existing linked path"))
+	}
+	if *f.reference && (path == "" || repo != "" || strings.TrimSpace(*f.notebook) != "" || strings.TrimSpace(*f.url) != "") {
+		seedFail(verb, fmt.Errorf("--reference removes one old linked --path without --repo"))
+	}
 	artifact, err := f.artifact()
 	if err != nil {
 		seedFail(verb, err)
@@ -983,7 +1054,7 @@ func runSeedArtifact(verb string, args []string) {
 		kind = garden.NoteKindDetach
 	}
 	result, err := seedClient().SeedNote(
-		f.sessionID(), positionals[0], f.text(verb), strings.TrimSpace(*f.member), kind, false, artifact)
+		f.sessionID(), seedID, f.text(verb), strings.TrimSpace(*f.member), kind, false, artifact)
 	if err != nil {
 		seedFail(verb, err)
 	}
@@ -998,10 +1069,72 @@ func runSeedArtifact(verb string, args []string) {
 		Path:               protocol.Deref(artifact.Path),
 		URL:                protocol.Deref(artifact.URL),
 	})
-	fmt.Printf("%s %s\n", positionals[0], moved)
+	fmt.Printf("%s %s\n", seedID, moved)
 	if body := strings.TrimSpace(result.Note.Body); body != "" && body != moved {
 		fmt.Printf("%s\n", body)
 	}
+}
+
+type seedArtifactTransferPlan struct {
+	operation   string
+	source      string
+	filename    string
+	destination string
+}
+
+func (f *seedFlags) artifactTransferPlan(verb string) (*seedArtifactTransferPlan, bool, error) {
+	path := *f.path
+	repo := strings.TrimSpace(*f.repo)
+	to := *f.to
+	localFlags := *f.move || *f.copy || to != ""
+	managedAttach := verb == "attach" && path != "" && repo == "" && strings.TrimSpace(*f.notebook) == "" && strings.TrimSpace(*f.url) == "" && !*f.reference
+	managedDetach := verb == "detach" && path != "" && repo == "" && strings.TrimSpace(*f.notebook) == "" && strings.TrimSpace(*f.url) == "" && !*f.reference
+	if !managedAttach && !managedDetach && !localFlags {
+		return nil, false, nil
+	}
+	if f.wasSet("m") || strings.TrimSpace(*f.member) != "" {
+		return nil, true, fmt.Errorf("managed artifact transfers carry their own receipt; -m and --member apply to log associations")
+	}
+	plan := &seedArtifactTransferPlan{}
+	switch verb {
+	case "attach":
+		if !managedAttach {
+			return nil, true, fmt.Errorf("--move and --copy apply only to a local --path without --repo")
+		}
+		if *f.move == *f.copy {
+			return nil, true, fmt.Errorf("local attach requires exactly one of --move or --copy; --move is recommended")
+		}
+		if to != "" {
+			return nil, true, fmt.Errorf("--to belongs to detach")
+		}
+		plan.operation = "copy"
+		if *f.move {
+			plan.operation = "move"
+		}
+		var err error
+		plan.source, err = filepath.Abs(path)
+		if err != nil {
+			return nil, true, fmt.Errorf("resolve source path: %w", err)
+		}
+	case "detach":
+		if !managedDetach {
+			return nil, true, fmt.Errorf("--to applies only to a managed --path without --repo")
+		}
+		if *f.move || *f.copy {
+			return nil, true, fmt.Errorf("detach moves the artifact out; do not pass --move or --copy")
+		}
+		if to == "" {
+			return nil, true, fmt.Errorf("managed detach requires --to <destination>; use --reference to remove an old linked path")
+		}
+		plan.operation = "detach"
+		plan.filename = path
+		var err error
+		plan.destination, err = filepath.Abs(to)
+		if err != nil {
+			return nil, true, fmt.Errorf("resolve detach destination: %w", err)
+		}
+	}
+	return plan, true, nil
 }
 
 func (f *seedFlags) artifact() (*protocol.SeedArtifactReference, error) {

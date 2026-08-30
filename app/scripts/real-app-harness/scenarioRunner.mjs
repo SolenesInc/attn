@@ -1,9 +1,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { armAgentTripwire, ensureDaemonCarriesTripwire, formatReceiptFailure, formatTripwireFailure } from './agentTripwire.mjs';
 import { assertPackagedAppBuildMatchesCurrentSource } from './buildPreflight.mjs';
 import { createRunContext, emitVerdict, FIRST_FAILURE_MAX_LENGTH, restoreHarnessSettings } from './common.mjs';
-import { MacOSDriver } from './macosDriver.mjs';
+import { createWindowDriver } from './platform.mjs';
+import { allowRealAgentsForRunner } from './scenarioCatalog.mjs';
 import { createScenarioRecorder, recordingEnabled } from './windowRecording.mjs';
 
 // The verdict's firstFailure must stay one line whatever the error contains.
@@ -22,10 +24,16 @@ function writeJson(filePath, value) {
 
 const FAILURE_DIGEST_MAX_ERROR_LINES = 60;
 
-function buildFailureDigest({ scenarioId, runId, steps, error, runDir }) {
+function buildFailureDigest({ scenarioId, runId, steps, error, runDir, tripwire = null }) {
   const failingStep = [...steps].reverse().find((step) => step.status === 'error');
   const errorLines = normalizeError(error).split(/\r?\n/).slice(0, FAILURE_DIGEST_MAX_ERROR_LINES);
+  // The tripwire kills the session the failing step was waiting on, so its
+  // lines have to come before the step error they caused.
+  const tripwireLines = tripwire
+    ? [formatTripwireFailure({ scenarioId, ledgerPath: tripwire.ledgerPath, lines: tripwire.lines }), '']
+    : [];
   return [
+    ...tripwireLines,
     `scenario: ${scenarioId}`,
     `run: ${runId}`,
     `failing step: ${failingStep ? failingStep.name : '(none — failed outside a step)'}`,
@@ -55,8 +63,47 @@ function processExists(pid) {
   }
 }
 
-function packagedAppScenarioLockPath() {
+export function packagedAppScenarioLockPath() {
   return process.env.ATTN_REAL_APP_SCENARIO_LOCK_PATH || path.join(os.tmpdir(), 'attn-real-app-harness-scenario.lock');
+}
+
+const SCENARIO_LOCK_POLL_MS = 2_000;
+const SCENARIO_LOCK_HEARTBEAT_MS = 15_000;
+// 20 missed 15s heartbeats. A SERIAL-MATRIX holder legitimately runs for hours,
+// so only a wedged event loop (or a pre-heartbeat build) ever looks this stale.
+const SCENARIO_LOCK_STALE_MS = 300_000;
+
+function scenarioLockWaitMs() {
+  const raw = process.env.ATTN_REAL_APP_SCENARIO_LOCK_WAIT_MS;
+  if (raw === undefined || raw === '') {
+    return Infinity;
+  }
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`invalid ATTN_REAL_APP_SCENARIO_LOCK_WAIT_MS: ${raw} (want milliseconds; 0 fails fast)`);
+  }
+  return value;
+}
+
+// Blocking the event loop is the point: the runner is sync and nothing else runs.
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function describeLockOwner(owner) {
+  const scenario = owner?.scenarioId || 'unknown';
+  const pid = Number.isInteger(owner?.pid) ? owner.pid : 'unknown';
+  const runId = owner?.runId || 'unknown';
+  const startedAt = owner?.startedAt || 'unknown';
+  return `${scenario} (pid ${pid}, run ${runId}, started ${startedAt})`;
+}
+
+function ownerHeartbeatAgeMs(lockDir, nowMs) {
+  try {
+    return nowMs - fs.statSync(path.join(lockDir, 'owner.json')).mtimeMs;
+  } catch {
+    return 0;
+  }
 }
 
 function readLockOwner(lockDir) {
@@ -70,8 +117,15 @@ function removeDirIfPresent(dirPath) {
   } catch {}
 }
 
-function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }) {
-  const lockDir = packagedAppScenarioLockPath();
+export function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }, lockDir = packagedAppScenarioLockPath(), {
+  waitMs = scenarioLockWaitMs(),
+  pollMs = SCENARIO_LOCK_POLL_MS,
+  heartbeatMs = SCENARIO_LOCK_HEARTBEAT_MS,
+  staleMs = SCENARIO_LOCK_STALE_MS,
+  sleep = sleepSync,
+  now = Date.now,
+  log = (message) => console.error(message),
+} = {}) {
   const ownerPath = path.join(lockDir, 'owner.json');
   const owner = {
     pid: process.pid,
@@ -84,6 +138,9 @@ function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }) {
     command: process.argv.join(' '),
   };
 
+  const waitStart = now();
+  let announced = false;
+  let staleStrikes = 0;
   while (true) {
     try {
       fs.mkdirSync(lockDir);
@@ -107,16 +164,41 @@ function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }) {
         continue;
       }
 
-      const activeScenario = existingOwner.scenarioId || 'unknown';
-      const activePid = Number.isInteger(existingOwner.pid) ? existingOwner.pid : 'unknown';
-      const activeRunId = existingOwner.runId || 'unknown';
-      const activeStartedAt = existingOwner.startedAt || 'unknown';
-      throw new Error(
-        `invalid run: packaged-app scenarios are single-tenant; ${activeScenario} is already active ` +
-        `(pid ${activePid}, run ${activeRunId}, started ${activeStartedAt})`
-      );
+      if (now() - waitStart >= waitMs) {
+        throw new Error(
+          `packaged-app scenarios are single-tenant; gave up after ${waitMs}ms ` +
+          `(ATTN_REAL_APP_SCENARIO_LOCK_WAIT_MS) waiting for ` +
+          `${describeLockOwner(existingOwner)} to release ${lockDir}`
+        );
+      }
+
+      const heartbeatAge = ownerHeartbeatAgeMs(lockDir, now());
+      // One stale poll is forgiven: after wake-from-sleep the waiter can stat
+      // the owner before the holder's overdue heartbeat timer has fired.
+      staleStrikes = heartbeatAge >= staleMs ? staleStrikes + 1 : 0;
+      if (staleStrikes >= 2) {
+        throw new Error(
+          `packaged-app scenario lock holder looks wedged: ${describeLockOwner(existingOwner)} ` +
+          `is alive but has not heartbeat ${lockDir} for ${Math.round(heartbeatAge)}ms ` +
+          `(threshold ${staleMs}ms); stop it, or remove the lock dir if it is gone`
+        );
+      }
+
+      if (!announced) {
+        announced = true;
+        log(`[scenario-lock] ${scenarioId}: waiting for ${describeLockOwner(existingOwner)} to release ${lockDir}`);
+      }
+      sleep(pollMs);
     }
   }
+
+  const heartbeat = setInterval(() => {
+    try {
+      const stamp = new Date();
+      fs.utimesSync(ownerPath, stamp, stamp);
+    } catch {}
+  }, heartbeatMs);
+  heartbeat.unref?.();
 
   let released = false;
   const release = () => {
@@ -124,6 +206,7 @@ function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }) {
       return;
     }
     released = true;
+    clearInterval(heartbeat);
     try {
       const existingOwner = readLockOwner(lockDir);
       if (existingOwner?.pid === process.pid && existingOwner?.runId === runId) {
@@ -143,14 +226,20 @@ export function createScenarioRunner(options, {
   prefix,
   metadata = {},
   preflightLaunchEnv = null,
+  allowRealAgents,
 } = {}, {
   assertBuildMatches = assertPackagedAppBuildMatchesCurrentSource,
+  armTripwire = armAgentTripwire,
+  ensureDaemonArmed = ensureDaemonCarriesTripwire,
   createRecorder = createScenarioRecorder,
-  createRecordingDriver = (appPath) => new MacOSDriver({ appPath }),
+  createRecordingDriver = (appPath) => createWindowDriver({ appPath }),
   emitRunnerVerdict = emitVerdict,
   isRecordingEnabled = recordingEnabled,
 } = {}) {
   const runnerCreatedAt = Date.now();
+  const declaredAllowRealAgents = allowRealAgents === undefined
+    ? allowRealAgentsForRunner(scenarioId)
+    : allowRealAgents;
   assertBuildMatches({
     appPath: options?.appPath,
     launchEnv: preflightLaunchEnv,
@@ -170,6 +259,18 @@ export function createScenarioRunner(options, {
     removeDirIfPresent(sessionDir);
     throw error;
   }
+  const tripwire = armTripwire({ scenarioId, runDir, allowRealAgents: declaredAllowRealAgents });
+  try {
+    ensureDaemonArmed({ scenarioId, marker: tripwire.marker, armed: tripwire.armed, appPath: options?.appPath });
+  } catch (error) {
+    if (tripwire.armed) {
+      releaseScenarioLock();
+      removeDirIfPresent(runDir);
+      removeDirIfPresent(sessionDir);
+      throw error;
+    }
+    console.warn(`[agent-tripwire] could not check the running daemon: ${error?.message || error}`);
+  }
   const tracePath = path.join(runDir, 'trace.log');
   const steps = [];
   const assertions = [];
@@ -182,6 +283,19 @@ export function createScenarioRunner(options, {
     fs.appendFileSync(tracePath, line, 'utf8');
     process.stdout.write(line);
   };
+
+  let tripwireTraced = false;
+  const collectTripwireLedger = () => {
+    const lines = tripwire.read();
+    if (lines.length > 0 && !tripwireTraced) {
+      tripwireTraced = true;
+      appendTrace('agent_tripwire:tripped', { count: lines.length, lines });
+    }
+    return lines;
+  };
+
+  const readDaemonReceipt = () => tripwire.readReceipt?.() || null;
+  const headlessSwitchField = (receipt) => (receipt ? { headlessTasks: receipt.headlessTasks } : {});
 
   let recorder = null;
   if (isRecordingEnabled()) {
@@ -367,6 +481,23 @@ export function createScenarioRunner(options, {
     async finishSuccess(summary = {}) {
       const recorderError = await finalizeRunner();
       if (recorderError) throw recorderError;
+      const ledger = collectTripwireLedger();
+      if (ledger.length > 0) {
+        const digest = formatTripwireFailure({ scenarioId, ledgerPath: tripwire.ledgerPath, lines: ledger });
+        process.stdout.write(`${digest}\n`);
+        throw new Error(digest);
+      }
+      const receipt = readDaemonReceipt();
+      if (tripwire.armed && !(receipt?.headlessTasks === 'off' && receipt?.carriesMarker)) {
+        const digest = formatReceiptFailure({
+          scenarioId,
+          receipt,
+          marker: tripwire.marker,
+          pidPath: tripwire.pidPath,
+        });
+        process.stdout.write(`${digest}\n`);
+        throw new Error(digest);
+      }
       const finalSummary = {
         ok: true,
         scenarioId,
@@ -377,6 +508,7 @@ export function createScenarioRunner(options, {
         metadata,
         steps,
         assertions,
+        ...headlessSwitchField(receipt),
         ...summary,
       };
       const summaryPath = path.join(runDir, 'summary.json');
@@ -395,6 +527,7 @@ export function createScenarioRunner(options, {
     },
     async finishFailure(error, summary = {}) {
       const recorderError = await finalizeRunner();
+      const ledger = collectTripwireLedger();
       const finalSummary = {
         ok: false,
         scenarioId,
@@ -409,11 +542,22 @@ export function createScenarioRunner(options, {
         ...(recorderError && recorderError !== error
           ? { recordingError: normalizeError(recorderError) }
           : {}),
+        ...headlessSwitchField(readDaemonReceipt()),
+        ...(ledger.length > 0
+          ? { agentTripwire: { count: ledger.length, ledgerPath: tripwire.ledgerPath, lines: ledger } }
+          : {}),
         ...summary,
       };
       const summaryPath = path.join(runDir, 'failure.json');
       writeJson(summaryPath, finalSummary);
-      const digest = buildFailureDigest({ scenarioId, runId, steps, error, runDir });
+      const digest = buildFailureDigest({
+        scenarioId,
+        runId,
+        steps,
+        error,
+        runDir,
+        tripwire: ledger.length > 0 ? { ledgerPath: tripwire.ledgerPath, lines: ledger } : null,
+      });
       fs.writeFileSync(path.join(runDir, 'failure-digest.txt'), `${digest}\n`, 'utf8');
       process.stdout.write(`--- failure digest ---\n${digest}\n--- end digest ---\n`);
       emitRunnerVerdict({

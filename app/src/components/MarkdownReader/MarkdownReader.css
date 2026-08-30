@@ -9,7 +9,7 @@
   /* Focus is claimed programmatically on selection gestures (tabindex=-1);
      no visible focus ring on the document surface. */
   outline: none;
-  font-family: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   font-feature-settings: 'ss01', 'ss02', 'cv01';
   color: var(--color-text-primary);
   scrollbar-width: thin;
@@ -47,7 +47,7 @@
 .md-reader code,
 .md-reader pre,
 .md-reader kbd {
-  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, 'DejaVu Sans Mono', monospace;
 }
 
 /* ---- Card layout ---- */
@@ -316,6 +316,28 @@
   text-underline-offset: 2px;
 }
 
+.md-reader-artifact-link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent, #5b8cff);
+  font: inherit;
+  cursor: pointer;
+}
+
+.md-reader-artifact-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.md-reader-linked-artifact-image {
+  display: inline-flex;
+  max-width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
 .md-reader ::selection {
   background: color-mix(in srgb, var(--color-accent, #5b8cff) 30%, transparent);
 }
@@ -510,6 +532,15 @@
   max-width: 100%;
   border-radius: 0.25rem;
   margin: 0.5rem 0;
+  cursor: zoom-in;
+}
+
+.md-reader-image-button {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
   cursor: zoom-in;
 }
 
@@ -826,7 +857,7 @@
 }
 
 .md-card-quote {
-  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, 'DejaVu Sans Mono', monospace;
   font-size: 11px;
   color: var(--color-text-secondary, #bbb);
   background: var(--color-bg-app, #0d0d0f);

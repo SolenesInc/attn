@@ -9,7 +9,7 @@ import {
   printCommonHelp,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { delay } from './macosDriver.mjs';
+import { delay } from './platform.mjs';
 import {
   captureSessionArtifacts,
   waitForPaneAttached,

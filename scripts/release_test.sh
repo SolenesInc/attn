@@ -58,6 +58,9 @@ cat >"$work/bin/claude" <<'EOF'
 set -euo pipefail
 printf '%s\n' "$#" >"$FAKE_CLAUDE_ARGC"
 cat >"$FAKE_CLAUDE_INPUT"
+if [[ -n "${FAKE_CLAUDE_PREAMBLE:-}" ]]; then
+  printf '%s\n' "$FAKE_CLAUDE_PREAMBLE"
+fi
 printf '## [%s]\n\n### Added\n- **Fixture release.** Candidate facts compiled.\n' \
   "$(date +%Y-%m-%d)"
 EOF
@@ -92,7 +95,7 @@ setup_fixture() {
   git -C "$fixture_repo" switch -q -C main
   git -C "$fixture_repo" push -q -u origin main
 
-  git -C "$fixture_repo" switch -q -c next
+  git -C "$fixture_repo" switch -q -C next
   printf '%s\n' 'kind: added' 'area: release' 'change: candidate fixture' \
     >"$fixture_repo/changelog.d/candidate-fixture.yaml"
   git -C "$fixture_repo" add changelog.d/candidate-fixture.yaml
@@ -126,7 +129,7 @@ setup_hotfix_fixture() {
   fi
   git -C "$fixture_repo" remote set-url origin "$fixture_origin"
   git -C "$fixture_repo" switch -q -C main
-  git -C "$fixture_repo" rm -q -- 'changelog.d/*.yaml'
+  git -C "$fixture_repo" rm -q --ignore-unmatch -- 'changelog.d/*.yaml'
 
   local previous_source
   previous_source="$(git -C "$fixture_repo" rev-parse HEAD)"
@@ -182,7 +185,7 @@ expect_failure() {
     echo "expected release preparation failure: $*" >&2
     exit 1
   fi
-  if ! grep -Fq "$expected" "$work/failure.out"; then
+  if ! grep -Fq -- "$expected" "$work/failure.out"; then
     echo "failure did not contain '$expected':" >&2
     cat "$work/failure.out" >&2
     exit 1
@@ -220,7 +223,9 @@ grep -Fq 'api --paginate --method GET repos/{owner}/{repo}/pulls?state=open&base
 export FAKE_ACTIVE_CANDIDATE=
 
 git -C "$fixture_repo" tag v99.98.96
+git -C "$fixture_repo" push -q origin refs/tags/v99.98.96
 expect_failure 'tag v99.98.96 already exists' run_release v99.98.96
+git --git-dir="$fixture_origin" update-ref -d refs/tags/v99.98.96
 git -C "$fixture_repo" tag -d v99.98.96 >/dev/null
 
 git clone -q --branch next "$fixture_origin" "$work/updater"
@@ -241,8 +246,15 @@ fixture_origin="$default_origin"
 source_sha="$(git -C "$fixture_repo" rev-parse origin/next)"
 main_sha="$(git -C "$fixture_repo" rev-parse origin/main)"
 
+# Historical tag drift must not block an unrelated candidate. Release
+# preparation reads the requested remote tag and leaves local history alone.
+git --git-dir="$fixture_origin" update-ref refs/tags/v90.0.0 "$main_sha"
+git -C "$fixture_repo" tag -f v90.0.0 "$source_sha"
+git -C "$fixture_repo" tag -f v99.98.97 "$source_sha"
+
 run_release v99.98.97 --dry-run >"$work/dry-run.out"
 grep -Fq "$source_sha" "$work/dry-run.out"
+grep -Fq 'publication: automatic' "$work/dry-run.out"
 grep -q 'would not merge, tag, or dispatch a release' "$work/dry-run.out"
 
 run_release v99.98.97 >"$work/success.out"
@@ -251,6 +263,7 @@ candidate_sha="$(git --git-dir="$fixture_origin" rev-parse "$candidate_ref")"
 manifest="$(git --git-dir="$fixture_origin" show "$candidate_ref:.github/release-candidate.yml")"
 grep -Fq "source_sha: ${source_sha}" <<<"$manifest"
 grep -Fq "main_sha: ${main_sha}" <<<"$manifest"
+grep -Fq 'publication: automatic' <<<"$manifest"
 if git --git-dir="$fixture_origin" ls-tree -r --name-only "$candidate_ref" \
   -- changelog.d | grep -q '\.yaml$'; then
   echo "candidate retained changelog fragments" >&2
@@ -260,9 +273,13 @@ fi
 grep -q 'pr create --draft --base main --head release/v99.98.97' "$FAKE_GH_LOG"
 for value in "$source_sha" "$main_sha" "$candidate_sha" \
   'https://github.com/example/attn/actions/runs/42/job/7' \
-  'candidate-fixture.yaml' '--ref main' 'candidate_sha='; do
+  'frozen changelog fragment' '--ref main' 'candidate_sha='; do
   grep -Fq -- "$value" "$FAKE_PR_BODY"
 done
+if grep -Fq 'candidate-fixture.yaml' "$FAKE_PR_BODY"; then
+  echo "candidate PR body repeated raw changelog inputs" >&2
+  exit 1
+fi
 grep -Fq 'candidate-fixture.yaml' "$FAKE_CLAUDE_INPUT"
 [[ "$(<"$FAKE_CLAUDE_ARGC")" == "2" ]]
 if grep -Eq '(^| )(pr merge|workflow run release)' "$FAKE_GH_LOG"; then
@@ -270,8 +287,36 @@ if grep -Eq '(^| )(pr merge|workflow run release)' "$FAKE_GH_LOG"; then
   exit 1
 fi
 
+setup_fixture held
+: >"$FAKE_GH_LOG"
+held_source_sha="$(git -C "$fixture_repo" rev-parse origin/next)"
+run_release v99.98.97 --hold --dry-run >"$work/held-dry-run.out"
+grep -Fq 'publication: held' "$work/held-dry-run.out"
+export FAKE_CLAUDE_PREAMBLE='Here is the compiled changelog section.'
+run_release v99.98.97 --hold >"$work/held-success.out"
+unset FAKE_CLAUDE_PREAMBLE
+held_ref='refs/heads/release/v99.98.97'
+held_manifest="$(git --git-dir="$fixture_origin" show "$held_ref:.github/release-candidate.yml")"
+held_changelog="$(git --git-dir="$fixture_origin" show "$held_ref:CHANGELOG.md")"
+grep -Fq 'publication: held' <<<"$held_manifest"
+grep -Fq "source_sha: ${held_source_sha}" <<<"$held_manifest"
+if grep -Fq 'Here is the compiled changelog section.' <<<"$held_changelog"; then
+  echo "candidate retained changelog writer preamble" >&2
+  exit 1
+fi
+for value in '| Publication | `held` |' '## Publication hold' \
+  'does not claim packaged-app verification' 'stop before App acceptance'; do
+  grep -Fq -- "$value" "$FAKE_PR_BODY"
+done
+if grep -Fq '## Manual app verification' "$FAKE_PR_BODY"; then
+  echo "held candidate requested manual App acceptance" >&2
+  exit 1
+fi
+
 setup_hotfix_fixture
 : >"$FAKE_GH_LOG"
+
+expect_failure '--hold is only supported for promotions' run_hotfix v99.98.98 --hold
 
 git clone -q --branch main "$fixture_origin" "$work/hotfix-main-updater"
 git -C "$work/hotfix-main-updater" config user.name 'Release Test'
@@ -317,7 +362,7 @@ grep -Fq 'pr create --draft --base main --head hotfix/startup-crash --title fix(
   "$FAKE_GH_LOG"
 for value in "$hotfix_source_sha" "$released_main_sha" "$hotfix_candidate_sha" \
   'Final `PR gate` and `App acceptance`' '--ref main' \
-  'candidate_sha=' 'hotfix.yaml'; do
+  'candidate_sha=' 'frozen changelog fragment'; do
   grep -Fq -- "$value" "$FAKE_PR_BODY"
 done
 if grep -q 'api --method GET' "$FAKE_GH_LOG"; then

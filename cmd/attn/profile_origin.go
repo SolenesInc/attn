@@ -140,10 +140,12 @@ type profileListEntry struct {
 	Label         string         `json:"label"`
 	DataDir       string         `json:"dataDir"`
 	AppPath       string         `json:"appPath"`
+	AppLocalData  string         `json:"appLocalDataDir"`
 	WSPort        string         `json:"wsPort"`
 	Active        bool           `json:"active"`
 	HasData       bool           `json:"hasData"`
 	HasApp        bool           `json:"hasApp"`
+	HasAppLocal   bool           `json:"hasAppLocalData"`
 	DaemonRunning bool           `json:"daemonRunning"`
 	LiveWorkers   int            `json:"liveWorkers"`
 	Origin        *profileOrigin `json:"origin,omitempty"`
@@ -156,10 +158,12 @@ func newProfileListEntry(profile string, active string) profileListEntry {
 		Label:         r.Label,
 		DataDir:       r.DataDir,
 		AppPath:       r.AppPath,
+		AppLocalData:  r.AppLocalData,
 		WSPort:        r.WSPort,
 		Active:        profile == active,
 		HasData:       fileExists(r.DataDir),
 		HasApp:        fileExists(r.AppPath),
+		HasAppLocal:   fileExists(r.AppLocalData),
 		DaemonRunning: socketLive(r.Socket),
 		LiveWorkers:   countLiveWorkers(r.DataDir),
 		Origin:        readProfileOrigin(r.DataDir),

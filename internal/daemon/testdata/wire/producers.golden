@@ -219,6 +219,8 @@
     "crew.wake_limit": "8",
     "crew.wake_limit_window_seconds": "43200",
     "headless_context_window_cap": "128000",
+    "headless_tasks.enabled": "true",
+    "headless_tasks.enabled.stored": "true",
     "model_capture.bytes": "0",
     "model_capture.enabled": "false",
     "model_capture.interval_seconds": "10",

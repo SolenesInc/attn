@@ -20,6 +20,11 @@ import (
 
 const defaultManifestPath = ".github/release-candidate.yml"
 
+const (
+	publicationAutomatic = "automatic"
+	publicationHeld      = "held"
+)
+
 var (
 	plainVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 	commitPattern       = regexp.MustCompile(`^[0-9a-f]{40,64}$`)
@@ -29,10 +34,11 @@ var (
 )
 
 type candidateManifest struct {
-	Version   string `yaml:"version"`
-	Kind      string `yaml:"kind"`
-	SourceSHA string `yaml:"source_sha"`
-	MainSHA   string `yaml:"main_sha"`
+	Version     string `yaml:"version"`
+	Kind        string `yaml:"kind"`
+	Publication string `yaml:"publication"`
+	SourceSHA   string `yaml:"source_sha"`
+	MainSHA     string `yaml:"main_sha"`
 }
 
 type versionSource struct {
@@ -46,6 +52,7 @@ type candidateValidation struct {
 	currentMainRef      string
 	headRef             string
 	sourceAcceptance    string
+	tagStatus           string
 	otherOpenCandidates int
 }
 
@@ -97,6 +104,7 @@ commands:
   candidate validate [flags] validate a prepared release candidate
   accepted-main tag          print the manifest's release tag for main
   accepted-main validate     validate and print the release tag for main
+  accepted-main publication  print automatic or held for main
   sync apply [flags]         consume released fragments after main is merged
   sync check [flags]         verify main ancestry and fragment consumption
 `
@@ -353,12 +361,13 @@ func renderFragments(root string) (string, error) {
 
 func runManifest(root string, args []string, stdout io.Writer) error {
 	if len(args) == 0 || args[0] != "write" {
-		return errors.New("usage: release-train manifest write --version vX.Y.Z --kind <promotion|hotfix> --source <ref> --main <ref> [--output path]")
+		return errors.New("usage: release-train manifest write --version vX.Y.Z --kind <promotion|hotfix> --publication <automatic|held> --source <ref> --main <ref> [--output path]")
 	}
 	flags := flag.NewFlagSet("manifest write", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	versionFlag := flags.String("version", "", "release version")
 	kind := flags.String("kind", "", "candidate kind")
+	publication := flags.String("publication", publicationAutomatic, "publication mode")
 	sourceRef := flags.String("source", "", "accepted source ref")
 	mainRef := flags.String("main", "", "main ref at candidate creation")
 	output := flags.String("output", defaultManifestPath, "manifest path")
@@ -377,7 +386,10 @@ func runManifest(root string, args []string, stdout io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("main: %w", err)
 	}
-	manifest := candidateManifest{Version: version, Kind: *kind, SourceSHA: sourceSHA, MainSHA: mainSHA}
+	manifest := candidateManifest{
+		Version: version, Kind: *kind, Publication: *publication,
+		SourceSHA: sourceSHA, MainSHA: mainSHA,
+	}
 	if err := validateManifest(manifest); err != nil {
 		return err
 	}
@@ -422,6 +434,9 @@ func decodeManifest(data []byte) (candidateManifest, error) {
 	if err := decoder.Decode(&manifest); err != nil {
 		return candidateManifest{}, err
 	}
+	if manifest.Publication == "" {
+		manifest.Publication = publicationAutomatic
+	}
 	var extra candidateManifest
 	if err := decoder.Decode(&extra); err == nil {
 		return candidateManifest{}, errors.New("manifest holds more than one YAML document")
@@ -441,6 +456,12 @@ func validateManifest(manifest candidateManifest) error {
 	if manifest.Kind != "promotion" && manifest.Kind != "hotfix" {
 		return fmt.Errorf("kind must be promotion or hotfix (got %q)", manifest.Kind)
 	}
+	if manifest.Publication != publicationAutomatic && manifest.Publication != publicationHeld {
+		return fmt.Errorf("publication must be automatic or held (got %q)", manifest.Publication)
+	}
+	if manifest.Kind == "hotfix" && manifest.Publication == publicationHeld {
+		return errors.New("hotfix publication cannot be held")
+	}
 	if !commitPattern.MatchString(manifest.SourceSHA) {
 		return errors.New("source_sha must be a full commit SHA")
 	}
@@ -452,7 +473,7 @@ func validateManifest(manifest candidateManifest) error {
 
 func runCandidate(root string, args []string, stdout io.Writer) error {
 	if len(args) == 0 || args[0] != "validate" {
-		return errors.New("usage: release-train candidate validate --current-main <ref> --other-open-candidates 0 [--source-acceptance success] [--head ref] [--manifest path]")
+		return errors.New("usage: release-train candidate validate --current-main <ref> --tag-status absent --other-open-candidates 0 [--source-acceptance success] [--head ref] [--manifest path]")
 	}
 	flags := flag.NewFlagSet("candidate validate", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
@@ -461,6 +482,7 @@ func runCandidate(root string, args []string, stdout io.Writer) error {
 	flags.StringVar(&input.currentMainRef, "current-main", "", "current main ref")
 	flags.StringVar(&input.headRef, "head", input.headRef, "candidate head ref")
 	flags.StringVar(&input.sourceAcceptance, "source-acceptance", "", "accepted source conclusion")
+	flags.StringVar(&input.tagStatus, "tag-status", "", "remote candidate tag status")
 	flags.IntVar(&input.otherOpenCandidates, "other-open-candidates", -1, "other open candidate count")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
@@ -497,6 +519,12 @@ func validateCandidate(root string, input candidateValidation) error {
 	if input.otherOpenCandidates != 0 {
 		return fmt.Errorf("found %d other open release candidate(s)", input.otherOpenCandidates)
 	}
+	if strings.ToLower(input.tagStatus) != "absent" {
+		if input.tagStatus == "" {
+			return errors.New("remote tag status is missing")
+		}
+		return fmt.Errorf("remote tag status is %s, expected absent", input.tagStatus)
+	}
 	if input.currentMainRef == "" {
 		return errors.New("current main ref is required")
 	}
@@ -519,9 +547,6 @@ func validateCandidate(root string, input candidateValidation) error {
 	if err := checkVersions(root, headSHA, manifest.Version); err != nil {
 		return err
 	}
-	if err := requireTagAbsent(root, "v"+manifest.Version); err != nil {
-		return err
-	}
 	if err := requireNoFragments(root, headSHA); err != nil {
 		return err
 	}
@@ -532,20 +557,6 @@ func validateCandidate(root string, input candidateValidation) error {
 		return err
 	}
 	return nil
-}
-
-func requireTagAbsent(root, tag string) error {
-	command := exec.Command("git", "show-ref", "--verify", "--quiet", "refs/tags/"+tag)
-	command.Dir = root
-	err := command.Run()
-	if err == nil {
-		return fmt.Errorf("tag %s already exists", tag)
-	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
-		return nil
-	}
-	return err
 }
 
 func requireNoFragments(root, ref string) error {
@@ -652,8 +663,8 @@ func requireReleaseOnlyChanges(root, source, head, manifestPath string) error {
 }
 
 func runAcceptedMain(root string, args []string, stdout io.Writer) error {
-	if len(args) == 0 || (args[0] != "tag" && args[0] != "validate") {
-		return errors.New("usage: release-train accepted-main <tag|validate> --head <ref> [--manifest path]")
+	if len(args) == 0 || (args[0] != "tag" && args[0] != "validate" && args[0] != "publication") {
+		return errors.New("usage: release-train accepted-main <tag|validate|publication> --head <ref> [--manifest path]")
 	}
 	flags := flag.NewFlagSet("accepted-main "+args[0], flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
@@ -670,6 +681,10 @@ func runAcceptedMain(root string, args []string, stdout io.Writer) error {
 		manifest, err = validateAcceptedMain(root, *headRef, *manifestPath)
 	}
 	if err != nil {
+		return err
+	}
+	if args[0] == "publication" {
+		_, err = fmt.Fprintln(stdout, manifest.Publication)
 		return err
 	}
 	_, err = fmt.Fprintln(stdout, "v"+manifest.Version)

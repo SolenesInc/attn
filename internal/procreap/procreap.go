@@ -1,5 +1,3 @@
-// docs/decisions/2026-08-08-daemon-children-are-reaped-from-files.md.
-// Design: docs/decisions/2026-08-08-daemon-children-are-reaped-from-files.md.
 package procreap
 
 import (

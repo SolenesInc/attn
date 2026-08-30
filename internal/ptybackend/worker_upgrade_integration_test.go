@@ -12,7 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
-// Design: docs/plans/2026-08-22-worker-inplace-upgrade.md
 func TestWorkerBackend_UpgradeKeepsTheSessionAlive(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping worker integration test in short mode")

@@ -27,7 +27,7 @@
 
 .markdown-code-frame-language,
 .markdown-mermaid-label {
-  font-family: 'JetBrains Mono', 'SF Mono', Monaco, Menlo, monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', Monaco, Menlo, 'DejaVu Sans Mono', monospace;
   letter-spacing: 0.02em;
 }
 

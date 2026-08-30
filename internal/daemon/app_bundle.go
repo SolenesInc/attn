@@ -11,7 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/apps"
 )
 
-// Design: docs/plans/2026-08-13-ext-a5-ui-host-and-app-sdk.md.
 const appBundleRoutePrefix = "/apps/bundle/"
 
 // A year in seconds, the conventional ceiling for `immutable` content: the hash

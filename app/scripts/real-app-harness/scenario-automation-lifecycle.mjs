@@ -19,7 +19,7 @@ import {
 } from './harnessProfile.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
+import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import { readFrontendProtocolVersion } from './presentDaemon.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -292,7 +292,7 @@ async function captureFailureEvidence(runner, client) {
     runner.log('failure_evidence_state_error', { error: error instanceof Error ? error.message : String(error) });
   }
   try {
-    await captureFrontWindowScreenshot(path.join(runner.runDir, 'failure.png'), { client });
+    await captureScreenshotData(path.join(runner.runDir, 'failure.png'), { client });
   } catch (error) {
     runner.log('failure_evidence_screenshot_error', { error: error instanceof Error ? error.message : String(error) });
   }

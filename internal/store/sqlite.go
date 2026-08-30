@@ -5,14 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/rankkey"
 )
 
@@ -1067,6 +1070,30 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{123, "persist session transcript bindings", ``},
 	{124, "one model list for both classifier passes", ``},
 	{125, "the environment becomes slots the rules can look up", ``},
+	{126, "seed slugs drop their stop words", ``},
+	{127, "pull requests a session's agent opened", `
+		CREATE TABLE IF NOT EXISTS session_pull_requests (
+			session_id        TEXT NOT NULL,
+			pr_id             TEXT NOT NULL,
+			repository        TEXT NOT NULL,
+			number            INTEGER NOT NULL,
+			url               TEXT NOT NULL,
+			created_at        TEXT NOT NULL,
+			title             TEXT NOT NULL DEFAULT '',
+			draft             INTEGER NOT NULL DEFAULT 0,
+			state             TEXT NOT NULL DEFAULT 'open',
+			ci_status         TEXT NOT NULL DEFAULT '',
+			review_status     TEXT NOT NULL DEFAULT '',
+			mergeable_state   TEXT NOT NULL DEFAULT '',
+			head_sha          TEXT NOT NULL DEFAULT '',
+			head_branch       TEXT NOT NULL DEFAULT '',
+			status_fetched_at TEXT NOT NULL DEFAULT '',
+			last_activity_at  TEXT NOT NULL DEFAULT '',
+			PRIMARY KEY (session_id, pr_id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_session_pull_requests_session
+			ON session_pull_requests(session_id, created_at DESC);
+	`},
 }
 
 const migration99SQL = `
@@ -1120,13 +1147,26 @@ func applyMigration99(tx *sql.Tx) error {
 	return err
 }
 
+// A deferred transaction that reads before it writes cannot upgrade while
+// another connection holds the write lock: SQLite fails it instantly, no wait.
+func sqliteDSN(dbPath string) string {
+	if dbPath == ":memory:" {
+		return dbPath
+	}
+	u := &url.URL{Scheme: "file", Path: dbPath}
+	query := u.Query()
+	query.Set("_txlock", "immediate")
+	u.RawQuery = query.Encode()
+	return u.String()
+}
+
 func OpenDB(dbPath string) (*sql.DB, error) {
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, err
 	}
 
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite3", sqliteDSN(dbPath))
 	if err != nil {
 		return nil, err
 	}
@@ -1478,6 +1518,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			}
 		} else if m.version == 125 {
 			if err := applyMigration125(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 126 {
+			if err := applyMigration126(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -2700,6 +2745,64 @@ func applyMigration125(tx *sql.Tx) error {
 	}
 	_, err = tx.Exec("UPDATE automode_config SET environment = ? WHERE id = 1", string(encoded))
 	return err
+}
+
+// Slugs are stored at planting, so every seed planted under the old rule keeps a
+// title-length slug until it is recomputed here. Nothing references a slug as a key.
+func applyMigration126(tx *sql.Tx) error {
+	var collection int64
+	err := tx.QueryRow(
+		`SELECT id FROM document_collections WHERE namespace = ? AND collection = ?`,
+		garden.Namespace, garden.CollectionSeeds).Scan(&collection)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	table := docstore.TableName(collection)
+	rows, err := tx.Query(fmt.Sprintf(`SELECT id, body FROM %s`, table))
+	if err != nil {
+		return err
+	}
+	type reslug struct{ id, body string }
+	var updates []reslug
+	for rows.Next() {
+		var id, raw string
+		if err := rows.Scan(&id, &raw); err != nil {
+			rows.Close()
+			return err
+		}
+		var body map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(raw), &body); err != nil {
+			continue
+		}
+		var title, slug string
+		json.Unmarshal(body["title"], &title)
+		json.Unmarshal(body["step_slug"], &slug)
+		if want := garden.StepSlug(title); want != slug {
+			encoded, _ := json.Marshal(want)
+			body["step_slug"] = encoded
+			next, err := json.Marshal(body)
+			if err != nil {
+				rows.Close()
+				return err
+			}
+			updates = append(updates, reslug{id, string(next)})
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	// A new body is a new revision: stale conditional writes and resuming
+	// subscriptions decide by rev, so a silent rewrite would leave them holding the old slug.
+	stamp := time.Now().UTC().Format(docstore.TimeFormat)
+	for _, u := range updates {
+		if _, err := tx.Exec(fmt.Sprintf(`UPDATE %s SET body = ?, rev = rev + 1, updated_at = ? WHERE id = ?`, table), u.body, stamp, u.id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func foldModelLists(lists ...string) ([]string, error) {

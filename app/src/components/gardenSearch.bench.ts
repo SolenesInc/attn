@@ -1,5 +1,4 @@
-// The receipt behind the numbers in docs/plans/2026-08-20-garden-search.md. Every
-// steady-state figure is the minimum of three rounds after a long warmup.
+// Every steady-state figure is the minimum of three rounds after a long warmup.
 import type { Seed } from '../hooks/useDaemonSocket';
 import { buildIndex, parseQuery, searchGarden, type SearchEntry } from './gardenSearch.js';
 

@@ -11,8 +11,8 @@ import {
   printCommonHelp,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { MacOSDriver, delay } from './macosDriver.mjs';
-import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
+import { createWindowDriver, delay } from './platform.mjs';
+import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import {
   waitForFirstWorkspacePane,
   waitForPaneShellReady,
@@ -120,7 +120,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = new MacOSDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath });
   let sessionId = null;
 
   runner.log(`[RealAppHarness] wsUrl=${options.wsUrl}`);
@@ -206,7 +206,7 @@ async function main() {
         !state.rows.some((row) => row.path.includes(runner.runId)),
         `Empty query must not list files that have never been opened: ${JSON.stringify(state.rows)}`,
       );
-      await captureFrontWindowScreenshot(path.join(runner.runDir, 'opener-empty.png'), { client }).catch(() => {});
+      await captureScreenshotData(path.join(runner.runDir, 'opener-empty.png'), { client }).catch(() => {});
     });
 
     await runner.step('gitignored_file_is_invisible', async () => {
@@ -230,7 +230,7 @@ async function main() {
         betaRow.path === `docs/${beta}`,
         `Fuzzy rows must be labeled relative to the session root: ${JSON.stringify(state.rows)}`,
       );
-      await captureFrontWindowScreenshot(path.join(runner.runDir, 'opener-fuzzy.png'), { client }).catch(() => {});
+      await captureScreenshotData(path.join(runner.runDir, 'opener-fuzzy.png'), { client }).catch(() => {});
       await pickRow(state, beta);
       await waitForOpener(client, (current) => !current.open, 'picking a file closes the opener');
       const ui = await waitForWorkspaceUi(
@@ -320,7 +320,7 @@ async function main() {
         alphaAt >= 0 && betaAt >= 0 && alphaAt < betaAt,
         `Recents must list both opened files, the later open first: ${JSON.stringify(state.rows)}`,
       );
-      await captureFrontWindowScreenshot(path.join(runner.runDir, 'opener-recents.png'), { client }).catch(() => {});
+      await captureScreenshotData(path.join(runner.runDir, 'opener-recents.png'), { client }).catch(() => {});
 
       await pickRow(state, alpha);
       await waitForOpener(client, (current) => !current.open, 'picking a recent closes the opener');
@@ -373,7 +373,7 @@ async function main() {
         !state.rows.some((row) => row.path.endsWith('main.go')),
         `A non-markdown edit must not enter the opener: ${JSON.stringify(state.rows)}`,
       );
-      await captureFrontWindowScreenshot(path.join(runner.runDir, 'opener-agent-edits.png'), { client }).catch(() => {});
+      await captureScreenshotData(path.join(runner.runDir, 'opener-agent-edits.png'), { client }).catch(() => {});
 
       await pickRow(state, claudeEdited);
       await waitForOpener(client, (current) => !current.open, 'picking an agent-written file closes the opener');
@@ -408,7 +408,7 @@ async function main() {
         descended.query.endsWith('/build/'),
         `Descending must rewrite the query to the directory: ${JSON.stringify(descended.query)}`,
       );
-      await captureFrontWindowScreenshot(path.join(runner.runDir, 'opener-path-mode.png'), { client }).catch(() => {});
+      await captureScreenshotData(path.join(runner.runDir, 'opener-path-mode.png'), { client }).catch(() => {});
 
       await pickRow(descended, ignored);
       await waitForOpener(client, (current) => !current.open, 'picking a file in path mode closes the opener');
@@ -424,7 +424,7 @@ async function main() {
     console.log('[verify] PASS — markdown opener: fuzzy (git-enumerated, gitignore-respecting), recents, and path mode all worked.');
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
-    await captureFrontWindowScreenshot(path.join(runner.runDir, 'failure.png'), { client }).catch(() => {});
+    await captureScreenshotData(path.join(runner.runDir, 'failure.png'), { client }).catch(() => {});
     const result = await runner.finishFailure(error, { sessionId });
     console.error(result.error);
     process.exitCode = 1;

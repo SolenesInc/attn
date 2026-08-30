@@ -369,6 +369,7 @@ type wsHub struct {
 	logf              func(format string, args ...interface{})
 	broadcastListener BroadcastListener
 	wireTap           WireTap
+	evictionListener  func(string, evictionRecord)
 }
 
 const (
@@ -777,16 +778,15 @@ func (d *Daemon) wsWritePump(client *wsClient) {
 		if message.kind != messageKindText {
 			wsType = websocket.MessageBinary
 		}
-		start := time.Now()
 		client.writing.Store(true)
 		err := client.conn.Write(ctx, wsType, message.payload)
 		client.writing.Store(false)
-		elapsed := time.Since(start)
+		// The deadline starts before Write and survives scheduler preemption; an
+		// elapsed stopwatch around Write can miss a deadline that already fired.
+		deadlineExpired := ctx.Err() == context.DeadlineExceeded
 		cancel()
 		if err != nil {
-			// The library reports a timed-out write and a write to a connection closed
-			// underneath it through the same error, and which it picks is a race.
-			stalled = elapsed >= writeTimeout
+			stalled = deadlineExpired
 			if stalled {
 				d.logf("WebSocket client took longer than %s to accept a message, giving up on it", writeTimeout)
 			}
@@ -1020,6 +1020,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		go d.sendNotificationMarkReadWSResult(client, protocol.Deref(notifMark.RequestID), notifMark.NotificationID)
 	case protocol.CmdTicketAttach: // wire: ticket_attach
 		go d.handleTicketAttachWS(client, msg.(*protocol.TicketAttachMessage))
+	case protocol.CmdSeedArtifactTransfer: // wire: seed_artifact_transfer
+		go d.handleSeedArtifactTransferWS(client, msg.(*protocol.SeedArtifactTransferMessage))
+	case protocol.CmdSeedArtifactTarget: // wire: seed_artifact_target
+		go d.handleSeedArtifactTarget(client, msg.(*protocol.SeedArtifactTargetMessage))
 	case protocol.CmdSeedResume: // wire: seed_resume
 		go d.handleSeedResume(client, msg.(*protocol.SeedResumeMessage))
 	case protocol.CmdCrewWake: // wire: crew_wake
@@ -1090,6 +1094,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleSnoozeTurn(msg.(*protocol.SnoozeTurnMessage))
 	case protocol.CmdWakeTurn: // wire: wake_turn
 		d.handleWakeTurn(msg.(*protocol.WakeTurnMessage))
+	case protocol.CmdPullRequestCreated: // wire: pull_request_created
+		d.handlePullRequestCreatedWS(msg.(*protocol.PullRequestCreatedMessage))
+	case protocol.CmdPullRequestForget: // wire: pull_request_forget
+		d.handlePullRequestForgetWS(msg.(*protocol.PullRequestForgetMessage))
 	case protocol.CmdCancelCountdown: // wire: cancel_countdown
 		d.handleCancelCountdown(msg.(*protocol.CancelCountdownMessage))
 	case protocol.CmdTriggerNudge: // wire: trigger_nudge
@@ -1470,6 +1478,14 @@ func remoteCommandSessionID(cmd string, msg interface{}) string {
 		// the endpoint's next snapshot would put the row straight back.
 		if typed, ok := msg.(*protocol.SettleTurnMessage); ok {
 			return typed.SessionID
+		}
+	case protocol.CmdPullRequestCreated: // wire: pull_request_created
+		if typed, ok := msg.(*protocol.PullRequestCreatedMessage); ok {
+			return typed.ID
+		}
+	case protocol.CmdPullRequestForget: // wire: pull_request_forget
+		if typed, ok := msg.(*protocol.PullRequestForgetMessage); ok {
+			return typed.ID
 		}
 	case protocol.CmdCancelCountdown: // wire: cancel_countdown
 		if typed, ok := msg.(*protocol.CancelCountdownMessage); ok {

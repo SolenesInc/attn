@@ -410,11 +410,15 @@ func TestDaemon_PrunesSessionsWithoutLivePTYOnStart(t *testing.T) {
 	}
 
 	warnings := d.getWarnings()
-	if len(warnings) == 0 {
-		t.Fatal("expected daemon warning for startup stale-session prune")
+	hasPruneWarning := false
+	for _, warning := range warnings {
+		if warning.Code == warnStaleSessionsPruned {
+			hasPruneWarning = true
+			break
+		}
 	}
-	if warnings[0].Code != "stale_sessions_pruned" {
-		t.Fatalf("warning code = %q, want stale_sessions_pruned", warnings[0].Code)
+	if !hasPruneWarning {
+		t.Fatalf("expected %q warning, got %+v", warnStaleSessionsPruned, warnings)
 	}
 }
 
@@ -1007,6 +1011,42 @@ func TestDaemon_PruneSessionsWithoutPTY_SkipsSessionsRegisteredAfterCutoff(t *te
 	}
 	if session := d.store.Get("just-registered"); session == nil || session.State != protocol.SessionStateRecoverable {
 		t.Fatalf("session = %+v, want recoverable once the cutoff no longer protects it", session)
+	}
+}
+
+func TestDaemon_InjectTestSession_SurvivesRecoveryStartedBeforeIt(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	cutoff := time.Now()
+	stamp := time.Now().Format(time.RFC3339)
+	resp := socketRoundTrip(t, d, map[string]any{
+		"cmd": "inject_test_session",
+		"session": map[string]any{
+			"id":          "injected-during-recovery",
+			"label":       "Injected During Recovery",
+			"agent":       "claude",
+			"directory":   "/tmp/injected-during-recovery",
+			"state":       protocol.StateWorking,
+			"state_since": stamp,
+			"last_seen":   stamp,
+		},
+	})
+	if err := protocol.Deref(resp.Error); err != "" {
+		t.Fatalf("inject_test_session error: %s", err)
+	}
+
+	session := d.store.Get("injected-during-recovery")
+	if session == nil {
+		t.Fatal("session was not stored")
+	}
+	if session.StateUpdatedAt == "" {
+		t.Fatal("state_updated_at is empty; startup recovery cannot date this session")
+	}
+
+	if removed := d.pruneSessionsWithoutPTY(cutoff); removed != 0 {
+		t.Fatalf("pruneSessionsWithoutPTY removed = %d, want 0", removed)
+	}
+	if d.store.Get("injected-during-recovery") == nil {
+		t.Fatal("session was reaped; recovery started before the injection, not before a previous run")
 	}
 }
 
@@ -3240,6 +3280,7 @@ func waitForProtocolWebSocketEvent(t *testing.T, conn *websocket.Conn, want stri
 
 func sendWorkspaceClientHello(t *testing.T, conn *websocket.Conn) {
 	t.Helper()
+	conn.SetReadLimit(-1)
 	if err := writeWS(conn, map[string]interface{}{
 		"cmd":          protocol.CmdClientHello,
 		"client_kind":  "daemon-test",
@@ -3978,7 +4019,7 @@ func TestDaemon_ApprovePR_ViaWebSocket(t *testing.T) {
 func TestDaemon_InjectTestPR(t *testing.T) {
 	useFreeWSPort(t)
 
-	tmpDir := t.TempDir()
+	tmpDir := shortTempDir(t)
 	sockPath := filepath.Join(tmpDir, "test.sock")
 
 	d := NewForTesting(sockPath)
@@ -4397,8 +4438,10 @@ func TestDaemon_HookReportedStatesReachClients(t *testing.T) {
 
 	sendWorkspaceClientHello(t, wsConn)
 	waitForProtocolWebSocketEvent(t, wsConn, protocol.EventInitialState)
+	// coder/websocket defaults to 32 KiB; CI saw this legal state event cross it.
+	d.store.UpdateTodos("test-session", []string{strings.Repeat("x", 32<<10)})
 
-	for _, expected := range []string{
+	for i, expected := range []string{
 		protocol.StateWorking,
 		protocol.StateWaitingInput,
 		protocol.StateWorking,
@@ -4409,6 +4452,15 @@ func TestDaemon_HookReportedStatesReachClients(t *testing.T) {
 		waitForResolvedState(t, d, "test-session", protocol.SessionState(expected))
 
 		event := waitForProtocolWebSocketEvent(t, wsConn, protocol.EventSessionStateChanged)
+		if i == 0 {
+			payload, err := json.Marshal(event)
+			if err != nil {
+				t.Fatalf("marshal session state event: %v", err)
+			}
+			if len(payload) <= 32<<10 {
+				t.Fatalf("session state event = %d bytes, want past coder/websocket's 32 KiB default", len(payload))
+			}
+		}
 		got := ""
 		if event.Session != nil {
 			got = string(event.Session.State)

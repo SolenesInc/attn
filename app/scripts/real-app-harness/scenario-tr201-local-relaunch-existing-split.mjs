@@ -10,6 +10,7 @@ import {
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+import { widenWindowForSplitPanes } from './nativeWindowCapture.mjs';
 import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
 import {
   assertPaneCoverage,
@@ -27,7 +28,8 @@ import {
 } from './scenarioAssertions.mjs';
 import {
   ensureClaudeInitialPanePromptReady,
-  promptClaudeForStructuredBlock,
+  promptAgentForStructuredBlock,
+  writeStructuredBlockFixture,
 } from './scenarioAgents.mjs';
 
 function parseArgs(argv) {
@@ -51,7 +53,7 @@ async function main() {
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'TR-201',
-    tier: 'tier2-local-real-agent',
+    tier: 'tier2-local-mock-agent',
     prefix: 'scenario-tr201-local-relaunch-existing-split',
     metadata: {
       agent: 'claude',
@@ -71,9 +73,11 @@ async function main() {
   try {
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
+      await widenWindowForSplitPanes(client);
     });
 
     sessionId = await runner.step('create_session', async () => {
+      writeStructuredBlockFixture(runner.sessionDir, agentToken, 4);
       return createSessionAndWaitForInitialPane({
         client,
         observer,
@@ -85,7 +89,7 @@ async function main() {
     });
 
     utilityPaneId = await runner.step('prepare_split_session_before_relaunch', async () => {
-      const fixture = await promptClaudeForStructuredBlock(client, sessionId, agentToken, 4);
+      const fixture = await promptAgentForStructuredBlock(client, sessionId, agentToken, 4);
       initialPaneId = fixture.paneId;
       runner.writeJson('agent-fixture.json', fixture);
 
@@ -184,6 +188,7 @@ async function main() {
 
     await runner.step('relaunch_and_verify_existing_split', async () => {
       await relaunchAppAndConnect(client, observer);
+      await widenWindowForSplitPanes(client);
       await client.request('select_session', { sessionId });
 
       const restoredWorkspace = await waitForSessionWorkspace(

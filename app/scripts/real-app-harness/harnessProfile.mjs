@@ -9,6 +9,7 @@ const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEV_PROFILE = 'dev';
 const PROD_BUNDLE_ID = 'com.attn.manager';
 const PROD_APP_NAME = 'attn.app';
+const PROD_APP_TREE = 'attn';
 const PROD_DAEMON_PORT = '9849';
 
 // Profile name grammar — mirrors config.profileNamePattern on the Go side.
@@ -21,7 +22,6 @@ const BUILTIN_RESOURCES = {
     profile: '',
     bundleId: PROD_BUNDLE_ID,
     appName: 'attn',
-    appPath: path.join(os.homedir(), 'Applications', PROD_APP_NAME),
     wsPort: 9849,
     socket: path.join(os.homedir(), '.attn', 'attn.sock'),
     dataDir: path.join(os.homedir(), '.attn'),
@@ -31,13 +31,40 @@ const BUILTIN_RESOURCES = {
     profile: 'dev',
     bundleId: 'com.attn.manager.dev',
     appName: 'attn-dev',
-    appPath: path.join(os.homedir(), 'Applications', 'attn-dev.app'),
     wsPort: 29849,
     socket: path.join(os.homedir(), '.attn-dev', 'attn.sock'),
     dataDir: path.join(os.homedir(), '.attn-dev'),
     deepLinkScheme: 'attn-dev',
   },
 };
+
+function xdgDataHome() {
+  return (process.env.XDG_DATA_HOME ?? '').trim() || path.join(os.homedir(), '.local', 'share');
+}
+
+function appLocalDataDir(bundleId) {
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', bundleId);
+  }
+  return path.join(xdgDataHome(), bundleId);
+}
+
+function installedApp(appName) {
+  if (process.platform === 'darwin') {
+    const appPath = path.join(os.homedir(), 'Applications', `${appName}.app`);
+    return {
+      appPath,
+      appExecutable: path.join(appPath, 'Contents', 'MacOS', 'app'),
+      appDaemon: path.join(appPath, 'Contents', 'MacOS', 'attn'),
+    };
+  }
+  const appPath = path.join(xdgDataHome(), appName);
+  return {
+    appPath,
+    appExecutable: path.join(appPath, 'bin', 'attn-app'),
+    appDaemon: path.join(appPath, 'bin', 'attn'),
+  };
+}
 
 function normalizeProfile(raw) {
   const value = (raw ?? '').trim().toLowerCase();
@@ -86,6 +113,9 @@ function resolveViaAuthority(profile) {
     bundleId: resolved.bundleId,
     appName: resolved.appName,
     appPath: resolved.appPath,
+    appExecutable: resolved.appExecutable,
+    appDaemon: resolved.appDaemon,
+    appLocalDataDir: resolved.appLocalDataDir,
     wsPort: Number(resolved.wsPort),
     socket: resolved.socket,
     dataDir: resolved.dataDir,
@@ -96,7 +126,12 @@ function resolveViaAuthority(profile) {
 export function resolveHarnessResources(profile = currentHarnessProfile()) {
   const key = normalizeProfile(profile);
   if (Object.prototype.hasOwnProperty.call(BUILTIN_RESOURCES, key)) {
-    return BUILTIN_RESOURCES[key];
+    const builtin = BUILTIN_RESOURCES[key];
+    return {
+      ...builtin,
+      ...installedApp(builtin.appName),
+      appLocalDataDir: appLocalDataDir(builtin.bundleId),
+    };
   }
   if (!PROFILE_NAME.test(key)) {
     throw new Error(`Invalid attn profile name '${profile}' (expected ${PROFILE_NAME}).`);
@@ -114,13 +149,21 @@ export function bundleIdentifierForProfile(profile = currentHarnessProfile()) {
 // macOS filesystems are case-insensitive: `Attn.app` is the prod bundle.
 export function profileForAppPath(appPath, fallbackProfile = currentHarnessProfile()) {
   const appName = path.basename(appPath || '').toLowerCase();
-  const match = /^attn(?:-([a-z0-9][a-z0-9-]{0,15}))?\.app$/.exec(appName);
+  const match = /^attn(?:-([a-z0-9][a-z0-9-]{0,15}))?(?:\.app)?$/.exec(appName);
   if (match) return match[1] ?? '';
   return fallbackProfile;
 }
 
 export function bundleIdentifierForAppPath(appPath, fallbackProfile = currentHarnessProfile()) {
   return bundleIdentifierForProfile(profileForAppPath(appPath, fallbackProfile));
+}
+
+export function appExecutableForProfile(profile = currentHarnessProfile()) {
+  return resolveHarnessResources(profile).appExecutable;
+}
+
+export function appExecutableForAppPath(appPath, fallbackProfile = currentHarnessProfile()) {
+  return appExecutableForProfile(profileForAppPath(appPath, fallbackProfile));
 }
 
 export function defaultAppPathForProfile(profile = currentHarnessProfile()) {
@@ -168,15 +211,12 @@ export function defaultWSURLForProfile(profile = currentHarnessProfile()) {
   return `ws://127.0.0.1:${resolveHarnessResources(profile).wsPort}/ws`;
 }
 
+export function appLocalDataDirForProfile(profile = currentHarnessProfile()) {
+  return resolveHarnessResources(profile).appLocalDataDir;
+}
+
 export function manifestPathForProfile(profile = currentHarnessProfile()) {
-  return path.join(
-    os.homedir(),
-    'Library',
-    'Application Support',
-    resolveHarnessResources(profile).bundleId,
-    'debug',
-    'ui-automation.json',
-  );
+  return path.join(appLocalDataDirForProfile(profile), 'debug', 'ui-automation.json');
 }
 
 export function deepLinkSchemeForProfile(profile = currentHarnessProfile()) {
@@ -217,9 +257,11 @@ export function isProductionHarnessTarget({
     wsPort = new URL(wsUrl).port;
   } catch {
   }
+  const appName = path.basename(appPath || '').toLowerCase();
   return (
     profile === ''
-    || path.basename(appPath || '').toLowerCase() === PROD_APP_NAME
+    || appName === PROD_APP_NAME
+    || appName === PROD_APP_TREE
     || bundleId === PROD_BUNDLE_ID
     || wsPort === PROD_DAEMON_PORT
   );

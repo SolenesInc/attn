@@ -282,7 +282,7 @@
 .garden-row__id {
   color: var(--color-text-muted);
   flex: none;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   font-size: var(--font-size-sm);
   opacity: 0;
   text-align: right;
@@ -404,7 +404,7 @@
 
 .garden-head__id {
   color: var(--color-text-muted);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
 }
 
 .garden-head__progress {
@@ -705,7 +705,7 @@
 .garden-search__glyph {
   color: var(--color-text-dimmed);
   flex: none;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   font-size: var(--font-size-md);
 }
 
@@ -754,7 +754,7 @@
   border: none;
   color: var(--color-text-muted);
   cursor: pointer;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   font-size: var(--font-size-sm);
   padding: 0;
 }
@@ -785,7 +785,7 @@
 .garden-search kbd,
 .garden-nothing__moves kbd {
   color: var(--color-text-muted);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   font-size: var(--font-size-sm);
 }
 
@@ -864,7 +864,7 @@
 
 .garden-nothing__echo {
   color: var(--color-text-primary);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
 }
 
 .garden-nothing__moves {

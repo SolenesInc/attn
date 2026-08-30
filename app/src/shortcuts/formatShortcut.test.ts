@@ -1,6 +1,7 @@
 // app/src/shortcuts/formatShortcut.test.ts
 import { describe, it, expect } from 'vitest';
-import { formatShortcut, shortcutTokens, modifierTokens } from './formatShortcut';
+import { formatShortcut, keyCombo, shortcutTokens, modifierTokens } from './formatShortcut';
+import { withNavigatorPlatform } from '../test/platformStub';
 
 describe('formatShortcut', () => {
   it('renders modifiers as Mac glyphs in ⌘ ⌥ ⇧ order', () => {
@@ -42,6 +43,28 @@ describe('formatShortcut', () => {
 
     it('reports the leader modifiers for a chord', () => {
       expect(modifierTokens(chord)).toEqual(['⌘']);
+    });
+  });
+});
+
+describe('off-mac rendering', () => {
+  it('writes the accelerator as Ctrl and joins tokens with +', () => {
+    withNavigatorPlatform('Linux aarch64', () => {
+      expect(formatShortcut('session.new')).toBe('Ctrl+N');
+      expect(formatShortcut('session.newHorizontal')).toBe('Ctrl+Shift+N');
+      expect(formatShortcut('notebook.openFullscreen')).toBe('Ctrl+Alt+Shift+N');
+      expect(formatShortcut('terminal.toggleMaximize')).toBe('Ctrl+Shift+⏎');
+    });
+  });
+
+  it('gives one keycap per modifier and folds ctrl into the accelerator', () => {
+    withNavigatorPlatform('Linux aarch64', () => {
+      expect(shortcutTokens('terminal.focusLeft')).toEqual(['Ctrl', 'Alt', '←']);
+      expect(shortcutTokens({ key: 'k', meta: true, ctrl: true })).toEqual(['Ctrl', 'K']);
+      expect(keyCombo('accel', 'shift', 'T')).toBe('Ctrl+Shift+T');
+    });
+    withNavigatorPlatform('MacIntel', () => {
+      expect(keyCombo('accel', 'shift', 'T')).toBe('⌘⇧T');
     });
   });
 });

@@ -5,15 +5,17 @@ remote="${RELEASE_TRAIN_REMOTE:-origin}"
 
 usage() {
   cat <<EOF
-usage: $0 <version-tag> [--hotfix] [--dry-run]
+usage: $0 <version-tag> [--hotfix] [--hold] [--dry-run]
 example: $0 v0.12.0
+         $0 v0.12.0 --hold
          $0 v0.12.1 --hotfix
 
 Freeze the accepted ${remote}/next head into release/vX.Y.Z, compile its
 changelog, bump versions, write the release manifest, and open a draft PR to
 main. With --hotfix, prepare the current hotfix/* branch in place from the
-current ${remote}/main instead. This command never merges, tags, or starts a
-release.
+current ${remote}/main instead. With --hold, prepare a promotion that may merge
+to main after normal CI but cannot create a tag or dispatch a release. This
+command never merges, tags, or starts a release.
 EOF
 }
 
@@ -26,6 +28,7 @@ version_tag="$1"
 shift
 dry_run=0
 kind=promotion
+publication=automatic
 
 if [[ ! "$version_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "prepare release: version tag must look like v1.2.3" >&2
@@ -35,11 +38,17 @@ fi
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) dry_run=1 ;;
+    --hold) publication=held ;;
     --hotfix) kind=hotfix ;;
     *) usage >&2; exit 2 ;;
   esac
   shift
 done
+
+if [[ "$kind" == hotfix && "$publication" == held ]]; then
+  echo "prepare release: --hold is only supported for promotions" >&2
+  exit 1
+fi
 
 for command in git gh go; do
   if ! command -v "$command" >/dev/null 2>&1; then
@@ -50,6 +59,7 @@ done
 
 root="$(git rev-parse --show-toplevel)"
 script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$script_root/lib/release-tag.sh"
 cd "$root"
 
 if [[ -n "$(git status --porcelain)" ]]; then
@@ -83,11 +93,11 @@ if [[ -z "$repo_name" || -z "$repo_url" ]]; then
   exit 1
 fi
 
-echo "Fetching ${remote}/main and tags..."
-git fetch --tags "$remote" main
+echo "Fetching ${remote}/main..."
+git fetch --no-tags "$remote" main
 if [[ "$kind" == promotion ]]; then
   echo "Fetching ${remote}/next..."
-  git fetch "$remote" next
+  git fetch --no-tags "$remote" next
 fi
 
 main_sha="$(git rev-parse --verify "${remote}/main^{commit}")"
@@ -117,10 +127,8 @@ if ! git merge-base --is-ancestor "$main_sha" "$source_sha"; then
   fi
   exit 1
 fi
-if git show-ref --verify --quiet "refs/tags/${version_tag}"; then
-  echo "prepare release: tag ${version_tag} already exists" >&2
-  exit 1
-fi
+require_remote_tag_absent "$remote" "$version_tag" "prepare release" \
+  "tag ${version_tag} already exists"
 if [[ "$kind" == promotion ]]; then
   if git show-ref --verify --quiet "refs/heads/${release_branch}"; then
     echo "prepare release: local branch ${release_branch} already exists" >&2
@@ -183,6 +191,7 @@ if [[ "$dry_run" -eq 1 ]]; then
 Candidate preparation dry run
 - version: ${version_tag}
 - kind: ${kind}
+- publication: ${publication}
 - ${source_label}: ${source_sha}
 ${acceptance_line}
 - main baseline: ${main_sha}
@@ -202,9 +211,12 @@ done
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-release-candidate.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
-facts="$work/fragments.md"
 body="$work/pr-body.md"
-go run ./cmd/release-train fragments render >"$facts"
+fragment_count="$(find changelog.d -maxdepth 1 -type f -name '*.yaml' | wc -l | tr -d '[:space:]')"
+fragment_noun=fragments
+if [[ "$fragment_count" == 1 ]]; then
+  fragment_noun=fragment
+fi
 
 if [[ "$kind" == promotion ]]; then
   echo "Creating frozen candidate ${release_branch} from ${source_sha}..."
@@ -219,7 +231,7 @@ go run ./cmd/release-train version set "$version_tag"
 (cd app/src-tauri && cargo check -q)
 go run ./cmd/release-train version check "$version_tag"
 go run ./cmd/release-train manifest write \
-  --version "$version_tag" --kind "$kind" \
+  --version "$version_tag" --kind "$kind" --publication "$publication" \
   --source "$source_sha" --main "$main_sha"
 
 git add -A CHANGELOG.md changelog.d .github/release-candidate.yml \
@@ -229,7 +241,7 @@ git commit -m "chore(release): prepare ${version_tag}"
 candidate_sha="$(git rev-parse HEAD)"
 
 echo "Rechecking the frozen baseline before publishing..."
-git fetch --tags "$remote" main
+git fetch --no-tags "$remote" main
 current_main_sha="$(git rev-parse --verify "${remote}/main^{commit}")"
 if [[ "$current_main_sha" != "$main_sha" ]]; then
   echo "prepare release: main moved during preparation" >&2
@@ -237,10 +249,8 @@ if [[ "$current_main_sha" != "$main_sha" ]]; then
   echo "current:  ${current_main_sha}" >&2
   exit 1
 fi
-if git show-ref --verify --quiet "refs/tags/${version_tag}"; then
-  echo "prepare release: tag ${version_tag} appeared during preparation" >&2
-  exit 1
-fi
+require_remote_tag_absent "$remote" "$version_tag" "prepare release" \
+  "tag ${version_tag} appeared during preparation"
 candidate_prs="$(bash "$script_root/open-release-candidates.sh")"
 if [[ -n "$candidate_prs" ]]; then
   echo "prepare release: another candidate opened during preparation:" >&2
@@ -251,6 +261,7 @@ fi
 candidate_args=(
   --current-main "$main_sha"
   --head "$candidate_sha"
+  --tag-status absent
   --other-open-candidates 0
 )
 if [[ "$kind" == promotion ]]; then
@@ -260,11 +271,18 @@ go run ./cmd/release-train candidate validate "${candidate_args[@]}"
 
 manifest_version="$(awk '$1 == "version:" { print $2 }' .github/release-candidate.yml)"
 manifest_kind="$(awk '$1 == "kind:" { print $2 }' .github/release-candidate.yml)"
+manifest_publication="$(awk '$1 == "publication:" { print $2 }' .github/release-candidate.yml)"
 manifest_source="$(awk '$1 == "source_sha:" { print $2 }' .github/release-candidate.yml)"
 manifest_main="$(awk '$1 == "main_sha:" { print $2 }' .github/release-candidate.yml)"
 
 if [[ "$kind" == promotion ]]; then
-  candidate_tldr="Freezes accepted \`next\` commit [\`${manifest_source:0:12}\`](${repo_url}/commit/${manifest_source}) as ${version_tag}."
+  if [[ "$publication" == held ]]; then
+    candidate_tldr="Freezes accepted \`next\` commit [\`${manifest_source:0:12}\`](${repo_url}/commit/${manifest_source}) as ${version_tag} for a CI-only promotion to \`main\`. Publication is held at the accepted-main boundary."
+    candidate_followup="This PR carries the release metadata. Merging remains separate, and this held candidate cannot dispatch a release."
+  else
+    candidate_tldr="Freezes accepted \`next\` commit [\`${manifest_source:0:12}\`](${repo_url}/commit/${manifest_source}) as ${version_tag}."
+    candidate_followup="This PR carries the release metadata. Merging and release dispatch remain separate gates."
+  fi
   source_label="Accepted source"
   source_gate_row="| Source Acceptance | [green check](${acceptance_url}) |"
   movement_note="\`next\` may keep moving while this PR is reviewed. Those later changes are outside this frozen candidate."
@@ -275,12 +293,13 @@ else
   source_gate_row="| Source gate | Final \`PR gate\` and \`App acceptance\` on this candidate |"
   movement_note="The hotfix starts from the recorded current \`main\` baseline. If \`main\` moves, close this candidate and prepare it again."
   pr_title="$(git log -1 --format=%s "$manifest_source")"
+  candidate_followup="This PR carries the release metadata. Merging and release dispatch remain separate gates."
 fi
 
 cat >"$body" <<EOF
 ## TL;DR
 
-${candidate_tldr} This PR includes the release metadata, but merging and release dispatch remain separate gates.
+${candidate_tldr} ${candidate_followup}
 
 ## Frozen candidate
 
@@ -288,6 +307,7 @@ ${candidate_tldr} This PR includes the release metadata, but merging and release
 | --- | --- |
 | Version | \`${manifest_version}\` |
 | Kind | \`${manifest_kind}\` |
+| Publication | \`${manifest_publication}\` |
 | ${source_label} | [\`${manifest_source}\`](${repo_url}/commit/${manifest_source}) |
 ${source_gate_row}
 | Main baseline | [\`${manifest_main}\`](${repo_url}/commit/${manifest_main}) |
@@ -297,9 +317,26 @@ ${movement_note}
 
 ## What changed
 
-- compiled the frozen source's changelog fragments into \`CHANGELOG.md\`
+- compiled ${fragment_count} frozen changelog ${fragment_noun} into \`CHANGELOG.md\`
 - updated every committed app version to \`${manifest_version}\`
 - recorded the accepted source and main baseline in \`.github/release-candidate.yml\`
+
+EOF
+
+if [[ "$publication" == held ]]; then
+  cat >>"$body" <<EOF
+## Publication hold
+
+This candidate does not claim packaged-app verification. Merge it after \`PR gate\`
+is green. The merged \`main\` SHA will run full Acceptance, then the release
+controller will stop before App acceptance, tag creation, or release dispatch.
+
+The hold is committed with the candidate and remains in force on later \`main\`
+runs. Prepare a new candidate and version for a public release.
+
+EOF
+else
+  cat >>"$body" <<EOF
 
 ## Manual app verification
 
@@ -317,15 +354,8 @@ gh workflow run app-acceptance.yml \\
 
 Do not merge until \`PR gate\` and \`App acceptance\` are green on \`${candidate_sha}\`.
 
-<details>
-<summary>Frozen changelog inputs</summary>
-
 EOF
-sed 's/^/    /' "$facts" >>"$body"
-cat >>"$body" <<'EOF'
-
-</details>
-EOF
+fi
 
 echo "Pushing ${release_branch}..."
 git push -u "$remote" "$release_branch"
@@ -333,5 +363,9 @@ pr_url="$(gh pr create --draft --base main --head "$release_branch" \
   --title "$pr_title" --body-file "$body")"
 
 echo "Opened draft candidate ${pr_url}"
-echo "Next: review the changelog, run the packaged app, and record App acceptance."
+if [[ "$publication" == held ]]; then
+  echo "Next: review the changelog and merge after normal PR CI is green."
+else
+  echo "Next: review the changelog, run the packaged app, and record App acceptance."
+fi
 echo "This command did not merge, tag, or start a release."

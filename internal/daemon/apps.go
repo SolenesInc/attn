@@ -12,8 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// See docs/plans/2026-08-06-ext-a4-app-registry-and-runtime.md.
-
 const recentInvocationLimit = 10
 
 // Rollback names ids in its refusals and nothing else lists them, so status has

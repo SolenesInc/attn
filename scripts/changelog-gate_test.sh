@@ -68,7 +68,7 @@ git clone -q "$root" "$hotfix_repo"
 git -C "$hotfix_repo" config user.name 'Changelog Gate Test'
 git -C "$hotfix_repo" config user.email 'changelog-gate@example.com'
 git -C "$hotfix_repo" switch -q -C main
-git -C "$hotfix_repo" rm -q -- 'changelog.d/*.yaml'
+git -C "$hotfix_repo" rm -q --ignore-unmatch -- 'changelog.d/*.yaml'
 previous_source="$(git -C "$hotfix_repo" rev-parse HEAD)"
 cat >"$hotfix_repo/.github/release-candidate.yml" <<EOF
 version: 99.98.96

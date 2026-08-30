@@ -1,6 +1,0 @@
-kind: internal
-area: release
-change: >
-  Prepare post-release hotfix candidates with a fresh version and manifest,
-  without reusing the consumed manifest from the previous release, and keep PR
-  path classification independent of the shared GitHub API quota.

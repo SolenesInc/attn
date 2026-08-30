@@ -10,7 +10,7 @@ import (
 )
 
 // A pty-worker outlives an install, so its bytes can reach a client whose decoder is a
-// different build. See docs/plans/2026-08-16-snapshot-format-skew.md.
+// different build.
 func TestInfoStampsSnapshotFormat(t *testing.T) {
 	newSession := func() *Session {
 		return &Session{

@@ -42,7 +42,9 @@ const (
 	claudeTranscriptFreshnessSkew = 5 * time.Second
 )
 
-var claudePeerTools = []string{"ListAgents", "SendMessage"}
+// ListAgents' address book is keyed by working directory, not attn's names.
+// SendMessage stays: it's also how a session continues its own subagents.
+var claudePeerTools = []string{"ListAgents"}
 
 func init() {
 	Register(&Claude{})
@@ -92,7 +94,7 @@ func (c *Claude) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	}
 
 	// Denying removes the tools from the agent's list rather than failing the call
-	// (measured: 31 tools -> 29). One element per rule: a joined element can go inert.
+	// (measured with two rules: 31 tools -> 29). One element per rule: a joined element can go inert.
 	if enabled, _ := boolEnv("ATTN_CLAUDE_PEER_MESSAGING"); !enabled {
 		args = append(args, "--disallowed-tools")
 		args = append(args, claudePeerTools...)

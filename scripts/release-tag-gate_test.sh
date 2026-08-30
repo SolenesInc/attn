@@ -69,8 +69,8 @@ git clone -q "$root" "$repo"
 git -C "$repo" config user.name 'Release Tag Gate Test'
 git -C "$repo" config user.email 'release-tag-gate@example.com'
 git -C "$repo" switch -q -C main
-git -C "$repo" rm -q -- 'changelog.d/*.yaml'
-git -C "$repo" commit -q -m 'release fixture baseline'
+git -C "$repo" rm -q --ignore-unmatch -- 'changelog.d/*.yaml'
+git -C "$repo" commit -q --allow-empty -m 'release fixture baseline'
 baseline_sha="$(git -C "$repo" rev-parse HEAD)"
 (cd "$repo" && go run ./cmd/release-train version set v99.98.97 >/dev/null)
 cat >"$repo/.github/release-candidate.yml" <<EOF
@@ -150,6 +150,19 @@ expect_failure 'main moved from dispatch SHA' run_gate v99.98.97
 git -C "$repo" switch -q main
 export GITHUB_SHA="$forged_sha"
 expect_failure 'expected 99.98.97' run_gate v99.98.97
+
+git -C "$repo" switch -q -C held-main "$accepted_sha"
+(cd "$repo" && go run ./cmd/release-train manifest write \
+  --version v99.98.97 --kind promotion --publication held \
+  --source "$baseline_sha" --main "$baseline_sha" >/dev/null)
+git -C "$repo" add .github/release-candidate.yml
+git -C "$repo" commit -q -m 'chore(release): hold publication'
+held_sha="$(git -C "$repo" rev-parse HEAD)"
+git -C "$repo" tag v99.98.95
+git -C "$repo" update-ref refs/remotes/origin/main "$held_sha"
+export GITHUB_SHA="$held_sha"
+export FAKE_ACCEPTANCE_SHA="$held_sha"
+expect_failure 'publication is held' run_gate v99.98.95
 
 validate_job="$(sed -n '/^  validate-tag:/,/^  tauri:/p' "$root/.github/workflows/release.yml")"
 grep -Fq 'actions: read' <<<"$validate_job"

@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { sleep } from './scenarioAssertions.mjs';
@@ -316,7 +317,10 @@ export async function removeStaleHarnessScenarioSessions(observer, timeoutMs = 6
 }
 
 export function buildRemoteHarnessPaths(remoteHome, runId) {
-  const remoteHarnessRoot = path.posix.join(remoteHome, '.attn', 'harness', runId);
+  // A 16-hex digest measures 91 bytes at the Linux worker socket directory,
+  // below sockaddr_un's 108-byte ceiling; full run IDs remain in local artifacts.
+  const remoteRunId = createHash('sha256').update(String(runId)).digest('hex').slice(0, 16);
+  const remoteHarnessRoot = path.posix.join(remoteHome, '.attn', 'harness', remoteRunId);
   return {
     remoteHarnessRoot,
     remoteHarnessBinary: path.posix.join(remoteHarnessRoot, 'bin', 'attn'),

@@ -174,7 +174,7 @@ func dialDaemonWSAs(t *testing.T, ctx context.Context, addr, clientID string) *w
 	if err != nil {
 		t.Fatalf("dial %s: %v", addr, err)
 	}
-	conn.SetReadLimit(64 << 20)
+	conn.SetReadLimit(-1)
 	sendClientHelloAs(t, conn, clientID)
 	return conn
 }
@@ -206,7 +206,7 @@ func dialDaemonWS(t *testing.T, ctx context.Context, addr string) *websocket.Con
 	if err != nil {
 		t.Fatalf("dial %s: %v", addr, err)
 	}
-	conn.SetReadLimit(64 << 20)
+	conn.SetReadLimit(-1)
 	sendWorkspaceClientHello(t, conn)
 	return conn
 }

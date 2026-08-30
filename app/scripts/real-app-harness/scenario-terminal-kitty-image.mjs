@@ -151,6 +151,7 @@ async function main() {
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'TERMINAL-KITTY-IMAGE',
+    allowRealAgents: false,
     tier: 'tier1-local-shell',
     prefix: 'terminal-kitty-image',
     metadata: {

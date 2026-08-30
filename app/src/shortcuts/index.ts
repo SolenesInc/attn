@@ -24,7 +24,21 @@ export {
 } from './chordState';
 export { matchChordLeader } from './chordDispatch';
 export { useShortcut, setShortcutCaptureSuspended } from './useShortcut';
-export { formatShortcut, shortcutTokens, modifierTokens } from './formatShortcut';
+export {
+  formatShortcut,
+  shortcutTokens,
+  modifierTokens,
+  keyCombo,
+  keyComboTokens,
+} from './formatShortcut';
+export {
+  type ModifierName,
+  type ModifierGlyphs,
+  isMacLikePlatform,
+  isAccelKeyPressed,
+  modifierGlyphs,
+  keyJoiner,
+} from './platform';
 export {
   buildCheatsheet,
   type CheatsheetRow,

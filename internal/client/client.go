@@ -421,6 +421,26 @@ func (c *Client) RecordFilesEdited(id string, paths []string) error {
 	return err
 }
 
+func (c *Client) RecordPullRequestCreated(id, url string) error {
+	msg := protocol.PullRequestCreatedMessage{
+		Cmd: protocol.CmdPullRequestCreated,
+		ID:  id,
+		URL: url,
+	}
+	_, err := c.send(msg)
+	return err
+}
+
+func (c *Client) ForgetSessionPullRequest(id, url string) error {
+	msg := protocol.PullRequestForgetMessage{
+		Cmd: protocol.CmdPullRequestForget,
+		ID:  id,
+		URL: url,
+	}
+	_, err := c.send(msg)
+	return err
+}
+
 type DelegateOptions struct {
 	RequestID          string
 	TicketID           string

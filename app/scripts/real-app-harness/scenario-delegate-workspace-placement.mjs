@@ -79,7 +79,7 @@ async function main() {
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'DELEGATE-WORKSPACE-PLACEMENT',
-    tier: 'tier2-local-real-agent',
+    tier: 'tier2-local-mock-agent',
     prefix: 'delegate-workspace-placement',
     metadata: {
       agent: 'codex',

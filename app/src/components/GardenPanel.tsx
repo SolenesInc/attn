@@ -1,8 +1,8 @@
-// See docs/plans/2026-08-20-garden-search.md.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { gardenPathToSeed, gardenScrollMemory, seedParentID, useGardenWalk } from '../store/gardenWalk';
 import type { Seed } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
+import { isAccelKeyPressed } from '../shortcuts/platform';
 import { crewDisplayName, crewHolderName } from '../utils/crewName';
 import {
   IS_VALUES,
@@ -23,6 +23,7 @@ import { SeedArtifactRows } from './SeedArtifactRows';
 import type { SeedDocument } from './SeedDocumentView';
 import type { SeedDocumentNote } from './seedArtifacts';
 import './GardenPanel.css';
+import { formatShortcut, keyCombo } from '../shortcuts/formatShortcut';
 
 interface GardenPanelProps {
   isOpen: boolean;
@@ -671,7 +672,7 @@ export function GardenPanel({
   const onPanelKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null;
     const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
-    if ((event.key === 'f' && event.metaKey) || (event.key === '/' && !typing)) {
+    if ((event.key === 'f' && isAccelKeyPressed(event)) || (event.key === '/' && !typing)) {
       event.preventDefault();
       event.stopPropagation();
       focusSearch();
@@ -724,6 +725,7 @@ export function GardenPanel({
 
   const seedDoc = seedDocument && here && seedDocument.seed.id === here.id ? seedDocument : null;
   const artifacts = seedDoc?.artifacts ?? [];
+  const references = seedDoc?.references ?? [];
   const notes = seedDoc?.notes ?? [];
   const notesTotal = seedDoc?.notes_total ?? 0;
   const withheld = Math.max(0, notesTotal - notes.length);
@@ -829,7 +831,7 @@ export function GardenPanel({
           className="garden-chrome__frame"
           onClick={onToggleFrame}
           aria-label={frame === 'full' ? 'Return the garden to the dock' : 'Expand the garden'}
-          title={frame === 'full' ? 'Return to the dock (Esc)' : 'Expand (⌘⇧T)'}
+          title={frame === 'full' ? 'Return to the dock (Esc)' : `Expand (${formatShortcut('board.open')})`}
         >
           <FrameGlyph direction={frame === 'full' ? 'in' : 'out'} />
         </button>
@@ -885,12 +887,12 @@ export function GardenPanel({
             <>
               {plotId && !wide && outside > 0 && (
                 <button type="button" className="garden-search__widen" onClick={toggleWide}>
-                  +{outside} in the whole garden <kbd>⌥↵</kbd>
+                  +{outside} in the whole garden <kbd>{keyCombo('alt', '↵')}</kbd>
                 </button>
               )}
               {plotId && wide && (
                 <button type="button" className="garden-search__widen" onClick={toggleWide}>
-                  {inPlot} in this plot <kbd>⌥↵</kbd>
+                  {inPlot} in this plot <kbd>{keyCombo('alt', '↵')}</kbd>
                 </button>
               )}
             </>
@@ -911,7 +913,7 @@ export function GardenPanel({
             <button type="button" onClick={toggleWide}>
               Search the whole garden <span className="garden-nothing__count">{outside}</span>
             </button>
-            <kbd>⌥↵</kbd>
+            <kbd>{keyCombo('alt', '↵')}</kbd>
           </li>
         )}
         {plotId && wide && (
@@ -919,7 +921,7 @@ export function GardenPanel({
             <button type="button" onClick={toggleWide}>
               Search this plot only <span className="garden-nothing__count">{inPlot}</span>
             </button>
-            <kbd>⌥↵</kbd>
+            <kbd>{keyCombo('alt', '↵')}</kbd>
           </li>
         )}
         {hiddenClosed > 0 && (
@@ -998,7 +1000,12 @@ export function GardenPanel({
 
       {here.body.trim() ? (
         <div className="garden-body">
-          <MarkdownReader content={here.body} source={seedMarkdownSource(here.id)} allowLocalTargets={false} />
+          <MarkdownReader
+            content={here.body}
+            source={seedMarkdownSource(here.id)}
+            allowLocalTargets={false}
+            seedArtifacts={artifacts}
+          />
         </div>
       ) : (
         <p className="garden-note-empty">No body — the title is the whole seed.</p>
@@ -1038,11 +1045,13 @@ export function GardenPanel({
         </section>
       )}
 
-      {artifacts.length > 0 && (
+      {artifacts.length + references.length > 0 && (
         <section className="garden-section">
           <h3>Artifacts</h3>
           <SeedArtifactRows
+            seedId={here.id}
             artifacts={artifacts}
+            references={references}
             onOpenMarkdownArtifact={onOpenMarkdownArtifact}
             checkArtifactPath={checkArtifactPath}
           />

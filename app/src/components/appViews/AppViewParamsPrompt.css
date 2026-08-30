@@ -20,7 +20,7 @@
 
 .app-view-params-title {
   color: var(--color-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -42,7 +42,7 @@
   border: 1px solid var(--color-border-hover);
   border-radius: 6px;
   color: var(--color-text-primary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
   margin-bottom: 14px;
   padding: 8px 10px;

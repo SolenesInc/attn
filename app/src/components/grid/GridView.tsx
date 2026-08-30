@@ -20,6 +20,7 @@ import {
   measureCanonicalCell,
 } from './gridConfig';
 import './grid.css';
+import { formatShortcut } from '../../shortcuts/formatShortcut';
 
 export interface GridSessionTile {
   runtimeId: string;
@@ -339,7 +340,7 @@ export function GridView({
         </div>
       )}
       <div className="grid-view-hint">
-        click a tile to zoom &amp; type{onRemoveTile ? ' · hover a tile to remove it' : ''} · Esc to exit zoom · ⌘G closes grid
+        click a tile to zoom &amp; type{onRemoveTile ? ' · hover a tile to remove it' : ''} · Esc to exit zoom · {formatShortcut('view.toggleGrid')} closes grid
       </div>
     </div>
   );

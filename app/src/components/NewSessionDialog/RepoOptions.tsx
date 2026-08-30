@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { generateWorktreeName, isBranchAlreadyExistsError } from './worktreeNames';
 import './RepoOptions.css';
+import { keyCombo } from '../../shortcuts/formatShortcut';
 
 interface RepoInfo {
   repo: string;
@@ -564,7 +565,7 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
                 type="button"
                 className="new-worktree-reroll"
                 data-testid="repo-new-worktree-reroll"
-                title="Pick another name (⌃R)"
+                title={`Pick another name (${keyCombo('ctrl', 'R')})`}
                 aria-label="Pick another name"
                 onClick={rerollWorktreeName}
                 disabled={creatingWorktree}
@@ -603,7 +604,7 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
                   Creating worktree...
                 </>
               ) : (
-                'Enter to create • Tab to toggle • ⌃R for another name • ↓ to open an existing one'
+                `Enter to create • Tab to toggle • ${keyCombo('ctrl', 'R')} for another name • ↓ to open an existing one`
               )}
             </div>
           </div>

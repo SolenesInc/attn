@@ -8,7 +8,7 @@ import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, resolveHarnessResources, profileCliEnv as profileEnv } from './harnessProfile.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
+import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import { readFrontendProtocolVersion } from './presentDaemon.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -144,7 +144,7 @@ async function captureFailureEvidence(runner, client) {
     runner.log('failure_evidence_form_state_error', { error: error instanceof Error ? error.message : String(error) });
   }
   try {
-    await captureFrontWindowScreenshot(path.join(runner.runDir, 'failure.png'), { client });
+    await captureScreenshotData(path.join(runner.runDir, 'failure.png'), { client });
   } catch (error) {
     runner.log('failure_evidence_screenshot_error', { error: error instanceof Error ? error.message : String(error) });
   }
@@ -152,7 +152,7 @@ async function captureFailureEvidence(runner, client) {
 
 async function captureEvidenceScreenshot(runner, client, name) {
   try {
-    await captureFrontWindowScreenshot(path.join(runner.runDir, name), { client });
+    await captureScreenshotData(path.join(runner.runDir, name), { client });
   } catch (error) {
     runner.log('evidence_screenshot_error', { name, error: error instanceof Error ? error.message : String(error) });
   }
@@ -170,6 +170,7 @@ async function main() {
   const binary = path.join(resources.appPath, 'Contents', 'MacOS', 'attn');
   const runner = createScenarioRunner(options, {
     scenarioId: 'AUTOMATION-FORM',
+    allowRealAgents: false,
     tier: 'tier2-local',
     prefix: 'automation-form',
     metadata: { profile },

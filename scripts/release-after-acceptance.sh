@@ -57,6 +57,17 @@ if [ "$acceptance_status/$acceptance_conclusion" != "completed/success" ]; then
   exit 0
 fi
 
+publication="$(go run ./cmd/release-train accepted-main publication --head "$sha")"
+if [ "$publication" = held ]; then
+  tag="$(go run ./cmd/release-train accepted-main validate --head "$sha")"
+  echo "release after acceptance: publication is held for $tag at accepted main $sha; leaving main untagged"
+  exit 0
+fi
+if [ "$publication" != automatic ]; then
+  echo "release after acceptance: unsupported publication '$publication'" >&2
+  exit 1
+fi
+
 "$script_root/app-acceptance-gate.sh" "$sha"
 
 tag="$(go run ./cmd/release-train accepted-main tag --head "$sha")"

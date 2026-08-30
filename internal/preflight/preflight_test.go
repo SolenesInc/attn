@@ -51,6 +51,25 @@ func TestRunPassesWithConsistentEnvironment(t *testing.T) {
 	assertCheck(t, report, "protocol.app_daemon", StatusPass, "")
 }
 
+func TestRunReportsTheDaemonsHeadlessTaskMode(t *testing.T) {
+	p := passingProber(t)
+	inner := p.daemonHealth
+	p.daemonHealth = func(ctx context.Context, port string) (daemonHealth, error) {
+		health, err := inner(ctx, port)
+		health.HeadlessTasks = "off (ATTN_HEADLESS_TASKS)"
+		return health, err
+	}
+	report := run(context.Background(), Options{Agent: "codex", WorkingDir: t.TempDir()}, p)
+	assertCheck(t, report, "headless.tasks", StatusPass, "daemon headless tasks off (ATTN_HEADLESS_TASKS)")
+
+	unreachable := passingProber(t)
+	unreachable.daemonHealth = func(context.Context, string) (daemonHealth, error) {
+		return daemonHealth{}, errors.New("connection refused")
+	}
+	report = run(context.Background(), Options{Agent: "codex", WorkingDir: t.TempDir()}, unreachable)
+	assertCheck(t, report, "headless.tasks", StatusPass, "this CLI resolves headless tasks on")
+}
+
 func TestRunReportsRootCausesAndActions(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -75,7 +75,13 @@ func (repo *testRepository) commit(subject string) string {
 
 func (repo *testRepository) writeManifest(manifest candidateManifest) {
 	repo.t.Helper()
-	data := "version: " + manifest.Version + "\nkind: " + manifest.Kind + "\nsource_sha: " + manifest.SourceSHA + "\nmain_sha: " + manifest.MainSHA + "\n"
+	publication := manifest.Publication
+	if publication == "" {
+		publication = publicationAutomatic
+	}
+	data := "version: " + manifest.Version + "\nkind: " + manifest.Kind +
+		"\npublication: " + publication + "\nsource_sha: " + manifest.SourceSHA +
+		"\nmain_sha: " + manifest.MainSHA + "\n"
 	repo.write(defaultManifestPath, data)
 }
 
@@ -144,8 +150,11 @@ func TestManifestValidation(t *testing.T) {
 		wantErr string
 	}{
 		{name: "promotion", body: "version: 1.2.3\nkind: promotion\nsource_sha: " + sha + "\nmain_sha: " + sha + "\n"},
+		{name: "held promotion", body: "version: 1.2.3\nkind: promotion\npublication: held\nsource_sha: " + sha + "\nmain_sha: " + sha + "\n"},
 		{name: "hotfix", body: "version: 1.2.3\nkind: hotfix\nsource_sha: " + sha + "\nmain_sha: " + sha + "\n"},
 		{name: "unknown kind", body: "version: 1.2.3\nkind: patch\nsource_sha: " + sha + "\nmain_sha: " + sha + "\n", wantErr: "kind must be"},
+		{name: "unknown publication", body: "version: 1.2.3\nkind: promotion\npublication: later\nsource_sha: " + sha + "\nmain_sha: " + sha + "\n", wantErr: "publication must be"},
+		{name: "held hotfix", body: "version: 1.2.3\nkind: hotfix\npublication: held\nsource_sha: " + sha + "\nmain_sha: " + sha + "\n", wantErr: "hotfix publication cannot be held"},
 		{name: "short sha", body: "version: 1.2.3\nkind: promotion\nsource_sha: abc123\nmain_sha: " + sha + "\n", wantErr: "full commit SHA"},
 		{name: "unknown field", body: "version: 1.2.3\nkind: promotion\nsource_sha: " + sha + "\nmain_sha: " + sha + "\nbranch: next\n", wantErr: "field branch not found"},
 		{name: "second document", body: "version: 1.2.3\nkind: promotion\nsource_sha: " + sha + "\nmain_sha: " + sha + "\n---\nversion: 1.2.4\n", wantErr: "more than one YAML document"},
@@ -185,8 +194,28 @@ func TestManifestWriteRecordsExactCommits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if manifest.Version != "0.12.0" || manifest.Kind != "promotion" || manifest.SourceSHA != sourceSHA || manifest.MainSHA != mainSHA {
+	if manifest.Version != "0.12.0" || manifest.Kind != "promotion" || manifest.Publication != publicationAutomatic || manifest.SourceSHA != sourceSHA || manifest.MainSHA != mainSHA {
 		t.Fatalf("manifest = %+v", manifest)
+	}
+}
+
+func TestAcceptedMainReportsHeldPublication(t *testing.T) {
+	repo := newTestRepository(t)
+	_, _, _ = repo.prepareCandidate("promotion")
+	manifest, err := readManifest(filepath.Join(repo.root, defaultManifestPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.Publication = publicationHeld
+	repo.writeManifest(manifest)
+	repo.commit("hold publication")
+
+	var output strings.Builder
+	if err := runAcceptedMain(repo.root, []string{"publication", "--head", "HEAD"}, &output); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(output.String()); got != publicationHeld {
+		t.Fatalf("publication = %q", got)
 	}
 }
 
@@ -201,7 +230,7 @@ func TestCandidateValidationAcceptsPromotionAndHotfix(t *testing.T) {
 			}
 			err := validateCandidate(repo.root, candidateValidation{
 				manifestPath: defaultManifestPath, currentMainRef: mainSHA, headRef: headSHA,
-				sourceAcceptance: acceptance, otherOpenCandidates: 0,
+				sourceAcceptance: acceptance, tagStatus: "absent", otherOpenCandidates: 0,
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -254,14 +283,13 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 			wantErr: "main moved",
 		},
 		{
-			name: "tag exists",
-			mutate: func(repo *testRepository, _, head string) {
-				repo.git("tag", "v0.12.0", head)
-			},
+			name: "remote tag exists",
 			input: func(main, head string) candidateValidation {
-				return validCandidateInput(main, head, "success")
+				input := validCandidateInput(main, head, "success")
+				input.tagStatus = "present"
+				return input
 			},
-			wantErr: "already exists",
+			wantErr: "expected absent",
 		},
 		{
 			name: "version disagreement",
@@ -361,7 +389,7 @@ func TestCandidateValidationAllowsInternalFragmentsWithoutChangelogUpdate(t *tes
 func validCandidateInput(main, head, acceptance string) candidateValidation {
 	return candidateValidation{
 		manifestPath: defaultManifestPath, currentMainRef: main, headRef: head,
-		sourceAcceptance: acceptance, otherOpenCandidates: 0,
+		sourceAcceptance: acceptance, tagStatus: "absent", otherOpenCandidates: 0,
 	}
 }
 

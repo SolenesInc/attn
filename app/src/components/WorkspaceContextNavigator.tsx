@@ -82,7 +82,7 @@ export function WorkspaceContextNavigator({
               <ContextIcon />
               <div>
                 <span className="workspace-context-eyebrow">Local shared memory</span>
-                <h1 id="workspace-context-title">Workspace contexts on this Mac</h1>
+                <h1 id="workspace-context-title">Workspace contexts on this machine</h1>
               </div>
             </div>
             <div className="workspace-context-search">

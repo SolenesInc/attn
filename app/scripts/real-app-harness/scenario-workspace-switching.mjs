@@ -9,7 +9,7 @@ import {
   printCommonHelp,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { MacOSDriver } from './macosDriver.mjs';
+import { createWindowDriver } from './platform.mjs';
 import {
   captureSessionArtifacts,
   waitForPaneAttached,
@@ -211,7 +211,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = new MacOSDriver({
+  const driver = createWindowDriver({
     appPath: options.appPath,
   });
   const createdSessionIds = [];

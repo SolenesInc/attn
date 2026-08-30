@@ -68,6 +68,10 @@ var wireFixtures = map[string]wireFixture{
 		events:  []string{protocol.EventSessionStateChanged},
 		subject: (*wireWorld).session,
 	},
+	FactSessionPullRequestChanged: {
+		events:  []string{protocol.EventSessionStateChanged},
+		subject: (*wireWorld).session,
+	},
 	FactSessionTerminalBuildChanged: {
 		events:  []string{protocol.EventSessionStateChanged},
 		subject: (*wireWorld).session,
@@ -185,6 +189,7 @@ var wireFixtures = map[string]wireFixture{
 	FactGardenWithered:              {events: []string{protocol.EventGardenSeedsUpdated}},
 	FactGardenReplanted:             {events: []string{protocol.EventGardenSeedsUpdated}},
 	FactGardenNoted:                 {events: []string{protocol.EventGardenSeedsUpdated}},
+	FactGardenArtifactChanged:       {events: []string{protocol.EventGardenSeedsUpdated}},
 	FactGardenLinked:                {events: []string{protocol.EventGardenSeedsUpdated}},
 	FactGardenUnlinked:              {events: []string{protocol.EventGardenSeedsUpdated}},
 

@@ -1057,6 +1057,7 @@ function seedDocumentFixture(body = '# Seed body\n\nAnnotate this plan.'): SeedD
     }],
     notes_total: 1,
     artifacts: [],
+    references: [],
   };
 }
 

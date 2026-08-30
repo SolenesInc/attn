@@ -9,7 +9,7 @@ import {
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { MacOSDriver, delay } from './macosDriver.mjs';
+import { createWindowDriver, delay } from './platform.mjs';
 import {
   captureSessionArtifacts,
   waitForPaneAttached,
@@ -87,7 +87,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = new MacOSDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath });
   const savedClipboard = readClipboard();
   let sessionId = null;
 

@@ -280,6 +280,12 @@ func (d *Daemon) deliverAgentMessageOnce(record store.AgentMessage) error {
 	if attempt.err != nil {
 		return attempt.err
 	}
+	if d.sessionRunsWhatIsTyped(record.TargetSessionID) && attempt.stage == sessionInputPlaced {
+		// A shell starts no turn to take the words with, so placement is the
+		// receipt; waiting for one leaves the lane blocked against every later message.
+		d.sessionInputs().forget(record.TargetSessionID, id)
+		return d.stampAgentMessageDelivered(record.TargetSessionID, record.ID)
+	}
 	if sessionInputTakenWindow > 0 && attempt.stage == sessionInputPlaced {
 		attempt = d.sessionInputs().await(record.TargetSessionID, id, attempt.wait, sessionInputTakenWindow)
 		if attempt.stage != sessionInputTaken {
@@ -294,6 +300,11 @@ func (d *Daemon) deliverAgentMessageOnce(record store.AgentMessage) error {
 		return errDoorbellNotTaken
 	}
 	return d.stampAgentMessageDelivered(record.TargetSessionID, record.ID)
+}
+
+func (d *Daemon) sessionRunsWhatIsTyped(sessionID string) bool {
+	session := d.store.Get(sessionID)
+	return session != nil && string(session.Agent) == protocol.AgentShellValue
 }
 
 func (d *Daemon) stampAgentMessageDelivered(sessionID, id string) error {

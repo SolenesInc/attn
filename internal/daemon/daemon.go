@@ -31,6 +31,7 @@ import (
 	"github.com/victorarias/attn/internal/fsdoc"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/github"
+	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/hostsession"
 	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/jobs"
@@ -165,6 +166,7 @@ type Daemon struct {
 	sessionTitleExec                  func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error)
 	sessionTitleAttempted             map[string]struct{}
 	ticketArtifactMu                  sync.Mutex
+	seedArtifactMu                    sync.Mutex
 	delegationMu                      sync.Mutex
 	delegationRunning                 map[string]bool
 	delegationWorktreePrepareHook     func(path string)
@@ -223,10 +225,7 @@ type Daemon struct {
 	autoSettleFireHook      func(sessionID, outcome string)
 	autoSettlePreSettleHook func()
 
-	snoozeMu          sync.Mutex
-	snoozeTimers      map[string]*snoozeTimer
-	snoozeWakeHook    func(sessionID string)
-	snoozeWakeGapHook func(sessionID string)
+	snoozeMu sync.Mutex
 
 	recoveryMu          sync.RWMutex
 	recovering          bool
@@ -786,6 +785,7 @@ func (d *Daemon) Start() error {
 	}()
 	d.ensurePluginSupervisor()
 	d.applyHeadlessContextWindowCap()
+	d.applyHeadlessTasksMode()
 	if err := d.startEventBus(); err != nil {
 		return fmt.Errorf("start event bus: %w", err)
 	}
@@ -924,7 +924,6 @@ func (d *Daemon) Start() error {
 	d.removeLegacyEmbeddedTailscaleState()
 	d.migrateKeeperCompactSettingKey()
 	d.migrateNotebookCronSettingKeys()
-	d.rescheduleSnoozeWakes()
 	go d.ensureTailscaleServeFromSettingsAndBroadcast()
 	d.hubManager.Start(d.doneContext())
 
@@ -1468,6 +1467,20 @@ func (d *Daemon) runDeferredWorkerReconciliation(maxAttempts int, retryInterval 
 	}
 }
 
+// Startup recovery dates a session by state_updated_at and runs concurrently with the
+// socket: an unstamped row reads as a leftover of a previous run and is reaped.
+func stampSessionTimestamps(session *protocol.Session, now string) {
+	if strings.TrimSpace(session.StateSince) == "" {
+		session.StateSince = now
+	}
+	if strings.TrimSpace(session.StateUpdatedAt) == "" {
+		session.StateUpdatedAt = now
+	}
+	if strings.TrimSpace(session.LastSeen) == "" {
+		session.LastSeen = now
+	}
+}
+
 func sessionUpdatedAfter(session *protocol.Session, cutoff time.Time) bool {
 	if session == nil || cutoff.IsZero() {
 		return false
@@ -1522,7 +1535,6 @@ func (d *Daemon) Stop() {
 	d.stopNudgeCountdowns()
 	d.pluginDriverSilence().stop()
 	d.stopAutoSettleTimers()
-	d.stopSnoozeTimers()
 	if d.ptyBackend != nil {
 		_ = d.ptyBackend.Shutdown(context.Background())
 	}
@@ -2307,6 +2319,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSeedList(conn, msg.(*protocol.SeedListMessage))
 	case protocol.CmdSeedShow: // wire: seed_show
 		d.handleSeedShow(conn, msg.(*protocol.SeedShowMessage))
+	case protocol.CmdSeedArtifactTransfer: // wire: seed_artifact_transfer
+		d.handleSeedArtifactTransfer(conn, msg.(*protocol.SeedArtifactTransferMessage))
 	case protocol.CmdSeedEdit: // wire: seed_edit
 		d.handleSeedEdit(conn, msg.(*protocol.SeedEditMessage))
 	case protocol.CmdSeedSetResume: // wire: seed_set_resume
@@ -2341,6 +2355,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleTodos(conn, msg.(*protocol.TodosMessage))
 	case protocol.CmdFilesEdited: // wire: files_edited
 		d.handleFilesEdited(conn, msg.(*protocol.FilesEditedMessage))
+	case protocol.CmdPullRequestCreated: // wire: pull_request_created
+		d.handlePullRequestCreated(conn, msg.(*protocol.PullRequestCreatedMessage))
+	case protocol.CmdPullRequestForget: // wire: pull_request_forget
+		d.handlePullRequestForget(conn, msg.(*protocol.PullRequestForgetMessage))
 	case protocol.CmdWorkflowRunUpsert: // wire: workflow_run_upsert
 		d.handleWorkflowRunUpsert(conn, msg.(*protocol.WorkflowRunUpsertMessage))
 	case protocol.CmdWorkflowCallUpsert: // wire: workflow_call_upsert
@@ -2803,6 +2821,7 @@ func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Sessio
 	)
 	if decorated != nil {
 		decorated.Automation = d.automationProvenanceForSession(decorated.ID)
+		decorated.PullRequests = d.sessionPullRequestsForSession(decorated.ID)
 	}
 	return decorated
 }
@@ -2843,10 +2862,12 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	crewBySession := d.crewMembersBySession()
 	seedBySession := d.gardenDispatchSeedsBySession()
 	bySession, _ := d.latestAutomationProvenance()
+	pullRequestsBySession := d.store.ListSessionPullRequestsBySession()
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
 		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefOfStaffSessionID, delegatedFromChief, crewBySession, seedBySession); decorated != nil {
 			decorated.Automation = bySession[decorated.ID]
+			decorated.PullRequests = sessionPullRequestsForBroadcast(pullRequestsBySession[decorated.ID])
 			out = append(out, *decorated)
 		}
 	}
@@ -3401,6 +3422,7 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 	}
 
 	msg.Session.Agent = normalizeStoredSessionAgent(string(msg.Session.Agent), protocol.SessionAgentCodex)
+	stampSessionTimestamps(&msg.Session, string(protocol.TimestampNow()))
 	workspaceID := strings.TrimSpace(msg.Session.WorkspaceID)
 	if workspaceID == "" {
 		workspaceID = "workspace-" + msg.Session.ID
@@ -3724,6 +3746,7 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"data_dir":           dataDir,
 		"socket_path":        socketPath,
 		"port":               config.WSPort(),
+		"headless_tasks":     headless.Describe(),
 	}
 	if routingPathError != "" {
 		health["routing_path_error"] = routingPathError

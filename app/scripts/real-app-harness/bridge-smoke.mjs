@@ -2,6 +2,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { armAgentTripwire, ensureDaemonCarriesTripwire, formatTripwireFailure } from './agentTripwire.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createRunContext, parseCommonArgs, printCommonHelp } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -17,6 +18,9 @@ async function main() {
   const { runId, runDir, sessionDir } = createRunContext(options, 'bridge-smoke');
   const sessionLabel = `attn-bridge-${runId}`;
   const utilityToken = `__ATTN_BRIDGE_UTILITY_${Date.now()}__`;
+
+  const tripwire = armAgentTripwire({ scenarioId: 'bridge-smoke', runDir, allowRealAgents: true });
+  ensureDaemonCarriesTripwire({ marker: tripwire.marker, appPath: options.appPath });
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -86,6 +90,11 @@ async function main() {
       15_000
     );
     fs.writeFileSync(path.join(runDir, 'utility-scrollback.txt'), utilityPaneText?.text || '', 'utf8');
+
+    const ledger = tripwire.read();
+    if (ledger.length > 0) {
+      throw new Error(formatTripwireFailure({ scenarioId: 'bridge-smoke', ledgerPath: tripwire.ledgerPath, lines: ledger }));
+    }
 
     const summary = {
       ok: true,

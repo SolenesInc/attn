@@ -116,9 +116,16 @@ if [[ "$SECTION" == "EMPTY" ]]; then
 fi
 
 if [[ "$SECTION" != "## [${TODAY}]"* ]]; then
-  echo "error: unexpected writer output (expected a section starting with '## [${TODAY}]'):" >&2
-  printf '%s\n' "$SECTION" >&2
-  exit 1
+  if ! NORMALIZED_SECTION="$(printf '%s\n' "$SECTION" | awk -v header="## [${TODAY}]" '
+    $0 == header { found = 1 }
+    found { print }
+    END { if (!found) exit 1 }
+  ')"; then
+    echo "error: unexpected writer output (expected a section starting with '## [${TODAY}]'):" >&2
+    printf '%s\n' "$SECTION" >&2
+    exit 1
+  fi
+  SECTION="$NORMALIZED_SECTION"
 fi
 
 if [[ -n "$EXISTING_RECEIPTS" ]]; then

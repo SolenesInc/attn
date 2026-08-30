@@ -231,7 +231,7 @@
 /* Inline code is bordered and sits a touch below the prose size so it reads as
    a token inside the sentence rather than a hole punched in it. */
 .conversation-message-text :not(pre) > code {
-  font-family: 'JetBrains Mono', 'SF Mono', Monaco, Menlo, monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', Monaco, Menlo, 'DejaVu Sans Mono', monospace;
   font-size: 0.85em;
   padding: 0.1em 0.35em;
   border: 1px solid var(--md-frame-border);

@@ -21,7 +21,7 @@
 }
 
 .trigger-count {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: 13px;
   font-weight: 600;
   color: #ff6b35;

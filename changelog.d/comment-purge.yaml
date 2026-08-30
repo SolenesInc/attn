@@ -1,8 +1,0 @@
-kind: internal
-area: codebase
-change: >
-  Most comments are gone from the codebase: ~39,000 comment lines removed (48k to ~9.5k)
-  across Go, TypeScript, and Rust, keeping only what cannot be re-derived:
-  tool directives, measured receipts, traps outside the file, and design-doc
-  links. Every touched Go and TypeScript file is token-stream
-  identical to its previous version, verified mechanically.

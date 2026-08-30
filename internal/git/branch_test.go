@@ -159,3 +159,18 @@ func TestListBranchesWithCommits(t *testing.T) {
 		t.Errorf("Expected ISO timestamp for feature-b commit time, got %q: %v", featureBBranch.CommitTime, err)
 	}
 }
+
+func TestGetDefaultBranchPrefersConfiguredBase(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-b", "main")
+	runGit(t, dir, "commit", "--allow-empty", "-m", "init")
+
+	if got, _ := GetDefaultBranch(dir); got != "main" {
+		t.Fatalf("GetDefaultBranch without config = %q, want main", got)
+	}
+	runGit(t, dir, "config", "attn.baseBranch", "next")
+	if got, _ := GetDefaultBranch(dir); got != "next" {
+		t.Fatalf("GetDefaultBranch with attn.baseBranch = %q, want next", got)
+	}
+}

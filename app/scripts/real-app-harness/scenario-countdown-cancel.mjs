@@ -3,21 +3,20 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
 
 import {
   createSessionAndWaitForInitialPane,
   launchFreshAppAndConnect,
+  legacyTicketRequest,
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { MacOSDriver } from './macosDriver.mjs';
+import { createWindowDriver } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile } from './harnessProfile.mjs';
-import { preTrustClaudeFolder, ensureClaudePromptReadyViaPty } from './scenarioAgents.mjs';
+import { currentHarnessProfile, socketPathForProfile } from './harnessProfile.mjs';
+import { ensureClaudePromptReadyViaPty, writeQueueAgentFixture } from './scenarioAgents.mjs';
 import {
   waitForFirstWorkspacePane,
   waitForPaneAttached,
@@ -25,9 +24,15 @@ import {
   waitForSessionWorkspace,
 } from './scenarioAssertions.mjs';
 
-const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
-
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const LONG_RUN_PROMPT = 'Count from 1 to 2000, one number per line, nothing else. Do not use any tools.';
+// Measured over a green mock run: 26.8s of work needed; this outlasts it 3x.
+const LONG_RUN_MS = 90_000;
+const LONG_RUN_TURN = {
+  includes: LONG_RUN_PROMPT,
+  actions: [{ type: 'delay', ms: LONG_RUN_MS }, { type: 'reply', text: '1 ... 2000', state: 'idle' }],
+};
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -47,31 +52,11 @@ async function pollFor(fn, description, timeoutMs = 60_000, intervalMs = 300) {
   throw new Error(`Timed out waiting for: ${description}. Last value: ${JSON.stringify(last)}`);
 }
 
-function resolveAttnBin() {
-  const candidates = [process.env.ATTN_HARNESS_BIN, path.resolve(HARNESS_DIR, '../../../attn')].filter(Boolean);
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
-  }
-  throw new Error('attn binary not found (build ./attn or set ATTN_HARNESS_BIN)');
-}
-
-function makeAttnRunner(attnBin, profile) {
-  return function runAttn(args) {
-    const stdout = execFileSync(attnBin, args, {
-      encoding: 'utf8',
-      env: { ...process.env, ATTN_PROFILE: profile },
-    });
-    const brace = stdout.indexOf('{');
-    return { stdout, json: brace >= 0 ? JSON.parse(stdout.slice(brace)) : null };
-  };
-}
-
-// Claude treats a fast multi-line write as a paste, so the submit has to be a
-// lone carriage return a beat later.
+// Auto-settle arms only behind user input, and a fast write lands as a paste.
 async function submitPrompt(client, sessionId, paneId, text) {
-  await client.request('write_pane', { sessionId, paneId, text, submit: false });
+  await client.request('type_pane_via_ui', { sessionId, paneId, text });
   await delay(600);
-  await client.request('write_pane', { sessionId, paneId, text: '\r', submit: false });
+  await client.request('type_pane_via_ui', { sessionId, paneId, text: '\r' });
 }
 
 async function pressCancelCountdown(driver) {
@@ -111,12 +96,11 @@ async function main() {
   if (!profile) {
     throw new Error('the countdown-cancel scenario does not run against production; set ATTN_PROFILE / ATTN_HARNESS_PROFILE to a named profile');
   }
-  const attnBin = resolveAttnBin();
-  const runAttn = makeAttnRunner(attnBin, profile);
+  const socketPath = socketPathForProfile(profile);
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'COUNTDOWN-CANCEL',
-    tier: 'tier3-local-agent',
+    tier: 'tier2-local-mock-agent',
     prefix: 'countdown-cancel',
     metadata: {
       agent: 'claude',
@@ -126,7 +110,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = new MacOSDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath });
   const note = (message, extra) => runner.log(message, extra);
 
   let agentId = null;   // the booted claude agent — auto-settle target, then nudge target
@@ -149,7 +133,7 @@ async function main() {
     await runner.step('boot_agent_owing_a_turn', async () => {
       const cwd = path.join(runner.sessionDir, 'agent-repo');
       fs.mkdirSync(cwd, { recursive: true });
-      preTrustClaudeFolder(cwd);
+      writeQueueAgentFixture(cwd, { turns: [LONG_RUN_TURN] });
       agentId = await createSessionAndWaitForInitialPane({
         client,
         observer,
@@ -168,7 +152,7 @@ async function main() {
       const owed = await pollFor(
         () => (observer.getSession(agentId)?.turn_owed === true ? true : null),
         'the booted agent to owe a turn',
-        90_000,
+        45_000,
       );
       note('agent booted and owes a turn', { agentId, owed });
     });
@@ -178,23 +162,16 @@ async function main() {
       await client.request('set_setting', { key: 'auto_settle_countdown_seconds', value: '60' });
       await client.request('set_setting', { key: 'auto_settle_enabled', value: 'true' });
 
-      // Measured on the pinned haiku: 77 numbers a second (239 -> 1004 across
-      // ten seconds), so 2000 buys ~26s; 200 ran dry in five.
-      await submitPrompt(
-        client,
-        agentId,
-        agentPaneId,
-        'Count from 1 to 2000, one number per line, nothing else. Do not use any tools.',
-      );
+      await submitPrompt(client, agentId, agentPaneId, LONG_RUN_PROMPT);
       await pollFor(
         () => (observer.getSession(agentId)?.state === 'working' ? true : null),
         'the steered agent to start working',
-        90_000,
+        30_000,
       );
       const armed = await pollFor(
         () => observer.getSession(agentId)?.auto_settle_fires_at || null,
         'the auto-settle countdown to arm on the visible agent',
-        90_000,
+        30_000,
       );
       const remainingMs = Date.parse(armed) - Date.now();
       note('auto-settle armed', { firesAt: armed, remainingMs });
@@ -238,7 +215,7 @@ async function main() {
       const rearmed = await pollFor(
         () => observer.getSession(agentId)?.auto_settle_fires_at || null,
         'the settle to re-arm after the dismissal was undone',
-        60_000,
+        30_000,
       );
       note('dismissal undone, settle re-armed', { firesAt: rearmed });
 
@@ -246,14 +223,13 @@ async function main() {
     });
 
     const ticketId = await runner.step('arm_a_nudge_on_the_visible_unselected_pane', async () => {
-      const created = runAttn([
-        'ticket', 'new',
-        '--title', `Countdown cancel fixture ${runner.runId.slice(-6)}`,
-        '--session', agentId,
-        '--json',
-      ]);
-      const id = created.json?.ticket_id;
-      runner.assert(typeof id === 'string' && id.length > 0, `ticket new returned an id (got ${JSON.stringify(created.json)})`, created.json);
+      const created = await legacyTicketRequest(socketPath, {
+        cmd: 'ticket_create',
+        source_session_id: agentId,
+        title: `Countdown cancel fixture ${runner.runId.slice(-6)}`,
+      });
+      const id = created.ticket_create_result?.ticket_id;
+      runner.assert(typeof id === 'string' && id.length > 0, `ticket_create returned an id (got ${JSON.stringify(created)})`, created);
 
       const splitPane = await splitIntoShellPane(client, agentId);
       authorId = splitPane.runtimeId;
@@ -264,7 +240,12 @@ async function main() {
       }, 'the split pane to take the selection off the agent', 20_000);
       note('split pane holds the selection; the agent tile is still on screen', { authorId });
 
-      runAttn(['ticket', 'comment', id, '-m', 'Please take a look when you can.', '--session', authorId]);
+      await legacyTicketRequest(socketPath, {
+        cmd: 'ticket_comment',
+        source_session_id: authorId,
+        ticket_id: id,
+        comment: 'Please take a look when you can.',
+      });
       const armed = await pollFor(
         () => {
           const session = observer.getSession(agentId);
@@ -322,7 +303,12 @@ async function main() {
     });
 
     await runner.step('new_ticket_activity_asks_again', async () => {
-      runAttn(['ticket', 'comment', ticketId, '-m', 'One more thing, after the cancel.', '--session', authorId]);
+      await legacyTicketRequest(socketPath, {
+        cmd: 'ticket_comment',
+        source_session_id: authorId,
+        ticket_id: ticketId,
+        comment: 'One more thing, after the cancel.',
+      });
       const rearmed = await pollFor(
         () => {
           const session = observer.getSession(agentId);

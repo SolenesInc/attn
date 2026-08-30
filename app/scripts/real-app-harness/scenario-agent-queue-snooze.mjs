@@ -16,7 +16,8 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile } from './harnessProfile.mjs';
-import { preTrustClaudeFolder, ensureClaudePromptReadyViaPty } from './scenarioAgents.mjs';
+import { processCwd } from './processCwd.mjs';
+import { ensureClaudePromptReadyViaPty, writeQueueAgentFixture } from './scenarioAgents.mjs';
 import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -55,8 +56,8 @@ const queueState = (client) => client.request('queue_get_state');
 const turnIds = (queue) => (queue.turns || []).map((row) => row.id);
 const snoozedIds = (queue) => (queue.snoozed?.rows || []).map((row) => row.id);
 
-// Claude treats a fast multi-line write as a paste, so the submit has to be a
-// lone carriage return a beat later.
+// A fast write lands as a paste, so the submit has to be a lone carriage
+// return a beat later.
 async function submitPrompt(client, sessionId, paneId, text) {
   await client.request('write_pane', { sessionId, paneId, text, submit: false });
   await delay(600);
@@ -66,7 +67,7 @@ async function submitPrompt(client, sessionId, paneId, text) {
 async function createAgent(client, observer, runner, dirName, label) {
   const cwd = path.join(runner.sessionDir, dirName);
   fs.mkdirSync(cwd, { recursive: true });
-  preTrustClaudeFolder(cwd);
+  writeQueueAgentFixture(cwd, { minimumWorkingMs: WORKING_WINDOW_MS });
   const sessionId = await createSessionAndWaitForInitialPane({
     client,
     observer,
@@ -89,14 +90,17 @@ function questionPrompt(token) {
   ].join(' ');
 }
 
-const AGENT_STOP_TIMEOUT_MS = 240_000;
+// The queue is read every 500ms; a turn has to be working across a read.
+const WORKING_WINDOW_MS = 4_000;
+// Measured over a green mock run: the slowest submit-to-stop leg took 8.6s.
+const AGENT_STOP_TIMEOUT_MS = 45_000;
 
 async function driveToStop(client, observer, agent, token, description) {
   await submitPrompt(client, agent.sessionId, agent.paneId, questionPrompt(token));
   await pollFor(
     () => (observer.getSession(agent.sessionId)?.state === 'working' ? true : null),
     `${description} to start working`,
-    120_000,
+    AGENT_STOP_TIMEOUT_MS,
   );
   return pollFor(
     () => {
@@ -125,16 +129,10 @@ function agentPidForCwd(cwd) {
   const rows = execFileSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' }).split('\n');
   const candidates = rows
     .map((row) => row.trim().match(/^(\d+)\s+(.*)$/))
-    .filter((match) => match && /(^|\/)claude(\s|$)/.test(match[2]))
+    .filter((match) => match && /(^|\/)claude(\s|$)|mockAgent\.mjs(\s|$)/.test(match[2]))
     .map((match) => Number(match[1]));
   for (const pid of candidates) {
-    let out = '';
-    try {
-      out = execFileSync('lsof', ['-a', '-d', 'cwd', '-p', String(pid), '-Fn'], { encoding: 'utf8' });
-    } catch {
-      continue;
-    }
-    if (out.split('\n').some((line) => line.startsWith('n') && line.slice(1) === cwd)) return pid;
+    if (processCwd(pid) === cwd) return pid;
   }
   return null;
 }
@@ -148,7 +146,7 @@ async function main() {
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'AGENT-QUEUE-SNOOZE',
-    tier: 'tier3-local-agent',
+    tier: 'tier2-local-mock-agent',
     prefix: 'agent-queue-snooze',
     metadata: {
       focus: 'a snooze closes the turn, suppresses the next one, and wakes to the tail',
@@ -302,7 +300,7 @@ async function main() {
       runner.assert(turnIds(queue)[1] === beta.sessionId, 'it came back at the tail');
     });
 
-    await runner.step('the_timer_wakes_it_on_its_own', async () => {
+    await runner.step('the_deadline_wakes_it_on_its_own', async () => {
       const until = snoozeUntil(beta.sessionId, 8_000);
       runner.log('deferred by the daemon command', { until });
       await waitForTurns(client, [alpha.sessionId], 'the short deferral to close the turn');
@@ -312,12 +310,12 @@ async function main() {
           const current = await queueState(client);
           return turnIds(current).length === 2 ? current : null;
         },
-        'the wake timer to put it back by itself',
+        'the wake deadline to put it back by itself',
         45_000,
       );
       runner.assert(
         JSON.stringify(turnIds(queue)) === JSON.stringify([alpha.sessionId, beta.sessionId]),
-        `the timer woke it to the tail: ${JSON.stringify(turnIds(queue))}`,
+        `the deadline woke it to the tail: ${JSON.stringify(turnIds(queue))}`,
       );
       runner.assert(
         !queue.snoozed.present,

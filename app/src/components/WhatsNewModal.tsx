@@ -1,7 +1,7 @@
 
 import FocusTrap from 'focus-trap-react';
 import { useEscapeStack } from '../hooks/useEscapeStack';
-import { shortcutTokens } from '../shortcuts';
+import { keyCombo, keyComboTokens, shortcutTokens } from '../shortcuts/formatShortcut';
 import { KeyCombos } from './Keycap';
 import './WhatsNewModal.css';
 
@@ -21,8 +21,8 @@ interface Highlight {
 const HIGHLIGHTS: Highlight[] = [
   {
     flagged: true,
-    title: '⌘N opens a session inside this workspace',
-    body: 'This is the big change. ⌘N used to open a separate session with its own row in the sidebar. Now it adds a session to the workspace you’re already in. Want a new sidebar row instead? Press ⌘T to start a new workspace.',
+    title: `${keyCombo('accel', 'N')} opens a session inside this workspace`,
+    body: `This is the big change. ${keyCombo('accel', 'N')} used to open a separate session with its own row in the sidebar. Now it adds a session to the workspace you’re already in. Want a new sidebar row instead? Press ${keyCombo('accel', 'T')} to start a new workspace.`,
     combos: [shortcutTokens('session.new'), shortcutTokens('session.newWorkspace')],
   },
   {
@@ -43,7 +43,7 @@ const HIGHLIGHTS: Highlight[] = [
   {
     title: 'Move between panes',
     body: 'Use the arrow keys to move focus around the panes. Keep going past an edge and you land in the next workspace.',
-    combos: [['⌘', '⌥', '←↑→↓']],
+    combos: [keyComboTokens('accel', 'alt', '←↑→↓')],
   },
 ];
 

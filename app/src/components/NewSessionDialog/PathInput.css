@@ -2,7 +2,7 @@
 
 .path-input-container {
   position: relative;
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
 }
 
 .path-input {

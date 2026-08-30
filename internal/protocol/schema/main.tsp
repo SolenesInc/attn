@@ -128,6 +128,22 @@ model PullRequestProvenance {
   head_sha: string;
 }
 
+// SessionPullRequest is a pull request an agent opened from inside a session,
+// reported by the tool-use hook or `attn pr record`. Status fields stay absent
+// until the refresh job has fetched them from GitHub once.
+model SessionPullRequest {
+  repository: string;           // host/owner/repository, same convention as PullRequestProvenance
+  number: int32;
+  url: string;
+  title?: string;
+  created_at: string;           // ISO timestamp the session reported it
+  state: string;                // draft | open | merged | closed
+  ci_status?: string;           // success, failure, pending, none — the PR vocabulary
+  review_status?: string;       // approved, changes_requested, pending, none
+  mergeable_state?: string;     // clean, blocked, dirty, unstable
+  status_fetched_at?: string;   // ISO timestamp of the last GitHub fetch; absent until the first one
+}
+
 // AutomationProvenance is a derived read model. The daemon joins existing
 // definition/run/occurrence rows when it builds wire snapshots; sessions and
 // tickets do not persist a second copy.
@@ -175,6 +191,7 @@ model Session {
   cost_usd?: float64;           // Accrued token cost in USD. Present only after usage exists and every observed model has a price.
   cost_unknown?: boolean;       // True after usage exists when any observed model has no price. Mutually exclusive with cost_usd; both absent means no usage yet.
   automation?: AutomationProvenance; // Present when this session was launched by an automation; latest run wins for a continuity thread.
+  pull_requests?: SessionPullRequest[]; // Pull requests this session's agent opened, newest first. Joined at broadcast from the session_pull_requests table, never stored on the session row.
   terminal_build_stale?: boolean; // True when this session's pty-worker was built against a different libghostty-vt than the daemon, which happens when the app updates under a running session. The two then hold different terminal implementations and stop agreeing about the grid, so the app offers a reload. Derived at broadcast from the format tag the worker reports at its handshake; never stored, and absent for every same-build session, which is all of them outside an upgrade window.
   todos?: string[];             // Optional: can be empty/absent
   last_seen: string;            // ISO timestamp, always set
@@ -816,6 +833,21 @@ model FilesEditedMessage {
   paths: string[];
 }
 
+// A pull request the session's agent just opened. The daemon owns validation
+// (known host, parseable number) and dedup, so a repeated report is a no-op.
+model PullRequestCreatedMessage {
+  cmd: "pull_request_created";
+  id: string;
+  url: string;
+}
+
+// The way out: drops one recorded pull request from a session.
+model PullRequestForgetMessage {
+  cmd: "pull_request_forget";
+  id: string;
+  url: string;
+}
+
 model DelegateMessage {
   cmd: "delegate";
   request_id: string; // Stable caller-supplied idempotency key for one logical delegation
@@ -1226,8 +1258,8 @@ model TaskRetryMessage {
   task_id: string;
 }
 
-// Notifications surface: a global, daemon-level feed of durable notifications
-// (see docs/plans/2026-07-02-bg-task-notifications.md). The producer is the task
+// Notifications surface: a global, daemon-level feed of durable notifications.
+// The producer is the task
 // runner, which adds one when a background task reaches terminal `dead`. The
 // frontend lists them, marks them read, and re-lists on the notifications_updated
 // broadcast; the unread count drives a sidebar badge.
@@ -3685,8 +3717,7 @@ model ReloadSessionResultMessage {
 // beside the snapshot so restore reconstructs clickable prompt/command/output
 // regions (the snapshot has rendered cells, not the marks). Rows are
 // SCREEN-space rows of the snapshot, which equal client buffer rows once it is
-// decoded. See Phase 3a in
-// docs/plans/2026-07-22-server-authoritative-terminal.md.
+// decoded.
 model AttachBlock {
   id: safeint;                   // server-assigned, monotonic per session
   pending: boolean;              // the single open block (no command-end yet)
@@ -3746,7 +3777,7 @@ model AttachSnapshot {
   // not match; the client compares this against its own and falls back to a
   // snapshot-less attach rather than decoding a format it cannot read. Absent
   // from a worker that predates the field, which is also a format nobody
-  // speaks. See docs/plans/2026-08-16-snapshot-format-skew.md.
+  // speaks.
   format?: string;
   blocks?: AttachBlock[];        // OSC 133 command blocks, empty/absent if none
   // Kitty placements on the screen the snapshot carries, captured in the same
@@ -4304,8 +4335,6 @@ model DocSubscriptionEndedMessage {
 // crown, a packet is a plot flagged as template. Seeds live in the home
 // daemon's document store under `core/garden`; an outpost refuses every command
 // here, naming its home, until the uplink carries the ask there.
-//
-// Design: docs/plans/2026-08-06-the-garden-vertical-slices.md.
 
 // One seed as every read and every push carries it. The id is short, stable and
 // sayable, and unique within its hub; the fully qualified `<daemon-id>/<id>`
@@ -4490,11 +4519,12 @@ model SeedShowResult {
   // whoever tends the seed next, so it is rendered before the seed itself and
   // not left to be recognised in a log.
   "handoff"?: SeedNote;
-  // The seed's current artifacts: every attach on its log that no later detach
-  // took back. The projection is the daemon's, computed over the whole log, so
-  // a bounded `notes` list here cannot make the set wrong and no client has to
-  // recompute it.
-  "artifacts": SeedArtifactReference[];
+  // Direct visible regular files in the seed-owned artifact directory. The
+  // filesystem is canonical; this is enumerated at read time.
+  "artifacts": SeedArtifact[];
+  // Explicit external associations projected as attach-minus-detach over the
+  // whole log. These remain references until a user brings one into the seed.
+  "references": SeedArtifactReference[];
 }
 
 // Replace one seed's markdown body without moving its lifecycle or claim.
@@ -4543,11 +4573,10 @@ model SeedDocument {
   "children": Seed[];
   "notes": SeedNote[];
   "notes_total": int32;
-  // The seed's current artifacts: every attach on its log that no later detach
-  // took back. The projection is the daemon's, computed over the whole log, so
-  // a bounded `notes` list here cannot make the set wrong and no client has to
-  // recompute it.
-  "artifacts": SeedArtifactReference[];
+  // Direct visible regular files in the seed-owned artifact directory.
+  "artifacts": SeedArtifact[];
+  // Attach-minus-detach associations retained separately from owned files.
+  "references": SeedArtifactReference[];
 }
 
 model SeedDocumentGetResultMessage {
@@ -4556,6 +4585,85 @@ model SeedDocumentGetResultMessage {
   "success": boolean;
   "error"?: string;
   "document"?: SeedDocument;
+}
+
+// One filesystem-canonical file owned by a seed. `relative_target` is the
+// ordinary Markdown target the seed body can use; callers resolve it through
+// the typed seed artifact operation rather than treating it as a local path.
+model SeedArtifact {
+  "filename": string;
+  "relative_target": string;
+  "size": safeint;
+  "modified_at": string;
+}
+
+// Move or copy a local file into seed ownership, or detach one to an explicit
+// destination. Source and destination paths are absolute so the owning daemon,
+// never a caller's cwd, decides which file is mutated.
+model SeedArtifactTransferMessage {
+  "cmd": "seed_artifact_transfer";
+  "request_id"?: string;
+  "source_session_id"?: string;
+  "seed_id": string;
+  // move | copy | detach.
+  "operation": string;
+  // Required by move/copy; absent on detach.
+  "source_path"?: string;
+  // The direct visible artifact filename. Defaults to source basename on
+  // move/copy and is required on detach.
+  "filename"?: string;
+  // Required by detach; absent on move/copy.
+  "destination_path"?: string;
+  // Bring into seed: remove this current association only after transfer
+  // completion. Other references remain untouched.
+  "legacy_reference"?: SeedArtifactReference;
+}
+
+model SeedArtifactTransferResult {
+  "operation_id": string;
+  "seed_id": string;
+  "operation": string;
+  "source_path": string;
+  "destination_path": string;
+  "relative_target": string;
+  "artifact"?: SeedArtifact;
+  // True when a durable receipt let this call finish an interrupted transfer.
+  "recovered": boolean;
+}
+
+model SeedArtifactTransferResultMessage {
+  "event": "seed_artifact_transfer_result";
+  "request_id": string;
+  "success": boolean;
+  "error"?: string;
+  "result"?: SeedArtifactTransferResult;
+}
+
+// Resolve or read one seed-relative target through the owning daemon. `image`
+// returns bounded bytes; `link` returns only safe document/image targets;
+// `artifact` accepts any regular managed file for explicit row actions.
+model SeedArtifactTargetMessage {
+  "cmd": "seed_artifact_target";
+  "request_id": string;
+  "seed_id": string;
+  "relative_target": string;
+  // image | link | artifact.
+  "purpose": string;
+}
+
+model SeedArtifactTargetResult {
+  "relative_target": string;
+  "path"?: string;
+  "mime_type"?: string;
+  "data_base64"?: string;
+}
+
+model SeedArtifactTargetResultMessage {
+  "event": "seed_artifact_target_result";
+  "request_id": string;
+  "success": boolean;
+  "error"?: string;
+  "result"?: SeedArtifactTargetResult;
 }
 
 // One edge as it reads from one seed's point of view: `blocks` and `part-of`
@@ -4662,10 +4770,11 @@ model SeedTransitionResult {
 // One entry on a seed's log: what happened and what was learned, written for
 // whoever tends the seed next. A note is anchored to the work and routed to
 // nobody — directed messages are their own surface.
-// Typed artifact association carried by an attach or detach log entry. Each
+// Typed external association carried by an attach or detach log entry. Each
 // kind names the fields that carry it and refuses the rest; the daemon
 // validates that shape and never reads meaning out of a string. Storage does
-// not move — the seed records the association only.
+// not move — the seed records the association only. Managed local files use
+// SeedArtifact and never acquire a second membership row here.
 model SeedArtifactReference {
   // markdown_file (path, optional repository) | notebook (notebook_document_id)
   // | repository (repository and path) | url (url).
@@ -5644,6 +5753,7 @@ model Response {
   seed_show_result?: SeedShowResult;
   seed_edit_result?: SeedEditResult;
   seed_set_resume_result?: SeedSetResumeResult;
+  seed_artifact_transfer_result?: SeedArtifactTransferResult;
   seed_transition_result?: SeedTransitionResult;
   seed_note_result?: SeedNoteResult;
   seed_notes_result?: SeedNotesResult;
@@ -6571,6 +6681,8 @@ alias DaemonEvent =
   | GardenSeedsUpdatedMessage
   | SeedResumeResultMessage
   | SeedDocumentGetResultMessage
+  | SeedArtifactTransferResultMessage
+  | SeedArtifactTargetResultMessage
   | SeedTransitionResultMessage
   | SeedNoteResultMessage
   | CrewUpdatedMessage

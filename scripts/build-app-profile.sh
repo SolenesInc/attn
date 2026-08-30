@@ -39,11 +39,21 @@ if [ -n "$harness_default" ] && [ -z "$profile" ]; then
   exit 1
 fi
 
-echo ">>> Building $label app: $app_name.app (id=$bundle_id, port=$ws_port)"
+echo ">>> Building $label app: $app_name (id=$bundle_id, port=$ws_port)"
 
-# Stage the Go daemon as the Tauri sidecar.
+if [ "$(uname -s)" = "Darwin" ]; then
+  bundle_args="--bundles app"
+else
+  bundle_args="--no-bundle"
+fi
+
+host_triple="$(rustc -vV | awk '/host:/ {print $2}')"
+if [ -z "$host_triple" ]; then
+  echo "could not read the rustc host triple (rustc -vV)" >&2
+  exit 1
+fi
 mkdir -p app/src-tauri/binaries
-cp "$attn" "app/src-tauri/binaries/attn-aarch64-apple-darwin"
+cp "$attn" "app/src-tauri/binaries/attn-${host_triple}"
 
 # Compile first-party plugins before Tauri collects resources. Bundled means
 # available in the catalog; the daemon still requires a per-profile opt-in.
@@ -75,7 +85,7 @@ if [ -n "$profile" ]; then
     VITE_ATTN_SOURCE_FINGERPRINT="$SOURCE_FINGERPRINT" \
     VITE_ATTN_GIT_COMMIT="$GIT_COMMIT" \
     VITE_ATTN_BUILD_TIME="$BUILD_TIME" \
-    pnpm tauri build --bundles app --config "$gen_rel"
+    pnpm tauri build $bundle_args --config "$gen_rel"
   else
     ATTN_BUILD_PROFILE="$profile" \
     VITE_ATTN_BUILD_PROFILE="$profile" \
@@ -87,7 +97,7 @@ if [ -n "$profile" ]; then
     VITE_ATTN_SOURCE_FINGERPRINT="$SOURCE_FINGERPRINT" \
     VITE_ATTN_GIT_COMMIT="$GIT_COMMIT" \
     VITE_ATTN_BUILD_TIME="$BUILD_TIME" \
-    pnpm tauri build --bundles app --config "$gen_rel"
+    pnpm tauri build $bundle_args --config "$gen_rel"
   fi
 else
   # Default/prod build: committed tauri.conf.json, no baked profile env. This is
@@ -97,17 +107,34 @@ else
   VITE_ATTN_SOURCE_FINGERPRINT="$SOURCE_FINGERPRINT" \
   VITE_ATTN_GIT_COMMIT="$GIT_COMMIT" \
   VITE_ATTN_BUILD_TIME="$BUILD_TIME" \
-  pnpm tauri build --bundles app
+  pnpm tauri build $bundle_args
 fi
 cd "$repo_root"
 
 bundle_dir="app/src-tauri/target/release/bundle/macos/${app_name}.app"
 
+write_build_identity() {
+  printf '{\n  "version": "%s",\n  "sourceFingerprint": "%s",\n  "gitCommit": "%s",\n  "buildTime": "%s"\n}\n' \
+    "$VERSION" "$SOURCE_FINGERPRINT" "$GIT_COMMIT" "$BUILD_TIME" > "$1"
+}
+
+if [ "$(uname -s)" != "Darwin" ]; then
+  release_dir="${CARGO_TARGET_DIR:-$repo_root/app/src-tauri/target}/release"
+  tree_dir="app/src-tauri/target/release/linux-tree/${app_name}"
+  rm -rf "$tree_dir"
+  mkdir -p "${tree_dir}/bin" "${tree_dir}/resources"
+  cp "${release_dir}/app" "${tree_dir}/bin/attn-app"
+  cp "$attn" "${tree_dir}/bin/attn"
+  cp -R app/src-tauri/bundled-plugins "${tree_dir}/resources/plugins"
+  cp -R app/src-tauri/app-runtime "${tree_dir}/resources/app-runtime"
+  write_build_identity "${tree_dir}/resources/build-identity.json"
+  echo ">>> Built $tree_dir"
+  exit 0
+fi
+
 if [ "$(uname -s)" = "Darwin" ]; then
   mkdir -p "${bundle_dir}/Contents/Resources"
-  printf '{\n  "version": "%s",\n  "sourceFingerprint": "%s",\n  "gitCommit": "%s",\n  "buildTime": "%s"\n}\n' \
-    "$VERSION" "$SOURCE_FINGERPRINT" "$GIT_COMMIT" "$BUILD_TIME" \
-    > "${bundle_dir}/Contents/Resources/build-identity.json"
+  write_build_identity "${bundle_dir}/Contents/Resources/build-identity.json"
 
   # Sign the sidecar first, then the enclosing app bundle, so macOS privacy
   # grants attach to a stable signed identity across source rebuilds. One
