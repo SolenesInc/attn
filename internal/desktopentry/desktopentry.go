@@ -1,5 +1,4 @@
-// Package desktopentry registers a profile's deep-link scheme with the Linux
-// desktop database, the only route an attn:// link has from outside attn.
+// Package desktopentry registers a profile's deep-link scheme with the Linux desktop database.
 package desktopentry
 
 import (
@@ -16,8 +15,6 @@ type Entry struct {
 	Scheme  string
 }
 
-// Written but inert: the entry is on disk and the desktop will route the scheme
-// once the named tools exist.
 type Report struct {
 	Path         string
 	Ran          []string

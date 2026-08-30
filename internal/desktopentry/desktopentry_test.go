@@ -98,7 +98,6 @@ func TestDirDefaultsToLocalShare(t *testing.T) {
 func TestInstallAndRemove(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", dataHome)
-	// PATH without the desktop tools: the entry still lands, and says what is missing.
 	t.Setenv("PATH", t.TempDir())
 
 	entry := Entry{AppName: "attn-lx", Exec: "/opt/attn-lx/bin/attn-app", Scheme: "attn-lx"}

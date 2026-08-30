@@ -5,8 +5,6 @@ import { appExecutableForAppPath } from './harnessProfile.mjs';
 
 const execFileAsync = promisify(execFile);
 
-// macOS asks LaunchServices to route the URL. Linux hands it to the app binary as
-// argv, and the single-instance plugin passes it to the already-running app.
 export function deepLinkCommand(url, { appExecutable, platform = process.platform } = {}) {
   if (platform === 'darwin') {
     return { command: 'open', args: [url] };
@@ -27,7 +25,6 @@ export async function openDeepLink(url, { appPath, appExecutable, platform = pro
     await execFileAsync(command, args);
     return;
   }
-  // It hands the URL over and exits by itself, so nothing here waits on it.
   const child = spawn(command, args, { detached: true, stdio: 'ignore' });
   child.unref();
 }

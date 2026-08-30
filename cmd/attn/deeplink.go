@@ -11,8 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/config"
 )
 
-// macOS asks LaunchServices to route the URL. Linux has no equivalent that also
-// starts the app, and attn knows the profile's executable, so hand it the URL.
 func launchDeepLink(deepLink string) error {
 	if runtime.GOOS == "darwin" {
 		return exec.Command("open", deepLink).Run()

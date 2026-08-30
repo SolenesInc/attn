@@ -10,8 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/desktopentry"
 )
 
-// macOS routes a deep link through the installed bundle's CFBundleURLTypes; on
-// Linux nothing routes until a .desktop entry claims the scheme.
 func desktopEntryPath(appName string) string {
 	if runtime.GOOS != "linux" {
 		return ""

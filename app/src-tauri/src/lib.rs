@@ -784,8 +784,6 @@ fn canonical_safe_markdown_target(path: &Path) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
-// zbus resolves the session bus from DBUS_SESSION_BUS_ADDRESS, falling back to
-// $XDG_RUNTIME_DIR/bus; this asks the same two questions before it panics on the answer.
 #[cfg(target_os = "linux")]
 fn linux_session_bus_available() -> bool {
     if env::var("DBUS_SESSION_BUS_ADDRESS").is_ok_and(|value| !value.trim().is_empty()) {
