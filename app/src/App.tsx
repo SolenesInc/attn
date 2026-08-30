@@ -994,6 +994,7 @@ function AppContent({
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [seedPopoverRequest, setSeedPopoverRequest] = useState<{ sessionId: string; nonce: number }>();
   const [workspaceContextsOpen, setWorkspaceContextsOpen] = useState(false);
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [notebookRequestedPath, setNotebookRequestedPath] = useState<string | null>(null);
@@ -2484,6 +2485,17 @@ function AppContent({
         run: () => sendPinSession(activeSession.id, !activeSession.pinnedAt),
       }]
       : [];
+    const sessionSeedItems: ActionMenuItem[] = activeSession
+      && (activeSession.seedId || seeds.some((seed) => seed.tender_session === activeSession.id))
+      ? [{
+        id: 'show-tended-seeds',
+        title: `Show ${activeSession.label}'s seeds`,
+        description: 'The seeds this agent is tending, and what it reports to',
+        keywords: ['seed', 'seeds', 'tend', 'tending', 'garden', 'plot', 'agent', 'session'],
+        icon: <GardenIcon />,
+        run: () => setSeedPopoverRequest((prev) => ({ sessionId: activeSession.id, nonce: (prev?.nonce ?? 0) + 1 })),
+      }]
+      : [];
     const sessionCapItems: ActionMenuItem[] = activeSession && ['claude', 'codex'].includes((activeSession.agent ?? '').toLowerCase())
       ? [{
         id: 'set-session-context-cap',
@@ -2506,6 +2518,7 @@ function AppContent({
       ...actionMenuItems,
       ...appViewMenuItems,
       ...sessionPinItems,
+      ...sessionSeedItems,
       ...sessionCapItems,
       {
         id: 'pin-active-workspace',
@@ -2528,7 +2541,7 @@ function AppContent({
         run: () => sendMuteWorkspace(workspace.id, workspace.endpointId),
       },
     ];
-  }, [actionMenuItems, appViewMenuItems, activeWorkspaceForCommands, activeSessionId, sendPinWorkspace, sendPinSession, sendMuteWorkspace]);
+  }, [actionMenuItems, appViewMenuItems, activeWorkspaceForCommands, activeSessionId, seeds, sendPinWorkspace, sendPinSession, sendMuteWorkspace]);
 
 
   const wantsAttention = useCallback(
@@ -3626,6 +3639,7 @@ function AppContent({
                     gardenSeeds={seeds}
                     onOpenSeed={handleOpenSeedTile}
                     onRevealSeedInGarden={handleRevealSeedInGarden}
+                    seedPopoverRequest={seedPopoverRequest}
                     conversationAgents={conversationPaneAgents}
                     annotationApi={annotationApi}
                     onTriggerNudge={sendTriggerNudge}

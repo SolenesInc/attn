@@ -1,0 +1,141 @@
+/* The tended-seeds popover, one surface behind two doors: chip hover and the
+   action menu. Fixed-positioned to escape .workspace-pane's overflow:hidden.
+   Status tints reuse the garden's [data-status] contract like PaneSeedChip. */
+
+.tended-seeds-popover {
+  position: fixed;
+  z-index: 60;
+  min-width: 240px;
+  max-width: 340px;
+  padding: 4px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-hover);
+  border-radius: 8px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+  outline: none;
+}
+
+.tended-seeds-popover-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tended-seeds-row {
+  --tsp-tint: var(--color-border-hover);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.tended-seeds-row[data-status='planted'] { --tsp-tint: var(--color-border-hover); }
+.tended-seeds-row[data-status='growing'] { --tsp-tint: var(--accent); }
+.tended-seeds-row[data-status='dormant'] { --tsp-tint: color-mix(in srgb, var(--accent) 45%, var(--color-text-tertiary)); }
+.tended-seeds-row[data-status='harvested'] { --tsp-tint: var(--color-text-muted); }
+.tended-seeds-row[data-status='withered'] { --tsp-tint: var(--color-error, #ef4444); }
+
+.tended-seeds-row:hover,
+.tended-seeds-row--selected {
+  background: color-mix(in srgb, var(--tsp-tint) 14%, transparent);
+  color: var(--color-text-primary);
+}
+
+/* The plot row heads the list: the plan the tended rows below belong to. */
+.tended-seeds-row--plot {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.tended-seeds-row--crown {
+  color: var(--color-text-tertiary);
+}
+
+.tended-seeds-mark {
+  flex: none;
+}
+
+.tended-seeds-mark--seed {
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--tsp-tint);
+}
+
+/* Hollow ring: assigned, not picked up. */
+.tended-seeds-mark--crown {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1.5px solid var(--color-text-muted);
+  background: none;
+}
+
+/* Four beds in a grid: a plot is a place seeds grow in. */
+.tended-seeds-mark--plot {
+  display: grid;
+  grid-template-columns: 3px 3px;
+  gap: 1.5px;
+}
+
+.tended-seeds-mark--plot i {
+  width: 3px;
+  height: 3px;
+  border-radius: 1px;
+  background: var(--tsp-tint);
+}
+
+.tended-seeds-row-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tended-seeds-row-id {
+  flex: none;
+  color: var(--color-text-dimmed);
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  font-size: var(--font-size-xs);
+}
+
+.tended-seeds-row-fraction {
+  flex: none;
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.tended-seeds-row-note {
+  flex: none;
+  color: var(--color-text-dimmed);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tended-seeds-popover-hint {
+  display: flex;
+  gap: 10px;
+  padding: 5px 8px 3px;
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: 3px;
+  color: var(--color-text-dimmed);
+  font-size: var(--font-size-xs);
+}

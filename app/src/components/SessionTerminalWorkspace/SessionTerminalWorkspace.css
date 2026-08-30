@@ -412,6 +412,13 @@
   flex-shrink: 0;
 }
 
+/* In a narrow pane the garden chip gives ground before the title does, but
+   never collapses past a readable stub. */
+.workspace-pane-header .pane-seed-chip {
+  flex: 0 1 auto;
+  min-width: 76px;
+}
+
 /* A lone tile's header: a status bar naming the session and hosting its chips,
    with nowhere to be dragged to. */
 .workspace-pane-header--static {
