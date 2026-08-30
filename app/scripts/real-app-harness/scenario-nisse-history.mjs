@@ -11,6 +11,7 @@ import {
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+import { rememberedWord, scriptedAgent, startStubWorld } from './piStubProvider.mjs';
 import { currentHarnessProfile, dataDirForProfile } from './harnessProfile.mjs';
 
 const SECRET = 'zeppelin';
@@ -150,11 +151,17 @@ async function main() {
   if (!profile) {
     throw new Error('the nisse history scenario does not run against production; set ATTN_PROFILE / ATTN_HARNESS_PROFILE to a named profile');
   }
+  const world = await startStubWorld({ scenario: 'nisse-history', appPath: options.appPath, profile, agent: scriptedAgent([
+    { when: 'What word did I ask you to remember', text: rememberedWord },
+    { when: 'alpha', text: 'alpha' },
+    { when: 'bravo', text: 'bravo' },
+  ]) });
   const dataDir = dataDirForProfile(profile);
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'PI-HOST-HISTORY',
     tier: 'tier2-local-real-agent',
+    preflightLaunchEnv: world.launchEnv,
     prefix: 'nisse-history',
     metadata: {
       agent: 'nisse',
@@ -162,7 +169,7 @@ async function main() {
     },
   });
 
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient({ appPath: options.appPath, launchEnv: world.launchEnv });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const note = (message, extra) => runner.log(message, extra);
   const sessionIds = [];
@@ -189,7 +196,7 @@ async function main() {
     });
 
     await runner.step('launch_app', async () => {
-      await launchFreshAppAndConnect(client, observer);
+      await world.launch({ client, runner, launchApp: () => launchFreshAppAndConnect(client, observer), pinModelFor: 'nisse' });
     });
 
     const { originalFile } = await runner.step('hold_a_conversation_worth_resuming', async () => {
@@ -391,6 +398,7 @@ async function main() {
     }
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
+    await world.close();
   }
 }
 

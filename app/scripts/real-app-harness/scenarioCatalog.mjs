@@ -337,8 +337,8 @@ export const scenarioCatalog = [
     allowRealAgents: ['pi'],
     label: 'Conversation session: nisse round trip, second prompt after settle, no orphans on close',
     command: ['pnpm', 'run', 'real-app:scenario-nisse-conversation'],
-    // Needs the attn-pi plugin installed in the target profile
-    // (`attn plugin install-bundled attn-pi`) and pi credentials.
+    // Needs the attn-pi plugin installed (`attn plugin install-bundled attn-pi`). The model
+    // is a loopback stub; `pi` is allowed only for the plugin's `pi --version` health probe.
     timeoutMs: 300_000,
   },
   {

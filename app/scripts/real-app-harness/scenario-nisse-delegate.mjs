@@ -13,14 +13,12 @@ import {
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+import { bash, scriptedAgent, startStubWorld, stubAgentModel } from './piStubProvider.mjs';
 import { currentHarnessProfile, dataDirForProfile, socketPathForProfile } from './harnessProfile.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 const GUIDANCE_TOKEN = 'quicksilver-badger';
-
-// The state an agent reports and the column the board keeps it in differ.
-const TICKET_COLUMN_FOR_READY = 'in_review';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -108,36 +106,48 @@ function waitForHost(known, description, timeoutMs = 90_000) {
   return pollFor(async () => hostProcesses().find((entry) => !known.includes(entry.pid)) ?? null, description, timeoutMs);
 }
 
-// Steps 1 and 2 must be demanded as SEPARATE bash calls: told only "in order", a
-// model batches both and composes the comment unread (observed 2026-08-09).
+// `<seed>` is the id attn appends to the brief when it launches the delegate.
 function briefFor(token) {
   return [
-    'Do these three things, in order, using your bash tool. Do not ask for',
+    'Do these things, in order, using your bash tool. Do not ask for',
     'confirmation and do nothing else. Steps 1 and 2 are two separate bash',
     'calls: you cannot know what to write in step 2 until step 1 has answered.',
     '',
     '1. Read AGENTS.md in the current directory and note the codename it records.',
     '2. In a second, separate bash call, run this command, with <codename>',
-    '   replaced by what you read in step 1:',
-    `     attn ticket status ready_for_review --comment "${token} codename=<codename>"`,
-    '3. Reply with the single word: done',
+    '   replaced by what you read in step 1 and <seed> by your seed id:',
+    `     attn seed note <seed> -m "${token} codename=<codename>"`,
+    '3. In a third bash call, run this command, with <seed> replaced the same way:',
+    `     attn seed harvest <seed> -m "${token} done"`,
+    '4. Reply with the single word: done',
   ].join('\n');
 }
 
-function ticketFor(runAttn, workerId) {
+// The stub's script for both briefs: every `attn seed` line in the brief, in order,
+// `<seed>` from the footer and `<codename>` from what `cat AGENTS.md` returned.
+function seedCommands(request) {
+  const seed = /Your work is seed `(s-[a-z0-9]+)`/.exec(request.prompt)?.[1] ?? 'unknown-seed';
+  const brief = request.prompt.split('Your work is seed')[0];
+  const lines = [...brief.matchAll(/^\s*(attn seed [^\n]*)/gm)].map((match) => match[1].replaceAll('<seed>', seed));
+  if (!lines.some((line) => line.includes('<codename>'))) return lines.map(bash);
+  const codename = /codename is (\S+?)\.?\s/.exec(request.toolResults[0] ?? '')?.[1] ?? 'unread';
+  return [bash('cat AGENTS.md'), ...lines.map((line) => bash(line.replaceAll('<codename>', codename)))];
+}
+
+function seedFor(runAttn, token) {
   return pollFor(
     async () => {
-      const list = runAttn(['ticket', 'list', '--json'], { allowFailure: true });
-      const tickets = Array.isArray(list.json) ? list.json : [];
-      return tickets.find((ticket) => ticket.assignee === workerId) ?? null;
+      const list = runAttn(['seed', 'ls', '--flat', '--json'], { allowFailure: true });
+      return (list.json?.seeds ?? []).find((seed) => (seed.body ?? '').includes(token)) ?? null;
     },
-    `a ticket bound to worker ${workerId}`,
+    `a seed whose brief carries ${token}`,
     45_000,
   );
 }
 
-const activityOf = (ticket) => ticket?.activity ?? [];
-const textOf = (entry) => entry?.comment ?? '';
+const showSeed = (runAttn, seedId) => runAttn(['seed', 'show', seedId, '--json'], { allowFailure: true }).json;
+const notesOf = (shown) => shown?.notes ?? [];
+const textOf = (note) => note?.body ?? '';
 
 async function main() {
   const { options, help } = parseArgs(process.argv.slice(2));
@@ -150,20 +160,27 @@ async function main() {
   if (!profile) {
     throw new Error('the nisse delegation scenario does not run against production; set ATTN_PROFILE / ATTN_HARNESS_PROFILE to a named profile');
   }
+  const world = await startStubWorld({ scenario: 'nisse-delegate', appPath: options.appPath, profile, agent: scriptedAgent([
+    // Held so the crash sub-test can kill the host inside pi's pre-write window,
+    // where a real model's own latency would sit.
+    { when: 'PIREVIVE', tools: seedCommands, text: 'done', holdMs: 4_000 },
+    { when: /^\s*attn seed /m, tools: seedCommands, text: 'done' },
+  ]) });
   const dataDir = dataDirForProfile(profile);
   const runAttn = makeAttnRunner(resolveAttnBin(), profile);
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'PI-HOST-DELEGATE',
     tier: 'tier2-local-real-agent',
+    preflightLaunchEnv: world.launchEnv,
     prefix: 'nisse-delegate',
     metadata: {
       agent: 'nisse',
-      focus: 'delegation to a conversation agent: brief as the first message, ticket report attributed to the delegated session, repository guidance in the worktree, brief replayed after a zero-file crash',
+      focus: 'delegation to a conversation agent: brief as the first message, seed report attributed to the delegated session, repository guidance in the worktree, brief replayed after a zero-file crash',
     },
   });
 
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient({ appPath: options.appPath, launchEnv: world.launchEnv });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   let delegatorId = null;
   let workerId = null;
@@ -195,7 +212,7 @@ async function main() {
     });
 
     await runner.step('launch_app', async () => {
-      await launchFreshAppAndConnect(client, observer);
+      await world.launch({ client, runner, launchApp: () => launchFreshAppAndConnect(client, observer), pinModelFor: 'nisse' });
     });
 
     await runner.step('boot_delegator', async () => {
@@ -210,13 +227,14 @@ async function main() {
       });
     });
 
-    const { ticketId, token } = await runner.step('delegate_a_conversation_agent', async () => {
+    const { seedId, token } = await runner.step('delegate_a_conversation_agent', async () => {
       const before = hostProcesses().map((entry) => entry.pid);
       const runToken = `PIDELEGATE-${runner.runId.slice(-6).toUpperCase()}`;
       const delegate = runAttn([
         'delegate',
         '--source-session', delegatorId,
         '--agent', 'nisse',
+        '--model', stubAgentModel,
         '--brief', briefFor(runToken),
         '--name', `pid-${runner.runId.slice(-6)}`,
       ]);
@@ -225,11 +243,11 @@ async function main() {
       await observer.waitForSession({ id: workerId, timeoutMs: 45_000 });
       const host = await waitForHost(before, 'the host process for the delegated conversation');
 
-      const ticket = await ticketFor(runAttn, workerId);
+      const seed = await seedFor(runAttn, runToken);
       runner.assert(
-        (ticket.description ?? '').includes(runToken),
-        'the delegated ticket carries the brief as its description',
-        ticket,
+        (seed.body ?? '').includes(runToken),
+        'the delegated seed carries the brief as its body',
+        seed,
       );
       const worktree = delegate.json?.directory;
       runner.assert(
@@ -237,8 +255,8 @@ async function main() {
         `the delegated agent got its own worktree (got ${worktree}, worktree_created=${delegate.json?.worktree_created})`,
         delegate.json,
       );
-      runner.log(`[RealAppHarness] worker=${workerId} ticket=${ticket.id} host=${host.pid} cwd=${worktree}`);
-      return { ticketId: ticket.id, token: runToken, worktree };
+      runner.log(`[RealAppHarness] worker=${workerId} seed=${seed.id} host=${host.pid} cwd=${worktree}`);
+      return { seedId: seed.id, token: runToken, worktree };
     });
 
     await runner.step('the_brief_is_the_conversations_first_message', async () => {
@@ -258,24 +276,24 @@ async function main() {
       return first;
     });
 
-    await runner.step('the_agent_reports_onto_its_own_ticket', async () => {
+    await runner.step('the_agent_reports_onto_its_own_seed', async () => {
       const settled = await pollFor(
         async () => {
-          const show = runAttn(['ticket', 'show', ticketId, '--json'], { allowFailure: true });
-          return show.json?.status === TICKET_COLUMN_FOR_READY ? show.json : null;
+          const shown = showSeed(runAttn, seedId);
+          return shown?.seed?.status === 'harvested' ? shown : null;
         },
-        `the delegated agent to move its ticket to ${TICKET_COLUMN_FOR_READY}`,
+        'the delegated agent to harvest its seed',
         420_000,
         2_000,
       );
-      runner.writeJson('delegated-ticket.json', settled);
+      runner.writeJson('delegated-seed.json', settled);
 
-      const activity = activityOf(settled);
-      const report = activity.find((entry) => textOf(entry).includes(token));
-      runner.assert(Boolean(report), `the ticket carries the agent's own report (got ${JSON.stringify(activity)})`, activity);
+      const notes = notesOf(settled);
+      const report = notes.find((note) => note.kind === 'note' && textOf(note).includes(token));
+      runner.assert(Boolean(report), `the seed log carries the agent's own report (got ${JSON.stringify(notes)})`, notes);
       runner.assert(
-        report.author === workerId,
-        `the report is attributed to the delegated session (author=${report.author}, worker=${workerId})`,
+        report.author_session === workerId,
+        `the report is attributed to the delegated session (author=${report.author_session}, worker=${workerId})`,
         report,
       );
       runner.assert(
@@ -293,11 +311,12 @@ async function main() {
         'delegate',
         '--source-session', delegatorId,
         '--agent', 'nisse',
+        '--model', stubAgentModel,
         // One call, deliberately: asking the agent to retry would hide a
         // regression of the read-before-you-write gate (#821).
         '--brief', [
-          'Using your bash tool, run exactly this command, once:',
-          `attn ticket status ready_for_review --comment "${earlyToken}"`,
+          'Using your bash tool, run exactly this command, once, with <seed> replaced by your seed id:',
+          `attn seed note <seed> -m "${earlyToken}"`,
           'Then reply with the single word: done',
         ].join('\n'),
         '--name', `pir-${runner.runId.slice(-6)}`,
@@ -328,27 +347,21 @@ async function main() {
       await client.request('dom_click', { selector: reloadOf(earlyWorkerId) });
       await waitForHost(known, 'a replacement host for the crashed delegation');
 
-      const earlyTicket = await ticketFor(runAttn, earlyWorkerId);
+      const earlySeed = await seedFor(runAttn, earlyToken);
       const settled = await pollFor(
         async () => {
-          const show = runAttn(['ticket', 'show', earlyTicket.id, '--json'], { allowFailure: true });
-          return show.json?.status === TICKET_COLUMN_FOR_READY ? show.json : null;
+          const shown = showSeed(runAttn, earlySeed.id);
+          return notesOf(shown).some((note) => textOf(note).includes(earlyToken)) ? shown : null;
         },
         'the relaunched delegation to do the work its replayed brief asked for',
         420_000,
         2_000,
       );
-      const activity = activityOf(settled);
-      runner.assert(
-        activity.some((entry) => textOf(entry).includes(earlyToken)),
-        `the replayed brief reached the fresh session (got ${JSON.stringify(activity)})`,
-        activity,
-      );
-      runner.writeJson('replayed-brief-ticket.json', settled);
-      return { killedPid: host.pid, filesAtKill, ticket: earlyTicket.id };
+      runner.writeJson('replayed-brief-seed.json', settled);
+      return { killedPid: host.pid, filesAtKill, seed: earlySeed.id };
     });
 
-    const summary = await runner.finishSuccess({ profile, delegatorId, workerId, earlyWorkerId, ticketId });
+    const summary = await runner.finishSuccess({ profile, delegatorId, workerId, earlyWorkerId, seedId });
     console.log('[RealAppHarness] nisse delegation scenario passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
@@ -362,6 +375,7 @@ async function main() {
     }
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
+    await world.close();
   }
 }
 

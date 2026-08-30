@@ -3,18 +3,16 @@
 import { createWriteStream } from "node:fs";
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { open } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   createAgentSession,
   DefaultResourceLoader,
+  getAgentDir,
+  ModelRuntime,
   SessionManager,
   SettingsManager,
   VERSION as PI_VERSION,
 } from "@earendil-works/pi-coding-agent";
-// getModel is exported only from the /compat subpath at this pin, where it is deprecated but working.
-import { getModel } from "@earendil-works/pi-ai/compat";
 // Inlined at build time: pi reads its own VERSION off disk at runtime, which a `bun build --compile` binary has no copy of, so it degrades to "0.0.0".
 import piPlugin from "../package.json" with { type: "json" };
 
@@ -106,18 +104,14 @@ function holdsSession(sessionDir: string): boolean {
   }
 }
 
-function resolveModel(pinned: string) {
+function resolveModel(modelRuntime: ModelRuntime, pinned: string) {
   const split = pinned.indexOf("/");
   if (split <= 0 || split === pinned.length - 1) {
     throw new Error(`model ${JSON.stringify(pinned)} must be "provider/model-id" (e.g. "openai/gpt-5.6-luna")`);
   }
-  const provider = pinned.slice(0, split);
-  const id = pinned.slice(split + 1);
-  try {
-    return getModel(provider, id);
-  } catch (error) {
-    throw new Error(`pi has no model ${JSON.stringify(pinned)}: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  const model = modelRuntime.getModel(pinned.slice(0, split), pinned.slice(split + 1));
+  if (!model) throw new Error(`pi has no model ${JSON.stringify(pinned)}`);
+  return model;
 }
 
 async function readOutputTail(path: string, limit: number): Promise<{ text: string; clipped: boolean; size: number }> {
@@ -158,11 +152,12 @@ async function main(): Promise<void> {
     envelopeOut.write(`${JSON.stringify(envelope)}\n`);
   };
 
-  const model = resolveModel(pinnedModel);
+  // Session storage is attn's; auth, models.json and resource discovery resolve against pi's own
+  // agent dir (~/.pi/agent, or PI_CODING_AGENT_DIR).
+  const agentDir = getAgentDir();
+  const modelRuntime = await ModelRuntime.create();
+  const model = resolveModel(modelRuntime, pinnedModel);
   if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
-
-  // Session storage is attn's; auth and resource discovery still resolve against the real ~/.pi/agent dir.
-  const agentDir = join(homedir(), ".pi", "agent");
   // A host killed before pi's first assistant message leaves no session file at all
   // (measured, 2026-08-04), so the relaunch is an ordinary fresh start.
   const { sessionManager, forked } = openSession(cwd, sessionDir, resumeFile);
@@ -170,7 +165,7 @@ async function main(): Promise<void> {
   const resourceLoader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
   await resourceLoader.reload();
 
-  const { session } = await createAgentSession({ cwd, model, sessionManager, settingsManager, resourceLoader });
+  const { session } = await createAgentSession({ cwd, model, modelRuntime, sessionManager, settingsManager, resourceLoader });
 
   // Required: without it `session_start` never fires and extensions silently do nothing (receipt: 2026-08-04 spike).
   await session.bindExtensions({ mode: "print" });
@@ -315,7 +310,7 @@ async function main(): Promise<void> {
   const setModel = async (pinned: string) => {
     const body: ModelChangedBody = { model: pinned };
     try {
-      await session.setModel(resolveModel(pinned));
+      await session.setModel(resolveModel(modelRuntime, pinned));
       body.model = currentModelName() || pinned;
       console.error(`[nisse] model switched to ${body.model}`);
     } catch (error) {

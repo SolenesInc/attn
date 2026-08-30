@@ -3,8 +3,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import {
   launchFreshAppAndConnect,
   parseCommonArgs,
@@ -16,6 +15,8 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, dataDirForProfile, socketPathForProfile } from './harnessProfile.mjs';
 import {
+  resolveAttnBinary,
+  restartDaemonWithStubEnv,
   startPiStubProvider,
   stubAgentModel,
   stubJudgeModel,
@@ -34,23 +35,8 @@ const GRANTED_DONE = 'GRANTED-LEG-DONE';
 
 const QUIET_WINDOW_MS = 20_000;
 
-const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// The profile's own bundled CLI, not a repo build: bundled plugins resolve
-// relative to the app bundle, so any other daemon reports the pi driver missing.
-function resolveAttnBinary(appPath) {
-  const candidates = [
-    process.env.ATTN_HARNESS_BIN,
-    path.join(appPath, 'Contents/MacOS/attn'),
-    path.resolve(HARNESS_DIR, '../../../attn'),
-  ].filter(Boolean);
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
-  }
-  throw new Error(`no attn binary found for ${appPath}`);
-}
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -96,30 +82,6 @@ function makeAttnRunner(attnBin, profile) {
       return { stdout, stderr, status: error.status ?? 1, json: parseAttnJSON(stdout) };
     }
   };
-}
-
-// pi reads its agent dir from the daemon's environment, so a daemon left over
-// from an earlier run is restarted with the stub agent dir before the app connects.
-async function restartDaemonWithStubEnv({ attnBin, profile, agentDir, runAttn }) {
-  runAttn(['daemon', 'stop'], { allowFailure: true });
-  const child = spawn(attnBin, ['daemon', 'ensure'], {
-    env: {
-      ...process.env,
-      ATTN_PROFILE: profile,
-      ATTN_SOCKET_PATH: socketPathForProfile(profile),
-      PI_CODING_AGENT_DIR: agentDir,
-    },
-    detached: true,
-    stdio: 'ignore',
-  });
-  child.unref();
-  const deadline = Date.now() + 30_000;
-  for (;;) {
-    const probe = runAttn(['automode', 'show', '--json'], { allowFailure: true });
-    if (probe.status === 0) return;
-    if (Date.now() > deadline) throw new Error('daemon did not come back up with the stub agent dir');
-    await delay(500);
-  }
 }
 
 // A fast burst ending in CR arrives as a bracketed paste and never submits, so
@@ -182,13 +144,13 @@ async function main() {
   const launchEnv = { PI_CODING_AGENT_DIR: agentDir };
 
   try {
-    await drive({ options, profile, attnBin, runAttn, dbPath, stub, judgeQueue, launchEnv, agentDir });
+    await drive({ options, profile, runAttn, dbPath, stub, judgeQueue, launchEnv, agentDir });
   } finally {
     await stub.close().catch(() => {});
   }
 }
 
-async function drive({ options, profile, attnBin, runAttn, dbPath, stub, judgeQueue, launchEnv, agentDir }) {
+async function drive({ options, profile, runAttn, dbPath, stub, judgeQueue, launchEnv, agentDir }) {
   const runner = createScenarioRunner(options, {
     scenarioId: 'PI-AUTOMODE',
     tier: 'tier2-local-real-agent',
@@ -219,7 +181,7 @@ async function drive({ options, profile, attnBin, runAttn, dbPath, stub, judgeQu
     });
 
     await runner.step('launch_app', async () => {
-      await restartDaemonWithStubEnv({ attnBin, profile, agentDir, runAttn });
+      await restartDaemonWithStubEnv({ appPath: options.appPath, profile, agentDir });
       await launchFreshAppAndConnect(client, observer);
       await client.request('set_setting', { key: 'default_model_pi', value: stubAgentModel });
       runner.registerCleanup('restore_pi_model', () => client

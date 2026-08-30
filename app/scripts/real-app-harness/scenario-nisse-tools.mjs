@@ -11,6 +11,7 @@ import {
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+import { bash, scriptedAgent, startStubWorld } from './piStubProvider.mjs';
 import { currentHarnessProfile } from './harnessProfile.mjs';
 
 // Composer selectors must stay pane-scoped: a bare conversation-input resolves
@@ -105,15 +106,27 @@ async function main() {
   if (!profile) {
     throw new Error('the nisse tools scenario does not run against production; set ATTN_PROFILE / ATTN_HARNESS_PROFILE to a named profile');
   }
+  const world = await startStubWorld({ scenario: 'nisse-tools', appPath: options.appPath, profile, agent: scriptedAgent([
+    { when: 'read tool', tools: [{ name: 'read', args: { path: 'notes.txt' } }], text: 'alpha' },
+    { when: 'seq 1 5000', tools: [bash('seq 1 5000')], text: 'bravo' },
+    {
+      when: 'edit tool',
+      tools: [{ name: 'edit', args: { path: 'notes.txt', edits: [{ oldText: MARKER, newText: REPLACEMENT }] } }],
+      text: 'charlie',
+    },
+    { when: 'sleep 30', tools: [bash('sleep 30')], text: 'delta' },
+    { when: 'epsilon', text: 'epsilon' },
+  ]) });
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'PI-HOST-TOOLS',
     tier: 'tier2-local-real-agent',
+    preflightLaunchEnv: world.launchEnv,
     prefix: 'nisse-tools',
     metadata: { agent: 'nisse', focus: 'tool cards, on-demand detail, full output, patch as a diff, queue cancel' },
   });
 
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient({ appPath: options.appPath, launchEnv: world.launchEnv });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const note = (message, extra) => runner.log(message, extra);
   let sessionId = null;
@@ -146,7 +159,7 @@ async function main() {
     });
 
     await runner.step('launch_app', async () => {
-      await launchFreshAppAndConnect(client, observer);
+      await world.launch({ client, runner, launchApp: () => launchFreshAppAndConnect(client, observer), pinModelFor: 'nisse' });
     });
 
     await runner.step('create_conversation_session', async () => {
@@ -329,6 +342,7 @@ async function main() {
   } finally {
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
+    await world.close();
   }
 }
 

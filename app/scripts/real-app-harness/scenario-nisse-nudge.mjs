@@ -11,6 +11,7 @@ import {
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+import { bash, scriptedAgent, startStubWorld } from './piStubProvider.mjs';
 import { currentHarnessProfile } from './harnessProfile.mjs';
 
 // Composer selectors are pane-scoped: a bare [data-testid="conversation-input"]
@@ -64,15 +65,22 @@ async function main() {
   if (!profile) {
     throw new Error('the nisse nudge scenario does not run against production; set ATTN_PROFILE / ATTN_HARNESS_PROFILE to a named profile');
   }
+  const world = await startStubWorld({ scenario: 'nisse-nudge', appPath: options.appPath, profile, agent: scriptedAgent([
+    { when: 'sleep 25', tools: [bash('sleep 25')], text: 'alpha' },
+    { when: 'bravo', text: 'bravo' },
+    // The stub answers in milliseconds; a short tool run keeps `working` observable.
+    { when: 'charlie', tools: [bash('sleep 5')], text: 'charlie' },
+  ]) });
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'PI-HOST-NUDGE',
     tier: 'tier2-local-real-agent',
+    preflightLaunchEnv: world.launchEnv,
     prefix: 'nisse-nudge',
     metadata: { agent: 'nisse', focus: 'steer mid-run, nudge an idle session, session state and turn' },
   });
 
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient({ appPath: options.appPath, launchEnv: world.launchEnv });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const note = (message, extra) => runner.log(message, extra);
   let sessionId = null;
@@ -99,7 +107,7 @@ async function main() {
     });
 
     await runner.step('launch_app', async () => {
-      await launchFreshAppAndConnect(client, observer);
+      await world.launch({ client, runner, launchApp: () => launchFreshAppAndConnect(client, observer), pinModelFor: 'nisse' });
     });
 
     await runner.step('create_conversation_session', async () => {
@@ -263,6 +271,7 @@ async function main() {
     // socket holds node's event loop open.
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
+    await world.close();
   }
 }
 

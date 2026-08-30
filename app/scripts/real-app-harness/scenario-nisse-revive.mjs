@@ -12,6 +12,7 @@ import {
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+import { bash, rememberedWord, scriptedAgent, startStubWorld } from './piStubProvider.mjs';
 import { currentHarnessProfile, dataDirForProfile } from './harnessProfile.mjs';
 
 // A word the agent can only produce by having read the pre-crash exchange.
@@ -146,11 +147,18 @@ async function main() {
   if (!profile) {
     throw new Error('the nisse revive scenario does not run against production; set ATTN_PROFILE / ATTN_HARNESS_PROFILE to a named profile');
   }
+  const world = await startStubWorld({ scenario: 'nisse-revive', appPath: options.appPath, profile, agent: scriptedAgent([
+    { when: 'sleep 45', tools: [bash('sleep 45')], text: 'done' },
+    { when: 'What word did I ask you to remember', text: rememberedWord },
+    { when: 'alpha', text: 'alpha' },
+    { when: 'bravo', text: 'bravo' },
+  ]) });
   const dataDir = dataDirForProfile(profile);
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'PI-HOST-REVIVE',
     tier: 'tier2-local-real-agent',
+    preflightLaunchEnv: world.launchEnv,
     prefix: 'nisse-revive',
     metadata: {
       agent: 'nisse',
@@ -158,7 +166,7 @@ async function main() {
     },
   });
 
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const client = new UiAutomationClient({ appPath: options.appPath, launchEnv: world.launchEnv });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const note = (message, extra) => runner.log(message, extra);
   let sessionId = null;
@@ -201,7 +209,7 @@ async function main() {
     });
 
     await runner.step('launch_app', async () => {
-      await launchFreshAppAndConnect(client, observer);
+      await world.launch({ client, runner, launchApp: () => launchFreshAppAndConnect(client, observer), pinModelFor: 'nisse' });
     });
 
     await runner.step('hold_a_conversation', async () => {
@@ -374,6 +382,7 @@ async function main() {
     reapStrandedToolChildren();
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
+    await world.close();
   }
 }
 

@@ -2,7 +2,11 @@
 // opens with a line no coding agent's does.
 import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
+import { execFileSync, spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { socketPathForProfile } from './harnessProfile.mjs';
 
 const CLASSIFIER_MARKER = 'You are a security monitor for an autonomous coding agent';
 
@@ -19,9 +23,19 @@ function severityAnswer(verdict, pass) {
   return `${thinking}<severity>${DENY_SEVERITY}</severity><category>${category}</category>`;
 }
 
+const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
+
 export const stubProviderName = 'attn-harness';
 export const stubAgentModel = `${stubProviderName}/stub-agent`;
 export const stubJudgeModel = `${stubProviderName}/stub-judge`;
+
+function textOf(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return content == null ? '' : JSON.stringify(content);
+  return content.map((part) => (typeof part === 'string' ? part : (part?.text ?? ''))).join('');
+}
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function sse(res, payload) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -62,7 +76,7 @@ export function startPiStubProvider({ agent, judge }) {
     }
     let raw = '';
     req.on('data', (piece) => { raw += piece; });
-    req.on('end', () => {
+    req.on('end', async () => {
       let body;
       try {
         body = JSON.parse(raw);
@@ -76,7 +90,10 @@ export function startPiStubProvider({ agent, judge }) {
         .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
         .join('\n');
       const role = systemPrompt.includes(CLASSIFIER_MARKER) ? 'judge' : 'agent';
-      const request = { body, messages, systemPrompt, turn: calls[role].length };
+      const lastUser = messages.findLastIndex((m) => m.role === 'user');
+      const prompts = messages.filter((m) => m.role === 'user').map((m) => textOf(m.content));
+      const toolResults = messages.slice(lastUser + 1).filter((m) => m.role === 'tool').map((m) => textOf(m.content));
+      const request = { body, messages, systemPrompt, turn: calls[role].length, prompt: prompts.at(-1) ?? '', prompts, toolResults };
       calls[role].push(request);
 
       res.writeHead(200, {
@@ -95,7 +112,8 @@ export function startPiStubProvider({ agent, judge }) {
           const verdict = held ?? { verdict: 'deny', reason: 'the stub had no scripted verdict' };
           writeText(res, severityAnswer(verdict, pass));
         } else {
-          const answer = agent(request);
+          const answer = await agent(request);
+          if (answer.holdMs) await delay(answer.holdMs);
           if (answer.tool) {
             writeToolCall(res, {
               id: answer.tool.id ?? `call-${calls.agent.length}`,
@@ -156,4 +174,97 @@ export function writeStubAgentDir(dir, baseUrl) {
     'utf8',
   );
   return dir;
+}
+
+// The first rule whose `when` (substring or RegExp) matches the latest user message
+// wins; its `tools` go out one per model call until every result is in, then `text`.
+export function scriptedAgent(rules) {
+  return (request) => {
+    const rule = rules.find(({ when }) => (when instanceof RegExp ? when.test(request.prompt) : request.prompt.includes(when)));
+    if (!rule) return { text: `the stub has no scripted reply for: ${request.prompt.slice(0, 200)}` };
+    const tools = typeof rule.tools === 'function' ? rule.tools(request) : (rule.tools ?? []);
+    const next = tools[request.toolResults.length];
+    if (next) return { tool: next, holdMs: rule.holdMs };
+    return { text: typeof rule.text === 'function' ? rule.text(request) : (rule.text ?? ''), holdMs: rule.holdMs };
+  };
+}
+
+export const bash = (command) => ({ name: 'bash', args: { command } });
+
+// The word an earlier prompt asked the agent to remember; only a request carrying
+// that history can answer it, which is what the revive and resume scenarios test.
+export function rememberedWord(request) {
+  for (const prompt of [...request.prompts].reverse()) {
+    const match = /Remember this word: (\w+)/.exec(prompt);
+    if (match) return match[1];
+  }
+  return 'the stub was never told a word to remember';
+}
+
+export const allowEverything = () => ({ verdict: 'allow' });
+
+// The profile's own bundled CLI, not a repo build: bundled plugins resolve
+// relative to the app bundle, so any other daemon reports the pi driver missing.
+export function resolveAttnBinary(appPath) {
+  const candidates = [
+    process.env.ATTN_HARNESS_BIN,
+    path.join(appPath, 'Contents/MacOS/attn'),
+    path.resolve(HARNESS_DIR, '../../../attn'),
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  throw new Error(`no attn binary found for ${appPath}`);
+}
+
+// pi reads its agent dir from the daemon's environment, so a daemon left over
+// from an earlier run is restarted with the stub agent dir before the app connects.
+export async function restartDaemonWithStubEnv({ appPath, profile, agentDir }) {
+  const attnBin = resolveAttnBinary(appPath);
+  const env = { ...process.env, ATTN_PROFILE: profile, ATTN_SOCKET_PATH: socketPathForProfile(profile) };
+  try {
+    execFileSync(attnBin, ['daemon', 'stop'], { encoding: 'utf8', env });
+  } catch {
+  }
+  const child = spawn(attnBin, ['daemon', 'ensure'], {
+    env: { ...env, PI_CODING_AGENT_DIR: agentDir },
+    detached: true,
+    stdio: 'ignore',
+  });
+  child.unref();
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    try {
+      execFileSync(attnBin, ['automode', 'show', '--json'], { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'ignore'] });
+      return;
+    } catch {
+      if (Date.now() > deadline) throw new Error('daemon did not come back up with the stub agent dir');
+      await delay(500);
+    }
+  }
+}
+
+// The stub, its agent dir, and the launch env: build the runner with
+// `preflightLaunchEnv: launchEnv`, the client with `launchEnv`, then call `launch` from a step.
+export async function startStubWorld({ scenario, appPath, profile, agent, judge = allowEverything }) {
+  const stub = await startPiStubProvider({ agent, judge });
+  const agentDir = writeStubAgentDir(path.join(os.tmpdir(), `attn-${scenario}-${process.pid}`), stub.baseUrl);
+  const launchEnv = { PI_CODING_AGENT_DIR: agentDir };
+  return {
+    stub,
+    agentDir,
+    launchEnv,
+    async launch({ client, runner, launchApp, pinModelFor }) {
+      await restartDaemonWithStubEnv({ appPath, profile, agentDir });
+      await launchApp();
+      const key = `default_model_${pinModelFor}`;
+      await client.request('set_setting', { key, value: stubAgentModel });
+      runner.registerCleanup(`restore_${key}`, () => client.request('set_setting', { key, value: '' }).catch(() => {}));
+      runner.log(`stub provider on ${stub.baseUrl}`, { agentDir, model: stubAgentModel });
+    },
+    async close() {
+      await stub.close().catch(() => {});
+      fs.rmSync(agentDir, { recursive: true, force: true });
+    },
+  };
 }
