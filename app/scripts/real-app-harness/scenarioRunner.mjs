@@ -1,9 +1,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { armAgentTripwire, ensureDaemonCarriesTripwire, formatTripwireFailure } from './agentTripwire.mjs';
 import { assertPackagedAppBuildMatchesCurrentSource } from './buildPreflight.mjs';
 import { createRunContext, emitVerdict, FIRST_FAILURE_MAX_LENGTH, restoreHarnessSettings } from './common.mjs';
 import { MacOSDriver } from './macosDriver.mjs';
+import { allowRealAgentsForRunner } from './scenarioCatalog.mjs';
 import { createScenarioRecorder, recordingEnabled } from './windowRecording.mjs';
 
 // The verdict's firstFailure must stay one line whatever the error contains.
@@ -143,8 +145,11 @@ export function createScenarioRunner(options, {
   prefix,
   metadata = {},
   preflightLaunchEnv = null,
+  allowRealAgents = allowRealAgentsForRunner(scenarioId),
 } = {}, {
   assertBuildMatches = assertPackagedAppBuildMatchesCurrentSource,
+  armTripwire = armAgentTripwire,
+  ensureDaemonArmed = ensureDaemonCarriesTripwire,
   createRecorder = createScenarioRecorder,
   createRecordingDriver = (appPath) => new MacOSDriver({ appPath }),
   emitRunnerVerdict = emitVerdict,
@@ -169,6 +174,12 @@ export function createScenarioRunner(options, {
     removeDirIfPresent(runDir);
     removeDirIfPresent(sessionDir);
     throw error;
+  }
+  const tripwire = armTripwire({ scenarioId, runDir, allowRealAgents });
+  try {
+    ensureDaemonArmed({ marker: tripwire.marker, appPath: options?.appPath });
+  } catch (error) {
+    console.warn(`[agent-tripwire] could not check the running daemon: ${error?.message || error}`);
   }
   const tracePath = path.join(runDir, 'trace.log');
   const steps = [];
@@ -367,6 +378,13 @@ export function createScenarioRunner(options, {
     async finishSuccess(summary = {}) {
       const recorderError = await finalizeRunner();
       if (recorderError) throw recorderError;
+      const ledger = tripwire.read();
+      if (ledger.length > 0) {
+        const digest = formatTripwireFailure({ scenarioId, ledgerPath: tripwire.ledgerPath, lines: ledger });
+        appendTrace('agent_tripwire:tripped', { count: ledger.length, lines: ledger });
+        process.stdout.write(`${digest}\n`);
+        throw new Error(digest);
+      }
       const finalSummary = {
         ok: true,
         scenarioId,

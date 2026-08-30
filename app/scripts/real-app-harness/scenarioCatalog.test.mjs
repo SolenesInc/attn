@@ -1,5 +1,58 @@
 import { describe, expect, it } from 'vitest';
-import { resolveScenario, resolveScenarios, scenarioCatalog } from './scenarioCatalog.mjs';
+import { TRIPWIRE_BINARIES } from './agentTripwire.mjs';
+import {
+  allowRealAgentsForRunner,
+  resolveScenario,
+  resolveScenarios,
+  scenarioCatalog,
+  scenariosAllowingRealAgents,
+} from './scenarioCatalog.mjs';
+
+describe('scenarioCatalog agent tripwire flags', () => {
+  it('names the runner id every entry arms the tripwire under', () => {
+    for (const scenario of scenarioCatalog) {
+      expect(scenario, `${scenario.id} must declare runnerId (null when it has no scenario runner)`)
+        .toHaveProperty('runnerId');
+    }
+  });
+
+  it('only allows agent binaries the tripwire knows how to shim', () => {
+    for (const scenario of scenariosAllowingRealAgents()) {
+      if (scenario.allowRealAgents === true) continue;
+      expect(Array.isArray(scenario.allowRealAgents)).toBe(true);
+      for (const binary of scenario.allowRealAgents) {
+        expect(TRIPWIRE_BINARIES).toContain(binary);
+      }
+    }
+  });
+
+  it('keeps the model-free scenarios armed', () => {
+    expect(allowRealAgentsForRunner('NUDGE-TRIGGER')).toBeUndefined();
+    expect(allowRealAgentsForRunner('TERMINAL-ANNOTATIONS')).toBeUndefined();
+  });
+
+  it('lets the pi scenarios run pi and nothing else', () => {
+    // pi is a real binary these scenarios exec against a stub model or a
+    // recording, so only pi is allowed and claude/codex/copilot stay armed.
+    expect(allowRealAgentsForRunner('PI-AUTOMODE')).toEqual(['pi']);
+    expect(allowRealAgentsForRunner('NISSE-MARKDOWN-STREAM')).toEqual(['pi']);
+  });
+
+  it('allows every binary for a scenario that still launches a real agent', () => {
+    expect(allowRealAgentsForRunner('AGENT-QUEUE')).toBe(true);
+  });
+
+  it('allows every binary for a runner outside the catalog', () => {
+    expect(allowRealAgentsForRunner('SOME-UNLISTED-PROBE')).toBe(true);
+    expect(allowRealAgentsForRunner(undefined)).toBe(true);
+  });
+
+  it('takes the permissive flag when one runner id serves several entries', () => {
+    // TR-402 is both the local claude/codex scenario and the remote probe.
+    expect(scenarioCatalog.filter((scenario) => scenario.runnerId === 'TR-402').length).toBeGreaterThan(1);
+    expect(allowRealAgentsForRunner('TR-402')).toBe(true);
+  });
+});
 
 describe('scenarioCatalog soakOnly handling', () => {
   it('has the focus-probe entry marked soakOnly', () => {

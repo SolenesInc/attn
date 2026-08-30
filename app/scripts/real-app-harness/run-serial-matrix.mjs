@@ -2,10 +2,9 @@
 
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { assertPackagedAppBuildMatchesCurrentSource } from './buildPreflight.mjs';
-import { emitVerdict } from './common.mjs';
+import { emitVerdict, harnessArtifactsRoot } from './common.mjs';
 import { ensureFreshWorld } from './freshWorld.mjs';
 import {
   assertProductionRunAllowed,
@@ -15,7 +14,7 @@ import {
   isProductionHarnessTarget,
 } from './harnessProfile.mjs';
 import { formatResultTable, selectFailedScenarios } from './matrixDigest.mjs';
-import { resolveScenarios as resolveScenariosFromCatalog, scenarioCatalog } from './scenarioCatalog.mjs';
+import { resolveScenarios as resolveScenariosFromCatalog, scenarioCatalog, scenariosAllowingRealAgents } from './scenarioCatalog.mjs';
 
 // Must run before any import that reads ATTN_HARNESS_PROFILE at module load.
 // An unset ATTN_PROFILE falls back to dev, never to prod.
@@ -71,8 +70,17 @@ function parseArgs(argv) {
   };
 }
 
-function harnessArtifactsRoot() {
-  return process.env.ATTN_REAL_APP_ARTIFACTS_DIR || path.join(os.tmpdir(), 'attn-real-app-harness');
+function reportRealAgentAllowances(scenarios) {
+  const allowed = scenariosAllowingRealAgents(scenarios);
+  if (allowed.length === 0) {
+    console.log('[agent-tripwire] every selected scenario is armed: no real agent binary may run.');
+    return;
+  }
+  console.log(`[agent-tripwire] REAL AGENTS ALLOWED in ${allowed.length}/${scenarios.length} selected scenarios:`);
+  for (const scenario of allowed) {
+    const which = scenario.allowRealAgents === true ? 'all' : scenario.allowRealAgents.join(', ');
+    console.log(`[agent-tripwire]   ${scenario.id} (${which})`);
+  }
 }
 
 function printHelp() {
@@ -255,6 +263,7 @@ async function main() {
     runAgainstProd ? ['--run-against-prod'] : process.argv.slice(2),
   );
   console.log(`Matrix target: ${appPath} (ATTN_HARNESS_PROFILE=${process.env.ATTN_HARNESS_PROFILE || '<default>'})`);
+  reportRealAgentAllowances(scenarios);
 
   if (isProductionHarnessTarget({ appPath, wsUrl, profile })) {
     console.log('[fresh-world] skipped (production target)');

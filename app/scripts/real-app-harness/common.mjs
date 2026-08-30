@@ -98,6 +98,10 @@ export function emitVerdict(verdict) {
   console.log(formatVerdictLine(verdict));
 }
 
+export function harnessArtifactsRoot(env = process.env) {
+  return env.ATTN_REAL_APP_ARTIFACTS_DIR || path.join(os.tmpdir(), 'attn-real-app-harness');
+}
+
 export function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
 }
