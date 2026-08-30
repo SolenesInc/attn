@@ -170,6 +170,42 @@ enum Popup {
     Help,
 }
 
+/// The queue pill's hover unfold: t inches toward target a frame at a time, so reversals stay smooth.
+#[derive(Default)]
+struct Morph {
+    t: f32,
+    target: f32,
+    last: Option<Instant>,
+    on_pill: bool,
+    on_panel: bool,
+}
+
+impl Morph {
+    const UNFOLD_MS: f32 = 180.;
+
+    fn retarget(&mut self) {
+        self.target = if self.on_pill || self.on_panel { 1. } else { 0. };
+    }
+
+    /// One animation step; true while another frame should follow.
+    fn step(&mut self) -> bool {
+        if self.t == self.target {
+            self.last = None;
+            return false;
+        }
+        let now = Instant::now();
+        let dt = self.last.map(|last| now.duration_since(last).as_secs_f32()).unwrap_or(0.);
+        self.last = Some(now);
+        let step = dt * 1000. / Self::UNFOLD_MS;
+        self.t = if self.target > self.t {
+            (self.t + step).min(self.target)
+        } else {
+            (self.t - step).max(self.target)
+        };
+        true
+    }
+}
+
 enum ItemAction {
     Source(fn(&Zero) -> ScenarioAction),
     Motion,
@@ -194,11 +230,12 @@ const SCENARIO_ITEMS: [ScenarioItem; 8] = [
     ScenarioItem { label: "motion", detail: "cycle the desktop slide duration", action: ItemAction::Motion },
 ];
 
-const HELP: [(&str, &str); 15] = [
+const HELP: [(&str, &str); 16] = [
     ("⌘⇧E", "settle the focused turn and go to the next one in the queue"),
     ("⌘J", "peek at the next agent in the queue without settling"),
     ("⌘P", "back to the previous agent"),
     ("⌘K", "the agent list: waiting first; type to filter, ⏎ jumps"),
+    ("hover", "the waiting pill unfolds into the same list; click a row to jump"),
     ("⌘1…9", "go to that desktop"),
     ("⌘⌥1…9", "move the focused pane to that desktop"),
     ("⌘←↑↓→", "focus the neighboring pane"),
@@ -224,6 +261,7 @@ struct Zero {
     dirty: HashSet<AgentId>,
     docs: HashMap<AgentId, DocTile>,
     popup: Popup,
+    queue_morph: Morph,
     previous_focus: Option<AgentId>,
     content: Bounds<Pixels>,
     slide: (i8, u64),
@@ -349,6 +387,7 @@ impl Zero {
             dirty: HashSet::new(),
             docs: doc_tiles,
             popup: Popup::None,
+            queue_morph: Morph::default(),
             previous_focus: None,
             content: Bounds::default(),
             slide: (0, 0),
@@ -614,6 +653,7 @@ impl Zero {
     }
 
     fn open(&mut self, popup: Popup, cx: &mut Context<Self>) {
+        self.queue_morph = Morph::default();
         self.popup = popup;
         cx.notify();
     }
@@ -1073,20 +1113,103 @@ impl Zero {
             .into_any_element()
     }
 
+    /// The queue pill's hover face: every agent as a row, unfolding under the pill.
+    fn render_queue_panel(&self, open: f32, now: Duration, cx: &mut Context<Self>) -> Stateful<Div> {
+        let mut ids = self.model.queue();
+        let rest: Vec<AgentId> = self.model.agents.iter().map(|agent| agent.id).filter(|id| !ids.contains(id)).collect();
+        ids.extend(rest);
+        let height = (12. + ids.len() as f32 * 28.) * open;
+        let mut panel = div()
+            .id("queue-panel")
+            .occlude()
+            .absolute()
+            .top(px(26.))
+            .left_0()
+            .w_full()
+            .min_w(px(360.))
+            .h(px(height.max(1.)))
+            .overflow_hidden()
+            .rounded_bl(px(12.))
+            .rounded_br(px(12.))
+            .rounded_tr(px(4.))
+            .bg(theme::bg_dark())
+            .border_1()
+            .border_color(theme::gutter())
+            .shadow(vec![BoxShadow {
+                color: gpui::black().alpha(0.5),
+                offset: point(px(0.), px(14.)),
+                blur_radius: px(38.),
+                spread_radius: px(0.),
+            }])
+            .opacity((open * 1.5).min(1.))
+            .flex()
+            .flex_col()
+            .py(px(6.))
+            .on_hover(cx.listener(|zero, hovered: &bool, _, cx| {
+                zero.queue_morph.on_panel = *hovered;
+                zero.queue_morph.retarget();
+                cx.notify();
+            }));
+        for (index, id) in ids.into_iter().enumerate() {
+            let agent = self.model.agent(id);
+            let color = theme::state_color(agent.kind, agent.state);
+            let age = agent.turn_opened_at.map(|opened| format_age(now.saturating_sub(opened))).unwrap_or_default();
+            let owes = agent.turn_opened_at.is_some();
+            let reveal = ((open - 0.1 - (index as f32).min(8.) * 0.05) * 3.).clamp(0., 1.);
+            panel = panel.child(
+                div()
+                    .id(("queue-row", id))
+                    .h(px(28.))
+                    .px(px(12.))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .cursor_pointer()
+                    .opacity(reveal)
+                    .hover(|row| row.bg(theme::bg_highlight().alpha(0.7)))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |zero, _, _, cx| {
+                            cx.stop_propagation();
+                            zero.queue_morph = Morph::default();
+                            zero.focus(Some(id), SwitchPath::Click, cx);
+                        }),
+                    )
+                    .child(dot(color))
+                    .child(div().flex_1().text_color(if owes { theme::fg() } else { theme::fg_dark() }).child(agent.name.clone()))
+                    .child(key_cap(&format!("⌘{}", agent.desktop)))
+                    .child(chip(label(agent), color))
+                    .child(div().w(px(40.)).font_family("JetBrains Mono").text_size(px(11.)).text_color(theme::comment()).child(age))
+                    .when(index == 0 && owes, |row| row.child(key_cap("⌘J"))),
+            );
+        }
+        panel
+    }
+
     fn render_bar(&self, now: Duration, cx: &mut Context<Self>) -> Div {
         let tips = matches!(self.popup, Popup::None);
         let queue = self.model.queue();
         let waiting = queue.len();
+        let open = ease_in_out(self.queue_morph.t);
         let mut left = div()
             .id("queue-pill")
+            .relative()
             .flex()
             .items_center()
             .gap(px(8.))
             .h(px(26.))
             .px(px(11.))
-            .rounded_full()
+            .rounded_tl(px(13.))
+            .rounded_tr(px(13.))
+            .rounded_bl(px(13. * (1. - open)))
+            .rounded_br(px(13. * (1. - open)))
             .cursor_pointer()
-            .when(tips, |pill| pill.tooltip(tip("every agent, waiting first", "⌘K")))
+            .when(tips && open == 0., |pill| pill.tooltip(tip("every agent, waiting first", "⌘K")))
+            .on_hover(cx.listener(|zero, hovered: &bool, _, cx| {
+                zero.queue_morph.on_pill = *hovered;
+                zero.queue_morph.retarget();
+                cx.notify();
+            }))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|zero, _, _, cx| {
@@ -1107,12 +1230,13 @@ impl Zero {
                 );
             for (index, id) in queue.iter().copied().take(3).enumerate() {
                 let agent = self.model.agent(id);
-                left = left.child(div().text_color(theme::comment()).child(if index == 0 { "·" } else { "›" }));
+                left = left.child(div().text_color(theme::comment()).opacity(1. - 0.8 * open).child(if index == 0 { "·" } else { "›" }));
                 left = left.child(
                     div()
                         .id(("chip", id))
                         .cursor_pointer()
-                        .when(tips && index == 0, |chip| chip.tooltip(tip("next in the queue", "⌘J")))
+                        .when(tips && index == 0 && open == 0., |chip| chip.tooltip(tip("next in the queue", "⌘J")))
+                        .opacity(1. - 0.8 * open)
                         .text_color(theme::fg_dark())
                         .hover(|chip| chip.text_color(theme::fg()))
                         .child(agent.name.clone())
@@ -1126,7 +1250,7 @@ impl Zero {
                 );
             }
             if waiting > 3 {
-                left = left.child(div().text_color(theme::comment()).child(format!("+{}", waiting - 3)));
+                left = left.child(div().text_color(theme::comment()).opacity(1. - 0.8 * open).child(format!("+{}", waiting - 3)));
             }
         } else {
             left = left
@@ -1135,6 +1259,9 @@ impl Zero {
                 .child(div().text_color(theme::comment()).child("all quiet"));
         }
         left = left.child(div().text_color(theme::comment()).text_size(px(10.)).child("▾"));
+        if waiting > 0 && open > 0. {
+            left = left.child(self.render_queue_panel(open, now, cx));
+        }
 
         let mut center = div().flex().items_center().gap(px(4.));
         for desktop in 1..=9u8 {
@@ -1442,6 +1569,12 @@ impl Render for Zero {
             origin: point(px(GAP), px(BAR_HEIGHT)),
             size: size(viewport.width - px(GAP * 2.), viewport.height - px(BAR_HEIGHT) - px(GAP)),
         };
+        if self.model.queue().is_empty() {
+            self.queue_morph = Morph::default();
+        }
+        if self.queue_morph.step() {
+            window.request_animation_frame();
+        }
         let now = self.now();
         let ids = self.model.desktop_agents();
         let rects = tiles(self.content, ids.len(), px(GAP));
