@@ -369,6 +369,7 @@ type wsHub struct {
 	logf              func(format string, args ...interface{})
 	broadcastListener BroadcastListener
 	wireTap           WireTap
+	evictionListener  func(string, evictionRecord)
 }
 
 const (
@@ -777,16 +778,15 @@ func (d *Daemon) wsWritePump(client *wsClient) {
 		if message.kind != messageKindText {
 			wsType = websocket.MessageBinary
 		}
-		start := time.Now()
 		client.writing.Store(true)
 		err := client.conn.Write(ctx, wsType, message.payload)
 		client.writing.Store(false)
-		elapsed := time.Since(start)
+		// The deadline starts before Write and survives scheduler preemption; an
+		// elapsed stopwatch around Write can miss a deadline that already fired.
+		deadlineExpired := ctx.Err() == context.DeadlineExceeded
 		cancel()
 		if err != nil {
-			// The library reports a timed-out write and a write to a connection closed
-			// underneath it through the same error, and which it picks is a race.
-			stalled = elapsed >= writeTimeout
+			stalled = deadlineExpired
 			if stalled {
 				d.logf("WebSocket client took longer than %s to accept a message, giving up on it", writeTimeout)
 			}

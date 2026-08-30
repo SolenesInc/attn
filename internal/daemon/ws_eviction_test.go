@@ -192,11 +192,19 @@ func TestAnEvictionFiledMidHelloIsNotLostWithTheConnection(t *testing.T) {
 }
 
 func TestWriteStallEndsTheConnectionAndIsRemembered(t *testing.T) {
+	const clientID = "stalled-app"
+
 	wsPort := useFreeWSPort(t)
 	tmpDir := shortTempDir(t)
 	sockPath := filepath.Join(tmpDir, "test.sock")
 	d := NewForTesting(sockPath)
 	d.wsWriteTimeout = 300 * time.Millisecond
+	evictionRecorded := make(chan evictionRecord, 1)
+	d.wsHub.evictionListener = func(id string, record evictionRecord) {
+		if id == clientID {
+			evictionRecorded <- record
+		}
+	}
 	go d.Start()
 	defer d.Stop()
 	waitForSocket(t, sockPath, 5*time.Second)
@@ -215,7 +223,6 @@ func TestWriteStallEndsTheConnectionAndIsRemembered(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	const clientID = "stalled-app"
 	addr := "127.0.0.1:" + wsPort
 	stalled := dialDaemonWSAs(t, ctx, addr, clientID)
 	defer stalled.Close(websocket.StatusNormalClosure, "")
@@ -230,9 +237,20 @@ func TestWriteStallEndsTheConnectionAndIsRemembered(t *testing.T) {
 	})
 
 	d.wsHub.BroadcastRawText([]byte(strings.Repeat("x", 8<<20)))
-	waitForCond(t, evictionDeathBudget, "the daemon to drop the stalled client", func() bool {
-		return d.wsHub.ClientCount() == 0
-	})
+	recordCtx, cancelRecord := context.WithTimeout(ctx, evictionDeathBudget)
+	defer cancelRecord()
+	var recorded evictionRecord
+	select {
+	case recorded = <-evictionRecorded:
+	case <-recordCtx.Done():
+		t.Fatalf("the write stall was not recorded within %s", evictionDeathBudget)
+	}
+	if recorded.reason != slowClientCloseReason {
+		t.Errorf("recorded eviction reason = %q, want %q", recorded.reason, slowClientCloseReason)
+	}
+	if recorded.undelivered < 1 {
+		t.Errorf("recorded eviction undelivered = %d, want at least 1", recorded.undelivered)
+	}
 
 	deathCtx, cancelDeath := context.WithTimeout(ctx, evictionDeathBudget)
 	defer cancelDeath()
