@@ -140,6 +140,10 @@ export function probeBannerReadyMatchers(style) {
   return [/ATTN-PROBE \d+x\d+/, probeStyleRowRegex(style)];
 }
 
+function workspaceLayoutPanes(workspace) {
+  return workspace?.workspace?.layout?.panes || workspace?.layout?.panes || [];
+}
+
 // `(?!\d)` guards against a grid like 31x2 matching as a prefix of 31x25.
 export function buildProbeBannerAtGridRegex(cols, rows) {
   return new RegExp(`ATTN-PROBE ${cols}x${rows}(?!\\d)`);
@@ -281,7 +285,7 @@ async function closePaneAndAssertRecovery({
     client,
     sessionId,
     (workspace) => {
-      const layoutPane = (workspace?.layout?.panes || []).find((entry) => entry.paneId === initialPaneId);
+      const layoutPane = workspaceLayoutPanes(workspace).find((entry) => entry.paneId === initialPaneId);
       return (
         (workspace.panes || []).length === minPaneCountAfterClose &&
         (layoutPane?.bounds?.width ?? 0) > previousInitialPaneLayoutWidth
@@ -333,7 +337,7 @@ async function closePaneAndAssertRecovery({
   }
   const finalMainState = await client.request('get_pane_state', { sessionId, paneId: initialPaneId });
   if (enforceNativeStability && baselineNativeMetrics && candidateNativeMetrics) {
-    const recoveredLayoutWidth = (recoveredWorkspace?.layout?.panes || [])
+    const recoveredLayoutWidth = workspaceLayoutPanes(recoveredWorkspace)
       .find((entry) => entry.paneId === initialPaneId)?.bounds?.width ?? 0;
     const widenedPastPreviousWidth = recoveredLayoutWidth > previousInitialPaneLayoutWidth;
     await assertPaneNativePaintRecovered(
@@ -360,7 +364,7 @@ async function closePaneAndAssertRecovery({
     state: anchorState || finalMainState,
     nativeMetrics: candidateNativeMetrics,
     widthState: recoveredInitialPaneState,
-    layoutWidth: (recoveredWorkspace?.layout?.panes || [])
+    layoutWidth: workspaceLayoutPanes(recoveredWorkspace)
       .find((entry) => entry.paneId === initialPaneId)?.bounds?.width ?? null,
   };
 }
@@ -682,7 +686,7 @@ async function main() {
       await client.request('select_session', { sessionId });
       await waitForPaneVisible(client, sessionId, initialPaneId, 20_000);
       const workspaceBeforeClose = await client.request('get_workspace', { sessionId });
-      let previousInitialPaneLayoutWidth = (workspaceBeforeClose?.layout?.panes || [])
+      let previousInitialPaneLayoutWidth = workspaceLayoutPanes(workspaceBeforeClose)
         .find((entry) => entry.paneId === initialPaneId)?.bounds?.width ?? 0;
       const firstRecovered = await closePaneAndAssertRecovery({
         client,

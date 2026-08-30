@@ -1286,6 +1286,9 @@ func (m *Manager) upsertRemoteWorkspace(id string, workspace protocol.Workspace)
 	if runtime.workspaces == nil {
 		runtime.workspaces = make(map[string]protocol.Workspace)
 	}
+	if current, ok := runtime.workspaces[workspace.ID]; ok && workspace.Layout == nil {
+		workspace.Layout = current.Layout
+	}
 	workspace.EndpointID = protocol.Ptr(id)
 	runtime.workspaces[workspace.ID] = workspace
 	return true
