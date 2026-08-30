@@ -1,0 +1,18 @@
+kind: internal
+area: linux
+change: >
+  Keyboard shortcuts read and render in the platform's own vocabulary. The
+  registry's `meta` flag now means "the accelerator" everywhere — Command on
+  macOS, Control elsewhere — and one module (`app/src/shortcuts/platform.ts`)
+  owns the glyphs, the joiner (⌘⇧T against Ctrl+Shift+T) and the accelerator
+  test. The shortcuts cheatsheet, the shortcut editor and every tooltip that
+  used to hardcode ⌘ read from it, and recording a shortcut with Control off
+  macOS now stores the accelerator instead of a bare, terminal-eating key.
+  The terminal's clipboard follows the same rule: off macOS Ctrl+C and Ctrl+V
+  stay the PTY's and copy/paste move to Ctrl+Shift+C / Ctrl+Shift+V, with the
+  context menu naming whichever chord applies. Tauri's default menu is attached
+  on macOS only, where it exists to deliver ⌘. and ⌘W past AppKit; off macOS it
+  would have claimed Ctrl+C, Ctrl+V, Ctrl+W and Ctrl+Z before the app saw them.
+  Font stacks name DejaVu Sans Mono and system-ui ahead of their generic
+  fallbacks so a Linux desktop resolves them the same way every time. macOS
+  bindings and rendering are unchanged.

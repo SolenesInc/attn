@@ -209,7 +209,7 @@ const cardTheme = EditorView.baseTheme({
   },
   '.cm-md-fm-header': { display: 'flex', alignItems: 'center', gap: '10px' },
   '.cm-md-fm-dates': {
-    fontFamily: "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace",
+    fontFamily: "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'DejaVu Sans Mono', monospace",
     fontSize: '0.72em',
     color: 'var(--color-text-muted, #888)',
   },
@@ -234,7 +234,7 @@ const cardTheme = EditorView.baseTheme({
   },
   '.cm-md-fm-sources': { display: 'flex', flexWrap: 'wrap', gap: '4px 12px', marginTop: '8px' },
   '.cm-md-fm-source': {
-    fontFamily: "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace",
+    fontFamily: "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'DejaVu Sans Mono', monospace",
     fontSize: '0.72em',
     color: 'var(--accent, #ff6b35)',
   },

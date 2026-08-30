@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+let macLike = true;
 vi.mock('./platform', () => ({
-  isMacLikePlatform: () => true,
-  isAccelKeyPressed: (e: KeyboardEvent) => e.metaKey,
+  isMacLikePlatform: () => macLike,
+  isAccelKeyPressed: (e: KeyboardEvent) => (macLike ? e.metaKey : e.metaKey || e.ctrlKey),
 }));
 
 import { SHORTCUTS, ShortcutId } from './registry';
@@ -20,7 +21,7 @@ import {
   DEFAULT_DOCK,
 } from './resolver';
 
-beforeEach(() => setShortcutOverrides({}));
+beforeEach(() => { macLike = true; setShortcutOverrides({}); });
 afterEach(() => setShortcutOverrides({}));
 
 function key(init: KeyboardEventInit): KeyboardEvent {
@@ -108,6 +109,13 @@ describe('eventToBinding', () => {
   it('rejects Control as a modifier on macOS', () => {
     const r = eventToBinding(key({ key: 'k', ctrlKey: true }));
     expect(r.kind).toBe('error');
+  });
+
+  it('records Control as the accelerator off-mac', () => {
+    macLike = false;
+    expect(eventToBinding(key({ key: 'k', ctrlKey: true }))).toEqual({
+      kind: 'binding', def: { key: 'k', meta: true },
+    });
   });
 });
 

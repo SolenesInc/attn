@@ -33,7 +33,7 @@
 }
 
 .dashboard-header h1 {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xl);
   font-weight: 700;
   background: linear-gradient(135deg, #ff6b35 0%, #ff9966 50%, #ff6b35 100%);
@@ -272,7 +272,7 @@
 }
 
 .card-header h2 {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -434,7 +434,7 @@
 .chief-session-state {
   color: var(--color-text-dimmed);
   flex-shrink: 0;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   text-transform: lowercase;
 }
@@ -572,7 +572,7 @@
   border: 1px solid var(--color-border);
   border-radius: 4px;
   padding: 3px 8px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
   margin-right: 6px;
   box-shadow: 0 1px 0 var(--color-border), 0 2px 4px rgba(0, 0, 0, 0.2);
@@ -694,12 +694,12 @@
 
 .pr-number {
   color: var(--color-text-dimmed);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
 }
 
 .pr-host {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: 10px;
   text-transform: lowercase;
   color: #8b8b8b;
@@ -791,7 +791,7 @@
 }
 
 .pr-loading-status {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: 10px;
   color: var(--color-text-dimmed);
   letter-spacing: 0.05em;
@@ -903,7 +903,7 @@
 
 /* Has changes badge - explicit label */
 .badge-changes {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -973,7 +973,7 @@
 
 .group-count {
   margin-left: 6px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   letter-spacing: 0;
   color: var(--color-text-muted);
 }
@@ -982,7 +982,7 @@
 .session-turn-age {
   margin-left: auto;
   padding-left: 8px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   color: var(--color-text-dimmed);
 }
@@ -1018,7 +1018,7 @@
 .session-wake-at {
   margin-left: auto;
   padding-left: 8px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   color: var(--color-text-dimmed);
 }
@@ -1066,7 +1066,7 @@
 }
 
 .pr-section-count {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   letter-spacing: 0;
 }
 

@@ -82,5 +82,5 @@
 .md-quick-label-num {
   font-size: 10px;
   color: var(--color-text-muted, #888);
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, 'DejaVu Sans Mono', monospace;
 }

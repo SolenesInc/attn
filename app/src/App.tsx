@@ -2357,10 +2357,10 @@ function AppContent({
           alert('Please configure your Projects Directory in Settings first.\n\nThis tells the app where to find your local git repositories.');
           break;
         case 'missing_head_branch':
-          alert('PR branch information not available.\n\nTry refreshing PRs (⌘R) to fetch branch details.');
+          alert(`PR branch information not available.\n\nTry refreshing PRs (${formatShortcut('session.refreshPRs')}) to fetch branch details.`);
           break;
         case 'fetch_pr_details_failed':
-          alert(`Failed to fetch PR details.\n\n${errorMsg || 'Try refreshing PRs (⌘R) and try again.'}`);
+          alert(`Failed to fetch PR details.\n\n${errorMsg || `Try refreshing PRs (${formatShortcut('session.refreshPRs')}) and try again.`}`);
           break;
         case 'ensure_repo_failed':
         case 'create_worktree_failed':
@@ -3217,7 +3217,7 @@ function AppContent({
     },
     {
       id: 'notebook',
-      title: 'Open Notebook (⌘⌥⇧N)',
+      title: `Open Notebook (${formatShortcut('notebook.openFullscreen')})`,
       icon: <NotebookIcon />,
       active: notebookOpen,
       onClick: openNotebookBrowser,
@@ -3690,7 +3690,7 @@ function AppContent({
             {sessions.length === 0 && (
               <div className="no-sessions">
                 <p>No active sessions</p>
-                <p>Press ⌘T to start a new workspace</p>
+                <p>Press {formatShortcut('session.newWorkspace')} to start a new workspace</p>
               </div>
             )}
           </div>

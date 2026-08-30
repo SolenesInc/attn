@@ -290,7 +290,7 @@ const baseTheme = EditorView.baseTheme({
   '.cm-md-strike': { textDecoration: 'line-through', opacity: '0.75' },
   '.cm-md-code': {
     fontFamily:
-      "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+      "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'DejaVu Sans Mono', monospace",
     fontSize: '0.92em',
     padding: '0.5px 4px',
     borderRadius: '4px',
@@ -302,7 +302,7 @@ const baseTheme = EditorView.baseTheme({
   '.cm-md-checkbox.is-checked': { color: 'var(--accent, #ff6b35)' },
   '.cm-md-codeblock': {
     fontFamily:
-      "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+      "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'DejaVu Sans Mono', monospace",
     fontSize: '0.9em',
     background: 'var(--color-bg-elevated, rgba(127,127,127,0.1))',
     borderLeft: '2px solid var(--color-border, rgba(127,127,127,0.35))',

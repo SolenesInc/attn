@@ -68,6 +68,8 @@ import {
   type TerminalMarkdownRun,
 } from '../utils/terminalMarkdown';
 import { readClipboardText, writeClipboardText } from '../utils/clipboardBridge';
+import { isMacLikePlatform, terminalClipboardChord } from '../shortcuts/platform';
+import { formatShortcut, keyCombo } from '../shortcuts/formatShortcut';
 import { parseOsc52Writes, type Osc52State } from '../utils/terminalOsc';
 import {
   parseSynchronizedOutput,
@@ -3234,13 +3236,17 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const contextMenuBlock = contextMenu?.blockId != null
       ? blockStoreRef.current.blockById(contextMenu.blockId)
       : null;
+    const onMac = isMacLikePlatform();
+    const clipboardCopyHint = onMac ? keyCombo('accel', 'C') : keyCombo('ctrl', 'shift', 'C');
+    const clipboardPasteHint = onMac ? keyCombo('accel', 'V') : keyCombo('ctrl', 'shift', 'V');
+    const clipboardCopyCommandHint = onMac ? keyCombo('shift', 'accel', 'C') : undefined;
     const contextMenuItems: TerminalContextMenuItem[] = contextMenu ? [
-      { id: 'copy', label: 'Copy', shortcut: '⌘C', disabled: !selectedTextRef.current && !contextMenuBlock },
-      { id: 'copy-command', label: 'Copy command', shortcut: '⇧⌘C', disabled: !contextMenuBlock?.command },
+      { id: 'copy', label: 'Copy', shortcut: clipboardCopyHint, disabled: !selectedTextRef.current && !contextMenuBlock },
+      { id: 'copy-command', label: 'Copy command', shortcut: clipboardCopyCommandHint, disabled: !contextMenuBlock?.command },
       { id: 'copy-output', label: 'Copy output', disabled: !contextMenuBlock },
-      { id: 'paste', label: 'Paste', shortcut: '⌘V', separatorBefore: true },
+      { id: 'paste', label: 'Paste', shortcut: clipboardPasteHint, separatorBefore: true },
       { id: 'filter-block', label: 'Filter block output', separatorBefore: true, disabled: !contextMenuBlock },
-      { id: 'find', label: 'Find', shortcut: '⌘F' },
+      { id: 'find', label: 'Find', shortcut: formatShortcut('terminal.find') },
       { id: 'scroll-block-top', label: 'Scroll to top of block', separatorBefore: true, disabled: !contextMenuBlock },
       { id: 'scroll-block-bottom', label: 'Scroll to bottom of block', disabled: !contextMenuBlock },
     ] : [];
@@ -3549,8 +3555,17 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           }
         }}
         onKeyDown={(event) => {
-          if (!event.metaKey || event.key.toLowerCase() !== 'c') return;
-          if (event.shiftKey) {
+          const chord = terminalClipboardChord(event);
+          if (chord === null) return;
+          if (chord === 'paste') {
+            // Off-mac the chord is Ctrl+Shift+V, which no WebView paste stands behind.
+            if (!isMacLikePlatform()) {
+              void pasteFromClipboard();
+              event.preventDefault();
+            }
+            return;
+          }
+          if (chord === 'copyCommand') {
             const text = selectedMarkdown();
             if (text) {
               void writeClipboardText(text);

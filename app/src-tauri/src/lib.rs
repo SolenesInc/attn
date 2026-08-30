@@ -510,6 +510,7 @@ const CANCEL_COUNTDOWN_MENU_ID: &str = "attn-cancel-countdown";
 const NATIVE_SHORTCUT_EVENT: &str = "attn:native-shortcut";
 const NATIVE_BROWSER_CLOSE_EVENT: &str = "attn:native-browser-close";
 
+#[cfg(target_os = "macos")]
 fn app_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     use tauri::menu::{Menu, MenuItem, MenuItemKind};
 
@@ -1153,15 +1154,19 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
 });
 "#;
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .append_invoke_initialization_script(automation_init_script)
         .append_invoke_initialization_script(native_dialog_capture_script)
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_clipboard_manager::init())
-        .menu(app_menu)
+        .plugin(tauri_plugin_clipboard_manager::init());
+    // Off-mac Tauri attaches no menu unless asked, and a default one would claim Ctrl+C, Ctrl+V,
+    // Ctrl+W and Ctrl+Z — the keys the app and the PTY need — so only macOS gets a menu.
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(app_menu);
+    builder
         .on_menu_event(|app, event| {
             use tauri::Manager;
 

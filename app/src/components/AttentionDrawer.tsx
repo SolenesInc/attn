@@ -6,6 +6,7 @@ import { StateIndicator } from './StateIndicator';
 import { getRepoName } from '../utils/repo';
 import type { UISessionState } from '../types/sessionState';
 import './AttentionDrawer.css';
+import { formatShortcut } from '../shortcuts/formatShortcut';
 
 interface AttentionDrawerProps {
   onClose: () => void;
@@ -131,7 +132,7 @@ export function AttentionDrawer({
       </div>
 
       <div className="drawer-footer">
-        <span className="shortcut"><kbd>⌘K</kbd> toggle</span>
+        <span className="shortcut"><kbd>{formatShortcut('ui.actionMenu')}</kbd> toggle</span>
         <span className="shortcut"><kbd>Esc</kbd> close</span>
       </div>
     </div>

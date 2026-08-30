@@ -5,6 +5,7 @@ import {
   type TerminalInputTarget,
 } from './input';
 import type { TerminalKeyEvent } from './keyEncoder';
+import { withNavigatorPlatform } from '../test/platformStub';
 
 function setup(overrides: Partial<{
   target: TerminalInputTarget | null;
@@ -162,6 +163,25 @@ describe('attachTerminalInput', () => {
     expect(copy.defaultPrevented).toBe(false);
     expect(paste.defaultPrevented).toBe(false);
     expect(input.target!.encodeKey).not.toHaveBeenCalled();
+    input.dispose();
+  });
+
+  it('off-mac sends Ctrl+C to the terminal and reserves Ctrl+Shift+C for copy', () => {
+    const input = setup();
+    withNavigatorPlatform('Linux aarch64', () => {
+      const interrupt = key(input.window, 'keydown', { key: 'c', code: 'KeyC', ctrlKey: true });
+      const copy = key(input.window, 'keydown', {
+        key: 'C', code: 'KeyC', ctrlKey: true, shiftKey: true,
+      });
+      input.element.dispatchEvent(interrupt);
+      input.element.dispatchEvent(copy);
+
+      expect(input.target!.encodeKey).toHaveBeenCalledTimes(1);
+      expect(input.target!.encodeKey).toHaveBeenCalledWith(
+        expect.objectContaining({ key: 'C', mods: 2 }),
+      );
+      expect(copy.defaultPrevented).toBe(false);
+    });
     input.dispose();
   });
 

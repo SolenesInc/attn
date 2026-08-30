@@ -13,7 +13,7 @@
   background: transparent;
   color: #e8e5de;
   color-scheme: dark;
-  font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, sans-serif);
+  font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, system-ui, sans-serif);
   opacity: 0;
   pointer-events: none;
 }

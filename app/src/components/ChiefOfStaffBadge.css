@@ -6,7 +6,7 @@
   color: #79b8ff;
   display: inline-flex;
   flex-shrink: 0;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   font-weight: 700;
   gap: 3px;

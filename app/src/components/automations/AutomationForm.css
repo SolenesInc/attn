@@ -364,7 +364,7 @@
 }
 
 .automation-form__sentence-mono {
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace);
 }
 
 .automation-form__banner {

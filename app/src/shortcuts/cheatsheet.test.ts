@@ -1,6 +1,7 @@
 // app/src/shortcuts/cheatsheet.test.ts
 import { describe, it, expect } from 'vitest';
 import { buildCheatsheet } from './cheatsheet';
+import { withNavigatorPlatform } from '../test/platformStub';
 
 describe('buildCheatsheet', () => {
   it('produces categories with non-empty, fully-rendered combos', () => {
@@ -20,6 +21,16 @@ describe('buildCheatsheet', () => {
         }
       }
     }
+  });
+
+  it('renders its hand-written combos in the platform vocabulary', () => {
+    const jumpRow = (rows: ReturnType<typeof buildCheatsheet>) => rows
+      .flatMap((c) => c.rows)
+      .find((r) => r.label === 'Jump to workspace 1–9');
+    expect(jumpRow(buildCheatsheet())?.combos[0]).toEqual(['⌘', '1–9']);
+    withNavigatorPlatform('Linux aarch64', () => {
+      expect(jumpRow(buildCheatsheet())?.combos[0]).toEqual(['Ctrl', '1–9']);
+    });
   });
 
   it('reflects the current workspace bindings (⌘T new workspace, ⌘N new session)', () => {

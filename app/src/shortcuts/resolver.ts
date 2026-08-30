@@ -110,7 +110,8 @@ export function eventToBinding(e: KeyboardEvent): CaptureResult {
   }
 
   const def: ShortcutDef = { key: e.key };
-  if (e.metaKey) def.meta = true;
+  // Off-mac Ctrl IS the accelerator, so it records as `meta`: one stored shape, both platforms.
+  if (e.metaKey || e.ctrlKey) def.meta = true;
   if (e.altKey) def.alt = true;
   if (e.shiftKey) def.shift = true;
   // Keep code for keys whose `key` is layout/locale dependent (digits, named keys).

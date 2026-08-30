@@ -8,7 +8,55 @@ export function isMacLikePlatform(): boolean {
   return ua.includes('mac os') || ua.includes('macintosh');
 }
 
-export function isAccelKeyPressed(e: KeyboardEvent): boolean {
+/** Structural, so React's synthetic keyboard events pass without a cast. */
+export type ModifierBearingEvent = Pick<KeyboardEvent, 'metaKey' | 'ctrlKey'>;
+
+export function isAccelKeyPressed(e: ModifierBearingEvent): boolean {
   // Non-mac accepts Ctrl or Meta: CI/Playwright sends Meta even on Linux runners.
   return isMacLikePlatform() ? e.metaKey : e.ctrlKey || e.metaKey;
+}
+
+export type ModifierName = 'accel' | 'ctrl' | 'alt' | 'shift';
+
+export type ModifierGlyphs = Record<ModifierName, string>;
+
+// `accel` is what the registry stores as `meta`: the key that carries app shortcuts.
+const MAC_GLYPHS: ModifierGlyphs = { accel: '⌘', ctrl: '⌃', alt: '⌥', shift: '⇧' };
+const PC_GLYPHS: ModifierGlyphs = { accel: 'Ctrl', ctrl: 'Ctrl', alt: 'Alt', shift: 'Shift' };
+
+export function modifierGlyphs(): ModifierGlyphs {
+  return isMacLikePlatform() ? MAC_GLYPHS : PC_GLYPHS;
+}
+
+/** Separator for a combo written as one string: mac glyphs abut, word modifiers need a plus. */
+export function keyJoiner(): string {
+  return isMacLikePlatform() ? '' : '+';
+}
+
+export type TerminalClipboardChord = 'copy' | 'copyCommand' | 'paste' | null;
+
+export interface ClipboardChordEvent extends ModifierBearingEvent {
+  key: string;
+  code: string;
+  shiftKey: boolean;
+}
+
+function clipboardLetter(e: ClipboardChordEvent): 'c' | 'v' | null {
+  if (e.key.toLowerCase() === 'c' || e.code === 'KeyC') return 'c';
+  if (e.key.toLowerCase() === 'v' || e.code === 'KeyV') return 'v';
+  return null;
+}
+
+// Off-mac Ctrl+C is the PTY's interrupt, so the terminal's clipboard moves to Ctrl+Shift, as in
+// every Linux terminal. `copyCommand` has no off-mac chord; the context menu still reaches it.
+export function terminalClipboardChord(e: ClipboardChordEvent): TerminalClipboardChord {
+  const letter = clipboardLetter(e);
+  if (!letter) return null;
+  if (isMacLikePlatform()) {
+    if (!e.metaKey) return null;
+    if (letter === 'v') return 'paste';
+    return e.shiftKey ? 'copyCommand' : 'copy';
+  }
+  if (e.metaKey || !e.ctrlKey || !e.shiftKey) return null;
+  return letter === 'v' ? 'paste' : 'copy';
 }
