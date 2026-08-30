@@ -1,168 +1,82 @@
 # Glossary
 
-Details: [Notebook](notebook.md), [sessions](sessions.md),
-[Garden/crew](garden-and-crew.md), [apps/events](apps-and-events.md),
-[ownership](daemon-ownership.md), and [auto mode](maintaining.md#auto-mode).
+## Sessions
 
-## Workspace context
+- Session: attn runtime hosting an agent through a PTY or conversation host.
+- Agent conversation: provider history and resume target; can change within one session.
+- Conversation session: headless runtime; its host exchanges envelopes with the daemon.
+- Envelope: sequenced host message. Declaration: daemon-readable session event. Rendering: app display data.
+- Run: one prompt and response, from `run_started` to `run_settled`.
+- Prompt: starts a run. Steer: read at the next agent boundary. Follow-up: read before settlement.
+- Input queue: unread messages in a conversation host.
+- Session input: ordered delivery to a live session with evidence of receipt.
+- Input evidence: deferred = untouched; placed = adapter-owned; taken = reading begun; indeterminate = uncertain.
+- Turn: attention owed to an agent; viewing it does not settle it.
+- Auto-settle: closes a turn after proven user-conversation input and uninterrupted working time.
+- Standing dismissal: suppresses the next auto-settle for the current working stretch.
+- Queue: sidebar ordering by owed turns. Pinning excludes an agent/workspace without settling turns.
+- Satellite: shell pane attached to an agent. Orphan: satellite without a live parent.
+- Activity: generated status line. Activity cursor: transcript position already summarized.
+- Presence: watching = home visible; present = recent input elsewhere in app; away = neither.
+- Recoverable: runtime gone, conversation restorable. Reaped: unrestorable session removed.
+- Snapshot: current conversation state. Epoch: host generation. Scroll-back: older paged history.
+- Resume: copies history into a new session. Reload: reopens a recoverable session's own history.
+- Launch prompt: opening message replayed only if a replacement host finds empty history.
+- nisse: attn's conversation agent, powered by pi.
 
-Shared working context for one workspace.
+## Garden and crew
 
-## The Notebook
+- Garden: home daemon's work tracker, shared across workspaces.
+- Seed: work item with stable `s-...` id, title, body, and state. Slug: readable, non-unique name.
+- Plot: seed with children; its body is the plan. Packet: reusable plot template.
+- Plant/tend/park/harvest/wither/replant: create/claim/pause/complete/abandon/reopen.
+- Seed states: planted/open, growing/claimed, dormant/paused, harvested/done, withered/abandoned.
+- Tender: seed claimant; one at a time.
+- Edges: blocks orders work; part-of contains it; discovered-from records origin.
+- Ready: claimable open seed, excluding plots, parked/blocked/held work, gates, packets, and packet descendants.
+- Stale: open without recent activity; age alone never closes work.
+- Artifact: owned file under `<Notebook>/seeds/<seed-id>/`, retained across session/workspace/seed lifecycles.
+- Linked artifact: reference to an external file, Notebook document, or URL.
+- Note: seed log entry. Handoff: note for the next tender. Watch: interest in change notifications.
+- Dispatch-at-plot: delegation bound to an existing seed as its tender.
+- Ticket: archived pre-Garden work item; user tickets and their history remain permanently.
+- Crew member: durable named identity with a charter. Day: its current session.
+- Member home: charter/handoff directory. Registry: index of member files. Binding: member's active session.
+- Awareness dirs: working context directories. Priming: launch guidance.
+- Wake: start a day. Sleep request: ask it to file a handoff and stop.
+- Nap: replace a day using its handoff. Sleep: no live day. Heartbeat: refresh current context.
+- Wake limit: cap on autonomous starts.
 
-Durable markdown shared across a profile.
+## Knowledge
 
-## The journal
+- Workspace context: current, potentially stale account of one workspace.
+- Notebook: profile-wide durable markdown; files are authoritative.
+- Journal: dated work history. Knowledge base: lasting knowledge. Raw tier: machine inputs to the keeper.
+- Note title: first H1 outside fenced code; filename fallback. Frontmatter `title` is ignored.
+- Keeper: maintains workspace context and journal narration.
+- Chief of staff: coordinates work across workspaces.
 
-Dated, curated work history in the Notebook.
+## Apps and events
 
-## Knowledge base
+- App: named automation in the shared runtime. Plugin: integration with its own supervised process.
+- Version: immutable app build. Applying: build and select a version. Serving history: versions served.
+- View: app React component. Tile: one mounted instance. Command: named view action.
+- Event bus: ordered domain-fact log. Fact: recorded change. Subject: changed entity.
+- Consumer: fact reader. Cursor: reading progress; durable cursors survive restarts, ephemeral readers start at head.
+- Projection: fact-to-app traffic. Snapshot projection: whole-list update.
+- Retention floor: oldest protected cursor. Pin alarm: warning of stalled reading.
+- Document store: app JSON data. Namespace: owner isolation. Collection: document group.
+- Document id: key within a collection. Revision: write count. Expectation: required revision, zero means absent.
+- Declaration: queryable field types. Query: retrieval criteria. After cursor: pagination anchor.
+- Live query: subscription delivering complete replacement results.
 
-The Notebook's lasting knowledge.
+## Daemons and permissions
 
-## Note title
-
-First H1, or the filename when absent.
-
-## The keeper
-
-Automates workspace narration and context maintenance.
-
-## The chief of staff
-
-Coordinates work across workspaces.
-
-## Session
-
-An attn runtime hosting a PTY or headless agent.
-
-## Turns and the queue
-
-- **Turn**: attention the user owes an agent.
-- **Auto-settle**: settlement after the agent takes user conversation input.
-- **Standing dismissal**: suppresses the next auto-settle.
-- **Queue**: sidebar ordering by owed turns.
-- **Pinned**: agent or workspace excluded from the queue.
-- **Satellite**: a shell pane attached to an agent; an **orphan** has no live parent.
-
-## Session input
-
-The boundary for input to a live session. **Deferred** means untouched; placed, held by an adapter; taken, reading begun; indeterminate, uncertain outcome.
-
-## Agent conversation
-
-Provider history and resume target within a session.
-
-## Session activity and presence
-
-- **Activity**: what the agent is doing; activity cursor: the transcript position summarized.
-- **Presence**: **watching** home, **present** elsewhere in the app, or **away**.
-
-## Ticket
-
-Archived delegation record predating seeds.
-
-## The raw tier
-
-Machine inputs to the keeper.
-
-## App
-
-- **App**: named automation in attn's shared runtime.
-- **Version**: immutable build; serving history: versions served.
-- **View**: app React component; tile: one layout instance.
-- **Command**: view action; enabled: receiving events.
-- **Applying** builds and selects a version; removing uninstalls the app.
-
-## Plugin
-
-External integration with its own supervised process.
-
-## Event bus
-
-Ordered log of domain facts.
-
-- **Fact**: recorded change; subject: changed entity.
-- **Consumer**: fact reader; cursor: reading progress.
-- **Durable** consumers retain cursors across restarts; ephemeral consumers start at the head.
-- **Projection**: converts a fact to app traffic; snapshot projections send whole lists.
-
-## The retention floor, and the pin alarm
-
-**Retention floor**: oldest protected cursor; pin: hold that floor; pin alarm: warning of a stalled cursor.
-
-## The document store
-
-Stores app JSON documents.
-
-- **Namespace**: an owner's isolated data; collection: a named document group.
-- **Document**: JSON object; id: unique key within its collection.
-- **Revision**: write count; expectation: revision required by a write.
-- **Declaration**: queryable fields and their types.
-- **Query**: retrieval criteria; after cursor: pagination anchor; live query: a result subscription.
-
-## Recoverable
-
-**Recoverable**: conversation can be restored; reaped: session removed when recovery is impossible.
-
-## The garden
-
-- **Garden**: the home's work tracker; seed: a work item; slug: its readable name.
-- **Artifact**: a file owned by a seed; linked artifact: an external reference.
-- **Plot**: a seed with children; packet: a reusable plot template.
-- **Plant/tend/park/harvest/wither/replant**: create/claim/pause/complete/abandon/reopen work.
-- **Seed states**: `planted` (open), `growing` (claimed), `dormant` (paused), `harvested` (done), `withered` (abandoned).
-- **Tender**: the seed's claimant.
-- **Edge**: **blocks** orders work, **part-of** contains it, **discovered-from** records origin.
-- **Ready**: available to claim; stale: open without recent activity.
-- **Dispatch-at-plot**: delegation at an existing seed.
-- **Note**: a log entry; watch: notification interest; handoff: a note for the next tender.
-- Conversational aliases **ticket/todo/epic/done** mean **seed/ready/plot/harvested**.
-
-## The crew
-
-- **Crew**: named identities; member: one identity; day: its session.
-- **Member home**: charter and handoff files; registry: their index; binding: a session launched as a member.
-- **Awareness dirs**: charter's directories; priming: launch context.
-- **Wake** starts a day; a **sleep request** asks the member to end it.
-- **Sleep**: no live day; nap: replacement day.
-- **Crew handoff**: letter for the next day.
-- **Crew lifecycle**: day management using presence and cache age.
-- **Heartbeat**: context refresh; wake limit: cap on autonomous starts.
-
-## Client token
-
-Profile protocol credential. The **browser host token** identifies the trusted WebView; the **HTTP bearer** protects exposed WebSockets.
-
-## Home daemon
-
-Owner of the fleet's Garden and crew.
-
-## Outpost
-
-- **Outpost**: enrolled daemon; enrollment: its recorded home relationship.
-- **Uplink**: requests from outpost to home.
-- **Hub**: dialing side; endpoint: SSH target; remote: the dialed machine.
-- **Parked endpoint**: waiting for Sync.
-
-## Conversation session
-
-- **Conversation session**: a headless agent runtime; host: its process.
-- **Envelope**: a host message; declaration: daemon-understood event; rendering: app display data.
-- **State declaration**: a run-boundary state; tool call: an action; detail: its payload.
-- **Run**: a prompt and response.
-- **Prompt** starts a run; steer arrives at a boundary; follow-up waits for current work.
-- **Input queue**: unread messages, distinct from the sidebar queue.
-- **Snapshot**: current conversation; scroll-back/page: older history/a retrieval unit.
-- **Epoch**: host generation; notice: interruption status.
-- **Resume**: new session from history; launch prompt: opening message.
-
-## nisse
-
-attn's conversation agent, powered by pi's model loop.
-
-## Auto mode, proposals, and promotion
-
-- **Auto mode**: pi permissions; config: policy and environment context.
-- **Proposal**: requested config change; promotion: the human applying it.
-- **Environment template**: starting context; denial: a refused call.
+- Home: owns fleet Garden/crew. Outpost: enrolled daemon owning local sessions. Uplink: requests home.
+- Enrollment: recorded home relationship. Hub: dialing side. Endpoint: SSH target. Remote: dialed machine.
+- Parked endpoint: binary/protocol mismatch awaiting Sync.
+- Client token: profile protocol credential. Browser host token: trusted WebView identity.
+- HTTP bearer: operator credential for exposed WebSockets.
+- Auto mode: pi permissions. Config: policy/environment snapshot at launch.
+- Proposal: requested policy/model change. Promotion: user applies it. Denial: refused call.
+- Environment template: initial classifier context copied into config.

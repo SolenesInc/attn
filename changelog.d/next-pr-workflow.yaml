@@ -1,6 +1,5 @@
 kind: internal
 area: contributing
 change: >
-  Document next as the routine pull request base without unrelated rebases,
-  restore epic-branch guidance, and route specialized agent instructions from
-  compact root guidance into focused docs.
+  Use next for ordinary PRs, retain epic review, and shorten agent guidance
+  with explicit loading rules.
