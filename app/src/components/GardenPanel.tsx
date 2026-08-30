@@ -723,6 +723,7 @@ export function GardenPanel({
 
   const seedDoc = seedDocument && here && seedDocument.seed.id === here.id ? seedDocument : null;
   const artifacts = seedDoc?.artifacts ?? [];
+  const references = seedDoc?.references ?? [];
   const notes = seedDoc?.notes ?? [];
   const notesTotal = seedDoc?.notes_total ?? 0;
   const withheld = Math.max(0, notesTotal - notes.length);
@@ -997,7 +998,12 @@ export function GardenPanel({
 
       {here.body.trim() ? (
         <div className="garden-body">
-          <MarkdownReader content={here.body} source={seedMarkdownSource(here.id)} allowLocalTargets={false} />
+          <MarkdownReader
+            content={here.body}
+            source={seedMarkdownSource(here.id)}
+            allowLocalTargets={false}
+            seedArtifacts={artifacts}
+          />
         </div>
       ) : (
         <p className="garden-note-empty">No body — the title is the whole seed.</p>
@@ -1037,11 +1043,13 @@ export function GardenPanel({
         </section>
       )}
 
-      {artifacts.length > 0 && (
+      {artifacts.length + references.length > 0 && (
         <section className="garden-section">
           <h3>Artifacts</h3>
           <SeedArtifactRows
+            seedId={here.id}
             artifacts={artifacts}
+            references={references}
             onOpenMarkdownArtifact={onOpenMarkdownArtifact}
             checkArtifactPath={checkArtifactPath}
           />

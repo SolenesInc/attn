@@ -1,7 +1,7 @@
-import { isValidElement, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { Children, createContext, isValidElement, memo, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { HTMLAttributes, ReactNode, Ref, RefObject } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkFrontmatter from 'remark-frontmatter';
@@ -17,6 +17,7 @@ import {
   isSafeLocalMarkdownTarget,
   openMarkdownTarget,
   resolveMarkdownTarget,
+  resolveSeedMarkdownTarget,
   sanitizeLinkUrl,
 } from './markdownLinks';
 import rehypeAlerts, { type AlertKind } from './rehypeAlerts';
@@ -29,6 +30,8 @@ import { AnnotationLayer, type AnnotationLayerHandle } from './annotations/Annot
 import { useAnnotations } from './annotations/useAnnotations';
 import { markdownDocumentPath, type MarkdownDocumentSource } from './documentSource';
 import { tilePathBasename } from '../../utils/tilePresentation';
+import type { SeedArtifact, SeedArtifactTargetResult } from '../../types/generated';
+import { useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
 import './MarkdownReader.css';
 
 // Parsing WITH remark-frontmatter is what makes the anchor lineOffset 0. Both
@@ -44,6 +47,7 @@ const rehypePlugins: PluggableList = [
   rehypeHeadingSlugs,
   rehypeProseTransforms,
 ];
+const EMPTY_SEED_ARTIFACTS: readonly SeedArtifact[] = [];
 
 const ALERT_TITLES: Record<AlertKind, string> = {
   note: 'Note',
@@ -108,9 +112,129 @@ function codeMeta(children: ReactNode): { text: string; language?: string; isMer
   };
 }
 
+interface SeedArtifactReaderContextValue {
+  seedId: string;
+  version: string;
+  resolveTarget: (
+    seedId: string,
+    relativeTarget: string,
+    purpose: 'image' | 'link' | 'artifact',
+  ) => Promise<SeedArtifactTargetResult>;
+}
+
+const SeedArtifactReaderContext = createContext<SeedArtifactReaderContextValue | null>(null);
+
+function decodedSeedTargetName(target: string): string {
+  try {
+    return decodeURIComponent(target);
+  } catch {
+    return target;
+  }
+}
+
+function SeedArtifactLink({ target, children }: { target: string; children: ReactNode }) {
+  const artifactContext = useContext(SeedArtifactReaderContext);
+  if (!artifactContext || !isSafeLocalMarkdownTarget(decodedSeedTargetName(target))) {
+    return <span title={`Blocked seed artifact target: ${target}`}>{children}</span>;
+  }
+  const targetName = decodedSeedTargetName(target);
+  const openArtifact = () => {
+    void artifactContext.resolveTarget(artifactContext.seedId, target, 'link')
+      .then((result) => result.path
+        ? invoke('open_safe_seed_artifact_target', { path: result.path })
+        : Promise.reject(new Error('The daemon returned no artifact path')))
+      .catch((error) => console.warn('[MarkdownReader] Failed to open seed artifact:', error));
+  };
+  const containsArtifactImage = Children.toArray(children)
+    .some((child) => isValidElement<{ node?: { tagName?: string } }>(child) && child.props.node?.tagName === 'img');
+  if (containsArtifactImage) {
+    return (
+      <span className="md-reader-linked-artifact-image">
+        {children}
+        <button
+          type="button"
+          className="md-reader-artifact-link"
+          title={targetName}
+          onClick={openArtifact}
+        >
+          Open {targetName}
+        </button>
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="md-reader-artifact-link"
+      title={targetName}
+      onClick={openArtifact}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SeedArtifactImage({
+  target,
+  alt,
+  imageProps,
+  onImageClick,
+}: {
+  target: string;
+  alt: string;
+  imageProps: HTMLAttributes<HTMLImageElement>;
+  onImageClick: (src: string, alt: string) => void;
+}) {
+  const artifactContext = useContext(SeedArtifactReaderContext);
+  const [src, setSrc] = useState('');
+  const safe = isSafeLocalMarkdownImageTarget(decodedSeedTargetName(target));
+
+  useEffect(() => {
+    let current = true;
+    setSrc('');
+    if (!artifactContext || !safe) return () => { current = false; };
+    void artifactContext.resolveTarget(artifactContext.seedId, target, 'image')
+      .then((result) => {
+        if (!current || !result.mime_type || !result.data_base64) return;
+        setSrc(`data:${result.mime_type};base64,${result.data_base64}`);
+      })
+      .catch((error) => {
+        if (current) console.warn('[MarkdownReader] Failed to load seed artifact image:', error);
+      });
+    return () => { current = false; };
+  }, [artifactContext, safe, target]);
+
+  if (!artifactContext || !safe) {
+    return <span className="md-reader-blocked-image" title={target} data-md-chrome="1">[blocked image: {alt || target}]</span>;
+  }
+  if (!src) {
+    return <span className="md-reader-image-loading" data-md-chrome="1">[loading image: {alt || target}]</span>;
+  }
+  return (
+    <button
+      type="button"
+      className="md-reader-image-button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onImageClick(src, alt);
+      }}
+    >
+      <img
+        {...imageProps}
+        className="md-reader-image"
+        src={src}
+        alt={alt || decodedSeedTargetName(target)}
+        title={decodedSeedTargetName(target)}
+        loading="lazy"
+      />
+    </button>
+  );
+}
+
 function readerComponents(
   documentPath: string,
   allowLocalTargets: boolean,
+  seedDocument: boolean,
   rootRef: { current: HTMLDivElement | null },
   onImageClick: (src: string, alt: string) => void,
 ): Components {
@@ -159,7 +283,10 @@ function readerComponents(
     },
     a({ node: _node, href, children }) {
       const sanitized = href ? sanitizeLinkUrl(href) : null;
-      const target = sanitized ? resolveMarkdownTarget(documentPath, sanitized) : null;
+      let target = sanitized ? resolveMarkdownTarget(documentPath, sanitized) : null;
+      if (seedDocument && sanitized && (!target || target.kind === 'local')) {
+        target = resolveSeedMarkdownTarget(sanitized);
+      }
       if (!target) {
         return <span>{children}</span>;
       }
@@ -178,6 +305,9 @@ function readerComponents(
             {children}
           </a>
         );
+      }
+      if (target.kind === 'seed') {
+        return <SeedArtifactLink target={target.value}>{children}</SeedArtifactLink>;
       }
       return (
         <a
@@ -198,7 +328,20 @@ function readerComponents(
       const { srcSet: _srcSet, sizes: _sizes, ...safeProps } = props as Record<string, unknown> &
         HTMLAttributes<HTMLImageElement>;
       const imgSrc = typeof src === 'string' ? src : undefined;
-      const target = imgSrc ? resolveMarkdownTarget(documentPath, imgSrc) : null;
+      let target = imgSrc ? resolveMarkdownTarget(documentPath, imgSrc) : null;
+      if (seedDocument && imgSrc && (!target || target.kind === 'local')) {
+        target = resolveSeedMarkdownTarget(imgSrc);
+      }
+      if (target?.kind === 'seed') {
+        return (
+          <SeedArtifactImage
+            target={target.value}
+            alt={alt ?? ''}
+            imageProps={safeProps}
+            onImageClick={onImageClick}
+          />
+        );
+      }
       if (!target || target.kind !== 'local' || !allowLocalTargets || !isSafeLocalMarkdownImageTarget(target.value)) {
         return (
           <span className="md-reader-blocked-image" title={imgSrc} data-md-chrome="1">
@@ -273,12 +416,14 @@ export interface MarkdownReaderProps {
   annotationsEnabled?: boolean;
   onAnnotationsCountChange?: (count: number) => void;
   annotationsSendRef?: Ref<MarkdownAnnotationsSendHandle | null>;
+  seedArtifacts?: readonly SeedArtifact[];
 }
 
 interface MarkdownReaderBodyProps {
   content: string;
   path: string;
   allowLocalTargets: boolean;
+  seedDocument: boolean;
   rootRef: RefObject<HTMLDivElement | null>;
   onImageClick: (src: string, alt: string) => void;
 }
@@ -289,11 +434,12 @@ const MarkdownReaderBody = memo(function MarkdownReaderBody({
   content,
   path,
   allowLocalTargets,
+  seedDocument,
   rootRef,
   onImageClick,
 }: MarkdownReaderBodyProps) {
   const frontmatter = extractFrontmatter(content);
-  const components = readerComponents(path, allowLocalTargets, rootRef, onImageClick);
+  const components = readerComponents(path, allowLocalTargets, seedDocument, rootRef, onImageClick);
 
   return (
     <article className="md-reader-card">
@@ -314,16 +460,31 @@ export const MarkdownReader = memo(function MarkdownReader({
   annotationsEnabled = false,
   onAnnotationsCountChange,
   annotationsSendRef,
+  seedArtifacts = EMPTY_SEED_ARTIFACTS,
 }: MarkdownReaderProps) {
+  const daemon = useOptionalDaemonApi();
   const path = markdownDocumentPath(source);
+  const sourceSeedId = source.kind === 'seed' ? source.seedId : '';
   const localTargetsEnabled = allowLocalTargets && source.kind === 'file';
   const rootRef = useRef<HTMLDivElement | null>(null);
   const annotationLayerRef = useRef<AnnotationLayerHandle | null>(null);
-  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string; artifactVersion: string } | null>(null);
+  const seedArtifactVersion = useMemo(() => seedArtifacts
+    .map((artifact) => `${artifact.filename}\0${artifact.size}\0${artifact.modified_at}`)
+    .join('\0'), [seedArtifacts]);
+  const seedArtifactContext = useMemo<SeedArtifactReaderContextValue | null>(() => (
+    sourceSeedId && daemon?.sendSeedArtifactTarget
+      ? {
+          seedId: sourceSeedId,
+          version: seedArtifactVersion,
+          resolveTarget: daemon.sendSeedArtifactTarget,
+        }
+      : null
+  ), [daemon?.sendSeedArtifactTarget, seedArtifactVersion, sourceSeedId]);
   // Props of the memoized body: identities must never change (gate contract).
   const handleImageClick = useCallback((src: string, alt: string) => {
-    setLightbox({ src, alt });
-  }, []);
+    setLightbox({ src, alt, artifactVersion: seedArtifactVersion });
+  }, [seedArtifactVersion]);
   const handleLightboxClose = useCallback(() => {
     setLightbox(null);
   }, []);
@@ -346,6 +507,7 @@ export const MarkdownReader = memo(function MarkdownReader({
       onAnnotationsCountChange?.(0);
     };
   }, [onAnnotationsCountChange]);
+  const visibleLightbox = lightbox?.artifactVersion === seedArtifactVersion ? lightbox : null;
 
   useImperativeHandle(annotationsSendRef, () => ({
     flushPendingSave: () => annotationsApiRef.current.flushPendingSave(),
@@ -367,20 +529,23 @@ export const MarkdownReader = memo(function MarkdownReader({
     >
       <div className="md-reader-doc">
         <div className="md-reader-wrap">
-          <MarkdownReaderBody
-            content={content}
-            path={path}
-            allowLocalTargets={localTargetsEnabled}
-            rootRef={rootRef}
-            onImageClick={handleImageClick}
-          />
+          <SeedArtifactReaderContext.Provider value={seedArtifactContext}>
+            <MarkdownReaderBody
+              content={content}
+              path={path}
+              allowLocalTargets={localTargetsEnabled}
+              seedDocument={source.kind === 'seed'}
+              rootRef={rootRef}
+              onImageClick={handleImageClick}
+            />
+          </SeedArtifactReaderContext.Provider>
         </div>
       </div>
       {annotationsEnabled && (
         <AnnotationLayer ref={annotationLayerRef} api={annotationsApi} rootRef={rootRef} source={source} />
       )}
-      {lightbox && (
-        <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={handleLightboxClose} />
+      {visibleLightbox && (
+        <ImageLightbox src={visibleLightbox.src} alt={visibleLightbox.alt} onClose={handleLightboxClose} />
       )}
     </div>
   );

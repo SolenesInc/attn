@@ -56,13 +56,23 @@ A bell carries only the seed and what moved, so read it with `attn seed show`;
 
 ## Artifacts
 
-Attach a document where it already lives, and detach the pointer when it stops
-being current:
+Bring a local file into durable seed ownership with an explicit Move or Copy.
+Move is recommended; tracked Git files must use Copy. Detaching moves the owned
+file back out and never overwrites:
 
-    attn seed attach <id> --path <file.md> [--repo <repository>]
+    attn seed attach <id> --path <file> --move
+    attn seed attach <id> --path <file> --copy
+    attn seed detach <id> --path <filename> --to <destination>
+
+Repository, Notebook and URL documents remain links where they already live:
+
+    attn seed attach <id> --path <file.md> --repo <repository>
     attn seed attach <id> --notebook <document-id>
     attn seed attach <id> --url <url>
-    attn seed detach <id> --path <file.md>
+    attn seed detach <id> --path <file.md> --reference
+
+The Garden labels old path associations as linked files. Bring one into seed
+ownership explicitly with Move or Copy; a failed transfer leaves the link alone.
 
 ## Packets
 

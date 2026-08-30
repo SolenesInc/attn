@@ -22,8 +22,11 @@ import type {
   Task as GeneratedTask,
   Notification as GeneratedNotification,
   Seed as GeneratedSeed,
-  SeedNote as GeneratedSeedNote,
+  SeedArtifact as GeneratedSeedArtifact,
   SeedArtifactReference as GeneratedSeedArtifactReference,
+  SeedArtifactTargetResult,
+  SeedArtifactTransferResult,
+  SeedDocument as GeneratedSeedDocument,
   CrewMember as GeneratedCrewMember,
   MarkdownAnnotation,
   Presentation,
@@ -81,6 +84,7 @@ import {
   type AutoModeState,
 } from './daemonAutoModeEvents';
 import { handleFsDaemonEvent } from './daemonFsEvents';
+import { handleSeedArtifactDaemonEvent } from './daemonSeedArtifactEvents';
 import { handleNotebookDaemonEvent } from './daemonNotebookEvents';
 import {
   DocumentSubscriptions,
@@ -132,14 +136,9 @@ export interface PastConversationsResult {
 }
 
 export type Seed = GeneratedSeed;
-export interface SeedDocument {
-  seed: Seed;
-  tender_holds: boolean;
-  children: Seed[];
-  notes: GeneratedSeedNote[];
-  notes_total: number;
-  artifacts: GeneratedSeedArtifactReference[];
-}
+export type SeedArtifact = GeneratedSeedArtifact;
+export type SeedArtifactReference = GeneratedSeedArtifactReference;
+export type SeedDocument = GeneratedSeedDocument;
 export type CrewMember = GeneratedCrewMember;
 export interface CrewSleepResult {
   member: string;
@@ -254,7 +253,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '273';
+export const PROTOCOL_VERSION = '274';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -2759,6 +2758,7 @@ export function useDaemonSocket({
 
           default: {
             const pending = pendingActionsRef.current;
+            if (handleSeedArtifactDaemonEvent(data, pending)) break;
             if (handleFsDaemonEvent(data, { pending, onFsChanged: callbacksRef.current.onFsChanged })) break;
             if (handleNotebookDaemonEvent(data, { pending, onNotebookChanged: callbacksRef.current.onNotebookChanged })) break;
             if (handleMarkdownAnnotationDaemonEvent(data, mdAnnotationsPendingRef.current)) break;
@@ -3695,6 +3695,46 @@ export function useDaemonSocket({
       }, 10000);
     });
   }, [nextRequestID]);
+
+  const sendSeedArtifactTarget = useCallback((
+    seedId: string,
+    relativeTarget: string,
+    purpose: 'image' | 'link' | 'artifact',
+  ): Promise<SeedArtifactTargetResult> => sendRequest(
+    'seed_artifact_target',
+    { seed_id: seedId, relative_target: relativeTarget, purpose },
+    'Seed artifact target resolution timed out',
+  ), [sendRequest]);
+
+  const sendSeedArtifactTransfer = useCallback((input: {
+    seedId: string;
+    operation: 'move' | 'copy' | 'detach';
+    sourcePath?: string;
+    filename?: string;
+    destinationPath?: string;
+    legacyReference?: GeneratedSeedArtifactReference;
+  }): Promise<SeedArtifactTransferResult> => sendRequest(
+    'seed_artifact_transfer',
+    {
+      seed_id: input.seedId,
+      operation: input.operation,
+      ...(input.sourcePath !== undefined && { source_path: input.sourcePath }),
+      ...(input.filename !== undefined && { filename: input.filename }),
+      ...(input.destinationPath !== undefined && { destination_path: input.destinationPath }),
+      ...(input.legacyReference !== undefined && { legacy_reference: input.legacyReference }),
+    },
+    'Seed artifact transfer timed out',
+    5 * 60 * 1000,
+  ), [sendRequest]);
+
+  const sendSeedArtifactReferenceDetach = useCallback((
+    seedId: string,
+    reference: GeneratedSeedArtifactReference,
+  ): Promise<void> => sendRequest(
+    'seed_note',
+    { seed_id: seedId, body: '', kind: 'detach', artifact: reference },
+    'Removing the linked artifact timed out',
+  ), [sendRequest]);
 
   useEffect(() => {
     setPtyBackend({
@@ -5202,6 +5242,9 @@ export function useDaemonSocket({
     sendOpenMarkdown,
     sendOpenSeed,
     sendSeedDocumentGet,
+    sendSeedArtifactTarget,
+    sendSeedArtifactTransfer,
+    sendSeedArtifactReferenceDetach,
     sendSeedTransition,
     sendSeedNote,
     sendRuntimeInput: sendPtyInput,

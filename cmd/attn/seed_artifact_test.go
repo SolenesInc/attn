@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -86,6 +87,107 @@ func TestSeedArtifactFlagsChooseTheKind(t *testing.T) {
 				URL:                protocol.Deref(got.URL),
 			}); err != nil {
 				t.Fatalf("the daemon refuses what the CLI composed: %v", err)
+			}
+		})
+	}
+}
+
+func TestSeedArtifactTransferFlags(t *testing.T) {
+	cases := []struct {
+		name        string
+		verb        string
+		args        []string
+		handled     bool
+		operation   string
+		source      string
+		filename    string
+		destination string
+		refusal     string
+	}{
+		{
+			name: "move owns the local source",
+			verb: "attach", args: []string{"--path", "work/plan.bin", "--move"}, handled: true,
+			operation: "move", source: "work/plan.bin",
+		},
+		{
+			name: "copy owns an independent snapshot",
+			verb: "attach", args: []string{"--copy", "--path", "work/report.pdf"}, handled: true,
+			operation: "copy", source: "work/report.pdf",
+		},
+		{
+			name: "local attach needs one transfer choice",
+			verb: "attach", args: []string{"--path", "work/plan.bin"}, handled: true,
+			refusal: "exactly one of --move or --copy",
+		},
+		{
+			name: "local attach refuses two transfer choices",
+			verb: "attach", args: []string{"--path", "work/plan.bin", "--move", "--copy"}, handled: true,
+			refusal: "exactly one of --move or --copy",
+		},
+		{
+			name: "repository path remains a link",
+			verb: "attach", args: []string{"--path", "docs/plan.md", "--repo", "attn"}, handled: false,
+		},
+		{
+			name: "transfer flags do not apply to repository links",
+			verb: "attach", args: []string{"--path", "docs/plan.md", "--repo", "attn", "--copy"}, handled: true,
+			refusal: "apply only to a local --path without --repo",
+		},
+		{
+			name: "detach names the file and destination",
+			verb: "detach", args: []string{"--path", "report.pdf", "--to", "exports/report.pdf"}, handled: true,
+			operation: "detach", filename: "report.pdf", destination: "exports/report.pdf",
+		},
+		{
+			name: "managed detach needs a destination",
+			verb: "detach", args: []string{"--path", "report.pdf"}, handled: true,
+			refusal: "requires --to <destination>",
+		},
+		{
+			name: "legacy path removal stays separate",
+			verb: "detach", args: []string{"--path", "old/report.pdf", "--reference"}, handled: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newSeedFlags(tc.verb)
+			f.parse(tc.verb, append([]string{"s-7k3f9m"}, tc.args...))
+			got, handled, err := f.artifactTransferPlan(tc.verb)
+			if handled != tc.handled {
+				t.Fatalf("handled = %t, want %t", handled, tc.handled)
+			}
+			if tc.refusal != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.refusal) {
+					t.Fatalf("refusal = %v, want text %q", err, tc.refusal)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !handled {
+				return
+			}
+			if got.operation != tc.operation || got.filename != tc.filename {
+				t.Fatalf("plan = %+v", got)
+			}
+			if tc.source != "" {
+				want, err := filepath.Abs(tc.source)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got.source != want {
+					t.Fatalf("source = %q, want %q", got.source, want)
+				}
+			}
+			if tc.destination != "" {
+				want, err := filepath.Abs(tc.destination)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got.destination != want {
+					t.Fatalf("destination = %q, want %q", got.destination, want)
+				}
 			}
 		})
 	}

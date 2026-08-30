@@ -4487,11 +4487,12 @@ model SeedShowResult {
   // whoever tends the seed next, so it is rendered before the seed itself and
   // not left to be recognised in a log.
   "handoff"?: SeedNote;
-  // The seed's current artifacts: every attach on its log that no later detach
-  // took back. The projection is the daemon's, computed over the whole log, so
-  // a bounded `notes` list here cannot make the set wrong and no client has to
-  // recompute it.
-  "artifacts": SeedArtifactReference[];
+  // Direct visible regular files in the seed-owned artifact directory. The
+  // filesystem is canonical; this is enumerated at read time.
+  "artifacts": SeedArtifact[];
+  // Explicit external associations projected as attach-minus-detach over the
+  // whole log. These remain references until a user brings one into the seed.
+  "references": SeedArtifactReference[];
 }
 
 // Replace one seed's markdown body without moving its lifecycle or claim.
@@ -4540,11 +4541,10 @@ model SeedDocument {
   "children": Seed[];
   "notes": SeedNote[];
   "notes_total": int32;
-  // The seed's current artifacts: every attach on its log that no later detach
-  // took back. The projection is the daemon's, computed over the whole log, so
-  // a bounded `notes` list here cannot make the set wrong and no client has to
-  // recompute it.
-  "artifacts": SeedArtifactReference[];
+  // Direct visible regular files in the seed-owned artifact directory.
+  "artifacts": SeedArtifact[];
+  // Attach-minus-detach associations retained separately from owned files.
+  "references": SeedArtifactReference[];
 }
 
 model SeedDocumentGetResultMessage {
@@ -4553,6 +4553,85 @@ model SeedDocumentGetResultMessage {
   "success": boolean;
   "error"?: string;
   "document"?: SeedDocument;
+}
+
+// One filesystem-canonical file owned by a seed. `relative_target` is the
+// ordinary Markdown target the seed body can use; callers resolve it through
+// the typed seed artifact operation rather than treating it as a local path.
+model SeedArtifact {
+  "filename": string;
+  "relative_target": string;
+  "size": safeint;
+  "modified_at": string;
+}
+
+// Move or copy a local file into seed ownership, or detach one to an explicit
+// destination. Source and destination paths are absolute so the owning daemon,
+// never a caller's cwd, decides which file is mutated.
+model SeedArtifactTransferMessage {
+  "cmd": "seed_artifact_transfer";
+  "request_id"?: string;
+  "source_session_id"?: string;
+  "seed_id": string;
+  // move | copy | detach.
+  "operation": string;
+  // Required by move/copy; absent on detach.
+  "source_path"?: string;
+  // The direct visible artifact filename. Defaults to source basename on
+  // move/copy and is required on detach.
+  "filename"?: string;
+  // Required by detach; absent on move/copy.
+  "destination_path"?: string;
+  // Bring into seed: remove this current association only after transfer
+  // completion. Other references remain untouched.
+  "legacy_reference"?: SeedArtifactReference;
+}
+
+model SeedArtifactTransferResult {
+  "operation_id": string;
+  "seed_id": string;
+  "operation": string;
+  "source_path": string;
+  "destination_path": string;
+  "relative_target": string;
+  "artifact"?: SeedArtifact;
+  // True when a durable receipt let this call finish an interrupted transfer.
+  "recovered": boolean;
+}
+
+model SeedArtifactTransferResultMessage {
+  "event": "seed_artifact_transfer_result";
+  "request_id": string;
+  "success": boolean;
+  "error"?: string;
+  "result"?: SeedArtifactTransferResult;
+}
+
+// Resolve or read one seed-relative target through the owning daemon. `image`
+// returns bounded bytes; `link` returns only safe document/image targets;
+// `artifact` accepts any regular managed file for explicit row actions.
+model SeedArtifactTargetMessage {
+  "cmd": "seed_artifact_target";
+  "request_id": string;
+  "seed_id": string;
+  "relative_target": string;
+  // image | link | artifact.
+  "purpose": string;
+}
+
+model SeedArtifactTargetResult {
+  "relative_target": string;
+  "path"?: string;
+  "mime_type"?: string;
+  "data_base64"?: string;
+}
+
+model SeedArtifactTargetResultMessage {
+  "event": "seed_artifact_target_result";
+  "request_id": string;
+  "success": boolean;
+  "error"?: string;
+  "result"?: SeedArtifactTargetResult;
 }
 
 // One edge as it reads from one seed's point of view: `blocks` and `part-of`
@@ -4659,10 +4738,11 @@ model SeedTransitionResult {
 // One entry on a seed's log: what happened and what was learned, written for
 // whoever tends the seed next. A note is anchored to the work and routed to
 // nobody — directed messages are their own surface.
-// Typed artifact association carried by an attach or detach log entry. Each
+// Typed external association carried by an attach or detach log entry. Each
 // kind names the fields that carry it and refuses the rest; the daemon
 // validates that shape and never reads meaning out of a string. Storage does
-// not move — the seed records the association only.
+// not move — the seed records the association only. Managed local files use
+// SeedArtifact and never acquire a second membership row here.
 model SeedArtifactReference {
   // markdown_file (path, optional repository) | notebook (notebook_document_id)
   // | repository (repository and path) | url (url).
@@ -5641,6 +5721,7 @@ model Response {
   seed_show_result?: SeedShowResult;
   seed_edit_result?: SeedEditResult;
   seed_set_resume_result?: SeedSetResumeResult;
+  seed_artifact_transfer_result?: SeedArtifactTransferResult;
   seed_transition_result?: SeedTransitionResult;
   seed_note_result?: SeedNoteResult;
   seed_notes_result?: SeedNotesResult;
@@ -6568,6 +6649,8 @@ alias DaemonEvent =
   | GardenSeedsUpdatedMessage
   | SeedResumeResultMessage
   | SeedDocumentGetResultMessage
+  | SeedArtifactTransferResultMessage
+  | SeedArtifactTargetResultMessage
   | SeedTransitionResultMessage
   | SeedNoteResultMessage
   | CrewUpdatedMessage

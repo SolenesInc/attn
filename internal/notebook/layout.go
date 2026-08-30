@@ -43,6 +43,17 @@ func TicketArtifactsDir(root, ticketID string) string {
 	return filepath.Join(root, "tickets", ticketID)
 }
 
+// SeedArtifactsDir is filesystem-canonical storage, intentionally outside the
+// Markdown-only Store APIs. Direct visible regular files are the membership.
+func SeedArtifactsDir(root, seedID string) string {
+	return filepath.Join(root, "seeds", seedID)
+}
+
+// SeedArtifactTransfersDir holds recovery receipts, never artifact membership.
+func SeedArtifactTransfersDir(root string) string {
+	return filepath.Join(root, machineDir, "seed-artifact-transfers")
+}
+
 func CleanPath(p string) (string, error) {
 	trimmed := strings.TrimSpace(p)
 	if trimmed == "" {

@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "273"
+const ProtocolVersion = "274"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -133,6 +133,8 @@ const (
 	CmdSeedList                              = "seed_list"
 	CmdSeedShow                              = "seed_show"
 	CmdSeedDocumentGet                       = "seed_document_get"
+	CmdSeedArtifactTransfer                  = "seed_artifact_transfer"
+	CmdSeedArtifactTarget                    = "seed_artifact_target"
 	CmdSeedEdit                              = "seed_edit"
 	CmdSeedSetResume                         = "seed_set_resume"
 	CmdSeedTransition                        = "seed_transition"
@@ -433,6 +435,8 @@ const (
 	EventOpenMarkdownResult              = "open_markdown_result"
 	EventOpenSeedResult                  = "open_seed_result"
 	EventSeedDocumentGetResult           = "seed_document_get_result"
+	EventSeedArtifactTransferResult      = "seed_artifact_transfer_result"
+	EventSeedArtifactTargetResult        = "seed_artifact_target_result"
 	EventSeedResumeResult                = "seed_resume_result"
 	EventSeedTransitionResult            = "seed_transition_result"
 	EventSeedNoteResult                  = "seed_note_result"
@@ -1251,6 +1255,20 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdSeedDocumentGet:
 		var msg SeedDocumentGetMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdSeedArtifactTransfer:
+		var msg SeedArtifactTransferMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdSeedArtifactTarget:
+		var msg SeedArtifactTargetMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}

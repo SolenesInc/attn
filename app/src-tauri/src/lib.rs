@@ -804,6 +804,66 @@ fn open_safe_markdown_target(path: String) -> Result<(), String> {
     launch_safe_markdown_target(&canonical)
 }
 
+fn canonical_regular_seed_artifact(path: &Path) -> Result<PathBuf, String> {
+    let metadata = std::fs::symlink_metadata(path)
+        .map_err(|e| format!("Managed artifact {} is unavailable: {}", path.display(), e))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err("Managed artifact targets must be regular files, never links.".to_string());
+    }
+    let canonical = std::fs::canonicalize(path).map_err(|e| {
+        format!(
+            "Managed artifact {} could not be resolved: {}",
+            path.display(),
+            e
+        )
+    })?;
+    let canonical_metadata = std::fs::symlink_metadata(&canonical).map_err(|e| {
+        format!(
+            "Managed artifact {} is unavailable: {}",
+            canonical.display(),
+            e
+        )
+    })?;
+    if canonical_metadata.file_type().is_symlink() || !canonical_metadata.is_file() {
+        return Err("Managed artifact targets must resolve to regular files.".to_string());
+    }
+    Ok(canonical)
+}
+
+fn validate_seed_artifact_launch(path: &Path, reveal: bool) -> Result<(), String> {
+    if reveal || is_safe_markdown_target_extension(path) {
+        return Ok(());
+    }
+    Err("This managed artifact can only be revealed in Finder.".to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn launch_seed_artifact(path: &Path, reveal: bool) -> Result<(), String> {
+    let mut command = Command::new("/usr/bin/open");
+    if reveal {
+        command.arg("-R");
+    }
+    command
+        .arg("--")
+        .arg(path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Failed to open managed artifact {}: {}", path.display(), e))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn launch_seed_artifact(_path: &Path, _reveal: bool) -> Result<(), String> {
+    Err("Opening managed seed artifacts is only supported on macOS.".to_string())
+}
+
+#[tauri::command]
+fn open_safe_seed_artifact_target(path: String, reveal: Option<bool>) -> Result<(), String> {
+    let canonical = canonical_regular_seed_artifact(Path::new(&path))?;
+    let reveal = reveal.unwrap_or(false);
+    validate_seed_artifact_launch(&canonical, reveal)?;
+    launch_seed_artifact(&canonical, reveal)
+}
+
 #[cfg(test)]
 mod markdown_target_tests {
     use super::*;
@@ -845,6 +905,39 @@ mod markdown_target_tests {
         fs::remove_dir_all(dir).expect("remove temp dir");
     }
 
+    #[test]
+    fn canonical_regular_seed_artifact_accepts_binary_files() {
+        let dir = temp_dir("seed-artifact-binary");
+        let file = dir.join("payload.bin");
+        fs::write(&file, [0, 1, 2, 255]).expect("write artifact");
+
+        assert_eq!(
+            canonical_regular_seed_artifact(&file).expect("regular artifact"),
+            fs::canonicalize(&file).expect("canonical artifact")
+        );
+
+        fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
+    #[test]
+    fn seed_artifact_command_can_only_be_revealed() {
+        let command = Path::new("install.command");
+
+        assert_eq!(
+            validate_seed_artifact_launch(command, false),
+            Err("This managed artifact can only be revealed in Finder.".to_string())
+        );
+        assert_eq!(validate_seed_artifact_launch(command, true), Ok(()));
+    }
+
+    #[test]
+    fn seed_artifact_safe_document_can_still_be_opened() {
+        assert_eq!(
+            validate_seed_artifact_launch(Path::new("report.pdf"), false),
+            Ok(())
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn canonical_safe_markdown_target_rejects_symbolic_links() {
@@ -857,6 +950,22 @@ mod markdown_target_tests {
         symlink(&command, &disguised).expect("create symlink");
 
         assert!(canonical_safe_markdown_target(&disguised).is_err());
+
+        fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn canonical_regular_seed_artifact_rejects_symbolic_links() {
+        use std::os::unix::fs::symlink;
+
+        let dir = temp_dir("seed-artifact-symlink");
+        let file = dir.join("payload.bin");
+        let linked = dir.join("linked.bin");
+        fs::write(&file, [0, 1, 2, 255]).expect("write artifact");
+        symlink(&file, &linked).expect("create symlink");
+
+        assert!(canonical_regular_seed_artifact(&linked).is_err());
 
         fs::remove_dir_all(dir).expect("remove temp dir");
     }
@@ -1089,6 +1198,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             quit_app,
             open_in_editor,
             open_safe_markdown_target,
+            open_safe_seed_artifact_target,
             get_build_profile,
             get_browser_host_token,
             get_client_token,

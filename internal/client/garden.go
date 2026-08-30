@@ -93,6 +93,33 @@ func (c *Client) SeedShow(sessionID, seedID string) (*protocol.SeedShowResult, e
 	return resp.SeedShowResult, nil
 }
 
+func (c *Client) SeedArtifactTransfer(sessionID, seedID, operation, sourcePath, filename, destinationPath string, legacy *protocol.SeedArtifactReference) (*protocol.SeedArtifactTransferResult, error) {
+	msg := protocol.SeedArtifactTransferMessage{
+		Cmd: protocol.CmdSeedArtifactTransfer, SeedID: seedID, Operation: operation,
+		LegacyReference: legacy,
+	}
+	if sessionID != "" {
+		msg.SourceSessionID = protocol.Ptr(sessionID)
+	}
+	if sourcePath != "" {
+		msg.SourcePath = protocol.Ptr(sourcePath)
+	}
+	if filename != "" {
+		msg.Filename = protocol.Ptr(filename)
+	}
+	if destinationPath != "" {
+		msg.DestinationPath = protocol.Ptr(destinationPath)
+	}
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	if resp.SeedArtifactTransferResult == nil {
+		return nil, fmt.Errorf("the daemon accepted the artifact transfer but returned no receipt")
+	}
+	return resp.SeedArtifactTransferResult, nil
+}
+
 func (c *Client) SeedEdit(seedID, body string) (*protocol.SeedEditResult, error) {
 	resp, err := c.send(protocol.SeedEditMessage{Cmd: protocol.CmdSeedEdit, SeedID: seedID, Body: body})
 	if err != nil {

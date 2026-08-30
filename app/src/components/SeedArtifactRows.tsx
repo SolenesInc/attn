@@ -1,51 +1,50 @@
+import { invoke } from '@tauri-apps/api/core';
+import { open, save } from '@tauri-apps/plugin-dialog';
 import { useEffect, useState } from 'react';
-import type { SeedArtifactReference } from '../types/generated';
+import type { SeedArtifact, SeedArtifactReference } from '../types/generated';
+import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
 import { artifactKey } from './seedArtifacts';
+import { isSafeLocalMarkdownTarget } from './MarkdownReader/markdownLinks';
 import './SeedArtifactRows.css';
 
 export interface SeedArtifactRowsProps {
-  artifacts: readonly SeedArtifactReference[];
+  seedId: string;
+  artifacts: readonly SeedArtifact[];
+  references?: readonly SeedArtifactReference[];
   onOpenMarkdownArtifact?: (path: string) => void;
-  /** Answers whether a path is really there. Absent leaves rows unchecked. */
   checkArtifactPath?: (path: string) => Promise<boolean>;
 }
 
 interface Presentation {
-  /** The kind gutter: what sort of object this is, in two or three words. */
   kind: string;
-  /** The part a person recognizes — a filename, a PR number, a host. */
   primary: string;
-  /** Where it lives. Dropped when it would only repeat the primary. */
   secondary: string;
-  /** Following this leaves attn. */
   external: boolean;
-  /** The path a markdown artifact opens as a tile. */
   path: string;
   href: string;
 }
 
-// The recognition is the view's, not the daemon's: the wire kind stays `url`.
 const PR_URL = /^https?:\/\/(?:www\.)?github\.com\/([^/]+)\/([^/]+)\/(pull|issues)\/(\d+)/;
 
-function present(artifact: SeedArtifactReference): Presentation {
+function present(reference: SeedArtifactReference): Presentation {
   const base: Presentation = { kind: 'artifact', primary: '', secondary: '', external: false, path: '', href: '' };
-  const path = artifact.path ?? '';
+  const path = reference.path ?? '';
   const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
   const name = path.slice(path.lastIndexOf('/') + 1);
 
-  if (artifact.kind === 'markdown_file' || artifact.kind === 'repository') {
+  if (reference.kind === 'markdown_file' || reference.kind === 'repository') {
     return {
       ...base,
-      kind: artifact.kind === 'repository' ? 'repo file' : 'markdown',
+      kind: reference.kind === 'repository' ? 'repo file' : 'linked file',
       primary: name || path,
-      secondary: [artifact.repository, dir].filter(Boolean).join(' / '),
+      secondary: [reference.repository, dir].filter(Boolean).join(' / '),
       path,
     };
   }
-  if (artifact.kind === 'notebook') {
-    return { ...base, kind: 'notebook', primary: artifact.notebook_document_id ?? '' };
+  if (reference.kind === 'notebook') {
+    return { ...base, kind: 'notebook', primary: reference.notebook_document_id ?? '' };
   }
-  const url = artifact.url ?? '';
+  const url = reference.url ?? '';
   const pr = PR_URL.exec(url);
   if (pr) {
     const [, owner, repo, sort, number] = pr;
@@ -69,91 +68,156 @@ function present(artifact: SeedArtifactReference): Presentation {
     }
     return { ...base, kind: 'link', primary: host, secondary: rest === '/' ? '' : rest, external: true, href: url };
   }
-  return { ...base, kind: artifact.kind, primary: artifact.repository ?? artifact.kind };
+  return { ...base, kind: reference.kind, primary: reference.repository ?? reference.kind };
 }
 
-/** Which artifact paths are missing. Absolute paths only: a repo-relative path
- * resolves against a worktree this surface does not know. */
 function useMissingPaths(
-  artifacts: readonly SeedArtifactReference[],
+  references: readonly SeedArtifactReference[],
   check?: (path: string) => Promise<boolean>,
 ): Set<string> {
   const [missing, setMissing] = useState<Set<string>>(new Set());
-  const absolute: string[] = [];
-  for (const artifact of artifacts) {
-    const path = artifact.path ?? '';
-    if (path.startsWith('/')) absolute.push(path);
+  const absolutePaths: string[] = [];
+  for (const reference of references) {
+    const path = reference.path ?? '';
+    if (path.startsWith('/')) absolutePaths.push(path);
   }
-  const paths = absolute.join('\n');
+  const pathsKey = JSON.stringify(absolutePaths);
 
   useEffect(() => {
-    if (!check || !paths) {
+    const absolute = JSON.parse(pathsKey) as string[];
+    if (!check || absolute.length === 0) {
       setMissing(new Set());
       return;
     }
     let ignore = false;
-    const wanted = paths.split('\n');
-    Promise.all(
-      wanted.map((path) => check(path).then((exists) => (exists ? '' : path)).catch(() => '')),
+    void Promise.all(
+      absolute.map((path) => check(path).then((exists) => (exists ? '' : path)).catch(() => '')),
     ).then((results) => {
-      if (ignore) return;
-      setMissing(new Set(results.filter(Boolean)));
+      if (!ignore) setMissing(new Set(results.filter(Boolean)));
     });
-    return () => {
-      ignore = true;
-    };
-  }, [paths, check]);
+    return () => { ignore = true; };
+  }, [check, pathsKey]);
 
   return missing;
 }
 
-export function SeedArtifactRows({ artifacts, onOpenMarkdownArtifact, checkArtifactPath }: SeedArtifactRowsProps) {
-  const missing = useMissingPaths(artifacts, checkArtifactPath);
-  if (artifacts.length === 0) return null;
+function managedKey(artifact: SeedArtifact): string {
+  return `managed\0${artifact.filename}`;
+}
+
+export function SeedArtifactRows({
+  seedId,
+  artifacts,
+  references = [],
+  onOpenMarkdownArtifact,
+  checkArtifactPath,
+}: SeedArtifactRowsProps) {
+  const daemon = useOptionalDaemonApi();
+  const missing = useMissingPaths(references, checkArtifactPath);
+  const [pending, setPending] = useState('');
+  const [error, setError] = useState('');
+  if (artifacts.length === 0 && references.length === 0) return null;
+
+  const act = async (key: string, operation: () => Promise<unknown>) => {
+    setPending(key);
+    setError('');
+    try {
+      await operation();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : String(actionError));
+    } finally {
+      setPending('');
+    }
+  };
+
+  const openManaged = (artifact: SeedArtifact, reveal: boolean) => act(managedKey(artifact), async () => {
+    if (!daemon) throw new Error('The daemon is not connected');
+    const target = await daemon.sendSeedArtifactTarget(seedId, artifact.relative_target, 'artifact');
+    if (!target.path) throw new Error('The daemon returned no artifact path');
+    await invoke('open_safe_seed_artifact_target', { path: target.path, reveal });
+  });
+
+  const detachManaged = (artifact: SeedArtifact) => act(managedKey(artifact), async () => {
+    if (!daemon) throw new Error('The daemon is not connected');
+    const destination = await save({ defaultPath: artifact.filename, title: 'Move artifact out of this seed' });
+    if (!destination) return;
+    await daemon.sendSeedArtifactTransfer({
+      seedId,
+      operation: 'detach',
+      filename: artifact.filename,
+      destinationPath: destination,
+    });
+  });
+
+  const bringReference = (reference: SeedArtifactReference, operation: 'move' | 'copy') => {
+    const key = artifactKey(reference);
+    return act(key, async () => {
+      if (!daemon) throw new Error('The daemon is not connected');
+      let source = reference.path ?? '';
+      if (!source.startsWith('/')) {
+        const selected = await open({ multiple: false, directory: false, title: 'Choose the linked file to bring into this seed' });
+        if (!selected) return;
+        source = selected;
+      }
+      await daemon.sendSeedArtifactTransfer({
+        seedId,
+        operation,
+        sourcePath: source,
+        legacyReference: reference,
+      });
+    });
+  };
 
   return (
-    <ul className="seed-artifacts">
-      {artifacts.map((artifact) => {
-        const view = present(artifact);
-        const gone = Boolean(view.path) && missing.has(view.path);
-        const body = (
-          <>
-            <span className="seed-artifact__kind">{view.kind}</span>
-            <span className="seed-artifact__primary">{view.primary}</span>
-            {view.secondary && <span className="seed-artifact__secondary">{view.secondary}</span>}
-            {gone ? (
-              <span className="seed-artifact__gone">not on disk</span>
-            ) : (
-              view.external && <span className="seed-artifact__leaves" aria-label="opens outside attn">↗</span>
-            )}
-          </>
-        );
-
-        if (gone) {
+    <>
+      <ul className="seed-artifacts">
+        {artifacts.map((artifact) => {
+          const key = managedKey(artifact);
           return (
-            <li key={artifactKey(artifact)} className="seed-artifact is-gone" title={view.path}>
-              {body}
+            <li key={key} className="seed-artifact seed-artifact--managed">
+              <span className="seed-artifact__kind">file</span>
+              <span className="seed-artifact__primary" title={artifact.filename}>{artifact.filename}</span>
+              <span className="seed-artifact__secondary">{artifact.size.toLocaleString()} bytes</span>
+              <span className="seed-artifact__actions">
+                {isSafeLocalMarkdownTarget(artifact.filename) && (
+                  <button type="button" disabled={pending === key} onClick={() => void openManaged(artifact, false)}>Open</button>
+                )}
+                <button type="button" disabled={pending === key} onClick={() => void openManaged(artifact, true)}>Reveal</button>
+                <button type="button" disabled={pending === key} onClick={() => void detachManaged(artifact)}>Move out</button>
+              </span>
             </li>
           );
-        }
-        if (view.path && onOpenMarkdownArtifact) {
+        })}
+        {references.map((reference) => {
+          const view = present(reference);
+          const gone = Boolean(view.path) && missing.has(view.path);
+          const key = artifactKey(reference);
+          const linkedFile = reference.kind === 'markdown_file';
           return (
-            <li key={artifactKey(artifact)} className="seed-artifact">
-              <button type="button" onClick={() => onOpenMarkdownArtifact(view.path)} title={view.path}>
-                {body}
-              </button>
+            <li key={key} className={`seed-artifact seed-artifact--reference${gone ? ' is-gone' : ''}`} title={view.path || view.href}>
+              <span className="seed-artifact__kind">{view.kind}</span>
+              {view.href ? (
+                <a href={view.href} className="seed-artifact__primary">{view.primary}</a>
+              ) : view.path && onOpenMarkdownArtifact && !gone ? (
+                <button type="button" className="seed-artifact__primary" onClick={() => onOpenMarkdownArtifact(view.path)}>{view.primary}</button>
+              ) : (
+                <span className="seed-artifact__primary">{view.primary}</span>
+              )}
+              {view.secondary && <span className="seed-artifact__secondary">{view.secondary}</span>}
+              {gone && <span className="seed-artifact__gone">not on disk</span>}
+              {view.external && <span className="seed-artifact__leaves" aria-label="opens outside attn">↗</span>}
+              {linkedFile && daemon && (
+                <span className="seed-artifact__actions">
+                  <button type="button" disabled={pending === key} onClick={() => void bringReference(reference, 'move')}>Move into seed</button>
+                  <button type="button" disabled={pending === key} onClick={() => void bringReference(reference, 'copy')}>Copy into seed</button>
+                  <button type="button" disabled={pending === key} onClick={() => void act(key, () => daemon.sendSeedArtifactReferenceDetach(seedId, reference))}>Remove link</button>
+                </span>
+              )}
             </li>
           );
-        }
-        if (view.href) {
-          return (
-            <li key={artifactKey(artifact)} className="seed-artifact">
-              <a href={view.href} title={view.href}>{body}</a>
-            </li>
-          );
-        }
-        return <li key={artifactKey(artifact)} className="seed-artifact">{body}</li>;
-      })}
-    </ul>
+        })}
+      </ul>
+      {error && <p className="seed-artifacts__error" role="alert">{error}</p>}
+    </>
   );
 }
