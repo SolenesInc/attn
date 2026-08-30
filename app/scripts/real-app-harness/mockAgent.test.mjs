@@ -13,11 +13,24 @@ import {
   markerStateForActions,
   mockAgentTitle,
   MOCK_AGENT_CONFIG,
+  parseHeadlessSwitch,
   selectMockAgentActions,
   stateMarker,
   validateMockAgentConfig,
   writeMockAgentFixture,
 } from './mockAgent.mjs';
+
+// The daemon stores every headless write, then republishes the effective key as
+// the env override when there is one; the fake keeps that split.
+function applyDaemonWrite(settings, { key, value }) {
+  if (key !== HEADLESS_TASKS_SETTING) {
+    settings[key] = value;
+    return;
+  }
+  settings[HEADLESS_TASKS_STORED_SETTING] = value;
+  const override = parseHeadlessSwitch(settings[HEADLESS_TASKS_OVERRIDE_SETTING]);
+  settings[HEADLESS_TASKS_SETTING] = override === null ? value : String(override);
+}
 
 function fakeWorld({ settings = {}, failWaitFor = null, daemonObserves = () => true } = {}) {
   const writes = [];
@@ -26,7 +39,7 @@ function fakeWorld({ settings = {}, failWaitFor = null, daemonObserves = () => t
     request: async (verb, payload) => {
       expect(verb).toBe('set_setting');
       writes.push(payload);
-      if (daemonObserves(payload, writes.length - 1)) settings[payload.key] = payload.value;
+      if (daemonObserves(payload, writes.length - 1)) applyDaemonWrite(settings, payload);
     },
   };
   const observer = {
@@ -172,7 +185,11 @@ describe('mock agent fixture', () => {
     expect(configured.previousHeadless).toBe('true');
     await configured.restore();
     expect(world.writes.at(-1)).toEqual({ key: HEADLESS_TASKS_SETTING, value: 'true' });
-    expect(world.settings[HEADLESS_TASKS_SETTING]).toBe('true');
+    expect(world.settings[HEADLESS_TASKS_STORED_SETTING]).toBe('true');
+    expect(world.settings[HEADLESS_TASKS_SETTING]).toBe('false');
+
+    await configured.restore();
+    expect(world.writes).toHaveLength(4);
   });
 
   it('leaves the cleanup armed when a restore dispatch is accepted but never observed', async () => {
