@@ -21,8 +21,7 @@ func resolveLsofPath() string {
 	return "/usr/sbin/lsof"
 }
 
-// No /proc here, so lsof is the only fd table available. Fail-closed on
-// exec/parse errors. Membership, not exclusivity, so Stop's own fd is harmless.
+// Membership, not exclusivity, so Stop's own fd is harmless.
 func pidHoldsPIDFile(pid int, pidPath string) (bool, error) {
 	cmd := exec.Command(lsofPath, "-t", "--", pidPath)
 	var stdout, stderr bytes.Buffer

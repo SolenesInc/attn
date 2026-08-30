@@ -8,7 +8,6 @@ import (
 	"syscall"
 )
 
-// The kernel answers what lsof would, and a Linux box need not have lsof.
 // Membership, not exclusivity, so Stop's own open fd is harmless.
 func pidHoldsPIDFile(pid int, pidPath string) (bool, error) {
 	info, err := os.Stat(pidPath)

@@ -396,8 +396,6 @@ func TestStop_MalformedPIDFile(t *testing.T) {
 	}
 }
 
-// The regression: a Linux box without lsof still gets a positive receipt that the
-// pid holds the lock, so `attn daemon stop` never leaves an orphan daemon behind.
 func TestStop_LiveHolderWithoutLsof(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("only Linux reads the holder out of /proc; other platforms still shell out to lsof")
