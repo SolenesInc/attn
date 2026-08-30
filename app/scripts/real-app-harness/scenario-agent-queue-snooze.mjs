@@ -16,6 +16,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile } from './harnessProfile.mjs';
+import { processCwd } from './processCwd.mjs';
 import { preTrustClaudeFolder, ensureClaudePromptReadyViaPty } from './scenarioAgents.mjs';
 import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
 
@@ -128,13 +129,7 @@ function agentPidForCwd(cwd) {
     .filter((match) => match && /(^|\/)claude(\s|$)/.test(match[2]))
     .map((match) => Number(match[1]));
   for (const pid of candidates) {
-    let out = '';
-    try {
-      out = execFileSync('lsof', ['-a', '-d', 'cwd', '-p', String(pid), '-Fn'], { encoding: 'utf8' });
-    } catch {
-      continue;
-    }
-    if (out.split('\n').some((line) => line.startsWith('n') && line.slice(1) === cwd)) return pid;
+    if (processCwd(pid) === cwd) return pid;
   }
   return null;
 }

@@ -236,9 +236,8 @@ fn stop_running_daemon(socket_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(unix)]
-fn listening_pids_for_daemon_port() -> Vec<u32> {
-    let port = daemon_http_port();
+#[cfg(target_os = "macos")]
+fn listening_pids_for_port(port: u16) -> Vec<u32> {
     let output = Command::new("lsof")
         .arg("-ti")
         .arg(format!("tcp:{port}"))
@@ -258,9 +257,108 @@ fn listening_pids_for_daemon_port() -> Vec<u32> {
         .collect()
 }
 
-#[cfg(not(unix))]
-fn listening_pids_for_daemon_port() -> Vec<u32> {
+#[cfg(target_os = "linux")]
+fn listening_socket_inodes(table: &str, port: u16) -> std::collections::HashSet<u64> {
+    table
+        .lines()
+        .skip(1)
+        .filter_map(|line| {
+            let fields: Vec<_> = line.split_whitespace().collect();
+            if fields.len() <= 9 || fields[3] != "0A" {
+                return None;
+            }
+            let (_, local_port) = fields[1].rsplit_once(':')?;
+            if u16::from_str_radix(local_port, 16).ok()? != port {
+                return None;
+            }
+            fields[9].parse::<u64>().ok()
+        })
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn socket_inode(path: &Path) -> Option<u64> {
+    path.to_str()?
+        .strip_prefix("socket:[")?
+        .strip_suffix(']')?
+        .parse()
+        .ok()
+}
+
+#[cfg(target_os = "linux")]
+fn listening_pids_for_port(port: u16) -> Vec<u32> {
+    let mut inodes = std::collections::HashSet::new();
+    for table_path in ["/proc/net/tcp", "/proc/net/tcp6"] {
+        if let Ok(table) = std::fs::read_to_string(table_path) {
+            inodes.extend(listening_socket_inodes(&table, port));
+        }
+    }
+    if inodes.is_empty() {
+        return Vec::new();
+    }
+
+    let Ok(processes) = std::fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+    let mut pids = Vec::new();
+    for process in processes.flatten() {
+        let Ok(pid) = process.file_name().to_string_lossy().parse::<u32>() else {
+            continue;
+        };
+        let Ok(fds) = std::fs::read_dir(process.path().join("fd")) else {
+            continue;
+        };
+        if fds.flatten().any(|fd| {
+            std::fs::read_link(fd.path())
+                .ok()
+                .and_then(|target| socket_inode(&target))
+                .is_some_and(|inode| inodes.contains(&inode))
+        }) {
+            pids.push(pid);
+        }
+    }
+    pids
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn listening_pids_for_port(_port: u16) -> Vec<u32> {
     Vec::new()
+}
+
+fn listening_pids_for_daemon_port() -> Vec<u32> {
+    listening_pids_for_port(daemon_http_port())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_listener_tests {
+    use super::*;
+    use std::net::TcpListener;
+
+    #[test]
+    fn parses_only_listeners_on_the_requested_port() {
+        let table = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n\
+            0: 0100007F:2679 00000000:0000 0A 00000000:00000000 00:00000000 00000000 1000 0 12345 1\n\
+            1: 0100007F:2679 0100007F:1234 01 00000000:00000000 00:00000000 00000000 1000 0 23456 1\n\
+            2: 0100007F:2680 00000000:0000 0A 00000000:00000000 00:00000000 00000000 1000 0 34567 1\n";
+
+        assert_eq!(
+            listening_socket_inodes(table, 9849),
+            std::collections::HashSet::from([12345])
+        );
+    }
+
+    #[test]
+    fn finds_the_process_holding_a_live_listener() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind listener");
+        let port = listener.local_addr().expect("listener address").port();
+
+        let pids = listening_pids_for_port(port);
+
+        assert!(
+            pids.contains(&std::process::id()),
+            "current pid missing from {pids:?}"
+        );
+    }
 }
 
 #[cfg(unix)]
