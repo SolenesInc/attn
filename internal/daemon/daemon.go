@@ -224,10 +224,7 @@ type Daemon struct {
 	autoSettleFireHook      func(sessionID, outcome string)
 	autoSettlePreSettleHook func()
 
-	snoozeMu          sync.Mutex
-	snoozeTimers      map[string]*snoozeTimer
-	snoozeWakeHook    func(sessionID string)
-	snoozeWakeGapHook func(sessionID string)
+	snoozeMu sync.Mutex
 
 	recoveryMu          sync.RWMutex
 	recovering          bool
@@ -925,7 +922,6 @@ func (d *Daemon) Start() error {
 	d.removeLegacyEmbeddedTailscaleState()
 	d.migrateKeeperCompactSettingKey()
 	d.migrateNotebookCronSettingKeys()
-	d.rescheduleSnoozeWakes()
 	go d.ensureTailscaleServeFromSettingsAndBroadcast()
 	d.hubManager.Start(d.doneContext())
 
@@ -1523,7 +1519,6 @@ func (d *Daemon) Stop() {
 	d.stopNudgeCountdowns()
 	d.pluginDriverSilence().stop()
 	d.stopAutoSettleTimers()
-	d.stopSnoozeTimers()
 	if d.ptyBackend != nil {
 		_ = d.ptyBackend.Shutdown(context.Background())
 	}
