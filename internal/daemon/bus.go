@@ -437,6 +437,7 @@ func (d *Daemon) ensureEventBus() {
 	d.busUnsubscribe = d.eventBus.Subscribe(bus.All, d.projectToClients)
 	d.subscribeDocumentFacts()
 	d.subscribeAgentConversationFacts()
+	d.subscribeSessionPullRequestFacts()
 }
 
 func (d *Daemon) startEventBus() error {
@@ -447,6 +448,7 @@ func (d *Daemon) startEventBus() error {
 func (d *Daemon) stopEventBus() {
 	d.unsubscribeDocumentFacts()
 	d.unsubscribeAgentConversationFacts()
+	d.unsubscribeSessionPullRequestFacts()
 	if d.busUnsubscribe != nil {
 		d.busUnsubscribe()
 		d.busUnsubscribe = nil

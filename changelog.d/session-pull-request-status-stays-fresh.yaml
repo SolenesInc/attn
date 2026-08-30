@@ -1,0 +1,10 @@
+kind: added
+area: sessions
+change: >
+  A pull request a session opened now tracks GitHub on its own. The daemon
+  refreshes title, draft, state, checks, review and mergeability every 30
+  seconds while the pull request is active, backing off to two minutes and then
+  ten as it goes quiet, and stops entirely once it merges or closes. Anything
+  the PR inbox notices about the same pull request puts it straight back on the
+  fast cadence, so "attn pr ls" and the app agree within a tick. A pull request
+  on a host attn has no GitHub client for stays exactly as it was recorded.

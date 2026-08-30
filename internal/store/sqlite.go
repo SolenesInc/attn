@@ -1094,6 +1094,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 		CREATE INDEX IF NOT EXISTS idx_session_pull_requests_session
 			ON session_pull_requests(session_id, created_at DESC);
 	`},
+	{128, "session pull request refresh keeps its own pacing cursor", ``},
 }
 
 const migration99SQL = `
@@ -1526,6 +1527,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 128 {
+			if err := applyMigration128(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else {
 			if _, err := tx.Exec(m.sql); err != nil {
 				tx.Rollback()
@@ -1573,6 +1579,18 @@ func applyMigration123(tx *sql.Tx) error {
 		return nil
 	}
 	_, err = tx.Exec("ALTER TABLE sessions ADD COLUMN transcript_path TEXT NOT NULL DEFAULT ''")
+	return err
+}
+
+func applyMigration128(tx *sql.Tx) error {
+	has, err := columnExists(tx, "session_pull_requests", "status_checked_at")
+	if err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	_, err = tx.Exec(`ALTER TABLE session_pull_requests ADD COLUMN status_checked_at TEXT NOT NULL DEFAULT ''`)
 	return err
 }
 

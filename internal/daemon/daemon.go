@@ -353,6 +353,8 @@ type Daemon struct {
 	docSubsSeq             int64
 	docUnsubHooks          func()
 	conversationUnsubHooks func()
+	sessionPRUnsubHooks    func()
+	sessionPRHosts         func(host string) (sessionPRHost, bool)
 
 	notebookPendingMu    sync.Mutex
 	notebookPendingPaths map[string][]string
