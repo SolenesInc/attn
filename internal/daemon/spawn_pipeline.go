@@ -514,5 +514,6 @@ func (d *Daemon) runSpawnPipeline(msg *protocol.SpawnSessionMessage, policy inte
 	if outcome := d.commitSpawn(req, plan); outcome.err != nil {
 		return &spawnRejection{err: outcome.err}
 	}
+	d.rememberSessionTitleInitialPrompt(msg.ID, req.initialPrompt)
 	return nil
 }

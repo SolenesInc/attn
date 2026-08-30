@@ -372,7 +372,7 @@ func TestMaybeGenerateSessionTitleFromPrompt_TitlesBeforeStop(t *testing.T) {
 		return "Fix login flow", nil
 	}
 
-	d.maybeGenerateSessionTitleFromPrompt("sess-1", "  fix the login flow\n")
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "  fix the login flow\n", userConversationInput())
 	if calls != 1 || gotBrief != "fix the login flow" {
 		t.Fatalf("exec calls = %d brief = %q, want 1 call with the trimmed prompt", calls, gotBrief)
 	}
@@ -380,7 +380,6 @@ func TestMaybeGenerateSessionTitleFromPrompt_TitlesBeforeStop(t *testing.T) {
 		t.Fatalf("session label = %+v, want %q", got, "Fix login flow")
 	}
 
-	// The Stop that follows must not title a second time.
 	d.maybeGenerateSessionTitle("sess-1", writeSessionTitleTranscript(t))
 	if calls != 1 {
 		t.Fatalf("exec calls after Stop = %d, want 1", calls)
@@ -398,7 +397,7 @@ func TestMaybeGenerateSessionTitleFromPrompt_EmptyPromptLeavesStopPath(t *testin
 		return "Fix login flow", nil
 	}
 
-	d.maybeGenerateSessionTitleFromPrompt("sess-1", "   ")
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "   ", userConversationInput())
 	if calls != 0 {
 		t.Fatalf("exec calls after empty prompt = %d, want 0", calls)
 	}
@@ -419,8 +418,60 @@ func TestMaybeGenerateSessionTitleFromPrompt_CapsLongPrompt(t *testing.T) {
 		return "Long prompt", nil
 	}
 
-	d.maybeGenerateSessionTitleFromPrompt("sess-1", strings.Repeat("é", sessionTitleBriefCharCap+10))
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", strings.Repeat("é", sessionTitleBriefCharCap+10), userConversationInput())
 	if n := len([]rune(gotBrief)); n != sessionTitleBriefCharCap {
 		t.Fatalf("brief runes = %d, want %d", n, sessionTitleBriefCharCap)
+	}
+}
+
+func TestMaybeGenerateSessionTitleFromPrompt_UncorrelatedReceiptLeavesAttemptAvailable(t *testing.T) {
+	d := newDaemonForTest(t)
+	directory := t.TempDir()
+	seedSessionTitleSession(t, d, "sess-1", directory, "")
+
+	calls := 0
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
+		calls++
+		return "Fix login flow", nil
+	}
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "ticket nudge: please reconcile", maintenanceInput("tickets"))
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "peer says hi", peerAgentInput("sess-2"))
+	if calls != 0 {
+		t.Fatalf("exec calls after maintenance and peer receipts = %d, want 0", calls)
+	}
+	if got := d.store.Get("sess-1"); got == nil || got.Label != defaultSessionLabel(directory, "sess-1") {
+		t.Fatalf("session label = %+v, want the default label untouched", got)
+	}
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "fix the login flow", userConversationInput())
+	if calls != 1 {
+		t.Fatalf("exec calls after user turn = %d, want 1 (receipts must not consume the attempt)", calls)
+	}
+}
+
+func TestMaybeGenerateSessionTitleFromPrompt_InitialPromptTitlesWithoutCorrelation(t *testing.T) {
+	d := newDaemonForTest(t)
+	directory := t.TempDir()
+	seedSessionTitleSession(t, d, "sess-1", directory, "")
+	d.rememberSessionTitleInitialPrompt("sess-1", "investigate the retry queue")
+
+	calls := 0
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
+		calls++
+		return "Investigate retry queue", nil
+	}
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "unrelated injected text", sessionInputOrigin{})
+	if calls != 0 {
+		t.Fatalf("exec calls after non-matching uncorrelated prompt = %d, want 0", calls)
+	}
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "investigate the retry queue", sessionInputOrigin{})
+	if calls != 1 {
+		t.Fatalf("exec calls after the initial prompt = %d, want 1", calls)
+	}
+	if got := d.store.Get("sess-1"); got == nil || got.Label != "Investigate retry queue" {
+		t.Fatalf("session label = %+v, want %q", got, "Investigate retry queue")
 	}
 }

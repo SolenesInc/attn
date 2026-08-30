@@ -32,8 +32,6 @@ const sessionTitleOutputSchema = `{
 	"additionalProperties": false
 }`
 
-// Stop-time path: the first human turn is read back from the transcript. It is
-// the fallback for harnesses whose prompt hook carries no text.
 func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 	if !d.sessionWantsAutoTitle(sessionID) {
 		return
@@ -57,17 +55,50 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 	d.generateSessionTitle(sessionID, slice, "transcript")
 }
 
-// Prompt-submit path: the first prompt is enough for a title, so a one-shot
-// agent gets its name seconds in instead of when its first turn ends.
-func (d *Daemon) maybeGenerateSessionTitleFromPrompt(sessionID, prompt string) {
+// UserPromptSubmit also delivers maintenance and peer-agent text; only a
+// correlated user turn or the session's own initial prompt may title it.
+func (d *Daemon) maybeGenerateSessionTitleFromPrompt(sessionID, prompt string, origin sessionInputOrigin) {
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" || !d.sessionWantsAutoTitle(sessionID) {
+		return
+	}
+	if origin.kind != sessionInputOriginUserConversation && !d.matchSessionTitleInitialPrompt(sessionID, prompt) {
 		return
 	}
 	if runes := []rune(prompt); len(runes) > sessionTitleBriefCharCap {
 		prompt = string(runes[:sessionTitleBriefCharCap])
 	}
 	d.generateSessionTitle(sessionID, transcript.ConversationSlice{Brief: prompt, HumanCount: 1}, "prompt")
+}
+
+func (d *Daemon) rememberSessionTitleInitialPrompt(sessionID, prompt string) {
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		return
+	}
+	d.sessionTitleMu.Lock()
+	defer d.sessionTitleMu.Unlock()
+	if d.sessionTitleInitialPrompt == nil {
+		d.sessionTitleInitialPrompt = make(map[string]string)
+	}
+	d.sessionTitleInitialPrompt[sessionID] = prompt
+}
+
+func (d *Daemon) forgetSessionTitleInitialPrompt(sessionID string) {
+	d.sessionTitleMu.Lock()
+	defer d.sessionTitleMu.Unlock()
+	delete(d.sessionTitleInitialPrompt, sessionID)
+}
+
+func (d *Daemon) matchSessionTitleInitialPrompt(sessionID, prompt string) bool {
+	d.sessionTitleMu.Lock()
+	defer d.sessionTitleMu.Unlock()
+	remembered, ok := d.sessionTitleInitialPrompt[sessionID]
+	if !ok || remembered != prompt {
+		return false
+	}
+	delete(d.sessionTitleInitialPrompt, sessionID)
+	return true
 }
 
 func (d *Daemon) sessionWantsAutoTitle(sessionID string) bool {

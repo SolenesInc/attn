@@ -165,6 +165,7 @@ type Daemon struct {
 	sessionTitleMu                    sync.Mutex
 	sessionTitleExec                  func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error)
 	sessionTitleAttempted             map[string]struct{}
+	sessionTitleInitialPrompt         map[string]string
 	ticketArtifactMu                  sync.Mutex
 	seedArtifactMu                    sync.Mutex
 	delegationMu                      sync.Mutex
@@ -1761,6 +1762,7 @@ func (d *Daemon) dropSessionRecord(sessionID string) {
 	}
 	d.clearNudgeState(sessionID)
 	d.forgetPostInitialPrompt(sessionID)
+	d.forgetSessionTitleInitialPrompt(sessionID)
 	d.clearAutoSettleState(sessionID)
 	d.clearSnoozeState(sessionID)
 	d.sessionInputs().forgetSession(sessionID)
@@ -2562,8 +2564,12 @@ func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 	d.logf("hook evidence: id=%s state=%s", msg.ID, msg.State)
 	if strings.EqualFold(strings.TrimSpace(protocol.Deref(msg.HookEvent)), "user_prompt_submit") &&
 		strings.TrimSpace(protocol.Deref(msg.Prompt)) != "" {
-		d.observePromptTaken(msg.ID, protocol.Deref(msg.Prompt), time.Now())
-		go d.maybeGenerateSessionTitleFromPrompt(msg.ID, protocol.Deref(msg.Prompt))
+		effects := d.observePromptTaken(msg.ID, protocol.Deref(msg.Prompt), time.Now())
+		origin := sessionInputOrigin{}
+		if effects.taken != nil {
+			origin = effects.taken.origin
+		}
+		go d.maybeGenerateSessionTitleFromPrompt(msg.ID, protocol.Deref(msg.Prompt), origin)
 	}
 	d.noteInitialAgentMessageSubmitted(msg.ID, msg.State)
 	d.runPostInitialPrompt(msg.ID, msg.State)
