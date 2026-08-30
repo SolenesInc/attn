@@ -114,6 +114,13 @@ export const scenarioCatalog = [
     timeoutMs: 240_000,
   },
   {
+    id: 'delegate-workspace-placement',
+    runnerId: 'DELEGATE-WORKSPACE-PLACEMENT',
+    label: 'Delegate placement: --workspace places the pane, --no-worktree keeps the source checkout',
+    command: ['pnpm', 'run', 'real-app:scenario-delegate-workspace-placement'],
+    timeoutMs: 240_000,
+  },
+  {
     id: 'ordinary-delegation-ticket',
     runnerId: 'ORDINARY-DELEGATION-TICKET',
     allowRealAgents: true,
@@ -321,14 +328,12 @@ export const scenarioCatalog = [
   {
     id: 'snapshot-scrollback-restore',
     runnerId: 'SNAPSHOT-SCROLLBACK-RESTORE',
-    allowRealAgents: true,
     label: 'Deep scrollback survives an app relaunch restore',
     command: ['pnpm', 'run', 'real-app:scenario-snapshot-scrollback-restore'],
   },
   {
     id: 'ghostty-scroll',
     runnerId: 'GHOSTTY-SCROLLBACK-ANCHOR',
-    allowRealAgents: true,
     label: 'Ghostty scrollback anchoring while output streams',
     command: ['pnpm', 'run', 'real-app:scenario-ghostty-scroll'],
   },
@@ -439,7 +444,6 @@ export const scenarioCatalog = [
   {
     id: 'focus-probe',
     runnerId: 'FOCUS-PROBE',
-    allowRealAgents: true,
     label: 'Focus probe (no focus steal on background session create)',
     command: ['pnpm', 'run', 'real-app:focus-probe'],
     // Not part of the serial matrix sweep — only runnable directly (run-soak).
