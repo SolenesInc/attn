@@ -18,4 +18,8 @@ change: >
   app was still running — long enough for WebKit to recreate the directory that
   had just been deleted. A pid that is not the profile's app executable is never
   signalled, and a clean that cannot confirm the app exited now removes nothing
-  and names the pid instead of reporting a profile it did not clean.
+  and names the pid instead of reporting a profile it did not clean. Ownership is
+  rebuilt from the live process before each signal, since a pid the app releases
+  can be reused; a live pid that cannot be identified stops the clean rather than
+  being assumed dead; and an `app.pid` that names a different pid, or reappears
+  after the stop, is read as a relaunch and aborts before anything is removed.

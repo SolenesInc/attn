@@ -99,10 +99,14 @@ unconfirmed PIDs the command leaves running.
 
 The app goes first and clean waits for its pid (`<data-dir>/app.pid`, written by
 the Tauri shell) to be gone — a macOS quit request only asks — escalating to
-SIGTERM then SIGKILL if it will not leave. A pid that is not this profile's app
-executable is never signalled. If the app cannot be confirmed gone, clean removes
-nothing and names the pid: quit it yourself and re-run. `--force` covers the
-production profile, never a live app.
+SIGTERM then SIGKILL if it will not leave. Ownership is rebuilt from the live
+process before every signal: a pid that is not this profile's app executable is
+never signalled, and one that is alive but cannot be identified stops the clean
+rather than being assumed dead. The shell rewrites `app.pid` on every launch, so
+a marker naming a different pid, or one that reappears after the stop, is a
+relaunch and aborts the clean. Whenever the app cannot be confirmed gone, clean
+removes nothing and names the pid: quit it yourself and re-run. `--force` covers
+the production profile, never a live app.
 
 Use `attn profile stop-app --profile <name>` to stop only the app; it returns
 once the app is gone.

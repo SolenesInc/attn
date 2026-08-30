@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -12,24 +13,40 @@ import (
 	"time"
 )
 
-// Not a test: re-exec'd as an app that will not shut down. Ignores SIGTERM.
+// Not a test: re-exec'd as the app being stopped. Ignores SIGTERM, or with
+// ATTN_APP_STOP_HELPER_RELAUNCH writes that marker on SIGTERM and exits.
 func TestProfileAppStopHelperProcess(t *testing.T) {
 	readyPath := os.Getenv("ATTN_APP_STOP_HELPER_READY")
 	if readyPath == "" {
 		return
 	}
-	signal.Ignore(syscall.SIGTERM)
+	relaunch := os.Getenv("ATTN_APP_STOP_HELPER_RELAUNCH")
+	term := make(chan os.Signal, 1)
+	if relaunch == "" {
+		signal.Ignore(syscall.SIGTERM)
+	} else {
+		signal.Notify(term, syscall.SIGTERM)
+	}
 	if err := os.WriteFile(readyPath, []byte("ready"), 0o644); err != nil {
 		t.Fatalf("helper: write ready file: %v", err)
 	}
-	time.Sleep(time.Hour)
+	if relaunch == "" {
+		time.Sleep(time.Hour)
+		return
+	}
+	<-term
+	path, pid, _ := strings.Cut(relaunch, "|")
+	if err := os.WriteFile(path, []byte(pid), 0o644); err != nil {
+		t.Fatalf("helper: write relaunch marker: %v", err)
+	}
 }
 
-func spawnStubbornApp(t *testing.T) int {
+func spawnStubbornApp(t *testing.T, extraEnv ...string) int {
 	t.Helper()
 	readyPath := filepath.Join(t.TempDir(), "helper-ready")
 	cmd := exec.Command(os.Args[0], "-test.run=^TestProfileAppStopHelperProcess$")
 	cmd.Env = append(os.Environ(), "ATTN_APP_STOP_HELPER_READY="+readyPath)
+	cmd.Env = append(cmd.Env, extraEnv...)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("spawn stubborn app helper: %v", err)
 	}
@@ -207,5 +224,60 @@ func TestQuitAppPIDRevalidatesOwnershipBeforeSignalling(t *testing.T) {
 	}
 	if _, err := os.Stat(pidPath); !os.IsNotExist(err) {
 		t.Fatalf("stale app.pid survived: %v", err)
+	}
+}
+
+func TestStopProfileAppFailsClosedOnAnUnidentifiablePID(t *testing.T) {
+	shrinkAppStopWaits(t)
+	r := sandboxedProfile(t)
+	pid := spawnForeignProcess(t)
+	writeAppPID(t, r.DataDir, pid)
+
+	previous := lookupProcessExecutable
+	lookupProcessExecutable = func(int) (string, error) { return "", errors.New("permission denied") }
+	t.Cleanup(func() { lookupProcessExecutable = previous })
+
+	var out strings.Builder
+	err := cleanProfile(&out, r)
+	if err == nil {
+		t.Fatalf("cleanProfile succeeded with an unidentifiable live pid; output:\n%s", out.String())
+	}
+	if !strings.Contains(err.Error(), "could not be identified") {
+		t.Fatalf("cleanProfile error = %v, want it to report the pid could not be identified", err)
+	}
+	if processGone(pid) {
+		t.Fatalf("pid %d was signalled although it could not be identified", pid)
+	}
+	for _, dir := range []string{r.DataDir, r.AppPath, r.AppLocalData} {
+		if !fileExists(dir) {
+			t.Fatalf("%s was removed while a live pid could not be identified", dir)
+		}
+	}
+}
+
+func TestCleanProfileAbortsWhenTheAppRelaunchesWhileStopping(t *testing.T) {
+	shrinkAppStopWaits(t)
+	r := sandboxedProfile(t)
+	relaunched := spawnForeignProcess(t)
+	pidPath := filepath.Join(r.DataDir, "app.pid")
+	pid := spawnStubbornApp(t, "ATTN_APP_STOP_HELPER_RELAUNCH="+pidPath+"|"+strconv.Itoa(relaunched))
+	writeAppPID(t, r.DataDir, pid)
+
+	var out strings.Builder
+	err := cleanProfile(&out, r)
+	if err == nil {
+		t.Fatalf("cleanProfile succeeded across a relaunch; output:\n%s", out.String())
+	}
+	if !strings.Contains(err.Error(), "relaunched") {
+		t.Fatalf("cleanProfile error = %v, want it to report the relaunch", err)
+	}
+	raw, readErr := os.ReadFile(pidPath)
+	if readErr != nil || strings.TrimSpace(string(raw)) != strconv.Itoa(relaunched) {
+		t.Fatalf("app.pid = %q (err %v), want the relaunched pid %d left alone", raw, readErr, relaunched)
+	}
+	for _, dir := range []string{r.DataDir, r.AppPath, r.AppLocalData} {
+		if !fileExists(dir) {
+			t.Fatalf("%s was removed under a relaunched app", dir)
+		}
 	}
 }
