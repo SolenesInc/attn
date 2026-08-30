@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -392,5 +393,35 @@ func TestStop_MalformedPIDFile(t *testing.T) {
 	}
 	if !isAlive(helper.Process.Pid) {
 		t.Fatal("helper process is gone: Stop() should not have signaled anything for malformed content")
+	}
+}
+
+// The regression: a Linux box without lsof still gets a positive receipt that the
+// pid holds the lock, so `attn daemon stop` never leaves an orphan daemon behind.
+func TestStop_LiveHolderWithoutLsof(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("only Linux reads the holder out of /proc; other platforms still shell out to lsof")
+	}
+	t.Setenv("PATH", "")
+	if found, err := exec.LookPath("lsof"); err == nil {
+		t.Fatalf("lsof is still reachable at %s with PATH cleared", found)
+	}
+
+	dir := t.TempDir()
+	pidPath := filepath.Join(dir, "attn.pid")
+
+	helper := spawnStopHelper(t, pidPath, "lock-self")
+	waitForPIDFileContent(t, pidPath, strconv.Itoa(helper.Process.Pid), 5*time.Second)
+	waitForFlockHeld(t, pidPath, 5*time.Second)
+
+	result, err := Stop(pidPath)
+	if err != nil {
+		t.Fatalf("Stop() error = %v, want nil", err)
+	}
+	if !result.Stopped || result.PID != helper.Process.Pid {
+		t.Fatalf("Stop() = %+v, want Stopped=true with PID=%d", result, helper.Process.Pid)
+	}
+	if isAlive(helper.Process.Pid) {
+		t.Fatal("helper process is still alive after Stop() reported Stopped=true")
 	}
 }

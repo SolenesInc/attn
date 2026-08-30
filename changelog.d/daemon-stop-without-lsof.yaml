@@ -1,0 +1,11 @@
+kind: fixed
+area: daemon
+change: >
+  `attn daemon stop` and `attn profile clean` now stop the daemon on a Linux box
+  that has no lsof installed. Before signaling, both prove the pid on disk is the
+  process holding the pid file's lock; that proof used to come only from `lsof`,
+  so on a minimal Linux install the stop gave up and left an orphan daemon (and
+  its workers) running. On Linux the proof now comes from the kernel — the pid's
+  own fd table under /proc, matched by device and inode against the pid file —
+  and lsof remains the route on macOS, which has no /proc. The check itself is
+  unchanged in strength: nothing is signaled without a positive receipt.
