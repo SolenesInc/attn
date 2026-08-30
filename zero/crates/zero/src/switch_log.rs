@@ -14,6 +14,8 @@ pub enum SwitchPath {
     Switcher,
     Desktop,
     PaneMove,
+    Click,
+    Back,
 }
 
 impl SwitchPath {
@@ -24,6 +26,8 @@ impl SwitchPath {
             Self::Switcher => "switcher",
             Self::Desktop => "desktop",
             Self::PaneMove => "pane-move",
+            Self::Click => "click",
+            Self::Back => "back",
         }
     }
 }

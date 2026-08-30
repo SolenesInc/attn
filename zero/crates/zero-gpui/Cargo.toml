@@ -1,0 +1,15 @@
+[package]
+name = "zero-gpui"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+crossbeam-channel.workspace = true
+futures.workspace = true
+gpui.workspace = true
+libghostty-vt.workspace = true
+zero = { path = "../zero" }

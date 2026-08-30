@@ -1,0 +1,1153 @@
+mod grid;
+mod keys;
+mod layout;
+mod theme;
+
+use std::borrow::Cow;
+use std::collections::{HashMap, HashSet};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use anyhow::{Result, bail};
+use futures::StreamExt;
+use futures::channel::mpsc;
+use gpui::{
+    Animation, AnimationExt, AnyElement, App, Application, Bounds, BoxShadow, Context, Div,
+    FocusHandle, FontWeight, Hsla, KeyDownEvent, Keystroke, MouseButton, Pixels, Render,
+    ScrollDelta, ScrollWheelEvent, Task, TitlebarOptions, Window, WindowBackgroundAppearance,
+    WindowBounds, WindowOptions, canvas, div, ease_out_quint, linear_color_stop, linear_gradient,
+    point, prelude::*, px, size,
+};
+use libghostty_vt::terminal::ScrollViewport;
+use zero::model::{AgentId, AgentKind, AgentState, Model};
+use zero::shell::{Shell, ShellOutput};
+use zero::simulator::Simulator;
+use zero::source::{Command, Event as SourceEvent, Scenario, ScenarioAction, Source};
+use zero::switch_log::{SwitchLog, SwitchPath};
+use zero::switcher::filter_agents;
+
+use crate::grid::{Grid, Metrics, Prepared};
+use crate::layout::{Direction, neighbor, tiles};
+
+const SHELL_ID: AgentId = u64::MAX;
+const BAR_HEIGHT: f32 = 46.;
+const GAP: f32 = 12.;
+const USAGE: &str = "usage: zero-gpui [--scenario calm|busy-morning|all-busy]";
+
+fn main() {
+    let scenario = match parse_args() {
+        Ok(scenario) => scenario,
+        Err(error) => {
+            eprintln!("{error}\n{USAGE}");
+            std::process::exit(2);
+        }
+    };
+    Application::new().run(move |cx: &mut App| {
+        cx.text_system()
+            .add_fonts(vec![
+                Cow::Borrowed(&include_bytes!("../fonts/JetBrainsMono-Regular.ttf")[..]),
+                Cow::Borrowed(&include_bytes!("../fonts/JetBrainsMono-Bold.ttf")[..]),
+                Cow::Borrowed(&include_bytes!("../fonts/JetBrainsMono-Italic.ttf")[..]),
+                Cow::Borrowed(&include_bytes!("../fonts/JetBrainsMono-BoldItalic.ttf")[..]),
+            ])
+            .expect("embedded JetBrains Mono loads");
+        let bounds = Bounds::centered(None, size(px(1480.), px(940.)), cx);
+        cx.open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(bounds)),
+                titlebar: Some(TitlebarOptions {
+                    title: Some("attn zero".into()),
+                    appears_transparent: true,
+                    traffic_light_position: Some(point(px(14.), px(15.))),
+                }),
+                window_background: WindowBackgroundAppearance::Opaque,
+                ..Default::default()
+            },
+            move |window, cx| cx.new(|cx| Zero::new(scenario, window, cx).expect("zero starts")),
+        )
+        .expect("the window opens");
+        cx.on_window_closed(|cx| {
+            if cx.windows().is_empty() {
+                cx.quit();
+            }
+        })
+        .detach();
+        cx.activate(true);
+    });
+}
+
+fn parse_args() -> Result<Scenario> {
+    let mut scenario = Scenario::Calm;
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--scenario" => {
+                let name = args.next().unwrap_or_default();
+                scenario = Scenario::parse(&name)
+                    .ok_or_else(|| anyhow::anyhow!("unknown scenario {name:?}"))?;
+            }
+            other => bail!("unknown argument {other:?}"),
+        }
+    }
+    Ok(scenario)
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Popup {
+    None,
+    Switcher { query: String, selected: usize },
+    Scenario { selected: usize },
+    Help,
+}
+
+struct ScenarioItem {
+    label: &'static str,
+    detail: &'static str,
+    action: fn(&Zero) -> ScenarioAction,
+}
+
+const SCENARIO_ITEMS: [ScenarioItem; 7] = [
+    ScenarioItem { label: "calm", detail: "12 agents, one or two waiting at a time", action: |_| ScenarioAction::Set(Scenario::Calm) },
+    ScenarioItem { label: "busy morning", detail: "five or more waiting, a turn every ~20s", action: |_| ScenarioAction::Set(Scenario::BusyMorning) },
+    ScenarioItem { label: "all busy", detail: "everyone working, nobody waiting", action: |_| ScenarioAction::Set(Scenario::AllBusy) },
+    ScenarioItem { label: "toggle speed", detail: "x1 or x5", action: |_| ScenarioAction::ToggleSpeed },
+    ScenarioItem { label: "add an agent", detail: "on this desktop", action: |zero| ScenarioAction::AddAgent { desktop: zero.model.current_desktop } },
+    ScenarioItem { label: "finish one now", detail: "a working agent flips to waiting", action: |_| ScenarioAction::FinishOneNow },
+    ScenarioItem { label: "make three wait now", detail: "three turns open at once", action: |_| ScenarioAction::MakeThreeWaitNow },
+];
+
+const HELP: [(&str, &str); 12] = [
+    ("⌘J", "next agent in the queue (oldest open turn first)"),
+    ("⌘P", "back to the previous agent"),
+    ("⌘K", "switcher: fuzzy find any agent"),
+    ("⌘1…9", "go to that desktop"),
+    ("⌘⇧1…9", "move the focused pane to that desktop"),
+    ("⌘←↑↓→", "focus the neighboring pane"),
+    ("click", "focus a pane, a desktop badge, or a name in the bar"),
+    ("wheel", "scroll a pane's scrollback"),
+    ("type + ⏎", "prompt a waiting or idle agent; the shell pane is a real shell"),
+    ("y / n", "answer an approval"),
+    ("⌘S", "scenario menu"),
+    ("⌘Q", "quit"),
+];
+
+struct Zero {
+    model: Model,
+    source: Simulator,
+    shell: Shell,
+    log: SwitchLog,
+    started: Instant,
+    focus_handle: FocusHandle,
+    metrics: Metrics,
+    grids: HashMap<AgentId, Grid>,
+    dirty: HashSet<AgentId>,
+    popup: Popup,
+    previous_focus: Option<AgentId>,
+    content: Bounds<Pixels>,
+    slide: (i8, u64),
+    ticker: Option<Task<()>>,
+    _shell_pump: Task<()>,
+}
+
+impl Zero {
+    fn new(scenario: Scenario, window: &mut Window, cx: &mut Context<Self>) -> Result<Self> {
+        let metrics = Metrics::measure(window)?;
+        let mut source = Simulator::new(scenario);
+        let mut model = Model::new();
+        model.apply(source.advance(Duration::ZERO))?;
+        let (shell, shell_output) = Shell::spawn(80, 24)?;
+        model.add_shell(SHELL_ID, 1, b"")?;
+        if let Some(first) = model.queue().first().copied() {
+            model.current_desktop = model.agent(first).desktop;
+            model.focus = Some(first);
+        } else {
+            model.focus = model.first_on_current_desktop();
+        }
+        let (sender, mut receiver) = mpsc::unbounded::<ShellOutput>();
+        thread::spawn(move || {
+            for output in shell_output {
+                if sender.unbounded_send(output).is_err() {
+                    break;
+                }
+            }
+        });
+        let shell_pump = cx.spawn(async move |this, cx| {
+            while let Some(output) = receiver.next().await {
+                let mut batch = vec![output];
+                while let Ok(more) = receiver.try_recv() {
+                    batch.push(more);
+                }
+                if this
+                    .update(cx, |zero, cx| zero.on_shell_output(batch, cx))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
+        let focus_handle = cx.focus_handle();
+        window.focus(&focus_handle);
+        let mut zero = Self {
+            model,
+            source,
+            shell,
+            log: SwitchLog::open_default()?,
+            started: Instant::now(),
+            focus_handle,
+            metrics,
+            grids: HashMap::new(),
+            dirty: HashSet::new(),
+            popup: Popup::None,
+            previous_focus: None,
+            content: Bounds::default(),
+            slide: (0, 0),
+            ticker: None,
+            _shell_pump: shell_pump,
+        };
+        zero.arm_ticker(cx);
+        Ok(zero)
+    }
+
+    fn now(&self) -> Duration {
+        self.started.elapsed()
+    }
+
+    fn arm_ticker(&mut self, cx: &mut Context<Self>) {
+        let now = self.now();
+        let deadline = match (self.source.next_deadline(), self.model.next_age_deadline(now)) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
+        let Some(deadline) = deadline else {
+            self.ticker = None;
+            return;
+        };
+        let delay = deadline.saturating_sub(now);
+        self.ticker = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(delay).await;
+            this.update(cx, |zero, cx| zero.tick(cx)).ok();
+        }));
+    }
+
+    fn tick(&mut self, cx: &mut Context<Self>) {
+        let events = self.source.advance(self.now());
+        self.apply(events);
+        cx.notify();
+        self.arm_ticker(cx);
+    }
+
+    fn command(&mut self, command: Command, cx: &mut Context<Self>) {
+        let events = self.source.command(self.now(), command);
+        self.apply(events);
+        self.arm_ticker(cx);
+        cx.notify();
+    }
+
+    fn apply(&mut self, events: Vec<SourceEvent>) {
+        for event in &events {
+            match event {
+                SourceEvent::AgentAdded { id, .. }
+                | SourceEvent::Output { id, .. }
+                | SourceEvent::Resized { id, .. } => {
+                    self.dirty.insert(*id);
+                }
+                SourceEvent::StateChanged { .. } | SourceEvent::TurnSettled { .. } => {}
+            }
+        }
+        self.model.apply(events).expect("the model accepts simulator events");
+    }
+
+    fn on_shell_output(&mut self, batch: Vec<ShellOutput>, cx: &mut Context<Self>) {
+        for output in batch {
+            match output {
+                ShellOutput::Bytes(bytes) => {
+                    let agent = self.model.agent_mut(SHELL_ID);
+                    agent.terminal.vt_write(&bytes);
+                    for response in agent.take_pty_responses() {
+                        self.shell.write(&response).ok();
+                    }
+                }
+                ShellOutput::Closed => {
+                    self.model
+                        .agent_mut(SHELL_ID)
+                        .terminal
+                        .vt_write(b"\r\n\x1b[2m[shell exited]\x1b[0m");
+                }
+            }
+        }
+        self.dirty.insert(SHELL_ID);
+        cx.notify();
+    }
+
+    fn resize(&mut self, id: AgentId, cols: u16, rows: u16) {
+        if id == SHELL_ID {
+            self.shell.resize(cols, rows).ok();
+            self.model.resize_terminal(id, cols, rows).ok();
+            self.dirty.insert(id);
+        } else {
+            let events = self
+                .source
+                .command(self.now(), Command::Resize { id, cols, rows });
+            self.apply(events);
+        }
+    }
+
+    fn scenario_name(&self) -> &'static str {
+        self.source.scenario().name()
+    }
+
+    fn focus(&mut self, target: Option<AgentId>, path: SwitchPath, cx: &mut Context<Self>) {
+        let before = self.model.focus;
+        let before_desktop = self.model.current_desktop;
+        let record = self
+            .model
+            .switch_focus(target, path, self.scenario_name(), timestamp_ms())
+            .cloned();
+        if let Some(record) = record {
+            self.log.append(&record).ok();
+        }
+        if self.model.focus != before {
+            self.previous_focus = before;
+        }
+        self.note_desktop_change(before_desktop);
+        cx.notify();
+    }
+
+    fn note_desktop_change(&mut self, before: u8) {
+        let after = self.model.current_desktop;
+        if after != before {
+            self.slide = (if after > before { 1 } else { -1 }, self.slide.1 + 1);
+        }
+    }
+
+    fn go_desktop(&mut self, desktop: u8, cx: &mut Context<Self>) {
+        let before = self.model.current_desktop;
+        let record = self
+            .model
+            .go_desktop(desktop, self.scenario_name(), timestamp_ms())
+            .cloned();
+        if let Some(record) = record {
+            self.log.append(&record).ok();
+        }
+        self.note_desktop_change(before);
+        cx.notify();
+    }
+
+    fn next_in_queue(&mut self, cx: &mut Context<Self>) {
+        if let Some(next) = self.model.queue().first().copied() {
+            self.focus(Some(next), SwitchPath::Queue, cx);
+        }
+    }
+
+    fn auto_next(&mut self, cx: &mut Context<Self>) {
+        if let Some(next) = self.model.queue().first().copied() {
+            self.focus(Some(next), SwitchPath::AutoNext, cx);
+        }
+    }
+
+    fn back(&mut self, cx: &mut Context<Self>) {
+        if let Some(previous) = self.previous_focus
+            && self.model.agents.iter().any(|agent| agent.id == previous)
+        {
+            self.focus(Some(previous), SwitchPath::Back, cx);
+        }
+    }
+
+    fn focus_neighbor(&mut self, direction: Direction, cx: &mut Context<Self>) {
+        let ids = self.model.desktop_agents();
+        let Some(current) = self
+            .model
+            .focus
+            .and_then(|focus| ids.iter().position(|id| *id == focus))
+        else {
+            return;
+        };
+        let rects = tiles(self.content, ids.len(), px(GAP));
+        if let Some(index) = neighbor(&rects, current, direction) {
+            self.focus(Some(ids[index]), SwitchPath::PaneMove, cx);
+        }
+    }
+
+    fn scroll(&mut self, id: AgentId, event: &ScrollWheelEvent, cx: &mut Context<Self>) {
+        let lines = match event.delta {
+            ScrollDelta::Lines(delta) => delta.y,
+            ScrollDelta::Pixels(delta) => f32::from(delta.y) / f32::from(self.metrics.line_height),
+        };
+        let delta = (-lines).round() as isize;
+        if delta != 0 {
+            self.model
+                .agent_mut(id)
+                .terminal
+                .scroll_viewport(ScrollViewport::Delta(delta));
+            self.dirty.insert(id);
+            cx.notify();
+        }
+    }
+
+    fn run_scenario_item(&mut self, index: usize, cx: &mut Context<Self>) {
+        let action = (SCENARIO_ITEMS[index].action)(self);
+        self.popup = Popup::None;
+        self.command(Command::Scenario(action), cx);
+    }
+
+    fn on_key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        let keystroke = &event.keystroke;
+        if self.popup != Popup::None {
+            self.popup_key(keystroke, cx);
+            return;
+        }
+        let modifiers = keystroke.modifiers;
+        if modifiers.platform {
+            if let Some(desktop) = digit(keystroke) {
+                if modifiers.shift {
+                    self.model.move_focused(desktop);
+                    cx.notify();
+                } else {
+                    self.go_desktop(desktop, cx);
+                }
+                return;
+            }
+            match keystroke.key.as_str() {
+                "j" => self.next_in_queue(cx),
+                "p" => self.back(cx),
+                "k" => self.open(Popup::Switcher { query: String::new(), selected: 0 }, cx),
+                "s" => self.open(Popup::Scenario { selected: 0 }, cx),
+                "/" => self.open(Popup::Help, cx),
+                "q" => cx.quit(),
+                "left" => self.focus_neighbor(Direction::Left, cx),
+                "right" => self.focus_neighbor(Direction::Right, cx),
+                "up" => self.focus_neighbor(Direction::Up, cx),
+                "down" => self.focus_neighbor(Direction::Down, cx),
+                _ => {}
+            }
+            return;
+        }
+        let Some(id) = self.model.focus else {
+            return;
+        };
+        if self.model.agent(id).kind == AgentKind::Shell {
+            if let Some(bytes) = keys::keystroke_bytes(keystroke) {
+                self.shell.write(&bytes).ok();
+            }
+            return;
+        }
+        let state = self.model.agent(id).state;
+        let key = keystroke.key.as_str();
+        if state == AgentState::PendingApproval && matches!(key, "y" | "n") {
+            let approved = key == "y";
+            self.model
+                .agent_mut(id)
+                .terminal
+                .vt_write(if approved { b"y\r\n" } else { b"n\r\n" });
+            self.dirty.insert(id);
+            self.command(Command::Approval { id, approved }, cx);
+            self.auto_next(cx);
+        } else if matches!(state, AgentState::WaitingInput | AgentState::Idle) {
+            match key {
+                "enter" => {
+                    let owed = self.model.agent(id).turn_opened_at.is_some();
+                    let text = std::mem::take(&mut self.model.agent_mut(id).draft);
+                    self.model.agent_mut(id).terminal.vt_write(b"\r\n");
+                    self.dirty.insert(id);
+                    self.command(Command::Prompt { id, text }, cx);
+                    if owed {
+                        self.auto_next(cx);
+                    }
+                }
+                "backspace" => {
+                    if self.model.agent_mut(id).draft.pop().is_some() {
+                        self.model.agent_mut(id).terminal.vt_write(b"\x08 \x08");
+                        self.dirty.insert(id);
+                        cx.notify();
+                    }
+                }
+                _ => {
+                    if let Some(text) = keys::typed_text(keystroke) {
+                        let agent = self.model.agent_mut(id);
+                        agent.draft.push_str(&text);
+                        agent.terminal.vt_write(text.as_bytes());
+                        self.dirty.insert(id);
+                        cx.notify();
+                    }
+                }
+            }
+        }
+    }
+
+    fn open(&mut self, popup: Popup, cx: &mut Context<Self>) {
+        self.popup = popup;
+        cx.notify();
+    }
+
+    fn popup_key(&mut self, keystroke: &Keystroke, cx: &mut Context<Self>) {
+        let key = keystroke.key.as_str();
+        if key == "escape" || (keystroke.modifiers.platform && matches!(key, "k" | "s" | "/")) {
+            self.popup = Popup::None;
+            cx.notify();
+            return;
+        }
+        let mut jump: Option<AgentId> = None;
+        let mut run: Option<usize> = None;
+        match &mut self.popup {
+            Popup::Switcher { query, selected } => match key {
+                "up" => *selected = selected.saturating_sub(1),
+                "down" => *selected += 1,
+                "backspace" => {
+                    query.pop();
+                    *selected = 0;
+                }
+                "enter" => {
+                    let matches = filter_agents(&self.model.agents, query);
+                    jump = matches.get((*selected).min(matches.len().saturating_sub(1))).copied();
+                }
+                _ => {
+                    if let Some(text) = keys::typed_text(keystroke) {
+                        query.push_str(&text);
+                        *selected = 0;
+                    }
+                }
+            },
+            Popup::Scenario { selected } => match key {
+                "up" => *selected = selected.saturating_sub(1),
+                "down" => *selected = (*selected + 1).min(SCENARIO_ITEMS.len() - 1),
+                "enter" => run = Some(*selected),
+                _ => {
+                    if let Some(index) = key.parse::<usize>().ok().filter(|n| (1..=SCENARIO_ITEMS.len()).contains(n)) {
+                        run = Some(index - 1);
+                    }
+                }
+            },
+            Popup::Help => self.popup = Popup::None,
+            Popup::None => {}
+        }
+        if let Some(id) = jump {
+            self.popup = Popup::None;
+            self.focus(Some(id), SwitchPath::Switcher, cx);
+        }
+        if let Some(index) = run {
+            self.run_scenario_item(index, cx);
+        }
+        cx.notify();
+    }
+
+    fn prepare_grid(
+        &mut self,
+        id: AgentId,
+        bounds: Bounds<Pixels>,
+        focused: bool,
+        window: &mut Window,
+    ) -> Option<Prepared> {
+        if !self.model.agents.iter().any(|agent| agent.id == id) {
+            return None;
+        }
+        let origin = point(bounds.origin.x + px(10.), bounds.origin.y + px(6.));
+        let avail = size(bounds.size.width - px(20.), bounds.size.height - px(10.));
+        let cols = (f32::from(avail.width) / f32::from(self.metrics.cell_width)).floor().max(1.) as u16;
+        let rows = (f32::from(avail.height) / f32::from(self.metrics.line_height)).floor().max(1.) as u16;
+        let agent = self.model.agent(id);
+        if agent.cols != cols || agent.rows != rows {
+            self.resize(id, cols, rows);
+        }
+        let grid = self
+            .grids
+            .entry(id)
+            .or_insert_with(|| Grid::new().expect("a render state"));
+        if self.dirty.remove(&id) || grid.size() != (cols, rows) {
+            grid.refresh(&self.model.agent(id).terminal, cols, rows).ok()?;
+        }
+        let color = if self.model.agent(id).kind == AgentKind::Shell {
+            theme::teal()
+        } else {
+            theme::blue()
+        };
+        Some(grid.prepare(&self.metrics, origin, focused, color, window))
+    }
+
+    fn render_pane(&mut self, id: AgentId, rect: Bounds<Pixels>, now: Duration, cx: &mut Context<Self>) -> AnyElement {
+        let agent = self.model.agent(id);
+        let focused = self.model.focus == Some(id);
+        let owes = agent.turn_opened_at.is_some();
+        let color = theme::state_color(agent.kind, agent.state);
+        let age = agent.turn_opened_at.map(|opened| now.saturating_sub(opened));
+        let warmth = age.map_or(0., |age| (age.as_secs_f32() / 120.).min(1.));
+        let ring = if focused {
+            theme::blue()
+        } else if owes {
+            color.alpha(0.75)
+        } else {
+            theme::gutter().alpha(0.8)
+        };
+        let glow = if focused {
+            theme::blue().alpha(0.32)
+        } else if owes {
+            color.alpha(0.16 + 0.3 * warmth)
+        } else {
+            gpui::transparent_black()
+        };
+        let name = agent.name.clone();
+        let label = agent.state.label();
+        let entity = cx.entity();
+        let header = div()
+            .flex_none()
+            .h(px(30.))
+            .px(px(12.))
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .bg(theme::card_header())
+            .border_b_1()
+            .border_color(theme::gutter().alpha(0.5))
+            .child(
+                div()
+                    .flex_none()
+                    .size(px(8.))
+                    .rounded_full()
+                    .bg(color)
+                    .shadow(vec![BoxShadow {
+                        color: color.alpha(0.7),
+                        offset: point(px(0.), px(0.)),
+                        blur_radius: px(6.),
+                        spread_radius: px(0.),
+                    }]),
+            )
+            .child(
+                div()
+                    .text_size(px(12.5))
+                    .font_weight(if focused { FontWeight::SEMIBOLD } else { FontWeight::MEDIUM })
+                    .text_color(if focused { theme::fg() } else { theme::fg_dark() })
+                    .whitespace_nowrap()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .child(name),
+            )
+            .child(chip(label, color))
+            .when_some(age, |header, age| {
+                header.child(
+                    div()
+                        .text_size(px(11.5))
+                        .font_family("JetBrains Mono")
+                        .text_color(if warmth > 0.5 { theme::orange() } else { theme::comment() })
+                        .child(format_age(age)),
+                )
+            })
+            .child(div().flex_1());
+        div()
+            .absolute()
+            .left(rect.origin.x)
+            .top(rect.origin.y)
+            .w(rect.size.width)
+            .h(rect.size.height)
+            .flex()
+            .flex_col()
+            .rounded(px(10.))
+            .overflow_hidden()
+            .bg(theme::card())
+            .border_1()
+            .border_color(ring)
+            .opacity(if focused || owes { 1. } else { 0.9 })
+            .shadow(vec![
+                BoxShadow {
+                    color: gpui::black().alpha(0.55),
+                    offset: point(px(0.), px(12.)),
+                    blur_radius: px(32.),
+                    spread_radius: px(-4.),
+                },
+                BoxShadow {
+                    color: glow,
+                    offset: point(px(0.), px(0.)),
+                    blur_radius: px(22.),
+                    spread_radius: px(2.),
+                },
+            ])
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |zero, _, window, cx| {
+                    window.focus(&zero.focus_handle);
+                    zero.focus(Some(id), SwitchPath::Click, cx);
+                }),
+            )
+            .on_scroll_wheel(cx.listener(move |zero, event, _, cx| zero.scroll(id, event, cx)))
+            .child(header)
+            .child(
+                canvas(
+                    move |bounds, window, cx| {
+                        entity.update(cx, |zero, _| zero.prepare_grid(id, bounds, focused, window))
+                    },
+                    |_, prepared, window, cx| {
+                        if let Some(prepared) = prepared {
+                            prepared.paint(window, cx);
+                        }
+                    },
+                )
+                .flex_1()
+                .w_full(),
+            )
+            .into_any_element()
+    }
+
+    fn render_bar(&self, now: Duration, cx: &mut Context<Self>) -> Div {
+        let queue = self.model.queue();
+        let waiting = queue.len();
+        let mut left = div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .h(px(26.))
+            .px(px(11.))
+            .rounded_full();
+        if waiting > 0 {
+            left = left
+                .bg(theme::yellow().alpha(0.12))
+                .child(dot(theme::yellow()))
+                .child(
+                    div()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(theme::yellow())
+                        .child(format!("{waiting} waiting")),
+                );
+            for (index, id) in queue.iter().copied().take(3).enumerate() {
+                let agent = self.model.agent(id);
+                left = left.child(div().text_color(theme::comment()).child(if index == 0 { "·" } else { "›" }));
+                left = left.child(
+                    div()
+                        .id(("chip", id))
+                        .cursor_pointer()
+                        .text_color(theme::fg_dark())
+                        .hover(|chip| chip.text_color(theme::fg()))
+                        .child(agent.name.clone())
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |zero, _, _, cx| {
+                                cx.stop_propagation();
+                                zero.focus(Some(id), SwitchPath::Click, cx);
+                            }),
+                        ),
+                );
+            }
+            if waiting > 3 {
+                left = left.child(div().text_color(theme::comment()).child(format!("+{}", waiting - 3)));
+            }
+        } else {
+            left = left
+                .child(dot(theme::comment()))
+                .child(div().text_color(theme::comment()).child("all quiet"));
+        }
+
+        let mut center = div().flex().items_center().gap(px(4.));
+        for desktop in 1..=9u8 {
+            center = center.child(self.render_badge(desktop, cx));
+        }
+
+        let mut right = div().flex().items_center().gap(px(10.));
+        if let Some(agent) = self.model.focused() {
+            let color = theme::state_color(agent.kind, agent.state);
+            right = right
+                .child(div().text_color(theme::fg()).font_weight(FontWeight::MEDIUM).child(agent.name.clone()))
+                .child(chip(agent.state.label(), color));
+        }
+        let speed = self.source.speed();
+        right = right
+            .child(
+                div()
+                    .id("scenario")
+                    .cursor_pointer()
+                    .px(px(9.))
+                    .h(px(22.))
+                    .flex()
+                    .items_center()
+                    .rounded(px(6.))
+                    .bg(theme::purple().alpha(0.12))
+                    .text_color(theme::purple())
+                    .text_size(px(11.5))
+                    .hover(|el| el.bg(theme::purple().alpha(0.22)))
+                    .child(format!("{} · x{speed}", self.scenario_name()))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|zero, _, _, cx| {
+                            cx.stop_propagation();
+                            zero.open(Popup::Scenario { selected: 0 }, cx);
+                        }),
+                    ),
+            )
+            .child(
+                div()
+                    .id("help")
+                    .cursor_pointer()
+                    .text_color(theme::comment())
+                    .font_family("JetBrains Mono")
+                    .text_size(px(11.))
+                    .hover(|el| el.text_color(theme::fg_dark()))
+                    .child("⌘/")
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|zero, _, _, cx| {
+                            cx.stop_propagation();
+                            zero.open(Popup::Help, cx);
+                        }),
+                    ),
+            );
+        let _ = now;
+        div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .w_full()
+            .h(px(BAR_HEIGHT))
+            .flex()
+            .items_center()
+            .pl(px(86.))
+            .pr(px(14.))
+            .gap(px(12.))
+            .on_mouse_down(MouseButton::Left, |_, window, _| window.start_window_move())
+            .child(left)
+            .child(div().flex_1())
+            .child(center)
+            .child(div().flex_1())
+            .child(right)
+    }
+
+    fn render_badge(&self, desktop: u8, cx: &mut Context<Self>) -> AnyElement {
+        let current = desktop == self.model.current_desktop;
+        let owed = self.model.desktop_waiting_count(desktop);
+        let populated = self.model.agents.iter().any(|agent| agent.desktop == desktop);
+        let mut badge = div()
+            .id(("badge", desktop as u64))
+            .relative()
+            .w(px(24.))
+            .h(px(22.))
+            .rounded(px(6.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .font_family("JetBrains Mono")
+            .text_size(px(11.5))
+            .cursor_pointer()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |zero, _, _, cx| {
+                    cx.stop_propagation();
+                    zero.go_desktop(desktop, cx);
+                }),
+            )
+            .child(desktop.to_string());
+        badge = if current {
+            badge.bg(theme::blue()).text_color(theme::bg_dark()).font_weight(FontWeight::BOLD)
+        } else if owed > 0 {
+            badge
+                .bg(theme::yellow().alpha(0.14))
+                .text_color(theme::yellow())
+                .hover(|el| el.bg(theme::yellow().alpha(0.26)))
+        } else if populated {
+            badge.text_color(theme::fg_dark()).hover(|el| el.bg(theme::bg_highlight()))
+        } else {
+            badge.text_color(theme::comment().alpha(0.6)).hover(|el| el.bg(theme::bg_highlight()))
+        };
+        if owed > 0 {
+            badge = badge.child(
+                div()
+                    .absolute()
+                    .top(px(-4.))
+                    .right(px(-5.))
+                    .min_w(px(13.))
+                    .h(px(13.))
+                    .px(px(3.))
+                    .rounded_full()
+                    .bg(theme::yellow())
+                    .text_color(theme::bg_dark())
+                    .text_size(px(8.5))
+                    .font_weight(FontWeight::BOLD)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(owed.to_string()),
+            );
+        }
+        badge.into_any_element()
+    }
+
+    fn render_popup(&self, now: Duration, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let panel = match &self.popup {
+            Popup::None => return None,
+            Popup::Switcher { query, selected } => {
+                let matches = filter_agents(&self.model.agents, query);
+                let selected = (*selected).min(matches.len().saturating_sub(1));
+                let first = selected.saturating_sub(11);
+                let mut panel = popup_panel(px(680.)).child(
+                    div()
+                        .h(px(46.))
+                        .px(px(16.))
+                        .flex()
+                        .items_center()
+                        .gap(px(10.))
+                        .border_b_1()
+                        .border_color(theme::gutter().alpha(0.6))
+                        .child(key_cap("⌘K"))
+                        .child(
+                            div()
+                                .flex_1()
+                                .font_family("JetBrains Mono")
+                                .text_size(px(13.))
+                                .text_color(theme::fg())
+                                .child(format!("{query}▍")),
+                        )
+                        .child(div().text_color(theme::comment()).text_size(px(11.)).child(format!("{} of {}", matches.len(), self.model.agents.len()))),
+                );
+                if matches.is_empty() {
+                    panel = panel.child(div().p(px(16.)).text_color(theme::comment()).child("nothing matches"));
+                }
+                for (index, id) in matches.iter().copied().enumerate().skip(first).take(12) {
+                    let agent = self.model.agent(id);
+                    let color = theme::state_color(agent.kind, agent.state);
+                    let age = agent.turn_opened_at.map(|opened| format_age(now.saturating_sub(opened))).unwrap_or_default();
+                    let is_selected = index == selected;
+                    panel = panel.child(
+                        div()
+                            .id(("row", id))
+                            .h(px(34.))
+                            .px(px(16.))
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
+                            .cursor_pointer()
+                            .when(is_selected, |row| row.bg(theme::bg_highlight()))
+                            .hover(|row| row.bg(theme::bg_highlight().alpha(0.7)))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |zero, _, _, cx| {
+                                    cx.stop_propagation();
+                                    zero.popup = Popup::None;
+                                    zero.focus(Some(id), SwitchPath::Switcher, cx);
+                                }),
+                            )
+                            .child(div().w(px(10.)).text_color(theme::blue()).child(if is_selected { "›" } else { "" }))
+                            .child(dot(color))
+                            .child(div().flex_1().text_color(if is_selected { theme::fg() } else { theme::fg_dark() }).child(agent.name.clone()))
+                            .child(div().font_family("JetBrains Mono").text_size(px(11.)).text_color(theme::comment()).child(format!("d{}", agent.desktop)))
+                            .child(chip(agent.state.label(), color))
+                            .child(div().w(px(40.)).font_family("JetBrains Mono").text_size(px(11.)).text_color(theme::comment()).child(age)),
+                    );
+                }
+                panel
+            }
+            Popup::Scenario { selected } => {
+                let mut panel = popup_panel(px(520.)).child(popup_title("scenario", format!("{} · x{}", self.scenario_name(), self.source.speed())));
+                for (index, item) in SCENARIO_ITEMS.iter().enumerate() {
+                    let is_selected = index == *selected;
+                    panel = panel.child(
+                        div()
+                            .id(("scenario-item", index as u64))
+                            .h(px(36.))
+                            .px(px(16.))
+                            .flex()
+                            .items_center()
+                            .gap(px(12.))
+                            .cursor_pointer()
+                            .when(is_selected, |row| row.bg(theme::bg_highlight()))
+                            .hover(|row| row.bg(theme::bg_highlight().alpha(0.7)))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |zero, _, _, cx| {
+                                    cx.stop_propagation();
+                                    zero.run_scenario_item(index, cx);
+                                }),
+                            )
+                            .child(key_cap(&(index + 1).to_string()))
+                            .child(div().text_color(theme::fg()).font_weight(FontWeight::MEDIUM).child(item.label))
+                            .child(div().text_color(theme::comment()).child(item.detail)),
+                    );
+                }
+                panel
+            }
+            Popup::Help => {
+                let mut panel = popup_panel(px(560.)).child(popup_title("keys", "no leader, no chords".to_string()));
+                for (key, what) in HELP {
+                    panel = panel.child(
+                        div()
+                            .h(px(30.))
+                            .px(px(16.))
+                            .flex()
+                            .items_center()
+                            .gap(px(12.))
+                            .child(div().w(px(76.)).child(key_cap(key)))
+                            .child(div().text_color(theme::fg_dark()).child(what)),
+                    );
+                }
+                panel.child(div().h(px(8.)))
+            }
+        };
+        Some(
+            div()
+                .absolute()
+                .left_0()
+                .top_0()
+                .size_full()
+                .bg(gpui::black().alpha(0.4))
+                .flex()
+                .items_start()
+                .justify_center()
+                .pt(px(110.))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|zero, _, _, cx| {
+                        zero.popup = Popup::None;
+                        cx.notify();
+                    }),
+                )
+                .child(panel.on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()))
+                .into_any_element(),
+        )
+    }
+}
+
+impl Render for Zero {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let viewport = window.viewport_size();
+        self.content = Bounds {
+            origin: point(px(GAP), px(BAR_HEIGHT)),
+            size: size(viewport.width - px(GAP * 2.), viewport.height - px(BAR_HEIGHT) - px(GAP)),
+        };
+        let now = self.now();
+        let ids = self.model.desktop_agents();
+        let rects = tiles(self.content, ids.len(), px(GAP));
+        let panes: Vec<AnyElement> = ids
+            .iter()
+            .zip(rects)
+            .map(|(&id, rect)| self.render_pane(id, rect, now, cx))
+            .collect();
+        let (direction, generation) = self.slide;
+        let slide_from = px(36. * direction as f32);
+        let desktop_layer = div()
+            .absolute()
+            .left_0()
+            .top_0()
+            .size_full()
+            .children(panes)
+            .with_animation(
+                ("desktop", generation),
+                Animation::new(Duration::from_millis(220)).with_easing(ease_out_quint()),
+                move |layer, delta| layer.left(slide_from * (1. - delta)).opacity(0.35 + 0.65 * delta),
+            );
+        let mut root = div()
+            .relative()
+            .size_full()
+            .bg(linear_gradient(
+                180.,
+                linear_color_stop(theme::desk(), 0.),
+                linear_color_stop(theme::desk_far(), 1.),
+            ))
+            .track_focus(&self.focus_handle)
+            .on_key_down(cx.listener(Self::on_key_down))
+            .font_family(".SystemUIFont")
+            .text_size(px(12.5))
+            .text_color(theme::fg())
+            .child(desktop_layer);
+        if ids.is_empty() {
+            root = root.child(
+                div()
+                    .absolute()
+                    .left_0()
+                    .top_0()
+                    .size_full()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_color(theme::comment())
+                    .child(format!("desktop {} is empty · ⌘1…9 to move around · ⌘⇧1…9 to bring a pane here", self.model.current_desktop)),
+            );
+        }
+        root = root.child(self.render_bar(now, cx));
+        if let Some(popup) = self.render_popup(now, cx) {
+            root = root.child(popup);
+        }
+        root
+    }
+}
+
+fn popup_panel(width: Pixels) -> Div {
+    div()
+        .w(width)
+        .flex()
+        .flex_col()
+        .rounded(px(12.))
+        .overflow_hidden()
+        .bg(theme::bg_dark())
+        .border_1()
+        .border_color(theme::gutter())
+        .shadow(vec![BoxShadow {
+            color: gpui::black().alpha(0.6),
+            offset: point(px(0.), px(18.)),
+            blur_radius: px(48.),
+            spread_radius: px(0.),
+        }])
+        .text_size(px(12.5))
+}
+
+fn popup_title(title: &'static str, detail: String) -> Div {
+    div()
+        .h(px(44.))
+        .px(px(16.))
+        .flex()
+        .items_center()
+        .gap(px(10.))
+        .border_b_1()
+        .border_color(theme::gutter().alpha(0.6))
+        .child(div().font_weight(FontWeight::SEMIBOLD).text_color(theme::fg()).child(title))
+        .child(div().text_color(theme::comment()).child(detail))
+}
+
+fn key_cap(text: &str) -> Div {
+    div()
+        .px(px(6.))
+        .h(px(20.))
+        .flex()
+        .items_center()
+        .rounded(px(5.))
+        .bg(theme::bg_highlight())
+        .border_1()
+        .border_color(theme::gutter())
+        .font_family("JetBrains Mono")
+        .text_size(px(11.))
+        .text_color(theme::fg_dark())
+        .child(text.to_string())
+}
+
+fn chip(label: &'static str, color: Hsla) -> Div {
+    div()
+        .flex_none()
+        .px(px(7.))
+        .h(px(18.))
+        .flex()
+        .items_center()
+        .rounded(px(5.))
+        .bg(color.alpha(0.16))
+        .text_color(color)
+        .text_size(px(10.5))
+        .font_weight(FontWeight::MEDIUM)
+        .child(label)
+}
+
+fn dot(color: Hsla) -> Div {
+    div().flex_none().size(px(7.)).rounded_full().bg(color)
+}
+
+fn digit(keystroke: &Keystroke) -> Option<u8> {
+    let key = keystroke.key.as_str();
+    if let Ok(n) = key.parse::<u8>()
+        && (1..=9).contains(&n)
+    {
+        return Some(n);
+    }
+    "!@#$%^&*(".find(key).map(|index| index as u8 + 1)
+}
+
+fn format_age(age: Duration) -> String {
+    let seconds = age.as_secs();
+    format!("{}:{:02}", seconds / 60, seconds % 60)
+}
+
+fn timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}

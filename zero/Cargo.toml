@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/spike0", "crates/zero"]
+members = ["crates/spike0", "crates/zero", "crates/zero-gpui"]
 
 [workspace.package]
 edition = "2024"
@@ -23,6 +23,9 @@ crossterm = "0.29"
 portable-pty = "0.9"
 crossbeam-channel = "0.5"
 rand = "0.9"
+futures = "0.3"
+# runtime_shaders: the Metal toolchain is not installed here; gpui compiles its shaders at launch instead.
+gpui = { version = "0.2.2", features = ["runtime_shaders"] }
 
 [profile.release]
 debug = 1
