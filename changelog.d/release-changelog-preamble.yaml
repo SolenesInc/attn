@@ -1,0 +1,3 @@
+kind: internal
+area: release
+change: Release preparation discards model chatter before the exact dated changelog header.

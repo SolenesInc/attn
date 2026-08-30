@@ -58,6 +58,9 @@ cat >"$work/bin/claude" <<'EOF'
 set -euo pipefail
 printf '%s\n' "$#" >"$FAKE_CLAUDE_ARGC"
 cat >"$FAKE_CLAUDE_INPUT"
+if [[ -n "${FAKE_CLAUDE_PREAMBLE:-}" ]]; then
+  printf '%s\n' "$FAKE_CLAUDE_PREAMBLE"
+fi
 printf '## [%s]\n\n### Added\n- **Fixture release.** Candidate facts compiled.\n' \
   "$(date +%Y-%m-%d)"
 EOF
@@ -285,11 +288,18 @@ setup_fixture held
 held_source_sha="$(git -C "$fixture_repo" rev-parse origin/next)"
 run_release v99.98.97 --hold --dry-run >"$work/held-dry-run.out"
 grep -Fq 'publication: held' "$work/held-dry-run.out"
+export FAKE_CLAUDE_PREAMBLE='Here is the compiled changelog section.'
 run_release v99.98.97 --hold >"$work/held-success.out"
+unset FAKE_CLAUDE_PREAMBLE
 held_ref='refs/heads/release/v99.98.97'
 held_manifest="$(git --git-dir="$fixture_origin" show "$held_ref:.github/release-candidate.yml")"
+held_changelog="$(git --git-dir="$fixture_origin" show "$held_ref:CHANGELOG.md")"
 grep -Fq 'publication: held' <<<"$held_manifest"
 grep -Fq "source_sha: ${held_source_sha}" <<<"$held_manifest"
+if grep -Fq 'Here is the compiled changelog section.' <<<"$held_changelog"; then
+  echo "candidate retained changelog writer preamble" >&2
+  exit 1
+fi
 for value in '| Publication | `held` |' '## Publication hold' \
   'does not claim packaged-app verification' 'stop before App acceptance'; do
   grep -Fq -- "$value" "$FAKE_PR_BODY"
