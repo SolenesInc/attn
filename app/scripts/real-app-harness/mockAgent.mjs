@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -32,6 +33,45 @@ const MOCK_AGENT_FLAVORS = {
 
 export const MOCK_AGENT_AGENTS = Object.keys(MOCK_AGENT_FLAVORS);
 export const MOCK_AGENT_EXECUTABLE = executablePath;
+export const MOCK_AGENT_MODEL = 'mock-agent-1';
+export const MOCK_AGENT_NEW_CONVERSATION = '/new';
+
+export function mockAgentName(agent) {
+  const name = String(agent || '').trim().toLowerCase();
+  return MOCK_AGENT_AGENTS.includes(name) ? name : 'codex';
+}
+
+// internal/transcript/discovery.go resolves both roots this way; the mock has to
+// land inside the same walk or the daemon cannot map a session to a resume target.
+export function agentHomeRoots(env = process.env) {
+  const toolHome = String(env.ATTN_TOOL_HOME || '').trim() || os.homedir();
+  const codexHome = String(env.CODEX_HOME || '').trim() || path.join(toolHome, '.codex');
+  return {
+    toolHome,
+    codexSessions: path.join(codexHome, 'sessions'),
+    claudeProjects: path.join(toolHome, '.claude', 'projects'),
+  };
+}
+
+// Mirrors claudeProjectDir() in internal/agent/claude.go.
+export function claudeTranscriptPath(cwd, id, env = process.env) {
+  const project = String(cwd).replaceAll('/', '-').replaceAll('.', '-');
+  return path.join(agentHomeRoots(env).claudeProjects, project, `${id}.jsonl`);
+}
+
+export function codexTranscriptPath(id, startedAt = new Date(), env = process.env) {
+  const [date, clock] = startedAt.toISOString().split('T');
+  const [year, month, day] = date.split('-');
+  const stamp = `${date}T${clock.slice(0, 8).replaceAll(':', '-')}`;
+  return path.join(agentHomeRoots(env).codexSessions, year, month, day, `rollout-${stamp}-${id}.jsonl`);
+}
+
+export function mockTranscriptPath({ agent, cwd, id, resumable, startedAt = new Date(), env = process.env }) {
+  if (!resumable) return path.join(cwd, '.attn-mock-agent', `rollout-${id}.jsonl`);
+  return mockAgentName(agent) === 'claude'
+    ? claudeTranscriptPath(cwd, id, env)
+    : codexTranscriptPath(id, startedAt, env);
+}
 
 export function mockAgentExecutableVar(agent) {
   return `ATTN_${String(agent).toUpperCase()}_EXECUTABLE`;
@@ -107,6 +147,9 @@ export function validateMockAgentConfig(config) {
   if (!Array.isArray(config.turns)) throw new Error('mock agent config turns must be an array');
   if (config.minimumWorkingMs !== undefined && (!Number.isFinite(config.minimumWorkingMs) || config.minimumWorkingMs < 0)) {
     throw new Error('mock agent minimumWorkingMs must be a non-negative number');
+  }
+  if (config.resumable !== undefined && typeof config.resumable !== 'boolean') {
+    throw new Error('mock agent resumable must be a boolean');
   }
   for (const [index, turn] of config.turns.entries()) {
     if (typeof turn?.includes !== 'string' || !turn.includes) {
@@ -239,6 +282,101 @@ function transcriptRecord(type, payload) {
   return JSON.stringify({ timestamp: new Date().toISOString(), type, payload });
 }
 
+export function sessionMetaRecord({ id, cwd, launch }) {
+  return transcriptRecord('session_meta', { id, timestamp: new Date().toISOString(), cwd, source: 'cli', launch });
+}
+
+export function conversationHeaderRecords({ agent, id, cwd, launch, model = MOCK_AGENT_MODEL }) {
+  const records = [sessionMetaRecord({ id, cwd, launch })];
+  if (mockAgentName(agent) === 'codex') records.push(transcriptRecord('turn_context', { model }));
+  return records;
+}
+
+// internal/transcript/usage.go reads a codex turn's tokens off event_msg/token_count
+// and claude's off the assistant message; a repeated usage value is dropped as a re-read.
+export function messageRecords({ agent, role, text, sequence, model = MOCK_AGENT_MODEL }) {
+  const usage = { input: 900 + sequence * 10, cached: 100, output: 20 + sequence };
+  if (mockAgentName(agent) === 'claude') {
+    const message = { role, content: [{ type: 'text', text }] };
+    if (role === 'assistant') {
+      message.id = `msg_mock_${sequence}`;
+      message.model = model;
+      message.usage = {
+        input_tokens: usage.input,
+        output_tokens: usage.output,
+        cache_read_input_tokens: usage.cached,
+        cache_creation_input_tokens: 0,
+      };
+    }
+    return [JSON.stringify({ type: role, uuid: `mock-${sequence}-${role}`, timestamp: new Date().toISOString(), message })];
+  }
+  const records = [transcriptRecord('response_item', {
+    type: 'message',
+    role,
+    content: [{ type: role === 'assistant' ? 'output_text' : 'input_text', text }],
+  })];
+  if (role === 'assistant') {
+    records.push(transcriptRecord('event_msg', {
+      type: 'token_count',
+      info: {
+        last_token_usage: { input_tokens: usage.input, cached_input_tokens: usage.cached, output_tokens: usage.output },
+      },
+    }));
+  }
+  return records;
+}
+
+export function transcriptMessages(text) {
+  const messages = [];
+  for (const line of String(text).split('\n')) {
+    if (!line.trim()) continue;
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const claude = entry?.message;
+    const payload = entry?.type === 'response_item' ? entry.payload : null;
+    const message = claude?.role ? claude : (payload?.type === 'message' ? payload : null);
+    if (!message || !Array.isArray(message.content)) continue;
+    const spoken = message.content.map((block) => block?.text || '').join('');
+    if (spoken) messages.push({ role: message.role, text: spoken });
+  }
+  return messages;
+}
+
+export function transcriptTurns(text) {
+  return transcriptMessages(text).filter((message) => !message.text.startsWith('<!-- attn:state='));
+}
+
+function firstFileEndingWith(root, suffix) {
+  const stack = [root];
+  while (stack.length > 0) {
+    const dir = stack.pop();
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) stack.push(full);
+      else if (entry.name.endsWith(suffix)) return full;
+    }
+  }
+  return '';
+}
+
+export function findMockTranscript({ agent, cwd, id, env = process.env }) {
+  const named = mockTranscriptPath({ agent, cwd, id, resumable: false });
+  if (fs.existsSync(named)) return named;
+  const roots = agentHomeRoots(env);
+  return firstFileEndingWith(roots.claudeProjects, `${id}.jsonl`)
+    || firstFileEndingWith(roots.codexSessions, `${id}.jsonl`);
+}
+
 // Every scenario launches the mock, most without a fixture: an absent one is a
 // silent agent, not a crashed session.
 export function readMockAgentConfig(cwd) {
@@ -255,35 +393,65 @@ async function runMockAgent() {
   const config = readMockAgentConfig(cwd);
   const launch = parseMockAgentArgv(process.argv.slice(2));
   const captures = new Map();
-  const nativeId = `mock-${randomUUID()}`;
-  const transcriptDir = path.join(cwd, '.attn-mock-agent');
-  const transcriptPath = path.join(transcriptDir, `rollout-${nativeId}.jsonl`);
-  fs.mkdirSync(transcriptDir, { recursive: true });
-  fs.writeFileSync(transcriptPath, `${transcriptRecord('session_meta', {
-    id: nativeId,
-    timestamp: new Date().toISOString(),
-    cwd,
-    source: 'cli',
-    launch,
-  })}\n`, 'utf8');
-
-  requireAttn(['_hook-session-start'], JSON.stringify({
-    session_id: nativeId,
-    transcript_path: transcriptPath,
-    cwd,
-  }));
-
-  const appendMessage = (role, text) => {
-    fs.appendFileSync(transcriptPath, `${transcriptRecord('response_item', {
-      type: 'message',
-      role,
-      content: [{ type: role === 'assistant' ? 'output_text' : 'input_text', text }],
-    })}\n`, 'utf8');
-  };
-  const flavor = mockAgentFlavor(config.agent || process.env.ATTN_AGENT);
+  const agent = mockAgentName(config.agent || process.env.ATTN_AGENT);
+  const flavor = mockAgentFlavor(agent);
+  const resumable = Boolean(config.resumable);
   const header = config.banner || flavor.header;
   const blocks = [];
   let phase = 'ready';
+  let sequence = 0;
+  let conversation = null;
+
+  const notice = (text) => blocks.push(`• mock agent: ${text}`);
+  const openConversation = (id, transcriptPath, { headerWritten = false, recordLaunch = false } = {}) => {
+    conversation = { id, path: transcriptPath, written: headerWritten };
+    // claude writes its transcript on the first turn, which is what leaves a
+    // zero-turn session with nothing to resume; codex writes its rollout at launch.
+    if (!headerWritten && (agent === 'codex' || !resumable)) writeRecords([]);
+    if (recordLaunch) fs.appendFileSync(transcriptPath, `${sessionMetaRecord({ id, cwd, launch })}\n`, 'utf8');
+    requireAttn(['_hook-session-start'], JSON.stringify({
+      session_id: id,
+      transcript_path: transcriptPath,
+      cwd,
+    }));
+  };
+  const writeRecords = (records) => {
+    fs.mkdirSync(path.dirname(conversation.path), { recursive: true });
+    if (!conversation.written) {
+      const head = conversationHeaderRecords({ agent, id: conversation.id, cwd, launch });
+      fs.appendFileSync(conversation.path, `${head.join('\n')}\n`, 'utf8');
+      conversation.written = true;
+    }
+    if (records.length > 0) fs.appendFileSync(conversation.path, `${records.join('\n')}\n`, 'utf8');
+  };
+  const appendMessage = (role, text) => {
+    sequence += 1;
+    writeRecords(messageRecords({ agent, role, text, sequence }));
+  };
+  const startConversation = (dictatedId = launch.sessionId) => {
+    const id = agent === 'claude' && dictatedId ? dictatedId : `mock-${randomUUID()}`;
+    openConversation(id, mockTranscriptPath({ agent, cwd, id, resumable }));
+  };
+  const resumeConversation = () => {
+    if (launch.resumePicker) {
+      notice('no resume picker here; starting a fresh conversation');
+      return false;
+    }
+    const found = findMockTranscript({ agent, cwd, id: launch.resumeSessionId });
+    if (!found) {
+      notice(`no transcript for ${launch.resumeSessionId}; starting a fresh conversation`);
+      return false;
+    }
+    const earlier = fs.readFileSync(found, 'utf8');
+    // The resumed process keeps counting where the transcript stopped: attn keys a
+    // claude cost observation on the message id and drops a repeated usage value.
+    sequence = transcriptMessages(earlier).length;
+    for (const turn of transcriptTurns(earlier)) {
+      blocks.push(turn.role === 'assistant' ? `• ${turn.text.replaceAll('\n', '\n  ')}` : `${flavor.prompt}${turn.text}`);
+    }
+    openConversation(launch.resumeSessionId, found, { headerWritten: true, recordLaunch: true });
+    return true;
+  };
 
   const setTitle = () => process.stdout.write(`\u001b]0;${mockAgentTitle(config.name, phase, flavor.resting)}\u0007`);
   const prompt = () => {
@@ -369,8 +537,8 @@ async function runMockAgent() {
   const stop = (state) => {
     appendMessage('assistant', stateMarker(state));
     requireAttn(['_hook-stop'], JSON.stringify({
-      session_id: nativeId,
-      transcript_path: transcriptPath,
+      session_id: conversation.id,
+      transcript_path: conversation.path,
       cwd,
     }));
   };
@@ -379,6 +547,13 @@ async function runMockAgent() {
     const input = raw.trim();
     if (!input) {
       prompt();
+      return;
+    }
+    if (agent === 'codex' && input === MOCK_AGENT_NEW_CONVERSATION) {
+      blocks.length = 0;
+      startConversation('');
+      notice(`started a new conversation ${conversation.id}`);
+      repaint();
       return;
     }
     appendMessage('user', input);
@@ -399,6 +574,9 @@ async function runMockAgent() {
     phase = 'ready';
     prompt();
   };
+
+  if (!launch.resumeSessionId && !launch.resumePicker) startConversation();
+  else if (!resumeConversation()) startConversation('');
 
   repaint();
   process.stdout.on('resize', repaint);

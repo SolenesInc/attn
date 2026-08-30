@@ -305,14 +305,12 @@ export const scenarioCatalog = [
   {
     id: 'codex-resume',
     runnerId: 'TR-CODEX-RESUME',
-    allowRealAgents: true,
     label: 'Codex native resume id mapping',
     command: ['pnpm', 'run', 'real-app:scenario-codex-resume'],
   },
   {
     id: 'recoverable-auto-revive',
-    runnerId: null,
-    allowRealAgents: true,
+    runnerId: 'RECOVERABLE-AUTO-REVIVE',
     label: 'Recoverable Claude session auto-revives after daemon restart',
     command: ['pnpm', 'run', 'real-app:scenario-recoverable-auto-revive'],
     timeoutMs: 360_000,
@@ -320,7 +318,6 @@ export const scenarioCatalog = [
   {
     id: 'crash-recovery',
     runnerId: 'CRASH-REC',
-    allowRealAgents: true,
     label: 'A machine crash keeps every session it can bring back and reaps the rest',
     command: ['pnpm', 'run', 'real-app:scenario-crash-recovery'],
     timeoutMs: 360_000,

@@ -1,0 +1,9 @@
+kind: internal
+area: testing
+change: >
+  The real-app harness's resume family — crash recovery, recoverable
+  auto-revive, and codex resume mapping — now runs on the mock agent with the
+  agent tripwire armed, so none of the three calls a provider. Auto-revive also
+  became an ordinary scenario runner with a verdict and an artifacts dir, and it
+  finds the pty-worker to kill in the profile's worker registry rather than by
+  matching a process name.

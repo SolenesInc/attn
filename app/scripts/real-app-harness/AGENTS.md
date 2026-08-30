@@ -31,6 +31,11 @@ Run commands from the repository root.
 - A brief delivered on argv (`-- <prompt>`, how every delegation, crew wake and
   automation launch starts an agent) is the mock's first turn, matched against the
   same fixture. Its resume flags land in the transcript's `session_meta`.
+- A fixture marked `resumable` places the transcript where the daemon's finders
+  walk — codex at launch under the codex sessions tree, claude on its first turn
+  under the tool home's project folder — so a resume launch finds it, replays the
+  earlier turns into the pane and appends to that same file. Codex `/new` binds a
+  successor rollout.
 - Actions beyond `reply`/`delay`/`touch`/`wait_for_file`/`attn`: `capture` lifts a
   value out of the prompt (`pattern`, `name`) for `{{name}}` in a later `attn` or
   `exec` argument, and `exec` runs a command into the pane and the transcript,

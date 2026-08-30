@@ -129,7 +129,7 @@ setup_hotfix_fixture() {
   fi
   git -C "$fixture_repo" remote set-url origin "$fixture_origin"
   git -C "$fixture_repo" switch -q -C main
-  git -C "$fixture_repo" rm -q -- 'changelog.d/*.yaml'
+  git -C "$fixture_repo" rm -q --ignore-unmatch -- 'changelog.d/*.yaml'
 
   local previous_source
   previous_source="$(git -C "$fixture_repo" rev-parse HEAD)"
@@ -273,9 +273,13 @@ fi
 grep -q 'pr create --draft --base main --head release/v99.98.97' "$FAKE_GH_LOG"
 for value in "$source_sha" "$main_sha" "$candidate_sha" \
   'https://github.com/example/attn/actions/runs/42/job/7' \
-  'candidate-fixture.yaml' '--ref main' 'candidate_sha='; do
+  'frozen changelog fragment' '--ref main' 'candidate_sha='; do
   grep -Fq -- "$value" "$FAKE_PR_BODY"
 done
+if grep -Fq 'candidate-fixture.yaml' "$FAKE_PR_BODY"; then
+  echo "candidate PR body repeated raw changelog inputs" >&2
+  exit 1
+fi
 grep -Fq 'candidate-fixture.yaml' "$FAKE_CLAUDE_INPUT"
 [[ "$(<"$FAKE_CLAUDE_ARGC")" == "2" ]]
 if grep -Eq '(^| )(pr merge|workflow run release)' "$FAKE_GH_LOG"; then
@@ -358,7 +362,7 @@ grep -Fq 'pr create --draft --base main --head hotfix/startup-crash --title fix(
   "$FAKE_GH_LOG"
 for value in "$hotfix_source_sha" "$released_main_sha" "$hotfix_candidate_sha" \
   'Final `PR gate` and `App acceptance`' '--ref main' \
-  'candidate_sha=' 'hotfix.yaml'; do
+  'candidate_sha=' 'frozen changelog fragment'; do
   grep -Fq -- "$value" "$FAKE_PR_BODY"
 done
 if grep -q 'api --method GET' "$FAKE_GH_LOG"; then
