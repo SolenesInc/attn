@@ -42,7 +42,7 @@ describe('scenarioCatalog agent tripwire flags', () => {
   });
 
   it('allows every binary for a scenario that still launches a real agent', () => {
-    expect(allowRealAgentsForRunner('CRASH-REC')).toBe(true);
+    expect(allowRealAgentsForRunner('ORDINARY-DELEGATION-TICKET')).toBe(true);
   });
 
   it('refuses a runner outside the catalog rather than allowing every binary', () => {
