@@ -15,12 +15,30 @@ function resolveFixturePath(cwd, value) {
   return path.isAbsolute(value) ? value : path.join(cwd, value);
 }
 
+// Mirrors internal/statemarker.States(); the two must not drift.
+export const MOCK_AGENT_STATES = ['waiting_input', 'idle'];
+const REPLYING_ACTIONS = ['reply', 'attn'];
+
+export function stateMarker(state) {
+  return `<!-- attn:state=${state} -->`;
+}
+
+export function markerStateForActions(actions) {
+  const list = Array.isArray(actions) ? actions : [];
+  const named = list.filter((action) => action?.state);
+  if (named.length > 0) return named[named.length - 1].state;
+  return list.some((action) => REPLYING_ACTIONS.includes(action?.type)) ? 'waiting_input' : 'idle';
+}
+
 function validateActions(actions, label) {
   if (!Array.isArray(actions)) throw new Error(`${label} must be an array`);
   for (const action of actions) {
     if (!action || typeof action.type !== 'string') throw new Error(`${label} has an action without a type`);
     if (!['reply', 'delay', 'touch', 'wait_for_file', 'attn'].includes(action.type)) {
       throw new Error(`${label} has unsupported action type ${JSON.stringify(action.type)}`);
+    }
+    if (action.state !== undefined && !MOCK_AGENT_STATES.includes(action.state)) {
+      throw new Error(`${label} has state ${JSON.stringify(action.state)}, want one of ${MOCK_AGENT_STATES.join(', ')}`);
     }
   }
 }
@@ -103,24 +121,71 @@ export function writeMockAgentFixture(cwd, config) {
   return { configPath, executablePath };
 }
 
+export const HEADLESS_TASKS_SETTING = 'headless_tasks.enabled';
+// The daemon publishes the stored value and the env override beside the effective
+// one; internal/daemon/ws_settings.go mints these three keys and must not drift.
+export const HEADLESS_TASKS_STORED_SETTING = `${HEADLESS_TASKS_SETTING}.stored`;
+export const HEADLESS_TASKS_OVERRIDE_SETTING = `${HEADLESS_TASKS_SETTING}.override`;
+export const HEADLESS_TASKS_ENV_VAR = 'ATTN_HEADLESS_TASKS';
+
+export function parseHeadlessSwitch(raw) {
+  switch (String(raw ?? '').trim().toLowerCase()) {
+    case 'on': case '1': case 'true': case 'yes': case 'enabled': return true;
+    case 'off': case '0': case 'false': case 'no': case 'disabled': return false;
+    default: return null;
+  }
+}
+
+// An env override pins the effective headless key, so only `.stored` can ever
+// reach a written value; every headless write observes that key instead.
+async function setSettingAndWait(client, observer, key, value, description, observedKey = key) {
+  await client.request('set_setting', { key, value });
+  await observer.waitFor(() => (observer.getSetting(observedKey) === value ? true : null), description, 20_000);
+}
+
 export async function configureMockAgent({ client, observer, runner, agent = 'codex' }) {
   const key = `${agent}_executable`;
+  const override = observer.getSetting(HEADLESS_TASKS_OVERRIDE_SETTING) || '';
+  if (parseHeadlessSwitch(override) === true) {
+    throw new Error(
+      `${HEADLESS_TASKS_ENV_VAR}=${override} forces headless tasks on, so ${HEADLESS_TASKS_SETTING} cannot be turned off for the mock agent`,
+    );
+  }
+
   const previous = observer.getSetting(key) || '';
-  await client.request('set_setting', { key, value: executablePath });
-  await observer.waitFor(
-    () => (observer.getSetting(key) === executablePath ? true : null),
-    `${key} to point at the shared mock agent`,
-    20_000,
-  );
+  const previousHeadless = observer.getSetting(HEADLESS_TASKS_STORED_SETTING) || 'true';
 
   let restored = false;
   const restore = async () => {
     if (restored) return;
+    let failure = null;
+    const writes = [
+      { key, value: previous, observe: key },
+      { key: HEADLESS_TASKS_SETTING, value: previousHeadless, observe: HEADLESS_TASKS_STORED_SETTING },
+    ];
+    for (const write of writes) {
+      const target = `${write.key} back to ${JSON.stringify(write.value)}`;
+      try {
+        await setSettingAndWait(client, observer, write.key, write.value, target, write.observe);
+      } catch (err) {
+        failure ??= new Error(`the daemon never confirmed ${target}: ${err.message}`, { cause: err });
+      }
+    }
+    if (failure) throw failure;
     restored = true;
-    await client.request('set_setting', { key, value: previous });
   };
   runner?.registerCleanup(`restore_${key}`, restore);
-  return { executablePath, previous, restore };
+
+  try {
+    await setSettingAndWait(client, observer, key, executablePath, `${key} to point at the shared mock agent`);
+    await setSettingAndWait(
+      client, observer, HEADLESS_TASKS_SETTING, 'false', 'headless tasks to be off', HEADLESS_TASKS_STORED_SETTING,
+    );
+  } catch (err) {
+    await restore().catch(() => {});
+    throw err;
+  }
+  return { executablePath, previous, previousHeadless, restore };
 }
 
 function runAttn(args, input = '') {
@@ -212,6 +277,15 @@ async function runMockAgent() {
     }
   };
 
+  const stop = (state) => {
+    appendMessage('assistant', stateMarker(state));
+    requireAttn(['_hook-stop'], JSON.stringify({
+      session_id: nativeId,
+      transcript_path: transcriptPath,
+      cwd,
+    }));
+  };
+
   const answer = async (raw) => {
     const input = raw.trim();
     if (!input) {
@@ -222,9 +296,10 @@ async function runMockAgent() {
     setTitle(mockAgentTitle(config.name, 'working'));
     requireAttn(['_hook-state', 'working', 'user_prompt_submit'], JSON.stringify({ prompt: input }));
     const workingSince = Date.now();
-    for (const action of selectMockAgentActions(config, input)) await runAction(action);
+    const actions = selectMockAgentActions(config, input);
+    for (const action of actions) await runAction(action);
     await delay(Math.max(0, (config.minimumWorkingMs ?? 1_500) - (Date.now() - workingSince)));
-    requireAttn(['_hook-state', 'idle']);
+    stop(markerStateForActions(actions));
     prompt();
   };
 
@@ -234,7 +309,7 @@ async function runMockAgent() {
   const parseInput = createMockAgentInputParser((input) => {
     turns = turns.then(() => answer(input)).catch((error) => {
       process.stdout.write(`\n• mock agent error: ${error.message}\n`);
-      try { requireAttn(['_hook-state', 'idle']); } catch { /* the daemon may be closing */ }
+      try { stop('idle'); } catch { /* the daemon may be closing */ }
       prompt();
     });
   });

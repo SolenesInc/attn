@@ -53,6 +53,14 @@ func resolve() (enabled bool, source string) {
 	return true, "default"
 }
 
+func Override() (raw string, ok bool) {
+	raw = strings.TrimSpace(os.Getenv(EnvVar))
+	if _, parsed := ParseSwitch(raw); !parsed {
+		return "", false
+	}
+	return raw, true
+}
+
 func ParseSwitch(raw string) (value bool, ok bool) {
 	switch strings.TrimSpace(strings.ToLower(raw)) {
 	case "on", "1", "true", "yes", "enabled":

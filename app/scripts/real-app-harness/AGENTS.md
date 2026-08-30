@@ -18,6 +18,12 @@ Run commands from the repository root.
 - Exercise actual app actions/order; update scenarios when product flows change.
 - Use `mockAgent.mjs`, `writeMockAgentFixture`, and `configureMockAgent`
   unless testing a provider integration; state why a real provider is needed.
+- The mock ends every turn with the real Stop hook and a `<!-- attn:state=… -->`
+  marker; an action's `state` sets it (default: `waiting_input` after a reply,
+  `idle` when the turn was silent). `configureMockAgent` turns headless tasks
+  off, which is what makes the daemon read that marker instead of a model. It
+  registers its rollback before the first write and restores the *stored*
+  values, and refuses by name when `ATTN_HEADLESS_TASKS` forces them back on.
 - `launchFreshAppAndConnect` pins cheap models/low effort and restores settings.
   Never pin `fable`. `ATTN_HARNESS_LAUNCH_MODEL_<AGENT>=inherit` needs explicit request.
   Stronger scenario-specific models need an explanatory comment.

@@ -74,3 +74,20 @@ func TestRefusalNamesTheCallerAndWrapsErrRefused(t *testing.T) {
 		t.Fatalf("Refusal() message = %q, want %q", got, want)
 	}
 }
+
+func TestOverrideReportsTheRawEnvironmentValue(t *testing.T) {
+	if raw, ok := Override(); ok {
+		t.Fatalf("Override() = (%q, true), want no override with the env var unset", raw)
+	}
+
+	t.Setenv(EnvVar, " Off ")
+	raw, ok := Override()
+	if !ok || raw != "Off" {
+		t.Fatalf("Override() = (%q, %v), want (\"Off\", true)", raw, ok)
+	}
+
+	t.Setenv(EnvVar, "maybe")
+	if raw, ok := Override(); ok {
+		t.Fatalf("Override() = (%q, true), want an unparsable value to report no override", raw)
+	}
+}

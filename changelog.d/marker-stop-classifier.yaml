@@ -1,0 +1,17 @@
+kind: added
+area: daemon
+change: >
+  With headless tasks off, a stop is still classified deterministically: the
+  daemon reads a `<!-- attn:state=waiting_input|idle -->` marker from the last
+  assistant message instead of calling a model, in both the Claude
+  content-block and the Codex envelope transcript shapes. A message with no
+  marker keeps the old route — an unknown verdict that files no claim, so the
+  hook evidence settles the turn. A marker naming any other state is logged
+  with the value and the allowed set and settles the same way; `parked` is one
+  of those, because it survives only a yielded stop, which a marker cannot
+  express. The real-app harness's mock agent now writes that marker and ends
+  every turn through the real Stop hook, so scenarios exercise turn accounting
+  instead of asserting a state. The settings snapshot now publishes that
+  switch's stored value and its environment override beside the effective one,
+  so a client can restore what was actually stored rather than what the
+  environment was masking.
