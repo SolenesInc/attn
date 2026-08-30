@@ -1,7 +1,0 @@
-kind: added
-area: garden
-change: >
-  Seeds can own durable local files through explicit Move or Copy transfers,
-  render safe relative images and document links from their Markdown bodies,
-  migrate old linked files deliberately, and move owned files back out without
-  overwriting.

@@ -1,6 +1,0 @@
-kind: internal
-area: build
-change: >
-  Pull request path classification now declares the read-only token permissions
-  it needs, so CI keeps selecting the right jobs after repository recreation or
-  other changes to the repository's default workflow permissions.

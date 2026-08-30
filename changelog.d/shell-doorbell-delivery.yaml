@@ -1,8 +1,0 @@
-kind: fixed
-area: daemon
-change: >
-  A doorbell typed into a shell session lands every time, not just once. A
-  shell starts no turn, so it never produced the receipt delivery waited for:
-  the first doorbell stayed queued and held that session's input lane, and
-  every later message to that shell — the next seed nudge included — was never
-  typed at all. A shell runs what is typed, so placement is now the receipt.

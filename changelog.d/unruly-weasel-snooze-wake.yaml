@@ -1,8 +1,0 @@
-kind: fixed
-area: queue
-change: >
-  Snoozed agents now wake promptly after their deadline when the Mac slept
-  through it.
-symptom: >
-  An agent could keep changing visible state while remaining in the settled
-  section for hours after its snooze deadline.

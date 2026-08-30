@@ -1,5 +1,0 @@
-kind: internal
-area: release
-change: >
-  Tag and dispatch a release only after exact-SHA main acceptance, keep retries
-  idempotent, and report failed release runs through one durable issue.

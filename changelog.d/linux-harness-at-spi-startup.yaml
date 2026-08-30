@@ -1,9 +1,0 @@
-kind: fixed
-area: testing
-change: >
-  Linux real-app scenarios no longer wait on desktop D-Bus services before
-  their window exists. WebKitGTK and the GTK portal backend queried AT-SPI
-  while constructing the window, and a sluggish service stalled startup before
-  Tauri setup for as long as 30 seconds, so the harness hid the problem behind
-  a 90-second manifest budget. Harness launches now fail those unused desktop
-  connections immediately and keep the scenario's real startup budget visible.

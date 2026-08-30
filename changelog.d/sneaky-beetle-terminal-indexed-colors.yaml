@@ -1,6 +1,0 @@
-kind: fixed
-area: terminal
-change: >
-  Preserve the standard 256-color terminal palette when applying attn's custom
-  ANSI colors, so shell prompts and other indexed-color output do not render
-  black on dark backgrounds.
