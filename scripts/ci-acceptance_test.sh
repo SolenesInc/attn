@@ -13,6 +13,24 @@ expect_failure() {
 }
 
 workflow="$root/.github/workflows/ci.yml"
+workflow_concurrency="$(sed -n '/^concurrency:/,/^jobs:/p' "$workflow")"
+for contract in \
+  'group: ci-${{ github.event.pull_request.number || github.ref }}' \
+  "cancel-in-progress: \${{ github.ref != 'refs/heads/main' }}"; do
+  if ! grep -Fq "$contract" <<<"$workflow_concurrency"; then
+    echo "CI concurrency is missing: $contract" >&2
+    exit 1
+  fi
+done
+
+react_doctor="$root/.github/workflows/react-doctor.yml"
+react_doctor_triggers="$(sed -n '/^on:/,/^permissions:/p' "$react_doctor")"
+if ! grep -Fq 'pull_request:' <<<"$react_doctor_triggers" ||
+  grep -Fq 'push:' <<<"$react_doctor_triggers"; then
+  echo "React Doctor must run on pull requests only" >&2
+  exit 1
+fi
+
 changes_job="$(sed -n '/^  changes:/,/^  changelog:/p' "$workflow")"
 if ! grep -Fq 'fetch-depth: 0' <<<"$changes_job" ||
   ! grep -Fq "token: ''" <<<"$changes_job"; then
