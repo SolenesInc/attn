@@ -28,6 +28,7 @@ import { HeaderNudgeIndicator, deriveNudgeMode } from '../NudgeIndicator';
 import { HeaderSettleKeptChip, HeaderSettlingIndicator } from '../SettlingIndicator';
 import { HeaderPresentationChip } from '../PresentationChip';
 import { PaneSeedChip } from '../PaneSeedChip';
+import { derivePaneSeedDisplay } from '../paneSeedDisplay';
 import type { Seed } from '../../hooks/useDaemonSocket';
 import type { Presentation } from '../../types/generated';
 import { useGhosttyPaneRuntime } from './useGhosttyPaneRuntime';
@@ -123,6 +124,7 @@ interface SessionTerminalWorkspaceProps {
   gardenSeeds?: Seed[];
   onOpenSeed?: (seedId: string) => void;
   onRevealSeedInGarden?: (seedId: string) => void;
+  seedPopoverRequest?: { sessionId: string; nonce: number };
   // The daemon decides this from the driver's `conversation` capability; never
   // recompute it here.
   conversationAgents?: ReadonlySet<string>;
@@ -185,6 +187,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     gardenSeeds = EMPTY_GARDEN_SEEDS,
     onOpenSeed,
     onRevealSeedInGarden,
+    seedPopoverRequest,
     conversationAgents,
     annotationApi,
     workspace,
@@ -236,6 +239,10 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     const [pendingRatioOverrides, setPendingRatioOverrides] = useState<Map<string, number>>(() => new Map());
     const [resizingSplit, setResizingSplit] = useState<{ splitId: string; direction: TerminalSplitDirection } | null>(null);
     const [staleBuildDismissed, setStaleBuildDismissed] = useState<ReadonlySet<string>>(() => new Set());
+    const [pinnedSeedPopover, setPinnedSeedPopover] = useState<string | null>(null);
+    useEffect(() => {
+      if (seedPopoverRequest) setPinnedSeedPopover(seedPopoverRequest.sessionId);
+    }, [seedPopoverRequest]);
     const [draggingLeafId, setDraggingLeafId] = useState<string | null>(null);
     const [dockTarget, setDockTarget] = useState<DockTarget | null>(null);
     const [ghostPos, setGhostPos] = useState<{ x: number; y: number } | null>(null);
@@ -1005,8 +1012,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
               isActive: Boolean(paneSession.isActive),
             })
           : null;
-        const paneSeedId = paneSession?.seedId;
-        const paneSeed = paneSeedId ? gardenSeeds.find((candidate) => candidate.id === paneSeedId) : undefined;
+        const paneSeedDisplay = derivePaneSeedDisplay(gardenSeeds, agentPane.sessionId, paneSession?.seedId);
         const autoSettleFiresAt = paneSession?.autoSettleFiresAt;
         const autoSettleHeld = paneSession?.autoSettleHeld;
         const autoSettleDismissArmed = paneSession?.autoSettleDismissArmed;
@@ -1096,13 +1102,15 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
                   onCancel={() => onCancelCountdown?.(agentPane.sessionId)}
                 />
               ) : null}
-              {paneSeedId && onOpenSeed ? (
+              {paneSeedDisplay.kind !== 'none' && onOpenSeed ? (
                 <PaneSeedChip
-                  seedId={paneSeedId}
-                  seed={paneSeed}
+                  display={paneSeedDisplay}
+                  crownSeedId={paneSession?.seedId}
                   unread={Boolean(paneSession?.ticketUnread)}
                   sessionId={agentPane.sessionId}
-                  onOpen={() => onOpenSeed(paneSeedId)}
+                  pinned={pinnedSeedPopover === agentPane.sessionId}
+                  onOpenSeed={onOpenSeed}
+                  onPopoverClosed={() => setPinnedSeedPopover(null)}
                 />
               ) : null}
             </div>
@@ -1281,6 +1289,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       terminalsLive,
       onOpenSeed,
       onRevealSeedInGarden,
+      pinnedSeedPopover,
       conversationAgents,
       annotationApi,
       onCancelCountdown,

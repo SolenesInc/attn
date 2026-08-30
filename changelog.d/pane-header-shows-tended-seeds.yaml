@@ -1,0 +1,12 @@
+kind: added
+area: app
+change: >
+  The agent pane header now shows everything the session is tending, not just
+  a seed it was delegated at. One tended seed shows as a status-tinted chip;
+  several under one plot show the plot with its done/total progress; an
+  unrelated set shows a "tending N" chip; a delegation the agent has not
+  picked up yet shows as a hollow dashed chip. Hovering the chip, clicking a
+  plot or multi chip, or the action menu's "Show <session>'s seeds" opens the
+  same popover listing every seed, keyboard-navigable when opened by click or
+  the action menu, dismissed by Escape, a click outside, or clicking the chip
+  again.

@@ -412,6 +412,11 @@
   flex-shrink: 0;
 }
 
+.workspace-pane-header .pane-seed-chip {
+  flex: 0 1 auto;
+  min-width: 76px;
+}
+
 /* A lone tile's header: a status bar naming the session and hosting its chips,
    with nowhere to be dragged to. */
 .workspace-pane-header--static {

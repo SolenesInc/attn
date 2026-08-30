@@ -1,16 +1,10 @@
-/* PaneSeedChip — the clickable seed chip in the agent pane header. Status
-   colors reuse the garden's [data-status] tint contract: only DEFINED tokens (or
-   the documented #ef4444 fallback for the undefined --color-error), never bare
-   --color-accent/--color-error. Each status sets a single --psc-tint the chip's
-   rule/hover read. Status chrome, never text-selectable. */
-
 .pane-seed-chip {
   --psc-tint: var(--color-border-hover);
   display: inline-flex;
   align-items: center;
   gap: 6px;
   flex: none;
-  max-width: 220px;
+  max-width: 240px;
   margin: 0;
   padding: 2px 9px;
   font-family: inherit;
@@ -33,11 +27,46 @@
   color: var(--color-text-primary);
 }
 
-.pane-seed-chip-rule {
+.pane-seed-chip[data-kind='crown'] {
+  background: none;
+  border-style: dashed;
+  color: var(--color-text-tertiary);
+}
+
+.pane-seed-chip[data-kind='crown']:hover {
+  background: color-mix(in srgb, var(--psc-tint) 10%, transparent);
+  color: var(--color-text-secondary);
+}
+
+.pane-seed-chip-mark {
   flex: none;
+}
+
+.pane-seed-chip-mark--seed {
   width: 6px;
   height: 6px;
   border-radius: 2px;
+  background: var(--psc-tint);
+}
+
+.pane-seed-chip-mark--crown {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1.5px solid var(--psc-tint);
+  background: none;
+}
+
+.pane-seed-chip-mark--plot {
+  display: grid;
+  grid-template-columns: 3px 3px;
+  gap: 1.5px;
+}
+
+.pane-seed-chip-mark--plot i {
+  width: 3px;
+  height: 3px;
+  border-radius: 1px;
   background: var(--psc-tint);
 }
 
@@ -46,6 +75,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.pane-seed-chip-fraction {
+  flex: none;
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.pane-seed-chip:hover .pane-seed-chip-fraction {
+  color: var(--color-text-secondary);
 }
 
 .pane-seed-chip-id {
@@ -75,7 +115,9 @@
   --psc-tint: var(--color-border-hover);
 }
 
-.pane-seed-chip[data-status='growing'] {
+.pane-seed-chip[data-status='growing'],
+.pane-seed-chip[data-status='plot'],
+.pane-seed-chip[data-status='multi'] {
   --psc-tint: var(--accent);
 }
 
@@ -89,4 +131,8 @@
 
 .pane-seed-chip[data-status='withered'] {
   --psc-tint: var(--color-error, #ef4444);
+}
+
+.pane-seed-chip[data-status='crown'] {
+  --psc-tint: var(--color-border-hover);
 }
