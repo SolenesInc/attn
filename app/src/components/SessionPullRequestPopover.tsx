@@ -186,7 +186,7 @@ export function SessionPullRequestPopover({
           {pullRequests.map((pr, index) => {
             const entry = describeSessionPullRequest(pr);
             return (
-              <li key={pr.url}>
+              <li key={`${pr.repository}#${pr.number}`}>
                 <button
                   type="button"
                   className="session-pr-popover__item"

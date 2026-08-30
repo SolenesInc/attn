@@ -21,10 +21,11 @@ const provenance = {
 };
 
 function pr(overrides: Partial<SessionPullRequest> = {}): SessionPullRequest {
+  const number = overrides.number ?? 71;
   return {
     repository: 'github.com/victorarias/attn',
-    number: 71,
-    url: 'https://github.com/victorarias/attn/pull/71',
+    number,
+    url: `https://github.com/victorarias/attn/pull/${number}`,
     title: 'feat(garden): sweep the agent ledger nightly',
     created_at: '2026-08-30T12:00:00Z',
     state: 'open',
