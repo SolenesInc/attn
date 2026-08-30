@@ -138,13 +138,6 @@ impl Agent {
     }
 }
 
-/// What a batch of events changed, for the client to react to.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct Applied {
-    pub dirty: bool,
-    pub focused_turn_settled: bool,
-}
-
 pub struct Model {
     pub agents: Vec<Agent>,
     pub current_desktop: u8,
@@ -191,10 +184,10 @@ impl Model {
             .map(|agent| agent.id)
     }
 
-    pub fn apply(&mut self, events: Vec<Event>) -> Result<Applied> {
-        let mut applied = Applied::default();
+    pub fn apply(&mut self, events: Vec<Event>) -> Result<bool> {
+        let mut dirty = false;
         for event in events {
-            applied.dirty = true;
+            dirty = true;
             match event {
                 Event::AgentAdded {
                     id,
@@ -223,15 +216,12 @@ impl Model {
                     }
                     agent.state = state;
                 }
-                Event::TurnSettled { id } => {
-                    self.agent_mut(id).turn_opened_at = None;
-                    applied.focused_turn_settled |= self.focus == Some(id);
-                }
+                Event::TurnSettled { id } => self.agent_mut(id).turn_opened_at = None,
                 Event::Output { id, bytes } => self.agent_mut(id).terminal.vt_write(&bytes),
                 Event::Resized { id, cols, rows } => self.resize_terminal(id, cols, rows)?,
             }
         }
-        Ok(applied)
+        Ok(dirty)
     }
 
     pub fn agent(&self, id: AgentId) -> &Agent {
@@ -455,7 +445,7 @@ mod tests {
             }])
             .unwrap();
         model.focus = Some(1);
-        let applied = model
+        model
             .apply(vec![
                 Event::TurnSettled { id: 1 },
                 Event::StateChanged {
@@ -465,7 +455,6 @@ mod tests {
                 },
             ])
             .unwrap();
-        assert!(applied.focused_turn_settled);
         assert_eq!(model.queue().first(), Some(&2));
     }
 

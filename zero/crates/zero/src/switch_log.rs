@@ -16,6 +16,7 @@ pub enum SwitchPath {
     PaneMove,
     Click,
     Back,
+    Settle,
 }
 
 impl SwitchPath {
@@ -28,6 +29,7 @@ impl SwitchPath {
             Self::PaneMove => "pane-move",
             Self::Click => "click",
             Self::Back => "back",
+            Self::Settle => "settle",
         }
     }
 }

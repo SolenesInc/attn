@@ -65,6 +65,13 @@ struct SimAgent {
     line: Vec<u8>,
     submitted: Option<Submitted>,
     ack_at: Option<Duration>,
+    settled: bool,
+}
+
+impl SimAgent {
+    fn owes(&self) -> bool {
+        self.state.owes_turn() && !self.settled
+    }
 }
 
 pub struct Simulator {
@@ -102,6 +109,7 @@ impl Simulator {
                     line: Vec::new(),
                     submitted: None,
                     ack_at: None,
+                    settled: false,
                 })
                 .collect(),
             initial_events: Vec::new(),
@@ -141,9 +149,15 @@ impl Simulator {
         }
     }
 
+    fn enter(&mut self, index: usize, state: AgentState) {
+        let agent = &mut self.agents[index];
+        agent.state = state;
+        agent.settled = false;
+    }
+
     fn set_state_without_events(&mut self, index: usize, state: AgentState, now: Duration) {
         self.clear_deadlines(index);
-        self.agents[index].state = state;
+        self.enter(index, state);
         match state {
             AgentState::Working => self.schedule_work(index, now),
             AgentState::Idle => self.schedule_wake(index, now),
@@ -227,7 +241,7 @@ impl Simulator {
 
     fn wake(&mut self, index: usize, at: Duration, events: &mut Vec<Event>) {
         let id = self.agents[index].id;
-        self.agents[index].state = AgentState::Working;
+        self.enter(index, AgentState::Working);
         self.agents[index].wake_at = None;
         self.schedule_work(index, at);
         events.push(Event::StateChanged {
@@ -249,14 +263,10 @@ impl Simulator {
         events: &mut Vec<Event>,
     ) {
         self.clear_deadlines(index);
-        let owed = self
-            .agents
-            .iter()
-            .filter(|agent| agent.state.owes_turn())
-            .count();
+        let owed = self.agents.iter().filter(|agent| agent.owes()).count();
         if self.scenario == Scenario::Calm && owed >= 2 && !force_attention {
             let id = self.agents[index].id;
-            self.agents[index].state = AgentState::Idle;
+            self.enter(index, AgentState::Idle);
             self.schedule_wake(index, at);
             events.push(Event::Output {
                 id,
@@ -275,8 +285,8 @@ impl Simulator {
         } else {
             AgentState::WaitingInput
         };
-        let agent = &mut self.agents[index];
-        agent.state = state;
+        self.enter(index, state);
+        let agent = &self.agents[index];
         let (bytes, state) = match state {
             AgentState::PendingApproval => (
                 b"\r\n\x1b[33mApproval required: apply the generated change? [y/n]\x1b[0m\r\n"
@@ -349,6 +359,17 @@ impl Simulator {
         }
     }
 
+    fn settle(&mut self, id: AgentId) -> Vec<Event> {
+        let Some(agent) = self.agents.iter_mut().find(|agent| agent.id == id) else {
+            return Vec::new();
+        };
+        if !agent.owes() {
+            return Vec::new();
+        }
+        agent.settled = true;
+        vec![Event::TurnSettled { id }]
+    }
+
     fn ack(&mut self, index: usize, at: Duration, events: &mut Vec<Event>) {
         let agent = &mut self.agents[index];
         agent.ack_at = None;
@@ -365,10 +386,11 @@ impl Simulator {
             return;
         }
         let id = self.agents[index].id;
-        self.agents[index].state = AgentState::Working;
+        let owed = self.agents[index].owes();
+        self.enter(index, AgentState::Working);
         self.clear_deadlines(index);
         self.schedule_work(index, at);
-        if state.owes_turn() {
+        if owed {
             events.push(Event::TurnSettled { id });
         }
         events.push(Event::Output {
@@ -387,9 +409,11 @@ impl Simulator {
             return;
         }
         let id = self.agents[index].id;
-        events.push(Event::TurnSettled { id });
+        if self.agents[index].owes() {
+            events.push(Event::TurnSettled { id });
+        }
         if approved {
-            self.agents[index].state = AgentState::Working;
+            self.enter(index, AgentState::Working);
             self.schedule_work(index, at);
             events.push(Event::Output {
                 id,
@@ -401,7 +425,7 @@ impl Simulator {
                 at,
             });
         } else {
-            self.agents[index].state = AgentState::WaitingInput;
+            self.enter(index, AgentState::WaitingInput);
             events.push(Event::StateChanged {
                 id,
                 state: AgentState::Working,
@@ -443,7 +467,7 @@ impl Simulator {
         let mut events = Vec::new();
         for index in 0..self.agents.len() {
             let previous = self.agents[index].state;
-            let state = if previous.owes_turn() {
+            let state = if self.agents[index].owes() {
                 previous
             } else if attention_to_add > 0 {
                 attention_to_add -= 1;
@@ -499,6 +523,7 @@ impl Simulator {
             line: Vec::new(),
             submitted: None,
             ack_at: None,
+            settled: false,
         };
         let name = agent.name.clone();
         agent.output_cursor = self.rng.random_range(0..WORK_OUTPUT.len());
@@ -532,7 +557,7 @@ impl Simulator {
             .agents
             .iter()
             .enumerate()
-            .filter(|(_, agent)| !agent.state.owes_turn())
+            .filter(|(_, agent)| !agent.owes())
             .take(3)
             .map(|(index, _)| index)
             .collect();
@@ -540,7 +565,7 @@ impl Simulator {
         for index in indexes {
             let id = self.agents[index].id;
             self.clear_deadlines(index);
-            self.agents[index].state = AgentState::WaitingInput;
+            self.enter(index, AgentState::WaitingInput);
             events.push(Event::Output {
                 id,
                 bytes: b"\r\nI need a decision before I can continue.\r\n".to_vec(),
@@ -590,6 +615,7 @@ impl Source for Simulator {
     fn command(&mut self, now: Duration, command: Command) -> Vec<Event> {
         match command {
             Command::Input { id, bytes } => self.input(id, &bytes, now),
+            Command::Settle { id } => self.settle(id),
             Command::Resize { id, cols, rows } => vec![Event::Resized { id, cols, rows }],
             Command::Scenario(action) => match action {
                 ScenarioAction::Set(scenario) => self.set_scenario(scenario, now),
@@ -737,6 +763,23 @@ mod tests {
         let events = simulator.command(now, input(1, &[0x7f, 0x7f, 0x7f]));
         assert_eq!(events, vec![output(1, b"\x08 \x08\x08 \x08")]);
         assert!(simulator.agents[0].line.is_empty());
+    }
+
+    #[test]
+    fn settle_closes_the_turn_and_leaves_the_agent_as_it_is() {
+        let mut simulator = Simulator::seeded(Scenario::Calm, 2);
+        let now = Duration::from_secs(3);
+        simulator.advance(now);
+
+        let events = simulator.command(now, Command::Settle { id: 1 });
+        assert_eq!(events, vec![Event::TurnSettled { id: 1 }]);
+        assert_eq!(simulator.agents[0].state, AgentState::WaitingInput);
+        assert!(simulator.command(now, Command::Settle { id: 1 }).is_empty());
+
+        simulator.command(now, input(1, b"go\r"));
+        let events = simulator.advance(now + INPUT_ACK);
+        assert!(!settled(&events, 1));
+        assert!(has_state(&events, 1, AgentState::Working));
     }
 
     #[test]

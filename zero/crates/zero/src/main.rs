@@ -26,7 +26,7 @@ use zero::shell::{Shell, ShellOutput};
 use zero::simulator::Simulator;
 use zero::source::{Command, Event as SourceEvent, Scenario, ScenarioAction, Source};
 use zero::switch_log::{SwitchLog, SwitchPath, default_path, summary};
-use zero::switcher::filter_agents;
+use zero::switcher::rows;
 use zero::vt::VtRenderer;
 
 const SHELL_ID: AgentId = u64::MAX;
@@ -162,7 +162,7 @@ fn run_tui(scenario: Scenario) -> Result<()> {
     loop {
         let now = started.elapsed();
         let events = source.advance(now);
-        app.apply_events(events, &source)?;
+        app.apply_events(events)?;
         if app.dirty {
             let size: Rect = terminal.size()?.into();
             app.ensure_sizes(size, &mut source, &shell)?;
@@ -305,7 +305,7 @@ impl App {
         }
     }
 
-    fn apply_events(&mut self, events: Vec<SourceEvent>, source: &impl Source) -> Result<()> {
+    fn apply_events(&mut self, events: Vec<SourceEvent>) -> Result<()> {
         for event in &events {
             match event {
                 SourceEvent::AgentAdded { id, .. }
@@ -316,12 +316,8 @@ impl App {
                 SourceEvent::StateChanged { .. } | SourceEvent::TurnSettled { .. } => {}
             }
         }
-        let applied = self.model.apply(events)?;
-        if applied.dirty {
+        if self.model.apply(events)? {
             self.dirty = true;
-        }
-        if applied.focused_turn_settled {
-            self.auto_next(source)?;
         }
         Ok(())
     }
@@ -354,7 +350,7 @@ impl App {
                 self.dirty_terminals.insert(id);
             } else {
                 let events = source.command(Duration::ZERO, Command::Resize { id, cols, rows });
-                self.apply_events(events, &*source)?;
+                self.apply_events(events)?;
             }
         }
         Ok(())
@@ -483,7 +479,7 @@ impl App {
     }
 
     fn draw_switcher(&self, frame: &mut Frame<'_>, now: Duration, query: &str, selected: usize) {
-        let matches = filter_agents(&self.model.agents, query);
+        let matches = rows(&self.model.agents, query);
         let area = centered(frame.area(), 72, (matches.len() as u16 + 3).min(18));
         let visible = area.height.saturating_sub(2) as usize;
         let start = selected
@@ -555,7 +551,7 @@ impl App {
     fn draw_help(&self, frame: &mut Frame<'_>) {
         let help = vec![
             Line::from("Ctrl-Space, then…"),
-            Line::from("n queue   1-9 desktop   m 1-9 move pane"),
+            Line::from("n next in queue   e settle, go to next   1-9 desktop   m 1-9 move pane"),
             Line::from("space or / switcher   h j k l / arrows focus"),
             Line::from("s scenario   ? help   q quit"),
             Line::from(""),
@@ -590,7 +586,7 @@ impl App {
                     KeyCode::Esc => self.popup = Popup::None,
                     KeyCode::Up => *selected = selected.saturating_sub(1),
                     KeyCode::Down => {
-                        let count = filter_agents(&self.model.agents, query).len();
+                        let count = rows(&self.model.agents, query).len();
                         *selected = (*selected + 1).min(count.saturating_sub(1));
                     }
                     KeyCode::Backspace => {
@@ -598,7 +594,7 @@ impl App {
                         *selected = 0;
                     }
                     KeyCode::Enter => {
-                        let target = filter_agents(&self.model.agents, query)
+                        let target = rows(&self.model.agents, query)
                             .get(*selected)
                             .copied();
                         self.popup = Popup::None;
@@ -625,7 +621,7 @@ impl App {
                     KeyCode::Enter => {
                         let action = scenario_action(*selected, self.model.current_desktop);
                         let events = source.command(now, Command::Scenario(action));
-                        self.apply_events(events, &*source)?;
+                        self.apply_events(events)?;
                         if matches!(action, ScenarioAction::AddAgent { .. })
                             && self.model.focus.is_none()
                         {
@@ -666,7 +662,7 @@ impl App {
         }
         if self.pending == PendingKey::Leader {
             self.pending = PendingKey::None;
-            self.handle_leader(key.code, source)?;
+            self.handle_leader(key.code, now, source)?;
             self.dirty = true;
             return Ok(());
         }
@@ -675,7 +671,7 @@ impl App {
             .focused()
             .is_some_and(|agent| agent.kind == AgentKind::Shell);
         if key.modifiers.contains(KeyModifiers::ALT) && !focused_shell {
-            self.handle_leader(key.code, source)?;
+            self.handle_leader(key.code, now, source)?;
             self.dirty = true;
             return Ok(());
         }
@@ -695,7 +691,7 @@ impl App {
             shell.write(&bytes)?;
         } else {
             let events = source.command(now, Command::Input { id, bytes });
-            self.apply_events(events, &*source)?;
+            self.apply_events(events)?;
         }
         Ok(())
     }
@@ -715,19 +711,20 @@ impl App {
         } else {
             let bytes = text.as_bytes().to_vec();
             let events = source.command(now, Command::Input { id, bytes });
-            self.apply_events(events, &*source)?;
+            self.apply_events(events)?;
         }
         Ok(())
     }
 
-    fn handle_leader(&mut self, code: KeyCode, source: &impl Source) -> Result<()> {
+    fn handle_leader(&mut self, code: KeyCode, now: Duration, source: &mut impl Source) -> Result<()> {
         match code {
             KeyCode::Char('n') => {
                 let target = self.model.queue().first().copied();
                 if target.is_some() {
-                    self.focus(target, SwitchPath::Queue, source)?;
+                    self.focus(target, SwitchPath::Queue, &*source)?;
                 }
             }
+            KeyCode::Char('e') => self.settle_and_next(now, source)?,
             KeyCode::Char('m') => self.pending = PendingKey::Move,
             KeyCode::Char(' ' | '/') => {
                 self.popup = Popup::Switcher {
@@ -738,10 +735,10 @@ impl App {
             KeyCode::Char('s') => self.popup = Popup::Scenario { selected: 0 },
             KeyCode::Char('?') => self.popup = Popup::Help,
             KeyCode::Char('q') => self.quit = true,
-            KeyCode::Left | KeyCode::Char('h') => self.focus_neighbor(Direction::Left, source)?,
-            KeyCode::Down | KeyCode::Char('j') => self.focus_neighbor(Direction::Down, source)?,
-            KeyCode::Up | KeyCode::Char('k') => self.focus_neighbor(Direction::Up, source)?,
-            KeyCode::Right | KeyCode::Char('l') => self.focus_neighbor(Direction::Right, source)?,
+            KeyCode::Left | KeyCode::Char('h') => self.focus_neighbor(Direction::Left, &*source)?,
+            KeyCode::Down | KeyCode::Char('j') => self.focus_neighbor(Direction::Down, &*source)?,
+            KeyCode::Up | KeyCode::Char('k') => self.focus_neighbor(Direction::Up, &*source)?,
+            KeyCode::Right | KeyCode::Char('l') => self.focus_neighbor(Direction::Right, &*source)?,
             code => {
                 if let Some(desktop) = digit(code) {
                     let record = self
@@ -771,9 +768,15 @@ impl App {
         Ok(())
     }
 
-    fn auto_next(&mut self, source: &impl Source) -> Result<()> {
+    fn settle_and_next(&mut self, now: Duration, source: &mut impl Source) -> Result<()> {
+        if let Some(id) = self.model.focus
+            && self.model.agent(id).turn_opened_at.is_some()
+        {
+            let events = source.command(now, Command::Settle { id });
+            self.apply_events(events)?;
+        }
         if let Some(next) = self.model.queue().first().copied() {
-            self.focus(Some(next), SwitchPath::AutoNext, source)?;
+            self.focus(Some(next), SwitchPath::Settle, &*source)?;
         }
         Ok(())
     }
@@ -927,7 +930,7 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn auto_next_focuses_and_records_the_oldest_turn() {
+    fn settle_and_next_closes_the_turn_and_moves_to_the_oldest() {
         let mut model = Model::new();
         model
             .apply(vec![
@@ -966,12 +969,14 @@ mod tests {
         let log = SwitchLog::open(path.clone()).unwrap();
         let mut app = App::new(model, log);
 
-        app.auto_next(&Simulator::new(Scenario::Calm)).unwrap();
+        let mut simulator = Simulator::new(Scenario::Calm);
+        app.settle_and_next(Duration::ZERO, &mut simulator).unwrap();
 
         assert_eq!(app.model.focus, Some(2));
+        assert!(app.model.agent(1).turn_opened_at.is_none());
         assert_eq!(
             app.model.switches.last().unwrap().path,
-            SwitchPath::AutoNext
+            SwitchPath::Settle
         );
         drop(app);
         fs::remove_file(path).unwrap();

@@ -12,11 +12,11 @@ use anyhow::{Result, bail};
 use futures::StreamExt;
 use futures::channel::mpsc;
 use gpui::{
-    Animation, AnimationExt, AnyElement, App, Application, Bounds, BoxShadow, Context, Div,
-    FocusHandle, FontWeight, Hsla, KeyDownEvent, Keystroke, MouseButton, Pixels, Render,
-    ScrollDelta, ScrollWheelEvent, Task, TitlebarOptions, Window, WindowBackgroundAppearance,
-    WindowBounds, WindowOptions, canvas, div, ease_out_quint, linear_color_stop, linear_gradient,
-    point, prelude::*, px, size,
+    Animation, AnimationExt, AnyElement, AnyView, App, Application, Bounds, BoxShadow, Context,
+    Div, FocusHandle, FontWeight, Hsla, KeyDownEvent, Keystroke, MouseButton, Pixels, Render,
+    ScrollDelta, ScrollWheelEvent, SharedString, Task, TitlebarOptions, Window,
+    WindowBackgroundAppearance, WindowBounds, WindowOptions, canvas, div, ease_in_out,
+    linear_color_stop, linear_gradient, point, prelude::*, px, size,
 };
 use libghostty_vt::terminal::ScrollViewport;
 use zero::model::{AgentId, AgentKind, Model};
@@ -24,7 +24,7 @@ use zero::shell::{Shell, ShellOutput};
 use zero::simulator::Simulator;
 use zero::source::{Command, Event as SourceEvent, Scenario, ScenarioAction, Source};
 use zero::switch_log::{SwitchLog, SwitchPath};
-use zero::switcher::filter_agents;
+use zero::switcher::rows;
 
 use crate::grid::{Grid, Metrics, Prepared};
 use crate::layout::{Direction, neighbor, tiles};
@@ -111,7 +111,7 @@ struct ScenarioItem {
     action: ItemAction,
 }
 
-const MOTION_STEPS: [u64; 3] = [220, 420, 650];
+const MOTION_STEPS: [u64; 4] = [400, 600, 800, 1100];
 
 const SCENARIO_ITEMS: [ScenarioItem; 8] = [
     ScenarioItem { label: "calm", detail: "12 agents, one or two waiting at a time", action: ItemAction::Source(|_| ScenarioAction::Set(Scenario::Calm)) },
@@ -124,17 +124,18 @@ const SCENARIO_ITEMS: [ScenarioItem; 8] = [
     ScenarioItem { label: "motion", detail: "cycle the desktop slide duration", action: ItemAction::Motion },
 ];
 
-const HELP: [(&str, &str); 12] = [
-    ("⌘J", "next agent in the queue (oldest open turn first)"),
+const HELP: [(&str, &str); 13] = [
+    ("⌘⇧E", "settle the focused turn and go to the next one in the queue"),
+    ("⌘J", "peek at the next agent in the queue without settling"),
     ("⌘P", "back to the previous agent"),
-    ("⌘K", "switcher: fuzzy find any agent"),
+    ("⌘K", "the agent list: waiting first; type to filter, ⏎ jumps"),
     ("⌘1…9", "go to that desktop"),
     ("⌘⌥1…9", "move the focused pane to that desktop"),
     ("⌘←↑↓→", "focus the neighboring pane"),
-    ("click", "focus a pane, a desktop badge, or a name in the bar"),
+    ("click", "every pill, badge, and pane is clickable; hovering shows its key"),
     ("wheel", "scroll a pane's scrollback"),
     ("type + ⏎", "keys go to the focused terminal; ⏎ prompts a waiting or idle agent"),
-    ("y / n", "answer an approval; focus moves on when the agent's state changes"),
+    ("y / n", "answer an approval in its terminal"),
     ("⌘S", "scenario menu"),
     ("⌘Q", "quit"),
 ];
@@ -210,7 +211,7 @@ impl Zero {
             previous_focus: None,
             content: Bounds::default(),
             slide: (0, 0),
-            motion_ms: 420,
+            motion_ms: 600,
             ticker: None,
             _shell_pump: shell_pump,
         };
@@ -241,25 +242,19 @@ impl Zero {
 
     fn tick(&mut self, cx: &mut Context<Self>) {
         let events = self.source.advance(self.now());
-        let settled = self.apply(events);
+        self.apply(events);
         self.arm_ticker(cx);
-        if settled {
-            self.auto_next(cx);
-        }
         cx.notify();
     }
 
     fn command(&mut self, command: Command, cx: &mut Context<Self>) {
         let events = self.source.command(self.now(), command);
-        let settled = self.apply(events);
+        self.apply(events);
         self.arm_ticker(cx);
-        if settled {
-            self.auto_next(cx);
-        }
         cx.notify();
     }
 
-    fn apply(&mut self, events: Vec<SourceEvent>) -> bool {
+    fn apply(&mut self, events: Vec<SourceEvent>) {
         for event in &events {
             match event {
                 SourceEvent::AgentAdded { id, .. }
@@ -270,10 +265,7 @@ impl Zero {
                 SourceEvent::StateChanged { .. } | SourceEvent::TurnSettled { .. } => {}
             }
         }
-        self.model
-            .apply(events)
-            .expect("the model accepts simulator events")
-            .focused_turn_settled
+        self.model.apply(events).expect("the model accepts simulator events");
     }
 
     fn on_shell_output(&mut self, batch: Vec<ShellOutput>, cx: &mut Context<Self>) {
@@ -358,9 +350,18 @@ impl Zero {
         }
     }
 
-    fn auto_next(&mut self, cx: &mut Context<Self>) {
+    fn settle(&mut self, id: AgentId, cx: &mut Context<Self>) {
+        if self.model.agent(id).turn_opened_at.is_some() {
+            self.command(Command::Settle { id }, cx);
+        }
+    }
+
+    fn settle_and_next(&mut self, cx: &mut Context<Self>) {
+        if let Some(id) = self.model.focus {
+            self.settle(id, cx);
+        }
         if let Some(next) = self.model.queue().first().copied() {
-            self.focus(Some(next), SwitchPath::AutoNext, cx);
+            self.focus(Some(next), SwitchPath::Settle, cx);
         }
     }
 
@@ -436,6 +437,7 @@ impl Zero {
                 return;
             }
             match keystroke.key.as_str() {
+                "e" if modifiers.shift => self.settle_and_next(cx),
                 "j" => self.next_in_queue(cx),
                 "p" => self.back(cx),
                 "k" => self.open(Popup::Switcher { query: String::new(), selected: 0 }, cx),
@@ -486,7 +488,7 @@ impl Zero {
                     *selected = 0;
                 }
                 "enter" => {
-                    let matches = filter_agents(&self.model.agents, query);
+                    let matches = rows(&self.model.agents, query);
                     jump = matches.get((*selected).min(matches.len().saturating_sub(1))).copied();
                 }
                 _ => {
@@ -562,14 +564,14 @@ impl Zero {
         let ring = if focused {
             theme::blue()
         } else if owes {
-            color.alpha(0.75)
+            color.alpha(0.4)
         } else {
-            theme::gutter().alpha(0.8)
+            theme::gutter().alpha(0.6)
         };
         let glow = if focused {
-            theme::blue().alpha(0.32)
+            theme::blue().alpha(0.55)
         } else if owes {
-            color.alpha(0.16 + 0.3 * warmth)
+            color.alpha(0.08 + 0.22 * warmth)
         } else {
             gpui::transparent_black()
         };
@@ -583,7 +585,7 @@ impl Zero {
             .flex()
             .items_center()
             .gap(px(8.))
-            .bg(theme::card_header())
+            .bg(if focused { theme::blue().alpha(0.14) } else { theme::card_header() })
             .border_b_1()
             .border_color(theme::gutter().alpha(0.5))
             .child(
@@ -619,7 +621,39 @@ impl Zero {
                         .child(format_age(age)),
                 )
             })
-            .child(div().flex_1());
+            .child(div().flex_1())
+            .when(owes, |header| {
+                header.child(
+                    div()
+                        .id(("settle", id))
+                        .flex_none()
+                        .h(px(20.))
+                        .pl(px(7.))
+                        .pr(px(4.))
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .rounded(px(5.))
+                        .cursor_pointer()
+                        .text_size(px(11.))
+                        .text_color(theme::fg_dark())
+                        .hover(|el| el.bg(theme::bg_highlight()).text_color(theme::fg()))
+                        .tooltip(tip("close this turn and go to the next one", "⌘⇧E"))
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |zero, _, _, cx| {
+                                cx.stop_propagation();
+                                if zero.model.focus == Some(id) {
+                                    zero.settle_and_next(cx);
+                                } else {
+                                    zero.settle(id, cx);
+                                }
+                            }),
+                        )
+                        .child("settle")
+                        .child(key_cap("⌘⇧E")),
+                )
+            });
         div()
             .absolute()
             .left(rect.origin.x)
@@ -630,10 +664,11 @@ impl Zero {
             .flex_col()
             .rounded(px(10.))
             .overflow_hidden()
-            .bg(theme::card())
-            .border_1()
+            .bg(if focused { theme::card() } else { theme::bg_dark() })
+            .when(focused, |card| card.border_2())
+            .when(!focused, |card| card.border_1())
             .border_color(ring)
-            .opacity(if focused || owes { 1. } else { 0.9 })
+            .opacity(if focused { 1. } else if owes { 0.92 } else { 0.8 })
             .shadow(vec![
                 BoxShadow {
                     color: gpui::black().alpha(0.55),
@@ -644,8 +679,8 @@ impl Zero {
                 BoxShadow {
                     color: glow,
                     offset: point(px(0.), px(0.)),
-                    blur_radius: px(22.),
-                    spread_radius: px(2.),
+                    blur_radius: px(if focused { 30. } else { 22. }),
+                    spread_radius: px(if focused { 3. } else { 2. }),
                 },
             ])
             .on_mouse_down(
@@ -675,18 +710,30 @@ impl Zero {
     }
 
     fn render_bar(&self, now: Duration, cx: &mut Context<Self>) -> Div {
+        let tips = matches!(self.popup, Popup::None);
         let queue = self.model.queue();
         let waiting = queue.len();
         let mut left = div()
+            .id("queue-pill")
             .flex()
             .items_center()
             .gap(px(8.))
             .h(px(26.))
             .px(px(11.))
-            .rounded_full();
+            .rounded_full()
+            .cursor_pointer()
+            .when(tips, |pill| pill.tooltip(tip("every agent, waiting first", "⌘K")))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|zero, _, _, cx| {
+                    cx.stop_propagation();
+                    zero.open(Popup::Switcher { query: String::new(), selected: 0 }, cx);
+                }),
+            );
         if waiting > 0 {
             left = left
                 .bg(theme::yellow().alpha(0.12))
+                .hover(|pill| pill.bg(theme::yellow().alpha(0.2)))
                 .child(dot(theme::yellow()))
                 .child(
                     div()
@@ -701,6 +748,7 @@ impl Zero {
                     div()
                         .id(("chip", id))
                         .cursor_pointer()
+                        .when(tips && index == 0, |chip| chip.tooltip(tip("next in the queue", "⌘J")))
                         .text_color(theme::fg_dark())
                         .hover(|chip| chip.text_color(theme::fg()))
                         .child(agent.name.clone())
@@ -718,9 +766,11 @@ impl Zero {
             }
         } else {
             left = left
+                .hover(|pill| pill.bg(theme::bg_highlight()))
                 .child(dot(theme::comment()))
                 .child(div().text_color(theme::comment()).child("all quiet"));
         }
+        left = left.child(div().text_color(theme::comment()).text_size(px(10.)).child("▾"));
 
         let mut center = div().flex().items_center().gap(px(4.));
         for desktop in 1..=9u8 {
@@ -749,6 +799,7 @@ impl Zero {
                     .text_color(theme::purple())
                     .text_size(px(11.5))
                     .hover(|el| el.bg(theme::purple().alpha(0.22)))
+                    .when(tips, |pill| pill.tooltip(tip("scenario and knobs", "⌘S")))
                     .child(format!("{} · x{speed}", self.scenario_name()))
                     .on_mouse_down(
                         MouseButton::Left,
@@ -762,11 +813,15 @@ impl Zero {
                 div()
                     .id("help")
                     .cursor_pointer()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
                     .text_color(theme::comment())
-                    .font_family("JetBrains Mono")
-                    .text_size(px(11.))
+                    .text_size(px(11.5))
                     .hover(|el| el.text_color(theme::fg_dark()))
-                    .child("⌘/")
+                    .when(tips, |pill| pill.tooltip(tip("every key", "⌘/")))
+                    .child("keys")
+                    .child(key_cap("⌘/"))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|zero, _, _, cx| {
@@ -796,6 +851,7 @@ impl Zero {
     }
 
     fn render_badge(&self, desktop: u8, cx: &mut Context<Self>) -> AnyElement {
+        let tips = matches!(self.popup, Popup::None);
         let current = desktop == self.model.current_desktop;
         let owed = self.model.desktop_waiting_count(desktop);
         let populated = self.model.agents.iter().any(|agent| agent.desktop == desktop);
@@ -811,6 +867,9 @@ impl Zero {
             .font_family("JetBrains Mono")
             .text_size(px(11.5))
             .cursor_pointer()
+            .when(tips, |badge| {
+                badge.tooltip(tip(format!("desktop {desktop} · ⌘⌥{desktop} brings the focused pane here"), format!("⌘{desktop}")))
+            })
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |zero, _, _, cx| {
@@ -855,13 +914,14 @@ impl Zero {
     }
 
     fn render_popup(&self, now: Duration, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let anchored = matches!(self.popup, Popup::Switcher { .. });
         let panel = match &self.popup {
             Popup::None => return None,
             Popup::Switcher { query, selected } => {
-                let matches = filter_agents(&self.model.agents, query);
+                let matches = rows(&self.model.agents, query);
                 let selected = (*selected).min(matches.len().saturating_sub(1));
                 let first = selected.saturating_sub(11);
-                let mut panel = popup_panel(px(680.)).child(
+                let mut panel = popup_panel(px(640.)).child(
                     div()
                         .h(px(46.))
                         .px(px(16.))
@@ -911,12 +971,32 @@ impl Zero {
                             .child(div().w(px(10.)).text_color(theme::blue()).child(if is_selected { "›" } else { "" }))
                             .child(dot(color))
                             .child(div().flex_1().text_color(if is_selected { theme::fg() } else { theme::fg_dark() }).child(agent.name.clone()))
-                            .child(div().font_family("JetBrains Mono").text_size(px(11.)).text_color(theme::comment()).child(format!("d{}", agent.desktop)))
+                            .child(key_cap(&format!("⌘{}", agent.desktop)))
                             .child(chip(agent.state.label(), color))
-                            .child(div().w(px(40.)).font_family("JetBrains Mono").text_size(px(11.)).text_color(theme::comment()).child(age)),
+                            .child(div().w(px(40.)).font_family("JetBrains Mono").text_size(px(11.)).text_color(theme::comment()).child(age))
+                            .child(div().w(px(40.)).flex().justify_end().when(
+                                index == 0 && query.is_empty() && agent.turn_opened_at.is_some(),
+                                |cell| cell.child(key_cap("⌘J")),
+                            )),
                     );
                 }
-                panel
+                panel.child(
+                    div()
+                        .h(px(30.))
+                        .px(px(16.))
+                        .flex()
+                        .items_center()
+                        .gap(px(14.))
+                        .border_t_1()
+                        .border_color(theme::gutter().alpha(0.6))
+                        .text_size(px(11.))
+                        .text_color(theme::comment())
+                        .child("↑↓ move")
+                        .child("⏎ jump")
+                        .child("type to filter")
+                        .child("or click anything")
+                        .child("esc closes"),
+                )
             }
             Popup::Scenario { selected } => {
                 let mut panel = popup_panel(px(520.)).child(popup_title("scenario", format!("{} · x{}", self.scenario_name(), self.source.speed())));
@@ -976,8 +1056,8 @@ impl Zero {
                 .bg(gpui::black().alpha(0.4))
                 .flex()
                 .items_start()
-                .justify_center()
-                .pt(px(110.))
+                .when(anchored, |scrim| scrim.justify_start().pt(px(BAR_HEIGHT - 6.)).pl(px(80.)))
+                .when(!anchored, |scrim| scrim.justify_center().pt(px(110.)))
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|zero, _, _, cx| {
@@ -1007,7 +1087,7 @@ impl Render for Zero {
             .map(|(&id, rect)| self.render_pane(id, rect, now, cx))
             .collect();
         let (direction, generation) = self.slide;
-        let slide_from = px(36. * direction as f32);
+        let slide_from = px(64. * direction as f32);
         let desktop_layer = div()
             .absolute()
             .left_0()
@@ -1016,7 +1096,7 @@ impl Render for Zero {
             .children(panes)
             .with_animation(
                 ("desktop", generation),
-                Animation::new(Duration::from_millis(self.motion_ms)).with_easing(ease_out_quint()),
+                Animation::new(Duration::from_millis(self.motion_ms)).with_easing(ease_in_out),
                 move |layer, delta| layer.left(slide_from * (1. - delta)).opacity(0.35 + 0.65 * delta),
             );
         let mut root = div()
@@ -1044,7 +1124,7 @@ impl Render for Zero {
                     .items_center()
                     .justify_center()
                     .text_color(theme::comment())
-                    .child(format!("desktop {} is empty · ⌘1…9 to move around · ⌘⇧1…9 to bring a pane here", self.model.current_desktop)),
+                    .child(format!("desktop {} is empty · ⌘1…9 to move around · ⌘⌥1…9 to bring a pane here", self.model.current_desktop)),
             );
         }
         root = root.child(self.render_bar(now, cx));
@@ -1120,6 +1200,47 @@ fn chip(label: &'static str, color: Hsla) -> Div {
 
 fn dot(color: Hsla) -> Div {
     div().flex_none().size(px(7.)).rounded_full().bg(color)
+}
+
+struct Tip {
+    text: SharedString,
+    key: SharedString,
+}
+
+impl Render for Tip {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .px(px(10.))
+            .py(px(6.))
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .rounded(px(6.))
+            .bg(theme::bg_dark())
+            .border_1()
+            .border_color(theme::gutter())
+            .shadow(vec![BoxShadow {
+                color: gpui::black().alpha(0.5),
+                offset: point(px(0.), px(6.)),
+                blur_radius: px(16.),
+                spread_radius: px(0.),
+            }])
+            .font_family(".SystemUIFont")
+            .text_size(px(12.))
+            .text_color(theme::fg_dark())
+            .child(self.text.clone())
+            .when(!self.key.is_empty(), |tip| tip.child(key_cap(&self.key)))
+    }
+}
+
+/// A hover tooltip naming the action and its key: the mouse path teaches the keyboard path.
+fn tip(text: impl Into<SharedString>, key: impl Into<SharedString>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+    let text = text.into();
+    let key = key.into();
+    move |_, cx| {
+        let (text, key) = (text.clone(), key.clone());
+        cx.new(|_| Tip { text, key }).into()
+    }
 }
 
 fn digit(keystroke: &Keystroke) -> Option<u8> {

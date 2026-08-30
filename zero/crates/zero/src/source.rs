@@ -40,6 +40,8 @@ pub enum ScenarioAction {
 pub enum Command {
     /// Keystrokes for the agent's terminal, exactly as its PTY would receive them.
     Input { id: AgentId, bytes: Vec<u8> },
+    /// The user closing the agent's turn without steering it: attn-level, never terminal input.
+    Settle { id: AgentId },
     Resize { id: AgentId, cols: u16, rows: u16 },
     Scenario(ScenarioAction),
 }
