@@ -440,8 +440,7 @@ func StatePath() string {
 	return filepath.Join(home, "."+binaryName+"-state"+suffix+".json")
 }
 
-// Mirrors Tauri's BaseDirectory.AppLocalData resolution: the app shell writes the
-// automation manifest and the frontend's debug JSONL here, WebKit its own state.
+// Tauri's app_local_data_dir: automation manifest, debug JSONL, WebKit state.
 func AppLocalDataDirForProfile(profile string) string {
 	home, err := os.UserHomeDir()
 	if err != nil {

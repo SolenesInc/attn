@@ -42,7 +42,6 @@ function xdgDataHome() {
   return (process.env.XDG_DATA_HOME ?? '').trim() || path.join(os.homedir(), '.local', 'share');
 }
 
-// Tauri's app_local_data_dir; mirrors config.AppLocalDataDirForProfile on the Go side.
 function appLocalDataDir(bundleId) {
   if (process.platform === 'darwin') {
     return path.join(os.homedir(), 'Library', 'Application Support', bundleId);

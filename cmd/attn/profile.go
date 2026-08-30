@@ -368,8 +368,6 @@ func runProfileClean(args []string) {
 	fmt.Printf("Cleaned profile %s.\n", r.Label)
 }
 
-// Tauri's app_local_data_dir, outside the data dir and outside the install tree:
-// the automation manifest, the frontend's debug JSONL, and WebKit's state live here.
 func removeAppLocalData(r profileResolved) (string, error) {
 	if !fileExists(r.AppLocalData) {
 		return fmt.Sprintf("none (%s)", r.AppLocalData), nil
