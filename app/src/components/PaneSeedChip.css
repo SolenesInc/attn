@@ -1,6 +1,3 @@
-/* The garden chip in the agent pane header: seed / crown / plot / multi share
-   one grammar, tinted by the garden's [data-status] contract. */
-
 .pane-seed-chip {
   --psc-tint: var(--color-border-hover);
   display: inline-flex;

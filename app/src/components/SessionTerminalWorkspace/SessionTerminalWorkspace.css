@@ -412,7 +412,6 @@
   flex-shrink: 0;
 }
 
-/* Gives ground before the pane title does, but never past a readable stub. */
 .workspace-pane-header .pane-seed-chip {
   flex: 0 1 auto;
   min-width: 76px;

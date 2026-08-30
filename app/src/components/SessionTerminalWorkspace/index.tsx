@@ -124,7 +124,6 @@ interface SessionTerminalWorkspaceProps {
   gardenSeeds?: Seed[];
   onOpenSeed?: (seedId: string) => void;
   onRevealSeedInGarden?: (seedId: string) => void;
-  // Action-menu door into the tended-seeds popover; a fresh nonce re-opens it.
   seedPopoverRequest?: { sessionId: string; nonce: number };
   // The daemon decides this from the driver's `conversation` capability; never
   // recompute it here.

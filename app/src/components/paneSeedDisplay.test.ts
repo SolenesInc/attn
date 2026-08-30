@@ -82,8 +82,6 @@ describe('derivePaneSeedDisplay', () => {
     const a = seed({ id: 's-a', title: 'a', tender_session: SESSION, edges: [{ kind: 'part-of', to: 's-b' }] });
     const b = seed({ id: 's-b', title: 'b', tender_session: SESSION, edges: [{ kind: 'part-of', to: 's-a' }] });
     const display = derivePaneSeedDisplay([a, b], SESSION, undefined);
-    // Each is an ancestor of the other, so the first seed's chain wins; the
-    // point is it terminates and answers something sane.
     expect(display.kind).toBe('plot');
   });
 });

@@ -9,7 +9,6 @@ const VIEWPORT_MARGIN = 8;
 interface TendedSeedsPopoverProps {
   rows: PaneSeedPopoverRow[];
   anchor: { top: number; right: number };
-  /** The chip owns its own click-to-toggle; outside-dismiss must ignore it. */
   anchorRef?: React.RefObject<HTMLElement | null>;
   pinned: boolean;
   onOpenSeed: (seedId: string) => void;
