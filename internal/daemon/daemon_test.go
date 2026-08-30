@@ -410,11 +410,15 @@ func TestDaemon_PrunesSessionsWithoutLivePTYOnStart(t *testing.T) {
 	}
 
 	warnings := d.getWarnings()
-	if len(warnings) == 0 {
-		t.Fatal("expected daemon warning for startup stale-session prune")
+	hasPruneWarning := false
+	for _, warning := range warnings {
+		if warning.Code == warnStaleSessionsPruned {
+			hasPruneWarning = true
+			break
+		}
 	}
-	if warnings[0].Code != "stale_sessions_pruned" {
-		t.Fatalf("warning code = %q, want stale_sessions_pruned", warnings[0].Code)
+	if !hasPruneWarning {
+		t.Fatalf("expected %q warning, got %+v", warnStaleSessionsPruned, warnings)
 	}
 }
 
