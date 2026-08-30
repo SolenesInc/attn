@@ -59,12 +59,12 @@ async function typeLikeAPerson(client, sessionId, paneId, text) {
   await client.request('type_pane_via_ui', { sessionId, paneId, text });
 }
 
-// Claude treats a fast multi-line write as a paste, so the submit has to be a
-// lone carriage return a beat later.
+// Keep the prompt on the user's input path: auto-settle deliberately ignores
+// automation writes, which this scenario checks again at the end.
 async function submitPrompt(client, sessionId, paneId, text) {
-  await client.request('write_pane', { sessionId, paneId, text, submit: false });
+  await client.request('type_pane_via_ui', { sessionId, paneId, text });
   await delay(600);
-  await client.request('write_pane', { sessionId, paneId, text: '\r', submit: false });
+  await client.request('type_pane_via_ui', { sessionId, paneId, text: '\r' });
 }
 
 async function main() {
