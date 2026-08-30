@@ -1,9 +1,12 @@
 use gpui::{Bounds, Pixels, Point, point, size};
 
-/// Tiles `count` cards into `area`: a near-square grid whose last row stretches to fill the width.
+/// Tiles `count` cards into `area`: a near-square grid whose last row stretches; three cards are a main column and a stack.
 pub fn tiles(area: Bounds<Pixels>, count: usize, gap: Pixels) -> Vec<Bounds<Pixels>> {
     if count == 0 {
         return Vec::new();
+    }
+    if count == 3 {
+        return main_and_stack(area, gap);
     }
     let columns = (count as f32).sqrt().ceil() as usize;
     let rows = count.div_ceil(columns);
@@ -68,6 +71,18 @@ fn center(rect: &Bounds<Pixels>) -> Point<Pixels> {
     )
 }
 
+/// Three tiles: the first takes a full-height column, the other two stack beside it.
+fn main_and_stack(area: Bounds<Pixels>, gap: Pixels) -> Vec<Bounds<Pixels>> {
+    let width = (area.size.width - gap) / 2.;
+    let height = (area.size.height - gap) / 2.;
+    let right = area.origin.x + width + gap;
+    vec![
+        Bounds { origin: area.origin, size: size(width, area.size.height) },
+        Bounds { origin: point(right, area.origin.y), size: size(width, height) },
+        Bounds { origin: point(right, area.origin.y + height + gap), size: size(width, height) },
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -94,5 +109,14 @@ mod tests {
         assert_eq!(neighbor(&rects, 0, Direction::Down), Some(2));
         assert_eq!(neighbor(&rects, 0, Direction::Left), None);
         assert_eq!(neighbor(&rects, 3, Direction::Up), Some(1));
+    }
+
+    #[test]
+    fn three_tiles_are_a_main_column_and_a_stack() {
+        let area = Bounds { origin: point(px(10.), px(20.)), size: size(px(1000.), px(600.)) };
+        let tiles = tiles(area, 3, px(8.));
+        assert_eq!(tiles[0], Bounds { origin: point(px(10.), px(20.)), size: size(px(496.), px(600.)) });
+        assert_eq!(tiles[1], Bounds { origin: point(px(514.), px(20.)), size: size(px(496.), px(296.)) });
+        assert_eq!(tiles[2], Bounds { origin: point(px(514.), px(324.)), size: size(px(496.), px(296.)) });
     }
 }
