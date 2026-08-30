@@ -19,6 +19,12 @@ the production guard, recordings, and the remote VM. Rules that live only here:
 - A visible pane is a session pane. Resolve pane ids from daemon or app state.
   An empty workspace is invalid state; a scenario that creates one asserts it
   is removed. Shortcut scenarios use the app's shortcut registry ids.
+- Every OS branch lives in `platform.mjs`: install-tree layout, how the app is
+  launched, how a window is observed, how it is quit. Add a case there, never an
+  `if (process.platform)` at a call site. A pid comes from the automation
+  manifest or from the spawn, never from a command-line pattern, and a manifest
+  pid is signalled only while `/proc` still shows it running the install tree's
+  executable.
 - Read the result from the last `ATTN_VERDICT ` line on stdout
   (`emitVerdict` in `common.mjs`). Scenarios with a hand-rolled `main()` print
   none.

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { assertProductionRunAllowed, defaultAppPathForProfile } from './harnessProfile.mjs';
+import { appBuildIdentityInTree, appDaemonInTree } from './platform.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HARNESS_DIR, '../../..');
@@ -34,20 +35,6 @@ function normalizeBuildInfo(raw) {
   };
 }
 
-function bundledDaemonPathForApp(appPath) {
-  if (appPath.endsWith('.app')) {
-    return path.join(appPath, 'Contents', 'MacOS', 'attn');
-  }
-  return path.join(path.dirname(appPath), 'attn');
-}
-
-function packagedAppBuildIdentityPath(appPath) {
-  if (appPath.endsWith('.app')) {
-    return path.join(appPath, 'Contents', 'Resources', 'build-identity.json');
-  }
-  return path.join(path.dirname(appPath), 'build-identity.json');
-}
-
 function getCurrentSourceIdentitySync() {
   const stdout = execFileSync('bash', [SOURCE_FINGERPRINT_SCRIPT, '--json'], {
     cwd: REPO_ROOT,
@@ -57,7 +44,7 @@ function getCurrentSourceIdentitySync() {
 }
 
 function readPackagedAppBuildInfoSync(appPath) {
-  const identityPath = packagedAppBuildIdentityPath(appPath);
+  const identityPath = appBuildIdentityInTree(appPath);
   let raw;
   try {
     raw = JSON.parse(fs.readFileSync(identityPath, 'utf8'));
@@ -80,7 +67,7 @@ function resolveDaemonBinaryPathSync({ appPath, launchEnv = null }) {
   const overridePath = launchEnv && typeof launchEnv === 'object'
     ? launchEnv.ATTN_DAEMON_BINARY
     : undefined;
-  const bundledPath = bundledDaemonPathForApp(appPath);
+  const bundledPath = appDaemonInTree(appPath);
   const explicitPath = typeof overridePath === 'string' && overridePath.trim() !== ''
     ? overridePath.trim()
     : (typeof process.env.ATTN_DAEMON_BINARY === 'string' && process.env.ATTN_DAEMON_BINARY.trim() !== ''

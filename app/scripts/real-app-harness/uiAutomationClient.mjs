@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
-import { execFile, spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { MacOSDriver } from './macosDriver.mjs';
+import { appDaemonInTree, appPlatform } from './platform.mjs';
 import {
   assertProductionRunAllowed,
   bundleIdentifierForAppPath,
@@ -65,13 +65,6 @@ function readNonEmptyString(value) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function bundledDaemonPathForApp(appPath) {
-  if (appPath.endsWith('.app')) {
-    return path.join(appPath, 'Contents', 'MacOS', 'attn');
-  }
-  return path.join(path.dirname(appPath), 'attn');
-}
-
 function normalizeBuildInfo(raw) {
   if (!raw || typeof raw !== 'object') {
     return {
@@ -108,6 +101,7 @@ export class UiAutomationClient {
     launchEnv = null,
     backgroundLaunch = false,
     bundleId = null,
+    platform = appPlatform,
   } = {}) {
     const appProfile = profileForAppPath(appPath);
     const resolvedBundleId = bundleId || bundleIdentifierForAppPath(appPath);
@@ -117,6 +111,8 @@ export class UiAutomationClient {
     this.launchEnv = launchEnv;
     this.backgroundLaunch = backgroundLaunch;
     this.bundleId = resolvedBundleId;
+    this.platform = platform;
+    this.launch = null;
     this.currentSourceIdentityPromise = null;
     this.verifiedBuildIdentityKey = null;
   }
@@ -138,95 +134,112 @@ export class UiAutomationClient {
       : this.launchEnv;
 
     const focusDriver = this.#focusDriver();
-
-    if (effectiveLaunchEnv && Object.keys(effectiveLaunchEnv).length > 0) {
-      // LaunchServices and `open` do not reliably propagate env into Tauri's
-      // window-creation path, so custom env needs spawn-style delivery.
-      const executablePath = this.appPath.endsWith('.app')
-        ? path.join(this.appPath, 'Contents', 'MacOS', 'app')
-        : this.appPath;
-      const child = spawn(executablePath, [], {
-        detached: true,
-        stdio: 'ignore',
-        env: {
-          ...process.env,
-          ...effectiveLaunchEnv,
-        },
-      });
-      child.unref();
-      await focusDriver.waitForMainWindow(10_000).catch(() => null);
-      // The AX set-position call also nudges the WebView out of the
-      // off-screen-init throttle state it otherwise enters.
-      const parkPx = Number.parseInt(parkPxStr || '', 10);
-      if (alwaysOnTop && Number.isInteger(parkPx) && parkPx > 0) {
-        await focusDriver.parkWindow(parkPx).catch((error) => {
-          console.warn(`[RealAppHarness] Park failed: ${error?.message || error}`);
-        });
-      }
+    const launched = await this.platform.launchApp({
+      appPath: this.appPath,
+      env: effectiveLaunchEnv,
+      background: this.backgroundLaunch,
+    });
+    this.launch = launched;
+    if (!launched.spawned) {
       return;
     }
-    const openArgs = this.backgroundLaunch ? ['-g', this.appPath] : [this.appPath];
-    await execFileAsync('open', openArgs);
+
+    await focusDriver.waitForMainWindow(10_000, 150, { pid: launched.pid }).catch(() => null);
+    // The AX set-position call also nudges the WebView out of the
+    // off-screen-init throttle state it otherwise enters.
+    const parkPx = Number.parseInt(parkPxStr || '', 10);
+    if (alwaysOnTop && Number.isInteger(parkPx) && parkPx > 0) {
+      await focusDriver.parkWindow(parkPx).catch((error) => {
+        console.warn(`[RealAppHarness] Park failed: ${error?.message || error}`);
+      });
+    }
   }
 
   #focusDriver() {
     if (!this._focusDriver) {
-      this._focusDriver = new MacOSDriver({ bundleId: this.bundleId, appPath: this.appPath });
+      this._focusDriver = this.platform.createWindowDriver({ bundleId: this.bundleId, appPath: this.appPath });
     }
     return this._focusDriver;
   }
 
 
   async quitApp(timeoutMs = 10_000) {
-    let existingPid = null;
+    let manifestPid = null;
 
     try {
-      existingPid = this.readManifest()?.pid ?? null;
+      manifestPid = this.readManifest()?.pid ?? null;
     } catch {
-      existingPid = null;
+      manifestPid = null;
     }
 
-    try {
-      await execFileAsync('osascript', ['-e', `tell application id "${this.bundleId}" to quit`]);
-    } catch {
+    const { pids: ownedPids, staleManifest } = this.#ownedPids(manifestPid);
+    if (staleManifest) {
+      this.#removeManifest();
     }
+
+    await this.platform.requestQuit({ bundleId: this.bundleId, pids: ownedPids });
 
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
+      const stillOwned = this.#ownedPids(manifestPid).pids;
       const appPids = await this.listAppPids();
-      if ((!existingPid || !processExists(existingPid)) && appPids.length === 0) {
+      if (!stillOwned.some(processExists) && appPids.length === 0) {
+        this.launch = null;
         return;
       }
       await delay(200);
     }
 
-    const remainingPids = await this.listAppPids();
-    for (const pid of new Set([existingPid, ...remainingPids].filter((value) => Number.isInteger(value) && value > 0))) {
+    let escalating = this.#stillOwnedPids(manifestPid, ownedPids);
+    for (const pid of livePids([...escalating, ...await this.listAppPids()])) {
       try {
         process.kill(pid, 'SIGTERM');
       } catch {}
     }
     await delay(500);
-    for (const pid of await this.listAppPids()) {
+    escalating = this.#stillOwnedPids(manifestPid, escalating);
+    for (const pid of livePids([...escalating, ...await this.listAppPids()])) {
       try {
         process.kill(pid, 'SIGKILL');
       } catch {}
     }
+    this.launch = null;
+  }
+
+  #ownedPids(manifestPid) {
+    return this.platform.ownedPids({ appPath: this.appPath, manifestPid, launch: this.launch });
+  }
+
+  // A pid that stopped passing the ownership fence may already name a stranger
+  // that reused the number, so escalation drops it instead of signalling it.
+  #stillOwnedPids(manifestPid, previous) {
+    const { pids } = this.#ownedPids(manifestPid);
+    for (const pid of previous) {
+      if (!pids.includes(pid)) {
+        console.warn(`[RealAppHarness] pid ${pid} is no longer ours; skipping escalation signal.`);
+      }
+    }
+    return pids;
+  }
+
+  #removeManifest() {
+    try {
+      fs.unlinkSync(this.manifestPath);
+    } catch {}
   }
 
   async launchFreshApp() {
     await this.quitApp();
-    try {
-      fs.unlinkSync(this.manifestPath);
-    } catch {}
+    this.#removeManifest();
     await this.launchApp();
   }
 
   async waitForManifest(timeoutMs = 15_000) {
+    const budgetMs = Math.max(timeoutMs, this.platform.manifestWaitFloorMs);
     const startedAt = Date.now();
     let lastError = null;
 
-    while (Date.now() - startedAt < timeoutMs) {
+    while (Date.now() - startedAt < budgetMs) {
       try {
         const manifest = this.readManifest();
         if (manifest?.enabled && manifest.port && manifest.token && processExists(manifest.pid)) {
@@ -239,7 +252,7 @@ export class UiAutomationClient {
     }
 
     throw new Error(
-      `Timed out waiting for UI automation manifest at ${this.manifestPath}: ${lastError instanceof Error ? lastError.message : lastError || 'manifest unavailable'}`
+      `Timed out waiting for UI automation manifest after ${budgetMs}ms at ${this.manifestPath}: ${lastError instanceof Error ? lastError.message : lastError || 'manifest unavailable'}`
     );
   }
 
@@ -248,15 +261,7 @@ export class UiAutomationClient {
   }
 
   async listAppPids() {
-    try {
-      const { stdout } = await execFileAsync('pgrep', ['-f', `${this.appPath}/Contents/MacOS/app`]);
-      return stdout
-        .split(/\s+/)
-        .map((value) => Number.parseInt(value, 10))
-        .filter((value) => Number.isInteger(value) && value > 0);
-    } catch {
-      return [];
-    }
+    return this.platform.listAppPids({ appPath: this.appPath });
   }
 
   async request(action, payload = {}, options = {}) {
@@ -381,7 +386,7 @@ export class UiAutomationClient {
   }
 
   resolveDaemonBinaryPath() {
-    const bundledPath = bundledDaemonPathForApp(this.appPath);
+    const bundledPath = appDaemonInTree(this.appPath);
     const explicitPath = this.launchEnv && typeof this.launchEnv === 'object' && typeof this.launchEnv.ATTN_DAEMON_BINARY === 'string'
       ? this.launchEnv.ATTN_DAEMON_BINARY.trim()
       : (typeof process.env.ATTN_DAEMON_BINARY === 'string' ? process.env.ATTN_DAEMON_BINARY.trim() : '');
@@ -502,6 +507,10 @@ export class UiAutomationClient {
       `Timed out waiting for frontend automation responsiveness via ${action}: ${lastError instanceof Error ? lastError.message : lastError || 'unknown error'}`
     );
   }
+}
+
+function livePids(candidates) {
+  return new Set(candidates.filter((value) => processExists(value)));
 }
 
 function processExists(pid) {
