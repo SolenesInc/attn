@@ -2355,6 +2355,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleTodos(conn, msg.(*protocol.TodosMessage))
 	case protocol.CmdFilesEdited: // wire: files_edited
 		d.handleFilesEdited(conn, msg.(*protocol.FilesEditedMessage))
+	case protocol.CmdPullRequestCreated: // wire: pull_request_created
+		d.handlePullRequestCreated(conn, msg.(*protocol.PullRequestCreatedMessage))
+	case protocol.CmdPullRequestForget: // wire: pull_request_forget
+		d.handlePullRequestForget(conn, msg.(*protocol.PullRequestForgetMessage))
 	case protocol.CmdWorkflowRunUpsert: // wire: workflow_run_upsert
 		d.handleWorkflowRunUpsert(conn, msg.(*protocol.WorkflowRunUpsertMessage))
 	case protocol.CmdWorkflowCallUpsert: // wire: workflow_call_upsert
@@ -2817,6 +2821,7 @@ func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Sessio
 	)
 	if decorated != nil {
 		decorated.Automation = d.automationProvenanceForSession(decorated.ID)
+		decorated.PullRequests = d.sessionPullRequestsForSession(decorated.ID)
 	}
 	return decorated
 }
@@ -2857,10 +2862,12 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	crewBySession := d.crewMembersBySession()
 	seedBySession := d.gardenDispatchSeedsBySession()
 	bySession, _ := d.latestAutomationProvenance()
+	pullRequestsBySession := d.store.ListSessionPullRequestsBySession()
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
 		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefOfStaffSessionID, delegatedFromChief, crewBySession, seedBySession); decorated != nil {
 			decorated.Automation = bySession[decorated.ID]
+			decorated.PullRequests = sessionPullRequestsForBroadcast(pullRequestsBySession[decorated.ID])
 			out = append(out, *decorated)
 		}
 	}

@@ -53,6 +53,7 @@ type hookInput struct {
 	Prompt           string           `json:"prompt"`
 	ToolName         string           `json:"tool_name"`
 	ToolInput        json.RawMessage  `json:"tool_input"`
+	ToolResponse     json.RawMessage  `json:"tool_response"`
 	CWD              string           `json:"cwd"`
 	BackgroundTasks  []backgroundTask `json:"background_tasks"`
 	SessionCrons     []sessionCron    `json:"session_crons"`
@@ -644,6 +645,7 @@ commands:
   automation <command>              manage and run durable automations
   preflight                         diagnose tools, paths, routing, and launch settings
   pr wait-ready <pr>                wait for exact-head checks and approval
+  pr record|ls|forget <url>         pull requests this session opened
   list                              list sessions and workspaces
   activity [clear <id>]             what each agent is doing right now
   present <command>                 open a review presentation and read feedback
@@ -2799,6 +2801,12 @@ func runHookToolUse() {
 	if sent := hooks.SentFiles(input.ToolName, input.ToolInput, input.CWD); len(sent) > 0 {
 		if err := c.OpenSentFiles(sessionID, sent); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not open sent files: %v\n", err)
+		}
+	}
+
+	for _, url := range hooks.PullRequestCreated(input.ToolName, input.ToolInput, input.ToolResponse) {
+		if err := c.RecordPullRequestCreated(sessionID, url); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not record pull request %s: %v\n", url, err)
 		}
 	}
 }

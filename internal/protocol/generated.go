@@ -5919,6 +5919,28 @@ type PtyResizedMessage struct {
 	Ypixel *int `json:"ypixel,omitempty,omitzero"`
 }
 
+type PullRequestCreatedMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// URL corresponds to the JSON schema field "url".
+	URL string `json:"url"`
+}
+
+type PullRequestForgetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// URL corresponds to the JSON schema field "url".
+	URL string `json:"url"`
+}
+
 type PullRequestProvenance struct {
 	// HeadSHA corresponds to the JSON schema field "head_sha".
 	HeadSHA string `json:"head_sha"`
@@ -7394,6 +7416,9 @@ type Session struct {
 	// PinnedAt corresponds to the JSON schema field "pinned_at".
 	PinnedAt *string `json:"pinned_at,omitempty,omitzero"`
 
+	// PullRequests corresponds to the JSON schema field "pull_requests".
+	PullRequests []SessionPullRequest `json:"pull_requests,omitempty,omitzero"`
+
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID *string `json:"seed_id,omitempty,omitzero"`
 
@@ -7734,6 +7759,38 @@ type SessionMessagesGetResultMessage struct {
 
 	// Truncated corresponds to the JSON schema field "truncated".
 	Truncated bool `json:"truncated"`
+}
+
+type SessionPullRequest struct {
+	// CIStatus corresponds to the JSON schema field "ci_status".
+	CIStatus *string `json:"ci_status,omitempty,omitzero"`
+
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt string `json:"created_at"`
+
+	// MergeableState corresponds to the JSON schema field "mergeable_state".
+	MergeableState *string `json:"mergeable_state,omitempty,omitzero"`
+
+	// Number corresponds to the JSON schema field "number".
+	Number int `json:"number"`
+
+	// Repository corresponds to the JSON schema field "repository".
+	Repository string `json:"repository"`
+
+	// ReviewStatus corresponds to the JSON schema field "review_status".
+	ReviewStatus *string `json:"review_status,omitempty,omitzero"`
+
+	// State corresponds to the JSON schema field "state".
+	State string `json:"state"`
+
+	// StatusFetchedAt corresponds to the JSON schema field "status_fetched_at".
+	StatusFetchedAt *string `json:"status_fetched_at,omitempty,omitzero"`
+
+	// Title corresponds to the JSON schema field "title".
+	Title *string `json:"title,omitempty,omitzero"`
+
+	// URL corresponds to the JSON schema field "url".
+	URL string `json:"url"`
 }
 
 type SessionRegisteredMessage struct {
