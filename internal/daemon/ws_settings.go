@@ -293,7 +293,6 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 	settings[SettingNotebookSummarizeSessionEnabled] = strconv.FormatBool(d.notebookSummariesEnabled())
 	settings[SettingNotebookNarrateWorkspaceEnabled] = strconv.FormatBool(d.notebookWorkspaceNarrationEnabled())
 	settings[SettingOpenSentFilesEnabled] = strconv.FormatBool(d.openSentFilesEnabled())
-	// Resolved, not stored: an env override decides what the daemon will actually do.
 	settings[SettingHeadlessTasksEnabled] = strconv.FormatBool(headless.Enabled())
 	settings[SettingChiefContextWindowCap] = strconv.Itoa(resolveContextWindowCap(stored[SettingChiefContextWindowCap]))
 	settings[SettingHeadlessContextWindowCap] = strconv.Itoa(resolveContextWindowCap(stored[SettingHeadlessContextWindowCap]))
@@ -418,7 +417,6 @@ func (d *Daemon) applyHeadlessContextWindowCap() {
 	agentdriver.SetHeadlessContextWindowCap(resolveContextWindowCap(d.store.GetSetting(SettingHeadlessContextWindowCap)))
 }
 
-// The env override still wins over whatever this mirrors.
 func (d *Daemon) applyHeadlessTasksMode() {
 	if d.store == nil {
 		return

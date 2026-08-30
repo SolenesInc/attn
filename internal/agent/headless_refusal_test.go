@@ -11,7 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/headless"
 )
 
-// The executable exists and would run: only the switch can produce ErrRefused here.
 func writeRunnableAgentStub(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "agent-stub")

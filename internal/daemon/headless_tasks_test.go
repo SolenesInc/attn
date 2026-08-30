@@ -67,8 +67,6 @@ func TestHeadlessSwitchOffRefusesTheStopClassifier(t *testing.T) {
 	requireRefusal(t, readLog, "classifier")
 }
 
-// The refused stop takes the classifier-error route, which files no verdict and
-// leaves the hook evidence to settle the session.
 func TestHeadlessSwitchOffStillSettlesASession(t *testing.T) {
 	t.Setenv(headless.EnvVar, "off")
 	d, _ := newHeadlessDaemon(t)
