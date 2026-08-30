@@ -20,6 +20,17 @@ import (
 
 func installActivityRunner(t *testing.T, d *Daemon) {
 	t.Helper()
+	runner := installQuietActivityRunner(t, d)
+	if err := runner.Start(); err != nil {
+		t.Fatalf("start runner: %v", err)
+	}
+	t.Cleanup(runner.Stop)
+}
+
+// Registered but not started: a caller that runs the queued job itself must be
+// the only thing running it.
+func installQuietActivityRunner(t *testing.T, d *Daemon) *jobs.Runner {
+	t.Helper()
 	d.store.SetSetting(SettingActivityEnabled, "true")
 	d.store.SetSetting(SettingActivityConfig, `{"agent":"claude","model":"claude-haiku-4-5"}`)
 	d.store.SetSetting(canonicalExecutableSettingKey("claude"), writeFakeAgentExecutable(t))
@@ -33,11 +44,8 @@ func installActivityRunner(t *testing.T, d *Daemon) {
 		jobs.HandlerConfig{Timeout: sessionActivityTimeout}); err != nil {
 		t.Fatalf("register session_activity: %v", err)
 	}
-	if err := runner.Start(); err != nil {
-		t.Fatalf("start runner: %v", err)
-	}
-	t.Cleanup(runner.Stop)
 	d.jobQueue = runner
+	return runner
 }
 
 func watchingClient(d *Daemon) {

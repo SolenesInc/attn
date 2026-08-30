@@ -11,6 +11,7 @@ import (
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -62,6 +63,11 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 	if err != nil || slice.Empty() || slice.Brief == "" {
 		// Leave the attempted-guard unmarked so a later Stop retries rather than
 		// permanently skipping this session.
+		return
+	}
+
+	// Ahead of the attempted-mark: a refused title must stay retryable.
+	if d.headlessTaskRefused("session_title") {
 		return
 	}
 
@@ -174,6 +180,9 @@ func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent string, sli
 // Mirrors the command shape of classifier.ClassifyWithCopilot without importing
 // it: stop-time classification is internal/classifier's alone.
 func execSessionTitleCopilot(ctx context.Context, prompt, model string) (string, error) {
+	if !headless.Enabled() {
+		return "", headless.Refusal("session_title")
+	}
 	executable := strings.TrimSpace(os.Getenv("ATTN_COPILOT_EXECUTABLE"))
 	if executable == "" {
 		executable = "copilot"

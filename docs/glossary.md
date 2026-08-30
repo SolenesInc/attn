@@ -77,6 +77,8 @@
 - Parked endpoint: binary/protocol mismatch awaiting Sync.
 - Client token: profile protocol credential. Browser host token: trusted WebView identity.
 - HTTP bearer: operator credential for exposed WebSockets.
+- Headless task: model run the daemon starts on its own, with no session and no PTY.
+- Headless tasks switch: `ATTN_HEADLESS_TASKS` / `headless_tasks.enabled`; off refuses every headless task before it spawns. The environment wins.
 - Auto mode: pi permissions. Config: policy/environment snapshot at launch.
 - Proposal: requested policy/model change. Promotion: user applies it. Denial: refused call.
 - Environment template: initial classifier context copied into config.

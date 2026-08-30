@@ -91,13 +91,10 @@ func (d *Daemon) sessionActivityScanHandler(context.Context, *jobs.Job) (any, er
 	if interval <= 0 {
 		return nil, nil
 	}
-	if _, err := d.activityConfigured(); err != nil {
-		d.logf("session_activity: enabled but not runnable: %v", err)
-		return nil, nil
-	}
 
 	now := time.Now()
 	live := make(map[string]struct{})
+	var due []string
 	for _, session := range d.store.List("") {
 		live[session.ID] = struct{}{}
 		if !sessionGeneratesActivity(session) {
@@ -112,9 +109,19 @@ func (d *Daemon) sessionActivityScanHandler(context.Context, *jobs.Job) (any, er
 		if !d.transcriptMovedSince(session, latest(stored.At, run.ObservedAt)) {
 			continue
 		}
-		d.enqueueSessionActivity(session.ID)
+		due = append(due, session.ID)
 	}
 	d.forgetSessionActivityRuns(live)
+	if len(due) == 0 {
+		return nil, nil
+	}
+	if _, err := d.activityConfigured(); err != nil {
+		d.logf("session_activity: enabled but not runnable: %v", err)
+		return nil, nil
+	}
+	for _, sessionID := range due {
+		d.enqueueSessionActivity(sessionID)
+	}
 	return nil, nil
 }
 
@@ -169,10 +176,6 @@ func (d *Daemon) enqueueSessionActivity(sessionID string) {
 	if d.PresenceTier() == PresenceAway {
 		return
 	}
-	runner := d.jobQueueRef()
-	if runner == nil || runner.Disabled() {
-		return
-	}
 	session := d.store.Get(sessionID)
 	if session == nil || !sessionGeneratesActivity(session) {
 		return
@@ -180,6 +183,10 @@ func (d *Daemon) enqueueSessionActivity(sessionID string) {
 	resumeID := strings.TrimSpace(d.store.GetResumeSessionID(sessionID))
 	transcriptPath := d.sessionActivityTranscript(session)
 	if transcriptPath == "" {
+		return
+	}
+	runner := d.jobQueueRef()
+	if runner == nil || runner.Disabled() {
 		return
 	}
 	if _, err := runner.Enqueue(sessionActivityKind, jobs.EnqueueOptions{
@@ -215,23 +222,14 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	if !d.activityEnabled() || d.PresenceTier() == PresenceAway {
 		return nil, nil
 	}
-
 	sessionID := strings.TrimSpace(jobSubject(job))
 	if sessionID == "" {
 		return nil, errors.New("session_activity requires a session id")
 	}
-	config, err := d.activityConfigured()
-	if err != nil {
-		return nil, err
-	}
-
 	session := d.store.Get(sessionID)
 	if session == nil {
 		return nil, nil
 	}
-	d.noteSessionActivityRun(sessionID, func(run *sessionActivityRun) {
-		run.ObservedAt = time.Now()
-	})
 
 	var carried sessionActivityPayload
 	if err := job.DecodePayload(&carried); err != nil {
@@ -245,6 +243,9 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	if transcriptPath == "" {
 		return nil, nil
 	}
+	d.noteSessionActivityRun(sessionID, func(run *sessionActivityRun) {
+		run.ObservedAt = time.Now()
+	})
 
 	stored := d.store.GetSessionActivity(sessionID)
 	// Cold start, checked before the read: reading from byte 0 succeeds, which is
@@ -266,6 +267,15 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 
 	if window.Empty() {
 		return nil, d.advanceSessionActivityCursor(sessionID, resumeID, stored, window.NextCursor)
+	}
+	// The cursor advances past a refused delta on purpose: holding it would re-refuse
+	// the same bytes on every scan.
+	if d.headlessTaskRefused(sessionActivityKind) {
+		return nil, d.advanceSessionActivityCursor(sessionID, resumeID, stored, window.NextCursor)
+	}
+	config, err := d.activityConfigured()
+	if err != nil {
+		return nil, err
 	}
 
 	prompt := activity.Baseline().Render(activity.Input{

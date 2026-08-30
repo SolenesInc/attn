@@ -31,6 +31,7 @@ import (
 	"github.com/victorarias/attn/internal/fsdoc"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/github"
+	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/hostsession"
 	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/jobs"
@@ -784,6 +785,7 @@ func (d *Daemon) Start() error {
 	}()
 	d.ensurePluginSupervisor()
 	d.applyHeadlessContextWindowCap()
+	d.applyHeadlessTasksMode()
 	if err := d.startEventBus(); err != nil {
 		return fmt.Errorf("start event bus: %w", err)
 	}
@@ -3737,6 +3739,7 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"data_dir":           dataDir,
 		"socket_path":        socketPath,
 		"port":               config.WSPort(),
+		"headless_tasks":     headless.Describe(),
 	}
 	if routingPathError != "" {
 		health["routing_path_error"] = routingPathError

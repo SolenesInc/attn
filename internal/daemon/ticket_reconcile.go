@@ -173,7 +173,8 @@ func (d *Daemon) reconcileTicketsOnSessionEnd(sessionID, state string) {
 	}
 	// Read before dropSessionRecord deletes the row.
 	session := d.store.Get(sessionID)
-	runner := d.jobQueueRef()
+	// nil still lets the crash marking below run; only the verdict needs a model.
+	runner := d.headlessJobQueue(reconcileKind)
 
 	intentionalClose := d.sessionCloseWasIntentional(sessionID)
 
@@ -188,7 +189,7 @@ func (d *Daemon) reconcileTicketsOnSessionEnd(sessionID, state string) {
 			}
 			statusAtClaim = store.TicketStatusCrashed
 		}
-		if runner == nil || runner.Disabled() {
+		if runner == nil {
 			continue
 		}
 		claimed, err := d.store.ClaimTicketReconciliation(ticket.ID, time.Now())
@@ -284,6 +285,10 @@ func (d *Daemon) reconcileJobHandler(ctx context.Context, job *jobs.Job) (_ any,
 	if err != nil {
 		// Garbled inputs can never run into health; retire (nil) to avoid a hot loop.
 		d.logf("ticket reconcile %s: %v", jobSubject(job), err)
+		return nil, nil
+	}
+	willClassify := d.ticketReconcileExec != nil && strings.TrimSpace(in.TranscriptPath) != ""
+	if willClassify && d.headlessTaskRefused(reconcileKind) {
 		return nil, nil
 	}
 	// The replant into the garden waits for this: a replant mid-classification would move
@@ -466,16 +471,12 @@ func (d *Daemon) ticketReconcileSweepPass(now time.Time) {
 	if d.store == nil {
 		return
 	}
-	runner := d.jobQueueRef()
-	if runner == nil || runner.Disabled() {
-		return
-	}
 	tickets, err := d.store.ListTickets(store.TicketListFilter{})
 	if err != nil {
 		d.logf("ticket reconcile sweep: list tickets: %v", err)
 		return
 	}
-	claims := 0
+	var candidates []*store.Ticket
 	for _, ticket := range tickets {
 		if ticket == nil {
 			continue
@@ -492,6 +493,17 @@ func (d *Daemon) ticketReconcileSweepPass(now time.Time) {
 			d.clearOrphanFirstSeen(ticket.ID)
 			continue
 		}
+		candidates = append(candidates, ticket)
+	}
+	if len(candidates) == 0 {
+		return
+	}
+	runner := d.jobQueueRef()
+	if runner == nil || runner.Disabled() {
+		return
+	}
+	var claimable []*store.Ticket
+	for _, ticket := range candidates {
 		if existing, err := runner.GetByKey(reconcileKind, ticket.ID); err != nil {
 			d.logf("ticket reconcile sweep: lookup job for %s: %v", ticket.ID, err)
 			continue
@@ -503,8 +515,19 @@ func (d *Daemon) ticketReconcileSweepPass(now time.Time) {
 		if now.Sub(firstSeen) < ticketReconcileGrace() {
 			continue
 		}
+		claimable = append(claimable, ticket)
+	}
+	if len(claimable) == 0 {
+		return
+	}
+	if d.headlessTaskRefused(reconcileKind) {
+		return
+	}
+	claims := 0
+	for _, ticket := range claimable {
+		assignee := strings.TrimSpace(ticket.Assignee)
 		if claims >= ticketReconcileSweepClaimCap {
-			continue
+			break
 		}
 		claims++
 		d.clearOrphanFirstSeen(ticket.ID)
