@@ -300,6 +300,23 @@ func (m *sessionInputModule) release(sessionID string, id sessionInputAttemptID)
 	lane.mu.Unlock()
 }
 
+func (m *sessionInputModule) forget(sessionID string, id sessionInputAttemptID) {
+	key := id.String()
+	if key == "" || strings.TrimSpace(sessionID) == "" {
+		return
+	}
+	m.mu.Lock()
+	lane := m.lanes[sessionID]
+	m.mu.Unlock()
+	if lane == nil {
+		return
+	}
+	lane.mu.Lock()
+	delete(lane.attempts, key)
+	lane.removePending(id)
+	lane.mu.Unlock()
+}
+
 func (m *sessionInputModule) forgetSession(sessionID string) {
 	m.mu.Lock()
 	delete(m.lanes, sessionID)

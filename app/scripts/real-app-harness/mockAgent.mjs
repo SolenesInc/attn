@@ -17,7 +17,9 @@ function resolveFixturePath(cwd, value) {
 
 // Mirrors internal/statemarker.States(); the two must not drift.
 export const MOCK_AGENT_STATES = ['waiting_input', 'idle'];
-const REPLYING_ACTIONS = ['reply', 'attn'];
+const REPLYING_ACTIONS = ['reply', 'attn', 'exec'];
+const ACTION_TYPES = ['reply', 'delay', 'touch', 'wait_for_file', 'attn', 'capture', 'exec'];
+const CAPTURE_SOURCES = ['prompt'];
 
 // Header and prompt glyph are what scenarioAgents.mjs reads to call a pane
 // ready, so an agent the mock stands in for must be recognisable by both.
@@ -69,12 +71,30 @@ export function markerStateForActions(actions) {
   return list.some((action) => REPLYING_ACTIONS.includes(action?.type)) ? 'waiting_input' : 'idle';
 }
 
+function validateCapture(action, label) {
+  if (typeof action.name !== 'string' || !action.name.trim()) throw new Error(`${label} capture needs a name`);
+  const from = action.from ?? 'prompt';
+  if (!CAPTURE_SOURCES.includes(from)) {
+    throw new Error(`${label} captures from ${JSON.stringify(from)}, want one of ${CAPTURE_SOURCES.join(', ')}`);
+  }
+  if (typeof action.pattern !== 'string' || !action.pattern) throw new Error(`${label} capture needs a pattern`);
+  try {
+    new RegExp(action.pattern);
+  } catch (error) {
+    throw new Error(`${label} capture pattern ${JSON.stringify(action.pattern)} does not compile: ${error.message}`);
+  }
+}
+
 function validateActions(actions, label) {
   if (!Array.isArray(actions)) throw new Error(`${label} must be an array`);
   for (const action of actions) {
     if (!action || typeof action.type !== 'string') throw new Error(`${label} has an action without a type`);
-    if (!['reply', 'delay', 'touch', 'wait_for_file', 'attn'].includes(action.type)) {
+    if (!ACTION_TYPES.includes(action.type)) {
       throw new Error(`${label} has unsupported action type ${JSON.stringify(action.type)}`);
+    }
+    if (action.type === 'capture') validateCapture(action, label);
+    if (action.type === 'exec' && (typeof action.cmd !== 'string' || !action.cmd.trim())) {
+      throw new Error(`${label} exec needs a cmd`);
     }
     if (action.state !== undefined && !MOCK_AGENT_STATES.includes(action.state)) {
       throw new Error(`${label} has state ${JSON.stringify(action.state)}, want one of ${MOCK_AGENT_STATES.join(', ')}`);
@@ -101,6 +121,44 @@ export function validateMockAgentConfig(config) {
 export function selectMockAgentActions(config, input) {
   const turn = config.turns.find((candidate) => input.includes(candidate.includes));
   return turn?.actions ?? config.defaultActions ?? [];
+}
+
+export function parseMockAgentArgv(argv = []) {
+  const args = argv.map(String);
+  const separator = args.indexOf('--');
+  const head = separator === -1 ? args : args.slice(0, separator);
+  const initialPrompt = separator === -1 ? '' : args.slice(separator + 1).join(' ');
+  const valueAfter = (index) => {
+    const value = head[index + 1];
+    return value === undefined || value.startsWith('-') ? '' : value;
+  };
+  const launch = { argv: args, sessionId: '', resumeSessionId: '', resumePicker: false };
+  head.forEach((token, index) => {
+    if (token === '--session-id') launch.sessionId = valueAfter(index);
+    if (token !== '-r' && token !== 'resume') return;
+    launch.resumeSessionId = valueAfter(index);
+    launch.resumePicker = !launch.resumeSessionId;
+  });
+  return { ...launch, initialPrompt };
+}
+
+export function interpolateCaptures(value, captures) {
+  return String(value).replace(/\{\{([A-Za-z0-9_]+)\}\}/g, (whole, name) => {
+    const captured = captures instanceof Map ? captures.get(name) : captures?.[name];
+    if (captured === undefined) {
+      const known = [...(captures instanceof Map ? captures.keys() : Object.keys(captures ?? {}))];
+      throw new Error(`${whole} has nothing captured under ${name}; captured so far: ${known.join(', ') || '(nothing)'}`);
+    }
+    return captured;
+  });
+}
+
+export function captureFromPrompt(action, prompt) {
+  const match = new RegExp(action.pattern).exec(prompt);
+  if (!match) {
+    throw new Error(`capture ${action.name} found no ${JSON.stringify(action.pattern)} in the prompt: ${JSON.stringify(prompt)}`);
+  }
+  return match[1] ?? match[0];
 }
 
 export function mockAgentTitle(name, state, resting = '') {
@@ -195,6 +253,8 @@ export function readMockAgentConfig(cwd) {
 async function runMockAgent() {
   const cwd = process.cwd();
   const config = readMockAgentConfig(cwd);
+  const launch = parseMockAgentArgv(process.argv.slice(2));
+  const captures = new Map();
   const nativeId = `mock-${randomUUID()}`;
   const transcriptDir = path.join(cwd, '.attn-mock-agent');
   const transcriptPath = path.join(transcriptDir, `rollout-${nativeId}.jsonl`);
@@ -204,6 +264,7 @@ async function runMockAgent() {
     timestamp: new Date().toISOString(),
     cwd,
     source: 'cli',
+    launch,
   })}\n`, 'utf8');
 
   requireAttn(['_hook-session-start'], JSON.stringify({
@@ -245,7 +306,37 @@ async function runMockAgent() {
     emit(`• ${text.replaceAll('\n', '\n  ')}`);
   };
 
-  const runAction = async (action) => {
+  const fill = (value) => interpolateCaptures(value, captures);
+
+  const runExec = (action) => {
+    const args = (action.args || []).map((arg) => fill(arg));
+    const command = fill(action.cmd);
+    const result = spawnSync(command, args, {
+      cwd: action.cwd ? resolveFixturePath(cwd, fill(action.cwd)) : cwd,
+      encoding: 'utf8',
+      env: process.env,
+    });
+    const printed = [result.stdout, result.stderr].map((part) => (part || '').trim()).filter(Boolean).join('\n');
+    const label = [command, ...args].join(' ');
+    if (result.error || result.status !== 0) {
+      const detail = printed || result.error?.message || 'no output';
+      const failure = `${label} exited ${result.status ?? 'without status'}: ${detail}`;
+      if (!action.allowFailure) throw new Error(failure);
+      reply(`✗ ${failure}`);
+      return;
+    }
+    reply(printed ? `$ ${label}\n${printed}` : `$ ${label}`);
+  };
+
+  const runAction = async (action, prompt) => {
+    if (action.type === 'capture') {
+      captures.set(action.name, captureFromPrompt(action, prompt));
+      return;
+    }
+    if (action.type === 'exec') {
+      runExec(action);
+      return;
+    }
     if (action.type === 'reply') {
       reply(String(action.text ?? ''));
       return;
@@ -270,7 +361,7 @@ async function runMockAgent() {
       return;
     }
     if (action.type === 'attn') {
-      const output = requireAttn((action.args || []).map(String), String(action.input || '')).trim();
+      const output = requireAttn((action.args || []).map((arg) => fill(arg)), fill(action.input || '')).trim();
       reply(output || String(action.emptyReply || 'done'));
     }
   };
@@ -299,7 +390,7 @@ async function runMockAgent() {
     const beating = setInterval(setTitle, 500);
     try {
       const actions = selectMockAgentActions(config, input);
-      for (const action of actions) await runAction(action);
+      for (const action of actions) await runAction(action, input);
       await delay(Math.max(0, (config.minimumWorkingMs ?? 1_500) - (Date.now() - workingSince)));
       stop(markerStateForActions(actions));
     } finally {
@@ -312,17 +403,19 @@ async function runMockAgent() {
   repaint();
   process.stdout.on('resize', repaint);
   let turns = Promise.resolve();
-  const parseInput = createMockAgentInputParser((input) => {
+  const take = (input) => {
     turns = turns.then(() => answer(input)).catch((error) => {
       emit(`• mock agent error: ${error.message}`);
       try { stop('idle'); } catch { /* the daemon may be closing */ }
       phase = 'ready';
       prompt();
     });
-  });
+  };
+  const parseInput = createMockAgentInputParser(take);
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', parseInput);
   process.stdin.resume();
+  if (launch.initialPrompt.trim()) take(launch.initialPrompt);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === executablePath) {

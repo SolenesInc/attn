@@ -101,7 +101,6 @@ export const scenarioCatalog = [
   {
     id: 'garden-seed-nudges',
     runnerId: 'GardenSeedNudges',
-    allowRealAgents: true,
     label: 'Garden seed nudges: a ringing note and harvest reach the dispatcher with a read reset between them',
     command: ['pnpm', 'run', 'real-app:scenario-garden-seed-nudges'],
     timeoutMs: 240_000,

@@ -4,8 +4,11 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  captureFromPrompt,
   createMockAgentInputParser,
+  interpolateCaptures,
   markerStateForActions,
+  parseMockAgentArgv,
   mockAgentFlavor,
   mockAgentSplash,
   mockAgentTitle,
@@ -138,6 +141,63 @@ describe('mock agent fixture', () => {
     expect(selectMockAgentActions(config, 'anything at all')).toEqual([]);
   });
 
+  it('reads the brief and the resume flags each agent hands it on argv', () => {
+    const claude = parseMockAgentArgv([
+      '--session-id', 'sess-7', '--settings', '/tmp/settings.json',
+      '--disallowed-tools', 'AttnPeerSend', '--model', 'claude-haiku-4-5',
+      '--dangerously-skip-permissions', '--', 'Plant a seed and report back',
+    ]);
+    expect(claude.initialPrompt).toBe('Plant a seed and report back');
+    expect(claude.sessionId).toBe('sess-7');
+    expect(claude.resumeSessionId).toBe('');
+
+    const resumed = parseMockAgentArgv(['--model', 'x', '-r', 'abc-123', '--', 'carry on']);
+    expect(resumed.resumeSessionId).toBe('abc-123');
+    expect(resumed.resumePicker).toBe(false);
+
+    const codex = parseMockAgentArgv(['-c', 'k="v"', 'resume', 'rollout-9', '-C', '/tmp/work', '--', 'brief here']);
+    expect(codex.resumeSessionId).toBe('rollout-9');
+    expect(codex.initialPrompt).toBe('brief here');
+
+    expect(parseMockAgentArgv(['resume', '-C', '/tmp/work']).resumePicker).toBe(true);
+    expect(parseMockAgentArgv([])).toEqual({
+      argv: [], sessionId: '', resumeSessionId: '', resumePicker: false, initialPrompt: '',
+    });
+  });
+
+  it('captures a value out of the prompt and fills it into later arguments', () => {
+    const action = { type: 'capture', from: 'prompt', pattern: '(s-[a-z0-9]{6})', name: 'seed' };
+    expect(captureFromPrompt(action, 'your work is seed `s-627pnh` in the garden')).toBe('s-627pnh');
+    expect(() => captureFromPrompt(action, 'no seed here')).toThrow('found no');
+
+    const captures = new Map([['seed', 's-627pnh']]);
+    expect(interpolateCaptures('{{seed}}', captures)).toBe('s-627pnh');
+    expect(interpolateCaptures('note on {{seed}} now', captures)).toBe('note on s-627pnh now');
+    expect(() => interpolateCaptures('{{ticket}}', captures)).toThrow('nothing captured under ticket');
+  });
+
+  it('rejects a capture or an exec a scenario cannot run', () => {
+    expect(() => validateMockAgentConfig({
+      version: 1,
+      turns: [{ includes: 'hi', actions: [{ type: 'capture', pattern: 's-.*' }] }],
+    })).toThrow('capture needs a name');
+
+    expect(() => validateMockAgentConfig({
+      version: 1,
+      turns: [{ includes: 'hi', actions: [{ type: 'capture', name: 'seed', from: 'transcript', pattern: 's-.*' }] }],
+    })).toThrow('want one of prompt');
+
+    expect(() => validateMockAgentConfig({
+      version: 1,
+      turns: [{ includes: 'hi', actions: [{ type: 'capture', name: 'seed', pattern: '(' }] }],
+    })).toThrow('does not compile');
+
+    expect(() => validateMockAgentConfig({
+      version: 1,
+      turns: [{ includes: 'hi', actions: [{ type: 'exec', args: ['status'] }] }],
+    })).toThrow('exec needs a cmd');
+  });
+
   it('names only the agents whose executable is pinned at the mock', () => {
     expect(mockPinnedAgents({
       ATTN_CLAUDE_EXECUTABLE: MOCK_AGENT_EXECUTABLE,
@@ -246,5 +306,99 @@ describe('mock agent turns', () => {
     const assistant = messages.filter((entry) => entry.payload?.role === 'assistant');
     expect(assistant.at(-1).payload.content[0].text).toBe(stateMarker('idle'));
     expect(assistant.at(-2).payload.content[0].text).toBe('wrapped up');
+  });
+
+  function startMock(argv, ledger) {
+    const wrapper = path.join(tmpDir, 'fake-attn.mjs');
+    fs.writeFileSync(wrapper, FAKE_ATTN, { mode: 0o755 });
+    fs.writeFileSync(ledger, '');
+    return spawn(process.execPath, [MOCK_AGENT_EXECUTABLE, ...argv], {
+      cwd: tmpDir,
+      env: { ...process.env, ATTN_WRAPPER_PATH: wrapper, MOCK_AGENT_LEDGER: ledger, ATTN_SESSION_ID: 'sess-argv' },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  }
+
+  it('takes the brief off argv as its first turn and fills a captured value into the attn call', async () => {
+    const ledger = path.join(tmpDir, 'attn-calls.jsonl');
+    const brief = 'Live proof only. Your work is seed `s-627pnh`; ring a note about it.';
+    writeMockAgentFixture(tmpDir, {
+      name: 'capture mock',
+      minimumWorkingMs: 0,
+      turns: [{
+        includes: 'ring a note',
+        actions: [
+          { type: 'capture', from: 'prompt', pattern: '(s-[a-z0-9]{6})', name: 'seed' },
+          { type: 'attn', args: ['seed', 'note', '{{seed}}', '-m', 'RING7', '--ring'] },
+        ],
+      }],
+    });
+
+    child = startMock(['-c', 'k="v"', 'resume', 'rollout-42', '-C', tmpDir, '--', brief], ledger);
+
+    const calls = () => fs.readFileSync(ledger, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
+    const note = await waitFor(
+      () => calls().find((call) => call.args[0] === 'seed' && call.args[1] === 'note'),
+      'the mock to act on the brief it was launched with',
+    );
+    expect(note.args).toEqual(['seed', 'note', 's-627pnh', '-m', 'RING7', '--ring']);
+    await waitFor(() => calls().find((call) => call.args[0] === '_hook-stop'), 'the argv turn to close');
+
+    const sessionStart = calls().find((call) => call.args[0] === '_hook-session-start');
+    const meta = JSON.parse(fs.readFileSync(JSON.parse(sessionStart.input).transcript_path, 'utf8').split('\n')[0]);
+    expect(meta.payload.launch.resumeSessionId).toBe('rollout-42');
+    expect(meta.payload.launch.argv).toContain('resume');
+  });
+
+  it('runs a command, paints its output, and fails the turn only when the failure is not allowed', async () => {
+    const ledger = path.join(tmpDir, 'attn-calls.jsonl');
+    writeMockAgentFixture(tmpDir, {
+      name: 'exec mock',
+      minimumWorkingMs: 0,
+      turns: [
+        {
+          includes: 'remove the worktree',
+          actions: [{ type: 'exec', cmd: process.execPath, args: ['-e', 'console.log("worktree removed")'], state: 'idle' }],
+        },
+        {
+          includes: 'already gone',
+          actions: [{
+            type: 'exec',
+            cmd: process.execPath,
+            args: ['-e', 'console.error("no such worktree"); process.exit(3)'],
+            allowFailure: true,
+          }],
+        },
+        {
+          includes: 'must not fail',
+          actions: [{ type: 'exec', cmd: process.execPath, args: ['-e', 'process.exit(4)'] }],
+        },
+      ],
+    });
+
+    child = startMock([], ledger);
+    let stdout = '';
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+
+    const calls = () => fs.readFileSync(ledger, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
+    const stops = () => calls().filter((call) => call.args[0] === '_hook-stop').length;
+
+    child.stdin.write('remove the worktree\r');
+    await waitFor(() => stdout.includes('worktree removed') || null, 'the command output in the pane');
+    await waitFor(() => stops() >= 1 || null, 'the exec turn to close');
+
+    child.stdin.write('the worktree is already gone\r');
+    await waitFor(() => stdout.includes('no such worktree') || null, 'the tolerated failure in the pane');
+    expect(stdout).toContain('exited 3');
+    expect(stdout).not.toContain('mock agent error');
+
+    child.stdin.write('this one must not fail\r');
+    await waitFor(() => (stdout.includes('mock agent error') ? stdout : null), 'the refused failure to break the turn');
+    expect(stdout).toContain('exited 4');
+    await waitFor(() => stops() >= 3 || null, 'every turn to close its own stop hook');
+
+    const transcriptPath = JSON.parse(calls().find((call) => call.args[0] === '_hook-session-start').input).transcript_path;
+    expect(fs.readFileSync(transcriptPath, 'utf8')).toContain('worktree removed');
   });
 });

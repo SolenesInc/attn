@@ -1,0 +1,10 @@
+kind: fixed
+area: daemon
+change: >
+  Writes stop losing races they should have waited out. Every store transaction
+  began deferred, so one that read before it wrote had to upgrade to the write
+  lock mid-flight — an upgrade SQLite refuses instantly, without ever consulting
+  the busy timeout, whenever another connection is writing. A scheduled
+  automation's claim hit exactly that and dropped its whole tick, once a minute,
+  with one log line. Transactions now take the write lock when they begin, so a
+  busy database delays them instead of failing them.
