@@ -63,7 +63,7 @@ func TestRealAgentHarness(t *testing.T) {
 	}
 	t.Setenv("ATTN_WS_PORT", strconv.Itoa(port))
 
-	tmpDir := t.TempDir()
+	tmpDir := shortTempDir(t)
 	sockPath := filepath.Join(tmpDir, "attn.sock")
 	d := NewForTesting(sockPath)
 	go func() {

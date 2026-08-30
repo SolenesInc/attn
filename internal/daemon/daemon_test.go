@@ -3276,6 +3276,7 @@ func waitForProtocolWebSocketEvent(t *testing.T, conn *websocket.Conn, want stri
 
 func sendWorkspaceClientHello(t *testing.T, conn *websocket.Conn) {
 	t.Helper()
+	conn.SetReadLimit(-1)
 	if err := writeWS(conn, map[string]interface{}{
 		"cmd":          protocol.CmdClientHello,
 		"client_kind":  "daemon-test",
@@ -4014,7 +4015,7 @@ func TestDaemon_ApprovePR_ViaWebSocket(t *testing.T) {
 func TestDaemon_InjectTestPR(t *testing.T) {
 	useFreeWSPort(t)
 
-	tmpDir := t.TempDir()
+	tmpDir := shortTempDir(t)
 	sockPath := filepath.Join(tmpDir, "test.sock")
 
 	d := NewForTesting(sockPath)
@@ -4433,8 +4434,10 @@ func TestDaemon_HookReportedStatesReachClients(t *testing.T) {
 
 	sendWorkspaceClientHello(t, wsConn)
 	waitForProtocolWebSocketEvent(t, wsConn, protocol.EventInitialState)
+	// coder/websocket defaults to 32 KiB; CI saw this legal state event cross it.
+	d.store.UpdateTodos("test-session", []string{strings.Repeat("x", 32<<10)})
 
-	for _, expected := range []string{
+	for i, expected := range []string{
 		protocol.StateWorking,
 		protocol.StateWaitingInput,
 		protocol.StateWorking,
@@ -4445,6 +4448,15 @@ func TestDaemon_HookReportedStatesReachClients(t *testing.T) {
 		waitForResolvedState(t, d, "test-session", protocol.SessionState(expected))
 
 		event := waitForProtocolWebSocketEvent(t, wsConn, protocol.EventSessionStateChanged)
+		if i == 0 {
+			payload, err := json.Marshal(event)
+			if err != nil {
+				t.Fatalf("marshal session state event: %v", err)
+			}
+			if len(payload) <= 32<<10 {
+				t.Fatalf("session state event = %d bytes, want past coder/websocket's 32 KiB default", len(payload))
+			}
+		}
 		got := ""
 		if event.Session != nil {
 			got = string(event.Session.State)
