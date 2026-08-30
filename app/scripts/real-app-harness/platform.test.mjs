@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { appPlatformFor, LinuxWindowDriver } from './platform.mjs';
+import { appPlatformFor } from './platform.mjs';
+import { LinuxDriver } from './linuxDriver.mjs';
 
 const darwin = appPlatformFor('darwin');
 const linux = appPlatformFor('linux');
@@ -62,37 +63,49 @@ describe('linux app control', () => {
   });
 });
 
-describe('LinuxWindowDriver.waitForMainWindow', () => {
+describe('LinuxDriver.waitForMainWindow', () => {
   it('returns the first mapped window xdotool reports for the pid', async () => {
     const run = vi.fn().mockResolvedValue({ stdout: '31457282\n31457284\n' });
-    const driver = new LinuxWindowDriver({ appPath: '/home/someone/.local/share/attn-dev', run });
+    const driver = new LinuxDriver({ appPath: '/home/someone/.local/share/attn-dev', run, env: { DISPLAY: ':99' } });
 
     await expect(driver.waitForMainWindow(1_000, 10, { pid: 4242 })).resolves.toBe(31457282);
-    expect(run).toHaveBeenCalledWith('xdotool', ['search', '--onlyvisible', '--pid', '4242']);
+    expect(run).toHaveBeenCalledWith(
+      'xdotool',
+      ['search', '--onlyvisible', '--pid', '4242'],
+      expect.objectContaining({ env: { DISPLAY: ':99' } }),
+    );
   });
 
   it('skips observation when xdotool is not installed', async () => {
     const run = vi.fn().mockRejectedValue(Object.assign(new Error('spawn xdotool ENOENT'), { code: 'ENOENT' }));
-    const driver = new LinuxWindowDriver({ run });
+    const driver = new LinuxDriver({ run, env: { DISPLAY: ':99' } });
 
-    await expect(driver.waitForMainWindow(1_000, 10, { pid: 4242 })).resolves.toBeNull();
+    await expect(driver.waitForMainWindow(1_000, 10, { pid: 4242 })).rejects.toThrow('xdotool is not installed');
     expect(run).toHaveBeenCalledTimes(1);
   });
 
   it('gives up when no window ever carries the pid', async () => {
     const run = vi.fn().mockRejectedValue(Object.assign(new Error('exit 1'), { code: 1 }));
-    const driver = new LinuxWindowDriver({ run });
+    const driver = new LinuxDriver({ run, env: { DISPLAY: ':99' } });
 
     await expect(driver.waitForMainWindow(60, 10, { pid: 4242 })).resolves.toBeNull();
     expect(run.mock.calls.length).toBeGreaterThan(1);
   });
 
-  it('observes nothing without a pid', async () => {
-    const run = vi.fn();
-    const driver = new LinuxWindowDriver({ run });
+  it('finds the profile window by its exact title without a pid', async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: '31457282\n' });
+    const driver = new LinuxDriver({
+      appPath: '/home/someone/.local/share/attn-dev',
+      run,
+      env: { DISPLAY: ':99' },
+    });
 
-    await expect(driver.waitForMainWindow(1_000, 10, {})).resolves.toBeNull();
-    expect(run).not.toHaveBeenCalled();
+    await expect(driver.waitForMainWindow(1_000, 10, {})).resolves.toBe(31457282);
+    expect(run).toHaveBeenCalledWith(
+      'xdotool',
+      ['search', '--onlyvisible', '--name', '^attn-dev$'],
+      expect.objectContaining({ env: { DISPLAY: ':99' } }),
+    );
   });
 });
 

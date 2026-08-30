@@ -4,7 +4,7 @@ import path from 'node:path';
 import { armAgentTripwire, ensureDaemonCarriesTripwire, formatReceiptFailure, formatTripwireFailure } from './agentTripwire.mjs';
 import { assertPackagedAppBuildMatchesCurrentSource } from './buildPreflight.mjs';
 import { createRunContext, emitVerdict, FIRST_FAILURE_MAX_LENGTH, restoreHarnessSettings } from './common.mjs';
-import { MacOSDriver } from './macosDriver.mjs';
+import { createWindowDriver } from './platform.mjs';
 import { allowRealAgentsForRunner } from './scenarioCatalog.mjs';
 import { createScenarioRecorder, recordingEnabled } from './windowRecording.mjs';
 
@@ -157,7 +157,7 @@ export function createScenarioRunner(options, {
   armTripwire = armAgentTripwire,
   ensureDaemonArmed = ensureDaemonCarriesTripwire,
   createRecorder = createScenarioRecorder,
-  createRecordingDriver = (appPath) => new MacOSDriver({ appPath }),
+  createRecordingDriver = (appPath) => createWindowDriver({ appPath }),
   emitRunnerVerdict = emitVerdict,
   isRecordingEnabled = recordingEnabled,
 } = {}) {

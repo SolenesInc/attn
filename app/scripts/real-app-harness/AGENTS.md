@@ -87,6 +87,9 @@ fails the scenario on a non-empty ledger and prints the lines.
 - Read the last `ATTN_VERDICT ` stdout line; hand-rolled `main()` scenarios omit it.
 - Inspect captured pane text and native screenshots before diagnosing failures.
 - Dark/locked screens block input. Check `pmset -g log | rg "Display is turned"`.
+- Linux input needs `DISPLAY` and `xdotool`; run scenarios through `xvfb-run` in CI.
+- Use `capture_screenshot_data` for DOM pixels. WebGL terminal evidence needs a
+  native window capture (`import -window` on Linux).
 
 ## Recordings
 
@@ -103,3 +106,4 @@ keep clips around 20 seconds and heed the 10MB GIF warning.
 `ATTN_HARNESS_RECORD=1` writes `recording-NN.mp4` segments to scenario artifacts.
 Install/update the recorder with `make install-window-recorder`; its stable
 bundle preserves macOS Screen Recording permission.
+Recording is unsupported on Linux; the harness names that and continues.

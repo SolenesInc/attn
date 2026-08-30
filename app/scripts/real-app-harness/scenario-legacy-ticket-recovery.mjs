@@ -13,7 +13,7 @@ import {
   DEFAULT_PROFILE_HARNESS_PACKAGING_PROFILE,
 } from './defaultProfileHarness.mjs';
 import { resolveHarnessResources } from './harnessProfile.mjs';
-import { MacOSDriver } from './macosDriver.mjs';
+import { createWindowDriver } from './platform.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -416,7 +416,7 @@ async function launchAndInspect(runner, world, binary, receipt) {
     launchEnv: world.env,
   });
   const observer = new DaemonObserver({ wsUrl: world.wsUrl });
-  const driver = new MacOSDriver({ appPath: world.resources.appPath });
+  const driver = createWindowDriver({ appPath: world.resources.appPath });
   process.env.ATTN_CLIENT_TOKEN = fs.readFileSync(path.join(world.dataDir, 'client-token'), 'utf8').trim();
   try {
     await client.launchFreshApp();

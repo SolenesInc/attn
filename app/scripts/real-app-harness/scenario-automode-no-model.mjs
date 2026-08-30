@@ -7,7 +7,7 @@ import {
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
-import { delay } from './macosDriver.mjs';
+import { delay } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';

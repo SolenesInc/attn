@@ -1,0 +1,10 @@
+kind: internal
+area: linux
+change: >
+  The real-app harness can drive the Linux app under X11 with xdotool: native
+  shortcuts, typing, clicks, drags, scrolling, window discovery, and screenshots
+  share the macOS driver's scenario interface and are selected through
+  platform.mjs. Missing DISPLAY or xdotool failures say what the run needs. DOM
+  screenshots use the app bridge, native Linux captures use ImageMagick or xwd,
+  and requested recordings report that Linux is unsupported without failing the
+  scenario.

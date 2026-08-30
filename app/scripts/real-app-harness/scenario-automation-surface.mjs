@@ -8,7 +8,7 @@ import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, resolveHarnessResources, profileCliEnv as profileEnv } from './harnessProfile.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
+import { captureScreenshotData } from './nativeWindowCapture.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -153,7 +153,7 @@ async function captureFailureEvidence(runner, client) {
     runner.log('failure_evidence_state_error', { error: error instanceof Error ? error.message : String(error) });
   }
   try {
-    await captureFrontWindowScreenshot(path.join(runner.runDir, 'failure.png'), { client });
+    await captureScreenshotData(path.join(runner.runDir, 'failure.png'), { client });
   } catch (error) {
     runner.log('failure_evidence_screenshot_error', { error: error instanceof Error ? error.message : String(error) });
   }

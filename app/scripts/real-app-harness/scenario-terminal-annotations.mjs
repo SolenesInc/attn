@@ -12,7 +12,7 @@ import {
   relaunchAppAndConnect,
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
-import { MacOSDriver } from './macosDriver.mjs';
+import { createWindowDriver } from './platform.mjs';
 import { configureMockAgent, writeMockAgentFixture } from './mockAgent.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import {
@@ -279,7 +279,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = new MacOSDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath });
   const cwd = path.join(runner.sessionDir, 'annotated');
   let sessionId = null;
   let paneId = null;
