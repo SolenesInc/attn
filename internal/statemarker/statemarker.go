@@ -33,3 +33,12 @@ func Parse(text string) (string, error) {
 	}
 	return state, nil
 }
+
+// Strip removes every marker from text, so a message list never shows the
+// agent's note to the classifier. Trailing whitespace the marker sat on goes too.
+func Strip(text string) string {
+	if !markerRegex.MatchString(text) {
+		return text
+	}
+	return strings.TrimRight(markerRegex.ReplaceAllString(text, ""), " \t\r\n")
+}

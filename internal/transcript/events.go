@@ -13,6 +13,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/victorarias/attn/internal/statemarker"
 )
 
 const (
@@ -352,20 +354,34 @@ func parseEventLine(agent string, line []byte) parsedEventLine {
 		return parsedEventLine{}
 	}
 
+	var parsed parsedEventLine
 	switch strings.ToLower(strings.TrimSpace(agent)) {
 	case "claude":
-		return parsedEventLine{events: parseClaudeEvent(envelope)}
+		parsed.events = parseClaudeEvent(envelope)
 	case "copilot":
-		return parsedEventLine{events: parseCopilotEvent(envelope)}
+		parsed.events = parseCopilotEvent(envelope)
 	case "codex":
-		events := parseCodexEvent(envelope)
-		return parsedEventLine{
-			events:                 events,
-			assistantEchoCandidate: envelope.Type == "response_item",
-		}
-	default:
-		return parsedEventLine{}
+		parsed.events = parseCodexEvent(envelope)
+		parsed.assistantEchoCandidate = envelope.Type == "response_item"
 	}
+	parsed.events = withoutStateMarkers(parsed.events)
+	return parsed
+}
+
+// The marker is addressed to the classifier, which reads the raw transcript;
+// the message list is for the user, so the text loses it and a marker-only entry vanishes.
+func withoutStateMarkers(events []Event) []Event {
+	kept := events[:0]
+	for _, event := range events {
+		if event.Kind == EventKindAssistant {
+			event.Text = statemarker.Strip(event.Text)
+			if strings.TrimSpace(event.Text) == "" {
+				continue
+			}
+		}
+		kept = append(kept, event)
+	}
+	return kept
 }
 
 func isDuplicateAssistantEcho(parsed parsedEventLine, previous Event, hasPrevious bool) bool {
