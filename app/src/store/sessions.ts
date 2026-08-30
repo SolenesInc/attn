@@ -9,6 +9,7 @@ import { listenPtyEvents, ptyReload, type PtySpawnArgs } from '../pty/bridge';
 import {
   createDefaultWorkspaceState,
   workspaceSnapshotFromDaemonWorkspace,
+  type TerminalWorkspaceSnapshot,
   type TerminalWorkspaceState,
 } from '../types/workspace';
 
@@ -67,6 +68,8 @@ interface SessionStore {
   recentSessionIds: string[];
   connected: boolean;
   launcherConfig: LauncherConfig;
+  // Current, not last seen: session_unregistered clears a layout on purpose.
+  daemonWorkspaceLayouts: Record<string, TerminalWorkspaceSnapshot>;
 
   connect: () => Promise<void>;
   createSession: (
@@ -167,6 +170,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   launcherConfig: {
     executables: {},
   },
+  daemonWorkspaceLayouts: {},
 
   connect: async () => {
     if (get().connected) return;
@@ -347,6 +351,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
       const syncedSessions = daemonSessions.map((daemonSession) => {
         const existing = existingByID.get(daemonSession.id);
+        const daemonLayout = state.daemonWorkspaceLayouts[daemonSession.workspace_id];
         const normalizedState = normalizeSessionState(daemonSession.state);
         const nextAgent: SessionAgent = normalizeSessionAgent(daemonSession.agent, existing?.agent ?? 'codex');
         const nextEndpointId = daemonSession.endpoint_id ?? existing?.endpointId;
@@ -384,8 +389,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           isWorktree: nextIsWorktree,
           automation: daemonSession.automation,
           pullRequests: daemonSession.pull_requests,
-          workspace: existing?.workspace ?? createDefaultWorkspaceState(),
-          daemonActivePaneId: existing?.daemonActivePaneId ?? '',
+          workspace: existing?.workspace
+            ?? daemonLayout?.workspace
+            ?? createDefaultWorkspaceState(),
+          daemonActivePaneId: existing?.daemonActivePaneId ?? daemonLayout?.daemonActivePaneId ?? '',
         } satisfies Session;
       });
 
@@ -425,6 +432,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         workspaceSnapshotFromDaemonWorkspace(workspace.layout!),
       ]));
 
+    const daemonWorkspaceLayouts = Object.fromEntries(workspaceByID);
+
     set((state) => {
       const sessions = state.sessions.map((session) => ({
         ...session,
@@ -461,7 +470,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         }
       }
 
-      return { sessions };
+      return { sessions, daemonWorkspaceLayouts };
     });
   },
 }));

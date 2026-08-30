@@ -30,6 +30,7 @@ describe('sessions store', () => {
       activeSessionId: null,
       connected: false,
       launcherConfig: { executables: {} },
+      daemonWorkspaceLayouts: {},
     });
   });
 
@@ -179,6 +180,57 @@ describe('sessions store', () => {
     expect(state.sessions.map((session) => session.id)).toEqual(['root-session']);
     expect(state.activeSessionId).toBe('root-session');
     expect(state.recentSessionIds).toEqual([]);
+  });
+
+  it('syncFromDaemonSessions restores the daemon workspace layout for a session that comes back', () => {
+    const daemonWorkspace = {
+      id: 'workspace-blip',
+      title: 'Blip',
+      directory: '/tmp/workspace',
+      status: WorkspaceStatus.Idle,
+      muted: false,
+      pinned: false,
+      rank: '',
+      layout: {
+        workspace_id: 'workspace-blip',
+        active_pane_id: 'pane-blip',
+        layout_json: JSON.stringify({ type: 'pane', pane_id: 'pane-blip' }),
+        panes: [
+          {
+            workspace_id: 'workspace-blip',
+            pane_id: 'pane-blip',
+            kind: WorkspaceLayoutPaneKind.Agent,
+            title: 'Blip',
+            runtime_id: 'blip-session',
+            session_id: 'blip-session',
+            status: WorkspaceLayoutPaneStatus.Ready,
+          },
+        ],
+      },
+    };
+    const daemonSession = {
+      id: 'blip-session',
+      label: 'Blip',
+      agent: 'codex',
+      directory: '/tmp/workspace',
+      workspace_id: 'workspace-blip',
+      state: 'working',
+    };
+
+    useSessionStore.getState().syncFromDaemonSessions([daemonSession]);
+    useSessionStore.getState().syncFromDaemonWorkspaces([daemonWorkspace]);
+    expect(
+      useSessionStore.getState().sessions.find((entry) => entry.id === 'blip-session')?.workspace.agents,
+    ).toHaveLength(1);
+
+    useSessionStore.getState().syncFromDaemonSessions([]);
+    useSessionStore.getState().syncFromDaemonSessions([daemonSession]);
+
+    const restored = useSessionStore.getState().sessions.find((entry) => entry.id === 'blip-session');
+    expect(restored?.workspace.agents).toEqual([
+      { id: 'pane-blip', runtimeId: 'blip-session', sessionId: 'blip-session', title: 'Blip' },
+    ]);
+    expect(restored?.daemonActivePaneId).toBe('pane-blip');
   });
 
   it('syncFromDaemonSessions retains a genuinely launching session with a pending workspace pane', () => {
