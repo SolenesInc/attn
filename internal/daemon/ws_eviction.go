@@ -34,7 +34,6 @@ func (h *wsHub) rememberEviction(clientID string, record evictionRecord) {
 		return
 	}
 	h.evictionMu.Lock()
-	defer h.evictionMu.Unlock()
 	if h.evictions == nil {
 		h.evictions = make(map[string]evictionRecord)
 	}
@@ -53,6 +52,10 @@ func (h *wsHub) rememberEviction(clientID string, record evictionRecord) {
 		delete(h.evictions, oldestID)
 	}
 	h.evictions[clientID] = record
+	h.evictionMu.Unlock()
+	if h.evictionListener != nil {
+		h.evictionListener(clientID, record)
+	}
 }
 
 func (h *wsHub) takeEviction(clientID string) (evictionRecord, bool) {
