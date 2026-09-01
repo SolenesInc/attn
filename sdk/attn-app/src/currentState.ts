@@ -225,12 +225,21 @@ export interface SeedContinuation {
   readonly source: string
 }
 
+export interface SeedHarvestCondition {
+  readonly pull_request: string
+  readonly set_at: string
+  readonly set_by_member?: string
+  readonly set_by_session?: string
+  readonly url: string
+}
+
 export interface Seed {
   readonly body: string
   readonly continuation?: SeedContinuation
   readonly created_at: string
   readonly edges: readonly SeedEdge[]
   readonly gate: boolean
+  readonly harvest_when?: SeedHarvestCondition
   readonly id: string
   readonly last_execution_id?: string
   readonly planter_member: string

@@ -1159,7 +1159,8 @@ func runSeedTransition(verb string, args []string) {
 		seedFail(verb, fmt.Errorf("needs exactly one seed id, got %d: attn seed %s s-7k3f9m", len(positionals), verb))
 	}
 	result, err := seedClient().SeedTransition(
-		f.sessionID(), positionals[0], verb, f.text(verb), strings.TrimSpace(*f.member), *f.force)
+		f.sessionID(), positionals[0], verb, f.text(verb), strings.TrimSpace(*f.member), *f.force,
+		client.SeedTransitionOptions{})
 	if err != nil {
 		seedFail(verb, err)
 	}

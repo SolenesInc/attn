@@ -245,6 +245,20 @@ func seedToProtocol(seed garden.Seed, doc docstore.Document, ready bool) protoco
 		out.ResumeCwd = protocol.Ptr(seed.ResumeCwd)
 		out.ResumeAgent = protocol.Ptr(seed.ResumeAgent)
 	}
+	if seed.HarvestWhen != nil {
+		condition := protocol.SeedHarvestCondition{
+			PullRequest: seed.HarvestWhen.PullRequest,
+			URL:         seed.HarvestWhen.URL,
+			SetAt:       seed.HarvestWhen.SetAt,
+		}
+		if seed.HarvestWhen.SetBySession != "" {
+			condition.SetBySession = protocol.Ptr(seed.HarvestWhen.SetBySession)
+		}
+		if seed.HarvestWhen.SetByMember != "" {
+			condition.SetByMember = protocol.Ptr(seed.HarvestWhen.SetByMember)
+		}
+		out.HarvestWhen = &condition
+	}
 	for _, e := range seed.Edges {
 		out.Edges = append(out.Edges, protocol.SeedEdge{Kind: e.Kind, To: e.To})
 	}

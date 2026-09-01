@@ -65,6 +65,32 @@ type Seed struct {
 	ResumeSessionID string `json:"resume_session_id,omitempty"`
 	ResumeCwd       string `json:"resume_cwd,omitempty"`
 	ResumeAgent     string `json:"resume_agent,omitempty"`
+
+	HarvestWhen *HarvestCondition `json:"harvest_when,omitempty"`
+	// Flattened out of HarvestWhen by Encode: a docstore field is a top-level JSON
+	// key, so armed seeds cannot be found through the nested object.
+	HarvestWhenPullRequest string `json:"harvest_when_pull_request"`
+}
+
+// What a seed waits on before it harvests itself. The daemon settles it when the
+// pull request merges; a pull request closed without merging clears it instead.
+type HarvestCondition struct {
+	// host:owner/repo#number, the session pull request id.
+	PullRequest  string `json:"pull_request"`
+	URL          string `json:"url"`
+	SetAt        string `json:"set_at"`
+	SetBySession string `json:"set_by_session,omitempty"`
+	SetByMember  string `json:"set_by_member,omitempty"`
+}
+
+func ValidateHarvestCondition(c HarvestCondition) error {
+	if strings.TrimSpace(c.PullRequest) == "" {
+		return fmt.Errorf("a harvest condition needs the pull request it waits on, as host:owner/repo#number")
+	}
+	if strings.TrimSpace(c.URL) == "" {
+		return fmt.Errorf("a harvest condition needs the pull request url, so the seed can point at what it waits on")
+	}
+	return nil
 }
 
 func SeedsSchema() docstore.CollectionSchema {
@@ -75,6 +101,7 @@ func SeedsSchema() docstore.CollectionSchema {
 			{Name: "status", Type: docstore.FieldString},
 			{Name: "step_slug", Type: docstore.FieldString},
 			{Name: "tender_session", Type: docstore.FieldString},
+			{Name: "harvest_when_pull_request", Type: docstore.FieldString},
 			{Name: "template", Type: docstore.FieldBool},
 			{Name: "gate", Type: docstore.FieldBool},
 		},
@@ -269,6 +296,10 @@ func (s Seed) Encode() ([]byte, error) {
 	}
 	if s.Vars == nil {
 		s.Vars = []Var{}
+	}
+	s.HarvestWhenPullRequest = ""
+	if s.HarvestWhen != nil {
+		s.HarvestWhenPullRequest = s.HarvestWhen.PullRequest
 	}
 	return json.Marshal(s)
 }

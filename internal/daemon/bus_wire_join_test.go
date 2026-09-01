@@ -193,6 +193,7 @@ var wireFixtures = map[string]wireFixture{
 	FactGardenArtifactChanged:       {events: []string{protocol.EventGardenSeedsUpdated}},
 	FactGardenLinked:                {events: []string{protocol.EventGardenSeedsUpdated}},
 	FactGardenUnlinked:              {events: []string{protocol.EventGardenSeedsUpdated}},
+	FactGardenHarvestWhenChanged:    {events: []string{protocol.EventGardenSeedsUpdated}},
 	FactGardenReviewChanged: {
 		events:  []string{protocol.EventGardenReviewUpdated},
 		subject: (*wireWorld).gardenReview,
