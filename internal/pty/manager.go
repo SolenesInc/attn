@@ -473,6 +473,9 @@ func (m *Manager) Kill(sessionID string, sig syscall.Signal) error {
 	if err != nil {
 		return err
 	}
+	if session.agent == "shell" && sig == syscall.SIGTERM {
+		sig = syscall.SIGHUP
+	}
 	return session.kill(sig, defaultKillTimeout)
 }
 
