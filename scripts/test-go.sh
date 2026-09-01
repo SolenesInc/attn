@@ -7,20 +7,11 @@ daemon_package="github.com/victorarias/attn/internal/daemon"
 shard_count="${ATTN_GO_TEST_SHARDS:-5}"
 package_parallelism="${ATTN_GO_TEST_PACKAGE_PARALLELISM:-4}"
 test_gomaxprocs="${ATTN_GO_TEST_GOMAXPROCS:-${GOMAXPROCS:-3}}"
-# A package's wall clock here is mostly contention: this job runs -p 4 packages
-# at GOMAXPROCS=3 on a 4-vCPU runner, and Go's -timeout counts the starvation.
-# Measured 2026-09-01: `internal/store` took 143.3s in CI run 33505065785 and
-# blew past the old 300s ceiling in runs 33549033327 and 33551228490 with no
-# store change between them, so the healthy number is noisy by construction.
-# Alone on an M-series laptop at GOMAXPROCS=3 the package is 101.3s across 475
-# tests, ~0.21s each. 1200s is a tripwire: only a hang reaches it.
+# -p 4 packages at GOMAXPROCS=3 on a 4-vCPU runner, and Go's -timeout counts
+# the starvation. 1200s is a tripwire past a 143.3s healthy pass (2026-09-01).
 test_timeout="${ATTN_GO_TEST_TIMEOUT:-1200s}"
-# The race job runs the same packages a second time under -race, which costs
-# roughly an order of magnitude, and it competes with the packages job above.
-# Measured 2026-09-01: `internal/store` under -race took 104.9s in CI run
-# 33505065785, blew past 300s in the same two failing runs, and takes 218.3s
-# alone on an M-series laptop at GOMAXPROCS=3 — uncontended, that is already
-# 73% of the old ceiling. Same 1200s tripwire — only a hang reaches it.
+# -race costs an order of magnitude and contends with the job above; measured
+# 218.3s for internal/store alone, 2026-09-01. Same 1200s tripwire.
 race_timeout="${ATTN_GO_TEST_RACE_TIMEOUT:-1200s}"
 
 if ! [[ "$shard_count" =~ ^[1-9][0-9]*$ ]]; then
