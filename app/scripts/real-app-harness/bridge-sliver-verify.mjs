@@ -30,16 +30,19 @@ async function main() {
     }
   };
   const boundsOf = async (selector) => (await req('dom_scroll_into_view', { selector })).bounds;
-  const osa = (script) => execFileAsync('osascript', ['-e', `tell application "System Events" to tell (first process whose bundle identifier is "${bundleId}") to ${script}`]);
+  // A live window capture adds a tiny overlay window to the process, and it
+  // becomes "front window"; address the app window by its title instead.
+  const appName = (await execFileAsync('defaults', ['read', `${options.appPath}/Contents/Info`, 'CFBundleName'])).stdout.trim();
+  const osa = (script) => execFileAsync('osascript', ['-e', `tell application "System Events" to tell (first process whose bundle identifier is "${bundleId}") to tell (first window whose name is "${appName}") to ${script}`]);
   const panesSelector = '.terminal-wrapper.active .session-terminal-panes';
   const sizePanesTo = async (targetPx) => {
-    await osa('set position of front window to {20, 40}');
+    await osa('set position to {20, 40}');
     for (let i = 0; i < 6; i++) {
       const panes = await boundsOf(panesSelector);
       const delta = targetPx - panes.width;
       if (Math.abs(delta) < 4) return panes.width;
       const win = await req('get_window_bounds', {});
-      await osa(`set size of front window to {${Math.round(win.logicalBounds.width + delta)}, 900}`);
+      await osa(`set size to {${Math.round(win.logicalBounds.width + delta)}, 900}`);
       await delay(700);
     }
     return (await boundsOf(panesSelector)).width;
