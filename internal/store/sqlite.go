@@ -1095,6 +1095,17 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 			ON session_pull_requests(session_id, created_at DESC);
 	`},
 	{128, "session pull request refresh keeps its own pacing cursor", ``},
+	{129, "the screen a session showed when its process exited", `
+		CREATE TABLE IF NOT EXISTS session_exit_screens (
+			session_id  TEXT PRIMARY KEY,
+			text        TEXT NOT NULL DEFAULT '',
+			cols        INTEGER NOT NULL DEFAULT 0,
+			rows        INTEGER NOT NULL DEFAULT 0,
+			exit_code   INTEGER NOT NULL DEFAULT 0,
+			exit_signal TEXT NOT NULL DEFAULT '',
+			exited_at   TEXT NOT NULL
+		);
+	`},
 }
 
 const migration99SQL = `

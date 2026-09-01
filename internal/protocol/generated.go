@@ -133,6 +133,17 @@ const AgentMsgStatusDelivered AgentMsgStatus = "delivered"
 const AgentMsgStatusQueued AgentMsgStatus = "queued"
 const AgentMsgStatusRefused AgentMsgStatus = "refused"
 
+type AgentPeekExit struct {
+	// At corresponds to the JSON schema field "at".
+	At string `json:"at"`
+
+	// Code corresponds to the JSON schema field "code".
+	Code int `json:"code"`
+
+	// Signal corresponds to the JSON schema field "signal".
+	Signal *string `json:"signal,omitempty,omitzero"`
+}
+
 type AgentPeekMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -147,6 +158,9 @@ type AgentPeekResult struct {
 
 	// CrewMember corresponds to the JSON schema field "crew_member".
 	CrewMember *string `json:"crew_member,omitempty,omitzero"`
+
+	// Exit corresponds to the JSON schema field "exit".
+	Exit *AgentPeekExit `json:"exit,omitempty,omitzero"`
 
 	// Label corresponds to the JSON schema field "label".
 	Label string `json:"label"`

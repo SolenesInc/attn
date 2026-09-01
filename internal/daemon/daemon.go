@@ -1610,6 +1610,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	d.sessionInputs().forgetSession(info.ID)
 	d.stopTranscriptWatcher(info.ID)
 	d.closePluginDriverSession(info.ID, "exited", &info.ExitCode, info.Signal)
+	d.captureExitScreen(info)
 
 	if d.ptyBackend != nil {
 		if err := d.removePTYSession(info.ID); err != nil {

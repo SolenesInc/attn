@@ -82,6 +82,15 @@ func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekR
 		}
 	}
 	result.Screen = d.agentPeekScreen(session.ID)
+	if exit := d.store.GetSessionExitScreen(session.ID); exit != nil {
+		result.Exit = &protocol.AgentPeekExit{Code: exit.ExitCode, At: exit.ExitedAt}
+		if exit.ExitSignal != "" {
+			result.Exit.Signal = protocol.Ptr(exit.ExitSignal)
+		}
+		if result.Screen == nil && strings.TrimSpace(exit.Text) != "" {
+			result.Screen = &protocol.AgentPeekScreen{Text: exit.Text, Cols: exit.Cols, Rows: exit.Rows}
+		}
+	}
 	return result
 }
 
