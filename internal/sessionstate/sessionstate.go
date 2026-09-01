@@ -78,9 +78,7 @@ type Policy struct {
 	SettleGrace          time.Duration
 	ClassifierTimeout    time.Duration
 	GuardianDwell        time.Duration
-	// How long a parked verdict may hold working before the prompt-idle
-	// confirmation is believed instead.
-	ParkedAfter time.Duration
+	ParkedAfter          time.Duration
 }
 
 // Measured on claude 2.1.220 and codex 0.145.0 through a real PTY: claude repaints ~1/s

@@ -267,8 +267,6 @@ func TestDaemon_YieldedStop_ParkedVerdictHoldsWorkingPastPromptIdle(t *testing.T
 	})
 }
 
-// The tripwire: work that never wakes the agent must not hold the session green
-// for good. Past ParkedAfter the prompt-idle confirmation settles it.
 func TestDaemon_YieldedStop_ParkedVerdictExpiresIntoPromptIdle(t *testing.T) {
 	base := NewForTesting(filepath.Join(shortTempDir(t), "test.sock"))
 	synctest.Test(t, func(t *testing.T) {

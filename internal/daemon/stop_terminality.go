@@ -18,8 +18,6 @@ func runningBackgroundTaskCount(msg *protocol.StopMessage) int {
 	return running
 }
 
-// The harness's list verbatim, one "type status name" per task: a stop judged
-// non-terminal must name what held it, or the next stuck session is a mystery.
 func describeBackgroundTasks(msg *protocol.StopMessage) string {
 	parts := make([]string, 0, len(msg.BackgroundTasks))
 	for _, task := range msg.BackgroundTasks {
