@@ -151,6 +151,9 @@ export function validateMockAgentConfig(config) {
   if (config.resumable !== undefined && typeof config.resumable !== 'boolean') {
     throw new Error('mock agent resumable must be a boolean');
   }
+  if (config.ignoreSigterm !== undefined && typeof config.ignoreSigterm !== 'boolean') {
+    throw new Error('mock agent ignoreSigterm must be a boolean');
+  }
   for (const [index, turn] of config.turns.entries()) {
     if (typeof turn?.includes !== 'string' || !turn.includes) {
       throw new Error(`mock agent turn ${index} needs a non-empty includes value`);
@@ -399,6 +402,7 @@ export function readMockAgentConfig(cwd) {
 async function runMockAgent() {
   const cwd = process.cwd();
   const config = readMockAgentConfig(cwd);
+  if (config.ignoreSigterm) process.on('SIGTERM', () => {});
   const launch = parseMockAgentArgv(process.argv.slice(2));
   const captures = new Map();
   const agent = mockAgentName(config.agent || process.env.ATTN_AGENT);

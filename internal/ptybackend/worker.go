@@ -2362,6 +2362,16 @@ func (b *WorkerBackend) handleLifecycleEvent(session *workerSession, evt ptywork
 		if onExit != nil {
 			go onExit(ExitInfo{ID: session.SessionID, ExitCode: exitCode, Signal: exitSignal, LifecycleID: session.LifecycleID})
 		}
+	case ptyworker.EventTeardownEscalated:
+		if b.cfg.Logf == nil || evt.Reason == nil || evt.ExitSignal == nil {
+			return
+		}
+		b.cfg.Logf(
+			"session teardown escalated for %s: requested=%s escalation=%s",
+			session.SessionID,
+			strings.TrimSpace(*evt.Reason),
+			strings.TrimSpace(*evt.ExitSignal),
+		)
 	}
 }
 

@@ -1120,7 +1120,7 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 	}
 
 	if strings.TrimSpace(sessionID) != "" {
-		if session := d.unregisterSession(sessionID, syscall.SIGTERM); session != nil {
+		if session := d.unregisterSessionBeforeTeardown(sessionID); session != nil {
 			d.publishSessionUnregistered(session)
 			d.dissociateSessionFromWorkspace(session.ID)
 		}
@@ -1141,6 +1141,10 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 		}
 	} else {
 		d.broadcastWorkspaceLayoutUpdated(msg.WorkspaceID)
+	}
+
+	if strings.TrimSpace(sessionID) != "" {
+		d.terminateSessionAsync(sessionID, syscall.SIGTERM)
 	}
 }
 

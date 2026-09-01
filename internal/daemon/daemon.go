@@ -1686,7 +1686,7 @@ func (d *Daemon) removePTYSession(sessionID string) error {
 
 func (d *Daemon) terminateSession(sessionID string, sig syscall.Signal) {
 	if err := d.terminateSessionChecked(sessionID, sig); err != nil {
-		d.logf("terminate session failed for %s: %v", sessionID, err)
+		d.logf("session teardown failed for %s: requested=%s error=%v", sessionID, signalName(sig), err)
 		d.markForcedStopClassification(sessionID)
 		if d.store != nil {
 			d.store.MarkSessionIntentionalClose(sessionID, time.Now())
@@ -1698,13 +1698,17 @@ func (d *Daemon) terminateSession(sessionID string, sig syscall.Signal) {
 	}
 }
 
-func (d *Daemon) terminateSessionChecked(sessionID string, sig syscall.Signal) error {
+func (d *Daemon) markSessionTerminationIntent(sessionID string) {
 	d.markForcedStopClassification(sessionID)
-	// Durable close mark BEFORE the kill: ticket reconcile can run after the
-	// in-memory mark expires and would crash-stamp a user close.
 	if d.store != nil {
 		d.store.MarkSessionIntentionalClose(sessionID, time.Now())
 	}
+}
+
+func (d *Daemon) terminateSessionChecked(sessionID string, sig syscall.Signal) error {
+	// Durable close mark BEFORE the kill: ticket reconcile can run after the
+	// in-memory mark expires and would crash-stamp a user close.
+	d.markSessionTerminationIntent(sessionID)
 
 	if d.isHostSession(sessionID) {
 		if err := d.ensureHostSessions().Kill(sessionID); err != nil && !errors.Is(err, hostsession.ErrNotFound) {
@@ -1755,6 +1759,25 @@ func (d *Daemon) unregisterSession(sessionID string, sig syscall.Signal) *protoc
 	d.terminateSession(sessionID, sig)
 	d.forgetSession(sessionID)
 	return session
+}
+
+func (d *Daemon) unregisterSessionBeforeTeardown(sessionID string) *protocol.Session {
+	session := d.store.Get(sessionID)
+	if session == nil && d.hubManager != nil {
+		session = d.hubManager.RemoteSession(sessionID)
+	}
+	if session != nil {
+		if _, err := d.captureGardenSessionExecution(session); err != nil {
+			d.logf("garden: preserving execution %s before session removal: %v", sessionID, err)
+		}
+	}
+	d.markSessionTerminationIntent(sessionID)
+	d.forgetSession(sessionID)
+	return session
+}
+
+func (d *Daemon) terminateSessionAsync(sessionID string, sig syscall.Signal) {
+	go d.terminateSession(sessionID, sig)
 }
 
 func (d *Daemon) forgetSession(sessionID string) {
@@ -2592,7 +2615,7 @@ func (d *Daemon) publishSessionUnregistered(session *protocol.Session) {
 }
 
 func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage) {
-	session := d.unregisterSession(msg.ID, syscall.SIGTERM)
+	session := d.unregisterSessionBeforeTeardown(msg.ID)
 	d.sendOK(conn)
 
 	if session != nil {
@@ -2600,6 +2623,7 @@ func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage
 		d.dissociateSessionFromWorkspace(session.ID)
 		d.removeWorkspaceLayoutPaneForSession(session.ID)
 	}
+	d.terminateSessionAsync(msg.ID, syscall.SIGTERM)
 }
 
 func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {

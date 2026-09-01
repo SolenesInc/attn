@@ -43,6 +43,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-workspace-close-one-session-keeps-selection'],
   },
   {
+    id: 'close-pane-nonblocking',
+    runnerId: 'CLOSE-PANE-NONBLOCKING',
+    label: 'Close pane does not wait for process teardown',
+    command: ['pnpm', 'run', 'real-app:scenario-close-pane-nonblocking'],
+  },
+  {
     id: 'tile-only-workspace-select',
     runnerId: 'TILE-ONLY-WORKSPACE-SELECT',
     label: 'Tile-only workspace select + render',
