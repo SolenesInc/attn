@@ -1095,6 +1095,72 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 			ON session_pull_requests(session_id, created_at DESC);
 	`},
 	{128, "session pull request refresh keeps its own pacing cursor", ``},
+	{129, "separate agent mailbox receipts from message content", `
+		CREATE TABLE IF NOT EXISTS peer_messages (
+			id                TEXT PRIMARY KEY,
+			sender_session_id TEXT NOT NULL,
+			body              TEXT NOT NULL,
+			created_at        TEXT NOT NULL
+		);
+		CREATE TABLE IF NOT EXISTS agent_mailbox_items (
+			id                   TEXT PRIMARY KEY,
+			recipient_session_id TEXT NOT NULL,
+			kind                 TEXT NOT NULL,
+			source_id            TEXT NOT NULL DEFAULT '',
+			coalesce_key         TEXT NOT NULL DEFAULT '',
+			hint                 TEXT NOT NULL DEFAULT '',
+			prompt               TEXT NOT NULL DEFAULT '',
+			created_at           TEXT NOT NULL,
+			notified_at          TEXT NOT NULL DEFAULT '',
+			read_at              TEXT NOT NULL DEFAULT '',
+			CHECK (read_at = '' OR notified_at != '')
+		);
+
+		INSERT INTO peer_messages (id, sender_session_id, body, created_at)
+		SELECT m.id, m.sender_session_id, m.content, m.created_at
+		FROM agent_messages m
+		LEFT JOIN garden_seed_bells b ON b.message_id = m.id
+		WHERE b.message_id IS NULL AND m.sender_session_id != '';
+
+		INSERT INTO agent_mailbox_items
+			(id, recipient_session_id, kind, source_id, coalesce_key, hint, prompt,
+			 created_at, notified_at, read_at)
+		SELECT m.id, m.target_session_id, 'garden_seed', b.seed_id, b.seed_id,
+		       b.event_kind, '', m.created_at, m.delivered_at, ''
+		FROM garden_seed_bells b
+		JOIN agent_messages m ON m.id = b.message_id;
+
+		INSERT INTO agent_mailbox_items
+			(id, recipient_session_id, kind, source_id, coalesce_key, hint, prompt,
+			 created_at, notified_at, read_at)
+		SELECT m.id, m.target_session_id, 'peer_message', m.id, '', '', '',
+		       m.created_at, m.delivered_at, m.delivered_at
+		FROM agent_messages m
+		LEFT JOIN garden_seed_bells b ON b.message_id = m.id
+		WHERE b.message_id IS NULL AND m.sender_session_id != '';
+
+		INSERT INTO agent_mailbox_items
+			(id, recipient_session_id, kind, source_id, coalesce_key, hint, prompt,
+			 created_at, notified_at, read_at)
+		SELECT m.id, m.target_session_id, 'maintenance_prompt', '', '', '', m.content,
+		       m.created_at, m.delivered_at, m.delivered_at
+		FROM agent_messages m
+		LEFT JOIN garden_seed_bells b ON b.message_id = m.id
+		WHERE b.message_id IS NULL AND m.sender_session_id = '';
+
+		CREATE INDEX IF NOT EXISTS idx_agent_mailbox_recipient_queued
+			ON agent_mailbox_items(recipient_session_id, notified_at, created_at, id);
+		CREATE INDEX IF NOT EXISTS idx_agent_mailbox_source
+			ON agent_mailbox_items(kind, source_id, recipient_session_id);
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_mailbox_unread_coalesce
+			ON agent_mailbox_items(recipient_session_id, kind, coalesce_key)
+			WHERE coalesce_key != '' AND read_at = '';
+		CREATE INDEX IF NOT EXISTS idx_peer_messages_sender_created
+			ON peer_messages(sender_session_id, created_at);
+
+		DROP TABLE garden_seed_bells;
+		DROP TABLE agent_messages;
+	`},
 }
 
 const migration99SQL = `
@@ -1532,6 +1598,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 129 {
+			if err := applyMigration129(tx, m.sql); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else {
 			if _, err := tx.Exec(m.sql); err != nil {
 				tx.Rollback()
@@ -1591,6 +1662,25 @@ func applyMigration128(tx *sql.Tx) error {
 		return nil
 	}
 	_, err = tx.Exec(`ALTER TABLE session_pull_requests ADD COLUMN status_checked_at TEXT NOT NULL DEFAULT ''`)
+	return err
+}
+
+func applyMigration129(tx *sql.Tx, migrationSQL string) error {
+	mailboxExists, err := tableExists(tx, "agent_mailbox_items")
+	if err != nil {
+		return err
+	}
+	legacyExists, err := tableExists(tx, "agent_messages")
+	if err != nil {
+		return err
+	}
+	if mailboxExists && !legacyExists {
+		return nil
+	}
+	if !legacyExists {
+		return fmt.Errorf("neither agent_messages nor the migrated agent_mailbox_items table exists")
+	}
+	_, err = tx.Exec(migrationSQL)
 	return err
 }
 

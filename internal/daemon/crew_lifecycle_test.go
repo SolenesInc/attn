@@ -99,10 +99,10 @@ func newLifecycleDaemon(t *testing.T) (*Daemon, string, *doorbellRecorder) {
 		t.Fatalf("wake: %v", err)
 	}
 	sessionID = woken.SessionID
-	d.agentMessageMu.Lock()
+	d.agentMailboxMu.Lock()
 	delete(d.postInitialPrompt, woken.SessionID)
 	delete(d.agentMessageInitialPrompt, woken.SessionID)
-	d.agentMessageMu.Unlock()
+	d.agentMailboxMu.Unlock()
 	return d, woken.SessionID, recorder
 }
 

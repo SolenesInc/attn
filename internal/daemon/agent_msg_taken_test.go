@@ -36,7 +36,7 @@ func TestAgentMsgQueuesWhenTheTargetNeverTakesIt(t *testing.T) {
 		t.Fatalf("pasted %d times, want 1: %q", len(prompts), prompts)
 	}
 
-	queued, err := d.store.UndeliveredAgentMessages("target-session-id")
+	queued, err := d.store.QueuedAgentMailboxDeliveries("target-session-id")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestAgentMsgRedeliveryPressesEnterRatherThanRepasting(t *testing.T) {
 		}
 	}}
 	drained := make(chan int, 1)
-	d.agentMessageDrainHook = func(_ string, delivered int) { drained <- delivered }
+	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
 	go func() {
 		<-retried
 		d.observePromptTaken("target-session-id", prompts[0], time.Now())
@@ -132,7 +132,7 @@ func TestAgentMsgTakenReceiptCoalescesRacingStateChangeDrain(t *testing.T) {
 		if result == nil || result.Status != protocol.AgentMsgStatusDelivered {
 			t.Fatalf("result = %+v, want delivered", result)
 		}
-		queued, err := d.store.UndeliveredAgentMessages("target-session-id")
+		queued, err := d.store.QueuedAgentMailboxDeliveries("target-session-id")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -202,7 +202,7 @@ func TestAgentMsgToAShellDeliversEveryDoorbellNotJustTheFirst(t *testing.T) {
 	if prompts := doorbell.pasted(); len(prompts) != 2 {
 		t.Fatalf("pasted %d times, want 2: %q", len(prompts), prompts)
 	}
-	queued, err := d.store.UndeliveredAgentMessages("shell-session-id")
+	queued, err := d.store.QueuedAgentMailboxDeliveries("shell-session-id")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -12,12 +12,12 @@ import (
 
 	"github.com/google/uuid"
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/store"
 )
 
 const crewWakeAgent = crew.DefaultAgent
@@ -54,7 +54,7 @@ const crewWakePrompt = "You have been woken for today. Orient from your charter 
 func crewWorkspaceID(memberID string) string { return "workspace-crew-" + memberID }
 
 type crewWakeDelivery struct {
-	Record             *store.AgentMessage
+	Message            *agentmailbox.PeerMessage
 	Prompt             string
 	AfterInitialPrompt func(sessionID string)
 }
@@ -283,15 +283,14 @@ func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, deliv
 		// trust dialog; the first hook past the greeting opens and drains the gate.
 		d.notePostInitialPrompt(sessionID, nil)
 	} else {
-		if delivery.Record != nil {
-			delivery.Record.TargetSessionID = sessionID
-			if err := d.store.EnqueueAgentMessage(*delivery.Record); err != nil {
+		if delivery.Message != nil {
+			if _, err := d.store.EnqueuePeerMessage(*delivery.Message, sessionID); err != nil {
 				d.removeWorkspaceLayoutPaneForSession(sessionID)
 				d.releaseCrewBindingIfSession(sessionID)
 				return nil, err
 			}
-			d.noteQueuedAgentMessage(sessionID)
-			d.noteInitialAgentMessage(sessionID, delivery.Record.ID)
+			d.noteQueuedAgentMailboxItem(sessionID)
+			d.noteInitialAgentMessage(sessionID, delivery.Message.ID)
 			initialPrompt = delivery.Prompt
 		}
 		if delivery.AfterInitialPrompt != nil {
@@ -313,8 +312,8 @@ func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, deliv
 		InitialPrompt: protocol.Ptr(initialPrompt),
 	})
 	if _, err := readInternalActionResult(spawnClient); err != nil {
-		if delivery != nil && delivery.Record != nil {
-			d.rollbackInitialAgentMessage(sessionID, delivery.Record.ID)
+		if delivery != nil && delivery.Message != nil {
+			d.rollbackInitialAgentMessage(sessionID, delivery.Message.ID)
 		}
 		d.forgetPostInitialPrompt(sessionID)
 		d.removeWorkspaceLayoutPaneForSession(sessionID)

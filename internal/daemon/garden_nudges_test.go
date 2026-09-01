@@ -16,7 +16,7 @@ func TestSeedNudges_InjectionLeavesTheBellUnreadUntilShow(t *testing.T) {
 	doorbell := &recordingDoorbell{}
 	fixture.d.ptyBackend = doorbell.backend()
 	drained := make(chan int, 2)
-	fixture.d.agentMessageDrainHook = func(_ string, delivered int) { drained <- delivered }
+	fixture.d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
 	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
 
 	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "look now", true)
@@ -57,7 +57,7 @@ func TestSeedNudges_FailedShowDoesNotReadTheBell(t *testing.T) {
 	fixture := newSeededNudgeGarden(t)
 	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
 	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "first", true)
-	first, err := fixture.d.store.UndeliveredAgentMessages("sess-b")
+	first, err := fixture.d.store.QueuedAgentMailboxDeliveries("sess-b")
 	if err != nil || len(first) != 1 {
 		t.Fatalf("first bell = %+v err=%v", first, err)
 	}
@@ -80,8 +80,8 @@ func TestSeedNudges_FailedShowDoesNotReadTheBell(t *testing.T) {
 	}
 
 	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "second", true)
-	remaining, err := fixture.d.store.UndeliveredAgentMessages("sess-b")
-	if err != nil || len(remaining) != 1 || remaining[0].ID != first[0].ID {
+	remaining, err := fixture.d.store.QueuedAgentMailboxDeliveries("sess-b")
+	if err != nil || len(remaining) != 1 || remaining[0].Item.ID != first[0].Item.ID {
 		t.Fatalf("failed show consumed the bell: before=%+v after=%+v err=%v", first, remaining, err)
 	}
 }
@@ -142,13 +142,17 @@ func ringingNote(t *testing.T, d *Daemon, sessionID, seedID, body string, ring b
 
 func queuedSeedBells(t *testing.T, d *Daemon, sessionID string) []string {
 	t.Helper()
-	messages, err := d.store.UndeliveredAgentMessages(sessionID)
+	messages, err := d.store.QueuedAgentMailboxDeliveries(sessionID)
 	if err != nil {
 		t.Fatalf("queued bells for %s: %v", sessionID, err)
 	}
 	contents := make([]string, 0, len(messages))
-	for _, message := range messages {
-		contents = append(contents, message.Content)
+	for _, delivery := range messages {
+		text, _, err := d.composeAgentMailboxPrompt(delivery)
+		if err != nil {
+			t.Fatalf("compose queued bell: %v", err)
+		}
+		contents = append(contents, text)
 	}
 	return contents
 }
