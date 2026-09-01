@@ -289,16 +289,17 @@ func (d *Daemon) crewSessionGeometry(sessionID string) (int, int) {
 }
 
 func (d *Daemon) closeNappedSession(sessionID string) {
-	session := d.unregisterSessionBeforeTeardown(sessionID)
-	if session == nil {
-		d.terminateSessionAsync(sessionID, syscall.SIGTERM)
+	teardown := d.unregisterSessionBeforeTeardown(sessionID)
+	if teardown == nil {
 		return
 	}
-	d.publishSessionUnregistered(session)
-	d.dissociateSessionFromWorkspace(session.ID)
-	d.removeWorkspaceLayoutPaneForSession(session.ID)
-	d.publishFact(FactSessionTerminated, session.ID, nil)
-	d.terminateSessionAsync(sessionID, syscall.SIGTERM)
+	if teardown.session != nil {
+		d.publishSessionUnregistered(teardown.session)
+		d.dissociateSessionFromWorkspace(teardown.session.ID)
+		d.removeWorkspaceLayoutPaneForSession(teardown.session.ID)
+		d.publishFact(FactSessionTerminated, teardown.session.ID, nil)
+	}
+	d.terminateSessionAsync(sessionID, syscall.SIGTERM, teardown)
 }
 
 func (d *Daemon) handleCrewHandoff(conn net.Conn, msg *protocol.CrewHandoffMessage) {

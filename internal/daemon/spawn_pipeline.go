@@ -345,7 +345,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	// after Spawn otherwise leaves a worker with no durable session row to recover.
 	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.existingSession, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID)
 	session := plan.launchSession
-	if err := d.store.AddChecked(session); err != nil {
+	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
 		if req.hasPluginDriver {
 			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
 		}
@@ -374,7 +374,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		d.restoreExitScreen(msg.ID, priorExit)
 		if req.existingSession == nil {
 			d.store.Remove(msg.ID)
-		} else if restoreErr := d.store.AddChecked(req.existingSession); restoreErr != nil {
+		} else if restoreErr := d.store.AddCheckedUnlessTeardown(req.existingSession); restoreErr != nil {
 			err = errors.Join(err, fmt.Errorf("restore prior session after spawn failure: %w", restoreErr))
 		}
 		if req.existingSession != nil {
@@ -413,7 +413,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 			session.Label = current.Label
 		}
 	}
-	if err := d.store.AddChecked(session); err != nil {
+	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
 		if req.hasPluginDriver {
 			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
 		}

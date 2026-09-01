@@ -1119,10 +1119,12 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 		return
 	}
 
+	var teardown *sessionTeardown
 	if strings.TrimSpace(sessionID) != "" {
-		if session := d.unregisterSessionBeforeTeardown(sessionID); session != nil {
-			d.publishSessionUnregistered(session)
-			d.dissociateSessionFromWorkspace(session.ID)
+		teardown = d.unregisterSessionBeforeTeardown(sessionID)
+		if teardown != nil && teardown.session != nil {
+			d.publishSessionUnregistered(teardown.session)
+			d.dissociateSessionFromWorkspace(teardown.session.ID)
 		}
 	}
 
@@ -1143,8 +1145,8 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 		d.broadcastWorkspaceLayoutUpdated(msg.WorkspaceID)
 	}
 
-	if strings.TrimSpace(sessionID) != "" {
-		d.terminateSessionAsync(sessionID, syscall.SIGTERM)
+	if teardown != nil {
+		d.terminateSessionAsync(sessionID, syscall.SIGTERM, teardown)
 	}
 }
 

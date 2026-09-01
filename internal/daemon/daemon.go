@@ -178,6 +178,8 @@ type Daemon struct {
 	launchWatches                     map[string]*launchWatch
 	reloadingMu                       sync.Mutex
 	reloadingSessions                 map[string]bool
+	teardownMu                        sync.Mutex
+	tearingDown                       map[string]chan struct{}
 	reloadLocksMu                     sync.Mutex
 	reloadLocks                       map[string]*sync.Mutex
 	spawnLocksMu                      sync.Mutex
@@ -1253,6 +1255,10 @@ func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.Recove
 }
 
 func (d *Daemon) reconcileSessionsWithWorkerBackend(ctx context.Context, allowIdleDemotion bool, demotionCutoff time.Time) workerReconcileReport {
+	return d.reconcileSessionsWithWorkerBackendState(ctx, allowIdleDemotion, allowIdleDemotion, demotionCutoff)
+}
+
+func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, allowIdleDemotion, allowTombstoneCleanup bool, demotionCutoff time.Time) workerReconcileReport {
 	report := workerReconcileReport{}
 	if d.store == nil || d.ptyBackend == nil {
 		return report
@@ -1268,6 +1274,23 @@ func (d *Daemon) reconcileSessionsWithWorkerBackend(ctx context.Context, allowId
 
 	for sessionID := range liveIDs {
 		existing := d.store.Get(sessionID)
+		intentionalClose, intentErr := d.store.SessionCloseIntentionalChecked(sessionID)
+		if intentErr != nil {
+			d.logf("worker reconciliation skipped session %s: %v", sessionID, intentErr)
+			report.LivenessUnknown++
+			continue
+		}
+		if intentionalClose {
+			teardown := d.resumeSessionTeardown(sessionID)
+			if teardown != nil {
+				d.terminateSessionAsync(sessionID, syscall.SIGTERM, teardown)
+			}
+			if existing != nil {
+				report.Reaped++
+				report.markChanged(sessionID)
+			}
+			continue
+		}
 		var info ptybackend.SessionInfo
 		var haveInfo bool
 		if infoProvider != nil {
@@ -1347,6 +1370,28 @@ func (d *Daemon) reconcileSessionsWithWorkerBackend(ctx context.Context, allowId
 				report.markChanged(sessionID)
 			}
 			continue
+		}
+	}
+	if allowTombstoneCleanup {
+		for _, sessionID := range d.store.SessionTeardownIntentIDs() {
+			if _, live := liveIDs[sessionID]; live {
+				continue
+			}
+			if d.sessionTeardownInFlight(sessionID) {
+				continue
+			}
+			existing := d.store.Get(sessionID)
+			teardown := d.resumeSessionTeardown(sessionID)
+			if teardown != nil {
+				if !d.notifyPreparedPluginDriverSessionClosed(sessionID, teardown.driverRun, syscall.SIGTERM) {
+					continue
+				}
+				d.store.ClearSessionIntentionalClose(sessionID)
+			}
+			if existing != nil {
+				report.Reaped++
+				report.markChanged(sessionID)
+			}
 		}
 	}
 
@@ -1434,7 +1479,7 @@ func (d *Daemon) runDeferredWorkerReconciliation(maxAttempts int, retryInterval 
 			continue
 		}
 
-		reconcile := d.reconcileSessionsWithWorkerBackend(context.Background(), true, recoveryStartedAt)
+		reconcile := d.reconcileSessionsWithWorkerBackendState(context.Background(), true, fullyRecovered, recoveryStartedAt)
 		d.publishSessionsReconciled(reconcile)
 		if reconcile.MarkedRecoverable > 0 {
 			d.addWarning(
@@ -1684,12 +1729,19 @@ func (d *Daemon) removePTYSession(sessionID string) error {
 	return err
 }
 
+type sessionTeardown struct {
+	session   *protocol.Session
+	driverRun store.AgentDriverReportCursor
+}
+
 func (d *Daemon) terminateSession(sessionID string, sig syscall.Signal) {
 	if err := d.terminateSessionChecked(sessionID, sig); err != nil {
 		d.logf("session teardown failed for %s: requested=%s error=%v", sessionID, signalName(sig), err)
 		d.markForcedStopClassification(sessionID)
 		if d.store != nil {
-			d.store.MarkSessionIntentionalClose(sessionID, time.Now())
+			if markErr := d.store.MarkSessionIntentionalClose(sessionID, time.Now()); markErr != nil {
+				d.logf("session teardown intent failed for %s: %v", sessionID, markErr)
+			}
 		}
 		d.stopTranscriptWatcher(sessionID)
 		if d.ptyBackend != nil {
@@ -1698,45 +1750,48 @@ func (d *Daemon) terminateSession(sessionID string, sig syscall.Signal) {
 	}
 }
 
-func (d *Daemon) markSessionTerminationIntent(sessionID string) {
+func (d *Daemon) markSessionTerminationIntent(sessionID string) error {
 	d.markForcedStopClassification(sessionID)
 	if d.store != nil {
-		d.store.MarkSessionIntentionalClose(sessionID, time.Now())
+		if err := d.store.MarkSessionIntentionalClose(sessionID, time.Now()); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func (d *Daemon) terminateSessionChecked(sessionID string, sig syscall.Signal) error {
 	// Durable close mark BEFORE the kill: ticket reconcile can run after the
 	// in-memory mark expires and would crash-stamp a user close.
-	d.markSessionTerminationIntent(sessionID)
+	if err := d.markSessionTerminationIntent(sessionID); err != nil {
+		return err
+	}
+	if err := d.terminateSessionRuntimeChecked(sessionID, sig); err != nil {
+		d.clearForcedStopClassification(sessionID)
+		if d.store != nil {
+			d.store.ClearSessionIntentionalClose(sessionID)
+		}
+		return err
+	}
+	d.closePluginDriverSession(sessionID, "killed", nil, signalName(sig))
+	return nil
+}
 
+func (d *Daemon) terminateSessionRuntimeChecked(sessionID string, sig syscall.Signal) error {
 	if d.isHostSession(sessionID) {
 		if err := d.ensureHostSessions().Kill(sessionID); err != nil && !errors.Is(err, hostsession.ErrNotFound) {
-			d.clearForcedStopClassification(sessionID)
-			if d.store != nil {
-				d.store.ClearSessionIntentionalClose(sessionID)
-			}
 			return err
 		}
 		d.stopTranscriptWatcher(sessionID)
-		d.closePluginDriverSession(sessionID, "killed", nil, signalName(sig))
 		return nil
 	}
 
 	if d.ptyBackend == nil {
 		d.stopTranscriptWatcher(sessionID)
-		d.closePluginDriverSession(sessionID, "killed", nil, signalName(sig))
 		return nil
 	}
 	err := d.ptyBackend.Kill(context.Background(), sessionID, sig)
-	if err == nil || errors.Is(err, pty.ErrSessionNotFound) {
-		d.closePluginDriverSession(sessionID, "killed", nil, signalName(sig))
-	}
 	if err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
-		d.clearForcedStopClassification(sessionID)
-		if d.store != nil {
-			d.store.ClearSessionIntentionalClose(sessionID)
-		}
 		return err
 	}
 	d.stopTranscriptWatcher(sessionID)
@@ -1761,7 +1816,7 @@ func (d *Daemon) unregisterSession(sessionID string, sig syscall.Signal) *protoc
 	return session
 }
 
-func (d *Daemon) unregisterSessionBeforeTeardown(sessionID string) *protocol.Session {
+func (d *Daemon) unregisterSessionBeforeTeardown(sessionID string) *sessionTeardown {
 	session := d.store.Get(sessionID)
 	if session == nil && d.hubManager != nil {
 		session = d.hubManager.RemoteSession(sessionID)
@@ -1771,13 +1826,92 @@ func (d *Daemon) unregisterSessionBeforeTeardown(sessionID string) *protocol.Ses
 			d.logf("garden: preserving execution %s before session removal: %v", sessionID, err)
 		}
 	}
-	d.markSessionTerminationIntent(sessionID)
+	d.markForcedStopClassification(sessionID)
+	driverRun, err := d.store.PrepareSessionTeardown(sessionID, time.Now())
+	if err != nil {
+		d.logf("session teardown intent failed for %s: %v", sessionID, err)
+		return nil
+	}
 	d.forgetSession(sessionID)
-	return session
+	return &sessionTeardown{session: session, driverRun: driverRun}
 }
 
-func (d *Daemon) terminateSessionAsync(sessionID string, sig syscall.Signal) {
-	go d.terminateSession(sessionID, sig)
+func (d *Daemon) resumeSessionTeardown(sessionID string) *sessionTeardown {
+	driverRun, found, err := d.store.PrepareExistingSessionTeardown(sessionID, time.Now())
+	if err != nil {
+		d.logf("session teardown recovery failed for %s: %v", sessionID, err)
+		return nil
+	}
+	if !found {
+		return nil
+	}
+	session := d.store.Get(sessionID)
+	d.forgetSession(sessionID)
+	return &sessionTeardown{session: session, driverRun: driverRun}
+}
+
+func (d *Daemon) notifyPreparedPluginDriverSessionClosed(sessionID string, run store.AgentDriverReportCursor, sig syscall.Signal) bool {
+	if run.RunID == "" {
+		return true
+	}
+	claimed, err := d.store.ClaimSessionTeardownDriverRun(sessionID, run.RunID)
+	if err != nil {
+		d.logf("plugin session close claim failed: session=%s run=%s error=%v", sessionID, run.RunID, err)
+		return false
+	}
+	if claimed {
+		d.notifyPluginDriverSessionClosed(run.PluginName, sessionID, run.RunID, "killed", nil, signalName(sig))
+	}
+	return true
+}
+
+func (d *Daemon) sessionTeardownInFlight(sessionID string) bool {
+	d.teardownMu.Lock()
+	defer d.teardownMu.Unlock()
+	return d.tearingDown[sessionID] != nil
+}
+
+func (d *Daemon) waitForSessionTeardown(sessionID string) {
+	d.teardownMu.Lock()
+	done := d.tearingDown[sessionID]
+	d.teardownMu.Unlock()
+	if done != nil {
+		<-done
+	}
+}
+
+func (d *Daemon) terminateSessionAsync(sessionID string, sig syscall.Signal, teardown *sessionTeardown) <-chan struct{} {
+	d.teardownMu.Lock()
+	if d.tearingDown == nil {
+		d.tearingDown = make(map[string]chan struct{})
+	}
+	if done := d.tearingDown[sessionID]; done != nil {
+		d.teardownMu.Unlock()
+		return done
+	}
+	done := make(chan struct{})
+	d.tearingDown[sessionID] = done
+	d.teardownMu.Unlock()
+
+	go func() {
+		defer func() {
+			d.teardownMu.Lock()
+			delete(d.tearingDown, sessionID)
+			d.teardownMu.Unlock()
+			close(done)
+		}()
+		if teardown == nil {
+			d.terminateSession(sessionID, sig)
+			return
+		}
+		if err := d.terminateSessionRuntimeChecked(sessionID, sig); err != nil {
+			d.logf("session teardown failed for %s: requested=%s error=%v", sessionID, signalName(sig), err)
+			_ = d.removePTYSession(sessionID)
+			return
+		}
+		d.notifyPreparedPluginDriverSessionClosed(sessionID, teardown.driverRun, sig)
+	}()
+	return done
 }
 
 func (d *Daemon) forgetSession(sessionID string) {
@@ -2551,6 +2685,11 @@ func (d *Daemon) handleRegister(conn net.Conn, msg *protocol.RegisterMessage) {
 		d.releaseCrewBindingIfSession(msg.ID)
 	}
 	session.WorkspaceID = workspaceID
+	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
+		d.releaseCrewBindingIfSession(session.ID)
+		d.sendError(conn, err.Error())
+		return
+	}
 	existingWS := d.store.GetWorkspace(workspaceID)
 	workspaceTitle := session.Label
 	if existingWS != nil && strings.TrimSpace(existingWS.Title) != "" {
@@ -2559,7 +2698,6 @@ func (d *Daemon) handleRegister(conn net.Conn, msg *protocol.RegisterMessage) {
 	workspaceRank := d.resolveWorkspaceRank(existingWS)
 	d.store.AddWorkspace(&protocol.Workspace{ID: workspaceID, Title: workspaceTitle, Directory: session.Directory, Status: protocol.WorkspaceStatusLaunching, Rank: workspaceRank})
 	d.workspaces.register(workspaceID, workspaceTitle, session.Directory, workspaceRank, false, false)
-	d.store.Add(session)
 	if pending, ok := d.consumePendingAgentConversation(session.ID); ok {
 		d.observeAgentConversation(pending)
 	}
@@ -2615,15 +2753,17 @@ func (d *Daemon) publishSessionUnregistered(session *protocol.Session) {
 }
 
 func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage) {
-	session := d.unregisterSessionBeforeTeardown(msg.ID)
+	teardown := d.unregisterSessionBeforeTeardown(msg.ID)
 	d.sendOK(conn)
 
-	if session != nil {
-		d.publishSessionUnregistered(session)
-		d.dissociateSessionFromWorkspace(session.ID)
-		d.removeWorkspaceLayoutPaneForSession(session.ID)
+	if teardown != nil && teardown.session != nil {
+		d.publishSessionUnregistered(teardown.session)
+		d.dissociateSessionFromWorkspace(teardown.session.ID)
+		d.removeWorkspaceLayoutPaneForSession(teardown.session.ID)
 	}
-	d.terminateSessionAsync(msg.ID, syscall.SIGTERM)
+	if teardown != nil {
+		d.terminateSessionAsync(msg.ID, syscall.SIGTERM, teardown)
+	}
 }
 
 func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {

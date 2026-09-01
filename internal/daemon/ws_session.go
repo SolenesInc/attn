@@ -34,12 +34,12 @@ func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMe
 			endpointID = resolved
 		}
 	}
-	session := d.unregisterSessionBeforeTeardown(msg.ID)
-	if session != nil {
-		d.publishSessionUnregistered(session)
-		d.dissociateSessionFromWorkspace(session.ID)
-		d.removeWorkspaceLayoutPaneForSession(session.ID)
-		d.publishFact(FactSessionTerminated, session.ID, nil)
+	teardown := d.unregisterSessionBeforeTeardown(msg.ID)
+	if teardown != nil && teardown.session != nil {
+		d.publishSessionUnregistered(teardown.session)
+		d.dissociateSessionFromWorkspace(teardown.session.ID)
+		d.removeWorkspaceLayoutPaneForSession(teardown.session.ID)
+		d.publishFact(FactSessionTerminated, teardown.session.ID, nil)
 	}
 	if endpointID != "" {
 		payload, err := json.Marshal(protocol.UnregisterMessage{
@@ -52,7 +52,9 @@ func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMe
 			d.logf("remote unregister forward failed for %s on endpoint %s: %v", msg.ID, endpointID, err)
 		}
 	}
-	d.terminateSessionAsync(msg.ID, syscall.SIGTERM)
+	if teardown != nil {
+		d.terminateSessionAsync(msg.ID, syscall.SIGTERM, teardown)
+	}
 }
 
 func (d *Daemon) handleGetRecentLocationsWS(client *wsClient, msg *protocol.GetRecentLocationsMessage) {
