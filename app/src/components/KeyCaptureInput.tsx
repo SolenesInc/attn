@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Binding, Combo, Chord } from '../shortcuts/registry';
-import { keyCombo, shortcutTokens } from '../shortcuts/formatShortcut';
+import { formatShortcut, shortcutTokens } from '../shortcuts/formatShortcut';
 import { eventToBinding, isRiskyBinding } from '../shortcuts/resolver';
 import { setShortcutCaptureSuspended } from '../shortcuts/useShortcut';
 import { KeyCombo } from './Keycap';
@@ -128,7 +128,7 @@ export function KeyCaptureInput({
         type="button"
         className="key-capture-chord-btn"
         onClick={onStartChord}
-        title={`Record a leader-key chord (e.g. ${keyCombo('accel', 'K')} then D)`}
+        title={`Record a leader-key chord (e.g. ${formatShortcut('ui.actionMenu')} then D)`}
         aria-label="Record a chord"
       >
         chord

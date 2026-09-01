@@ -50,16 +50,17 @@ describe('formatShortcut', () => {
 describe('off-mac rendering', () => {
   it('writes the accelerator as Ctrl and joins tokens with +', () => {
     withNavigatorPlatform('Linux aarch64', () => {
-      expect(formatShortcut('session.new')).toBe('Ctrl+N');
-      expect(formatShortcut('session.newHorizontal')).toBe('Ctrl+Shift+N');
-      expect(formatShortcut('notebook.openFullscreen')).toBe('Ctrl+Alt+Shift+N');
-      expect(formatShortcut('terminal.toggleMaximize')).toBe('Ctrl+Shift+⏎');
+      expect(formatShortcut('session.new')).toBe('Ctrl+Shift+N');
+      expect(formatShortcut('session.newHorizontal')).toBe('Ctrl+Alt+N');
+      expect(formatShortcut('notebook.openFullscreen')).toBe('Ctrl+Alt+Shift+F');
+      expect(formatShortcut('terminal.toggleMaximize')).toBe('Ctrl+Alt+⏎');
+      expect(formatShortcut('terminal.focusLeft')).toBe('Ctrl+Shift+←');
     });
   });
 
   it('gives one keycap per modifier and folds ctrl into the accelerator', () => {
     withNavigatorPlatform('Linux aarch64', () => {
-      expect(shortcutTokens('terminal.focusLeft')).toEqual(['Ctrl', 'Alt', '←']);
+      expect(shortcutTokens('terminal.focusLeft')).toEqual(['Ctrl', 'Shift', '←']);
       expect(shortcutTokens({ key: 'k', meta: true, ctrl: true })).toEqual(['Ctrl', 'K']);
       expect(keyCombo('accel', 'shift', 'T')).toBe('Ctrl+Shift+T');
     });

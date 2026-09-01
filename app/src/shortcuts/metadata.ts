@@ -2,6 +2,7 @@
 // `Record<ShortcutId, ...>` shape keeps this map exhaustive.
 
 import { ShortcutId } from './registry';
+import { isMacLikePlatform } from './platform';
 
 export type ShortcutCategory = 'sessions' | 'panes' | 'markdown' | 'review' | 'app';
 
@@ -97,7 +98,7 @@ export function isProtectedShortcut(id: ShortcutId): boolean {
 }
 
 export function isNativeDeliveryShortcut(id: ShortcutId): boolean {
-  return SHORTCUT_META[id].nativeDelivery === true;
+  return isMacLikePlatform() && SHORTCUT_META[id].nativeDelivery === true;
 }
 
 export function dockShortcutLabel(id: ShortcutId): string {

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useShortcut } from '../shortcuts/useShortcut';
-import { isAccelKeyPressed } from '../shortcuts/platform';
+import { isAccelKeyPressed, isMacLikePlatform } from '../shortcuts/platform';
 
 interface KeyboardShortcutsConfig {
   onNewSession: () => void;
@@ -115,13 +115,13 @@ export function useKeyboardShortcuts({
 
   useEffect(() => {
     const preventWindowCloseShortcut = (e: KeyboardEvent) => {
-      if (!isAccelKeyPressed(e) || e.shiftKey || e.altKey) {
+      if (!isMacLikePlatform() || !isAccelKeyPressed(e) || e.shiftKey || e.altKey) {
         return;
       }
       if (e.key.toLowerCase() !== 'w') {
         return;
       }
-      // Keep Cmd/Ctrl+W inside the app so shortcut handlers can decide
+      // Keep Cmd+W inside the app so shortcut handlers can decide
       // whether to close a pane, close a session, or do nothing.
       e.preventDefault();
     };

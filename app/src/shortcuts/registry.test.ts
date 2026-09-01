@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   SHORTCUTS,
+  MAC_SHORTCUTS,
+  LINUX_SHORTCUTS,
   ShortcutDef,
   Chord,
   matchesShortcut,
@@ -8,6 +10,7 @@ import {
   combosConflict,
   isAllowedConflict,
   isChord,
+  validateNoConflicts,
   type ShortcutId,
 } from './registry';
 import { withNavigatorPlatform } from '../test/platformStub';
@@ -227,6 +230,90 @@ describe('shortcut registry', () => {
     it('has expected workspace shortcuts defined', () => {
       expect(SHORTCUTS['workspace.select1']).toEqual({ key: '1', code: 'Digit1', meta: true });
       expect(SHORTCUTS['workspace.select9']).toEqual({ key: '9', code: 'Digit9', meta: true });
+    });
+  });
+
+  describe('platform defaults', () => {
+    it('binds every shortcut id on both platforms and validates both tables', () => {
+      expect(Object.keys(LINUX_SHORTCUTS)).toEqual(Object.keys(MAC_SHORTCUTS));
+      expect(() => validateNoConflicts(MAC_SHORTCUTS)).not.toThrow();
+      expect(() => validateNoConflicts(LINUX_SHORTCUTS)).not.toThrow();
+    });
+
+    it('keeps every plain Ctrl+letter free on Linux', () => {
+      for (const [id, binding] of Object.entries(LINUX_SHORTCUTS) as Array<[ShortcutId, ShortcutDef]>) {
+        if (!/^[a-z]$/i.test(binding.key)) continue;
+        const event = new KeyboardEvent('keydown', {
+          key: binding.key,
+          code: `Key${binding.key.toUpperCase()}`,
+          ctrlKey: true,
+        });
+        withNavigatorPlatform('Linux aarch64', () => {
+          expect(matchesShortcut(event, binding), id).toBe(false);
+        });
+      }
+    });
+
+    it('puts every Linux default behind Shift or Alt', () => {
+      for (const [id, binding] of Object.entries(LINUX_SHORTCUTS) as Array<[ShortcutId, ShortcutDef]>) {
+        expect(binding.meta, id).toBe(true);
+        expect(Boolean(binding.shift || binding.alt), id).toBe(true);
+      }
+    });
+
+    it('avoids Ubuntu 24.04 desktop-reserved Ctrl+Alt chords', () => {
+      const reserved = new Set([
+        't',
+        'delete',
+        'tab',
+        'escape',
+        'arrowleft',
+        'arrowright',
+        'arrowup',
+        'arrowdown',
+      ]);
+      for (const [id, binding] of Object.entries(LINUX_SHORTCUTS) as Array<[ShortcutId, ShortcutDef]>) {
+        if (!binding.alt || binding.shift) continue;
+        expect(reserved.has(binding.key.toLowerCase()), id).toBe(false);
+      }
+    });
+
+    it('adds Shift to every macOS Cmd+letter action that had no Shift', () => {
+      for (const [id, mac] of Object.entries(MAC_SHORTCUTS) as Array<[ShortcutId, ShortcutDef]>) {
+        if (!mac.meta || mac.shift || !/^[a-z]$/i.test(mac.key)) continue;
+        const linux: ShortcutDef = LINUX_SHORTCUTS[id];
+        expect(linux.key, id).toBe(mac.key);
+        expect(linux.meta, id).toBe(true);
+        expect(linux.shift, id).toBe(true);
+        expect(Boolean(linux.alt), id).toBe(Boolean(mac.alt));
+      }
+    });
+
+    it('moves the former Cmd+Shift letter actions to Ctrl+Alt', () => {
+      const rehomed: ShortcutId[] = [
+        'terminal.splitHorizontal',
+        'terminal.toggleZoom',
+        'session.newHorizontal',
+        'session.goToDashboard',
+        'session.settle',
+        'session.snooze',
+        'session.toggleSidebar',
+        'dock.attention',
+        'board.open',
+      ];
+      for (const id of rehomed) {
+        const linux: ShortcutDef = LINUX_SHORTCUTS[id];
+        expect(linux, id).toMatchObject({ meta: true, alt: true });
+        expect(linux.shift, id).not.toBe(true);
+      }
+    });
+
+    it('uses the Linux terminal convention for representative app actions', () => {
+      expect(LINUX_SHORTCUTS['terminal.close']).toEqual({ key: 'w', meta: true, shift: true });
+      expect(LINUX_SHORTCUTS['session.new']).toEqual({ key: 'n', meta: true, shift: true });
+      expect(LINUX_SHORTCUTS['ui.actionMenu']).toEqual({ key: 'k', meta: true, shift: true });
+      expect(LINUX_SHORTCUTS['terminal.splitHorizontal']).toEqual({ key: 'd', meta: true, alt: true });
+      expect(LINUX_SHORTCUTS['terminal.focusLeft']).toEqual({ key: 'ArrowLeft', meta: true, shift: true });
     });
   });
 

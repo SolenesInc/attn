@@ -4,6 +4,7 @@ import { ShortcutEditorModal } from './ShortcutEditorModal';
 import { SettingsProvider } from '../contexts/SettingsContext';
 import { KeybindingsProvider } from '../contexts/KeybindingsContext';
 import { KEYBINDINGS_SETTING_KEY, setShortcutOverrides } from '../shortcuts/resolver';
+import { withNavigatorPlatform } from '../test/platformStub';
 
 afterEach(() => setShortcutOverrides({}));
 
@@ -41,6 +42,21 @@ describe('ShortcutEditorModal', () => {
     const newSession = row('New session in this workspace');
     expect(newSession.textContent).toContain('⌘');
     expect(newSession.textContent).toContain('N');
+  });
+
+  it('renders and resets to Linux defaults off macOS', () => {
+    withNavigatorPlatform('Linux aarch64', () => {
+      const { setSetting } = renderEditor({
+        [KEYBINDINGS_SETTING_KEY]: JSON.stringify({
+          version: 1,
+          overrides: { 'session.new': { key: 'm', meta: true, shift: true } },
+        }),
+      });
+      const newSession = row('New session in this workspace');
+      expect(newSession.textContent).toContain('CtrlShiftM');
+      fireEvent.click(within(newSession).getByTitle('Reset to Ctrl+Shift+N'));
+      expect(lastConfig(setSetting).overrides).not.toHaveProperty('session.new');
+    });
   });
 
   it('marks protected shortcuts as required and hides their unbind control', () => {

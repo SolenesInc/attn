@@ -7,7 +7,7 @@ import {
   readAnnotationDraft,
   writeAnnotationDraft,
 } from './annotationDrafts';
-import { keyCombo } from '../../../shortcuts/formatShortcut';
+import { formatShortcut } from '../../../shortcuts/formatShortcut';
 
 export interface AnnotationPopoverProps {
   getAnchorRect: () => DOMRect | null;
@@ -161,7 +161,7 @@ export function AnnotationPopover({
         rows={3}
       />
       <div className="md-popover-footer">
-        <span className="md-popover-hint">{keyCombo('accel', '↩')} to save</span>
+        <span className="md-popover-hint">{formatShortcut('markdown.sendAnnotations')} to save</span>
         <button
           type="button"
           className="md-popover-submit"

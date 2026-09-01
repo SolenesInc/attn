@@ -1,6 +1,7 @@
 
 import {
   SHORTCUTS,
+  defaultShortcut,
   ShortcutDef,
   ShortcutId,
   Combo,
@@ -56,7 +57,7 @@ export function resolveBinding(id: ShortcutId): Binding | null {
     const ov = overrides[id];
     return ov ?? null;
   }
-  return SHORTCUTS[id];
+  return defaultShortcut(id);
 }
 
 export function isUnbound(id: ShortcutId): boolean {
