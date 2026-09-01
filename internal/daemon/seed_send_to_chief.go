@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
@@ -66,14 +65,12 @@ func chiefSeedAssignmentPrompt(seedID string) string {
 
 func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID, seedID string) (protocol.AgentMsgStatus, string) {
 	now := time.Now()
-	item := agentmailbox.Item{
-		ID: uuid.NewString(), RecipientSessionID: chiefSessionID,
-		Prompt: chiefSeedAssignmentPrompt(seedID), CreatedAt: now.UTC().Format(time.RFC3339),
-	}
-	delivery, err := d.store.EnqueueMaintenancePrompt(item)
+	itemID := uuid.NewString()
+	prompt := chiefSeedAssignmentPrompt(seedID)
+	delivery, err := d.store.EnqueueMaintenancePrompt(itemID, chiefSessionID, prompt, now)
 	if err != nil {
 		d.logf("seed send to Chief: queue %s for %s: %v", seedID, chiefSessionID, err)
-		if d.nudgeChiefOfStaff(item.ID, item.Prompt) {
+		if d.nudgeChiefOfStaff(itemID, prompt) {
 			return protocol.AgentMsgStatusDelivered, "delivered to Chief"
 		}
 		return protocol.AgentMsgStatusRefused, "Chief now tends the seed, but the direct notification could not be queued; the assignment remains on the seed log"

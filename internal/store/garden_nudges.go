@@ -70,37 +70,33 @@ func (s *Store) GardenSeedWatches() ([]GardenSeedWatch, error) {
 	return watches, rows.Err()
 }
 
-func (s *Store) ClaimGardenSeedMailboxItem(watcherSessionID, seedID, eventKind, itemID string, now time.Time) (agentmailbox.Delivery, bool, error) {
+func (s *Store) ClaimGardenSeedMailboxItem(watcherSessionID, seedID, eventKind, itemID string, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	item := agentmailbox.Item{
-		ID: itemID, RecipientSessionID: watcherSessionID,
-		Kind: agentmailbox.KindGardenSeed, SourceID: seedID, CoalesceKey: seedID,
-		Hint: eventKind, CreatedAt: now.UTC().Format(sortableTimeFormat),
-	}
+	createdAt := now.UTC().Format(sortableTimeFormat)
 	tx, err := s.db.Begin()
 	if err != nil {
-		return agentmailbox.Delivery{}, false, err
+		return false, err
 	}
 	defer tx.Rollback()
 	res, err := tx.Exec(`
 		INSERT OR IGNORE INTO agent_mailbox_items
-			(id, recipient_session_id, kind, source_id, coalesce_key, hint, prompt, created_at, notified_at, read_at)
-		VALUES (?, ?, ?, ?, ?, ?, '', ?, '', '')
-	`, item.ID, item.RecipientSessionID, item.Kind, item.SourceID, item.CoalesceKey, item.Hint, item.CreatedAt)
+			(id, recipient_session_id, kind, source_id, coalesce_key, hint, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, itemID, watcherSessionID, agentmailbox.KindGardenSeed, seedID, seedID, eventKind, createdAt)
 	if err != nil {
-		return agentmailbox.Delivery{}, false, fmt.Errorf("claim Garden seed mailbox item: %w", err)
+		return false, fmt.Errorf("claim Garden seed mailbox item: %w", err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return agentmailbox.Delivery{}, false, err
+		return false, err
 	}
 	if n == 0 {
-		return agentmailbox.Delivery{}, false, nil
+		return false, nil
 	}
 	if err := tx.Commit(); err != nil {
-		return agentmailbox.Delivery{}, false, err
+		return false, err
 	}
-	return agentmailbox.Delivery{Item: item}, true, nil
+	return true, nil
 }

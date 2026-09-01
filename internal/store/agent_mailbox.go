@@ -8,13 +8,15 @@ import (
 	"github.com/victorarias/attn/internal/agentmailbox"
 )
 
-func (s *Store) EnqueueMaintenancePrompt(item agentmailbox.Item) (agentmailbox.Delivery, error) {
+func (s *Store) EnqueueMaintenancePrompt(id, recipientSessionID, prompt string, at time.Time) (agentmailbox.Delivery, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	item.Kind = agentmailbox.KindMaintenancePrompt
-	item.SourceID = ""
-	item.CoalesceKey = ""
+	item := agentmailbox.Item{
+		ID: id, RecipientSessionID: recipientSessionID,
+		Kind: agentmailbox.KindMaintenancePrompt, Prompt: prompt,
+		CreatedAt: at.UTC().Format(sortableTimeFormat),
+	}
 	if err := insertAgentMailboxItem(s.db, item); err != nil {
 		return agentmailbox.Delivery{}, err
 	}
@@ -28,10 +30,10 @@ type mailboxItemExecer interface {
 func insertAgentMailboxItem(exec mailboxItemExecer, item agentmailbox.Item) error {
 	_, err := exec.Exec(`
 		INSERT INTO agent_mailbox_items
-			(id, recipient_session_id, kind, source_id, coalesce_key, hint, prompt, created_at, notified_at, read_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(id, recipient_session_id, kind, source_id, coalesce_key, hint, prompt, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`, item.ID, item.RecipientSessionID, string(item.Kind), item.SourceID, item.CoalesceKey,
-		item.Hint, item.Prompt, item.CreatedAt, item.NotifiedAt, item.ReadAt)
+		item.Hint, item.Prompt, item.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("enqueue agent mailbox item: %w", err)
 	}
@@ -44,7 +46,7 @@ func (s *Store) QueuedAgentMailboxDeliveries(recipientSessionID string) ([]agent
 
 	rows, err := s.db.Query(`
 		SELECT i.id, i.recipient_session_id, i.kind, i.source_id, i.coalesce_key,
-		       i.hint, i.prompt, i.created_at, i.notified_at, i.read_at,
+		       i.hint, i.prompt, i.created_at,
 		       COALESCE(p.id, ''), COALESCE(p.sender_session_id, ''),
 		       COALESCE(p.body, ''), COALESCE(p.created_at, '')
 		FROM agent_mailbox_items i
@@ -67,8 +69,8 @@ func (s *Store) QueuedAgentMailboxDeliveries(recipientSessionID string) ([]agent
 		if err := rows.Scan(
 			&delivery.Item.ID, &delivery.Item.RecipientSessionID, &kind,
 			&delivery.Item.SourceID, &delivery.Item.CoalesceKey, &delivery.Item.Hint,
-			&delivery.Item.Prompt, &delivery.Item.CreatedAt, &delivery.Item.NotifiedAt,
-			&delivery.Item.ReadAt, &peerID, &peerSender, &body, &at,
+			&delivery.Item.Prompt, &delivery.Item.CreatedAt,
+			&peerID, &peerSender, &body, &at,
 		); err != nil {
 			return nil, fmt.Errorf("scan queued agent mailbox item: %w", err)
 		}

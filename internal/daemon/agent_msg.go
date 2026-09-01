@@ -95,7 +95,6 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 			}
 			woken, err := d.crewWakeWithDelivery(member.ID, "", true, &crewWakeDelivery{
 				Message: &message,
-				Prompt:  d.composeAgentMessage(sender, message),
 			})
 			if err != nil {
 				d.sendError(conn, err.Error())

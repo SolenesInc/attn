@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -77,11 +76,9 @@ func (d *Daemon) crewSleep(name string) (*protocol.CrewSleepResult, error) {
 		}, nil
 	}
 
-	item := agentmailbox.Item{
-		ID: uuid.NewString(), RecipientSessionID: sessionID,
-		Prompt: crewRequestedSleepPrompt, CreatedAt: time.Now().UTC().Format(time.RFC3339),
-	}
-	delivery, err := d.store.EnqueueMaintenancePrompt(item)
+	delivery, err := d.store.EnqueueMaintenancePrompt(
+		uuid.NewString(), sessionID, crewRequestedSleepPrompt, time.Now(),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("record %s's sleep request: %w", crew.DisplayName(member.ID), err)
 	}

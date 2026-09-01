@@ -145,24 +145,6 @@ func TestPeerMessageGuardCountsScopeEachLimit(t *testing.T) {
 	}
 }
 
-func TestGardenMailboxItemsCoalesceUntilRead(t *testing.T) {
-	s := newAgentMailboxStore(t)
-	now := time.Now()
-	first, claimed, err := s.ClaimGardenSeedMailboxItem("watcher", "s-7k3f9m", "note", "bell-1", now)
-	if err != nil || !claimed || first.Item.Kind != agentmailbox.KindGardenSeed {
-		t.Fatalf("first claim = %+v, %v, %v", first, claimed, err)
-	}
-	if _, claimed, err := s.ClaimGardenSeedMailboxItem("watcher", "s-7k3f9m", "harvested", "bell-2", now.Add(time.Second)); err != nil || claimed {
-		t.Fatalf("coalesced claim = %v, %v", claimed, err)
-	}
-	if read, err := s.ReadGardenSeedMailboxItems("watcher", "s-7k3f9m", now.Add(2*time.Second)); err != nil || !read {
-		t.Fatalf("read = %v, %v", read, err)
-	}
-	if _, claimed, err := s.ClaimGardenSeedMailboxItem("watcher", "s-7k3f9m", "harvested", "bell-2", now.Add(3*time.Second)); err != nil || !claimed {
-		t.Fatalf("claim after read = %v, %v", claimed, err)
-	}
-}
-
 func TestMigration129SeparatesMailboxReceiptsAndPayloads(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)

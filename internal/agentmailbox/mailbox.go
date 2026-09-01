@@ -17,26 +17,6 @@ type Item struct {
 	Hint               string
 	Prompt             string
 	CreatedAt          string
-	NotifiedAt         string
-	ReadAt             string
-}
-
-type State string
-
-const (
-	StateQueued   State = "queued"
-	StateNotified State = "notified"
-	StateRead     State = "read"
-)
-
-func (i Item) State() State {
-	if i.ReadAt != "" {
-		return StateRead
-	}
-	if i.NotifiedAt != "" {
-		return StateNotified
-	}
-	return StateQueued
 }
 
 type PeerMessage struct {

@@ -55,7 +55,6 @@ func crewWorkspaceID(memberID string) string { return "workspace-crew-" + member
 
 type crewWakeDelivery struct {
 	Message            *agentmailbox.PeerMessage
-	Prompt             string
 	AfterInitialPrompt func(sessionID string)
 }
 
@@ -291,7 +290,8 @@ func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, deliv
 			}
 			d.noteQueuedAgentMailboxItem(sessionID)
 			d.noteInitialAgentMessage(sessionID, delivery.Message.ID)
-			initialPrompt = delivery.Prompt
+			sender := d.store.Get(delivery.Message.SenderSessionID)
+			initialPrompt = d.composeAgentMessage(sender, *delivery.Message)
 		}
 		if delivery.AfterInitialPrompt != nil {
 			d.notePostInitialPrompt(sessionID, func() { delivery.AfterInitialPrompt(sessionID) })

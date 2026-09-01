@@ -175,7 +175,7 @@ func (d *Daemon) readGardenDispatchesAt(seedIDs map[string]bool) ([]garden.Dispa
 
 func (d *Daemon) claimAndDeliverSeedBell(sessionID, seedID, eventKind string) {
 	now := time.Now()
-	_, claimed, err := d.store.ClaimGardenSeedMailboxItem(sessionID, seedID, eventKind, uuid.NewString(), now)
+	claimed, err := d.store.ClaimGardenSeedMailboxItem(sessionID, seedID, eventKind, uuid.NewString(), now)
 	if err != nil {
 		d.logf("garden bell: claiming session=%s seed=%s: %v", sessionID, seedID, err)
 		return

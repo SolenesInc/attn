@@ -23,11 +23,11 @@ func TestGardenSeedWatchAndBellLifecycle(t *testing.T) {
 		t.Fatalf("watching=%v err=%v", watching, err)
 	}
 
-	_, claimed, err := s.ClaimGardenSeedMailboxItem("watcher", "s-7k3f9m", "note", "bell-1", now)
+	claimed, err := s.ClaimGardenSeedMailboxItem("watcher", "s-7k3f9m", "note", "bell-1", now)
 	if err != nil || !claimed {
 		t.Fatalf("first bell claimed=%v err=%v", claimed, err)
 	}
-	_, claimed, err = s.ClaimGardenSeedMailboxItem("watcher", "s-7k3f9m", "harvested", "bell-2", now.Add(time.Second))
+	claimed, err = s.ClaimGardenSeedMailboxItem("watcher", "s-7k3f9m", "harvested", "bell-2", now.Add(time.Second))
 	if err != nil || claimed {
 		t.Fatalf("coalesced bell claimed=%v err=%v", claimed, err)
 	}
@@ -44,7 +44,7 @@ func TestGardenSeedWatchAndBellLifecycle(t *testing.T) {
 	if err != nil || len(queued) != 0 {
 		t.Fatalf("queued after read=%+v err=%v", queued, err)
 	}
-	_, claimed, err = s.ClaimGardenSeedMailboxItem("watcher", "s-7k3f9m", "harvested", "bell-2", now.Add(time.Second))
+	claimed, err = s.ClaimGardenSeedMailboxItem("watcher", "s-7k3f9m", "harvested", "bell-2", now.Add(time.Second))
 	if err != nil || !claimed {
 		t.Fatalf("bell after read claimed=%v err=%v", claimed, err)
 	}
