@@ -38,8 +38,8 @@ func TestAgentMailboxQueuesItemsUntilTheirNotificationIsStamped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(queued) != 2 || queued[0].Item.ID != "first" || queued[1].Item.ID != "second" {
-		t.Fatalf("queue is not oldest-first: %+v", queued)
+	if len(queued) != 1 || queued[0].Item.ID != "first" {
+		t.Fatalf("queue exposed more than the oldest unread peer: %+v", queued)
 	}
 	if queued[0].Peer == nil || queued[0].Peer.Body != "earlier" || queued[0].Peer.SenderSessionID != "sender" {
 		t.Fatalf("peer payload = %+v", queued[0].Peer)
@@ -53,19 +53,67 @@ func TestAgentMailboxQueuesItemsUntilTheirNotificationIsStamped(t *testing.T) {
 		t.Fatalf("queued recipients = %v, %v", recipients, err)
 	}
 
-	if err := s.MarkAgentMailboxItemHandled("first", now); err != nil {
+	if err := s.MarkAgentMailboxItemNotified("first", now); err != nil {
 		t.Fatal(err)
 	}
 	queued, err = s.QueuedAgentMailboxDeliveries("target")
+	if err != nil || len(queued) != 0 {
+		t.Fatalf("a second peer passed the notified unread message: %+v, %v", queued, err)
+	}
+	if _, changed, err := s.ReadPeerMessage("first", "target", now.Add(time.Second)); err != nil || !changed {
+		t.Fatalf("read first = %v, %v", changed, err)
+	}
+	queued, err = s.QueuedAgentMailboxDeliveries("target")
 	if err != nil || len(queued) != 1 || queued[0].Item.ID != "second" {
-		t.Fatalf("after handling, queue = %+v, %v", queued, err)
+		t.Fatalf("after reading first, queue = %+v, %v", queued, err)
+	}
+}
+
+func TestAgentMailboxDoesNotPassAnAlreadyNotifiedNewerPeer(t *testing.T) {
+	s := newAgentMailboxStore(t)
+	now := time.Now()
+	enqueuePeer(t, s, "newer", "sender", "target", "landed first", now)
+	if err := s.MarkAgentMailboxItemNotified("newer", now); err != nil {
+		t.Fatal(err)
+	}
+	enqueuePeer(t, s, "older", "sender", "target", "persisted late", now.Add(-time.Second))
+
+	queued, err := s.QueuedAgentMailboxDeliveries("target")
+	if err != nil || len(queued) != 0 {
+		t.Fatalf("queued behind a notified peer = %+v, %v", queued, err)
+	}
+}
+
+func TestReadPeerMessageRequiresItsRecipientAndNotification(t *testing.T) {
+	s := newAgentMailboxStore(t)
+	now := time.Now()
+	enqueuePeer(t, s, "message", "sender", "target", "hello", now)
+
+	if _, _, err := s.ReadPeerMessage("message", "someone-else", now); err != ErrPeerMessageNotFound {
+		t.Fatalf("unauthorized read error = %v", err)
+	}
+	if _, _, err := s.ReadPeerMessage("message", "target", now); err != ErrPeerMessageNotNotified {
+		t.Fatalf("queued read error = %v", err)
+	}
+	if err := s.MarkAgentMailboxItemNotified("message", now); err != nil {
+		t.Fatal(err)
+	}
+	record, changed, err := s.ReadPeerMessage("message", "target", now.Add(time.Second))
+	if err != nil || !changed || record.State() != agentmailbox.StateRead || record.Message.Body != "hello" {
+		t.Fatalf("read = %+v, %v, %v", record, changed, err)
+	}
+	again, changed, err := s.ReadPeerMessage("message", "target", now.Add(time.Hour))
+	if err != nil || changed || again.ReadAt != record.ReadAt {
+		t.Fatalf("repeated read = %+v, %v, %v", again, changed, err)
 	}
 }
 
 func TestAgentMailboxReceiptTimestampsAreWriteOnce(t *testing.T) {
 	s := newAgentMailboxStore(t)
 	first := time.Now().Add(-time.Hour)
-	enqueuePeer(t, s, "once", "sender", "target", "hello", first)
+	if _, err := s.EnqueueMaintenancePrompt("once", "target", "hello", first); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.MarkAgentMailboxItemHandled("once", first); err != nil {
 		t.Fatal(err)
 	}
@@ -101,8 +149,11 @@ func TestDeleteQueuedPeerMessageLeavesHandledHistory(t *testing.T) {
 	s := newAgentMailboxStore(t)
 	now := time.Now()
 	enqueuePeer(t, s, "queued", "sender", "target", "not launched", now)
-	enqueuePeer(t, s, "handled", "sender", "target", "already read", now)
-	if err := s.MarkAgentMailboxItemHandled("handled", now); err != nil {
+	enqueuePeer(t, s, "handled", "sender", "target", "already read", now.Add(time.Second))
+	if err := s.MarkAgentMailboxItemNotified("handled", now.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, changed, err := s.ReadPeerMessage("handled", "target", now.Add(2*time.Second)); err != nil || !changed {
 		t.Fatal(err)
 	}
 

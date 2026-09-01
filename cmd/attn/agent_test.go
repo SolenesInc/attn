@@ -233,9 +233,9 @@ func TestParseAgentMsgArgsResolvesTheSenderAndRefusesWhenItCannot(t *testing.T) 
 
 func TestAgentMsgOutcomeLineCarriesTheDaemonsReason(t *testing.T) {
 	delivered := agentMsgOutcomeLine(&protocol.AgentMsgResult{
-		Status: protocol.AgentMsgStatusDelivered, Detail: "delivered to reviewer", MessageID: "abc",
+		Status: protocol.AgentMsgStatusNotified, Detail: "notified reviewer", MessageID: "abc",
 	})
-	if !strings.Contains(delivered, "delivered to reviewer") || !strings.Contains(delivered, "abc") {
+	if !strings.Contains(delivered, "notified reviewer") || !strings.Contains(delivered, "abc") {
 		t.Fatalf("delivered line = %q", delivered)
 	}
 	refused := agentMsgOutcomeLine(&protocol.AgentMsgResult{
@@ -263,6 +263,84 @@ func TestAgentMsgErrorMessageSeparatesTargetFromSender(t *testing.T) {
 	for _, want := range []string{`"zzzz"`, "attn agent list", "attn crew list"} {
 		if !strings.Contains(unknown, want) {
 			t.Fatalf("unknown-address error %q does not name %q", unknown, want)
+		}
+	}
+}
+
+func TestParseAgentMailboxArgsResolvesIdentity(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		args    []string
+		env     string
+		want    agentMailboxArgs
+		wantErr string
+	}{
+		{
+			name: "session defaults to this session", args: []string{"message-id"}, env: "session-id",
+			want: agentMailboxArgs{messageID: "message-id", sessionID: "session-id"},
+		},
+		{
+			name: "explicit session and JSON", args: []string{"message-id", "--session", "other", "--json"}, env: "session-id",
+			want: agentMailboxArgs{messageID: "message-id", sessionID: "other", json: true},
+		},
+		{name: "no message", env: "session-id", wantErr: "usage:"},
+		{name: "flag first", args: []string{"--json", "message-id"}, env: "session-id", wantErr: "usage:"},
+		{name: "no identity", args: []string{"message-id"}, wantErr: "--session"},
+		{name: "extra argument", args: []string{"message-id", "other"}, env: "session-id", wantErr: "usage:"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseAgentMailboxArgs("inbox", tt.args, tt.env)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("error = %v, want one mentioning %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil || got != tt.want {
+				t.Fatalf("parsed = %+v, %v, want %+v", got, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestPrintAgentInboxKeepsTheBodyBehindTheSecurityBoundary(t *testing.T) {
+	var out bytes.Buffer
+	printAgentInbox(&out, &protocol.AgentPeerMessage{
+		MessageID: "message-id", SenderSessionID: "sender-session-id", SenderLabel: "reviewer",
+		TargetSessionID: "target-session-id", Content: "the migration landed", State: protocol.AgentMessageStateRead,
+	})
+	text := out.String()
+	for _, want := range []string{
+		"sender-s (reviewer)", "the migration landed", "another agent, not from your user",
+		`attn agent msg sender-s "..."`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("output missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestPrintAgentMsgStatusShowsTheDurableState(t *testing.T) {
+	var out bytes.Buffer
+	printAgentMsgStatus(&out, &protocol.AgentPeerMessage{
+		MessageID: "message-id", TargetSessionID: "target-session-id", State: protocol.AgentMessageStateNotified,
+	})
+	if got := out.String(); got != "notified: message message-id to session target-s\n" {
+		t.Fatalf("output = %q", got)
+	}
+}
+
+func TestAgentMailboxErrorMessagesDoNotLeakOtherSessionsMessages(t *testing.T) {
+	parsed := agentMailboxArgs{messageID: "message-id", sessionID: "session-id"}
+	for code, want := range map[string]string{
+		"recipient_session_not_found": "session-id",
+		"sender_ambiguous_session":    "more than one session",
+		"message_not_found":           "not found for this session",
+		"message_not_notified":        "still queued",
+	} {
+		err := &client.DaemonError{Code: code, Message: code}
+		if got := agentMailboxErrorMessage(parsed, err); !strings.Contains(got, want) {
+			t.Fatalf("%s message = %q, want %q", code, got, want)
 		}
 	}
 }

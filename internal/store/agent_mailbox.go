@@ -52,8 +52,16 @@ func (s *Store) QueuedAgentMailboxDeliveries(recipientSessionID string) ([]agent
 		FROM agent_mailbox_items i
 		LEFT JOIN peer_messages p ON i.kind = ? AND p.id = i.source_id
 		WHERE i.recipient_session_id = ? AND i.notified_at = ''
+		  AND (i.kind != ? OR NOT EXISTS (
+			SELECT 1 FROM agent_mailbox_items other
+			WHERE other.recipient_session_id = i.recipient_session_id
+			  AND other.kind = ? AND other.read_at = '' AND other.id != i.id
+			  AND (other.notified_at != '' OR other.created_at < i.created_at
+			       OR (other.created_at = i.created_at AND other.id < i.id))
+		  ))
 		ORDER BY i.created_at, i.id
-	`, agentmailbox.KindPeerMessage, recipientSessionID)
+	`, agentmailbox.KindPeerMessage, recipientSessionID,
+		agentmailbox.KindPeerMessage, agentmailbox.KindPeerMessage)
 	if err != nil {
 		return nil, fmt.Errorf("list queued agent mailbox items: %w", err)
 	}
@@ -147,8 +155,8 @@ func (s *Store) MarkAgentMailboxItemHandled(id string, at time.Time) error {
 		UPDATE agent_mailbox_items
 		SET notified_at = CASE WHEN notified_at = '' THEN ? ELSE notified_at END,
 		    read_at = CASE WHEN read_at = '' THEN ? ELSE read_at END
-		WHERE id = ?
-	`, stamp, stamp, id)
+		WHERE id = ? AND kind = ?
+	`, stamp, stamp, id, agentmailbox.KindMaintenancePrompt)
 	if err != nil {
 		return fmt.Errorf("mark agent mailbox item handled: %w", err)
 	}

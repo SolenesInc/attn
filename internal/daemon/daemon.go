@@ -186,7 +186,6 @@ type Daemon struct {
 	drainingAgentMailbox              map[string]bool
 	agentMailboxDeliveries            map[string]*agentMailboxDeliveryFlight
 	postInitialPrompt                 map[string]func()
-	agentMessageInitialPrompt         map[string]string
 	agentMailboxDrainScheduledHook    func(sessionID string)
 	agentMailboxDrainHook             func(sessionID string, delivered int)
 	crewWakeMu                        sync.Mutex
@@ -2332,6 +2331,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 
 	case protocol.CmdAgentMsg: // wire: agent_msg
 		d.handleAgentMsg(conn, msg.(*protocol.AgentMsgMessage))
+	case protocol.CmdAgentInbox: // wire: agent_inbox
+		d.handleAgentInbox(conn, msg.(*protocol.AgentInboxMessage))
+	case protocol.CmdAgentMsgStatus: // wire: agent_msg_status
+		d.handleAgentMsgStatus(conn, msg.(*protocol.AgentMsgStatusMessage))
 	case protocol.CmdSeedPlant: // wire: seed_plant
 		d.handleSeedPlant(conn, msg.(*protocol.SeedPlantMessage))
 	case protocol.CmdSeedPlot: // wire: seed_plot
@@ -2606,7 +2609,6 @@ func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 		}
 		go d.maybeGenerateSessionTitleFromPrompt(msg.ID, protocol.Deref(msg.Prompt), origin)
 	}
-	d.noteInitialAgentMessageSubmitted(msg.ID, msg.State)
 	d.runPostInitialPrompt(msg.ID, msg.State)
 	d.tracePermissionMode(msg.ID, protocol.Deref(msg.PermissionMode))
 	d.recordReviewerEvidenceFromPermissionMode(msg.ID, protocol.Deref(msg.PermissionMode))

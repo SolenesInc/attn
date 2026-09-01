@@ -12,7 +12,8 @@
 - Session input: ordered delivery to a live session with evidence of receipt.
 - Input evidence: deferred = untouched; placed = adapter-owned; taken = reading begun; indeterminate = uncertain.
 - Agent mailbox: durable agent-addressed notification queue, separate from the app-wide user notification feed.
-- Mailbox item: one notification with queued, notified, and read states. Safe session-input placement proves notified; a successful domain CLI read proves read.
+- Mailbox item: one durable notification. Safe session-input placement proves notified; agent-facing items prove read only through their domain CLI.
+- Peer message: stored agent-to-agent body with a content-free mailbox doorbell. One unread doorbell is notified per recipient; `attn agent inbox` returns the body, proves read, and releases the next.
 - Turn: attention owed to an agent; viewing it does not settle it.
 - Auto-settle: closes a turn after proven user-conversation input and uninterrupted working time.
 - Standing dismissal: suppresses the next auto-settle for the current working stretch.

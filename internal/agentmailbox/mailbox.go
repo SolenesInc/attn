@@ -26,6 +26,31 @@ type PeerMessage struct {
 	CreatedAt       string
 }
 
+type State string
+
+const (
+	StateQueued   State = "queued"
+	StateNotified State = "notified"
+	StateRead     State = "read"
+)
+
+type PeerRecord struct {
+	Message            PeerMessage
+	RecipientSessionID string
+	NotifiedAt         string
+	ReadAt             string
+}
+
+func (r PeerRecord) State() State {
+	if r.ReadAt != "" {
+		return StateRead
+	}
+	if r.NotifiedAt != "" {
+		return StateNotified
+	}
+	return StateQueued
+}
+
 type Delivery struct {
 	Item Item
 	Peer *PeerMessage

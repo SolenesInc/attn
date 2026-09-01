@@ -71,7 +71,7 @@ func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID, seedID string) (prot
 	if err != nil {
 		d.logf("seed send to Chief: queue %s for %s: %v", seedID, chiefSessionID, err)
 		if d.nudgeChiefOfStaff(itemID, prompt) {
-			return protocol.AgentMsgStatusDelivered, "delivered to Chief"
+			return protocol.AgentMsgStatusNotified, "notified Chief"
 		}
 		return protocol.AgentMsgStatusRefused, "Chief now tends the seed, but the direct notification could not be queued; the assignment remains on the seed log"
 	}
@@ -79,7 +79,7 @@ func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID, seedID string) (prot
 	if err := d.deliverAgentMailboxItem(delivery); err != nil {
 		return protocol.AgentMsgStatusQueued, agentMessageQueuedDetail(err)
 	}
-	return protocol.AgentMsgStatusDelivered, "delivered to Chief"
+	return protocol.AgentMsgStatusNotified, "notified Chief"
 }
 
 func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage) (*protocol.SeedSendToChiefResult, error) {

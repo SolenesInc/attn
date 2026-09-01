@@ -44,7 +44,7 @@ func TestCrewSleep_DeliversAUserRequestForSleep(t *testing.T) {
 		t.Fatalf("crew sleep: %v", protocol.Deref(resp.Error))
 	}
 	result := resp.CrewSleepResult
-	if result == nil || result.AlreadyAsleep || protocol.Deref(result.DeliveryStatus) != protocol.AgentMsgStatusDelivered {
+	if result == nil || result.AlreadyAsleep || protocol.Deref(result.DeliveryStatus) != protocol.AgentMsgStatusNotified {
 		t.Fatalf("sleep result = %+v, want delivered request", result)
 	}
 	mu.Lock()

@@ -101,7 +101,6 @@ func newLifecycleDaemon(t *testing.T) (*Daemon, string, *doorbellRecorder) {
 	sessionID = woken.SessionID
 	d.agentMailboxMu.Lock()
 	delete(d.postInitialPrompt, woken.SessionID)
-	delete(d.agentMessageInitialPrompt, woken.SessionID)
 	d.agentMailboxMu.Unlock()
 	return d, woken.SessionID, recorder
 }
