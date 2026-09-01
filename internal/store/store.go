@@ -33,6 +33,7 @@ type Store struct {
 	activityCursors map[string]string
 	sessionCosts    map[string]SessionCostState
 	agentDriverRuns map[string]AgentDriverReportCursor
+	teardownIntents map[string]SessionTeardownIntent
 	agentMetadata   map[string]string
 	profileRoles    map[string]string
 	workspaces      map[string]workspacelayout.WorkspaceLayout
@@ -43,6 +44,11 @@ type AgentDriverReportCursor struct {
 	PluginName string
 	RunID      string
 	Seq        uint64
+}
+
+type SessionTeardownIntent struct {
+	RequestedAt time.Time
+	DriverRun   AgentDriverReportCursor
 }
 
 // Seq is the run's report cursor: a replacement driver must continue from it, because applyState discards anything that does not advance it.
@@ -76,6 +82,7 @@ func New() *Store {
 		return &Store{
 			sessions:        make(map[string]*protocol.Session),
 			agentDriverRuns: make(map[string]AgentDriverReportCursor),
+			teardownIntents: make(map[string]SessionTeardownIntent),
 			sessionCosts:    make(map[string]SessionCostState),
 			agentMetadata:   make(map[string]string),
 			profileRoles:    make(map[string]string),
@@ -175,8 +182,20 @@ func (s *Store) Add(session *protocol.Session) {
 func (s *Store) AddChecked(session *protocol.Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.addCheckedLocked(session, false)
+}
 
+func (s *Store) AddCheckedUnlessTeardown(session *protocol.Session) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.addCheckedLocked(session, true)
+}
+
+func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool) error {
 	if s.db == nil {
+		if _, closing := s.teardownIntents[session.ID]; rejectTeardown && closing {
+			return fmt.Errorf("session %s is closing", session.ID)
+		}
 		if s.sessions == nil {
 			s.sessions = make(map[string]*protocol.Session)
 		}
@@ -202,6 +221,15 @@ func (s *Store) AddChecked(session *protocol.Session) error {
 		}
 		s.sessions[session.ID] = stored
 		return nil
+	}
+	if rejectTeardown {
+		var closing int
+		if err := s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM session_teardown_tombstones WHERE session_id = ?)", session.ID).Scan(&closing); err != nil {
+			return fmt.Errorf("check session %s teardown before insert: %w", session.ID, err)
+		}
+		if closing == 1 {
+			return fmt.Errorf("session %s is closing", session.ID)
+		}
 	}
 
 	todosJSON, err := json.Marshal(session.Todos)
@@ -806,34 +834,221 @@ func (s *Store) LaunchIntent(id string) (LaunchIntent, bool) {
 	return intent, true
 }
 
-func (s *Store) MarkSessionIntentionalClose(id string, now time.Time) {
+func (s *Store) MarkSessionIntentionalClose(id string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.db == nil {
-		return
+		if s.teardownIntents == nil {
+			s.teardownIntents = make(map[string]SessionTeardownIntent)
+		}
+		intent := s.teardownIntents[id]
+		intent.RequestedAt = now
+		s.teardownIntents[id] = intent
+		return nil
 	}
 
-	_, err := s.db.Exec("UPDATE sessions SET closed_intentionally_at = ? WHERE id = ?",
-		now.Format(time.RFC3339Nano), id)
+	_, err := s.db.Exec(`INSERT INTO session_teardown_tombstones (session_id, requested_at)
+		VALUES (?, ?) ON CONFLICT(session_id) DO UPDATE SET requested_at = excluded.requested_at`,
+		id, now.Format(time.RFC3339Nano))
 	if err != nil {
-		log.Printf("[store] MarkSessionIntentionalClose: failed for session %s: %v", id, err)
+		return fmt.Errorf("mark session %s intentional close: %w", id, err)
 	}
+	return nil
 }
 
-func (s *Store) SessionCloseIntentional(id string) bool {
+func (s *Store) SessionCloseIntentionalChecked(id string) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if s.db == nil {
-		return false
+		_, ok := s.teardownIntents[id]
+		return ok, nil
 	}
 
-	var closedAt string
-	if err := s.db.QueryRow("SELECT closed_intentionally_at FROM sessions WHERE id = ?", id).Scan(&closedAt); err != nil {
-		return false
+	var found int
+	if err := s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM session_teardown_tombstones WHERE session_id = ?)", id).Scan(&found); err != nil {
+		return false, fmt.Errorf("read session %s teardown intent: %w", id, err)
 	}
-	return strings.TrimSpace(closedAt) != ""
+	return found == 1, nil
+}
+
+func (s *Store) SessionCloseIntentional(id string) bool {
+	intentional, err := s.SessionCloseIntentionalChecked(id)
+	if err != nil {
+		log.Printf("[store] SessionCloseIntentional: %v", err)
+		return true
+	}
+	return intentional
+}
+
+func (s *Store) PrepareSessionTeardown(id string, now time.Time) (AgentDriverReportCursor, error) {
+	run, _, err := s.prepareSessionTeardown(id, now, true)
+	return run, err
+}
+
+func (s *Store) PrepareExistingSessionTeardown(id string, now time.Time) (AgentDriverReportCursor, bool, error) {
+	return s.prepareSessionTeardown(id, now, false)
+}
+
+func (s *Store) prepareSessionTeardown(id string, now time.Time, create bool) (AgentDriverReportCursor, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.db == nil {
+		if s.teardownIntents == nil {
+			if !create {
+				return AgentDriverReportCursor{}, false, nil
+			}
+			s.teardownIntents = make(map[string]SessionTeardownIntent)
+		}
+		intent, found := s.teardownIntents[id]
+		if !found && !create {
+			return AgentDriverReportCursor{}, false, nil
+		}
+		if intent.DriverRun.RunID == "" {
+			intent.DriverRun = s.agentDriverRuns[id]
+			delete(s.agentDriverRuns, id)
+		}
+		intent.RequestedAt = now
+		s.teardownIntents[id] = intent
+		return intent.DriverRun, true, nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return AgentDriverReportCursor{}, false, fmt.Errorf("begin session %s teardown: %w", id, err)
+	}
+	defer tx.Rollback()
+
+	var run AgentDriverReportCursor
+	err = tx.QueryRow(`SELECT driver_plugin_name, driver_run_id, driver_report_seq
+		FROM session_teardown_tombstones WHERE session_id = ?`, id).Scan(&run.PluginName, &run.RunID, &run.Seq)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return AgentDriverReportCursor{}, false, fmt.Errorf("read session %s teardown owner: %w", id, err)
+	}
+	found := err == nil
+	if !found && !create {
+		return AgentDriverReportCursor{}, false, nil
+	}
+	if run.RunID == "" {
+		err = tx.QueryRow(`SELECT agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq
+			FROM sessions WHERE id = ?`, id).Scan(&run.PluginName, &run.RunID, &run.Seq)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return AgentDriverReportCursor{}, false, fmt.Errorf("read session %s driver owner: %w", id, err)
+		}
+	}
+	run.PluginName = strings.TrimSpace(run.PluginName)
+	run.RunID = strings.TrimSpace(run.RunID)
+	if _, err := tx.Exec(`INSERT INTO session_teardown_tombstones
+		(session_id, requested_at, driver_plugin_name, driver_run_id, driver_report_seq)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(session_id) DO UPDATE SET requested_at = excluded.requested_at,
+			driver_plugin_name = CASE WHEN session_teardown_tombstones.driver_run_id = '' THEN excluded.driver_plugin_name ELSE session_teardown_tombstones.driver_plugin_name END,
+			driver_run_id = CASE WHEN session_teardown_tombstones.driver_run_id = '' THEN excluded.driver_run_id ELSE session_teardown_tombstones.driver_run_id END,
+			driver_report_seq = CASE WHEN session_teardown_tombstones.driver_run_id = '' THEN excluded.driver_report_seq ELSE session_teardown_tombstones.driver_report_seq END`,
+		id, now.Format(time.RFC3339Nano), run.PluginName, run.RunID, run.Seq); err != nil {
+		return AgentDriverReportCursor{}, false, fmt.Errorf("persist session %s teardown owner: %w", id, err)
+	}
+	if run.RunID != "" {
+		if _, err := tx.Exec(`UPDATE sessions SET agent_driver_plugin_name = '', agent_driver_run_id = '', agent_driver_report_seq = 0
+			WHERE id = ? AND agent_driver_plugin_name = ? AND agent_driver_run_id = ?`, id, run.PluginName, run.RunID); err != nil {
+			return AgentDriverReportCursor{}, false, fmt.Errorf("claim session %s driver owner: %w", id, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return AgentDriverReportCursor{}, false, fmt.Errorf("commit session %s teardown: %w", id, err)
+	}
+	return run, true, nil
+}
+
+func (s *Store) SessionTeardownIntentIDs() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.db == nil {
+		ids := make([]string, 0, len(s.teardownIntents))
+		for id := range s.teardownIntents {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+
+	rows, err := s.db.Query("SELECT session_id FROM session_teardown_tombstones")
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+func (s *Store) ClaimSessionTeardownDriverRun(id, runID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.db == nil {
+		intent := s.teardownIntents[id]
+		if intent.DriverRun.RunID != runID || runID == "" {
+			return false, nil
+		}
+		intent.DriverRun = AgentDriverReportCursor{}
+		s.teardownIntents[id] = intent
+		return true, nil
+	}
+
+	result, err := s.db.Exec(`UPDATE session_teardown_tombstones
+		SET driver_plugin_name = '', driver_run_id = '', driver_report_seq = 0
+		WHERE session_id = ? AND driver_run_id = ?`, id, runID)
+	if err != nil {
+		return false, fmt.Errorf("claim session %s teardown driver run: %w", id, err)
+	}
+	updated, err := result.RowsAffected()
+	return err == nil && updated == 1, err
+}
+
+func (s *Store) CancelSessionTeardown(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.db == nil {
+		intent, found := s.teardownIntents[id]
+		if !found {
+			return nil
+		}
+		if intent.DriverRun.RunID != "" {
+			s.agentDriverRuns[id] = intent.DriverRun
+		}
+		delete(s.teardownIntents, id)
+		return nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var run AgentDriverReportCursor
+	if err := tx.QueryRow(`SELECT driver_plugin_name, driver_run_id, driver_report_seq
+		FROM session_teardown_tombstones WHERE session_id = ?`, id).Scan(&run.PluginName, &run.RunID, &run.Seq); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if run.RunID != "" {
+		if _, err := tx.Exec(`UPDATE sessions SET agent_driver_plugin_name = ?, agent_driver_run_id = ?, agent_driver_report_seq = ?
+			WHERE id = ? AND agent_driver_run_id = ''`, run.PluginName, run.RunID, run.Seq, id); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec("DELETE FROM session_teardown_tombstones WHERE session_id = ?", id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // A live session must not carry the mark, or a later genuine crash would be misread as a clean close.
@@ -842,10 +1057,11 @@ func (s *Store) ClearSessionIntentionalClose(id string) {
 	defer s.mu.Unlock()
 
 	if s.db == nil {
+		delete(s.teardownIntents, id)
 		return
 	}
 
-	_, err := s.db.Exec("UPDATE sessions SET closed_intentionally_at = '' WHERE id = ?", id)
+	_, err := s.db.Exec("DELETE FROM session_teardown_tombstones WHERE session_id = ?", id)
 	if err != nil {
 		log.Printf("[store] ClearSessionIntentionalClose: failed for session %s: %v", id, err)
 	}

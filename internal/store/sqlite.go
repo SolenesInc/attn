@@ -1106,6 +1106,17 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 			exited_at   TEXT NOT NULL
 		);
 	`},
+	{130, "intentional session teardown survives session removal", `
+		CREATE TABLE IF NOT EXISTS session_teardown_tombstones (
+			session_id        TEXT PRIMARY KEY,
+			requested_at      TEXT NOT NULL,
+			driver_plugin_name TEXT NOT NULL DEFAULT '',
+			driver_run_id      TEXT NOT NULL DEFAULT '',
+			driver_report_seq  INTEGER NOT NULL DEFAULT 0
+		);
+		INSERT OR IGNORE INTO session_teardown_tombstones (session_id, requested_at)
+			SELECT id, closed_intentionally_at FROM sessions WHERE closed_intentionally_at <> '';
+	`},
 }
 
 const migration99SQL = `

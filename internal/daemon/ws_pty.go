@@ -760,23 +760,27 @@ func parseSignal(name string) syscall.Signal {
 func (d *Daemon) handleKillSession(client *wsClient, msg *protocol.KillSessionMessage) {
 	d.detachSession(client, msg.ID)
 	sig := parseSignal(protocol.Deref(msg.Signal))
-	if d.isHostSession(msg.ID) {
-		if err := d.killSessionRuntime(msg.ID); err != nil {
-			d.logf("kill_session failed for host %s: %v", msg.ID, err)
+	go d.killSessionRuntimeAsync(msg.ID, sig)
+}
+
+func (d *Daemon) killSessionRuntimeAsync(sessionID string, sig syscall.Signal) {
+	if d.isHostSession(sessionID) {
+		if err := d.killSessionRuntime(sessionID); err != nil {
+			d.logf("kill_session failed for host %s: %v", sessionID, err)
 			return
 		}
-		d.closePluginDriverSession(msg.ID, "killed", nil, signalName(sig))
+		d.closePluginDriverSession(sessionID, "killed", nil, signalName(sig))
 		return
 	}
-	err := d.ptyBackend.Kill(context.Background(), msg.ID, sig)
+	err := d.ptyBackend.Kill(context.Background(), sessionID, sig)
 	if err == nil || errors.Is(err, pty.ErrSessionNotFound) {
 		// Production backends return from Kill only once the child has exited.
 		// Close here because worker lifecycle delivery can trail that return.
-		d.closePluginDriverSession(msg.ID, "killed", nil, signalName(sig))
+		d.closePluginDriverSession(sessionID, "killed", nil, signalName(sig))
 	}
 	if err != nil {
 		if shouldLogPtyCommandError(err) {
-			d.logf("kill_session failed for %s: %v", msg.ID, err)
+			d.logf("kill_session failed for %s: %v", sessionID, err)
 		}
 	}
 }

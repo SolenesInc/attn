@@ -865,6 +865,181 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend(t *testing.T) {
 	}
 }
 
+func TestDaemon_ReconcileResumesTeardownWithoutRecreatingRemovedSession(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "attn.db")
+	firstStore, err := store.NewWithDB(dbPath)
+	if err != nil {
+		t.Fatalf("open first store: %v", err)
+	}
+	now := protocol.TimestampNow().String()
+	firstStore.Add(&protocol.Session{
+		ID: "closing-session", Label: "closing", Agent: protocol.SessionAgentCodex,
+		Directory: t.TempDir(), State: protocol.SessionStateWorking,
+		StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	if !firstStore.BeginAgentDriverRun("closing-session", "recovery-plugin", "recovery-run") {
+		t.Fatal("begin recovery driver run")
+	}
+	first := NewForTesting(filepath.Join(t.TempDir(), "first.sock"))
+	_ = first.store.Close()
+	first.store = firstStore
+	if _, err := first.prepareSessionTeardown("closing-session"); err != nil {
+		t.Fatalf("prepare session teardown: %v", err)
+	}
+	first.commitSessionUnregister("closing-session")
+	if firstStore.Get("closing-session") != nil || !firstStore.SessionCloseIntentional("closing-session") {
+		t.Fatal("teardown gap must have no session row and a durable close marker")
+	}
+	if err := firstStore.Close(); err != nil {
+		t.Fatalf("close first store: %v", err)
+	}
+
+	reopened, err := store.NewWithDB(dbPath)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	killEntered := make(chan struct{})
+	releaseKill := make(chan struct{})
+	backend := &fakeSpawnBackend{
+		sessionIDs: []string{"closing-session"},
+		onKill: func() {
+			close(killEntered)
+			<-releaseKill
+		},
+	}
+	second := NewForTesting(filepath.Join(t.TempDir(), "second.sock"))
+	_ = second.store.Close()
+	second.store = reopened
+	second.ptyBackend = backend
+	pluginClient, pluginDone := startPluginPipe(t, second, "recovery-plugin", nil)
+	defer func() {
+		_ = pluginClient.Close()
+		<-pluginDone
+	}()
+	registerTestPluginDriver(t, pluginClient, "recovery-agent", map[string]bool{"state_reporting": true})
+	pluginClosed := make(chan pluginDriverSessionClosedParams, 1)
+	go func() {
+		request := decodeJSONRPCMessage(t, pluginClient)
+		var params pluginDriverSessionClosedParams
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			t.Errorf("decode recovered session_closed params: %v", err)
+		}
+		respondPluginRequest(t, pluginClient, request, pluginDriverSessionClosedResult{OK: true})
+		pluginClosed <- params
+	}()
+
+	report := second.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	<-killEntered
+	if report.Created != 0 || reopened.Get("closing-session") != nil {
+		t.Fatalf("reconcile recreated an intentionally closed session: report=%+v session=%+v", report, reopened.Get("closing-session"))
+	}
+	if !reopened.SessionCloseIntentional("closing-session") {
+		t.Fatal("teardown marker cleared before the worker exited")
+	}
+	done := second.terminateSessionAsync("closing-session", syscall.SIGTERM, nil)
+	close(releaseKill)
+	<-done
+	params := <-pluginClosed
+	if params.SessionID != "closing-session" || params.RunID != "recovery-run" || params.Reason != "killed" {
+		t.Fatalf("recovered session_closed params = %+v", params)
+	}
+	if !reopened.SessionCloseIntentional("closing-session") {
+		t.Fatal("remove acknowledgement cleared the marker before registry absence was proven")
+	}
+	backend.mu.Lock()
+	backend.sessionIDs = nil
+	backend.onKill = nil
+	backend.mu.Unlock()
+	second.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	if reopened.SessionCloseIntentional("closing-session") {
+		t.Fatal("teardown marker survived complete recovery proving the worker absent")
+	}
+}
+
+func TestDaemon_AsyncTeardownFailureKeepsRestartTombstone(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	now := protocol.TimestampNow().String()
+	d.store.Add(&protocol.Session{
+		ID: "failed-teardown", Label: "failed", Agent: protocol.SessionAgentCodex,
+		Directory: t.TempDir(), State: protocol.SessionStateWorking,
+		StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	teardown, err := d.prepareSessionTeardown("failed-teardown")
+	if err != nil {
+		t.Fatalf("prepare session teardown: %v", err)
+	}
+	d.commitSessionUnregister("failed-teardown")
+	d.ptyBackend = &fakeSpawnBackend{killErr: errors.New("worker still owns the child")}
+	<-d.terminateSessionAsync("failed-teardown", syscall.SIGTERM, teardown)
+	if !d.store.SessionCloseIntentional("failed-teardown") {
+		t.Fatal("failed teardown cleared the marker needed for restart recovery")
+	}
+	backend := d.ptyBackend.(*fakeSpawnBackend)
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	if len(backend.removed) != 1 || backend.removed[0] != "failed-teardown" {
+		t.Fatalf("fallback removals = %v, want failed-teardown", backend.removed)
+	}
+}
+
+func TestDaemon_ReconcileDoesNotCreateSessionWhenTombstoneReadFails(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	if err := d.store.Close(); err != nil {
+		t.Fatalf("close store: %v", err)
+	}
+	d.ptyBackend = &fakeSpawnBackend{sessionIDs: []string{"unknown-close-state"}}
+	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	if report.Created != 0 || report.LivenessUnknown != 1 {
+		t.Fatalf("report = %+v, want no creation and one unknown close state", report)
+	}
+}
+
+func TestDaemon_IncompleteRecoveryDoesNotClearAbsentTombstone(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	if err := d.store.MarkSessionIntentionalClose("possibly-live", time.Now()); err != nil {
+		t.Fatalf("mark close: %v", err)
+	}
+	d.ptyBackend = &fakeSpawnBackend{}
+	d.reconcileSessionsWithWorkerBackendState(context.Background(), true, false, time.Time{})
+	if !d.store.SessionCloseIntentional("possibly-live") {
+		t.Fatal("incomplete recovery cleared an absent teardown tombstone")
+	}
+	d.reconcileSessionsWithWorkerBackendState(context.Background(), true, true, time.Time{})
+	if d.store.SessionCloseIntentional("possibly-live") {
+		t.Fatal("complete recovery did not clear an absent teardown tombstone")
+	}
+}
+
+func TestDaemon_LateRegisterCannotRecreateClosingSession(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	now := protocol.TimestampNow().String()
+	d.store.Add(&protocol.Session{
+		ID: "late-register", Label: "closing", Agent: protocol.SessionAgentCodex,
+		Directory: t.TempDir(), State: protocol.SessionStateWorking,
+		StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	if _, err := d.prepareSessionTeardown("late-register"); err != nil {
+		t.Fatalf("prepare close: %v", err)
+	}
+	d.commitSessionUnregister("late-register")
+	conn := &syncConn{}
+	d.handleRegister(conn, &protocol.RegisterMessage{
+		ID: "late-register", Label: protocol.Ptr("late"), Dir: t.TempDir(),
+		Agent: protocol.Ptr(protocol.SessionAgentCodex), WorkspaceID: "workspace-late",
+	})
+	var response protocol.Response
+	if err := json.Unmarshal(conn.buf.Bytes(), &response); err != nil {
+		t.Fatalf("decode register response: %v", err)
+	}
+	if response.Ok {
+		t.Fatal("late register succeeded while teardown tombstone existed")
+	}
+	if d.store.Get("late-register") != nil || !d.store.SessionCloseIntentional("late-register") {
+		t.Fatal("late register recreated the session or cleared its tombstone")
+	}
+}
+
 func TestDaemon_ReconcileSessionsWithWorkerBackend_PreservesScheduled(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	now := string(protocol.TimestampNow())
@@ -2565,6 +2740,25 @@ func TestDaemon_HandleUnregisterWS_RemovesSessionPaneAndBroadcastsSessionUnregis
 	}
 	if asString(event["session"].(map[string]interface{})["id"]) != session.ID {
 		t.Fatalf("session_unregistered id = %v, want %s", event["session"], session.ID)
+	}
+}
+
+func TestDaemon_HandleUnregisterWS_PreparationFailureKeepsAttachment(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	sessionID := "failed-ws-close"
+	d.store.Add(&protocol.Session{ID: sessionID, Label: "live", Directory: t.TempDir()})
+	stream := newFakeOutputStream()
+	client := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: map[string]ptybackend.Stream{sessionID: stream}}
+	d.prepareSessionTeardownHook = func(string) error { return errors.New("tombstone write failed") }
+
+	d.handleUnregisterWS(client, &protocol.UnregisterMessage{ID: sessionID})
+	if d.store.Get(sessionID) == nil {
+		t.Fatal("failed unregister removed the session")
+	}
+	client.attachMu.Lock()
+	defer client.attachMu.Unlock()
+	if client.attachedStreams[sessionID] != stream {
+		t.Fatal("failed unregister detached the live PTY stream")
 	}
 }
 

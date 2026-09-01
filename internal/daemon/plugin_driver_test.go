@@ -854,6 +854,86 @@ func TestPluginDriverSessionClosed_KillNotifiesOwnerAfterExit(t *testing.T) {
 	}
 }
 
+func TestPluginDriverSessionClosed_ClosePaneKeepsOwnerUntilAsyncTeardown(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	client, done := startPluginPipe(t, d, "snipe-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, client, "snipe", map[string]bool{"state_reporting": true})
+
+	workspaceID := "plugin-close-workspace"
+	sessionID := "plugin-close-session"
+	paneID := "plugin-close-pane"
+	protocolClient := newWorkspaceProtocolTestClient()
+	d.handleRegisterWorkspace(protocolClient, &protocol.RegisterWorkspaceMessage{
+		Cmd: protocol.CmdRegisterWorkspace, ID: workspaceID, Title: "Plugin close", Directory: t.TempDir(),
+	})
+	d.handleWorkspaceLayoutAddSessionPane(protocolClient, &protocol.WorkspaceLayoutAddSessionPaneMessage{
+		Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: workspaceID,
+		PaneID: protocol.Ptr(paneID), SessionID: sessionID,
+	})
+	expectWorkspaceLayoutActionResult(t, protocolClient, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
+	now := protocol.TimestampNow().String()
+	d.store.Add(&protocol.Session{
+		ID: sessionID, Label: "snipe", Agent: "snipe", Directory: t.TempDir(),
+		State: protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	if !d.store.BeginAgentDriverRun(sessionID, "snipe-plugin", "run-close-pane") {
+		t.Fatal("failed to begin test plugin run")
+	}
+
+	killEntered := make(chan struct{})
+	releaseKill := make(chan struct{})
+	d.ptyBackend = &fakeSpawnBackend{onKill: func() {
+		close(killEntered)
+		<-releaseKill
+	}}
+	closed := make(chan pluginDriverSessionClosedParams, 1)
+	go func() {
+		request := decodeJSONRPCMessage(t, client)
+		var params pluginDriverSessionClosedParams
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			t.Errorf("decode session_closed params: %v", err)
+		}
+		respondPluginRequest(t, client, request, pluginDriverSessionClosedResult{OK: true})
+		closed <- params
+	}()
+
+	d.handleWorkspaceLayoutClosePane(protocolClient, &protocol.WorkspaceLayoutClosePaneMessage{
+		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: paneID,
+	})
+	expectWorkspaceLayoutActionResult(t, protocolClient, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, true)
+	<-killEntered
+	if d.store.Get(sessionID) != nil {
+		t.Fatal("session row survived the close-pane reply")
+	}
+	if d.store.ApplyAgentDriverState(sessionID, "run-close-pane", 1, protocol.StateIdle, time.Time{}) {
+		t.Fatal("report from claimed driver run was accepted during teardown")
+	}
+	select {
+	case params := <-closed:
+		t.Fatalf("session_closed arrived before runtime teardown: %+v", params)
+	default:
+	}
+	close(releaseKill)
+	params := <-closed
+	if params.SessionID != sessionID || params.RunID != "run-close-pane" || params.Reason != "killed" || params.Signal != "SIGTERM" {
+		t.Fatalf("session_closed params=%+v, want killed run-close-pane after SIGTERM", params)
+	}
+	if !d.store.SessionCloseIntentional(sessionID) {
+		t.Fatal("teardown marker cleared before recovery proved the worker registry entry absent")
+	}
+	run, err := d.store.PrepareSessionTeardown(sessionID, time.Now())
+	if err != nil {
+		t.Fatalf("read teardown after notification: %v", err)
+	}
+	if run.RunID != "" {
+		t.Fatalf("notified driver run remained claimable: %+v", run)
+	}
+}
+
 func TestPluginDriverSessionClosed_UsesRecordedOwnerAfterRegistrationChanges(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	owner, ownerDone := startPluginPipe(t, d, "owner-plugin", nil)

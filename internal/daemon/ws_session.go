@@ -27,14 +27,25 @@ func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMe
 		return
 	}
 	d.logf("Unregistering session %s via WebSocket", msg.ID)
-	d.detachSession(client, msg.ID)
 	endpointID := ""
 	if d.hubManager != nil {
 		if resolved, ok := d.hubManager.EndpointIDForSession(msg.ID); ok {
 			endpointID = resolved
 		}
 	}
-	session := d.unregisterSession(msg.ID, syscall.SIGTERM)
+	teardown, err := d.prepareSessionTeardown(msg.ID)
+	if err != nil {
+		d.sendCommandError(client, protocol.CmdUnregister, err.Error())
+		return
+	}
+	d.commitSessionUnregister(msg.ID)
+	d.detachSession(client, msg.ID)
+	if teardown != nil && teardown.session != nil {
+		d.publishSessionUnregistered(teardown.session)
+		d.dissociateSessionFromWorkspace(teardown.session.ID)
+		d.removeWorkspaceLayoutPaneForSession(teardown.session.ID)
+		d.publishFact(FactSessionTerminated, teardown.session.ID, nil)
+	}
 	if endpointID != "" {
 		payload, err := json.Marshal(protocol.UnregisterMessage{
 			Cmd: protocol.CmdUnregister,
@@ -46,11 +57,8 @@ func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMe
 			d.logf("remote unregister forward failed for %s on endpoint %s: %v", msg.ID, endpointID, err)
 		}
 	}
-	if session != nil {
-		d.publishSessionUnregistered(session)
-		d.dissociateSessionFromWorkspace(session.ID)
-		d.removeWorkspaceLayoutPaneForSession(session.ID)
-		d.publishFact(FactSessionTerminated, session.ID, nil)
+	if teardown != nil {
+		d.terminateSessionAsync(msg.ID, syscall.SIGTERM, teardown)
 	}
 }
 

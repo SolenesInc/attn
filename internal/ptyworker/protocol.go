@@ -37,10 +37,11 @@ const (
 )
 
 const (
-	EventOutput       = "output"
-	EventDesync       = "desync"
-	EventStateChanged = "state_changed"
-	EventExit         = "exit"
+	EventOutput            = "output"
+	EventDesync            = "desync"
+	EventStateChanged      = "state_changed"
+	EventExit              = "exit"
+	EventTeardownEscalated = "teardown_escalated"
 	// Carries the FULL placement set as of the chunk stamped Seq, the empty set
 	// included: that is how a client learns the last image is gone.
 	EventKittyPlacements = "kitty_placements"

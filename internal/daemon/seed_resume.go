@@ -92,6 +92,8 @@ func (d *Daemon) resumeSeedFromReview(
 	if err != nil {
 		return nil, err
 	}
+	d.waitForSessionTeardown(sessionID)
+	d.store.ClearSessionIntentionalClose(sessionID)
 
 	// Unregister on rollback only if this call created the workspace — a re-register is
 	// idempotent and preserves a stored rename (handleRegisterWorkspace's title guard).

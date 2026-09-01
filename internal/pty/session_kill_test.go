@@ -55,7 +55,10 @@ func TestKill_SIGTERMIgnoringShellExitsViaSIGHUP(t *testing.T) {
 	_, s := spawnKillTestSession(t, "kill-term-ignored", `trap '' TERM; echo __KILLREADY__; while :; do sleep 0.1; done`)
 
 	start := time.Now()
-	if err := s.kill(syscall.SIGTERM, 8*time.Second); err != nil {
+	var escalations []syscall.Signal
+	if err := s.killWithEscalation(syscall.SIGTERM, 8*time.Second, func(sig syscall.Signal) {
+		escalations = append(escalations, sig)
+	}); err != nil {
 		t.Fatalf("kill() error: %v", err)
 	}
 	elapsed := time.Since(start)
@@ -72,6 +75,9 @@ func TestKill_SIGTERMIgnoringShellExitsViaSIGHUP(t *testing.T) {
 		}
 		t.Fatalf("ExitSignal = %s, want %s", got, syscall.SIGHUP.String())
 	}
+	if len(escalations) != 1 || escalations[0] != syscall.SIGHUP {
+		t.Fatalf("escalations = %v, want [%s]", escalations, syscall.SIGHUP)
+	}
 }
 
 func TestKill_TERMAndHUPIgnoringChildFallsBackToSIGKILL(t *testing.T) {
@@ -82,7 +88,10 @@ func TestKill_TERMAndHUPIgnoringChildFallsBackToSIGKILL(t *testing.T) {
 	_, s := spawnKillTestSession(t, "kill-term-hup-ignored", `trap '' TERM HUP; echo __KILLREADY__; while :; do sleep 0.1; done`)
 
 	start := time.Now()
-	if err := s.kill(syscall.SIGTERM, 1500*time.Millisecond); err != nil {
+	var escalations []syscall.Signal
+	if err := s.killWithEscalation(syscall.SIGTERM, 1500*time.Millisecond, func(sig syscall.Signal) {
+		escalations = append(escalations, sig)
+	}); err != nil {
 		t.Fatalf("kill() error: %v", err)
 	}
 	elapsed := time.Since(start)
@@ -98,6 +107,9 @@ func TestKill_TERMAndHUPIgnoringChildFallsBackToSIGKILL(t *testing.T) {
 	if elapsed < 1200*time.Millisecond {
 		t.Fatalf("kill() took %v, want it to ride the full ladder (>= ~1.2s)", elapsed)
 	}
+	if len(escalations) != 2 || escalations[0] != syscall.SIGHUP || escalations[1] != syscall.SIGKILL {
+		t.Fatalf("escalations = %v, want [%s %s]", escalations, syscall.SIGHUP, syscall.SIGKILL)
+	}
 }
 
 func TestKill_CooperativeChildExitsOnSIGTERMBeforeGrace(t *testing.T) {
@@ -108,7 +120,10 @@ func TestKill_CooperativeChildExitsOnSIGTERMBeforeGrace(t *testing.T) {
 	_, s := spawnKillTestSession(t, "kill-term-cooperative", `echo __KILLREADY__; while :; do sleep 0.1; done`)
 
 	start := time.Now()
-	if err := s.kill(syscall.SIGTERM, 8*time.Second); err != nil {
+	var escalations []syscall.Signal
+	if err := s.killWithEscalation(syscall.SIGTERM, 8*time.Second, func(sig syscall.Signal) {
+		escalations = append(escalations, sig)
+	}); err != nil {
 		t.Fatalf("kill() error: %v", err)
 	}
 	elapsed := time.Since(start)
@@ -124,6 +139,9 @@ func TestKill_CooperativeChildExitsOnSIGTERMBeforeGrace(t *testing.T) {
 			got = *info.ExitSignal
 		}
 		t.Fatalf("ExitSignal = %s, want %s", got, syscall.SIGTERM.String())
+	}
+	if len(escalations) != 0 {
+		t.Fatalf("escalations = %v, want none", escalations)
 	}
 }
 
