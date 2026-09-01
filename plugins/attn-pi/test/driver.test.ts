@@ -53,6 +53,8 @@ function noopRelay(): RelayServer {
       async suiteReportState() {},
       async suiteReportStop() {},
       async suiteReportDenial() {},
+      async suiteReportInputTaken() {},
+      async suiteReportPullRequest() {},
     },
   });
 }
@@ -110,6 +112,7 @@ describe("PiDriver", () => {
         state_reporting: true,
         message_delivery: true,
         auto_mode: true,
+        pull_request_reporting: true,
       },
     });
   });
@@ -530,6 +533,33 @@ describe("PiDriver", () => {
       rule: "classifier-harm",
       at: "2026-08-17T10:00:00.000Z",
     });
+  });
+
+  test("a reported pull request reaches the daemon addressed to the run that opened it", async () => {
+    const rpc = new FakeRPC();
+    const driver = newDriver({ rpc });
+    const spawned = await driver.spawn(params({ session_id: "session-1", run_id: "run-1" }));
+    const token = spawned.env?.ATTN_PI_TOKEN as string;
+
+    await driver.suiteReportPullRequest({ token, url: " https://github.com/victorarias/attn/pull/90 " });
+
+    expect(rpc.requests.find((call) => call.method === "session.report_pull_request")?.params).toEqual({
+      session_id: "session-1",
+      run_id: "run-1",
+      url: "https://github.com/victorarias/attn/pull/90",
+    });
+  });
+
+  test("a pull request from an unknown token is refused rather than attributed to somebody", async () => {
+    const driver = newDriver({ rpc: new FakeRPC() });
+    await expect(
+      driver.suiteReportPullRequest({ token: "not-a-token", url: "https://github.com/a/b/pull/1" }),
+    ).rejects.toThrow(/unknown pi suite token/);
+  });
+
+  test("a pull request report with no url is refused", async () => {
+    const driver = newDriver({ rpc: new FakeRPC() });
+    await expect(driver.suiteReportPullRequest({ token: "tok", url: "  " })).rejects.toThrow(/missing url/);
   });
 
   test("a denial from an unknown token is refused rather than attributed to somebody", async () => {

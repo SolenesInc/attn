@@ -17,7 +17,7 @@ func TestPreparePluginLaunchInstructionsBeforeSessionPersistence(t *testing.T) {
 		t.Fatalf("seed workspace context: %v", err)
 	}
 
-	instructions, rollback, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", false)
+	instructions, rollback, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", false, true)
 	if err != nil {
 		t.Fatalf("preparePluginLaunchInstructions: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestPreparePluginLaunchInstructionsBeforeSessionPersistence(t *testing.T) {
 	if got, err := os.ReadFile(instructions.ContextPath); err != nil || string(got) != "# Shared\ncurrent decision\n" {
 		t.Fatalf("checkout = %q, err=%v", got, err)
 	}
-	other, otherRollback, err := d.preparePluginLaunchInstructions("session-b", "workspace-a", false)
+	other, otherRollback, err := d.preparePluginLaunchInstructions("session-b", "workspace-a", false, true)
 	if err != nil {
 		t.Fatalf("prepare second session: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestPreparePluginLaunchInstructionsBeforeSessionPersistence(t *testing.T) {
 	if _, _, err := d.store.UpdateWorkspaceContext("workspace-a", "# Shared\nnew decision\n", "source", 1); err != nil {
 		t.Fatalf("update workspace context: %v", err)
 	}
-	refreshed, _, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", false)
+	refreshed, _, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", false, true)
 	if err != nil {
 		t.Fatalf("refresh launch instructions: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestPreparePluginLaunchInstructionsPreservesExistingCheckout(t *testing.T) 
 		t.Fatalf("edit checkout: %v", err)
 	}
 
-	_, rollback, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", false)
+	_, rollback, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", false, true)
 	if err != nil {
 		t.Fatalf("preparePluginLaunchInstructions: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestPreparePluginChiefInstructionsUsesNotebookNotWorkspace(t *testing.T) {
 	notebookRoot := t.TempDir()
 	d.store.SetSetting(SettingNotebookRoot, notebookRoot)
 
-	instructions, _, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", true)
+	instructions, _, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", true, true)
 	if err != nil {
 		t.Fatalf("preparePluginLaunchInstructions: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestPreparePluginLaunchInstructionsOutpostOmitsGarden(t *testing.T) {
 	t.Cleanup(func() { _ = d.store.Close() })
 	addTestWorkspace(d, "workspace-a", t.TempDir())
 
-	instructions, _, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", false)
+	instructions, _, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", false, true)
 	if err != nil {
 		t.Fatalf("preparePluginLaunchInstructions: %v", err)
 	}
@@ -119,5 +119,35 @@ func TestPreparePluginLaunchInstructionsOutpostOmitsGarden(t *testing.T) {
 	}
 	if !strings.Contains(instructions.Content, instructions.ContextPath) {
 		t.Fatalf("outpost launch lost workspace guidance: %q", instructions.Content)
+	}
+}
+
+func TestPreparePluginLaunchInstructionsGatePullRequestSelfReporting(t *testing.T) {
+	d := newEnrolledDaemon(t, "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	t.Cleanup(func() { _ = d.store.Close() })
+	addTestWorkspace(d, "workspace-a", t.TempDir())
+
+	told, _, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", false, true)
+	if err != nil {
+		t.Fatalf("preparePluginLaunchInstructions: %v", err)
+	}
+	if !strings.Contains(told.Content, hooks.PullRequestSelfReportGuidance) {
+		t.Fatal("a harness that reports nothing missed the pull request block")
+	}
+
+	quiet, _, err := d.preparePluginLaunchInstructions("session-b", "workspace-a", false, false)
+	if err != nil {
+		t.Fatalf("preparePluginLaunchInstructions: %v", err)
+	}
+	if strings.Contains(quiet.Content, hooks.PullRequestSelfReportGuidance) {
+		t.Fatal("a reporting harness was told to record its own pull requests")
+	}
+
+	chief, _, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", true, false)
+	if err != nil {
+		t.Fatalf("preparePluginLaunchInstructions: %v", err)
+	}
+	if strings.Contains(chief.Content, hooks.PullRequestSelfReportGuidance) {
+		t.Fatal("a reporting chief was told to record its own pull requests")
 	}
 }

@@ -7,6 +7,7 @@ import {
   type RelayDeliverMessageResult,
   type RelayHelloState,
 } from "../src/relay-protocol";
+import { pullRequestsCreated } from "../src/pullrequest";
 
 export type SessionStartReason = "startup" | "reload" | "new" | "resume" | "fork";
 
@@ -19,6 +20,12 @@ export type AgentSettledEvent = { type: "agent_settled" };
 export type AgentMessageContentBlock = { type: string; text?: string };
 export type AgentMessageLike = { role: string; content: AgentMessageContentBlock[]; stopReason?: string };
 export type AgentEndEvent = { type: "agent_end"; messages: AgentMessageLike[] };
+export type ToolResultEvent = {
+  type: "tool_result";
+  toolName: string;
+  input: Record<string, unknown>;
+  content: AgentMessageContentBlock[];
+};
 export type MessageStartEvent = { type: "message_start"; message: AgentMessageLike };
 
 export type SessionManagerLike = { getSessionId(): string };
@@ -36,6 +43,7 @@ export type ExtensionAPILike = {
   on(event: "message_start", handler: ExtensionHandler<MessageStartEvent>): void;
   on(event: "agent_end", handler: ExtensionHandler<AgentEndEvent>): void;
   on(event: "agent_settled", handler: ExtensionHandler<AgentSettledEvent>): void;
+  on(event: "tool_result", handler: (event: ToolResultEvent, ctx: ExtensionContextLike) => undefined): void;
   sendUserMessage(content: string, options?: { deliverAs?: "steer" | "followUp" }): void;
 };
 
@@ -390,6 +398,13 @@ export class AttnPiSuite {
       this.cachedAborted = last?.stopReason === "aborted";
     });
 
+    pi.on("tool_result", (event) => {
+      for (const url of pullRequestsCreated(event.toolName, event.input, toolResultText(event))) {
+        relay.client.reportFact(`pull_request:${url}`, relayMethods.reportPullRequest, { token: relay.token, url });
+      }
+      return undefined;
+    });
+
     pi.on("agent_settled", (_event, ctx) => {
       this.currentContext = ctx;
       const text = this.cachedAssistantText;
@@ -459,6 +474,13 @@ function lastAssistantMessage(messages: AgentMessageLike[]): AgentMessageLike | 
 
 function assistantText(message: AgentMessageLike): string {
   return message.content
+    .filter((block) => block.type === "text" && typeof block.text === "string")
+    .map((block) => block.text)
+    .join("\n");
+}
+
+function toolResultText(event: ToolResultEvent): string {
+  return event.content
     .filter((block) => block.type === "text" && typeof block.text === "string")
     .map((block) => block.text)
     .join("\n");
