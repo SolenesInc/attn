@@ -1,8 +1,5 @@
 #!/usr/bin/env node
 
-// Live sliver checks: auto-restore when room returns, LRU click victim,
-// and neighbor resize beside a sliver.
-
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createRunContext, parseCommonArgs } from './common.mjs';
