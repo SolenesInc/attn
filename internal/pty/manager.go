@@ -476,6 +476,18 @@ func (m *Manager) Kill(sessionID string, sig syscall.Signal) error {
 	return session.kill(sig, defaultKillTimeout)
 }
 
+func (m *Manager) Close(sessionID string) error {
+	session, err := m.getSession(sessionID)
+	if err != nil {
+		return err
+	}
+	sig := syscall.SIGTERM
+	if session.agent == "shell" {
+		sig = syscall.SIGHUP
+	}
+	return session.kill(sig, defaultKillTimeout)
+}
+
 func (m *Manager) SessionInfo(sessionID string) (SessionInfo, error) {
 	session, err := m.getSession(sessionID)
 	if err != nil {

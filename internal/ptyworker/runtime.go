@@ -1126,7 +1126,7 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 		// past the daemon's 5s RPC timeout, and probes then read "i/o timeout".
 		c.sendResult(req.ID, map[string]any{"ok": true})
 		c.shutdown = true
-		_ = c.runtime.manager.Kill(c.runtime.cfg.SessionID, syscall.SIGTERM)
+		_ = c.runtime.manager.Close(c.runtime.cfg.SessionID)
 		c.runtime.manager.Remove(c.runtime.cfg.SessionID)
 		c.runtime.requestStop()
 	case MethodWatch:
