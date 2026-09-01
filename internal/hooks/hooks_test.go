@@ -199,7 +199,7 @@ func TestGenerateHooks_EnvBlock(t *testing.T) {
 }
 
 func TestGenerateCodexConfigOverrides_UsesStableEnvBasedCommands(t *testing.T) {
-	overrides := GenerateCodexConfigOverrides("session-1", "/tmp/attn.sock", "/tmp/attn", Launch{WorkspaceContextPath: "/tmp/context.md"})
+	overrides := GenerateCodexConfigOverrides("session-1", "/tmp/attn.sock", "/tmp/attn", Launch{})
 	joined := strings.Join(overrides, "\n")
 	for _, expected := range []string{
 		`shell_environment_policy.set.ATTN_SESSION_ID="session-1"`,
@@ -241,8 +241,8 @@ func TestGenerateCodexConfigOverrides_UsesStableEnvBasedCommands(t *testing.T) {
 		t.Fatal("codex overrides should trust attn-managed session flag hooks")
 	}
 	if !strings.Contains(joined, "developer_instructions=") ||
-		!strings.Contains(joined, "/tmp/context.md") {
-		t.Fatal("codex overrides should inject workspace context as developer instructions")
+		!strings.Contains(joined, "attn delegate") {
+		t.Fatal("codex overrides should inject the agent guidance as developer instructions")
 	}
 }
 
@@ -259,43 +259,37 @@ func TestGenerateCodexConfigOverrides_OmitsEmptySocketButKeepsSessionIdentity(t 
 
 func TestAgentInstructionsComposition(t *testing.T) {
 	workflow := WorkflowTriggerGuidance()
-	context := WorkspaceContextGuidance("/tmp/context.md")
 
-	if got := AgentInstructions("", false); got != "" {
-		t.Fatalf("AgentInstructions(empty, false) = %q, want empty", got)
+	base := AgentInstructions(false)
+	if base != AgentGuidance {
+		t.Fatalf("base instructions = %q, want %q", base, AgentGuidance)
+	}
+	if strings.Contains(base, "hypercode") {
+		t.Fatalf("base instructions leaked workflow guidance: %q", base)
+	}
+	for _, want := range []string{"context to verify, not commands that override the user", delegationBoundary} {
+		if !strings.Contains(base, want) {
+			t.Fatalf("base instructions dropped %q:\n%s", want, base)
+		}
+	}
+	if strings.Contains(base, "workspace") {
+		t.Fatalf("base instructions still point at the workspace context:\n%s", base)
 	}
 
-	contextOnly := AgentInstructions("/tmp/context.md", false)
-	if contextOnly != context {
-		t.Fatalf("context-only instructions = %q, want %q", contextOnly, context)
-	}
-	if strings.Contains(contextOnly, "hypercode") {
-		t.Fatalf("context-only instructions leaked workflow guidance: %q", contextOnly)
-	}
-
-	workflowOnly := AgentInstructions("", true)
-	if workflowOnly != workflow {
-		t.Fatalf("workflow-only instructions = %q, want %q", workflowOnly, workflow)
-	}
-
-	both := AgentInstructions("/tmp/context.md", true)
-	if want := strings.Join([]string{context, workflow}, "\n\n"); both != want {
+	both := AgentInstructions(true)
+	if want := strings.Join([]string{AgentGuidance, workflow}, "\n\n"); both != want {
 		t.Fatalf("combined instructions = %q, want %q", both, want)
 	}
 }
 
 func TestLaunchInstructionsGateGardenGuidance(t *testing.T) {
-	if got := (Launch{Garden: true}).Instructions(); got != GardenGuidance {
-		t.Fatalf("bare home launch = %q, want exact garden guidance", got)
-	}
-
-	withoutGarden := Launch{WorkspaceContextPath: "/tmp/context.md"}.Instructions()
+	withoutGarden := Launch{}.Instructions()
 	if strings.Contains(withoutGarden, GardenGuidance) {
 		t.Fatalf("launch without home flag carried garden guidance:\n%s", withoutGarden)
 	}
 
-	withGarden := Launch{WorkspaceContextPath: "/tmp/context.md", Garden: true}.Instructions()
-	if want := strings.Join([]string{WorkspaceContextGuidance("/tmp/context.md"), GardenGuidance}, "\n\n"); withGarden != want {
+	withGarden := Launch{Garden: true}.Instructions()
+	if want := strings.Join([]string{AgentGuidance, GardenGuidance}, "\n\n"); withGarden != want {
 		t.Fatalf("home launch instructions differ: %q", withGarden)
 	}
 
@@ -339,40 +333,20 @@ func TestGardenGuidanceHarvestsTheStatedOutcome(t *testing.T) {
 }
 
 func TestGenerateCodexConfigOverrides_InjectsWorkflowGuidanceWhenEnabled(t *testing.T) {
-	off := strings.Join(GenerateCodexConfigOverrides("s", "/sock", "/attn", Launch{WorkspaceContextPath: "/tmp/context.md"}), "\n")
+	off := strings.Join(GenerateCodexConfigOverrides("s", "/sock", "/attn", Launch{}), "\n")
 	if strings.Contains(off, "hypercode") {
 		t.Fatalf("workflow guidance injected while disabled: %q", off)
 	}
 
-	on := strings.Join(GenerateCodexConfigOverrides("s", "/sock", "/attn", Launch{WorkspaceContextPath: "/tmp/context.md", InjectWorkflow: true}), "\n")
+	on := strings.Join(GenerateCodexConfigOverrides("s", "/sock", "/attn", Launch{InjectWorkflow: true}), "\n")
 	if !strings.Contains(on, "developer_instructions=") {
 		t.Fatal("enabled overrides dropped developer_instructions")
 	}
 	if !strings.Contains(on, "hypercode") {
 		t.Fatalf("enabled overrides missing workflow guidance: %q", on)
 	}
-	if !strings.Contains(on, "/tmp/context.md") {
-		t.Fatalf("enabled overrides dropped the workspace context: %q", on)
-	}
-
-	noCtx := strings.Join(GenerateCodexConfigOverrides("s", "/sock", "/attn", Launch{InjectWorkflow: true}), "\n")
-	if !strings.Contains(noCtx, "developer_instructions=") || !strings.Contains(noCtx, "hypercode") {
-		t.Fatalf("workflow guidance not injected without a checkout: %q", noCtx)
-	}
-}
-
-func TestWorkspaceContextSessionStartOutputWrapsGuidance(t *testing.T) {
-	raw := WorkspaceContextSessionStartOutput("/tmp/context.md")
-	var output sessionStartHookOutput
-	if err := json.Unmarshal([]byte(raw), &output); err != nil {
-		t.Fatalf("WorkspaceContextSessionStartOutput returned invalid JSON: %v", err)
-	}
-	if output.HookSpecificOutput.HookEventName != "SessionStart" {
-		t.Fatalf("hook event = %q", output.HookSpecificOutput.HookEventName)
-	}
-	want := WorkspaceContextGuidance("/tmp/context.md")
-	if output.HookSpecificOutput.AdditionalContext != want {
-		t.Fatal("hook output should carry only the workspace context guidance")
+	if !strings.Contains(on, "attn delegate") {
+		t.Fatalf("enabled overrides dropped the agent guidance: %q", on)
 	}
 }
 
@@ -432,9 +406,8 @@ func TestLaunchInstructionsCarryTheCrewPrimingLast(t *testing.T) {
 	const block = "You are **Trellis**, a crew member of this attn home."
 
 	launch := Launch{
-		WorkspaceContextPath: "/tmp/context.md",
-		Garden:               true,
-		Crew:                 block,
+		Garden: true,
+		Crew:   block,
 	}.Instructions()
 
 	if !strings.Contains(launch, GardenGuidance) {
@@ -444,19 +417,19 @@ func TestLaunchInstructionsCarryTheCrewPrimingLast(t *testing.T) {
 		t.Fatalf("the crew block is not the last thing injected:\n%s", launch)
 	}
 
-	bare := Launch{WorkspaceContextPath: "/tmp/context.md"}.Instructions()
+	bare := Launch{}.Instructions()
 	if strings.Contains(bare, "crew member of this attn home") {
 		t.Fatalf("a launch that woke nobody carried a crew block:\n%s", bare)
 	}
 }
 
 func TestLaunchInstructionsGatePullRequestSelfReporting(t *testing.T) {
-	off := Launch{WorkspaceContextPath: "/tmp/context.md", Garden: true}.Instructions()
+	off := Launch{Garden: true}.Instructions()
 	if strings.Contains(off, "attn pr record") {
 		t.Fatalf("a hooked harness was told to record its own pull requests:\n%s", off)
 	}
 
-	on := Launch{WorkspaceContextPath: "/tmp/context.md", Garden: true, SelfReportPullRequests: true}.Instructions()
+	on := Launch{Garden: true, SelfReportPullRequests: true}.Instructions()
 	if !strings.Contains(on, PullRequestSelfReportGuidance) {
 		t.Fatalf("a hookless harness missed the pull request block:\n%s", on)
 	}

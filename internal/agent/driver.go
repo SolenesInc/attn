@@ -49,7 +49,7 @@ type Capabilities struct {
 
 	HasInitialPrompt bool
 
-	HasWorkspaceContext bool
+	HasLaunchInstructions bool
 
 	HasModelPin bool
 
@@ -97,8 +97,8 @@ func EffectiveCapabilities(d Driver) Capabilities {
 	if v, ok := boolEnv(prefix + "INITIAL_PROMPT"); ok {
 		caps.HasInitialPrompt = v
 	}
-	if v, ok := boolEnv(prefix + "WORKSPACE_CONTEXT"); ok {
-		caps.HasWorkspaceContext = v
+	if v, ok := boolEnv(prefix + "LAUNCH_INSTRUCTIONS"); ok {
+		caps.HasLaunchInstructions = v
 	}
 	if v, ok := boolEnv(prefix + "MODEL_PIN"); ok {
 		caps.HasModelPin = v
@@ -168,8 +168,6 @@ type SpawnOpts struct {
 
 	SettingsPath string
 
-	WorkspaceContextPath string
-
 	InjectWorkflowGuidance bool
 
 	NotebookRoot string
@@ -202,7 +200,6 @@ func (o SpawnOpts) addDirArgs() []string {
 func (o SpawnOpts) launchSpec() hooks.Launch {
 	return hooks.Launch{
 		NotebookRoot:           o.NotebookRoot,
-		WorkspaceContextPath:   o.WorkspaceContextPath,
 		InjectWorkflow:         o.InjectWorkflowGuidance,
 		Garden:                 o.Garden,
 		Crew:                   o.CrewPriming,

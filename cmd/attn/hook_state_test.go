@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -86,24 +87,23 @@ func TestPromptConversationObservationRequiresAnExactPath(t *testing.T) {
 
 type recordingSessionStartClient struct {
 	recordingConversationObserver
-	fakeWorkspaceContextCheckoutClient
+	fakeSessionStartClient
 }
 
 func TestPathlessSessionStartStillEmitsIndependentGuidance(t *testing.T) {
-	t.Setenv("ATTN_WORKSPACE_CONTEXT_GUIDANCE", "")
+	t.Setenv("ATTN_AGENT_GUIDANCE", "")
 	t.Setenv("ATTN_CHIEF_GUIDANCE", "")
 	c := &recordingSessionStartClient{
-		fakeWorkspaceContextCheckoutClient: fakeWorkspaceContextCheckoutClient{
-			path:  "/tmp/context.md",
+		fakeSessionStartClient: fakeSessionStartClient{
 			ready: &protocol.SeedReadyResult{},
 		},
 	}
 
-	output, contextErr, primeErr := sessionStartHookOutput(c, "attn-session", hookInput{
+	output, primeErr := sessionStartHookOutput(c, "attn-session", hookInput{
 		SessionID: "pathless-claude-session",
-	}, 1, 0)
-	if contextErr != nil || primeErr != nil {
-		t.Fatalf("pathless SessionStart errors = (%v, %v)", contextErr, primeErr)
+	})
+	if primeErr != nil {
+		t.Fatalf("pathless SessionStart error = %v", primeErr)
 	}
 	if len(c.observations) != 0 {
 		t.Fatalf("pathless SessionStart observations = %+v, want none", c.observations)
@@ -122,7 +122,7 @@ func TestPathlessSessionStartStillEmitsIndependentGuidance(t *testing.T) {
 		t.Fatalf("pathless SessionStart event = %q", decoded.HookSpecificOutput.HookEventName)
 	}
 	context := decoded.HookSpecificOutput.AdditionalContext
-	for _, want := range []string{"/tmp/context.md", "Nothing is ready now."} {
+	for _, want := range []string{hooks.AgentGuidance, "Nothing is ready now."} {
 		if !strings.Contains(context, want) {
 			t.Fatalf("pathless SessionStart context = %q, want it to contain %q", context, want)
 		}
