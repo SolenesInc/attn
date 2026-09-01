@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/store"
 )
 
 type recordingDoorbell struct {
@@ -100,7 +100,7 @@ func TestHandleAgentMsgDeliversAnAttributedPromptWithTheBoundary(t *testing.T) {
 		}
 	}
 
-	queued, err := d.store.UndeliveredAgentMessages("target-session-id")
+	queued, err := d.store.QueuedAgentMailboxDeliveries("target-session-id")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,8 +177,8 @@ func TestHandleAgentMsgWakesASleepingMemberWithTheMessageAsItsFirstPrompt(t *tes
 	if writes != 0 {
 		t.Fatalf("the message was pasted %d times in addition to the initial prompt", writes)
 	}
-	queued, err := d.store.UndeliveredAgentMessages(result.TargetSessionID)
-	if err != nil || len(queued) != 1 || queued[0].ID != result.MessageID {
+	queued, err := d.store.QueuedAgentMailboxDeliveries(result.TargetSessionID)
+	if err != nil || len(queued) != 1 || queued[0].Item.ID != result.MessageID {
 		t.Fatalf("message was not durable before the wake completed: queued=%+v err=%v", queued, err)
 	}
 
@@ -189,7 +189,7 @@ func TestHandleAgentMsgWakesASleepingMemberWithTheMessageAsItsFirstPrompt(t *tes
 	}) {
 		t.Fatal("the woken member did not enter working")
 	}
-	queued, err = d.store.UndeliveredAgentMessages(result.TargetSessionID)
+	queued, err = d.store.QueuedAgentMailboxDeliveries(result.TargetSessionID)
 	if err != nil || len(queued) != 1 {
 		t.Fatalf("worker state claimed the initial prompt before the hook: %+v, %v", queued, err)
 	}
@@ -203,7 +203,7 @@ func TestHandleAgentMsgWakesASleepingMemberWithTheMessageAsItsFirstPrompt(t *tes
 	if !hook.Ok {
 		t.Fatalf("prompt-submit hook: %+v", hook)
 	}
-	queued, err = d.store.UndeliveredAgentMessages(result.TargetSessionID)
+	queued, err = d.store.QueuedAgentMailboxDeliveries(result.TargetSessionID)
 	if err != nil || len(queued) != 0 {
 		t.Fatalf("the prompt-submit receipt left the message queued: %+v, %v", queued, err)
 	}
@@ -227,7 +227,7 @@ func TestHandleAgentMsgDuringWakePrimingDrainsAfterTheInitialPrompt(t *testing.T
 	if !second.Ok || second.AgentMsgResult == nil || second.AgentMsgResult.TargetSessionID != sessionID || second.AgentMsgResult.Status != protocol.AgentMsgStatusQueued {
 		t.Fatalf("second response = %+v, want a queue behind the same waking day", second)
 	}
-	queued, err := d.store.UndeliveredAgentMessages(sessionID)
+	queued, err := d.store.QueuedAgentMailboxDeliveries(sessionID)
 	if err != nil || len(queued) != 2 {
 		t.Fatalf("messages queued during priming = %+v, %v", queued, err)
 	}
@@ -237,8 +237,8 @@ func TestHandleAgentMsgDuringWakePrimingDrainsAfterTheInitialPrompt(t *testing.T
 
 	scheduled := make(chan string, 1)
 	drained := make(chan int, 1)
-	d.agentMessageDrainScheduledHook = func(sessionID string) { scheduled <- sessionID }
-	d.agentMessageDrainHook = func(_ string, delivered int) { drained <- delivered }
+	d.agentMailboxDrainScheduledHook = func(sessionID string) { scheduled <- sessionID }
+	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
 	hook := callHandler(t, func(conn net.Conn) {
 		d.handleState(conn, &protocol.StateMessage{ID: sessionID, State: protocol.StateWorking})
 	})
@@ -256,7 +256,7 @@ func TestHandleAgentMsgDuringWakePrimingDrainsAfterTheInitialPrompt(t *testing.T
 	if delivered := <-drained; delivered != 1 {
 		t.Fatalf("drained %d messages behind the initial prompt, want 1", delivered)
 	}
-	queued, err = d.store.UndeliveredAgentMessages(sessionID)
+	queued, err = d.store.QueuedAgentMailboxDeliveries(sessionID)
 	if err != nil || len(queued) != 0 {
 		t.Fatalf("queue after prompt submit = %+v, %v", queued, err)
 	}
@@ -287,7 +287,7 @@ func TestHandleAgentMsgWakeLimitRefusalDeliversNothing(t *testing.T) {
 	if spawned != 0 {
 		t.Fatalf("the refused wake spawned %d sessions", spawned)
 	}
-	queued, err := d.store.TargetsWithQueuedAgentMessages()
+	queued, err := d.store.TargetsWithQueuedAgentMailboxItems()
 	if err != nil || len(queued) != 0 {
 		t.Fatalf("the refused wake queued a message anyway: %v, %v", queued, err)
 	}
@@ -302,7 +302,7 @@ func TestHandleAgentMsgFailedWakeLeavesNoUndeliverableMessage(t *testing.T) {
 	if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), "would not start") {
 		t.Fatalf("response = %+v", resp)
 	}
-	targets, err := d.store.TargetsWithQueuedAgentMessages()
+	targets, err := d.store.TargetsWithQueuedAgentMailboxItems()
 	if err != nil || len(targets) != 0 {
 		t.Fatalf("failed wake left an undeliverable row: %v, %v", targets, err)
 	}
@@ -350,7 +350,7 @@ func TestHandleAgentMsgQueuesUnderApprovalAndDrainsOnTheNextStateChange(t *testi
 	}
 
 	drained := make(chan int, 1)
-	d.agentMessageDrainHook = func(_ string, delivered int) { drained <- delivered }
+	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
 	if !d.applyState(sessionStateChange{
 		sessionID: "target-session-id",
 		state:     protocol.StateIdle,
@@ -370,7 +370,7 @@ func TestHandleAgentMsgQueuesUnderApprovalAndDrainsOnTheNextStateChange(t *testi
 	if !strings.Contains(prompt, "when you surface, rebase") {
 		t.Fatalf("drained prompt = %q", prompt)
 	}
-	queued, err := d.store.UndeliveredAgentMessages("target-session-id")
+	queued, err := d.store.QueuedAgentMailboxDeliveries("target-session-id")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -417,19 +417,19 @@ func TestHandleAgentMsgRefusalsNameTheirReason(t *testing.T) {
 }
 
 func TestAgentMessageGuardVerdictNamesTheLimitAndTheAsk(t *testing.T) {
-	if verdict := agentMessageGuardVerdict(store.AgentMessageGuardCounts{FromSenderInWindow: 2}); verdict != "" {
+	if verdict := agentMessageGuardVerdict(agentmailbox.PeerGuardCounts{FromSenderInWindow: 2}); verdict != "" {
 		t.Fatalf("a healthy exchange was refused: %q", verdict)
 	}
 
-	rate := agentMessageGuardVerdict(store.AgentMessageGuardCounts{FromSenderInWindow: agentMessageRateLimit})
+	rate := agentMessageGuardVerdict(agentmailbox.PeerGuardCounts{FromSenderInWindow: agentMessageRateLimit})
 	if !strings.Contains(rate, "8") || !strings.Contains(rate, "30s") {
 		t.Fatalf("rate verdict = %q", rate)
 	}
-	full := agentMessageGuardVerdict(store.AgentMessageGuardCounts{UndeliveredForTarget: agentMessageQueueCap})
+	full := agentMessageGuardVerdict(agentmailbox.PeerGuardCounts{UnreadForRecipient: agentMessageQueueCap})
 	if !strings.Contains(full, "50") {
 		t.Fatalf("queue-cap verdict = %q", full)
 	}
-	both := agentMessageGuardVerdict(store.AgentMessageGuardCounts{
+	both := agentMessageGuardVerdict(agentmailbox.PeerGuardCounts{
 		DuplicateFromSender: true, FromSenderInWindow: agentMessageRateLimit,
 	})
 	if !strings.Contains(both, "already sent") {
@@ -437,24 +437,21 @@ func TestAgentMessageGuardVerdictNamesTheLimitAndTheAsk(t *testing.T) {
 	}
 }
 
-func TestSeedQueuedAgentMessagesRestoresTheDrainAfterRestart(t *testing.T) {
+func TestSeedQueuedAgentMailboxItemsRestoresTheDrainAfterRestart(t *testing.T) {
 	d, _ := newAgentMsgDaemon(t)
 	addCharacterizationSession(t, d, "target-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
-	if err := d.store.EnqueueAgentMessage(store.AgentMessage{
-		ID:              "queued-across-restart",
-		SenderSessionID: "sender-session-id",
-		TargetSessionID: "target-session-id",
-		Content:         "still owed",
-		CreatedAt:       time.Now().UTC().Format(time.RFC3339),
-	}); err != nil {
+	if _, err := d.store.EnqueuePeerMessage(agentmailbox.PeerMessage{
+		ID: "queued-across-restart", SenderSessionID: "sender-session-id",
+		Body: "still owed", CreatedAt: time.Now().UTC().Format(time.RFC3339),
+	}, "target-session-id"); err != nil {
 		t.Fatal(err)
 	}
 
-	if d.hasQueuedAgentMessages("target-session-id") {
+	if d.hasQueuedAgentMailboxItems("target-session-id") {
 		t.Fatal("a fresh daemon should not remember a message it never accepted")
 	}
-	d.seedQueuedAgentMessages()
-	if !d.hasQueuedAgentMessages("target-session-id") {
+	d.seedQueuedAgentMailboxItems()
+	if !d.hasQueuedAgentMailboxItems("target-session-id") {
 		t.Fatal("seeding did not restore the queued target")
 	}
 }

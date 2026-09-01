@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/store"
 )
 
 const crewRequestedSleepPrompt = "[attn] The user is asking you to close your day and sleep. Finish what you need to settle, write your handoff letter, and file it with `attn handoff --sleep -m \"<your letter>\"`. This is consented closure, not a hard stop; nobody wakes behind you when the letter lands."
@@ -77,20 +76,17 @@ func (d *Daemon) crewSleep(name string) (*protocol.CrewSleepResult, error) {
 		}, nil
 	}
 
-	record := store.AgentMessage{
-		ID:              uuid.NewString(),
-		TargetSessionID: sessionID,
-		Content:         crewRequestedSleepPrompt,
-		CreatedAt:       time.Now().UTC().Format(time.RFC3339),
-	}
-	if err := d.store.EnqueueAgentMessage(record); err != nil {
+	delivery, err := d.store.EnqueueMaintenancePrompt(
+		uuid.NewString(), sessionID, crewRequestedSleepPrompt, time.Now(),
+	)
+	if err != nil {
 		return nil, fmt.Errorf("record %s's sleep request: %w", crew.DisplayName(member.ID), err)
 	}
-	d.noteQueuedAgentMessage(sessionID)
+	d.noteQueuedAgentMailboxItem(sessionID)
 
 	status := protocol.AgentMsgStatusDelivered
 	detail := fmt.Sprintf("asked %s in session %s to write its handoff and file it with `attn handoff --sleep`", crew.DisplayName(member.ID), shortSessionID(sessionID))
-	if err := d.deliverAgentMessage(record); err != nil {
+	if err := d.deliverAgentMailboxItem(delivery); err != nil {
 		status = protocol.AgentMsgStatusQueued
 		detail = agentMessageQueuedDetail(err)
 	}

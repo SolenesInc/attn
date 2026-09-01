@@ -23,30 +23,28 @@ func TestGardenSeedWatchAndBellLifecycle(t *testing.T) {
 		t.Fatalf("watching=%v err=%v", watching, err)
 	}
 
-	first := AgentMessage{ID: "bell-1", Content: "first", CreatedAt: now.UTC().Format(time.RFC3339)}
-	claimed, err := s.ClaimGardenSeedBell("watcher", "s-7k3f9m", "note", first, now)
+	claimed, err := s.ClaimGardenSeedMailboxItem("watcher", "s-7k3f9m", "note", "bell-1", now)
 	if err != nil || !claimed {
 		t.Fatalf("first bell claimed=%v err=%v", claimed, err)
 	}
-	second := AgentMessage{ID: "bell-2", Content: "second", CreatedAt: now.Add(time.Second).UTC().Format(time.RFC3339)}
-	claimed, err = s.ClaimGardenSeedBell("watcher", "s-7k3f9m", "harvested", second, now.Add(time.Second))
+	claimed, err = s.ClaimGardenSeedMailboxItem("watcher", "s-7k3f9m", "harvested", "bell-2", now.Add(time.Second))
 	if err != nil || claimed {
 		t.Fatalf("coalesced bell claimed=%v err=%v", claimed, err)
 	}
-	queued, err := s.UndeliveredAgentMessages("watcher")
-	if err != nil || len(queued) != 1 || queued[0].ID != first.ID || queued[0].SeedBellID != "s-7k3f9m" {
+	queued, err := s.QueuedAgentMailboxDeliveries("watcher")
+	if err != nil || len(queued) != 1 || queued[0].Item.ID != "bell-1" || queued[0].Item.SourceID != "s-7k3f9m" {
 		t.Fatalf("queued bells=%+v err=%v", queued, err)
 	}
 
-	consumed, err := s.ConsumeGardenSeedBell("watcher", "s-7k3f9m")
+	consumed, err := s.ReadGardenSeedMailboxItems("watcher", "s-7k3f9m", now)
 	if err != nil || !consumed {
 		t.Fatalf("consume=%v err=%v", consumed, err)
 	}
-	queued, err = s.UndeliveredAgentMessages("watcher")
+	queued, err = s.QueuedAgentMailboxDeliveries("watcher")
 	if err != nil || len(queued) != 0 {
 		t.Fatalf("queued after read=%+v err=%v", queued, err)
 	}
-	claimed, err = s.ClaimGardenSeedBell("watcher", "s-7k3f9m", "harvested", second, now.Add(time.Second))
+	claimed, err = s.ClaimGardenSeedMailboxItem("watcher", "s-7k3f9m", "harvested", "bell-2", now.Add(time.Second))
 	if err != nil || !claimed {
 		t.Fatalf("bell after read claimed=%v err=%v", claimed, err)
 	}

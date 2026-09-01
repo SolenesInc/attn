@@ -10,7 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/store"
 )
 
 var gardenRingEvents = map[garden.Verb]string{
@@ -68,13 +67,13 @@ func (d *Daemon) consumeSeedBell(sessionID, seedID string) {
 	if sessionID == "" || d.store == nil {
 		return
 	}
-	consumed, err := d.store.ConsumeGardenSeedBell(sessionID, seedID)
+	consumed, err := d.store.ReadGardenSeedMailboxItems(sessionID, seedID, time.Now())
 	if err != nil {
 		d.logf("garden bell: consuming session=%s seed=%s: %v", sessionID, seedID, err)
 		return
 	}
 	if consumed {
-		d.forgetQueuedAgentMessages(sessionID)
+		d.forgetQueuedAgentMailboxItems(sessionID)
 	}
 }
 
@@ -176,12 +175,7 @@ func (d *Daemon) readGardenDispatchesAt(seedIDs map[string]bool) ([]garden.Dispa
 
 func (d *Daemon) claimAndDeliverSeedBell(sessionID, seedID, eventKind string) {
 	now := time.Now()
-	message := store.AgentMessage{
-		ID: uuid.NewString(), TargetSessionID: sessionID,
-		Content:   fmt.Sprintf("🔔 %s moved: %s — read it with `attn seed show %s`.", seedID, eventKind, seedID),
-		CreatedAt: now.UTC().Format(time.RFC3339),
-	}
-	claimed, err := d.store.ClaimGardenSeedBell(sessionID, seedID, eventKind, message, now)
+	claimed, err := d.store.ClaimGardenSeedMailboxItem(sessionID, seedID, eventKind, uuid.NewString(), now)
 	if err != nil {
 		d.logf("garden bell: claiming session=%s seed=%s: %v", sessionID, seedID, err)
 		return
@@ -189,6 +183,6 @@ func (d *Daemon) claimAndDeliverSeedBell(sessionID, seedID, eventKind string) {
 	if !claimed {
 		return
 	}
-	d.noteQueuedAgentMessage(sessionID)
-	go d.drainQueuedAgentMessages(sessionID)
+	d.noteQueuedAgentMailboxItem(sessionID)
+	go d.drainQueuedAgentMailboxItems(sessionID)
 }
