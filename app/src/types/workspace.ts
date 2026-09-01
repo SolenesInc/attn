@@ -204,8 +204,6 @@ export interface SplitDivider {
   top: number;
   right: number;
   bottom: number;
-  // A divider re-aimed from a boundary beside a sliver: it renders at
-  // grabRatio but drags this split's ratio, offset by the pinned slivers.
   grabRatio?: number;
 }
 

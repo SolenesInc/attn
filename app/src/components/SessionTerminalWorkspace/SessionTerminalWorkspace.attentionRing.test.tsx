@@ -439,15 +439,12 @@ describe('SessionTerminalWorkspace attention ring', () => {
         { wrapper: Wrapper },
       );
 
-      // Fold the middle document so the layout is [Alpha | sliver | Beta].
       const beta = await screen.findByRole('button', { name: 'Expand Beta' });
       fireEvent.click(beta);
       await waitFor(() => {
         expect(screen.getByRole('button', { name: 'Expand review.md' })).toBeInTheDocument();
       });
 
-      // The boundary beside the sliver re-aims at the outer split, so both
-      // of the sliver's edges resize Alpha against Beta.
       const grab = container.querySelector('.workspace-split-divider[data-split-grab]') as HTMLElement;
       expect(grab).not.toBeNull();
       expect(grab.dataset.splitId).toBe('outer');
@@ -456,7 +453,6 @@ describe('SessionTerminalWorkspace attention ring', () => {
           .getAttribute('data-split-ratio')!,
       );
 
-      // Squeezing Alpha's side under its 480px minimum folds Alpha live.
       fireEvent.pointerDown(grab, { button: 0, pointerId: 1, clientX: 500, clientY: 350 });
       fireEvent.pointerMove(window, { pointerId: 1, clientX: 300, clientY: 350 });
       await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -469,14 +465,12 @@ describe('SessionTerminalWorkspace attention ring', () => {
         expect(ratioAfter).toBeLessThan(ratioBefore - 0.02);
       });
 
-      // Dragging back gives the side room again, so Alpha unfolds mid-drag.
       fireEvent.pointerMove(window, { pointerId: 1, clientX: 520, clientY: 350 });
       await new Promise((resolve) => requestAnimationFrame(resolve));
       fireEvent.pointerUp(window, { pointerId: 1, clientX: 520, clientY: 350 });
       await waitFor(() => {
         expect(screen.queryByRole('button', { name: 'Expand Alpha' })).not.toBeInTheDocument();
       });
-      // The sliver itself never expands from a drag.
       expect(screen.getByRole('button', { name: 'Expand review.md' })).toBeInTheDocument();
     } finally {
       boundingRect.mockRestore();

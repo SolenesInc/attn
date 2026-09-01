@@ -411,9 +411,11 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       ? pendingPaneFocus.leafId
       : activePaneId;
     const activeLeafId = focusedTileId || focusedPaneId || firstTileId || '';
-    layoutTreeRef.current = workspace.layoutTree ?? null;
-    activeLeafIdRef.current = activeLeafId;
     const activeLeafIsTile = tileLeafById.has(activeLeafId);
+    useLayoutEffect(() => {
+      layoutTreeRef.current = workspace.layoutTree ?? null;
+      activeLeafIdRef.current = activeLeafId;
+    }, [workspace.layoutTree, activeLeafId]);
 
     useLayoutEffect(() => {
       const pending = pendingPaneFocusRef.current;
@@ -1435,8 +1437,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
         suspended: suspendedLeafIdsRef.current,
         pinned: pinnedLeafIdsRef.current,
       };
-// Squeezing a side past its minimums folds its leaves live; dragging back or
-// freeing room restores them. The pins survive the drag until then.
       const updateDragSuspension = (ratio: number) => {
         if (!layoutTreeRef.current) {
           return;
@@ -1461,8 +1461,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
         direction === 'vertical' ? 'col-resize' : 'row-resize',
       );
 
-      // A grab divider sits at the sliver's edge but drags its target split's
-      // boundary, which lies grabOffset before the pointer along the axis.
       const grabOffset = divider.grabRatio != null ? divider.grabRatio - divider.ratio : 0;
       const computeRatio = (clientX: number, clientY: number): number => {
         let ratio = 0.5;

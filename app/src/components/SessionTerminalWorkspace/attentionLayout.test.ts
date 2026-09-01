@@ -301,8 +301,6 @@ describe('workspace attention layout', () => {
   }
 
   it('restores a suspended leaf the moment the viewport fits it again', () => {
-    // 1470px fits three 480px agents; whatever suspended one earlier (a tile
-    // since closed, a window since grown) must not keep it collapsed.
     const plan = resolve(threeAgents(), {
       width: 1470,
       height: 800,
@@ -326,7 +324,6 @@ describe('workspace attention layout', () => {
   });
 
   it('re-aims the boundary beside a middle sliver at the split of its visible neighbors', () => {
-    // agent-b collapses in the middle: [agent-a | sliver | agent-c].
     const viewport = { width: 1100, height: 800 };
     const plan = resolve(threeAgents(), {
       ...viewport,
@@ -340,7 +337,6 @@ describe('workspace attention layout', () => {
     expect(outerDividers).toHaveLength(2);
     const grab = outerDividers.find((divider) => divider.grabRatio != null)!;
     const own = outerDividers.find((divider) => divider.grabRatio == null)!;
-    // The grab handle sits one sliver past the target split's own boundary.
     expect(grab.grabRatio! * viewport.width).toBeCloseTo(own.ratio * viewport.width + 34, 0);
     expect(grab.ratio).toBeCloseTo(own.ratio, 5);
   });
@@ -353,7 +349,6 @@ describe('workspace attention layout', () => {
     tree.children[1] = { ...tree.children[1], ratio: 0.7, ratioMode: 'preferred' };
     tree.ratio = 0.55;
     tree.ratioMode = 'preferred';
-    // agent-c is the most recently focused peer but by far the smallest pane.
     const plan = resolve(tree, {
       width: 1300,
       height: 800,
@@ -393,7 +388,6 @@ describe('workspace attention layout', () => {
   it('folds a leaf dragged below its minimum and restores it when dragged back', () => {
     const tree = threeAgents();
     const boxPx = { width: 733, height: 800 };
-    // Squeezing agent-c's side of the inner split under 480px folds it.
     const squeezed = applyDragSuspension({
       sourceTree: tree,
       splitId: 'inner',
@@ -425,8 +419,6 @@ describe('workspace attention layout', () => {
 
   it('leaves fit-suspended leaves alone while a drag pins and releases its own', () => {
     const tree = threeAgents();
-    // agent-b is suspended by viewport pressure, not by this drag: squeezing
-    // and releasing agent-c's side must not touch it.
     const squeezed = applyDragSuspension({
       sourceTree: tree,
       splitId: 'outer',
@@ -480,7 +472,6 @@ describe('workspace attention layout', () => {
   });
 
   it('gives a boundary with only viewport edge beyond the sliver no divider', () => {
-    // agent-c collapses at the far right: nothing visible beyond it to trade.
     const plan = resolve(threeAgents(), {
       width: 1100,
       height: 800,

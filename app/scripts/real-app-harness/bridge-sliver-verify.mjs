@@ -76,14 +76,12 @@ async function main() {
   const paneC = await newPaneAfter(before);
   console.log(`[sliver-verify] panes A=${paneA} B=${paneB} C=${paneC}`);
 
-  // 1a. Room exists (1470 > 3x480): nothing may stay suspended, however we got here.
   let width = await sizePanesTo(1470);
   await delay(600);
   const atRoomy = await suspendedTitle();
   console.log(`[sliver-verify] width=${width} suspended=${atRoomy} => ${atRoomy === null ? 'AUTO-RESTORED' : 'BUG: stuck sliver'}`);
   if (atRoomy !== null) throw new Error('sliver survived a viewport with room');
 
-  // 1b. Shrink until one folds, grow again: it must come back on its own.
   width = await sizePanesTo(1200);
   await delay(600);
   const atTight = await suspendedTitle();
@@ -95,7 +93,6 @@ async function main() {
   console.log(`[sliver-verify] width=${width} suspended=${regrown} => ${regrown === null ? 'AUTO-EXPANDED on clearance' : 'BUG'}`);
   if (regrown !== null) throw new Error('sliver did not auto-expand when the window grew');
 
-  // 1c. A 4th pane folds someone; closing it restores.
   before = paneIds();
   await req('split_pane', { sessionId, targetPaneId: paneC, direction: 'vertical' });
   const paneD = await newPaneAfter(before);
@@ -109,7 +106,6 @@ async function main() {
   console.log(`[sliver-verify] closed 4th, suspended=${afterClose} => ${afterClose === null ? 'RESTORED' : 'BUG'}`);
   if (afterClose !== null) throw new Error('sliver did not restore after the tile closed');
 
-  // 2. Click: focus A, then click the sliver; the LRU pane folds, A stays.
   width = await sizePanesTo(1200);
   await req('focus_pane', { sessionId, paneId: paneC });
   await delay(300);
@@ -122,8 +118,6 @@ async function main() {
   const clickAfter = await suspendedTitle();
   console.log(`[sliver-verify] click: before=${clickBefore} after=${clickAfter} activePane=${ws.activePaneId}`);
 
-  // 3. Drag beside the sliver: neighbors resize, the sliver stays 34px.
-  // Focus C then A so the middle pane (B) is the LRU that folds.
   await req('focus_pane', { sessionId, paneId: paneC });
   await delay(300);
   await req('focus_pane', { sessionId, paneId: paneA });
@@ -137,7 +131,6 @@ async function main() {
   const sBefore = await boundsOf('[data-pane-suspended="true"]');
   const relX = (grab.x + grab.width / 2) / win.logicalBounds.width;
   const relY = (grab.y + grab.height / 2) / win.logicalBounds.height;
-  // A sits at its 480 floor here, so drag right: C shrinks, A grows.
   const toRelX = (grab.x + grab.width / 2 + 150) / win.logicalBounds.width;
   await inputDriver.dragWindow(relX, relY, toRelX, relY, { steps: 12 });
   await delay(900);
@@ -152,7 +145,6 @@ async function main() {
     throw new Error('sliver changed size during a neighbor resize');
   }
 
-  // 4. Drag past C's minimum: C folds into a second sliver; clicking restores.
   const grab2 = await boundsOf('.workspace-split-divider[data-split-grab]');
   const rel2X = (grab2.x + grab2.width / 2) / win.logicalBounds.width;
   const farX = (grab2.x + grab2.width / 2 + 400) / win.logicalBounds.width;

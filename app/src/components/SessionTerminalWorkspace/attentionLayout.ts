@@ -29,8 +29,6 @@ export interface ResolveWorkspaceLayoutInput {
   activeLeafId: string;
   focusOrder: readonly string[];
   previousSuspendedLeafIds: ReadonlySet<string>;
-// Leaves the user folded by dragging: they stay folded through restore
-// passes until a click, a drag freeing room, or removal releases them.
   pinnedLeafIds?: ReadonlySet<string>;
 // While a divider drag is live, restores wait for the drag to end; a fold
 // freeing room mid-drag must not pop another leaf open under the pointer.
@@ -208,8 +206,6 @@ function sameIds(first: ReadonlySet<string>, second: ReadonlySet<string>): boole
   return first.size === second.size && [...first].every((id) => second.has(id));
 }
 
-// Size rank comes from user-set ratios alone (automatic splits stay
-// neutral), so untouched layouts tie exactly and fall back to staleness.
 function intentSizeScores(
   node: TerminalLayoutNode,
   pendingPreferredSplitIds: ReadonlySet<string>,
@@ -230,8 +226,6 @@ function intentSizeScores(
   return scores;
 }
 
-// Staleness breaks size ties: never-focused leaves fold before anything in
-// the focus order, and the most recently focused leaf folds last.
 function stalenessRank(leafIds: readonly string[], focusOrder: readonly string[]): Map<string, number> {
   const focusedIds = new Set(focusOrder);
   return new Map([
@@ -467,8 +461,6 @@ function findSplitNode(
   return findSplitNode(node.children[0], splitId) || findSplitNode(node.children[1], splitId);
 }
 
-// A drag may fold any unfocused leaf past its minimum, so its floors assume
-// everything on a side folds to slivers except the focused leaf.
 export function dragRatioBounds(
   sourceTree: TerminalLayoutNode,
   splitId: string,
@@ -541,8 +533,6 @@ export interface DragSuspensionResult {
   pinnedLeafIds: ReadonlySet<string>;
 }
 
-// Each drag move re-derives the dragged split's pins from its side spans, so
-// squeezing folds a leaf live and dragging back (or freeing room) restores it.
 export function applyDragSuspension(input: DragSuspensionInput): DragSuspensionResult {
   const split = findSplitNode(input.sourceTree, input.splitId);
   if (!split) {
@@ -598,8 +588,6 @@ export function applyDragSuspension(input: DragSuspensionInput): DragSuspensionR
   return { suspendedLeafIds: suspended, pinnedLeafIds: pinned };
 }
 
-// Releasing never folds a peer here: reconcileSuspension picks the smallest
-// unfocused victim, and only when space actually runs out.
 export function releaseSuspendedLeaf(
   current: ReadonlySet<string>,
   targetLeafId: string,
@@ -611,4 +599,3 @@ export function releaseSuspendedLeaf(
   next.delete(targetLeafId);
   return next;
 }
-
