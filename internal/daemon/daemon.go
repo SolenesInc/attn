@@ -173,6 +173,9 @@ type Daemon struct {
 	delegationRunning                 map[string]bool
 	delegationWorktreePrepareHook     func(path string)
 	delegationFinalizeHook            func() error
+	delegationWaitsForFirstTurn       bool
+	launchWatchMu                     sync.Mutex
+	launchWatches                     map[string]*launchWatch
 	reloadingMu                       sync.Mutex
 	reloadingSessions                 map[string]bool
 	reloadLocksMu                     sync.Mutex
@@ -643,6 +646,7 @@ func New(socketPath string) *Daemon {
 		workspaces:          newWorkspaceRegistry(),
 		spawnLocks:          make(map[string]*spawnLock),
 	}
+	d.delegationWaitsForFirstTurn = true
 	d.ticketReconcileExec = d.execTicketReconcileClassifier
 	d.ensureEventBus()
 	d.sessionTitleExec = d.execSessionTitle
@@ -1611,6 +1615,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	d.stopTranscriptWatcher(info.ID)
 	d.closePluginDriverSession(info.ID, "exited", &info.ExitCode, info.Signal)
 	d.captureExitScreen(info)
+	d.noteLaunchExited(info)
 
 	if d.ptyBackend != nil {
 		if err := d.removePTYSession(info.ID); err != nil {

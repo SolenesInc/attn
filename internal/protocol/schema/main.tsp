@@ -6361,6 +6361,12 @@ model DelegateResult {
   branch?: string;
   placement: string;
   worktree_created?: boolean;
+  // When the harness first reported a turn (hook, transcript or plugin driver).
+  // Absent when the delegation completed without that: the first turn is unconfirmed.
+  first_turn_at?: string;
+  // Why the first turn is unconfirmed: the wait hit its limit. Names the limit
+  // and where to look. Absent when first_turn_at is set.
+  first_turn_unconfirmed?: string;
 }
 
 enum DelegationOperationState {

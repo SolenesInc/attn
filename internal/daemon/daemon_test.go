@@ -1601,6 +1601,7 @@ type fakeSpawnBackend struct {
 	setThemeErr        error
 	screen             string
 	screenUnavailable  bool
+	onSnapshot         func()
 	terminalBuild      string
 	terminalBuildKnown bool
 	upgradeErr         error
@@ -1641,6 +1642,12 @@ func (b *fakeSpawnBackend) SessionTerminalBuild(string) (string, bool) {
 }
 
 func (b *fakeSpawnBackend) ScreenSnapshot(_ context.Context, _ string) (pty.ScreenSnapshotInfo, error) {
+	b.mu.Lock()
+	onSnapshot := b.onSnapshot
+	b.mu.Unlock()
+	if onSnapshot != nil {
+		onSnapshot()
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.screenUnavailable {
