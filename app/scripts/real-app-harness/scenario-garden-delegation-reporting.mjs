@@ -236,17 +236,16 @@ async function main() {
     await runner.step('a_seed_id_steers_its_tender', async () => {
       delegatePane = await waitForFirstWorkspacePane(client, delegated, 'the delegate’s pane', 20_000);
       const sent = await runInPane(client, pane,
-        `attn agent msg ${seed} "${STEER}" --source-session ${pane.sessionId}`, 'delivered');
+        `attn agent msg ${seed} "${STEER}" --source-session ${pane.sessionId}`, 'notified');
       runner.writeText('agent-msg.txt', sent + '\n');
-      const deadline = Date.now() + 20_000;
-      let text = '';
-      while (Date.now() < deadline) {
-        text = flat(await paneText(client, { sessionId: delegated, paneId: delegatePane.paneId }));
-        if (saw(text, STEER)) break;
-        await delay(250);
-      }
+      const messageID = sent.match(/\(id\s*([0-9a-f-]{36})\)/)?.[1] ?? null;
+      runner.assert(Boolean(messageID), 'the steer returned its mailbox id', { sent });
+      const read = await runInPane(client, { sessionId: delegated, paneId: delegatePane.paneId },
+        `attn agent inbox ${messageID} --session ${delegated}`, STEER);
+      const text = flat(await paneText(client, { sessionId: delegated, paneId: delegatePane.paneId }));
       runner.assert(saw(text, STEER),
         'the message addressed to the seed arrived in its tender’s pane', { text });
+      runner.writeText('agent-inbox.txt', read + '\n');
       runner.writeText('delegate-pane.txt', text + '\n');
       await pace();
     });

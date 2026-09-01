@@ -96,6 +96,23 @@ type AgentHistoryMessage struct {
 	ID string `json:"id"`
 }
 
+type AgentInboxMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// MessageID corresponds to the JSON schema field "message_id".
+	MessageID string `json:"message_id"`
+
+	// RecipientSessionID corresponds to the JSON schema field "recipient_session_id".
+	RecipientSessionID string `json:"recipient_session_id"`
+}
+
+type AgentMessageState string
+
+const AgentMessageStateNotified AgentMessageState = "notified"
+const AgentMessageStateQueued AgentMessageState = "queued"
+const AgentMessageStateRead AgentMessageState = "read"
+
 type AgentMsgMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -129,7 +146,18 @@ type AgentMsgResult struct {
 
 type AgentMsgStatus string
 
-const AgentMsgStatusDelivered AgentMsgStatus = "delivered"
+type AgentMsgStatusMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// MessageID corresponds to the JSON schema field "message_id".
+	MessageID string `json:"message_id"`
+
+	// SenderSessionID corresponds to the JSON schema field "sender_session_id".
+	SenderSessionID string `json:"sender_session_id"`
+}
+
+const AgentMsgStatusNotified AgentMsgStatus = "notified"
 const AgentMsgStatusQueued AgentMsgStatus = "queued"
 const AgentMsgStatusRefused AgentMsgStatus = "refused"
 
@@ -195,6 +223,35 @@ type AgentPeekScreen struct {
 
 	// Text corresponds to the JSON schema field "text".
 	Text string `json:"text"`
+}
+
+type AgentPeerMessage struct {
+	// Content corresponds to the JSON schema field "content".
+	Content string `json:"content"`
+
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt string `json:"created_at"`
+
+	// MessageID corresponds to the JSON schema field "message_id".
+	MessageID string `json:"message_id"`
+
+	// NotifiedAt corresponds to the JSON schema field "notified_at".
+	NotifiedAt *string `json:"notified_at,omitempty,omitzero"`
+
+	// ReadAt corresponds to the JSON schema field "read_at".
+	ReadAt *string `json:"read_at,omitempty,omitzero"`
+
+	// SenderLabel corresponds to the JSON schema field "sender_label".
+	SenderLabel string `json:"sender_label"`
+
+	// SenderSessionID corresponds to the JSON schema field "sender_session_id".
+	SenderSessionID string `json:"sender_session_id"`
+
+	// State corresponds to the JSON schema field "state".
+	State AgentMessageState `json:"state"`
+
+	// TargetSessionID corresponds to the JSON schema field "target_session_id".
+	TargetSessionID string `json:"target_session_id"`
 }
 
 type AgentPromptMessage struct {
@@ -6397,8 +6454,15 @@ type Response struct {
 	// "activity_status_result".
 	ActivityStatusResult *ActivityStatusResult `json:"activity_status_result,omitempty,omitzero"`
 
+	// AgentInboxResult corresponds to the JSON schema field "agent_inbox_result".
+	AgentInboxResult *AgentPeerMessage `json:"agent_inbox_result,omitempty,omitzero"`
+
 	// AgentMsgResult corresponds to the JSON schema field "agent_msg_result".
 	AgentMsgResult *AgentMsgResult `json:"agent_msg_result,omitempty,omitzero"`
+
+	// AgentMsgStatusResult corresponds to the JSON schema field
+	// "agent_msg_status_result".
+	AgentMsgStatusResult *AgentPeerMessage `json:"agent_msg_status_result,omitempty,omitzero"`
 
 	// AgentPeekResult corresponds to the JSON schema field "agent_peek_result".
 	AgentPeekResult *AgentPeekResult `json:"agent_peek_result,omitempty,omitzero"`

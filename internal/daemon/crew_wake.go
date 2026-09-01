@@ -289,12 +289,15 @@ func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, deliv
 				return nil, err
 			}
 			d.noteQueuedAgentMailboxItem(sessionID)
-			d.noteInitialAgentMessage(sessionID, delivery.Message.ID)
-			sender := d.store.Get(delivery.Message.SenderSessionID)
-			initialPrompt = d.composeAgentMessage(sender, *delivery.Message)
 		}
-		if delivery.AfterInitialPrompt != nil {
-			d.notePostInitialPrompt(sessionID, func() { delivery.AfterInitialPrompt(sessionID) })
+		after := delivery.AfterInitialPrompt
+		d.notePostInitialPrompt(sessionID, func() {
+			if after != nil {
+				after(sessionID)
+			}
+		})
+		if delivery.Message == nil && delivery.AfterInitialPrompt == nil {
+			d.forgetPostInitialPrompt(sessionID)
 		}
 	}
 
@@ -313,7 +316,7 @@ func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, deliv
 	})
 	if _, err := readInternalActionResult(spawnClient); err != nil {
 		if delivery != nil && delivery.Message != nil {
-			d.rollbackInitialAgentMessage(sessionID, delivery.Message.ID)
+			d.rollbackQueuedPeerMessage(sessionID, delivery.Message.ID)
 		}
 		d.forgetPostInitialPrompt(sessionID)
 		d.removeWorkspaceLayoutPaneForSession(sessionID)

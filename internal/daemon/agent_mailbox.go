@@ -11,28 +11,35 @@ import (
 
 type agentMailboxDeliveryFlight struct {
 	done chan struct{}
-	err  error
 }
 
 func (d *Daemon) deliverAgentMailboxItem(delivery agentmailbox.Delivery) error {
-	d.agentMailboxMu.Lock()
-	if d.agentMailboxDeliveries == nil {
-		d.agentMailboxDeliveries = make(map[string]*agentMailboxDeliveryFlight)
-	}
-	if flight := d.agentMailboxDeliveries[delivery.Item.ID]; flight != nil {
+	recipient := delivery.Item.RecipientSessionID
+	// A recipient gets one placement attempt at a time, preserving one unread
+	// peer doorbell even when several sends arrive concurrently.
+	for {
+		d.agentMailboxMu.Lock()
+		if d.agentMailboxDeliveries == nil {
+			d.agentMailboxDeliveries = make(map[string]*agentMailboxDeliveryFlight)
+		}
+		flight := d.agentMailboxDeliveries[recipient]
+		if flight == nil {
+			flight = &agentMailboxDeliveryFlight{done: make(chan struct{})}
+			d.agentMailboxDeliveries[recipient] = flight
+			d.agentMailboxMu.Unlock()
+			break
+		}
 		d.agentMailboxMu.Unlock()
 		<-flight.done
-		return flight.err
 	}
-	flight := &agentMailboxDeliveryFlight{done: make(chan struct{})}
-	d.agentMailboxDeliveries[delivery.Item.ID] = flight
-	d.agentMailboxMu.Unlock()
 
 	err := d.deliverAgentMailboxItemOnce(delivery)
 	d.agentMailboxMu.Lock()
-	flight.err = err
-	delete(d.agentMailboxDeliveries, delivery.Item.ID)
-	close(flight.done)
+	flight := d.agentMailboxDeliveries[recipient]
+	delete(d.agentMailboxDeliveries, recipient)
+	if flight != nil {
+		close(flight.done)
+	}
 	d.agentMailboxMu.Unlock()
 	return err
 }
@@ -45,6 +52,22 @@ func (d *Daemon) deliverAgentMailboxItemOnce(delivery agentmailbox.Delivery) err
 	}
 	if !queued {
 		return nil
+	}
+	if item.Kind == agentmailbox.KindPeerMessage {
+		eligible, err := d.store.QueuedAgentMailboxDeliveries(item.RecipientSessionID)
+		if err != nil {
+			return err
+		}
+		ready := false
+		for _, candidate := range eligible {
+			if candidate.Item.ID == item.ID {
+				ready = true
+				break
+			}
+		}
+		if !ready {
+			return errPeerMessageWaitingForRead
+		}
 	}
 	if d.initialPromptPending(item.RecipientSessionID) {
 		return errAgentMessageInitialPromptPending
@@ -60,9 +83,10 @@ func (d *Daemon) deliverAgentMailboxItemOnce(delivery agentmailbox.Delivery) err
 	if attempt.err != nil {
 		return attempt.err
 	}
-	if item.Kind == agentmailbox.KindGardenSeed && (attempt.stage == sessionInputPlaced || attempt.stage == sessionInputTaken) {
-		// Seed show is the read receipt. Successful placement only releases the
-		// input lane so every harness follows the same Garden protocol.
+	if (item.Kind == agentmailbox.KindGardenSeed || item.Kind == agentmailbox.KindPeerMessage) &&
+		(attempt.stage == sessionInputPlaced || attempt.stage == sessionInputTaken) {
+		// The CLI read is the receipt. Successful placement only releases the
+		// input lane, so every harness follows the same mailbox protocol.
 		d.sessionInputs().forget(item.RecipientSessionID, id)
 		return d.stampAgentMailboxItemNotified(item.RecipientSessionID, item.ID)
 	}
@@ -111,22 +135,6 @@ func (d *Daemon) stampAgentMailboxItemHandled(sessionID, id string) error {
 	return nil
 }
 
-func (d *Daemon) noteInitialAgentMessage(sessionID, messageID string) {
-	d.agentMailboxMu.Lock()
-	defer d.agentMailboxMu.Unlock()
-	if d.agentMessageInitialPrompt == nil {
-		d.agentMessageInitialPrompt = make(map[string]string)
-	}
-	d.agentMessageInitialPrompt[sessionID] = messageID
-}
-
-func (d *Daemon) initialAgentMessagePending(sessionID, messageID string) bool {
-	d.agentMailboxMu.Lock()
-	defer d.agentMailboxMu.Unlock()
-	current := d.agentMessageInitialPrompt[sessionID]
-	return current != "" && (messageID == "" || current == messageID)
-}
-
 func (d *Daemon) notePostInitialPrompt(sessionID string, after func()) {
 	d.agentMailboxMu.Lock()
 	defer d.agentMailboxMu.Unlock()
@@ -146,7 +154,7 @@ func (d *Daemon) initialPromptPending(sessionID string) bool {
 	d.agentMailboxMu.Lock()
 	defer d.agentMailboxMu.Unlock()
 	_, postPending := d.postInitialPrompt[sessionID]
-	return d.agentMessageInitialPrompt[sessionID] != "" || postPending
+	return postPending
 }
 
 func (d *Daemon) runPostInitialPrompt(sessionID, state string) {
@@ -165,29 +173,7 @@ func (d *Daemon) runPostInitialPrompt(sessionID, state string) {
 	}
 }
 
-// Worker state is not enough: a freshly spawned Claude session reports `working`
-// while still at its trust dialog, and hook evidence lands past that dialog.
-func (d *Daemon) noteInitialAgentMessageSubmitted(sessionID, state string) {
-	if state != protocol.StateWorking {
-		return
-	}
-	d.agentMailboxMu.Lock()
-	messageID := d.agentMessageInitialPrompt[sessionID]
-	delete(d.agentMessageInitialPrompt, sessionID)
-	d.agentMailboxMu.Unlock()
-	if messageID == "" {
-		return
-	}
-	_ = d.stampAgentMailboxItemHandled(sessionID, messageID)
-	d.drainAgentMailboxAfterStateChange(sessionID, state)
-}
-
-func (d *Daemon) rollbackInitialAgentMessage(sessionID, messageID string) {
-	d.agentMailboxMu.Lock()
-	if d.agentMessageInitialPrompt[sessionID] == messageID {
-		delete(d.agentMessageInitialPrompt, sessionID)
-	}
-	d.agentMailboxMu.Unlock()
+func (d *Daemon) rollbackQueuedPeerMessage(sessionID, messageID string) {
 	if err := d.store.DeleteQueuedPeerMessage(messageID); err != nil {
 		d.logf("agent msg rollback: session=%s id=%s err=%v", sessionID, messageID, err)
 	}
@@ -206,7 +192,7 @@ func (d *Daemon) composeAgentMailboxPrompt(delivery agentmailbox.Delivery) (stri
 			return "", "", fmt.Errorf("peer mailbox item %s has no message", delivery.Item.ID)
 		}
 		sender := d.store.Get(delivery.Peer.SenderSessionID)
-		return d.composeAgentMessage(sender, *delivery.Peer), delivery.Peer.SenderSessionID, nil
+		return d.composePeerMessageDoorbell(sender, *delivery.Peer), delivery.Peer.SenderSessionID, nil
 	default:
 		return "", "", fmt.Errorf("agent mailbox item %s has unknown kind %q", delivery.Item.ID, delivery.Item.Kind)
 	}

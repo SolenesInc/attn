@@ -132,6 +132,81 @@ func TestClient_UpdateState(t *testing.T) {
 	}
 }
 
+func TestClientAgentMailboxCommands(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("/tmp", "attn-client-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+	sockPath := filepath.Join(tmpDir, "test.sock")
+	listener, err := net.Listen("unix", sockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	requests := make(chan string, 2)
+	go func() {
+		for range 2 {
+			conn, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				requests <- "accept: " + acceptErr.Error()
+				return
+			}
+			var raw json.RawMessage
+			decodeErr := json.NewDecoder(conn).Decode(&raw)
+			if decodeErr != nil {
+				requests <- "decode: " + decodeErr.Error()
+				_ = conn.Close()
+				return
+			}
+			cmd, msg, parseErr := protocol.ParseMessage(raw)
+			if parseErr != nil {
+				requests <- "parse: " + parseErr.Error()
+				_ = conn.Close()
+				return
+			}
+			result := &protocol.AgentPeerMessage{
+				MessageID: "message-id", SenderSessionID: "sender-id", SenderLabel: "sender",
+				TargetSessionID: "recipient-id", Content: "hello", State: protocol.AgentMessageStateRead,
+				CreatedAt: "2026-09-01T10:00:00Z",
+			}
+			response := protocol.Response{Ok: true}
+			switch typed := msg.(type) {
+			case *protocol.AgentInboxMessage:
+				requests <- cmd + ":" + typed.MessageID + ":" + typed.RecipientSessionID
+				response.AgentInboxResult = result
+			case *protocol.AgentMsgStatusMessage:
+				requests <- cmd + ":" + typed.MessageID + ":" + typed.SenderSessionID
+				response.AgentMsgStatusResult = result
+			default:
+				requests <- "unexpected command: " + cmd
+			}
+			_ = json.NewEncoder(conn).Encode(response)
+			_ = conn.Close()
+		}
+	}()
+
+	c := New(sockPath)
+	inbox, err := c.AgentInbox("message-id", "recipient-id")
+	if err != nil || inbox.Content != "hello" {
+		t.Fatalf("AgentInbox = %+v, %v", inbox, err)
+	}
+	status, err := c.AgentMsgStatus("message-id", "sender-id")
+	if err != nil || status.State != protocol.AgentMessageStateRead {
+		t.Fatalf("AgentMsgStatus = %+v, %v", status, err)
+	}
+
+	for _, want := range []string{
+		protocol.CmdAgentInbox + ":message-id:recipient-id",
+		protocol.CmdAgentMsgStatus + ":message-id:sender-id",
+	} {
+		if got := <-requests; got != want {
+			t.Fatalf("request = %q, want %q", got, want)
+		}
+	}
+}
+
 func TestClient_WorkspaceContextMaintenance(t *testing.T) {
 	tests := []struct {
 		name    string
