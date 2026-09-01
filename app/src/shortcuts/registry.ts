@@ -162,7 +162,7 @@ export const LINUX_SHORTCUTS = {
   'notebook.openTile': { key: 'n', code: 'KeyN', meta: true, alt: true, shift: true },
   'notebook.openFullscreen': { key: 'f', code: 'KeyF', meta: true, alt: true, shift: true },
   'file.open': { key: 'p', meta: true, shift: true },
-  'board.open': { key: 't', meta: true, alt: true },
+  'board.open': { key: 'g', meta: true, alt: true },
   'markdown.sendAnnotations': { key: 'Enter', meta: true, shift: true, editableTarget: 'native' },
   'terminal.sendAnnotations': { key: 'Enter', meta: true, shift: true, editableTarget: 'native' },
 } as const satisfies ShortcutRegistry;

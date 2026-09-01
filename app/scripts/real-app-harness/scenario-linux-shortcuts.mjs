@@ -191,6 +191,13 @@ async function main() {
       );
     });
 
+    await runner.step('ctrl_alt_g_opens_garden', async () => {
+      await client.request('focus_pane', { sessionId, paneId: primaryPane.paneId });
+      await driver.pressKey('g', { control: true, alt: true });
+      await waitForSelector(client, '.garden-board');
+      await driver.pressKeyCode(53);
+    });
+
     let screenshotPath;
     await runner.step('ctrl_shift_slash_opens_linux_cheatsheet', async () => {
       await client.request('focus_pane', { sessionId, paneId: primaryPane.paneId });

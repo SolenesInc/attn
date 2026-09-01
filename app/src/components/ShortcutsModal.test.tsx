@@ -30,7 +30,7 @@ describe('ShortcutsModal', () => {
     });
     const newWorkspaceRow = screen.getByText('New workspace').closest('.shortcuts-row');
     const caps = [...newWorkspaceRow!.querySelectorAll('.keycap')].map((c) => c.textContent);
-    expect(caps).toEqual(['Ctrl', 'T']);
+    expect(caps).toEqual(['Ctrl', 'Shift', 'T']);
     expect(newWorkspaceRow!.textContent).not.toContain('⌘');
   });
 

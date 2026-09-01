@@ -261,6 +261,23 @@ describe('shortcut registry', () => {
       }
     });
 
+    it('avoids Ubuntu 24.04 desktop-reserved Ctrl+Alt chords', () => {
+      const reserved = new Set([
+        't',
+        'delete',
+        'tab',
+        'escape',
+        'arrowleft',
+        'arrowright',
+        'arrowup',
+        'arrowdown',
+      ]);
+      for (const [id, binding] of Object.entries(LINUX_SHORTCUTS) as Array<[ShortcutId, ShortcutDef]>) {
+        if (!binding.alt || binding.shift) continue;
+        expect(reserved.has(binding.key.toLowerCase()), id).toBe(false);
+      }
+    });
+
     it('adds Shift to every macOS Cmd+letter action that had no Shift', () => {
       for (const [id, mac] of Object.entries(MAC_SHORTCUTS) as Array<[ShortcutId, ShortcutDef]>) {
         if (!mac.meta || mac.shift || !/^[a-z]$/i.test(mac.key)) continue;
