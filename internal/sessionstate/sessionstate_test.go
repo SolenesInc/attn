@@ -19,6 +19,7 @@ func testPolicy() Policy {
 		GuardianDwell:     60 * time.Second,
 		SettleGrace:       4 * time.Second,
 		ClassifierTimeout: 30 * time.Second,
+		ParkedAfter:       30 * time.Minute,
 	}
 }
 
@@ -343,6 +344,30 @@ func TestResolve(t *testing.T) {
 			},
 			wantState:  protocol.SessionStateWorking,
 			wantReason: ReasonBackgroundParked,
+		},
+		{
+			name: "a parked verdict past the tripwire settles on the prompt-idle confirmation",
+			evidence: Evidence{
+				BackgroundWork: true,
+				TurnEverOpened: true,
+				LastClassifier: seen(SourceClassifier, ClaimParked, 31*time.Minute),
+				LastBusyAt:     now.Add(-32 * time.Minute),
+				PromptIdleAt:   now.Add(-30 * time.Minute),
+				LastMovement:   now.Add(-31 * time.Minute),
+			},
+			wantState:  protocol.SessionStateIdle,
+			wantReason: ReasonParkedExpired,
+		},
+		{
+			name: "a parked verdict past the tripwire with no prompt confirmation is stuck",
+			evidence: Evidence{
+				BackgroundWork: true,
+				TurnEverOpened: true,
+				LastClassifier: seen(SourceClassifier, ClaimParked, 31*time.Minute),
+				LastMovement:   now.Add(-31 * time.Minute),
+			},
+			wantState:  protocol.SessionStateUnknown,
+			wantReason: ReasonStuck,
 		},
 		{
 			name: "a busy frame spends a parked verdict",

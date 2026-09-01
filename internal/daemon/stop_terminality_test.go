@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
+	"github.com/victorarias/attn/internal/sessionstate"
 )
 
 func TestStopIsNonTerminal(t *testing.T) {
@@ -81,9 +82,9 @@ func TestStopIsNonTerminal(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			msg := &protocol.StopMessage{
-				Cmd:                    protocol.CmdStop,
-				ID:                     "sess",
-				BackgroundTaskStatuses: tc.statuses,
+				Cmd:             protocol.CmdStop,
+				ID:              "sess",
+				BackgroundTasks: tasksWithStatuses(tc.statuses...),
 			}
 			if tc.crons > 0 {
 				msg.PendingSessionCrons = protocol.Ptr(tc.crons)
@@ -92,6 +93,28 @@ func TestStopIsNonTerminal(t *testing.T) {
 				t.Fatalf("stopIsNonTerminal() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func tasksWithStatuses(statuses ...string) []protocol.StopBackgroundTask {
+	tasks := make([]protocol.StopBackgroundTask, 0, len(statuses))
+	for _, status := range statuses {
+		tasks = append(tasks, protocol.StopBackgroundTask{Type: "background_session", Status: status})
+	}
+	return tasks
+}
+
+func TestDescribeBackgroundTasks(t *testing.T) {
+	msg := &protocol.StopMessage{BackgroundTasks: []protocol.StopBackgroundTask{
+		{Type: "background_session", Status: "running", Name: protocol.Ptr("gh run watch 1234")},
+		{Type: "cron", Status: "pending"},
+	}}
+	want := `background_session running "gh run watch 1234", cron pending`
+	if got := describeBackgroundTasks(msg); got != want {
+		t.Fatalf("describeBackgroundTasks() = %q, want %q", got, want)
+	}
+	if got := describeBackgroundTasks(&protocol.StopMessage{}); got != "" {
+		t.Fatalf("describeBackgroundTasks(empty) = %q, want empty", got)
 	}
 }
 
@@ -124,7 +147,7 @@ func TestDaemon_StopCommand_BackgroundWork_StaysWorking(t *testing.T) {
 	}
 
 	if err := c.SendStop("bg-session", "/nonexistent/transcript.jsonl", client.StopFacts{
-		BackgroundTaskStatuses: []string{"running"},
+		BackgroundTasks: tasksWithStatuses("running"),
 	}); err != nil {
 		t.Fatalf("SendStop error: %v", err)
 	}
@@ -205,10 +228,10 @@ func yieldedStopDaemon(t *testing.T, d *Daemon, verdict string) (*Daemon, *recor
 	d.recordPTYEvidence("yielded", pty.Observation{Source: pty.SourceHeartbeat, Claim: "not_busy", At: now})
 
 	d.handleStop(drainingConn(t), &protocol.StopMessage{
-		Cmd:                    protocol.CmdStop,
-		ID:                     "yielded",
-		TranscriptPath:         "/tmp/transcript.jsonl",
-		BackgroundTaskStatuses: []string{"running"},
+		Cmd:             protocol.CmdStop,
+		ID:              "yielded",
+		TranscriptPath:  "/tmp/transcript.jsonl",
+		BackgroundTasks: tasksWithStatuses("running"),
 	})
 
 	// The judgment is dispatched async on the retry loop handleStop owns; run it out
@@ -240,6 +263,34 @@ func TestDaemon_YieldedStop_ParkedVerdictHoldsWorkingPastPromptIdle(t *testing.T
 		}
 		if sess.State != protocol.StateWorking {
 			t.Fatalf("state = %s, want %s: a parked verdict outranks the prompt-idle confirmation", sess.State, protocol.StateWorking)
+		}
+	})
+}
+
+// The tripwire: work that never wakes the agent must not hold the session green
+// for good. Past ParkedAfter the prompt-idle confirmation settles it.
+func TestDaemon_YieldedStop_ParkedVerdictExpiresIntoPromptIdle(t *testing.T) {
+	base := NewForTesting(filepath.Join(shortTempDir(t), "test.sock"))
+	synctest.Test(t, func(t *testing.T) {
+		stopDaemonBackground(t, base)
+		d, _ := yieldedStopDaemon(t, base, classifier.VerdictParked)
+		d.recordNotificationEvidence("yielded", notifyIdlePrompt, "Claude is waiting for your input")
+
+		policy := sessionstate.PolicyFor(string(protocol.SessionAgentClaude))
+		time.Sleep(policy.ParkedAfter - time.Minute)
+		d.resolveAllSessions(time.Now())
+		if got := d.store.Get("yielded").State; got != protocol.StateWorking {
+			t.Fatalf("state before the tripwire = %s, want %s", got, protocol.StateWorking)
+		}
+
+		time.Sleep(2 * time.Minute)
+		d.resolveAllSessions(time.Now())
+		sess := d.store.Get("yielded")
+		if sess.State != protocol.StateIdle {
+			t.Fatalf("state past the tripwire = %s, want %s", sess.State, protocol.StateIdle)
+		}
+		if got := sessionstate.Reason(protocol.Deref(d.sessionForBroadcast(sess).StateReason)); got != sessionstate.ReasonParkedExpired {
+			t.Fatalf("state reason = %q, want %q", got, sessionstate.ReasonParkedExpired)
 		}
 	})
 }

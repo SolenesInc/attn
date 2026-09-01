@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -9,12 +10,26 @@ import (
 // Status comparison is case-insensitive: the status string is the agent harness's, not ours.
 func runningBackgroundTaskCount(msg *protocol.StopMessage) int {
 	running := 0
-	for _, status := range msg.BackgroundTaskStatuses {
-		if strings.EqualFold(strings.TrimSpace(status), "running") {
+	for _, task := range msg.BackgroundTasks {
+		if strings.EqualFold(strings.TrimSpace(task.Status), "running") {
 			running++
 		}
 	}
 	return running
+}
+
+// The harness's list verbatim, one "type status name" per task: a stop judged
+// non-terminal must name what held it, or the next stuck session is a mystery.
+func describeBackgroundTasks(msg *protocol.StopMessage) string {
+	parts := make([]string, 0, len(msg.BackgroundTasks))
+	for _, task := range msg.BackgroundTasks {
+		part := strings.TrimSpace(task.Type) + " " + strings.TrimSpace(task.Status)
+		if name := strings.TrimSpace(protocol.Deref(task.Name)); name != "" {
+			part += " " + strconv.Quote(name)
+		}
+		parts = append(parts, part)
+	}
+	return strings.Join(parts, ", ")
 }
 
 func hasActiveBackgroundTask(msg *protocol.StopMessage) bool {

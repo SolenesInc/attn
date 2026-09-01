@@ -8,6 +8,7 @@
 - Envelope: sequenced host message. Declaration: daemon-readable session event. Rendering: app display data.
 - Run: one prompt and response, from `run_started` to `run_settled`.
 - Prompt: starts a run. Steer: read at the next agent boundary. Follow-up: read before settlement.
+- Parked: a run that ended with the harness's background work still running; held working for at most the parked tripwire, then settled.
 - Input queue: unread messages in a conversation host.
 - Session input: ordered delivery to a live session with evidence of receipt.
 - Input evidence: deferred = untouched; placed = adapter-owned; taken = reading begun; indeterminate = uncertain.

@@ -965,6 +965,7 @@ func TestStopFacts(t *testing.T) {
 		name         string
 		payload      string
 		wantStatuses []string
+		wantNames    []string
 		wantCrons    int
 	}{
 		{
@@ -1011,6 +1012,12 @@ func TestStopFacts(t *testing.T) {
 			wantStatuses: []string{"running"},
 			wantCrons:    1,
 		},
+		{
+			name:         "a task's description travels as its name (captured from Claude Code 2.1.257)",
+			payload:      `{"background_tasks":[{"id":"bzd8fe67e","type":"shell","status":"running","description":"Sleep for 90 seconds in background","command":"sleep 90"},{"id":"a2c193c118d82726c","type":"subagent","status":"running","description":"Run sleep 75 then report completion","agent_type":"general-purpose"}],"session_crons":[]}`,
+			wantStatuses: []string{"running", "running"},
+			wantNames:    []string{"Sleep for 90 seconds in background", "Run sleep 75 then report completion"},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1019,8 +1026,16 @@ func TestStopFacts(t *testing.T) {
 				t.Fatalf("unmarshal payload: %v", err)
 			}
 			facts := stopFacts(input)
-			if !slices.Equal(facts.BackgroundTaskStatuses, tc.wantStatuses) {
-				t.Fatalf("BackgroundTaskStatuses = %q, want %q", facts.BackgroundTaskStatuses, tc.wantStatuses)
+			var statuses, names []string
+			for _, task := range facts.BackgroundTasks {
+				statuses = append(statuses, task.Status)
+				names = append(names, protocol.Deref(task.Name))
+			}
+			if !slices.Equal(statuses, tc.wantStatuses) {
+				t.Fatalf("background task statuses = %q, want %q", statuses, tc.wantStatuses)
+			}
+			if tc.wantNames != nil && !slices.Equal(names, tc.wantNames) {
+				t.Fatalf("background task names = %q, want %q", names, tc.wantNames)
 			}
 			if facts.PendingSessionCrons != tc.wantCrons {
 				t.Fatalf("PendingSessionCrons = %d, want %d", facts.PendingSessionCrons, tc.wantCrons)

@@ -1,0 +1,10 @@
+kind: fixed
+area: sessions
+symptom: >
+  A Claude session whose turn ended with a background task still listed as
+  running stayed green in the Settled band for days, with nothing happening.
+change: >
+  A parked session now holds working for at most 30 minutes. Past that, the
+  harness's own "waiting for your input" notification settles it and a turn
+  opens, so a task that never wakes the agent is visible instead of silent.
+  The daemon log and `attn state explain` name the tasks that held the stop.

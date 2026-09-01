@@ -385,17 +385,17 @@ func (c *Client) AgentMsg(target, sourceSessionID, content string) (*protocol.Ag
 // StopFacts is what the Stop hook observed about whether the turn finished; the
 // daemon decides what it means. The zero value reads as a terminal stop.
 type StopFacts struct {
-	BackgroundTaskStatuses []string
-	PendingSessionCrons    int
+	BackgroundTasks     []protocol.StopBackgroundTask
+	PendingSessionCrons int
 }
 
 func (c *Client) SendStop(id, transcriptPath string, facts StopFacts) error {
 	msg := protocol.StopMessage{
-		Cmd:                    protocol.CmdStop,
-		ID:                     id,
-		TranscriptPath:         transcriptPath,
-		BackgroundTaskStatuses: facts.BackgroundTaskStatuses,
-		PendingSessionCrons:    protocol.Ptr(facts.PendingSessionCrons),
+		Cmd:                 protocol.CmdStop,
+		ID:                  id,
+		TranscriptPath:      transcriptPath,
+		BackgroundTasks:     facts.BackgroundTasks,
+		PendingSessionCrons: protocol.Ptr(facts.PendingSessionCrons),
 	}
 	_, err := c.send(msg)
 	return err

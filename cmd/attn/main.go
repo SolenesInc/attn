@@ -66,9 +66,12 @@ type hookInput struct {
 	Trigger          string           `json:"trigger"`
 }
 
+// Verified against Claude Code 2.1.257: type is shell or subagent, status running, and
+// description is the human-readable label (the docs' name field is not sent).
 type backgroundTask struct {
-	Type   string `json:"type"`
-	Status string `json:"status"`
+	Type        string `json:"type"`
+	Status      string `json:"status"`
+	Description string `json:"description"`
 }
 
 // Verified against Claude Code 2.1.177: there is no status field — a fired or deleted cron drops out of the list.
@@ -2604,7 +2607,11 @@ func runHookStop() {
 func stopFacts(input hookInput) client.StopFacts {
 	facts := client.StopFacts{PendingSessionCrons: len(input.SessionCrons)}
 	for _, t := range input.BackgroundTasks {
-		facts.BackgroundTaskStatuses = append(facts.BackgroundTaskStatuses, t.Status)
+		facts.BackgroundTasks = append(facts.BackgroundTasks, protocol.StopBackgroundTask{
+			Type:   t.Type,
+			Status: t.Status,
+			Name:   protocol.Ptr(t.Description),
+		})
 	}
 	return facts
 }
