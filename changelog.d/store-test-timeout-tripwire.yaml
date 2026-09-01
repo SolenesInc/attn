@@ -1,0 +1,5 @@
+kind: internal
+area: ci
+change: >
+  Raise the Go test tripwire past what a contended CI runner actually needs, so
+  the Daemon job stops failing healthy runs with a 5m test timeout.

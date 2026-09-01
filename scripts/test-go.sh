@@ -7,17 +7,21 @@ daemon_package="github.com/victorarias/attn/internal/daemon"
 shard_count="${ATTN_GO_TEST_SHARDS:-5}"
 package_parallelism="${ATTN_GO_TEST_PACKAGE_PARALLELISM:-4}"
 test_gomaxprocs="${ATTN_GO_TEST_GOMAXPROCS:-${GOMAXPROCS:-3}}"
-# Measured 2026-08-07: `go test ./internal/store` alone takes ~23s on an
-# M-series laptop after the doc-store windowed-subscription battery and the
-# two timestamp-migration suites landed, and CI runs SQLite work 3-4x slower
-# — the package hit the old 90s ceiling on a healthy run (run 31133211867).
-# 300s is a tripwire: only a hang reaches it.
-test_timeout="${ATTN_GO_TEST_TIMEOUT:-300s}"
+# A package's wall clock here is mostly contention: this job runs -p 4 packages
+# at GOMAXPROCS=3 on a 4-vCPU runner, and Go's -timeout counts the starvation.
+# Measured 2026-09-01: `internal/store` took 143.3s in CI run 33505065785 and
+# blew past the old 300s ceiling in runs 33549033327 and 33551228490 with no
+# store change between them, so the healthy number is noisy by construction.
+# Alone on an M-series laptop at GOMAXPROCS=3 the package is 101.3s across 475
+# tests, ~0.21s each. 1200s is a tripwire: only a hang reaches it.
+test_timeout="${ATTN_GO_TEST_TIMEOUT:-1200s}"
 # The race job runs the same packages a second time under -race, which costs
-# roughly an order of magnitude. Measured: `go test -race ./internal/store
-# ./internal/docstore` takes 22s on an M-series laptop, and CI runs SQLite work
-# 3-4x slower. 300s is the same tripwire — only a hang reaches it.
-race_timeout="${ATTN_GO_TEST_RACE_TIMEOUT:-300s}"
+# roughly an order of magnitude, and it competes with the packages job above.
+# Measured 2026-09-01: `internal/store` under -race took 104.9s in CI run
+# 33505065785, blew past 300s in the same two failing runs, and takes 218.3s
+# alone on an M-series laptop at GOMAXPROCS=3 — uncontended, that is already
+# 73% of the old ceiling. Same 1200s tripwire — only a hang reaches it.
+race_timeout="${ATTN_GO_TEST_RACE_TIMEOUT:-1200s}"
 
 if ! [[ "$shard_count" =~ ^[1-9][0-9]*$ ]]; then
   echo "ATTN_GO_TEST_SHARDS must be a positive integer, got: $shard_count" >&2
