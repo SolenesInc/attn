@@ -77,6 +77,7 @@ export interface GardenFrameProps {
   onSendSeedToChief?: (options: Omit<SeedSendToChiefOptions, 'sourceSessionId'>) => Promise<unknown>;
   chiefAvailable?: boolean;
   liveSessions?: Set<string>;
+  tenderSessionLabels?: ReadonlyMap<string, string>;
   loaded?: boolean;
   moveSeed?: (
     seedId: string,
@@ -112,6 +113,7 @@ export function GardenFrame({
   onSendSeedToChief,
   chiefAvailable = false,
   liveSessions,
+  tenderSessionLabels,
   loaded = true,
   moveSeed,
   noteSeed,
@@ -299,6 +301,7 @@ export function GardenFrame({
                 reviewOpening={reviewOpening}
                 reviewError={reviewError}
                 onOpenReview={() => void openReview()}
+                tenderSessionLabels={tenderSessionLabels}
               />
             )}
           </div>

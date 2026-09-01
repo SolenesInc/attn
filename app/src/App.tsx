@@ -1636,6 +1636,10 @@ function AppContent({
     () => new Set(daemonSessions.map((session) => session.id)),
     [daemonSessions],
   );
+  const gardenSessionLabels = useMemo(
+    () => new Map(daemonSessions.map((session) => [session.id, session.label])),
+    [daemonSessions],
+  );
 
   const toggleNotificationsPanel = useCallback(() => {
     setNotificationsPanelOpen((open) => !open);
@@ -3931,6 +3935,7 @@ function AppContent({
         seeds={seeds}
         seedsTotal={seedsTotal}
         liveSessions={liveGardenSessions}
+        tenderSessionLabels={gardenSessionLabels}
         loaded={hasReceivedInitialState}
         moveSeed={sendSeedTransition}
         noteSeed={sendSeedNote}

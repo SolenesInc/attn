@@ -22,6 +22,9 @@ function parseArgs(argv) {
 
 // Short enough to survive any pane width without wrapping.
 const HANDOFF = 'PICKUP7 start at freshestHandoff';
+const SEED_TITLE = 'carry a seed across two sessions without losing where the handoff belongs';
+// Garden columns start at 1160px. The 24px fullscreen inset leaves 96px of room at this width.
+const WIDE_GARDEN_WINDOW = 1280;
 
 function occurrences(haystack, needle) {
   let count = 0;
@@ -95,6 +98,10 @@ async function main() {
   let authorID = null;
   try {
     await launchFreshAppAndConnect(client, observer);
+    const initialBounds = await client.request('get_window_bounds');
+    await client.request('set_window_bounds', {
+      logicalBounds: { ...initialBounds.logicalBounds, width: WIDE_GARDEN_WINDOW },
+    });
 
     paneA = await runner.step('open_session_a', () => openPane(client, observer, runner, 'gardenA'));
 
@@ -102,9 +109,8 @@ async function main() {
       // A shell pane carries no session identity of its own, so the tender has
       // to be named. An agent pane has ATTN_SESSION_ID and passes nothing.
       const planted = await runInPane(client, paneA,
-        `attn seed plant "carry a seed across two sessions" --session ${paneA.sessionId}`, 's-');
-      // plant answers with the id and nothing else, on a line of its own.
-      const ids = [...planted.matchAll(/^\s*(s-[a-z0-9]{5,})\s*$/gm)].map((match) => match[1]);
+        `attn seed plant "${SEED_TITLE}" --session ${paneA.sessionId}`, 's-');
+      const ids = [...planted.matchAll(/^\s*(s-[a-z0-9]{5,})(?:\s|$)/gm)].map((match) => match[1]);
       const id = ids[ids.length - 1];
       runner.assert(Boolean(id), 'plant answered with a seed id', { planted });
       const claimed = await runInPane(client, paneA, `attn seed tend ${id} --session ${paneA.sessionId}`, 'is growing');
@@ -115,11 +121,24 @@ async function main() {
     await runner.step('the_panel_shows_the_seed', async () => {
       await client.request('open_dock_panel', { panelId: 'garden' });
       await delay(500);
+      const dock = await client.request('garden_get_state');
+      const row = dock.seeds.find((candidate) => candidate.id === seedID);
+      runner.assert(row?.displayId === seedID,
+        'the dock list always shows the seed id', { row, seedID });
+      runner.assert(row?.tender === 'tended by gardenA',
+        'the dock list names the tender session instead of exposing its id', { row, sessionId: paneA.sessionId });
       const shot = await client.request('capture_screenshot_data', { selector: '.garden-panel' });
       runner.assert(Boolean(shot?.pngBase64), 'the garden panel is on screen', {});
-      fs.writeFileSync(path.join(runner.runDir, 'garden-panel.png'), Buffer.from(shot.pngBase64, 'base64'));
+      fs.writeFileSync(path.join(runner.runDir, 'garden-list-dock.png'), Buffer.from(shot.pngBase64, 'base64'));
+
+      const full = await client.request('garden_toggle_frame');
+      runner.assert(full.frame === 'full', 'the same list expands to the full window', { full });
+      runner.assert(full.layout === 'columns', 'the wide full window uses the column list', { full });
+      const fullShot = await client.request('capture_screenshot_data', { selector: '.garden-frame' });
+      runner.assert(Boolean(fullShot?.pngBase64), 'the full Garden list is on screen', {});
+      fs.writeFileSync(path.join(runner.runDir, 'garden-list-full.png'), Buffer.from(fullShot.pngBase64, 'base64'));
       await pace();
-      await client.request('dom_click', { selector: '.garden-panel__close' });
+      await client.request('dom_click', { selector: '.garden-chrome__close' });
     });
 
     await runner.step('a_leaves_a_handoff_and_ends', async () => {
