@@ -155,6 +155,9 @@ export function validateMockAgentConfig(config) {
     if (typeof turn?.includes !== 'string' || !turn.includes) {
       throw new Error(`mock agent turn ${index} needs a non-empty includes value`);
     }
+    if (turn.submitHook !== undefined && typeof turn.submitHook !== 'boolean') {
+      throw new Error(`mock agent turn ${index} submitHook must be a boolean`);
+    }
     validateActions(turn.actions, `mock agent turn ${index}`);
   }
   validateActions(config.defaultActions ?? [], 'mock agent defaultActions');
@@ -162,8 +165,13 @@ export function validateMockAgentConfig(config) {
 }
 
 export function selectMockAgentActions(config, input) {
-  const turn = config.turns.find((candidate) => input.includes(candidate.includes));
-  return turn?.actions ?? config.defaultActions ?? [];
+  return selectMockAgentTurn(config, input).actions;
+}
+
+export function selectMockAgentTurn(config, input) {
+  return config.turns.find((candidate) => input.includes(candidate.includes)) ?? {
+    actions: config.defaultActions ?? [],
+  };
 }
 
 export function parseMockAgentArgv(argv = []) {
@@ -556,15 +564,18 @@ async function runMockAgent() {
       repaint();
       return;
     }
+    const turn = selectMockAgentTurn(config, input);
     appendMessage('user', input);
     phase = 'working';
     setTitle();
-    requireAttn(['_hook-state', 'working', 'user_prompt_submit'], JSON.stringify({ prompt: input }));
+    if (turn.submitHook !== false) {
+      requireAttn(['_hook-state', 'working', 'user_prompt_submit'], JSON.stringify({ prompt: input }));
+    }
     const workingSince = Date.now();
     // A turn silent for StaleAfter (60s) settles under the daemon.
     const beating = setInterval(setTitle, 500);
     try {
-      const actions = selectMockAgentActions(config, input);
+      const actions = turn.actions;
       for (const action of actions) await runAction(action, input);
       await delay(Math.max(0, (config.minimumWorkingMs ?? 1_500) - (Date.now() - workingSince)));
       stop(markerStateForActions(actions));

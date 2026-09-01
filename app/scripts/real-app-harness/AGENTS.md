@@ -32,6 +32,8 @@ Run commands from the repository root.
 - Give the mock a turn with `writeMockAgentFixture` in the session cwd before the
   session starts. No fixture is a silent agent, not a broken one: the pane paints
   the splash and every prompt closes its turn with no reply.
+- A turn with `submitHook: false` models injected input that no user submitted.
+  It still records the turn and runs the stop hook, but emits no prompt-submit hook.
 - A brief delivered on argv (`-- <prompt>`, how every delegation, crew wake and
   automation launch starts an agent) is the mock's first turn, matched against the
   same fixture. Its resume flags land in the transcript's `session_meta`.

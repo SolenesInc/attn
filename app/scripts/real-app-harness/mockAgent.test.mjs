@@ -21,6 +21,7 @@ import {
   MOCK_AGENT_EXECUTABLE,
   readMockAgentConfig,
   selectMockAgentActions,
+  selectMockAgentTurn,
   stateMarker,
   validateMockAgentConfig,
   writeMockAgentFixture,
@@ -52,6 +53,20 @@ describe('mock agent fixture', () => {
     expect(fs.statSync(fixture.executablePath).mode & 0o111).not.toBe(0);
     expect(selectMockAgentActions(written, 'the second turn')).toEqual(config.turns[1].actions);
     expect(selectMockAgentActions(written, 'anything else')).toEqual(config.defaultActions);
+  });
+
+  it('can model an injected turn without emitting a prompt-submit hook', () => {
+    const config = validateMockAgentConfig({
+      version: 1,
+      turns: [{ includes: '🔔', submitHook: false, actions: [] }],
+    });
+
+    expect(selectMockAgentTurn(config, '🔔 seed moved').submitHook).toBe(false);
+    expect(selectMockAgentTurn(config, 'ordinary prompt').submitHook).toBeUndefined();
+    expect(() => validateMockAgentConfig({
+      version: 1,
+      turns: [{ includes: '🔔', submitHook: 'no', actions: [] }],
+    })).toThrow('submitHook must be a boolean');
   });
 
   it('rejects misspelled actions before a scenario launches', () => {
@@ -333,6 +348,26 @@ describe('mock agent turns', () => {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
   }
+
+  it('records an injected turn without reporting a prompt-submit hook', async () => {
+    const ledger = path.join(tmpDir, 'attn-calls.jsonl');
+    writeMockAgentFixture(tmpDir, {
+      name: 'injected turn mock',
+      minimumWorkingMs: 0,
+      turns: [{
+        includes: '🔔',
+        submitHook: false,
+        actions: [{ type: 'reply', text: 'read', state: 'idle' }],
+      }],
+    });
+    child = startMock([], ledger);
+    const calls = () => fs.readFileSync(ledger, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
+
+    child.stdin.write('🔔 s-abc123 moved: note\r');
+    await waitFor(() => calls().find((call) => call.args[0] === '_hook-stop'), 'the injected turn to close');
+
+    expect(calls().some((call) => call.args[0] === '_hook-state')).toBe(false);
+  });
 
   it('takes the brief off argv as its first turn and fills a captured value into the attn call', async () => {
     const ledger = path.join(tmpDir, 'attn-calls.jsonl');

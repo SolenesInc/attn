@@ -34,7 +34,7 @@ func TestGardenSeedWatchAndBellLifecycle(t *testing.T) {
 		t.Fatalf("coalesced bell claimed=%v err=%v", claimed, err)
 	}
 	queued, err := s.UndeliveredAgentMessages("watcher")
-	if err != nil || len(queued) != 1 || queued[0].ID != first.ID {
+	if err != nil || len(queued) != 1 || queued[0].ID != first.ID || queued[0].SeedBellID != "s-7k3f9m" {
 		t.Fatalf("queued bells=%+v err=%v", queued, err)
 	}
 

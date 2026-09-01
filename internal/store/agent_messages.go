@@ -12,6 +12,7 @@ type AgentMessage struct {
 	Content         string
 	CreatedAt       string
 	DeliveredAt     string
+	SeedBellID      string
 }
 
 type AgentMessageGuardCounts struct {
@@ -54,10 +55,12 @@ func (s *Store) UndeliveredAgentMessages(targetSessionID string) ([]AgentMessage
 	defer s.mu.Unlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, sender_session_id, target_session_id, content, created_at
-		FROM agent_messages
-		WHERE target_session_id = ? AND delivered_at = ''
-		ORDER BY created_at, id
+		SELECT m.id, m.sender_session_id, m.target_session_id, m.content, m.created_at,
+		       COALESCE(b.seed_id, '')
+		FROM agent_messages m
+		LEFT JOIN garden_seed_bells b ON b.message_id = m.id
+		WHERE m.target_session_id = ? AND m.delivered_at = ''
+		ORDER BY m.created_at, m.id
 	`, targetSessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list queued agent messages: %w", err)
@@ -67,7 +70,7 @@ func (s *Store) UndeliveredAgentMessages(targetSessionID string) ([]AgentMessage
 	messages := []AgentMessage{}
 	for rows.Next() {
 		var msg AgentMessage
-		if err := rows.Scan(&msg.ID, &msg.SenderSessionID, &msg.TargetSessionID, &msg.Content, &msg.CreatedAt); err != nil {
+		if err := rows.Scan(&msg.ID, &msg.SenderSessionID, &msg.TargetSessionID, &msg.Content, &msg.CreatedAt, &msg.SeedBellID); err != nil {
 			return nil, fmt.Errorf("failed to scan queued agent message: %w", err)
 		}
 		messages = append(messages, msg)
