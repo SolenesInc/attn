@@ -883,9 +883,10 @@ func TestDaemon_ReconcileResumesTeardownWithoutRecreatingRemovedSession(t *testi
 	first := NewForTesting(filepath.Join(t.TempDir(), "first.sock"))
 	_ = first.store.Close()
 	first.store = firstStore
-	if teardown := first.unregisterSessionBeforeTeardown("closing-session"); teardown == nil {
-		t.Fatal("failed to prepare session teardown")
+	if _, err := first.prepareSessionTeardown("closing-session"); err != nil {
+		t.Fatalf("prepare session teardown: %v", err)
 	}
+	first.commitSessionUnregister("closing-session")
 	if firstStore.Get("closing-session") != nil || !firstStore.SessionCloseIntentional("closing-session") {
 		t.Fatal("teardown gap must have no session row and a durable close marker")
 	}
@@ -964,10 +965,11 @@ func TestDaemon_AsyncTeardownFailureKeepsRestartTombstone(t *testing.T) {
 		Directory: t.TempDir(), State: protocol.SessionStateWorking,
 		StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
-	teardown := d.unregisterSessionBeforeTeardown("failed-teardown")
-	if teardown == nil {
-		t.Fatal("failed to prepare session teardown")
+	teardown, err := d.prepareSessionTeardown("failed-teardown")
+	if err != nil {
+		t.Fatalf("prepare session teardown: %v", err)
 	}
+	d.commitSessionUnregister("failed-teardown")
 	d.ptyBackend = &fakeSpawnBackend{killErr: errors.New("worker still owns the child")}
 	<-d.terminateSessionAsync("failed-teardown", syscall.SIGTERM, teardown)
 	if !d.store.SessionCloseIntentional("failed-teardown") {
@@ -1017,9 +1019,10 @@ func TestDaemon_LateRegisterCannotRecreateClosingSession(t *testing.T) {
 		Directory: t.TempDir(), State: protocol.SessionStateWorking,
 		StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
-	if d.unregisterSessionBeforeTeardown("late-register") == nil {
-		t.Fatal("failed to prepare close")
+	if _, err := d.prepareSessionTeardown("late-register"); err != nil {
+		t.Fatalf("prepare close: %v", err)
 	}
+	d.commitSessionUnregister("late-register")
 	conn := &syncConn{}
 	d.handleRegister(conn, &protocol.RegisterMessage{
 		ID: "late-register", Label: protocol.Ptr("late"), Dir: t.TempDir(),

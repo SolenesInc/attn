@@ -505,11 +505,19 @@ func (d *Daemon) handleUnregisterWorkspace(client *wsClient, msg *protocol.Unreg
 	memberIDs := d.workspaces.sessionIDs(id)
 	teardowns := make(map[string]*sessionTeardown, len(memberIDs))
 	for _, sid := range memberIDs {
-		teardown := d.unregisterSessionBeforeTeardown(sid)
-		if teardown == nil {
-			continue
+		teardown, err := d.prepareSessionTeardown(sid)
+		if err != nil {
+			for preparedID := range teardowns {
+				d.cancelSessionTeardown(preparedID)
+			}
+			d.sendCommandError(client, protocol.CmdUnregisterWorkspace, err.Error())
+			return
 		}
 		teardowns[sid] = teardown
+	}
+	for _, sid := range memberIDs {
+		teardown := teardowns[sid]
+		d.commitSessionUnregister(sid)
 		d.publishSessionUnregistered(teardown.session)
 	}
 

@@ -178,6 +178,7 @@ type Daemon struct {
 	launchWatches                     map[string]*launchWatch
 	reloadingMu                       sync.Mutex
 	reloadingSessions                 map[string]bool
+	prepareSessionTeardownHook        func(string) error
 	teardownMu                        sync.Mutex
 	tearingDown                       map[string]chan struct{}
 	reloadLocksMu                     sync.Mutex
@@ -1816,7 +1817,7 @@ func (d *Daemon) unregisterSession(sessionID string, sig syscall.Signal) *protoc
 	return session
 }
 
-func (d *Daemon) unregisterSessionBeforeTeardown(sessionID string) *sessionTeardown {
+func (d *Daemon) prepareSessionTeardown(sessionID string) (*sessionTeardown, error) {
 	session := d.store.Get(sessionID)
 	if session == nil && d.hubManager != nil {
 		session = d.hubManager.RemoteSession(sessionID)
@@ -1827,13 +1828,29 @@ func (d *Daemon) unregisterSessionBeforeTeardown(sessionID string) *sessionTeard
 		}
 	}
 	d.markForcedStopClassification(sessionID)
+	if d.prepareSessionTeardownHook != nil {
+		if err := d.prepareSessionTeardownHook(sessionID); err != nil {
+			d.clearForcedStopClassification(sessionID)
+			return nil, err
+		}
+	}
 	driverRun, err := d.store.PrepareSessionTeardown(sessionID, time.Now())
 	if err != nil {
-		d.logf("session teardown intent failed for %s: %v", sessionID, err)
-		return nil
+		d.clearForcedStopClassification(sessionID)
+		return nil, err
 	}
+	return &sessionTeardown{session: session, driverRun: driverRun}, nil
+}
+
+func (d *Daemon) commitSessionUnregister(sessionID string) {
 	d.forgetSession(sessionID)
-	return &sessionTeardown{session: session, driverRun: driverRun}
+}
+
+func (d *Daemon) cancelSessionTeardown(sessionID string) {
+	d.clearForcedStopClassification(sessionID)
+	if err := d.store.CancelSessionTeardown(sessionID); err != nil {
+		d.logf("cancel session teardown failed for %s: %v", sessionID, err)
+	}
 }
 
 func (d *Daemon) resumeSessionTeardown(sessionID string) *sessionTeardown {
@@ -2753,7 +2770,12 @@ func (d *Daemon) publishSessionUnregistered(session *protocol.Session) {
 }
 
 func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage) {
-	teardown := d.unregisterSessionBeforeTeardown(msg.ID)
+	teardown, err := d.prepareSessionTeardown(msg.ID)
+	if err != nil {
+		d.sendError(conn, fmt.Sprintf("prepare session teardown: %v", err))
+		return
+	}
+	d.commitSessionUnregister(msg.ID)
 	d.sendOK(conn)
 
 	if teardown != nil && teardown.session != nil {

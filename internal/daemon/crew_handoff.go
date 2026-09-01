@@ -289,10 +289,12 @@ func (d *Daemon) crewSessionGeometry(sessionID string) (int, int) {
 }
 
 func (d *Daemon) closeNappedSession(sessionID string) {
-	teardown := d.unregisterSessionBeforeTeardown(sessionID)
-	if teardown == nil {
+	teardown, err := d.prepareSessionTeardown(sessionID)
+	if err != nil {
+		d.logf("close napped session %s: %v", sessionID, err)
 		return
 	}
+	d.commitSessionUnregister(sessionID)
 	if teardown.session != nil {
 		d.publishSessionUnregistered(teardown.session)
 		d.dissociateSessionFromWorkspace(teardown.session.ID)

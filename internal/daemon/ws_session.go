@@ -34,7 +34,12 @@ func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMe
 			endpointID = resolved
 		}
 	}
-	teardown := d.unregisterSessionBeforeTeardown(msg.ID)
+	teardown, err := d.prepareSessionTeardown(msg.ID)
+	if err != nil {
+		d.sendCommandError(client, protocol.CmdUnregister, err.Error())
+		return
+	}
+	d.commitSessionUnregister(msg.ID)
 	if teardown != nil && teardown.session != nil {
 		d.publishSessionUnregistered(teardown.session)
 		d.dissociateSessionFromWorkspace(teardown.session.ID)

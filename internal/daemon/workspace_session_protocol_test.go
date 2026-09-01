@@ -79,6 +79,52 @@ func TestWorkspaceSessionProtocolLifecycleMatchesAppOrder(t *testing.T) {
 	}
 }
 
+func TestWorkspaceLayoutClosePaneKeepsVisibleStateWhenTeardownPreparationFails(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	backend := &fakeSpawnBackend{}
+	d.ptyBackend = backend
+	client := newWorkspaceProtocolTestClient()
+	workspaceID := "workspace-close-failure"
+	sessionID := "session-close-failure"
+	paneID := "pane-close-failure"
+	cwd := t.TempDir()
+
+	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
+		Cmd: protocol.CmdRegisterWorkspace, ID: workspaceID, Title: "Close failure", Directory: cwd,
+	})
+	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
+		Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: workspaceID,
+		PaneID: protocol.Ptr(paneID), SessionID: sessionID,
+	})
+	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
+	now := protocol.TimestampNow().String()
+	d.store.Add(&protocol.Session{
+		ID: sessionID, Label: "closing", Agent: protocol.SessionAgentCodex, Directory: cwd,
+		WorkspaceID: workspaceID, State: protocol.SessionStateWorking,
+		StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	d.prepareSessionTeardownHook = func(string) error { return errors.New("tombstone write failed") }
+
+	d.handleWorkspaceLayoutClosePane(client, &protocol.WorkspaceLayoutClosePaneMessage{
+		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: paneID,
+	})
+	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, false)
+	if d.store.Get(sessionID) == nil {
+		t.Fatal("failed close removed the session")
+	}
+	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot == nil || !workspacelayout.HasPane(snapshot.Layout, paneID) {
+		t.Fatalf("failed close removed the pane: %+v", snapshot)
+	}
+	if d.hasForcedStopMark(sessionID) {
+		t.Fatal("failed close left a forced-stop classification mark")
+	}
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	if len(backend.killed) != 0 {
+		t.Fatalf("failed close killed sessions: %v", backend.killed)
+	}
+}
+
 func TestWorkspaceSessionProtocolBareSpawnEnsuresLayoutPane(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &fakeSpawnBackend{}

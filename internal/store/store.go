@@ -1013,6 +1013,44 @@ func (s *Store) ClaimSessionTeardownDriverRun(id, runID string) (bool, error) {
 	return err == nil && updated == 1, err
 }
 
+func (s *Store) CancelSessionTeardown(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.db == nil {
+		intent, found := s.teardownIntents[id]
+		if !found {
+			return nil
+		}
+		if intent.DriverRun.RunID != "" {
+			s.agentDriverRuns[id] = intent.DriverRun
+		}
+		delete(s.teardownIntents, id)
+		return nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var run AgentDriverReportCursor
+	if err := tx.QueryRow(`SELECT driver_plugin_name, driver_run_id, driver_report_seq
+		FROM session_teardown_tombstones WHERE session_id = ?`, id).Scan(&run.PluginName, &run.RunID, &run.Seq); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if run.RunID != "" {
+		if _, err := tx.Exec(`UPDATE sessions SET agent_driver_plugin_name = ?, agent_driver_run_id = ?, agent_driver_report_seq = ?
+			WHERE id = ? AND agent_driver_run_id = ''`, run.PluginName, run.RunID, run.Seq, id); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec("DELETE FROM session_teardown_tombstones WHERE session_id = ?", id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // A live session must not carry the mark, or a later genuine crash would be misread as a clean close.
 func (s *Store) ClearSessionIntentionalClose(id string) {
 	s.mu.Lock()
