@@ -1,0 +1,8 @@
+kind: fixed
+area: sessions
+change: >
+  A session that left one sessions snapshot and returned in the next came back
+  without its panes and showed an empty workspace, because the daemon layout
+  only reached a session through a workspaces message and those arrive only when
+  a layout changes. The store now keeps the daemon's current layouts and applies
+  them whenever it rebuilds a session.
