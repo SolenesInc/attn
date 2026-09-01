@@ -2939,12 +2939,14 @@ export interface DelegateMessageWorktree {
 }
 
 export interface DelegateResult {
-    branch?:           string;
-    directory:         string;
-    placement:         string;
-    session_id:        string;
-    workspace_id:      string;
-    worktree_created?: boolean;
+    branch?:                 string;
+    directory:               string;
+    first_turn_at?:          string;
+    first_turn_unconfirmed?: string;
+    placement:               string;
+    session_id:              string;
+    workspace_id:            string;
+    worktree_created?:       boolean;
     [property: string]: any;
 }
 
@@ -2962,12 +2964,14 @@ export enum DelegateResultMessageEvent {
 }
 
 export interface DelegateResultObject {
-    branch?:           string;
-    directory:         string;
-    placement:         string;
-    session_id:        string;
-    workspace_id:      string;
-    worktree_created?: boolean;
+    branch?:                 string;
+    directory:               string;
+    first_turn_at?:          string;
+    first_turn_unconfirmed?: string;
+    placement:               string;
+    session_id:              string;
+    workspace_id:            string;
+    worktree_created?:       boolean;
     [property: string]: any;
 }
 
@@ -16351,6 +16355,8 @@ const typeMap: any = {
     "DelegateResult": o([
         { json: "branch", js: "branch", typ: u(undefined, "") },
         { json: "directory", js: "directory", typ: "" },
+        { json: "first_turn_at", js: "first_turn_at", typ: u(undefined, "") },
+        { json: "first_turn_unconfirmed", js: "first_turn_unconfirmed", typ: u(undefined, "") },
         { json: "placement", js: "placement", typ: "" },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "workspace_id", js: "workspace_id", typ: "" },
@@ -16366,6 +16372,8 @@ const typeMap: any = {
     "DelegateResultObject": o([
         { json: "branch", js: "branch", typ: u(undefined, "") },
         { json: "directory", js: "directory", typ: "" },
+        { json: "first_turn_at", js: "first_turn_at", typ: u(undefined, "") },
+        { json: "first_turn_unconfirmed", js: "first_turn_unconfirmed", typ: u(undefined, "") },
         { json: "placement", js: "placement", typ: "" },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "workspace_id", js: "workspace_id", typ: "" },

@@ -2615,6 +2615,13 @@ type DelegateResult struct {
 	// Directory corresponds to the JSON schema field "directory".
 	Directory string `json:"directory"`
 
+	// FirstTurnAt corresponds to the JSON schema field "first_turn_at".
+	FirstTurnAt *string `json:"first_turn_at,omitempty,omitzero"`
+
+	// FirstTurnUnconfirmed corresponds to the JSON schema field
+	// "first_turn_unconfirmed".
+	FirstTurnUnconfirmed *string `json:"first_turn_unconfirmed,omitempty,omitzero"`
+
 	// Placement corresponds to the JSON schema field "placement".
 	Placement string `json:"placement"`
 

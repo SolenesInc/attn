@@ -675,12 +675,15 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 			d.store.UpdateSessionLabel(sessionID, name)
 			existing.Label = name
 		}
+		var watch *launchWatch
 		if !d.sessionHasLiveWorker(sessionID) {
 			if operationID != "" {
 				_ = d.store.UpdateDelegationOperation(operationID, protocol.DelegationOperationStatePreparing,
 					"recovering delegated runtime", existing.WorkspaceID, "", existing.Directory, nil, nil, time.Now())
 			}
+			watch = d.watchLaunch(sessionID)
 			if err := d.spawnDelegatedRuntime(msg, sessionID, existing.WorkspaceID, existing.Directory, existing.Label, agent, model, effort, brief, delegatedByChief); err != nil {
+				d.forgetLaunchWatch(sessionID, watch)
 				return nil, fmt.Errorf("recover delegated session runtime: %w", err)
 			}
 		}
@@ -697,7 +700,13 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 			_ = d.store.UpdateDelegationOperation(operationID, protocol.DelegationOperationStatePreparing,
 				"recovered delegated session", existing.WorkspaceID, "", worktreePath, nil, nil, time.Now())
 		}
-		return d.completedDelegationResult(existing, placement, worktreeOwned), nil
+		result := d.completedDelegationResult(existing, placement, worktreeOwned)
+		if watch != nil {
+			if err := d.confirmDelegatedLaunch(operationID, sessionID, agent, watch, result); err != nil {
+				return nil, err
+			}
+		}
+		return result, nil
 	}
 
 	switch placement {
@@ -865,7 +874,9 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 	}
 	rollback.onPaneCreated(sessionID)
 
+	watch := d.watchLaunch(sessionID)
 	if err := d.spawnDelegatedRuntime(msg, sessionID, workspaceID, directory, name, agent, model, effort, brief, delegatedByChief); err != nil {
+		d.forgetLaunchWatch(sessionID, watch)
 		return nil, rollback.fail(fmt.Errorf("spawn delegated session: %w", err))
 	}
 
@@ -905,7 +916,33 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 	if session.Branch != nil && strings.TrimSpace(*session.Branch) != "" {
 		result.Branch = protocol.Ptr(strings.TrimSpace(*session.Branch))
 	}
+	// Everything built so far stays on a failure here: the dead pane is the
+	// evidence, and undoing it would leave nothing to read.
+	rollback.abandon()
+	if err := d.confirmDelegatedLaunch(operationID, sessionID, agent, watch, result); err != nil {
+		return nil, err
+	}
 	return result, nil
+}
+
+func (d *Daemon) confirmDelegatedLaunch(operationID, sessionID, agent string, watch *launchWatch, result *protocol.DelegateResult) error {
+	if operationID != "" {
+		_ = d.store.UpdateDelegationOperation(operationID, protocol.DelegationOperationStatePreparing,
+			fmt.Sprintf("waiting for %s's first turn", agent), "", "", "", nil, nil, time.Now())
+	}
+	outcome := d.awaitDelegatedLaunch(sessionID, watch)
+	if outcome.exit != nil {
+		seedID, _ := d.gardenDispatchCrown(sessionID)
+		d.noteDelegatedExitOnSeed(seedID, agent, sessionID, outcome.exit)
+		return delegationExitError(agent, sessionID, outcome.exit)
+	}
+	if outcome.unconfirmed != "" {
+		result.FirstTurnUnconfirmed = protocol.Ptr(outcome.unconfirmed)
+	}
+	if !outcome.startedAt.IsZero() {
+		result.FirstTurnAt = protocol.Ptr(outcome.startedAt.UTC().Format(time.RFC3339Nano))
+	}
+	return nil
 }
 
 func (d *Daemon) completedDelegationResult(session *protocol.Session, placement string, worktreeCreated bool) *protocol.DelegateResult {

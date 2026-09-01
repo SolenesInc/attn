@@ -506,35 +506,50 @@ func (d *Daemon) beginPluginSessionLaunch(sessionID, pluginName, runID string) {
 
 func (d *Daemon) queueReportDuringPluginLaunch(plugin *pluginConnection, sessionID string, report pendingPluginReport) bool {
 	d.pluginDriverMu.Lock()
-	defer d.pluginDriverMu.Unlock()
 	launch, ok := d.pluginLaunching[sessionID]
 	if !ok || launch.PluginName != plugin.name || launch.RunID != report.runID() {
+		d.pluginDriverMu.Unlock()
 		return false
 	}
 	d.pluginReports[sessionID] = append(d.pluginReports[sessionID], report)
+	var watch *launchWatch
+	if report.State != nil || report.Stop != nil {
+		watch = d.claimLaunchWatch(sessionID)
+	}
+	d.pluginDriverMu.Unlock()
+	watch.settle(launchOutcome{startedAt: time.Now()})
 	return true
 }
 
 func (d *Daemon) queueHostReportDuringLaunch(sessionID string, params pluginReportStateParams) bool {
 	d.pluginDriverMu.Lock()
-	defer d.pluginDriverMu.Unlock()
 	launch, ok := d.pluginLaunching[sessionID]
 	if !ok || launch.RunID == "" || launch.RunID != strings.TrimSpace(params.RunID) {
+		d.pluginDriverMu.Unlock()
 		return false
 	}
 	d.pluginReports[sessionID] = append(d.pluginReports[sessionID], pendingPluginReport{State: &params})
+	watch := d.claimLaunchWatch(sessionID)
+	d.pluginDriverMu.Unlock()
+	watch.settle(launchOutcome{startedAt: time.Now()})
 	return true
 }
 
+// The launch replays queued reports before the queued exit whatever their
+// order, so the launch watch is claimed here, under the mutex, in arrival order.
 func (d *Daemon) queueExitDuringPluginLaunch(info ptybackend.ExitInfo) bool {
 	d.pluginDriverMu.Lock()
-	defer d.pluginDriverMu.Unlock()
 	launch, ok := d.pluginLaunching[info.ID]
 	if !ok || info.LifecycleID == "" || launch.RunID != info.LifecycleID {
+		d.pluginDriverMu.Unlock()
 		return false
 	}
 	d.logf("deferring plugin PTY exit until launch completes: session=%s run=%s", info.ID, info.LifecycleID)
 	d.pluginExits[info.ID] = info
+	watch := d.claimLaunchWatch(info.ID)
+	d.pluginDriverMu.Unlock()
+	d.captureExitScreen(info)
+	watch.settle(launchOutcome{exit: d.exitScreenOrBare(info)})
 	return true
 }
 

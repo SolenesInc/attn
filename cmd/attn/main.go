@@ -710,6 +710,9 @@ func runDelegate() {
 		fmt.Fprintf(os.Stderr, "delegate: %v\n", err)
 		os.Exit(1)
 	}
+	if operation.Result != nil && operation.Result.FirstTurnUnconfirmed != nil {
+		fmt.Fprintf(os.Stderr, "delegate: %s\n", *operation.Result.FirstTurnUnconfirmed)
+	}
 	printJSON(operation.Result)
 }
 
