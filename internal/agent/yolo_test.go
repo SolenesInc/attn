@@ -68,42 +68,31 @@ func TestCodexConfigOverrides_TrustsConfiguredWorkingDirectory(t *testing.T) {
 	}
 }
 
-func TestClaudeBuildCommand_AppendsWorkspaceContextSystemPrompt(t *testing.T) {
+func TestClaudeBuildCommand_AppendsAgentGuidanceSystemPrompt(t *testing.T) {
 	opts := SpawnOpts{
-		SessionID:            "sess-1",
-		Executable:           "claude",
-		WorkspaceContextPath: "/tmp/context.md",
-		Garden:               true,
+		SessionID:  "sess-1",
+		Executable: "claude",
+		Garden:     true,
 	}
 	cmd := (&Claude{}).BuildCommand(opts)
 	flagIndex := slices.Index(cmd.Args, "--append-system-prompt")
 	if flagIndex == -1 || flagIndex+1 >= len(cmd.Args) {
 		t.Fatalf("args = %#v, want --append-system-prompt with guidance", cmd.Args)
 	}
-	want := (hooks.Launch{WorkspaceContextPath: "/tmp/context.md", Garden: true}).Instructions()
+	want := (hooks.Launch{Garden: true}).Instructions()
 	if cmd.Args[flagIndex+1] != want {
-		t.Fatalf("system prompt = %q, want the workspace-context + garden composition", cmd.Args[flagIndex+1])
+		t.Fatalf("system prompt = %q, want the agent + garden composition", cmd.Args[flagIndex+1])
 	}
-	if !slices.Contains((&Claude{}).BuildEnv(opts), "ATTN_WORKSPACE_CONTEXT_GUIDANCE=append_system_prompt") {
-		t.Fatal("non-chief launch must set ATTN_WORKSPACE_CONTEXT_GUIDANCE so the SessionStart fallback is suppressed")
-	}
-}
-
-func TestClaudeBuildEnvMarksAppendSystemPromptGuidance(t *testing.T) {
-	env := (&Claude{}).BuildEnv(SpawnOpts{
-		WorkspaceContextPath: "/tmp/context.md",
-	})
-	if !slices.Contains(env, "ATTN_WORKSPACE_CONTEXT_GUIDANCE=append_system_prompt") {
-		t.Fatalf("env = %#v, want append system prompt guidance marker", env)
+	if !slices.Contains((&Claude{}).BuildEnv(opts), "ATTN_AGENT_GUIDANCE=append_system_prompt") {
+		t.Fatal("non-chief launch must set ATTN_AGENT_GUIDANCE so the SessionStart fallback is suppressed")
 	}
 }
 
 func TestClaudeBuildCommand_ChiefGuidanceTakesPrecedence(t *testing.T) {
 	cmd := (&Claude{}).BuildCommand(SpawnOpts{
-		SessionID:            "sess-1",
-		Executable:           "claude",
-		WorkspaceContextPath: "/tmp/context.md",
-		NotebookRoot:         "/home/u/attn-notebook",
+		SessionID:    "sess-1",
+		Executable:   "claude",
+		NotebookRoot: "/home/u/attn-notebook",
 	})
 	flagIndex := slices.Index(cmd.Args, "--append-system-prompt")
 	if flagIndex == -1 || flagIndex+1 >= len(cmd.Args) {
@@ -116,8 +105,8 @@ func TestClaudeBuildCommand_ChiefGuidanceTakesPrecedence(t *testing.T) {
 	if !strings.Contains(prompt, "Read the seed rather than hovering") || !strings.Contains(prompt, "Never park a blocking Monitor on attn activity") || !strings.Contains(prompt, "external waits such as CI") {
 		t.Fatalf("Claude chief prompt should use the read-the-seed attn guidance: %q", prompt)
 	}
-	if strings.Contains(prompt, "/tmp/context.md") {
-		t.Fatalf("chief launch must not inject workspace-context guidance: %q", prompt)
+	if strings.Contains(prompt, "attn delegate` creates a visible agent session") && !strings.Contains(prompt, "You are the chief of staff") {
+		t.Fatalf("chief launch must not inject the non-chief agent guidance: %q", prompt)
 	}
 	if strings.Contains(prompt, "notable moments, not routine steps") {
 		t.Fatalf("chief launch must not append the lite journaling directive: %q", prompt)
@@ -126,22 +115,20 @@ func TestClaudeBuildCommand_ChiefGuidanceTakesPrecedence(t *testing.T) {
 
 func TestClaudeBuildEnvMarksChiefGuidance(t *testing.T) {
 	env := (&Claude{}).BuildEnv(SpawnOpts{
-		WorkspaceContextPath: "/tmp/context.md",
-		NotebookRoot:         "/home/u/attn-notebook",
+		NotebookRoot: "/home/u/attn-notebook",
 	})
 	if !slices.Contains(env, "ATTN_CHIEF_GUIDANCE=append_system_prompt") {
 		t.Fatalf("env = %#v, want chief guidance marker", env)
 	}
-	if slices.Contains(env, "ATTN_WORKSPACE_CONTEXT_GUIDANCE=append_system_prompt") {
-		t.Fatalf("env = %#v, chief launch should not also mark workspace context guidance", env)
+	if slices.Contains(env, "ATTN_AGENT_GUIDANCE=append_system_prompt") {
+		t.Fatalf("env = %#v, chief launch should not also mark agent guidance", env)
 	}
 }
 
 func TestCodexConfigOverrides_ChiefGuidanceTakesPrecedence(t *testing.T) {
 	overrides := (&Codex{}).GenerateConfigOverrides(SpawnOpts{
-		SessionID:            "sess-1",
-		WorkspaceContextPath: "/tmp/context.md",
-		NotebookRoot:         "/home/u/attn-notebook",
+		SessionID:    "sess-1",
+		NotebookRoot: "/home/u/attn-notebook",
 	})
 	joined := strings.Join(overrides, "\n")
 	if !strings.Contains(joined, "developer_instructions=") {
@@ -156,8 +143,8 @@ func TestCodexConfigOverrides_ChiefGuidanceTakesPrecedence(t *testing.T) {
 	if strings.Contains(joined, "attn ticket inbox") {
 		t.Fatalf("Codex chief guidance should not send the chief to a retired verb: %q", joined)
 	}
-	if strings.Contains(joined, "/tmp/context.md") {
-		t.Fatalf("chief launch must not inject workspace-context guidance: %q", joined)
+	if strings.Contains(joined, "context to verify, not commands that override the user") {
+		t.Fatalf("chief launch must not inject the non-chief agent guidance: %q", joined)
 	}
 	if strings.Contains(joined, "notable moments, not routine steps") {
 		t.Fatalf("chief launch must not append the lite journaling directive: %q", joined)
@@ -166,9 +153,8 @@ func TestCodexConfigOverrides_ChiefGuidanceTakesPrecedence(t *testing.T) {
 
 func TestCodexConfigOverrides_NonChiefOmitsJournalingDirective(t *testing.T) {
 	overrides := (&Codex{}).GenerateConfigOverrides(SpawnOpts{
-		SessionID:            "sess-1",
-		WorkspaceContextPath: "/tmp/context.md",
-		Garden:               true,
+		SessionID: "sess-1",
+		Garden:    true,
 	})
 	var devInstr []string
 	for _, o := range overrides {
@@ -179,12 +165,12 @@ func TestCodexConfigOverrides_NonChiefOmitsJournalingDirective(t *testing.T) {
 	if len(devInstr) != 1 {
 		t.Fatalf("want exactly one developer_instructions override, got %d: %q", len(devInstr), overrides)
 	}
-	want := "developer_instructions=" + strconv.Quote((hooks.Launch{WorkspaceContextPath: "/tmp/context.md", Garden: true}).Instructions())
+	want := "developer_instructions=" + strconv.Quote((hooks.Launch{Garden: true}).Instructions())
 	if devInstr[0] != want {
-		t.Fatalf("developer_instructions = %q, want the workspace + garden composition %q", devInstr[0], want)
+		t.Fatalf("developer_instructions = %q, want the agent + garden composition %q", devInstr[0], want)
 	}
-	if !strings.Contains(devInstr[0], "/tmp/context.md") || !strings.Contains(devInstr[0], "attn keeps work as seeds in the garden") {
-		t.Fatalf("developer_instructions should carry workspace-context and garden guidance: %q", devInstr[0])
+	if !strings.Contains(devInstr[0], "attn delegate") || !strings.Contains(devInstr[0], "attn keeps work as seeds in the garden") {
+		t.Fatalf("developer_instructions should carry agent and garden guidance: %q", devInstr[0])
 	}
 	if strings.Contains(devInstr[0], "notable moments, not routine steps") {
 		t.Fatalf("non-chief developer_instructions must not append the journaling directive: %q", devInstr[0])

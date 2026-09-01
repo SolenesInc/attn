@@ -125,12 +125,12 @@ func TestHandleSpawnSession_PluginDriverLaunchesReturnedCommand(t *testing.T) {
 			t.Error("spawn run_id is empty, want daemon-assigned run identity")
 			return
 		}
-		if params.Instructions == nil || params.Instructions.Kind != pluginInstructionKindWorkspace || !strings.Contains(params.Instructions.Content, hooks.GardenGuidance) {
-			t.Errorf("spawn instructions=%+v, want workspace guidance", params.Instructions)
+		if params.Instructions == nil || params.Instructions.Kind != pluginInstructionKindAgent || !strings.Contains(params.Instructions.Content, hooks.GardenGuidance) {
+			t.Errorf("spawn instructions=%+v, want agent guidance", params.Instructions)
 			return
 		}
-		if params.Instructions.ContextPath == "" || params.Instructions.WorkspaceID != "workspace-snipe" {
-			t.Errorf("spawn instruction provenance=%+v, want workspace checkout", params.Instructions)
+		if params.Instructions.WorkspaceID != "workspace-snipe" {
+			t.Errorf("spawn instruction provenance=%+v, want workspace-snipe", params.Instructions)
 			return
 		}
 		respondPluginRequest(t, client, request, pluginDriverSpawnResult{

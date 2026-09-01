@@ -37,8 +37,9 @@ func TestCopilotGenerateInstructionsFileCarriesLaunchGuidance(t *testing.T) {
 		t.Fatalf("frontmatter is inlined verbatim and scopes the file away:\n%s", content)
 	}
 
-	if _, empty := (&Copilot{}).GenerateInstructionsFile(SpawnOpts{SessionID: "s"}); empty != "" {
-		t.Fatalf("a launch with nothing to say still wrote instructions:\n%s", empty)
+	_, bare := (&Copilot{}).GenerateInstructionsFile(SpawnOpts{SessionID: "s"})
+	if bare != hooks.AgentGuidance {
+		t.Fatalf("a launch outside the home should carry only the agent guidance:\n%s", bare)
 	}
 }
 

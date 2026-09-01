@@ -2400,17 +2400,8 @@ func runAgentDirectly(requestedAgent string) {
 	}
 
 	hasHooks := false
-	if agentdriver.EffectiveCapabilities(driver).HasWorkspaceContext {
-		if root := resolveChiefNotebookRoot(c, sessionID); root != "" {
-			opts.NotebookRoot = root
-		} else {
-			contextPath, checkoutErr := workspaceContextCheckoutPath(c, sessionID, 40, 25*time.Millisecond)
-			if checkoutErr != nil {
-				fmt.Fprintf(os.Stderr, "warning: could not prepare workspace context guidance: %v\n", checkoutErr)
-			} else {
-				opts.WorkspaceContextPath = contextPath
-			}
-		}
+	if agentdriver.EffectiveCapabilities(driver).HasLaunchInstructions {
+		opts.NotebookRoot = resolveChiefNotebookRoot(c, sessionID)
 	}
 	if _, err := c.SeedReady(sessionID, "", false); err == nil {
 		opts.Garden = true
@@ -2627,10 +2618,7 @@ func runHookSessionStart() {
 	_ = json.NewDecoder(os.Stdin).Decode(&input)
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
-	output, contextErr, primeErr := sessionStartHookOutput(c, sessionID, input, 40, 25*time.Millisecond)
-	if contextErr != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not load workspace context guidance: %v\n", contextErr)
-	}
+	output, primeErr := sessionStartHookOutput(c, sessionID, input)
 	if primeErr != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not load garden status: %v\n", primeErr)
 	}
@@ -2645,86 +2633,32 @@ type sessionStartHookClient interface {
 	sessionStartClient
 }
 
-func sessionStartHookOutput(
-	c sessionStartHookClient,
-	sessionID string,
-	input hookInput,
-	attempts int,
-	retryDelay time.Duration,
-) (output string, contextErr, primeErr error) {
+func sessionStartHookOutput(c sessionStartHookClient, sessionID string, input hookInput) (output string, primeErr error) {
 	observeAgentConversation(c, sessionID, input.SessionID, input.TranscriptPath)
-	contexts, contextErr, primeErr := sessionStartContexts(c, sessionID, attempts, retryDelay)
-	return hooks.SessionStartOutput(contexts...), contextErr, primeErr
+	contexts, primeErr := sessionStartContexts(c, sessionID)
+	return hooks.SessionStartOutput(contexts...), primeErr
 }
 
 type sessionStartClient interface {
-	workspaceContextCheckoutClient
 	SeedReady(sessionID, plot string, all bool) (*protocol.SeedReadyResult, error)
 }
 
-func sessionStartContexts(
-	c sessionStartClient,
-	sessionID string,
-	attempts int,
-	retryDelay time.Duration,
-) (contexts []string, contextErr, primeErr error) {
-	contextPath, contextErr := workspaceContextCheckoutPath(c, sessionID, attempts, retryDelay)
-	if contextErr == nil && !workspaceContextGuidanceProvidedAtLaunch() {
-		if guidance := hooks.WorkspaceContextGuidance(contextPath); guidance != "" {
-			contexts = append(contexts, guidance)
-		}
+// A bare harness launched outside attn's wrapper still gets the agent guidance here.
+func sessionStartContexts(c sessionStartClient, sessionID string) (contexts []string, primeErr error) {
+	if !launchGuidanceProvided() {
+		contexts = append(contexts, hooks.AgentGuidance)
 	}
 
 	ready, primeErr := c.SeedReady(sessionID, "", false)
 	if primeErr == nil {
 		contexts = append(contexts, seedPrimeTailFromReady(ready))
 	}
-	return contexts, contextErr, primeErr
+	return contexts, primeErr
 }
 
-func workspaceContextSessionStartOutput(
-	c workspaceContextCheckoutClient,
-	sessionID string,
-	attempts int,
-	retryDelay time.Duration,
-) (string, error) {
-	path, err := workspaceContextCheckoutPath(c, sessionID, attempts, retryDelay)
-	if err != nil {
-		return "", err
-	}
-	return hooks.WorkspaceContextSessionStartOutput(path), nil
-}
-
-func workspaceContextGuidanceProvidedAtLaunch() bool {
-	return strings.TrimSpace(os.Getenv("ATTN_WORKSPACE_CONTEXT_GUIDANCE")) != "" ||
+func launchGuidanceProvided() bool {
+	return strings.TrimSpace(os.Getenv("ATTN_AGENT_GUIDANCE")) != "" ||
 		strings.TrimSpace(os.Getenv("ATTN_CHIEF_GUIDANCE")) != ""
-}
-
-type workspaceContextCheckoutClient interface {
-	CheckoutWorkspaceContext(sourceSessionID string, force bool) (*protocol.WorkspaceContextResult, error)
-}
-
-func workspaceContextCheckoutPath(
-	c workspaceContextCheckoutClient,
-	sessionID string,
-	attempts int,
-	retryDelay time.Duration,
-) (string, error) {
-	if attempts < 1 {
-		attempts = 1
-	}
-	var lastErr error
-	for attempt := 0; attempt < attempts; attempt++ {
-		result, err := c.CheckoutWorkspaceContext(sessionID, false)
-		if err == nil {
-			return result.Path, nil
-		}
-		lastErr = err
-		if attempt+1 < attempts && retryDelay > 0 {
-			time.Sleep(retryDelay)
-		}
-	}
-	return "", lastErr
 }
 
 func runHookState() {

@@ -181,8 +181,6 @@ clipboard directly. No xclip / X server needed on the remote.
 
 Your agents can work as a team:
 
-- **Shared workspace context.** A living brief agents read and keep current, so
-  a new session orients itself without you re-explaining the task.
 - **Delegation.** An agent spins up a fresh, visible session with a focused
   brief (`attn delegate`). You can open that session, talk to the agent, and
   steer the work directly. Delegation is retry-safe: the CLI prints a stable

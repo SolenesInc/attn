@@ -52,8 +52,6 @@ type spawnPlan struct {
 	chiefAssigned                bool
 	isChief                      bool
 	chiefAssignmentCommitted     bool
-	instructionsRollback         func()
-	instructionsCommitted        bool
 	priorIntent                  store.LaunchIntent
 	hadPriorIntent               bool
 }
@@ -90,9 +88,6 @@ func (plan *spawnPlan) rollback(d *Daemon, sessionID string) {
 	if plan.chiefAssigned && !plan.chiefAssignmentCommitted {
 		d.clearChiefOfStaffIfSession(sessionID)
 	}
-	if !plan.instructionsCommitted {
-		plan.instructionsRollback()
-	}
 }
 
 func (plan *spawnPlan) restoreLaunchIntent(d *Daemon, sessionID string) {
@@ -105,7 +100,6 @@ func (plan *spawnPlan) restoreLaunchIntent(d *Daemon, sessionID string) {
 
 func (plan *spawnPlan) commit() {
 	plan.chiefAssignmentCommitted = true
-	plan.instructionsCommitted = true
 }
 
 func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (*spawnRequest, *spawnRejection) {
@@ -210,7 +204,7 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 			return nil, &spawnRejection{err: fmt.Errorf("cannot pick up the conversation at %s: it is a directory, not a conversation file", resume)}
 		}
 	}
-	plan := &spawnPlan{cleanupInitialPrompt: func() {}, instructionsRollback: func() {}}
+	plan := &spawnPlan{cleanupInitialPrompt: func() {}}
 	if !req.hasPluginDriver {
 		initialPromptFile, cleanup, err := d.writeInitialPromptFile(msg.ID, req.initialPrompt)
 		if err != nil {
@@ -299,14 +293,14 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			params.Metadata = json.RawMessage(metadata)
 		}
 		if req.pluginDriver.Capabilities["launch_instructions"] {
-			instructions, rollback, err := d.preparePluginLaunchInstructions(msg.ID, req.workspaceID, plan.isChief,
+			instructions, err := d.preparePluginLaunchInstructions(msg.ID, req.workspaceID, plan.isChief,
 				!req.pluginDriver.Capabilities["pull_request_reporting"])
 			if err != nil {
 				d.finishPluginSessionLaunch(msg.ID, false)
 				plan.rollback(d, msg.ID)
 				return &spawnOutcome{err: err}
 			}
-			params.Instructions, plan.instructionsRollback = instructions, rollback
+			params.Instructions = instructions
 		}
 		if req.pluginDriver.Capabilities["auto_mode"] {
 			cfg, err := d.store.GetAutoModeConfig()

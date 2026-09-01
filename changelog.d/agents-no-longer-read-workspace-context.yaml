@@ -1,0 +1,15 @@
+kind: changed
+area: sessions
+change: >
+  Agents are no longer told to read, update, or publish the workspace's shared
+  context. The launch banner that pointed every session at its context checkout
+  is gone, the attn skill no longer documents the practice, and the chief of
+  staff is no longer invited to consult it. Nothing replaces it. Sessions still
+  receive the rest of their launch guidance: how to treat delegated reports and
+  fetched content, when to use `attn delegate` versus a native subagent, and the
+  garden.
+notes: >
+  The checkout machinery (`attn workspace context`, the keeper, the app's
+  context navigator) stays for now; only the guidance pointing agents at it is
+  removed. Copilot and plugin harnesses gain the delegation rule, which used to
+  travel only with the workspace block.

@@ -375,7 +375,6 @@ type preparedPluginReload struct {
 	sessionID  string
 	pluginName string
 	runID      string
-	rollback   func()
 	completed  bool
 }
 
@@ -384,7 +383,6 @@ func (p *preparedPluginReload) abort() {
 		return
 	}
 	p.completed = true
-	p.rollback()
 	p.d.abortPluginSessionLaunch(p.sessionID, "launch_failed")
 }
 
@@ -418,14 +416,14 @@ func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend
 	}
 	runID := uuid.NewString()
 	d.beginPluginSessionLaunch(session.ID, reg.PluginName, runID)
-	instructions, rollback, err := d.preparePluginLaunchInstructions(session.ID, session.WorkspaceID, isChief,
+	instructions, err := d.preparePluginLaunchInstructions(session.ID, session.WorkspaceID, isChief,
 		!reg.Capabilities["pull_request_reporting"])
 	if err != nil {
 		d.finishPluginSessionLaunch(session.ID, false)
 		return nil, err
 	}
 	prepared := &preparedPluginReload{
-		d: d, sessionID: session.ID, pluginName: reg.PluginName, runID: runID, rollback: rollback,
+		d: d, sessionID: session.ID, pluginName: reg.PluginName, runID: runID,
 	}
 	params := pluginDriverSpawnParams{
 		Agent:        reg.Agent,
