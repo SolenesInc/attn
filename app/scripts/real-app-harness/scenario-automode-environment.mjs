@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 
-import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
-import { delay } from './platform.mjs';
+import { appDaemonInTree, delay } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -46,7 +45,7 @@ function makeAttnRunner(attnBin, profile) {
 }
 
 function resolveAttnBinary(appPath) {
-  return path.join(appPath, 'Contents', 'MacOS', 'attn');
+  return appDaemonInTree(appPath);
 }
 
 const hold = () => (process.env.ATTN_HARNESS_RECORD === '1' ? delay(1500) : Promise.resolve());
@@ -87,17 +86,17 @@ async function main() {
 
   const slotValues = (env, id) => env?.slots?.find((slot) => slot.id === id)?.values ?? [];
   const readEnv = () => runAttn(['automode', 'env', '--json']).json?.environment ?? { slots: [], notes: [] };
-  const before = slotValues(readEnv(), SLOT);
-  const restore = () =>
-    before.length > 0
-      ? runAttn(['automode', 'env', 'set', SLOT, ...before])
-      : runAttn(['automode', 'env', 'clear', SLOT]);
-  runner.registerCleanup('restore_environment', restore);
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
 
   try {
     await launchFreshAppAndConnect(client, observer);
+    const before = slotValues(readEnv(), SLOT);
+    const restore = () =>
+      before.length > 0
+        ? runAttn(['automode', 'env', 'set', SLOT, ...before])
+        : runAttn(['automode', 'env', 'clear', SLOT]);
+    runner.registerCleanup('restore_environment', restore);
 
     await runner.step('settings_opens_on_auto_mode', async () => {
       await client.request('dismiss_whats_new');

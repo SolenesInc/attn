@@ -13,7 +13,7 @@ import {
   DEFAULT_PROFILE_HARNESS_PACKAGING_PROFILE,
 } from './defaultProfileHarness.mjs';
 import { resolveHarnessResources } from './harnessProfile.mjs';
-import { createWindowDriver } from './platform.mjs';
+import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -513,7 +513,7 @@ async function main() {
   const resources = { ...profileResources, appPath: path.resolve(options.appPath) };
   options.appPath = resources.appPath;
   options.wsUrl = `ws://127.0.0.1:${resources.wsPort}/ws`;
-  const binary = path.join(resources.appPath, 'Contents', 'MacOS', 'attn');
+  const binary = appDaemonInTree(resources.appPath);
   if (!fs.existsSync(binary)) {
     throw new Error(`default-profile harness bundle is missing; run make build-default-profile-harness (${binary})`);
   }

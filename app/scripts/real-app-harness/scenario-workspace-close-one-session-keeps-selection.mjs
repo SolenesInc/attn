@@ -226,6 +226,13 @@ async function main() {
 
     await runner.step('verify_selection_restored', async () => {
       await waitForActiveSession(client, initialSessionId, 'remaining workspace session selected after close');
+      await waitForSessionWorkspace(
+        client,
+        initialSessionId,
+        (workspace) => (workspace?.panes || []).length === 1,
+        'remaining workspace collapsed to one pane after close',
+        15_000,
+      );
       await assertRemainingWorkspaceSelected(runner, client, initialSessionId, splitSessionId);
       note(`remaining workspace session selected after close`, { initialSessionId });
     });

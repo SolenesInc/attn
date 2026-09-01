@@ -107,6 +107,14 @@ const darwinPlatform = {
     return new MacOSDriver(options);
   },
 
+  // The AX set-position call also nudges the WebView out of the
+  // off-screen-init throttle state it otherwise enters.
+  async placeWindow(driver, { parkPx }) {
+    if (Number.isInteger(parkPx) && parkPx > 0) {
+      await driver.parkWindow(parkPx);
+    }
+  },
+
   readClipboard() {
     try {
       return execFileSync('pbpaste', { encoding: 'utf8' });
@@ -170,6 +178,13 @@ const linuxPlatform = {
 
   createWindowDriver(options) {
     return new LinuxDriver(options);
+  },
+
+  // Without a window manager (Xvfb) GTK opens the window at its 800x600
+  // minimum; two split panes need the configured 1200x800 to both stay live.
+  async placeWindow(driver, { pid }) {
+    await driver.waitForWindowTitled(driver.appName, { timeoutMs: 10_000 });
+    await driver.setWindowBounds({ x: 0, y: 0, width: 1200, height: 800 }, { pid });
   },
 
   readClipboard() {

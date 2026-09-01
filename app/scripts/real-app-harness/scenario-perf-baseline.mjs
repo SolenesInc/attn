@@ -14,6 +14,7 @@ import { getMachineFingerprint, loadBaseline, recordOrCompareBaseline } from './
 import { buildBaselineVerdict, evaluateRssBaseline } from './rssBaselineVerdict.mjs';
 import { captureFrontWindowScreenshot, getFrontWindowBounds, setFrontWindowBounds } from './nativeWindowCapture.mjs';
 import { delay, captureWebKitPids, snapshot, classRssMb, sampleWindow, readLiveDaemonPid, stopDaemon, paneIdForSession, closeSessions, fillAllPanes, readRegionFootprint, readGraphicsRegions, readAppFootprint } from './perfMeasure.mjs';
+import { appDaemonInTree } from './platform.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -183,7 +184,7 @@ function reportSessionState(bin, socketPath, sessionId, state) {
 
 async function markSessionsIdle(client, options, sessionIds) {
   const profile = profileForAppPath(options.appPath);
-  const bin = path.join(options.appPath, 'Contents', 'MacOS', 'attn');
+  const bin = appDaemonInTree(options.appPath);
   const socketPath = socketPathForProfile(profile);
   for (const sessionId of sessionIds) {
     await reportSessionState(bin, socketPath, sessionId, 'idle');

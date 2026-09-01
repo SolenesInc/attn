@@ -11,7 +11,7 @@ import {
   printCommonHelp,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { createWindowDriver, delay } from './platform.mjs';
+import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import {
   waitForFirstWorkspacePane,
@@ -339,7 +339,7 @@ async function main() {
       // agent's writes have to be real writes.
       fs.writeFileSync(path.join(cwd, 'build', claudeEdited), '# Claude wrote this\n', 'utf8');
       fs.writeFileSync(path.join(cwd, 'build', codexEdited), '# Codex wrote this\n', 'utf8');
-      const hookBin = path.join(options.appPath, 'Contents', 'MacOS', 'attn');
+      const hookBin = appDaemonInTree(options.appPath);
       // The hook routes by env: pin it at the profile under test so a run can
       // never reach another world's daemon.
       const socketPath = socketPathForProfile(profileForAppPath(options.appPath));

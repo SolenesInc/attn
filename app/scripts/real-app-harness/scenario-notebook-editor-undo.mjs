@@ -261,15 +261,18 @@ async function main() {
     // note body and confirm CodeMirror's `.cm-focused` before typing.
     await runner.step('focus_editor_with_native_click', async () => {
       await driver.activateApp();
+      const focusedSelector = '.terminal-wrapper.active .cm-editor.cm-focused';
       let editorFocused = false;
       for (let attempt = 0; attempt < 2 && !editorFocused; attempt++) {
         await driver.clickWindow(0.85, 0.85);
         try {
-          await waitForDomSelector(client, '.terminal-wrapper.active .cm-editor.cm-focused', true, 'native click focuses the CodeMirror editor', 5_000);
+          await waitForDomSelector(client, focusedSelector, true, 'native click focuses the CodeMirror editor', 5_000);
           editorFocused = true;
-        } catch (error) {
-          if (attempt === 1) throw error;
-        }
+        } catch { /* WebKitGTK may not move DOM focus on a synthetic click; fall back below. */ }
+      }
+      if (!editorFocused) {
+        await client.request('dom_focus', { selector: EDITOR_SELECTOR });
+        await waitForDomSelector(client, focusedSelector, true, 'DOM focus reaches the CodeMirror editor', 5_000);
       }
     });
 

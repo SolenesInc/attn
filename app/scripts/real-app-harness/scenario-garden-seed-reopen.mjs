@@ -10,6 +10,7 @@ import {
 import { waitForFirstWorkspacePane, waitForPaneShellReady } from './scenarioAssertions.mjs';
 import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { delay } from './platform.mjs';
+import { writeMockAgentFixture } from './mockAgent.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -46,9 +47,11 @@ async function runInPane(client, pane, command, expected, timeoutMs = 30_000) {
   let text = '';
   while (Date.now() < deadline) {
     await delay(250);
-    text = flat((await client.request('read_pane_text', pane)).text || '');
-    if (occurrences(text, mark) >= 2) {
-      const first = text.indexOf(mark) + mark.length;
+    const raw = (await client.request('read_pane_text', pane)).text || '';
+    text = flat(raw);
+    if (raw.split('\n').some((line) => line.trim() === mark)) {
+      const typed = text.lastIndexOf(`echo ${mark}`);
+      const first = typed >= 0 ? typed + `echo ${mark}`.length : text.indexOf(mark) + mark.length;
       const out = text.slice(first, text.lastIndexOf(mark));
       if (saw(out, expected)) return out;
       throw new Error(`${JSON.stringify(command)} did not answer with ${JSON.stringify(expected)}:\n${out}`);
@@ -57,19 +60,17 @@ async function runInPane(client, pane, command, expected, timeoutMs = 30_000) {
   throw new Error(`pane never finished ${JSON.stringify(command)}:\n${text}`);
 }
 
-function occurrences(haystack, needle) {
-  let count = 0;
-  let at = haystack.indexOf(needle);
-  while (at !== -1) {
-    count += 1;
-    at = haystack.indexOf(needle, at + needle.length);
-  }
-  return count;
-}
 
 async function openPane(client, observer, runner, label) {
   const cwd = path.join(runner.sessionDir, label);
   fs.mkdirSync(cwd, { recursive: true });
+  writeMockAgentFixture(cwd, {
+    name: 'reopen mock',
+    turns: [{
+      includes: 'GSREOPEN_READY',
+      actions: [{ type: 'reply', text: 'GSREOPEN_READY', state: 'waiting_input' }],
+    }],
+  });
   const sessionId = await createSessionAndWaitForInitialPane({
     client, observer, cwd, label, agent: 'shell',
   });
@@ -97,10 +98,12 @@ async function waitForRenderedReply(client, sessionId, expected, timeoutMs = 120
   const deadline = Date.now() + timeoutMs;
   let last = '';
   while (Date.now() < deadline) {
-    last = flat((await client.request('read_pane_text', { sessionId, paneId: pane.paneId })).text || '');
-    if (occurrences(last, expected) >= 2 && !last.includes('Working (')) return;
+    last = (await client.request('read_pane_text', { sessionId, paneId: pane.paneId })).text || '';
+    const answered = last.split('\n').some((line) => line.trim() === expected);
+    if (answered && !last.includes('Working (')) return;
     await delay(250);
   }
+  last = flat(last);
   throw new Error(`Timed out waiting for ${JSON.stringify(expected)} from ${sessionId}:\n${last}`);
 }
 
@@ -147,6 +150,7 @@ async function main() {
         timeoutMs: 30_000,
       });
       await ensureCodexPromptReadyViaPty(client, spawned, 60_000);
+      await client.request('select_session', { sessionId: spawned });
       await waitForRenderedReply(client, spawned, 'GSREOPEN_READY');
       return spawned;
     });

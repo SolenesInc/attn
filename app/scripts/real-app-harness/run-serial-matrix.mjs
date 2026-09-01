@@ -13,7 +13,7 @@ import {
   defaultWSURLForProfile,
   isProductionHarnessTarget,
 } from './harnessProfile.mjs';
-import { formatResultTable, selectFailedScenarios } from './matrixDigest.mjs';
+import { formatResultTable, scenarioSkipReason, selectFailedScenarios } from './matrixDigest.mjs';
 import { resolveScenarios as resolveScenariosFromCatalog, scenarioCatalog, scenariosAllowingRealAgents } from './scenarioCatalog.mjs';
 import { acquireScenarioLock, packagedAppScenarioLockPath } from './scenarioRunner.mjs';
 
@@ -306,6 +306,14 @@ async function main() {
 
   for (const scenario of scenarios) {
     console.log(`\n=== ${scenario.label} (${scenario.id}) ===`);
+    const skipReason = scenarioSkipReason(scenario);
+    if (skipReason) {
+      console.log(`--- ${scenario.id}: skipped on ${process.platform}: ${skipReason} ---`);
+      results.push({
+        id: scenario.id, label: scenario.label, code: 0, skipped: true, skipReason, durationMs: 0,
+      });
+      continue;
+    }
     const result = await runScenario(scenario, timeoutMs, runAgainstProd);
     results.push(result);
     const status = result.code === 0 ? 'ok' : (result.timedOut ? 'timed-out' : 'failed');
@@ -319,10 +327,12 @@ async function main() {
   }
 
   const failed = results.filter((result) => result.code !== 0);
+  const skipped = results.filter((result) => result.skipped);
   const summary = {
     ok: failed.length === 0,
     scenarioCount: results.length,
     failedCount: failed.length,
+    skippedCount: skipped.length,
     results: results.map(({ outputTail: _outputTail, ...rest }) => rest),
   };
   console.log(`\nSerial matrix summary:\n${JSON.stringify(summary, null, 2)}`);
@@ -342,6 +352,10 @@ async function main() {
       finishedAt: new Date().toISOString(),
       results: results.map((result) => {
         const entry = { id: result.id, code: result.code };
+        if (result.skipped) {
+          entry.skipped = true;
+          entry.skipReason = result.skipReason;
+        }
         if (result.code !== 0 && result.outputTail) {
           entry.outputTail = result.outputTail;
         }

@@ -9,6 +9,7 @@ import { currentHarnessProfile, resolveHarnessResources, profileCliEnv as profil
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
+import { appDaemonInTree } from './platform.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -168,7 +169,7 @@ async function main() {
   const profile = currentHarnessProfile();
   if (!profile) throw new Error('automation surface scenario requires a named non-production profile');
   const resources = resolveHarnessResources(profile);
-  const binary = path.join(resources.appPath, 'Contents', 'MacOS', 'attn');
+  const binary = appDaemonInTree(resources.appPath);
   const runner = createScenarioRunner(options, {
     scenarioId: 'AUTOMATION-SURFACE',
     allowRealAgents: false,

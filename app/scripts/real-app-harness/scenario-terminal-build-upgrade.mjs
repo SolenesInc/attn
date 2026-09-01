@@ -21,6 +21,7 @@ import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
+import { appDaemonInTree } from './platform.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HARNESS_DIR, '../../..');
@@ -60,7 +61,7 @@ function readRegistryEntry(dataDir, sessionId) {
 }
 
 function restartDaemon(appPath, profile) {
-  const binary = path.join(appPath, 'Contents', 'MacOS', 'attn');
+  const binary = appDaemonInTree(appPath);
   // profileCliEnv, not a hand-built env: a harness driven from inside attn
   // inherits ATTN_DATA_DIR and would land on production ~/.attn.
   const env = profileCliEnv(profile);

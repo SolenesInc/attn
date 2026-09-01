@@ -88,6 +88,26 @@ describe('the shim a real agent exec lands in', () => {
       'unattributed\tcopilot --version',
     ]);
   });
+
+  it('lets only pi pass a bare --version probe through to the real binary without a ledger entry', () => {
+    const env = freshEnv();
+    const tripwire = armAgentTripwire({ scenarioId: 'TR-201', runDir, env, log: () => {} });
+    const realDir = path.join(runDir, 'real-bin');
+    fs.mkdirSync(realDir, { recursive: true });
+    fs.writeFileSync(path.join(realDir, 'pi'), '#!/bin/sh\necho pi 9.9.9\n', { mode: 0o755 });
+
+    const probe = spawnSync(path.join(tripwire.dir, 'pi'), ['--version'], {
+      encoding: 'utf8', env: { ...env, PATH: `${tripwire.dir}:${realDir}:/usr/bin:/bin` },
+    });
+    expect(probe.status).toBe(0);
+    expect(probe.stdout.trim()).toBe('pi 9.9.9');
+
+    const missing = spawnSync(path.join(tripwire.dir, 'pi'), ['--version'], {
+      encoding: 'utf8', env: { ...env, PATH: `${tripwire.dir}:/usr/bin:/bin` },
+    });
+    expect(missing.status).toBe(127);
+    expect(tripwire.read()).toEqual([]);
+  });
 });
 
 describe('what a scenario arms', () => {

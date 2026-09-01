@@ -69,6 +69,31 @@ describe('linux app control', () => {
   it('never discovers pids by command-line pattern', async () => {
     await expect(linux.listAppPids({ appPath: '/home/someone/.local/share/attn-dev' })).resolves.toEqual([]);
   });
+
+  it('sizes the window to the configured default, since no window manager applies it', async () => {
+    const driver = {
+      appName: 'attn-dev',
+      waitForWindowTitled: vi.fn(async () => ({ id: 7 })),
+      setWindowBounds: vi.fn(async () => ({})),
+    };
+    await linux.placeWindow(driver, { parkPx: 20, pid: 4242 });
+    expect(driver.waitForWindowTitled).toHaveBeenCalledWith('attn-dev', { timeoutMs: 10_000 });
+    expect(driver.setWindowBounds).toHaveBeenCalledWith({ x: 0, y: 0, width: 1200, height: 800 }, { pid: 4242 });
+  });
+});
+
+describe('darwin window placement', () => {
+  it('parks the window by the visible strip it was asked for', async () => {
+    const driver = { parkWindow: vi.fn(async () => {}) };
+    await darwin.placeWindow(driver, { parkPx: 20, pid: 4242 });
+    expect(driver.parkWindow).toHaveBeenCalledWith(20);
+  });
+
+  it('leaves the window alone when parking is off', async () => {
+    const driver = { parkWindow: vi.fn(async () => {}) };
+    await darwin.placeWindow(driver, { parkPx: 0, pid: 4242 });
+    expect(driver.parkWindow).not.toHaveBeenCalled();
+  });
 });
 
 describe('LinuxDriver.waitForMainWindow', () => {
