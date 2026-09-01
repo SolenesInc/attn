@@ -3,7 +3,7 @@ import { gardenPathToSeed, gardenScrollMemory, seedParentID, useGardenWalk } fro
 import type { Seed, SeedHandoverOptions, SeedSendToChiefOptions } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { isAccelKeyPressed } from '../shortcuts/platform';
-import { crewDisplayName, crewHolderName } from '../utils/crewName';
+import { crewDisplayName } from '../utils/crewName';
 import {
   IS_VALUES,
   buildIndex,
@@ -47,6 +47,7 @@ interface GardenPanelProps {
   reviewOpening?: boolean;
   reviewError?: string;
   onOpenReview?: () => void;
+  tenderSessionLabels?: ReadonlyMap<string, string>;
 }
 
 const COLUMNS_MIN = 1160;
@@ -113,8 +114,10 @@ function isPlot(seed: Seed): boolean {
   return Boolean(seed.plot_progress);
 }
 
-function tenderOf(seed: Seed): string {
-  return crewHolderName(seed.tender_member, seed.tender_session);
+function tenderOf(seed: Seed, sessionLabels?: ReadonlyMap<string, string>): string {
+  if (seed.tender_member.trim()) return crewDisplayName(seed.tender_member);
+  if (!seed.tender_session.trim()) return '';
+  return sessionLabels?.get(seed.tender_session)?.trim() || 'session';
 }
 
 interface Relation {
@@ -233,12 +236,23 @@ interface RowProps {
   match?: SeedMatch;
   home?: Seed;
   option?: boolean;
+  tenderSessionLabels?: ReadonlyMap<string, string>;
 }
 
-function SeedRow({ seed, blockers, onOpen, selected, active, match, home, option }: RowProps) {
+function SeedRow({
+  seed,
+  blockers,
+  onOpen,
+  selected,
+  active,
+  match,
+  home,
+  option,
+  tenderSessionLabels,
+}: RowProps) {
   const progress = seed.plot_progress;
   const signal = signalOf(seed, blockers);
-  const tender = tenderOf(seed);
+  const tender = tenderOf(seed, tenderSessionLabels);
   return (
     <li
       className={`garden-row ${statusClass(seed.status)}${isClosed(seed) ? ' is-closed' : ''}${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}`}
@@ -252,13 +266,23 @@ function SeedRow({ seed, blockers, onOpen, selected, active, match, home, option
         onClick={() => onOpen(seed.id)}
       >
         <span className="garden-row__pip" aria-hidden="true" />
-        <span className="garden-row__title">
-          <Marked text={seed.title} ranges={match?.titleRanges ?? []} />
+        <span className="garden-row__content">
+          <span className="garden-row__primary">
+            <span className="garden-row__title">
+              <Marked text={seed.title} ranges={match?.titleRanges ?? []} />
+            </span>
+            {signal && <span className={`garden-row__signal is-${signal.tone}`}>{signal.text}</span>}
+          </span>
+          <span className="garden-row__meta">
+            <span className={`garden-row__id${match?.idHit ? ' garden-hit' : ''}`}>{seed.id}</span>
+            {tender && (
+              <span className="garden-row__tender" title={seed.tender_session || undefined}>
+                tended by {tender}
+              </span>
+            )}
+            {home && <span className="garden-row__home">in {home.title}</span>}
+          </span>
         </span>
-        {signal && <span className={`garden-row__signal is-${signal.tone}`}>{signal.text}</span>}
-        {home && <span className="garden-row__home">in {home.title}</span>}
-        {tender && <span className="garden-row__tender">tended by {tender}</span>}
-        <span className={`garden-row__id${match?.idHit ? ' garden-hit' : ''}`}>{seed.id}</span>
         {progress && (
           <span className="garden-row__plot">
             {progress.done}/{progress.total}
@@ -288,9 +312,23 @@ interface ListProps {
   emptyMessage?: React.ReactNode;
   listId?: string;
   options?: boolean;
+  tenderSessionLabels?: ReadonlyMap<string, string>;
 }
 
-function SeedList({ seeds, index, onOpen, selectedId, activeId, matchByID, homes, hereId, emptyMessage, listId, options }: ListProps) {
+function SeedList({
+  seeds,
+  index,
+  onOpen,
+  selectedId,
+  activeId,
+  matchByID,
+  homes,
+  hereId,
+  emptyMessage,
+  listId,
+  options,
+  tenderSessionLabels,
+}: ListProps) {
   if (seeds.length === 0) return emptyMessage ? <p className="garden-empty">{emptyMessage}</p> : null;
   return (
     <ul className="garden-list" id={listId} role={options ? 'listbox' : undefined}>
@@ -305,6 +343,7 @@ function SeedList({ seeds, index, onOpen, selectedId, activeId, matchByID, homes
           match={matchByID?.get(seed.id)}
           home={homes && crownOf(seed) !== hereId ? index.byID.get(crownOf(seed)) : undefined}
           option={options}
+          tenderSessionLabels={tenderSessionLabels}
         />
       ))}
     </ul>
@@ -350,6 +389,7 @@ function ColumnList({
   selectedId,
   memory,
   onOpen,
+  tenderSessionLabels,
 }: {
   levelKey: string;
   seeds: Seed[];
@@ -357,6 +397,7 @@ function ColumnList({
   selectedId: string;
   memory: React.MutableRefObject<Map<string, number>>;
   onOpen: (id: string) => void;
+  tenderSessionLabels?: ReadonlyMap<string, string>;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   useLayoutEffect(() => {
@@ -378,6 +419,7 @@ function ColumnList({
         index={index}
         onOpen={onOpen}
         selectedId={selectedId}
+        tenderSessionLabels={tenderSessionLabels}
         emptyMessage={<>Nothing here yet.</>}
       />
     </div>
@@ -428,6 +470,7 @@ export function GardenPanel({
   reviewOpening = false,
   reviewError = '',
   onOpenReview,
+  tenderSessionLabels,
 }: GardenPanelProps) {
   const trail = useGardenWalk((walk) => walk.trail);
   const setTrail = useGardenWalk((walk) => walk.setTrail);
@@ -489,8 +532,11 @@ export function GardenPanel({
   // Lowercased once per snapshot: doing it per keystroke is what makes
   // client-side search feel slow; receipts in gardenSearch.bench.ts.
   const entries = useMemo(
-    () => buildIndex(seeds, { tenderOf, blockersOf: (seed: Seed) => index.blockers.get(seed.id) ?? 0 }),
-    [seeds, index],
+    () => buildIndex(seeds, {
+      tenderOf: (seed: Seed) => tenderOf(seed, tenderSessionLabels),
+      blockersOf: (seed: Seed) => index.blockers.get(seed.id) ?? 0,
+    }),
+    [seeds, index, tenderSessionLabels],
   );
   const entryByID = useMemo(() => {
     const map = new Map<string, SearchEntry>();
@@ -1023,6 +1069,7 @@ export function GardenPanel({
       hereId={plotId}
       options
       listId="garden-results"
+      tenderSessionLabels={tenderSessionLabels}
     />
   );
 
@@ -1065,7 +1112,11 @@ export function GardenPanel({
             <span className="garden-row__pip" aria-hidden="true" />
             {here.status}
           </span>
-          {tenderOf(here) && <span>tended by {tenderOf(here)}</span>}
+          {tenderOf(here, tenderSessionLabels) && (
+            <span title={here.tender_session || undefined}>
+              tended by {tenderOf(here, tenderSessionLabels)}
+            </span>
+          )}
           {here.planter_member && <span>by {crewDisplayName(here.planter_member)}</span>}
           <span>{formatPlantedAt(here.created_at)}</span>
           <span className="garden-head__id">{here.id}</span>
@@ -1145,6 +1196,7 @@ export function GardenPanel({
               seeds={lens(children)}
               index={index}
               onOpen={drillInto}
+              tenderSessionLabels={tenderSessionLabels}
               emptyMessage={<>Nothing planted in this plot yet. <code>attn seed plant &quot;what this is&quot; --part-of {here.id}</code> puts something in it.</>}
             />
           )}
@@ -1265,6 +1317,7 @@ export function GardenPanel({
                 selectedId={level.selectedId}
                 memory={scrollMemory}
                 onOpen={(id) => selectAtLevel(firstVisibleLevel + offset, id)}
+                tenderSessionLabels={tenderSessionLabels}
               />
             ))
           )}
@@ -1322,6 +1375,7 @@ export function GardenPanel({
                   index={index}
                   onOpen={drillInto}
                   selectedId={livingTrail[0] ?? ''}
+                  tenderSessionLabels={tenderSessionLabels}
                   emptyMessage={<>The garden is empty. <code>attn seed plant &quot;what this is&quot;</code> puts something in it.</>}
                 />
               )}
