@@ -8670,10 +8670,20 @@ type StateMessage struct {
 	State string `json:"state"`
 }
 
+type StopBackgroundTask struct {
+	// Name corresponds to the JSON schema field "name".
+	Name *string `json:"name,omitempty,omitzero"`
+
+	// Status corresponds to the JSON schema field "status".
+	Status string `json:"status"`
+
+	// Type corresponds to the JSON schema field "type".
+	Type string `json:"type"`
+}
+
 type StopMessage struct {
-	// BackgroundTaskStatuses corresponds to the JSON schema field
-	// "background_task_statuses".
-	BackgroundTaskStatuses []string `json:"background_task_statuses,omitempty,omitzero"`
+	// BackgroundTasks corresponds to the JSON schema field "background_tasks".
+	BackgroundTasks []StopBackgroundTask `json:"background_tasks,omitempty,omitzero"`
 
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`

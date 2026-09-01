@@ -814,8 +814,16 @@ model StopMessage {
   cmd: "stop";
   id: string;
   transcript_path: string;
-  background_task_statuses?: string[];
+  background_tasks?: StopBackgroundTask[];
   pending_session_crons?: int32;
+}
+
+// One entry of the harness's background task list at stop time, verbatim: the
+// daemon logs type and name so a stop judged non-terminal names what held it.
+model StopBackgroundTask {
+  type: string;
+  status: string;
+  name?: string;
 }
 
 model TodosMessage {

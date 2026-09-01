@@ -2634,13 +2634,14 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		hasPendingSessionCron(msg),
 	)
 	if stopIsNonTerminal(msg, relaxBackgroundWork) {
+		tasks := describeBackgroundTasks(msg)
 		d.logf(
-			"handleStop: non-terminal stop session=%s background_tasks=%d pending_crons=%d",
-			msg.ID, len(msg.BackgroundTaskStatuses), protocol.Deref(msg.PendingSessionCrons),
+			"handleStop: non-terminal stop session=%s pending_crons=%d background_tasks=[%s]",
+			msg.ID, protocol.Deref(msg.PendingSessionCrons), tasks,
 		)
 		d.traceStateEvidence(
 			msg.ID,
-			stateOrigin{source: stateSourceStopHook, detail: "non-terminal stop"},
+			stateOrigin{source: stateSourceStopHook, detail: "non-terminal stop: " + tasks},
 			"",
 		)
 		d.sendOK(conn)
