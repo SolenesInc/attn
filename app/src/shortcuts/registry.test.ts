@@ -285,8 +285,9 @@ describe('shortcut registry', () => {
         'board.open',
       ];
       for (const id of rehomed) {
-        expect(LINUX_SHORTCUTS[id], id).toMatchObject({ meta: true, alt: true });
-        expect(LINUX_SHORTCUTS[id].shift, id).not.toBe(true);
+        const linux: ShortcutDef = LINUX_SHORTCUTS[id];
+        expect(linux, id).toMatchObject({ meta: true, alt: true });
+        expect(linux.shift, id).not.toBe(true);
       }
     });
 
