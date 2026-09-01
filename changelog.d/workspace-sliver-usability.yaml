@@ -1,0 +1,14 @@
+kind: fixed
+area: app
+change: >
+  Workspace slivers stopped being one-way doors. A tile collapsed for lack of
+  room expands again the moment room returns, instead of staying stuck when a
+  window lands in a narrow band. Dragging a divider no longer locks at a
+  pane's minimum size: pushing past it folds the pane into a sliver, with a
+  short animation, and dragging back out (or clicking the sliver) brings it
+  back; a pane folded this way stays folded until then. When room runs out,
+  the victim is the smallest unfocused pane by user-set ratios, never the one
+  being worked in, and the boundaries beside a sliver stay draggable to
+  resize the visible tiles around it. Dragging a divider also no longer
+  resets the focused pane to the daemon's preference when the new ratio
+  echoes back.

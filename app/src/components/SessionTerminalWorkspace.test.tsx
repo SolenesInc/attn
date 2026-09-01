@@ -766,14 +766,14 @@ describe('SessionTerminalWorkspace', () => {
     mockTerminalFit.mockClear();
 
     fireEvent.pointerDown(screen.getByRole('separator'), { button: 0, clientX: 500, clientY: 250 });
-    fireEvent.pointerMove(window, { clientX: 700, clientY: 250 });
+    fireEvent.pointerMove(window, { clientX: 520, clientY: 250 });
     act(() => {
       vi.advanceTimersByTime(20);
     });
 
     expect(mockTerminalFit).not.toHaveBeenCalled();
 
-    fireEvent.pointerUp(window, { clientX: 700, clientY: 250 });
+    fireEvent.pointerUp(window, { clientX: 520, clientY: 250 });
     act(() => {
       vi.advanceTimersByTime(20);
     });
@@ -871,19 +871,19 @@ describe('SessionTerminalWorkspace', () => {
     });
 
     fireEvent.pointerDown(screen.getByRole('separator'), { button: 0, clientX: 500, clientY: 250 });
-    fireEvent.pointerUp(window, { clientX: 800, clientY: 250 });
-    expect(container.querySelector('.workspace-layout-metadata [data-split-id="root"]')).toHaveAttribute('data-split-ratio', '0.800');
+    fireEvent.pointerUp(window, { clientX: 520, clientY: 250 });
+    expect(container.querySelector('.workspace-layout-metadata [data-split-id="root"]')).toHaveAttribute('data-split-ratio', '0.520');
 
     rerender(
       <SessionTerminalWorkspace
         {...commonProps}
-        workspace={createDocumentSplitWorkspace(0.8, 'preferred')}
+        workspace={createDocumentSplitWorkspace(0.52, 'preferred')}
       />,
     );
     rerender(
       <SessionTerminalWorkspace
         {...commonProps}
-        workspace={createDocumentSplitWorkspace(0.8, 'automatic')}
+        workspace={createDocumentSplitWorkspace(0.52, 'automatic')}
       />,
     );
 
