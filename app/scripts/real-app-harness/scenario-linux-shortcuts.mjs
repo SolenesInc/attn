@@ -173,10 +173,10 @@ async function main() {
       await waitForPaneAttached(client, sessionId, utilityPane.paneId, 20_000);
       await waitForActivePane(client, sessionId, utilityPane.paneId, 'new utility pane to hold focus');
 
-      await driver.pressKey('Up', { control: true, shift: true });
-      await waitForActivePane(client, sessionId, primaryPane.paneId, 'Ctrl+Shift+Up to focus the upper pane');
-      await driver.pressKey('Down', { control: true, shift: true });
-      await waitForActivePane(client, sessionId, utilityPane.paneId, 'Ctrl+Shift+Down to focus the lower pane');
+      await driver.pressKey('Left', { control: true, shift: true });
+      await waitForActivePane(client, sessionId, primaryPane.paneId, 'Ctrl+Shift+Left to focus the left pane');
+      await driver.pressKey('Right', { control: true, shift: true });
+      await waitForActivePane(client, sessionId, utilityPane.paneId, 'Ctrl+Shift+Right to focus the right pane');
     });
 
     await runner.step('ctrl_shift_w_closes_focused_pane', async () => {
