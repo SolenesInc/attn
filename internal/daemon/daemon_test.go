@@ -2743,6 +2743,25 @@ func TestDaemon_HandleUnregisterWS_RemovesSessionPaneAndBroadcastsSessionUnregis
 	}
 }
 
+func TestDaemon_HandleUnregisterWS_PreparationFailureKeepsAttachment(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	sessionID := "failed-ws-close"
+	d.store.Add(&protocol.Session{ID: sessionID, Label: "live", Directory: t.TempDir()})
+	stream := newFakeOutputStream()
+	client := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: map[string]ptybackend.Stream{sessionID: stream}}
+	d.prepareSessionTeardownHook = func(string) error { return errors.New("tombstone write failed") }
+
+	d.handleUnregisterWS(client, &protocol.UnregisterMessage{ID: sessionID})
+	if d.store.Get(sessionID) == nil {
+		t.Fatal("failed unregister removed the session")
+	}
+	client.attachMu.Lock()
+	defer client.attachMu.Unlock()
+	if client.attachedStreams[sessionID] != stream {
+		t.Fatal("failed unregister detached the live PTY stream")
+	}
+}
+
 func TestDaemon_HandleUnregisterWS_RemovesSessionPaneWithoutPromotingAnotherPane(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	workspaceID := "workspace-shared"

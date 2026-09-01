@@ -27,7 +27,6 @@ func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMe
 		return
 	}
 	d.logf("Unregistering session %s via WebSocket", msg.ID)
-	d.detachSession(client, msg.ID)
 	endpointID := ""
 	if d.hubManager != nil {
 		if resolved, ok := d.hubManager.EndpointIDForSession(msg.ID); ok {
@@ -40,6 +39,7 @@ func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMe
 		return
 	}
 	d.commitSessionUnregister(msg.ID)
+	d.detachSession(client, msg.ID)
 	if teardown != nil && teardown.session != nil {
 		d.publishSessionUnregistered(teardown.session)
 		d.dissociateSessionFromWorkspace(teardown.session.ID)

@@ -93,13 +93,17 @@ func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.
 	}
 
 	result := &protocol.CrewHandoffResult{Member: member.ID, Path: path}
+	teardown, err := d.prepareSessionTeardown(sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("prepare %s's day to close: %w", crew.DisplayName(member.ID), err)
+	}
 	if d.crewDayEndsHere(close, time.Now()) {
-		d.closeNappedSession(sessionID)
+		d.closeNappedSession(sessionID, teardown)
 		d.logf("crew: %s went to sleep — session %s ended and nobody was woken behind it", crew.DisplayName(member.ID), sessionID)
 		result.Outcome = protocol.Ptr(protocol.CrewDayCloseSleep)
 		return result, nil
 	}
-	newSessionID, err := d.crewNap(member, sessionID)
+	newSessionID, err := d.crewNap(member, sessionID, teardown)
 	if err != nil {
 		d.logf("crew: %s's letter is filed but the nap did not run: %v", crew.DisplayName(member.ID), err)
 		result.NapError = protocol.Ptr(err.Error())
@@ -171,7 +175,13 @@ func (d *Daemon) recordCrewLetter(memberID, sessionID, path string) {
 	}
 }
 
-func (d *Daemon) crewNap(member crew.Member, oldSessionID string) (string, error) {
+func (d *Daemon) crewNap(member crew.Member, oldSessionID string, teardown *sessionTeardown) (newSessionID string, err error) {
+	committed := false
+	defer func() {
+		if !committed {
+			d.cancelSessionTeardown(oldSessionID)
+		}
+	}()
 	if err := d.validateCrewMemberPaths(member); err != nil {
 		return "", err
 	}
@@ -196,7 +206,7 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID string) (string, error
 		return "", fmt.Errorf("wake %s's successor in %s: %w", crew.DisplayName(member.ID), spawnMsg.Cwd, err)
 	}
 	spawnMsg.Cwd = launchDir
-	newSessionID := spawnMsg.ID
+	newSessionID = spawnMsg.ID
 
 	// Before the spawn: the launching wrapper asks `crew_prime` for what to inject,
 	// and the binding is what answers. One write, so the member is never unbound.
@@ -230,7 +240,8 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID string) (string, error
 
 	// releaseCrewBindingIfSession only clears a binding pointing at the id being
 	// closed, so this releases nothing the member still needs.
-	d.closeNappedSession(oldSessionID)
+	d.closeNappedSession(oldSessionID, teardown)
+	committed = true
 	d.logf("crew: %s napped — session %s ended, session %s is the new day", crew.DisplayName(member.ID), oldSessionID, newSessionID)
 	return newSessionID, nil
 }
@@ -288,12 +299,7 @@ func (d *Daemon) crewSessionGeometry(sessionID string) (int, int) {
 	return cols, rows
 }
 
-func (d *Daemon) closeNappedSession(sessionID string) {
-	teardown, err := d.prepareSessionTeardown(sessionID)
-	if err != nil {
-		d.logf("close napped session %s: %v", sessionID, err)
-		return
-	}
+func (d *Daemon) closeNappedSession(sessionID string, teardown *sessionTeardown) {
 	d.commitSessionUnregister(sessionID)
 	if teardown.session != nil {
 		d.publishSessionUnregistered(teardown.session)

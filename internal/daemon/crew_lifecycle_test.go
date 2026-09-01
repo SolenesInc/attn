@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -484,6 +485,32 @@ func TestCrewHandoff_SleepIsExplicitEvenWithTheUserHere(t *testing.T) {
 	}
 	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").BindingSession); got != "" {
 		t.Fatalf("the member is still bound to %q after being told to sleep", got)
+	}
+}
+
+func TestCrewHandoff_TeardownPreparationFailureKeepsTheDayRunning(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	woken, err := d.crewWake("trellis", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	d.prepareSessionTeardownHook = func(string) error { return errors.New("tombstone write failed") }
+	msg := protocol.CrewHandoffMessage{
+		Cmd: protocol.CmdCrewHandoff, SessionID: woken.SessionID,
+		Note: "cannot close yet\n", Close: protocol.Ptr(protocol.CrewDayCloseSleep),
+	}
+	resp := gardenCall(t, func(c net.Conn) { d.handleCrewHandoff(c, &msg) })
+	if resp.Ok {
+		t.Fatal("handoff reported success after teardown preparation failed")
+	}
+	if d.store.Get(woken.SessionID) == nil {
+		t.Fatal("failed handoff removed the running day")
+	}
+	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").BindingSession); got != woken.SessionID {
+		t.Fatalf("binding = %q, want original day %q", got, woken.SessionID)
+	}
+	if got := spawnedSessions(t, backend); len(got) != 1 {
+		t.Fatalf("spawned sessions = %v, want no successor", got)
 	}
 }
 
