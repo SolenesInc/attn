@@ -12,6 +12,13 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-workspace-creation-shortcuts'],
   },
   {
+    id: 'linux-shortcuts',
+    runnerId: 'LINUX-SHORTCUTS',
+    label: 'Linux terminal-style shortcuts through xdotool',
+    command: ['pnpm', 'run', 'real-app:scenario-linux-shortcuts'],
+    soakOnly: true,
+  },
+  {
     id: 'workspace-switching',
     runnerId: 'WORKSPACE-SWITCHING',
     label: 'Workspace switching',

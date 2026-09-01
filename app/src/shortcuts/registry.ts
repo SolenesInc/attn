@@ -30,7 +30,7 @@ const ALLOWED_CONFLICT_PAIRS = new Set([
   'markdown.sendAnnotations|terminal.sendAnnotations',
 ]);
 
-export const SHORTCUTS = {
+export const MAC_SHORTCUTS = {
   'app.quit': { key: 'q', meta: true },
 
   'terminal.open': { key: '`', meta: true },
@@ -107,7 +107,75 @@ export const SHORTCUTS = {
   'terminal.sendAnnotations': { key: 'Enter', meta: true, editableTarget: 'native' },
 } as const;
 
-export type ShortcutId = keyof typeof SHORTCUTS;
+export type ShortcutId = keyof typeof MAC_SHORTCUTS;
+export type ShortcutRegistry = Record<ShortcutId, ShortcutDef>;
+
+export const LINUX_SHORTCUTS = {
+  'app.quit': { key: 'q', meta: true, shift: true },
+
+  'terminal.open': { key: '`', code: 'Backquote', meta: true, shift: true },
+  'terminal.collapse': { key: '`', code: 'Backquote', meta: true, alt: true },
+  'terminal.splitVertical': { key: 'd', meta: true, shift: true },
+  'terminal.splitHorizontal': { key: 'd', meta: true, alt: true },
+  'terminal.toggleZoom': { key: 'z', meta: true, alt: true, editableTarget: 'native' },
+  'terminal.toggleMaximize': { key: 'Enter', meta: true, alt: true },
+  'terminal.close': { key: 'w', meta: true, shift: true },
+  'terminal.focusLeft': { key: 'ArrowLeft', meta: true, shift: true },
+  'terminal.focusRight': { key: 'ArrowRight', meta: true, shift: true },
+  'terminal.focusUp': { key: 'ArrowUp', meta: true, shift: true },
+  'terminal.focusDown': { key: 'ArrowDown', meta: true, shift: true },
+  'terminal.find': { key: 'f', meta: true, shift: true, editableTarget: 'native' },
+
+  'session.new': { key: 'n', meta: true, shift: true },
+  'session.newHorizontal': { key: 'n', meta: true, alt: true },
+  'session.newWorkspace': { key: 't', meta: true, shift: true },
+  'session.close': { key: 'w', meta: true, shift: true },
+  'session.prev': { key: 'PageUp', meta: true, shift: true, editableTarget: 'native' },
+  'session.next': { key: 'PageDown', meta: true, shift: true, editableTarget: 'native' },
+  'session.goToDashboard': { key: 'h', meta: true, alt: true },
+  'view.toggleGrid': { key: 'g', meta: true, shift: true },
+  'session.jumpToWaiting': { key: 'j', meta: true, shift: true },
+  'session.settle': { key: 'e', meta: true, alt: true },
+  'session.snooze': { key: 's', meta: true, alt: true },
+  'session.cancelCountdown': { key: '.', code: 'Period', meta: true, shift: true },
+  'session.toggleSidebar': { key: 'b', meta: true, alt: true },
+  'session.refreshPRs': { key: 'r', meta: true, shift: true },
+
+  'workspace.select1': { key: '1', code: 'Digit1', meta: true, shift: true },
+  'workspace.select2': { key: '2', code: 'Digit2', meta: true, shift: true },
+  'workspace.select3': { key: '3', code: 'Digit3', meta: true, shift: true },
+  'workspace.select4': { key: '4', code: 'Digit4', meta: true, shift: true },
+  'workspace.select5': { key: '5', code: 'Digit5', meta: true, shift: true },
+  'workspace.select6': { key: '6', code: 'Digit6', meta: true, shift: true },
+  'workspace.select7': { key: '7', code: 'Digit7', meta: true, shift: true },
+  'workspace.select8': { key: '8', code: 'Digit8', meta: true, shift: true },
+  'workspace.select9': { key: '9', code: 'Digit9', meta: true, shift: true },
+
+  'dock.attention': { key: 'p', meta: true, alt: true },
+  'ui.actionMenu': { key: 'k', meta: true, shift: true },
+  'ui.openSettings': { key: ',', code: 'Comma', meta: true, shift: true },
+  'ui.showShortcuts': { key: '/', code: 'Slash', meta: true, shift: true },
+  'ui.increaseFontSize': { key: '=', code: 'Equal', meta: true, shift: true },
+  'ui.decreaseFontSize': { key: '-', code: 'Minus', meta: true, shift: true },
+  'ui.resetFontSize': { key: '0', meta: true, shift: true },
+
+  'notebook.openTile': { key: 'n', code: 'KeyN', meta: true, alt: true, shift: true },
+  'notebook.openFullscreen': { key: 'f', code: 'KeyF', meta: true, alt: true, shift: true },
+  'file.open': { key: 'p', meta: true, shift: true },
+  'board.open': { key: 't', meta: true, alt: true },
+  'markdown.sendAnnotations': { key: 'Enter', meta: true, shift: true, editableTarget: 'native' },
+  'terminal.sendAnnotations': { key: 'Enter', meta: true, shift: true, editableTarget: 'native' },
+} as const satisfies ShortcutRegistry;
+
+export const SHORTCUTS = MAC_SHORTCUTS;
+
+export function defaultShortcuts(): ShortcutRegistry {
+  return isMacLikePlatform() ? MAC_SHORTCUTS : LINUX_SHORTCUTS;
+}
+
+export function defaultShortcut(id: ShortcutId): ShortcutDef {
+  return defaultShortcuts()[id];
+}
 
 function modifiersEqual(a: Combo, b: Combo): boolean {
   return !!a.meta === !!b.meta
@@ -144,8 +212,8 @@ export function isAllowedConflict(idA: ShortcutId, idB: ShortcutId): boolean {
 }
 
 /** Throws at module load when two shortcuts share a key combination. */
-export function validateNoConflicts(): void {
-  const entries = Object.entries(SHORTCUTS) as Array<[ShortcutId, ShortcutDef]>;
+export function validateNoConflicts(shortcuts: ShortcutRegistry): void {
+  const entries = Object.entries(shortcuts) as Array<[ShortcutId, ShortcutDef]>;
   for (let i = 0; i < entries.length; i++) {
     for (let j = i + 1; j < entries.length; j++) {
       const [idA, defA] = entries[i];
@@ -173,4 +241,5 @@ export function matchesShortcut(e: KeyboardEvent, def: ShortcutDef): boolean {
   return keyMatches && metaMatches && shiftMatches && altMatches;
 }
 
-validateNoConflicts();
+validateNoConflicts(MAC_SHORTCUTS);
+validateNoConflicts(LINUX_SHORTCUTS);

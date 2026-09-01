@@ -1,0 +1,3 @@
+kind: changed
+area: app
+change: Linux app shortcuts use Ctrl+Shift or Ctrl+Alt, leaving plain Ctrl+letter keys to shells and terminal apps.

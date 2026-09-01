@@ -29,7 +29,17 @@ describe('buildCheatsheet', () => {
       .find((r) => r.label === 'Jump to workspace 1–9');
     expect(jumpRow(buildCheatsheet())?.combos[0]).toEqual(['⌘', '1–9']);
     withNavigatorPlatform('Linux aarch64', () => {
-      expect(jumpRow(buildCheatsheet())?.combos[0]).toEqual(['Ctrl', '1–9']);
+      expect(jumpRow(buildCheatsheet())?.combos[0]).toEqual(['Ctrl', 'Shift', '1–9']);
+    });
+  });
+
+  it('renders Linux action and pane-focus chords from the Linux table', () => {
+    withNavigatorPlatform('Linux aarch64', () => {
+      const rows = buildCheatsheet().flatMap((category) => category.rows);
+      expect(rows.find((row) => row.label === 'Action menu')?.combos[0])
+        .toEqual(['Ctrl', 'Shift', 'K']);
+      expect(rows.find((row) => row.label === 'Move focus between panes')?.combos[0])
+        .toEqual(['Ctrl', 'Shift', '←↑→↓']);
     });
   });
 

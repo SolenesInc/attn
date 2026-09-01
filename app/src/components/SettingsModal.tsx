@@ -59,7 +59,7 @@ import { GardenAdvisorSettings } from './GardenAdvisorSettings';
 import { parseGardenAdvisorSetting } from '../utils/gardenAdvisorSettings';
 import { SessionCostPriceSettings } from './SessionCostPriceSettings';
 import './SettingsModal.css';
-import { formatShortcut, keyCombo } from '../shortcuts/formatShortcut';
+import { formatShortcut } from '../shortcuts/formatShortcut';
 
 const OPEN_SENT_FILES_ENABLED_SETTING = 'open_sent_files_enabled';
 
@@ -1072,8 +1072,8 @@ export function SettingsModal({
             <div>
               <p className="settings-row-title">App</p>
               <p className="settings-row-copy">
-                The whole interface, including terminals. Also adjustable with {keyCombo('accel', '+')} and{' '}
-                {keyCombo('accel', '−')}.
+                The whole interface, including terminals. Also adjustable with {formatShortcut('ui.increaseFontSize')} and{' '}
+                {formatShortcut('ui.decreaseFontSize')}.
               </p>
             </div>
             <div className="settings-font-scale" data-testid="settings-app-font-scale">

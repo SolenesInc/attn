@@ -1,7 +1,7 @@
 
 import FocusTrap from 'focus-trap-react';
 import { useEscapeStack } from '../hooks/useEscapeStack';
-import { keyCombo, keyComboTokens, shortcutTokens } from '../shortcuts/formatShortcut';
+import { formatShortcut, modifierTokens, shortcutTokens } from '../shortcuts/formatShortcut';
 import { KeyCombos } from './Keycap';
 import './WhatsNewModal.css';
 
@@ -18,11 +18,12 @@ interface Highlight {
   flagged?: boolean;
 }
 
-const HIGHLIGHTS: Highlight[] = [
+function highlights(): Highlight[] {
+  return [
   {
     flagged: true,
-    title: `${keyCombo('accel', 'N')} opens a session inside this workspace`,
-    body: `This is the big change. ${keyCombo('accel', 'N')} used to open a separate session with its own row in the sidebar. Now it adds a session to the workspace you’re already in. Want a new sidebar row instead? Press ${keyCombo('accel', 'T')} to start a new workspace.`,
+    title: `${formatShortcut('session.new')} opens a session inside this workspace`,
+    body: `This is the big change. ${formatShortcut('session.new')} used to open a separate session with its own row in the sidebar. Now it adds a session to the workspace you’re already in. Want a new sidebar row instead? Press ${formatShortcut('session.newWorkspace')} to start a new workspace.`,
     combos: [shortcutTokens('session.new'), shortcutTokens('session.newWorkspace')],
   },
   {
@@ -43,9 +44,10 @@ const HIGHLIGHTS: Highlight[] = [
   {
     title: 'Move between panes',
     body: 'Use the arrow keys to move focus around the panes. Keep going past an edge and you land in the next workspace.',
-    combos: [keyComboTokens('accel', 'alt', '←↑→↓')],
+    combos: [[...modifierTokens('terminal.focusLeft'), '←↑→↓']],
   },
-];
+  ];
+}
 
 export function WhatsNewModal({ isOpen, onClose, onViewShortcuts }: WhatsNewModalProps) {
   useEscapeStack(onClose, isOpen);
@@ -81,7 +83,7 @@ export function WhatsNewModal({ isOpen, onClose, onViewShortcuts }: WhatsNewModa
           </div>
 
           <div className="whats-new-body">
-            {HIGHLIGHTS.map((highlight) => (
+            {highlights().map((highlight) => (
               <section
                 className={`whats-new-item${highlight.flagged ? ' whats-new-item--key' : ''}`}
                 key={highlight.title}

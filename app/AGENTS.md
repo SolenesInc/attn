@@ -51,6 +51,11 @@ Daemon connection paths are relative to `app/src`.
 - Use `dispatch_native_shortcut` only for required visible native menu items;
   it hardcodes the action.
 
+## Linux shortcuts
+
+- Plain Ctrl+letter belongs to the focused shell or TUI. App actions use Ctrl+Shift,
+  with Ctrl+Alt for actions whose macOS default already includes Shift.
+
 ## Diagnostics
 
 Use prefixed console logs/DevTools. For intermittent bugs, write

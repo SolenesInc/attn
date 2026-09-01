@@ -286,10 +286,7 @@ function unshiftedCodepoint(event: KeyboardEvent, text: string | undefined): num
 }
 
 function browserOwnsKey(event: KeyboardEvent): boolean {
-  // Plain Ctrl+V stays the WebView's paste accelerator off-mac; on mac the interceptor
-  // has already turned it into the agent image-paste trigger.
-  return terminalClipboardChord(event) !== null
-    || (event.ctrlKey && !event.shiftKey && event.code === 'KeyV');
+  return terminalClipboardChord(event) !== null;
 }
 
 function consumeBrowserEvent(event: Event): void {

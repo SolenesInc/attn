@@ -53,6 +53,7 @@
     "real-app:scenario-tr502": "node scripts/real-app-harness/scenario-tr502-remote-relaunch-splits.mjs",
     "real-app:scenario-workspace-shell-lifecycle": "node scripts/real-app-harness/scenario-workspace-shell-lifecycle.mjs",
     "real-app:scenario-workspace-creation-shortcuts": "node scripts/real-app-harness/scenario-workspace-creation-shortcuts.mjs",
+    "real-app:scenario-linux-shortcuts": "node scripts/real-app-harness/scenario-linux-shortcuts.mjs",
     "real-app:scenario-workspace-switching": "node scripts/real-app-harness/scenario-workspace-switching.mjs",
     "real-app:scenario-workspace-move-leaf": "node scripts/real-app-harness/scenario-workspace-move-leaf.mjs",
     "real-app:scenario-workspace-close-last-session-switches-back": "node scripts/real-app-harness/scenario-workspace-close-last-session-switches-back.mjs",
