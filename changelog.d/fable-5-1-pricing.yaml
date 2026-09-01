@@ -1,0 +1,9 @@
+kind: added
+area: sessions
+change: >
+  Session cost knows Claude Fable 5.1 (claude-fable-5-1). It bills like Fable 5
+  at $10 input and $50 output per million tokens, except cache reads, which
+  Anthropic prices at a flat $0.25 per million instead of 10% of input. Before
+  this, a Fable 5.1 session showed no price at all. A crew member with no model
+  configured now wakes on Claude Code's "fable" alias, so it follows the newest
+  Fable release instead of staying pinned to Fable 5.

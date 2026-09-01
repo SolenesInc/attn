@@ -22,7 +22,7 @@ import (
 
 const crewWakeAgent = crew.DefaultAgent
 
-const crewWakeFallbackModel = "claude-fable-5"
+const crewWakeFallbackModel = "fable"
 
 func (d *Daemon) crewWakeModel(member crew.Member, agent string) *string {
 	// A one-day harness override must not receive a model chosen for the
