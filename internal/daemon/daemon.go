@@ -1848,6 +1848,7 @@ func (d *Daemon) initHTTPServer() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", d.handleWS)
 	mux.HandleFunc("/health", d.handleHealth)
+	mux.HandleFunc("/agents", d.handleAgents)
 	mux.HandleFunc(appBundleRoutePrefix, d.handleAppBundle)
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, _ *http.Request) {
 		setNoStoreHeaders(w.Header())
