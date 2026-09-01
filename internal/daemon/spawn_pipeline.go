@@ -371,8 +371,13 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	// After the already-live no-op returns, before the runtime whose first
 	// UserPromptSubmit can beat commitSpawn.
 	d.rememberSessionTitleInitialPrompt(msg.ID, req.initialPrompt)
+	priorExit := d.store.GetSessionExitScreen(msg.ID)
+	if err := d.store.DeleteSessionExitScreen(msg.ID); err != nil {
+		d.logf("exit screen of the previous process not cleared: session=%s err=%v", msg.ID, err)
+	}
 	if err := d.spawnSessionRuntime(req, plan.spawnOpts); err != nil {
 		d.forgetSessionTitleInitialPrompt(msg.ID)
+		d.restoreExitScreen(msg.ID, priorExit)
 		if req.existingSession == nil {
 			d.store.Remove(msg.ID)
 		} else if restoreErr := d.store.AddChecked(req.existingSession); restoreErr != nil {
