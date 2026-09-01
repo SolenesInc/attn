@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 
-import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
-import { delay } from './platform.mjs';
+import { appDaemonInTree, delay } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -67,7 +66,7 @@ async function main() {
   if (!profile) {
     throw new Error('the automode-no-model scenario does not run against production; set ATTN_PROFILE / ATTN_HARNESS_PROFILE to a named profile');
   }
-  const runAttn = makeAttnRunner(path.join(options.appPath, 'Contents', 'MacOS', 'attn'), profile);
+  const runAttn = makeAttnRunner(appDaemonInTree(options.appPath), profile);
 
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver(options);
@@ -89,7 +88,11 @@ async function main() {
       (await client.request('dom_text', { selector: '[data-testid="automode-new-sessions"]' })).text;
 
     const promote = async (proposalId) => {
-      await client.request('dom_click', { selector: `[data-testid="automode-promote-${proposalId}"]` });
+      const selector = `[data-testid="automode-promote-${proposalId}"]`;
+      await pollFor(
+        () => client.request('dom_click', { selector }).then(() => true, () => null),
+        `proposal ${proposalId} to reach the pane`,
+      );
     };
 
     const openSettings = async () => {

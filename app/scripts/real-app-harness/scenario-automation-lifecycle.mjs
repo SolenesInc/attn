@@ -21,6 +21,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import { readFrontendProtocolVersion } from './presentDaemon.mjs';
+import { appDaemonInTree } from './platform.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '../../..');
@@ -307,7 +308,7 @@ async function main() {
   const profile = currentHarnessProfile();
   if (!profile) throw new Error('automation lifecycle scenario requires a named non-production profile');
   const resources = resolveHarnessResources(profile);
-  const binary = path.join(resources.appPath, 'Contents', 'MacOS', 'attn');
+  const binary = appDaemonInTree(resources.appPath);
   const dbPath = path.join(dataDirForProfile(profile), 'attn.db');
   const runner = createScenarioRunner(options, {
     scenarioId: 'AUTOMATION-LIFECYCLE',

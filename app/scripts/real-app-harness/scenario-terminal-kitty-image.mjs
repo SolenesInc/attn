@@ -23,6 +23,7 @@ import {
   waitForPaneText,
   waitForPaneVisible,
 } from './scenarioAssertions.mjs';
+import { appDaemonInTree } from './platform.mjs';
 
 const STORAGE_OFF = '0';
 
@@ -147,7 +148,7 @@ async function main() {
     throw new Error('kitty image scenario requires a named non-production profile (it restarts the profile daemon)');
   }
   const resources = resolveHarnessResources(profile);
-  const binary = path.join(resources.appPath, 'Contents', 'MacOS', 'attn');
+  const binary = appDaemonInTree(resources.appPath);
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'TERMINAL-KITTY-IMAGE',

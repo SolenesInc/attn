@@ -16,6 +16,7 @@ import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessProfile, dataDirForProfile } from './harnessProfile.mjs';
+import { appDaemonInTree } from './platform.mjs';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -38,7 +39,7 @@ async function pollFor(fn, description, timeoutMs = 30_000, intervalMs = 300) {
 // The app's bundled binary — daemon lifecycle must run through the exact build
 // under test, not an unrelated ./attn on PATH.
 function resolveAppBin(appPath) {
-  const bin = path.join(appPath, 'Contents/MacOS/attn');
+  const bin = appDaemonInTree(appPath);
   if (!fs.existsSync(bin)) throw new Error(`app binary not found at ${bin}`);
   return bin;
 }
