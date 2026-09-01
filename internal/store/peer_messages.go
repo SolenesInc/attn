@@ -15,6 +15,12 @@ var (
 )
 
 func (s *Store) EnqueuePeerMessage(message agentmailbox.PeerMessage, recipientSessionID string) (agentmailbox.Delivery, error) {
+	createdAt, err := time.Parse(time.RFC3339Nano, message.CreatedAt)
+	if err != nil {
+		return agentmailbox.Delivery{}, fmt.Errorf("enqueue peer message: invalid created_at %q: %w", message.CreatedAt, err)
+	}
+	message.CreatedAt = createdAt.UTC().Format(sortableTimeFormat)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

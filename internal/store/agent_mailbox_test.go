@@ -69,6 +69,35 @@ func TestAgentMailboxQueuesItemsUntilTheirNotificationIsStamped(t *testing.T) {
 	}
 }
 
+func TestAgentMailboxPeerFIFOUsesChronologicalOrderWithinASecond(t *testing.T) {
+	s := newAgentMailboxStore(t)
+	base := time.Date(2026, 9, 1, 10, 0, 0, 100_000_000, time.UTC)
+	enqueue := func(id string, createdAt time.Time) {
+		t.Helper()
+		if _, err := s.EnqueuePeerMessage(agentmailbox.PeerMessage{
+			ID: id, SenderSessionID: "sender", Body: id,
+			CreatedAt: createdAt.Format(time.RFC3339Nano),
+		}, "target"); err != nil {
+			t.Fatalf("enqueue %s: %v", id, err)
+		}
+	}
+
+	enqueue("later", base.Add(time.Nanosecond))
+	enqueue("earlier", base)
+
+	queued, err := s.QueuedAgentMailboxDeliveries("target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queued) != 1 || queued[0].Item.ID != "earlier" {
+		t.Fatalf("oldest unread peer = %+v, want earlier", queued)
+	}
+	want := base.Format(sortableTimeFormat)
+	if queued[0].Item.CreatedAt != want || queued[0].Peer == nil || queued[0].Peer.CreatedAt != want {
+		t.Fatalf("created_at = %q/%v, want %q", queued[0].Item.CreatedAt, queued[0].Peer, want)
+	}
+}
+
 func TestAgentMailboxDoesNotPassAnAlreadyNotifiedNewerPeer(t *testing.T) {
 	s := newAgentMailboxStore(t)
 	now := time.Now()
