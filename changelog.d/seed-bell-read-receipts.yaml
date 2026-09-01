@@ -1,0 +1,3 @@
+kind: fixed
+area: garden
+change: Seed notifications reach agents without waiting for harness-specific delivery receipts.

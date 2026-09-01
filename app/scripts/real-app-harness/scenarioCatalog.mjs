@@ -106,6 +106,13 @@ export const scenarioCatalog = [
     timeoutMs: 240_000,
   },
   {
+    id: 'garden-seed-read-receipts',
+    runnerId: 'GardenSeedReadReceipts',
+    label: 'Garden seed read receipts: seed show rearms notifications without a prompt-submit hook',
+    command: ['pnpm', 'run', 'real-app:scenario-garden-seed-read-receipts'],
+    timeoutMs: 240_000,
+  },
+  {
     id: 'garden-seed-reopen',
     runnerId: 'GardenSeedReopen',
     label: 'Garden continuation: a closed tender resumes exactly, then hands the same seed to a new agent',

@@ -619,12 +619,12 @@ func (d *Daemon) handleSeedShow(conn net.Conn, msg *protocol.SeedShowMessage) {
 	}
 	sessionID := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
 	watching := d.seedWatching(sessionID, seed.ID)
-	d.consumeSeedBell(sessionID, seed.ID)
 	artifacts, err := d.seedArtifacts(seed.ID)
 	if err != nil {
 		d.sendGardenError(conn, "show", fmt.Errorf("read seed artifacts: %w", err))
 		return
 	}
+	d.consumeSeedBell(sessionID, seed.ID)
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok: true,
 		SeedShowResult: &protocol.SeedShowResult{

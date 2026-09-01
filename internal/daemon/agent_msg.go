@@ -280,6 +280,12 @@ func (d *Daemon) deliverAgentMessageOnce(record store.AgentMessage) error {
 	if attempt.err != nil {
 		return attempt.err
 	}
+	if record.SeedBellID != "" && (attempt.stage == sessionInputPlaced || attempt.stage == sessionInputTaken) {
+		// Seed show is the read receipt. Successful placement only releases the
+		// input lane so every harness follows the same Garden protocol.
+		d.sessionInputs().forget(record.TargetSessionID, id)
+		return d.stampAgentMessageDelivered(record.TargetSessionID, record.ID)
+	}
 	if d.sessionRunsWhatIsTyped(record.TargetSessionID) && attempt.stage == sessionInputPlaced {
 		// A shell starts no turn to take the words with, so placement is the
 		// receipt; waiting for one leaves the lane blocked against every later message.

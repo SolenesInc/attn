@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -9,28 +11,78 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func TestSeedNudges_DeliverThroughTheAgentMessageDoorbell(t *testing.T) {
+func TestSeedNudges_InjectionLeavesTheBellUnreadUntilShow(t *testing.T) {
 	fixture := newSeededNudgeGarden(t)
-	writes := make(chan string, 4)
-	fixture.d.ptyBackend = &fakeSpawnBackend{onInput: func(_ string, data []byte) {
-		writes <- string(data)
-	}}
-	previousWindow := sessionInputTakenWindow
-	sessionInputTakenWindow = 0
-	t.Cleanup(func() { sessionInputTakenWindow = previousWindow })
+	doorbell := &recordingDoorbell{}
+	fixture.d.ptyBackend = doorbell.backend()
+	drained := make(chan int, 2)
+	fixture.d.agentMessageDrainHook = func(_ string, delivered int) { drained <- delivered }
 	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
 
 	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "look now", true)
-	for {
-		write := <-writes
-		if !strings.HasPrefix(write, sessionInputPasteStart) {
-			continue
-		}
-		prompt := strings.TrimSuffix(strings.TrimPrefix(write, sessionInputPasteStart), sessionInputPasteEnd)
-		if !strings.Contains(prompt, fixture.leaf.ID+" moved: note") || strings.Contains(prompt, "look now") {
-			t.Fatalf("doorbell = %q", prompt)
-		}
-		break
+	if delivered := <-drained; delivered != 1 {
+		t.Fatalf("drain delivered %d bells, want 1", delivered)
+	}
+	prompts := doorbell.pasted()
+	if len(prompts) != 1 || !strings.Contains(prompts[0], fixture.leaf.ID+" moved: note") || strings.Contains(prompts[0], "look now") {
+		t.Fatalf("doorbells = %q, want one content-free seed notification", prompts)
+	}
+	if queued := queuedSeedBells(t, fixture.d, "sess-b"); len(queued) != 0 {
+		t.Fatalf("injected bell remains in the transport queue: %q", queued)
+	}
+
+	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "still unread", true)
+	if prompts := doorbell.pasted(); len(prompts) != 1 {
+		t.Fatalf("unread seed rang %d times, want one: %q", len(prompts), prompts)
+	}
+
+	resp := gardenCall(t, func(c net.Conn) {
+		fixture.d.handleSeedShow(c, &protocol.SeedShowMessage{
+			Cmd: protocol.CmdSeedShow, SeedID: fixture.leaf.ID, SourceSessionID: protocol.Ptr("sess-b"),
+		})
+	})
+	if !resp.Ok {
+		t.Fatalf("show: %v", protocol.Deref(resp.Error))
+	}
+	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "after read", true)
+	if delivered := <-drained; delivered != 1 {
+		t.Fatalf("post-read drain delivered %d bells, want 1", delivered)
+	}
+	if prompts := doorbell.pasted(); len(prompts) != 2 {
+		t.Fatalf("read did not re-arm the bell: %q", prompts)
+	}
+}
+
+func TestSeedNudges_FailedShowDoesNotReadTheBell(t *testing.T) {
+	fixture := newSeededNudgeGarden(t)
+	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
+	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "first", true)
+	first, err := fixture.d.store.UndeliveredAgentMessages("sess-b")
+	if err != nil || len(first) != 1 {
+		t.Fatalf("first bell = %+v err=%v", first, err)
+	}
+
+	root := t.TempDir()
+	fixture.d.store.SetSetting(SettingNotebookRoot, root)
+	if err := os.Mkdir(filepath.Join(root, "seeds"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(root, "seeds", fixture.leaf.ID)); err != nil {
+		t.Fatal(err)
+	}
+	resp := gardenCall(t, func(c net.Conn) {
+		fixture.d.handleSeedShow(c, &protocol.SeedShowMessage{
+			Cmd: protocol.CmdSeedShow, SeedID: fixture.leaf.ID, SourceSessionID: protocol.Ptr("sess-b"),
+		})
+	})
+	if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), "not a real directory") {
+		t.Fatalf("show through invalid artifact directory = %+v", resp)
+	}
+
+	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "second", true)
+	remaining, err := fixture.d.store.UndeliveredAgentMessages("sess-b")
+	if err != nil || len(remaining) != 1 || remaining[0].ID != first[0].ID {
+		t.Fatalf("failed show consumed the bell: before=%+v after=%+v err=%v", first, remaining, err)
 	}
 }
 
