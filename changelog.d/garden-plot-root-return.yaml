@@ -1,0 +1,6 @@
+kind: fixed
+area: harness
+change: >
+  The garden plot dispatch scenario now proves that climbing out of a plot
+  restores its crown and an outside seed, without assuming the root has more
+  rows than the plot has children.
