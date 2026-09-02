@@ -303,7 +303,7 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) {
 		d.registerSessionPullRequestRefreshCron(runner)
 		if err := runner.RegisterCron(
 			automationScheduleKind,
-			automationScheduleInterval,
+			automationScheduleInterval(),
 			d.automationScheduleHandler,
 			jobs.HandlerConfig{Timeout: automationScheduleTickTimeout},
 		); err != nil {

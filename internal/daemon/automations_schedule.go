@@ -3,6 +3,8 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/automation"
@@ -20,10 +22,21 @@ const scheduleSkipGrace = 5 * time.Minute
 
 const automationScheduleKind = "automation_schedule"
 
-const automationScheduleInterval = time.Minute
+const defaultAutomationScheduleInterval = time.Minute
 
 // automationScheduleTickTimeout is a tripwire, far past any healthy pass.
 const automationScheduleTickTimeout = 2 * time.Minute
+
+// ATTN_AUTOMATION_SCHEDULE_INTERVAL lets a test drive a sub-minute cron
+// (`@every 2s`) without waiting a real minute per instant. Users never set it.
+func automationScheduleInterval() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("ATTN_AUTOMATION_SCHEDULE_INTERVAL")); v != "" {
+		if dur, err := time.ParseDuration(v); err == nil && dur > 0 {
+			return dur
+		}
+	}
+	return defaultAutomationScheduleInterval
+}
 
 func (d *Daemon) automationScheduleHandler(_ context.Context, _ *jobs.Job) (any, error) {
 	d.observeDueSchedules(time.Now())

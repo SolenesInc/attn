@@ -1,0 +1,8 @@
+kind: internal
+area: harness
+change: >
+  The automation-lifecycle scenario's edit-rebind leg no longer spends three
+  wall-clock minutes waiting for cron boundaries. It drives the daemon's real
+  scheduled path on an `@every 2s` cron with the schedule ticker shortened by
+  ATTN_AUTOMATION_SCHEDULE_INTERVAL, keeping every assertion. The daemon's
+  default tick is unchanged.

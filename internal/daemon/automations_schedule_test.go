@@ -736,3 +736,50 @@ func TestObserveDueScheduleBroadcastsAtClaimTimeEvenWhenDeliveryFailsRetryably(t
 		t.Fatalf("runs=%#v err=%v, want exactly one pending run despite the retryable delivery failure", runs, err)
 	}
 }
+
+func TestAutomationScheduleIntervalDefaultsToAMinuteAndTheEnvOverrideShortensIt(t *testing.T) {
+	if got := automationScheduleInterval(); got != time.Minute {
+		t.Fatalf("default schedule interval = %s, want 1m", got)
+	}
+	for _, bad := range []string{"nonsense", "0s", "-1s"} {
+		t.Setenv("ATTN_AUTOMATION_SCHEDULE_INTERVAL", bad)
+		if got := automationScheduleInterval(); got != time.Minute {
+			t.Fatalf("schedule interval with %q = %s, want the 1m default", bad, got)
+		}
+	}
+	t.Setenv("ATTN_AUTOMATION_SCHEDULE_INTERVAL", "2s")
+	if got := automationScheduleInterval(); got != 2*time.Second {
+		t.Fatalf("schedule interval with the override = %s, want 2s", got)
+	}
+}
+
+func TestObserveDueSchedulesFiresTheSubMinuteEveryCronTheLifecycleScenarioUses(t *testing.T) {
+	d, s, def, _ := setupScheduledDaemon(t, "@every 2s", "singleton", "latest")
+	d.automationDeliveryHook = func(*store.AutomationRun) error { return nil }
+
+	anchor := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
+	d.observeDueSchedules(anchor)
+	runs, err := s.ListAutomationRuns(def.ID)
+	if err != nil || len(runs) != 0 {
+		t.Fatalf("anchor observation runs=%#v err=%v, want none", runs, err)
+	}
+
+	d.observeDueSchedules(anchor.Add(time.Second))
+	runs, err = s.ListAutomationRuns(def.ID)
+	if err != nil || len(runs) != 0 {
+		t.Fatalf("runs one second past the anchor=%#v err=%v, want none before the 2s instant", runs, err)
+	}
+
+	d.observeDueSchedules(anchor.Add(2 * time.Second))
+	runs, err = s.ListAutomationRuns(def.ID)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("runs at the 2s instant=%#v err=%v, want exactly one", runs, err)
+	}
+	occurrence, err := s.GetAutomationOccurrence(runs[0].OccurrenceID)
+	if err != nil || occurrence == nil {
+		t.Fatalf("occurrence for the fired run: %#v err=%v", occurrence, err)
+	}
+	if want := automation.ScheduledOccurrenceKey(anchor.Add(2 * time.Second)); occurrence.OccurrenceKey != want {
+		t.Fatalf("occurrence key = %q, want %q", occurrence.OccurrenceKey, want)
+	}
+}
