@@ -461,6 +461,8 @@ func TestHandlePtyInputRecordsKeystrokeForGuard(t *testing.T) {
 		{"automation write", protocol.Ptr("automation"), false},
 		{"attach replay write", protocol.Ptr("attach_replay"), false},
 		{"padded automation is trimmed then ignored", protocol.Ptr("  automation  "), false},
+		{"mouse report tagged by the app", protocol.Ptr("pointer"), false},
+		{"terminal query reply forwarded by the app", protocol.Ptr("response"), false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

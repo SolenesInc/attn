@@ -1982,6 +1982,9 @@ model PtyInputMessage {
   cmd: "pty_input";
   id: string;
   data: string;
+  // Who produced these bytes. Absent or "user" is a keystroke and stamps the
+  // daemon's composer clock; "pointer" (mouse reports), "response" (terminal
+  // query replies), "automation" and "attach_replay" do not.
   source?: string;
   // Sparse diagnostic correlation. Absent on nearly every input; when present,
   // the daemon acknowledges after the PTY backend accepts this write.
