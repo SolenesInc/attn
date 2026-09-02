@@ -478,7 +478,9 @@ jobs:
     name: App acceptance
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next'
     permissions:
+      actions: read
       contents: read
+      pull-requests: read
     runs-on: ubuntu-24.04
     concurrency:
       group: app-acceptance-${{ github.repository }}
@@ -488,6 +490,8 @@ jobs:
       ATTN_HARNESS_PROFILE: app-acceptance
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Install Linux desktop dependencies
         run: |
@@ -534,6 +538,8 @@ jobs:
           echo "$PWD/plugins/attn-pi/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Run serial matrix
+        id: matrix
+        continue-on-error: true
         env:
           ATTN_REAL_APP_ARTIFACTS_DIR: ${{ runner.temp }}/attn-real-app-harness
         run: xvfb-run -a -s '-screen 0 1600x1000x24' pnpm --dir app run real-app:serial-matrix
@@ -552,6 +558,32 @@ jobs:
       - name: Clean profile
         if: always()
         run: ./attn profile clean "$ATTN_PROFILE"
+
+      - name: Gate app acceptance
+        if: always()
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          MATRIX_OUTCOME: ${{ steps.matrix.outcome }}
+        run: |
+          if [ "$MATRIX_OUTCOME" = success ]; then
+            echo "app acceptance: Linux serial matrix is green for $HEAD_SHA"
+            exit 0
+          fi
+          if [[ "$EVENT_NAME/$HEAD_BRANCH" =~ ^pull_request/(release/v[0-9]+\.[0-9]+\.[0-9]+|hotfix/.+)$ ]]; then
+            ./scripts/workflow-job-gate.sh \
+              app-acceptance.yml "$HEAD_SHA" workflow_dispatch main 'App acceptance'
+            echo "app acceptance: protected-main manual override is green for $HEAD_SHA"
+            exit 0
+          fi
+          if [ "$EVENT_NAME/$GITHUB_REF" = push/refs/heads/main ]; then
+            ./scripts/app-acceptance-gate.sh "$HEAD_SHA"
+            echo "app acceptance: candidate receipt covers main $HEAD_SHA"
+            exit 0
+          fi
+          echo "app acceptance: Linux serial matrix is $MATRIX_OUTCOME for $HEAD_SHA" >&2
+          exit 1
 
   release-preflight:
     name: Release preflight
