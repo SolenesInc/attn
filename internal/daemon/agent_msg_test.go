@@ -495,11 +495,82 @@ func TestOversizeSocketFrameIsAnsweredNotDropped(t *testing.T) {
 	}
 }
 
+func TestAgentMailboxRetryStaleCallbackLeavesItsReplacementArmed(t *testing.T) {
+	d, doorbell := newAgentMsgDaemon(t)
+	addCharacterizationSession(t, d, "sender-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
+	addCharacterizationSession(t, d, "target-session-id", protocol.SessionAgentClaude, protocol.SessionStateWaitingInput)
+	synctest.Test(t, func(t *testing.T) {
+		drained := make(chan int, 1)
+		d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
+		if err := d.writeSessionPTY("target-session-id", []byte("a draft"), "user"); err != nil {
+			t.Fatalf("user input: %v", err)
+		}
+		callAgentMsg(t, d, "target-session-id", "sender-session-id", "the migration landed")
+		d.agentMailboxMu.Lock()
+		stale := d.agentMailboxRetries["target-session-id"]
+		d.agentMailboxMu.Unlock()
+		if stale == nil {
+			t.Fatal("the held delivery armed no retry")
+		}
+
+		d.scheduleAgentMailboxDrain("target-session-id", sessionInputQuietWindow)
+		d.agentMailboxMu.Lock()
+		replacement := d.agentMailboxRetries["target-session-id"]
+		d.agentMailboxMu.Unlock()
+		if replacement == nil || replacement == stale {
+			t.Fatalf("re-arming kept the old entry: %p", replacement)
+		}
+
+		d.fireAgentMailboxRetry("target-session-id", stale)
+		d.agentMailboxMu.Lock()
+		current := d.agentMailboxRetries["target-session-id"]
+		d.agentMailboxMu.Unlock()
+		if current != replacement {
+			t.Fatalf("a stale callback evicted the replacement: %p", current)
+		}
+		if len(drained) != 0 || len(doorbell.pasted()) != 0 {
+			t.Fatalf("a stale callback drained: pasted=%q", doorbell.pasted())
+		}
+
+		time.Sleep(sessionInputQuietWindow)
+		synctest.Wait()
+		if len(drained) != 1 || <-drained != 1 {
+			t.Fatalf("the replacement did not drain once: pasted=%q", doorbell.pasted())
+		}
+	})
+}
+
+func TestAgentMailboxRetryRefusesToArmAfterStop(t *testing.T) {
+	d, _ := newAgentMsgDaemon(t)
+	addCharacterizationSession(t, d, "target-session-id", protocol.SessionAgentClaude, protocol.SessionStateWaitingInput)
+	synctest.Test(t, func(t *testing.T) {
+		d.scheduleAgentMailboxDrain("target-session-id", sessionInputQuietWindow)
+		close(d.done)
+		d.stopAgentMailboxRetries()
+		d.scheduleAgentMailboxDrain("target-session-id", sessionInputQuietWindow)
+		d.agentMailboxMu.Lock()
+		armed := len(d.agentMailboxRetries)
+		d.agentMailboxMu.Unlock()
+		if armed != 0 {
+			t.Fatalf("%d retries armed after stop", armed)
+		}
+		scheduled := make(chan string, 1)
+		d.agentMailboxDrainScheduledHook = func(sessionID string) { scheduled <- sessionID }
+		time.Sleep(sessionInputQuietWindow)
+		synctest.Wait()
+		if len(scheduled) != 0 {
+			t.Fatal("a retry fired after stop")
+		}
+	})
+}
+
 func TestHandleAgentMsgHeldOffByTypingLandsAfterTheQuietWindow(t *testing.T) {
 	d, doorbell := newAgentMsgDaemon(t)
 	addCharacterizationSession(t, d, "sender-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
 	addCharacterizationSession(t, d, "target-session-id", protocol.SessionAgentClaude, protocol.SessionStateWaitingInput)
 	synctest.Test(t, func(t *testing.T) {
+		drained := make(chan int, 1)
+		d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
 		if err := d.writeSessionPTY("target-session-id", []byte("a draft"), "user"); err != nil {
 			t.Fatalf("user input: %v", err)
 		}
@@ -513,8 +584,6 @@ func TestHandleAgentMsgHeldOffByTypingLandsAfterTheQuietWindow(t *testing.T) {
 			t.Fatalf("typed into a composer the user just used: %q", prompts)
 		}
 
-		drained := make(chan int, 1)
-		d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
 		time.Sleep(sessionInputQuietWindow)
 		synctest.Wait()
 		select {

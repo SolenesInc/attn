@@ -255,8 +255,6 @@ var sessionInputTakenWindow = 3 * time.Second
 // Receipt (daemon.log, 9h, 5,588 keystrokes): p99 gap 3s, p99.5 12s; 30s is the tripwire.
 var sessionInputQuietWindow = 30 * time.Second
 
-// sessionInputQuietError carries how long the user's last keystroke still guards
-// the composer, so a deferred delivery can retry on its own without a state change.
 type sessionInputQuietError struct{ retryAfter time.Duration }
 
 func (e *sessionInputQuietError) Error() string { return errSessionInputComposerDirty.Error() }
@@ -579,8 +577,6 @@ func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, dat
 	return m.daemon.ptyBackend.Input(ctx, sessionID, data)
 }
 
-// A pointer moving over the pane is not the user drafting a prompt: SGR mouse
-// reports and focus reports never edit the composer, so they do not guard it.
 func sessionInputEditsComposer(data []byte) bool {
 	rest := data
 	for len(rest) > 0 {

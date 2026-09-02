@@ -185,7 +185,7 @@ type Daemon struct {
 	queuedAgentMailboxItems           map[string]bool
 	drainingAgentMailbox              map[string]bool
 	agentMailboxDeliveries            map[string]*agentMailboxDeliveryFlight
-	agentMailboxRetries               map[string]*time.Timer
+	agentMailboxRetries               map[string]*agentMailboxRetry
 	postInitialPrompt                 map[string]func()
 	agentMailboxDrainScheduledHook    func(sessionID string)
 	agentMailboxDrainHook             func(sessionID string, delivered int)
