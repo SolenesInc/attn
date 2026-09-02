@@ -17,7 +17,6 @@ import (
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/sessioninstructions"
 	"github.com/victorarias/attn/internal/store"
-	"github.com/victorarias/attn/internal/transcript"
 )
 
 func newHeadlessDaemon(t *testing.T) (*Daemon, func() string) {
@@ -121,12 +120,14 @@ func TestHeadlessSwitchOffRefusesSessionTitle(t *testing.T) {
 	transcriptPath := writeSessionTitleTranscript(t)
 
 	calls := 0
-	d.sessionTitleExec = func(context.Context, *protocol.Session, transcript.ConversationSlice) (string, error) {
+	d.sessionTitleExec = func(context.Context, *protocol.Session, string) (string, error) {
 		calls++
 		return "Fix login flow", nil
 	}
+	installSessionTitleRunner(t, d)
 
 	d.maybeGenerateSessionTitle("sess-1", transcriptPath)
+	runSessionTitleJobs(t, d)
 
 	if calls != 0 {
 		t.Fatalf("title exec ran %d times, want 0", calls)
@@ -486,9 +487,9 @@ func runNotebookJob(t *testing.T, d *Daemon, handler func(context.Context, *jobs
 	_, _ = handler(context.Background(), &jobs.Job{Kind: kind, UniqueKey: subject})
 }
 
-func refusingTitleExec(t *testing.T) func(context.Context, *protocol.Session, transcript.ConversationSlice) (string, error) {
+func refusingTitleExec(t *testing.T) func(context.Context, *protocol.Session, string) (string, error) {
 	t.Helper()
-	return func(context.Context, *protocol.Session, transcript.ConversationSlice) (string, error) {
+	return func(context.Context, *protocol.Session, string) (string, error) {
 		t.Error("a refused duty called the title model")
 		return "", nil
 	}

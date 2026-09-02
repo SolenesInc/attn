@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -21,16 +21,16 @@ const (
 	maxSessionTitleRunes     = 48
 	sessionTitleTimeout      = 90 * time.Second
 	sessionTitleBriefCharCap = 1500
+	sessionTitleKind         = "session_title"
+	sessionTitleAttempts     = 3
 )
 
-const sessionTitleOutputSchema = `{
-	"type": "object",
-	"properties": {
-		"title": { "type": "string" }
-	},
-	"required": ["title"],
-	"additionalProperties": false
-}`
+const sessionTitleInstructions = `You generate short titles for AI-agent terminal sessions. Based on the conversation excerpt below, produce a concise title (3-7 words, at most 48 characters) that captures what the user is working on. Respond with only the title text - no quotes, no trailing punctuation, no explanation.`
+
+type sessionTitlePayload struct {
+	Conversation string `json:"conversation"`
+	Source       string `json:"source"`
+}
 
 func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 	if !d.sessionWantsAutoTitle(sessionID) {
@@ -52,7 +52,7 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 		// permanently skipping this session.
 		return
 	}
-	d.generateSessionTitle(sessionID, slice, "transcript")
+	d.enqueueSessionTitle(sessionID, slice.Render(), "transcript")
 }
 
 // UserPromptSubmit also delivers maintenance and peer-agent text; only a
@@ -68,7 +68,7 @@ func (d *Daemon) maybeGenerateSessionTitleFromPrompt(sessionID, prompt string, o
 	if runes := []rune(prompt); len(runes) > sessionTitleBriefCharCap {
 		prompt = string(runes[:sessionTitleBriefCharCap])
 	}
-	d.generateSessionTitle(sessionID, transcript.ConversationSlice{Brief: prompt, HumanCount: 1}, "prompt")
+	d.enqueueSessionTitle(sessionID, transcript.ConversationSlice{Brief: prompt, HumanCount: 1}.Render(), "prompt")
 }
 
 // A fingerprint, not the prompt: the body can be 1 MiB and the marker may
@@ -97,11 +97,7 @@ func (d *Daemon) matchSessionTitleInitialPrompt(sessionID, prompt string) bool {
 	d.sessionTitleMu.Lock()
 	defer d.sessionTitleMu.Unlock()
 	remembered, ok := d.sessionTitleInitialPrompt[sessionID]
-	if !ok || remembered != sha256.Sum256([]byte(prompt)) {
-		return false
-	}
-	delete(d.sessionTitleInitialPrompt, sessionID)
-	return true
+	return ok && remembered == sha256.Sum256([]byte(prompt))
 }
 
 func (d *Daemon) sessionWantsAutoTitle(sessionID string) bool {
@@ -118,9 +114,10 @@ func (d *Daemon) sessionWantsAutoTitle(sessionID string) bool {
 	return !attempted
 }
 
-func (d *Daemon) generateSessionTitle(sessionID string, slice transcript.ConversationSlice, source string) {
+func (d *Daemon) enqueueSessionTitle(sessionID, conversation, source string) {
 	// Ahead of the attempted-mark: a refused title must stay retryable.
-	if d.headlessTaskRefused("session_title") {
+	runner := d.headlessJobQueue("session_title")
+	if runner == nil {
 		return
 	}
 
@@ -135,33 +132,61 @@ func (d *Daemon) generateSessionTitle(sessionID string, slice transcript.Convers
 		d.sessionTitleAttempted = make(map[string]struct{})
 	}
 	d.sessionTitleAttempted[sessionID] = struct{}{}
+	fingerprint, hadFingerprint := d.sessionTitleInitialPrompt[sessionID]
 	delete(d.sessionTitleInitialPrompt, sessionID)
 	d.sessionTitleMu.Unlock()
 
-	session := d.store.Get(sessionID)
-	if session == nil {
+	_, err := runner.Enqueue(sessionTitleKind, jobs.EnqueueOptions{
+		UniqueKey:   sessionID,
+		Payload:     sessionTitlePayload{Conversation: conversation, Source: source},
+		MaxAttempts: sessionTitleAttempts,
+	})
+	if err == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), sessionTitleTimeout)
-	defer cancel()
-	result, err := d.sessionTitleExec(ctx, session, slice)
+	d.logf("session title %s: enqueue: %v", sessionID, err)
+	// The job never existed, so the attempt is still available; a marker a
+	// concurrent caller set meanwhile is theirs to keep.
+	d.sessionTitleMu.Lock()
+	delete(d.sessionTitleAttempted, sessionID)
+	if _, newer := d.sessionTitleInitialPrompt[sessionID]; hadFingerprint && !newer {
+		d.sessionTitleInitialPrompt[sessionID] = fingerprint
+	}
+	d.sessionTitleMu.Unlock()
+}
+
+func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, error) {
+	sessionID := jobSubject(job)
+	var payload sessionTitlePayload
+	if err := job.DecodePayload(&payload); err != nil {
+		return nil, err
+	}
+	session := d.store.Get(sessionID)
+	if session == nil || !d.sessionMayBeAutoTitled(session) {
+		return nil, nil
+	}
+	result, err := d.sessionTitleExec(ctx, session, payload.Conversation)
 	if err != nil {
-		d.logf("session title %s: %v", sessionID, err)
-		return
+		return nil, fmt.Errorf("session %s: %w", sessionID, err)
 	}
 	title := sanitizeSessionTitle(result)
 	if title == "" {
-		return
+		return nil, nil
 	}
 
 	session = d.store.Get(sessionID)
 	if session == nil || !d.sessionMayBeAutoTitled(session) {
-		return
+		return nil, nil
 	}
+	if !job.CommitGuard.Enter() {
+		return nil, context.Canceled
+	}
+	defer job.CommitGuard.Leave()
 	d.store.UpdateSessionLabel(sessionID, title)
 	session.Label = title
-	d.logf("session title %s: %q from %s", sessionID, title, source)
+	d.logf("session title %s: %q from %s", sessionID, title, payload.Source)
 	d.publishFact(FactSessionRenamed, sessionID, nil)
+	return title, nil
 }
 
 // The member check is the backstop for a member session renamed back to the cwd
@@ -174,17 +199,17 @@ func (d *Daemon) sessionMayBeAutoTitled(session *protocol.Session) bool {
 }
 
 // Wired onto d.sessionTitleExec in New(); test daemons leave it nil.
-func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
+func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
 	agent := string(session.Agent)
 	switch agent {
 	case "claude", "codex", "copilot":
-		return d.execSessionTitleHeadless(ctx, agent, slice)
+		return d.execSessionTitleHeadless(ctx, agent, conversation)
 	default:
 		return "", fmt.Errorf("unsupported agent for title generation: %s", agent)
 	}
 }
 
-func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent string, slice transcript.ConversationSlice) (string, error) {
+func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent string, conversation string) (string, error) {
 	driver := agentdriver.Get(agent)
 	if driver == nil {
 		return "", fmt.Errorf("%s driver unavailable", agent)
@@ -206,40 +231,26 @@ func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent string, sli
 	request := agentdriver.HeadlessTaskRequest{
 		Executable:   executable,
 		Model:        sessionTitleModel(agent),
-		Prompt:       buildSessionTitlePrompt(slice),
+		SystemPrompt: sessionTitleInstructions,
+		Prompt:       "<conversation>\n" + conversation + "\n</conversation>",
 		WorkDir:      workDir,
 		DisableTools: true,
 	}
 	switch agent {
 	case "claude":
 		request.MaxTurns = 2
+		// Receipt: $0.0056 on haiku with no tool definitions and this system prompt
+		// (was $0.055 with them, over this budget). A ~9x tripwire.
 		request.MaxBudgetUSD = "0.05"
-		request.OutputSchema = json.RawMessage(sessionTitleOutputSchema)
 	case "codex":
 		request.ReasoningEffort = "low"
 	}
 
 	result, err := provider.RunHeadlessTask(ctx, request)
 	if err != nil {
-		return "", fmt.Errorf("%s title run failed: %w", agent, err)
-	}
-	if agent == "claude" && len(result.StructuredOutput) > 0 {
-		var parsed struct {
-			Title string `json:"title"`
-		}
-		if jsonErr := json.Unmarshal(result.StructuredOutput, &parsed); jsonErr == nil {
-			return parsed.Title, nil
-		}
+		return "", fmt.Errorf("%s title run failed: %w\n%s", agent, err, result.FailureOutput)
 	}
 	return result.Text, nil
-}
-
-func buildSessionTitlePrompt(slice transcript.ConversationSlice) string {
-	return fmt.Sprintf(`You generate short titles for AI-agent terminal sessions. Based on the conversation excerpt below, produce a concise title (3-7 words, at most 48 characters) that captures what the user is working on. Respond with only the title text - no quotes, no trailing punctuation, no explanation.
-
-<conversation>
-%s
-</conversation>`, slice.Render())
 }
 
 var sessionTitleQuoteClosers = map[rune]rune{
