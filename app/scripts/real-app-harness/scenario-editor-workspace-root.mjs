@@ -96,7 +96,7 @@ async function waitForWorkspaceUi(client, workspaceId, predicate, description, t
 
 async function dockEditorTileNative(client, driver, workspaceId) {
   await driver.activateApp();
-  await pressShortcutKeys(client, driver, 'session.newHorizontal');
+  await pressShortcutKeys(client, driver, 'notebook.openTile');
   try {
     return await waitForWorkspaceUi(
       client,
