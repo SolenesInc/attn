@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -121,12 +122,19 @@ func TestClaudeHeadlessArgsReplacesSystemPromptWhenAsked(t *testing.T) {
 	plain := claudeHeadlessArgs(HeadlessTaskRequest{Model: "claude-test", Prompt: "compact"})
 	assertContainsNone(t, "Claude default system prompt", plain, "--system-prompt")
 
-	// A tool-less run must NOT disallow tools: --disallowedTools also disables
-	// StructuredOutput, so a --json-schema run produces no answer at all.
+	// A tool-less run drops the tool definitions from the billed prefix, unless it
+	// asks for a schema: --disallowedTools also disables StructuredOutput.
 	toolless := claudeHeadlessArgs(HeadlessTaskRequest{
 		Model: "claude-test", Prompt: "classify", DisableTools: true,
 	})
-	assertContainsNone(t, "Claude tool-less args", toolless, "--disallowedTools")
+	assertContainsAll(t, "Claude tool-less args", toolless, "--disallowedTools", "*")
+	assertContainsNone(t, "Claude tool-less args", toolless, "--allowedTools")
+	schema := claudeHeadlessArgs(HeadlessTaskRequest{
+		Model: "claude-test", Prompt: "classify", DisableTools: true,
+		OutputSchema: json.RawMessage(`{"type":"object"}`),
+	})
+	assertContainsAll(t, "Claude tool-less schema args", schema, "--allowedTools", "")
+	assertContainsNone(t, "Claude tool-less schema args", schema, "--disallowedTools")
 }
 
 func TestCodexHeadlessArgsUsesWorkspaceWriteAndDropsMCPPin(t *testing.T) {

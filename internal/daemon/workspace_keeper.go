@@ -249,6 +249,13 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) {
 			d.logf("legacy ticket recovery: register: %v", err)
 		}
 		if err := runner.RegisterWith(
+			sessionTitleKind,
+			d.sessionTitleHandler,
+			jobs.HandlerConfig{Timeout: sessionTitleTimeout},
+		); err != nil {
+			d.logf("session title: register session_title: %v", err)
+		}
+		if err := runner.RegisterWith(
 			gardenReviewClassifyKind,
 			d.gardenReviewClassifyHandler,
 			jobs.HandlerConfig{

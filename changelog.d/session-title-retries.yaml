@@ -1,0 +1,11 @@
+kind: fixed
+area: sessions
+change: >
+  Session auto-titles run on the jobs runner with three attempts and backoff,
+  the failed run's output lands in the daemon log, and the Claude title call
+  drops the tool definitions and the CLI system prompt it never used
+  (measured $0.055 to $0.006 per title).
+symptom: >
+  A session kept its directory name forever after one failed title run, and
+  the log only said "MCP tool server failed" because the call had overrun its
+  own budget.
