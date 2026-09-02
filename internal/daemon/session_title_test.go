@@ -285,7 +285,6 @@ func TestSessionTitle_CancelledRunDoesNotCommitTheLabel(t *testing.T) {
 	wantLabel := defaultSessionLabel(directory, "sess-1")
 
 	started := make(chan struct{})
-	// The provider answers only after the run is fenced: a late answer must not commit.
 	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
 		close(started)
 		<-ctx.Done()
