@@ -705,7 +705,6 @@ function CardMeta({
   armed: HarvestWhenDisplay | null;
 }) {
   if (plot) return <span className="garden-card__plot">{plot}</span>;
-  // Parked says nothing the column has not already said; what the seed waits on does.
   const marker = armed ? <span className="garden-card__armed" title={armed.sentence}>{armed.marker}</span> : null;
   switch (column) {
     case 'ready':

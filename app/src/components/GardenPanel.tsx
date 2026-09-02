@@ -274,7 +274,6 @@ function SeedRow({
             <span className="garden-row__title">
               <Marked text={seed.title} ranges={match?.titleRanges ?? []} />
             </span>
-            {/* Parked says nothing the row has not already said; what the seed waits on does. */}
             {signal && !(armed && signal.text === 'parked') && (
               <span className={`garden-row__signal is-${signal.tone}`}>{signal.text}</span>
             )}

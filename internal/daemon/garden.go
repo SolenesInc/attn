@@ -1369,6 +1369,9 @@ func (d *Daemon) applySeedTransitionDetailedAs(
 	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, sessionLive, 0)
 }
 
+// Wrapped into the revision refusal so a caller that can re-read tells it apart.
+var errSeedRevisionMoved = errors.New("")
+
 func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(string) bool, expectedRev int64,
 ) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
@@ -1400,7 +1403,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 		}
 		if expectedRev > 0 && doc.Rev != expectedRev {
 			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(
-				"%s changed since you reviewed it; refresh the garden", id)
+				"%s changed since you reviewed it; refresh the garden%w", id, errSeedRevisionMoved)
 		}
 		var displaced *garden.Tender
 		if held := seed.Tender(); ask.Force && held.Holds(sessionLive) && !held.Is(ask.Actor) {

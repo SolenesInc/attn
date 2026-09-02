@@ -432,7 +432,7 @@ func TestAMergedPullRequestHarvestsAnArmedSeedAsAttn(t *testing.T) {
 	if !ok {
 		t.Fatalf("the merged row went missing")
 	}
-	harvested, _, err := d.fulfilHarvestWhen(armed, merged, 0)
+	harvested, _, err := d.fulfilHarvestWhen(armed, merged, nil)
 	if err != nil {
 		t.Fatalf("fulfil: %v", err)
 	}
@@ -542,10 +542,10 @@ func TestSettlementIsBoundToTheConditionItObserved(t *testing.T) {
 	settlePullRequest(t, d, rec.PRID, sessionPullRequestMerged, "merged after the clear")
 	merged, _ := d.store.SessionPullRequestByID(rec.PRID)
 
-	if _, _, err := d.fulfilHarvestWhen(observed[0].seed, merged, observed[0].rev); err == nil {
+	if _, _, err := d.fulfilHarvestWhen(observed[0], merged, observed[0].HarvestWhen); err == nil {
 		t.Fatalf("a harvest pinned to a cleared condition went through")
 	}
-	if _, _, err := d.clearHarvestWhen(seed.ID, rec.PRID, observed[0].rev, "stale", garden.Tender{Member: crew.DaemonID}); err == nil {
+	if _, _, err := d.clearHarvestWhen(seed.ID, observed[0].HarvestWhen, "stale", garden.Tender{Member: crew.DaemonID}); err == nil {
 		t.Fatalf("a clear pinned to a cleared condition went through")
 	}
 	stored, _, err := d.readSeed(seed.ID)
@@ -554,5 +554,31 @@ func TestSettlementIsBoundToTheConditionItObserved(t *testing.T) {
 	}
 	if stored.Status != garden.StatusPlanted {
 		t.Fatalf("the cleared seed was moved to %q by a stale settlement", stored.Status)
+	}
+}
+
+func TestAnOrdinaryEditDoesNotStopSettlement(t *testing.T) {
+	d := newGardenDaemon(t)
+	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "edited under the sweep"})
+	rec := recordPullRequest(t, d, "sess-a", "https://github.com/victorarias/attn/pull/71")
+	if resp := armWhenMerged(t, d, "sess-a", seed.ID, rec.URL); !resp.Ok {
+		t.Fatalf("arm: %v", protocol.Deref(resp.Error))
+	}
+	observed, err := d.armedSeeds()
+	if err != nil || len(observed) != 1 {
+		t.Fatalf("armed seeds = %+v, %v", observed, err)
+	}
+	if _, _, err := d.applySeedBodyEdit(seed.ID, "the same promise, a better body"); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	settlePullRequest(t, d, rec.PRID, sessionPullRequestMerged, "merged after the edit")
+	merged, _ := d.store.SessionPullRequestByID(rec.PRID)
+
+	harvested, _, err := d.fulfilHarvestWhen(observed[0], merged, observed[0].HarvestWhen)
+	if err != nil {
+		t.Fatalf("an edit that kept the condition stopped the harvest: %v", err)
+	}
+	if harvested.Status != garden.StatusHarvested || harvested.Body != "the same promise, a better body" {
+		t.Fatalf("settlement after an edit left %+v", harvested)
 	}
 }

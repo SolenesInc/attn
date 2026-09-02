@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -66,7 +67,7 @@ func (d *Daemon) armHarvestWhenMerged(
 		return garden.Seed{}, docstore.Document{}, err
 	}
 	if rec.State == sessionPullRequestMerged {
-		return d.fulfilHarvestWhen(seed, rec, 0, sessionID)
+		return d.fulfilHarvestWhen(seed, rec, nil, sessionID)
 	}
 	if rec.State == sessionPullRequestClosed {
 		return garden.Seed{}, docstore.Document{}, fmt.Errorf(
@@ -156,9 +157,9 @@ func (d *Daemon) settleFreshlyArmed(
 	}
 	switch rec.State {
 	case sessionPullRequestMerged:
-		return d.fulfilHarvestWhen(seed, rec, written.Rev, sessionID)
+		return d.fulfilHarvestWhen(seed, rec, seed.HarvestWhen, sessionID)
 	case sessionPullRequestClosed:
-		cleared, doc, err := d.clearHarvestWhen(seed.ID, seed.HarvestWhen.PullRequest, written.Rev,
+		cleared, doc, err := d.clearHarvestWhen(seed.ID, seed.HarvestWhen,
 			harvestWhenClosedNote(rec), garden.Tender{Member: harvestWhenActor})
 		if err != nil {
 			return garden.Seed{}, docstore.Document{}, err
@@ -169,17 +170,55 @@ func (d *Daemon) settleFreshlyArmed(
 	return seed, written, nil
 }
 
-// expectedRev pins the harvest to the armed seed the caller observed; zero is unpinned.
-func (d *Daemon) fulfilHarvestWhen(
-	seed garden.Seed, rec store.SessionPullRequestRecord, expectedRev int64, excludedSessions ...string,
-) (garden.Seed, docstore.Document, error) {
-	reason := harvestWhenMergedReason(rec)
-	harvested, doc, notes, err := d.applySeedTransitionDetailedAsAtRevision(
-		seed.ID, garden.VerbHarvest,
-		garden.Ask{Actor: garden.Tender{Member: harvestWhenActor}, Reason: reason, Force: true},
-		"", d.sessionExists, expectedRev)
+// The same pull request set at the same time: a re-arm on the same pull request
+// is a new promise, and an ordinary edit in between is not.
+func sameHarvestCondition(current, observed *garden.HarvestCondition) bool {
+	return current != nil && observed != nil &&
+		current.PullRequest == observed.PullRequest && current.SetAt == observed.SetAt
+}
+
+func (d *Daemon) observedHarvestCondition(seedID string, observed *garden.HarvestCondition) (garden.Seed, docstore.Document, error) {
+	seed, doc, err := d.readSeed(seedID)
 	if err != nil {
 		return garden.Seed{}, docstore.Document{}, err
+	}
+	if seed.HarvestWhen == nil {
+		return garden.Seed{}, docstore.Document{}, fmt.Errorf("%s has no harvest condition", seed.ID)
+	}
+	if observed != nil && !sameHarvestCondition(seed.HarvestWhen, observed) {
+		return garden.Seed{}, docstore.Document{}, fmt.Errorf(
+			"%s now waits on %s set at %s, not the condition that was read", seed.ID, seed.HarvestWhen.PullRequest, seed.HarvestWhen.SetAt)
+	}
+	return seed, doc, nil
+}
+
+// observed pins the harvest to that condition; nil harvests whatever is armed now.
+func (d *Daemon) fulfilHarvestWhen(
+	seed garden.Seed, rec store.SessionPullRequestRecord, observed *garden.HarvestCondition, excludedSessions ...string,
+) (garden.Seed, docstore.Document, error) {
+	reason := harvestWhenMergedReason(rec)
+	ask := garden.Ask{Actor: garden.Tender{Member: harvestWhenActor}, Reason: reason, Force: true}
+	var harvested garden.Seed
+	var doc docstore.Document
+	var notes seedTransitionNotes
+	const attempts = 3
+	for attempt := range attempts {
+		current, read, err := d.readSeed(seed.ID)
+		if err == nil && observed != nil {
+			current, read, err = d.observedHarvestCondition(seed.ID, observed)
+		}
+		if err != nil {
+			return garden.Seed{}, docstore.Document{}, err
+		}
+		harvested, doc, notes, err = d.applySeedTransitionDetailedAsAtRevision(
+			current.ID, garden.VerbHarvest, ask, "", d.sessionExists, read.Rev)
+		if errors.Is(err, errSeedRevisionMoved) && attempt+1 < attempts {
+			continue
+		}
+		if err != nil {
+			return garden.Seed{}, docstore.Document{}, err
+		}
+		break
 	}
 	for _, note := range notes.all() {
 		d.mirrorSeedNoteOntoTicket("", seed.ID, note.Body)
@@ -189,10 +228,9 @@ func (d *Daemon) fulfilHarvestWhen(
 	return harvested, doc, nil
 }
 
-// pullRequest and expectedRev pin the clear to the condition the caller observed;
-// empty and zero clear whatever the seed carries now.
+// observed pins the clear to that condition; nil clears whatever is armed now.
 func (d *Daemon) clearHarvestWhen(
-	seedID, pullRequest string, expectedRev int64, noteBody string, actor garden.Tender,
+	seedID string, observed *garden.HarvestCondition, noteBody string, actor garden.Tender,
 ) (garden.Seed, docstore.Document, error) {
 	schema, err := d.seedsCollection()
 	if err != nil {
@@ -200,19 +238,9 @@ func (d *Daemon) clearHarvestWhen(
 	}
 	const attempts = 3
 	for range attempts {
-		seed, doc, err := d.readSeed(seedID)
+		seed, doc, err := d.observedHarvestCondition(seedID, observed)
 		if err != nil {
 			return garden.Seed{}, docstore.Document{}, err
-		}
-		if seed.HarvestWhen == nil {
-			return garden.Seed{}, docstore.Document{}, fmt.Errorf("%s has no harvest condition", seed.ID)
-		}
-		if expectedRev > 0 && doc.Rev != expectedRev {
-			return garden.Seed{}, docstore.Document{}, fmt.Errorf("%s changed since its condition was read", seed.ID)
-		}
-		if pullRequest != "" && seed.HarvestWhen.PullRequest != pullRequest {
-			return garden.Seed{}, docstore.Document{}, fmt.Errorf(
-				"%s now waits on %s, not %s", seed.ID, seed.HarvestWhen.PullRequest, pullRequest)
 		}
 		next := seed
 		next.HarvestWhen = nil
@@ -234,7 +262,7 @@ func (d *Daemon) clearHarvestWhen(
 func (d *Daemon) clearHarvestWhenRequested(
 	seedID string, ask garden.Ask, sessionID string,
 ) (garden.Seed, docstore.Document, error) {
-	seed, doc, err := d.clearHarvestWhen(seedID, "", 0, harvestWhenClearedNote, ask.Actor)
+	seed, doc, err := d.clearHarvestWhen(seedID, nil, harvestWhenClearedNote, ask.Actor)
 	if err != nil {
 		return garden.Seed{}, docstore.Document{}, err
 	}
