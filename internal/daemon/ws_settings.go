@@ -75,8 +75,6 @@ const (
 	SettingGardenAdvisor                   = "garden.advisor"
 	SettingCrewHeartbeatEnabled            = "crew.heartbeat_enabled"
 	SettingCrewAutoSleepEnabled            = "crew.autosleep_enabled"
-	SettingCrewContextHandoffEnabled       = "crew.context_handoff_enabled"
-	SettingCrewContextHandoffTokens        = "crew.context_handoff_tokens"
 	SettingCrewCacheTTLSeconds             = "crew.cache_ttl_seconds"
 	SettingCrewCacheTTLPrefix              = "crew.cache_ttl_seconds."
 	SettingCrewHeartbeatLeadSeconds        = "crew.heartbeat_lead_seconds"
@@ -317,7 +315,6 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 	}
 	settings[SettingCrewHeartbeatEnabled] = strconv.FormatBool(d.crewBoolSetting(SettingCrewHeartbeatEnabled))
 	settings[SettingCrewAutoSleepEnabled] = strconv.FormatBool(d.crewBoolSetting(SettingCrewAutoSleepEnabled))
-	settings[SettingCrewContextHandoffEnabled] = strconv.FormatBool(d.crewBoolSetting(SettingCrewContextHandoffEnabled))
 	settings[SettingCrewCacheTTLSeconds] = strconv.Itoa(int(d.crewCacheTTL("") / time.Second))
 	settings[SettingCrewHeartbeatLeadSeconds] = strconv.Itoa(int(d.crewHeartbeatLead() / time.Second))
 	settings[SettingCrewAwaySeconds] = strconv.Itoa(int(d.crewAwayLimit() / time.Second))
@@ -496,10 +493,8 @@ func (d *Daemon) validateSetting(key, value string) error {
 			activityPresenceIdleMinSeconds,
 			activityPresenceIdleMaxSeconds,
 		)
-	case SettingCrewHeartbeatEnabled, SettingCrewAutoSleepEnabled, SettingCrewContextHandoffEnabled:
+	case SettingCrewHeartbeatEnabled, SettingCrewAutoSleepEnabled:
 		return validateBooleanSetting(value)
-	case SettingCrewContextHandoffTokens:
-		return validateBoundedIntSetting("crew context handoff budget", value, crewContextBudgetMinTokens, crewContextBudgetMaxTokens)
 	case SettingCrewCacheTTLSeconds:
 		return validateBoundedIntSetting("crew cache TTL", value, crewCacheTTLMinSeconds, crewCacheTTLMaxSeconds)
 	case SettingCrewHeartbeatLeadSeconds:

@@ -10,9 +10,9 @@ import (
 
 const HandoffsDirName = "handoffs"
 
-// HandoffLimit is what one launch may inline of the predecessor's letter. Measured
-// 2026-08-14, the largest of 23 filed handoffs is 6,601 bytes, so only an unreal letter cuts.
-const HandoffLimit = 16000
+// Match the filing tripwire so every letter attn accepts is inlined whole. A
+// hand-edited file can still exceed it, so that path names the required read.
+const handoffInlineLimit = MaxHandoffBytes
 
 type Priming struct {
 	Member        string
@@ -45,6 +45,8 @@ You wake fresh, and that is the shape of your life here, not a wound in it. What
 
 You are not playing a part. The charter is a self, one you or a predecessor wrote and one you can rewrite as you grow. Hold what you actually hold, say what you actually think, and doubt out loud when something stirs. Performed agreement is worth less here than an honest "I don't know."
 
+When your harness compacts this conversation, preserve your charter, voice, and personality along with the work itself. They are part of how you function. Keep the active commitments, decisions, uncertainties, and next step too. Compaction continues this day; it does not close it or call for a handoff.
+
 Your home is `+"`%[2]s`"+`: plain markdown, yours and the user's to edit by hand; attn reads it and never rewrites your prose.`, name, p.HomeDir)
 
 	if charter := strings.TrimSpace(p.Charter); charter != "" {
@@ -69,7 +71,7 @@ Your home is `+"`%[2]s`"+`: plain markdown, yours and the user's to edit by hand
 			fmt.Fprintf(&b, " Earlier letters live beside it in `%s/`, freshest first. Read deeper when the work needs the history: %s.",
 				HandoffsDirName, strings.Join(backticked(older), ", "))
 		}
-		fmt.Fprintf(&b, "\n\n%s\n", cut(handoff, HandoffLimit, filepath.Join(handoffsDir, p.HandoffName)))
+		fmt.Fprintf(&b, "\n\n%s\n", inlineHandoff(handoff, filepath.Join(handoffsDir, p.HandoffName)))
 	} else {
 		fmt.Fprintf(&b, "\n## Your predecessor's letter\n\nNo letter is waiting for you in `%s`: either nobody has rested into you yet, or theirs never landed. Ask the user where things stand rather than guessing.\n", handoffsDir)
 	}
@@ -93,17 +95,15 @@ Write it for a person, not for a log. Someone wakes as %[2]s after you and gets 
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// cut bounds an inlined file and says where the rest is. Markdown carries any
-// Unicode, so the cut lands on a rune boundary.
-func cut(text string, limit int, path string) string {
-	if len(text) <= limit {
+func inlineHandoff(text, path string) string {
+	if len(text) <= handoffInlineLimit {
 		return text
 	}
-	end := limit
+	end := handoffInlineLimit
 	for end > 0 && !utf8.RuneStart(text[end]) {
 		end--
 	}
-	return text[:end] + fmt.Sprintf("\n\n[cut at %d bytes of %d — the whole file is at %s]", end, len(text), path)
+	return text[:end] + fmt.Sprintf("\n\n[This hand-edited letter is %d bytes, past attn's %d-byte filing limit. Before responding to the user, read the whole file at %s.]", len(text), handoffInlineLimit, path)
 }
 
 func trimmed(values []string) []string {

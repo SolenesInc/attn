@@ -12,14 +12,12 @@ import (
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/transcript"
 )
 
 type doorbellRecorder struct {
 	mu       sync.Mutex
 	writes   []string
 	autoTake bool
-	taken    chan struct{}
 }
 
 func TestCrewSleepPrompt_ForcesThePromisedSleep(t *testing.T) {
@@ -53,13 +51,6 @@ func (r *doorbellRecorder) setAutoTake(enabled bool) {
 	r.autoTake = enabled
 }
 
-func (r *doorbellRecorder) expectTake() <-chan struct{} {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.taken = make(chan struct{})
-	return r.taken
-}
-
 func newLifecycleDaemon(t *testing.T) (*Daemon, string, *doorbellRecorder) {
 	t.Helper()
 	previous := sessionInputSubmitDelay
@@ -81,19 +72,9 @@ func newLifecycleDaemon(t *testing.T) (*Daemon, string, *doorbellRecorder) {
 		}
 		prompt := submitted
 		autoTake := recorder.autoTake
-		var taken chan struct{}
-		if autoTake && string(data) == "\r" && prompt != "" && sessionID != "" {
-			taken = recorder.taken
-			recorder.taken = nil
-		}
 		recorder.mu.Unlock()
 		if autoTake && string(data) == "\r" && prompt != "" && sessionID != "" {
-			go func() {
-				d.observePromptTaken(sessionID, prompt, time.Now())
-				if taken != nil {
-					close(taken)
-				}
-			}()
+			go d.observePromptTaken(sessionID, prompt, time.Now())
 		}
 	}
 	woken, err := d.crewWake("trellis", "")
@@ -527,8 +508,8 @@ func TestCrewLifecycleMemo_ForgetsAClosedSession(t *testing.T) {
 	if memo.heartbeatDue("a", now.Add(time.Minute), time.Hour) {
 		t.Fatal("a second heartbeat slipped through the grace")
 	}
-	if !memo.mayAsk("a", now, time.Hour) {
-		t.Fatal("a heartbeat's grace blocked the handoff ask; they are separate acts")
+	if !memo.mayPromptSleep("a", now, time.Hour) {
+		t.Fatal("a heartbeat's grace blocked the sleep prompt; they are separate acts")
 	}
 	memo.forget("a")
 	if !memo.heartbeatDue("a", now.Add(time.Minute), time.Hour) {
@@ -536,109 +517,7 @@ func TestCrewLifecycleMemo_ForgetsAClosedSession(t *testing.T) {
 	}
 }
 
-func setSessionContextOccupancy(t *testing.T, d *Daemon, sessionID string, tokens, window int64) {
-	t.Helper()
-	d.watchersMu.Lock()
-	watcher := d.transcriptWatch[sessionID]
-	if watcher == nil {
-		watcher = newTranscriptWatcher(sessionID, protocol.SessionAgentClaude, "", time.Now(), nil)
-		if d.transcriptWatch == nil {
-			d.transcriptWatch = make(map[string]*transcriptWatcher)
-		}
-		d.transcriptWatch[sessionID] = watcher
-	}
-	d.watchersMu.Unlock()
-	watcher.observeOccupancy(transcript.ContextObservation{Tokens: tokens, Window: window})
-}
-
-func TestCrewLifecycleTick_AsksForTheHandoffWhenTheContextIsFull(t *testing.T) {
-	d, sessionID, recorder := newLifecycleDaemon(t)
-	now := time.Now()
-	setSessionActivity(t, d, sessionID, protocol.SessionStateIdle, now.Add(-2*time.Minute))
-	setSessionContextOccupancy(t, d, sessionID, crewContextBudgetDefault, 0)
-
-	d.crewLifecycleTick(now)
-
-	prompts := recorder.prompts()
-	if len(prompts) != 1 {
-		t.Fatalf("the tick sent %q, want the context handoff ask", prompts)
-	}
-	for _, want := range []string{
-		"160000 of the 160000 tokens",
-		"`attn handoff --nap -m",
-		"Write the letter first",
-		"carry on without asking",
-	} {
-		if !strings.Contains(prompts[0], want) {
-			t.Fatalf("the context handoff ask does not carry %q: %q", want, prompts[0])
-		}
-	}
-}
-
-func TestCrewLifecycleTick_AsksAboutAFullContextExactlyOnce(t *testing.T) {
-	d, sessionID, recorder := newLifecycleDaemon(t)
-	now := time.Now()
-	setSessionActivity(t, d, sessionID, protocol.SessionStateIdle, now.Add(-2*time.Minute))
-	setSessionContextOccupancy(t, d, sessionID, crewContextBudgetDefault+50000, 0)
-
-	for i := 0; i < 30; i++ {
-		d.crewLifecycleTick(now.Add(time.Duration(i) * time.Minute))
-	}
-	if got := recorder.prompts(); len(got) != 1 {
-		t.Fatalf("a full context was asked about %d times over half an hour", len(got))
-	}
-}
-
-func TestCrewLifecycleTick_ReArmsAfterAContextThatCameBackUnderBudget(t *testing.T) {
-	d, sessionID, recorder := newLifecycleDaemon(t)
-	now := time.Now()
-	setSessionActivity(t, d, sessionID, protocol.SessionStateIdle, now.Add(-2*time.Minute))
-
-	setSessionContextOccupancy(t, d, sessionID, crewContextBudgetDefault, 0)
-	firstTaken := recorder.expectTake()
-	d.crewLifecycleTick(now)
-	<-firstTaken
-	setSessionContextOccupancy(t, d, sessionID, 20000, 0)
-	d.crewLifecycleTick(now.Add(time.Minute))
-	setSessionContextOccupancy(t, d, sessionID, crewContextBudgetDefault, 0)
-	secondTaken := recorder.expectTake()
-	d.crewLifecycleTick(now.Add(2 * time.Minute))
-	<-secondTaken
-
-	if got := recorder.prompts(); len(got) != 2 {
-		t.Fatalf("the tick sent %d asks across two separate fills: %q", len(got), got)
-	}
-}
-
-func TestCrewLifecycleTick_SaysNothingWithoutAReading(t *testing.T) {
-	d, sessionID, recorder := newLifecycleDaemon(t)
-	now := time.Now()
-	setSessionActivity(t, d, sessionID, protocol.SessionStateIdle, now.Add(-2*time.Minute))
-
-	for i := 0; i < 10; i++ {
-		d.crewLifecycleTick(now.Add(time.Duration(i) * time.Minute))
-	}
-	if got := recorder.prompts(); len(got) != 0 {
-		t.Fatalf("a session with no occupancy reading was sent %q", got)
-	}
-}
-
-// Measured over the corpus behind this feature: 7 of 286 auto-compactions finished their
-// whole climb inside one turn, the worst burning 159,674 tokens without going idle.
-func TestCrewLifecycleTick_AsksAMemberThatIsStillWorking(t *testing.T) {
-	d, sessionID, recorder := newLifecycleDaemon(t)
-	now := time.Now()
-	setSessionActivity(t, d, sessionID, protocol.SessionStateWorking, now.Add(-2*time.Minute))
-	setSessionContextOccupancy(t, d, sessionID, crewContextBudgetDefault, 0)
-
-	d.crewLifecycleTick(now)
-
-	if got := recorder.prompts(); len(got) != 1 {
-		t.Fatalf("a working member with a full context was sent %q, want the handoff ask", got)
-	}
-}
-
-func TestCrewLifecycleTick_LeavesAWorkingMemberAloneWithoutContextPressure(t *testing.T) {
+func TestCrewLifecycleTick_LeavesAWorkingMemberAlone(t *testing.T) {
 	d, sessionID, recorder := newLifecycleDaemon(t)
 	now := time.Now()
 	setSessionActivity(t, d, sessionID, protocol.SessionStateWorking, now.Add(-3*time.Hour))
@@ -646,69 +525,8 @@ func TestCrewLifecycleTick_LeavesAWorkingMemberAloneWithoutContextPressure(t *te
 	d.crewLifecycleTick(now)
 
 	if got := recorder.prompts(); len(got) != 0 {
-		t.Fatalf("a working member with room left was sent %q", got)
+		t.Fatalf("a working member was sent %q", got)
 	}
-}
-
-func TestCrewLifecycleTick_ContextHandoffCanBeTurnedOff(t *testing.T) {
-	d, sessionID, recorder := newLifecycleDaemon(t)
-	now := time.Now()
-	setSessionActivity(t, d, sessionID, protocol.SessionStateIdle, now.Add(-2*time.Minute))
-	setSessionContextOccupancy(t, d, sessionID, crewContextBudgetDefault, 0)
-	d.store.SetSetting(SettingCrewContextHandoffEnabled, "false")
-
-	d.crewLifecycleTick(now)
-
-	if got := recorder.prompts(); len(got) != 0 {
-		t.Fatalf("the context half was off and the tick still sent %q", got)
-	}
-}
-
-func TestCrewContextBudget(t *testing.T) {
-	d, sessionID, _ := newLifecycleDaemon(t)
-	session := d.store.Get(sessionID)
-	if session == nil {
-		t.Fatalf("no session %s", sessionID)
-	}
-
-	t.Run("the shipped default with no window in sight", func(t *testing.T) {
-		setSessionContextOccupancy(t, d, sessionID, 1000, 0)
-		if got := d.crewContextPressure(session); got.Budget != crewContextBudgetDefault {
-			t.Fatalf("budget = %d, want %d", got.Budget, crewContextBudgetDefault)
-		}
-	})
-
-	t.Run("a stated window smaller than the budget lowers it, minus the letter's room", func(t *testing.T) {
-		setSessionContextOccupancy(t, d, sessionID, 1000, 100000)
-		want := int64(100000 - crewContextHandoffMargin)
-		if got := d.crewContextPressure(session); got.Budget != want {
-			t.Fatalf("budget = %d, want %d", got.Budget, want)
-		}
-	})
-
-	t.Run("a window bigger than the budget does not raise it", func(t *testing.T) {
-		setSessionContextOccupancy(t, d, sessionID, 1000, 1000000)
-		if got := d.crewContextPressure(session); got.Budget != crewContextBudgetDefault {
-			t.Fatalf("budget = %d, want the setting to stay the ceiling", got.Budget)
-		}
-	})
-
-	t.Run("the setting moves it", func(t *testing.T) {
-		d.store.SetSetting(SettingCrewContextHandoffTokens, "90000")
-		t.Cleanup(func() { d.store.SetSetting(SettingCrewContextHandoffTokens, "") })
-		setSessionContextOccupancy(t, d, sessionID, 1000, 0)
-		if got := d.crewContextPressure(session); got.Budget != 90000 {
-			t.Fatalf("budget = %d, want the configured 90000", got.Budget)
-		}
-	})
-
-	t.Run("no reading is no pressure", func(t *testing.T) {
-		other := *session
-		other.ID = "no-watcher-session"
-		if got := d.crewContextPressure(&other); got.Tokens != 0 || got.Budget != 0 {
-			t.Fatalf("pressure = %+v, want nothing at all", got)
-		}
-	})
 }
 
 func TestCrewLifecycleTick_SleepAskHeldOffByTypingLandsAfterTheQuietWindow(t *testing.T) {

@@ -28,6 +28,10 @@ func TestPriming_BlockCarriesEverythingAWokenMemberNeeds(t *testing.T) {
 		"The last Trellis left you what they knew",
 		"Presence over persistence",
 		"You are not playing a part.",
+		"When your harness compacts this conversation",
+		"preserve your charter, voice, and personality",
+		"They are part of how you function.",
+		"Compaction continues this day",
 		"/home/victor/.attn/crew/trellis",
 		"Begin by reading `CHARTER.md` there.",
 		"/home/victor/projects/attn",
@@ -110,29 +114,31 @@ func TestPriming_AFirstDayNamesWhatIsMissing(t *testing.T) {
 	}
 }
 
-func TestPriming_AnOversizeFileIsCutWithWhereTheRestIs(t *testing.T) {
+func TestPriming_AFiledLetterAtTheLimitIsInlinedWhole(t *testing.T) {
 	p := fullPriming()
-	p.Handoff = strings.Repeat("letter. ", HandoffLimit/4)
+	p.Handoff = strings.Repeat("x", MaxHandoffBytes)
 	block := p.Block()
 
-	if len(block) > HandoffLimit+8000 {
-		t.Fatalf("block is %d bytes; the limit did not bound it", len(block))
+	if !strings.Contains(block, p.Handoff) {
+		t.Fatal("a letter accepted by FileHandoff was not inlined whole")
 	}
-	if !strings.Contains(block, "[cut at ") || !strings.Contains(block, p.HandoffName) {
-		t.Error("the cut does not say where the whole file is")
+	if strings.Contains(block, "Before responding to the user, read the whole file") {
+		t.Fatal("a letter within the filing limit was treated as oversize")
 	}
 }
 
-func TestPriming_ACutLandsOnARuneBoundary(t *testing.T) {
+func TestPriming_AHandEditedOversizeLetterRequiresAFullRead(t *testing.T) {
 	p := Priming{Member: "keel", HomeDir: "/homes/keel", HandoffName: "2026-08-13T22-20Z-keel.md"}
-	p.Handoff = strings.Repeat("日", HandoffLimit)
+	p.Handoff = strings.Repeat("日", handoffInlineLimit)
 
 	block := p.Block()
 	if !utf8.ValidString(block) {
 		t.Fatal("the cut split a rune: the block is not valid UTF-8")
 	}
-	if !strings.Contains(block, "[cut at ") {
-		t.Fatal("an oversize letter was not cut")
+	for _, want := range []string{"hand-edited letter", "Before responding to the user, read the whole file", p.HandoffName} {
+		if !strings.Contains(block, want) {
+			t.Errorf("the oversize letter guidance does not contain %q", want)
+		}
 	}
 }
 

@@ -10,17 +10,15 @@ import (
 )
 
 type FollowRecord struct {
-	Raw     []byte
-	Events  []Event
-	Usage   *TokenUsage
-	Context *ContextObservation
+	Raw    []byte
+	Events []Event
+	Usage  *TokenUsage
 }
 
 type FollowBatch struct {
 	Records []FollowRecord
 	Events  []Event
 	Usage   []TokenUsage
-	Context *ContextObservation
 }
 
 type Follower struct {
@@ -179,10 +177,6 @@ func (f *Follower) Read() (FollowBatch, error) {
 		if usage, ok := f.usage.Observe(raw, encodeEventCursor(f.fingerprint, lineOffset, 0)); ok {
 			followRecord.Usage = &usage
 			batch.Usage = append(batch.Usage, usage)
-		}
-		if occupancy, ok := ContextOccupancy(f.agent, raw); ok {
-			followRecord.Context = &occupancy
-			batch.Context = &occupancy
 		}
 		batch.Records = append(batch.Records, followRecord)
 		batch.Events = append(batch.Events, events...)
