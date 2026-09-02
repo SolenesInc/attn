@@ -171,8 +171,9 @@ async function main() {
     // Docking a tile resizes the pane, which reflows text and invalidates any
     // cached row/col geometry.
     const clickTargetFor = async (relPath) => {
-      // A docked-away terminal pane suspends; its released surface reads empty.
-      await client.request('select_session', { sessionId });
+      // A docked tile takes focus and can fold the terminal into a sliver, whose
+      // released surface reads empty; refocusing the pane restores it first.
+      await client.request('focus_pane', { sessionId, paneId: pane.paneId });
       let read = { text: '' };
       let row = -1;
       const deadline = Date.now() + 15_000;

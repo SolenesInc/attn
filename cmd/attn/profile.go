@@ -218,8 +218,15 @@ func runProfileResolve(args []string) {
 
 func runProfileTauriConfig(args []string) {
 	profile := config.Profile()
+	basePath := ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--base":
+			if i+1 >= len(args) {
+				profileFatal("--base requires a value")
+			}
+			i++
+			basePath = args[i]
 		case "--profile":
 			if i+1 >= len(args) {
 				profileFatal("--profile requires a value")
@@ -238,18 +245,39 @@ func runProfileTauriConfig(args []string) {
 		}
 	}
 
-	r := resolveProfile(profile)
-	overlay := map[string]any{
+	window := map[string]any{}
+	if basePath != "" {
+		base, err := os.ReadFile(basePath)
+		if err != nil {
+			profileFatal(err.Error())
+		}
+		window, err = baseMainWindow(base)
+		if err != nil {
+			profileFatal(fmt.Sprintf("%s: %v", basePath, err))
+		}
+	}
+	b, err := json.MarshalIndent(tauriConfigOverlay(resolveProfile(profile), window), "", "  ")
+	if err != nil {
+		profileFatal(err.Error())
+	}
+	fmt.Println(string(b))
+}
+
+// Tauri replaces the whole app.windows array when an overlay names it, so the
+// overlay window starts from the base config's; without it Tauri's 800x600 wins.
+func tauriConfigOverlay(r profileResolved, baseWindow map[string]any) map[string]any {
+	window := map[string]any{}
+	for k, v := range baseWindow {
+		window[k] = v
+	}
+	window["title"] = r.AppName
+	window["backgroundThrottling"] = "disabled"
+	return map[string]any{
 		"$schema":     "https://schema.tauri.app/config/2",
 		"productName": r.AppName,
 		"identifier":  r.BundleID,
 		"app": map[string]any{
-			"windows": []any{
-				map[string]any{
-					"title":                r.AppName,
-					"backgroundThrottling": "disabled",
-				},
-			},
+			"windows": []any{window},
 		},
 		"plugins": map[string]any{
 			"deep-link": map[string]any{
@@ -259,11 +287,21 @@ func runProfileTauriConfig(args []string) {
 			},
 		},
 	}
-	b, err := json.MarshalIndent(overlay, "", "  ")
-	if err != nil {
-		profileFatal(err.Error())
+}
+
+func baseMainWindow(tauriConf []byte) (map[string]any, error) {
+	var conf struct {
+		App struct {
+			Windows []map[string]any `json:"windows"`
+		} `json:"app"`
 	}
-	fmt.Println(string(b))
+	if err := json.Unmarshal(tauriConf, &conf); err != nil {
+		return nil, err
+	}
+	if len(conf.App.Windows) == 0 {
+		return nil, fmt.Errorf("no app.windows entry to inherit")
+	}
+	return conf.App.Windows[0], nil
 }
 
 func cleanPlan(args []string) (normalized string, force bool, err error) {

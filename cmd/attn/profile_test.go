@@ -161,3 +161,24 @@ func TestStopProfileAppExitStatus(t *testing.T) {
 		t.Fatalf("stopProfileApp (unreadable pid) = %q, want an error", msg)
 	}
 }
+
+func TestTauriConfigOverlayInheritsTheBaseWindow(t *testing.T) {
+	window, err := baseMainWindow([]byte(`{"app":{"windows":[{"title":"attn","width":1200,"height":800,"minWidth":800}]}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	overlay := tauriConfigOverlay(resolveProfile("probe"), window)
+	got := overlay["app"].(map[string]any)["windows"].([]any)[0].(map[string]any)
+	if got["width"] != float64(1200) || got["height"] != float64(800) || got["minWidth"] != float64(800) {
+		t.Fatalf("base window geometry dropped: %v", got)
+	}
+	if got["title"] != "attn-probe" || got["backgroundThrottling"] != "disabled" {
+		t.Fatalf("profile window overrides missing: %v", got)
+	}
+	if window["title"] != "attn" {
+		t.Fatalf("overlay mutated the base window: %v", window)
+	}
+	if _, err := baseMainWindow([]byte(`{"app":{}}`)); err == nil {
+		t.Fatal("a base without windows must be rejected")
+	}
+}
