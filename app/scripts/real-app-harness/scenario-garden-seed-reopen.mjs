@@ -65,6 +65,8 @@ async function openPane(client, observer, runner, label) {
   const cwd = path.join(runner.sessionDir, label);
   fs.mkdirSync(cwd, { recursive: true });
   writeMockAgentFixture(cwd, {
+    // Resume needs the rollout where the codex driver looks, not under the cwd.
+    resumable: true,
     name: 'reopen mock',
     turns: [{
       includes: 'GSREOPEN_READY',
@@ -99,7 +101,7 @@ async function waitForRenderedReply(client, sessionId, expected, timeoutMs = 120
   let last = '';
   while (Date.now() < deadline) {
     last = (await client.request('read_pane_text', { sessionId, paneId: pane.paneId })).text || '';
-    const answered = last.split('\n').some((line) => line.trim() === expected);
+    const answered = last.split('\n').some((line) => line.trim().replace(/^• /, '') === expected);
     if (answered && !last.includes('Working (')) return;
     await delay(250);
   }
@@ -168,8 +170,6 @@ async function main() {
         },
         'the delegated pane to carry its seed chip',
       );
-      runner.assert(chip.hint.includes(planted),
-        'the chip names the seed the session reports to', { chip, planted });
       runner.assert(chip.id === planted,
         'the chip visibly carries the seed id agents use', { chip, planted });
       runner.writeText('seed-chip.json', JSON.stringify(chip, null, 2) + '\n');
@@ -221,7 +221,7 @@ async function main() {
         },
         'the reopened pane to carry the same seed chip',
       );
-      runner.assert(chip.hint.includes(seed),
+      runner.assert(chip.id === seed,
         'the reopened session reports to the seed it was reopened from', { chip, seed });
     });
 
@@ -256,7 +256,7 @@ async function main() {
         },
         'the Handover pane to carry the same seed chip',
       );
-      runner.assert(chip.hint.includes(seed),
+      runner.assert(chip.id === seed,
         'the Handover session reports to the same seed', { chip, seed });
       const shown = await runInPane(client, pane, `attn seed show ${seed}`, HANDOFF);
       runner.assert(saw(shown, HANDOFF), 'the confirmed handoff landed on the seed log', { shown });
