@@ -593,9 +593,7 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 	if probeID != "" {
 		probeStartedAt = time.Now()
 	}
-	// Record genuine user keystrokes for the nudge splice guard. A doorbell that fires
-	// within userInputGuardWindow of a keystroke would splice onto the half-typed line.
-	userTyped := d.noteUserInput(msg.ID, source)
+	userTyped := isComposerKeystroke(source, []byte(msg.Data))
 	if d.debugLogging {
 		d.logf(
 			"pty_input: id=%s bytes=%d preview=%q source=%s",

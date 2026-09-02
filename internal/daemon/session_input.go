@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -207,7 +208,6 @@ type sessionInputLane struct {
 	placing        bool
 	epoch          uint64
 	userGeneration uint64
-	userDirty      bool
 	userSubmit     bool
 	phase          protocol.SessionState
 }
@@ -250,6 +250,17 @@ var sessionInputSubmitDelay = 150 * time.Millisecond
 
 // Claude Code 2.1.228 receipt: warm 181/187ms, fresh 1.06s; 3s is the tripwire.
 var sessionInputTakenWindow = 3 * time.Second
+
+// Receipt (daemon.log, 9h, 5,588 keystrokes): p99 gap 3s, p99.5 12s; 30s is the tripwire.
+var sessionInputQuietWindow = 30 * time.Second
+
+type sessionInputQuietError struct{ retryAfter time.Duration }
+
+func (e *sessionInputQuietError) Error() string {
+	return fmt.Sprintf("%v (retry in %s)", errSessionInputComposerDirty, e.retryAfter)
+}
+
+func (e *sessionInputQuietError) Unwrap() error { return errSessionInputComposerDirty }
 
 func sessionInputDeferredError(err error) bool {
 	return errors.Is(err, errSessionInputBlockedByApproval) ||
@@ -515,8 +526,10 @@ func sessionInputPhaseAllows(placement sessionInputPlacement, state protocol.Ses
 }
 
 func (m *sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID string, lane *sessionInputLane, allowUserComposer bool) (sessionInputReason, error) {
-	if lane.userDirty && !allowUserComposer {
-		return sessionInputReasonUserComposerDirty, errSessionInputComposerDirty
+	if !allowUserComposer {
+		if remaining := m.daemon.userInputQuietRemaining(sessionID, sessionInputQuietWindow); remaining > 0 {
+			return sessionInputReasonUserComposerDirty, &sessionInputQuietError{retryAfter: remaining}
+		}
 	}
 	line, known, selector := m.daemon.sessionInputScreen(ctx, sessionID)
 	if !known {
@@ -541,24 +554,21 @@ func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, dat
 			lane.phase = session.State
 		}
 	}
-	if isUserKeystrokeSource(source) {
+	if m.daemon.noteUserInput(sessionID, source, data) {
 		lane.userGeneration++
-		if len(data) > 0 {
-			lane.userDirty = true
-			for _, attempt := range lane.attempts {
-				if !attempt.composer || (attempt.stage != sessionInputPlaced && attempt.stage != sessionInputIndeterminate) {
-					continue
-				}
-				attempt.stage = sessionInputIndeterminate
-				attempt.composer = false
-				select {
-				case <-attempt.wait:
-				default:
-					close(attempt.wait)
-				}
+		for _, attempt := range lane.attempts {
+			if !attempt.composer || (attempt.stage != sessionInputPlaced && attempt.stage != sessionInputIndeterminate) {
+				continue
+			}
+			attempt.stage = sessionInputIndeterminate
+			attempt.composer = false
+			select {
+			case <-attempt.wait:
+			default:
+				close(attempt.wait)
 			}
 		}
-		if strings.ContainsAny(string(data), "\r\n") {
+		if bytes.ContainsAny(data, "\r\n") {
 			lane.userSubmit = true
 		}
 	}
@@ -624,7 +634,7 @@ func (m *sessionInputModule) observePromptTaken(sessionID, prompt string, at tim
 		}
 		lane.pending = kept
 	}
-	lane.userDirty = false
+	m.daemon.forgetUserInput(sessionID)
 	lane.userSubmit = false
 	return m.takeLocked(lane, sessionID, candidate, at)
 }
@@ -701,6 +711,7 @@ func (m *sessionInputModule) observePhase(sessionID string, phase protocol.Sessi
 		m.ensureRunLocked(lane, sessionID)
 		if lane.userSubmit || previous == protocol.SessionStatePendingApproval {
 			lane.clearConsumedUserInputLocked()
+			m.daemon.forgetUserInput(sessionID)
 		}
 		return
 	}
@@ -718,7 +729,6 @@ func (lane *sessionInputLane) clearConsumedUserInputLocked() {
 		}
 	}
 	lane.pending = kept
-	lane.userDirty = false
 	lane.userSubmit = false
 }
 

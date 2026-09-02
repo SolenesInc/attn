@@ -1,0 +1,8 @@
+kind: fixed
+area: agents
+change: >
+  A doorbell held off by the user's typing lands on its own once the composer has
+  been quiet for 30 seconds. Mouse movement over a pane no longer counts as typing.
+symptom: >
+  A seed notification queued while the user was in the session never arrived,
+  because only a submitted prompt released it and hovering the pane kept it held.

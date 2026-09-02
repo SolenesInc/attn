@@ -414,7 +414,7 @@ func TestNudgeCountdownReArmsAfterRecentKeystroke(t *testing.T) {
 	d.nudgeFireHook = func(_, a string) { action = a }
 	agentID, inputs := armForTest(t, d)
 
-	d.noteUserInput(agentID, "")
+	d.noteUserInput(agentID, "", []byte("k"))
 	fireNudgeNow(t, d, agentID)
 
 	if action != "rearm" {
@@ -436,8 +436,8 @@ func TestNudgeKeystrokeGuardIgnoresAutomation(t *testing.T) {
 	d.nudgeFireHook = func(_, a string) { action = a }
 	agentID, inputs := armForTest(t, d)
 
-	d.noteUserInput(agentID, "automation")
-	d.noteUserInput(agentID, "attach_replay")
+	d.noteUserInput(agentID, "automation", []byte("k"))
+	d.noteUserInput(agentID, "attach_replay", []byte("k"))
 	fireNudgeNow(t, d, agentID)
 
 	if action != "doorbell" {

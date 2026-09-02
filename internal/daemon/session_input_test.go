@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/hostsession"
@@ -485,5 +486,42 @@ func TestSessionInput_RandomInterleavingsKeepMechanicalAndCausalContracts(t *tes
 			},
 			"": assertContracts,
 		})
+	})
+}
+
+func TestSessionInput_MouseReportsDoNotGuardTheComposer(t *testing.T) {
+	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
+	for _, report := range []string{"\x1b[<35;12;20M", "\x1b[<0;32;26M\x1b[<3;32;26m", "\x1b[I", "\x1b[O"} {
+		if err := d.writeSessionPTY(sessionID, []byte(report), "user"); err != nil {
+			t.Fatalf("mouse input: %v", err)
+		}
+	}
+	delivery := maintenanceSessionInput("crew-heartbeat", "after-mouse", sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
+	if attempt := d.sessionInputs().try(context.Background(), delivery); attempt.err != nil {
+		t.Fatalf("a mouse move guarded the composer: %v", attempt.err)
+	}
+}
+
+func TestSessionInput_QuietWindowReleasesTheComposerWithoutAPrompt(t *testing.T) {
+	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
+	synctest.Test(t, func(t *testing.T) {
+		if err := d.writeSessionPTY(sessionID, []byte("half written"), "user"); err != nil {
+			t.Fatalf("user input: %v", err)
+		}
+		time.Sleep(sessionInputQuietWindow / 2)
+		delivery := maintenanceSessionInput("crew-heartbeat", "mid-window", sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
+		attempt := d.sessionInputs().try(context.Background(), delivery)
+		var quiet *sessionInputQuietError
+		if !errors.As(attempt.err, &quiet) || !errors.Is(attempt.err, errSessionInputComposerDirty) {
+			t.Fatalf("mid-window error = %v, want the quiet-window deferral", attempt.err)
+		}
+		if quiet.retryAfter != sessionInputQuietWindow/2 {
+			t.Fatalf("retryAfter = %v, want the rest of the window %v", quiet.retryAfter, sessionInputQuietWindow/2)
+		}
+		time.Sleep(quiet.retryAfter)
+		delivery = maintenanceSessionInput("crew-heartbeat", "after-window", sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
+		if attempt := d.sessionInputs().try(context.Background(), delivery); attempt.err != nil {
+			t.Fatalf("input after the quiet window: %v", attempt.err)
+		}
 	})
 }

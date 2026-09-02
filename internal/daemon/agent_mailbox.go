@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -34,6 +35,10 @@ func (d *Daemon) deliverAgentMailboxItem(delivery agentmailbox.Delivery) error {
 	}
 
 	err := d.deliverAgentMailboxItemOnce(delivery)
+	var quiet *sessionInputQuietError
+	if errors.As(err, &quiet) {
+		d.scheduleAgentMailboxDrain(recipient, quiet.retryAfter)
+	}
 	d.agentMailboxMu.Lock()
 	flight := d.agentMailboxDeliveries[recipient]
 	delete(d.agentMailboxDeliveries, recipient)
@@ -267,6 +272,54 @@ func (d *Daemon) drainQueuedAgentMailboxItems(sessionID string) {
 	}
 	if d.agentMailboxDrainHook != nil {
 		d.agentMailboxDrainHook(sessionID, delivered)
+	}
+}
+
+type agentMailboxRetry struct{ timer *time.Timer }
+
+func (d *Daemon) scheduleAgentMailboxDrain(sessionID string, after time.Duration) {
+	d.agentMailboxMu.Lock()
+	defer d.agentMailboxMu.Unlock()
+	select {
+	case <-d.done:
+		return
+	default:
+	}
+	if d.agentMailboxRetries == nil {
+		d.agentMailboxRetries = make(map[string]*agentMailboxRetry)
+	}
+	if existing := d.agentMailboxRetries[sessionID]; existing != nil {
+		existing.timer.Stop()
+	}
+	entry := &agentMailboxRetry{}
+	entry.timer = time.AfterFunc(after, func() { d.fireAgentMailboxRetry(sessionID, entry) })
+	d.agentMailboxRetries[sessionID] = entry
+}
+
+// A stopped timer may already be running its callback, so only the entry that
+// still owns the session slot drains; a replaced or swept one returns.
+func (d *Daemon) fireAgentMailboxRetry(sessionID string, self *agentMailboxRetry) {
+	d.agentMailboxMu.Lock()
+	owner := d.agentMailboxRetries[sessionID] == self
+	if owner {
+		delete(d.agentMailboxRetries, sessionID)
+	}
+	d.agentMailboxMu.Unlock()
+	if !owner || d.store.Get(sessionID) == nil || !d.hasQueuedAgentMailboxItems(sessionID) {
+		return
+	}
+	if d.agentMailboxDrainScheduledHook != nil {
+		d.agentMailboxDrainScheduledHook(sessionID)
+	}
+	d.drainQueuedAgentMailboxItems(sessionID)
+}
+
+func (d *Daemon) stopAgentMailboxRetries() {
+	d.agentMailboxMu.Lock()
+	defer d.agentMailboxMu.Unlock()
+	for sessionID, entry := range d.agentMailboxRetries {
+		entry.timer.Stop()
+		delete(d.agentMailboxRetries, sessionID)
 	}
 }
 

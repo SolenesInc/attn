@@ -12,6 +12,7 @@
 - Input queue: unread messages in a conversation host.
 - Session input: ordered delivery to a live session with evidence of receipt.
 - Input evidence: deferred = untouched; placed = adapter-owned; taken = reading begun; indeterminate = uncertain.
+- Quiet window: automated input waits 30s after the user's last keystroke in a pane; mouse and focus reports are not keystrokes. A held delivery retries by timer, never only on a prompt or state change.
 - Agent mailbox: durable agent-addressed notification queue, separate from the app-wide user notification feed.
 - Mailbox item: one durable notification. Safe session-input placement proves notified; agent-facing items prove read only through their domain CLI.
 - Peer message: stored agent-to-agent body with a content-free mailbox doorbell. One unread doorbell is notified per recipient; `attn agent inbox` returns the body, proves read, and releases the next.
