@@ -27,10 +27,17 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '../../..');
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// The daemon's automation-schedule ticker fires once a real minute; the
-// budgets below are that cadence plus margin.
-const ANCHOR_POLL_TIMEOUT_MS = 90_000; // the anchor tick lands within one 60s ticker interval of apply, plus margin.
-const SCHEDULE_RUN_TIMEOUT_MS = 90_000; // one more live tick after apply/edit; the cursor is not re-anchored by an edit.
+// Leg 1 drives the daemon's real scheduled path — anchor tick, cursor, catch-up,
+// singleton continuity — off a sub-minute cron instead of a wall-clock minute.
+const SCHEDULE_TICK_INTERVAL = '1s';
+const EDIT_REBIND_CRON = '@every 2s';
+// Receipts, local macOS matrix run: the anchor lands 1.3s after apply and each
+// delivery 7.3s after the apply before it. Tripwires far past both.
+const ANCHOR_POLL_TIMEOUT_MS = 30_000;
+const SCHEDULE_RUN_TIMEOUT_MS = 45_000;
+// The anchor read must beat the first instant, one 2s cron period past the
+// anchor tick; the measured cursor-to-runs round trip is 8ms.
+const ANCHOR_POLL_INTERVAL_MS = 25;
 const PANEL_TIMEOUT_MS = 30_000;
 const RUN_DELIVERED_TIMEOUT_MS = 45_000;
 const GH_DELIVERY_TIMEOUT_MS = 60_000;
@@ -60,13 +67,13 @@ function disableDefinition(binary, id, env) {
   return runJSON(binary, ['automation', 'disable', id], env);
 }
 
-async function poll(fn, description, timeoutMs = 30_000) {
+async function poll(fn, description, timeoutMs = 30_000, intervalMs = 150) {
   const started = Date.now();
   let last = null;
   while (Date.now() - started < timeoutMs) {
     last = await fn();
     if (last) return last;
-    await delay(150);
+    await delay(intervalMs);
   }
   throw new Error(`timed out waiting for ${description}; last=${JSON.stringify(last)}`);
 }
@@ -94,11 +101,13 @@ async function waitForDaemonReady(binary, daemonEnv) {
 // The tick after the anchor tick legitimately fires a run, so asserting "no
 // run yet" after a fixed sleep races it. Poll for the anchor cursor instead.
 async function waitForScheduleAnchor(dbPath, definitionID) {
-  await poll(
+  const row = await poll(
     () => sqliteRow(dbPath, `SELECT observed_at FROM automation_provider_cursors WHERE definition_id='${sqlEscape(definitionID)}' AND provider='schedule' AND scope='*';`),
     `schedule cursor anchor for ${definitionID}`,
     ANCHOR_POLL_TIMEOUT_MS,
+    ANCHOR_POLL_INTERVAL_MS,
   );
+  return row[0];
 }
 
 
@@ -125,7 +134,7 @@ name: Slice 7 packaged edit-rebind proof
 trigger:
   type: scheduled
   schedule:
-    cron: "* * * * *"
+    cron: ${JSON.stringify(EDIT_REBIND_CRON)}
     time_zone: UTC
   continuity: singleton
   catch_up: latest
@@ -358,6 +367,9 @@ async function main() {
         ATTN_MOCK_GH_URL: mock.url,
         ATTN_MOCK_GH_HOST: mock.host,
         ATTN_MOCK_GH_TOKEN: 'test-token',
+        // Only the observation cadence moves; a definition still fires solely on
+        // its cron's instants, through the same claim and delivery path.
+        ATTN_AUTOMATION_SCHEDULE_INTERVAL: SCHEDULE_TICK_INTERVAL,
       });
       try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}
       run(binary, ['daemon', 'ensure'], daemonEnv);
@@ -376,24 +388,36 @@ async function main() {
       const created = runJSON(binary, ['automation', 'apply', '--file', editDefinitionFile], daemonEnv);
       editApplied = true;
       runner.assert(created && created.enabled === true, 'sanity: a brand-new definition is inserted enabled by default', created);
-      await waitForScheduleAnchor(dbPath, editID);
+      const appliedAt = Date.now();
+      const anchorObservedAt = await waitForScheduleAnchor(dbPath, editID);
+      const anchorSeenAt = Date.now();
       const anchoredRows = runJSON(binary, ['automation', 'runs', editID], daemonEnv) || [];
+      runner.log('schedule_anchor_receipt', {
+        anchorObservedAt,
+        applyToAnchorMs: anchorSeenAt - appliedAt,
+        anchorToRunsReadMs: Date.now() - anchorSeenAt,
+        cron: EDIT_REBIND_CRON,
+        tickInterval: SCHEDULE_TICK_INTERVAL,
+      });
       runner.assert(anchoredRows.length === 0, 'no run fires on the anchor-only tick', { anchoredRows });
 
       run1 = await poll(() => {
         const rows = (runJSON(binary, ['automation', 'runs', editID], daemonEnv) || []).filter((row) => row.state === 'delivered');
         return rows.length >= 1 ? rows[0] : null;
       }, 'P1 initial delivery', SCHEDULE_RUN_TIMEOUT_MS);
+      runner.log('schedule_delivery_receipt', { which: 'P1 initial', waitedMs: Date.now() - anchorSeenAt });
       runner.assert(Boolean(run1.ticket_id) && Boolean(run1.session_id), 'P1 delivery reserves a ticket and session', run1);
       runner.assert(!run1.last_error, 'P1 delivery has no error', run1);
 
       fs.writeFileSync(editDefinitionFile, editRebindDefinitionYAML({ id: editID, locationPath: editFixture, executable: probe.executable, prompt: PROMPT_P2 }));
+      const editedAt = Date.now();
       runJSON(binary, ['automation', 'apply', '--file', editDefinitionFile], daemonEnv);
 
       run2 = await poll(() => {
         const rows = (runJSON(binary, ['automation', 'runs', editID], daemonEnv) || []).filter((row) => row.state === 'delivered' && row.ticket_id !== run1.ticket_id);
         return rows.length >= 1 ? rows[0] : null;
       }, 'P2 edit delivery on a fresh thread', SCHEDULE_RUN_TIMEOUT_MS);
+      runner.log('schedule_delivery_receipt', { which: 'P2 edit', waitedMs: Date.now() - editedAt });
       runner.assert(!run2.last_error, 'P2 edit delivery succeeds; no "contract changed" refusal', run2);
       runner.assert(run2.ticket_id !== run1.ticket_id && run2.session_id !== run1.session_id, 'P2 edit delivery reserves a fresh ticket and session', { run1, run2 });
 
@@ -405,6 +429,7 @@ async function main() {
       );
 
       fs.writeFileSync(editDefinitionFile, editRebindDefinitionYAML({ id: editID, locationPath: editFixture, executable: probe.executable, prompt: PROMPT_P1 }));
+      const revertedAt = Date.now();
       runJSON(binary, ['automation', 'apply', '--file', editDefinitionFile], daemonEnv);
 
       run3 = await poll(() => {
@@ -413,6 +438,7 @@ async function main() {
         );
         return rows.length >= 1 ? rows[0] : null;
       }, 'P1 revert delivery on yet another fresh thread (the A1-fix, live)', SCHEDULE_RUN_TIMEOUT_MS);
+      runner.log('schedule_delivery_receipt', { which: 'P1 revert', waitedMs: Date.now() - revertedAt });
       runner.assert(!run3.last_error, 'P1 revert delivery succeeds; the revert edge does not brick delivery', run3);
       runner.assert(
         run3.ticket_id !== run1.ticket_id && run3.ticket_id !== run2.ticket_id,
