@@ -8,6 +8,7 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
+  pressShortcutKeys,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessProfile } from './harnessProfile.mjs';
@@ -95,20 +96,20 @@ async function waitForWorkspaceUi(client, workspaceId, predicate, description, t
 
 async function dockEditorTileNative(client, driver, workspaceId) {
   await driver.activateApp();
-  await driver.pressKey('n', { command: true, option: true });
+  await pressShortcutKeys(client, driver, 'notebook.openTile');
   try {
     return await waitForWorkspaceUi(
       client,
       workspaceId,
       (state) => Array.isArray(state?.tileIds) && state.tileIds.length === 1
         && Array.isArray(state?.tileTitles) && state.tileTitles.includes('Editor'),
-      'native Cmd+Opt+N to dock a fresh editor tile (titled "Editor")',
+      'the notebook.openTile shortcut to dock a fresh editor tile (titled "Editor")',
       15_000,
     );
   } catch (dockError) {
     const frontmost = await driver.frontmostBundleId().catch(() => '(unknown)');
     throw new Error(
-      `${dockError.message}\n\nThe native Cmd+Opt+N did not reach the app. This scenario `
+      `${dockError.message}\n\nThe native shortcut did not reach the app. This scenario `
       + `needs native keyboard input: grant Accessibility permission to the process running it `
       + `and keep attn frontmost. Frontmost app was "${frontmost}" (expected "${driver.bundleId}").`,
     );
@@ -207,6 +208,9 @@ async function main() {
 
   try {
     process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
+    if (process.env.ATTN_HARNESS_ALWAYS_ON_TOP === undefined) {
+      process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
+    }
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
       await closeExistingSessions(client, options.sessionRootDir);
