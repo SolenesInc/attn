@@ -211,7 +211,10 @@ async function main() {
           { selector: '.garden-panel' })).pngBase64, 'base64'));
       await pace();
 
-      await runInPane(client, pane, `attn open ${seed} --session ${pane.sessionId}`, '');
+      await client.request('write_pane', {
+        ...pane,
+        text: `attn open ${seed} --session ${pane.sessionId}`,
+      });
       const tile = await awaitTile(client, seed, (state) => state.notes.some((note) => note.kind === 'attach'));
       runner.assert(tile.present, 'the seed opened as a tile', { tile });
       runner.assert(tile.artifacts.some((label) => label.includes('evidence.md')),

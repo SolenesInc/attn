@@ -188,7 +188,7 @@ async function main() {
       await runInPane(client, dispatcher,
         `attn agent msg ${seed} "Now harvest your assigned seed with reason: ${HARVEST_REASON}" ` +
           `--source-session ${dispatcher.sessionId}`,
-        'delivered');
+        'seed-bell (id');
       const text = await waitForPane(client, dispatcher, `${seed} moved: harvested`, 60_000);
       runner.assert(saw(text, `${seed} moved: note`), 'the first doorbell remains visible', { text });
       runner.assert(saw(text, `${seed} moved: harvested`), 'the harvest rings after the read reset', { text });

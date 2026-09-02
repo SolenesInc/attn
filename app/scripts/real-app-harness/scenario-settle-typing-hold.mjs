@@ -150,6 +150,12 @@ async function main() {
       await client.request('set_setting', { key: 'auto_settle_arm_seconds', value: '5' });
       await client.request('set_setting', { key: 'auto_settle_countdown_seconds', value: String(COUNTDOWN_SECONDS) });
       await client.request('set_setting', { key: 'auto_settle_enabled', value: 'true' });
+      await observer.waitFor(
+        () => observer.getSetting('auto_settle_arm_seconds') === '5'
+          && observer.getSetting('auto_settle_countdown_seconds') === String(COUNTDOWN_SECONDS)
+          && observer.getSetting('auto_settle_enabled') === 'true',
+        'the daemon to apply the auto-settle settings',
+      );
 
       await submitPrompt(client, agentId, agentPaneId, LONG_RUN_PROMPT);
       await pollFor(
