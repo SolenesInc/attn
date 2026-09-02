@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -984,6 +985,108 @@ func TestMigrations_MigratedColumnsExist(t *testing.T) {
 		if err != nil {
 			t.Errorf("Column %s.%s should exist after migrations: %v", tc.table, tc.column, err)
 		}
+	}
+}
+
+func TestMigration131_RepairsPartialAgentDriverCursorSchemas(t *testing.T) {
+	columns := []struct {
+		name    string
+		dropSQL string
+	}{
+		{"plugin-name", `ALTER TABLE sessions DROP COLUMN agent_driver_plugin_name`},
+		{"run-id", `ALTER TABLE sessions DROP COLUMN agent_driver_run_id`},
+		{"report-seq", `ALTER TABLE sessions DROP COLUMN agent_driver_report_seq`},
+	}
+
+	for missing := 0; missing < 1<<len(columns); missing++ {
+		name := "complete-schema"
+		var missingNames []string
+		for i, column := range columns {
+			if missing&(1<<i) != 0 {
+				missingNames = append(missingNames, column.name)
+			}
+		}
+		if len(missingNames) > 0 {
+			name = "missing-" + strings.Join(missingNames, "-and-")
+		}
+		t.Run(name, func(t *testing.T) {
+			dbPath := filepath.Join(t.TempDir(), "migration-131.db")
+			db, err := OpenDB(dbPath)
+			if err != nil {
+				t.Fatalf("OpenDB setup: %v", err)
+			}
+			if _, err := db.Exec(`
+				INSERT INTO sessions (
+					id, label, directory, state, state_since, state_updated_at, last_seen,
+					agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq
+				) VALUES (
+					'partial-driver', 'Partial driver', '/tmp/partial-driver', 'idle',
+					'2026-05-25T20:22:10Z', '2026-05-25T20:22:10Z', '2026-05-25T20:22:10Z',
+					'example-plugin', 'run-39', 7
+				)
+			`); err != nil {
+				db.Close()
+				t.Fatalf("seed session: %v", err)
+			}
+			for i, column := range columns {
+				if missing&(1<<i) == 0 {
+					continue
+				}
+				if _, err := db.Exec(column.dropSQL); err != nil {
+					db.Close()
+					t.Fatalf("drop %s column: %v", column.name, err)
+				}
+			}
+			if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version >= 131`); err != nil {
+				db.Close()
+				t.Fatalf("rewind migration 131: %v", err)
+			}
+			if err := db.Close(); err != nil {
+				t.Fatalf("close partial database: %v", err)
+			}
+
+			migrated, err := OpenDB(dbPath)
+			if err != nil {
+				t.Fatalf("OpenDB migrate: %v", err)
+			}
+			defer migrated.Close()
+
+			want := AgentDriverReportCursor{PluginName: "example-plugin", RunID: "run-39", Seq: 7}
+			if missing&1 != 0 {
+				want.PluginName = ""
+			}
+			if missing&2 != 0 {
+				want.RunID = ""
+			}
+			if missing&4 != 0 {
+				want.Seq = 0
+			}
+			var got AgentDriverReportCursor
+			if err := migrated.QueryRow(`SELECT agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq
+				FROM sessions WHERE id = 'partial-driver'`).Scan(&got.PluginName, &got.RunID, &got.Seq); err != nil {
+				t.Fatalf("read repaired cursor: %v", err)
+			}
+			if got != want {
+				t.Fatalf("repaired cursor = %+v, want %+v", got, want)
+			}
+
+			store := &Store{db: migrated}
+			teardown, err := store.PrepareSessionTeardown("partial-driver", time.Date(2026, 9, 2, 12, 30, 0, 0, time.UTC))
+			if err != nil {
+				t.Fatalf("PrepareSessionTeardown after repair: %v", err)
+			}
+			if teardown != want {
+				t.Fatalf("teardown cursor = %+v, want %+v", teardown, want)
+			}
+
+			var applied int
+			if err := migrated.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version = 131`).Scan(&applied); err != nil {
+				t.Fatalf("read migration 131: %v", err)
+			}
+			if applied != 1 {
+				t.Fatalf("migration 131 count = %d, want 1", applied)
+			}
+		})
 	}
 }
 

@@ -70,7 +70,7 @@ if [ -n "$profile" ]; then
   # Named profile: generate the bundle-metadata overlay from the authority and
   # bake the resolved port + bundle id so the Rust runtime view can never drift.
   gen_rel="src-tauri/${app_name}.gen.conf.json"
-  "$attn" profile tauri-config --profile "$profile" > "$gen_rel"
+  "$attn" profile tauri-config --profile "$profile" --base src-tauri/tauri.conf.json > "$gen_rel"
   echo ">>> Generated Tauri overlay $gen_rel"
   if [ -n "$harness_default" ]; then
     echo ">>> Logical runtime profile: default, isolated by ATTN_HARNESS_DATA_DIR"

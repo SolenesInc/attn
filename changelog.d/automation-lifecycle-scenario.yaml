@@ -1,0 +1,8 @@
+kind: fixed
+area: harness
+change: >
+  The automation-lifecycle scenario expected a review request that already
+  existed when the automation was applied to deliver; since activation
+  baselines the backlog, that never fires on any platform. Leg 3 now toggles
+  the request for its first delivery like the later ones, and the scenario
+  passes on Linux and macOS.

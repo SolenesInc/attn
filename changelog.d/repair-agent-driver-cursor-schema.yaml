@@ -1,0 +1,4 @@
+kind: fixed
+area: sessions
+change: Repair incomplete agent-driver cursor schemas on startup so affected session panes can close normally.
+symptom: Closing a session did nothing when its profile recorded migration 39 before all three cursor columns existed.

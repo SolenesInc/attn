@@ -94,6 +94,7 @@ import {
   fitShouldBailAsSuspicious,
   geometryOverflowsContainer,
   isWorkspaceResizeDragActive,
+  isWorkspaceSuspensionAnimating,
   recoveryDelayMs,
 } from './ghosttyGeometry';
 import { recordTerminalLinkHitTestEvent } from '../utils/terminalLinkHitTestLog';
@@ -1915,6 +1916,14 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       const session = runtimeMetaRef.current?.sessionId ?? undefined;
       if (runtimeMetaRef.current && !runtimeMetaRef.current.isActiveSession) {
         noteResize(diagKeyRef.current, { session, paneKind, source: 'fit', bail: 'inactiveSession', cw: container.clientWidth, ch: container.clientHeight });
+        return;
+      }
+      if (surfaceReleasedRef.current) {
+        noteResize(diagKeyRef.current, { session, paneKind, source: 'fit', bail: 'surfaceReleased', cw: container.clientWidth, ch: container.clientHeight });
+        return;
+      }
+      if (isWorkspaceSuspensionAnimating(container)) {
+        noteResize(diagKeyRef.current, { session, paneKind, source: 'fit', bail: 'suspensionAnimating', cw: container.clientWidth, ch: container.clientHeight });
         return;
       }
       const dims = renderer.fitDimensions(container.clientWidth, container.clientHeight);

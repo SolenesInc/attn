@@ -843,6 +843,12 @@ function clickPaneElement(sessionId: string, paneId: string) {
   if (!(element instanceof HTMLElement)) {
     throw new Error(`Pane element not found for ${sessionId}:${paneId}`);
   }
+  // A folded pane is only its expand button; that button stops mousedown.
+  const expand = element.querySelector('.workspace-suspended-leaf');
+  if (element.dataset.paneSuspended === 'true' && expand instanceof HTMLElement) {
+    expand.click();
+    return;
+  }
 
   element.dispatchEvent(new MouseEvent('mousedown', {
     bubbles: true,
@@ -1357,7 +1363,10 @@ function collectGardenUiState() {
     depth: Number.parseInt(step.getAttribute('data-trail-depth') ?? '-1', 10),
     here: false,
   }));
-  const here = panel.querySelector('.garden-head__title')?.textContent?.trim() ?? '';
+  // Root renders no head; the trail nav names the place instead ("The garden").
+  const here = panel.querySelector('.garden-head__title')?.textContent?.trim()
+    || panel.querySelector('.garden-trail__here')?.textContent?.trim()
+    || '';
   if (here) trail.push({ label: here, depth: trail.length, here: true });
   const seeds = Array.from(panel.querySelectorAll('.garden-row')).map((row) => ({
     id: row.querySelector('[data-seed-row]')?.getAttribute('data-seed-row') ?? '',
@@ -1433,10 +1442,13 @@ function collectGardenSeedPage() {
       gone: Boolean(item.querySelector('.seed-artifact__gone')),
       external: Boolean(item.querySelector('.seed-artifact__leaves')),
     })),
+    // Attach and detach notes sit behind the "attachment changes" disclosure
+    // and only join this list once garden_expand_seed opens it (bookkeeping: true).
     notes: Array.from(page.querySelectorAll('.garden-log > li')).map((note) => ({
       kind: note.getAttribute('data-kind') ?? '',
       body: note.querySelector('.garden-log__body')?.textContent?.trim() ?? '',
     })),
+    bookkeeping: page.querySelector('.garden-closed-toggle')?.textContent?.trim() ?? '',
     resumeAvailable: Boolean(page.querySelector('[data-testid^="seed-resume-"]')),
     handoverAvailable: Boolean(page.querySelector('[data-testid^="seed-handover-"]')),
   };
@@ -3052,6 +3064,13 @@ export function useUiAutomationBridge({
         await settleUi(2);
         return { shortcutId };
       }
+      case 'shortcut_binding': {
+        const shortcutId = typeof payload.shortcutId === 'string' ? payload.shortcutId as ShortcutId : null;
+        if (!shortcutId || !Object.prototype.hasOwnProperty.call(SHORTCUTS, shortcutId)) {
+          throw new Error(`shortcut_binding requires a known shortcutId, got ${JSON.stringify(payload.shortcutId)}`);
+        }
+        return { shortcutId, binding: resolveBinding(shortcutId) };
+      }
       case 'open_shortcut_editor': {
         if (!openShortcutEditor) {
           throw new Error('openShortcutEditor handler is not wired');
@@ -3421,6 +3440,13 @@ export function useUiAutomationBridge({
         if (row instanceof HTMLElement) {
           row.click();
           await settleUi(3);
+        }
+        if (payload.bookkeeping === true) {
+          const toggle = document.querySelector('.garden-page .garden-closed-toggle[aria-expanded="false"]');
+          if (toggle instanceof HTMLElement) {
+            toggle.click();
+            await settleUi(1);
+          }
         }
         return collectGardenSeedPage();
       }

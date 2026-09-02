@@ -1,0 +1,8 @@
+kind: fixed
+area: app
+change: >
+  Folding a terminal pane into its sliver (for example when a docked markdown
+  tile took the width) resized the PTY down to three columns mid-animation and
+  truncated every scrollback row. Fits now hold while the fold or restore
+  animates and while the surface is released, so the PTY only sees the settled
+  width.

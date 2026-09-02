@@ -349,6 +349,20 @@ export async function legacyTicketRequest(socketPath, message, timeoutMs = 10_00
   });
 }
 
+// The app answers with its live binding: a macOS chord pressed on Linux lands
+// in the focused terminal as text instead of reaching the shortcut.
+export async function pressShortcutKeys(client, driver, shortcutId) {
+  const { binding } = await client.request('shortcut_binding', { shortcutId });
+  if (!binding) throw new Error(`shortcut ${shortcutId} is unbound in the app`);
+  if (binding.leader) throw new Error(`shortcut ${shortcutId} is a leader chord; pressShortcutKeys presses one combo`);
+  await driver.pressKey(binding.key, {
+    command: !!binding.meta,
+    control: !!binding.ctrl,
+    shift: !!binding.shift,
+    option: !!binding.alt,
+  });
+}
+
 export function timestampSlug() {
   return new Date().toISOString().replace(/[:.]/g, '-');
 }

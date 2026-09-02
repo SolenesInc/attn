@@ -59,6 +59,9 @@ function saw(haystack, needle) {
 }
 
 let marks = 0;
+// A docked seed tile weighs 1.5 terminals; 1440px keeps the terminal at 576px,
+// above the 480px fold whose released surface reads empty.
+const WIDE_WINDOW = 1440;
 
 // The marker appears twice — in the line as typed and again as the shell
 // prints it — so the output is what lies between them.
@@ -116,7 +119,7 @@ async function readDrill(client, seedID, ready, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
   let state = { present: false, notes: [], artifacts: [] };
   while (Date.now() < deadline) {
-    state = await client.request('garden_expand_seed', { seedId: seedID, reopen: true });
+    state = await client.request('garden_expand_seed', { seedId: seedID, reopen: true, bookkeeping: true });
     if (state.present && ready(state)) return state;
     await delay(200);
   }
@@ -145,6 +148,10 @@ async function main() {
   let artifactPath = null;
   try {
     await launchFreshAppAndConnect(client, observer);
+    const initialBounds = await client.request('get_window_bounds');
+    await client.request('set_window_bounds', {
+      logicalBounds: { ...initialBounds.logicalBounds, width: WIDE_WINDOW },
+    });
     pane = await runner.step('open_session', () => openPane(client, observer, runner, 'dispatcher'));
 
     delegated = await runner.step('dispatch_a_delegation', async () => {
@@ -197,7 +204,7 @@ async function main() {
       await delay(500);
       const drill = await readDrill(client, seed, (state) => state.notes.some((note) => note.kind === 'attach'));
       runner.assert(drill.present, 'the panel drill shows the seed document', { drill });
-      runner.assert(drill.artifacts.some((label) => label.includes('evidence.md')),
+      runner.assert(drill.artifacts.some((artifact) => artifact.primary === 'evidence.md'),
         'the drill carries the current artifact', { drill });
       fs.writeFileSync(path.join(runner.runDir, 'drill-attached.png'),
         Buffer.from((await client.request('capture_screenshot_data',

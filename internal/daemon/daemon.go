@@ -164,7 +164,7 @@ type Daemon struct {
 	ticketOrphanFirstSeen             map[string]time.Time
 	ticketReconcilePRFetch            prStateFetcher
 	sessionTitleMu                    sync.Mutex
-	sessionTitleExec                  func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error)
+	sessionTitleExec                  func(ctx context.Context, session *protocol.Session, conversation string) (string, error)
 	sessionTitleAttempted             map[string]struct{}
 	sessionTitleInitialPrompt         map[string][sha256.Size]byte
 	ticketArtifactMu                  sync.Mutex

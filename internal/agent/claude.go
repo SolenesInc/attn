@@ -293,8 +293,6 @@ func claudeHeadlessArgs(request HeadlessTaskRequest) []string {
 	if len(tools) == 0 && !request.DisableTools {
 		tools = claudeNativeDefaultTools
 	}
-	// Not trimmed here: --disallowedTools "*" drops the native tool definitions from the
-	// billed prefix (~24.8K to ~2.3K tokens, measured) but disables StructuredOutput.
 	args := []string{"--print"}
 	args = append(args, claudeHeadlessIsolationArgs()...)
 	// --strict-mcp-config with no --mcp-config loads ZERO MCP servers. Without it the
@@ -328,7 +326,15 @@ func claudeHeadlessArgs(request HeadlessTaskRequest) []string {
 		"--no-session-persistence",
 		"--disable-slash-commands",
 		"--no-chrome",
-		"--allowedTools", strings.Join(tools, ","),
+	)
+	// --disallowedTools "*" drops the native tool definitions from the billed prefix
+	// (~24.8K to ~2.3K tokens, measured) but disables StructuredOutput.
+	if request.DisableTools && len(request.OutputSchema) == 0 {
+		args = append(args, "--disallowedTools", "*")
+	} else {
+		args = append(args, "--allowedTools", strings.Join(tools, ","))
+	}
+	args = append(args,
 		"--permission-mode", "dontAsk",
 		"--output-format", "json",
 		request.Prompt,

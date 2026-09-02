@@ -12,6 +12,7 @@ import {
   createSessionAndWaitForInitialPane,
   launchFreshAppAndConnect,
   parseCommonArgs,
+  pressShortcutKeys,
   printCommonHelp,
   relaunchAppAndConnect,
 } from './common.mjs';
@@ -652,7 +653,7 @@ async function main() {
       await client.request('select_session', { sessionId: beta.sessionId });
       await driver.activateApp();
       await driver.clickWindow(0.5, 0.5);
-      await driver.pressKey('e', { command: true, shift: true });
+      await pressShortcutKeys(client, driver, 'session.settle');
       await waitForTurns(client, [alpha.sessionId], 'beta settled by shortcut before the restart');
 
       // The target is read before the settle: reading it afterwards races the
@@ -701,7 +702,7 @@ async function main() {
       const emptied = await pollFor(async () => {
         const queue = await queueState(client);
         if (turnIds(queue).length === 0) return queue;
-        await driver.pressKey('e', { command: true, shift: true });
+        await pressShortcutKeys(client, driver, 'session.settle');
         await delay(1500);
         return null;
       }, 'the band emptied one keyboard settle at a time', 45_000, 0);
@@ -770,7 +771,7 @@ async function main() {
     await runner.step('home_the_user_walked_to_keeps_them', async () => {
       await driver.activateApp();
       await driver.clickWindow(0.5, 0.5);
-      await driver.pressKey('h', { command: true, shift: true });
+      await pressShortcutKeys(client, driver, 'session.goToDashboard');
       const home = await pollFor(async () => {
         const current = await client.request('get_state');
         return current.activeSessionId === null ? current : null;

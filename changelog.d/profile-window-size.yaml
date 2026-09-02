@@ -1,0 +1,6 @@
+kind: fixed
+area: app
+change: >
+  A named-profile app opened at Tauri's 800x600 default instead of the
+  configured 1200x800: the profile build overlay replaced the window list and
+  dropped the base geometry. The overlay now inherits the base window.
