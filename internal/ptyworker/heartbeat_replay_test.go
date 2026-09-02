@@ -78,8 +78,6 @@ func TestWatchWithoutHeartbeatReplaysOnlyTheState(t *testing.T) {
 	}
 }
 
-// Watch subscription raced against a heartbeat stream must never hand the
-// watcher a newer heartbeat followed by the stale replay.
 func TestWatchReplayNeverReordersBehindALiveHeartbeat(t *testing.T) {
 	for round := 0; round < 200; round++ {
 		r := &Runtime{
