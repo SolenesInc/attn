@@ -1117,6 +1117,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 		INSERT OR IGNORE INTO session_teardown_tombstones (session_id, requested_at)
 			SELECT id, closed_intentionally_at FROM sessions WHERE closed_intentionally_at <> '';
 	`},
+	{131, "repair partial agent driver cursor schemas", ``},
 }
 
 const migration99SQL = `
@@ -1554,6 +1555,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 131 {
+			if err := applyMigration131(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else {
 			if _, err := tx.Exec(m.sql); err != nil {
 				tx.Rollback()
@@ -1614,6 +1620,29 @@ func applyMigration128(tx *sql.Tx) error {
 	}
 	_, err = tx.Exec(`ALTER TABLE session_pull_requests ADD COLUMN status_checked_at TEXT NOT NULL DEFAULT ''`)
 	return err
+}
+
+func applyMigration131(tx *sql.Tx) error {
+	columns := []struct {
+		name string
+		sql  string
+	}{
+		{"agent_driver_plugin_name", `ALTER TABLE sessions ADD COLUMN agent_driver_plugin_name TEXT NOT NULL DEFAULT ''`},
+		{"agent_driver_run_id", `ALTER TABLE sessions ADD COLUMN agent_driver_run_id TEXT NOT NULL DEFAULT ''`},
+		{"agent_driver_report_seq", `ALTER TABLE sessions ADD COLUMN agent_driver_report_seq INTEGER NOT NULL DEFAULT 0`},
+	}
+	for _, column := range columns {
+		has, err := columnExists(tx, "sessions", column.name)
+		if err != nil {
+			return err
+		}
+		if !has {
+			if _, err := tx.Exec(column.sql); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func applyMigration107(tx *sql.Tx) error {
