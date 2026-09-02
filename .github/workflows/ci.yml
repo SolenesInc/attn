@@ -482,6 +482,9 @@ jobs:
       contents: read
       pull-requests: read
     runs-on: ubuntu-24.04
+    # ubuntu-24.04 run 33657368804 took 35m42s end to end; its matrix took 24m07.635s.
+    # 60m leaves 24m18s of runner variance before releasing the repository-wide lock.
+    timeout-minutes: 60
     concurrency:
       group: app-acceptance-${{ github.repository }}
       cancel-in-progress: false
