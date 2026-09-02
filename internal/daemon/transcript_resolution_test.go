@@ -89,6 +89,25 @@ func TestResolveStopTranscriptPath_RejectsAReportedSameCWDNeighbor(t *testing.T)
 	}
 }
 
+func TestResolveStopTranscriptPath_RejectsAReportedNeighborWhenBoundPathIsMissing(t *testing.T) {
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	cwd := "/repo/project"
+	missing := filepath.Join(t.TempDir(), "missing.jsonl")
+	neighbor := writeCodexInteractiveRollout(t, codexHome, "native-neighbor", cwd, time.Now())
+
+	d.store.Add(&protocol.Session{ID: "sess", Agent: protocol.SessionAgentCodex, Directory: cwd})
+	if changed, err := d.store.TransitionSessionConversation("sess", "native-own", missing); err != nil || !changed {
+		t.Fatalf("bind missing transcript: changed=%v err=%v", changed, err)
+	}
+
+	if got := d.resolveStopTranscriptPath(d.store.Get("sess"), neighbor); got != "" {
+		t.Fatalf("stop resolved to neighbor %q when bound transcript %q is missing", got, missing)
+	}
+}
+
 func TestResolveTranscriptPathForSession_RejectsCWDGuessWithoutNativeID(t *testing.T) {
 	codexHome := t.TempDir()
 	t.Setenv("CODEX_HOME", codexHome)

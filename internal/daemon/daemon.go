@@ -2896,6 +2896,9 @@ func (d *Daemon) resolveStopTranscriptPath(session *protocol.Session, reported s
 	if exact := d.resolveTranscriptPathForSession(session, ""); exact != "" {
 		return exact
 	}
+	if session != nil && strings.TrimSpace(d.store.GetSessionTranscriptPath(session.ID)) != "" {
+		return ""
+	}
 	return strings.TrimSpace(reported)
 }
 
