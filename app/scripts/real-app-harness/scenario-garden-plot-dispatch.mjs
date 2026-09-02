@@ -124,6 +124,7 @@ async function main() {
   let second = null;
   let crown = null;
   let children = [];
+  let strayID = null;
   try {
     await launchFreshAppAndConnect(client, observer);
     pane = await runner.step('open_session', () => openPane(client, observer, runner, 'gardener'));
@@ -177,7 +178,7 @@ async function main() {
     await runner.step('dispatch_is_scope_and_not_a_fence', async () => {
       const outside = await runInPane(client, pane,
         `attn seed plant "Work outside the plot" --session ${pane.sessionId}`, 's-');
-      const strayID = seedIDs(outside).pop();
+      strayID = seedIDs(outside).pop();
       const all = await runInPane(client, pane,
         `attn seed ready --all --session ${delegated}`, 'ready in the garden');
       runner.assert(saw(all, strayID),
@@ -207,8 +208,14 @@ async function main() {
       await pace();
 
       const back = await client.request('garden_climb_to', { depth: 0 });
-      runner.assert(back.trail.length === 1 && back.seeds.length > children.length,
-        'the trail climbs back out to the whole garden', { trail: back.trail });
+      runner.assert(
+        back.trail.length === 1
+          && back.trail[0].here
+          && back.seeds.some((seed) => seed.id === crown)
+          && back.seeds.some((seed) => seed.id === strayID),
+        'the trail climbs back out to the whole garden',
+        { trail: back.trail, seeds: back.seeds, crown, strayID },
+      );
       await pace();
     });
 

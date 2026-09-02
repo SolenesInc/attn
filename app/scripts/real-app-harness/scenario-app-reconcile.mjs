@@ -492,9 +492,16 @@ async function main() {
         'a fact published after the rebuild was handled by the version that no longer serves',
         doc,
       );
-      const status = appStatus(STEWARD);
-      runner.assert(status.app.consumer.lag === 0, `${STEWARD} is still behind by ${status.app.consumer.lag}`);
-      runner.assert(status.reconcile.state === 'idle', `${STEWARD} still owes a rebuild: ${status.reconcile.state}`);
+      const status = await poll(
+        () => {
+          const candidate = appStatus(STEWARD);
+          return candidate.app.consumer.lag === 0 && candidate.reconcile.state === 'idle'
+            ? candidate
+            : null;
+        },
+        `${STEWARD} to consume the published fact and finish reconciling`,
+        SETTLE_MS,
+      );
       evidence.converged = { id, doc, consumer: status.app.consumer };
       runner.writeJson('leg7-converged.json', evidence.converged);
     });

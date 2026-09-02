@@ -66,11 +66,13 @@ async function waitForSelectorShot(client, selector, description, timeoutMs = 15
   let lastError = null;
   while (Date.now() < deadline) {
     try {
-      return await client.request('capture_screenshot_data', { selector });
+      const shot = await client.request('capture_screenshot_data', { selector });
+      if (shot?.bounds?.width > 0 && shot?.bounds?.height > 0) return shot;
+      lastError = new Error(`selector has zero-sized bounds: ${JSON.stringify(shot?.bounds)}`);
     } catch (error) {
       lastError = error;
-      await delay(150);
     }
+    await delay(150);
   }
   throw new Error(`Timed out waiting for ${description}: ${lastError}`);
 }
@@ -83,6 +85,15 @@ async function selectorIsAbsent(client, selector) {
     if (String(error).includes('Screenshot selector not found in DOM')) return true;
     throw error;
   }
+}
+
+async function waitForSelectorAbsent(client, selector, description, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await selectorIsAbsent(client, selector)) return;
+    await delay(150);
+  }
+  throw new Error(`Timed out waiting for ${description}`);
 }
 
 async function waitForSeedTile(client, seedId, timeoutMs = 15_000) {
@@ -248,12 +259,11 @@ async function main() {
           Buffer.from(shot.pngBase64, 'base64'),
         );
         if (PACE_MS > 0) await delay(PACE_MS);
-        await client.request('hover_pane_cell', {
-          sessionId,
-          paneId: pane.paneId,
-          cell: { row: sentinelRow, col: Math.max(0, paneSize.cols - 2) },
+        await client.request('dom_key', {
+          selector: previewSelector(),
+          key: 'Escape',
         });
-        await delay(320);
+        await waitForSelectorAbsent(client, previewSelector(), `${edge.name}-edge preview to close`);
       }
 
       seedCell = {

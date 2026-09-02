@@ -1,0 +1,7 @@
+kind: fixed
+area: harness
+change: >
+  Three Linux serial-matrix scenarios now wait on the state they verify:
+  garden plot navigation checks the restored root seeds, app reconciliation
+  waits for consumer lag to drain, and seed previews close fully between edge
+  placements and report only visible bounds.
