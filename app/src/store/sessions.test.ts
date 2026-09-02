@@ -267,23 +267,55 @@ describe('sessions store', () => {
     expect(useSessionStore.getState().activeSessionId).toBe('launching-session');
   });
 
-  it('takeSessionSpawnArgs must be taken before a mid-create sessions broadcast can prune it', async () => {
+  it('syncFromDaemonSessions keeps the session being created and the selection on it', async () => {
+    const neighbour = {
+      id: 'sess-neighbour',
+      label: 'Neighbour',
+      agent: 'shell',
+      directory: '/tmp/neighbour',
+      workspace_id: 'workspace-sess-neighbour',
+      state: 'idle',
+    };
+    useSessionStore.getState().syncFromDaemonSessions([neighbour]);
+    useSessionStore.getState().setActiveSession('sess-neighbour');
+
+    const sessionId = await useSessionStore.getState().createSession(
+      'Racey', '/tmp/racey', 'sess-racey', 'claude', undefined, false, 'workspace-sess-racey',
+    );
+    expect(useSessionStore.getState().activeSessionId).toBe(sessionId);
+
+    // The daemon broadcasts sessions while the create is still in flight: the
+    // pane is not added yet, and the daemon has not been asked to spawn.
+    useSessionStore.getState().syncFromDaemonSessions([neighbour]);
+
+    const kept = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
+    expect(kept?.state).toBe('launching');
+    expect(useSessionStore.getState().activeSessionId).toBe(sessionId);
+
+    const args = useSessionStore.getState().takeSessionSpawnArgs(sessionId, 80, 24);
+    expect(args?.id).toBe(sessionId);
+    expect(args?.cwd).toBe('/tmp/racey');
+  });
+
+  it('syncFromDaemonSessions prunes a created session once the daemon has reported it and dropped it', async () => {
     const sessionId = await useSessionStore.getState().createSession(
       'Racey', '/tmp/racey', 'sess-racey', 'claude', undefined, false, 'workspace-sess-racey',
     );
 
-    const created = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
-    expect(created?.state).toBe('launching');
-    expect(created?.workspace.agents).toEqual([]);
-
-    const argsBefore = useSessionStore.getState().takeSessionSpawnArgs(sessionId, 80, 24);
-    expect(argsBefore?.id).toBe(sessionId);
-    expect(argsBefore?.cwd).toBe('/tmp/racey');
+    useSessionStore.getState().syncFromDaemonSessions([{
+      id: sessionId,
+      label: 'Racey',
+      agent: 'claude',
+      directory: '/tmp/racey',
+      workspace_id: 'workspace-sess-racey',
+      state: 'idle',
+    }]);
+    expect(useSessionStore.getState().sessions.find((s) => s.id === sessionId)?.creating).toBeUndefined();
 
     useSessionStore.getState().syncFromDaemonSessions([]);
-    expect(useSessionStore.getState().sessions.find((s) => s.id === sessionId)).toBeUndefined();
 
-    expect(useSessionStore.getState().takeSessionSpawnArgs(sessionId, 80, 24)).toBeNull();
+    expect(useSessionStore.getState().sessions).toEqual([]);
+    expect(useSessionStore.getState().activeSessionId).toBeNull();
   });
 
   it('syncFromDaemonSessions removes an exited session with a stale spawning pane', () => {
