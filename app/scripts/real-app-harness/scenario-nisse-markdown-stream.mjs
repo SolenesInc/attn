@@ -273,6 +273,11 @@ async function drive({ options, replay }) {
   } catch (error) {
     await runner.finishFailure(error, { sessionId });
     throw error;
+  } finally {
+    // An open socket holds node's event loop open: without this the scenario
+    // prints its verdict and never exits.
+    await client.quitApp().catch(() => {});
+    await observer.close().catch(() => {});
   }
 }
 

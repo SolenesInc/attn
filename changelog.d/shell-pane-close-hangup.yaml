@@ -1,0 +1,4 @@
+kind: fixed
+area: sessions
+change: Shell panes now close immediately in bash and zsh.
+symptom: Closing a shell pane could leave it frozen for two seconds before it disappeared.

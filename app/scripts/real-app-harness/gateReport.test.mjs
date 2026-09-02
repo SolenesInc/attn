@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateVisibleContentGates, formatGateReport } from './scenarioAssertions.mjs';
-import { formatResultTable, selectFailedScenarios } from './matrixDigest.mjs';
+import { formatResultTable, scenarioSkipReason, selectFailedScenarios } from './matrixDigest.mjs';
 
 function visibleContent({
   lines = [],
@@ -115,5 +115,29 @@ describe('formatResultTable', () => {
     const lines = table.split('\n');
     expect(lines[0]).toMatch(/^PASS\s+tr401\s+1\.5s$/);
     expect(lines[1]).toMatch(/^FAIL\s+tr402\s+2\.5s$/);
+  });
+
+  it('lists a skipped scenario with its reason instead of a duration', () => {
+    const table = formatResultTable([
+      { id: 'terminal-context-menu', code: 0, skipped: true, skipReason: 'native macOS menu', durationMs: 0 },
+    ]);
+    expect(table).toMatch(/^SKIP\s+terminal-context-menu\s+native macOS menu$/);
+  });
+});
+
+describe('scenarioSkipReason', () => {
+  it('runs everywhere without a skipOn rule', () => {
+    expect(scenarioSkipReason({ id: 'x' }, 'linux', {})).toBeNull();
+    expect(scenarioSkipReason({ id: 'x', skipOn: { linux: 'no menu' } }, 'darwin', {})).toBeNull();
+  });
+
+  it('returns the platform reason', () => {
+    expect(scenarioSkipReason({ id: 'x', skipOn: { linux: 'no menu' } }, 'linux', {})).toBe('no menu');
+  });
+
+  it('lets an environment variable prove the runner has what the scenario needs', () => {
+    const scenario = { id: 'x', skipOn: { linux: { reason: 'needs the VM', unlessEnv: 'REMOTE' } } };
+    expect(scenarioSkipReason(scenario, 'linux', {})).toBe('needs the VM');
+    expect(scenarioSkipReason(scenario, 'linux', { REMOTE: 'host' })).toBeNull();
   });
 });

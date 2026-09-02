@@ -171,9 +171,18 @@ async function main() {
     // Docking a tile resizes the pane, which reflows text and invalidates any
     // cached row/col geometry.
     const clickTargetFor = async (relPath) => {
-      const read = await client.request('read_pane_text', { sessionId, paneId: pane.paneId });
+      // A docked-away terminal pane suspends; its released surface reads empty.
+      await client.request('select_session', { sessionId });
+      let read = { text: '' };
+      let row = -1;
+      const deadline = Date.now() + 15_000;
+      while (Date.now() < deadline) {
+        read = await client.request('read_pane_text', { sessionId, paneId: pane.paneId });
+        row = read.text.split('\n').findIndex((line) => line.trim() === relPath);
+        if (row >= 0) break;
+        await delay(250);
+      }
       const lines = read.text.split('\n');
-      const row = lines.findIndex((line) => line.trim() === relPath);
       if (row < 0) {
         throw new Error(`Path line for ${relPath} not found. Pane text:\n${read.text}`);
       }

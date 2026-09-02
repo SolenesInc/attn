@@ -1,6 +1,6 @@
 ---
 name: attn
-description: "Operate attn capabilities from an agent, including user-steered delegations, the garden, workflows, shared workspace context, the Notebook, Present reviews, markdown, and the in-app browser. Use when the user explicitly asks for an attn capability or delegation, or when acting as attn's chief of staff. Do not use merely because a task could benefit from delegation, parallel agents, or a background terminal."
+description: "Operate attn capabilities from an agent, including user-steered delegations, the garden, workflows, the Notebook, Present reviews, markdown, and the in-app browser. Use when the user explicitly asks for an attn capability or delegation, or when acting as attn's chief of staff. Do not use merely because a task could benefit from delegation, parallel agents, or a background terminal."
 ---
 
 # attn
@@ -63,8 +63,6 @@ seed says nothing about your role: it means your delegator and the chief are
   read [references/converse-and-observe.md](references/converse-and-observe.md).
 - **Plant, tend, or report on work in the garden — seeds and plots, what makes
   a good seed body, artifacts:** read [references/garden.md](references/garden.md).
-- **Read or update shared workspace context:** read
-  [references/workspace-context.md](references/workspace-context.md).
 - **Read or maintain the durable Notebook (journal + knowledge base), esp. as
   chief of staff:** read [references/notebook.md](references/notebook.md).
 - **Run a durable, resumable multi-agent workflow — a script that runs headless

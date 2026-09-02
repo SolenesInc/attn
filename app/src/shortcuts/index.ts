@@ -1,6 +1,11 @@
 // app/src/shortcuts/index.ts
 export {
   SHORTCUTS,
+  MAC_SHORTCUTS,
+  LINUX_SHORTCUTS,
+  defaultShortcuts,
+  defaultShortcut,
+  type ShortcutRegistry,
   type ShortcutId,
   type ShortcutDef,
   type Combo,

@@ -28,7 +28,7 @@ import type {
 } from '../types/generated';
 import { SessionProvenance } from './SessionProvenance';
 import { describeSessionPullRequest, pickSessionPullRequest } from '../utils/sessionPullRequest';
-import { keyCombo } from '../shortcuts/formatShortcut';
+import type { ShortcutId } from '../shortcuts/registry';
 
 interface LocalSession {
   id: string;
@@ -56,6 +56,11 @@ interface LocalSession {
 }
 
 type SidebarWorkspace = WorkspaceWithSessions<LocalSession>;
+
+function workspaceShortcut(index: number): string | null {
+  if (index < 0 || index >= 9) return null;
+  return formatShortcut(`workspace.select${index + 1}` as ShortcutId);
+}
 
 interface SelectedTile {
   workspaceId: string;
@@ -828,7 +833,9 @@ export function Sidebar({
               key={workspace.id}
               className={`icon-btn session-icon ${selectedWorkspaceId === workspace.id ? 'active' : ''} ${isSessionless(workspace) ? 'sessionless' : ''}`}
               onClick={() => onSelectWorkspace(workspace.id)}
-              title={`${workspace.title} (${keyCombo('accel', String(visualIndexOfWorkspace(workspace.id) + 1))})`}
+              title={workspaceShortcut(visualIndexOfWorkspace(workspace.id))
+                ? `${workspace.title} (${workspaceShortcut(visualIndexOfWorkspace(workspace.id))})`
+                : workspace.title}
             >
               ▸
               {workspace.sessions.some(sessionWantsAttention) && (
@@ -1046,7 +1053,9 @@ export function Sidebar({
                     {workspace.sessions[0].endpointName}
                   </span>
                 )}
-                <span className="session-shortcut">{keyCombo('accel', String(workspaceIndex + 1))}</span>
+                {workspaceShortcut(workspaceIndex) && (
+                  <span className="session-shortcut">{workspaceShortcut(workspaceIndex)}</span>
+                )}
                 {(onRenameWorkspace || onMuteWorkspace || onPinWorkspace) && (
                   <span className="workspace-actions">
                     {onPinWorkspace && (

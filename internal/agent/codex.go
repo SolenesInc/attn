@@ -44,17 +44,17 @@ func (c *Codex) ResolveExecutable(configured string) string {
 
 func (c *Codex) Capabilities() Capabilities {
 	return Capabilities{
-		HasHooks:             true,
-		HasTranscript:        true,
-		HasTranscriptWatcher: true,
-		HasClassifier:        true,
-		HarnessSignals:       HarnessSignalsCodex,
-		HasResume:            true,
-		HasYolo:              true,
-		HasInitialPrompt:     true,
-		HasWorkspaceContext:  true,
-		HasModelPin:          true,
-		HasEffortPin:         true,
+		HasHooks:              true,
+		HasTranscript:         true,
+		HasTranscriptWatcher:  true,
+		HasClassifier:         true,
+		HarnessSignals:        HarnessSignalsCodex,
+		HasResume:             true,
+		HasYolo:               true,
+		HasInitialPrompt:      true,
+		HasLaunchInstructions: true,
+		HasModelPin:           true,
+		HasEffortPin:          true,
 	}
 }
 
@@ -105,8 +105,8 @@ func (c *Codex) BuildEnv(opts SpawnOpts) []string {
 	}
 	if strings.TrimSpace(opts.NotebookRoot) != "" {
 		env = append(env, "ATTN_CHIEF_GUIDANCE=developer_instructions")
-	} else if strings.TrimSpace(opts.WorkspaceContextPath) != "" {
-		env = append(env, "ATTN_WORKSPACE_CONTEXT_GUIDANCE=developer_instructions")
+	} else {
+		env = append(env, "ATTN_AGENT_GUIDANCE=developer_instructions")
 	}
 	if opts.SocketPath != "" {
 		env = append(env, "ATTN_SOCKET_PATH="+opts.SocketPath)

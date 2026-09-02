@@ -1,0 +1,14 @@
+kind: added
+area: sessions
+change: >
+  A pi session now records the pull requests it opens, like a Claude Code or
+  Codex one. No hook runs inside pi, so the attn extension watches pi's own
+  tool results: a "gh pr create" that prints a pull request URL is reported to
+  the daemon and shows up in "attn pr ls". Nothing to configure and no
+  instruction in the prompt — the driver sees it and says so. A pi session is
+  no longer told to run "attn pr record" either, since its driver already does.
+notes: >
+  Plugin API 5 to 6, for the new session.report_pull_request RPC and the
+  pull_request_reporting driver capability that suppresses the self-report
+  guidance. The bundled attn-pi plugin ships with the binary, so it moves in
+  lockstep; the plugin SDK had drifted to 4 and is now correct at 6.

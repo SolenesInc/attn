@@ -1,0 +1,93 @@
+[
+  {
+    "name": "claude bash reports the url gh printed",
+    "tool_name": "Bash",
+    "tool_input": {"command": "gh pr create --fill"},
+    "tool_output": {"stdout": "https://github.com/victorarias/attn/pull/71\n", "stderr": "", "interrupted": false},
+    "want": ["https://github.com/victorarias/attn/pull/71"]
+  },
+  {
+    "name": "codex sends the tool output as a plain string",
+    "tool_name": "Bash",
+    "tool_input": {"command": "gh pr create --fill"},
+    "tool_output": "https://github.com/victorarias/attn/pull/71\n",
+    "want": ["https://github.com/victorarias/attn/pull/71"]
+  },
+  {
+    "name": "pi sends the bash tool's text output",
+    "tool_name": "bash",
+    "tool_input": {"command": "gh pr create --fill"},
+    "tool_output": "https://github.com/victorarias/attn/pull/71",
+    "want": ["https://github.com/victorarias/attn/pull/71"]
+  },
+  {
+    "name": "codex reporting a failed gh call has no url to report",
+    "tool_name": "Bash",
+    "tool_input": {"command": "gh pr create --fill"},
+    "tool_output": "failed to run git: exit status 128\n",
+    "want": []
+  },
+  {
+    "name": "an argv-form command under another shell tool name",
+    "tool_name": "exec_command",
+    "tool_input": {"cmd": ["bash", "-lc", "gh pr create --title x --body y"]},
+    "tool_output": {"output": "https://github.com/victorarias/attn/pull/8"},
+    "want": ["https://github.com/victorarias/attn/pull/8"]
+  },
+  {
+    "name": "an enterprise host is reported like any other",
+    "tool_name": "Bash",
+    "tool_input": {"command": "gh pr create"},
+    "tool_output": {"stdout": "https://ghe.example.test/acme/widget/pull/12"},
+    "want": ["https://ghe.example.test/acme/widget/pull/12"]
+  },
+  {
+    "name": "a chained command still reports",
+    "tool_name": "Bash",
+    "tool_input": {"command": "git push -u origin head && gh pr create --fill"},
+    "tool_output": {"stdout": "branch set up\nhttps://github.com/victorarias/attn/pull/71"},
+    "want": ["https://github.com/victorarias/attn/pull/71"]
+  },
+  {
+    "name": "two pull requests in one call are both reported, once each",
+    "tool_name": "Bash",
+    "tool_input": {"command": "gh pr create --fill; gh pr create --fill --repo other/repo"},
+    "tool_output": {"stdout": "https://github.com/a/b/pull/1\nhttps://github.com/a/b/pull/2\nhttps://github.com/a/b/pull/1"},
+    "want": ["https://github.com/a/b/pull/1", "https://github.com/a/b/pull/2"]
+  },
+  {
+    "name": "no url printed, nothing to report",
+    "tool_name": "Bash",
+    "tool_input": {"command": "gh pr create --fill"},
+    "tool_output": {"stdout": "", "stderr": "a pull request for branch already exists"},
+    "want": []
+  },
+  {
+    "name": "a url from another gh command is not a creation",
+    "tool_name": "Bash",
+    "tool_input": {"command": "gh pr view --json url"},
+    "tool_output": {"stdout": "https://github.com/victorarias/attn/pull/71"},
+    "want": []
+  },
+  {
+    "name": "the tool has to be a shell",
+    "tool_name": "Edit",
+    "tool_input": {"command": "gh pr create"},
+    "tool_output": {"stdout": "https://github.com/victorarias/attn/pull/71"},
+    "want": []
+  },
+  {
+    "name": "a repository whose name starts with gh is not a create",
+    "tool_name": "Bash",
+    "tool_input": {"command": "ghost pr create"},
+    "tool_output": {"stdout": "https://github.com/victorarias/attn/pull/71"},
+    "want": []
+  },
+  {
+    "name": "a tool input without a command reports nothing",
+    "tool_name": "bash",
+    "tool_input": {"path": "gh pr create"},
+    "tool_output": "https://github.com/victorarias/attn/pull/71",
+    "want": []
+  }
+]

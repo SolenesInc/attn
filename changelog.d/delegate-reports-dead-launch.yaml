@@ -1,0 +1,4 @@
+kind: fixed
+area: delegation
+change: "`attn delegate` waits for the agent's first turn; an agent that exits first fails the delegation with its exit code and last screen, notes it on the seed, and keeps the session for inspection. The result carries `first_turn_at` when the turn was seen."
+symptom: A pi pinned to an ambiguous model died within a second, yet the delegation reported success into an empty pane and the seed stayed bound to nothing.

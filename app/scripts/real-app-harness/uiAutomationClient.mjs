@@ -150,14 +150,10 @@ export class UiAutomationClient {
     }
 
     await focusDriver.waitForMainWindow(10_000, 150, { pid: launched.pid }).catch(() => null);
-    // The AX set-position call also nudges the WebView out of the
-    // off-screen-init throttle state it otherwise enters.
-    const parkPx = Number.parseInt(parkPxStr || '', 10);
-    if (alwaysOnTop && Number.isInteger(parkPx) && parkPx > 0) {
-      await focusDriver.parkWindow(parkPx).catch((error) => {
-        console.warn(`[RealAppHarness] Park failed: ${error?.message || error}`);
-      });
-    }
+    const parkPx = alwaysOnTop ? Number.parseInt(parkPxStr || '', 10) : 0;
+    await this.platform.placeWindow(focusDriver, { parkPx, pid: launched.pid }).catch((error) => {
+      console.warn(`[RealAppHarness] Window placement failed: ${error?.message || error}`);
+    });
   }
 
   #focusDriver() {

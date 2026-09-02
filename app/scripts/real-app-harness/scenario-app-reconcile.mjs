@@ -28,6 +28,7 @@ import {
   STEWARD_V1_DERIVE,
   STEWARD_V2_DERIVE,
 } from './appFixtures.mjs';
+import { appDaemonInTree } from './platform.mjs';
 
 // The shipped default is thirty days: without moving it a trim over a fresh
 // profile removes nothing, and the gap leg has nothing to stand on.
@@ -112,7 +113,7 @@ async function main() {
     throw new Error('reconcile scenario requires a named non-production profile (it restarts the profile daemon and trims its bus)');
   }
   const resources = resolveHarnessResources(profile);
-  const binary = path.join(resources.appPath, 'Contents', 'MacOS', 'attn');
+  const binary = appDaemonInTree(resources.appPath);
   const dbPath = path.join(dataDirForProfile(profile), 'attn.db');
 
   const runner = createScenarioRunner(options, {
@@ -143,23 +144,27 @@ async function main() {
 
   const appsRoot = path.join(runner.sessionDir, 'apps');
   fs.mkdirSync(appsRoot, { recursive: true });
-  const releaseTicketId = `release-the-rebuild-${runSlug}`;
+  const releaseTitle = `release the rebuild ${runSlug}`;
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
   const evidence = {};
-  let ticketSeq = 0;
+  let seedSeq = 0;
 
   runner.log('run context', {
     runDir: runner.runDir, sessionDir: runner.sessionDir, wsUrl: options.wsUrl, profile, dbPath,
   });
 
-  const publishTicket = (label) => {
-    ticketSeq += 1;
-    const id = `${runner.runId}-${ticketSeq}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-    run(binary, ['ticket', 'new', '--title', `${label} ${ticketSeq}`, '--id', id, '--session', 'reconcile-proof'], walkEnv);
+  const plantSeed = (title) => {
+    const planted = run(binary, ['seed', 'plant', title, '-m', 'A fact for the reconcile proof.'], walkEnv);
+    const id = /^\s*(s-[a-z0-9]{6})\b/m.exec(planted)?.[1];
+    if (!id) throw new Error(`plant answered without a seed id:\n${planted}`);
     return id;
+  };
+  const publishSeed = (label) => {
+    seedSeq += 1;
+    return plantSeed(`${label} ${seedSeq} ${runSlug}`);
   };
 
   const appStatus = (name) => parseJSON(run(binary, ['app', 'status', name, '--json'], walkEnv));
@@ -218,13 +223,13 @@ async function main() {
     await runner.step('leg1:before', async () => {
       writeApp(appsRoot, STEWARD, stewardManifest({ name: STEWARD }), stewardEntrypoint(STEWARD_V1_DERIVE));
       run(binary, ['app', 'apply', path.join(appsRoot, STEWARD)], walkEnv);
-      for (let i = 0; i < 3; i += 1) publishTicket('before');
+      for (let i = 0; i < 3; i += 1) publishSeed('before');
       const docs = await poll(
         () => {
-          const rows = documents(STEWARD, 'tickets');
+          const rows = documents(STEWARD, 'seeds');
           return rows.length >= 3 ? rows : null;
         },
-        'steward to derive a document per ticket',
+        'steward to derive a document per seed',
         SETTLE_MS,
       );
       runner.assert(
@@ -239,7 +244,7 @@ async function main() {
 
     await runner.step('leg2:resume-is-not-a-rebuild', async () => {
       run(binary, ['app', 'disable', STEWARD], walkEnv);
-      const backlog = [publishTicket('backlog'), publishTicket('backlog')];
+      const backlog = [publishSeed('backlog'), publishSeed('backlog')];
       const behind = await poll(
         () => {
           const consumer = consumerOf(STEWARD);
@@ -253,7 +258,7 @@ async function main() {
       run(binary, ['app', 'enable', STEWARD], walkEnv);
       const caughtUp = await poll(
         () => {
-          const rows = documents(STEWARD, 'tickets');
+          const rows = documents(STEWARD, 'seeds');
           return backlog.every((id) => rows.some((row) => row.id === id)) ? rows : null;
         },
         'the retained backlog to deliver after enable',
@@ -272,13 +277,13 @@ async function main() {
     });
 
     await runner.step('leg3:version-move-rebuilds', async () => {
-      const beforeRevs = new Map(documents(STEWARD, 'tickets').map((row) => [row.id, row.rev]));
+      const beforeRevs = new Map(documents(STEWARD, 'seeds').map((row) => [row.id, row.rev]));
       writeApp(appsRoot, STEWARD, stewardManifest({ name: STEWARD }), stewardEntrypoint(STEWARD_V2_DERIVE));
       run(binary, ['app', 'apply', path.join(appsRoot, STEWARD)], walkEnv);
 
       const rebuilt = await poll(
         () => {
-          const rows = documents(STEWARD, 'tickets');
+          const rows = documents(STEWARD, 'seeds');
           return rows.length > 0 && rows.every((row) => row.body.status !== undefined) ? rows : null;
         },
         'every document to carry the field the new version derives',
@@ -312,7 +317,7 @@ async function main() {
     await runner.step('leg4:no-handler-no-move', async () => {
       writeApp(appsRoot, HISTORIAN, historianManifest({ name: HISTORIAN }), historianEntrypoint());
       run(binary, ['app', 'apply', path.join(appsRoot, HISTORIAN)], walkEnv);
-      publishTicket('historian-sees');
+      publishSeed('historian-sees');
       await poll(
         () => (documents(HISTORIAN, 'seen').length > 0 ? true : null),
         'historian to record a fact',
@@ -350,12 +355,12 @@ async function main() {
       runner.assert(Number.isInteger(cursor) && cursor > 0, `historian has no cursor to be trimmed past: ${cursor}`);
 
       run(binary, ['app', 'remove', HISTORIAN], walkEnv);
-      for (let i = 0; i < 3; i += 1) publishTicket('past-the-cursor');
+      for (let i = 0; i < 3; i += 1) publishSeed('past-the-cursor');
       await sleep(2000);
 
       const trimmed = run(binary, ['bus', 'trim'], walkEnv);
       runner.assert(/removed \d+ event/.test(trimmed), `the trim removed nothing: ${trimmed}`);
-      for (let i = 0; i < 2; i += 1) publishTicket('after-the-trim');
+      for (let i = 0; i < 2; i += 1) publishSeed('after-the-trim');
       await sleep(2000);
       const earliest = Number(readOnlySqlite('select coalesce(min(seq), 0) from bus_events;'));
       runner.assert(
@@ -368,7 +373,7 @@ async function main() {
       run(binary, ['daemon', 'stop'], walkEnv);
       sqlite(
         'insert into bus_consumers (name, cursor, filter, enabled, updated_at) values ('
-        + `'app:${HISTORIAN}', ${cursor}, 'ticket.*', 1, '${new Date().toISOString()}');`,
+        + `'app:${HISTORIAN}', ${cursor}, 'garden.*', 1, '${new Date().toISOString()}');`,
       );
       run(binary, ['daemon', 'ensure'], walkEnv);
       await sleep(2000);
@@ -419,7 +424,7 @@ async function main() {
         appsRoot,
         STEWARD,
         stewardManifest({ name: STEWARD }),
-        stewardEntrypoint(STEWARD_V2_DERIVE, { blockUntilTicket: releaseTicketId }),
+        stewardEntrypoint(STEWARD_V2_DERIVE, { blockUntilSeed: releaseTitle }),
       );
       run(binary, ['app', 'apply', path.join(appsRoot, STEWARD)], walkEnv);
       const running = await poll(
@@ -447,7 +452,7 @@ async function main() {
         `an interrupted rebuild was forgotten across the restart: ${owedAfterRestart}`,
       );
 
-      run(binary, ['ticket', 'new', '--title', 'release the rebuild', '--id', releaseTicketId, '--session', 'reconcile-proof'], walkEnv);
+      plantSeed(releaseTitle);
       const settled = await poll(
         () => (appStatus(STEWARD).reconcile?.state === 'idle' ? appStatus(STEWARD) : null),
         'the repaired rebuild to finish',
@@ -473,10 +478,10 @@ async function main() {
     });
 
     await runner.step('leg7:converges-before-later-facts', async () => {
-      const id = publishTicket('after-everything');
+      const id = publishSeed('after-everything');
       const doc = await poll(
         () => {
-          const rows = documents(STEWARD, 'tickets');
+          const rows = documents(STEWARD, 'seeds');
           return rows.find((row) => row.id === id) || null;
         },
         'a fact published after every leg to be handled',
@@ -538,7 +543,7 @@ async function main() {
         await remote(`${remoteAttn} app apply ${remoteRoot}/${witnessName}`, 300_000);
 
         const remoteStatus = async () => parseJSON(await remote(`${remoteAttn} app status ${witnessName} --json`, 60_000));
-        await remote(`${remoteAttn} ticket new --title 'linux witness' --id ${witnessName}-fact --session reconcile-proof`, 60_000);
+        await remote(`${remoteAttn} seed plant 'linux witness ${runSlug}' -m 'A fact for the reconcile proof.'`, 60_000);
         const dispatched = await poll(
           async () => {
             const status = await remoteStatus().catch(() => null);

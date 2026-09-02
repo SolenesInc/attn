@@ -3,6 +3,7 @@ package daemon
 import (
 	"encoding/json"
 	"net"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -294,5 +295,88 @@ func TestSessionsForBroadcastCarryTheirPullRequests(t *testing.T) {
 				t.Errorf("s2 pull requests = %+v, want the recorded one", session.PullRequests)
 			}
 		}
+	}
+}
+
+func TestPullRequestReportedByAPluginDriverLandsOnTheSession(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	client, done := startPluginPipe(t, d, "pi-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, client, "pi", map[string]bool{"state_reporting": true})
+
+	now := protocol.TimestampNow().String()
+	d.store.Add(&protocol.Session{
+		ID: "pi-pr", Label: "driver work", Agent: "pi", Directory: t.TempDir(),
+		State: protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	if !d.store.BeginAgentDriverRun("pi-pr", "pi-plugin", "run-1") {
+		t.Fatal("failed to begin the test plugin run")
+	}
+
+	sendPluginMethod(t, client, 3, "session.report_pull_request", pluginReportPullRequestParams{
+		SessionID: "pi-pr",
+		RunID:     "run-1",
+		URL:       "https://github.com/victorarias/attn/pull/90",
+	})
+
+	prs := sessionPullRequests(t, d, "pi-pr")
+	if len(prs) != 1 {
+		t.Fatalf("pull requests = %+v, want the reported one", prs)
+	}
+	if prs[0].Repository != "github.com/victorarias/attn" || prs[0].Number != 90 || prs[0].State != "open" {
+		t.Errorf("entry = %+v, want github.com/victorarias/attn#90 open", prs[0])
+	}
+
+	sendPluginMethod(t, client, 4, "session.report_pull_request", pluginReportPullRequestParams{
+		SessionID: "pi-pr",
+		RunID:     "run-1",
+		URL:       "https://github.com/victorarias/attn/pull/90",
+	})
+	if prs := sessionPullRequests(t, d, "pi-pr"); len(prs) != 1 {
+		t.Fatalf("pull requests after the repeat = %+v, want still one", prs)
+	}
+	if published := docFacts(t, d, FactSessionPullRequestChanged); len(published) != 1 {
+		t.Fatalf("facts = %+v, want one: the suite retries a report the relay dropped", published)
+	}
+}
+
+func TestPullRequestReportedForARunThePluginDoesNotOwnIsRefused(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	client, done := startPluginPipe(t, d, "pi-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, client, "pi", map[string]bool{"state_reporting": true})
+
+	now := protocol.TimestampNow().String()
+	d.store.Add(&protocol.Session{
+		ID: "pi-pr", Label: "driver work", Agent: "pi", Directory: t.TempDir(),
+		State: protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	if !d.store.BeginAgentDriverRun("pi-pr", "pi-plugin", "run-1") {
+		t.Fatal("failed to begin the test plugin run")
+	}
+
+	refusals := []struct {
+		name   string
+		params pluginReportPullRequestParams
+	}{
+		{"another run", pluginReportPullRequestParams{SessionID: "pi-pr", RunID: "run-other", URL: "https://github.com/victorarias/attn/pull/90"}},
+		{"an unknown session", pluginReportPullRequestParams{SessionID: "nobody", RunID: "run-1", URL: "https://github.com/victorarias/attn/pull/90"}},
+		{"a url that is not a pull request", pluginReportPullRequestParams{SessionID: "pi-pr", RunID: "run-1", URL: "https://github.com/victorarias/attn"}},
+	}
+	for i, refusal := range refusals {
+		response := sendPluginMethodResponse(t, client, 3+i, "session.report_pull_request", refusal.params)
+		if response.Error == nil {
+			t.Errorf("%s was accepted", refusal.name)
+		}
+	}
+
+	if prs := sessionPullRequests(t, d, "pi-pr"); len(prs) != 0 {
+		t.Fatalf("refused reports reached the session: %+v", prs)
 	}
 }

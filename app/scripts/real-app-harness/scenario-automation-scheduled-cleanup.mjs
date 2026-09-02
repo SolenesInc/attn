@@ -8,6 +8,7 @@ import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, dataDirForProfile, resolveHarnessResources, profileCliEnv as profileEnv } from './harnessProfile.mjs';
 import { ensureFreshWorld } from './freshWorld.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
+import { appDaemonInTree } from './platform.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -221,7 +222,7 @@ async function main() {
   const profile = currentHarnessProfile();
   if (!profile) throw new Error('automation scheduled-cleanup scenario requires a named non-production profile');
   const resources = resolveHarnessResources(profile);
-  const binary = path.join(resources.appPath, 'Contents', 'MacOS', 'attn');
+  const binary = appDaemonInTree(resources.appPath);
   const dbPath = path.join(dataDirForProfile(profile), 'attn.db');
   const runner = createScenarioRunner(options, {
     scenarioId: 'AUTOMATION-SCHEDULED-CLEANUP',

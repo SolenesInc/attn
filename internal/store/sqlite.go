@@ -1095,7 +1095,29 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 			ON session_pull_requests(session_id, created_at DESC);
 	`},
 	{128, "session pull request refresh keeps its own pacing cursor", ``},
-	{129, "separate agent mailbox receipts from message content", `
+	{129, "the screen a session showed when its process exited", `
+		CREATE TABLE IF NOT EXISTS session_exit_screens (
+			session_id  TEXT PRIMARY KEY,
+			text        TEXT NOT NULL DEFAULT '',
+			cols        INTEGER NOT NULL DEFAULT 0,
+			rows        INTEGER NOT NULL DEFAULT 0,
+			exit_code   INTEGER NOT NULL DEFAULT 0,
+			exit_signal TEXT NOT NULL DEFAULT '',
+			exited_at   TEXT NOT NULL
+		);
+	`},
+	{130, "intentional session teardown survives session removal", `
+		CREATE TABLE IF NOT EXISTS session_teardown_tombstones (
+			session_id        TEXT PRIMARY KEY,
+			requested_at      TEXT NOT NULL,
+			driver_plugin_name TEXT NOT NULL DEFAULT '',
+			driver_run_id      TEXT NOT NULL DEFAULT '',
+			driver_report_seq  INTEGER NOT NULL DEFAULT 0
+		);
+		INSERT OR IGNORE INTO session_teardown_tombstones (session_id, requested_at)
+			SELECT id, closed_intentionally_at FROM sessions WHERE closed_intentionally_at <> '';
+	`},
+	{131, "separate agent mailbox receipts from message content", `
 		CREATE TABLE IF NOT EXISTS peer_messages (
 			id                TEXT PRIMARY KEY,
 			sender_session_id TEXT NOT NULL,
@@ -1598,8 +1620,8 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
-		} else if m.version == 129 {
-			if err := applyMigration129(tx, m.sql); err != nil {
+		} else if m.version == 131 {
+			if err := applyMigration131(tx, m.sql); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -1665,7 +1687,7 @@ func applyMigration128(tx *sql.Tx) error {
 	return err
 }
 
-func applyMigration129(tx *sql.Tx, migrationSQL string) error {
+func applyMigration131(tx *sql.Tx, migrationSQL string) error {
 	mailboxExists, err := tableExists(tx, "agent_mailbox_items")
 	if err != nil {
 		return err

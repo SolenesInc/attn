@@ -22,6 +22,7 @@ import {
 import { ensureCodexInitialPanePromptReady } from './scenarioAgents.mjs';
 import { agentHomeRoots, writeMockAgentFixture, MOCK_AGENT_NEW_CONVERSATION } from './mockAgent.mjs';
 import { currentHarnessProfile, dataDirForProfile } from './harnessProfile.mjs';
+import { appDaemonInTree } from './platform.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -323,7 +324,7 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
   const dbPath = dbPathForHarnessProfile();
-  const attnBin = path.join(options.appPath, 'Contents', 'MacOS', 'attn');
+  const attnBin = appDaemonInTree(options.appPath);
   const daemonEnv = { ...process.env, ATTN_PROFILE: currentHarnessProfile() };
   const firstReply = 'ATTN_FIRST_TURN_COMPLETE';
   const successorReply = 'new-ok';
@@ -467,7 +468,7 @@ async function main() {
       const hookOutput = execFileSync(attnBin, ['_hook-session-start', sessionId], {
         env: {
           ...daemonEnv,
-          ATTN_WORKSPACE_CONTEXT_GUIDANCE: '',
+          ATTN_AGENT_GUIDANCE: '',
           ATTN_CHIEF_GUIDANCE: '',
         },
         input: JSON.stringify({
@@ -479,11 +480,11 @@ async function main() {
       });
       const hookContext = JSON.parse(hookOutput)?.hookSpecificOutput?.additionalContext || '';
       runner.assert(
-        hookContext.includes("attn checked out this workspace's shared context") &&
+        hookContext.includes('`attn delegate` creates a visible agent session') &&
           hookContext.includes('ready now'),
-        'a pathless root hook still emits workspace and Garden guidance',
+        'a pathless root hook still emits agent and Garden guidance',
         {
-          hasWorkspaceContext: hookContext.includes("attn checked out this workspace's shared context"),
+          hasAgentGuidance: hookContext.includes('`attn delegate` creates a visible agent session'),
           hasGardenPrime: hookContext.includes('ready now'),
         }
       );

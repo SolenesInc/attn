@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { SHORTCUTS, ShortcutId, matchesShortcut, isChord } from './registry';
 import { resolvedShortcutEntries } from './resolver';
+import { isMacLikePlatform } from './platform';
 import { enterLeader, resolvePendingThen } from './chordState';
 import { matchChordLeader } from './chordDispatch';
 
@@ -42,6 +43,11 @@ function installGlobalListener() {
   window.addEventListener('keydown', (e: KeyboardEvent) => {
     if (captureSuspended) return;
 
+    const terminalTarget = isTerminalTarget(e.target);
+    if (!isMacLikePlatform() && terminalTarget && isPlainCtrlLetter(e)) {
+      return;
+    }
+
     // A pending leader owns the next keystroke entirely: always consume, so it can't fall through
     // to a single combo or leak into the terminal PTY.
     const pendingThen = resolvePendingThen(e);
@@ -53,7 +59,6 @@ function installGlobalListener() {
     }
 
     const editableTarget = isNonTerminalEditableTarget(e.target);
-    const terminalTarget = isTerminalTarget(e.target);
     for (const [id, def] of resolvedShortcutEntries()) {
       if (id === 'terminal.close' && !terminalTarget) {
         continue;
@@ -103,6 +108,11 @@ function installGlobalListener() {
       triggerShortcut(shortcutId as ShortcutId);
     }
   });
+}
+
+function isPlainCtrlLetter(e: KeyboardEvent): boolean {
+  if (!e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
+  return /^[a-z]$/i.test(e.key) || /^Key[A-Z]$/.test(e.code);
 }
 
 function isTerminalTarget(target: EventTarget | null): boolean {

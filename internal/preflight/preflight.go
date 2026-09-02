@@ -90,6 +90,7 @@ type prober struct {
 	goCachePaths  func(context.Context) ([]string, error)
 	appProtocol   func(context.Context, string) (string, error)
 	daemonHealth  func(context.Context, string) (daemonHealth, error)
+	daemonAgents  func(context.Context, string) ([]agentdriver.Descriptor, error)
 	requiredTools []string
 }
 
@@ -101,6 +102,7 @@ func defaultProber() prober {
 		goCachePaths:  resolveGoCachePaths,
 		appProtocol:   readAppProtocol,
 		daemonHealth:  fetchDaemonHealth,
+		daemonAgents:  fetchDaemonAgents,
 		requiredTools: []string{"git", "gh", "go", "pnpm", "cargo", "make"},
 	}
 }
@@ -118,22 +120,20 @@ func run(ctx context.Context, opts Options, p prober) Report {
 	report := Report{Status: StatusPass, Routing: routing, Launch: launch}
 	add := func(check Check) { report.Checks = append(report.Checks, check) }
 
-	driver := agentdriver.Get(launch.Agent.Value)
-	if driver == nil {
-		add(fail("launch.agent", fmt.Sprintf("agent %q is not registered", launch.Agent.Value), "Select a configured prompt-capable agent with --agent."))
-	} else {
-		caps := agentdriver.EffectiveCapabilities(driver)
-		if launch.Model.Value != "" && !caps.HasModelPin {
+	agents, agentsErr := p.daemonAgents(ctx, routing.WSPort)
+	agent := checkLaunchAgent(launch, agents, agentsErr, add)
+	if agent != nil {
+		if launch.Model.Value != "" && !agent.ModelPin {
 			add(fail("launch.model", fmt.Sprintf("agent %q does not support model pins", launch.Agent.Value), "Remove --model or select an agent that supports model pins."))
 		}
-		if launch.Effort.Value != "" && !caps.HasEffortPin {
+		if launch.Effort.Value != "" && !agent.EffortPin {
 			add(fail("launch.effort", fmt.Sprintf("agent %q does not support effort pins", launch.Agent.Value), "Remove --effort or select an agent that supports effort pins."))
 		}
 	}
 
 	tools := append([]string(nil), p.requiredTools...)
-	if driver != nil {
-		tools = append(tools, driver.ResolveExecutable(""))
+	if agent != nil && agentsErr != nil {
+		tools = append(tools, agent.Executable)
 	}
 	sort.Strings(tools)
 	seen := map[string]bool{}
@@ -148,6 +148,9 @@ func run(ctx context.Context, opts Options, p prober) Report {
 			continue
 		}
 		add(pass("tool."+filepath.Base(tool), path))
+	}
+	if agent != nil && agentsErr == nil {
+		add(agentHealthCheck(*agent))
 	}
 
 	workingDir := strings.TrimSpace(opts.WorkingDir)
@@ -246,6 +249,51 @@ func headlessTasksSummary(health daemonHealth, healthErr error) string {
 		}
 	}
 	return "daemon mode unavailable; this CLI resolves headless tasks " + headless.Describe()
+}
+
+// The daemon is the process that spawns, so its catalog is the truth about an
+// agent. Without it, only the built-in drivers this CLI carries can be checked.
+func checkLaunchAgent(launch Launch, agents []agentdriver.Descriptor, agentsErr error, add func(Check)) *agentdriver.Descriptor {
+	name := launch.Agent.Value
+	if agentsErr != nil {
+		driver := agentdriver.Get(name)
+		if driver == nil {
+			add(warn("launch.agent", fmt.Sprintf("daemon could not list its agents (%v), so preflight cannot tell whether a plugin provides agent %q", agentsErr, name), "Start this profile's daemon from this build and rerun preflight."))
+			return nil
+		}
+		caps := agentdriver.EffectiveCapabilities(driver)
+		add(warn("launch.agent", fmt.Sprintf("daemon could not list its agents (%v); %s was checked against this CLI's built-in driver instead", agentsErr, name), "Start this profile's daemon from this build and rerun preflight to check the launch against it."))
+		return &agentdriver.Descriptor{Name: name, Executable: driver.ResolveExecutable(""), ModelPin: caps.HasModelPin, EffortPin: caps.HasEffortPin}
+	}
+	names := make([]string, 0, len(agents))
+	for i := range agents {
+		names = append(names, agents[i].Name)
+		if agents[i].Name != name {
+			continue
+		}
+		if agents[i].Plugin != "" {
+			add(pass("launch.agent", fmt.Sprintf("plugin %s provides %s", agents[i].Plugin, name)))
+		} else {
+			add(pass("launch.agent", name+" is built into the daemon"))
+		}
+		return &agents[i]
+	}
+	add(fail("launch.agent", fmt.Sprintf("daemon does not provide agent %q; it provides %s", name, strings.Join(names, ", ")), "Select one of the daemon's agents with --agent, or install and connect the plugin that provides it."))
+	return nil
+}
+
+func agentHealthCheck(agent agentdriver.Descriptor) Check {
+	name := "tool." + filepath.Base(agent.Executable)
+	if agent.Plugin != "" {
+		name = "plugin." + agent.Plugin
+	}
+	switch agent.Health {
+	case agentdriver.HealthHealthy:
+		return pass(name, agent.Detail)
+	case agentdriver.HealthUnhealthy:
+		return fail(name, fmt.Sprintf("daemon cannot launch %s: %s", agent.Name, agent.Detail), fmt.Sprintf("Install %s or configure its executable path, then rerun preflight.", agent.Name))
+	}
+	return warn(name, fmt.Sprintf("daemon has not confirmed %s is launchable yet: %s", agent.Name, agent.Detail), "Wait for the plugin health check and rerun preflight.")
 }
 
 func resolveLaunch(opts Options) Launch {
@@ -380,28 +428,41 @@ func readAppProtocol(ctx context.Context, appPath string) (string, error) {
 }
 
 func fetchDaemonHealth(ctx context.Context, port string) (daemonHealth, error) {
+	var health daemonHealth
+	err := fetchDaemonJSON(ctx, port, "/health", &health)
+	return health, err
+}
+
+func fetchDaemonAgents(ctx context.Context, port string) ([]agentdriver.Descriptor, error) {
+	var payload struct {
+		Agents []agentdriver.Descriptor `json:"agents"`
+	}
+	err := fetchDaemonJSON(ctx, port, "/agents", &payload)
+	return payload.Agents, err
+}
+
+func fetchDaemonJSON(ctx context.Context, port, path string, out any) error {
 	requestCtx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, "http://"+net.JoinHostPort("127.0.0.1", port)+"/health", nil)
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, "http://"+net.JoinHostPort("127.0.0.1", port)+path, nil)
 	if err != nil {
-		return daemonHealth{}, err
+		return err
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return daemonHealth{}, err
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return daemonHealth{}, fmt.Errorf("HTTP %s", resp.Status)
+		return fmt.Errorf("HTTP %s", resp.Status)
 	}
-	var health daemonHealth
-	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
-		return daemonHealth{}, err
-	}
-	return health, nil
+	return json.NewDecoder(resp.Body).Decode(out)
 }
 
 func pass(name, summary string) Check { return Check{Name: name, Status: StatusPass, Summary: summary} }
 func fail(name, summary, action string) Check {
 	return Check{Name: name, Status: StatusFail, Summary: summary, Action: action}
+}
+func warn(name, summary, action string) Check {
+	return Check{Name: name, Status: StatusWarn, Summary: summary, Action: action}
 }

@@ -90,6 +90,12 @@ describe('mock agent fixture', () => {
       version: 1,
       turns: [{ includes: 'hello', actions: [{ type: 'reply', text: 'hello', state: 'parked' }] }],
     })).toThrow('want one of waiting_input, idle');
+
+    expect(() => validateMockAgentConfig({
+      version: 1,
+      turns: [],
+      ignoreSigterm: 'yes',
+    })).toThrow('ignoreSigterm must be a boolean');
   });
 
   it('ends a turn in the state its actions name, waiting after a reply and idle when silent', () => {

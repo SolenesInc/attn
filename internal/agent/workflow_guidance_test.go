@@ -8,7 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/hooks"
 )
 
-// workflowGuidanceMarker appears nowhere in argv, hook commands, or workspace-context guidance, so its presence means the workflow block was injected.
+// workflowGuidanceMarker appears nowhere in argv, hook commands, or the agent guidance, so its presence means the workflow block was injected.
 const workflowGuidanceMarker = "hypercode"
 
 func TestClaudeBuildCommand_GatesWorkflowGuidance(t *testing.T) {
@@ -30,24 +30,8 @@ func TestClaudeBuildCommand_GatesWorkflowGuidance(t *testing.T) {
 		t.Fatalf("enabled launch missing workflow guidance: %q", prompt)
 	}
 
-	both := (&Claude{}).BuildCommand(SpawnOpts{
-		SessionID:              "s",
-		Executable:             "claude",
-		WorkspaceContextPath:   "/tmp/context.md",
-		InjectWorkflowGuidance: true,
-	})
-	bothPrompt := argvValueAfter(both.Args, "--append-system-prompt")
-	if !strings.Contains(bothPrompt, "/tmp/context.md") || !strings.Contains(bothPrompt, workflowGuidanceMarker) {
-		t.Fatalf("enabled launch with checkout missing one of context/workflow guidance: %q", bothPrompt)
-	}
-
-	contextOnly := (&Claude{}).BuildCommand(SpawnOpts{
-		SessionID:            "s",
-		Executable:           "claude",
-		WorkspaceContextPath: "/tmp/context.md",
-	})
-	if strings.Contains(argvValueAfter(contextOnly.Args, "--append-system-prompt"), workflowGuidanceMarker) {
-		t.Fatalf("checkout without the flag leaked workflow guidance: %v", contextOnly.Args)
+	if !strings.Contains(prompt, hooks.AgentGuidance) {
+		t.Fatalf("enabled launch dropped the agent guidance: %q", prompt)
 	}
 }
 

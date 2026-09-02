@@ -828,8 +828,16 @@ model StopMessage {
   cmd: "stop";
   id: string;
   transcript_path: string;
-  background_task_statuses?: string[];
+  background_tasks?: StopBackgroundTask[];
   pending_session_crons?: int32;
+}
+
+// One entry of the harness's background task list at stop time, verbatim: the
+// daemon logs type and name so a stop judged non-terminal names what held it.
+model StopBackgroundTask {
+  type: string;
+  status: string;
+  name?: string;
 }
 
 model TodosMessage {
@@ -6070,6 +6078,14 @@ model AgentPeekScreen {
   rows: int32;
 }
 
+// How the session's process ended. Present only while the session has no live
+// process; a respawn clears it. `screen` is then the viewport kept at that exit.
+model AgentPeekExit {
+  code: int32;
+  signal?: string;
+  at: string;
+}
+
 model AgentPeekResult {
   session_id: string;
   label: string;
@@ -6087,8 +6103,10 @@ model AgentPeekResult {
   // Absent is not an error: a session with no inspectable transcript, or one
   // that has said nothing yet, simply has no message to show.
   last_assistant_message?: string;
-  // Absent when the backend cannot serve a snapshot (old worker, no frame).
+  // Absent when the backend cannot serve a snapshot (old worker, no frame)
+  // and no exit screen was kept.
   screen?: AgentPeekScreen;
+  exit?: AgentPeekExit;
   // The crew member whose active binding this session is; absent when unbound.
   crew_member?: string;
 }
@@ -6380,6 +6398,12 @@ model DelegateResult {
   branch?: string;
   placement: string;
   worktree_created?: boolean;
+  // When the harness first reported a turn (hook, transcript or plugin driver).
+  // Absent when the delegation completed without that: the first turn is unconfirmed.
+  first_turn_at?: string;
+  // Why the first turn is unconfirmed: the wait hit its limit. Names the limit
+  // and where to look. Absent when first_turn_at is set.
+  first_turn_unconfirmed?: string;
 }
 
 enum DelegationOperationState {

@@ -1,0 +1,4 @@
+kind: fixed
+area: agents
+change: "`attn agent peek` on a session whose process exited shows the screen it left behind and the exit code, instead of `screen unavailable`."
+symptom: A harness that died within a second of launch (a bad model pin, a missing binary) left an empty pane and nothing to read.

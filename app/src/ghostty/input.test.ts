@@ -166,19 +166,28 @@ describe('attachTerminalInput', () => {
     input.dispose();
   });
 
-  it('off-mac sends Ctrl+C to the terminal and reserves Ctrl+Shift+C for copy', () => {
+  it('off-mac sends plain Ctrl+C/V to the terminal and reserves Ctrl+Shift+C for copy', () => {
     const input = setup();
     withNavigatorPlatform('Linux aarch64', () => {
       const interrupt = key(input.window, 'keydown', { key: 'c', code: 'KeyC', ctrlKey: true });
       const copy = key(input.window, 'keydown', {
         key: 'C', code: 'KeyC', ctrlKey: true, shiftKey: true,
       });
+      const quotedInsert = key(input.window, 'keydown', {
+        key: 'v', code: 'KeyV', ctrlKey: true,
+      });
       input.element.dispatchEvent(interrupt);
       input.element.dispatchEvent(copy);
+      input.element.dispatchEvent(quotedInsert);
 
-      expect(input.target!.encodeKey).toHaveBeenCalledTimes(1);
-      expect(input.target!.encodeKey).toHaveBeenCalledWith(
+      expect(input.target!.encodeKey).toHaveBeenCalledTimes(2);
+      expect(input.target!.encodeKey).toHaveBeenNthCalledWith(
+        1,
         expect.objectContaining({ key: 'C', mods: 2 }),
+      );
+      expect(input.target!.encodeKey).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ key: 'V', mods: 2 }),
       );
       expect(copy.defaultPrevented).toBe(false);
     });

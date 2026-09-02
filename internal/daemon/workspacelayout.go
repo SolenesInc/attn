@@ -1109,20 +1109,33 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 	snapshot.Panes = nextPanes
 	normalized := workspacelayout.NormalizeWorkspaceLayout(*snapshot)
 	layoutEmpty := workspacelayout.LayoutEmpty(normalized.Layout)
+	var teardown *sessionTeardown
+	if strings.TrimSpace(sessionID) != "" {
+		var err error
+		teardown, err = d.prepareSessionTeardown(sessionID)
+		if err != nil {
+			d.sendWorkspaceLayoutActionResult(client, protocol.CmdWorkspaceLayoutClosePane, msg.WorkspaceID, protocol.Ptr(msg.PaneID), err)
+			return
+		}
+	}
 
 	// Commit the pane removal before terminating the session: teardown broadcasts
 	// immediately, and every observer of those events must see the pane-free layout.
 	if layoutEmpty {
 		d.store.RemoveWorkspaceLayout(msg.WorkspaceID)
 	} else if err := d.store.SaveWorkspaceLayout(normalized); err != nil {
+		if teardown != nil {
+			d.cancelSessionTeardown(sessionID)
+		}
 		d.sendWorkspaceLayoutActionResult(client, protocol.CmdWorkspaceLayoutClosePane, msg.WorkspaceID, protocol.Ptr(msg.PaneID), err)
 		return
 	}
 
-	if strings.TrimSpace(sessionID) != "" {
-		if session := d.unregisterSession(sessionID, syscall.SIGTERM); session != nil {
-			d.publishSessionUnregistered(session)
-			d.dissociateSessionFromWorkspace(session.ID)
+	if teardown != nil {
+		d.commitSessionUnregister(sessionID)
+		if teardown.session != nil {
+			d.publishSessionUnregistered(teardown.session)
+			d.dissociateSessionFromWorkspace(teardown.session.ID)
 		}
 	}
 
@@ -1141,6 +1154,10 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 		}
 	} else {
 		d.broadcastWorkspaceLayoutUpdated(msg.WorkspaceID)
+	}
+
+	if teardown != nil {
+		d.terminateSessionAsync(sessionID, syscall.SIGTERM, teardown)
 	}
 }
 

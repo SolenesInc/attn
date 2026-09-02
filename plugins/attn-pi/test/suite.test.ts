@@ -15,6 +15,7 @@ import {
   type SessionManagerLike,
   type SessionStartEvent,
   type SessionStartReason,
+  type ToolResultEvent,
 } from "../suite/core";
 
 const tmpRoot = mkdtempSync(join(tmpdir(), "attn-pi-suite-"));
@@ -107,6 +108,10 @@ class RecordingDelegate implements RelayDelegate {
   async suiteReportInputTaken(params: unknown): Promise<void> {
     this.calls.push({ method: relayMethods.reportInputTaken, params });
   }
+
+  async suiteReportPullRequest(params: unknown): Promise<void> {
+    this.calls.push({ method: relayMethods.reportPullRequest, params });
+  }
 }
 
 class StallingDelegate extends RecordingDelegate {
@@ -159,6 +164,82 @@ describe("AttnPiSuite: session_start -> suite.hello", () => {
         pi_state: "idle",
       })),
     );
+
+    suite.close();
+    relay.close();
+  });
+});
+
+describe("AttnPiSuite: tool_result -> suite.report_pull_request", () => {
+  function bashResult(command: string, output: string): ToolResultEvent {
+    return {
+      type: "tool_result",
+      toolName: "bash",
+      input: { command },
+      content: [{ type: "text", text: output }],
+    };
+  }
+
+  test("a gh pr create reports the url it printed", async () => {
+    const { relay, delegate, socketPath } = await buildHarness();
+    const suite = new AttnPiSuite({ socketPath, token: "tok-pr", piVersion: "0.83.0" });
+    const pi = new FakePi();
+    suite.register(pi);
+    const ctx = new FakeContext("native-pr");
+
+    pi.fire("session_start", { type: "session_start", reason: "new" }, ctx);
+    pi.fire(
+      "tool_result",
+      bashResult("gh pr create --fill", "https://github.com/victorarias/attn/pull/90\n"),
+      ctx,
+    );
+
+    await waitFor(() => delegate.calls.some((call) => call.method === relayMethods.reportPullRequest));
+    expect(delegate.calls.filter((call) => call.method === relayMethods.reportPullRequest).map((call) => call.params)).toEqual([
+      { token: "tok-pr", url: "https://github.com/victorarias/attn/pull/90" },
+    ]);
+
+    suite.close();
+    relay.close();
+  });
+
+  test("an ordinary tool result reports nothing", async () => {
+    const { relay, delegate, socketPath } = await buildHarness();
+    const suite = new AttnPiSuite({ socketPath, token: "tok-quiet", piVersion: "0.83.0" });
+    const pi = new FakePi();
+    suite.register(pi);
+    const ctx = new FakeContext("native-quiet");
+
+    pi.fire("session_start", { type: "session_start", reason: "new" }, ctx);
+    pi.fire("tool_result", bashResult("gh pr view --json url", "https://github.com/victorarias/attn/pull/90"), ctx);
+    pi.fire("agent_start", { type: "agent_start" }, ctx);
+
+    await waitFor(() => delegate.calls.some((call) => call.method === relayMethods.reportState));
+    expect(delegate.calls.some((call) => call.method === relayMethods.reportPullRequest)).toBe(false);
+
+    suite.close();
+    relay.close();
+  });
+
+  test("two pull requests from one command are each reported once", async () => {
+    const { relay, delegate, socketPath } = await buildHarness();
+    const suite = new AttnPiSuite({ socketPath, token: "tok-twice", piVersion: "0.83.0" });
+    const pi = new FakePi();
+    suite.register(pi);
+    const ctx = new FakeContext("native-twice");
+
+    pi.fire("session_start", { type: "session_start", reason: "new" }, ctx);
+    const event = bashResult(
+      "gh pr create --fill; gh pr create --fill --repo other/repo",
+      "https://github.com/a/b/pull/1\nhttps://github.com/a/b/pull/2\nhttps://github.com/a/b/pull/1",
+    );
+    pi.fire("tool_result", event, ctx);
+
+    await waitFor(() => delegate.calls.filter((call) => call.method === relayMethods.reportPullRequest).length === 2);
+    expect(delegate.calls.filter((call) => call.method === relayMethods.reportPullRequest).map((call) => call.params)).toEqual([
+      { token: "tok-twice", url: "https://github.com/a/b/pull/1" },
+      { token: "tok-twice", url: "https://github.com/a/b/pull/2" },
+    ]);
 
     suite.close();
     relay.close();

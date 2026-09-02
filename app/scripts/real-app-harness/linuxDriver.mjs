@@ -247,7 +247,7 @@ export class LinuxDriver {
 
   async movePointerInWindow(relativeX, relativeY, opts = {}) {
     const { windowId, x, y } = await this.relativePoint(relativeX, relativeY, opts);
-    await this.runXdotool(['mousemove', '--sync', '--window', String(windowId), String(x), String(y)]);
+    await this.runXdotool(['mousemove', '--window', String(windowId), String(x), String(y)]);
     await delay(this.actionDelayMs);
   }
 
@@ -264,14 +264,14 @@ export class LinuxDriver {
     const end = await this.relativePoint(toRelativeX, toRelativeY, opts);
     const stepCount = Math.max(2, Number.isInteger(opts.steps) ? opts.steps : 12);
     const args = [
-      'mousemove', '--sync', '--window', String(start.windowId), String(start.x), String(start.y),
+      'mousemove', '--window', String(start.windowId), String(start.x), String(start.y),
       'mousedown', '1',
     ];
     for (let step = 1; step <= stepCount; step += 1) {
       const fraction = step / stepCount;
       const x = Math.round(start.x + (end.x - start.x) * fraction);
       const y = Math.round(start.y + (end.y - start.y) * fraction);
-      args.push('mousemove', '--sync', '--window', String(start.windowId), String(x), String(y));
+      args.push('mousemove', '--window', String(start.windowId), String(x), String(y));
     }
     args.push('mouseup', '1');
     await this.activateBackground(opts);
@@ -357,11 +357,13 @@ export class LinuxDriver {
     };
   }
 
+  // `mousemove --sync` waits for a motion event, and none comes when the
+  // pointer already sits at the point (a repeated click), so it hangs.
   async clickButton(button, relativeX, relativeY, opts = {}) {
     const point = await this.relativePoint(relativeX, relativeY, opts);
     const modifiers = linuxModifierNames(opts.modifiers);
     const args = [
-      'mousemove', '--sync', '--window', String(point.windowId), String(point.x), String(point.y),
+      'mousemove', '--window', String(point.windowId), String(point.x), String(point.y),
     ];
     for (const modifier of modifiers) args.push('keydown', modifier);
     args.push('click', String(button));

@@ -8,6 +8,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { socketPathForProfile } from './harnessProfile.mjs';
 import { queueDaemonSettingRestore } from './common.mjs';
+import { appDaemonInTree } from './platform.mjs';
 
 const CLASSIFIER_MARKER = 'You are a security monitor for an autonomous coding agent';
 
@@ -205,7 +206,7 @@ export const allowEverything = () => ({ verdict: 'allow' });
 export function resolveAttnBinary(appPath) {
   const candidates = [
     process.env.ATTN_HARNESS_BIN,
-    path.join(appPath, 'Contents/MacOS/attn'),
+    appDaemonInTree(appPath),
     path.resolve(HARNESS_DIR, '../../../attn'),
   ].filter(Boolean);
   for (const candidate of candidates) {

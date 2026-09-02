@@ -95,6 +95,37 @@ describe('useSessionWorkspaceViewState', () => {
     expect(result.current.getActivePaneIdForSession(session)).toBe(SESSION_PANE_ID);
   });
 
+  it('keeps the local active pane when only a split ratio changes', () => {
+    const layout = (ratio: number, ratioMode?: 'automatic' | 'preferred'): TerminalWorkspaceState => ({
+      agents: [{ id: 'pane-a', runtimeId: 'runtime-a', title: 'Session', sessionId: 'session-1' }],
+      layoutTree: {
+        type: 'split' as const,
+        splitId: 'root',
+        direction: 'vertical' as const,
+        ratio,
+        ...(ratioMode ? { ratioMode } : {}),
+        children: [
+          { type: 'pane' as const, paneId: SESSION_PANE_ID },
+          { type: 'pane' as const, paneId: 'pane-a' },
+        ],
+      },
+    });
+    const initial = buildSession({ workspace: layout(0.5), daemonActivePaneId: 'pane-a' });
+
+    const { result, rerender } = renderHook(({ sessions }) => useSessionWorkspaceViewState(sessions), {
+      initialProps: { sessions: [initial] },
+    });
+
+    act(() => {
+      result.current.setActivePane(initial.id, SESSION_PANE_ID);
+    });
+
+    const dragged = buildSession({ workspace: layout(0.62, 'preferred'), daemonActivePaneId: 'pane-a' });
+    rerender({ sessions: [dragged] });
+
+    expect(result.current.getActivePaneIdForSession(dragged)).toBe(SESSION_PANE_ID);
+  });
+
   it('falls back to the daemon preferred pane when topology changes', () => {
     const initial = buildSession({
       workspace: {

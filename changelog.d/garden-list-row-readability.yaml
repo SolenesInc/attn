@@ -1,0 +1,3 @@
+kind: changed
+area: garden
+change: Garden lists keep seed IDs visible, align wrapped titles, and name tender sessions instead of showing their UUIDs.

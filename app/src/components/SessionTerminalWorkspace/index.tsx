@@ -53,11 +53,13 @@ import type {
 import { SessionProvenance } from '../SessionProvenance';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import {
+  applyDragSuspension,
+  dragRatioBounds,
+  releaseSuspendedLeaf,
   resolveWorkspaceLayout,
-  swapSuspendedLeaf,
   type AttentionViewport,
 } from './attentionLayout';
-import { keyCombo } from '../../shortcuts/formatShortcut';
+import { formatShortcut } from '../../shortcuts/formatShortcut';
 
 const RESIZE_MOUSE_SUPPRESSION_MS = 1_500;
 // Only swallows the trailing pointerup/synthetic click from the release itself,
@@ -263,6 +265,9 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     const panesContainerRef = useRef<HTMLDivElement | null>(null);
     const draggingSplitRef = useRef<string | null>(null);
     const activePaneIdRef = useRef(activePaneId);
+    const layoutTreeRef = useRef<TerminalLayoutNode | null>(null);
+    const activeLeafIdRef = useRef('');
+    const pinnedLeafIdsRef = useRef<ReadonlySet<string>>(new Set());
     const isActiveSessionRef = useRef(isActiveSession);
     const sessionViewVisibleRef = useRef(isSessionViewVisible);
 
@@ -407,6 +412,10 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       : activePaneId;
     const activeLeafId = focusedTileId || focusedPaneId || firstTileId || '';
     const activeLeafIsTile = tileLeafById.has(activeLeafId);
+    useLayoutEffect(() => {
+      layoutTreeRef.current = workspace.layoutTree ?? null;
+      activeLeafIdRef.current = activeLeafId;
+    }, [workspace.layoutTree, activeLeafId]);
 
     useLayoutEffect(() => {
       const pending = pendingPaneFocusRef.current;
@@ -508,6 +517,8 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
         activeLeafId: attentionActiveLeafId,
         focusOrder: attentionFocusOrder.slice(1),
         previousSuspendedLeafIds: suspendedLeafIdsRef.current,
+        pinnedLeafIds: pinnedLeafIdsRef.current,
+        holdRestores: resizingSplit !== null,
         pendingRatioOverrides,
         view: effectivePaneId
           ? { mode: 'focused', leafId: effectivePaneId }
@@ -523,12 +534,18 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       effectiveZoomedPaneId,
       pendingRatioOverrides,
       attentionRevision,
+      resizingSplit,
       workspace.layoutTree,
     ]);
     const suspendedLeafIds = layoutPlan?.suspendedLeafIds ?? suspendedLeafIdsRef.current;
     useLayoutEffect(() => {
       if (layoutPlan) {
         suspendedLeafIdsRef.current = layoutPlan.suspendedLeafIds;
+        const prunedPins = [...pinnedLeafIdsRef.current]
+          .filter((id) => layoutPlan.suspendedLeafIds.has(id));
+        if (prunedPins.length !== pinnedLeafIdsRef.current.size) {
+          pinnedLeafIdsRef.current = new Set(prunedPins);
+        }
       }
     }, [layoutPlan]);
     const renderedLayoutTree = layoutPlan?.renderedTree ?? null;
@@ -762,6 +779,36 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       }
     }, [isActiveSession, renderedPaneIds, renderedPaneIdsKey, setPaneSurfaceReleased, suspendedLeafIds, suspendedLeafIdsKey]);
 
+    // A fold or restore eases pane frames over 160ms; panes measure their old
+    // size mid-transition, so the settle refit below is unconditional.
+    const suspensionAnimationTimeoutRef = useRef<number | null>(null);
+    const prevSuspendedKeyRef = useRef(suspendedLeafIdsKey);
+    useLayoutEffect(() => {
+      if (prevSuspendedKeyRef.current === suspendedLeafIdsKey) {
+        return;
+      }
+      prevSuspendedKeyRef.current = suspendedLeafIdsKey;
+      const container = panesContainerRef.current;
+      if (!container || !sessionVisible) {
+        return;
+      }
+      container.dataset.suspensionAnimating = '1';
+      if (suspensionAnimationTimeoutRef.current != null) {
+        window.clearTimeout(suspensionAnimationTimeoutRef.current);
+      }
+      const visiblePaneIds = renderedPaneIds.filter((paneId) => !suspendedLeafIds.has(paneId));
+      suspensionAnimationTimeoutRef.current = window.setTimeout(() => {
+        suspensionAnimationTimeoutRef.current = null;
+        delete container.dataset.suspensionAnimating;
+        refitPanesNowAndIfStillWrong(visiblePaneIds);
+      }, 200);
+    }, [refitPanesNowAndIfStillWrong, renderedPaneIds, sessionVisible, suspendedLeafIds, suspendedLeafIdsKey]);
+    useEffect(() => () => {
+      if (suspensionAnimationTimeoutRef.current != null) {
+        window.clearTimeout(suspensionAnimationTimeoutRef.current);
+      }
+    }, []);
+
     useLayoutEffect(() => {
       if (!sessionVisible) {
         sessionVisibleRef.current = false;
@@ -843,13 +890,9 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     }, [onSetZoomActive, zoomActive]);
 
     const focusLeaf = useCallback((leafId: string) => {
-      const nextSuspendedLeafIds = swapSuspendedLeaf(
-        suspendedLeafIds,
-        leafId,
-        attentionActiveLeafId,
-      );
-      if (nextSuspendedLeafIds !== suspendedLeafIds) {
-        suspendedLeafIdsRef.current = nextSuspendedLeafIds;
+      suspendedLeafIdsRef.current = releaseSuspendedLeaf(suspendedLeafIdsRef.current, leafId);
+      if (pinnedLeafIdsRef.current.has(leafId)) {
+        pinnedLeafIdsRef.current = new Set([...pinnedLeafIdsRef.current].filter((id) => id !== leafId));
       }
       automaticTileFocusRef.current = null;
       if (tileLeafById.has(leafId)) {
@@ -864,7 +907,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       setActiveTile(null);
       onFocusPane(leafId);
       runtime.focusPane(leafId);
-    }, [activePaneId, attentionActiveLeafId, focusTile, onFocusPane, runtime, suspendedLeafIds, tileLeafById]);
+    }, [activePaneId, focusTile, onFocusPane, runtime, tileLeafById]);
     useLayoutEffect(() => {
       focusLeafRequestRef.current = focusLeaf;
     }, [focusLeaf]);
@@ -1383,13 +1426,42 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       const spanNorm = direction === 'vertical' ? right - left : bottom - top;
       const axisPx = direction === 'vertical' ? rect.width : rect.height;
       const spanPx = spanNorm * axisPx;
-      const minRatio = spanPx > 0 ? Math.min(0.45, 120 / spanPx) : 0.1;
+      const ratioBounds = layoutTreeRef.current
+        ? dragRatioBounds(layoutTreeRef.current, splitId, activeLeafIdRef.current, spanPx)
+        : { min: 0.1, max: 0.9 };
+      const splitBoxPx = {
+        width: (right - left) * rect.width,
+        height: (bottom - top) * rect.height,
+      };
+      const suspensionSnapshot = {
+        suspended: suspendedLeafIdsRef.current,
+        pinned: pinnedLeafIdsRef.current,
+      };
+      const updateDragSuspension = (ratio: number) => {
+        if (!layoutTreeRef.current) {
+          return;
+        }
+        const result = applyDragSuspension({
+          sourceTree: layoutTreeRef.current,
+          splitId,
+          ratio,
+          splitBoxPx,
+          viewport: { width: rect.width, height: rect.height },
+          suspendedLeafIds: suspendedLeafIdsRef.current,
+          pinnedLeafIds: pinnedLeafIdsRef.current,
+          protectedLeafId: activeLeafIdRef.current,
+          focusOrder: attentionFocusOrderRef.current,
+        });
+        suspendedLeafIdsRef.current = result.suspendedLeafIds;
+        pinnedLeafIdsRef.current = result.pinnedLeafIds;
+      };
       draggingSplitRef.current = splitId;
       setResizingSplit({ splitId, direction });
       const releaseSelectionLock = lockTextSelection(
         direction === 'vertical' ? 'col-resize' : 'row-resize',
       );
 
+      const grabOffset = divider.grabRatio != null ? divider.grabRatio - divider.ratio : 0;
       const computeRatio = (clientX: number, clientY: number): number => {
         let ratio = 0.5;
         if (spanNorm > 0) {
@@ -1398,15 +1470,18 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
           } else {
             ratio = ((clientY - rect.top) / rect.height - top) / spanNorm;
           }
+          ratio -= grabOffset;
         }
-        return Math.min(1 - minRatio, Math.max(minRatio, ratio));
+        return Math.min(ratioBounds.max, Math.max(ratioBounds.min, ratio));
       };
 
       const onMove = (ev: PointerEvent) => {
         ev.preventDefault();
         ev.stopPropagation();
         suppressTerminalMouseDuringResize();
-        pendingRatioRef.current = { splitId, ratio: computeRatio(ev.clientX, ev.clientY) };
+        const nextRatio = computeRatio(ev.clientX, ev.clientY);
+        updateDragSuspension(nextRatio);
+        pendingRatioRef.current = { splitId, ratio: nextRatio };
         if (ratioRafRef.current == null) {
           ratioRafRef.current = window.requestAnimationFrame(flushRatioOverride);
         }
@@ -1448,6 +1523,8 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       };
       const onCancel = () => {
         teardown();
+        suspendedLeafIdsRef.current = suspensionSnapshot.suspended;
+        pinnedLeafIdsRef.current = suspensionSnapshot.pinned;
         pendingRatioRef.current = null;
         draggingSplitRef.current = null;
         clearRatioOverride(splitId);
@@ -1458,6 +1535,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
         ev.stopPropagation();
         const ratio = computeRatio(ev.clientX, ev.clientY);
         teardown();
+        updateDragSuspension(ratio);
         pendingRatioRef.current = { splitId, ratio };
         flushRatioOverride();
         draggingSplitRef.current = null;
@@ -1538,7 +1616,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
               type="button"
               className="workspace-focus-exit"
               onClick={() => setMaximizedLeafId(null)}
-              title={`Exit focus mode (${keyCombo('accel', 'shift', 'Enter')})`}
+              title={`Exit focus mode (${formatShortcut('terminal.toggleMaximize')})`}
             >
               Return to split
             </button>

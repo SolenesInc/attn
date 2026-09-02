@@ -795,7 +795,7 @@ test.describe('Ghostty terminal interactions', () => {
     await expectTerminalInputCount(page, 's-image-paste', 'pasted text', 1);
   });
 
-  test('leaves ctrl+v text paste available on non-mac platforms', async ({ page, daemon }) => {
+  test('forwards ctrl+v to the PTY and leaves text paste available on non-mac platforms', async ({ page, daemon }) => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
       Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (X11; Linux x86_64)', configurable: true });
@@ -804,7 +804,7 @@ test.describe('Ghostty terminal interactions', () => {
     await terminal.focus();
 
     await page.keyboard.press('Control+v');
-    await expectTerminalInputCount(page, 's-text-paste-linux', '\u0016', 0);
+    await expectTerminalInputCount(page, 's-text-paste-linux', '\u0016', 1);
 
     await terminal.evaluate((element) => {
       const data = new DataTransfer();

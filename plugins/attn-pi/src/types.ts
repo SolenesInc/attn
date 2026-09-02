@@ -1,4 +1,4 @@
-export const pluginAPIVersion = 5;
+export const pluginAPIVersion = 6;
 
 export type StableVersion = {
   raw: string;

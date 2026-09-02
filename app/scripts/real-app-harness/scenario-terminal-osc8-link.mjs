@@ -183,7 +183,11 @@ async function main() {
       );
       const read = await client.request('read_pane_text', { sessionId, paneId: pane.paneId });
       const lines = read.text.split('\n');
-      labelRow = lines.findIndex((line) => line.includes(label));
+      // The echoed printf command also contains the label; the rendered hyperlink
+      // is the line whose visible text is exactly the label. Prefer it.
+      const exact = lines.map((line, i) => [line.trim(), i]).filter(([t]) => t === label).map(([, i]) => i);
+      const loose = lines.map((line, i) => [line, i]).filter(([line]) => line.includes(label)).map(([, i]) => i);
+      labelRow = exact.length ? exact[exact.length - 1] : (loose.length ? loose[loose.length - 1] : -1);
       runner.assert(labelRow >= 0, `Link label row disappeared. Pane text:\n${read.text}`);
       labelCol = lines[labelRow].indexOf(label) + Math.floor(label.length / 2);
 

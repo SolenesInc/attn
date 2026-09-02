@@ -41,16 +41,38 @@ describe('GardenPanel lifecycle', () => {
     expect(screen.getByText(/tended by Trellis/)).toBeInTheDocument();
   });
 
-  it('falls back to the claiming session when there is no member', () => {
+  it('uses the claiming session label when there is no member', () => {
     const growing = seed({
       id: 's-grow22',
       title: 'claimed by a session',
       status: 'growing',
       tender_session: 'sess-b',
     });
+    render(
+      <GardenPanel
+        isOpen
+        onClose={vi.fn()}
+        seedsTotal={1}
+        seeds={[growing]}
+        tenderSessionLabels={new Map([['sess-b', 'Garden polish']])}
+      />,
+    );
+
+    expect(screen.getByText(/tended by Garden polish/)).toBeInTheDocument();
+    expect(screen.queryByText(/tended by sess-b/)).not.toBeInTheDocument();
+  });
+
+  it('keeps an unknown claiming session human-readable', () => {
+    const growing = seed({
+      id: 's-grow33',
+      title: 'claimed by an unknown session',
+      status: 'growing',
+      tender_session: '4915e44d-fadd-4dc8-82cf-671cbbf872c0',
+    });
     render(<GardenPanel isOpen onClose={vi.fn()} seedsTotal={1} seeds={[growing]} />);
 
-    expect(screen.getByText(/tended by sess-b/)).toBeInTheDocument();
+    expect(screen.getByText('tended by session')).toBeInTheDocument();
+    expect(screen.queryByText(/4915e44d/)).not.toBeInTheDocument();
   });
 
   it('says nothing about a tender when nobody holds the seed', () => {

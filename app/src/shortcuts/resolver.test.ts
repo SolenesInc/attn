@@ -6,7 +6,7 @@ vi.mock('./platform', () => ({
   isAccelKeyPressed: (e: KeyboardEvent) => (macLike ? e.metaKey : e.metaKey || e.ctrlKey),
 }));
 
-import { SHORTCUTS, ShortcutId } from './registry';
+import { LINUX_SHORTCUTS, SHORTCUTS, ShortcutId } from './registry';
 import {
   setShortcutOverrides,
   resolveBinding,
@@ -36,6 +36,11 @@ describe('resolveBinding', () => {
   it('returns the override when present', () => {
     setShortcutOverrides({ 'session.new': { key: 'm', meta: true } });
     expect(resolveBinding('session.new')).toEqual({ key: 'm', meta: true });
+  });
+
+  it('returns the Linux default off macOS', () => {
+    macLike = false;
+    expect(resolveBinding('session.new')).toEqual(LINUX_SHORTCUTS['session.new']);
   });
 
   it('treats a null override as unbound', () => {

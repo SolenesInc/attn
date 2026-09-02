@@ -163,7 +163,7 @@ async function main() {
         `attn seed plant "Terminal seed preview receipt" -m "Known IDs preview from terminal output." --session ${sessionId}`,
         's-',
       );
-      const ids = [...planted.matchAll(/^\s*(s-[0-9a-hjkmnp-tv-z]{6})\s*$/gm)]
+      const ids = [...planted.matchAll(/^\s*(s-[0-9a-hjkmnp-tv-z]{6})\b/gm)]
         .map((match) => match[1]);
       seedId = ids[ids.length - 1];
       runner.assert(Boolean(seedId), 'plant answered with a seed id', { ids });
@@ -214,7 +214,7 @@ async function main() {
       screen[bottomRow] = `${' '.repeat(centerCol)}${seedId}`;
       screen[sentinelRow] = 'EDGE_READY';
       const payload = Buffer.from(screen.join('\n')).toString('base64');
-      const drawCommand = `clear; printf '%s' '${payload}' | /usr/bin/base64 -D`;
+      const drawCommand = `clear; printf '%s' '${payload}' | /usr/bin/base64 --decode`;
       await runInPane(
         client,
         { sessionId, paneId: pane.paneId },

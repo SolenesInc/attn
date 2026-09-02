@@ -882,6 +882,10 @@ func (s *Session) closePTMX() {
 const sigtermToHUPGrace = 2 * time.Second
 
 func (s *Session) kill(sig syscall.Signal, waitTimeout time.Duration) error {
+	return s.killWithEscalation(sig, waitTimeout, nil)
+}
+
+func (s *Session) killWithEscalation(sig syscall.Signal, waitTimeout time.Duration, onEscalate func(syscall.Signal)) error {
 	s.exitMu.RLock()
 	running := s.running
 	s.exitMu.RUnlock()
@@ -914,6 +918,9 @@ func (s *Session) kill(sig syscall.Signal, waitTimeout time.Duration) error {
 		case <-s.exited:
 			return nil
 		case <-time.After(grace):
+			if onEscalate != nil {
+				onEscalate(syscall.SIGHUP)
+			}
 			_ = syscall.Kill(-pgid, syscall.SIGHUP)
 		}
 	}
@@ -922,6 +929,9 @@ func (s *Session) kill(sig syscall.Signal, waitTimeout time.Duration) error {
 	case <-s.exited:
 		return nil
 	case <-time.After(time.Until(deadline)):
+		if onEscalate != nil {
+			onEscalate(syscall.SIGKILL)
+		}
 		_ = syscall.Kill(-pgid, syscall.SIGKILL)
 		<-s.exited
 		return nil

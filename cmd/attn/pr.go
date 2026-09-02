@@ -1022,10 +1022,11 @@ commands:
   ls [--session <id>] [--json]                    list the pull requests a session opened
   forget <url> [--session <id>]                   drop one from the session's list
 
-record/ls/forget default to the session in ATTN_SESSION_ID. A Claude Code or
-Codex session records its own "gh pr create" through the tool-use hook; record is
-the way in for every other harness and for a pull request opened by hand. Recording
-the same pull request twice is a no-op, so a double report costs nothing.
+record/ls/forget default to the session in ATTN_SESSION_ID. Claude Code and Codex
+sessions record their own "gh pr create" through the tool-use hook, and pi sessions
+through the driver; record is the way in for every other harness and for a pull
+request opened by hand. Recording the same pull request twice is a no-op, so a
+double report costs nothing.
 
 attn pr wait-ready <number-or-url> --reviewer <login> [options]
 

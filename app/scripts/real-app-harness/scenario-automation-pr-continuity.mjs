@@ -19,6 +19,7 @@ import {
   resolveHarnessResources,
   profileCliEnv as profileEnv,
 } from './harnessProfile.mjs';
+import { appDaemonInTree } from './platform.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '../../..');
@@ -239,7 +240,7 @@ async function main() {
   const profile = currentHarnessProfile();
   if (!profile) throw new Error('automation continuity scenario requires a named non-production profile');
   const resources = resolveHarnessResources(profile);
-  const binary = path.join(resources.appPath, 'Contents', 'MacOS', 'attn');
+  const binary = appDaemonInTree(resources.appPath);
   const runner = createScenarioRunner(options, {
     scenarioId: 'AUTOMATION-PR-CONTINUITY',
     allowRealAgents: false,

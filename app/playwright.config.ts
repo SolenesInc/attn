@@ -4,6 +4,8 @@ import { E2E_CLIENT_TOKEN, e2ePorts } from './e2e/profileEnv';
 // Ports for the active ATTN_PROFILE: the default keeps the historical 19849 (daemon) /
 // 1421 (Vite); a named profile gets a disjoint band (see e2e/profileEnv.ts).
 const { daemonPort: TEST_DAEMON_PORT, vitePort: TEST_VITE_PORT } = e2ePorts();
+// Browser E2E is the Mac shortcut matrix; Linux has the installed-app xdotool scenario.
+const MACOS_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X)';
 
 export default defineConfig({
   testDir: './e2e',
@@ -16,6 +18,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   use: {
     baseURL: `http://localhost:${TEST_VITE_PORT}`,
+    userAgent: MACOS_USER_AGENT,
     trace: 'on-first-retry',
   },
   webServer: {

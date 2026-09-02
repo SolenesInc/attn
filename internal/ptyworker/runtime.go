@@ -1112,7 +1112,17 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 			return
 		}
 		sig := parseSignal(params.Signal)
-		if err := c.runtime.manager.Kill(c.runtime.cfg.SessionID, sig); err != nil {
+		if err := c.runtime.manager.KillWithEscalation(c.runtime.cfg.SessionID, sig, func(escalated syscall.Signal) {
+			requested := params.Signal
+			escalation := escalated.String()
+			c.runtime.broadcastLifecycle(EventEnvelope{
+				Type:       "evt",
+				Event:      EventTeardownEscalated,
+				SessionID:  c.runtime.cfg.SessionID,
+				Reason:     &requested,
+				ExitSignal: &escalation,
+			})
+		}); err != nil {
 			if errors.Is(err, pty.ErrSessionNotFound) {
 				c.sendError(req.ID, ErrSessionNotFound, err.Error())
 				return

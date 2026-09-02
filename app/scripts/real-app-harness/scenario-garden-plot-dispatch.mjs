@@ -24,7 +24,7 @@ const PLOT = {
   title: 'Walk a plot end to end',
   body: '# The plan\n\nThe crown body is the plan a delegate is primed with.',
   children: [
-    { title: 'First parallel step', body: 'Nothing holds this one.', blocks: ['the-sequenced-step'] },
+    { title: 'First parallel step', body: 'Nothing holds this one.', blocks: ['sequenced-step'] },
     { title: 'Second parallel step', body: 'Nothing holds this one either.' },
     { title: 'The sequenced step' },
   ],
@@ -132,7 +132,7 @@ async function main() {
       const payload = path.join(runner.sessionDir, 'plot.json');
       fs.writeFileSync(payload, JSON.stringify(PLOT));
       const planted = await runInPane(client, pane,
-        `attn seed plot -f ${payload} --session ${pane.sessionId}`, 'the-sequenced-step');
+        `attn seed plot -f ${payload} --session ${pane.sessionId}`, 'sequenced-step');
       const ids = seedIDs(planted);
       runner.assert(ids.length >= 4, 'the plot answered with a crown and three children', { planted });
       crown = ids[0];
@@ -141,7 +141,7 @@ async function main() {
     });
 
     await runner.step('the_crown_wears_its_plot', async () => {
-      const listed = await runInPane(client, pane, 'attn seed ls --tree', 'done ·');
+      const listed = await runInPane(client, pane, 'attn seed ls', 'done ·');
       runner.assert(saw(listed, '[0/3 done · 0 growing · 2 ready · 1 blocked]'),
         'the crown row carries its plot progress', { listed });
       runner.writeText('ls-tree.txt', listed + '\n');
@@ -151,7 +151,7 @@ async function main() {
       const known = new Set(observer.sessionsById.keys());
       await client.request('write_pane', {
         ...pane,
-        text: `attn delegate --agent shell --no-worktree --source-session ${pane.sessionId} ` +
+        text: `attn delegate --agent shell --model none --no-worktree --source-session ${pane.sessionId} ` +
           `--plot ${crown} --name plotdel --brief "Tend the plot you were dispatched at."`,
       });
       let spawned = null;
@@ -159,8 +159,7 @@ async function main() {
         spawned = [...observer.sessionsById.keys()].find((id) => !known.has(id)) ?? null;
         return Boolean(spawned);
       }, 'the delegated session exists', 60_000);
-      // The delegation keeps printing after the daemon has the session; drain
-      // the pane before the next command types into the middle of it.
+      await client.request('select_session', { sessionId: pane.sessionId });
       await runInPane(client, pane, 'true', '');
       return spawned;
     });
@@ -241,13 +240,14 @@ async function main() {
       const known = new Set(observer.sessionsById.keys());
       await client.request('write_pane', {
         ...pane,
-        text: `attn delegate --agent shell --no-worktree --source-session ${pane.sessionId} ` +
+        text: `attn delegate --agent shell --model none --no-worktree --source-session ${pane.sessionId} ` +
           `--plot ${crown} --name plotdel2 --brief "Tend the plot you were dispatched at."`,
       });
       await observer.waitFor(() => {
         second = [...observer.sessionsById.keys()].find((id) => !known.has(id)) ?? null;
         return Boolean(second);
       }, 'the second delegated session exists', 60_000);
+      await client.request('select_session', { sessionId: pane.sessionId });
       await runInPane(client, pane, 'true', '');
 
       const [, parallel, sequenced] = children;

@@ -12,6 +12,13 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-workspace-creation-shortcuts'],
   },
   {
+    id: 'linux-shortcuts',
+    runnerId: 'LINUX-SHORTCUTS',
+    label: 'Linux terminal-style shortcuts through xdotool',
+    command: ['pnpm', 'run', 'real-app:scenario-linux-shortcuts'],
+    soakOnly: true,
+  },
+  {
     id: 'workspace-switching',
     runnerId: 'WORKSPACE-SWITCHING',
     label: 'Workspace switching',
@@ -34,6 +41,12 @@ export const scenarioCatalog = [
     runnerId: 'WORKSPACE-CLOSE-ONE-SESSION-KEEPS-SELECTION',
     label: 'Workspace close one session keeps selection',
     command: ['pnpm', 'run', 'real-app:scenario-workspace-close-one-session-keeps-selection'],
+  },
+  {
+    id: 'close-pane-nonblocking',
+    runnerId: 'CLOSE-PANE-NONBLOCKING',
+    label: 'Close pane does not wait for process teardown',
+    command: ['pnpm', 'run', 'real-app:scenario-close-pane-nonblocking'],
   },
   {
     id: 'tile-only-workspace-select',
@@ -177,6 +190,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'terminal-block-copy',
+    skipOn: { linux: 'Cmd+C reaches the terminal through the macOS menu accelerator' },
     runnerId: 'TERMINAL-BLOCK-COPY',
     label: 'OSC 133 block copy via real fish + native Cmd+C',
     command: ['pnpm', 'run', 'real-app:scenario-terminal-block-copy'],
@@ -196,6 +210,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'terminal-context-menu',
+    skipOn: { linux: 'the context menu is a native macOS menu' },
     runnerId: 'TERMINAL-CONTEXT-MENU',
     label: 'Terminal context menu via native right-click + clipboard',
     command: ['pnpm', 'run', 'real-app:scenario-terminal-context-menu'],
@@ -233,6 +248,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'tr205-probe-codex',
+    skipOn: { linux: { reason: 'needs the attn-remote OrbStack VM; set ATTN_HARNESS_REMOTE_SSH_TARGET to a reachable target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
     runnerId: 'TR-205',
     label: 'TR-205 remote probe (codex vocabulary)',
     command: ['pnpm', 'run', 'real-app:scenario-tr205', '--', '--remote-agent', 'probe:codex'],
@@ -240,6 +256,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'tr205-probe-claude',
+    skipOn: { linux: { reason: 'needs the attn-remote OrbStack VM; set ATTN_HARNESS_REMOTE_SSH_TARGET to a reachable target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
     runnerId: 'TR-205',
     label: 'TR-205 remote probe (claude vocabulary)',
     command: ['pnpm', 'run', 'real-app:scenario-tr205', '--', '--remote-agent', 'probe:claude'],
@@ -247,6 +264,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'tr502',
+    skipOn: { linux: { reason: 'needs the attn-remote OrbStack VM; set ATTN_HARNESS_REMOTE_SSH_TARGET to a reachable target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
     runnerId: 'TR-502',
     label: 'TR-502 remote relaunch splits',
     command: ['pnpm', 'run', 'real-app:scenario-tr502'],
@@ -254,6 +272,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'tr504',
+    skipOn: { linux: { reason: 'needs the attn-remote OrbStack VM; set ATTN_HARNESS_REMOTE_SSH_TARGET to a reachable target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
     runnerId: 'TR-504',
     label: 'TR-504 remote cleanup',
     command: ['pnpm', 'run', 'real-app:scenario-tr504'],
