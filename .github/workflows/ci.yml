@@ -551,6 +551,16 @@ jobs:
           ATTN_REAL_APP_ARTIFACTS_DIR: ${{ runner.temp }}/attn-real-app-harness
         run: xvfb-run -a -s '-screen 0 1600x1000x24' pnpm --dir app run real-app:serial-matrix
 
+      - name: Collect daemon and worker logs
+        if: always()
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/attn-real-app-harness
+        run: |
+          data_dir="$(./attn profile resolve --field dataDir)"
+          mkdir -p "$EVIDENCE_DIR/daemon"
+          cp "$data_dir/daemon.log" "$EVIDENCE_DIR/daemon/daemon.log"
+          find "$data_dir/workers" -name '*.log' -exec cp {} "$EVIDENCE_DIR/daemon/" \;
+
       - name: Upload app acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -561,6 +571,7 @@ jobs:
             ${{ runner.temp }}/attn-real-app-harness/matrix-digest.txt
             ${{ runner.temp }}/attn-real-app-harness/**/*.txt
             ${{ runner.temp }}/attn-real-app-harness/**/*.png
+            ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
 
       - name: Clean profile
         if: always()
