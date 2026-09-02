@@ -837,10 +837,20 @@ func TestSessionIntentionalCloseMark_PersistsAndClears(t *testing.T) {
 	if s.SessionCloseIntentional("sess-1") {
 		t.Fatal("fresh session should carry no intentional-close mark")
 	}
-	s.MarkSessionIntentionalClose("sess-1", time.Now())
+	if !s.BeginAgentDriverRun("sess-1", "test-plugin", "run-1") {
+		t.Fatal("begin driver run")
+	}
+	run, err := s.PrepareSessionTeardown("sess-1", time.Now())
+	if err != nil {
+		t.Fatalf("prepare intentional close: %v", err)
+	}
+	if run.PluginName != "test-plugin" || run.RunID != "run-1" {
+		t.Fatalf("prepared driver run = %+v", run)
+	}
 	if !s.SessionCloseIntentional("sess-1") {
 		t.Fatal("mark not readable after MarkSessionIntentionalClose")
 	}
+	s.Remove("sess-1")
 	s.Close()
 
 	s2, err := NewWithDB(dbPath)
@@ -849,7 +859,14 @@ func TestSessionIntentionalCloseMark_PersistsAndClears(t *testing.T) {
 	}
 	defer s2.Close()
 	if !s2.SessionCloseIntentional("sess-1") {
-		t.Fatal("intentional-close mark must survive a store reopen (daemon restart)")
+		t.Fatal("intentional-close mark must survive session removal and a store reopen")
+	}
+	recoveredRun, err := s2.PrepareSessionTeardown("sess-1", time.Now())
+	if err != nil {
+		t.Fatalf("recover teardown owner: %v", err)
+	}
+	if recoveredRun.PluginName != "test-plugin" || recoveredRun.RunID != "run-1" {
+		t.Fatalf("recovered driver run = %+v", recoveredRun)
 	}
 	s2.ClearSessionIntentionalClose("sess-1")
 	if s2.SessionCloseIntentional("sess-1") {
@@ -861,5 +878,86 @@ func TestSessionIntentionalCloseMark_UnknownSessionFalse(t *testing.T) {
 	s := New()
 	if s.SessionCloseIntentional("nope") {
 		t.Fatal("unknown session must not read as intentionally closed")
+	}
+}
+
+func TestMigration130CarriesLegacyIntentionalCloseMark(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "legacy-close.db")
+	s, err := NewWithDB(dbPath)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	s.Add(&protocol.Session{ID: "legacy-close", Label: "legacy-close"})
+	if _, err := s.db.Exec(`UPDATE sessions SET closed_intentionally_at = '2026-09-01T12:00:00Z' WHERE id = 'legacy-close';
+		DROP TABLE session_teardown_tombstones;
+		DELETE FROM schema_migrations WHERE version = 130`); err != nil {
+		t.Fatalf("restore pre-130 schema: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("close pre-130 store: %v", err)
+	}
+
+	reopened, err := NewWithDB(dbPath)
+	if err != nil {
+		t.Fatalf("reopen with migration 130: %v", err)
+	}
+	defer reopened.Close()
+	if !reopened.SessionCloseIntentional("legacy-close") {
+		t.Fatal("migration 130 did not carry the legacy close mark into the tombstone")
+	}
+}
+
+func TestSessionTeardownDriverRunCanOnlyBeClaimedOnce(t *testing.T) {
+	s := New()
+	s.Add(&protocol.Session{ID: "claim-once", Label: "claim-once"})
+	if !s.BeginAgentDriverRun("claim-once", "test-plugin", "run-once") {
+		t.Fatal("begin driver run")
+	}
+	run, err := s.PrepareSessionTeardown("claim-once", time.Now())
+	if err != nil {
+		t.Fatalf("prepare teardown: %v", err)
+	}
+	first, err := s.ClaimSessionTeardownDriverRun("claim-once", run.RunID)
+	if err != nil {
+		t.Fatalf("first claim: %v", err)
+	}
+	second, err := s.ClaimSessionTeardownDriverRun("claim-once", run.RunID)
+	if err != nil {
+		t.Fatalf("second claim: %v", err)
+	}
+	if !first || second {
+		t.Fatalf("claims = (%v, %v), want (true, false)", first, second)
+	}
+}
+
+func TestPrepareExistingSessionTeardownDoesNotRecreateClearedIntent(t *testing.T) {
+	s := New()
+	if err := s.MarkSessionIntentionalClose("reused", time.Now()); err != nil {
+		t.Fatalf("mark close: %v", err)
+	}
+	s.ClearSessionIntentionalClose("reused")
+	s.Add(&protocol.Session{ID: "reused", Label: "fresh"})
+	if !s.BeginAgentDriverRun("reused", "test-plugin", "fresh-run") {
+		t.Fatal("begin fresh driver run")
+	}
+	run, found, err := s.PrepareExistingSessionTeardown("reused", time.Now())
+	if err != nil || found || run.RunID != "" {
+		t.Fatalf("prepare existing after clear = run %+v found %v err %v", run, found, err)
+	}
+	if got := s.GetAgentDriverRun("reused"); got.RunID != "fresh-run" {
+		t.Fatalf("fresh driver run was claimed: %+v", got)
+	}
+}
+
+func TestAddCheckedUnlessTeardownRefusesClosingSession(t *testing.T) {
+	s := New()
+	if err := s.MarkSessionIntentionalClose("closing", time.Now()); err != nil {
+		t.Fatalf("mark close: %v", err)
+	}
+	if err := s.AddCheckedUnlessTeardown(&protocol.Session{ID: "closing", Label: "late"}); err == nil {
+		t.Fatal("late session insert succeeded despite teardown tombstone")
+	}
+	if s.Get("closing") != nil {
+		t.Fatal("late session insert recreated the closing session")
 	}
 }

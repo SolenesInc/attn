@@ -84,12 +84,19 @@ stage_plugin() {
   local source_dir="${repo_root}/plugins/${name}"
   local stage_dir="${stage_root}/${name}"
 
-  local package_version manifest_version runtime_version
+  local package_version manifest_version runtime_version api_version
   package_version="$(cd "${source_dir}" && bun -e 'console.log(require("./package.json").version)')"
   manifest_version="$(awk -F '"' '/^version = / { print $2; exit }' "${source_dir}/attn-plugin.toml")"
   runtime_version="$(awk -F '"' '/^const pluginVersion = / { print $2; exit }' "${source_dir}/src/index.ts")"
   if [[ -z "${package_version}" || "${package_version}" != "${manifest_version}" || "${package_version}" != "${runtime_version}" ]]; then
     echo "${name} version mismatch: package=${package_version:-missing} manifest=${manifest_version:-missing} runtime=${runtime_version:-missing}" >&2
+    exit 1
+  fi
+  # Read, never hardcoded: a stale copy here ships a plugin the daemon refuses at
+  # hello, and nothing but a real install surfaces it.
+  api_version="$(awk -F '= ' '/^attn_api_version = / { print $2; exit }' "${source_dir}/attn-plugin.toml")"
+  if [[ -z "${api_version}" ]]; then
+    echo "${name} has no attn_api_version in ${source_dir}/attn-plugin.toml" >&2
     exit 1
   fi
 
@@ -140,7 +147,7 @@ stage_plugin() {
   cat >"${stage_dir}/attn-plugin.toml" <<EOF
 name = "${name}"
 version = "${package_version}"
-attn_api_version = 5
+attn_api_version = ${api_version}
 description = "${description}"
 
 [plugin]

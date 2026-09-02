@@ -8,6 +8,8 @@ const KEY_SYMBOLS: Record<string, string> = {
   ArrowRight: '→',
   ArrowUp: '↑',
   ArrowDown: '↓',
+  PageUp: 'PgUp',
+  PageDown: 'PgDn',
   Enter: '⏎',
   Escape: 'Esc',
   ' ': 'Space',

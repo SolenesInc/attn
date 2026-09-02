@@ -243,8 +243,8 @@ func (d *Daemon) reconcileCloseContext(sessionID, state string, column store.Tic
 	return fmt.Sprintf("%s (%s, last runtime state %s) while the ticket was %s", source, how, state, column)
 }
 
-// Either source suffices: the durable mark on the session row survives the in-memory
-// mark's 30s TTL and a daemon restart.
+// Either source suffices: the teardown tombstone survives the in-memory mark's
+// 30s TTL, session removal, and a daemon restart.
 func (d *Daemon) sessionCloseWasIntentional(sessionID string) bool {
 	if d.hasForcedStopMark(sessionID) {
 		return true

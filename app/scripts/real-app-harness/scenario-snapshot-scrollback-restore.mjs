@@ -77,7 +77,7 @@ async function main() {
       await client.request('write_pane', {
         sessionId,
         paneId: shellPaneId,
-        text: `printf '${anchor}\\n'; jot -w 'SNAPROW_%05d' ${LINES} 1; printf '${tail}\\n'`,
+        text: `printf '${anchor}\\n'; seq -f 'SNAPROW_%05g' 1 ${LINES}; printf '${tail}\\n'`,
       });
       await waitForPaneText(client, sessionId, shellPaneId, (t) => t.includes(tail), 'seeded output', 60_000);
       await captureSessionArtifacts(client, runner.runDir, '01-seeded', sessionId);

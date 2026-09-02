@@ -25,7 +25,7 @@ func TestClaudeBuildEnv_ContextWindowCap(t *testing.T) {
 	})
 
 	t.Run("delegated launch emits the cap too", func(t *testing.T) {
-		env := (&Claude{}).BuildEnv(SpawnOpts{WorkspaceContextPath: "/ws", AutoCompactWindow: 800000})
+		env := (&Claude{}).BuildEnv(SpawnOpts{AutoCompactWindow: 800000})
 		if !slices.Contains(env, "CLAUDE_CODE_AUTO_COMPACT_WINDOW=800000") {
 			t.Fatalf("delegated env missing the cap: %#v", env)
 		}
@@ -34,7 +34,7 @@ func TestClaudeBuildEnv_ContextWindowCap(t *testing.T) {
 	t.Run("no cap emits nothing", func(t *testing.T) {
 		for _, opts := range []SpawnOpts{
 			{NotebookRoot: "/nb", AutoCompactWindow: 0},
-			{WorkspaceContextPath: "/ws", AutoCompactWindow: 0},
+			{AutoCompactWindow: 0},
 		} {
 			if env := (&Claude{}).BuildEnv(opts); envHasCap(env) {
 				t.Fatalf("uncapped env unexpectedly carried the cap: %#v", env)
@@ -100,11 +100,10 @@ func TestCodexBuildCommand_ContextWindowCap(t *testing.T) {
 
 	t.Run("delegated launch emits the cap override too", func(t *testing.T) {
 		cmd := (&Codex{}).BuildCommand(SpawnOpts{
-			SessionID:            "sess-1",
-			CWD:                  "/tmp/project",
-			Executable:           "codex",
-			WorkspaceContextPath: "/ws",
-			AutoCompactWindow:    800000,
+			SessionID:         "sess-1",
+			CWD:               "/tmp/project",
+			Executable:        "codex",
+			AutoCompactWindow: 800000,
 		})
 		if !argvHasPair(cmd.Args, "-c", "model_auto_compact_token_limit=800000") {
 			t.Fatalf("delegated codex args missing the cap override: %#v", cmd.Args)

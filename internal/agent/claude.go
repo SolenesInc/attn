@@ -61,17 +61,17 @@ func (c *Claude) ResolveExecutable(configured string) string {
 
 func (c *Claude) Capabilities() Capabilities {
 	return Capabilities{
-		HasHooks:             true,
-		HasTranscript:        true,
-		HasTranscriptWatcher: true,
-		HasClassifier:        true,
-		HarnessSignals:       HarnessSignalsClaude,
-		HasResume:            true,
-		HasYolo:              true,
-		HasInitialPrompt:     true,
-		HasWorkspaceContext:  true,
-		HasModelPin:          true,
-		HasEffortPin:         true,
+		HasHooks:              true,
+		HasTranscript:         true,
+		HasTranscriptWatcher:  true,
+		HasClassifier:         true,
+		HarnessSignals:        HarnessSignalsClaude,
+		HasResume:             true,
+		HasYolo:               true,
+		HasInitialPrompt:      true,
+		HasLaunchInstructions: true,
+		HasModelPin:           true,
+		HasEffortPin:          true,
 	}
 }
 
@@ -130,8 +130,8 @@ func (c *Claude) BuildEnv(opts SpawnOpts) []string {
 	var env []string
 	if strings.TrimSpace(opts.NotebookRoot) != "" {
 		env = append(env, "ATTN_CHIEF_GUIDANCE=append_system_prompt")
-	} else if strings.TrimSpace(opts.WorkspaceContextPath) != "" {
-		env = append(env, "ATTN_WORKSPACE_CONTEXT_GUIDANCE=append_system_prompt")
+	} else {
+		env = append(env, "ATTN_AGENT_GUIDANCE=append_system_prompt")
 	}
 	// Cap the effective context window so auto-compaction fires at the configured
 	// threshold. The user's settings can overwrite it, so claudeSettingsEnv repeats it.

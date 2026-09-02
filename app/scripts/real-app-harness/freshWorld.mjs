@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
+import { appDaemonInTree, appPlatform } from './platform.mjs';
 import {
   bundleIdentifierForProfile,
   currentHarnessProfile,
@@ -33,7 +34,18 @@ export function assertFreshWorldTargetSafe({ profile, appPath } = {}) {
 // Matching keys on this full app path, never a bare "pty-worker" pattern, so one
 // profile's cleanup can never touch another profile's or production's workers.
 function attnBinaryPath(appPath) {
-  return `${appPath}/Contents/MacOS/attn`;
+  return appDaemonInTree(appPath);
+}
+
+function requestAppQuit({ profile, appPath, bundleId }) {
+  if (appPlatform.os === 'darwin') {
+    try {
+      execFileSync('osascript', ['-e', `tell application id "${bundleId}" to quit`], { stdio: 'pipe' });
+    } catch {
+    }
+    return;
+  }
+  spawnSync(attnBinaryPath(appPath), ['profile', 'stop-app', '--profile', profile], { stdio: 'pipe' });
 }
 
 // pgrep -f exits 1 on no matches; that is "no pids", not an error.
@@ -80,14 +92,11 @@ export async function ensureFreshWorld({
   const bundleId = bundleIdentifierForProfile(profile);
 
   log(`quitting app bundle ${bundleId}${appWasRunning ? ' (was running)' : ' (not running)'}`);
-  try {
-    execFileSync('osascript', ['-e', `tell application id "${bundleId}" to quit`], { stdio: 'pipe' });
-  } catch {
-  }
+  requestAppQuit({ profile, appPath, bundleId });
 
   let daemonStopped = false;
   log(`stopping daemon for profile '${profile}'`);
-  const stopResult = spawnSync(`${appPath}/Contents/MacOS/attn`, ['daemon', 'stop'], {
+  const stopResult = spawnSync(attnBinaryPath(appPath), ['daemon', 'stop'], {
     env: { ...process.env, ATTN_PROFILE: profile },
     encoding: 'utf8',
   });

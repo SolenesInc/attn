@@ -151,7 +151,7 @@ async function main() {
       const known = new Set(observer.sessionsById.keys());
       await client.request('write_pane', {
         ...pane,
-        text: `attn delegate --agent shell --no-worktree --source-session ${pane.sessionId} ` +
+        text: `attn delegate --agent shell --model none --no-worktree --source-session ${pane.sessionId} ` +
           `--name delrep --brief "${BRIEF}"`,
       });
       let spawned = null;
@@ -159,6 +159,7 @@ async function main() {
         spawned = [...observer.sessionsById.keys()].find((id) => !known.has(id)) ?? null;
         return Boolean(spawned);
       }, 'the delegated session exists', 60_000);
+      await client.request('select_session', { sessionId: pane.sessionId });
       await runInPane(client, pane, 'true', '');
       return spawned;
     });
@@ -177,9 +178,9 @@ async function main() {
 
     await runner.step('a_status_report_lands_on_the_log', async () => {
       const reported = await runInPane(client, pane,
-        `attn ticket status in_progress --comment "digging in" --session ${delegated}`, '→ working');
-      runner.writeText('ticket-status.txt', reported + '\n');
-      const log = await runInPane(client, pane, `attn seed notes ${seed}`, 'reported in_progress');
+        `attn seed note ${seed} -m "digging in" --session ${delegated}`, 'noted on');
+      runner.writeText('seed-note.txt', reported + '\n');
+      const log = await runInPane(client, pane, `attn seed notes ${seed}`, 'digging in');
       runner.assert(saw(log, 'digging in'),
         'the report’s comment is on the seed’s log', { log });
       runner.writeText('seed-notes.txt', log + '\n');

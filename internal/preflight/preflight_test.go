@@ -9,9 +9,17 @@ import (
 	"strings"
 	"testing"
 
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/protocol"
 )
+
+func daemonCatalog() []agentdriver.Descriptor {
+	return []agentdriver.Descriptor{
+		{Name: "codex", Executable: "codex", Health: agentdriver.HealthHealthy, Detail: "/daemon/bin/codex", ModelPin: true, EffortPin: true},
+		{Name: "pi", Plugin: "attn-pi", Health: agentdriver.HealthHealthy, Detail: "pi 0.84.2 is ready", ModelPin: true},
+	}
+}
 
 func passingProber(t *testing.T) prober {
 	t.Helper()
@@ -35,7 +43,70 @@ func passingProber(t *testing.T) prober {
 				DataDir: dataDir, SocketPath: socketPath, Port: config.WSPort(),
 			}, nil
 		},
+		daemonAgents:  func(context.Context, string) ([]agentdriver.Descriptor, error) { return daemonCatalog(), nil },
 		requiredTools: []string{"git", "go"},
+	}
+}
+
+func TestRunChecksPluginAgentsAgainstTheDaemonCatalog(t *testing.T) {
+	report := run(context.Background(), Options{Agent: "pi", Model: "gpt-test", WorkingDir: t.TempDir()}, passingProber(t))
+	if report.Status != StatusPass {
+		t.Fatalf("report status = %q, checks=%+v", report.Status, report.Checks)
+	}
+	assertCheck(t, report, "launch.agent", StatusPass, "plugin attn-pi provides pi")
+	assertCheck(t, report, "plugin.attn-pi", StatusPass, "pi 0.84.2 is ready")
+	for _, check := range report.Checks {
+		if check.Name == "tool.codex" {
+			t.Fatalf("the default agent was tool-checked while checking pi: %+v", check)
+		}
+	}
+
+	report = run(context.Background(), Options{Agent: "pi", Effort: "high", WorkingDir: t.TempDir()}, passingProber(t))
+	assertCheck(t, report, "launch.effort", StatusFail, "does not support effort pins")
+
+	report = run(context.Background(), Options{Agent: "nisse", WorkingDir: t.TempDir()}, passingProber(t))
+	assertCheck(t, report, "launch.agent", StatusFail, `daemon does not provide agent "nisse"; it provides codex, pi`)
+}
+
+func TestRunReportsTheDaemonsViewOfBuiltInExecutables(t *testing.T) {
+	report := run(context.Background(), Options{Agent: "codex", WorkingDir: t.TempDir()}, passingProber(t))
+	assertCheck(t, report, "launch.agent", StatusPass, "built into the daemon")
+	assertCheck(t, report, "tool.codex", StatusPass, "/daemon/bin/codex")
+
+	p := passingProber(t)
+	p.daemonAgents = func(context.Context, string) ([]agentdriver.Descriptor, error) {
+		catalog := daemonCatalog()
+		catalog[0].Health, catalog[0].Detail = agentdriver.HealthUnhealthy, `exec: "codex": executable file not found in $PATH`
+		catalog[1].Health, catalog[1].Detail = agentdriver.HealthUnknown, ""
+		return catalog, nil
+	}
+	report = run(context.Background(), Options{Agent: "codex", WorkingDir: t.TempDir()}, p)
+	assertCheck(t, report, "tool.codex", StatusFail, "daemon cannot launch codex")
+	report = run(context.Background(), Options{Agent: "pi", WorkingDir: t.TempDir()}, p)
+	assertCheck(t, report, "plugin.attn-pi", StatusWarn, "has not confirmed pi is launchable yet")
+	if report.Status != StatusWarn {
+		t.Fatalf("report status = %q, want warn", report.Status)
+	}
+}
+
+func TestRunWarnsInsteadOfFailingWhenTheDaemonCannotListAgents(t *testing.T) {
+	p := passingProber(t)
+	p.daemonAgents = func(context.Context, string) ([]agentdriver.Descriptor, error) {
+		return nil, errors.New("connection refused")
+	}
+	report := run(context.Background(), Options{Agent: "pi", Model: "gpt-test", WorkingDir: t.TempDir()}, p)
+	assertCheck(t, report, "launch.agent", StatusWarn, "cannot tell whether a plugin provides agent \"pi\"")
+	for _, check := range report.Checks {
+		if check.Name == "launch.model" || strings.HasPrefix(check.Name, "plugin.") {
+			t.Fatalf("unexpected check without a catalog: %+v", check)
+		}
+	}
+
+	report = run(context.Background(), Options{Agent: "codex", Model: "gpt-test", WorkingDir: t.TempDir()}, p)
+	assertCheck(t, report, "launch.agent", StatusWarn, "checked against this CLI's built-in driver")
+	assertCheck(t, report, "tool.codex", StatusPass, "/tools/codex")
+	if report.Status != StatusWarn {
+		t.Fatalf("report status = %q, want warn", report.Status)
 	}
 }
 

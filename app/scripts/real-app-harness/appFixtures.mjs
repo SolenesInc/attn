@@ -1,15 +1,15 @@
 export function stewardManifest({ name = 'steward', reconcile = true } = {}) {
   return `name = "${name}"
-description = "Derives one document per ticket. The reconcile exit proof's converging app."
+description = "Derives one document per seed. The reconcile exit proof's converging app."
 
 attn_app_api = 1
 entrypoint = "src/index.ts"
 ${reconcile ? 'reconcile = true\n' : ''}
 [[subscribe]]
-events = ["ticket.*"]
+events = ["garden.*"]
 
 [[collections]]
-name = "tickets"
+name = "seeds"
 fields = ["state"]
 
 [[commands]]
@@ -18,31 +18,31 @@ description = "Ask the app to say what it holds."
 `;
 }
 
-export const STEWARD_V1_DERIVE = `function derive(ticket: TicketLike): Record<string, unknown> {
-  return { state: "seen", title: ticket.title }
+export const STEWARD_V1_DERIVE = `function derive(seed: SeedLike): Record<string, unknown> {
+  return { state: "seen", title: seed.title }
 }`;
 
-export const STEWARD_V2_DERIVE = `function derive(ticket: TicketLike): Record<string, unknown> {
+export const STEWARD_V2_DERIVE = `function derive(seed: SeedLike): Record<string, unknown> {
   // Version 2 derives a field version 1 never wrote. Every document already in
   // the collection is wrong until reconcile rebuilds it.
-  return { state: "seen", title: ticket.title, status: ticket.status }
+  return { state: "seen", title: seed.title, status: seed.status }
 }`;
 
-function blockGuard(releaseTicketId) {
-  const id = JSON.stringify(releaseTicketId);
+function blockGuard(releaseTitle) {
+  const title = JSON.stringify(releaseTitle);
   return `  for (;;) {
     const gate = await ctx.current.snapshot()
-    if (gate.tickets.some((row) => row.id === ${id})) break
+    if (gate.seeds.some((row) => row.title === ${title})) break
     await new Promise((resolve) => setTimeout(resolve, 250))
   }
 `;
 }
 
-export function stewardEntrypoint(derive, { blockUntilTicket = null } = {}) {
+export function stewardEntrypoint(derive, { blockUntilSeed = null } = {}) {
   return `import type { Ctx, Handlers } from "./generated"
 import type { AppEvent, ReconcileReason } from "@victorarias/attn-app"
 
-interface TicketLike {
+interface SeedLike {
   readonly id: string
   readonly title: string
   readonly status: string
@@ -50,39 +50,39 @@ interface TicketLike {
 
 ${derive}
 
-async function onTicket(event: AppEvent, ctx: Ctx): Promise<void> {
+async function onSeed(event: AppEvent, ctx: Ctx): Promise<void> {
   const current = await ctx.current.snapshot()
-  const ticket = current.tickets.find((row) => row.id === event.subject)
-  if (!ticket) {
-    // The ticket is gone in current truth, so the fact was its removal.
-    await ctx.collections.tickets.delete(event.subject)
+  const seed = current.seeds.find((row) => row.id === event.subject)
+  if (!seed) {
+    // The seed is gone in current truth, so the fact was its removal.
+    await ctx.collections.seeds.delete(event.subject)
     return
   }
-  await ctx.collections.tickets.put(ticket.id, derive(ticket))
+  await ctx.collections.seeds.put(seed.id, derive(seed))
 }
 
 async function refresh(_payload: unknown, ctx: Ctx): Promise<{ held: number }> {
-  return { held: (await ctx.collections.tickets.query({ limit: 1000 })).length }
+  return { held: (await ctx.collections.seeds.query({ limit: 1000 })).length }
 }
 
 async function reconcile(reason: ReconcileReason, ctx: Ctx): Promise<void> {
-${blockUntilTicket ? blockGuard(blockUntilTicket) : ''}  const current = await ctx.current.snapshot()
-  const live = new Map(current.tickets.map((row) => [row.id, row]))
+${blockUntilSeed ? blockGuard(blockUntilSeed) : ''}  const current = await ctx.current.snapshot()
+  const live = new Map(current.seeds.map((row) => [row.id, row]))
   // Deleting what current truth no longer has is half the job. A rebuild that
   // only upserts leaves rows nothing will ever remove.
-  for (const doc of await ctx.collections.tickets.query({ limit: 1000 })) {
+  for (const doc of await ctx.collections.seeds.query({ limit: 1000 })) {
     if (!live.has(doc.id)) {
-      await ctx.collections.tickets.delete(doc.id)
+      await ctx.collections.seeds.delete(doc.id)
     }
   }
-  for (const ticket of live.values()) {
-    await ctx.collections.tickets.put(ticket.id, derive(ticket))
+  for (const seed of live.values()) {
+    await ctx.collections.seeds.put(seed.id, derive(seed))
   }
   console.log("steward: rebuilt " + live.size + " through seq " + reason.throughSeq)
 }
 
 export default {
-  subscriptions: { "ticket.*": onTicket },
+  subscriptions: { "garden.*": onSeed },
   commands: { refresh },
   reconcile,
 } satisfies Handlers
@@ -100,7 +100,7 @@ attn_app_api = 1
 entrypoint = "src/index.ts"
 
 [[subscribe]]
-events = ["ticket.*"]
+events = ["garden.*"]
 
 [[collections]]
 name = "seen"
@@ -115,7 +115,7 @@ import type { AppEvent } from "@victorarias/attn-app"
 // A history app: what it holds is what it was told, in the order it was told.
 // No snapshot rebuilds this, which is exactly why attn refuses to move it across
 // a trigger it cannot survive.
-async function onTicket(event: AppEvent, ctx: Ctx): Promise<void> {
+async function onSeed(event: AppEvent, ctx: Ctx): Promise<void> {
   await ctx.collections.seen.put(String(event.seq), {
     state: "seen",
     subject: event.subject,
@@ -124,7 +124,7 @@ async function onTicket(event: AppEvent, ctx: Ctx): Promise<void> {
 }
 
 export default {
-  subscriptions: { "ticket.*": onTicket },
+  subscriptions: { "garden.*": onSeed },
 } satisfies Handlers
 `;
 }

@@ -2,83 +2,57 @@ package daemon
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/hooks"
-	"github.com/victorarias/attn/internal/protocol"
 )
 
 const (
-	pluginInstructionKindWorkspace = "workspace"
-	pluginInstructionKindChief     = "chief"
+	pluginInstructionKindAgent = "agent"
+	pluginInstructionKindChief = "chief"
 )
 
 type pluginLaunchInstructions struct {
-	Kind            string `json:"kind"`
-	Content         string `json:"content"`
-	WorkspaceID     string `json:"workspace_id,omitempty"`
-	ContextPath     string `json:"context_path,omitempty"`
-	ContextRevision int    `json:"context_revision,omitempty"`
-	NotebookRoot    string `json:"notebook_root,omitempty"`
+	Kind         string `json:"kind"`
+	Content      string `json:"content"`
+	WorkspaceID  string `json:"workspace_id,omitempty"`
+	NotebookRoot string `json:"notebook_root,omitempty"`
 }
 
-// The rollback removes only a checkout that this call created; an existing or
-// locally modified checkout is never removed.
-func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, isChief bool) (*pluginLaunchInstructions, func(), error) {
-	rollback := func() {}
+func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, isChief, selfReportPullRequests bool) (*pluginLaunchInstructions, error) {
 	gardenHome := d.requireHome(garden.Surface) == nil
 	if isChief {
 		root, _, err := d.ensureNotebookScaffold()
 		if err != nil {
-			return nil, rollback, fmt.Errorf("prepare chief notebook: %w", err)
+			return nil, fmt.Errorf("prepare chief notebook: %w", err)
 		}
 		if strings.TrimSpace(root) == "" {
-			return nil, rollback, fmt.Errorf("prepare chief guidance: notebook root is empty")
+			return nil, fmt.Errorf("prepare chief guidance: notebook root is empty")
 		}
 		return &pluginLaunchInstructions{
 			Kind: pluginInstructionKindChief,
 			Content: hooks.Launch{
-				NotebookRoot: root,
-				Garden:       gardenHome,
-				Crew:         d.crewPrimeForLaunch(sessionID),
-				// No plugin harness reports tool calls through attn's hooks.
-				SelfReportPullRequests: true,
+				NotebookRoot:           root,
+				Garden:                 gardenHome,
+				Crew:                   d.crewPrimeForLaunch(sessionID),
+				SelfReportPullRequests: selfReportPullRequests,
 			}.Instructions(),
 			WorkspaceID:  workspaceID,
 			NotebookRoot: root,
-		}, rollback, nil
+		}, nil
 	}
 
-	contextPath, metadataPath := workspaceContextCheckoutPaths(d.dataRoot, sessionID)
-	_, contextErr := os.Stat(contextPath)
-	_, metadataErr := os.Stat(metadataPath)
-	created := os.IsNotExist(contextErr) && os.IsNotExist(metadataErr)
-	session := &protocol.Session{ID: sessionID, WorkspaceID: workspaceID}
-	result, err := d.checkoutWorkspaceContextForSession(session, false)
-	if err != nil {
-		if created {
-			_ = os.RemoveAll(workspaceContextCheckoutDir(d.dataRoot, sessionID))
-		}
-		return nil, rollback, fmt.Errorf("prepare workspace context: %w", err)
-	}
-	if created {
-		rollback = func() { _ = os.RemoveAll(workspaceContextCheckoutDir(d.dataRoot, sessionID)) }
-	}
 	return &pluginLaunchInstructions{
-		Kind: pluginInstructionKindWorkspace,
+		Kind: pluginInstructionKindAgent,
 		Content: hooks.Launch{
-			WorkspaceContextPath:   result.Path,
 			InjectWorkflow:         parseBooleanSetting(d.store.GetSetting(SettingWorkflowsEnabled)),
 			Garden:                 gardenHome,
 			Crew:                   d.crewPrimeForLaunch(sessionID),
-			SelfReportPullRequests: true,
+			SelfReportPullRequests: selfReportPullRequests,
 		}.Instructions(),
-		WorkspaceID:     workspaceID,
-		ContextPath:     result.Path,
-		ContextRevision: result.CanonicalRevision,
-	}, rollback, nil
+		WorkspaceID: workspaceID,
+	}, nil
 }
 
 func (d *Daemon) crewPrimeForLaunch(sessionID string) string {

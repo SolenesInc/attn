@@ -118,6 +118,12 @@ type pluginReportInputTakenParams struct {
 	InputID   string `json:"input_id"`
 }
 
+type pluginReportPullRequestParams struct {
+	SessionID string `json:"session_id"`
+	RunID     string `json:"run_id"`
+	URL       string `json:"url"`
+}
+
 type pluginReportAutoModeDenialParams struct {
 	SessionID string `json:"session_id"`
 	RunID     string `json:"run_id"`
@@ -212,18 +218,19 @@ func normalizePluginAgent(value string) string {
 
 func validatePluginDriverCapabilities(values map[string]bool) (map[string]bool, error) {
 	allowed := map[string]struct{}{
-		"resume":              {},
-		"yolo":                {},
-		"initial_prompt":      {},
-		"classifier":          {},
-		"state_reporting":     {},
-		"pending_approval":    {},
-		"message_delivery":    {},
-		"model_pin":           {},
-		"effort_pin":          {},
-		"launch_instructions": {},
-		"conversation":        {},
-		"auto_mode":           {},
+		"resume":                 {},
+		"yolo":                   {},
+		"initial_prompt":         {},
+		"classifier":             {},
+		"state_reporting":        {},
+		"pending_approval":       {},
+		"message_delivery":       {},
+		"model_pin":              {},
+		"effort_pin":             {},
+		"launch_instructions":    {},
+		"conversation":           {},
+		"auto_mode":              {},
+		"pull_request_reporting": {},
 	}
 	out := make(map[string]bool, len(values))
 	for name, enabled := range values {
@@ -322,6 +329,23 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		}
 		d.notePluginDriverReport(params.SessionID)
 		d.observeStructuredInputTaken(params.SessionID, strings.TrimSpace(params.InputID), time.Now())
+		return struct{}{}, true, nil
+	case "session.report_pull_request":
+		var params pluginReportPullRequestParams
+		if err := json.Unmarshal(msg.Params, &params); err != nil {
+			return nil, true, fmt.Errorf("decode session.report_pull_request params: %w", err)
+		}
+		if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
+			return nil, true, err
+		}
+		d.notePluginDriverReport(params.SessionID)
+		rec, err := d.sessionPullRequestIdentity(params.SessionID, params.URL)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := d.recordSessionPullRequest(rec); err != nil {
+			return nil, true, err
+		}
 		return struct{}{}, true, nil
 	case "session.report_automode_denial":
 		var params pluginReportAutoModeDenialParams
@@ -482,35 +506,50 @@ func (d *Daemon) beginPluginSessionLaunch(sessionID, pluginName, runID string) {
 
 func (d *Daemon) queueReportDuringPluginLaunch(plugin *pluginConnection, sessionID string, report pendingPluginReport) bool {
 	d.pluginDriverMu.Lock()
-	defer d.pluginDriverMu.Unlock()
 	launch, ok := d.pluginLaunching[sessionID]
 	if !ok || launch.PluginName != plugin.name || launch.RunID != report.runID() {
+		d.pluginDriverMu.Unlock()
 		return false
 	}
 	d.pluginReports[sessionID] = append(d.pluginReports[sessionID], report)
+	var watch *launchWatch
+	if report.State != nil || report.Stop != nil {
+		watch = d.claimLaunchWatch(sessionID)
+	}
+	d.pluginDriverMu.Unlock()
+	watch.settle(launchOutcome{startedAt: time.Now()})
 	return true
 }
 
 func (d *Daemon) queueHostReportDuringLaunch(sessionID string, params pluginReportStateParams) bool {
 	d.pluginDriverMu.Lock()
-	defer d.pluginDriverMu.Unlock()
 	launch, ok := d.pluginLaunching[sessionID]
 	if !ok || launch.RunID == "" || launch.RunID != strings.TrimSpace(params.RunID) {
+		d.pluginDriverMu.Unlock()
 		return false
 	}
 	d.pluginReports[sessionID] = append(d.pluginReports[sessionID], pendingPluginReport{State: &params})
+	watch := d.claimLaunchWatch(sessionID)
+	d.pluginDriverMu.Unlock()
+	watch.settle(launchOutcome{startedAt: time.Now()})
 	return true
 }
 
+// The launch replays queued reports before the queued exit whatever their
+// order, so the launch watch is claimed here, under the mutex, in arrival order.
 func (d *Daemon) queueExitDuringPluginLaunch(info ptybackend.ExitInfo) bool {
 	d.pluginDriverMu.Lock()
-	defer d.pluginDriverMu.Unlock()
 	launch, ok := d.pluginLaunching[info.ID]
 	if !ok || info.LifecycleID == "" || launch.RunID != info.LifecycleID {
+		d.pluginDriverMu.Unlock()
 		return false
 	}
 	d.logf("deferring plugin PTY exit until launch completes: session=%s run=%s", info.ID, info.LifecycleID)
 	d.pluginExits[info.ID] = info
+	watch := d.claimLaunchWatch(info.ID)
+	d.pluginDriverMu.Unlock()
+	d.captureExitScreen(info)
+	watch.settle(launchOutcome{exit: d.exitScreenOrBare(info)})
 	return true
 }
 

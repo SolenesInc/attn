@@ -161,6 +161,17 @@ const AgentMsgStatusNotified AgentMsgStatus = "notified"
 const AgentMsgStatusQueued AgentMsgStatus = "queued"
 const AgentMsgStatusRefused AgentMsgStatus = "refused"
 
+type AgentPeekExit struct {
+	// At corresponds to the JSON schema field "at".
+	At string `json:"at"`
+
+	// Code corresponds to the JSON schema field "code".
+	Code int `json:"code"`
+
+	// Signal corresponds to the JSON schema field "signal".
+	Signal *string `json:"signal,omitempty,omitzero"`
+}
+
 type AgentPeekMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -175,6 +186,9 @@ type AgentPeekResult struct {
 
 	// CrewMember corresponds to the JSON schema field "crew_member".
 	CrewMember *string `json:"crew_member,omitempty,omitzero"`
+
+	// Exit corresponds to the JSON schema field "exit".
+	Exit *AgentPeekExit `json:"exit,omitempty,omitzero"`
 
 	// Label corresponds to the JSON schema field "label".
 	Label string `json:"label"`
@@ -2657,6 +2671,13 @@ type DelegateResult struct {
 
 	// Directory corresponds to the JSON schema field "directory".
 	Directory string `json:"directory"`
+
+	// FirstTurnAt corresponds to the JSON schema field "first_turn_at".
+	FirstTurnAt *string `json:"first_turn_at,omitempty,omitzero"`
+
+	// FirstTurnUnconfirmed corresponds to the JSON schema field
+	// "first_turn_unconfirmed".
+	FirstTurnUnconfirmed *string `json:"first_turn_unconfirmed,omitempty,omitzero"`
 
 	// Placement corresponds to the JSON schema field "placement".
 	Placement string `json:"placement"`
@@ -8734,10 +8755,20 @@ type StateMessage struct {
 	State string `json:"state"`
 }
 
+type StopBackgroundTask struct {
+	// Name corresponds to the JSON schema field "name".
+	Name *string `json:"name,omitempty,omitzero"`
+
+	// Status corresponds to the JSON schema field "status".
+	Status string `json:"status"`
+
+	// Type corresponds to the JSON schema field "type".
+	Type string `json:"type"`
+}
+
 type StopMessage struct {
-	// BackgroundTaskStatuses corresponds to the JSON schema field
-	// "background_task_statuses".
-	BackgroundTaskStatuses []string `json:"background_task_statuses,omitempty,omitzero"`
+	// BackgroundTasks corresponds to the JSON schema field "background_tasks".
+	BackgroundTasks []StopBackgroundTask `json:"background_tasks,omitempty,omitzero"`
 
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`

@@ -2,7 +2,8 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import FocusTrap from 'focus-trap-react';
 import type { FsEntry, FsExistsResult, FsReadAssetResult, FsReadResult, FsWriteResult, NotebookEntry, NotebookSendToChiefResult } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
-import { isAccelKeyPressed } from '../shortcuts/platform';
+import { matchesShortcut } from '../shortcuts/registry';
+import { resolveBinding } from '../shortcuts/resolver';
 import { useNotebookFileIndex } from '../hooks/useNotebookFileIndex';
 import { useTileAutoFold } from '../hooks/useTileAutoFold';
 import { notebookLinkPath } from './notebook/brokenLinks';
@@ -98,9 +99,9 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
     if (!finderEnabled) return;
     return registerPaletteClaim({ container: () => dialogRef.current, open: openFinder });
   }, [finderEnabled, openFinder]);
-  // preventDefault stops the WebView print dialog; Shift is excluded because Cmd+Shift+P is the global attention dock.
   const handleSurfaceKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (isAccelKeyPressed(event) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'p') {
+    const binding = resolveBinding('file.open');
+    if (binding && !('leader' in binding) && matchesShortcut(event.nativeEvent, binding)) {
       event.preventDefault();
       event.stopPropagation();
       if (finderEnabled) openFinder();

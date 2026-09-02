@@ -2,7 +2,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
 import { useEscapeStack } from '../hooks/useEscapeStack';
-import { SHORTCUTS, ShortcutId, Binding, bindingsConflict, isChord } from '../shortcuts/registry';
+import {
+  SHORTCUTS,
+  ShortcutId,
+  Binding,
+  bindingsConflict,
+  defaultShortcut,
+  isChord,
+} from '../shortcuts/registry';
 import {
   SHORTCUT_META,
   SHORTCUT_CATEGORY_ORDER,
@@ -42,7 +49,7 @@ function groupedByCategory(): Record<ShortcutCategory, ShortcutId[]> {
 }
 
 function effectiveBinding(id: ShortcutId, change: BindingChange): Binding {
-  return change === 'default' ? SHORTCUTS[id] : change;
+  return change === 'default' ? defaultShortcut(id) : change;
 }
 
 // A chord is never the default, so it must always be persisted: keystroke-equivalence
@@ -50,7 +57,7 @@ function effectiveBinding(id: ShortcutId, change: BindingChange): Binding {
 function overrideValue(id: ShortcutId, change: BindingChange): Binding | undefined {
   if (change === 'default') return undefined;
   if (isChord(change)) return change;
-  return bindingsConflict(change, SHORTCUTS[id]) ? undefined : change;
+  return bindingsConflict(change, defaultShortcut(id)) ? undefined : change;
 }
 
 export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProps) {
@@ -303,7 +310,7 @@ export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProp
                             )}
                             {isNative ? (
                               <span className="shortcut-editor-fixed-binding">
-                                {formatShortcut(binding ?? SHORTCUTS[id])}
+                                {formatShortcut(binding ?? defaultShortcut(id))}
                               </span>
                             ) : (
                             <KeyCaptureInput
@@ -341,7 +348,7 @@ export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProp
                               <button
                                 type="button"
                                 className="shortcut-editor-icon-btn"
-                                title={`Reset to ${formatShortcut(SHORTCUTS[id])}`}
+                                title={`Reset to ${formatShortcut(defaultShortcut(id))}`}
                                 onClick={() => applyBinding(id, 'default')}
                               >
                                 ↺

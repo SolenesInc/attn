@@ -28,6 +28,12 @@ var sessionOwnedTableSeeds = map[string]func(*testing.T, *Store, string){
 			t.Fatalf("record pull request for %s: %v", sessionID, err)
 		}
 	},
+	"session_exit_screens": func(t *testing.T, s *Store, sessionID string) {
+		t.Helper()
+		if err := s.SaveSessionExitScreen(SessionExitScreen{SessionID: sessionID, Text: "Error: boom", ExitCode: 1}, time.Now()); err != nil {
+			t.Fatalf("save exit screen for %s: %v", sessionID, err)
+		}
+	},
 }
 
 func TestEverySessionRemovalPathDropsEverySessionOwnedTable(t *testing.T) {

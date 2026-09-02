@@ -204,6 +204,7 @@ export interface SplitDivider {
   top: number;
   right: number;
   bottom: number;
+  grabRatio?: number;
 }
 
 export function getSplitDividers(node: TerminalLayoutNode): SplitDivider[] {

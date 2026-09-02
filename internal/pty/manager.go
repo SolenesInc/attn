@@ -469,11 +469,18 @@ func (m *Manager) Resize(sessionID string, cols, rows, xpixel, ypixel uint16) (b
 }
 
 func (m *Manager) Kill(sessionID string, sig syscall.Signal) error {
+	return m.KillWithEscalation(sessionID, sig, nil)
+}
+
+func (m *Manager) KillWithEscalation(sessionID string, sig syscall.Signal, onEscalate func(syscall.Signal)) error {
 	session, err := m.getSession(sessionID)
 	if err != nil {
 		return err
 	}
-	return session.kill(sig, defaultKillTimeout)
+	if session.agent == "shell" && sig == syscall.SIGTERM {
+		sig = syscall.SIGHUP
+	}
+	return session.killWithEscalation(sig, defaultKillTimeout, onEscalate)
 }
 
 func (m *Manager) SessionInfo(sessionID string) (SessionInfo, error) {

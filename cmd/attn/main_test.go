@@ -18,23 +18,12 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-type fakeWorkspaceContextCheckoutClient struct {
-	failures int
-	calls    int
-	path     string
+type fakeSessionStartClient struct {
 	ready    *protocol.SeedReadyResult
 	readyErr error
 }
 
-func (f *fakeWorkspaceContextCheckoutClient) CheckoutWorkspaceContext(string, bool) (*protocol.WorkspaceContextResult, error) {
-	f.calls++
-	if f.calls <= f.failures {
-		return nil, fmt.Errorf("source session not found")
-	}
-	return &protocol.WorkspaceContextResult{Path: f.path}, nil
-}
-
-func (f *fakeWorkspaceContextCheckoutClient) SeedReady(string, string, bool) (*protocol.SeedReadyResult, error) {
+func (f *fakeSessionStartClient) SeedReady(string, string, bool) (*protocol.SeedReadyResult, error) {
 	return f.ready, f.readyErr
 }
 
@@ -433,36 +422,22 @@ func TestReadInitialPromptFileRemovesFile(t *testing.T) {
 	}
 }
 
-func TestWorkspaceContextCheckoutPathReturnsCheckoutPath(t *testing.T) {
-	c := &fakeWorkspaceContextCheckoutClient{
-		failures: 1,
-		path:     "/tmp/context.md",
-	}
-	path, err := workspaceContextCheckoutPath(c, "session-1", 2, 0)
-	if err != nil {
-		t.Fatalf("workspaceContextCheckoutPath error: %v", err)
-	}
-	if path != "/tmp/context.md" {
-		t.Fatalf("path = %q, want /tmp/context.md", path)
-	}
-}
-
-func TestWorkspaceContextGuidanceProvidedAtLaunch(t *testing.T) {
-	t.Setenv("ATTN_WORKSPACE_CONTEXT_GUIDANCE", "developer_instructions")
+func TestLaunchGuidanceProvided(t *testing.T) {
+	t.Setenv("ATTN_AGENT_GUIDANCE", "developer_instructions")
 	t.Setenv("ATTN_CHIEF_GUIDANCE", "")
-	if !workspaceContextGuidanceProvidedAtLaunch() {
-		t.Fatal("workspace launch guidance should suppress hook guidance output")
+	if !launchGuidanceProvided() {
+		t.Fatal("agent launch guidance should suppress hook guidance output")
 	}
 
-	t.Setenv("ATTN_WORKSPACE_CONTEXT_GUIDANCE", "")
+	t.Setenv("ATTN_AGENT_GUIDANCE", "")
 	t.Setenv("ATTN_CHIEF_GUIDANCE", "append_system_prompt")
-	if !workspaceContextGuidanceProvidedAtLaunch() {
+	if !launchGuidanceProvided() {
 		t.Fatal("chief launch guidance should suppress hook guidance output")
 	}
 
-	t.Setenv("ATTN_WORKSPACE_CONTEXT_GUIDANCE", "")
+	t.Setenv("ATTN_AGENT_GUIDANCE", "")
 	t.Setenv("ATTN_CHIEF_GUIDANCE", "")
-	if workspaceContextGuidanceProvidedAtLaunch() {
+	if launchGuidanceProvided() {
 		t.Fatal("missing launch guidance should preserve hook fallback output")
 	}
 }
@@ -494,7 +469,7 @@ func TestResolveChiefNotebookRoot(t *testing.T) {
 			t.Fatalf("root = %q, want empty for non-chief", got)
 		}
 	})
-	t.Run("lookup error returns empty (falls back to workspace context)", func(t *testing.T) {
+	t.Run("lookup error returns empty", func(t *testing.T) {
 		c := &fakeNotebookGuideClient{err: errors.New("daemon down")}
 		if got := resolveChiefNotebookRoot(c, "s1"); got != "" {
 			t.Fatalf("root = %q, want empty on error", got)
@@ -502,28 +477,17 @@ func TestResolveChiefNotebookRoot(t *testing.T) {
 	})
 }
 
-func TestWorkspaceContextSessionStartOutputReturnsLastCheckoutError(t *testing.T) {
-	c := &fakeWorkspaceContextCheckoutClient{failures: 2}
-	output, err := workspaceContextSessionStartOutput(c, "session-1", 2, 0)
-	if err == nil || !strings.Contains(err.Error(), "source session not found") {
-		t.Fatalf("workspaceContextSessionStartOutput error = %v", err)
-	}
-	if output != "" {
-		t.Fatalf("hook output = %q, want empty", output)
-	}
-}
-
 func TestSessionStartContextsCarriesPrimeOnStartupAndCompact(t *testing.T) {
-	t.Setenv("ATTN_WORKSPACE_CONTEXT_GUIDANCE", "developer_instructions")
+	t.Setenv("ATTN_AGENT_GUIDANCE", "developer_instructions")
 	t.Setenv("ATTN_CHIEF_GUIDANCE", "")
 	ready := &protocol.SeedReadyResult{Seeds: []protocol.Seed{{ID: "s-ready1", Title: "ready now"}}}
 
 	for _, event := range []string{"startup", "compact"} {
 		t.Run(event, func(t *testing.T) {
-			c := &fakeWorkspaceContextCheckoutClient{path: "/tmp/context.md", ready: ready}
-			contexts, contextErr, primeErr := sessionStartContexts(c, "session-1", 1, 0)
-			if contextErr != nil || primeErr != nil {
-				t.Fatalf("SessionStart %s errors = (%v, %v)", event, contextErr, primeErr)
+			c := &fakeSessionStartClient{ready: ready}
+			contexts, primeErr := sessionStartContexts(c, "session-1")
+			if primeErr != nil {
+				t.Fatalf("SessionStart %s error = %v", event, primeErr)
 			}
 			raw := hooks.SessionStartOutput(contexts...)
 			var output struct {
@@ -550,20 +514,18 @@ func TestSessionStartContextsCarriesPrimeOnStartupAndCompact(t *testing.T) {
 
 func TestSessionStartContextsOutpostAddsNoPrimer(t *testing.T) {
 	const home = "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	c := &fakeWorkspaceContextCheckoutClient{
+	t.Setenv("ATTN_AGENT_GUIDANCE", "append_system_prompt")
+	c := &fakeSessionStartClient{
 		readyErr: fmt.Errorf("seed garden is unavailable on this outpost; home is %s", home),
 	}
-	contexts, contextErr, primeErr := sessionStartContexts(c, "session-1", 1, 0)
-	if contextErr != nil {
-		t.Fatalf("workspace context error = %v", contextErr)
-	}
+	contexts, primeErr := sessionStartContexts(c, "session-1")
 	if primeErr == nil || !strings.Contains(primeErr.Error(), home) {
 		t.Fatalf("garden error = %v, want the home named", primeErr)
 	}
 	if output := hooks.SessionStartOutput(contexts...); output != "" {
 		t.Fatalf("outpost SessionStart output = %q, want no injected context", output)
 	}
-	if got := (hooks.Launch{}).Instructions(); got != "" {
+	if got := (hooks.Launch{}).Instructions(); strings.Contains(got, hooks.GardenGuidance) {
 		t.Fatalf("outpost launch guidance = %q, want no garden block", got)
 	}
 }
@@ -965,6 +927,7 @@ func TestStopFacts(t *testing.T) {
 		name         string
 		payload      string
 		wantStatuses []string
+		wantNames    []string
 		wantCrons    int
 	}{
 		{
@@ -1011,6 +974,12 @@ func TestStopFacts(t *testing.T) {
 			wantStatuses: []string{"running"},
 			wantCrons:    1,
 		},
+		{
+			name:         "a task's description travels as its name (captured from Claude Code 2.1.257)",
+			payload:      `{"background_tasks":[{"id":"bzd8fe67e","type":"shell","status":"running","description":"Sleep for 90 seconds in background","command":"sleep 90"},{"id":"a2c193c118d82726c","type":"subagent","status":"running","description":"Run sleep 75 then report completion","agent_type":"general-purpose"}],"session_crons":[]}`,
+			wantStatuses: []string{"running", "running"},
+			wantNames:    []string{"Sleep for 90 seconds in background", "Run sleep 75 then report completion"},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1019,8 +988,16 @@ func TestStopFacts(t *testing.T) {
 				t.Fatalf("unmarshal payload: %v", err)
 			}
 			facts := stopFacts(input)
-			if !slices.Equal(facts.BackgroundTaskStatuses, tc.wantStatuses) {
-				t.Fatalf("BackgroundTaskStatuses = %q, want %q", facts.BackgroundTaskStatuses, tc.wantStatuses)
+			var statuses, names []string
+			for _, task := range facts.BackgroundTasks {
+				statuses = append(statuses, task.Status)
+				names = append(names, protocol.Deref(task.Name))
+			}
+			if !slices.Equal(statuses, tc.wantStatuses) {
+				t.Fatalf("background task statuses = %q, want %q", statuses, tc.wantStatuses)
+			}
+			if tc.wantNames != nil && !slices.Equal(names, tc.wantNames) {
+				t.Fatalf("background task names = %q, want %q", names, tc.wantNames)
 			}
 			if facts.PendingSessionCrons != tc.wantCrons {
 				t.Fatalf("PendingSessionCrons = %d, want %d", facts.PendingSessionCrons, tc.wantCrons)

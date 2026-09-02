@@ -8,6 +8,7 @@
 - Envelope: sequenced host message. Declaration: daemon-readable session event. Rendering: app display data.
 - Run: one prompt and response, from `run_started` to `run_settled`.
 - Prompt: starts a run. Steer: read at the next agent boundary. Follow-up: read before settlement.
+- Parked: a run that ended with the harness's background work still running; held working for at most the parked tripwire, then settled.
 - Input queue: unread messages in a conversation host.
 - Session input: ordered delivery to a live session with evidence of receipt.
 - Input evidence: deferred = untouched; placed = adapter-owned; taken = reading begun; indeterminate = uncertain.
@@ -19,13 +20,15 @@
 - Standing dismissal: suppresses the next auto-settle for the current working stretch.
 - Queue: sidebar ordering by owed turns. Pinning excludes an agent/workspace without settling turns.
 - Satellite: shell pane attached to an agent. Orphan: satellite without a live parent.
+- Sliver: a pane or tile suspended to a thin strip showing its name and state, when the workspace cannot give every leaf its minimum size or a drag pushes one below it. The victim is the smallest unfocused leaf, never the focused one; it expands on its own when room returns.
+- Pinned sliver: folded by a drag; stays folded until clicked or a drag gives its side room. Boundaries beside a sliver resize its visible neighbors.
 - Activity: generated status line. Activity cursor: transcript position already summarized.
 - Presence: watching = home visible; present = recent input elsewhere in app; away = neither.
 - Recoverable: runtime gone, conversation restorable. Reaped: unrestorable session removed.
 - Snapshot: current conversation state. Epoch: host generation. Scroll-back: older paged history.
 - Resume: copies history into a new session. Reload: reopens a recoverable session's own history.
 - Launch prompt: opening message replayed only if a replacement host finds empty history.
-- Session pull request: a pull request an agent opened from inside a session, reported by the tool-use hook or `attn pr record`. Distinct from the PR inbox, which tracks pull requests waiting on the user. The daemon refreshes its status on the PR heat cadence and stops once it merges or closes.
+- Session pull request: a pull request an agent opened from inside a session, reported by the tool-use hook, by a harness driver, or by `attn pr record`. Distinct from the PR inbox, which tracks pull requests waiting on the user. The daemon refreshes its status on the PR heat cadence and stops once it merges or closes.
 - Provenance line: the small line under a session's name saying where the session came from and what it produced. Carries the automation that launched it and the session pull request it opened, side by side.
 - nisse: attn's conversation agent, powered by pi.
 

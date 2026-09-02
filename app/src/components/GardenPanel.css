@@ -252,16 +252,17 @@
 }
 
 .garden-row > button {
-  align-items: baseline;
+  align-items: start;
   background: none;
   border: none;
   border-radius: 4px;
   color: inherit;
   cursor: pointer;
-  display: flex;
+  display: grid;
   font: inherit;
-  gap: 10px;
-  padding: 5px 8px;
+  grid-template-columns: 6px minmax(0, 1fr) auto;
+  column-gap: 10px;
+  padding: 7px 8px 8px;
   text-align: left;
   width: 100%;
 }
@@ -278,7 +279,6 @@
 
 /* The status pip carries the resting state, so most rows need no words. */
 .garden-row__pip {
-  align-self: center;
   background: var(--color-text-muted);
   border-radius: 50%;
   flex: none;
@@ -286,18 +286,33 @@
   width: 6px;
 }
 
+.garden-row > button > .garden-row__pip { margin-top: 6px; }
+
 .is-planted .garden-row__pip { background: var(--color-accent); }
 .is-growing .garden-row__pip { background: var(--accent); }
 .is-harvested .garden-row__pip { background: var(--color-text-tertiary); }
 .is-withered .garden-row__pip { background: var(--color-error); }
 .is-dormant .garden-row__pip { background: var(--color-warning); }
 
+.garden-row__content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.garden-row__primary {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
 .garden-row__title {
   flex: 1;
+  line-height: 18px;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .garden-row__signal {
@@ -313,30 +328,33 @@
 
 .garden-row__tender {
   color: var(--color-text-tertiary);
-  flex: none;
-  font-size: var(--font-size-sm);
+  min-width: 0;
   max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* The id is how you talk to the CLI about a seed, and it is noise forty-five
-   times down a list. It lives in a slot that is always reserved and only fills
-   under the pointer or focus, so showing it never moves a row. */
+.garden-row__meta {
+  align-items: baseline;
+  color: var(--color-text-tertiary);
+  display: flex;
+  font-size: var(--font-size-sm);
+  gap: 0 8px;
+  min-width: 0;
+}
+
+.garden-row__meta > :not(:first-child)::before {
+  color: var(--color-text-dimmed);
+  content: '·';
+  margin-right: 8px;
+}
+
+/* The id is how people address a seed from the CLI, so every row carries it. */
 .garden-row__id {
   color: var(--color-text-muted);
   flex: none;
   font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
-  font-size: var(--font-size-sm);
-  opacity: 0;
-  text-align: right;
-  width: 64px;
-}
-
-.garden-row > button:hover .garden-row__id,
-.garden-row > button:focus-visible .garden-row__id {
-  opacity: 1;
 }
 
 .garden-row__plot {
@@ -347,6 +365,7 @@
   font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
   gap: 6px;
+  line-height: 18px;
 }
 
 .garden-row__chevron {
@@ -592,16 +611,10 @@
 .garden-row.is-selected > button { background: var(--color-bg-selected); }
 .garden-row.is-selected .garden-row__title { color: var(--color-text-primary); }
 
-/* At 300px there is room for the title and one word about it. The tender and
-   the id are on the seed's own page, one column to the right. */
-.garden-columns .garden-column:not(.garden-column--reader) .garden-row__tender,
-.garden-columns .garden-column:not(.garden-column--reader) .garden-row__id {
-  display: none;
-}
-
-.garden-columns .garden-column:not(.garden-column--reader) .garden-row__title {
+/* Drill-in columns keep the same anatomy as the dock. Long metadata yields to
+   the id, which is the part people need to copy into a command. */
+.garden-columns .garden-column:not(.garden-column--reader) .garden-row__meta {
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

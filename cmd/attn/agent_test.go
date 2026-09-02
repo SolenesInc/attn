@@ -146,6 +146,35 @@ func TestPrintAgentPeekDegradesWithoutOptionalSections(t *testing.T) {
 	}
 }
 
+func TestPrintAgentPeekShowsTheScreenKeptAtExit(t *testing.T) {
+	var out bytes.Buffer
+	printAgentPeek(&out, &protocol.AgentPeekResult{
+		SessionID:   "cccc3333",
+		Label:       "dead",
+		Agent:       "pi",
+		State:       "idle",
+		StateReason: protocol.Ptr("process_exited"),
+		StateSince:  "2026-08-10T10:00:00Z",
+		LastSeen:    "2026-08-10T10:00:00Z",
+		Todos:       []string{},
+		Exit:        &protocol.AgentPeekExit{Code: 1, At: "2026-08-10T10:00:01Z"},
+		Screen:      &protocol.AgentPeekScreen{Text: "Error: Model \"x\" is ambiguous\n", Cols: 80, Rows: 24},
+	})
+	text := out.String()
+	for _, want := range []string{
+		"process exited with code 1 at ",
+		"screen at exit (80x24):",
+		"  Error: Model \"x\" is ambiguous",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("output missing %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "screen unavailable") {
+		t.Fatalf("output degrades although an exit screen was kept:\n%s", text)
+	}
+}
+
 func TestAgentPeekErrorMessagesNameTheTarget(t *testing.T) {
 	notFound := agentPeekErrorMessage("abc", errors.New("daemon error: session_not_found"))
 	if !strings.Contains(notFound, `"abc"`) || !strings.Contains(notFound, "attn agent list") {

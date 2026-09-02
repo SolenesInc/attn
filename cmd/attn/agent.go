@@ -266,8 +266,20 @@ func printAgentPeek(w io.Writer, result *protocol.AgentPeekResult) {
 			fmt.Fprintf(w, "  %s\n", line)
 		}
 	}
+	screenTitle := "screen"
+	if exit := result.Exit; exit != nil {
+		fmt.Fprintf(w, "\nprocess exited with code %d", exit.Code)
+		if signal := strings.TrimSpace(protocol.Deref(exit.Signal)); signal != "" {
+			fmt.Fprintf(w, " (%s)", signal)
+		}
+		if at := formatAgentPeekTime(exit.At); at != "" {
+			fmt.Fprintf(w, " at %s", at)
+		}
+		fmt.Fprintln(w)
+		screenTitle = "screen at exit"
+	}
 	if result.Screen != nil {
-		fmt.Fprintf(w, "\nscreen (%dx%d):\n", result.Screen.Cols, result.Screen.Rows)
+		fmt.Fprintf(w, "\n%s (%dx%d):\n", screenTitle, result.Screen.Cols, result.Screen.Rows)
 		for _, line := range strings.Split(strings.TrimRight(result.Screen.Text, "\n"), "\n") {
 			fmt.Fprintf(w, "  %s\n", line)
 		}

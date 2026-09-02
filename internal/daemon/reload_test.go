@@ -611,7 +611,7 @@ func TestSetChiefOfStaffRejectsPluginRoleChangeWhenResumePreflightFails(t *testi
 		wantKind     string
 	}{
 		{name: "promotion", promote: true, wantKind: pluginInstructionKindChief},
-		{name: "demotion", promote: false, initialChief: "plugin-chief", wantChief: "plugin-chief", wantKind: pluginInstructionKindWorkspace},
+		{name: "demotion", promote: false, initialChief: "plugin-chief", wantChief: "plugin-chief", wantKind: pluginInstructionKindAgent},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			backend := &fakeReloadBackend{

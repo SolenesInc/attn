@@ -7,6 +7,12 @@ Run commands from the repository root.
 
 - Scenarios share one display; run serially. Batch with
   `pnpm --dir app run real-app:serial-matrix`.
+- A scenario that cannot run on a platform says so in its catalog entry:
+  `skipOn: { linux: '<reason>' }`, or `{ reason, unlessEnv }` when an
+  environment variable proves the runner has what it needs (the remote `tr*`
+  probes run on Linux once `ATTN_HARNESS_REMOTE_SSH_TARGET` names a target).
+  The matrix digest lists every skip with its reason. A scenario that fails
+  on Linux for a product reason is a finding, not a skip.
 - A second run waits for the active one's lock, naming the holder. It waits as
   long as the holder is alive and heartbeating (a matrix can hold for hours) and
   gives up on a wedged holder (5 min without a heartbeat);
@@ -124,6 +130,8 @@ fails the scenario on a non-empty ledger and prints the lines.
 - Inspect captured pane text and native screenshots before diagnosing failures.
 - Dark/locked screens block input. Check `pmset -g log | rg "Display is turned"`.
 - Linux input needs `DISPLAY` and `xdotool`; run scenarios through `xvfb-run` in CI.
+  A Linux runner also needs `sqlite3`, `fish`, `bash`, `zsh`, `pi` on PATH, and
+  `attn plugin install-bundled attn-pi` run once in the profile.
 - Use `capture_screenshot_data` for DOM pixels. WebGL terminal evidence needs a
   native window capture (`import -window` on Linux).
 

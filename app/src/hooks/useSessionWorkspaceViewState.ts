@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Session } from '../store/sessions';
-import { findPaneInDirection, hasPane } from '../types/workspace';
+import { findPaneInDirection, hasPane, type TerminalLayoutNode } from '../types/workspace';
+
+// Ratios are not topology: a divider drag's daemon echo must not reset the
+// locally focused pane to the daemon's preference.
+function layoutTopology(node: TerminalLayoutNode | null | undefined): unknown {
+  if (!node) {
+    return null;
+  }
+  if (node.type === 'split') {
+    return [node.splitId, node.direction, layoutTopology(node.children[0]), layoutTopology(node.children[1])];
+  }
+  return node.type === 'pane' ? node.paneId : node.tileId;
+}
 
 interface SessionWorkspaceViewStateController {
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
@@ -48,7 +60,7 @@ export function useSessionWorkspaceViewState(
       return '';
     }
     return JSON.stringify({
-      layoutTree: session.workspace.layoutTree,
+      layoutTree: layoutTopology(session.workspace.layoutTree),
       agents: session.workspace.agents.map((agent) => agent.id),
     });
   }, []);

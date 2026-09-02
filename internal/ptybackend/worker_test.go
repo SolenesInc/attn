@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -38,6 +39,27 @@ func TestWithoutEnvironmentKeysRemovesInheritedLaunchPins(t *testing.T) {
 	want := []string{"PATH=/bin"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("withoutEnvironmentKeys() = %#v, want %#v", got, want)
+	}
+}
+
+func TestWorkerBackendLogsTeardownEscalationLifecycleEvent(t *testing.T) {
+	var got string
+	backend := &WorkerBackend{cfg: WorkerBackendConfig{
+		Logf: func(format string, args ...interface{}) {
+			got = fmt.Sprintf(format, args...)
+		},
+	}}
+	requested := "SIGTERM"
+	escalation := "hangup"
+	backend.handleLifecycleEvent(&workerSession{SessionID: "session-stubborn"}, ptyworker.EventEnvelope{
+		Event:      ptyworker.EventTeardownEscalated,
+		Reason:     &requested,
+		ExitSignal: &escalation,
+	})
+
+	want := "session teardown escalated for session-stubborn: requested=SIGTERM escalation=hangup"
+	if got != want {
+		t.Fatalf("log = %q, want %q", got, want)
 	}
 }
 

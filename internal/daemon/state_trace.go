@@ -54,6 +54,9 @@ func (d *Daemon) recordStateObservation(sessionID string, obs statetrace.Observa
 		return live
 	})
 	d.logf("%s", obs.LogLine(sessionID))
+	if harnessReportedState(obs.Source) {
+		d.noteLaunchStarted(sessionID)
+	}
 }
 
 func (d *Daemon) traceStateChange(change sessionStateChange, outcome statetrace.Outcome, reason string) {

@@ -1,0 +1,11 @@
+kind: internal
+area: harness
+change: >
+  The real-app serial matrix runs on Linux under Xvfb: the harness sizes the
+  window since no window manager does, scenarios reach the bundled CLI through
+  the platform layer, and macOS-only scenarios skip by name with a reason in
+  the digest. Scenario fixtures no longer assume macOS: coreutils replace BSD
+  tools (seq for jot, base64 --decode for -D), scenarios that lose window focus
+  reselect the source pane before reading it, doorbell nudges flush pending
+  shell input first, and every scenario closes its app and observer sockets on
+  the way out so the process exits instead of hanging.

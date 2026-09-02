@@ -40,15 +40,6 @@ function saw(haystack, needle) {
   return squash(haystack).includes(squash(needle));
 }
 
-function occurrences(haystack, needle) {
-  let count = 0;
-  let at = haystack.indexOf(needle);
-  while (at !== -1) {
-    count += 1;
-    at = haystack.indexOf(needle, at + needle.length);
-  }
-  return count;
-}
 
 let marks = 0;
 
@@ -64,9 +55,11 @@ async function runInPane(client, pane, command, expected, timeoutMs = 30_000) {
   let text = '';
   while (Date.now() < deadline) {
     await delay(250);
-    text = flat(await paneText(client, pane));
-    if (occurrences(text, mark) >= 2) {
-      const first = text.indexOf(mark) + mark.length;
+    const raw = await paneText(client, pane);
+    text = flat(raw);
+    if (raw.split('\n').some((line) => line.trim() === mark)) {
+      const typed = text.lastIndexOf(`echo ${mark}`);
+      const first = typed >= 0 ? typed + `echo ${mark}`.length : text.indexOf(mark) + mark.length;
       const out = text.slice(first, text.lastIndexOf(mark));
       if (saw(out, expected)) return out;
       throw new Error(`${JSON.stringify(command)} did not answer with ${JSON.stringify(expected)}:\n${out}`);
@@ -187,6 +180,7 @@ async function main() {
     });
 
     await runner.step('read_resets_then_harvest_rings', async () => {
+      await client.request('write_pane', { ...dispatcher, text: '\r', submit: false });
       // Harness shell sessions do not carry ATTN_SESSION_ID, so name the
       // dispatcher explicitly just as the delegation command above does.
       await runInPane(client, dispatcher,

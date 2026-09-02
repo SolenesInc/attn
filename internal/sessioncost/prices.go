@@ -5,6 +5,7 @@ package sessioncost
 var builtInRateCards = map[string]RateCard{
 	// Source: https://platform.claude.com/docs/en/about-claude/pricing
 	// Claude's table distinguishes 5-minute and 1-hour cache writes.
+	"claude-fable-5-1":          withCacheRead(anthropicRates(10, 50), 0.25),
 	"claude-fable-5":            anthropicRates(10, 50),
 	"claude-opus-5":             anthropicRates(5, 25),
 	"claude-opus-4-8":           anthropicRates(5, 25),
@@ -35,6 +36,12 @@ func anthropicRates(input, output float64) RateCard {
 		CacheWrite5mUSDPerMTok: input * 1.25,
 		CacheWrite1hUSDPerMTok: input * 2,
 	}
+}
+
+// Fable 5.1 bills cache reads at a flat $0.25/MTok, not 10% of input (checked 2026-09-01).
+func withCacheRead(card RateCard, cacheRead float64) RateCard {
+	card.CacheReadUSDPerMTok = cacheRead
+	return card
 }
 
 func openAIRates(input, output, cacheRead, cacheWrite float64) RateCard {

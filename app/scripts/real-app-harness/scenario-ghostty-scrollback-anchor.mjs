@@ -91,7 +91,7 @@ async function main() {
       await client.request('write_pane', {
         sessionId,
         paneId: shellPaneId,
-        text: `printf '${seedAnchor}\\n'; jot -w 'SEED_%03d' 100 1; printf '${seedEnd}\\n'`,
+        text: `printf '${seedAnchor}\\n'; seq -f 'SEED_%03g' 1 100; printf '${seedEnd}\\n'`,
       });
       await waitForPaneText(
         client,

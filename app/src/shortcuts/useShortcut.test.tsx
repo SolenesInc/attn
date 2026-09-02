@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useShortcut } from './useShortcut';
 import { setShortcutOverrides } from './resolver';
 import { cancelLeader, isLeaderPending } from './chordState';
+import { withNavigatorPlatform } from '../test/platformStub';
+
+afterEach(() => setShortcutOverrides({}));
 
 function ShortcutHarness(props: {
   onSessionClose: () => void;
@@ -31,6 +34,40 @@ function ShortcutHarness(props: {
 }
 
 describe('useShortcut close priority', () => {
+  it('never consumes plain Ctrl+letter in a Linux terminal, even after a custom rebind', () => {
+    withNavigatorPlatform('Linux aarch64', () => {
+      setShortcutOverrides({ 'session.close': { key: 'w', meta: true } });
+      const onSessionClose = vi.fn();
+      render(<ShortcutHarness onSessionClose={onSessionClose} onTerminalClose={vi.fn()} />);
+
+      const allowed = fireEvent.keyDown(screen.getByTestId('terminal-target'), {
+        key: 'w',
+        code: 'KeyW',
+        ctrlKey: true,
+      });
+
+      expect(allowed).toBe(true);
+      expect(onSessionClose).not.toHaveBeenCalled();
+    });
+  });
+
+  it('fires Ctrl+Shift+W in a Linux terminal', () => {
+    withNavigatorPlatform('Linux aarch64', () => {
+      const onTerminalClose = vi.fn();
+      render(<ShortcutHarness onSessionClose={vi.fn()} onTerminalClose={onTerminalClose} />);
+
+      const allowed = fireEvent.keyDown(screen.getByTestId('terminal-target'), {
+        key: 'W',
+        code: 'KeyW',
+        ctrlKey: true,
+        shiftKey: true,
+      });
+
+      expect(allowed).toBe(false);
+      expect(onTerminalClose).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('prefers terminal.close for Cmd+W when a terminal-close handler is active', () => {
     const onSessionClose = vi.fn();
     const onTerminalClose = vi.fn();
@@ -168,10 +205,7 @@ describe('useShortcut close priority', () => {
 });
 
 describe('useShortcut leader-key chords', () => {
-  afterEach(() => {
-    setShortcutOverrides({});
-    cancelLeader();
-  });
+  afterEach(() => cancelLeader());
 
   it('arms a leader (consuming it) and fires the bound action on the follow key', () => {
     setShortcutOverrides({ 'terminal.toggleZoom': { leader: { key: 'y', meta: true }, then: { key: 'z' } } });

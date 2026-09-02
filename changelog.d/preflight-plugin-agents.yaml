@@ -1,0 +1,4 @@
+kind: fixed
+area: preflight
+change: "`attn preflight --agent <name>` checks the launch against the daemon's agent catalog, so plugin-provided agents such as pi pass when their plugin is healthy, and an unreachable daemon warns instead of failing the agent check."
+symptom: "`attn preflight --agent pi` failed with `agent \"pi\" is not registered` even with the attn-pi plugin installed and running."

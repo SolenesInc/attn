@@ -500,12 +500,25 @@ func (d *Daemon) handleUnregisterWorkspace(client *wsClient, msg *protocol.Unreg
 		return
 	}
 
-	// Snapshot before tearing down: unregisterSession mutates the association map.
+	// Snapshot before removing session state: the association map changes with it.
 	// session_unregistered must reach clients before workspace_unregistered.
 	memberIDs := d.workspaces.sessionIDs(id)
+	teardowns := make(map[string]*sessionTeardown, len(memberIDs))
 	for _, sid := range memberIDs {
-		closed := d.unregisterSession(sid, syscall.SIGTERM)
-		d.publishSessionUnregistered(closed)
+		teardown, err := d.prepareSessionTeardown(sid)
+		if err != nil {
+			for preparedID := range teardowns {
+				d.cancelSessionTeardown(preparedID)
+			}
+			d.sendCommandError(client, protocol.CmdUnregisterWorkspace, err.Error())
+			return
+		}
+		teardowns[sid] = teardown
+	}
+	for _, sid := range memberIDs {
+		teardown := teardowns[sid]
+		d.commitSessionUnregister(sid)
+		d.publishSessionUnregistered(teardown.session)
 	}
 
 	snapshot, removed := d.workspaces.unregister(id)
@@ -513,6 +526,11 @@ func (d *Daemon) handleUnregisterWorkspace(client *wsClient, msg *protocol.Unreg
 		return
 	}
 	d.tearDownRemovedWorkspace(snapshot)
+	for _, sid := range memberIDs {
+		if teardown := teardowns[sid]; teardown != nil {
+			d.terminateSessionAsync(sid, syscall.SIGTERM, teardown)
+		}
+	}
 }
 
 // Every workspace must be registered before sessions are re-bound, or

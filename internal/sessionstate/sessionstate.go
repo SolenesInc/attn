@@ -78,6 +78,7 @@ type Policy struct {
 	SettleGrace          time.Duration
 	ClassifierTimeout    time.Duration
 	GuardianDwell        time.Duration
+	ParkedAfter          time.Duration
 }
 
 // Measured on claude 2.1.220 and codex 0.145.0 through a real PTY: claude repaints ~1/s
@@ -96,6 +97,9 @@ const (
 	guardianDwell            = 60 * time.Second
 	defaultSettleGrace       = 4 * time.Second
 	defaultClassifierTimeout = 30 * time.Second
+	// Tripwire. Measured in one day of production: 21 parked waits that resumed,
+	// the longest 3.7 minutes; the three that did not resume were held for days.
+	defaultParkedAfter = 30 * time.Minute
 	// A shell pane's heartbeat is the foreground process group on the 1s
 	// keepalive; 2.5s covers one missed poll plus worker RPC latency.
 	shellHeartbeatTTL = 2500 * time.Millisecond
@@ -111,6 +115,7 @@ func PolicyFor(agent string) Policy {
 		GuardianDwell:     guardianDwell,
 		SettleGrace:       defaultSettleGrace,
 		ClassifierTimeout: defaultClassifierTimeout,
+		ParkedAfter:       defaultParkedAfter,
 	}
 	if agent == string(protocol.SessionAgentClaude) {
 		policy.HeartbeatTTL = claudeHeartbeatTTL
@@ -137,6 +142,7 @@ const (
 	ReasonAwaitingVerdict   Reason = "awaiting_verdict"
 	ReasonBackgroundWork    Reason = "background_work"
 	ReasonBackgroundParked  Reason = "background_parked"
+	ReasonParkedExpired     Reason = "parked_expired"
 	ReasonCompacting        Reason = "compacting"
 	ReasonStopFailed        Reason = "stop_failed"
 	ReasonTurnAborted       Reason = "turn_aborted"
@@ -189,13 +195,18 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 	}
 
 	// A parked verdict holds working WITHOUT decaying to unknown, which would
-	// open a turn.
+	// open a turn. Past ParkedAfter the work it waited on never woke the agent.
 	if e.BackgroundWork {
 		if r, ok := classifierVerdict(e); ok {
 			return r
 		}
 		if parkedVerdict(e) {
-			return Resolution{State: protocol.SessionStateWorking, Reason: ReasonBackgroundParked}
+			if now.Sub(e.LastClassifier.ObservedAt) <= policy.ParkedAfter {
+				return Resolution{State: protocol.SessionStateWorking, Reason: ReasonBackgroundParked}
+			}
+			if promptIdleConfirmed(e) {
+				return settled(e, ReasonParkedExpired, policy, now)
+			}
 		}
 		if ClassifierVerdictPending(e, policy, now) {
 			return Resolution{State: protocol.SessionStateWorking, Reason: ReasonBackgroundWork}

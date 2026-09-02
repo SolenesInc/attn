@@ -255,9 +255,9 @@ func TestMigration129SeparatesMailboxReceiptsAndPayloads(t *testing.T) {
 		INSERT INTO garden_seed_bells VALUES
 			('target', 's-queued', 'note', 'seed-queued', '2026-01-01T00:00:03Z'),
 			('target', 's-notified', 'harvested', 'seed-notified', '2026-01-01T00:00:04Z');
-		DELETE FROM schema_migrations WHERE version >= 129;
+		DELETE FROM schema_migrations WHERE version >= 131;
 	`); err != nil {
-		t.Fatalf("plant pre-129 schema: %v", err)
+		t.Fatalf("plant pre-131 schema: %v", err)
 	}
 
 	if err := migrateDB(s.db, dbPath); err != nil {

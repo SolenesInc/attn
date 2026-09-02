@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -75,6 +76,52 @@ func TestWorkspaceSessionProtocolLifecycleMatchesAppOrder(t *testing.T) {
 	}
 	if _, _, ok := d.store.FindWorkspaceLayoutPaneBySessionID(sessionID); ok {
 		t.Fatalf("session %s still has a workspace pane mapping", sessionID)
+	}
+}
+
+func TestWorkspaceLayoutClosePaneKeepsVisibleStateWhenTeardownPreparationFails(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	backend := &fakeSpawnBackend{}
+	d.ptyBackend = backend
+	client := newWorkspaceProtocolTestClient()
+	workspaceID := "workspace-close-failure"
+	sessionID := "session-close-failure"
+	paneID := "pane-close-failure"
+	cwd := t.TempDir()
+
+	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
+		Cmd: protocol.CmdRegisterWorkspace, ID: workspaceID, Title: "Close failure", Directory: cwd,
+	})
+	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
+		Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: workspaceID,
+		PaneID: protocol.Ptr(paneID), SessionID: sessionID,
+	})
+	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
+	now := protocol.TimestampNow().String()
+	d.store.Add(&protocol.Session{
+		ID: sessionID, Label: "closing", Agent: protocol.SessionAgentCodex, Directory: cwd,
+		WorkspaceID: workspaceID, State: protocol.SessionStateWorking,
+		StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	d.prepareSessionTeardownHook = func(string) error { return errors.New("tombstone write failed") }
+
+	d.handleWorkspaceLayoutClosePane(client, &protocol.WorkspaceLayoutClosePaneMessage{
+		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: paneID,
+	})
+	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, false)
+	if d.store.Get(sessionID) == nil {
+		t.Fatal("failed close removed the session")
+	}
+	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot == nil || !workspacelayout.HasPane(snapshot.Layout, paneID) {
+		t.Fatalf("failed close removed the pane: %+v", snapshot)
+	}
+	if d.hasForcedStopMark(sessionID) {
+		t.Fatal("failed close left a forced-stop classification mark")
+	}
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	if len(backend.killed) != 0 {
+		t.Fatalf("failed close killed sessions: %v", backend.killed)
 	}
 }
 
@@ -287,19 +334,7 @@ func TestWorkspaceLayoutClosePanePersistsRemovalBeforeSessionUnregistered(t *tes
 	paneID := "pane-session-close-order"
 	cwd := t.TempDir()
 
-	backend := &fakeSpawnBackend{}
-	backend.onKill = func() {
-		if session := d.store.Get(sessionID); session == nil {
-			t.Fatalf("session %s was removed before pty kill", sessionID)
-		}
-		if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil {
-			t.Fatalf("workspace layout still referenced session %s when pty kill began: %+v", sessionID, snapshot)
-		}
-		if _, _, ok := d.store.FindWorkspaceLayoutPaneBySessionID(sessionID); ok {
-			t.Fatalf("workspace pane mapping for session %s still existed when pty kill began", sessionID)
-		}
-	}
-	d.ptyBackend = backend
+	d.ptyBackend = &fakeSpawnBackend{}
 
 	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
 		Cmd:       protocol.CmdRegisterWorkspace,
@@ -341,6 +376,109 @@ func TestWorkspaceLayoutClosePanePersistsRemovalBeforeSessionUnregistered(t *tes
 	}
 	if workspace := d.store.GetWorkspace(workspaceID); workspace != nil {
 		t.Fatalf("workspace still exists after closing its only session pane: %+v", workspace)
+	}
+}
+
+func TestWorkspaceLayoutClosePaneRepliesAndBroadcastsBeforeStubbornPTYExits(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping real PTY spawn in short mode")
+	}
+
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	backend := ptybackend.NewEmbedded(pty.NewManager(nil))
+	d.ptyBackend = backend
+	t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
+
+	client := newWorkspaceProtocolTestClient()
+	workspaceID := "workspace-stubborn-close"
+	sessionID := "session-stubborn-close"
+	paneID := "pane-stubborn-close"
+	remainingSessionID := "session-remaining"
+	remainingPaneID := "pane-remaining"
+	cwd := t.TempDir()
+
+	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
+		Cmd: protocol.CmdRegisterWorkspace, ID: workspaceID, Title: "Stubborn Close", Directory: cwd,
+	})
+	for _, pane := range []struct{ paneID, sessionID string }{
+		{paneID, sessionID},
+		{remainingPaneID, remainingSessionID},
+	} {
+		d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
+			Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: workspaceID,
+			PaneID: protocol.Ptr(pane.paneID), SessionID: pane.sessionID,
+		})
+		expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, pane.paneID, true)
+		d.store.Add(&protocol.Session{
+			ID: pane.sessionID, Label: pane.sessionID, Agent: protocol.SessionAgentShell,
+			Directory: cwd, WorkspaceID: workspaceID,
+		})
+		d.associateSessionWithWorkspace(pane.sessionID, workspaceID)
+	}
+
+	if err := backend.Spawn(context.Background(), ptybackend.SpawnOptions{
+		ID: sessionID, CWD: cwd, Agent: "probe-close", Cols: 80, Rows: 24,
+		ExternalCommand: []string{"/bin/bash", "-c", `trap '' TERM HUP; printf '__CLOSE_READY__\n'; while :; do read -r -t 1 _ || :; done`},
+	}); err != nil {
+		t.Fatalf("spawn stubborn PTY: %v", err)
+	}
+	_, stream, err := backend.Attach(context.Background(), sessionID, "close-order-test")
+	if err != nil {
+		t.Fatalf("attach stubborn PTY: %v", err)
+	}
+	defer stream.Close()
+	waitForPTYOutput(t, stream, "__CLOSE_READY__")
+
+	layoutBroadcast := make(chan *protocol.WorkspaceLayout, 1)
+	d.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) {
+		if event.Event == protocol.EventWorkspaceLayoutUpdated && event.WorkspaceLayout != nil {
+			layoutBroadcast <- event.WorkspaceLayout
+		}
+	}
+
+	d.handleWorkspaceLayoutClosePane(client, &protocol.WorkspaceLayoutClosePaneMessage{
+		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: paneID,
+	})
+	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, true)
+
+	select {
+	case layout := <-layoutBroadcast:
+		for _, pane := range layout.Panes {
+			if pane.PaneID == paneID {
+				t.Fatalf("layout broadcast still contains closed pane %s: %+v", paneID, layout)
+			}
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for pane-free layout broadcast")
+	}
+
+	info, err := backend.SessionInfo(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("session info before teardown completed: %v", err)
+	}
+	if !info.Running {
+		t.Fatal("stubborn PTY exited before the close result and layout broadcast arrived")
+	}
+	if err := backend.Kill(context.Background(), sessionID, syscall.SIGKILL); err != nil {
+		t.Fatalf("finish stubborn PTY teardown: %v", err)
+	}
+}
+
+func waitForPTYOutput(t *testing.T, stream ptybackend.Stream, marker string) {
+	t.Helper()
+	var output []byte
+	deadline := time.NewTimer(5 * time.Second)
+	defer deadline.Stop()
+	for {
+		select {
+		case event := <-stream.Events():
+			output = append(output, event.Data...)
+			if bytes.Contains(output, []byte(marker)) {
+				return
+			}
+		case <-deadline.C:
+			t.Fatalf("timed out waiting for PTY marker %q; output=%q", marker, output)
+		}
 	}
 }
 

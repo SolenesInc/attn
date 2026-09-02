@@ -57,7 +57,7 @@ describe("AttnPluginClient", () => {
 
     expect(server.requests.map((request) => request.method)).toEqual(["hello"]);
     expect(server.requests[0]?.params).toMatchObject({
-      attn_api_version: 4,
+      attn_api_version: 6,
       generation: 1,
       surfaces: ["worktree.after_create", "worktree.create"],
     });

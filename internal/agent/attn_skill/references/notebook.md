@@ -2,8 +2,7 @@
 
 Load this reference when you read or maintain the attn Notebook — the durable,
 profile-wide markdown store — especially when your session is the chief of staff.
-The Notebook outlives any single workspace; per-workspace shared context (see the
-workspace-context reference) does not.
+The Notebook outlives any single workspace.
 
 The Notebook is plain markdown on disk, and you maintain it by **editing the files
 directly with native tools** (Read/Write/Edit, plus `ls`/`grep` over the tree).
@@ -98,6 +97,4 @@ record durable decisions in the knowledge base as you make them, and keep the
 day's journal current with your cross-workspace view. The keeper already narrates
 each workspace's own work into the journal, so write at a chief-of-staff
 altitude — what moved across workspaces, what you delegated and decided — not a
-per-workspace play-by-play. You remain profile-wide — you may `attn
-workspace context show --session <id>` for a specific workspace you step into, but
-that is opt-in.
+per-workspace play-by-play. You remain profile-wide.

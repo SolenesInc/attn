@@ -19,6 +19,15 @@ describe('scenarioCatalog agent tripwire flags', () => {
     }
   });
 
+  it('gives every platform skip a reason', () => {
+    for (const scenario of scenarioCatalog) {
+      for (const [platform, rule] of Object.entries(scenario.skipOn ?? {})) {
+        const reason = typeof rule === 'string' ? rule : rule.reason;
+        expect(reason, `${scenario.id} skipOn.${platform}`).toMatch(/\S/);
+      }
+    }
+  });
+
   it('only allows agent binaries the tripwire knows how to shim', () => {
     for (const scenario of scenariosAllowingRealAgents()) {
       if (scenario.allowRealAgents === true) continue;

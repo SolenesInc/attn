@@ -52,8 +52,6 @@ type spawnPlan struct {
 	chiefAssigned                bool
 	isChief                      bool
 	chiefAssignmentCommitted     bool
-	instructionsRollback         func()
-	instructionsCommitted        bool
 	priorIntent                  store.LaunchIntent
 	hadPriorIntent               bool
 }
@@ -90,9 +88,6 @@ func (plan *spawnPlan) rollback(d *Daemon, sessionID string) {
 	if plan.chiefAssigned && !plan.chiefAssignmentCommitted {
 		d.clearChiefOfStaffIfSession(sessionID)
 	}
-	if !plan.instructionsCommitted {
-		plan.instructionsRollback()
-	}
 }
 
 func (plan *spawnPlan) restoreLaunchIntent(d *Daemon, sessionID string) {
@@ -105,7 +100,6 @@ func (plan *spawnPlan) restoreLaunchIntent(d *Daemon, sessionID string) {
 
 func (plan *spawnPlan) commit() {
 	plan.chiefAssignmentCommitted = true
-	plan.instructionsCommitted = true
 }
 
 func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (*spawnRequest, *spawnRejection) {
@@ -210,7 +204,7 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 			return nil, &spawnRejection{err: fmt.Errorf("cannot pick up the conversation at %s: it is a directory, not a conversation file", resume)}
 		}
 	}
-	plan := &spawnPlan{cleanupInitialPrompt: func() {}, instructionsRollback: func() {}}
+	plan := &spawnPlan{cleanupInitialPrompt: func() {}}
 	if !req.hasPluginDriver {
 		initialPromptFile, cleanup, err := d.writeInitialPromptFile(msg.ID, req.initialPrompt)
 		if err != nil {
@@ -299,13 +293,14 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			params.Metadata = json.RawMessage(metadata)
 		}
 		if req.pluginDriver.Capabilities["launch_instructions"] {
-			instructions, rollback, err := d.preparePluginLaunchInstructions(msg.ID, req.workspaceID, plan.isChief)
+			instructions, err := d.preparePluginLaunchInstructions(msg.ID, req.workspaceID, plan.isChief,
+				!req.pluginDriver.Capabilities["pull_request_reporting"])
 			if err != nil {
 				d.finishPluginSessionLaunch(msg.ID, false)
 				plan.rollback(d, msg.ID)
 				return &spawnOutcome{err: err}
 			}
-			params.Instructions, plan.instructionsRollback = instructions, rollback
+			params.Instructions = instructions
 		}
 		if req.pluginDriver.Capabilities["auto_mode"] {
 			cfg, err := d.store.GetAutoModeConfig()
@@ -350,7 +345,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	// after Spawn otherwise leaves a worker with no durable session row to recover.
 	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.existingSession, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID)
 	session := plan.launchSession
-	if err := d.store.AddChecked(session); err != nil {
+	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
 		if req.hasPluginDriver {
 			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
 		}
@@ -370,11 +365,16 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	// After the already-live no-op returns, before the runtime whose first
 	// UserPromptSubmit can beat commitSpawn.
 	d.rememberSessionTitleInitialPrompt(msg.ID, req.initialPrompt)
+	priorExit := d.store.GetSessionExitScreen(msg.ID)
+	if err := d.store.DeleteSessionExitScreen(msg.ID); err != nil {
+		d.logf("exit screen of the previous process not cleared: session=%s err=%v", msg.ID, err)
+	}
 	if err := d.spawnSessionRuntime(req, plan.spawnOpts); err != nil {
 		d.forgetSessionTitleInitialPrompt(msg.ID)
+		d.restoreExitScreen(msg.ID, priorExit)
 		if req.existingSession == nil {
 			d.store.Remove(msg.ID)
-		} else if restoreErr := d.store.AddChecked(req.existingSession); restoreErr != nil {
+		} else if restoreErr := d.store.AddCheckedUnlessTeardown(req.existingSession); restoreErr != nil {
 			err = errors.Join(err, fmt.Errorf("restore prior session after spawn failure: %w", restoreErr))
 		}
 		if req.existingSession != nil {
@@ -413,7 +413,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 			session.Label = current.Label
 		}
 	}
-	if err := d.store.AddChecked(session); err != nil {
+	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
 		if req.hasPluginDriver {
 			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
 		}

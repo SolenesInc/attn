@@ -138,7 +138,7 @@ async function main() {
       const payload = path.join(runner.sessionDir, 'plot.json');
       fs.writeFileSync(payload, JSON.stringify(PLOT));
       const planted = await runInPane(client, pane,
-        `attn seed plot -f ${payload} --session ${pane.sessionId}`, 'verify-the-route');
+        `attn seed plot -f ${payload} --session ${pane.sessionId}`, 'verify-route');
       const ids = seedIDs(planted);
       runner.assert(ids.length >= 4, 'the fixture planted a crown and three children', { planted });
       [crown, ...children] = ids.slice(0, 4);

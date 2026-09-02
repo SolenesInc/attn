@@ -1361,6 +1361,7 @@ function collectGardenUiState() {
   if (here) trail.push({ label: here, depth: trail.length, here: true });
   const seeds = Array.from(panel.querySelectorAll('.garden-row')).map((row) => ({
     id: row.querySelector('[data-seed-row]')?.getAttribute('data-seed-row') ?? '',
+    displayId: row.querySelector('.garden-row__id')?.textContent?.trim() ?? '',
     title: row.querySelector('.garden-row__title')?.textContent?.trim() ?? '',
     status: (row.className.match(/is-(planted|growing|harvested|withered|dormant|unknown)/) ?? [])[1] ?? '',
     signal: row.querySelector('.garden-row__signal')?.textContent?.trim() ?? '',
