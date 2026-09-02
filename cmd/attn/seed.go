@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/crew"
@@ -165,8 +166,13 @@ commands:
         tender. An optional comment lands on the log in the same move. Tending
         it again picks it back up.
 
-  harvest <id> -m "<what got done>" [--member <name>] [--force]
+  harvest <id> (-m "<what got done>" | --when-merged [<pr-url>] [--clear]) [--member <name>] [--force]
         close the seed as done. The reason is the point of the record.
+        --when-merged closes nothing now: attn harvests the seed itself, with
+        its own reason, when the pull request merges. Reach for it only when
+        the merge is the last step. With no url it takes this session's single
+        open pull request; --when-merged --clear takes the arming back and
+        leaves the state alone.
 
   wither <id> [-m "<why>"] [--member <name>] [--force]
         close the seed as abandoned. Nobody is picking this up.
@@ -223,7 +229,10 @@ flags:
   --name <text>       name for the new agent (handover)
   --request-id <id>   stable retry key (handover; generated when omitted)
   --yolo              bypass agent approval prompts (handover)
-  --clear             remove the fallback identity (set-resume)
+  --clear             remove the fallback identity (set-resume), or the
+                      harvest condition (harvest --when-merged)
+  --when-merged       harvest the seed when its pull request merges, instead
+                      of harvesting it now (harvest)
   --plot <plot>      scope a ready answer to one plot
   --flat             print a listing without nesting
   --stale            only open seeds whose log has not moved (ls)
@@ -338,6 +347,7 @@ type seedFlags struct {
 	requestID      *string
 	yolo           *bool
 	clear          *bool
+	whenMerged     *bool
 	force          *bool
 }
 
@@ -378,7 +388,8 @@ func newSeedFlags(verb string) *seedFlags {
 		name:           fs.String("name", "", "name for the new agent"),
 		requestID:      fs.String("request-id", "", "stable retry key"),
 		yolo:           fs.Bool("yolo", false, "bypass agent approval prompts"),
-		clear:          fs.Bool("clear", false, "remove the seed-owned resume identity"),
+		clear:          fs.Bool("clear", false, "remove what the verb set: the resume identity, or the harvest condition"),
+		whenMerged:     fs.Bool("when-merged", false, "harvest the seed when its pull request merges"),
 		force:          fs.Bool("force", false, "act even though somebody else still holds the seed"),
 	}
 }
@@ -538,7 +549,7 @@ func runSeedList(args []string) {
 	for _, row := range seedRows(result.Seeds, *f.flat) {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s%s%s\n",
 			row.seed.ID, row.seed.StepSlug, row.seed.Status, orDash(crew.HolderName(row.seed.TenderMember, row.seed.TenderSession)),
-			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, plotProgressSuffix(row.seed))
+			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, plotProgressSuffix(row.seed)+harvestWhenSuffix(row.seed))
 	}
 	w.Flush()
 	if result.Total > len(result.Seeds) {
@@ -699,6 +710,29 @@ func plotProgressSuffix(seed protocol.Seed) string {
 	p := *seed.PlotProgress
 	return fmt.Sprintf("  [%d/%d done · %d growing · %d ready · %d blocked]",
 		p.Done, p.Total, p.Growing, p.Ready, p.Blocked)
+}
+
+func harvestWhenSuffix(seed protocol.Seed) string {
+	if line := harvestWhenLine(seed.HarvestWhen); line != "" {
+		return "  [" + line + "]"
+	}
+	return ""
+}
+
+func harvestWhenLine(condition *protocol.SeedHarvestCondition) string {
+	if condition == nil {
+		return ""
+	}
+	return "harvests when " + pullRequestLabel(condition.PullRequest) + " merges"
+}
+
+// A session pull request id reads host:owner/repo#number; the host is noise to
+// whoever asked for this seed.
+func pullRequestLabel(prID string) string {
+	if _, rest, found := strings.Cut(prID, ":"); found {
+		return rest
+	}
+	return prID
 }
 
 func runSeedPlot(args []string) {
@@ -1076,7 +1110,7 @@ func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 			status = "plot"
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s%s%s\n", seed.ID, seed.StepSlug, status, shortStamp(seed.CreatedAt),
-			strings.Repeat("  ", row.depth), seed.Title, plotProgressSuffix(seed))
+			strings.Repeat("  ", row.depth), seed.Title, plotProgressSuffix(seed)+harvestWhenSuffix(seed))
 		if handoff, ok := handoffs[seed.ID]; ok {
 			fmt.Fprintf(w, "\t\t\t\t↳ %s: %s\n",
 				orDash(crew.HolderName(handoff.AuthorMember, handoff.AuthorSession)), firstLine(handoff.Body))
@@ -1133,6 +1167,9 @@ func fprintSeed(out io.Writer, seed protocol.Seed, watching ...bool) {
 	if resumeID := protocol.Deref(seed.ResumeSessionID); resumeID != "" {
 		fmt.Fprintf(w, "resume\t%s in %s on %s\n", resumeID, protocol.Deref(seed.ResumeCwd), protocol.Deref(seed.ResumeAgent))
 	}
+	if condition := seed.HarvestWhen; condition != nil {
+		fmt.Fprintf(w, "harvests when\t%s merges\n", pullRequestLabel(condition.PullRequest))
+	}
 	if seed.Ready {
 		fmt.Fprintf(w, "ready\tyes\n")
 	}
@@ -1154,13 +1191,12 @@ func orDash(value string) string {
 
 func runSeedTransition(verb string, args []string) {
 	f := newSeedFlags(verb)
-	positionals := f.parse(verb, args)
-	if len(positionals) != 1 {
-		seedFail(verb, fmt.Errorf("needs exactly one seed id, got %d: attn seed %s s-7k3f9m", len(positionals), verb))
+	seedID, opts, err := harvestWhenArgs(verb, f, f.parse(verb, args))
+	if err != nil {
+		seedFail(verb, err)
 	}
 	result, err := seedClient().SeedTransition(
-		f.sessionID(), positionals[0], verb, f.text(verb), strings.TrimSpace(*f.member), *f.force,
-		client.SeedTransitionOptions{})
+		f.sessionID(), seedID, verb, f.text(verb), strings.TrimSpace(*f.member), *f.force, opts)
 	if err != nil {
 		seedFail(verb, err)
 	}
@@ -1168,11 +1204,54 @@ func runSeedTransition(verb string, args []string) {
 		writeJSON(result)
 		return
 	}
-	fprintTransition(os.Stdout, result)
+	fprintTransition(os.Stdout, result, opts.ClearHarvestWhen)
 }
 
-func fprintTransition(w io.Writer, result *protocol.SeedTransitionResult) {
+// --when-merged carries an optional url, which flag cannot express, so the url
+// arrives as a second positional the way `attn pr record <url>` reads its own.
+func harvestWhenArgs(verb string, f *seedFlags, positionals []string) (string, client.SeedTransitionOptions, error) {
+	var none client.SeedTransitionOptions
+	if !*f.whenMerged && !*f.clear {
+		seedID, err := oneSeedID(verb, positionals, "")
+		return seedID, none, err
+	}
+	switch {
+	case verb != "harvest":
+		return "", none, fmt.Errorf("harvest-on-merge belongs to harvest: `attn seed harvest <id> --when-merged [pr-url]`")
+	case !*f.whenMerged:
+		return "", none, fmt.Errorf("--clear disarms harvest-on-merge; say the whole thing: `attn seed harvest <id> --when-merged --clear`")
+	case f.wasSet("m"):
+		// The daemon refuses the same pairing; saying it here spares a round trip.
+		return "", none, fmt.Errorf("harvest --when-merged takes no -m: the reason is written when the pull request merges")
+	}
+	if *f.clear {
+		seedID, err := oneSeedID(verb, positionals, " --when-merged --clear")
+		return seedID, client.SeedTransitionOptions{ClearHarvestWhen: true}, err
+	}
+	if len(positionals) == 2 {
+		if _, _, _, _, err := automation.ParsePullRequestURL(positionals[1]); err != nil {
+			return "", none, fmt.Errorf("%q is not a pull request url: %w", positionals[1], err)
+		}
+		return positionals[0], client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: positionals[1]}, nil
+	}
+	seedID, err := oneSeedID(verb, positionals, " --when-merged [pr-url]")
+	return seedID, client.SeedTransitionOptions{WhenMerged: true}, err
+}
+
+func oneSeedID(verb string, positionals []string, tail string) (string, error) {
+	if len(positionals) != 1 {
+		return "", fmt.Errorf("needs exactly one seed id, got %d: attn seed %s s-7k3f9m%s", len(positionals), verb, tail)
+	}
+	return positionals[0], nil
+}
+
+func fprintTransition(w io.Writer, result *protocol.SeedTransitionResult, cleared ...bool) {
 	fmt.Fprintln(w, transitionLine(result.Seed))
+	if line := harvestWhenLine(result.Seed.HarvestWhen); line != "" {
+		fmt.Fprintln(w, line)
+	} else if len(cleared) > 0 && cleared[0] {
+		fmt.Fprintln(w, "harvest-on-merge cleared")
+	}
 	if open := openPlotSeeds(result.Seed); open > 0 && closedSeedStatus(string(result.Seed.Status)) {
 		fmt.Fprintf(w, "its plot still holds %d open seed(s) — a closed plot over open work reads as done; close them too, or replant this one\n", open)
 	}
