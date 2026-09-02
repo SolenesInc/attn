@@ -3052,6 +3052,13 @@ export function useUiAutomationBridge({
         await settleUi(2);
         return { shortcutId };
       }
+      case 'shortcut_binding': {
+        const shortcutId = typeof payload.shortcutId === 'string' ? payload.shortcutId as ShortcutId : null;
+        if (!shortcutId || !Object.prototype.hasOwnProperty.call(SHORTCUTS, shortcutId)) {
+          throw new Error(`shortcut_binding requires a known shortcutId, got ${JSON.stringify(payload.shortcutId)}`);
+        }
+        return { shortcutId, binding: resolveBinding(shortcutId) };
+      }
       case 'open_shortcut_editor': {
         if (!openShortcutEditor) {
           throw new Error('openShortcutEditor handler is not wired');
