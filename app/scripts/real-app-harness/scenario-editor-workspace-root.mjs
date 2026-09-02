@@ -7,6 +7,7 @@ import {
   createSessionAndWaitForInitialPane,
   launchFreshAppAndConnect,
   parseCommonArgs,
+  pressShortcutKeys,
   printCommonHelp,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -95,7 +96,7 @@ async function waitForWorkspaceUi(client, workspaceId, predicate, description, t
 
 async function dockEditorTileNative(client, driver, workspaceId) {
   await driver.activateApp();
-  await driver.pressKey('n', { command: true, option: true });
+  await pressShortcutKeys(client, driver, 'session.newHorizontal');
   try {
     return await waitForWorkspaceUi(
       client,

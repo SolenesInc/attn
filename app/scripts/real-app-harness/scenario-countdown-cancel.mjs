@@ -9,6 +9,7 @@ import {
   launchFreshAppAndConnect,
   legacyTicketRequest,
   parseCommonArgs,
+  pressShortcutKeys,
   printCommonHelp,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -59,9 +60,9 @@ async function submitPrompt(client, sessionId, paneId, text) {
   await client.request('type_pane_via_ui', { sessionId, paneId, text: '\r' });
 }
 
-async function pressCancelCountdown(driver) {
+async function pressCancelCountdown(client, driver) {
   await driver.activateApp();
-  await driver.pressKey('.', { command: true });
+  await pressShortcutKeys(client, driver, 'session.cancelCountdown');
 }
 
 async function splitIntoShellPane(client, sessionId) {
@@ -180,7 +181,7 @@ async function main() {
         `the countdown has far more than the keystroke needs left on it (${remainingMs}ms), so expiry cannot explain a cancel`,
       );
 
-      await pressCancelCountdown(driver);
+      await pressCancelCountdown(client, driver);
 
       await pollFor(
         () => (observer.getSession(agentId)?.auto_settle_fires_at ? null : true),
@@ -205,7 +206,7 @@ async function main() {
         after,
       );
 
-      await pressCancelCountdown(driver);
+      await pressCancelCountdown(client, driver);
 
       await pollFor(
         () => (observer.getSession(agentId)?.auto_settle_dismiss_armed ? null : true),
@@ -259,7 +260,7 @@ async function main() {
     });
 
     await runner.step('cancel_nudge_with_a_real_keystroke', async () => {
-      await pressCancelCountdown(driver);
+      await pressCancelCountdown(client, driver);
 
       await pollFor(
         () => (observer.getSession(agentId)?.nudge_fires_at ? null : true),

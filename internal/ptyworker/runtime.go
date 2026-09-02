@@ -138,6 +138,9 @@ type Runtime struct {
 	state      string
 	exitCode   *int
 	exitSignal *string
+	// An agent that sets its title once at boot has no second heartbeat for a
+	// watcher that attaches after it; without the replay it never reads idle.
+	lastEvidence *pty.Observation
 
 	stopOnce sync.Once
 	stopCh   chan struct{}
@@ -215,34 +218,7 @@ func (r *Runtime) run(ctx context.Context) error {
 	}
 
 	r.manager = pty.NewManager(r.logf)
-	r.manager.SetStateHandler(func(_ string, obs pty.Observation) {
-		// Evidence-only: it must not touch the cached state or be deduped against
-		// it, or a heartbeat is dropped whenever it equals the last state string.
-		if !obs.Source.ClaimsProtocolState() {
-			r.broadcastLifecycle(stateChangedEvent(r.cfg.SessionID, obs))
-			return
-		}
-		state := obs.Claim
-		r.stateMu.Lock()
-		previousState := r.state
-		changed := previousState != state
-		r.state = state
-		r.stateMu.Unlock()
-		if r.capture != nil {
-			r.capture.recordState(state)
-			if isWorkingToStopTransition(previousState, state) {
-				path, err := r.capture.dump("working_to_" + state)
-				if err != nil {
-					r.logf("worker debug capture dump failed: session=%s reason=%s err=%v", r.cfg.SessionID, state, err)
-				} else if path != "" {
-					r.logf("worker debug capture dump: session=%s reason=working_to_%s path=%s", r.cfg.SessionID, state, path)
-				}
-			}
-		}
-		if changed {
-			r.broadcastLifecycle(stateChangedEvent(r.cfg.SessionID, obs))
-		}
-	})
+	r.manager.SetStateHandler(func(_ string, obs pty.Observation) { r.observeState(obs) })
 	r.manager.SetExitHandler(func(info pty.ExitInfo) {
 		r.stateMu.Lock()
 		code := info.ExitCode
@@ -633,6 +609,38 @@ func (r *Runtime) removeWatcher(conn *connCtx) {
 	r.watchMu.Lock()
 	delete(r.watchConn, conn)
 	r.watchMu.Unlock()
+}
+
+func (r *Runtime) observeState(obs pty.Observation) {
+	// Evidence-only: it must not touch the cached state or be deduped against
+	// it, or a heartbeat is dropped whenever it equals the last state string.
+	if !obs.Source.ClaimsProtocolState() {
+		r.stateMu.Lock()
+		r.lastEvidence = &obs
+		r.stateMu.Unlock()
+		r.broadcastLifecycle(stateChangedEvent(r.cfg.SessionID, obs))
+		return
+	}
+	state := obs.Claim
+	r.stateMu.Lock()
+	previousState := r.state
+	changed := previousState != state
+	r.state = state
+	r.stateMu.Unlock()
+	if r.capture != nil {
+		r.capture.recordState(state)
+		if isWorkingToStopTransition(previousState, state) {
+			path, err := r.capture.dump("working_to_" + state)
+			if err != nil {
+				r.logf("worker debug capture dump failed: session=%s reason=%s err=%v", r.cfg.SessionID, state, err)
+			} else if path != "" {
+				r.logf("worker debug capture dump: session=%s reason=working_to_%s path=%s", r.cfg.SessionID, state, path)
+			}
+		}
+	}
+	if changed {
+		r.broadcastLifecycle(stateChangedEvent(r.cfg.SessionID, obs))
+	}
 }
 
 func (r *Runtime) broadcastLifecycle(evt EventEnvelope) {
@@ -1151,6 +1159,7 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 		state := c.runtime.state
 		exitCode := c.runtime.exitCode
 		exitSignal := c.runtime.exitSignal
+		lastEvidence := c.runtime.lastEvidence
 		c.runtime.stateMu.RUnlock()
 		if state == "" {
 			state = "working"
@@ -1162,6 +1171,9 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 			Detail: "watch subscribe replay",
 			At:     time.Now(),
 		}))
+		if lastEvidence != nil {
+			_ = c.sendEvent(stateChangedEvent(c.runtime.cfg.SessionID, *lastEvidence))
+		}
 		if exitCode != nil || exitSignal != nil {
 			_ = c.sendEvent(EventEnvelope{
 				Type:       "evt",

@@ -1,0 +1,10 @@
+kind: fixed
+area: daemon
+change: >
+  An agent that set its terminal title once at boot, before the daemon
+  attached to its worker, never read as idle: the title heartbeat reached
+  no watcher and the session stayed working until its next turn. The worker
+  now keeps the last heartbeat and replays it to every watcher that attaches
+  later. The real-app harness presses app shortcuts by their platform binding
+  instead of the macOS chord, so countdown-cancel, settle-typing-hold and
+  agent-queue pass on Linux.
