@@ -214,7 +214,6 @@ async function main() {
 
     await runner.step('the_plot_drains_live', async () => {
       const [first, , sequenced] = children;
-      // A list row carries only done/total; the plot's head spells out the rest.
       const inside = await client.request('garden_open_plot', { seedId: crown });
       runner.assert(inside.crown.includes('0/3 done'), 'the plot head starts with nothing done', { head: inside.crown });
       await runInPane(client, pane, `attn seed tend ${first} --session ${delegated}`, 'is growing');
@@ -244,8 +243,6 @@ async function main() {
     await runner.step('two_delegates_share_one_plot', async () => {
       const [, parallel, sequenced] = children;
       const known = new Set(observer.sessionsById.keys());
-      // A seed has one tender; a second dispatch at the tended crown is refused
-      // and the work goes to a child instead.
       const refusedCrown = await runInPane(client, pane,
         `attn delegate --agent shell --model none --no-worktree --source-session ${pane.sessionId} ` +
           `--plot ${crown} --name plotdel2 --brief "Tend the plot you were dispatched at."`, 'one tender at a time');
