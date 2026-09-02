@@ -171,11 +171,11 @@ async function main() {
       await hold();
     });
 
-    const summary = runner.finishSuccess({ model: MODEL });
+    const summary = await runner.finishSuccess({ model: MODEL });
     console.log('[RealAppHarness] Auto mode no-model passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { model: MODEL });
+    const summary = await runner.finishFailure(error, { model: MODEL });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
