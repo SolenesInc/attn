@@ -68,7 +68,11 @@ if [ "$acceptance_status/$acceptance_conclusion" != "completed/success" ]; then
   exit 0
 fi
 
-"$script_root/app-acceptance-gate.sh" "$sha"
+if "$script_root/workflow-job-gate.sh" ci.yml "$sha" push main 'App acceptance'; then
+  echo "release after acceptance: CI App acceptance is green for main $sha"
+else
+  "$script_root/app-acceptance-gate.sh" "$sha"
+fi
 
 tag="$(go run ./cmd/release-train accepted-main tag --head "$sha")"
 if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then

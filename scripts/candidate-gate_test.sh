@@ -28,10 +28,24 @@ if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/app-acceptance.yml/runs?
   exit 0
 fi
 if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/ci.yml/runs?'* ]]; then
+  if [[ "$*" == *'event=pull_request'* ]]; then
+    if [[ "${FAKE_CI_APP_MODE:-success}" != missing ]] && \
+      [[ "$*" =~ head_sha=([0-9a-f]{40}) ]]; then
+      printf '2026-08-29T10:00:00Z\t44\t%s\tcompleted\t%s\t%s\n' "${BASH_REMATCH[1]}" \
+        "${FAKE_CI_APP_CONCLUSION:-success}" \
+        'https://github.com/example/attn/actions/runs/44'
+    fi
+    exit 0
+  fi
   if [[ "${FAKE_ACCEPTANCE_MODE:-success}" != missing ]]; then
     printf '2026-08-29T10:00:00Z\t42\t%s\tcompleted\tsuccess\t%s\n' "$FAKE_ACCEPTANCE_SHA" \
       'https://github.com/example/attn/actions/runs/42'
   fi
+  exit 0
+fi
+if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/44/jobs?'* ]]; then
+  printf 'completed\t%s\t%s\n' "${FAKE_CI_APP_CONCLUSION:-success}" \
+    'https://github.com/example/attn/actions/runs/44/job/9'
   exit 0
 fi
 if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/42/jobs?'* ]]; then
@@ -61,6 +75,8 @@ export FAKE_ACCEPTANCE_STATUS=completed
 export FAKE_ACCEPTANCE_CONCLUSION=success
 export FAKE_APP_MODE=success
 export FAKE_APP_CONCLUSION=success
+export FAKE_CI_APP_MODE=success
+export FAKE_CI_APP_CONCLUSION=success
 
 repo="$work/repo"
 git clone -q "$root" "$repo"
@@ -110,7 +126,7 @@ export FAKE_ACCEPTANCE_SHA="$promotion_source"
 export FAKE_CANDIDATES_PAGE_1=$'release/v99.98.97\thttps://github.com/example/attn/pull/1\n'
 run_gate promotion origin/main HEAD release/v99.98.97 >"$work/promotion.out"
 grep -Fq 'source Acceptance is green' "$work/promotion.out"
-grep -Fq 'protected-main App acceptance is green' "$work/promotion.out"
+grep -Fq 'CI App acceptance is green' "$work/promotion.out"
 (cd "$repo" && "$changelog_gate" main release/v99.98.97) >"$work/promotion-changelog.out"
 grep -Fq 'validated promotion candidate' "$work/promotion-changelog.out"
 
@@ -119,10 +135,15 @@ expect_failure 'Acceptance is completed/failure' \
   run_gate promotion origin/main HEAD release/v99.98.97
 export FAKE_ACCEPTANCE_CONCLUSION=success
 
+export FAKE_CI_APP_MODE=missing
+run_gate promotion origin/main HEAD release/v99.98.97 >"$work/manual-override.out"
+grep -Fq 'manual App acceptance override is green' "$work/manual-override.out"
+
 export FAKE_APP_MODE=missing
 expect_failure 'has no app-acceptance.yml workflow_dispatch run' \
   run_gate promotion origin/main HEAD release/v99.98.97
 export FAKE_APP_MODE=success
+export FAKE_CI_APP_MODE=success
 
 (cd "$repo" && go run ./cmd/release-train manifest write \
   --version v99.98.97 --kind promotion --publication held \
@@ -169,11 +190,11 @@ git -C "$repo" add .github/release-candidate.yml app
 git -C "$repo" commit -q -m 'chore(release): prepare v99.98.98'
 : >"$FAKE_GH_LOG"
 run_gate hotfix origin/main HEAD hotfix/startup-crash >"$work/hotfix.out"
-if grep -q '/actions/workflows/ci.yml/runs?' "$FAKE_GH_LOG"; then
+if grep -q 'event=push' "$FAKE_GH_LOG"; then
   echo "hotfix candidate queried next Acceptance" >&2
   exit 1
 fi
-grep -q '/actions/workflows/app-acceptance.yml/runs?' "$FAKE_GH_LOG"
+grep -q 'event=pull_request' "$FAKE_GH_LOG"
 
 changelog_job="$(sed -n '/^  changelog:/,/^  main-route:/p' "$root/.github/workflows/ci.yml")"
 grep -Fq 'actions: read' <<<"$changelog_job"

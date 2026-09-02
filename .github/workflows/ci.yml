@@ -114,7 +114,7 @@ jobs:
               - 'scripts/build-app-runtime-host.sh'
   changelog:
     name: Changelog
-    needs: changes
+    needs: [changes, app-acceptance]
     if: github.event_name == 'pull_request' || needs.changes.outputs.force_all == 'true'
     permissions:
       actions: read
@@ -474,6 +474,84 @@ jobs:
             (cd "$plugin" && bun test)
           done
 
+  app-acceptance:
+    name: App acceptance
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next'
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: app-acceptance-${{ github.repository }}
+      cancel-in-progress: false
+    env:
+      ATTN_PROFILE: app-acceptance
+      ATTN_HARNESS_PROFILE: app-acceptance
+      ATTN_REAL_APP_ARTIFACTS_DIR: ${{ runner.temp }}/attn-real-app-harness
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bash coreutils desktop-file-utils fish imagemagick \
+            libayatana-appindicator3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev \
+            libxdo-dev sqlite3 xauth xdg-utils xdotool xvfb zsh
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Read bun pin
+        id: bun
+        run: echo "version=$(awk '/^bun / { print $2 }' .tool-versions)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+
+      - name: Install packaged app and bundled plugin
+        env:
+          CI: 'true'
+        run: |
+          make install PROFILE="$ATTN_PROFILE"
+          ./attn plugin install-bundled attn-pi
+          echo "$PWD/plugins/attn-pi/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Run serial matrix
+        run: xvfb-run -a -s '-screen 0 1600x1000x24' pnpm --dir app run real-app:serial-matrix
+
+      - name: Upload app acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-acceptance-evidence-${{ github.run_attempt }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/attn-real-app-harness/matrix-digest.txt
+            ${{ runner.temp }}/attn-real-app-harness/**/*.txt
+            ${{ runner.temp }}/attn-real-app-harness/**/*.png
+
+      - name: Clean profile
+        if: always()
+        run: ./attn profile clean "$ATTN_PROFILE"
+
   release-preflight:
     name: Release preflight
     needs: changes
@@ -497,6 +575,7 @@ jobs:
       - rust
       - rust-gate
       - plugins
+      - app-acceptance
       - release-preflight
     permissions:
       contents: read
@@ -510,7 +589,7 @@ jobs:
         run: >-
           ./scripts/ci-gate.sh pr
           changes main-route changelog generated-types backend frontend frontend-e2e
-          frontend-e2e-gate rust rust-gate plugins release-preflight
+          frontend-e2e-gate rust rust-gate plugins app-acceptance release-preflight
 
   acceptance:
     name: Acceptance
@@ -527,6 +606,7 @@ jobs:
       - rust
       - rust-gate
       - plugins
+      - app-acceptance
       - release-preflight
     permissions:
       contents: read
@@ -540,7 +620,7 @@ jobs:
         run: >-
           ./scripts/ci-gate.sh acceptance
           changes main-route changelog generated-types backend frontend frontend-e2e
-          frontend-e2e-gate rust rust-gate plugins release-preflight
+          frontend-e2e-gate rust rust-gate plugins app-acceptance release-preflight
 
   branch-health:
     name: Report branch health

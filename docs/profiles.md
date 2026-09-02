@@ -36,6 +36,8 @@ Use a full build when unsure or when the daemon-only build misses the change.
 Open a named app with `make run PROFILE=<name>`.
 Full macOS builds/installs run outside the sandbox for keychain-backed signing;
 ad-hoc signing loses persistent permissions.
+On Linux, `make install PROFILE=<name>` stages an unprivileged application tree.
+The `App acceptance` CI job uses that same path before running the serial matrix.
 
 ## Linux deep links
 

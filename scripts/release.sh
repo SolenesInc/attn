@@ -338,9 +338,10 @@ EOF
 else
   cat >>"$body" <<EOF
 
-## Manual app verification
+## App acceptance
 
-Run the packaged-app scenarios from this exact candidate, then attach the receipt to this SHA:
+CI builds the packaged Linux app and runs the real-app serial matrix on this exact
+candidate. If that job cannot cover the candidate, record a manual override:
 
 \`\`\`bash
 gh workflow run app-acceptance.yml \\

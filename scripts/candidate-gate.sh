@@ -81,9 +81,14 @@ fi
 
 candidate_sha="$(git rev-parse --verify "${head_ref}^{commit}")"
 if [[ "$publication" == automatic ]]; then
-  "$script_root/workflow-job-gate.sh" \
-    app-acceptance.yml "$candidate_sha" workflow_dispatch main 'App acceptance'
-  echo "candidate gate: protected-main App acceptance is green for $candidate_sha"
+  if "$script_root/workflow-job-gate.sh" \
+    ci.yml "$candidate_sha" pull_request - 'App acceptance'; then
+    echo "candidate gate: CI App acceptance is green for $candidate_sha"
+  else
+    "$script_root/workflow-job-gate.sh" \
+      app-acceptance.yml "$candidate_sha" workflow_dispatch main 'App acceptance'
+    echo "candidate gate: manual App acceptance override is green for $candidate_sha"
+  fi
 else
   echo "candidate gate: publication is held; App acceptance is not claimed"
 fi

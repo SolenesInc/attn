@@ -74,6 +74,23 @@ grep -Fq 'event=push' "$FAKE_GH_LOG"
 grep -Fq 'branch=main' "$FAKE_GH_LOG"
 
 : >"$FAKE_GH_LOG"
+"$gate" ci.yml "$sha" pull_request - 'App acceptance' >"$work/pr-success.out"
+grep -Fq 'ci.yml run 42 and App acceptance are green' "$work/pr-success.out"
+grep -Fq 'event=pull_request' "$FAKE_GH_LOG"
+if grep -Fq 'branch=' "$FAKE_GH_LOG"; then
+  echo "pull-request App acceptance gate added a branch filter" >&2
+  exit 1
+fi
+
+export FAKE_RUN_STATUS=in_progress
+export FAKE_RUN_CONCLUSION=none
+"$gate" ci.yml "$sha" pull_request - 'App acceptance' >"$work/current-pr-success.out"
+expect_failure 'ci.yml run is in_progress/none' \
+  "$gate" ci.yml "$sha" push main Acceptance
+export FAKE_RUN_STATUS=completed
+export FAKE_RUN_CONCLUSION=success
+
+: >"$FAKE_GH_LOG"
 "$gate" app-acceptance.yml "$sha" workflow_dispatch main 'App acceptance' \
   >"$work/app-success.out"
 grep -Fq 'app-acceptance.yml run 42 and App acceptance are green' "$work/app-success.out"

@@ -25,10 +25,10 @@ change: Auto-settle advances to the next agent with an outstanding turn.
 - Promotions require accepted source SHA, current `main` baseline, matching
   versions, absent tag, consumed fragments, and a release-only preparation diff.
   User-facing fragments require compiled changelog copy with the generated receipt.
-- Automatic candidates need protected-`main` `App acceptance` for their exact
-  head. Rerun candidate CI after recording it. Hotfixes earn their own `PR gate`
-  and `App acceptance`; they do not inherit `next` Acceptance. Held promotions
-  are CI-only and cannot create a tag or dispatch a release.
+- Automatic candidates need exact-head `App acceptance` from `ci.yml` or the
+  protected-`main` manual override. Hotfixes earn their own `PR gate` and `App
+  acceptance`; they do not inherit `next` Acceptance. Held promotions are CI-only
+  and cannot create a tag or dispatch a release.
 - Only validated candidates and generated sync PRs get changelog exemptions.
 
 ## Prepare a frozen candidate
@@ -43,7 +43,7 @@ git pull --ff-only origin next
 
 The script requires green exact-SHA Acceptance, no existing tag or open candidate.
 It creates `release/vX.Y.Z`, compiles fragments, updates versions, writes
-`.github/release-candidate.yml`, and opens a draft PR to `main`.
+`.github/release-candidate.yml`, and opens a ready PR to `main`.
 It does not merge, tag, or publish. Internal-only fragments produce no release-note section.
 
 Later `next` changes, including red Acceptance, do not change the frozen source.
@@ -73,12 +73,16 @@ prepare a new candidate and version when a public release is wanted.
 Branch `hotfix/*` from current `main`; commit the fix and changelog fragment.
 On the clean branch, run `make release-hotfix VERSION_TAG=vX.Y.Z` with a fresh version.
 It commits release preparation and a fresh `kind: hotfix` manifest, then opens
-a draft PR to `main`. If `main` moves, prepare again from current `main`.
+a ready PR to `main`. If `main` moves, prepare again from current `main`.
 
-## Record app acceptance
+## App acceptance
 
-Install and exercise the packaged app from the exact candidate head.
-Use the command generated in its draft PR:
+`ci.yml` installs the packaged Linux app from the exact head and runs the
+real-app serial matrix under Xvfb. Its `App acceptance` job is required by both
+`PR gate` and exact-SHA `Acceptance`.
+
+Use the command generated in the candidate PR when the automated job cannot
+cover the candidate and a manual override is warranted:
 
 ```bash
 gh workflow run app-acceptance.yml --ref main \
@@ -88,16 +92,16 @@ gh workflow run app-acceptance.yml --ref main \
 ```
 
 Record failures with `outcome=failed`. Any head change needs a new receipt.
-Keep the workflow on protected `main`; it checks out the candidate separately.
-Mark ready after reviewing changelog copy and obtaining green `PR gate` and
-`App acceptance`. Merge only with those checks and required approval.
+Keep the override workflow on protected `main`; it checks out the candidate
+separately. Merge only with green `PR gate`, `App acceptance`, and required
+approval.
 
 ## Accept and release main
 
 - Merged `main` must earn exact-SHA Acceptance before tagging/publication.
   Failure leaves it untagged and opens a branch-health issue.
-- `Release accepted main` validates current `main`, its originating candidate's
-  protected-main app receipt, identical candidate/main trees, manifest, and versions.
+- `Release accepted main` validates current `main`, an automated or manual app
+  receipt, identical candidate/main trees, manifest, and versions.
   It creates the immutable tag and dispatches protected-`main` `release.yml`.
 - A held promotion validates through `main` Acceptance and exits before the app
   receipt, tag, and dispatch steps.
