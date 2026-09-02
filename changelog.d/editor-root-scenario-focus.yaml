@@ -1,0 +1,9 @@
+kind: internal
+area: harness
+change: >
+  editor-workspace-root docks the editor tile through the live notebook.openTile
+  binding and disables always-on-top, so the shortcut lands on both platforms.
+symptom: >
+  The scenario pressed a hardcoded Cmd+Opt+N, which is session.newHorizontal on
+  Linux, and on macOS never reached the app because an always-on-top harness
+  window is not focusable, so no editor tile docked.
