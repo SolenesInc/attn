@@ -89,7 +89,6 @@ async function main() {
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
 
-  // The finally puts the slot back, so the binding outlives the try.
   let restore = () => {};
 
   try {

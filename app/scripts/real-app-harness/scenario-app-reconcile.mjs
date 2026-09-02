@@ -519,8 +519,6 @@ async function main() {
       }).catch((error) => runner.log('ui:capture_failed', { error: String(error) }));
     });
 
-    // No run reaches the network unless the operator named a target: an unset
-    // ATTN_HARNESS_REMOTE_SSH_TARGET skips the witness instead of probing a VM.
     const target = skipRemote ? '' : (process.env.ATTN_HARNESS_REMOTE_SSH_TARGET || '');
     if (!target) {
       evidence.linux = { skipped: skipRemote ? '--skip-remote' : 'ATTN_HARNESS_REMOTE_SSH_TARGET is unset' };

@@ -433,8 +433,6 @@ export const scenarioCatalog = [
     runnerId: 'APP-RECONCILE',
     label: 'App reconcile: version move rebuilds, a real trim gap disables loudly, an interrupted rebuild repairs',
     command: ['pnpm', 'run', 'real-app:scenario-app-reconcile'],
-    // Needs bun for `attn app apply`; the Linux witness leg runs only when
-    // ATTN_HARNESS_REMOTE_SSH_TARGET names a target.
     timeoutMs: 600_000,
   },
   {
