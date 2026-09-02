@@ -1552,7 +1552,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             // CPR, DA1, and OSC 10/11/12 replies are the worker's; answering here too
             // double-replies and the shell reads the extra bytes as stray input.
             const forwarded = stripDaemonOwnedResponses(response);
-            if (forwarded) onInputRef.current(forwarded);
+            if (forwarded) onInputRef.current(forwarded, 'response');
           }
         }
         viewportOffsetRef.current = offsetAfterWrite(
@@ -2986,7 +2986,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           cell.col + 1,
           cell.row + 1,
           terminal.getMode(1006),
-        ));
+        ), 'pointer');
       }
       trackedMouseButtonRef.current = null;
       trackedMouseCellRef.current = null;
@@ -3015,7 +3015,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         cell.row + 1,
         terminal.getMode(1006),
         event ? mouseModifiers(event) : 0,
-      ));
+      ), 'pointer');
       return true;
     };
 
@@ -3075,7 +3075,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         cell.row + 1,
         terminal.getMode(1006),
         mouseModifiers(event),
-      ));
+      ), 'pointer');
       trackedMouseCellRef.current = cell;
       if (action === 'press') {
         trackedMouseButtonRef.current = button;
@@ -3383,13 +3383,15 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
               }
             }
             const cell = cellFromPointer(event);
+            // Without mouse tracking the wheel becomes arrow keys, which the
+            // composer reads as typing; only a real mouse report is pointer input.
             onInputRef.current(applicationWheelInput(
               wheel.lines,
               (cell?.col ?? 0) + 1,
               (cell?.row ?? 0) + 1,
               mouseTracking,
               terminal.getMode(1006),
-            ));
+            ), mouseTracking ? 'pointer' : undefined);
             return;
           }
           const scrollbackLength = terminal.getScrollbackLength();

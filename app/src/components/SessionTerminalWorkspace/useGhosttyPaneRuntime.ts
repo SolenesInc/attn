@@ -231,7 +231,7 @@ export function useGhosttyPaneRuntime(
         : 'fresh_spawn';
     if (import.meta.env.DEV && pane.testSessionId) {
       const testWindow = window as Window & {
-        __TEST_SESSION_INPUT_EVENTS?: Array<{ sessionId: string; event: 'connect_terminal' | 'send_to_pty'; data?: string }>;
+        __TEST_SESSION_INPUT_EVENTS?: Array<{ sessionId: string; event: 'connect_terminal' | 'send_to_pty'; data?: string; source?: string }>;
       };
       testWindow.__TEST_SESSION_INPUT_EVENTS = testWindow.__TEST_SESSION_INPUT_EVENTS || [];
       testWindow.__TEST_SESSION_INPUT_EVENTS.push({ sessionId: pane.testSessionId, event: 'connect_terminal' });
@@ -294,10 +294,10 @@ export function useGhosttyPaneRuntime(
     if (!pane) return;
     if (import.meta.env.DEV && pane.testSessionId) {
       const testWindow = window as Window & {
-        __TEST_SESSION_INPUT_EVENTS?: Array<{ sessionId: string; event: 'connect_terminal' | 'send_to_pty'; data?: string }>;
+        __TEST_SESSION_INPUT_EVENTS?: Array<{ sessionId: string; event: 'connect_terminal' | 'send_to_pty'; data?: string; source?: string }>;
       };
       testWindow.__TEST_SESSION_INPUT_EVENTS = testWindow.__TEST_SESSION_INPUT_EVENTS || [];
-      testWindow.__TEST_SESSION_INPUT_EVENTS.push({ sessionId: pane.testSessionId, event: 'send_to_pty', data });
+      testWindow.__TEST_SESSION_INPUT_EVENTS.push({ sessionId: pane.testSessionId, event: 'send_to_pty', data, source });
     }
     void ptyWrite({ id: pane.runtimeId, data, ...(source ? { source } : {}) });
   }, [paneFor]);

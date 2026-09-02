@@ -152,7 +152,7 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 	if profile.broadcast {
 		d.broadcastSessionStateChanged(change.sessionID)
 	}
-	d.drainAgentMessagesAfterStateChange(change.sessionID, change.state)
+	d.drainAgentMailboxAfterStateChange(change.sessionID, change.state)
 	return true
 }
 

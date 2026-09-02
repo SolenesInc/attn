@@ -414,7 +414,7 @@ func TestNudgeCountdownReArmsAfterRecentKeystroke(t *testing.T) {
 	d.nudgeFireHook = func(_, a string) { action = a }
 	agentID, inputs := armForTest(t, d)
 
-	d.noteUserInput(agentID, "")
+	d.noteUserInput(agentID, "", []byte("k"))
 	fireNudgeNow(t, d, agentID)
 
 	if action != "rearm" {
@@ -436,8 +436,8 @@ func TestNudgeKeystrokeGuardIgnoresAutomation(t *testing.T) {
 	d.nudgeFireHook = func(_, a string) { action = a }
 	agentID, inputs := armForTest(t, d)
 
-	d.noteUserInput(agentID, "automation")
-	d.noteUserInput(agentID, "attach_replay")
+	d.noteUserInput(agentID, "automation", []byte("k"))
+	d.noteUserInput(agentID, "attach_replay", []byte("k"))
 	fireNudgeNow(t, d, agentID)
 
 	if action != "doorbell" {
@@ -461,6 +461,8 @@ func TestHandlePtyInputRecordsKeystrokeForGuard(t *testing.T) {
 		{"automation write", protocol.Ptr("automation"), false},
 		{"attach replay write", protocol.Ptr("attach_replay"), false},
 		{"padded automation is trimmed then ignored", protocol.Ptr("  automation  "), false},
+		{"mouse report tagged by the app", protocol.Ptr("pointer"), false},
+		{"terminal query reply forwarded by the app", protocol.Ptr("response"), false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -491,4 +493,31 @@ func TestStopNudgeCountdownsClearsTimers(t *testing.T) {
 	if currentNudgeTimer(d, agentID) != nil {
 		t.Fatal("stopNudgeCountdowns left a countdown armed")
 	}
+}
+
+func TestNudgeHeldOffByTypingIsResentByTheLane(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d.nudgeWindowOverride = time.Hour
+	t.Cleanup(d.stopNudgeCountdowns)
+	agentID, inputs := armForTest(t, d)
+	quiesceTranscriptWatchers(t, d)
+	synctest.Test(t, func(t *testing.T) {
+		if err := d.writeSessionPTY(agentID, []byte("half written"), "user"); err != nil {
+			t.Fatalf("user input: %v", err)
+		}
+		delivery := maintenanceSessionInput("ticket-nudge", agentID+"/1", agentID, ticketNudgePrompt, sessionInputAtTurnBoundary)
+		delivery.resend = func() { d.deliverNudgeOrReArm(agentID) }
+		if attempt := d.sessionInputs().try(context.Background(), delivery); !sessionInputQuietDeferral(attempt.err) {
+			t.Fatalf("nudge into a typed-in composer = %v, want the quiet-window deferral", attempt.err)
+		}
+		if wasNudged(inputs(agentID)) {
+			t.Fatalf("typed into a composer the user just used: %q", inputs(agentID))
+		}
+
+		time.Sleep(sessionInputQuietWindow)
+		settleResend(t)
+		if !wasNudged(inputs(agentID)) {
+			t.Fatalf("nothing resent the nudge once the composer went quiet: %q", inputs(agentID))
+		}
+	})
 }

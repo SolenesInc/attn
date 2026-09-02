@@ -1,0 +1,3 @@
+kind: internal
+area: agents
+change: Agent notifications share a durable mailbox lifecycle separate from message content.

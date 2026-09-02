@@ -76,6 +76,7 @@
     "real-app:scenario-delegate-workspace-placement": "node scripts/real-app-harness/scenario-delegate-workspace-placement.mjs",
     "real-app:scenario-garden-seed-nudges": "node scripts/real-app-harness/scenario-garden-seed-nudges.mjs",
     "real-app:scenario-garden-seed-read-receipts": "node scripts/real-app-harness/scenario-garden-seed-read-receipts.mjs",
+    "real-app:scenario-peer-message-read-receipts": "node scripts/real-app-harness/scenario-peer-message-read-receipts.mjs",
     "real-app:scenario-garden-seed-reopen": "node scripts/real-app-harness/scenario-garden-seed-reopen.mjs",
     "real-app:scenario-legacy-ticket-recovery": "node scripts/real-app-harness/scenario-legacy-ticket-recovery.mjs",
     "real-app:scenario-agent-queue": "node scripts/real-app-harness/scenario-agent-queue.mjs",

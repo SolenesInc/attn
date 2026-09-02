@@ -783,10 +783,9 @@ model AgentPeekMessage {
   target_session_id: string;    // full id or unique prefix (the short id from `attn agent list`)
 }
 
-// One agent sends another a message. The daemon persists it, composes the
-// attributed prompt, and delivers it into the target's conversation — the
-// sender never touches the target's PTY, so attribution cannot be forged
-// beyond what the sender puts in content.
+// One agent sends another a message. The daemon persists the body and types a
+// content-free doorbell into the target's conversation. The recipient reads
+// the body explicitly with AgentInboxMessage.
 // Exactly one destination: a session (or crew member) by id, or a seed, whose
 // tender the daemon resolves. The caller decides which field it fills — a seed
 // id has a shape the CLI recognizes — so the daemon is handed authority instead
@@ -797,6 +796,21 @@ model AgentMsgMessage {
   target_seed_id?: string;      // deliver to this seed's tender
   source_session_id: string;    // who is speaking; the daemon composes from this
   content: string;
+}
+
+// The recipient reads one notified peer message. Reading is the only proof
+// that advances a peer mailbox item from notified to read.
+model AgentInboxMessage {
+  cmd: "agent_inbox";
+  message_id: string;
+  recipient_session_id: string;
+}
+
+// The sender inspects the durable lifecycle of one peer message.
+model AgentMsgStatusMessage {
+  cmd: "agent_msg_status";
+  message_id: string;
+  sender_session_id: string;
 }
 
 // A Stop is not always terminal: the turn may yield with background work still
@@ -1968,6 +1982,9 @@ model PtyInputMessage {
   cmd: "pty_input";
   id: string;
   data: string;
+  // Who produced these bytes. Absent or "user" is a keystroke and stamps the
+  // daemon's composer clock; "pointer" (mouse reports), "response" (terminal
+  // query replies), "automation" and "attach_replay" do not.
   source?: string;
   // Sparse diagnostic correlation. Absent on nearly every input; when present,
   // the daemon acknowledges after the PTY backend accepts this write.
@@ -5972,6 +5989,8 @@ model Response {
   state_explain_result?: StateExplainResult;
   agent_peek_result?: AgentPeekResult;
   agent_msg_result?: AgentMsgResult;
+  agent_inbox_result?: AgentPeerMessage;
+  agent_msg_status_result?: AgentPeerMessage;
   crew_list_result?: CrewListResult;
   crew_wake_result?: CrewWakeResult;
   crew_sleep_result?: CrewSleepResult;
@@ -6298,12 +6317,11 @@ model CrewUpdatedMessage {
   members: CrewMember[];
 }
 
-// What became of a message. Never a silent drop: a message that could not be
-// typed right now is `queued` and the daemon retries it on the target's next
-// state change, and one the inbound guard turned away is `refused` with the
-// reason. `detail` is the sentence for the sender, presence-specific.
+// What became of a message send. Never a silent drop: a safely placed doorbell
+// is `notified`, one waiting for a safe prompt or an older unread message is
+// `queued`, and one the inbound guard turned away is `refused` with the reason.
 enum AgentMsgStatus {
-  delivered,
+  notified,
   queued,
   refused,
 }
@@ -6313,6 +6331,25 @@ model AgentMsgResult {
   target_session_id: string;
   status: AgentMsgStatus;
   detail: string;
+}
+
+enum AgentMessageState {
+  queued,
+  notified,
+  read,
+}
+
+// The durable peer message returned to its authorized sender or recipient.
+model AgentPeerMessage {
+  message_id: string;
+  sender_session_id: string;
+  sender_label: string;
+  target_session_id: string;
+  content: string;
+  state: AgentMessageState;
+  created_at: string;
+  notified_at?: string;
+  read_at?: string;
 }
 
 model EvidenceExcerpt {

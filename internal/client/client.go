@@ -382,6 +382,34 @@ func (c *Client) AgentMsg(target, sourceSessionID, content string) (*protocol.Ag
 	return resp.AgentMsgResult, nil
 }
 
+func (c *Client) AgentInbox(messageID, recipientSessionID string) (*protocol.AgentPeerMessage, error) {
+	resp, err := c.send(protocol.AgentInboxMessage{
+		Cmd: protocol.CmdAgentInbox, MessageID: messageID,
+		RecipientSessionID: recipientSessionID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.AgentInboxResult == nil {
+		return nil, errors.New("daemon returned no agent inbox result")
+	}
+	return resp.AgentInboxResult, nil
+}
+
+func (c *Client) AgentMsgStatus(messageID, senderSessionID string) (*protocol.AgentPeerMessage, error) {
+	resp, err := c.send(protocol.AgentMsgStatusMessage{
+		Cmd: protocol.CmdAgentMsgStatus, MessageID: messageID,
+		SenderSessionID: senderSessionID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.AgentMsgStatusResult == nil {
+		return nil, errors.New("daemon returned no agent msg status result")
+	}
+	return resp.AgentMsgStatusResult, nil
+}
+
 // StopFacts is what the Stop hook observed about whether the turn finished; the
 // daemon decides what it means. The zero value reads as a terminal stop.
 type StopFacts struct {

@@ -1,0 +1,11 @@
+kind: fixed
+area: agents
+change: >
+  Every automated message held off by the user's typing now lands on its own once
+  the composer has been quiet for 30 seconds, not just peer doorbells: chief
+  nudges, present handbacks, ticket nudges, and the crew's heartbeat, sleep, and
+  context-handoff asks.
+symptom: >
+  A notification sent while the user was typing in the target session was dropped.
+  The crew's sleep and context-handoff asks were the worst of it: the tick had
+  already spent their ask-once guards, so nothing retried them at all.

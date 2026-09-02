@@ -1,0 +1,7 @@
+kind: added
+area: agents
+change: >
+  Peer messages keep their body in the agent mailbox and notify recipients with
+  a content-free doorbell. `attn agent inbox` is the durable read receipt, so
+  the next FIFO notification arrives after the recipient actually reads the
+  message instead of after a harness-specific hook or prompt event.

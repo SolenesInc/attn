@@ -126,6 +126,13 @@ export const scenarioCatalog = [
     timeoutMs: 240_000,
   },
   {
+    id: 'peer-message-read-receipts',
+    runnerId: 'PeerMessageReadReceipts',
+    label: 'Peer message read receipts: agent inbox rearms FIFO notifications without prompt-submit hooks',
+    command: ['pnpm', 'run', 'real-app:scenario-peer-message-read-receipts'],
+    timeoutMs: 240_000,
+  },
+  {
     id: 'garden-seed-reopen',
     runnerId: 'GardenSeedReopen',
     label: 'Garden continuation: a closed tender resumes exactly, then hands the same seed to a new agent',

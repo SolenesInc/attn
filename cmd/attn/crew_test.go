@@ -149,7 +149,7 @@ func TestCrewSleepOutcomeLine_NamesDeliveredQueuedAndAlreadyAsleep(t *testing.T)
 			name: "delivered",
 			result: protocol.CrewSleepResult{
 				Member: "trellis", SessionID: protocol.Ptr("sess-abcdef123456"),
-				DeliveryStatus: protocol.Ptr(protocol.AgentMsgStatusDelivered),
+				DeliveryStatus: protocol.Ptr(protocol.AgentMsgStatusNotified),
 			},
 			want: []string{"Asked Trellis", "sess-abc", "attn handoff --sleep"},
 		},

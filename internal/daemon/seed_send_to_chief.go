@@ -10,7 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/store"
 )
 
 func chiefSeedAssignmentNote(
@@ -66,22 +65,21 @@ func chiefSeedAssignmentPrompt(seedID string) string {
 
 func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID, seedID string) (protocol.AgentMsgStatus, string) {
 	now := time.Now()
-	record := store.AgentMessage{
-		ID: uuid.NewString(), TargetSessionID: chiefSessionID,
-		Content: chiefSeedAssignmentPrompt(seedID), CreatedAt: now.UTC().Format(time.RFC3339),
-	}
-	if err := d.store.EnqueueAgentMessage(record); err != nil {
+	itemID := uuid.NewString()
+	prompt := chiefSeedAssignmentPrompt(seedID)
+	delivery, err := d.store.EnqueueMaintenancePrompt(itemID, chiefSessionID, prompt, now)
+	if err != nil {
 		d.logf("seed send to Chief: queue %s for %s: %v", seedID, chiefSessionID, err)
-		if d.nudgeChiefOfStaff(record.ID, record.Content) {
-			return protocol.AgentMsgStatusDelivered, "delivered to Chief"
+		if d.nudgeChiefOfStaff(itemID, prompt) {
+			return protocol.AgentMsgStatusNotified, "notified Chief"
 		}
 		return protocol.AgentMsgStatusRefused, "Chief now tends the seed, but the direct notification could not be queued; the assignment remains on the seed log"
 	}
-	d.noteQueuedAgentMessage(chiefSessionID)
-	if err := d.deliverAgentMessage(record); err != nil {
+	d.noteQueuedAgentMailboxItem(chiefSessionID)
+	if err := d.deliverAgentMailboxItem(delivery); err != nil {
 		return protocol.AgentMsgStatusQueued, agentMessageQueuedDetail(err)
 	}
-	return protocol.AgentMsgStatusDelivered, "delivered to Chief"
+	return protocol.AgentMsgStatusNotified, "notified Chief"
 }
 
 func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage) (*protocol.SeedSendToChiefResult, error) {

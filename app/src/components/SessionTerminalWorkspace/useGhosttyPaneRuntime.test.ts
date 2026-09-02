@@ -100,10 +100,10 @@ describe('useGhosttyPaneRuntime', () => {
     });
     expect(mockPtyWrite).toHaveBeenCalledWith({ id: 'runtime-1', data: 'hello', source: 'user' });
     expect((window as Window & {
-      __TEST_SESSION_INPUT_EVENTS?: Array<{ sessionId: string; event: string; data?: string }>;
+      __TEST_SESSION_INPUT_EVENTS?: Array<{ sessionId: string; event: string; data?: string; source?: string }>;
     }).__TEST_SESSION_INPUT_EVENTS).toEqual([
       { sessionId: 'session-1', event: 'connect_terminal' },
-      { sessionId: 'session-1', event: 'send_to_pty', data: 'hello' },
+      { sessionId: 'session-1', event: 'send_to_pty', data: 'hello', source: 'user' },
     ]);
   });
 

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -10,9 +11,6 @@ import (
 )
 
 const defaultNudgeCountdownWindow = 30 * time.Second
-
-// Anti-splice guarantee: a session with a genuine keystroke this recent is never doorbelled, or the prompt + Enter splices onto a half-typed line.
-const userInputGuardWindow = 3 * time.Second
 
 // firesAt is stored beside the timer because time.Timer has no deadline accessor.
 type nudgeCountdown struct {
@@ -294,7 +292,7 @@ func (d *Daemon) runNudgeDelivery(sessionID string) string {
 		d.markTicketUnread(sessionID, false)
 		return "drained"
 	}
-	if d.recentUserInput(sessionID, userInputGuardWindow) {
+	if d.recentUserInput(sessionID, sessionInputQuietWindow) {
 		d.nudgeMu.Lock()
 		d.startCountdownLocked(sessionID, d.nudgeWindow())
 		d.nudgeMu.Unlock()
@@ -312,8 +310,12 @@ func (d *Daemon) runNudgeDelivery(sessionID string) string {
 		ticketNudgePrompt,
 		sessionInputAtTurnBoundary,
 	)
+	delivery.resend = func() { d.deliverNudgeOrReArm(sessionID) }
 	attempt := d.sessionInputs().try(context.Background(), delivery)
 	if attempt.err != nil {
+		if sessionInputQuietDeferral(attempt.err) {
+			return "rearm"
+		}
 		d.logf("nudge countdown input %s: %v", sessionID, attempt.err)
 		return "doorbell-error"
 	}
@@ -410,8 +412,8 @@ func (d *Daemon) handleTriggerNudge(msg *protocol.TriggerNudgeMessage) {
 	d.broadcastSessionStateChanged(sessionID)
 }
 
-func (d *Daemon) noteUserInput(sessionID, source string) bool {
-	if sessionID == "" || !isUserKeystrokeSource(source) {
+func (d *Daemon) noteUserInput(sessionID, source string, data []byte) bool {
+	if sessionID == "" || !isComposerKeystroke(source, data) {
 		return false
 	}
 	now := time.Now()
@@ -440,6 +442,13 @@ func (d *Daemon) noteAutoSettleActivity(sessionID string) bool {
 	d.lastAutoSettleActivityAt[sessionID] = time.Now()
 	d.lastInputMu.Unlock()
 	return true
+}
+
+// The composer is empty once a prompt is taken, whatever the clock says.
+func (d *Daemon) forgetUserInput(sessionID string) {
+	d.lastInputMu.Lock()
+	delete(d.lastUserInputAt, sessionID)
+	d.lastInputMu.Unlock()
 }
 
 func (d *Daemon) recentUserInput(sessionID string, within time.Duration) bool {
@@ -492,14 +501,37 @@ func (d *Daemon) settleIfAutoSettleQuiet(sessionID string, within time.Duration)
 	return 0, d.store.SettleTurn(sessionID, time.Now())
 }
 
-// Genuine keystrokes arrive untagged; automation and replay are tagged and excluded, and "user" (insert-reference) counts.
 func isUserKeystrokeSource(source string) bool {
 	switch source {
-	case "automation", "attach_replay":
+	case "automation", "attach_replay", "pointer", "response":
 		return false
 	default:
 		return true
 	}
+}
+
+func isComposerKeystroke(source string, data []byte) bool {
+	return isUserKeystrokeSource(source) && userInputEditsComposer(data)
+}
+
+// Backstop for clients that predate the "pointer" tag: SGR mouse reports and focus reports never edit the composer.
+func userInputEditsComposer(data []byte) bool {
+	rest := data
+	for len(rest) > 0 {
+		switch {
+		case bytes.HasPrefix(rest, []byte("\x1b[<")):
+			end := bytes.IndexAny(rest, "Mm")
+			if end < 0 {
+				return true
+			}
+			rest = rest[end+1:]
+		case bytes.HasPrefix(rest, []byte("\x1b[I")), bytes.HasPrefix(rest, []byte("\x1b[O")):
+			rest = rest[3:]
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 // Takes nudgeMu; callers must not already hold it.

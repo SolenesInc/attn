@@ -187,14 +187,13 @@ type Daemon struct {
 	spawnLocks                        map[string]*spawnLock
 	sessionInputOnce                  sync.Once
 	sessionInputState                 *sessionInputModule
-	agentMessageMu                    sync.Mutex
-	queuedAgentMessages               map[string]bool
-	drainingAgentMessages             map[string]bool
-	agentMessageDeliveries            map[string]*agentMessageDeliveryFlight
+	agentMailboxMu                    sync.Mutex
+	queuedAgentMailboxItems           map[string]bool
+	drainingAgentMailbox              map[string]bool
+	agentMailboxDeliveries            map[string]*agentMailboxDeliveryFlight
 	postInitialPrompt                 map[string]func()
-	agentMessageInitialPrompt         map[string]string
-	agentMessageDrainScheduledHook    func(sessionID string)
-	agentMessageDrainHook             func(sessionID string, delivered int)
+	agentMailboxDrainScheduledHook    func(sessionID string)
+	agentMailboxDrainHook             func(sessionID string, delivered int)
 	crewWakeMu                        sync.Mutex
 	crewExitedMu                      sync.Mutex
 	crewExitedSessions                map[string]string
@@ -809,7 +808,7 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("start event bus: %w", err)
 	}
 	reapedWorkspaceIDs := d.loadWorkspacesFromStore()
-	d.seedQueuedAgentMessages()
+	d.seedQueuedAgentMailboxItems()
 	if d.daemonInstanceID == "" {
 		instanceID, err := enrollment.EnsureDaemonID(d.dataRoot)
 		if err != nil {
@@ -1597,6 +1596,7 @@ func (d *Daemon) Stop() {
 	d.stopNudgeCountdowns()
 	d.pluginDriverSilence().stop()
 	d.stopAutoSettleTimers()
+	d.sessionInputs().stopRetries()
 	if d.ptyBackend != nil {
 		_ = d.ptyBackend.Shutdown(context.Background())
 	}
@@ -2513,6 +2513,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 
 	case protocol.CmdAgentMsg: // wire: agent_msg
 		d.handleAgentMsg(conn, msg.(*protocol.AgentMsgMessage))
+	case protocol.CmdAgentInbox: // wire: agent_inbox
+		d.handleAgentInbox(conn, msg.(*protocol.AgentInboxMessage))
+	case protocol.CmdAgentMsgStatus: // wire: agent_msg_status
+		d.handleAgentMsgStatus(conn, msg.(*protocol.AgentMsgStatusMessage))
 	case protocol.CmdSeedPlant: // wire: seed_plant
 		d.handleSeedPlant(conn, msg.(*protocol.SeedPlantMessage))
 	case protocol.CmdSeedPlot: // wire: seed_plot
@@ -2799,7 +2803,6 @@ func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 		}
 		go d.maybeGenerateSessionTitleFromPrompt(msg.ID, protocol.Deref(msg.Prompt), origin)
 	}
-	d.noteInitialAgentMessageSubmitted(msg.ID, msg.State)
 	d.runPostInitialPrompt(msg.ID, msg.State)
 	d.tracePermissionMode(msg.ID, protocol.Deref(msg.PermissionMode))
 	d.recordReviewerEvidenceFromPermissionMode(msg.ID, protocol.Deref(msg.PermissionMode))

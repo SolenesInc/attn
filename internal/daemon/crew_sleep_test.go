@@ -44,7 +44,7 @@ func TestCrewSleep_DeliversAUserRequestForSleep(t *testing.T) {
 		t.Fatalf("crew sleep: %v", protocol.Deref(resp.Error))
 	}
 	result := resp.CrewSleepResult
-	if result == nil || result.AlreadyAsleep || protocol.Deref(result.DeliveryStatus) != protocol.AgentMsgStatusDelivered {
+	if result == nil || result.AlreadyAsleep || protocol.Deref(result.DeliveryStatus) != protocol.AgentMsgStatusNotified {
 		t.Fatalf("sleep result = %+v, want delivered request", result)
 	}
 	mu.Lock()
@@ -58,7 +58,7 @@ func TestCrewSleep_DeliversAUserRequestForSleep(t *testing.T) {
 	if strings.Contains(text, "another agent, not from your user") {
 		t.Fatalf("user request masqueraded as an agent message: %q", text)
 	}
-	if queued, err := d.store.UndeliveredAgentMessages(woken.SessionID); err != nil || len(queued) != 0 {
+	if queued, err := d.store.QueuedAgentMailboxDeliveries(woken.SessionID); err != nil || len(queued) != 0 {
 		t.Fatalf("queued messages = %v, %v; delivered request must be stamped", queued, err)
 	}
 	if d.store.Get(woken.SessionID) == nil {
@@ -118,7 +118,7 @@ func TestCrewSleep_QueuesUntilAWakingMemberTakesItsFirstPrompt(t *testing.T) {
 	}
 
 	drained := make(chan int, 1)
-	d.agentMessageDrainHook = func(sessionID string, delivered int) {
+	d.agentMailboxDrainHook = func(sessionID string, delivered int) {
 		if sessionID == woken.SessionID {
 			drained <- delivered
 		}
@@ -133,7 +133,7 @@ func TestCrewSleep_QueuesUntilAWakingMemberTakesItsFirstPrompt(t *testing.T) {
 	if !strings.Contains(afterPrompt, "attn handoff --sleep") {
 		t.Fatalf("sleep request did not land after the greeting: %q", afterPrompt)
 	}
-	if queued, err := d.store.UndeliveredAgentMessages(woken.SessionID); err != nil || len(queued) != 0 {
+	if queued, err := d.store.QueuedAgentMailboxDeliveries(woken.SessionID); err != nil || len(queued) != 0 {
 		t.Fatalf("queued messages after first prompt = %v, %v", queued, err)
 	}
 }
