@@ -486,7 +486,6 @@ jobs:
     env:
       ATTN_PROFILE: app-acceptance
       ATTN_HARNESS_PROFILE: app-acceptance
-      ATTN_REAL_APP_ARTIFACTS_DIR: ${{ runner.temp }}/attn-real-app-harness
     steps:
       - uses: actions/checkout@v4
 
@@ -535,6 +534,8 @@ jobs:
           echo "$PWD/plugins/attn-pi/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Run serial matrix
+        env:
+          ATTN_REAL_APP_ARTIFACTS_DIR: ${{ runner.temp }}/attn-real-app-harness
         run: xvfb-run -a -s '-screen 0 1600x1000x24' pnpm --dir app run real-app:serial-matrix
 
       - name: Upload app acceptance evidence
