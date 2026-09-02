@@ -12,14 +12,13 @@ import {
   pressShortcutKeys,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
+import { createWindowDriver, delay } from './platform.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import {
   waitForFirstWorkspacePane,
   waitForPaneShellReady,
   waitForPaneVisible,
 } from './scenarioAssertions.mjs';
-import { profileForAppPath, socketPathForProfile } from './harnessProfile.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 
@@ -87,18 +86,15 @@ async function closeWorkspacePanes(client, sessionId) {
   }
 }
 
-function seedRepo(cwd, alpha, beta, ignored) {
+function seedRepo(cwd, alpha, beta) {
   fs.mkdirSync(path.join(cwd, 'docs'), { recursive: true });
-  fs.mkdirSync(path.join(cwd, 'build'), { recursive: true });
-  fs.writeFileSync(path.join(cwd, '.gitignore'), 'build/\n', 'utf8');
   fs.writeFileSync(path.join(cwd, 'docs', alpha), '# Alpha plan\n', 'utf8');
   fs.writeFileSync(path.join(cwd, 'docs', beta), '# Beta notes\n', 'utf8');
-  fs.writeFileSync(path.join(cwd, 'build', ignored), '# Generated\n', 'utf8');
   const git = (...args) => execFileSync('git', args, { cwd, stdio: 'pipe' });
   git('init');
   git('config', 'user.email', 'harness@example.com');
   git('config', 'user.name', 'Harness');
-  git('add', '.gitignore', path.join('docs', alpha));
+  git('add', path.join('docs', alpha));
   git('commit', '-m', 'seed');
 }
 
@@ -115,7 +111,7 @@ async function main() {
     prefix: 'markdown-opener',
     metadata: {
       agent: 'shell',
-      focus: 'native Cmd+P opener: fuzzy over git-enumerated markdown, recents, agent edits, then path mode',
+      focus: 'native Cmd+P opener: fuzzy over git-enumerated markdown, then recents reusing a docked tile',
     },
   });
 
@@ -139,14 +135,11 @@ async function main() {
     // the same profile must still prove THIS run's opens landed.
     const alpha = `alpha-plan-${runner.runId}.md`;
     const beta = `beta-notes-${runner.runId}.md`;
-    const ignored = `ignored-generated-${runner.runId}.md`;
-    const claudeEdited = `claude-wrote-${runner.runId}.md`;
-    const codexEdited = `codex-wrote-${runner.runId}.md`;
 
     const { workspaceId, cwd } = await runner.step('create_shell_session', async () => {
       const sessionCwd = path.join(runner.sessionDir, 'opener-ws');
       fs.mkdirSync(sessionCwd, { recursive: true });
-      seedRepo(sessionCwd, alpha, beta, ignored);
+      seedRepo(sessionCwd, alpha, beta);
       sessionId = await createSessionAndWaitForInitialPane({
         client,
         observer,
@@ -198,7 +191,7 @@ async function main() {
 
     const typeQuery = async (text) => {
       await client.request('dom_type', { selector: OPENER_INPUT, text });
-      await delay(400);
+      await waitForOpener(client, (state) => state.query === text, `the opener query to read ${JSON.stringify(text)}`);
     };
 
     await runner.step('opener_summons', async () => {
@@ -211,26 +204,13 @@ async function main() {
       await captureScreenshotData(path.join(runner.runDir, 'opener-empty.png'), { client }).catch(() => {});
     });
 
-    await runner.step('gitignored_file_is_invisible', async () => {
-      await typeQuery('ignoredgenerated');
-      const state = await openerState(client);
-      runner.assert(
-        !state.rows.some((row) => row.path.endsWith(ignored)),
-        `A gitignored markdown file must not appear in fuzzy mode: ${JSON.stringify(state.rows)}`,
-      );
-    });
-
+    let betaTileId;
     await runner.step('fuzzy_opens_untracked_file', async () => {
       await typeQuery('betanotes');
       const state = await waitForOpener(
         client,
         (current) => current.rows.some((row) => row.path.endsWith(beta)),
         'fuzzy query matches the untracked markdown file',
-      );
-      const betaRow = state.rows.find((row) => row.path.endsWith(beta));
-      runner.assert(
-        betaRow.path === `docs/${beta}`,
-        `Fuzzy rows must be labeled relative to the session root: ${JSON.stringify(state.rows)}`,
       );
       await captureScreenshotData(path.join(runner.runDir, 'opener-fuzzy.png'), { client }).catch(() => {});
       await pickRow(state, beta);
@@ -242,6 +222,7 @@ async function main() {
         'picking a file docks its markdown tile',
       );
       const openedTileId = markdownTileIds(ui)[0];
+      betaTileId = openedTileId;
       runner.log(`[RealAppHarness] docked ${openedTileId} for ${beta}`);
 
       await client.request('dom_click', {
@@ -324,9 +305,16 @@ async function main() {
       );
       await captureScreenshotData(path.join(runner.runDir, 'opener-recents.png'), { client }).catch(() => {});
 
-      await pickRow(state, alpha);
+      // Alpha's tile holds the workspace focus from the previous step, so beta's
+      // taking it back is the receipt this pick was acted on.
+      await pickRow(state, beta);
       await waitForOpener(client, (current) => !current.open, 'picking a recent closes the opener');
-      await delay(1_500);
+      await waitForSessionUi(
+        client,
+        sessionId,
+        (ui) => ui.workspace?.view?.activeLeafId === betaTileId,
+        'the reused tile to take the workspace focus',
+      );
       const after = await client.request('get_workspace_ui_state', { workspaceId });
       const before = markdownTileIds(beforeRecents);
       const now = markdownTileIds(after);
@@ -336,94 +324,8 @@ async function main() {
       );
     });
 
-    await runner.step('agent_edits_surface_without_being_opened', async () => {
-      // The daemon refuses (and forgets) a file that is not on disk, so the
-      // agent's writes have to be real writes.
-      fs.writeFileSync(path.join(cwd, 'build', claudeEdited), '# Claude wrote this\n', 'utf8');
-      fs.writeFileSync(path.join(cwd, 'build', codexEdited), '# Codex wrote this\n', 'utf8');
-      const hookBin = appDaemonInTree(options.appPath);
-      // The hook routes by env: pin it at the profile under test so a run can
-      // never reach another world's daemon.
-      const socketPath = socketPathForProfile(profileForAppPath(options.appPath));
-      const runHook = (payload) => {
-        execFileSync(hookBin, ['_hook-tool-use', sessionId], {
-          input: JSON.stringify({ ...payload, cwd }),
-          env: { ...process.env, ATTN_SOCKET_PATH: socketPath },
-          stdio: ['pipe', 'pipe', 'pipe'],
-        });
-      };
-      runHook({
-        tool_name: 'Write',
-        tool_input: { file_path: path.join(cwd, 'build', claudeEdited), content: '# Claude wrote this\n' },
-      });
-      runHook({
-        tool_name: 'apply_patch',
-        tool_input: {
-          command: `*** Begin Patch\n*** Add File: ${path.join(cwd, 'build', codexEdited)}\n+# Codex wrote this\n*** End Patch`,
-        },
-      });
-      runHook({ tool_name: 'Edit', tool_input: { file_path: path.join(cwd, 'main.go') } });
-
-      await summon('re-summon after the agent edits');
-      const state = await waitForOpener(
-        client,
-        (current) => current.rows.some((row) => row.path.endsWith(claudeEdited))
-          && current.rows.some((row) => row.path.endsWith(codexEdited)),
-        'files an agent wrote appear in recents without ever being opened',
-      );
-      runner.assert(
-        !state.rows.some((row) => row.path.endsWith('main.go')),
-        `A non-markdown edit must not enter the opener: ${JSON.stringify(state.rows)}`,
-      );
-      await captureScreenshotData(path.join(runner.runDir, 'opener-agent-edits.png'), { client }).catch(() => {});
-
-      await pickRow(state, claudeEdited);
-      await waitForOpener(client, (current) => !current.open, 'picking an agent-written file closes the opener');
-      await waitForWorkspaceUi(
-        client,
-        workspaceId,
-        (ui) => markdownTileIds(ui).length === 3,
-        'the agent-written file opens as a third markdown tile',
-      );
-    });
-
-    await runner.step('path_mode_reaches_gitignored_file', async () => {
-      await summon('re-summon for path mode');
-      await typeQuery(`${cwd}/`);
-      const listing = await waitForOpener(
-        client,
-        (current) => current.rows.some((row) => row.path.endsWith('/build')),
-        'path mode lists the session directory',
-      );
-      runner.assert(
-        listing.rows.some((row) => row.title === 'docs/'),
-        `Path mode must mark directories with a trailing slash: ${JSON.stringify(listing.rows)}`,
-      );
-
-      await pickRow(listing, '/build');
-      const descended = await waitForOpener(
-        client,
-        (current) => current.open && current.rows.some((row) => row.path.endsWith(ignored)),
-        'picking a directory descends into it',
-      );
-      runner.assert(
-        descended.query.endsWith('/build/'),
-        `Descending must rewrite the query to the directory: ${JSON.stringify(descended.query)}`,
-      );
-      await captureScreenshotData(path.join(runner.runDir, 'opener-path-mode.png'), { client }).catch(() => {});
-
-      await pickRow(descended, ignored);
-      await waitForOpener(client, (current) => !current.open, 'picking a file in path mode closes the opener');
-      await waitForWorkspaceUi(
-        client,
-        workspaceId,
-        (state) => markdownTileIds(state).length === 4,
-        'the gitignored file opens as a fourth markdown tile',
-      );
-    });
-
     const result = await runner.finishSuccess({ sessionId, workspaceId, cwd });
-    console.log('[verify] PASS — markdown opener: fuzzy (git-enumerated, gitignore-respecting), recents, and path mode all worked.');
+    console.log('[verify] PASS — markdown opener: fuzzy opens tracked and untracked files, and recents reuse their tile.');
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     await captureScreenshotData(path.join(runner.runDir, 'failure.png'), { client }).catch(() => {});

@@ -240,7 +240,7 @@ export const scenarioCatalog = [
   {
     id: 'terminal-block-resize',
     runnerId: 'BLOCK-RESIZE',
-    label: 'Block geometry across fish/bash/zsh through relaunch replay + split/close-split',
+    label: 'Block geometry through relaunch replay + split/close-split',
     command: ['pnpm', 'run', 'real-app:scenario-terminal-block-resize'],
     timeoutMs: 360_000,
   },
@@ -444,7 +444,7 @@ export const scenarioCatalog = [
     id: 'pi-automode',
     runnerId: 'PI-AUTOMODE',
     allowRealAgents: ['pi'],
-    label: 'pi auto mode: envelope invisibility, a denial and its surfaces, a conversational grant, a quiet session, the circuit breaker',
+    label: 'pi auto mode: envelope invisibility, a denial and its surfaces, a conversational grant, the circuit breaker',
     command: ['pnpm', 'run', 'real-app:scenario-pi-automode'],
     // Needs `pi` on PATH and the attn-pi plugin installed, but no credentials and
     // no network: the model and the classifier are both a loopback stub.

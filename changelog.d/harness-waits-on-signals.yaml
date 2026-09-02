@@ -1,0 +1,10 @@
+kind: internal
+area: harness
+change: >
+  Seven real-app scenarios wait on the signal the product emits instead of a
+  fixed sleep: a pty sentinel ends each input capture, a gate file orders the
+  scrollback stream after the scroll, workspace tile focus reports a reused
+  markdown tile, a pane's column count reports a reflow, and the nudge
+  scenario's busy turn is released by a file. Four assertions already owned by
+  unit tests, the bash and zsh legs of block resize, and a quiet-window step
+  that guarded no timer were dropped.

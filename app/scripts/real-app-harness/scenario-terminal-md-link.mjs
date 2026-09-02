@@ -44,19 +44,6 @@ function windowRelativePoint(pageX, pageY, windowBounds, innerWidth, innerHeight
   };
 }
 
-async function pollUntil(probe, description, timeoutMs = 15_000, intervalMs = 250) {
-  const deadline = Date.now() + timeoutMs;
-  let last = null;
-  for (;;) {
-    last = await probe();
-    if (last.ok) return last.value;
-    if (Date.now() >= deadline) {
-      throw new Error(`Timed out waiting for ${description}. Last: ${JSON.stringify(last.value)}`);
-    }
-    await delay(intervalMs);
-  }
-}
-
 function collectMarkdownTiles(layout) {
   if (!layout?.layout_json) return [];
   let root;
@@ -216,27 +203,38 @@ async function main() {
       return (state.tileIds || []).filter((id) => id.startsWith('tile-markdown'));
     };
 
-    const waitForMarkdownTileCount = (expected, description) => pollUntil(
-      async () => {
-        const ids = await markdownTileIds();
-        return { ok: ids.length === expected, value: ids };
-      },
-      description,
-      15_000,
-    );
+    const markdownTileNodes = () => collectMarkdownTiles(observer.workspacesBySessionId.get(sessionId));
 
-    // Path detection is hover-lazy with an async existence check, so the plain
-    // click also warms it at the exact point the Cmd+click must act on.
-    const cmdClickPath = async (relPath) => {
+    const tileFocused = async (tileId) => {
+      const view = (await client.request('get_session_ui_state', { sessionId }))?.workspace?.view;
+      return view?.activeLeafId === tileId;
+    };
+
+    const pointAtPath = async (relPath) => {
       const target = await clickTargetFor(relPath);
       // The hover detector runs on mousemove; a pointer already parked on the
       // cell (the re-click) would click without ever moving.
       await driver.movePointerInWindow(0.5, 0.9);
       await driver.movePointerInWindow(target.relativeX, target.relativeY);
-      await delay(250);
-      await driver.clickWindow(target.relativeX, target.relativeY);
-      await delay(750);
-      await driver.clickWindow(target.relativeX, target.relativeY, { modifiers: { command: true } });
+      return target;
+    };
+
+    // Path detection is hover-lazy with an async existence check, so a Cmd+click
+    // can land before the link exists; retry until the app acts on it.
+    const cmdClickPath = async (relPath, done, description, timeoutMs = 20_000) => {
+      const deadline = Date.now() + timeoutMs;
+      for (let attempt = 1; ; attempt += 1) {
+        const target = await pointAtPath(relPath);
+        await driver.clickWindow(target.relativeX, target.relativeY, { modifiers: { command: true } });
+        const settleBy = Date.now() + 800;
+        do {
+          if (await done()) return attempt;
+          await delay(100);
+        } while (Date.now() < settleBy);
+        if (Date.now() >= deadline) {
+          throw new Error(`Timed out waiting for ${description} after ${attempt} Cmd+clicks on ${relPath}`);
+        }
+      }
     };
 
     await runner.step('echo_paths', async () => {
@@ -245,35 +243,31 @@ async function main() {
       await driver.activateApp();
     });
 
+    // The negative is settled by the next step: the Cmd+click on alpha travels
+    // the same ordered path, so a tile this click opened would be docked by then.
     await runner.step('plain_click_stays_selection', async () => {
-      const plainTarget = await clickTargetFor('./alpha.md');
+      const plainTarget = await pointAtPath('./beta.md');
       await driver.clickWindow(plainTarget.relativeX, plainTarget.relativeY);
-      await delay(1_500);
-      const tilesAfterPlainClick = await markdownTileIds();
-      runner.assert(
-        tilesAfterPlainClick.length === 0,
-        `Plain click must not open a markdown tile, but found: ${JSON.stringify(tilesAfterPlainClick)}`,
-      );
     });
 
     let alphaTileId;
     let alphaNode;
     await runner.step('cmd_click_alpha_docks_tile', async () => {
-      await cmdClickPath('./alpha.md');
-      const tilesAfterAlpha = await waitForMarkdownTileCount(1, 'alpha markdown tile docked');
+      await cmdClickPath(
+        './alpha.md',
+        () => markdownTileNodes().some((node) => node.tile_params?.endsWith('/alpha.md')),
+        'the alpha markdown tile to dock',
+      );
+      const alphaTiles = markdownTileNodes();
+      runner.assert(
+        alphaTiles.length === 1,
+        `The plain click on ./beta.md must not open a markdown tile; alpha's Cmd+click found ${JSON.stringify(alphaTiles)}`,
+      );
+      const tilesAfterAlpha = await markdownTileIds();
       alphaTileId = tilesAfterAlpha[0];
       runner.assert(
-        /^tile-markdown-[0-9a-f]{16}$/.test(alphaTileId),
-        `Unexpected markdown tile id: ${alphaTileId}`,
-      );
-
-      const alphaTiles = await pollUntil(
-        async () => {
-          const tiles = collectMarkdownTiles(observer.workspacesBySessionId.get(sessionId));
-          return { ok: tiles.length === 1, value: tiles };
-        },
-        'daemon layout carries the alpha markdown tile',
-        15_000,
+        tilesAfterAlpha.length === 1 && /^tile-markdown-[0-9a-f]{16}$/.test(alphaTileId),
+        `Unexpected markdown tile ids: ${JSON.stringify(tilesAfterAlpha)}`,
       );
       alphaNode = alphaTiles[0];
       runner.assert(
@@ -289,21 +283,18 @@ async function main() {
     let betaTileId;
     let betaNode;
     await runner.step('cmd_click_beta_docks_second_tile', async () => {
-      await cmdClickPath('./beta.md');
-      const tilesAfterBeta = await waitForMarkdownTileCount(2, 'beta markdown tile docked alongside alpha');
+      await cmdClickPath(
+        './beta.md',
+        () => markdownTileNodes().some((node) => node.tile_params?.endsWith('/beta.md')),
+        'the beta markdown tile to dock alongside alpha',
+      );
+      const tilesAfterBeta = await markdownTileIds();
       runner.assert(
-        tilesAfterBeta.includes(alphaTileId),
-        `Alpha tile disappeared after opening beta: ${JSON.stringify(tilesAfterBeta)}`,
+        tilesAfterBeta.length === 2 && tilesAfterBeta.includes(alphaTileId),
+        `Beta must dock a second tile beside alpha: ${JSON.stringify(tilesAfterBeta)}`,
       );
       betaTileId = tilesAfterBeta.find((id) => id !== alphaTileId);
-      const betaTiles = await pollUntil(
-        async () => {
-          const tiles = collectMarkdownTiles(observer.workspacesBySessionId.get(sessionId));
-          return { ok: tiles.length === 2, value: tiles };
-        },
-        'daemon layout carries both markdown tiles',
-        15_000,
-      );
+      const betaTiles = markdownTileNodes();
       betaNode = betaTiles.find((node) => node.tile_id === betaTileId);
       runner.assert(
         Boolean(betaNode?.tile_params?.endsWith('/beta.md')),
@@ -316,8 +307,13 @@ async function main() {
     });
 
     await runner.step('cmd_click_alpha_again_reuses_tile', async () => {
-      await cmdClickPath('./alpha.md');
-      await delay(2_000);
+      // Every open focuses the tile it resolved to, so alpha's tile taking focus
+      // back from beta's is the receipt that this click was acted on.
+      await cmdClickPath(
+        './alpha.md',
+        () => tileFocused(alphaTileId),
+        'the re-clicked alpha tile to take focus',
+      );
       const tilesAfterReuse = await markdownTileIds();
       runner.assert(
         tilesAfterReuse.length === 2 && tilesAfterReuse.includes(alphaTileId) && tilesAfterReuse.includes(betaTileId),
