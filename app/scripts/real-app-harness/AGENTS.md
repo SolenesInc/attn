@@ -23,7 +23,9 @@ Run commands from the repository root.
 - Remote target: `attn-remote@orb`; provision with
   `pnpm --dir app run real-app:provision-remote`.
   Provisioning installs the mock-agent command and four tripwire shims; it does
-  not need provider credentials.
+  not need provider credentials. The `tr*` probes are remote by definition; a
+  scenario whose remote leg is optional runs it only once
+  `ATTN_HARNESS_REMOTE_SSH_TARGET` names a target, so it never probes by default.
 
 ## Writing scenarios
 
@@ -130,7 +132,7 @@ fails the scenario on a non-empty ledger and prints the lines.
 - Inspect captured pane text and native screenshots before diagnosing failures.
 - Dark/locked screens block input. Check `pmset -g log | rg "Display is turned"`.
 - Linux input needs `DISPLAY` and `xdotool`; run scenarios through `xvfb-run` in CI.
-  A Linux runner also needs `sqlite3`, `fish`, `bash`, `zsh`, `pi` on PATH, and
+  A Linux runner also needs `sqlite3`, `fish`, `bash`, `zsh`, `pi`, `xclip` on PATH, and
   `attn plugin install-bundled attn-pi` run once in the profile.
 - Use `capture_screenshot_data` for DOM pixels. WebGL terminal evidence needs a
   native window capture (`import -window` on Linux).

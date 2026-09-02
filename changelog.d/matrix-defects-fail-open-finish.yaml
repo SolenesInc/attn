@@ -1,0 +1,11 @@
+kind: internal
+area: harness
+change: >
+  Real-app scenarios await the runner's finishSuccess/finishFailure, so a
+  scenario can no longer print PASS before the agent-tripwire ledger and the
+  armed-daemon receipt are checked, and automode-environment restores the slot
+  it wrote. The terminal context menu is a React component, so it runs on
+  Linux; app-reconcile's remote witness runs only when
+  ATTN_HARNESS_REMOTE_SSH_TARGET names a target, so an ordinary run makes no
+  ssh call; the Linux clipboard reader names a missing xclip; and a change
+  under internal/ that the plugin tests cover now runs the plugins CI job.

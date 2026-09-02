@@ -210,7 +210,6 @@ export const scenarioCatalog = [
   },
   {
     id: 'terminal-context-menu',
-    skipOn: { linux: 'the context menu is a native macOS menu' },
     runnerId: 'TERMINAL-CONTEXT-MENU',
     label: 'Terminal context menu via native right-click + clipboard',
     command: ['pnpm', 'run', 'real-app:scenario-terminal-context-menu'],
@@ -434,8 +433,8 @@ export const scenarioCatalog = [
     runnerId: 'APP-RECONCILE',
     label: 'App reconcile: version move rebuilds, a real trim gap disables loudly, an interrupted rebuild repairs',
     command: ['pnpm', 'run', 'real-app:scenario-app-reconcile'],
-    // Needs bun for `attn app apply`; the Linux witness leg self-skips when the
-    // VM has no attn.
+    // Needs bun for `attn app apply`; the Linux witness leg runs only when
+    // ATTN_HARNESS_REMOTE_SSH_TARGET names a target.
     timeoutMs: 600_000,
   },
   {

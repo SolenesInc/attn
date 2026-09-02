@@ -87,11 +87,18 @@ jobs:
             tauri:
               - 'app/src-tauri/**'
               - '.github/workflows/ci.yml'
+            # The plugin tests read Go sources and fixtures verbatim, and attn-pi
+            # speaks the daemon's plugin-driver and conversation-host wire.
             plugins:
               - 'plugins/**'
               - 'scripts/build-bundled-plugins.sh'
               - '.tool-versions'
               - '.github/workflows/ci.yml'
+              - 'internal/automode/environment.go'
+              - 'internal/hooks/testdata/pull-request-extraction.json'
+              - 'internal/hostsession/**'
+              - 'internal/daemon/host_*'
+              - 'internal/daemon/plugin_*'
             release_preflight:
               - '.github/workflows/ci.yml'
               - '.github/workflows/release.yml'

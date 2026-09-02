@@ -187,10 +187,15 @@ const linuxPlatform = {
     await driver.setWindowBounds({ x: 0, y: 0, width: 1200, height: 800 }, { pid });
   },
 
+  // xclip exits non-zero on an empty selection, so only a missing binary is
+  // reported: a silent '' there reads as "the copy did not happen".
   readClipboard() {
     try {
       return execFileSync('xclip', ['-selection', 'clipboard', '-o'], { encoding: 'utf8' });
-    } catch {
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        throw new Error('xclip is required to read the clipboard on Linux; install it on the runner');
+      }
       return '';
     }
   },

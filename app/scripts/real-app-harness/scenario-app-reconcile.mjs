@@ -7,7 +7,6 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
-  DEFAULT_REMOTE_SSH_TARGET,
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -520,9 +519,14 @@ async function main() {
       }).catch((error) => runner.log('ui:capture_failed', { error: String(error) }));
     });
 
-    if (!skipRemote) {
+    // No run reaches the network unless the operator named a target: an unset
+    // ATTN_HARNESS_REMOTE_SSH_TARGET skips the witness instead of probing a VM.
+    const target = skipRemote ? '' : (process.env.ATTN_HARNESS_REMOTE_SSH_TARGET || '');
+    if (!target) {
+      evidence.linux = { skipped: skipRemote ? '--skip-remote' : 'ATTN_HARNESS_REMOTE_SSH_TARGET is unset' };
+      runner.log('linux:not-requested', evidence.linux);
+    } else {
       await runner.step('linux:reconcile-witness', async () => {
-        const target = process.env.ATTN_HARNESS_REMOTE_SSH_TARGET || DEFAULT_REMOTE_SSH_TARGET;
         // `attn app apply` bundles with bun and a non-interactive ssh shell
         // has not run .bashrc, so ~/.bun/bin goes on PATH explicitly.
         const remoteAttn = process.env.ATTN_HARNESS_REMOTE_ATTN || 'attn';

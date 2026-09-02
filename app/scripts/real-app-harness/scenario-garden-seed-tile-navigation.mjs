@@ -222,11 +222,11 @@ async function main() {
         'Reveal in Garden opens the full Garden at the tile’s current child', { garden });
     });
 
-    const summary = runner.finishSuccess({ crown, children, nestedLeaf });
+    const summary = await runner.finishSuccess({ crown, children, nestedLeaf });
     console.log('[RealAppHarness] Garden seed tile navigation passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { crown, children, nestedLeaf });
+    const summary = await runner.finishFailure(error, { crown, children, nestedLeaf });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

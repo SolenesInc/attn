@@ -89,10 +89,13 @@ async function main() {
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
 
+  // The finally puts the slot back, so the binding outlives the try.
+  let restore = () => {};
+
   try {
     await launchFreshAppAndConnect(client, observer);
     const before = slotValues(readEnv(), SLOT);
-    const restore = () =>
+    restore = () =>
       before.length > 0
         ? runAttn(['automode', 'env', 'set', SLOT, ...before])
         : runAttn(['automode', 'env', 'clear', SLOT]);
@@ -192,11 +195,11 @@ async function main() {
       await hold();
     });
 
-    const summary = runner.finishSuccess({ slot: SLOT });
+    const summary = await runner.finishSuccess({ slot: SLOT });
     console.log('[RealAppHarness] Auto mode environment passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { slot: SLOT });
+    const summary = await runner.finishFailure(error, { slot: SLOT });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
