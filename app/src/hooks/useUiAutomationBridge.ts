@@ -1357,7 +1357,10 @@ function collectGardenUiState() {
     depth: Number.parseInt(step.getAttribute('data-trail-depth') ?? '-1', 10),
     here: false,
   }));
-  const here = panel.querySelector('.garden-head__title')?.textContent?.trim() ?? '';
+  // Root renders no head; the trail nav names the place instead ("The garden").
+  const here = panel.querySelector('.garden-head__title')?.textContent?.trim()
+    || panel.querySelector('.garden-trail__here')?.textContent?.trim()
+    || '';
   if (here) trail.push({ label: here, depth: trail.length, here: true });
   const seeds = Array.from(panel.querySelectorAll('.garden-row')).map((row) => ({
     id: row.querySelector('[data-seed-row]')?.getAttribute('data-seed-row') ?? '',

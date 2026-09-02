@@ -1,0 +1,8 @@
+kind: fixed
+area: harness
+change: >
+  The garden-plot-dispatch scenario had fallen behind the Garden: the bridge
+  read no "here" at the root of the garden, the list row now shows only a
+  done/total counter, and a second dispatch at a tended crown is refused by
+  design. The scenario reads plot progress from the plot head, sends the second
+  delegate to a child, and passes on Linux and macOS.
