@@ -495,8 +495,6 @@ func TestOversizeSocketFrameIsAnsweredNotDropped(t *testing.T) {
 	}
 }
 
-// The target session is waiting for input and the user just typed into it, so
-// a doorbell sent now is held for the quiet window.
 func newHeldDoorbellDaemon(t *testing.T) (*Daemon, *recordingDoorbell, chan int) {
 	t.Helper()
 	d, doorbell := newAgentMsgDaemon(t)
