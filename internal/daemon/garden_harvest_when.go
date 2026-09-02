@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
@@ -11,7 +12,7 @@ import (
 )
 
 // The crew member the daemon acts as when it settles a harvest condition itself.
-const harvestWhenActor = "attn"
+const harvestWhenActor = crew.DaemonID
 
 const (
 	harvestWhenRingArmed   = "armed"

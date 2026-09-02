@@ -134,7 +134,7 @@ func TestSettle_ClosedPullRequestClearsTheConditionAndRings(t *testing.T) {
 	if len(bodies) != 1 || bodies[0] != want {
 		t.Fatalf("the log = %q, want %q", bodies, want)
 	}
-	assertOneSeedBell(t, d, "sess-b", seed.ID, harvestWhenClearedRing)
+	assertOneSeedBell(t, d, "sess-b", seed.ID, harvestWhenRingCleared)
 }
 
 func TestSettle_ARefreshOnlySweepsWhenSomethingMoved(t *testing.T) {
@@ -202,7 +202,7 @@ func TestSettle_AConditionNobodyTracksStaysArmedAndIsSaidOnce(t *testing.T) {
 }
 
 func TestSettle_TheHarvestReasonFitsTheGardensLimit(t *testing.T) {
-	reason := harvestWhenReason(store.SessionPullRequestRecord{
+	reason := harvestWhenMergedReason(store.SessionPullRequestRecord{
 		Number: 113, Title: strings.Repeat("long ", 200),
 	})
 	if n := len([]rune(reason)); n != garden.MaxReasonChars {
@@ -211,7 +211,7 @@ func TestSettle_TheHarvestReasonFitsTheGardensLimit(t *testing.T) {
 	if !strings.HasPrefix(reason, "PR #113 merged: ") || !strings.HasSuffix(reason, "…") {
 		t.Fatalf("the trimmed reason lost its shape: %q", reason)
 	}
-	if bare := harvestWhenReason(store.SessionPullRequestRecord{Number: 7}); bare != "PR #7 merged" {
+	if bare := harvestWhenMergedReason(store.SessionPullRequestRecord{Number: 7}); bare != "PR #7 merged" {
 		t.Fatalf("a row with no title made %q", bare)
 	}
 }

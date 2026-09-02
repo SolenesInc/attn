@@ -3,15 +3,12 @@ package daemon
 import (
 	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
-	"github.com/victorarias/attn/internal/store"
 )
 
-const harvestWhenClearedRing = "harvest-on-merge cleared"
 
 // Every armed seed whose pull request has finished: a merge harvests the seed,
 // a close without merging clears the condition and rings whoever watches.
@@ -32,18 +29,18 @@ func (d *Daemon) settleHarvestConditions() (harvested, cleared int) {
 		}
 		switch row.State {
 		case sessionPullRequestMerged:
-			if err := d.fulfilHarvestWhen(seed, row); err != nil {
+			if _, _, err := d.fulfilHarvestWhen(seed, row); err != nil {
 				d.logf("harvest-on-merge: harvesting %s on %s: %v", seed.ID, row.PRID, err)
 				continue
 			}
 			harvested++
 		case sessionPullRequestClosed:
 			note := fmt.Sprintf("PR #%d closed without merging; harvest-on-merge cleared", row.Number)
-			if err := d.clearHarvestWhen(seed, note); err != nil {
+			if _, _, err := d.clearHarvestWhen(seed.ID, note, garden.Tender{Member: crew.DaemonID}); err != nil {
 				d.logf("harvest-on-merge: clearing %s on %s: %v", seed.ID, row.PRID, err)
 				continue
 			}
-			d.ringSeedActivity(seed.ID, harvestWhenClearedRing)
+			d.ringSeedActivity(seed.ID, harvestWhenRingCleared)
 			cleared++
 		}
 	}
@@ -91,61 +88,4 @@ func (d *Daemon) reportUntrackedHarvestCondition(seed garden.Seed) {
 	}
 	d.logf("harvest-on-merge: %s waits on %s and no session records that pull request; it stays armed",
 		seed.ID, seed.HarvestWhen.PullRequest)
-}
-
-func (d *Daemon) fulfilHarvestWhen(seed garden.Seed, row store.SessionPullRequestRecord) error {
-	reason := harvestWhenReason(row)
-	// Forced: the merge is the answer whoever holds the seed, and the log records
-	// the takeover.
-	if _, _, _, err := d.applySeedTransitionDetailedAs(seed.ID, garden.VerbHarvest, garden.Ask{
-		Actor:  garden.Tender{Member: crew.DaemonID},
-		Reason: reason,
-		Force:  true,
-	}, "", d.sessionExists); err != nil {
-		return err
-	}
-	d.mirrorSeedMoveOntoTicket("", seed.ID, garden.VerbHarvest, reason)
-	d.ringSeedActivity(seed.ID, gardenRingEvents[garden.VerbHarvest])
-	return nil
-}
-
-func (d *Daemon) clearHarvestWhen(seed garden.Seed, note string) error {
-	schema, err := d.seedsCollection()
-	if err != nil {
-		return err
-	}
-	current, doc, err := d.readSeed(seed.ID)
-	if err != nil {
-		return err
-	}
-	if current.HarvestWhen == nil {
-		return nil
-	}
-	current.HarvestWhen = nil
-	if _, err := d.writeSeed(*schema, current, doc.Rev, FactGardenHarvestWhenChanged); err != nil {
-		return err
-	}
-	if strings.TrimSpace(note) == "" {
-		return nil
-	}
-	if _, err := d.appendSeedNote(seed.ID, note, "", crew.DaemonID, garden.NoteKindNote, nil); err != nil {
-		d.logf("harvest-on-merge: noting the cleared condition on %s: %v", seed.ID, err)
-	}
-	return nil
-}
-
-// The title is what a reader recognizes, so it is the part that gets trimmed to
-// fit garden's harvest reason limit.
-func harvestWhenReason(row store.SessionPullRequestRecord) string {
-	head := fmt.Sprintf("PR #%d merged", row.Number)
-	title := strings.TrimSpace(row.Title)
-	if title == "" {
-		return head
-	}
-	head += ": "
-	room := garden.MaxReasonChars - utf8.RuneCountInString(head)
-	if utf8.RuneCountInString(title) > room {
-		title = string([]rune(title)[:room-1]) + "…"
-	}
-	return head + title
 }
