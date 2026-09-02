@@ -42,6 +42,7 @@
 - Plant/tend/park/harvest/wither/replant: create/claim/pause/complete/abandon/reopen.
 - Seed states: planted/open, growing/claimed, dormant/paused, harvested/done, withered/abandoned.
 - Seed outcome: completion and required verification defined by the body. Harvest when both are complete.
+- Harvest condition: a seed armed to harvest when a named session pull request merges. The daemon settles it on the pull request refresh; a pull request closed without merging clears the condition instead of closing the seed.
 - Tender: seed claimant; one at a time.
 - Execution: last observed session, native conversation, agent, directory, host, repository, and branch for a seed.
 - Resume: reopen the exact saved conversation and directory. Handover: start a new agent on the same seed, then transfer its tender.
@@ -58,6 +59,7 @@
 - Dispatch-at-plot: delegation bound to an existing seed as its tender.
 - Ticket: archived pre-Garden work item; user tickets and their history remain permanently.
 - Crew member: durable named identity with a charter. Day: its current session.
+- `attn`: reserved member name the daemon takes when it moves a seed by itself, such as fulfilling a harvest condition. No crew home may claim it.
 - Member home: charter/handoff directory. Registry: index of member files. Binding: member's active session.
 - Awareness dirs: working context directories. Priming: launch guidance.
 - Wake: start a day. Sleep request: ask it to file a handoff and stop.
