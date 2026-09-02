@@ -9,7 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 )
 
-
 // Every armed seed whose pull request has finished: a merge harvests the seed,
 // a close without merging clears the condition and rings whoever watches.
 func (d *Daemon) settleHarvestConditions() (harvested, cleared int) {
