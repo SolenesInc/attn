@@ -2820,6 +2820,11 @@ func (d *Daemon) persistResumeSessionID(sessionID, resumeSessionID string) {
 }
 
 func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
+	reportedTranscriptPath := strings.TrimSpace(msg.TranscriptPath)
+	msg.TranscriptPath = d.resolveStopTranscriptPath(d.store.Get(msg.ID), reportedTranscriptPath)
+	if reportedTranscriptPath != "" && msg.TranscriptPath != reportedTranscriptPath {
+		d.logf("handleStop: ignored transcript path for session=%s: reported=%s bound=%s", msg.ID, reportedTranscriptPath, msg.TranscriptPath)
+	}
 	d.logf("handleStop: session=%s, transcript_path=%s", msg.ID, msg.TranscriptPath)
 
 	relaxBackgroundWork := d.isChiefOfStaffSession(msg.ID)
@@ -2885,6 +2890,16 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 
 	go d.classifySessionState(msg.ID, msg.TranscriptPath)
 	go d.maybeGenerateSessionTitle(msg.ID, msg.TranscriptPath)
+}
+
+func (d *Daemon) resolveStopTranscriptPath(session *protocol.Session, reported string) string {
+	if exact := d.resolveTranscriptPathForSession(session, ""); exact != "" {
+		return exact
+	}
+	if session != nil && strings.TrimSpace(d.store.GetSessionTranscriptPath(session.ID)) != "" {
+		return ""
+	}
+	return strings.TrimSpace(reported)
 }
 
 func (d *Daemon) resolveTranscriptPathForSession(session *protocol.Session, transcriptPath string) string {

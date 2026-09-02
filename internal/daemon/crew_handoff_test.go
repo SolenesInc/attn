@@ -250,6 +250,16 @@ func TestCrewHandoff_FilesTheLetterAndTurnsTheDayOver(t *testing.T) {
 	}
 	if successor.InitialPromptFile == "" {
 		t.Error("the successor launched with no prompt; a woken member must be asked to pick the thread up")
+	} else {
+		prompt, err := os.ReadFile(successor.InitialPromptFile)
+		if err != nil {
+			t.Fatalf("read successor prompt: %v", err)
+		}
+		for _, want := range []string{"pending user exchange", "continue that exchange directly", "Do not introduce yourself"} {
+			if !strings.Contains(string(prompt), want) {
+				t.Errorf("the successor prompt does not contain %q: %q", want, prompt)
+			}
+		}
 	}
 }
 

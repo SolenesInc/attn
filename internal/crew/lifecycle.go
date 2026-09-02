@@ -14,26 +14,15 @@ type CacheState struct {
 
 func (c CacheState) Remaining() time.Duration { return c.TTL - c.Age }
 
-type ContextPressure struct {
-	Tokens int64
-	Budget int64
-}
-
-func (c ContextPressure) Full() bool {
-	return c.Tokens > 0 && c.Budget > 0 && c.Tokens >= c.Budget
-}
-
 type Signals struct {
-	AwayFor               time.Duration
-	AwayLimit             time.Duration
-	Cache                 CacheState
-	Lead                  time.Duration
-	Reachable             bool
-	MidTurn               bool
-	Context               ContextPressure
-	HeartbeatEnabled      bool
-	AutoSleepEnabled      bool
-	ContextHandoffEnabled bool
+	AwayFor          time.Duration
+	AwayLimit        time.Duration
+	Cache            CacheState
+	Lead             time.Duration
+	Reachable        bool
+	MidTurn          bool
+	HeartbeatEnabled bool
+	AutoSleepEnabled bool
 }
 
 type Action int
@@ -42,7 +31,6 @@ const (
 	ActionNone Action = iota
 	ActionHeartbeat
 	ActionSleep
-	ActionContextHandoff
 )
 
 func (a Action) String() string {
@@ -51,8 +39,6 @@ func (a Action) String() string {
 		return "heartbeat"
 	case ActionSleep:
 		return "sleep"
-	case ActionContextHandoff:
-		return "context_handoff"
 	default:
 		return "none"
 	}
@@ -61,9 +47,6 @@ func (a Action) String() string {
 func Decide(s Signals) Action {
 	if !s.Reachable {
 		return ActionNone
-	}
-	if s.ContextHandoffEnabled && s.Context.Full() {
-		return ActionContextHandoff
 	}
 	if s.MidTurn {
 		return ActionNone

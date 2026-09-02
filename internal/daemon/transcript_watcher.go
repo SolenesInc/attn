@@ -37,7 +37,6 @@ type transcriptWatcher struct {
 	detail         string
 	transcriptPath string
 	window         *transcript.AssistantWindow
-	occupancy      *transcript.ContextObservation
 	sessionState   protocol.SessionState
 }
 
@@ -102,27 +101,9 @@ func (w *transcriptWatcher) resetSource(status protocol.SessionMessageWindowStat
 	w.detail = detail
 	w.transcriptPath = path
 	w.window = newAnnotatableWindow()
-	// A transcript attn can no longer vouch for cannot vouch for its context either:
-	// keeping the reading risks ending a member's day on a number from another file.
-	w.occupancy = nil
 	if omittedPrefix {
 		w.window.MarkPrefixOmitted()
 	}
-}
-
-func (w *transcriptWatcher) observeOccupancy(occupancy transcript.ContextObservation) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.occupancy = &occupancy
-}
-
-func (w *transcriptWatcher) contextOccupancy() (transcript.ContextObservation, bool) {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	if w.occupancy == nil {
-		return transcript.ContextObservation{}, false
-	}
-	return *w.occupancy, true
 }
 
 func (w *transcriptWatcher) applyEvents(events []transcript.Event) bool {
@@ -467,16 +448,6 @@ func (d *Daemon) assistantWindow(sessionID string, agent protocol.SessionAgent) 
 	return watcher.snapshot(), true
 }
 
-func (d *Daemon) sessionContextOccupancy(sessionID string) (transcript.ContextObservation, bool) {
-	d.watchersMu.Lock()
-	watcher := d.transcriptWatch[sessionID]
-	d.watchersMu.Unlock()
-	if watcher == nil {
-		return transcript.ContextObservation{}, false
-	}
-	return watcher.contextOccupancy()
-}
-
 func (d *Daemon) liveTranscriptPath(sessionID string, agent protocol.SessionAgent) string {
 	d.watchersMu.Lock()
 	watcher := d.transcriptWatch[sessionID]
@@ -615,10 +586,6 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript could not be read", false)
 				d.publishFact(FactSessionAssistantWindowChanged, w.sessionID, nil)
 				return
-			}
-
-			if batch.Context != nil {
-				w.observeOccupancy(*batch.Context)
 			}
 
 			for _, record := range batch.Records {

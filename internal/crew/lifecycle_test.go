@@ -18,10 +18,8 @@ func TestDecide(t *testing.T) {
 
 	base := Signals{
 		AwayLimit: limit, Lead: lead, Reachable: true,
-		HeartbeatEnabled: true, AutoSleepEnabled: true, ContextHandoffEnabled: true,
+		HeartbeatEnabled: true, AutoSleepEnabled: true,
 	}
-	full := ContextPressure{Tokens: 160000, Budget: 160000}
-	roomy := ContextPressure{Tokens: 40000, Budget: 160000}
 	with := func(mutate func(*Signals)) Signals {
 		s := base
 		mutate(&s)
@@ -94,31 +92,6 @@ func TestDecide(t *testing.T) {
 			want:    ActionNone,
 		},
 		{
-			name:    "a full context ends the day with the user watching and the cache warm",
-			signals: with(func(s *Signals) { s.Cache = warm; s.Context = full }),
-			want:    ActionContextHandoff,
-		},
-		{
-			name:    "a full context outranks the heartbeat its cache would have earned",
-			signals: with(func(s *Signals) { s.Cache = expiring; s.Context = full }),
-			want:    ActionContextHandoff,
-		},
-		{
-			name:    "a context with room left decides nothing on its own",
-			signals: with(func(s *Signals) { s.Cache = warm; s.Context = roomy }),
-			want:    ActionNone,
-		},
-		{
-			name:    "an unreachable session is not asked to close a full context",
-			signals: with(func(s *Signals) { s.Cache = warm; s.Context = full; s.Reachable = false }),
-			want:    ActionNone,
-		},
-		{
-			name:    "a full context is asked mid-turn",
-			signals: with(func(s *Signals) { s.Cache = warm; s.Context = full; s.MidTurn = true }),
-			want:    ActionContextHandoff,
-		},
-		{
 			name:    "a lapsing cache waits for the turn to end",
 			signals: with(func(s *Signals) { s.Cache = expiring; s.MidTurn = true }),
 			want:    ActionNone,
@@ -126,21 +99,6 @@ func TestDecide(t *testing.T) {
 		{
 			name:    "an absence waits for the turn to end",
 			signals: with(func(s *Signals) { s.Cache = expiring; s.AwayFor = 3 * time.Hour; s.MidTurn = true }),
-			want:    ActionNone,
-		},
-		{
-			name:    "the context half off leaves a full context alone",
-			signals: with(func(s *Signals) { s.Cache = warm; s.Context = full; s.ContextHandoffEnabled = false }),
-			want:    ActionNone,
-		},
-		{
-			name:    "the context half off does not become a heartbeat",
-			signals: with(func(s *Signals) { s.Cache = expiring; s.Context = full; s.ContextHandoffEnabled = false }),
-			want:    ActionHeartbeat,
-		},
-		{
-			name:    "a budget attn could not resolve never reads as full",
-			signals: with(func(s *Signals) { s.Cache = warm; s.Context = ContextPressure{Tokens: 900000} }),
 			want:    ActionNone,
 		},
 	}
