@@ -502,6 +502,49 @@ func TestSessionInput_MouseReportsDoNotGuardTheComposer(t *testing.T) {
 	}
 }
 
+// X10 mouse reports and terminal query replies are shaped like typing; only the producer's tag tells them apart.
+func TestSessionInput_TaggedPointerAndResponseDoNotGuardTheComposer(t *testing.T) {
+	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
+	lane := d.sessionInputs().lane(sessionID)
+
+	for _, tagged := range []struct {
+		data   string
+		source string
+	}{
+		{"\x1b[M !!", "pointer"},
+		{"\x1b[<0;1;1M", "pointer"},
+		{"\x1b[0n", "response"},
+	} {
+		if err := d.writeSessionPTY(sessionID, []byte(tagged.data), tagged.source); err != nil {
+			t.Fatalf("%s input: %v", tagged.source, err)
+		}
+	}
+	lane.mu.Lock()
+	generation := lane.userGeneration
+	lane.mu.Unlock()
+	if generation != 0 {
+		t.Fatalf("lane user generation = %d, want 0 (tagged input is not a keystroke)", generation)
+	}
+
+	delivery := maintenanceSessionInput("crew-heartbeat", "after-tagged", sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
+	if attempt := d.sessionInputs().try(context.Background(), delivery); attempt.err != nil {
+		t.Fatalf("tagged pointer/response input guarded the composer: %v", attempt.err)
+	}
+}
+
+// The same bytes untagged are indistinguishable from typing, so they must still guard.
+func TestSessionInput_UntaggedX10MouseReportStillGuardsTheComposer(t *testing.T) {
+	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
+	if err := d.writeSessionPTY(sessionID, []byte("\x1b[M !!"), "user"); err != nil {
+		t.Fatalf("mouse input: %v", err)
+	}
+	delivery := maintenanceSessionInput("crew-heartbeat", "after-x10", sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
+	attempt := d.sessionInputs().try(context.Background(), delivery)
+	if !errors.Is(attempt.err, errSessionInputComposerDirty) {
+		t.Fatalf("untagged X10 report error = %v, want the composer-dirty deferral", attempt.err)
+	}
+}
+
 func TestSessionInput_QuietWindowReleasesTheComposerWithoutAPrompt(t *testing.T) {
 	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
 	synctest.Test(t, func(t *testing.T) {

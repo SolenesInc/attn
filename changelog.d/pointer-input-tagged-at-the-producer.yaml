@@ -1,0 +1,9 @@
+kind: fixed
+area: agents
+change: >
+  The app marks mouse reports and terminal query replies as what they are when it
+  writes them to a session, so no shape of them can be mistaken for typing.
+symptom: >
+  Scrolling a pane whose TUI asked for the older X10 mouse encoding, or a program
+  answering a terminal capability query, held off a queued seed notification as if
+  the user were mid-prompt.

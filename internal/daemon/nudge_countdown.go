@@ -497,10 +497,10 @@ func (d *Daemon) settleIfAutoSettleQuiet(sessionID string, within time.Duration)
 	return 0, d.store.SettleTurn(sessionID, time.Now())
 }
 
-// Genuine keystrokes arrive untagged; automation and replay are tagged and excluded, and "user" (insert-reference) counts.
+// Genuine keystrokes arrive untagged or as "user"; every other producer tags what it sends and is excluded.
 func isUserKeystrokeSource(source string) bool {
 	switch source {
-	case "automation", "attach_replay":
+	case "automation", "attach_replay", "pointer", "response":
 		return false
 	default:
 		return true
@@ -511,7 +511,7 @@ func isComposerKeystroke(source string, data []byte) bool {
 	return isUserKeystrokeSource(source) && userInputEditsComposer(data)
 }
 
-// SGR mouse reports and focus reports never edit the composer.
+// Backstop for clients that predate the "pointer" tag: SGR mouse reports and focus reports never edit the composer.
 func userInputEditsComposer(data []byte) bool {
 	rest := data
 	for len(rest) > 0 {

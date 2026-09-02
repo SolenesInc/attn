@@ -468,7 +468,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
 declare global {
   interface Window {
-    __TEST_GET_SESSION_INPUT_EVENTS?: (sessionId: string) => Array<{ event: 'connect_terminal' | 'send_to_pty'; data?: string }>;
+    __TEST_GET_SESSION_INPUT_EVENTS?: (sessionId: string) => Array<{ event: 'connect_terminal' | 'send_to_pty'; data?: string; source?: string }>;
   }
 }
 
@@ -513,8 +513,8 @@ if (import.meta.env.DEV) {
 
   window.__TEST_GET_SESSION_INPUT_EVENTS = (sessionId: string) =>
     ((window as Window & {
-      __TEST_SESSION_INPUT_EVENTS?: Array<{ sessionId: string; event: 'connect_terminal' | 'send_to_pty'; data?: string }>;
+      __TEST_SESSION_INPUT_EVENTS?: Array<{ sessionId: string; event: 'connect_terminal' | 'send_to_pty'; data?: string; source?: string }>;
     }).__TEST_SESSION_INPUT_EVENTS || [])
       .filter((entry) => entry.sessionId === sessionId)
-      .map(({ event, data }) => ({ event, data }));
+      .map(({ event, data, source }) => ({ event, data, source }));
 }

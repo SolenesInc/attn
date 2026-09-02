@@ -726,6 +726,35 @@ test.describe('Ghostty terminal interactions', () => {
     expect(reports.filter((data) => /^\u001b\[<3;\d+;\d+m$/.test(data))).toHaveLength(2);
   });
 
+  test('tags mouse reports as pointer input and keystrokes as user input', async ({ page, daemon }) => {
+    const sessionId = 's-tagged-pointer-input';
+    const terminal = await openTerminalSession(page, daemon, sessionId);
+    await writeTerminalOutput(
+      page,
+      sessionId,
+      '\u001b[2J\u001b[H\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1006htracked mouse',
+    );
+
+    const bounds = await terminal.boundingBox();
+    expect(bounds).not.toBeNull();
+    await page.mouse.move(bounds!.x + 40, bounds!.y + 8);
+    await page.mouse.down();
+    await page.mouse.up();
+    await terminal.focus();
+    await page.keyboard.press('x');
+
+    const writes = await page.evaluate(
+      (id) => (window.__TEST_GET_SESSION_INPUT_EVENTS?.(id) ?? [])
+        .filter((event) => event.event === 'send_to_pty')
+        .map((event) => ({ data: event.data, source: event.source })),
+      sessionId,
+    );
+    const mouseReports = writes.filter((write) => /^\u001b\[<\d+;\d+;\d+[Mm]$/.test(write.data ?? ''));
+    expect(mouseReports.length).toBeGreaterThan(0);
+    expect(mouseReports.every((report) => report.source === 'pointer')).toBe(true);
+    expect(writes.filter((write) => write.data === 'x').map((write) => write.source)).toEqual(['user']);
+  });
+
   test('forwards screenshot paste triggers from ctrl+v and command paste', async ({ page, daemon }) => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
