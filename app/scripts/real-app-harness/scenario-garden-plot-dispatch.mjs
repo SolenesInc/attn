@@ -214,34 +214,47 @@ async function main() {
 
     await runner.step('the_plot_drains_live', async () => {
       const [first, , sequenced] = children;
+      const inside = await client.request('garden_open_plot', { seedId: crown });
+      runner.assert(inside.crown.includes('0/3 done'), 'the plot head starts with nothing done', { head: inside.crown });
       await runInPane(client, pane, `attn seed tend ${first} --session ${delegated}`, 'is growing');
       const growing = await client.request('garden_get_state', {});
-      const growingRow = growing.seeds.find((seed) => seed.id === crown);
-      runner.assert(growingRow.plot.includes('1 growing'),
-        'the panel shows the plot moving without anybody refreshing it', { row: growingRow });
+      runner.assert(growing.crown.includes('1 growing'),
+        'the panel shows the plot moving without anybody refreshing it', { head: growing.crown });
       await pace();
 
       await runInPane(client, pane,
         `attn seed harvest ${first} -m "the first parallel step is done" --session ${delegated}`, 'is harvested');
       const drained = await client.request('garden_get_state', {});
-      const drainedRow = drained.seeds.find((seed) => seed.id === crown);
-      runner.assert(drainedRow.plot.includes('1/3 done'),
-        'harvesting a child drains the plot on screen', { row: drainedRow });
+      runner.assert(drained.crown.includes('1/3 done'),
+        'harvesting a child drains the plot on screen', { head: drained.crown });
       const freed = await runInPane(client, pane, `attn seed ready --session ${delegated}`, 'ready in the plot under');
       runner.assert(saw(freed, sequenced),
         'harvesting the blocker freed the sequenced step', { freed, sequenced });
-      runner.assert(drainedRow.plot.includes('2 ready') && !drainedRow.plot.includes('blocked'),
-        'the freed step is what the plot counts as ready, with nothing blocked left', { row: drainedRow });
+      runner.assert(drained.crown.includes('2 ready') && !drained.crown.includes('blocked'),
+        'the freed step is what the plot counts as ready, with nothing blocked left', { head: drained.crown });
+      const back = await client.request('garden_climb_to', { depth: 0 });
+      const drainedRow = back.seeds.find((seed) => seed.id === crown);
+      runner.assert(Boolean(drainedRow?.plot.startsWith('1/3')),
+        'the list row counts the harvest too', { row: drainedRow });
       runner.writeText('ready-after-harvest.txt', freed + '\n');
       await pace();
     });
 
     await runner.step('two_delegates_share_one_plot', async () => {
+      const [, parallel, sequenced] = children;
       const known = new Set(observer.sessionsById.keys());
+      const refusedCrown = await runInPane(client, pane,
+        `attn delegate --agent shell --model none --no-worktree --source-session ${pane.sessionId} ` +
+          `--plot ${crown} --name plotdel2 --brief "Tend the plot you were dispatched at."`, 'one tender at a time');
+      runner.assert(saw(refusedCrown, `${crown} is being tended by ${delegated}`),
+        'dispatching at a tended crown is refused and names its tender', { refusedCrown });
+      runner.assert(observer.sessionsById.size === known.size,
+        'the refused dispatch started no session', { sessions: [...observer.sessionsById.keys()] });
+
       await client.request('write_pane', {
         ...pane,
         text: `attn delegate --agent shell --model none --no-worktree --source-session ${pane.sessionId} ` +
-          `--plot ${crown} --name plotdel2 --brief "Tend the plot you were dispatched at."`,
+          `--plot ${parallel} --name plotdel2 --brief "Tend the seed you were dispatched at."`,
       });
       await observer.waitFor(() => {
         second = [...observer.sessionsById.keys()].find((id) => !known.has(id)) ?? null;
@@ -250,22 +263,20 @@ async function main() {
       await client.request('select_session', { sessionId: pane.sessionId });
       await runInPane(client, pane, 'true', '');
 
-      const [, parallel, sequenced] = children;
-      const offered = await runInPane(client, pane, `attn seed ready --session ${second}`, 'ready in the plot under');
-      runner.assert(saw(offered, parallel) && saw(offered, sequenced),
-        'the second delegate is offered the same plot', { offered });
-      await runInPane(client, pane, `attn seed tend ${parallel} --session ${second}`, 'is growing');
+      const offered = await runInPane(client, pane, `attn seed ready --all --session ${second}`, 'ready in the garden');
+      runner.assert(saw(offered, sequenced) && !saw(offered, parallel),
+        'the second delegate already holds its seed and sees the rest of the plot', { offered });
       await runInPane(client, pane, `attn seed tend ${sequenced} --session ${delegated}`, 'is growing');
 
       const refused = await runInPane(client, pane,
-        `attn seed tend ${parallel} --session ${delegated}`, 'one tender at a time');
-      runner.assert(saw(refused, `${parallel} is being tended by`),
+        `attn seed tend ${parallel} --session ${delegated}`, 'takes it from them');
+      runner.assert(saw(refused, `${parallel} is being tended by ${second}`),
         'a second claim on one seed is refused and names who holds it', { refused });
 
       const drained = await runInPane(client, pane, `attn seed ready --session ${delegated}`, 'in the plot under');
       runner.assert(saw(drained, `nothing is ready in the plot under ${crown}`),
-        'the two claims emptied the plot’s ready list between them', { drained });
-      runner.writeText('two-delegates.txt', drained + '\n');
+        'the two claims emptied the plot\u2019s ready list between them', { drained });
+      runner.writeText('two-delegates.txt', refusedCrown + '\n' + drained + '\n');
     });
 
     await runner.step('a_fresh_session_reorients_from_ready_alone', async () => {
