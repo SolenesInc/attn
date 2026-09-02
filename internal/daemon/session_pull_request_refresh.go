@@ -136,8 +136,6 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 			}
 		})
 	}
-	// A pull request only reaches merged or closed through a change here, so a tick
-	// that moved nothing has no armed seed to settle.
 	if changed > 0 {
 		d.settleHarvestConditions()
 	}

@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
@@ -431,7 +432,7 @@ func TestAMergedPullRequestHarvestsAnArmedSeedAsAttn(t *testing.T) {
 	if !ok {
 		t.Fatalf("the merged row went missing")
 	}
-	harvested, _, err := d.fulfilHarvestWhen(armed, merged)
+	harvested, _, err := d.fulfilHarvestWhen(armed, merged, 0)
 	if err != nil {
 		t.Fatalf("fulfil: %v", err)
 	}
@@ -499,5 +500,59 @@ func TestTheLinesASeedGetsAboutItsPullRequest(t *testing.T) {
 	}
 	if got := harvestWhenClosedNote(rec); got != "PR #71 closed without merging; harvest-on-merge cleared" {
 		t.Fatalf("the closed line reads %q", got)
+	}
+}
+
+func TestAMergeThatLandsDuringArmingStillHarvests(t *testing.T) {
+	d := newGardenDaemon(t)
+	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "raced by the refresh"})
+	rec := recordPullRequest(t, d, "sess-a", "https://github.com/victorarias/attn/pull/71")
+	if resp := armWhenMerged(t, d, "sess-a", seed.ID, rec.URL); !resp.Ok {
+		t.Fatalf("arm: %v", protocol.Deref(resp.Error))
+	}
+	armed, doc, err := d.readSeed(seed.ID)
+	if err != nil {
+		t.Fatalf("read %s: %v", seed.ID, err)
+	}
+	settlePullRequest(t, d, rec.PRID, sessionPullRequestMerged, "landed between the check and the commit")
+
+	harvested, _, err := d.settleFreshlyArmed(armed, doc, "sess-a")
+	if err != nil {
+		t.Fatalf("settle after arming: %v", err)
+	}
+	if harvested.Status != garden.StatusHarvested || harvested.HarvestWhen != nil {
+		t.Fatalf("the merge that landed during arming was missed: %+v", harvested)
+	}
+}
+
+func TestSettlementIsBoundToTheConditionItObserved(t *testing.T) {
+	d := newGardenDaemon(t)
+	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "cleared under the sweep"})
+	rec := recordPullRequest(t, d, "sess-a", "https://github.com/victorarias/attn/pull/71")
+	if resp := armWhenMerged(t, d, "sess-a", seed.ID, rec.URL); !resp.Ok {
+		t.Fatalf("arm: %v", protocol.Deref(resp.Error))
+	}
+	observed, err := d.armedSeeds()
+	if err != nil || len(observed) != 1 {
+		t.Fatalf("armed seeds = %+v, %v", observed, err)
+	}
+	if resp := disarm(t, d, "sess-a", seed.ID); !resp.Ok {
+		t.Fatalf("clear: %v", protocol.Deref(resp.Error))
+	}
+	settlePullRequest(t, d, rec.PRID, sessionPullRequestMerged, "merged after the clear")
+	merged, _ := d.store.SessionPullRequestByID(rec.PRID)
+
+	if _, _, err := d.fulfilHarvestWhen(observed[0].seed, merged, observed[0].rev); err == nil {
+		t.Fatalf("a harvest pinned to a cleared condition went through")
+	}
+	if _, _, err := d.clearHarvestWhen(seed.ID, rec.PRID, observed[0].rev, "stale", garden.Tender{Member: crew.DaemonID}); err == nil {
+		t.Fatalf("a clear pinned to a cleared condition went through")
+	}
+	stored, _, err := d.readSeed(seed.ID)
+	if err != nil {
+		t.Fatalf("read %s: %v", seed.ID, err)
+	}
+	if stored.Status != garden.StatusPlanted {
+		t.Fatalf("the cleared seed was moved to %q by a stale settlement", stored.Status)
 	}
 }

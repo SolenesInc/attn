@@ -11,7 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// The crew member the daemon acts as when it settles a harvest condition itself.
 const harvestWhenActor = crew.DaemonID
 
 const (
@@ -21,8 +20,6 @@ const (
 
 const harvestWhenClearedNote = "harvest-on-merge cleared"
 
-// A move carries the harvest condition when it arms one or drops one; both are
-// halves of `attn seed harvest`, and neither is an ordinary transition.
 func harvestWhenRequested(msg *protocol.SeedTransitionMessage) bool {
 	return msg.WhenMerged != nil || protocol.Deref(msg.ClearHarvestWhen)
 }
@@ -69,7 +66,7 @@ func (d *Daemon) armHarvestWhenMerged(
 		return garden.Seed{}, docstore.Document{}, err
 	}
 	if rec.State == sessionPullRequestMerged {
-		return d.fulfilHarvestWhen(seed, rec, sessionID)
+		return d.fulfilHarvestWhen(seed, rec, 0, sessionID)
 	}
 	if rec.State == sessionPullRequestClosed {
 		return garden.Seed{}, docstore.Document{}, fmt.Errorf(
@@ -91,13 +88,15 @@ func (d *Daemon) armHarvestWhenMerged(
 		return garden.Seed{}, docstore.Document{}, err
 	}
 	seedID = seed.ID
-	// A conflict means the seed moved between read and write; re-reading turns a
-	// lost race into the honest answer. Tripwire: two agents contending is one retry.
 	const attempts = 3
 	for range attempts {
 		seed, doc, err := d.readSeed(seedID)
 		if err != nil {
 			return garden.Seed{}, docstore.Document{}, err
+		}
+		if garden.Closed(seed.Status) {
+			return garden.Seed{}, docstore.Document{}, fmt.Errorf(
+				"%s is %s and waits on nothing; replant it first: attn seed replant %s", seed.ID, seed.Status, seed.ID)
 		}
 		next := seed
 		next.HarvestWhen = &condition
@@ -107,7 +106,6 @@ func (d *Daemon) armHarvestWhenMerged(
 			if held := seed.Tender(); ask.Force && held.Holds(d.sessionExists) && !held.Is(ask.Actor) {
 				displaced = &held
 			}
-			// The claim has to go: nobody is working a seed that is waiting on a merge.
 			next, err = garden.Transition(next, garden.VerbPark, garden.Ask{Actor: ask.Actor, Force: ask.Force}, d.sessionExists)
 			if err != nil {
 				return garden.Seed{}, docstore.Document{}, err
@@ -140,23 +138,46 @@ func (d *Daemon) armHarvestWhenMerged(
 			d.mirrorSeedMoveOntoTicket(sessionID, seed.ID, garden.VerbPark, "")
 		}
 		d.ringSeedActivity(seed.ID, ring, sessionID)
-		return next, written, nil
+		return d.settleFreshlyArmed(next, written, sessionID)
 	}
 	return garden.Seed{}, docstore.Document{}, fmt.Errorf(
 		"%s was rewritten under all %d attempts to arm it; read it again with `attn seed show %s` and decide from what it says now",
 		seedID, attempts, seedID)
 }
 
-// The seed harvests itself, saying which pull request landed. The condition goes
-// with the harvest: `garden.Transition` drops it when a seed closes.
+// The refresh may have settled the pull request between the check above and the
+// arm commit; a merged row then leaves the open set and no tick looks at it again.
+func (d *Daemon) settleFreshlyArmed(
+	seed garden.Seed, written docstore.Document, sessionID string,
+) (garden.Seed, docstore.Document, error) {
+	rec, ok := d.store.SessionPullRequestByID(seed.HarvestWhen.PullRequest)
+	if !ok {
+		return seed, written, nil
+	}
+	switch rec.State {
+	case sessionPullRequestMerged:
+		return d.fulfilHarvestWhen(seed, rec, written.Rev, sessionID)
+	case sessionPullRequestClosed:
+		cleared, doc, err := d.clearHarvestWhen(seed.ID, seed.HarvestWhen.PullRequest, written.Rev,
+			harvestWhenClosedNote(rec), garden.Tender{Member: harvestWhenActor})
+		if err != nil {
+			return garden.Seed{}, docstore.Document{}, err
+		}
+		d.ringSeedActivity(seed.ID, harvestWhenRingCleared, sessionID)
+		return cleared, doc, nil
+	}
+	return seed, written, nil
+}
+
+// expectedRev pins the harvest to the armed seed the caller observed; zero is unpinned.
 func (d *Daemon) fulfilHarvestWhen(
-	seed garden.Seed, rec store.SessionPullRequestRecord, excludedSessions ...string,
+	seed garden.Seed, rec store.SessionPullRequestRecord, expectedRev int64, excludedSessions ...string,
 ) (garden.Seed, docstore.Document, error) {
 	reason := harvestWhenMergedReason(rec)
-	harvested, doc, notes, err := d.applySeedTransitionDetailedAs(
+	harvested, doc, notes, err := d.applySeedTransitionDetailedAsAtRevision(
 		seed.ID, garden.VerbHarvest,
 		garden.Ask{Actor: garden.Tender{Member: harvestWhenActor}, Reason: reason, Force: true},
-		"", d.sessionExists)
+		"", d.sessionExists, expectedRev)
 	if err != nil {
 		return garden.Seed{}, docstore.Document{}, err
 	}
@@ -168,9 +189,10 @@ func (d *Daemon) fulfilHarvestWhen(
 	return harvested, doc, nil
 }
 
-// Disarming is not a move: the seed stays where it is, the log says it stopped waiting.
+// pullRequest and expectedRev pin the clear to the condition the caller observed;
+// empty and zero clear whatever the seed carries now.
 func (d *Daemon) clearHarvestWhen(
-	seedID, noteBody string, actor garden.Tender,
+	seedID, pullRequest string, expectedRev int64, noteBody string, actor garden.Tender,
 ) (garden.Seed, docstore.Document, error) {
 	schema, err := d.seedsCollection()
 	if err != nil {
@@ -184,6 +206,13 @@ func (d *Daemon) clearHarvestWhen(
 		}
 		if seed.HarvestWhen == nil {
 			return garden.Seed{}, docstore.Document{}, fmt.Errorf("%s has no harvest condition", seed.ID)
+		}
+		if expectedRev > 0 && doc.Rev != expectedRev {
+			return garden.Seed{}, docstore.Document{}, fmt.Errorf("%s changed since its condition was read", seed.ID)
+		}
+		if pullRequest != "" && seed.HarvestWhen.PullRequest != pullRequest {
+			return garden.Seed{}, docstore.Document{}, fmt.Errorf(
+				"%s now waits on %s, not %s", seed.ID, seed.HarvestWhen.PullRequest, pullRequest)
 		}
 		next := seed
 		next.HarvestWhen = nil
@@ -205,7 +234,7 @@ func (d *Daemon) clearHarvestWhen(
 func (d *Daemon) clearHarvestWhenRequested(
 	seedID string, ask garden.Ask, sessionID string,
 ) (garden.Seed, docstore.Document, error) {
-	seed, doc, err := d.clearHarvestWhen(seedID, harvestWhenClearedNote, ask.Actor)
+	seed, doc, err := d.clearHarvestWhen(seedID, "", 0, harvestWhenClearedNote, ask.Actor)
 	if err != nil {
 		return garden.Seed{}, docstore.Document{}, err
 	}
@@ -221,8 +250,6 @@ func (d *Daemon) harvestWhenNote(seedID, body string, actor garden.Tender) garde
 	}
 }
 
-// The pull request becomes a reference on the seed, so whoever reads it while it
-// waits can open the thing it waits on.
 func (d *Daemon) harvestWhenAttachment(
 	seedID string, rec store.SessionPullRequestRecord, actor garden.Tender,
 ) (garden.Note, bool) {
@@ -248,8 +275,6 @@ func (d *Daemon) harvestWhenAttachment(
 	return note, true
 }
 
-// Which pull request the seed waits on: the one named, or the session's own if it
-// has exactly one still open.
 func (d *Daemon) harvestWhenPullRequest(seedID, url, sessionID string) (store.SessionPullRequestRecord, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -321,8 +346,6 @@ func harvestWhenMergedReason(rec store.SessionPullRequestRecord) string {
 	return garden.TrimReason(reason)
 }
 
-// owner/repo#number: the host is in the id the condition carries, and the line is
-// read by somebody who already knows where their pull requests live.
 func harvestWhenLabel(rec store.SessionPullRequestRecord) string {
 	repository := rec.Repository
 	if _, path, ok := strings.Cut(repository, "/"); ok {

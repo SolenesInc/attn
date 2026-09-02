@@ -135,8 +135,6 @@ func (s *Store) OpenSessionPullRequests() []SessionPullRequestRecord {
 	return records
 }
 
-// Status is written for every session that recorded the pull request at once, so
-// the freshest row is the whole truth about it whoever opened it.
 func (s *Store) SessionPullRequestByID(prID string) (SessionPullRequestRecord, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

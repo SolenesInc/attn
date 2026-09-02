@@ -1312,8 +1312,6 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedTransitionResult: result})
 }
 
-// The seed a move leaves behind, plus the two fields that only a read of the
-// whole garden can fill in.
 func (d *Daemon) seedTransitionWire(seed garden.Seed, doc docstore.Document) protocol.Seed {
 	wire := seedToProtocol(seed, doc, false)
 	if read, err := d.readGarden(); err == nil {

@@ -222,8 +222,6 @@ func (c *Client) SeedEdit(seedID, body string) (*protocol.SeedEditResult, error)
 	return resp.SeedEditResult, nil
 }
 
-// The harvest-on-merge half of a lifecycle move. WhenMerged arms the seed and an
-// empty PullRequestURL means infer it from the source session; ClearHarvestWhen disarms.
 type SeedTransitionOptions struct {
 	WhenMerged       bool
 	PullRequestURL   string

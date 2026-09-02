@@ -726,8 +726,6 @@ func harvestWhenLine(condition *protocol.SeedHarvestCondition) string {
 	return "harvests when " + pullRequestLabel(condition.PullRequest) + " merges"
 }
 
-// A session pull request id reads host:owner/repo#number; the host is noise to
-// whoever asked for this seed.
 func pullRequestLabel(prID string) string {
 	if _, rest, found := strings.Cut(prID, ":"); found {
 		return rest
@@ -1221,7 +1219,6 @@ func harvestWhenArgs(verb string, f *seedFlags, positionals []string) (string, c
 	case !*f.whenMerged:
 		return "", none, fmt.Errorf("--clear disarms harvest-on-merge; say the whole thing: `attn seed harvest <id> --when-merged --clear`")
 	case f.wasSet("m"):
-		// The daemon refuses the same pairing; saying it here spares a round trip.
 		return "", none, fmt.Errorf("harvest --when-merged takes no -m: the reason is written when the pull request merges")
 	}
 	if *f.clear {

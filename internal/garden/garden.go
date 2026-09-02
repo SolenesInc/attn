@@ -72,10 +72,7 @@ type Seed struct {
 	HarvestWhenPullRequest string `json:"harvest_when_pull_request"`
 }
 
-// What a seed waits on before it harvests itself. The daemon settles it when the
-// pull request merges; a pull request closed without merging clears it instead.
 type HarvestCondition struct {
-	// host:owner/repo#number, the session pull request id.
 	PullRequest  string `json:"pull_request"`
 	URL          string `json:"url"`
 	SetAt        string `json:"set_at"`

@@ -326,8 +326,6 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) {
 	d.setJobQueue(runner)
 	d.reconcileSnoozeWakeJobs()
 	d.resumeGardenReviews()
-	// A merge that landed while the daemon was down left its row merged and its
-	// seed armed; nothing else would look at that pair again.
 	d.settleHarvestConditions()
 }
 
