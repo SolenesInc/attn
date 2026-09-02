@@ -1,0 +1,8 @@
+kind: fixed
+area: harness
+change: >
+  The garden-delegation-reporting scenario failed on every platform, not only
+  Linux: attach notes moved behind the panel's "attachment changes" disclosure,
+  drill artifacts became structured, and a docked seed tile folded the
+  terminal at 1200px. The bridge can open the disclosure on request and the
+  scenario runs in a 1440px window.
