@@ -141,6 +141,9 @@ type Runtime struct {
 	// An agent that sets its title once at boot has no second heartbeat for a
 	// watcher that attaches after it; without the replay it never reads idle.
 	lastEvidence *pty.Observation
+	// Orders every observation broadcast against watcher registration plus
+	// replay, so no watcher can queue a fresh heartbeat ahead of a stale replay.
+	deliverMu sync.Mutex
 
 	stopOnce sync.Once
 	stopCh   chan struct{}
@@ -612,6 +615,8 @@ func (r *Runtime) removeWatcher(conn *connCtx) {
 }
 
 func (r *Runtime) observeState(obs pty.Observation) {
+	r.deliverMu.Lock()
+	defer r.deliverMu.Unlock()
 	// Evidence-only: it must not touch the cached state or be deduped against
 	// it, or a heartbeat is dropped whenever it equals the last state string.
 	if !obs.Source.ClaimsProtocolState() {
@@ -1148,6 +1153,8 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 		c.runtime.manager.Remove(c.runtime.cfg.SessionID)
 		c.runtime.requestStop()
 	case MethodWatch:
+		c.runtime.deliverMu.Lock()
+		defer c.runtime.deliverMu.Unlock()
 		if !c.watching {
 			c.watching = true
 			c.runtime.addWatcher(c)
