@@ -1433,10 +1433,13 @@ function collectGardenSeedPage() {
       gone: Boolean(item.querySelector('.seed-artifact__gone')),
       external: Boolean(item.querySelector('.seed-artifact__leaves')),
     })),
+    // Attach and detach notes sit behind the "attachment changes" disclosure
+    // and only join this list once garden_expand_seed opens it (bookkeeping: true).
     notes: Array.from(page.querySelectorAll('.garden-log > li')).map((note) => ({
       kind: note.getAttribute('data-kind') ?? '',
       body: note.querySelector('.garden-log__body')?.textContent?.trim() ?? '',
     })),
+    bookkeeping: page.querySelector('.garden-closed-toggle')?.textContent?.trim() ?? '',
     resumeAvailable: Boolean(page.querySelector('[data-testid^="seed-resume-"]')),
     handoverAvailable: Boolean(page.querySelector('[data-testid^="seed-handover-"]')),
   };
@@ -3421,6 +3424,13 @@ export function useUiAutomationBridge({
         if (row instanceof HTMLElement) {
           row.click();
           await settleUi(3);
+        }
+        if (payload.bookkeeping === true) {
+          const toggle = document.querySelector('.garden-page .garden-closed-toggle[aria-expanded="false"]');
+          if (toggle instanceof HTMLElement) {
+            toggle.click();
+            await settleUi(1);
+          }
         }
         return collectGardenSeedPage();
       }
