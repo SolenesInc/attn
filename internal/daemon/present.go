@@ -557,12 +557,21 @@ func (d *Daemon) handbackPresentationRound(pres *store.Presentation, seq int, ve
 		"\U0001F4FD "+notice+".",
 		sessionInputAtTurnBoundary,
 	)
+	delivery.resend = func() { d.resendPresentationHandback(pres.ID, seq, verdict) }
 	attempt := d.sessionInputs().try(context.Background(), delivery)
 	if attempt.err != nil {
 		d.logf("present handback: input failed for session %s: %v", pres.SessionID, attempt.err)
 		return
 	}
 	d.sessionInputs().release(pres.SessionID, delivery.id)
+}
+
+func (d *Daemon) resendPresentationHandback(presentationID string, seq int, verdict string) {
+	pres, err := d.store.GetPresentation(presentationID)
+	if err != nil || pres == nil || pres.Status == "closed" {
+		return
+	}
+	d.handbackPresentationRound(pres, seq, verdict)
 }
 
 func (d *Daemon) handlePresentClose(client *wsClient, msg *protocol.PresentCloseMessage) {

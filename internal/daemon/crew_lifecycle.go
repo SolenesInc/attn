@@ -318,14 +318,22 @@ func (d *Daemon) crewLifecycleTick(now time.Time) {
 			d.crewMemo().rearmContextFull(session.ID)
 		}
 		contextEpisode := uint64(0)
-		if action == crew.ActionContextHandoff {
+		switch action {
+		case crew.ActionHeartbeat:
+			if !d.crewMemo().heartbeatDue(session.ID, now, lead) {
+				continue
+			}
+		case crew.ActionSleep:
+			if !d.crewMemo().mayAsk(session.ID, now, crewSleepPromptGrace) {
+				continue
+			}
+		case crew.ActionContextHandoff:
 			var allowed bool
 			contextEpisode, allowed = d.crewMemo().mayAskContextFull(session.ID)
 			if !allowed {
 				continue
 			}
-		}
-		if action == crew.ActionNone {
+		default:
 			continue
 		}
 		d.actOnCrewMember(member, session.ID, action, cache, pressure, contextEpisode, now)
@@ -333,11 +341,11 @@ func (d *Daemon) crewLifecycleTick(now time.Time) {
 }
 
 func (d *Daemon) actOnCrewMember(member crew.Member, sessionID string, action crew.Action, cache crew.CacheState, pressure crew.ContextPressure, contextEpisode uint64, now time.Time) {
+	resend := func() {
+		d.actOnCrewMember(member, sessionID, action, cache, pressure, contextEpisode, time.Now())
+	}
 	switch action {
 	case crew.ActionHeartbeat:
-		if !d.crewMemo().heartbeatDue(sessionID, now, d.crewHeartbeatLead()) {
-			return
-		}
 		session := d.store.Get(sessionID)
 		if session == nil {
 			return
@@ -345,6 +353,7 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID string, action cr
 		generation := protocol.Deref(session.LastModelRequestAt)
 		id := inputAttemptID("crew-heartbeat", sessionID+"/"+generation)
 		delivery := maintenanceSessionInput("crew-heartbeat", sessionID+"/"+generation, sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
+		delivery.resend = resend
 		attempt := d.sessionInputs().try(context.Background(), delivery)
 		if attempt.err != nil {
 			d.logf("crew: %s's heartbeat did not reach session %s: %v", crew.DisplayName(member.ID), sessionID, attempt.err)
@@ -362,10 +371,8 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID string, action cr
 		d.logf("crew: warmed %s's context in session %s (cache estimated %s old against a %s assumption)",
 			crew.DisplayName(member.ID), sessionID, cache.Age.Round(time.Second), cache.TTL)
 	case crew.ActionSleep:
-		if !d.crewMemo().mayAsk(sessionID, now, crewSleepPromptGrace) {
-			return
-		}
 		delivery := maintenanceSessionInput("crew-sleep", sessionID, sessionID, crewSleepPrompt, sessionInputAtTurnBoundary)
+		delivery.resend = resend
 		attempt := d.sessionInputs().try(context.Background(), delivery)
 		if attempt.err != nil {
 			d.logf("crew: %s was not asked to close its day: %v", crew.DisplayName(member.ID), attempt.err)
@@ -377,6 +384,7 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID string, action cr
 	case crew.ActionContextHandoff:
 		key := fmt.Sprintf("%s/%d", sessionID, contextEpisode)
 		delivery := maintenanceSessionInput("crew-context-handoff", key, sessionID, crewContextHandoffPrompt(pressure.Tokens, pressure.Budget), sessionInputAtTurnBoundary)
+		delivery.resend = resend
 		attempt := d.sessionInputs().try(context.Background(), delivery)
 		if attempt.err != nil {
 			d.logf("crew: %s was not asked to hand off a full context: %v", crew.DisplayName(member.ID), attempt.err)

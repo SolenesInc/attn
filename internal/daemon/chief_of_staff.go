@@ -100,6 +100,7 @@ func (d *Daemon) nudgeChiefOfStaff(attemptKey, prompt string) bool {
 		return false
 	}
 	delivery := maintenanceSessionInput("chief-inbox", attemptKey, sessionID, prompt, sessionInputAtTurnBoundary)
+	delivery.resend = func() { d.nudgeChiefOfStaff(attemptKey, prompt) }
 	attempt := d.sessionInputs().try(context.Background(), delivery)
 	if attempt.err != nil {
 		d.logf("chief nudge: input failed for %s: %v", sessionID, attempt.err)

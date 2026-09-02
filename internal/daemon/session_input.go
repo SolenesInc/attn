@@ -106,6 +106,7 @@ type sessionInputDelivery struct {
 	placement         sessionInputPlacement
 	hostDelivery      hostsession.Delivery
 	allowUserComposer bool
+	resend            func()
 }
 
 func maintenanceSessionInput(domain, key, sessionID, text string, placement sessionInputPlacement) sessionInputDelivery {
@@ -203,6 +204,7 @@ type sessionInputLane struct {
 	mu sync.Mutex
 
 	attempts       map[string]*sessionInputAttemptState
+	retries        map[string]*sessionInputRetry
 	pending        []sessionInputCandidate
 	run            *sessionInputRunState
 	placing        bool
@@ -210,12 +212,15 @@ type sessionInputLane struct {
 	userGeneration uint64
 	userSubmit     bool
 	phase          protocol.SessionState
+	stopped        bool
+	running        sync.WaitGroup
 }
 
 type sessionInputModule struct {
-	daemon *Daemon
-	mu     sync.Mutex
-	lanes  map[string]*sessionInputLane
+	daemon  *Daemon
+	mu      sync.Mutex
+	lanes   map[string]*sessionInputLane
+	stopped bool
 }
 
 type sessionInputTakenEffect struct {
@@ -236,6 +241,8 @@ var (
 	errSessionInputBlockedBySelector = errors.New("session input blocked by an on-screen selector")
 	errSessionInputComposerDirty     = errors.New("session input blocked by the user's composer")
 	errSessionInputComposerOccupied  = errors.New("session input blocked by an unresolved automated composer")
+	errSessionInputPlacingAnother    = errors.New("another session input is being placed")
+	errSessionInputLaneClosed        = errors.New("the session's input lane is closed")
 	errSessionInputScreenUnavailable = errors.New("session input blocked because the screen is unavailable")
 	errSessionInputInitialPrompt     = errors.New("session input blocked while the initial prompt is pending")
 )
@@ -262,6 +269,31 @@ func (e *sessionInputQuietError) Error() string {
 
 func (e *sessionInputQuietError) Unwrap() error { return errSessionInputComposerDirty }
 
+type sessionInputRetry struct {
+	timer  *time.Timer
+	resend func()
+}
+
+// A collision clears when the placed prompt is taken, so it waits a take's own
+// span. Read once: tests move sessionInputTakenWindow.
+var sessionInputComposerRetry = sessionInputTakenWindow
+
+func sessionInputQuietDeferral(err error) bool {
+	var quiet *sessionInputQuietError
+	return errors.As(err, &quiet)
+}
+
+func sessionInputRetryDelay(err error) (time.Duration, bool) {
+	var quiet *sessionInputQuietError
+	if errors.As(err, &quiet) {
+		return quiet.retryAfter, true
+	}
+	if errors.Is(err, errSessionInputComposerOccupied) || errors.Is(err, errSessionInputPlacingAnother) {
+		return sessionInputComposerRetry, true
+	}
+	return 0, false
+}
+
 func sessionInputDeferredError(err error) bool {
 	return errors.Is(err, errSessionInputBlockedByApproval) ||
 		errors.Is(err, errSessionInputBlockedBySelector) ||
@@ -283,7 +315,7 @@ func (m *sessionInputModule) lane(sessionID string) *sessionInputLane {
 	defer m.mu.Unlock()
 	lane := m.lanes[sessionID]
 	if lane == nil {
-		lane = &sessionInputLane{attempts: make(map[string]*sessionInputAttemptState)}
+		lane = &sessionInputLane{attempts: make(map[string]*sessionInputAttemptState), stopped: m.stopped}
 		m.lanes[sessionID] = lane
 	}
 	return lane
@@ -328,10 +360,111 @@ func (m *sessionInputModule) forget(sessionID string, id sessionInputAttemptID) 
 	lane.mu.Unlock()
 }
 
+// Closed in place before it is dropped: a callback resuming mid-drain finds a
+// closed lane, not a fresh one built for the replacement runtime.
 func (m *sessionInputModule) forgetSession(sessionID string) {
+	lane := m.closeLane(sessionID)
+	if lane == nil {
+		return
+	}
 	m.mu.Lock()
-	delete(m.lanes, sessionID)
+	if m.lanes[sessionID] == lane {
+		delete(m.lanes, sessionID)
+	}
 	m.mu.Unlock()
+}
+
+func (m *sessionInputModule) fenceSession(sessionID string) {
+	m.closeLane(sessionID)
+}
+
+// Never call from a resend: it waits for every resend the lane has in flight.
+func (m *sessionInputModule) closeLane(sessionID string) *sessionInputLane {
+	m.mu.Lock()
+	lane := m.lanes[sessionID]
+	m.mu.Unlock()
+	if lane == nil {
+		return nil
+	}
+	lane.mu.Lock()
+	lane.stopRetriesLocked()
+	lane.mu.Unlock()
+	lane.running.Wait()
+	return lane
+}
+
+func (m *sessionInputModule) armRetryLocked(lane *sessionInputLane, delivery sessionInputDelivery, err error) {
+	after, retryable := sessionInputRetryDelay(err)
+	if !retryable || delivery.resend == nil || lane.stopped {
+		return
+	}
+	select {
+	case <-m.daemon.done:
+		return
+	default:
+	}
+	key := delivery.id.String()
+	if lane.retries == nil {
+		lane.retries = make(map[string]*sessionInputRetry)
+	}
+	if existing := lane.retries[key]; existing != nil {
+		existing.timer.Stop()
+	}
+	entry := &sessionInputRetry{resend: delivery.resend}
+	sessionID := delivery.sessionID
+	entry.timer = time.AfterFunc(after, func() { m.fireRetry(sessionID, key, entry) })
+	lane.retries[key] = entry
+}
+
+// A stopped timer may already be running its callback: it resends only while it
+// still owns its slot on an open lane, and is counted until it returns.
+func (m *sessionInputModule) fireRetry(sessionID, key string, self *sessionInputRetry) {
+	m.mu.Lock()
+	lane := m.lanes[sessionID]
+	m.mu.Unlock()
+	if lane == nil {
+		return
+	}
+	lane.mu.Lock()
+	owner := !lane.stopped && lane.retries[key] == self
+	if owner {
+		delete(lane.retries, key)
+		lane.running.Add(1)
+	}
+	lane.mu.Unlock()
+	if !owner {
+		return
+	}
+	defer lane.running.Done()
+	self.resend()
+}
+
+// Every live lane is closed under its own lock before the wait, and a lane born
+// later is born closed, so no resend can start once this returns.
+func (m *sessionInputModule) stopRetries() {
+	m.mu.Lock()
+	m.stopped = true
+	lanes := make([]*sessionInputLane, 0, len(m.lanes))
+	for _, lane := range m.lanes {
+		lanes = append(lanes, lane)
+	}
+	m.mu.Unlock()
+	for _, lane := range lanes {
+		lane.mu.Lock()
+		lane.stopRetriesLocked()
+		lane.mu.Unlock()
+	}
+	for _, lane := range lanes {
+		lane.running.Wait()
+	}
+}
+
+func (lane *sessionInputLane) stopRetriesLocked() {
+	lane.stopped = true
+	for key, entry := range lane.retries {
+		entry.timer.Stop()
+		delete(lane.retries, key)
+	}
 }
 
 func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDelivery) sessionInputAttempt {
@@ -342,6 +475,9 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 	lane := m.lane(delivery.sessionID)
 	lane.mu.Lock()
 	defer lane.mu.Unlock()
+	if lane.stopped {
+		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonGone, err: errSessionInputLaneClosed}
+	}
 
 	fingerprint := sessionInputFingerprint{
 		sessionID:         delivery.sessionID,
@@ -376,6 +512,7 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 				return sessionInputAttempt{id: delivery.id, stage: sessionInputPlaced, route: existing.route, reason: reason, wait: existing.wait, err: err}
 			}
 			if reason, err := m.ptySafetyLocked(ctx, delivery.sessionID, lane, delivery.allowUserComposer); err != nil {
+				m.armRetryLocked(lane, delivery, err)
 				return sessionInputAttempt{id: delivery.id, stage: sessionInputPlaced, route: existing.route, reason: reason, wait: existing.wait, err: err}
 			}
 			if err := m.daemon.ptyBackend.Input(ctx, delivery.sessionID, []byte("\r")); err != nil {
@@ -387,10 +524,12 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 		return attemptFromState(delivery.id, existing)
 	}
 	if lane.placing {
-		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonBusy, err: errors.New("another session input is being placed")}
+		m.armRetryLocked(lane, delivery, errSessionInputPlacingAnother)
+		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonBusy, err: errSessionInputPlacingAnother}
 	}
 	for _, existing := range lane.attempts {
 		if existing.composer && (existing.stage == sessionInputPlaced || existing.stage == sessionInputIndeterminate) {
+			m.armRetryLocked(lane, delivery, errSessionInputComposerOccupied)
 			return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonBusy, err: errSessionInputComposerOccupied}
 		}
 	}
@@ -466,6 +605,7 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 	}
 	if reason, err := m.ptySafetyLocked(ctx, delivery.sessionID, lane, delivery.allowUserComposer); err != nil {
 		delete(lane.attempts, key)
+		m.armRetryLocked(lane, delivery, err)
 		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, route: sessionInputRoutePTY, reason: reason, err: err}
 	}
 

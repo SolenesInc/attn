@@ -205,6 +205,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 	// Mark BEFORE kill, so the worker's async exit is suppressed however quickly it
 	// fires relative to the kill returning.
 	d.markReloading(sessionID)
+	d.sessionInputs().fenceSession(sessionID)
 
 	if killErr := d.ptyBackend.Kill(ctx, sessionID, syscall.SIGTERM); killErr != nil {
 		d.logf("reload: kill returned error for %s (continuing): %v", sessionID, killErr)

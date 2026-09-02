@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"net"
@@ -706,6 +707,35 @@ func TestCrewContextBudget(t *testing.T) {
 		other.ID = "no-watcher-session"
 		if got := d.crewContextPressure(&other); got.Tokens != 0 || got.Budget != 0 {
 			t.Fatalf("pressure = %+v, want nothing at all", got)
+		}
+	})
+}
+
+func TestCrewLifecycleTick_SleepAskHeldOffByTypingLandsAfterTheQuietWindow(t *testing.T) {
+	d, sessionID, recorder := newLifecycleDaemon(t)
+	d.store.SetSetting(SettingCrewHeartbeatEnabled, "false")
+	quiesceTranscriptWatchers(t, d)
+	synctest.Test(t, func(t *testing.T) {
+		now := time.Now()
+		setSessionActivity(t, d, sessionID, protocol.SessionStateIdle, now.Add(-58*time.Minute))
+		setUserAway(d, now.Add(-3*time.Hour))
+		if err := d.writeSessionPTY(sessionID, []byte("half written"), "user"); err != nil {
+			t.Fatalf("user input: %v", err)
+		}
+
+		d.crewLifecycleTick(now)
+		if got := recorder.prompts(); len(got) != 0 {
+			t.Fatalf("typed into a composer the user just used: %q", got)
+		}
+		d.crewLifecycleTick(now.Add(time.Minute))
+		if got := recorder.prompts(); len(got) != 0 {
+			t.Fatalf("the grace was not spent, so this witness proves nothing: %q", got)
+		}
+
+		time.Sleep(sessionInputQuietWindow)
+		settleResend(t)
+		if got := recorder.prompts(); len(got) != 1 || got[0] != crewSleepPrompt {
+			t.Fatalf("prompts after the window = %q, want one sleep ask", got)
 		}
 	})
 }

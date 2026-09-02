@@ -310,8 +310,12 @@ func (d *Daemon) runNudgeDelivery(sessionID string) string {
 		ticketNudgePrompt,
 		sessionInputAtTurnBoundary,
 	)
+	delivery.resend = func() { d.deliverNudgeOrReArm(sessionID) }
 	attempt := d.sessionInputs().try(context.Background(), delivery)
 	if attempt.err != nil {
+		if sessionInputQuietDeferral(attempt.err) {
+			return "rearm"
+		}
 		d.logf("nudge countdown input %s: %v", sessionID, attempt.err)
 		return "doorbell-error"
 	}

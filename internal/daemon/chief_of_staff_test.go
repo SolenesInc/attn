@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -218,4 +219,37 @@ func TestTypeDoorbellDoesNotSubmitInputRacingTheGap(t *testing.T) {
 	if !typedAt.Before(writtenAt[1]) {
 		t.Fatalf("keystroke started at %v, after the Enter at %v — the race never happened", typedAt, writtenAt[1])
 	}
+}
+
+func chiefWasNudged(inputs []string, prompt string) bool {
+	for _, in := range inputs {
+		if strings.Contains(in, prompt) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestNudgeChiefOfStaffHeldOffByTypingLandsAfterTheQuietWindow(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	chiefID, _, inputs := delegateForNotify(t, d, "codex")
+	prompt := "the notebook inbox has a new entry"
+	quiesceTranscriptWatchers(t, d)
+	synctest.Test(t, func(t *testing.T) {
+		if err := d.writeSessionPTY(chiefID, []byte("half written"), "user"); err != nil {
+			t.Fatalf("user input: %v", err)
+		}
+		if d.nudgeChiefOfStaff("inbox-1", prompt) {
+			t.Fatal("the nudge claimed a composer the user had just used")
+		}
+		if chiefWasNudged(inputs(chiefID), prompt) {
+			t.Fatalf("typed into a composer the user just used: %q", inputs(chiefID))
+		}
+
+		time.Sleep(sessionInputQuietWindow)
+		settleResend(t)
+		if !chiefWasNudged(inputs(chiefID), prompt) {
+			t.Fatalf("nothing resent the chief nudge once the composer went quiet: %q", inputs(chiefID))
+		}
+	})
 }
