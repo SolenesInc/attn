@@ -487,6 +487,11 @@ async function main() {
       runJSON(binary, ['automation', 'apply', '--file', cleanupDefinitionFile], daemonEnv);
       cleanupApplied = true;
 
+      // Applying baselines the review requests already open; only a new one delivers.
+      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      await setRequested(mock.url, false);
+      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      await setRequested(mock.url, true);
       await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
       const cleanRun = await poll(() => {
         const rows = (runJSON(binary, ['automation', 'runs', cleanupID], daemonEnv) || []).filter((row) => row.state === 'delivered');
