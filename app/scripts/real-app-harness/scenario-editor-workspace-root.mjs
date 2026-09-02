@@ -208,8 +208,6 @@ async function main() {
 
   try {
     process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
-    // notebook.openTile is a global window shortcut; a non-focusable always-on-top
-    // window never becomes key on macOS, so the native keystroke reaches no listener.
     if (process.env.ATTN_HARNESS_ALWAYS_ON_TOP === undefined) {
       process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
     }
