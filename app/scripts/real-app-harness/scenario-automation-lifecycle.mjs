@@ -27,8 +27,6 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '../../..');
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Leg 1 drives the daemon's real scheduled path — anchor tick, cursor, catch-up,
-// singleton continuity — off a sub-minute cron instead of a wall-clock minute.
 const SCHEDULE_TICK_INTERVAL = '1s';
 const EDIT_REBIND_CRON = '@every 2s';
 // Receipts, local macOS matrix run: the anchor lands 1.3s after apply and each
@@ -367,8 +365,6 @@ async function main() {
         ATTN_MOCK_GH_URL: mock.url,
         ATTN_MOCK_GH_HOST: mock.host,
         ATTN_MOCK_GH_TOKEN: 'test-token',
-        // Only the observation cadence moves; a definition still fires solely on
-        // its cron's instants, through the same claim and delivery path.
         ATTN_AUTOMATION_SCHEDULE_INTERVAL: SCHEDULE_TICK_INTERVAL,
       });
       try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}

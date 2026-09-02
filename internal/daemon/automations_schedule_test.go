@@ -753,9 +753,7 @@ func TestAutomationScheduleIntervalDefaultsToAMinuteAndTheEnvOverrideShortensIt(
 	}
 }
 
-// The sub-minute schedule form the packaged automation-lifecycle scenario uses,
-// so a change to cron parsing that drops it fails here rather than there.
-func TestObserveDueSchedulesFiresASubMinuteEveryCron(t *testing.T) {
+func TestObserveDueSchedulesFiresTheSubMinuteEveryCronTheLifecycleScenarioUses(t *testing.T) {
 	d, s, def, _ := setupScheduledDaemon(t, "@every 2s", "singleton", "latest")
 	d.automationDeliveryHook = func(*store.AutomationRun) error { return nil }
 
