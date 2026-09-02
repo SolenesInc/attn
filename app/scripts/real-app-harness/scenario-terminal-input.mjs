@@ -216,6 +216,28 @@ async function main() {
     });
   };
 
+  const pressShortcut = async (shortcutId, selector = terminalSelector) => {
+    const { binding } = await client.request('shortcut_binding', { shortcutId });
+    runner.assert(Boolean(binding), `shortcut ${shortcutId} is unbound in the app`);
+    const pressCombo = (combo) => {
+      const key = combo.key;
+      const code = combo.code
+        || (/^[a-z]$/i.test(key) ? `Key${key.toUpperCase()}` : /^[0-9]$/.test(key) ? `Digit${key}` : key);
+      return pressKey(
+        { key, code },
+        {
+          meta: process.platform === 'darwin' && !!combo.meta,
+          ctrl: !!combo.ctrl || (process.platform === 'linux' && !!combo.meta),
+          shift: !!combo.shift,
+          alt: !!combo.alt,
+        },
+        selector,
+      );
+    };
+    if (binding.leader) await pressCombo(binding.leader);
+    await pressCombo(binding.then || binding);
+  };
+
   const pasteText = async (text, selector = terminalSelector) => {
     await client.request('dom_terminal_paste', { selector, text });
   };
@@ -370,7 +392,7 @@ async function main() {
 
     await runner.step('shortcuts_and_chords_never_reach_pty', async () => {
       await beginCapture('shortcut');
-      await pressKey({ key: 'z', code: 'KeyZ' }, { meta: true, shift: true });
+      await pressShortcut('terminal.toggleZoom');
       await waitForZoom(client, sessionId, pane.paneId, 'default zoom shortcut');
       await finishCapture('shortcut', '');
 
@@ -386,8 +408,7 @@ async function main() {
       await client.request('set_setting', { key: 'keybindings_config', value: chordConfig });
       await delay(500);
       await beginCapture('chord');
-      await pressKey({ key: 'y', code: 'KeyY' }, { meta: true });
-      await pressKey({ key: 'z', code: 'KeyZ' });
+      await pressShortcut('terminal.toggleZoom');
       await waitForZoom(client, sessionId, null, 'custom zoom chord');
       await finishCapture('chord', '');
       await client.request('set_setting', { key: 'keybindings_config', value: '' });
@@ -395,7 +416,7 @@ async function main() {
 
     await runner.step('zoomed_grid_input', async () => {
       await focusPane();
-      await pressKey({ key: 'g', code: 'KeyG' }, { meta: true });
+      await pressShortcut('view.toggleGrid');
       await waitForGrid(client, (state) => state?.active === true, 'grid to open');
       await client.request('grid_zoom', { runtimeId: pane.runtimeId });
       await waitForGrid(client, (state) => state?.zoomedId === pane.runtimeId, 'shell tile to zoom');
@@ -419,7 +440,7 @@ async function main() {
         (value) => exactLineCount(value, token) >= before + 1,
         'Up history input to reach the zoomed grid tile',
       );
-      await pressKey({ key: 'g', code: 'KeyG' }, { meta: true }, '.grid-view-stage');
+      await pressShortcut('view.toggleGrid', '.grid-view-stage');
       await waitForGrid(client, (state) => state?.active === false, 'grid to close');
       runner.assert(exactLineCount(text, token) >= before + 1, 'grid history command did not rerun');
     });

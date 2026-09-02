@@ -9,6 +9,7 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
+  pressShortcutKeys,
   relaunchAppAndConnect,
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -261,11 +262,10 @@ async function main() {
     return;
   }
 
-  // HID clicks land at absolute screen positions, so the default 20px-visible
-  // window park would put every click off-window.
   if (process.env.ATTN_HARNESS_PARK_VISIBLE_PX === undefined) {
-    process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '800';
+    process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '0';
   }
+  process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'TERMINAL-ANNOTATIONS',
@@ -730,9 +730,7 @@ async function main() {
         submit: false,
       });
       await sleep(300);
-      // A real ⌘Return: the keystroke has to survive AppKit, reach the page's
-      // capture-phase listener, and be claimed by this pane over the PTY.
-      await driver.pressKeyCode(36, { command: true });
+      await pressShortcutKeys(client, driver, 'markdown.sendAnnotations');
       const sent = await pollFor(
         async () => {
           const state = await client.request('get_annotation_state', {});

@@ -6,6 +6,7 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
+  pressShortcutKeys,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
@@ -170,6 +171,7 @@ async function main() {
   try {
     await runner.step('launch_app', async () => {
       process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
+      process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
       await launchFreshAppAndConnect(client, observer);
     });
 
@@ -177,7 +179,7 @@ async function main() {
     await runner.step('create_workspace_via_cmd_t', async () => {
       const workspaceDir = path.join(runner.sessionDir, 'workspace-a');
       await driver.activateApp();
-      await driver.pressKey('t', { command: true });
+      await pressShortcutKeys(client, driver, 'session.newWorkspace');
       await submitTerminalLocation({
         client,
         driver,
@@ -201,7 +203,7 @@ async function main() {
     await runner.step('split_vertical_via_cmd_n', async () => {
       const verticalDir = path.join(runner.sessionDir, 'session-vertical');
       await driver.activateApp();
-      await driver.pressKey('n', { command: true });
+      await pressShortcutKeys(client, driver, 'session.new');
       await submitTerminalLocation({
         client,
         driver,
@@ -226,7 +228,7 @@ async function main() {
     await runner.step('split_horizontal_via_cmd_shift_n', async () => {
       const horizontalDir = path.join(runner.sessionDir, 'session-horizontal');
       await driver.activateApp();
-      await driver.pressKey('n', { command: true, shift: true });
+      await pressShortcutKeys(client, driver, 'session.newHorizontal');
       await submitTerminalLocation({
         client,
         driver,
