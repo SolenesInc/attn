@@ -843,6 +843,12 @@ function clickPaneElement(sessionId: string, paneId: string) {
   if (!(element instanceof HTMLElement)) {
     throw new Error(`Pane element not found for ${sessionId}:${paneId}`);
   }
+  // A folded pane is only its expand button; that button stops mousedown.
+  const expand = element.querySelector('.workspace-suspended-leaf');
+  if (element.dataset.paneSuspended === 'true' && expand instanceof HTMLElement) {
+    expand.click();
+    return;
+  }
 
   element.dispatchEvent(new MouseEvent('mousedown', {
     bubbles: true,

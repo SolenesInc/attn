@@ -4,6 +4,7 @@ import {
   fitShouldBailAsSuspicious,
   geometryOverflowsContainer,
   isWorkspaceResizeDragActive,
+  isWorkspaceSuspensionAnimating,
 } from './ghosttyGeometry';
 
 describe('ghosttyGeometry resize policy', () => {
@@ -25,6 +26,19 @@ describe('ghosttyGeometry resize policy', () => {
 
     document.documentElement.dataset.attnWorkspaceResizing = '1';
     expect(isWorkspaceResizeDragActive(terminal)).toBe(true);
+  });
+
+  it('holds fits while a fold or restore animates the pane frame', () => {
+    const panes = document.createElement('div');
+    panes.className = 'session-terminal-panes';
+    const terminal = document.createElement('div');
+    panes.appendChild(terminal);
+
+    expect(isWorkspaceSuspensionAnimating(terminal)).toBe(false);
+    panes.dataset.suspensionAnimating = '1';
+    expect(isWorkspaceSuspensionAnimating(terminal)).toBe(true);
+    delete panes.dataset.suspensionAnimating;
+    expect(isWorkspaceSuspensionAnimating(terminal)).toBe(false);
   });
 
   it('treats identical fit geometry as a no-op', () => {

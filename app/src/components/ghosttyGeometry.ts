@@ -9,6 +9,12 @@ export function isWorkspaceResizeDragActive(element: HTMLElement | null): boolea
   return Boolean(element?.closest('.session-terminal-panes[data-resizing-split-id]'));
 }
 
+// A fold eases the pane frame down to its 34px sliver; a fit mid-transition
+// would shrink the PTY to a few columns and truncate every row of scrollback.
+export function isWorkspaceSuspensionAnimating(element: HTMLElement | null): boolean {
+  return Boolean(element?.closest('.session-terminal-panes[data-suspension-animating]'));
+}
+
 export function fitRequiresTerminalResize(
   current: TerminalDimensions,
   next: TerminalDimensions,

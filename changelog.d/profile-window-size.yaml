@@ -3,6 +3,4 @@ area: app
 change: >
   A named-profile app opened at Tauri's 800x600 default instead of the
   configured 1200x800: the profile build overlay replaced the window list and
-  dropped the base geometry. The overlay now inherits the base window. The
-  real-app harness refocuses the terminal before each markdown-path click, so
-  terminal-md-link passes with the terminal folded behind two docked tiles.
+  dropped the base geometry. The overlay now inherits the base window.
