@@ -556,10 +556,15 @@ jobs:
         env:
           EVIDENCE_DIR: ${{ runner.temp }}/attn-real-app-harness
         run: |
-          data_dir="$(./attn profile resolve --field dataDir)"
+          data_dir="$(./attn profile resolve --field dataDir 2>/dev/null || true)"
           mkdir -p "$EVIDENCE_DIR/daemon"
-          cp "$data_dir/daemon.log" "$EVIDENCE_DIR/daemon/daemon.log"
-          find "$data_dir/workers" -name '*.log' -exec cp {} "$EVIDENCE_DIR/daemon/" \;
+          if [ -f "$data_dir/daemon.log" ]; then
+            cp "$data_dir/daemon.log" "$EVIDENCE_DIR/daemon/daemon.log"
+          fi
+          if [ -d "$data_dir/workers" ]; then
+            find "$data_dir/workers" -name '*.log' -exec cp {} "$EVIDENCE_DIR/daemon/" \;
+          fi
+          ls "$EVIDENCE_DIR/daemon"
 
       - name: Upload app acceptance evidence
         if: always()

@@ -92,7 +92,6 @@ function writeDelegateFixture(cwd) {
         ],
       },
       {
-        // A peer message arrives as a doorbell; reading the inbox is the receipt.
         includes: '📨 session',
         actions: [
           { type: 'capture', from: 'prompt', pattern: 'message ([0-9a-f-]{36})', name: 'message' },
