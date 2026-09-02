@@ -362,6 +362,9 @@ type Daemon struct {
 	sessionPRUnsubHooks    func()
 	sessionPRHosts         func(host string) (sessionPRHost, bool)
 
+	harvestWhenMu        sync.Mutex
+	harvestWhenUntracked map[string]bool
+
 	notebookPendingMu    sync.Mutex
 	notebookPendingPaths map[string][]string
 

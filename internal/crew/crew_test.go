@@ -125,7 +125,7 @@ func TestValidateID(t *testing.T) {
 			t.Errorf("ValidateID(%q) = %v, want accepted", ok, err)
 		}
 	}
-	for _, bad := range []string{"", "Trellis", "2keel", "with space", "with/slash", "-lead", strings.Repeat("a", MaxIDChars+1)} {
+	for _, bad := range []string{"", "Trellis", "2keel", "with space", "with/slash", "-lead", DaemonID, strings.Repeat("a", MaxIDChars+1)} {
 		if err := ValidateID(bad); err == nil {
 			t.Errorf("ValidateID(%q) = nil, want refused", bad)
 		}
@@ -244,5 +244,17 @@ func TestHolderName_NamesTheMemberAndLeavesASessionAlone(t *testing.T) {
 	}
 	if got := HolderName("  ", "  "); got != "" {
 		t.Errorf("an unheld thing displays as %q, want empty", got)
+	}
+}
+
+func TestTheDaemonsOwnNameIsReservedAndStaysLowercase(t *testing.T) {
+	if err := ValidateID(DaemonID); err == nil || !strings.Contains(err.Error(), DaemonID) {
+		t.Fatalf("ValidateID(%q) = %v, want a refusal that names it", DaemonID, err)
+	}
+	if got := DisplayName(DaemonID); got != DaemonID {
+		t.Errorf("DisplayName(%q) = %q, want it written the way the product is", DaemonID, got)
+	}
+	if got := HolderName(DaemonID, ""); got != DaemonID {
+		t.Errorf("HolderName(%q, \"\") = %q, want %q", DaemonID, got, DaemonID)
 	}
 }
