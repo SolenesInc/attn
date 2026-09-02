@@ -122,7 +122,6 @@ func newSessionTitleDaemon(t *testing.T) *Daemon {
 	return d
 }
 
-// Registered but not started: runSessionTitleJobs runs the queued titles itself.
 func installSessionTitleRunner(t *testing.T, d *Daemon) *jobs.Runner {
 	t.Helper()
 	runner := jobs.New(jobs.Options{
@@ -153,6 +152,7 @@ func runSessionTitleJobs(t *testing.T, d *Daemon) {
 		if job.Kind != sessionTitleKind {
 			continue
 		}
+		job.CommitGuard = &jobs.CommitGuard{}
 		_, _ = d.sessionTitleHandler(context.Background(), job)
 		runner.Remove(job.ID)
 	}
@@ -221,6 +221,99 @@ func TestSessionTitle_GivesUpAfterTheAttemptCap(t *testing.T) {
 	d.maybeGenerateSessionTitle("sess-1", writeSessionTitleTranscript(t))
 	if calls != sessionTitleAttempts {
 		t.Fatalf("a dead title job was re-armed: exec calls = %d", calls)
+	}
+}
+
+type failingSaveJobStore struct {
+	jobs.Store
+	fail bool
+}
+
+func (s *failingSaveJobStore) Save(j *jobs.Job) error {
+	if s.fail {
+		return errors.New("disk full")
+	}
+	return s.Store.Save(j)
+}
+
+func TestSessionTitle_EnqueueFailureLeavesTheAttemptAvailable(t *testing.T) {
+	d := newDaemonForTest(t)
+	store := &failingSaveJobStore{Store: newTestJobStore(t, d), fail: true}
+	runner := jobs.New(jobs.Options{Store: store, Log: func(string, ...interface{}) {}})
+	if err := runner.RegisterWith(sessionTitleKind, d.sessionTitleHandler, jobs.HandlerConfig{Timeout: sessionTitleTimeout}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	d.jobQueue = runner
+	directory := t.TempDir()
+	seedSessionTitleSession(t, d, "sess-1", directory, "")
+	d.rememberSessionTitleInitialPrompt("sess-1", "investigate the retry queue")
+	calls := 0
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
+		calls++
+		return "Investigate retry queue", nil
+	}
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "investigate the retry queue", sessionInputOrigin{})
+	runSessionTitleJobs(t, d)
+	if calls != 0 {
+		t.Fatalf("exec calls after a failed enqueue = %d, want 0", calls)
+	}
+	d.sessionTitleMu.Lock()
+	_, attempted := d.sessionTitleAttempted["sess-1"]
+	_, fingerprint := d.sessionTitleInitialPrompt["sess-1"]
+	d.sessionTitleMu.Unlock()
+	if attempted || !fingerprint {
+		t.Fatalf("after a failed enqueue attempted=%v fingerprint=%v, want the attempt and the initial-prompt marker back", attempted, fingerprint)
+	}
+
+	store.fail = false
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "investigate the retry queue", sessionInputOrigin{})
+	runSessionTitleJobs(t, d)
+	if calls != 1 {
+		t.Fatalf("exec calls once the store recovered = %d, want 1", calls)
+	}
+	if got := d.store.Get("sess-1"); got == nil || got.Label != "Investigate retry queue" {
+		t.Fatalf("session label = %+v, want %q", got, "Investigate retry queue")
+	}
+}
+
+func TestSessionTitle_CancelledRunDoesNotCommitTheLabel(t *testing.T) {
+	d := newDaemonForTest(t)
+	runner := installSessionTitleRunner(t, d)
+	directory := t.TempDir()
+	seedSessionTitleSession(t, d, "sess-1", directory, "")
+	wantLabel := defaultSessionLabel(directory, "sess-1")
+
+	started := make(chan struct{})
+	// The provider answers only after the run is fenced: a late answer must not commit.
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
+		close(started)
+		<-ctx.Done()
+		return "Fix login flow", nil
+	}
+	settled := make(chan jobs.State, 4)
+	runner.OnChange(func(jobID string) {
+		if job, _ := runner.Get(jobID); job != nil && job.State != jobs.StateRunning && job.State != jobs.StateQueued {
+			settled <- job.State
+		}
+	})
+	if err := runner.Start(); err != nil {
+		t.Fatalf("start runner: %v", err)
+	}
+	t.Cleanup(runner.Stop)
+
+	d.maybeGenerateSessionTitle("sess-1", writeSessionTitleTranscript(t))
+	<-started
+	job, err := runner.GetByKey(sessionTitleKind, "sess-1")
+	if err != nil || job == nil {
+		t.Fatalf("title job: %v %v", job, err)
+	}
+	runner.Cancel(job.ID)
+	if state := <-settled; state == jobs.StateDone {
+		t.Fatalf("a cancelled title run reported %s", state)
+	}
+	if got := d.store.Get("sess-1"); got == nil || got.Label != wantLabel {
+		t.Fatalf("session label = %+v, want unchanged %q after a cancel at commit", got, wantLabel)
 	}
 }
 

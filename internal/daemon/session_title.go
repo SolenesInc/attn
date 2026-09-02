@@ -97,11 +97,7 @@ func (d *Daemon) matchSessionTitleInitialPrompt(sessionID, prompt string) bool {
 	d.sessionTitleMu.Lock()
 	defer d.sessionTitleMu.Unlock()
 	remembered, ok := d.sessionTitleInitialPrompt[sessionID]
-	if !ok || remembered != sha256.Sum256([]byte(prompt)) {
-		return false
-	}
-	delete(d.sessionTitleInitialPrompt, sessionID)
-	return true
+	return ok && remembered == sha256.Sum256([]byte(prompt))
 }
 
 func (d *Daemon) sessionWantsAutoTitle(sessionID string) bool {
@@ -136,16 +132,27 @@ func (d *Daemon) enqueueSessionTitle(sessionID, conversation, source string) {
 		d.sessionTitleAttempted = make(map[string]struct{})
 	}
 	d.sessionTitleAttempted[sessionID] = struct{}{}
+	fingerprint, hadFingerprint := d.sessionTitleInitialPrompt[sessionID]
 	delete(d.sessionTitleInitialPrompt, sessionID)
 	d.sessionTitleMu.Unlock()
 
-	if _, err := runner.Enqueue(sessionTitleKind, jobs.EnqueueOptions{
+	_, err := runner.Enqueue(sessionTitleKind, jobs.EnqueueOptions{
 		UniqueKey:   sessionID,
 		Payload:     sessionTitlePayload{Conversation: conversation, Source: source},
 		MaxAttempts: sessionTitleAttempts,
-	}); err != nil {
-		d.logf("session title %s: enqueue: %v", sessionID, err)
+	})
+	if err == nil {
+		return
 	}
+	d.logf("session title %s: enqueue: %v", sessionID, err)
+	// The job never existed, so the attempt is still available; a marker a
+	// concurrent caller set meanwhile is theirs to keep.
+	d.sessionTitleMu.Lock()
+	delete(d.sessionTitleAttempted, sessionID)
+	if _, newer := d.sessionTitleInitialPrompt[sessionID]; hadFingerprint && !newer {
+		d.sessionTitleInitialPrompt[sessionID] = fingerprint
+	}
+	d.sessionTitleMu.Unlock()
 }
 
 func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, error) {
@@ -171,6 +178,10 @@ func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, e
 	if session == nil || !d.sessionMayBeAutoTitled(session) {
 		return nil, nil
 	}
+	if !job.CommitGuard.Enter() {
+		return nil, context.Canceled
+	}
+	defer job.CommitGuard.Leave()
 	d.store.UpdateSessionLabel(sessionID, title)
 	session.Label = title
 	d.logf("session title %s: %q from %s", sessionID, title, payload.Source)
