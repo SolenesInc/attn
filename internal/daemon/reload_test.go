@@ -45,6 +45,7 @@ type fakeReloadBackend struct {
 	calls     []string
 	spawnOpts []ptybackend.SpawnOptions
 	spawnGate *rendezvous
+	onKill    func(string)
 }
 
 type rendezvous struct {
@@ -109,6 +110,9 @@ func (b *fakeReloadBackend) SetTheme(context.Context, string, pty.TerminalTheme)
 	return nil
 }
 func (b *fakeReloadBackend) Kill(_ context.Context, id string, _ syscall.Signal) error {
+	if b.onKill != nil {
+		b.onKill(id)
+	}
 	b.mu.Lock()
 	b.calls = append(b.calls, "kill:"+id)
 	b.liveIDs = removeReloadID(b.liveIDs, id)
@@ -860,5 +864,47 @@ func requireSpawnCount(t *testing.T, backend *fakeReloadBackend, want int, label
 	synctest.Wait()
 	if got := backend.spawnCount(); got < want {
 		t.Fatalf("%s: respawn count = %d, want >= %d", label, got, want)
+	}
+}
+
+func laneIsClosed(d *Daemon, sessionID string) bool {
+	lane := laneFor(d, sessionID)
+	if lane == nil {
+		return true
+	}
+	lane.mu.Lock()
+	defer lane.mu.Unlock()
+	return lane.stopped
+}
+
+func TestReloadFencesTheInputLaneBeforeTheRuntimeIsReplaced(t *testing.T) {
+	backend := &fakeReloadBackend{
+		liveIDs: []string{"crew"},
+		info:    ptybackend.SessionInfo{Cols: 120, Rows: 40},
+		params:  ptybackend.SessionLaunchParams{Recorded: true, Executable: "/custom/claude"},
+	}
+	d := newReloadTestDaemon(t, backend)
+	addReloadSession(d, "crew", protocol.SessionAgentClaude, protocol.SessionStateWaitingInput)
+	if err := d.writeSessionPTY("crew", []byte("half written"), "user"); err != nil {
+		t.Fatalf("user input: %v", err)
+	}
+	delivery := maintenanceSessionInput("crew-sleep", "crew", "crew", crewSleepPrompt, sessionInputAtTurnBoundary)
+	delivery.resend = func() {}
+	if attempt := d.sessionInputs().try(context.Background(), delivery); !sessionInputQuietDeferral(attempt.err) {
+		t.Fatalf("the sleep ask into a typed-in composer = %v, want the quiet-window deferral", attempt.err)
+	}
+	if retryEntry(d, "crew", delivery.id) == nil {
+		t.Fatal("the deferred sleep ask armed no retry")
+	}
+
+	fencedAtKill := false
+	backend.onKill = func(id string) { fencedAtKill = laneIsClosed(d, id) }
+	d.reloadSessionAgent("crew")
+
+	if !fencedAtKill {
+		t.Fatal("the lane was still open when the reload killed the runtime")
+	}
+	if entry := retryEntry(d, "crew", delivery.id); entry != nil {
+		t.Fatal("a retry from the old runtime survived the replacement")
 	}
 }
