@@ -1,4 +1,3 @@
-// The daemon's composer clock trusts these tags; only 'user' may stamp it.
 import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 

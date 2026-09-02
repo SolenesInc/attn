@@ -497,7 +497,6 @@ func (d *Daemon) settleIfAutoSettleQuiet(sessionID string, within time.Duration)
 	return 0, d.store.SettleTurn(sessionID, time.Now())
 }
 
-// Genuine keystrokes arrive untagged or as "user"; every other producer tags what it sends and is excluded.
 func isUserKeystrokeSource(source string) bool {
 	switch source {
 	case "automation", "attach_replay", "pointer", "response":

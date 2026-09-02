@@ -177,8 +177,6 @@ export interface GhosttyTerminalProps {
     isActiveSession: boolean;
     paneCount: number;
   };
-  // 'user' keystrokes stamp the daemon's composer clock; 'pointer' (mouse
-  // reports) and 'response' (terminal query replies) deliberately do not.
   onInput: (data: string, source?: string) => void;
   onPointerActivity?: () => void;
   onOpenMarkdown?: (path: string, sessionId: string) => void;

@@ -502,7 +502,6 @@ func TestSessionInput_MouseReportsDoNotGuardTheComposer(t *testing.T) {
 	}
 }
 
-// X10 mouse reports and terminal query replies are shaped like typing; only the producer's tag tells them apart.
 func TestSessionInput_TaggedPointerAndResponseDoNotGuardTheComposer(t *testing.T) {
 	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
 	lane := d.sessionInputs().lane(sessionID)
@@ -532,7 +531,6 @@ func TestSessionInput_TaggedPointerAndResponseDoNotGuardTheComposer(t *testing.T
 	}
 }
 
-// The same bytes untagged are indistinguishable from typing, so they must still guard.
 func TestSessionInput_UntaggedX10MouseReportStillGuardsTheComposer(t *testing.T) {
 	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
 	if err := d.writeSessionPTY(sessionID, []byte("\x1b[M !!"), "user"); err != nil {
