@@ -1280,6 +1280,18 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 		Reason: protocol.Deref(msg.Reason),
 		Force:  protocol.Deref(msg.Force),
 	}
+	if harvestWhenRequested(msg) {
+		seed, doc, err := d.applyHarvestWhenRequest(msg, verb, ask, sessionID)
+		if err != nil {
+			d.sendGardenError(conn, string(verb), err)
+			return
+		}
+		d.sendGardenResponse(conn, protocol.Response{
+			Ok:                   true,
+			SeedTransitionResult: &protocol.SeedTransitionResult{Seed: d.seedTransitionWire(seed, doc)},
+		})
+		return
+	}
 	seed, doc, notes, err := d.applySeedTransitionDetailed(
 		msg.SeedID, verb, ask, protocol.Deref(msg.Comment))
 	if err != nil {
@@ -1289,13 +1301,7 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 	for _, note := range notes.all() {
 		d.mirrorSeedNoteOntoTicket(sessionID, seed.ID, note.Body)
 	}
-	result := &protocol.SeedTransitionResult{Seed: seedToProtocol(seed, doc, false)}
-	if read, err := d.readGarden(); err == nil {
-		result.Seed.Ready = read.ready[seed.ID]
-		if progress, ok := read.progress(seed.ID); ok {
-			result.Seed.PlotProgress = progress
-		}
-	}
+	result := &protocol.SeedTransitionResult{Seed: d.seedTransitionWire(seed, doc)}
 	if verb == garden.VerbTend {
 		result.Handoff = d.gardenHandoff(seed.ID)
 	}
@@ -1304,6 +1310,19 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 	d.mirrorSeedMoveOntoTicket(sessionID, seed.ID, verb, protocol.Deref(msg.Reason))
 	d.ringSeedActivity(seed.ID, gardenRingEvents[verb], sessionID)
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedTransitionResult: result})
+}
+
+// The seed a move leaves behind, plus the two fields that only a read of the
+// whole garden can fill in.
+func (d *Daemon) seedTransitionWire(seed garden.Seed, doc docstore.Document) protocol.Seed {
+	wire := seedToProtocol(seed, doc, false)
+	if read, err := d.readGarden(); err == nil {
+		wire.Ready = read.ready[seed.ID]
+		if progress, ok := read.progress(seed.ID); ok {
+			wire.PlotProgress = progress
+		}
+	}
+	return wire
 }
 
 func (d *Daemon) applySeedTransition(id string, verb garden.Verb, ask garden.Ask) (garden.Seed, docstore.Document, error) {

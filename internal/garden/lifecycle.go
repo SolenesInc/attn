@@ -169,6 +169,11 @@ func Transition(seed Seed, verb Verb, ask Ask, sessionLive func(sessionID string
 	case verb == VerbReplant:
 		next.Reason = ""
 	}
+	// A closed seed waits on nothing: the harvest condition dies with the move,
+	// whether the merge settled it or somebody closed the seed by hand.
+	if Closed(next.Status) {
+		next.HarvestWhen = nil
+	}
 	return next, nil
 }
 
@@ -237,6 +242,16 @@ const (
 	MaxReasonChars = 400
 	ShowNotes      = 5
 )
+
+// A reason the daemon writes itself has to fit; the pull request title is the
+// part long enough to cut.
+func TrimReason(reason string) string {
+	reason = strings.TrimSpace(reason)
+	if utf8.RuneCountInString(reason) <= MaxReasonChars {
+		return reason
+	}
+	return strings.TrimSpace(string([]rune(reason)[:MaxReasonChars-1])) + "…"
+}
 
 func ValidateNote(body string) error {
 	if strings.TrimSpace(body) == "" {
