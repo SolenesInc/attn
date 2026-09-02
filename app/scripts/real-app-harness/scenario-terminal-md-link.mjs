@@ -85,7 +85,12 @@ async function main() {
   // HID mouse clicks land at absolute screen positions, so the default
   // 20px-visible window park would put every click off-window.
   if (process.env.ATTN_HARNESS_PARK_VISIBLE_PX === undefined) {
-    process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '800';
+    process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '1200';
+  }
+  // Path links resolve on hover; a non-focusable always-on-top window never
+  // receives mouse-moved events on macOS, so the Cmd+click finds no link.
+  if (process.env.ATTN_HARNESS_ALWAYS_ON_TOP === undefined) {
+    process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
   }
 
   // Tauri's fs scope allows $HOME/** and does not match dot-directories, so a
@@ -171,8 +176,9 @@ async function main() {
     // Docking a tile resizes the pane, which reflows text and invalidates any
     // cached row/col geometry.
     const clickTargetFor = async (relPath) => {
-      // A docked-away terminal pane suspends; its released surface reads empty.
-      await client.request('select_session', { sessionId });
+      // A docked tile takes focus and can fold the terminal into a sliver, whose
+      // released surface reads empty; clicking the pane expands it first.
+      await client.request('click_pane', { sessionId, paneId: pane.paneId });
       let read = { text: '' };
       let row = -1;
       const deadline = Date.now() + 15_000;
@@ -223,6 +229,11 @@ async function main() {
     // click also warms it at the exact point the Cmd+click must act on.
     const cmdClickPath = async (relPath) => {
       const target = await clickTargetFor(relPath);
+      // The hover detector runs on mousemove; a pointer already parked on the
+      // cell (the re-click) would click without ever moving.
+      await driver.movePointerInWindow(0.5, 0.9);
+      await driver.movePointerInWindow(target.relativeX, target.relativeY);
+      await delay(250);
       await driver.clickWindow(target.relativeX, target.relativeY);
       await delay(750);
       await driver.clickWindow(target.relativeX, target.relativeY, { modifiers: { command: true } });
