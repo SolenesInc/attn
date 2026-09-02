@@ -93,8 +93,9 @@ gh workflow run app-acceptance.yml --ref main \
 
 Record failures with `outcome=failed`. Any head change needs a new receipt.
 Keep the override workflow on protected `main`; it checks out the candidate
-separately. Merge only with green `PR gate`, `App acceptance`, and required
-approval.
+separately. A manual dispatch does not restart candidate CI, so rerun it after
+recording the override. Merge only with green `PR gate`, `App acceptance`, and
+required approval.
 
 ## Accept and release main
 

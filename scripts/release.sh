@@ -353,6 +353,9 @@ gh workflow run app-acceptance.yml \\
   -f outcome=passed
 \`\`\`
 
+A manual dispatch does not restart this candidate's CI run. Rerun CI after
+recording the override.
+
 Do not merge until \`PR gate\` and \`App acceptance\` are green on \`${candidate_sha}\`.
 
 EOF

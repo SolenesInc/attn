@@ -52,8 +52,9 @@ gh workflow run app-acceptance.yml \
 
 The override loads its workflow and receipt script from protected `main`, then
 checks out the exact `candidate_sha` separately. Any candidate edit needs a new
-automated or manual receipt. Merge only when `PR gate` and `App acceptance` are
-green for the same candidate head.
+automated or manual receipt. A manual dispatch does not restart candidate CI, so
+rerun it after recording the override. Merge only when `PR gate` and `App
+acceptance` are green for the same candidate head.
 
 ## Release preflight
 
