@@ -153,7 +153,7 @@ async function main() {
 
     await waitForFinder(client, true, 'fresh notebook tile auto-opens its finder');
     await driver.activateApp();
-    await driver.pressKeyCode(53); // Esc — InputDriver's --key map only covers printable keys
+    await driver.pressKeyCode(53);
     await waitForFinder(client, false, 'Esc dismisses the finder, leaving focus in the tile');
 
     await driver.activateApp();

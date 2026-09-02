@@ -193,7 +193,7 @@ async function main() {
 
     await runner.step('esc_closes_finder', async () => {
       await driver.activateApp();
-      await driver.pressKeyCode(53); // Esc — InputDriver's --key map only covers printable keys
+      await driver.pressKeyCode(53);
       await waitForFinder(client, false, 'Esc dismisses the finder');
     });
 

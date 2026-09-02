@@ -262,8 +262,6 @@ async function main() {
     return;
   }
 
-  // The 1200px window leaves right-side popup controls off-screen when only
-  // 800px stays visible, so HID clicks cannot reach them.
   if (process.env.ATTN_HARNESS_PARK_VISIBLE_PX === undefined) {
     process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '0';
   }
