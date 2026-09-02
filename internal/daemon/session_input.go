@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -207,7 +208,7 @@ type sessionInputLane struct {
 	placing        bool
 	epoch          uint64
 	userGeneration uint64
-	userDirty      bool
+	userTypedAt    time.Time
 	userSubmit     bool
 	phase          protocol.SessionState
 }
@@ -250,6 +251,17 @@ var sessionInputSubmitDelay = 150 * time.Millisecond
 
 // Claude Code 2.1.228 receipt: warm 181/187ms, fresh 1.06s; 3s is the tripwire.
 var sessionInputTakenWindow = 3 * time.Second
+
+// Receipt (daemon.log, 9h, 5,588 keystrokes): p99 gap 3s, p99.5 12s; 30s is the tripwire.
+var sessionInputQuietWindow = 30 * time.Second
+
+// sessionInputQuietError carries how long the user's last keystroke still guards
+// the composer, so a deferred delivery can retry on its own without a state change.
+type sessionInputQuietError struct{ retryAfter time.Duration }
+
+func (e *sessionInputQuietError) Error() string { return errSessionInputComposerDirty.Error() }
+
+func (e *sessionInputQuietError) Is(target error) bool { return target == errSessionInputComposerDirty }
 
 func sessionInputDeferredError(err error) bool {
 	return errors.Is(err, errSessionInputBlockedByApproval) ||
@@ -515,8 +527,10 @@ func sessionInputPhaseAllows(placement sessionInputPlacement, state protocol.Ses
 }
 
 func (m *sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID string, lane *sessionInputLane, allowUserComposer bool) (sessionInputReason, error) {
-	if lane.userDirty && !allowUserComposer {
-		return sessionInputReasonUserComposerDirty, errSessionInputComposerDirty
+	if !allowUserComposer && !lane.userTypedAt.IsZero() {
+		if remaining := sessionInputQuietWindow - time.Since(lane.userTypedAt); remaining > 0 {
+			return sessionInputReasonUserComposerDirty, &sessionInputQuietError{retryAfter: remaining}
+		}
 	}
 	line, known, selector := m.daemon.sessionInputScreen(ctx, sessionID)
 	if !known {
@@ -541,10 +555,10 @@ func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, dat
 			lane.phase = session.State
 		}
 	}
-	if isUserKeystrokeSource(source) {
+	if isUserKeystrokeSource(source) && sessionInputEditsComposer(data) {
 		lane.userGeneration++
 		if len(data) > 0 {
-			lane.userDirty = true
+			lane.userTypedAt = time.Now()
 			for _, attempt := range lane.attempts {
 				if !attempt.composer || (attempt.stage != sessionInputPlaced && attempt.stage != sessionInputIndeterminate) {
 					continue
@@ -563,6 +577,27 @@ func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, dat
 		}
 	}
 	return m.daemon.ptyBackend.Input(ctx, sessionID, data)
+}
+
+// A pointer moving over the pane is not the user drafting a prompt: SGR mouse
+// reports and focus reports never edit the composer, so they do not guard it.
+func sessionInputEditsComposer(data []byte) bool {
+	rest := data
+	for len(rest) > 0 {
+		switch {
+		case bytes.HasPrefix(rest, []byte("\x1b[<")):
+			end := bytes.IndexAny(rest, "Mm")
+			if end < 0 {
+				return true
+			}
+			rest = rest[end+1:]
+		case bytes.HasPrefix(rest, []byte("\x1b[I")), bytes.HasPrefix(rest, []byte("\x1b[O")):
+			rest = rest[3:]
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 func (m *sessionInputModule) observePromptTaken(sessionID, prompt string, at time.Time) sessionInputEffects {
@@ -624,7 +659,7 @@ func (m *sessionInputModule) observePromptTaken(sessionID, prompt string, at tim
 		}
 		lane.pending = kept
 	}
-	lane.userDirty = false
+	lane.userTypedAt = time.Time{}
 	lane.userSubmit = false
 	return m.takeLocked(lane, sessionID, candidate, at)
 }
@@ -718,7 +753,7 @@ func (lane *sessionInputLane) clearConsumedUserInputLocked() {
 		}
 	}
 	lane.pending = kept
-	lane.userDirty = false
+	lane.userTypedAt = time.Time{}
 	lane.userSubmit = false
 }
 
