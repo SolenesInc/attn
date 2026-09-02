@@ -279,10 +279,17 @@ async function main() {
       sessionIds.push(created.sessionId);
       await observer.waitForSession({ id: created.sessionId, timeoutMs: 30_000 });
       await client.request('select_session', { sessionId: created.sessionId });
-      const opened = await composerOpen(client, created.sessionId, 'the resumed conversation to open');
-      if (!(opened.messages || []).some((message) => message.text.includes(SECRET))) {
-        throw new Error(`the resumed session drew none of the conversation it forked: ${JSON.stringify(opened.messages)}`);
-      }
+      await composerOpen(client, created.sessionId, 'the resumed conversation to open');
+      // The composer enables before the forked turns are drawn, so poll for the
+      // conversation rather than reading messages the instant input unlocks.
+      await pollFor(
+        async () => {
+          const current = await conversationState(client, created.sessionId);
+          return (current?.messages || []).some((message) => message.text.includes(SECRET)) ? current : null;
+        },
+        'the resumed session to draw the conversation it forked',
+        30_000,
+      );
 
       await sendPrompt(client, created.sessionId, 'What word did I ask you to remember? Reply with only that word.');
       const settled = await settledWith(client, created.sessionId, SECRET, 'the resumed agent to answer from the conversation it picked up');
