@@ -80,7 +80,7 @@ describe('scenarioCatalog agent tripwire flags', () => {
   });
 
   it('keeps the queue family armed on the mock agent', () => {
-    for (const runnerId of ['AGENT-QUEUE', 'AGENT-QUEUE-SNOOZE', 'COUNTDOWN-CANCEL', 'SETTLE-TYPING-HOLD']) {
+    for (const runnerId of ['AGENT-QUEUE', 'COUNTDOWN-CANCEL', 'SETTLE-TYPING-HOLD']) {
       expect(allowRealAgentsForRunner(runnerId), runnerId).toBeUndefined();
     }
   });

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Prereqs: a non-production profile install with the automation layer, and a
-// built `./attn` (or ATTN_HARNESS_BIN) for the restart step.
+// built `./attn` (or ATTN_HARNESS_BIN) for the two restart steps.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,13 +20,15 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile } from './harnessProfile.mjs';
+import { currentHarnessProfile, dataDirForProfile } from './harnessProfile.mjs';
 import { ensureClaudePromptReadyViaPty, writeQueueAgentFixture } from './scenarioAgents.mjs';
 import { waitForFirstWorkspacePane, waitForPaneInputFocus } from './scenarioAssertions.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 const TURN_OPENING_STATES = new Set(['waiting_input', 'pending_approval', 'unknown']);
+// A snoozed agent's turn never opens, so its run ends in idle instead.
+const STOPPED_STATES = new Set([...TURN_OPENING_STATES, 'idle']);
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -66,6 +68,38 @@ function turnIds(queue) {
 
 function settledIds(queue) {
   return (queue.settled || []).map((row) => row.id);
+}
+
+function snoozedIds(queue) {
+  return (queue.snoozed?.rows || []).map((row) => row.id);
+}
+
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// The pty worker registry names the agent process it spawned for a session.
+// Matching a command line instead would enumerate every agent on this machine.
+function registeredAgentPid(dataDir, sessionId) {
+  const workersRoot = path.join(dataDir, 'workers');
+  for (const instance of fs.readdirSync(workersRoot)) {
+    const registryDir = path.join(workersRoot, instance, 'registry');
+    if (!fs.existsSync(registryDir)) continue;
+    for (const entry of fs.readdirSync(registryDir)) {
+      const record = JSON.parse(fs.readFileSync(path.join(registryDir, entry), 'utf8'));
+      // A relaunch leaves the previous daemon instance's entry behind, naming
+      // the pid of a process that is already gone.
+      if (record.session_id !== sessionId) continue;
+      const pid = Number(record.child_pid);
+      if (processAlive(pid)) return pid;
+    }
+  }
+  return null;
 }
 
 async function paneIdFor(client, workspaceSessionId, sessionId) {
@@ -120,12 +154,20 @@ function questionPrompt(token) {
   ].join(' ');
 }
 
-// The queue is read every 500ms; a turn has to be working across a read.
-const WORKING_WINDOW_MS = 4_000;
+// A queue read is a bridge round trip (measured p100 14ms over a run) on top of
+// this scenario's own 500ms poll gap, so four reads land inside this window.
+const WORKING_WINDOW_MS = 2_500;
 const SHORT_RUN_PROMPT = 'Reply with the single word: done. Do not ask me anything and do not use any tools.';
 const LONG_RUN_PROMPT = 'Count from 1 to 500, one number per line, nothing else. Do not use any tools.';
-// Longer than the 5s auto-settle arm, shorter than the 60s countdown.
-const LONG_RUN_MS = 20_000;
+// Auto-settle's floors are a 5s arm and a 3s countdown; measured 8.1s from the
+// run starting to the handover, and this run has to outlast that.
+const LONG_RUN_MS = 12_000;
+// A daemon broadcast reaches the band within one poll, measured 505ms worst
+// case: past this window, what the band shows is what it is going to show.
+const BAND_UPDATE_WINDOW_MS = 1_500;
+// The band has to be read closed before this deadline wakes the row again; that
+// read landed 0.5s after the command, and the wake fires within 0.1s of it.
+const SHORT_SNOOZE_MS = 5_000;
 const QUEUE_TURNS = [
   { includes: 'single word: done', actions: [{ type: 'reply', text: 'done', state: 'idle' }] },
   {
@@ -134,10 +176,10 @@ const QUEUE_TURNS = [
   },
 ];
 
-// Measured over a green mock run: the slowest turn opened 6.1s after its prompt.
+// Measured over a green mock run: the slowest turn opened 3.6s after its prompt.
 const OWED_TURN_TIMEOUT_MS = 45_000;
 const SHORT_RUN_TIMEOUT_MS = 30_000;
-// The long run is LONG_RUN_MS of work plus its stop; its step measured 21.8s.
+// The long run is LONG_RUN_MS of work plus its stop; its step measured 13.3s.
 const LONG_RUN_TIMEOUT_MS = 60_000;
 
 async function driveToOwedTurn(client, observer, agent, token, description) {
@@ -152,6 +194,23 @@ async function driveToOwedTurn(client, observer, agent, token, description) {
     OWED_TURN_TIMEOUT_MS,
   );
   return { state, elapsedMs: Date.now() - startedAt };
+}
+
+async function driveToStop(client, observer, agent, token, description) {
+  await submitPrompt(client, agent.sessionId, agent.paneId, questionPrompt(token));
+  await pollFor(
+    () => (observer.getSession(agent.sessionId)?.state === 'working' ? true : null),
+    `${description} to start working`,
+    OWED_TURN_TIMEOUT_MS,
+  );
+  return pollFor(
+    () => {
+      const state = observer.getSession(agent.sessionId)?.state;
+      return STOPPED_STATES.has(state) ? state : null;
+    },
+    description,
+    OWED_TURN_TIMEOUT_MS,
+  );
 }
 
 async function waitForTurns(client, expected, description, timeoutMs = 30_000) {
@@ -177,7 +236,7 @@ async function main() {
     tier: 'tier2-local-mock-agent',
     prefix: 'agent-queue',
     metadata: {
-      focus: 'a turn opens on a state and closes only when the user settles it',
+      focus: 'a turn opens on a state, closes only when the user settles or snoozes it',
     },
   });
 
@@ -186,6 +245,7 @@ async function main() {
   const driver = createWindowDriver({ appPath: options.appPath });
   const profile = currentHarnessProfile();
   const attnBin = resolveAttnBin();
+  const dataDir = dataDirForProfile(profile);
   const daemonEnv = { ...process.env, ATTN_PROFILE: profile };
   const createdSessionIds = [];
 
@@ -201,12 +261,21 @@ async function main() {
   runner.registerCleanup('restore_queue_mode', () =>
     client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' }).catch(() => {}));
 
+  const snoozeUntil = (sessionId, ms) => {
+    const until = new Date(Date.now() + ms).toISOString();
+    observer.send({ cmd: 'snooze_turn', session_id: sessionId, until });
+    return until;
+  };
+
   let alpha;
   let beta;
 
   try {
     await runner.step('launch_app_with_queue_mode', async () => {
       process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
+      // macOS makes an always-on-top harness window non-focusable, so every
+      // native key in this scenario would land nowhere.
+      process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
       await launchFreshAppAndConnect(client, observer);
       await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
     });
@@ -493,7 +562,7 @@ async function main() {
         const session = (state.sessions || []).find((entry) => entry.agent === 'shell');
         return session?.state === 'idle' ? session : null;
       }, 'the shell pane to register and settle into idle', 30_000);
-      await delay(3000);
+      await delay(BAND_UPDATE_WINDOW_MS);
       const after = await queueState(client);
       runner.assert(
         !turnIds(after).includes(shell.id),
@@ -524,7 +593,7 @@ async function main() {
           .find((entry) => entry.agent === 'shell' && entry.id !== shell.id && entry.state === 'idle');
         return session || null;
       }, 'the shell split out of the shell to register and settle into idle', 30_000);
-      await delay(3000);
+      await delay(BAND_UPDATE_WINDOW_MS);
       const nestedQueue = await queueState(client);
       runner.assert(
         !turnIds(nestedQueue).includes(nested.id) && !settledIds(nestedQueue).includes(nested.id),
@@ -703,7 +772,7 @@ async function main() {
         const queue = await queueState(client);
         if (turnIds(queue).length === 0) return queue;
         await pressShortcutKeys(client, driver, 'session.settle');
-        await delay(1500);
+        await delay(BAND_UPDATE_WINDOW_MS);
         return null;
       }, 'the band emptied one keyboard settle at a time', 45_000, 0);
       runner.assert(emptied.empty, 'the band says so itself once nothing is owed');
@@ -785,11 +854,190 @@ async function main() {
         'both agents owed while the user sits on home',
         30_000,
       );
-      await delay(5_000);
+      await delay(BAND_UPDATE_WINDOW_MS);
       const stayed = await client.request('get_state');
       runner.assert(
         stayed.activeSessionId === null,
         `a home the user chose keeps them, however many agents ask: ${stayed.activeSessionId}`,
+      );
+    });
+
+    await runner.step('snoozing_from_the_row_menu_parks_the_agent_and_hands_over', async () => {
+      await client.request('select_session', { sessionId: alpha.sessionId });
+      await pollFor(async () => {
+        const state = await client.request('get_state');
+        return state.activeSessionId === alpha.sessionId ? state : null;
+      }, 'alpha to be the agent on screen', 15_000);
+
+      await client.request('dom_click', { selector: `[data-testid="queue-snooze-${alpha.sessionId}"]` });
+      const chosen = await pollFor(
+        () => client.request('dom_click', { selector: '[data-testid="snooze-choice-30m"]' }).catch(() => null),
+        'the snooze duration menu to open with its 30-minute choice',
+        10_000,
+      );
+      runner.log('chose 30 minutes', chosen);
+
+      const queue = await waitForTurns(client, [beta.sessionId], 'alpha out of the turns band');
+      runner.assert(
+        !settledIds(queue).includes(alpha.sessionId),
+        `a deferred agent is not in Settled either: ${JSON.stringify(settledIds(queue))}`,
+      );
+      runner.assert(queue.snoozed.present, 'the Snoozed section is drawn once something is deferred');
+      runner.assert(
+        queue.snoozed.header.includes('(1)'),
+        `the section counts what is in it: ${queue.snoozed.header}`,
+      );
+      runner.assert(
+        !queue.snoozed.expanded && queue.snoozed.rows.length === 0,
+        'the section ships collapsed — a snooze surfaces itself when it wakes',
+      );
+
+      await client.request('dom_click', { selector: '[data-testid="snoozed-section-header"]' });
+      const expanded = await pollFor(async () => {
+        const current = await queueState(client);
+        return current.snoozed.expanded ? current : null;
+      }, 'the Snoozed section to expand', 10_000);
+      const row = expanded.snoozed.rows.find((entry) => entry.id === alpha.sessionId);
+      runner.assert(row, `alpha is the deferred row: ${JSON.stringify(snoozedIds(expanded))}`);
+      runner.assert(row.wake, `the row says when it comes back: ${JSON.stringify(row)}`);
+      runner.log('deferred row', row);
+
+      const session = await pollFor(
+        () => {
+          const current = observer.getSession(alpha.sessionId);
+          // turn_owed is omitted from the broadcast when false.
+          return current && !current.turn_owed && current.turn_snoozed_until ? current : null;
+        },
+        'the daemon to broadcast the closed turn and the deadline',
+        15_000,
+      );
+      runner.log('broadcast deadline', {
+        turnOwed: session.turn_owed ?? false,
+        snoozedUntil: session.turn_snoozed_until,
+      });
+      const minutes = (Date.parse(session.turn_snoozed_until) - Date.now()) / 60_000;
+      runner.assert(
+        minutes > 28 && minutes < 31,
+        `the 30-minute choice deferred it by about 30 minutes: ${minutes.toFixed(1)}`,
+      );
+
+      const moved = await pollFor(async () => {
+        const state = await client.request('get_state');
+        return state.activeSessionId === beta.sessionId ? state : null;
+      }, 'snoozing the agent on screen to hand over the next one that wants the user', 15_000);
+      runner.assert(moved.activeSessionId === beta.sessionId, 'handover landed on beta');
+    });
+
+    await runner.step('the_deferral_holds_while_the_agent_runs_and_stops', async () => {
+      const state = await driveToStop(client, observer, alpha, 'SNOOZE_ALPHA_AGAIN', 'the deferred agent to stop again');
+      runner.log('the deferred agent stopped', { state });
+      await delay(BAND_UPDATE_WINDOW_MS);
+
+      const queue = await queueState(client);
+      runner.assert(
+        JSON.stringify(turnIds(queue)) === JSON.stringify([beta.sessionId]),
+        `stopping opened no turn for the deferred agent: ${JSON.stringify(turnIds(queue))}`,
+      );
+      runner.assert(
+        snoozedIds(queue).includes(alpha.sessionId),
+        `it is still parked, with its wake time: ${JSON.stringify(queue.snoozed)}`,
+      );
+      runner.assert(
+        !observer.getSession(alpha.sessionId)?.turn_owed,
+        'and the daemon agrees no turn is owed',
+      );
+    });
+
+    await runner.step('waking_early_returns_it_to_the_tail', async () => {
+      await client.request('dom_click', { selector: `[data-testid="queue-wake-${alpha.sessionId}"]` });
+      const queue = await waitForTurns(
+        client,
+        [beta.sessionId, alpha.sessionId],
+        'the woken agent back in the band, behind the turn owed longer',
+      );
+      runner.assert(
+        !queue.snoozed.present,
+        `the section goes away with the last deferral: ${JSON.stringify(queue.snoozed)}`,
+      );
+      runner.assert(turnIds(queue)[1] === alpha.sessionId, 'it came back at the tail');
+    });
+
+    await runner.step('the_deadline_wakes_it_on_its_own', async () => {
+      const until = snoozeUntil(alpha.sessionId, SHORT_SNOOZE_MS);
+      runner.log('deferred by the daemon command', { until });
+      await waitForTurns(client, [beta.sessionId], 'the short deferral to close the turn');
+
+      const queue = await pollFor(
+        async () => {
+          const current = await queueState(client);
+          return turnIds(current).length === 2 ? current : null;
+        },
+        'the wake deadline to put it back by itself',
+        45_000,
+      );
+      runner.assert(
+        JSON.stringify(turnIds(queue)) === JSON.stringify([beta.sessionId, alpha.sessionId]),
+        `the deadline woke it to the tail: ${JSON.stringify(turnIds(queue))}`,
+      );
+      runner.assert(
+        !queue.snoozed.present,
+        `and cleared the deferral: ${JSON.stringify(queue.snoozed)}`,
+      );
+    });
+
+    await runner.step('a_deferral_survives_a_daemon_restart', async () => {
+      snoozeUntil(alpha.sessionId, 20 * 60_000);
+      await waitForTurns(client, [beta.sessionId], 'alpha deferred again, for long enough to restart under');
+
+      await client.quitApp();
+      await observer.close();
+      try { execFileSync(attnBin, ['daemon', 'stop'], { env: daemonEnv, encoding: 'utf8' }); } catch {}
+      execFileSync(attnBin, ['daemon', 'ensure'], { env: daemonEnv, encoding: 'utf8' });
+      await relaunchAppAndConnect(client, observer);
+
+      const queue = await waitForTurns(
+        client,
+        [beta.sessionId],
+        'the deferral rebuilt from the persisted deadline',
+        60_000,
+      );
+      runner.assert(
+        snoozedIds(queue).includes(alpha.sessionId) || queue.snoozed.header.includes('(1)'),
+        `alpha is still parked after the restart: ${JSON.stringify(queue.snoozed)}`,
+      );
+      runner.assert(
+        observer.getSession(alpha.sessionId)?.turn_snoozed_until,
+        'and the daemon still broadcasts its deadline',
+      );
+    });
+
+    await runner.step('a_dead_agent_breaks_through_its_own_snooze', async () => {
+      // SIGKILL, not a clean exit: a clean exit is auto-close's business and
+      // would take the row away instead of ringing.
+      const pid = registeredAgentPid(dataDir, alpha.sessionId);
+      runner.assert(pid, `found the deferred agent's process: ${pid}`);
+      process.kill(pid, 'SIGKILL');
+
+      const queue = await pollFor(
+        async () => {
+          const current = await queueState(client);
+          return turnIds(current).includes(alpha.sessionId) ? current : null;
+        },
+        'the dead agent to break through its deferral and ring',
+        60_000,
+      );
+      runner.log('after the break-through', {
+        turns: turnIds(queue),
+        state: observer.getSession(alpha.sessionId)?.state,
+        reason: observer.getSession(alpha.sessionId)?.state_reason,
+      });
+      runner.assert(
+        !queue.snoozed.present,
+        `the break-through consumed the deferral rather than pausing it: ${JSON.stringify(queue.snoozed)}`,
+      );
+      runner.assert(
+        !observer.getSession(alpha.sessionId)?.turn_snoozed_until,
+        'and the daemon dropped the deadline',
       );
     });
 
