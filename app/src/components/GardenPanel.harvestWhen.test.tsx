@@ -43,16 +43,20 @@ function renderPanel() {
 }
 
 describe('GardenPanel harvest condition', () => {
-  it('marks an armed row so it reads apart from an ordinary parked one', () => {
+  it('says what an armed row waits on where a parked row says parked', () => {
     renderPanel();
 
     const row = document.querySelector('[data-seed-row="s-armed1"]');
     expect(row).toHaveTextContent('harvests on #42');
-    expect(row?.querySelector('.is-armed')).toHaveAttribute(
+    expect(row).not.toHaveTextContent('parked');
+    expect(row?.querySelector('.garden-row__armed')).toHaveAttribute(
       'title',
       'harvests when victorarias/attn#42 merges',
     );
-    expect(document.querySelector('[data-seed-row="s-park11"]')).not.toHaveTextContent('harvests on');
+
+    const ordinary = document.querySelector('[data-seed-row="s-park11"]');
+    expect(ordinary).toHaveTextContent('parked');
+    expect(ordinary).not.toHaveTextContent('harvests on');
   });
 
   it('says the whole condition on the seed it opens', () => {

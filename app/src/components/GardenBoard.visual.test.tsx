@@ -53,6 +53,16 @@ const world = [
       set_at: '2026-08-27T09:00:00Z',
     },
   }),
+  seed({
+    id: 's-armrdy',
+    title: 'armed but still pickable',
+    ready: true,
+    harvest_when: {
+      pull_request: 'github.com:victorarias/attn#43',
+      url: 'https://github.com/victorarias/attn/pull/43',
+      set_at: '2026-08-27T09:00:00Z',
+    },
+  }),
   seed({ id: 's-done11', title: 'finished work', status: 'harvested' }),
 ];
 
@@ -88,18 +98,28 @@ describe('GardenBoard visual language', () => {
     expect(document.querySelector('[data-seed="s-ready1"]')).toHaveClass('is-ready');
     expect(document.querySelector('[data-seed="s-wait11"]')).toHaveClass('is-not-ready');
     expect(document.querySelector('[data-column="parked"] [data-seed="s-park11"]')).not.toBeNull();
-    expect(screen.getAllByText('parked')).toHaveLength(2);
+    expect(screen.getByText('parked')).toBeInTheDocument();
   });
 
-  it('tells an armed card apart from a card somebody merely put down', () => {
+  it('says what an armed card waits on instead of repeating its column', () => {
     renderBoard();
 
     const card = document.querySelector('[data-seed="s-armed1"]');
     expect(card).toHaveTextContent('harvests on #42');
+    expect(card).not.toHaveTextContent('parked');
     expect(card?.querySelector('.garden-card__armed')).toHaveAttribute(
       'title',
       'harvests when victorarias/attn#42 merges',
     );
+    expect(document.querySelector('[data-seed="s-park11"]')).toHaveTextContent('parked');
     expect(document.querySelector('[data-seed="s-park11"]')).not.toHaveTextContent('harvests on');
+  });
+
+  it('keeps the marker beside ready, where the state still carries its own news', () => {
+    renderBoard();
+
+    const card = document.querySelector('[data-seed="s-armrdy"]');
+    expect(card).toHaveTextContent('ready');
+    expect(card).toHaveTextContent('harvests on #43');
   });
 });

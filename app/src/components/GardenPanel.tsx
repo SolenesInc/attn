@@ -274,9 +274,12 @@ function SeedRow({
             <span className="garden-row__title">
               <Marked text={seed.title} ranges={match?.titleRanges ?? []} />
             </span>
-            {signal && <span className={`garden-row__signal is-${signal.tone}`}>{signal.text}</span>}
+            {/* Parked says nothing the row has not already said; what the seed waits on does. */}
+            {signal && !(armed && signal.text === 'parked') && (
+              <span className={`garden-row__signal is-${signal.tone}`}>{signal.text}</span>
+            )}
             {armed && (
-              <span className="garden-row__signal is-armed" title={armed.sentence}>{armed.marker}</span>
+              <span className="garden-row__armed" title={armed.sentence}>{armed.marker}</span>
             )}
           </span>
           <span className="garden-row__meta">

@@ -12,7 +12,7 @@ import {
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import type { Seed } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
-import { harvestWhenDisplay } from '../utils/harvestWhen';
+import { harvestWhenDisplay, type HarvestWhenDisplay } from '../utils/harvestWhen';
 import {
   columnOf,
   heldByOther,
@@ -649,8 +649,7 @@ function Card({
       >
         <span className="garden-card__title">{seed.title}</span>
         <span className="garden-card__meta">
-          <CardMeta seed={seed} column={column} blockers={blockers} tenderLive={tenderLive} plot={plot} />
-          {armed && <span className="garden-card__armed" title={armed.sentence}>{armed.marker}</span>}
+          <CardMeta seed={seed} column={column} blockers={blockers} tenderLive={tenderLive} plot={plot} armed={armed} />
           <span className="garden-card__id">{seed.id}</span>
           <span className="garden-card__age">{ageOf(seed.updated_at || seed.created_at)}</span>
         </span>
@@ -700,13 +699,24 @@ function Card({
 }
 
 function CardMeta({
-  seed, column, blockers, tenderLive, plot,
-}: { seed: Seed; column: ColumnKey; blockers: number; tenderLive: boolean; plot: string }) {
+  seed, column, blockers, tenderLive, plot, armed,
+}: {
+  seed: Seed; column: ColumnKey; blockers: number; tenderLive: boolean; plot: string;
+  armed: HarvestWhenDisplay | null;
+}) {
   if (plot) return <span className="garden-card__plot">{plot}</span>;
+  // Parked says nothing the column has not already said; what the seed waits on does.
+  const marker = armed ? <span className="garden-card__armed" title={armed.sentence}>{armed.marker}</span> : null;
   switch (column) {
     case 'ready':
-      if (seed.ready) return <span className="garden-card__ready">ready</span>;
+      if (seed.ready) {
+        return <>
+          <span className="garden-card__ready">ready</span>
+          {marker}
+        </>;
+      }
       if (blockers > 0) return <span className="garden-card__held">blocked by {blockers}</span>;
+      if (marker) return marker;
       if (seed.template) return <span className="garden-card__held">packet</span>;
       if (seed.gate) return <span className="garden-card__held">gate</span>;
       return <span className="garden-card__held">not ready</span>;
@@ -718,7 +728,7 @@ function CardMeta({
         </span>
       );
     case 'parked':
-      return <span className="garden-card__held">parked</span>;
+      return marker ?? <span className="garden-card__held">parked</span>;
     case 'closed':
       return (
         <span className={`garden-card__closed is-${seed.status}`}>

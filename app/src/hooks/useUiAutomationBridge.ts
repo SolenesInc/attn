@@ -1334,6 +1334,7 @@ function collectGardenBoardUiState() {
       title: card.querySelector('.garden-card__title')?.textContent?.trim() ?? '',
       selected: card.classList.contains('is-selected'),
       plot: Boolean(card.querySelector('.garden-card__drill')),
+      armed: card.querySelector('.garden-card__armed')?.textContent?.trim() ?? '',
     })),
     zones: Array.from(column.querySelectorAll('[data-zone]')).map(
       (zone) => (zone as HTMLElement).dataset.zone ?? '',
@@ -1382,6 +1383,7 @@ function collectGardenUiState() {
     title: row.querySelector('.garden-row__title')?.textContent?.trim() ?? '',
     status: (row.className.match(/is-(planted|growing|harvested|withered|dormant|unknown)/) ?? [])[1] ?? '',
     signal: row.querySelector('.garden-row__signal')?.textContent?.trim() ?? '',
+    armed: row.querySelector('.garden-row__armed')?.textContent?.trim() ?? '',
     tender: row.querySelector('.garden-row__tender')?.textContent?.trim() ?? '',
     plot: row.querySelector('.garden-row__plot')?.textContent?.trim() ?? '',
     home: row.querySelector('.garden-row__home')?.textContent?.trim() ?? '',
