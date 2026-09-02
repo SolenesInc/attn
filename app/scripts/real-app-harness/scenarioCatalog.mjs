@@ -365,6 +365,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'nisse-conversation',
+    skipOn: { linux: 'the attn-nisse host exits seconds after spawn in some Linux runs (s-k5mf6n); nisse is being deprecated, so its Linux witness is off until its fate is decided' },
     runnerId: 'PI-HOST-CONVERSATION',
     allowRealAgents: ['pi'],
     label: 'Conversation session: nisse round trip, second prompt after settle, no orphans on close',
@@ -375,6 +376,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'nisse-nudge',
+    skipOn: { linux: 'the attn-nisse host exits seconds after spawn in some Linux runs (s-k5mf6n); nisse is being deprecated, so its Linux witness is off until its fate is decided' },
     runnerId: 'PI-HOST-NUDGE',
     allowRealAgents: ['pi'],
     label: 'Conversation session: steer mid-run, nudge an idle session, state and turn',
@@ -384,6 +386,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'nisse-tools',
+    skipOn: { linux: 'the attn-nisse host exits seconds after spawn in some Linux runs (s-k5mf6n); nisse is being deprecated, so its Linux witness is off until its fate is decided' },
     runnerId: 'PI-HOST-TOOLS',
     allowRealAgents: ['pi'],
     label: 'Conversation session: tool cards, on-demand detail, full output, patch as a diff, queue cancel',
@@ -393,6 +396,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'nisse-revive',
+    skipOn: { linux: 'the attn-nisse host exits seconds after spawn in some Linux runs (s-k5mf6n); nisse is being deprecated, so its Linux witness is off until its fate is decided' },
     runnerId: 'PI-HOST-REVIVE',
     allowRealAgents: ['pi'],
     label: 'Conversation session: kill -9 to recoverable, reload with history, snapshot on a cold client',
@@ -402,6 +406,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'nisse-delegate',
+    skipOn: { linux: 'the attn-nisse host exits seconds after spawn in some Linux runs (s-k5mf6n); nisse is being deprecated, so its Linux witness is off until its fate is decided' },
     runnerId: 'PI-HOST-DELEGATE',
     allowRealAgents: ['pi'],
     label: 'Delegation to a conversation agent: brief as the first message, the agent reports on its own ticket, a brief survives a crash before the first word',
@@ -411,6 +416,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'nisse-history',
+    skipOn: { linux: 'the attn-nisse host exits seconds after spawn in some Linux runs (s-k5mf6n); nisse is being deprecated, so its Linux witness is off until its fate is decided' },
     runnerId: 'PI-HOST-HISTORY',
     allowRealAgents: ['pi'],
     label: 'Conversation session: resume an existing conversation file, page a long transcript, switch model mid-session',
