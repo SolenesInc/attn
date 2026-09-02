@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-
 const ProtocolVersion = "283"
 
 const (
