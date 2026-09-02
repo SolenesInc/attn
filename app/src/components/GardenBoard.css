@@ -457,6 +457,11 @@
   color: var(--color-text-muted);
 }
 
+.garden-card__armed {
+  color: var(--color-text-tertiary);
+  flex: none;
+}
+
 .garden-card__tender {
   color: var(--color-text-tertiary);
 }

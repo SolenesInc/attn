@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { describe, expect, it, vi } from 'vitest';
 import type { Seed } from '../types/generated';
 import {
@@ -6,6 +7,10 @@ import {
   type SeedDocument,
 } from './SeedDocumentView';
 import type { SeedDocumentNote } from './seedArtifacts';
+
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  openUrl: vi.fn(async () => {}),
+}));
 
 function seed(overrides: Partial<Seed> = {}): Seed {
   return {
@@ -137,6 +142,39 @@ describe('SeedDocumentView', () => {
     const link = screen.getByRole('link', { name: /example\.test/ });
     expect(link).toHaveAttribute('href', 'https://example.test/pr/1');
     expect(link.closest('li')).toHaveTextContent('link');
+  });
+
+  it('says the harvest condition beside the state and opens the pull request', () => {
+    render(
+      <SeedDocumentView
+        document={document({
+          seed: seed({
+            status: 'dormant',
+            tender_session: '',
+            tender_member: '',
+            harvest_when: {
+              pull_request: 'github.com:victorarias/attn#42',
+              url: 'https://github.com/victorarias/attn/pull/42',
+              set_at: '2026-09-02T10:00:00Z',
+            },
+          }),
+        })}
+      />,
+    );
+
+    const details = screen.getByLabelText('Seed details');
+    const link = screen.getByRole('link', { name: /harvests when victorarias\/attn#42 merges/ });
+    expect(details).toContainElement(link);
+    expect(link).toHaveAttribute('href', 'https://github.com/victorarias/attn/pull/42');
+
+    fireEvent.click(link);
+    expect(openUrl).toHaveBeenCalledWith('https://github.com/victorarias/attn/pull/42');
+  });
+
+  it('says nothing about a harvest condition on a seed nobody armed', () => {
+    render(<SeedDocumentView document={document()} />);
+
+    expect(screen.queryByText(/harvests when/)).not.toBeInTheDocument();
   });
 
   it('renders no artifact section for an empty set', () => {

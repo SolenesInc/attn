@@ -1,0 +1,16 @@
+.harvest-when {
+  align-items: baseline;
+  color: var(--color-text-tertiary);
+  display: inline-flex;
+  gap: 4px;
+  text-decoration: none;
+}
+
+a.harvest-when:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.harvest-when > span {
+  color: var(--color-text-muted);
+}

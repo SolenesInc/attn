@@ -12,6 +12,7 @@ import {
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import type { Seed } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
+import { harvestWhenDisplay } from '../utils/harvestWhen';
 import {
   columnOf,
   heldByOther,
@@ -618,6 +619,7 @@ function Card({
 }: CardProps) {
   const verbs = verbsFor(seed);
   const plot = seed.plot_progress ? plotCounts(seed) : '';
+  const armed = harvestWhenDisplay(seed.harvest_when);
   const menu = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!menuOpen) return;
@@ -648,6 +650,7 @@ function Card({
         <span className="garden-card__title">{seed.title}</span>
         <span className="garden-card__meta">
           <CardMeta seed={seed} column={column} blockers={blockers} tenderLive={tenderLive} plot={plot} />
+          {armed && <span className="garden-card__armed" title={armed.sentence}>{armed.marker}</span>}
           <span className="garden-card__id">{seed.id}</span>
           <span className="garden-card__age">{ageOf(seed.updated_at || seed.created_at)}</span>
         </span>

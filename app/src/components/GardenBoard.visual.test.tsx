@@ -43,6 +43,16 @@ const world = [
     tender_member: 'trellis',
   }),
   seed({ id: 's-park11', title: 'paused on purpose', status: 'dormant' }),
+  seed({
+    id: 's-armed1',
+    title: 'waiting on the merge',
+    status: 'dormant',
+    harvest_when: {
+      pull_request: 'github.com:victorarias/attn#42',
+      url: 'https://github.com/victorarias/attn/pull/42',
+      set_at: '2026-08-27T09:00:00Z',
+    },
+  }),
   seed({ id: 's-done11', title: 'finished work', status: 'harvested' }),
 ];
 
@@ -78,6 +88,18 @@ describe('GardenBoard visual language', () => {
     expect(document.querySelector('[data-seed="s-ready1"]')).toHaveClass('is-ready');
     expect(document.querySelector('[data-seed="s-wait11"]')).toHaveClass('is-not-ready');
     expect(document.querySelector('[data-column="parked"] [data-seed="s-park11"]')).not.toBeNull();
-    expect(screen.getByText('parked')).toBeInTheDocument();
+    expect(screen.getAllByText('parked')).toHaveLength(2);
+  });
+
+  it('tells an armed card apart from a card somebody merely put down', () => {
+    renderBoard();
+
+    const card = document.querySelector('[data-seed="s-armed1"]');
+    expect(card).toHaveTextContent('harvests on #42');
+    expect(card?.querySelector('.garden-card__armed')).toHaveAttribute(
+      'title',
+      'harvests when victorarias/attn#42 merges',
+    );
+    expect(document.querySelector('[data-seed="s-park11"]')).not.toHaveTextContent('harvests on');
   });
 });
