@@ -1,0 +1,7 @@
+kind: fixed
+area: harness
+change: >
+  The garden-seed-reopen scenario failed on every platform: it waited for the
+  mock agent's reply without its bullet, looked for the seed id in a chip hint
+  that no longer carries it, and ran the mock with a transcript the codex
+  driver cannot resume. It now passes on Linux and macOS in about six seconds.
