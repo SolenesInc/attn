@@ -330,6 +330,8 @@ function collectWorkspaceViewState(sessionId: string) {
   return {
     sessionVisible: parseDataFlag(workspaceRoot?.dataset.sessionVisible),
     activePaneId: workspaceRoot?.dataset.activePaneId || null,
+    // A docked tile takes the workspace focus without becoming the active pane.
+    activeLeafId: workspaceRoot?.dataset.activeLeafId || null,
     zoomedPaneId: workspaceRoot?.dataset.zoomedPaneId || null,
     maximizedPaneId: workspaceRoot?.dataset.maximizedPaneId || null,
   };
