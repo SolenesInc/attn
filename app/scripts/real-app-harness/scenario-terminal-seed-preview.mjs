@@ -259,10 +259,9 @@ async function main() {
           Buffer.from(shot.pngBase64, 'base64'),
         );
         if (PACE_MS > 0) await delay(PACE_MS);
-        await client.request('hover_pane_cell', {
-          sessionId,
-          paneId: pane.paneId,
-          cell: { row: sentinelRow, col: Math.max(0, paneSize.cols - 2) },
+        await client.request('dom_key', {
+          selector: previewSelector(),
+          key: 'Escape',
         });
         await waitForSelectorAbsent(client, previewSelector(), `${edge.name}-edge preview to close`);
       }
