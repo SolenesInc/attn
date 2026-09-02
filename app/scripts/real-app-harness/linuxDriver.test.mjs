@@ -50,6 +50,8 @@ describe('Linux key names', () => {
     ]);
     expect(linuxKeyName('p', { command: true })).toBe('ctrl+p');
     expect(linuxKeyName('.', { command: true })).toBe('ctrl+period');
+    expect(linuxKeyName('Enter', { command: true, shift: true })).toBe('ctrl+shift+Return');
+    expect(linuxKeyName('ArrowLeft')).toBe('Left');
   });
 
   it('deduplicates command and control because both are Ctrl on Linux', () => {

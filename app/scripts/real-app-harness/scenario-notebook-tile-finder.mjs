@@ -7,6 +7,7 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
+  pressShortcutKeys,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
@@ -122,6 +123,7 @@ async function main() {
 
   try {
     process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
+    process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
       await closeExistingSessions(client, options.sessionRootDir);
@@ -158,7 +160,7 @@ async function main() {
 
     const docked = await runner.step('dock_notebook_tile', async () => {
       await driver.activateApp();
-      await driver.pressKey('n', { command: true, option: true });
+      await pressShortcutKeys(client, driver, 'notebook.openTile');
 
       let result;
       try {
@@ -197,7 +199,7 @@ async function main() {
 
     await runner.step('cmdp_resummons_finder', async () => {
       await driver.activateApp();
-      await driver.pressKey('p', { command: true });
+      await pressShortcutKeys(client, driver, 'file.open');
       await waitForFinder(client, true, 'native Cmd+P re-summons the finder after Esc');
       await captureScreenshotData(path.join(runner.runDir, 'finder-resummoned.png'), { client }).catch((error) => {
         runner.log(`[RealAppHarness] finder-resummoned screenshot failed: ${error}`);

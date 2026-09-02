@@ -1,0 +1,9 @@
+kind: internal
+area: harness
+change: >
+  Real-app scenarios resolve app shortcuts through the live platform binding,
+  so the same scenarios exercise their intended actions on macOS and Linux.
+symptom: >
+  Seven scenarios pressed macOS chords that Linux assigns to different actions
+  or leaves unbound, making the Linux serial matrix fail after the shortcut
+  table reserved plain Ctrl for terminal input.

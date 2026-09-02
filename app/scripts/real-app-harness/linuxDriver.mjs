@@ -66,6 +66,11 @@ export function linuxKeyName(key, modifiers = {}) {
     '/': 'slash',
     '-': 'minus',
     '=': 'equal',
+    Enter: 'Return',
+    ArrowLeft: 'Left',
+    ArrowRight: 'Right',
+    ArrowDown: 'Down',
+    ArrowUp: 'Up',
   };
   const raw = String(key || '').trim();
   const normalized = keyNames[raw] || raw;

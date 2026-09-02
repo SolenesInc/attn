@@ -9,6 +9,7 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
+  pressShortcutKeys,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
@@ -129,6 +130,7 @@ async function main() {
 
   try {
     process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
+    process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
     });
@@ -171,7 +173,7 @@ async function main() {
 
     const summon = async (description) => {
       await driver.activateApp();
-      await driver.pressKey('p', { command: true });
+      await pressShortcutKeys(client, driver, 'file.open');
       try {
         await waitForOpener(client, (state) => state.open, description);
       } catch (error) {

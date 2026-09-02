@@ -7,6 +7,7 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
+  pressShortcutKeys,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
@@ -231,6 +232,7 @@ async function main() {
   try {
     await runner.step('launch_app', async () => {
       process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
+      process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
       await launchFreshAppAndConnect(client, observer);
       await closeExistingSessions(client, options.sessionRootDir);
     });
@@ -274,11 +276,11 @@ async function main() {
 
     await runner.step('assert_cmd_number_shortcuts', async () => {
       await focusAppForNativeShortcut(driver);
-      await driver.pressKey('1', { command: true });
+      await pressShortcutKeys(client, driver, 'workspace.select1');
       await waitForActiveSession(client, workspaceA.sessionId, 'Cmd+1 selecting first workspace session');
       await assertWorkspaceVisible(client, workspaceA.sessionId, workspaceB.sessionId, 2);
 
-      await driver.pressKey('2', { command: true });
+      await pressShortcutKeys(client, driver, 'workspace.select2');
       await waitForActiveSession(client, workspaceB.sessionId, 'Cmd+2 selecting second workspace session');
       await assertWorkspaceVisible(client, workspaceB.sessionId, workspaceA.sessionId, 2);
 
