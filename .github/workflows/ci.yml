@@ -488,6 +488,7 @@ jobs:
     env:
       ATTN_PROFILE: app-acceptance
       ATTN_HARNESS_PROFILE: app-acceptance
+      BROWSER: /usr/bin/curl
     steps:
       - uses: actions/checkout@v4
         with:
@@ -496,7 +497,7 @@ jobs:
       - name: Install Linux desktop dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bash coreutils desktop-file-utils fish imagemagick \
+          sudo apt-get install -y bash coreutils curl desktop-file-utils fish imagemagick \
             libayatana-appindicator3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev \
             libxdo-dev sqlite3 xauth xdg-utils xdotool xvfb zsh
 
