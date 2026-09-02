@@ -105,6 +105,12 @@ export const scenarioCatalog = [
     timeoutMs: 240_000,
   },
   {
+    id: 'garden-seed-tile-navigation',
+    runnerId: 'GardenSeedTileNavigation',
+    label: 'Garden seed tile navigation: a plot walks in, a native Escape unwinds it, Reveal hands the place to the Garden',
+    command: ['pnpm', 'run', 'real-app:scenario-garden-seed-tile-navigation'],
+  },
+  {
     id: 'garden-delegation-reporting',
     runnerId: 'GardenDelegationReporting',
     label: 'Garden delegation reporting: a delegation reports on its seed — log notes, artifacts, steering',
