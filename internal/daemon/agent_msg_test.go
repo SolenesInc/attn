@@ -495,16 +495,29 @@ func TestOversizeSocketFrameIsAnsweredNotDropped(t *testing.T) {
 	}
 }
 
-func TestAgentMailboxRetryStaleCallbackLeavesItsReplacementArmed(t *testing.T) {
+// The target session is waiting for input and the user just typed into it, so
+// a doorbell sent now is held for the quiet window.
+func newHeldDoorbellDaemon(t *testing.T) (*Daemon, *recordingDoorbell, chan int) {
+	t.Helper()
 	d, doorbell := newAgentMsgDaemon(t)
 	addCharacterizationSession(t, d, "sender-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
 	addCharacterizationSession(t, d, "target-session-id", protocol.SessionAgentClaude, protocol.SessionStateWaitingInput)
+	drained := make(chan int, 1)
+	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
+	return d, doorbell, drained
+}
+
+func typeIntoTarget(t *testing.T, d *Daemon) {
+	t.Helper()
+	if err := d.writeSessionPTY("target-session-id", []byte("a draft"), "user"); err != nil {
+		t.Fatalf("user input: %v", err)
+	}
+}
+
+func TestAgentMailboxRetryStaleCallbackLeavesItsReplacementArmed(t *testing.T) {
+	d, doorbell, drained := newHeldDoorbellDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
-		drained := make(chan int, 1)
-		d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
-		if err := d.writeSessionPTY("target-session-id", []byte("a draft"), "user"); err != nil {
-			t.Fatalf("user input: %v", err)
-		}
+		typeIntoTarget(t, d)
 		callAgentMsg(t, d, "target-session-id", "sender-session-id", "the migration landed")
 		d.agentMailboxMu.Lock()
 		stale := d.agentMailboxRetries["target-session-id"]
@@ -565,15 +578,9 @@ func TestAgentMailboxRetryRefusesToArmAfterStop(t *testing.T) {
 }
 
 func TestHandleAgentMsgHeldOffByTypingLandsAfterTheQuietWindow(t *testing.T) {
-	d, doorbell := newAgentMsgDaemon(t)
-	addCharacterizationSession(t, d, "sender-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
-	addCharacterizationSession(t, d, "target-session-id", protocol.SessionAgentClaude, protocol.SessionStateWaitingInput)
+	d, doorbell, drained := newHeldDoorbellDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
-		drained := make(chan int, 1)
-		d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
-		if err := d.writeSessionPTY("target-session-id", []byte("a draft"), "user"); err != nil {
-			t.Fatalf("user input: %v", err)
-		}
+		typeIntoTarget(t, d)
 
 		resp := callAgentMsg(t, d, "target-session-id", "sender-session-id", "the migration landed")
 		result := resp.AgentMsgResult
