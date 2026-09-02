@@ -361,6 +361,8 @@ type Daemon struct {
 	conversationUnsubHooks func()
 	sessionPRUnsubHooks    func()
 	sessionPRHosts         func(host string) (sessionPRHost, bool)
+	// Test seam: runs between a lifecycle move's read and its write.
+	beforeSeedMoveWrite func(seedID string)
 
 	harvestWhenMu        sync.Mutex
 	harvestWhenUntracked map[string]bool

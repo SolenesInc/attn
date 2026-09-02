@@ -582,3 +582,36 @@ func TestAnOrdinaryEditDoesNotStopSettlement(t *testing.T) {
 		t.Fatalf("settlement after an edit left %+v", harvested)
 	}
 }
+
+func TestAnEditBetweenTheMoveReadAndWriteIsRetried(t *testing.T) {
+	d := newGardenDaemon(t)
+	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "edited mid-write"})
+	rec := recordPullRequest(t, d, "sess-a", "https://github.com/victorarias/attn/pull/71")
+	if resp := armWhenMerged(t, d, "sess-a", seed.ID, rec.URL); !resp.Ok {
+		t.Fatalf("arm: %v", protocol.Deref(resp.Error))
+	}
+	observed, err := d.armedSeeds()
+	if err != nil || len(observed) != 1 {
+		t.Fatalf("armed seeds = %+v, %v", observed, err)
+	}
+	settlePullRequest(t, d, rec.PRID, sessionPullRequestMerged, "merged")
+	merged, _ := d.store.SessionPullRequestByID(rec.PRID)
+
+	crossings := 0
+	d.beforeSeedMoveWrite = func(seedID string) {
+		if crossings > 0 {
+			return
+		}
+		crossings++
+		if _, _, err := d.applySeedBodyEdit(seedID, "edited between the read and the write"); err != nil {
+			t.Fatalf("edit: %v", err)
+		}
+	}
+	harvested, _, err := d.fulfilHarvestWhen(observed[0], merged, observed[0].HarvestWhen)
+	if err != nil {
+		t.Fatalf("a write-time conflict on the same condition stopped the harvest: %v", err)
+	}
+	if crossings != 1 || harvested.Status != garden.StatusHarvested || harvested.Body != "edited between the read and the write" {
+		t.Fatalf("crossings=%d, settlement left %+v", crossings, harvested)
+	}
+}

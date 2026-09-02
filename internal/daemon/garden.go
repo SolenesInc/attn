@@ -1425,6 +1425,9 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 		}
 		var written docstore.Document
 		notes := seedTransitionNotes{}
+		if d.beforeSeedMoveWrite != nil {
+			d.beforeSeedMoveWrite(id)
+		}
 		if displaced == nil && comment == "" {
 			written, err = d.writeSeed(*schema, next, doc.Rev, fact)
 		} else {
@@ -1464,7 +1467,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 		}
 		if expectedRev > 0 {
 			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(
-				"%s changed while the reviewed action was being applied; refresh the garden", id)
+				"%s changed while the reviewed action was being applied; refresh the garden%w", id, errSeedRevisionMoved)
 		}
 	}
 	return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(
