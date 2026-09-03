@@ -77,6 +77,7 @@ function seedIDs(text) {
   return [...text.replace(/\n/g, '').matchAll(/(s-[a-z0-9]{6})/g)].map((match) => match[1]);
 }
 
+// Tripwire: these navigations paint in ~150ms, so 20s means a broken app.
 async function awaitSeedTile(client, seedID, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
   let state = { present: false };
@@ -88,9 +89,15 @@ async function awaitSeedTile(client, seedID, timeoutMs = 20_000) {
   throw new Error(`the seed tile for ${seedID} never appeared: ${JSON.stringify(state)}`);
 }
 
+function tileBodySelector(seedID) {
+  return `.workspace-dock-tile:has(.seed-document[data-seed-id="${seedID}"]) .workspace-dock-tile-body`;
+}
+
 async function pressEscape(client, driver, seedID) {
   if (!nativeInputUnavailable) {
     try {
+      await driver.activateApp();
+      await client.request('dom_focus', { selector: tileBodySelector(seedID) });
       await driver.pressKeyCode(53);
       return;
     } catch (error) {
@@ -101,11 +108,28 @@ async function pressEscape(client, driver, seedID) {
     }
   }
 
+  await client.request('dom_focus', { selector: tileBodySelector(seedID) });
   await client.request('dom_terminal_key', {
-    selector: `.workspace-dock-tile:has(.seed-document[data-seed-id="${seedID}"]) .workspace-dock-tile-body`,
+    selector: tileBodySelector(seedID),
     key: 'Escape',
     code: 'Escape',
   });
+}
+
+async function escapeTo(client, driver, fromSeedID, toSeedID) {
+  await pressEscape(client, driver, fromSeedID);
+  try {
+    return await awaitSeedTile(client, toSeedID);
+  } catch (error) {
+    if (nativeInputUnavailable) throw error;
+    const frontmost = await driver.frontmostBundleId().catch(() => '(unknown)');
+    throw new Error(
+      `${error.message}\n\nA native Escape on ${fromSeedID} did not unwind the trail to ${toSeedID}. `
+      + `This scenario needs native keyboard input: grant Accessibility permission to the process `
+      + `running it and keep attn frontmost. Frontmost app was "${frontmost}" `
+      + `(expected "${driver.bundleId}").`,
+    );
+  }
 }
 
 async function main() {
@@ -120,7 +144,6 @@ async function main() {
   const driver = createWindowDriver({ appPath: options.appPath });
   const runner = createScenarioRunner(options, {
     scenarioId: 'GardenSeedTileNavigation',
-    allowRealAgents: false,
     tier: 'local',
     prefix: 'garden-seed-tile-navigation',
   });
@@ -131,8 +154,10 @@ async function main() {
   let nestedLeaf = null;
   try {
     process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
+    process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
     await launchFreshAppAndConnect(client, observer);
     pane = await runner.step('open_session', () => openPane(client, observer, runner));
+    await driver.activateApp();
 
     await runner.step('plant_and_open_the_plot', async () => {
       const payload = path.join(runner.sessionDir, 'plot.json');
@@ -197,13 +222,8 @@ async function main() {
       runner.assert(nestedState.parent === PLOT.children[0].title,
         'the nested seed exposes the intermediate plot as its parent', { nestedState });
 
-      await client.request('dom_focus', {
-        selector: `.workspace-dock-tile:has(.seed-document[data-seed-id="${nestedLeaf}"]) .workspace-dock-tile-body`,
-      });
-      await pressEscape(client, driver, nestedLeaf); // Nested seed → child plot.
-      await awaitSeedTile(client, child);
-      await pressEscape(client, driver, child); // Child plot → crown.
-      const crownState = await awaitSeedTile(client, crown);
+      await escapeTo(client, driver, nestedLeaf, child);
+      const crownState = await escapeTo(client, driver, child, crown);
       runner.assert(crownState.children.length === children.length,
         'successive Escapes unwind one canonical plot edge at a time', { crownState });
     });

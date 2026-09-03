@@ -1,0 +1,7 @@
+kind: internal
+area: harness
+change: >
+  The garden-seed-tile-navigation scenario drove a native Escape at a window
+  the harness launches unfocusable, so the trail never unwound and nothing
+  ran it. It now launches focusable, activates the window before each
+  keystroke, and is listed in the scenario catalog so App acceptance runs it.
