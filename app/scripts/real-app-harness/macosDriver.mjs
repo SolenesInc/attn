@@ -10,6 +10,7 @@ import {
   bundleIdentifierForAppPath,
   defaultAppPathForProfile,
 } from './harnessProfile.mjs';
+import { createKeyInputGuard } from './keyInputGuard.mjs';
 
 const execFileAsync = promisify(execFile);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -46,12 +47,14 @@ export class MacOSDriver {
     bundleId = null,
     appPath = defaultAppPathForProfile(),
     actionDelayMs = 250,
+    keyInputGuard = null,
   } = {}) {
     const resolvedBundleId = bundleId || bundleIdentifierForAppPath(appPath);
     assertProductionRunAllowed({ appPath, bundleId: resolvedBundleId });
     this.bundleId = resolvedBundleId;
     this.appPath = appPath;
     this.actionDelayMs = actionDelayMs;
+    this.keyInputGuard = keyInputGuard || createKeyInputGuard({ appPath });
   }
 
   async launchApp() {
@@ -143,11 +146,13 @@ export class MacOSDriver {
   }
 
   async typeText(text) {
+    this.keyInputGuard.assertReaches(`typeText(${JSON.stringify(text.slice(0, 20))})`);
     await this.runInputDriver(['text', '--text', text, '--prompt-accessibility']);
     await delay(this.actionDelayMs);
   }
 
   async pressKey(key, modifiers = {}) {
+    this.keyInputGuard.assertReaches(`pressKey(${key}, ${this.serializeModifiers(modifiers) || 'no modifiers'})`);
     await this.runInputDriver([
       'key',
       '--key',
@@ -160,6 +165,7 @@ export class MacOSDriver {
   }
 
   async pressKeyCode(keyCode, modifiers = {}) {
+    this.keyInputGuard.assertReaches(`pressKeyCode(${keyCode}, ${this.serializeModifiers(modifiers) || 'no modifiers'})`);
     await this.runInputDriver([
       'keycode',
       '--key-code',

@@ -13,7 +13,7 @@ import {
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessProfile } from './harnessProfile.mjs';
 import { createWindowDriver } from './platform.mjs';
-import { captureScreenshotData } from './nativeWindowCapture.mjs';
+import { captureEvidenceScreenshot } from './nativeWindowCapture.mjs';
 import {
   waitForFirstWorkspacePane,
   waitForPaneShellReady,
@@ -253,9 +253,7 @@ async function main() {
         'tile title becomes the opened file\'s basename',
         10_000,
       );
-      await captureScreenshotData(path.join(runner.runDir, 'off-root-open.png'), { client }).catch((error) => {
-        runner.log(`[RealAppHarness] off-root-open screenshot failed: ${error}`);
-      });
+      await captureEvidenceScreenshot(path.join(runner.runDir, 'off-root-open.png'), { client, log: (m) => runner.log(m) });
     });
 
     await runner.step('assert_off_root_rail_withheld', async () => {
@@ -277,9 +275,7 @@ async function main() {
       await openNoteViaFinder(client, driver, positiveControlBasename);
       await waitForDomSelector(client, RAIL_SELECTOR, true, 'on-root (Notebook) tile CAN render the backlinks/outline rail', 10_000);
       runner.log('[RealAppHarness] on-root (Notebook) tile: rail rendered (positive control).');
-      await captureScreenshotData(path.join(runner.runDir, 'on-root-rail.png'), { client }).catch((error) => {
-        runner.log(`[RealAppHarness] on-root-rail screenshot failed: ${error}`);
-      });
+      await captureEvidenceScreenshot(path.join(runner.runDir, 'on-root-rail.png'), { client, log: (m) => runner.log(m) });
     });
 
     const summary = await runner.finishSuccess({

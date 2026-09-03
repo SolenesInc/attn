@@ -13,7 +13,7 @@ import {
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver, delay } from './platform.mjs';
-import { captureScreenshotData } from './nativeWindowCapture.mjs';
+import { captureEvidenceScreenshot, captureScreenshotData } from './nativeWindowCapture.mjs';
 import {
   waitForFirstWorkspacePane,
   waitForPaneShellReady,
@@ -201,7 +201,7 @@ async function main() {
         !state.rows.some((row) => row.path.includes(runner.runId)),
         `Empty query must not list files that have never been opened: ${JSON.stringify(state.rows)}`,
       );
-      await captureScreenshotData(path.join(runner.runDir, 'opener-empty.png'), { client }).catch(() => {});
+      await captureEvidenceScreenshot(path.join(runner.runDir, 'opener-empty.png'), { client, log: (m) => runner.log(m) });
     });
 
     let betaTileId;
@@ -212,7 +212,7 @@ async function main() {
         (current) => current.rows.some((row) => row.path.endsWith(beta)),
         'fuzzy query matches the untracked markdown file',
       );
-      await captureScreenshotData(path.join(runner.runDir, 'opener-fuzzy.png'), { client }).catch(() => {});
+      await captureEvidenceScreenshot(path.join(runner.runDir, 'opener-fuzzy.png'), { client, log: (m) => runner.log(m) });
       await pickRow(state, beta);
       await waitForOpener(client, (current) => !current.open, 'picking a file closes the opener');
       const ui = await waitForWorkspaceUi(
@@ -303,7 +303,7 @@ async function main() {
         alphaAt >= 0 && betaAt >= 0 && alphaAt < betaAt,
         `Recents must list both opened files, the later open first: ${JSON.stringify(state.rows)}`,
       );
-      await captureScreenshotData(path.join(runner.runDir, 'opener-recents.png'), { client }).catch(() => {});
+      await captureEvidenceScreenshot(path.join(runner.runDir, 'opener-recents.png'), { client, log: (m) => runner.log(m) });
 
       await pickRow(state, beta);
       await waitForOpener(client, (current) => !current.open, 'picking a recent closes the opener');

@@ -1,10 +1,39 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  captureEvidenceScreenshot,
   parseIdentifyPixelDimensions,
   parseSipsPixelDimensions,
   resolveCaptureRect,
 } from './nativeWindowCapture.mjs';
 import { parseCropSpec } from './capture-app-screenshot.mjs';
+
+describe('captureEvidenceScreenshot', () => {
+  const outputPath = path.join(os.tmpdir(), `attn-evidence-${process.pid}.png`);
+  const clientThatFails = (message) => ({ request: () => Promise.reject(new Error(message)) });
+
+  it('fails the run when the capture hit its cap', async () => {
+    const client = clientThatFails('Automation request timed out: capture_screenshot_data (x) after 35000ms');
+    await expect(captureEvidenceScreenshot(outputPath, { client })).rejects.toThrow(/never returned a frame/);
+  });
+
+  it('names a missing artifact and lets the run stand when the app answered', async () => {
+    const logged = [];
+    const client = clientThatFails('Automation request failed: capture_screenshot_data (x): [object Event]');
+    await expect(captureEvidenceScreenshot(outputPath, { client, log: (m) => logged.push(m) })).resolves.toBeNull();
+    expect(logged.join('\n')).toContain('evidence screenshot missing');
+  });
+
+  it('writes the png it was handed', async () => {
+    const pngBase64 = Buffer.from('not-really-a-png').toString('base64');
+    const client = { request: () => Promise.resolve({ pngBase64 }) };
+    await expect(captureEvidenceScreenshot(outputPath, { client })).resolves.toMatchObject({ path: outputPath });
+    expect(fs.readFileSync(outputPath, 'utf8')).toBe('not-really-a-png');
+    fs.rmSync(outputPath, { force: true });
+  });
+});
 
 describe('resolveCaptureRect', () => {
   const windowBounds = { x: 100, y: 200, width: 800, height: 600 };

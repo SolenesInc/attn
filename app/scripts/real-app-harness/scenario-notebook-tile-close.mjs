@@ -110,6 +110,7 @@ async function main() {
 
   try {
     process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
+    process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
     await launchFreshAppAndConnect(client, observer);
     await closeExistingSessions(client, options.sessionRootDir);
 

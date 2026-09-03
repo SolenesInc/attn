@@ -128,6 +128,7 @@ async function main() {
     client.request('set_setting', { key: 'auto_settle_enabled', value: 'false' }).catch(() => {}));
   try {
     await runner.step('launch_app', async () => {
+      process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
       await launchFreshAppAndConnect(client, observer);
     });
 

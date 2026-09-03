@@ -1,0 +1,8 @@
+kind: internal
+area: harness
+change: >
+  Real-app scenarios that press native keys now launch a focusable window, and
+  the macOS driver refuses a keystroke aimed at an always-on-top window instead
+  of letting the scenario time out on the effect. A screenshot that hits its
+  cap fails the scenario with the reason instead of leaving the artifact
+  missing.

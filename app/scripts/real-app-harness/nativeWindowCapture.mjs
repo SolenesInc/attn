@@ -344,11 +344,33 @@ async function readPngPixelDimensions(filePath) {
   return parseSipsPixelDimensions(stdout);
 }
 
-export async function captureScreenshotData(outputPath, { client, selector } = {}) {
+const SCREENSHOT_CAP_HIT = /capture_screenshot_data never returned a frame|Automation request timed out: capture_screenshot_data/;
+
+export function isScreenshotCapHit(error) {
+  return SCREENSHOT_CAP_HIT.test(error?.message || '');
+}
+
+export function describeScreenshotTimeout(error, { outputPath, selector }) {
+  if (!/Automation request timed out/.test(error?.message || '')) {
+    return error;
+  }
+  return new Error(
+    `${error.message}: capture_screenshot_data never returned a frame for ${selector || 'the whole window'} `
+    + `(${outputPath}). WKWebView parks requestAnimationFrame when the window is occluded, which is what the `
+    + 'harness launches always-on-top to avoid; a scenario that opted out of always-on-top must keep its window '
+    + 'in front of whatever is covering it.',
+  );
+}
+
+export async function captureScreenshotData(outputPath, { client, selector, timeoutMs } = {}) {
   if (!client || typeof client.request !== 'function') {
     throw new Error('captureScreenshotData requires a UI automation client');
   }
-  const result = await client.request('capture_screenshot_data', selector ? { selector } : {});
+  const result = await client
+    .request('capture_screenshot_data', selector ? { selector } : {}, timeoutMs ? { timeoutMs } : {})
+    .catch((error) => {
+      throw describeScreenshotTimeout(error, { outputPath, selector });
+    });
   if (typeof result?.pngBase64 !== 'string' || result.pngBase64.length === 0) {
     throw new Error('capture_screenshot_data returned no PNG data');
   }
@@ -359,6 +381,19 @@ export async function captureScreenshotData(outputPath, { client, selector } = {
     path: outputPath,
     ...(selector ? { selector } : {}),
   };
+}
+
+export async function captureEvidenceScreenshot(outputPath, options = {}) {
+  try {
+    return await captureScreenshotData(outputPath, options);
+  } catch (error) {
+    if (isScreenshotCapHit(error)) {
+      throw error;
+    }
+    const log = options.log || ((message) => console.warn(message));
+    log(`[RealAppHarness] evidence screenshot missing: ${outputPath}: ${error?.message || error}`);
+    return null;
+  }
 }
 
 export async function captureFrontWindowScreenshot(outputPath, options = {}) {
