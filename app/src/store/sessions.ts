@@ -36,6 +36,7 @@ export interface Session {
   resumeConversationFile?: string;
   autoMode?: boolean;
   transcriptMatched: boolean;
+  creating?: boolean;
   branch?: string;
   isWorktree?: boolean;
   automation?: AutomationProvenance;
@@ -228,6 +229,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       resumeConversationFile,
       autoMode,
       transcriptMatched: resolvedAgent !== 'codex',
+      creating: true,
       workspace: createDefaultWorkspaceState(),
       daemonActivePaneId: '',
     };
@@ -361,6 +363,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
         if (
           existing &&
+          !existing.creating &&
           existing.label === daemonSession.label &&
           existing.agent === nextAgent &&
           existing.cwd === daemonSession.directory &&
@@ -396,12 +399,17 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         } satisfies Session;
       });
 
-      const pendingLayoutSessions = state.sessions.filter((session) => (
+      const pendingSessions = state.sessions.filter((session) => (
         !syncedSessions.some((synced) => synced.id === session.id)
-        && session.state === 'launching'
-        && session.workspace.agents.some((pane) => pane.sessionId === session.id && pane.status === 'spawning')
+        && (
+          session.creating
+          || (
+            session.state === 'launching'
+            && session.workspace.agents.some((pane) => pane.sessionId === session.id && pane.status === 'spawning')
+          )
+        )
       ));
-      const allSessions = [...syncedSessions, ...pendingLayoutSessions];
+      const allSessions = [...syncedSessions, ...pendingSessions];
       const syncedIds = new Set(allSessions.map((session) => session.id));
       const prunedRecent = state.recentSessionIds.filter((entry) => syncedIds.has(entry));
 

@@ -1,0 +1,10 @@
+kind: fixed
+area: sessions
+change: >
+  A session you start keeps the screen. A daemon sessions broadcast arriving
+  while the session was still being created no longer drops it and sends you
+  back to the session you came from.
+symptom: >
+  Starting a session while agents were busy elsewhere (a delegation landing, an
+  agent changing state) sometimes snapped the view back to the previous session,
+  leaving the new one's terminal unsized and unpainted behind it.

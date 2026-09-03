@@ -919,7 +919,6 @@ function AppContent({
       await sendRegisterWorkspace(workspaceId, label, cwd, endpointId);
       const createdSessionId = await createSession(label, cwd, sessionId, agent, endpointId, yoloMode, workspaceId, options?.chiefOfStaff, options?.resumeConversationFile, options?.autoMode);
       localCreated = true;
-      // Before any await: the workspace has no 'spawning' pane yet, so a sessions broadcast can prune this session past syncFromDaemonSessions' guard.
       const spawnArgs = takeSessionSpawnArgs(sessionId, 80, 24);
       if (!spawnArgs) {
         throw new Error('Session spawn arguments were not prepared.');
