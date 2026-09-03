@@ -77,8 +77,7 @@ function seedIDs(text) {
   return [...text.replace(/\n/g, '').matchAll(/(s-[a-z0-9]{6})/g)].map((match) => match[1]);
 }
 
-// Tripwire: a navigation that lands paints in well under a second (the three
-// in this scenario together take ~150ms), so 20s only fires on a broken app.
+// Tripwire: these navigations paint in ~150ms, so 20s means a broken app.
 async function awaitSeedTile(client, seedID, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
   let state = { present: false };
@@ -97,8 +96,6 @@ function tileBodySelector(seedID) {
 async function pressEscape(client, driver, seedID) {
   if (!nativeInputUnavailable) {
     try {
-      // A native key reaches the frontmost app, and activating it moves focus,
-      // so the tile claims Escape back only once the window is up front.
       await driver.activateApp();
       await client.request('dom_focus', { selector: tileBodySelector(seedID) });
       await driver.pressKeyCode(53);
@@ -157,13 +154,9 @@ async function main() {
   let nestedLeaf = null;
   try {
     process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
-    // Always-on-top launches the window unfocusable, and the Escape leg needs
-    // real keystrokes, which only a focusable window can receive.
     process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
     await launchFreshAppAndConnect(client, observer);
     pane = await runner.step('open_session', () => openPane(client, observer, runner));
-    // A focusable window is throttled while it is occluded, which stalls the
-    // DOM screenshot below; bringing it up front once keeps the run painting.
     await driver.activateApp();
 
     await runner.step('plant_and_open_the_plot', async () => {
@@ -229,8 +222,8 @@ async function main() {
       runner.assert(nestedState.parent === PLOT.children[0].title,
         'the nested seed exposes the intermediate plot as its parent', { nestedState });
 
-      await escapeTo(client, driver, nestedLeaf, child); // Nested seed → child plot.
-      const crownState = await escapeTo(client, driver, child, crown); // Child plot → crown.
+      await escapeTo(client, driver, nestedLeaf, child);
+      const crownState = await escapeTo(client, driver, child, crown);
       runner.assert(crownState.children.length === children.length,
         'successive Escapes unwind one canonical plot edge at a time', { crownState });
     });
