@@ -1,0 +1,7 @@
+kind: internal
+area: harness
+change: >
+  The agent-queue, garden-seed-read-receipts and peer-message-read-receipts
+  real-app scenarios submit their prompts through one shared write_pane
+  submit helper, dropping the unmeasured gaps that guarded a paste rule the
+  mock agent does not have.

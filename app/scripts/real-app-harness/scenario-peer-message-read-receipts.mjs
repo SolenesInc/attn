@@ -7,6 +7,7 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
+  submitPrompt,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { transcriptMessages, writeMockAgentFixture } from './mockAgent.mjs';
@@ -167,9 +168,7 @@ async function main() {
       });
       const first = await waitForFirstWorkspacePane(client, sessionId, 'recipient pane', 20_000);
       const pane = { sessionId, paneId: first.paneId };
-      await client.request('write_pane', { ...pane, text: 'Wait for peer messages', submit: false });
-      await delay(250);
-      await client.request('write_pane', { ...pane, text: '\r', submit: false });
+      await submitPrompt(client, pane.sessionId, pane.paneId, 'Wait for peer messages');
       await waitForRecipient(client, pane, 'PEER_RECIPIENT_READY');
       return pane;
     });
