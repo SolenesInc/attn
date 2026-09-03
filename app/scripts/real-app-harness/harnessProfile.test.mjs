@@ -307,10 +307,10 @@ describe('profileCliEnv', () => {
     expect(env.ATTN_DATA_DIR).toBeUndefined();
   });
 
-  it('leaves the unnamed production profile with the ambient routing it was given', () => {
+  it('clears them for the unnamed production profile too, which also names a destination', () => {
     const env = profileCliEnv('');
     expect(env.ATTN_PROFILE).toBe('');
-    for (const [key, value] of Object.entries(routing)) expect(env[key]).toBe(value);
+    for (const key of Object.keys(routing)) expect(key in env).toBe(false);
   });
 
   it('names the overrides it dropped once per run, not once per child', async () => {

@@ -240,16 +240,15 @@ function announceRoutingDrop(profile, dropped) {
   if (routingDropAnnounced || dropped.length === 0) return;
   routingDropAnnounced = true;
   console.log(
-    `[harness-profile] profile '${profile}': dropped inherited routing overrides from every child `
-    + `environment: ${dropped.join(', ')}`,
+    `[harness-profile] profile '${profile || 'default'}': dropped inherited routing overrides from `
+    + `every child environment: ${dropped.join(', ')}`,
   );
 }
 
-// A named profile decides where a child lands, so the shell's own routing must
-// go; the unnamed (production) profile has nothing to conflict with.
+// Every profile names a destination, the empty one (production) included, so the
+// shell's own routing always goes; only an explicit extra survives.
 export function profileCliEnv(profile = currentHarnessProfile(), extra = {}) {
   const env = { ...process.env, ATTN_PROFILE: profile, ...extra };
-  if (!profile) return env;
   const dropped = [];
   for (const key of ROUTING_OVERRIDE_ENV) {
     if (key in extra || !(key in env)) continue;

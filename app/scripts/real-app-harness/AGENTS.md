@@ -19,9 +19,10 @@ Run commands from the repository root.
   `ATTN_REAL_APP_SCENARIO_LOCK_WAIT_MS` caps the total wait (0 fails fast).
 - Profile: `ATTN_HARNESS_PROFILE` overrides `ATTN_PROFILE`, which defaults to `dev`.
   Production needs `ATTN_HARNESS_PROFILE=`, `--run-against-prod`, and explicit approval.
-- A named profile makes `profileCliEnv` drop the routing overrides the shell
-  inherited, so run the harness from inside an attn session without unsetting
-  anything. Build every child's environment with it, never `{ ...process.env }`.
+- `profileCliEnv` drops the routing overrides the shell inherited, so run the
+  harness from inside an attn session without unsetting anything. Build every
+  child's environment with it, never `{ ...process.env }`; only an override you
+  pass it deliberately survives.
 - Install the current checkout; source fingerprint mismatches fail.
 - Remote target: `attn-remote@orb`; provision with
   `pnpm --dir app run real-app:provision-remote`.
