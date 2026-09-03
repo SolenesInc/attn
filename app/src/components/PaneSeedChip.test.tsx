@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { PaneSeedChip } from './PaneSeedChip';
-import type { Seed } from '../hooks/useDaemonSocket';
+import type { Seed, SeedDocument } from '../hooks/useDaemonSocket';
+import { DaemonApiProvider, type DaemonApi } from '../contexts/DaemonApiContext';
+import { derivePaneSeedDisplay } from './paneSeedDisplay';
 
 function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
   return {
@@ -41,7 +43,8 @@ describe('PaneSeedChip', () => {
     );
 
     expect(screen.getByText('move the wire')).toBeInTheDocument();
-    expect(screen.getByText('s-work11')).toBeInTheDocument();
+    expect(screen.getByText('Growing')).toBeInTheDocument();
+    expect(screen.getByTestId('seed-chip-sess-a')).toHaveAttribute('data-seed-id', 's-work11');
     expect(screen.queryByTestId('seed-chip-unread-sess-a')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('seed-chip-sess-a'));
@@ -172,5 +175,104 @@ describe('PaneSeedChip', () => {
     fireEvent.keyDown(listbox, { key: 'Enter' });
     expect(onOpenSeed).toHaveBeenCalledWith('s-b');
     expect(onPopoverClosed).toHaveBeenCalled();
+  });
+});
+
+const props = { unread: false, sessionId: 'sess-a', pinned: false, onOpenSeed: vi.fn(), onPopoverClosed: vi.fn() };
+
+function documentFor(value: Seed, body = 'Leaves look good at header size.'): SeedDocument {
+  return {
+    seed: value, children: [], artifacts: [], references: [], notes_total: 1, tender_holds: false,
+    notes: [{ id: 'n-1', seed_id: value.id, body, kind: 'note', author_member: '', author_session: '', created_at: value.updated_at }],
+  };
+}
+
+describe('seed lifecycle and context', () => {
+  it.each(['planted', 'dormant', 'harvested', 'withered'])('keeps %s visible when tending ends', (status) => {
+    const value = seed({ id: 's-work11', title: 'Garden icons', tender_session: props.sessionId });
+    const { rerender } = render(<PaneSeedChip {...props} crownSeedId={value.id} display={derivePaneSeedDisplay([value], props.sessionId, value.id)} />);
+    const ended = { ...value, status, tender_session: '' };
+    rerender(<PaneSeedChip {...props} crownSeedId={value.id} display={derivePaneSeedDisplay([ended], props.sessionId, value.id)} />);
+    const chip = screen.getByTestId('seed-chip-sess-a');
+    expect(chip).toHaveAttribute('data-kind', 'crown');
+    expect(chip).toHaveAttribute('data-status', status);
+    expect(within(chip).getByText(status[0].toUpperCase() + status.slice(1))).toBeVisible();
+    fireEvent.keyDown(chip, { key: 'ArrowDown' });
+    const context = screen.getByRole('dialog', { name: 'Seed context' });
+    expect(within(context).getByText(status[0].toUpperCase() + status.slice(1))).toBeVisible();
+    expect(within(context).getByText('This agent reports to this seed.')).toBeVisible();
+  });
+
+  it('does not invent a state for an unavailable reporting seed', () => {
+    render(<PaneSeedChip {...props} display={{ kind: 'crown', seedId: 's-missing' }} />);
+    expect(screen.getByText('Unknown')).toBeVisible();
+  });
+
+  it('loads a real note only when opened, filters artifact activity, and keeps the outcome', async () => {
+    const value = seed({ id: 's-work11', title: 'Garden icons', status: 'harvested', reason: 'All five states are legible.' });
+    const doc = documentFor(value);
+    doc.notes.push({ ...doc.notes[0], id: 'n-2', kind: 'attach', body: 'attached screenshot', created_at: '2099-01-01T00:00:00Z' });
+    const fetchDocument = vi.fn().mockResolvedValue(doc);
+    render(
+      <DaemonApiProvider api={{ sendSeedDocumentGet: fetchDocument } as unknown as DaemonApi}>
+        <PaneSeedChip {...props} display={{ kind: 'crown', seedId: value.id, seed: value }} />
+      </DaemonApiProvider>,
+    );
+    expect(fetchDocument).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByTestId('seed-chip-sess-a'), { key: 'ArrowDown' });
+    expect(await screen.findByText('Leaves look good at header size.')).toBeVisible();
+    expect(screen.getByText('All five states are legible.')).toBeVisible();
+    expect(screen.queryByText('attached screenshot')).not.toBeInTheDocument();
+    expect(fetchDocument).toHaveBeenCalledExactlyOnceWith(value.id);
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('ignores a late note response after a lifecycle revision', async () => {
+    const value = seed({ id: 's-work11', title: 'Garden icons' });
+    let resolveOld!: (value: SeedDocument) => void;
+    const fetchDocument = vi.fn().mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }))
+      .mockResolvedValueOnce(documentFor({ ...value, rev: 2, status: 'harvested' }, 'Finished and verified.'));
+    const view = (current: Seed) => (
+      <DaemonApiProvider api={{ sendSeedDocumentGet: fetchDocument } as unknown as DaemonApi}>
+        <PaneSeedChip {...props} pinned display={{ kind: 'crown', seedId: current.id, seed: current }} />
+      </DaemonApiProvider>
+    );
+    const { rerender } = render(view(value));
+    rerender(view({ ...value, rev: 2, status: 'harvested' }));
+    expect(await screen.findByText('Finished and verified.')).toBeVisible();
+    await act(async () => resolveOld(documentFor(value, 'Still exploring.')));
+    expect(screen.queryByText('Still exploring.')).not.toBeInTheDocument();
+    expect(fetchDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps opening the seed available after a context fetch fails', async () => {
+    const value = seed({ id: 's-work11', title: 'Garden icons' });
+    const onOpenSeed = vi.fn();
+    render(
+      <DaemonApiProvider api={{ sendSeedDocumentGet: vi.fn().mockRejectedValue(new Error('offline')) } as unknown as DaemonApi}>
+        <PaneSeedChip {...props} onOpenSeed={onOpenSeed} pinned display={{ kind: 'seed', seed: value }} />
+      </DaemonApiProvider>,
+    );
+    expect(await screen.findByText('Latest note unavailable.')).toBeVisible();
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter' });
+    expect(onOpenSeed).toHaveBeenCalledWith(value.id);
+  });
+
+  it('refreshes a visible note when a Garden snapshot arrives at the same seed revision', async () => {
+    const value = seed({ id: 's-work11', title: 'Garden icons' });
+    const fetchDocument = vi.fn().mockResolvedValueOnce(documentFor(value, 'First note.'))
+      .mockResolvedValueOnce(documentFor(value, 'A new observation.'));
+    const api = { sendSeedDocumentGet: fetchDocument } as unknown as DaemonApi;
+    const view = (current: Seed) => (
+      <DaemonApiProvider api={api}>
+        <PaneSeedChip {...props} pinned display={{ kind: 'seed', seed: current }} />
+      </DaemonApiProvider>
+    );
+    const { rerender } = render(view(value));
+    expect(await screen.findByText('First note.')).toBeVisible();
+    rerender(view({ ...value }));
+    expect(await screen.findByText('A new observation.')).toBeVisible();
+    expect(fetchDocument).toHaveBeenCalledTimes(2);
   });
 });

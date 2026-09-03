@@ -63,7 +63,19 @@ export interface PaneSeedPopoverRow {
   role: 'plot' | 'tended' | 'crown';
 }
 
-export function popoverRows(display: PaneSeedDisplay, crownSeedId: string | undefined): PaneSeedPopoverRow[] {
+export function plotStateCounts(seed: Seed): Array<[string, number]> {
+  const progress = seed.plot_progress;
+  if (!progress) return [];
+  return Object.entries({
+    growing: progress.growing,
+    dormant: progress.dormant,
+    harvested: progress.done,
+    withered: progress.withered,
+    planted: Math.max(0, progress.total - progress.growing - progress.dormant - progress.done - progress.withered),
+  }).filter(([, count]) => count > 0);
+}
+
+export function popoverRows(display: PaneSeedDisplay, crownSeedId: string | undefined, crownSeed?: Seed): PaneSeedPopoverRow[] {
   const rows: PaneSeedPopoverRow[] = [];
   switch (display.kind) {
     case 'none':
@@ -85,7 +97,7 @@ export function popoverRows(display: PaneSeedDisplay, crownSeedId: string | unde
       break;
   }
   if (crownSeedId && !rows.some((row) => row.seedId === crownSeedId)) {
-    rows.push({ seedId: crownSeedId, role: 'crown' });
+    rows.push({ seed: crownSeed, seedId: crownSeedId, role: 'crown' });
   }
   return rows;
 }

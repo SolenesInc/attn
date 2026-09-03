@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import './PaneSeedChip.css';
 import type { PaneSeedDisplay } from './paneSeedDisplay';
-import { popoverRows } from './paneSeedDisplay';
+import { plotStateCounts, popoverRows } from './paneSeedDisplay';
 import { TendedSeedsPopover } from './TendedSeedsPopover';
+import type { Seed } from '../hooks/useDaemonSocket';
+import { SeedPlotIcon, SeedStateIcon, seedStateLabel } from './SeedStateIcon';
 
 const HOVER_OPEN_MS = 160;
 const HOVER_CLOSE_MS = 240;
@@ -12,6 +14,7 @@ const HOVER_CLOSE_MS = 240;
 export function PaneSeedChip({
   display,
   crownSeedId,
+  crownSeed,
   unread,
   sessionId,
   pinned,
@@ -20,6 +23,7 @@ export function PaneSeedChip({
 }: {
   display: PaneSeedDisplay;
   crownSeedId?: string;
+  crownSeed?: Seed;
   unread: boolean;
   sessionId: string;
   pinned: boolean;
@@ -32,6 +36,7 @@ export function PaneSeedChip({
   const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
   const openTimer = useRef<number | undefined>(undefined);
   const closeTimer = useRef<number | undefined>(undefined);
+  const [replay, setReplay] = useState(0);
 
   const popoverPinned = pinned || clickPinned;
   const popoverOpen = popoverPinned || hoverOpen;
@@ -56,6 +61,7 @@ export function PaneSeedChip({
     window.clearTimeout(closeTimer.current);
     window.clearTimeout(openTimer.current);
     openTimer.current = window.setTimeout(() => setHoverOpen(true), HOVER_OPEN_MS);
+    setReplay((value) => value + 1);
   }, []);
 
   const scheduleClose = useCallback(() => {
@@ -74,22 +80,19 @@ export function PaneSeedChip({
 
   if (display.kind === 'none') return null;
 
-  const rows = popoverRows(display, crownSeedId);
+  const rows = popoverRows(display, crownSeedId, crownSeed);
 
   let label: string;
-  let idText: string | null = null;
   let status: string;
   let fraction: string | null = null;
   switch (display.kind) {
     case 'crown': {
       label = display.seed?.title.trim() || display.seedId;
-      idText = display.seed?.title.trim() ? display.seedId : null;
-      status = 'crown';
+      status = display.seed?.status ?? 'unknown';
       break;
     }
     case 'seed': {
       label = display.seed.title.trim() || display.seed.id;
-      idText = display.seed.title.trim() ? display.seed.id : null;
       status = display.seed.status;
       break;
     }
@@ -108,6 +111,8 @@ export function PaneSeedChip({
   }
 
   const clickTarget = display.kind === 'crown' ? display.seedId : display.kind === 'seed' ? display.seed.id : null;
+  const aggregate = display.kind === 'plot' || display.kind === 'multi';
+  const stateLabel = aggregate ? (fraction ? `${fraction} harvested` : 'Growing') : seedStateLabel(status);
 
   return (
     <>
@@ -117,10 +122,25 @@ export function PaneSeedChip({
         className="pane-seed-chip"
         data-kind={display.kind}
         data-status={status}
+        data-seed-state={aggregate ? 'growing' : status}
+        data-seed-id={clickTarget ?? (display.kind === 'plot' ? display.plot.id : undefined)}
         data-testid={`seed-chip-${sessionId}`}
+        title=""
+        aria-label={`${label}, ${stateLabel}${unread ? ', unread activity' : ''}. ${clickTarget ? 'Open seed' : 'Show seeds'}`}
+        aria-haspopup={aggregate ? 'listbox' : undefined}
+        aria-expanded={popoverOpen}
         onPointerDown={(event) => event.stopPropagation()}
         onPointerEnter={scheduleOpen}
         onPointerLeave={scheduleClose}
+        onFocus={() => setReplay((value) => value + 1)}
+        onBlur={scheduleClose}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            event.stopPropagation();
+            setClickPinned(true);
+          }
+        }}
         onClick={(event) => {
           event.stopPropagation();
           if (popoverPinned) {
@@ -132,21 +152,20 @@ export function PaneSeedChip({
             setClickPinned(true);
           }
         }}
-        title={display.kind === 'multi' ? 'Seeds this agent is tending' : `${label}. Click to open`}
       >
-        {display.kind === 'plot' ? (
-          <span className="pane-seed-chip-mark pane-seed-chip-mark--plot" aria-hidden="true">
-            <i /><i /><i /><i />
-          </span>
-        ) : (
-          <span
-            className={`pane-seed-chip-mark ${display.kind === 'crown' ? 'pane-seed-chip-mark--crown' : 'pane-seed-chip-mark--seed'}`}
-            aria-hidden="true"
-          />
-        )}
+        {aggregate ? <SeedPlotIcon /> : <SeedStateIcon status={status} replay={replay} />}
         <span className="pane-seed-chip-title">{label}</span>
+        {display.kind === 'plot' ? (
+          <span className="pane-seed-counts">
+            {plotStateCounts(display.plot).map(([state, count]) => (
+              <span key={state} data-seed-state={state} title={`${count} ${state}`}>
+                <SeedStateIcon status={state} size={18} />{count}
+              </span>
+            ))}
+          </span>
+        ) : null}
         {fraction ? <span className="pane-seed-chip-fraction">{fraction}</span> : null}
-        {idText ? <span className="pane-seed-chip-id">{idText}</span> : null}
+        {!aggregate ? <span className="seed-state-label">{stateLabel}</span> : null}
         {unread ? (
           <span
             className="pane-seed-chip-unread"
@@ -158,6 +177,7 @@ export function PaneSeedChip({
       {popoverOpen && anchor && rows.length > 0 ? (
         <TendedSeedsPopover
           rows={rows}
+          crownSeedId={crownSeedId}
           anchor={anchor}
           anchorRef={chipRef}
           pinned={popoverPinned}

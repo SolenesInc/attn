@@ -1149,6 +1149,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
                 <PaneSeedChip
                   display={paneSeedDisplay}
                   crownSeedId={paneSession?.seedId}
+                  crownSeed={gardenSeeds.find((seed) => seed.id === paneSession?.seedId)}
                   unread={Boolean(paneSession?.ticketUnread)}
                   sessionId={agentPane.sessionId}
                   pinned={pinnedSeedPopover === agentPane.sessionId}

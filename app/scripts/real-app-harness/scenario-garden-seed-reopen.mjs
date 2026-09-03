@@ -171,7 +171,7 @@ async function main() {
         'the delegated pane to carry its seed chip',
       );
       runner.assert(chip.id === planted,
-        'the chip visibly carries the seed id agents use', { chip, planted });
+        'the chip points to the reporting seed', { chip, planted });
       runner.writeText('seed-chip.json', JSON.stringify(chip, null, 2) + '\n');
       return planted;
     });

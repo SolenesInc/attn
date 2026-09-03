@@ -13,6 +13,7 @@ import { NotebookTileHarness } from './NotebookTileHarness';
 import { PaneFocusRingHarness } from './PaneFocusRingHarness';
 import { PresentTourHarness } from './PresentTourHarness';
 import { TileHeaderHarness } from './TileHeaderHarness';
+import { SeedHeaderHarness } from './SeedHeaderHarness';
 
 export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   BrokenLinks: BrokenLinksHarness,
@@ -29,4 +30,5 @@ export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   PaneFocusRing: PaneFocusRingHarness,
   PresentTour: PresentTourHarness,
   TileHeader: TileHeaderHarness,
+  SeedHeader: SeedHeaderHarness,
 };
