@@ -481,13 +481,12 @@ jobs:
       actions: read
       contents: read
       pull-requests: read
+    # Each hosted job owns its VM and display; only scenarios within it run serially.
+    # A shared concurrency group would cancel unrelated waiting PR and branch checks.
     runs-on: ubuntu-24.04
     # ubuntu-24.04 run 33657368804 took 35m42s end to end; its matrix took 24m07.635s.
-    # 60m leaves 24m18s of runner variance before releasing the repository-wide lock.
+    # 60m leaves 24m18s of runner variance before timing out the job.
     timeout-minutes: 60
-    concurrency:
-      group: app-acceptance-${{ github.repository }}
-      cancel-in-progress: false
     env:
       ATTN_PROFILE: app-acceptance
       ATTN_HARNESS_PROFILE: app-acceptance

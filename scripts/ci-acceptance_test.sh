@@ -23,6 +23,20 @@ for contract in \
   fi
 done
 
+app_acceptance_job="$(sed -n '/^  app-acceptance:/,/^  release-preflight:/p' "$workflow")"
+if grep -Eq '^    concurrency:' <<<"$app_acceptance_job"; then
+  echo "App acceptance must not serialize independent hosted runners" >&2
+  exit 1
+fi
+for contract in \
+  'runs-on: ubuntu-24.04' \
+  "run: xvfb-run -a -s '-screen 0 1600x1000x24' pnpm --dir app run real-app:serial-matrix"; do
+  if ! grep -Fq "$contract" <<<"$app_acceptance_job"; then
+    echo "App acceptance must keep its isolated display and serial matrix: $contract" >&2
+    exit 1
+  fi
+done
+
 react_doctor="$root/.github/workflows/react-doctor.yml"
 react_doctor_triggers="$(sed -n '/^on:/,/^permissions:/p' "$react_doctor")"
 if ! grep -Fq 'pull_request:' <<<"$react_doctor_triggers" ||
@@ -82,12 +96,15 @@ done
 success='{"changes":{"result":"success"},"backend":{"result":"success"}}'
 filtered='{"changes":{"result":"success"},"backend":{"result":"skipped"}}'
 failed='{"changes":{"result":"success"},"backend":{"result":"failure"}}'
+cancelled='{"app-acceptance":{"result":"cancelled"}}'
 missing='{"changes":{"result":"success"}}'
 
 NEEDS_JSON="$success" "$root/scripts/ci-gate.sh" acceptance changes backend >/dev/null
 NEEDS_JSON="$filtered" "$root/scripts/ci-gate.sh" pr changes backend >/dev/null
 expect_failure env NEEDS_JSON="$filtered" "$root/scripts/ci-gate.sh" acceptance changes backend
 expect_failure env NEEDS_JSON="$failed" "$root/scripts/ci-gate.sh" pr changes backend
+expect_failure env NEEDS_JSON="$cancelled" "$root/scripts/ci-gate.sh" pr app-acceptance
+expect_failure env NEEDS_JSON="$cancelled" "$root/scripts/ci-gate.sh" acceptance app-acceptance
 expect_failure env NEEDS_JSON="$missing" "$root/scripts/ci-gate.sh" acceptance changes backend
 expect_failure env NEEDS_JSON="$success" "$root/scripts/ci-gate.sh" acceptance changes
 
