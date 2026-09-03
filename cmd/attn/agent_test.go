@@ -177,12 +177,18 @@ func TestPrintAgentPeekShowsTheScreenKeptAtExit(t *testing.T) {
 
 func TestAgentPeekErrorMessagesNameTheTarget(t *testing.T) {
 	notFound := agentPeekErrorMessage("abc", errors.New("daemon error: session_not_found"))
-	if !strings.Contains(notFound, `"abc"`) || !strings.Contains(notFound, "attn agent list") {
+	if !strings.Contains(notFound, `"abc"`) || !strings.Contains(notFound, "attn crew list") {
 		t.Fatalf("not-found message = %q", notFound)
 	}
 	ambiguous := agentPeekErrorMessage("a", errors.New("daemon error: ambiguous_session"))
 	if !strings.Contains(ambiguous, "more than one session") {
 		t.Fatalf("ambiguous message = %q", ambiguous)
+	}
+	asleep := agentPeekErrorMessage("Goalie", errors.New("daemon error: crew_member_asleep"))
+	for _, want := range []string{"Goalie is asleep", "never wakes", "attn crew wake goalie"} {
+		if !strings.Contains(asleep, want) {
+			t.Fatalf("asleep message %q is missing %q", asleep, want)
+		}
 	}
 	other := agentPeekErrorMessage("abc", errors.New("dial unix: no daemon"))
 	if !strings.Contains(other, "no daemon") {

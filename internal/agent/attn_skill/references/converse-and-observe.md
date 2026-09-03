@@ -7,18 +7,18 @@ you what one is doing, and `attn agent msg` speaks to one. Run
 
 ## Who else is here
 
-`attn agent list` is the address book. Session ids appear nowhere else you look,
-so this is where every other `attn agent` command's `<id>` comes from. It prints
-a short id per session; any unique prefix works, and `--json` carries the full
-ids and the machine shape.
+`attn agent list` is the address book. It prints a short id per session; any
+unique prefix works, and `--json` carries the full ids and the machine shape.
+An awake crew member's stable name also addresses `peek` and `msg`.
 
 ## Watching costs the watched nothing
 
-`attn agent peek <id>` reads a session's state, todos, last assistant message,
-and rendered screen. It is passive by construction: everything it shows is
-already held by the daemon, so peeking never types into that session, never
-wakes its agent, and never consumes its tokens. It leaves no trace the observed
-agent can see.
+`attn agent peek <session-or-member>` reads a session's state, todos, last
+assistant message, and rendered screen. A crew name follows its current session
+binding; a sleeping member stays asleep. Peek is passive by construction:
+everything it shows is already held by the daemon, so peeking never types into
+that session, never wakes its agent, and never consumes its tokens. It leaves
+no trace the observed agent can see.
 
 That makes peek the right first move. Before you ask an agent what it is doing —
 which costs it a turn — look. Ask only what looking cannot answer.

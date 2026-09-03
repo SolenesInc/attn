@@ -160,7 +160,7 @@ func printAgentList(w io.Writer, rows []agentListRow) {
 			turn,
 		)
 	}
-	fmt.Fprintf(w, "\nAn ID here is what `attn agent peek <id>` takes; --json carries full ids.\n")
+	fmt.Fprintf(w, "\nAn ID or awake MEMBER here works with `attn agent peek <target>`; --json carries full ids.\n")
 }
 
 func agentShortID(id string) string {
@@ -189,7 +189,7 @@ type agentPeekArgs struct {
 
 func parseAgentPeekArgs(args []string) (agentPeekArgs, error) {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		return agentPeekArgs{}, errors.New("exactly one target session id is required")
+		return agentPeekArgs{}, errors.New("exactly one target session or crew member is required")
 	}
 	target := strings.TrimSpace(args[0])
 	fs := flag.NewFlagSet("agent peek", flag.ContinueOnError)
@@ -199,7 +199,7 @@ func parseAgentPeekArgs(args []string) (agentPeekArgs, error) {
 		return agentPeekArgs{}, err
 	}
 	if target == "" || fs.NArg() != 0 {
-		return agentPeekArgs{}, errors.New("exactly one target session id is required")
+		return agentPeekArgs{}, errors.New("exactly one target session or crew member is required")
 	}
 	return agentPeekArgs{target: target, json: *jsonOut}, nil
 }
@@ -227,9 +227,12 @@ func agentPeekErrorMessage(target string, err error) string {
 	message := strings.TrimSpace(err.Error())
 	switch strings.TrimSpace(strings.TrimPrefix(message, "daemon error: ")) {
 	case "session_not_found":
-		return fmt.Sprintf("no session matches %q; `attn agent list` names the sessions on this daemon", target)
+		return fmt.Sprintf("no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", target)
 	case "ambiguous_session":
 		return fmt.Sprintf("%q matches more than one session; give more of the id (`attn agent list --json` carries full ids)", target)
+	case "crew_member_asleep":
+		member := strings.ToLower(strings.TrimSpace(target))
+		return fmt.Sprintf("%s is asleep; `attn agent peek` never wakes crew members. `attn crew wake %s` starts a day", crew.DisplayName(member), member)
 	}
 	return message
 }
@@ -513,10 +516,11 @@ commands:
   list [--json]
         the address book: every session on this daemon with its short id,
         name, workspace, state, and whether a turn is owed. Read-only.
-  peek <id> [--json]
+  peek <session-or-member> [--json]
         observe a session without interrupting it: state, todos, last
         assistant message, and the rendered screen. Passive — the observed
-        agent never notices. <id> is a full session id or a unique prefix.
+        agent never notices. The target is a crew name, full session id, or
+        unique session id prefix. A sleeping crew member stays asleep.
   msg <session-or-member-or-seed> "text" [--source-session <id>] [--json]
         send a session or crew member a message. The body stays in the mailbox;
         the recipient gets a notification with the exact inbox command to read it.

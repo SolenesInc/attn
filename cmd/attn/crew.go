@@ -172,8 +172,8 @@ func runCrewWake(args []string) {
 	if repair := crewWakeRepairLine(result); repair != "" {
 		fmt.Fprintln(os.Stdout, repair)
 	}
-	fmt.Printf("%s is awake in session %s. `attn agent peek %[2]s` watches the day; the priming size is in the daemon log (grep `crew: priming`).\n",
-		crew.DisplayName(result.Member), agentShortID(result.SessionID))
+	fmt.Printf("%s is awake in session %s. `attn agent peek %s` watches the day; the priming size is in the daemon log (grep `crew: priming`).\n",
+		crew.DisplayName(result.Member), agentShortID(result.SessionID), result.Member)
 }
 
 func crewWakeRepairLine(result *protocol.CrewWakeResult) string {
@@ -340,5 +340,5 @@ func printCrewList(w io.Writer, members []protocol.CrewMember) {
 		}
 		fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-10s  %s\n", crew.DisplayName(member.ID), state, valueOrDash(protocol.Deref(member.Agent)), valueOrDash(protocol.Deref(member.Model)), session, member.HomeDir)
 	}
-	fmt.Fprintf(w, "\nAn awake member's SESSION is what `attn agent peek <id>` takes.\n")
+	fmt.Fprintf(w, "\nAn awake MEMBER or SESSION works with `attn agent peek <target>`.\n")
 }

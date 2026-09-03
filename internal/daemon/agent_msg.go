@@ -84,7 +84,7 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 	}
 
 	now := time.Now()
-	member, memberFound, memberErr := d.agentMessageMember(msg.TargetSessionID)
+	member, memberFound, memberErr := d.resolveCrewMember(msg.TargetSessionID)
 	target, targetErrCode := d.resolveSessionByIDOrPrefix(msg.TargetSessionID)
 	if memberFound {
 		if d.crewBindingLive(member) {
@@ -174,18 +174,6 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		result.Detail = fmt.Sprintf("notified %s", targetName)
 	}
 	d.replyAgentMsg(conn, result)
-}
-
-func (d *Daemon) agentMessageMember(address string) (crew.Member, bool, error) {
-	if err := d.requireHome(crew.Surface); err != nil {
-		return crew.Member{}, false, err
-	}
-	members, _, err := d.readCrewMembers()
-	if err != nil {
-		return crew.Member{}, false, err
-	}
-	member, ok := crew.Resolve(address, members)
-	return member, ok, nil
 }
 
 func (d *Daemon) replyAgentMsg(conn net.Conn, result *protocol.AgentMsgResult) {

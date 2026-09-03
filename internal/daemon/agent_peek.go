@@ -20,7 +20,7 @@ const agentShortIDLength = 8
 const agentPeekSnapshotTimeout = modelCaptureSnapshotTimeout
 
 func (d *Daemon) handleAgentPeek(conn net.Conn, msg *protocol.AgentPeekMessage) {
-	session, errCode := d.resolveSessionByIDOrPrefix(msg.TargetSessionID)
+	session, errCode := d.resolveAgentPeekTarget(msg.TargetSessionID)
 	if session == nil {
 		d.sendError(conn, errCode)
 		return
@@ -29,6 +29,33 @@ func (d *Daemon) handleAgentPeek(conn net.Conn, msg *protocol.AgentPeekMessage) 
 		Ok:              true,
 		AgentPeekResult: d.agentPeekResult(session),
 	})
+}
+
+func (d *Daemon) resolveAgentPeekTarget(target string) (*protocol.Session, string) {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return nil, "session_not_found"
+	}
+	if session := d.store.Get(target); session != nil {
+		return session, ""
+	}
+	if status, err := d.enrollmentStatus(); err == nil && status.IsHome() {
+		member, found, err := d.resolveCrewMember(target)
+		if err != nil {
+			d.logf("agent peek crew resolution: target=%q err=%v", target, err)
+			return nil, "internal_error"
+		}
+		if found {
+			if !d.crewBindingLive(member) {
+				return nil, "crew_member_asleep"
+			}
+			if session := d.store.Get(member.BindingSession); session != nil {
+				return session, ""
+			}
+			return nil, "crew_member_asleep"
+		}
+	}
+	return d.resolveSessionByIDOrPrefix(target)
 }
 
 func (d *Daemon) resolveSessionByIDOrPrefix(target string) (*protocol.Session, string) {

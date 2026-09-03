@@ -88,6 +88,67 @@ func TestHandleAgentPeekResolvesPrefixesAndNamesFailures(t *testing.T) {
 	}
 }
 
+func TestHandleAgentPeekResolvesCrewMemberNameAcrossDays(t *testing.T) {
+	d, _, _ := newWakeableDaemon(t)
+	addCharacterizationSession(t, d, "keels-first-day", protocol.SessionAgentCodex, protocol.SessionStateIdle)
+	if _, err := d.claimCrewBinding("keel", "keels-first-day"); err != nil {
+		t.Fatalf("bind first day: %v", err)
+	}
+
+	first := callAgentPeek(t, d, "Keel")
+	if !first.Ok || first.AgentPeekResult == nil || first.AgentPeekResult.SessionID != "keels-first-day" {
+		t.Fatalf("first day response = %+v", first)
+	}
+
+	if released, err := d.releaseCrewBinding("keel", "keels-first-day"); err != nil || !released {
+		t.Fatalf("release first day: released=%v err=%v", released, err)
+	}
+	addCharacterizationSession(t, d, "keels-next-day", protocol.SessionAgentCodex, protocol.SessionStateIdle)
+	if _, err := d.claimCrewBinding("keel", "keels-next-day"); err != nil {
+		t.Fatalf("bind next day: %v", err)
+	}
+
+	next := callAgentPeek(t, d, "keel")
+	if !next.Ok || next.AgentPeekResult == nil || next.AgentPeekResult.SessionID != "keels-next-day" {
+		t.Fatalf("next day response = %+v", next)
+	}
+}
+
+func TestHandleAgentPeekDoesNotWakeASleepingCrewMember(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+
+	resp := callAgentPeek(t, d, "trellis")
+	if resp.Ok || protocol.Deref(resp.Error) != "crew_member_asleep" {
+		t.Fatalf("sleeping member response = %+v", resp)
+	}
+	backend.mu.Lock()
+	spawned := len(backend.spawnOpts)
+	backend.mu.Unlock()
+	if spawned != 0 {
+		t.Fatalf("peek woke a sleeping member in %d sessions", spawned)
+	}
+}
+
+func TestHandleAgentPeekAddressPrecedence(t *testing.T) {
+	d, _, _ := newWakeableDaemon(t)
+	addCharacterizationSession(t, d, "keels-live-day", protocol.SessionAgentCodex, protocol.SessionStateIdle)
+	addCharacterizationSession(t, d, "keel-prefix-session", protocol.SessionAgentCodex, protocol.SessionStateIdle)
+	if _, err := d.claimCrewBinding("keel", "keels-live-day"); err != nil {
+		t.Fatalf("bind keel: %v", err)
+	}
+
+	member := callAgentPeek(t, d, "keel")
+	if !member.Ok || member.AgentPeekResult == nil || member.AgentPeekResult.SessionID != "keels-live-day" {
+		t.Fatalf("member did not win over session prefix: %+v", member)
+	}
+
+	addCharacterizationSession(t, d, "keel", protocol.SessionAgentCodex, protocol.SessionStateIdle)
+	exact := callAgentPeek(t, d, "keel")
+	if !exact.Ok || exact.AgentPeekResult == nil || exact.AgentPeekResult.SessionID != "keel" {
+		t.Fatalf("exact session did not win over member: %+v", exact)
+	}
+}
+
 type peekSnapshotBackend struct {
 	*fakeSpawnBackend
 	snapshot pty.ScreenSnapshotInfo
