@@ -798,12 +798,13 @@ model AgentMsgMessage {
   content: string;
 }
 
-// The recipient reads one notified peer message. Reading is the only proof
-// that advances a peer mailbox item from notified to read.
+// With a message id, the recipient reads one notified peer message through the
+// legacy adapter. Without one, it reads a bounded FIFO batch from its inbox.
 model AgentInboxMessage {
   cmd: "agent_inbox";
-  message_id: string;
+  message_id?: string;
   recipient_session_id: string;
+  limit?: int32;
 }
 
 // The sender inspects the durable lifecycle of one peer message.
@@ -5990,6 +5991,7 @@ model Response {
   agent_peek_result?: AgentPeekResult;
   agent_msg_result?: AgentMsgResult;
   agent_inbox_result?: AgentPeerMessage;
+  agent_inbox_batch_result?: AgentInboxBatchResult;
   agent_msg_status_result?: AgentPeerMessage;
   crew_list_result?: CrewListResult;
   crew_wake_result?: CrewWakeResult;
@@ -6318,8 +6320,8 @@ model CrewUpdatedMessage {
 }
 
 // What became of a message send. Never a silent drop: a safely placed doorbell
-// is `notified`, one waiting for a safe prompt or an older unread message is
-// `queued`, and one the inbound guard turned away is `refused` with the reason.
+// is `notified`, one still waiting in the durable inbox is `queued`, and one the
+// inbound guard turned away is `refused` with the reason.
 enum AgentMsgStatus {
   notified,
   queued,
@@ -6350,6 +6352,26 @@ model AgentPeerMessage {
   created_at: string;
   notified_at?: string;
   read_at?: string;
+}
+
+// One durable notification consumed by a bounded inbox read. Content is the
+// peer body or the daemon-authored action text for another mailbox kind.
+model AgentInboxItem {
+  item_id: string;
+  kind: string;
+  source_id?: string;
+  hint?: string;
+  content: string;
+  sender_session_id?: string;
+  sender_label?: string;
+  created_at: string;
+  notified_at: string;
+  read_at: string;
+}
+
+model AgentInboxBatchResult {
+  items: AgentInboxItem[];
+  remaining: int32;
 }
 
 model EvidenceExcerpt {
@@ -6555,8 +6577,8 @@ model NotebookWriteResultMessage {
 }
 
 // Result of notebook_send_to_chief. path is the inbox note the selection was
-// appended to; nudged is true when a live chief session was pinged in its PTY
-// (false when no chief is set or it was busy — the inbox delivery still happened).
+// appended to; nudged is true when a live chief had an inbox doorbell placed or
+// already outstanding. A busy chief keeps the durable item queued.
 model NotebookSendToChiefResult {
   path: string;
   nudged: boolean;

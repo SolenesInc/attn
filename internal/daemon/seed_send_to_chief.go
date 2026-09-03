@@ -70,12 +70,8 @@ func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID, seedID string) (prot
 	delivery, err := d.store.EnqueueMaintenancePrompt(itemID, chiefSessionID, prompt, now)
 	if err != nil {
 		d.logf("seed send to Chief: queue %s for %s: %v", seedID, chiefSessionID, err)
-		if d.nudgeChiefOfStaff(itemID, prompt) {
-			return protocol.AgentMsgStatusNotified, "notified Chief"
-		}
-		return protocol.AgentMsgStatusRefused, "Chief now tends the seed, but the direct notification could not be queued; the assignment remains on the seed log"
+		return protocol.AgentMsgStatusRefused, "Chief now tends the seed, but its inbox item could not be recorded; the assignment remains on the seed log"
 	}
-	d.noteQueuedAgentMailboxItem(chiefSessionID)
 	if err := d.deliverAgentMailboxItem(delivery); err != nil {
 		return protocol.AgentMsgStatusQueued, agentMessageQueuedDetail(err)
 	}

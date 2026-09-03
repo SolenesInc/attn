@@ -24,11 +24,11 @@ func TestSeedNudges_InjectionLeavesTheBellUnreadUntilShow(t *testing.T) {
 		t.Fatalf("drain delivered %d bells, want 1", delivered)
 	}
 	prompts := doorbell.pasted()
-	if len(prompts) != 1 || !strings.Contains(prompts[0], fixture.leaf.ID+" moved: note") || strings.Contains(prompts[0], "look now") {
-		t.Fatalf("doorbells = %q, want one content-free seed notification", prompts)
+	if len(prompts) != 1 || prompts[0] != agentMailboxDoorbellText {
+		t.Fatalf("doorbells = %q, want one generic inbox notification", prompts)
 	}
-	if queued := queuedSeedBells(t, fixture.d, "sess-b"); len(queued) != 0 {
-		t.Fatalf("injected bell remains in the transport queue: %q", queued)
+	if unread := queuedSeedBells(t, fixture.d, "sess-b"); len(unread) != 1 {
+		t.Fatalf("injected bell is not durably unread: %q", unread)
 	}
 
 	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "still unread", true)
@@ -57,7 +57,7 @@ func TestSeedNudges_FailedShowDoesNotReadTheBell(t *testing.T) {
 	fixture := newSeededNudgeGarden(t)
 	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
 	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "first", true)
-	first, err := fixture.d.store.QueuedAgentMailboxDeliveries("sess-b")
+	first, err := fixture.d.store.UnreadAgentMailboxDeliveries("sess-b")
 	if err != nil || len(first) != 1 {
 		t.Fatalf("first bell = %+v err=%v", first, err)
 	}
@@ -80,7 +80,7 @@ func TestSeedNudges_FailedShowDoesNotReadTheBell(t *testing.T) {
 	}
 
 	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "second", true)
-	remaining, err := fixture.d.store.QueuedAgentMailboxDeliveries("sess-b")
+	remaining, err := fixture.d.store.UnreadAgentMailboxDeliveries("sess-b")
 	if err != nil || len(remaining) != 1 || remaining[0].Item.ID != first[0].Item.ID {
 		t.Fatalf("failed show consumed the bell: before=%+v after=%+v err=%v", first, remaining, err)
 	}
@@ -142,17 +142,13 @@ func ringingNote(t *testing.T, d *Daemon, sessionID, seedID, body string, ring b
 
 func queuedSeedBells(t *testing.T, d *Daemon, sessionID string) []string {
 	t.Helper()
-	messages, err := d.store.QueuedAgentMailboxDeliveries(sessionID)
+	messages, err := d.store.UnreadAgentMailboxDeliveries(sessionID)
 	if err != nil {
 		t.Fatalf("queued bells for %s: %v", sessionID, err)
 	}
 	contents := make([]string, 0, len(messages))
 	for _, delivery := range messages {
-		text, _, err := d.composeAgentMailboxPrompt(delivery)
-		if err != nil {
-			t.Fatalf("compose queued bell: %v", err)
-		}
-		contents = append(contents, text)
+		contents = append(contents, mailboxItemContent(delivery))
 	}
 	return contents
 }

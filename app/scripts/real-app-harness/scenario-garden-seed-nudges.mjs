@@ -8,7 +8,10 @@ import {
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
-import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
+import {
+  waitForFirstWorkspacePane,
+  waitForPaneShellReady,
+} from './scenarioAssertions.mjs';
 import { delay } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -21,6 +24,7 @@ const BRIEF = `Live proof only. Read your assigned seed id from this prompt, run
 const HARVEST_REASON = 'the live doorbell proof is done';
 const RING_RELEASE_FILE = 'ring-now';
 const PACE_MS = recordingEnabled() ? 1_400 : 0;
+const GENERIC_DOORBELL = '📬 You have unread items in your attn inbox. Run attn agent inbox to read them.';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -40,6 +44,9 @@ function saw(haystack, needle) {
   return squash(haystack).includes(squash(needle));
 }
 
+function occurrences(haystack, needle) {
+  return squash(haystack).split(squash(needle)).length - 1;
+}
 
 let marks = 0;
 
@@ -79,6 +86,17 @@ async function waitForPane(client, pane, expected, timeoutMs = 20_000) {
   throw new Error(`pane never received ${JSON.stringify(expected)}:\n${text}`);
 }
 
+async function waitForPaneOccurrences(client, pane, expected, count, timeoutMs = 60_000) {
+  const deadline = Date.now() + timeoutMs;
+  let text = '';
+  while (Date.now() < deadline) {
+    text = flat(await paneText(client, pane));
+    if (occurrences(text, expected) >= count) return text;
+    await delay(250);
+  }
+  throw new Error(`pane received fewer than ${count} copies of ${JSON.stringify(expected)}:\n${text}`);
+}
+
 function writeDelegateFixture(cwd) {
   writeMockAgentFixture(cwd, {
     name: 'seed-bell',
@@ -92,10 +110,9 @@ function writeDelegateFixture(cwd) {
         ],
       },
       {
-        includes: '📨 session',
+        includes: GENERIC_DOORBELL,
         actions: [
-          { type: 'capture', from: 'prompt', pattern: 'message ([0-9a-f-]{36})', name: 'message' },
-          { type: 'attn', args: ['agent', 'inbox', '{{message}}'] },
+          { type: 'attn', args: ['agent', 'inbox'] },
           { type: 'attn', args: ['seed', 'harvest', '{{seed}}', '-m', HARVEST_REASON], state: 'idle' },
         ],
       },
@@ -174,26 +191,41 @@ async function main() {
 
     await runner.step('ring_note_reaches_dispatcher', async () => {
       fs.writeFileSync(path.join(runner.sessionDir, 'dispatcher', RING_RELEASE_FILE), 'ring\n');
-      const text = await waitForPane(client, dispatcher, `${seed} moved: note`, 60_000);
-      const delivered = text.slice(text.lastIndexOf(`🔔 ${seed} moved: note`));
+      const text = await waitForPane(client, dispatcher, GENERIC_DOORBELL, 60_000);
+      const delivered = text.slice(text.lastIndexOf(GENERIC_DOORBELL));
       runner.assert(!saw(delivered, RINGING_NOTE), 'the doorbell carries no note content', { delivered });
+      runner.assert(!saw(delivered, seed), 'the generic doorbell carries no seed id', { delivered, seed });
       runner.writeText('note-doorbell.txt', text + '\n');
       if (PACE_MS > 0) await delay(PACE_MS);
     });
 
     await runner.step('read_resets_then_harvest_rings', async () => {
-      await client.request('write_pane', { ...dispatcher, text: '\r', submit: false });
       // Harness shell sessions do not carry ATTN_SESSION_ID, so name the
       // dispatcher explicitly just as the delegation command above does.
+      await waitForPaneShellReady(client, dispatcher.sessionId, dispatcher.paneId, {
+        timeoutMs: 20_000,
+        description: 'dispatcher shell ready after the generic doorbell',
+      });
+      await runInPane(client, dispatcher,
+        `attn agent inbox --session ${dispatcher.sessionId}`, `${seed} moved: note`);
       await runInPane(client, dispatcher,
         `attn seed show ${seed} --session ${dispatcher.sessionId}`, RINGING_NOTE);
       await runInPane(client, dispatcher,
         `attn agent msg ${seed} "Now harvest your assigned seed with reason: ${HARVEST_REASON}" ` +
           `--source-session ${dispatcher.sessionId}`,
         'notified seed-bell');
-      const text = await waitForPane(client, dispatcher, `${seed} moved: harvested`, 60_000);
+      await waitForPaneOccurrences(client, dispatcher, GENERIC_DOORBELL, 2, 60_000);
+      await waitForPaneShellReady(client, dispatcher.sessionId, dispatcher.paneId, {
+        timeoutMs: 20_000,
+        description: 'dispatcher shell ready after the harvest doorbell',
+      });
+      await runInPane(client, dispatcher,
+        `attn agent inbox --session ${dispatcher.sessionId}`, `${seed} moved: harvested`);
+      const text = await paneText(client, dispatcher);
       runner.assert(saw(text, `${seed} moved: note`), 'the first doorbell remains visible', { text });
       runner.assert(saw(text, `${seed} moved: harvested`), 'the harvest rings after the read reset', { text });
+      runner.assert(occurrences(text, GENERIC_DOORBELL) === 2,
+        'the note and harvest each produced one generic doorbell', { text });
       runner.writeText('both-doorbells.txt', text + '\n');
       if (PACE_MS > 0) await delay(PACE_MS);
     });

@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,7 +97,7 @@ func delegateMany(t *testing.T, d *Daemon, agent string, briefs ...string) (chie
 
 func wasNudged(inputs []string) bool {
 	for _, in := range inputs {
-		if strings.Contains(in, ticketNudgePrompt) {
+		if strings.Contains(in, agentMailboxDoorbellText) {
 			return true
 		}
 	}
@@ -114,14 +113,13 @@ func TestTicketNudgeNamesTheConsumingLegacyRead(t *testing.T) {
 	}
 }
 
-func TestNotifyNudgesEligibleLeavesAcrossRuntimes(t *testing.T) {
+func TestNotifyNudgesPromptReadyLeavesAcrossRuntimes(t *testing.T) {
 	states := []struct {
 		name  string
 		state protocol.SessionState
 	}{
-		{name: "active green", state: protocol.SessionStateWorking},
-		{name: "new initial", state: protocol.SessionStateLaunching},
-		{name: "unknown", state: protocol.SessionStateUnknown},
+		{name: "idle", state: protocol.SessionStateIdle},
+		{name: "waiting for input", state: protocol.SessionStateWaitingInput},
 	}
 	for _, runtime := range []string{"codex", "claude"} {
 		for _, tc := range states {
@@ -177,7 +175,7 @@ func TestCodexNudgeRoundtrip(t *testing.T) {
 	}
 }
 
-func TestNotifyDefersPendingApprovalThenFlushesOnWorking(t *testing.T) {
+func TestNotifyDefersPendingApprovalThenQueuesWorkingAndWakesIdle(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
 		stopDaemonBackground(t, d)
@@ -201,8 +199,21 @@ func TestNotifyDefersPendingApprovalThenFlushesOnWorking(t *testing.T) {
 		settledNudgeDeadline(t, d, agentID)
 		time.Sleep(defaultNudgeCountdownWindow)
 		synctest.Wait()
+		if wasNudged(inputs(agentID)) {
+			t.Fatal("deferred nudge typed into the session while it was working")
+		}
+		if unread, err := d.store.HasUnreadAgentMailboxItems(agentID); err != nil || !unread {
+			t.Fatalf("deferred nudge was not queued durably: unread=%v err=%v", unread, err)
+		}
+
+		d.applyState(sessionStateChange{
+			sessionID: agentID,
+			state:     protocol.StateIdle,
+			cause:     resolverObservation{},
+		})
+		synctest.Wait()
 		if !wasNudged(inputs(agentID)) {
-			t.Fatal("deferred nudge was not flushed when approval cleared")
+			t.Fatal("queued nudge did not wake when the session became idle")
 		}
 	})
 }
@@ -259,8 +270,21 @@ func TestTicketNudgesActiveChiefAcrossRuntimes(t *testing.T) {
 				callSetTicketStatus(t, d, agentID, string(protocol.DispatchWorkStateReadyForReview), "done, please review")
 				time.Sleep(time.Until(settledNudgeDeadline(t, d, chiefID)) + time.Second)
 				synctest.Wait()
+				if wasNudged(inputs(chiefID)) {
+					t.Fatalf("working %s chief received terminal input", runtime)
+				}
+				if unread, err := d.store.HasUnreadAgentMailboxItems(chiefID); err != nil || !unread {
+					t.Fatalf("working %s chief lost durable activity: unread=%v err=%v", runtime, unread, err)
+				}
+
+				d.applyState(sessionStateChange{
+					sessionID: chiefID,
+					state:     protocol.StateIdle,
+					cause:     resolverObservation{},
+				})
+				synctest.Wait()
 				if !wasNudged(inputs(chiefID)) {
-					t.Fatalf("active %s chief was not nudged", runtime)
+					t.Fatalf("idle %s chief was not woken for queued activity", runtime)
 				}
 				if wasNudged(inputs(agentID)) {
 					t.Fatal("the reporting agent was nudged about its own status change")
@@ -369,7 +393,7 @@ func TestTicketWatchDrainClearsSharedCountdown(t *testing.T) {
 	}
 }
 
-func TestTicketActivityWakesSleepingMemberAndNudgesAfterPriming(t *testing.T) {
+func TestTicketActivityWakesSleepingMemberAndDoorbellsOnIdleWithoutPromptHook(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	d.nudgeWindowOverride = time.Hour
 	t.Cleanup(d.stopNudgeCountdowns)
@@ -408,27 +432,36 @@ func TestTicketActivityWakesSleepingMemberAndNudgesAfterPriming(t *testing.T) {
 	if prompts := doorbell.pasted(); len(prompts) != 0 {
 		t.Fatalf("ticket nudge landed before priming completed: %q", prompts)
 	}
-	d.handleTriggerNudge(&protocol.TriggerNudgeMessage{SessionID: sessionID})
+	if currentNudgeTimer(d, sessionID) == nil {
+		t.Fatal("ticket activity did not schedule independently of the prompt hook")
+	}
+	fireNudgeNow(t, d, sessionID)
 	if prompts := doorbell.pasted(); len(prompts) != 0 {
-		t.Fatalf("manual nudge spliced into priming: %q", prompts)
+		t.Fatalf("countdown spliced into priming: %q", prompts)
 	}
 	decorated := d.sessionForBroadcast(d.store.Get(sessionID))
 	if decorated == nil || !protocol.Deref(decorated.TicketUnread) {
 		t.Fatalf("woken member session = %+v, want unread indicator", decorated)
 	}
+	unread, err := d.store.UnreadAgentMailboxDeliveries(sessionID)
+	if err != nil || len(unread) != 1 || unread[0].Item.Prompt != ticketNudgePrompt {
+		t.Fatalf("durable ticket mailbox after countdown = %+v, %v", unread, err)
+	}
 
-	hook := callHandler(t, func(conn net.Conn) {
-		d.handleState(conn, &protocol.StateMessage{ID: sessionID, State: protocol.StateWorking})
-	})
-	if !hook.Ok {
-		t.Fatalf("prompt-submit hook = %+v", hook)
+	drained := make(chan int, 1)
+	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
+	if !d.applyState(sessionStateChange{
+		sessionID: sessionID,
+		state:     protocol.StateIdle,
+		cause:     liveSignal{},
+	}) {
+		t.Fatal("idle state did not apply")
 	}
-	if currentNudgeTimer(d, sessionID) == nil {
-		t.Fatal("prompt-submit receipt did not arm the ticket nudge")
+	if delivered := <-drained; delivered != 1 {
+		t.Fatalf("idle drain delivered %d doorbells, want 1", delivered)
 	}
-	fireNudgeNow(t, d, sessionID)
 	if !wasNudged(doorbell.pasted()) {
-		t.Fatalf("woken member was not nudged after priming: %q", doorbell.pasted())
+		t.Fatalf("woken member was not nudged on idle without a hook: %q", doorbell.pasted())
 	}
 }
 
@@ -472,7 +505,7 @@ func TestTicketWakeLimitRefusalIsVisibleAndLeavesMemberUnread(t *testing.T) {
 	}
 }
 
-func TestCrewTicketWakeGateRebuildsFromDurableUnreadState(t *testing.T) {
+func TestCrewTicketRestartSchedulesWithoutPromptReceipt(t *testing.T) {
 	d := newCrewDaemon(t)
 	addSession(t, d, "woken-day")
 	d.store.UpdateState("woken-day", protocol.StateWorking)
@@ -488,21 +521,14 @@ func TestCrewTicketWakeGateRebuildsFromDurableUnreadState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := d.seedCrewTicketWakeDeliveries(); err != nil {
-		t.Fatal(err)
-	}
-	if !d.initialPromptPending("woken-day") {
-		t.Fatal("restart did not restore the initial-prompt gate")
-	}
-	if timer := currentNudgeTimer(d, "woken-day"); timer != nil {
-		t.Fatal("restart armed a nudge before the prompt receipt")
-	}
-	d.runPostInitialPrompt("woken-day", protocol.StateWorking)
-	if d.initialPromptPending("woken-day") {
-		t.Fatal("prompt receipt did not clear the restored gate")
-	}
+	d.rebuildTicketDeliverySchedules()
 	if timer := currentNudgeTimer(d, "woken-day"); timer == nil {
-		t.Fatal("prompt receipt did not arm the waiting ticket nudge")
+		t.Fatal("restart did not schedule ticket delivery independently of the prompt receipt")
+	}
+	fireNudgeNow(t, d, "woken-day")
+	unread, err := d.store.UnreadAgentMailboxDeliveries("woken-day")
+	if err != nil || len(unread) != 1 || unread[0].Item.Prompt != ticketNudgePrompt {
+		t.Fatalf("restart delivery was not durable before a prompt hook: %+v, %v", unread, err)
 	}
 }
 
@@ -523,9 +549,7 @@ func TestCrewTicketRestartNudgesAnAlreadySettledDay(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := d.seedCrewTicketWakeDeliveries(); err != nil {
-		t.Fatal(err)
-	}
+	d.rebuildTicketDeliverySchedules()
 	if d.initialPromptPending("settled-day") {
 		t.Fatal("settled day was incorrectly put back behind its first-prompt gate")
 	}
@@ -579,7 +603,7 @@ func TestWatchLeaseCoversReportedSlowPollingInterval(t *testing.T) {
 func nudgeCount(inputs []string) int {
 	n := 0
 	for _, in := range inputs {
-		if strings.Contains(in, ticketNudgePrompt) {
+		if strings.Contains(in, agentMailboxDoorbellText) {
 			n++
 		}
 	}

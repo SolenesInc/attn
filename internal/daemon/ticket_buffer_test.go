@@ -32,6 +32,7 @@ func TestTicketBurstBundlesIntoOneFollowupNudge(t *testing.T) {
 		stopDaemonBackground(t, d)
 		chiefID, agentID, inputs := delegateForNotify(t, d, "codex")
 		d.setSelectedSession(chiefID)
+		d.store.UpdateState(agentID, protocol.StateIdle)
 		ticketID := boundTicketID(t, d, agentID)
 
 		commentOnTicket(t, d, ticketID, "first")
@@ -40,7 +41,6 @@ func TestTicketBurstBundlesIntoOneFollowupNudge(t *testing.T) {
 		if got := nudgeCount(inputs(agentID)); got != 1 {
 			t.Fatalf("first-event nudges = %d, want 1", got)
 		}
-		d.observePromptTaken(agentID, ticketNudgePrompt, time.Now())
 		if bundles := callTicketInbox(t, d, agentID); len(bundles) != 1 || len(bundles[0].Events) != 1 {
 			t.Fatalf("first inbox = %+v, want one event", bundles)
 		}
@@ -101,12 +101,12 @@ func TestTicketNudgeReturnsToImmediateAfterQuiet(t *testing.T) {
 		stopDaemonBackground(t, d)
 		chiefID, agentID, inputs := delegateForNotify(t, d, "codex")
 		d.setSelectedSession(chiefID)
+		d.store.UpdateState(agentID, protocol.StateIdle)
 		ticketID := boundTicketID(t, d, agentID)
 
 		commentOnTicket(t, d, ticketID, "first")
 		time.Sleep(time.Second)
 		synctest.Wait()
-		d.observePromptTaken(agentID, ticketNudgePrompt, time.Now())
 		_ = callTicketInbox(t, d, agentID)
 		time.Sleep(10 * time.Minute)
 
@@ -158,6 +158,7 @@ func TestDeliveredUnreadDoesNotRearmUntilNewActivity(t *testing.T) {
 		stopDaemonBackground(t, d)
 		chiefID, agentID, inputs := delegateForNotify(t, d, "codex")
 		d.setSelectedSession(chiefID)
+		d.store.UpdateState(agentID, protocol.StateIdle)
 		ticketID := boundTicketID(t, d, agentID)
 
 		commentOnTicket(t, d, ticketID, "first")

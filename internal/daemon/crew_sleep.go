@@ -82,8 +82,6 @@ func (d *Daemon) crewSleep(name string) (*protocol.CrewSleepResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("record %s's sleep request: %w", crew.DisplayName(member.ID), err)
 	}
-	d.noteQueuedAgentMailboxItem(sessionID)
-
 	status := protocol.AgentMsgStatusNotified
 	detail := fmt.Sprintf("asked %s in session %s to write its handoff and file it with `attn handoff --sleep`", crew.DisplayName(member.ID), shortSessionID(sessionID))
 	if err := d.deliverAgentMailboxItem(delivery); err != nil {

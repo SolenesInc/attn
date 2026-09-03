@@ -8,6 +8,11 @@ const (
 	KindMaintenancePrompt Kind = "maintenance_prompt"
 )
 
+const (
+	DefaultInboxLimit = 20
+	MaxInboxLimit     = 50
+)
+
 type Item struct {
 	ID                 string
 	RecipientSessionID string
@@ -17,6 +22,8 @@ type Item struct {
 	Hint               string
 	Prompt             string
 	CreatedAt          string
+	NotifiedAt         string
+	ReadAt             string
 }
 
 type PeerMessage struct {

@@ -23,11 +23,13 @@ func TestCrewSleep_DeliversAUserRequestForSleep(t *testing.T) {
 	if err != nil {
 		t.Fatalf("wake: %v", err)
 	}
-	d.runPostInitialPrompt(woken.SessionID, protocol.StateWorking)
-	oldWindow := sessionInputTakenWindow
-	sessionInputTakenWindow = 0
-	t.Cleanup(func() { sessionInputTakenWindow = oldWindow })
-
+	if !d.applyState(sessionStateChange{
+		sessionID: woken.SessionID,
+		state:     protocol.StateIdle,
+		cause:     liveSignal{},
+	}) {
+		t.Fatal("idle state did not apply")
+	}
 	var mu sync.Mutex
 	var typed bytes.Buffer
 	backend.onInput = func(id string, data []byte) {
@@ -50,16 +52,14 @@ func TestCrewSleep_DeliversAUserRequestForSleep(t *testing.T) {
 	mu.Lock()
 	text := typed.String()
 	mu.Unlock()
-	for _, want := range []string{"The user is asking you", "attn handoff --sleep", "nobody wakes behind you"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("composer input is missing %q: %q", want, text)
-		}
+	if !strings.Contains(text, agentMailboxDoorbellText) {
+		t.Fatalf("composer input = %q, want generic inbox doorbell", text)
 	}
-	if strings.Contains(text, "another agent, not from your user") {
-		t.Fatalf("user request masqueraded as an agent message: %q", text)
+	if strings.Contains(text, "The user is asking you") {
+		t.Fatalf("sleep request body leaked into the terminal: %q", text)
 	}
-	if queued, err := d.store.QueuedAgentMailboxDeliveries(woken.SessionID); err != nil || len(queued) != 0 {
-		t.Fatalf("queued messages = %v, %v; delivered request must be stamped", queued, err)
+	if unread, err := d.store.UnreadAgentMailboxDeliveries(woken.SessionID); err != nil || len(unread) != 1 || unread[0].Item.Prompt != crewRequestedSleepPrompt || unread[0].Item.NotifiedAt == "" {
+		t.Fatalf("unread inbox = %v, %v; request must stay durable after the doorbell", unread, err)
 	}
 	if d.store.Get(woken.SessionID) == nil {
 		t.Fatal("sleep request killed the member")
@@ -78,7 +78,7 @@ func TestCrewSleep_AlreadyAsleepIsANamedNoOp(t *testing.T) {
 	}
 }
 
-func TestCrewSleep_QueuesUntilAWakingMemberTakesItsFirstPrompt(t *testing.T) {
+func TestCrewSleep_QueuesWhileWakingAndWakesOnIdleWithoutPromptHook(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("trellis", "")
 	if err != nil {
@@ -88,9 +88,6 @@ func TestCrewSleep_QueuesUntilAWakingMemberTakesItsFirstPrompt(t *testing.T) {
 		t.Fatal("ordinary wake did not gate messages behind its first prompt")
 	}
 
-	oldWindow := sessionInputTakenWindow
-	sessionInputTakenWindow = 0
-	t.Cleanup(func() { sessionInputTakenWindow = oldWindow })
 	var mu sync.Mutex
 	var typed bytes.Buffer
 	backend.onInput = func(id string, data []byte) {
@@ -107,7 +104,7 @@ func TestCrewSleep_QueuesUntilAWakingMemberTakesItsFirstPrompt(t *testing.T) {
 		t.Fatalf("sleep: %v", err)
 	}
 	if protocol.Deref(result.DeliveryStatus) != protocol.AgentMsgStatusQueued ||
-		!strings.Contains(result.Detail, "still reading its priming") {
+		!strings.Contains(result.Detail, "not taking input") {
 		t.Fatalf("sleep result = %+v, want queued behind first prompt", result)
 	}
 	mu.Lock()
@@ -123,17 +120,23 @@ func TestCrewSleep_QueuesUntilAWakingMemberTakesItsFirstPrompt(t *testing.T) {
 			drained <- delivered
 		}
 	}
-	d.runPostInitialPrompt(woken.SessionID, protocol.StateWorking)
+	if !d.applyState(sessionStateChange{
+		sessionID: woken.SessionID,
+		state:     protocol.StateIdle,
+		cause:     liveSignal{},
+	}) {
+		t.Fatal("idle state did not apply")
+	}
 	if delivered := <-drained; delivered != 1 {
-		t.Fatalf("first-prompt drain delivered %d messages, want 1", delivered)
+		t.Fatalf("idle drain delivered %d messages, want 1", delivered)
 	}
 	mu.Lock()
 	afterPrompt := typed.String()
 	mu.Unlock()
-	if !strings.Contains(afterPrompt, "attn handoff --sleep") {
-		t.Fatalf("sleep request did not land after the greeting: %q", afterPrompt)
+	if !strings.Contains(afterPrompt, agentMailboxDoorbellText) || strings.Contains(afterPrompt, "attn handoff --sleep") {
+		t.Fatalf("generic inbox doorbell did not land after the greeting: %q", afterPrompt)
 	}
-	if queued, err := d.store.QueuedAgentMailboxDeliveries(woken.SessionID); err != nil || len(queued) != 0 {
-		t.Fatalf("queued messages after first prompt = %v, %v", queued, err)
+	if unread, err := d.store.UnreadAgentMailboxDeliveries(woken.SessionID); err != nil || len(unread) != 1 || unread[0].Item.NotifiedAt == "" {
+		t.Fatalf("unread inbox after first prompt = %v, %v", unread, err)
 	}
 }

@@ -384,7 +384,7 @@ func (c *Client) AgentMsg(target, sourceSessionID, content string) (*protocol.Ag
 
 func (c *Client) AgentInbox(messageID, recipientSessionID string) (*protocol.AgentPeerMessage, error) {
 	resp, err := c.send(protocol.AgentInboxMessage{
-		Cmd: protocol.CmdAgentInbox, MessageID: messageID,
+		Cmd: protocol.CmdAgentInbox, MessageID: protocol.Ptr(messageID),
 		RecipientSessionID: recipientSessionID,
 	})
 	if err != nil {
@@ -394,6 +394,20 @@ func (c *Client) AgentInbox(messageID, recipientSessionID string) (*protocol.Age
 		return nil, errors.New("daemon returned no agent inbox result")
 	}
 	return resp.AgentInboxResult, nil
+}
+
+func (c *Client) AgentInboxBatch(recipientSessionID string, limit int) (*protocol.AgentInboxBatchResult, error) {
+	resp, err := c.send(protocol.AgentInboxMessage{
+		Cmd: protocol.CmdAgentInbox, RecipientSessionID: recipientSessionID,
+		Limit: protocol.Ptr(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.AgentInboxBatchResult == nil {
+		return nil, errors.New("daemon returned no agent inbox batch result")
+	}
+	return resp.AgentInboxBatchResult, nil
 }
 
 func (c *Client) AgentMsgStatus(messageID, senderSessionID string) (*protocol.AgentPeerMessage, error) {

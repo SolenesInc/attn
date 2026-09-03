@@ -120,21 +120,21 @@ export const scenarioCatalog = [
   {
     id: 'garden-seed-nudges',
     runnerId: 'GardenSeedNudges',
-    label: 'Garden seed nudges: a ringing note and harvest reach the dispatcher with a read reset between them',
+    label: 'Garden seed nudges: generic inbox doorbells carry a ringing note and harvest through durable reads',
     command: ['pnpm', 'run', 'real-app:scenario-garden-seed-nudges'],
     timeoutMs: 240_000,
   },
   {
     id: 'garden-seed-read-receipts',
     runnerId: 'GardenSeedReadReceipts',
-    label: 'Garden seed read receipts: seed show rearms notifications without a prompt-submit hook',
+    label: 'Garden seed read receipts: inbox reads rearm generic doorbells without prompt-submit hooks',
     command: ['pnpm', 'run', 'real-app:scenario-garden-seed-read-receipts'],
     timeoutMs: 240_000,
   },
   {
     id: 'peer-message-read-receipts',
     runnerId: 'PeerMessageReadReceipts',
-    label: 'Peer message read receipts: agent inbox rearms FIFO notifications without prompt-submit hooks',
+    label: 'Agent inbox burst: nine Garden events and one peer message share a doorbell, then a later item wakes',
     command: ['pnpm', 'run', 'real-app:scenario-peer-message-read-receipts'],
     timeoutMs: 240_000,
   },
@@ -155,7 +155,7 @@ export const scenarioCatalog = [
   {
     id: 'nudge-trigger',
     runnerId: 'NUDGE-TRIGGER',
-    label: 'Ticket nudge: paused gate holds, then the real "deliver now" button doorbells the agent',
+    label: 'Legacy ticket nudge: a missing-hook inbox doorbell cannot block a later busy-to-idle wake',
     command: ['pnpm', 'run', 'real-app:scenario-nudge-trigger'],
     timeoutMs: 360_000,
   },

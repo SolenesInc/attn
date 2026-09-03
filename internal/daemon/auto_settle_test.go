@@ -729,7 +729,7 @@ func TestAutoSettle_PointerMovementFreezesTheCountdownWithoutClaimingTyping(t *t
 	if !ok || held.phase != autoSettleHeld || held.resume != autoSettleCounting {
 		t.Fatalf("after pointer movement: pending=%v entry=%+v, want held(resume=counting)", ok, held)
 	}
-	if d.recentUserInput(id, time.Hour) {
+	if d.userInputQuietRemaining(id, time.Hour) > 0 {
 		t.Fatal("pointer movement was recorded as keyboard input; it would delay ticket nudges")
 	}
 	if !protocol.Deref(d.sessionForBroadcast(d.store.Get(id)).AutoSettleHeld) {

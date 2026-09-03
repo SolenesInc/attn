@@ -596,6 +596,60 @@ func TestDaemon_Start_SelectsEmbeddedBackendWhenRequested(t *testing.T) {
 	}
 }
 
+func TestDaemon_Start_ReplaysUnreadMailboxAfterPTYRecovery(t *testing.T) {
+	t.Setenv("ATTN_PTY_BACKEND", "embedded")
+	useFreeWSPort(t)
+
+	sockPath := filepath.Join(shortTempDir(t), "mailbox-replay.sock")
+	d := NewForTesting(sockPath)
+	doorbell := &recordingDoorbell{}
+	recoveryEntered := make(chan struct{})
+	releaseRecovery := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseRecovery) }) }
+	defer release()
+	backend := doorbell.backend()
+	backend.sessionIDs = []string{"mailbox-restart-target"}
+	backend.onRecover = func() {
+		close(recoveryEntered)
+		<-releaseRecovery
+	}
+	d.ptyBackend = backend
+	addCharacterizationSession(t, d, "mailbox-restart-target", protocol.SessionAgentCodex, protocol.SessionStateIdle)
+	if _, err := d.store.EnqueueMaintenancePrompt(
+		"mailbox-restart-item", "mailbox-restart-target", "survived restart", time.Now(),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- d.Start() }()
+	if !d.waitStarted(3 * time.Second) {
+		release()
+		select {
+		case err := <-errCh:
+			t.Fatalf("daemon start error: %v", err)
+		default:
+			t.Fatal("daemon did not signal startup")
+		}
+	}
+	defer d.Stop()
+	select {
+	case <-recoveryEntered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("PTY recovery did not start")
+	}
+	if got := doorbell.pasted(); len(got) != 0 {
+		t.Fatalf("mailbox replay reached the PTY before recovery completed: %q", got)
+	}
+
+	release()
+	waitForRecovery(t, d)
+	if got := doorbell.pasted(); len(got) != 1 || got[0] != agentMailboxDoorbellText {
+		t.Fatalf("mailbox replay after recovery = %q, want one generic doorbell", got)
+	}
+}
+
 type fakeWorkerReconcileBackend struct {
 	liveIDs []string
 	info    map[string]ptybackend.SessionInfo
@@ -1785,6 +1839,7 @@ type fakeSpawnBackend struct {
 	upgradeDone        chan string
 	upgradeEntered     chan string
 	upgradeGate        chan struct{}
+	onRecover          func()
 }
 
 func (b *fakeSpawnBackend) UpgradeWorker(_ context.Context, sessionID string) error {
@@ -1893,6 +1948,12 @@ func (b *fakeSpawnBackend) SessionIDs(context.Context) []string {
 	return append([]string(nil), b.sessionIDs...)
 }
 func (b *fakeSpawnBackend) Recover(context.Context) (ptybackend.RecoveryReport, error) {
+	b.mu.Lock()
+	onRecover := b.onRecover
+	b.mu.Unlock()
+	if onRecover != nil {
+		onRecover()
+	}
 	return ptybackend.RecoveryReport{}, nil
 }
 func (b *fakeSpawnBackend) Shutdown(context.Context) error { return nil }

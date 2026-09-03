@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -145,9 +146,9 @@ func TestClientAgentMailboxCommands(t *testing.T) {
 	}
 	defer listener.Close()
 
-	requests := make(chan string, 2)
+	requests := make(chan string, 3)
 	go func() {
-		for range 2 {
+		for range 3 {
 			conn, acceptErr := listener.Accept()
 			if acceptErr != nil {
 				requests <- "accept: " + acceptErr.Error()
@@ -174,8 +175,20 @@ func TestClientAgentMailboxCommands(t *testing.T) {
 			response := protocol.Response{Ok: true}
 			switch typed := msg.(type) {
 			case *protocol.AgentInboxMessage:
-				requests <- cmd + ":" + typed.MessageID + ":" + typed.RecipientSessionID
-				response.AgentInboxResult = result
+				if typed.MessageID != nil {
+					requests <- cmd + ":" + *typed.MessageID + ":" + typed.RecipientSessionID
+					response.AgentInboxResult = result
+				} else {
+					requests <- fmt.Sprintf("%s:batch:%s:%d", cmd, typed.RecipientSessionID, protocol.Deref(typed.Limit))
+					response.AgentInboxBatchResult = &protocol.AgentInboxBatchResult{
+						Items: []protocol.AgentInboxItem{{
+							ItemID: "item-id", Kind: "peer_message", Content: "hello",
+							CreatedAt: "2026-09-01T10:00:00Z", NotifiedAt: "2026-09-01T10:00:01Z",
+							ReadAt: "2026-09-01T10:00:02Z",
+						}},
+						Remaining: 2,
+					}
+				}
 			case *protocol.AgentMsgStatusMessage:
 				requests <- cmd + ":" + typed.MessageID + ":" + typed.SenderSessionID
 				response.AgentMsgStatusResult = result
@@ -192,6 +205,12 @@ func TestClientAgentMailboxCommands(t *testing.T) {
 	if err != nil || inbox.Content != "hello" {
 		t.Fatalf("AgentInbox = %+v, %v", inbox, err)
 	}
+	batch, err := c.AgentInboxBatch("recipient-id", 12)
+	if err != nil || len(batch.Items) != 1 || batch.Items[0].Content != "hello" ||
+		batch.Items[0].NotifiedAt != "2026-09-01T10:00:01Z" || batch.Items[0].ReadAt != "2026-09-01T10:00:02Z" ||
+		batch.Remaining != 2 {
+		t.Fatalf("AgentInboxBatch = %+v, %v", batch, err)
+	}
 	status, err := c.AgentMsgStatus("message-id", "sender-id")
 	if err != nil || status.State != protocol.AgentMessageStateRead {
 		t.Fatalf("AgentMsgStatus = %+v, %v", status, err)
@@ -199,6 +218,7 @@ func TestClientAgentMailboxCommands(t *testing.T) {
 
 	for _, want := range []string{
 		protocol.CmdAgentInbox + ":message-id:recipient-id",
+		protocol.CmdAgentInbox + ":batch:recipient-id:12",
 		protocol.CmdAgentMsgStatus + ":message-id:sender-id",
 	} {
 		if got := <-requests; got != want {

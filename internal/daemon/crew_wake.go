@@ -54,8 +54,7 @@ const crewWakePrompt = "You have been woken for today. Orient from your charter 
 func crewWorkspaceID(memberID string) string { return "workspace-crew-" + memberID }
 
 type crewWakeDelivery struct {
-	Message            *agentmailbox.PeerMessage
-	AfterInitialPrompt func(sessionID string)
+	Message *agentmailbox.PeerMessage
 }
 
 func (d *Daemon) crewMember(name string) (crew.Member, docstore.Document, error) {
@@ -277,11 +276,10 @@ func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, deliv
 	}
 
 	initialPrompt := crewWakePrompt
-	if delivery == nil {
-		// A crew binding becomes visible before the launching agent has crossed priming and its
-		// trust dialog; the first hook past the greeting opens and drains the gate.
-		d.notePostInitialPrompt(sessionID, nil)
-	} else {
+	// A crew binding becomes visible before the launching agent has crossed priming and its
+	// trust dialog. This marker protects unrelated foreground input, not mailbox delivery.
+	d.notePostInitialPrompt(sessionID)
+	if delivery != nil {
 		if delivery.Message != nil {
 			if _, err := d.store.EnqueuePeerMessage(*delivery.Message, sessionID); err != nil {
 				d.removeWorkspaceLayoutPaneForSession(sessionID)
@@ -289,15 +287,6 @@ func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, deliv
 				return nil, err
 			}
 			d.noteQueuedAgentMailboxItem(sessionID)
-		}
-		after := delivery.AfterInitialPrompt
-		d.notePostInitialPrompt(sessionID, func() {
-			if after != nil {
-				after(sessionID)
-			}
-		})
-		if delivery.Message == nil && delivery.AfterInitialPrompt == nil {
-			d.forgetPostInitialPrompt(sessionID)
 		}
 	}
 

@@ -188,10 +188,9 @@ type Daemon struct {
 	sessionInputOnce                  sync.Once
 	sessionInputState                 *sessionInputModule
 	agentMailboxMu                    sync.Mutex
-	queuedAgentMailboxItems           map[string]bool
-	drainingAgentMailbox              map[string]bool
-	agentMailboxDeliveries            map[string]*agentMailboxDeliveryFlight
-	postInitialPrompt                 map[string]func()
+	agentMailboxDoorbells             map[string]*agentMailboxDoorbellState
+	agentMailboxCooldownOverride      time.Duration
+	postInitialPrompt                 map[string]struct{}
 	agentMailboxDrainScheduledHook    func(sessionID string)
 	agentMailboxDrainHook             func(sessionID string, delivered int)
 	crewWakeMu                        sync.Mutex
@@ -782,6 +781,8 @@ func (d *Daemon) Start() error {
 		if startSucceeded {
 			return
 		}
+		d.sessionInputs().stopRetries()
+		d.stopAgentMailboxDoorbells()
 		d.stopInstalledPlugins()
 		if d.httpServer != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -808,7 +809,6 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("start event bus: %w", err)
 	}
 	reapedWorkspaceIDs := d.loadWorkspacesFromStore()
-	d.seedQueuedAgentMailboxItems()
 	if d.daemonInstanceID == "" {
 		instanceID, err := enrollment.EnsureDaemonID(d.dataRoot)
 		if err != nil {
@@ -835,9 +835,6 @@ func (d *Daemon) Start() error {
 	d.importCrewHomes()
 	if err := d.migrateCrewTicketIdentities(); err != nil {
 		return fmt.Errorf("migrate crew ticket identities: %w", err)
-	}
-	if err := d.seedCrewTicketWakeDeliveries(); err != nil {
-		return fmt.Errorf("restore crew ticket wake deliveries: %w", err)
 	}
 	if d.hubManager == nil {
 		d.hubManager = hub.NewManager(
@@ -954,14 +951,7 @@ func (d *Daemon) Start() error {
 		go d.pollPRs()
 		go d.refreshGitHubHostsLoop()
 	}()
-
 	recoveryStartedAt := time.Now()
-	go func() {
-		d.performStartupPTYRecovery(recoveryStartedAt)
-		recoverAutomationsAfterGitHubReady(githubHostsReady, d.recoverAutomations)
-		d.setRecovering(false)
-		d.resumePendingDelegations()
-	}()
 
 	go d.monitorBranches()
 
@@ -983,6 +973,14 @@ func (d *Daemon) Start() error {
 	for _, wsID := range reapedWorkspaceIDs {
 		d.enqueueFinalNarrateWorkspace(wsID)
 	}
+
+	go func() {
+		d.performStartupPTYRecovery(recoveryStartedAt)
+		d.seedQueuedAgentMailboxItems()
+		recoverAutomationsAfterGitHubReady(githubHostsReady, d.recoverAutomations)
+		d.setRecovering(false)
+		d.resumePendingDelegations()
+	}()
 
 	d.signalStarted()
 	startSucceeded = true
@@ -1581,6 +1579,7 @@ func sessionStateFromRecoveredInfo(info ptybackend.SessionInfo) (protocol.Sessio
 func (d *Daemon) Stop() {
 	d.log("daemon stopping")
 	close(d.done)
+	d.sessionInputs().stopRetries()
 	d.stopNotebookWatcher()
 	d.stopFsWatchers()
 	if runner := d.jobQueueRef(); runner != nil {
@@ -1594,9 +1593,9 @@ func (d *Daemon) Stop() {
 	d.stopAppRuntime()
 	d.stopAllTranscriptWatchers()
 	d.stopNudgeCountdowns()
+	d.stopAgentMailboxDoorbells()
 	d.pluginDriverSilence().stop()
 	d.stopAutoSettleTimers()
-	d.sessionInputs().stopRetries()
 	if d.ptyBackend != nil {
 		_ = d.ptyBackend.Shutdown(context.Background())
 	}
@@ -1961,6 +1960,7 @@ func (d *Daemon) dropSessionRecord(sessionID string) {
 	}
 	d.clearNudgeState(sessionID)
 	d.forgetPostInitialPrompt(sessionID)
+	d.forgetAgentMailboxDoorbell(sessionID)
 	d.forgetSessionTitleInitialPrompt(sessionID)
 	d.clearAutoSettleState(sessionID)
 	d.clearSnoozeState(sessionID)

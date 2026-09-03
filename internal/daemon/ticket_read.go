@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/ticketnotify"
@@ -52,6 +53,17 @@ func (d *Daemon) handleTicketInbox(conn net.Conn, msg *protocol.TicketInboxMessa
 	if err != nil {
 		d.sendError(conn, "ticket inbox: "+err.Error())
 		return
+	}
+	read, remaining, mailboxErr := d.store.ReadAgentMailboxItems(
+		sourceSessionID,
+		agentmailbox.KindMaintenancePrompt,
+		legacyTicketMailboxCoalesceKey,
+		now,
+	)
+	if mailboxErr != nil {
+		d.logf("ticket inbox mailbox receipt %s: %v", sourceSessionID, mailboxErr)
+	} else if read > 0 {
+		d.noteAgentMailboxRead(sourceSessionID, remaining)
 	}
 	d.refreshTicketUnread(sourceSessionID)
 	if d.debugLogging && len(bundles) > 0 {

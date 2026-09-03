@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -525,8 +524,6 @@ func (d *Daemon) handlePresentSubmitRound(client *wsClient, msg *protocol.Presen
 	d.handbackPresentationRound(pres, round.Seq, msg.Verdict)
 }
 
-// A bare session gets a best-effort doorbell, silently skipped while it waits
-// for approval — the accepted limitation with no durable inbox.
 func (d *Daemon) handbackPresentationRound(pres *store.Presentation, seq int, verdict string) {
 	var notice string
 	if verdict == "approved" {
@@ -546,32 +543,25 @@ func (d *Daemon) handbackPresentationRound(pres *store.Presentation, seq int, ve
 	}
 
 	session := d.store.Get(pres.SessionID)
-	if session == nil || !sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State) {
-		d.logf("present handback: session %s is waiting for approval, skipping doorbell for presentation %s", pres.SessionID, pres.ID)
+	if session == nil {
+		d.logf("present handback: session %s is gone; presentation %s remains updated", pres.SessionID, pres.ID)
 		return
 	}
-	delivery := maintenanceSessionInput(
-		"present-handback",
-		fmt.Sprintf("%s/%d", pres.ID, seq),
+	delivery, _, err := d.store.EnqueueMaintenancePromptOnce(
+		fmt.Sprintf("present-handback/%s/%d", pres.ID, seq),
 		pres.SessionID,
+		pres.ID,
+		"",
 		"\U0001F4FD "+notice+".",
-		sessionInputAtTurnBoundary,
+		time.Now(),
 	)
-	delivery.resend = func() { d.resendPresentationHandback(pres.ID, seq, verdict) }
-	attempt := d.sessionInputs().try(context.Background(), delivery)
-	if attempt.err != nil {
-		d.logf("present handback: input failed for session %s: %v", pres.SessionID, attempt.err)
+	if err != nil {
+		d.logf("present handback: failed to queue presentation %s round %d: %v", pres.ID, seq, err)
 		return
 	}
-	d.sessionInputs().release(pres.SessionID, delivery.id)
-}
-
-func (d *Daemon) resendPresentationHandback(presentationID string, seq int, verdict string) {
-	pres, err := d.store.GetPresentation(presentationID)
-	if err != nil || pres == nil || pres.Status == "closed" {
-		return
+	if err := d.deliverAgentMailboxItem(delivery); err != nil {
+		d.logf("present handback: inbox doorbell deferred for session %s: %v", pres.SessionID, err)
 	}
-	d.handbackPresentationRound(pres, seq, verdict)
 }
 
 func (d *Daemon) handlePresentClose(client *wsClient, msg *protocol.PresentCloseMessage) {

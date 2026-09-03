@@ -14,6 +14,8 @@ import (
 // streams a ticket's content into the PTY.
 const ticketNudgePrompt = "📋 Activity on a ticket that predates the garden — run `attn ticket inbox` to read and acknowledge it."
 
+const legacyTicketMailboxCoalesceKey = "legacy-ticket"
+
 // Busy delegation tickets in the production event history had a median inter-event gap
 // of 9m49s (440 gaps across 67 tickets), so ten minutes sits just past the burst cadence.
 const defaultTicketBundleWindow = 10 * time.Minute
@@ -123,57 +125,12 @@ func (d *Daemon) notifySleepingTicketMember(identity, ticketID string) {
 		return
 	}
 
-	result, err := d.crewWakeWithDelivery(memberID, "", true, &crewWakeDelivery{
-		AfterInitialPrompt: func(sessionID string) {
-			d.notifyTicketSession(sessionID, time.Now())
-		},
-	})
+	result, err := d.crewWakeWithDelivery(memberID, "", true, nil)
 	if err != nil {
 		d.notifyTicketMemberWakeRefused(memberID, ticketID, err)
 		return
 	}
-	if result.AlreadyAwake {
-		d.notifyTicketSession(result.SessionID, time.Now())
-		return
-	}
-	// Indicator only: the nudge itself waits on the prompt-submit receipt
-	// registered above, behind charter and handoff priming.
-	d.refreshTicketUnread(result.SessionID)
-}
-
-func (d *Daemon) seedCrewTicketWakeDeliveries() error {
-	members, _, err := d.readCrewMembers()
-	if err != nil {
-		return err
-	}
-	for _, member := range members {
-		if !d.crewBindingLive(member) {
-			continue
-		}
-		identity := store.TicketMemberIdentity(member.ID)
-		events, err := d.store.UnreadTicketEventsFor(identity, identity)
-		if err != nil {
-			return err
-		}
-		if len(events) == 0 {
-			continue
-		}
-		sessionID := member.BindingSession
-		session := d.store.Get(sessionID)
-		if session == nil {
-			continue
-		}
-		state := string(session.State)
-		if state == protocol.StateLaunching || state == protocol.StateWorking {
-			d.notePostInitialPrompt(sessionID, func() { d.notifyTicketSession(sessionID, time.Now()) })
-			d.refreshTicketUnread(sessionID)
-			continue
-		}
-		// A settled session has already crossed its first prompt; waiting for a hook
-		// it may never emit would lose the delivery.
-		d.notifyTicketSession(sessionID, time.Now())
-	}
-	return nil
+	d.notifyTicketSession(result.SessionID, time.Now())
 }
 
 const notificationKindCrewTicketWakeRefused = "crew_ticket_wake_refused"
@@ -227,7 +184,7 @@ func (d *Daemon) notifyUnreadTicketSessionLocked(sessionID string, now time.Time
 		return
 	}
 	session := d.store.Get(sessionID)
-	if session == nil || d.initialPromptPending(sessionID) || !sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State) {
+	if session == nil || !sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State) {
 		return
 	}
 	pending := make(map[int64]struct{})

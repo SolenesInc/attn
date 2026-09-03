@@ -67,13 +67,13 @@ func (d *Daemon) consumeSeedBell(sessionID, seedID string) {
 	if sessionID == "" || d.store == nil {
 		return
 	}
-	consumed, err := d.store.ReadGardenSeedMailboxItems(sessionID, seedID, time.Now())
+	consumed, remaining, err := d.store.ReadGardenSeedMailboxItems(sessionID, seedID, time.Now())
 	if err != nil {
 		d.logf("garden bell: consuming session=%s seed=%s: %v", sessionID, seedID, err)
 		return
 	}
 	if consumed {
-		d.forgetQueuedAgentMailboxItems(sessionID)
+		d.noteAgentMailboxRead(sessionID, remaining)
 	}
 }
 

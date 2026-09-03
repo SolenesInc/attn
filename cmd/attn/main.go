@@ -636,7 +636,7 @@ commands:
   agent list                        name every session running here
   agent peek <session-or-member>    read a session without interrupting it
   agent msg <target> "text"            notify a live session, crew member or seed's tender
-  agent inbox <message-id>              read a notified peer message
+  agent inbox [message-id]              read durable agent notifications
   agent msg-status <message-id>         inspect a sent peer message
 	  session <command>                 inspect a session's conversation
   state explain <id>                replay why a session's state is what it is

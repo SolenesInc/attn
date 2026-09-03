@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -64,11 +63,8 @@ func (d *Daemon) armNudgeCountdownAt(sessionID string, deadline time.Time) {
 	}
 }
 
-// The ready channel blocks the closure until `timer` is published, so the identity check in nudgeCountdownFire never reads a half-written value.
-func (d *Daemon) startCountdownLocked(sessionID string, window time.Duration) {
-	d.startCountdownAtLocked(sessionID, time.Now().Add(window))
-}
-
+// The ready channel keeps the callback from checking identity before timer is
+// published in nudgeCountdowns.
 func (d *Daemon) startCountdownAtLocked(sessionID string, firesAt time.Time) {
 	if d.nudgeCountdowns == nil {
 		d.nudgeCountdowns = make(map[string]*nudgeCountdown)
@@ -265,11 +261,8 @@ func (d *Daemon) runNudgeDelivery(sessionID string) string {
 	if d.store == nil {
 		return "noop"
 	}
-	if d.initialPromptPending(sessionID) {
-		return "priming"
-	}
 	session := d.store.Get(sessionID)
-	if session == nil || !sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State) {
+	if session == nil {
 		return "blocked"
 	}
 	if d.currentlySelectedSession() == sessionID {
@@ -292,38 +285,30 @@ func (d *Daemon) runNudgeDelivery(sessionID string) string {
 		d.markTicketUnread(sessionID, false)
 		return "drained"
 	}
-	if d.recentUserInput(sessionID, sessionInputQuietWindow) {
-		d.nudgeMu.Lock()
-		d.startCountdownLocked(sessionID, d.nudgeWindow())
-		d.nudgeMu.Unlock()
-		return "rearm"
-	}
 	deliveredThroughSeq, err := d.newestUnreadTicketSeq(sessionID)
 	if err != nil {
 		d.logf("nudge delivered-through scan %s: %v", sessionID, err)
 		return "error"
 	}
-	delivery := maintenanceSessionInput(
-		"ticket-nudge",
-		fmt.Sprintf("%s/%d", sessionID, deliveredThroughSeq),
+	delivery, _, err := d.store.EnqueueMaintenancePromptOnce(
+		fmt.Sprintf("legacy-ticket/%s/%d", sessionID, deliveredThroughSeq),
 		sessionID,
+		fmt.Sprintf("%d", deliveredThroughSeq),
+		legacyTicketMailboxCoalesceKey,
 		ticketNudgePrompt,
-		sessionInputAtTurnBoundary,
+		time.Now(),
 	)
-	delivery.resend = func() { d.deliverNudgeOrReArm(sessionID) }
-	attempt := d.sessionInputs().try(context.Background(), delivery)
-	if attempt.err != nil {
-		if sessionInputQuietDeferral(attempt.err) {
-			return "rearm"
-		}
-		d.logf("nudge countdown input %s: %v", sessionID, attempt.err)
-		return "doorbell-error"
+	if err != nil {
+		d.logf("nudge countdown mailbox enqueue %s: %v", sessionID, err)
+		return "error"
 	}
 	if err := d.store.SetTicketDeliveryAttentionThrough(d.ticketAttentionKey(sessionID), time.Now(), deliveredThroughSeq); err != nil {
 		d.logf("nudge attention update %s: %v", sessionID, err)
-		return "error"
 	}
-	d.sessionInputs().release(sessionID, delivery.id)
+	if err := d.deliverAgentMailboxItem(delivery); err != nil {
+		d.logf("nudge countdown inbox doorbell deferred %s: %v", sessionID, err)
+		return "queued"
+	}
 	return "doorbell"
 }
 
@@ -370,15 +355,12 @@ func (d *Daemon) handleTriggerNudge(msg *protocol.TriggerNudgeMessage) {
 	if sessionID == "" {
 		return
 	}
-	if d.initialPromptPending(sessionID) {
-		return
-	}
 	d.cancelNudgeCountdown(sessionID, "user triggered")
 	if d.store == nil {
 		return
 	}
 	session := d.store.Get(sessionID)
-	if session == nil || !sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State) {
+	if session == nil {
 		return
 	}
 	d.deliveryMu.Lock()
@@ -394,20 +376,23 @@ func (d *Daemon) handleTriggerNudge(msg *protocol.TriggerNudgeMessage) {
 		d.broadcastSessionStateChanged(sessionID)
 		return
 	}
-	delivery := maintenanceSessionInput(
-		"ticket-nudge",
-		fmt.Sprintf("%s/%d", sessionID, deliveredThroughSeq),
+	delivery, _, enqueueErr := d.store.EnqueueMaintenancePromptOnce(
+		fmt.Sprintf("legacy-ticket/%s/%d", sessionID, deliveredThroughSeq),
 		sessionID,
+		fmt.Sprintf("%d", deliveredThroughSeq),
+		legacyTicketMailboxCoalesceKey,
 		ticketNudgePrompt,
-		sessionInputAtTurnBoundary,
+		time.Now(),
 	)
-	attempt := d.sessionInputs().try(context.Background(), delivery)
-	if attempt.err != nil {
-		d.logf("trigger_nudge input %s: %v", sessionID, attempt.err)
-	} else if err := d.store.SetTicketDeliveryAttentionThrough(d.ticketAttentionKey(sessionID), time.Now(), deliveredThroughSeq); err != nil {
-		d.logf("trigger_nudge attention update %s: %v", sessionID, err)
+	if enqueueErr != nil {
+		d.logf("trigger_nudge mailbox enqueue %s: %v", sessionID, enqueueErr)
 	} else {
-		d.sessionInputs().release(sessionID, delivery.id)
+		if err := d.store.SetTicketDeliveryAttentionThrough(d.ticketAttentionKey(sessionID), time.Now(), deliveredThroughSeq); err != nil {
+			d.logf("trigger_nudge attention update %s: %v", sessionID, err)
+		}
+		if err := d.deliverAgentMailboxItem(delivery); err != nil {
+			d.logf("trigger_nudge inbox doorbell deferred %s: %v", sessionID, err)
+		}
 	}
 	d.broadcastSessionStateChanged(sessionID)
 }
@@ -449,10 +434,6 @@ func (d *Daemon) forgetUserInput(sessionID string) {
 	d.lastInputMu.Lock()
 	delete(d.lastUserInputAt, sessionID)
 	d.lastInputMu.Unlock()
-}
-
-func (d *Daemon) recentUserInput(sessionID string, within time.Duration) bool {
-	return d.userInputQuietRemaining(sessionID, within) > 0
 }
 
 func (d *Daemon) userInputQuietRemaining(sessionID string, within time.Duration) time.Duration {

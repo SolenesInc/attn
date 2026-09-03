@@ -20,10 +20,12 @@ import {
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
-const FIRST_BODY = 'FIRST_PEER_BODY only the inbox may reveal';
-const SECOND_BODY = 'SECOND_PEER_BODY follows the first read';
+const GENERIC_DOORBELL = '📬 You have unread items in your attn inbox. Run attn agent inbox to read them.';
+const GARDEN_ITEM_COUNT = 9;
+const BURST_PEER_BODY = 'BURST_PEER_BODY only the inbox may reveal';
+const LATER_PEER_BODY = 'LATER_PEER_BODY proves the missing hook did not latch the lane';
 const RELEASE_FILE = 'release-first-read';
-const READ_MARKER = 'PEER_MESSAGE_READ';
+const READ_MARKER = 'AGENT_INBOX_READ';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -86,7 +88,7 @@ async function waitForRecipientReads(client, pane, count, timeoutMs = 60_000) {
   throw new Error(`recipient completed fewer than ${count} inbox reads:\n${text}`);
 }
 
-function messageID(output) {
+function peerMessageID(output) {
   return output.match(/\(id([0-9a-f-]{36})\)/)?.[1] ?? null;
 }
 
@@ -100,12 +102,12 @@ function writeRecipientFixture(cwd) {
         actions: [{ type: 'reply', text: 'PEER_RECIPIENT_READY', state: 'idle' }],
       },
       {
-        includes: '📨 session',
+        includes: GENERIC_DOORBELL,
         submitHook: false,
         actions: [
-          { type: 'capture', from: 'prompt', pattern: 'message ([0-9a-f-]{36})', name: 'message' },
           { type: 'wait_for_file', path: RELEASE_FILE },
-          { type: 'attn', args: ['agent', 'inbox', '{{message}}'] },
+          { type: 'attn', args: ['agent', 'inbox', '--limit', '10', '--json'] },
+          { type: 'attn', args: ['agent', 'inbox', '--limit', '10', '--json'] },
           { type: 'reply', text: READ_MARKER, state: 'idle' },
         ],
       },
@@ -118,6 +120,18 @@ function readRecipientTranscript(cwd) {
   const file = fs.readdirSync(dir).find((entry) => entry.endsWith('.jsonl'));
   if (!file) throw new Error(`no mock transcript in ${dir}`);
   return fs.readFileSync(path.join(dir, file), 'utf8');
+}
+
+function inboxBatches(transcript) {
+  return transcriptMessages(transcript).flatMap((message) => {
+    if (message.role !== 'assistant') return [];
+    try {
+      const parsed = JSON.parse(message.text);
+      return Array.isArray(parsed?.items) ? [parsed] : [];
+    } catch {
+      return [];
+    }
+  });
 }
 
 async function main() {
@@ -139,8 +153,9 @@ async function main() {
   let author = null;
   let recipient = null;
   let recipientCwd = null;
-  let firstID = null;
-  let secondID = null;
+  const seedIDs = [];
+  let burstPeerID = null;
+  let laterPeerID = null;
   try {
     await launchFreshAppAndConnect(client, observer);
 
@@ -173,60 +188,134 @@ async function main() {
       return pane;
     });
 
-    await runner.step('only_the_first_doorbell_is_notified', async () => {
-      const first = await runInShell(
-        client, author,
-        `attn agent msg ${recipient.sessionId} "${FIRST_BODY}" --source-session ${author.sessionId}`,
-        'notified:',
-      );
-      firstID = messageID(first);
-      runner.assert(Boolean(firstID), 'the first send returned its message id', { first });
-
-      const second = await runInShell(
-        client, author,
-        `attn agent msg ${recipient.sessionId} "${SECOND_BODY}" --source-session ${author.sessionId}`,
-        'queued:',
-      );
-      secondID = messageID(second);
-      runner.assert(Boolean(secondID), 'the second queued send returned its message id', { second });
-      await runInShell(client, author,
-        `attn agent msg-status ${firstID} --session ${author.sessionId}`, 'notified:');
-      await runInShell(client, author,
-        `attn agent msg-status ${secondID} --session ${author.sessionId}`, 'queued:');
-      runner.writeText('send-results.txt', `${first}\n${second}\n`);
+    await runner.step('plant_and_watch_nine_seeds', async () => {
+      for (let index = 0; index < GARDEN_ITEM_COUNT; index += 1) {
+        const planted = await runInShell(
+          client,
+          author,
+          `attn seed plant "Inbox burst seed ${index + 1}" -m "Durable inbox burst fixture ${index + 1}." --session ${author.sessionId}`,
+          's-',
+        );
+        const seedID = planted.match(/s-[a-z0-9]{6}/)?.[0] ?? null;
+        runner.assert(Boolean(seedID), `plant returned seed ${index + 1}`, { planted });
+        seedIDs.push(seedID);
+        await runInShell(
+          client,
+          author,
+          `attn seed watch ${seedID} --session ${recipient.sessionId}`,
+          `watching ${seedID}`,
+        );
+      }
     });
 
-    await runner.step('inbox_reads_rearm_fifo_without_prompt_submit', async () => {
+    await runner.step('burst_gets_one_generic_doorbell', async () => {
+      await runInShell(
+        client,
+        author,
+        `attn seed note ${seedIDs[0]} -m BURST_GARDEN_1 --ring --session ${author.sessionId}`,
+        `noted on ${seedIDs[0]}`,
+      );
+      await waitForRecipient(client, recipient, GENERIC_DOORBELL);
+
+      for (let index = 1; index < seedIDs.length; index += 1) {
+        await runInShell(
+          client,
+          author,
+          `attn seed note ${seedIDs[index]} -m BURST_GARDEN_${index + 1} --ring --session ${author.sessionId}`,
+          `noted on ${seedIDs[index]}`,
+        );
+      }
+      const peer = await runInShell(
+        client,
+        author,
+        `attn agent msg ${recipient.sessionId} "${BURST_PEER_BODY}" --source-session ${author.sessionId}`,
+        'queued:',
+      );
+      burstPeerID = peerMessageID(peer);
+      runner.assert(Boolean(burstPeerID), 'the burst peer send returned its message id', { peer });
+      await runInShell(client, author,
+        `attn agent msg-status ${burstPeerID} --session ${author.sessionId}`, 'queued:');
+
+      const transcript = readRecipientTranscript(recipientCwd);
+      const doorbells = transcriptMessages(transcript)
+        .filter((message) => message.role === 'user' && message.text === GENERIC_DOORBELL);
+      runner.assert(doorbells.length === 1,
+        'nine Garden items and one peer item share one generic doorbell', { doorbells });
+      runner.assert(!doorbells[0].text.includes(BURST_PEER_BODY),
+        'the generic doorbell contains no durable item body', { doorbells });
+      runner.writeText('burst-send-result.txt', `${peer}\n`);
+    });
+
+    await runner.step('bounded_batch_reads_fifo_and_writes_each_receipt', async () => {
       fs.writeFileSync(path.join(recipientCwd, RELEASE_FILE), 'read\n');
-      const text = await waitForRecipientReads(client, recipient, 2);
-      runner.assert(flat(text).includes(flat(FIRST_BODY)), 'the first inbox read returned its body', { text });
-      runner.assert(flat(text).includes(flat(SECOND_BODY)), 'the second inbox read returned its body', { text });
+      const text = await waitForRecipientReads(client, recipient, 1);
+      const transcript = readRecipientTranscript(recipientCwd);
+      const batches = inboxBatches(transcript);
+      runner.assert(batches.length === 2, 'the turn produced one batch and one empty receipt check', { batches });
+      const [batch, empty] = batches;
+      runner.assert(batch.items.length === GARDEN_ITEM_COUNT + 1 && batch.remaining === 0,
+        'the bounded read returned all ten burst items', { batch });
+      runner.assert(empty.items.length === 0 && empty.remaining === 0,
+        'a second read finds no duplicated durable content', { empty });
+      const sources = batch.items.map((item) => item.source_id);
+      runner.assert(JSON.stringify(sources) === JSON.stringify([...seedIDs, burstPeerID]),
+        'the batch preserved FIFO order across Garden and peer producers', { sources, seedIDs, burstPeerID });
+      runner.assert(batch.items.slice(0, GARDEN_ITEM_COUNT).every((item) =>
+        item.kind === 'garden_seed' && item.content.includes(`${item.source_id} moved: note`)),
+      'each Garden item retained its durable action content', { batch });
+      runner.assert(batch.items.at(-1)?.kind === 'peer_message' && batch.items.at(-1)?.content === BURST_PEER_BODY,
+        'the peer body appeared once at the end of the FIFO batch', { batch });
+      runner.assert(batch.items.every((item) => item.notified_at && item.read_at),
+        'each returned item carries its notified and read receipt', { batch });
       await runInShell(client, author,
-        `attn agent msg-status ${firstID} --session ${author.sessionId}`, 'read:');
-      await runInShell(client, author,
-        `attn agent msg-status ${secondID} --session ${author.sessionId}`, 'read:');
+        `attn agent msg-status ${burstPeerID} --session ${author.sessionId}`, 'read:');
+      await observer.waitFor(
+        () => ['idle', 'waiting_input'].includes(observer.getSession(recipient.sessionId)?.state),
+        'the recipient to return idle after its missing-hook inbox turn',
+        30_000,
+      );
       runner.writeText('recipient-pane.txt', `${text}\n`);
     });
 
-    await runner.step('transcript_proves_content_free_doorbells', async () => {
+    await runner.step('later_item_wakes_after_missing_prompt_submit', async () => {
+      const peer = await runInShell(
+        client,
+        author,
+        `attn agent msg ${recipient.sessionId} "${LATER_PEER_BODY}" --source-session ${author.sessionId}`,
+        '(id',
+      );
+      laterPeerID = peerMessageID(peer);
+      runner.assert(Boolean(laterPeerID), 'the later peer send returned its message id', { peer });
+      const text = await waitForRecipientReads(client, recipient, 2);
       const transcript = readRecipientTranscript(recipientCwd);
       const doorbells = transcriptMessages(transcript)
-        .filter((message) => message.role === 'user' && message.text.includes('📨 session'));
-      runner.assert(doorbells.length === 2, 'the recipient got exactly two peer doorbells', { doorbells });
-      runner.assert(doorbells[0].text.includes(firstID) && doorbells[1].text.includes(secondID),
-        'the doorbells followed FIFO order', { doorbells, firstID, secondID });
+        .filter((message) => message.role === 'user' && message.text === GENERIC_DOORBELL);
+      runner.assert(doorbells.length === 2,
+        'the burst and later item each produced one generic doorbell', { doorbells });
       for (const doorbell of doorbells) {
-        runner.assert(!doorbell.text.includes(FIRST_BODY) && !doorbell.text.includes(SECOND_BODY),
-          'a doorbell contains no peer message body', { doorbell });
+        runner.assert(!doorbell.text.includes(BURST_PEER_BODY) && !doorbell.text.includes(LATER_PEER_BODY),
+          'a generic doorbell contains no durable item body', { doorbell });
       }
+      const batches = inboxBatches(transcript);
+      runner.assert(batches.length === 4, 'both wake turns completed their batch and empty reads', { batches });
+      const later = batches[2];
+      runner.assert(later.items.length === 1 && later.remaining === 0,
+        'the later wake consumed exactly its new item', { later });
+      runner.assert(later.items[0].source_id === laterPeerID && later.items[0].content === LATER_PEER_BODY,
+        'the later batch returned the new peer content without duplication', { later, laterPeerID });
+      runner.assert(Boolean(later.items[0].read_at), 'the later item got its read receipt', { later });
+      await runInShell(client, author,
+        `attn agent msg-status ${laterPeerID} --session ${author.sessionId}`, 'read:');
+      runner.writeText('recipient-after-later-wake.txt', `${text}\n`);
       runner.writeText('recipient-transcript.json', `${JSON.stringify(transcriptMessages(transcript), null, 2)}\n`);
     });
 
     const summary = await runner.finishSuccess({
       authorSessionId: author.sessionId,
       recipientSessionId: recipient.sessionId,
-      firstID,
-      secondID,
+      seedIDs,
+      burstPeerID,
+      laterPeerID,
     });
     console.log('[RealAppHarness] Peer message read receipts passed.');
     console.log(JSON.stringify(summary, null, 2));
@@ -234,8 +323,9 @@ async function main() {
     const summary = await runner.finishFailure(error, {
       authorSessionId: author?.sessionId ?? null,
       recipientSessionId: recipient?.sessionId ?? null,
-      firstID,
-      secondID,
+      seedIDs,
+      burstPeerID,
+      laterPeerID,
     });
     console.error(summary.error);
     process.exitCode = 1;

@@ -15,7 +15,7 @@ import {
 } from './scenarioAssertions.mjs';
 import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { writeMockAgentFixture } from './mockAgent.mjs';
+import { transcriptMessages, writeMockAgentFixture } from './mockAgent.mjs';
 import { delay } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -23,6 +23,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 const FIRST_NOTE = 'FIRST_READ_RECEIPT';
 const SECOND_NOTE = 'SECOND_READ_RECEIPT';
 const READ_MARKER = 'SEED_BELL_READ';
+const GENERIC_DOORBELL = '📬 You have unread items in your attn inbox. Run attn agent inbox to read them.';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -89,15 +90,23 @@ function writeWatcherFixture(cwd) {
         ],
       },
       {
-        includes: '🔔',
+        includes: GENERIC_DOORBELL,
         submitHook: false,
         actions: [
+          { type: 'attn', args: ['agent', 'inbox', '--json'] },
           { type: 'attn', args: ['seed', 'show', '{{seed}}'] },
           { type: 'reply', text: READ_MARKER, state: 'idle' },
         ],
       },
     ],
   });
+}
+
+function readWatcherTranscript(cwd) {
+  const dir = path.join(cwd, '.attn-mock-agent');
+  const file = fs.readdirSync(dir).find((entry) => entry.endsWith('.jsonl'));
+  if (!file) throw new Error(`no mock transcript in ${dir}`);
+  return fs.readFileSync(path.join(dir, file), 'utf8');
 }
 
 async function main() {
@@ -113,11 +122,12 @@ async function main() {
     scenarioId: 'GardenSeedReadReceipts',
     tier: 'local',
     prefix: 'garden-seed-read-receipts',
-    metadata: { agent: 'mock-codex', receipt: 'seed show without a prompt-submit hook' },
+    metadata: { agent: 'mock-codex', receipt: 'agent inbox without a prompt-submit hook' },
   });
 
   let author = null;
   let watcher = null;
+  let watcherCwd = null;
   let seed = null;
   try {
     await launchFreshAppAndConnect(client, observer);
@@ -146,12 +156,12 @@ async function main() {
     });
 
     watcher = await runner.step('watch_from_mock_codex', async () => {
-      const cwd = path.join(runner.sessionDir, 'watcher');
-      writeWatcherFixture(cwd);
+      watcherCwd = path.join(runner.sessionDir, 'watcher');
+      writeWatcherFixture(watcherCwd);
       const sessionId = await createSessionAndWaitForInitialPane({
         client,
         observer,
-        cwd,
+        cwd: watcherCwd,
         label: 'seed-read-watcher',
         agent: 'codex',
         promptReadyFn: ensureCodexPromptReadyViaPty,
@@ -182,10 +192,15 @@ async function main() {
         `noted on ${seed}`,
       );
       const text = await waitForAgentReads(client, watcher, 2, SECOND_NOTE);
-      const flattened = flat(text);
-      runner.assert(occurrences(flattened, `${seed}moved:note`) === 2,
-        'each read cycle injected exactly one bell', { text });
+      const transcript = readWatcherTranscript(watcherCwd);
+      const doorbells = transcriptMessages(transcript)
+        .filter((message) => message.role === 'user' && message.text === GENERIC_DOORBELL);
+      runner.assert(doorbells.length === 2,
+        'each read cycle received exactly one generic doorbell', { doorbells });
+      runner.assert(doorbells.every((doorbell) => !doorbell.text.includes(seed)),
+        'the durable seed id stayed out of the terminal doorbell', { doorbells, seed });
       runner.writeText('watcher-pane.txt', `${text}\n`);
+      runner.writeText('watcher-transcript.json', `${JSON.stringify(transcriptMessages(transcript), null, 2)}\n`);
     });
 
     const summary = await runner.finishSuccess({ seed, watcherSessionId: watcher.sessionId });

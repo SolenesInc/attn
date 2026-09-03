@@ -1,12 +1,13 @@
 package daemon
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -97,14 +98,22 @@ func (d *Daemon) nudgeChiefOfStaff(attemptKey, prompt string) bool {
 	if d.chiefOfStaffSessionID() != sessionID {
 		return false
 	}
-	delivery := maintenanceSessionInput("chief-inbox", attemptKey, sessionID, prompt, sessionInputAtTurnBoundary)
-	delivery.resend = func() { d.nudgeChiefOfStaff(attemptKey, prompt) }
-	attempt := d.sessionInputs().try(context.Background(), delivery)
-	if attempt.err != nil {
-		d.logf("chief nudge: input failed for %s: %v", sessionID, attempt.err)
+	itemID := "chief-inbox/" + strings.TrimSpace(attemptKey)
+	if strings.TrimSpace(attemptKey) == "" {
+		itemID = "chief-inbox/" + uuid.NewString()
+	}
+	delivery, _, err := d.store.EnqueueMaintenancePromptOnce(
+		itemID, sessionID, "notebook-inbox", "", prompt, time.Now(),
+	)
+	if err != nil {
+		d.logf("chief nudge: queue failed for %s: %v", sessionID, err)
 		return false
 	}
-	d.sessionInputs().release(sessionID, delivery.id)
+	err = d.deliverAgentMailboxItem(delivery)
+	if err != nil && !errors.Is(err, errAgentMailboxDoorbellOutstanding) && !errors.Is(err, errAgentMailboxDoorbellInFlight) {
+		d.logf("chief nudge: doorbell deferred for %s: %v", sessionID, err)
+		return false
+	}
 	return true
 }
 

@@ -22,13 +22,6 @@ const (
 	agentMessageQueueCap     = 50
 )
 
-var errDoorbellNotTaken = errors.New("doorbell typed but the target did not take it")
-var errPeerMessageWaitingForRead = errors.New("an older peer message is waiting to be read")
-
-// An initial-prompt delivery owns the prompt until its submit hook. Anything
-// behind it must queue rather than paste into priming or a trust dialog.
-var errAgentMessageInitialPromptPending = errors.New("target is still taking its initial prompt")
-
 func agentMessageGuardVerdict(counts agentmailbox.PeerGuardCounts) string {
 	switch {
 	case counts.DuplicateFromSender:
@@ -159,8 +152,6 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		d.sendError(conn, "internal_error")
 		return
 	}
-	d.noteQueuedAgentMailboxItem(target.ID)
-
 	result.MessageID = message.ID
 	if err := d.deliverAgentMailboxItem(delivery); err != nil {
 		result.Status = protocol.AgentMsgStatusQueued
@@ -187,11 +178,11 @@ func (d *Daemon) replyAgentMsgError(conn net.Conn, code, message string) {
 }
 
 func agentMessageQueuedDetail(err error) string {
-	if errors.Is(err, errPeerMessageWaitingForRead) {
-		return "queued (an older message is waiting to be read — this notification lands immediately after it is read)"
+	if errors.Is(err, errAgentMailboxDoorbellOutstanding) {
+		return "queued (target already has an inbox doorbell; this message is in the same unread batch)"
 	}
-	if errors.Is(err, errAgentMessageInitialPromptPending) {
-		return "queued (target is waking and still reading its priming — lands immediately after its first prompt starts)"
+	if errors.Is(err, errAgentMailboxDoorbellInFlight) {
+		return "queued (target's inbox doorbell is already being placed)"
 	}
 	if errors.Is(err, errSessionInputBlockedByApproval) {
 		return "queued (target is waiting on an approval — lands when the approval clears)"
@@ -205,22 +196,7 @@ func agentMessageQueuedDetail(err error) string {
 	if errors.Is(err, errSessionInputScreenUnavailable) {
 		return "queued (attn cannot see a safe prompt on the target yet; lands on its next state change)"
 	}
-	if errors.Is(err, errDoorbellNotTaken) {
-		return fmt.Sprintf(
-			"queued (typed it, but the target did not start a turn within %s — something in front of its prompt ate it; lands on its next state change)",
-			sessionInputTakenWindow)
-	}
 	return "queued (target is not taking input right now — lands when it is running again; don't wait for a reply)"
-}
-
-func (d *Daemon) composePeerMessageDoorbell(sender *protocol.Session, message agentmailbox.PeerMessage) string {
-	shortID := shortSessionID(message.SenderSessionID)
-	origin := shortID
-	if sender != nil {
-		origin = fmt.Sprintf("%s (%s)", shortID, d.sessionOriginName(sender))
-	}
-	return fmt.Sprintf("📨 session %s sent message %s — read it with `attn agent inbox %s`.",
-		origin, message.ID, message.ID)
 }
 
 func (d *Daemon) sessionOriginName(session *protocol.Session) string {

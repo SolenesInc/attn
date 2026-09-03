@@ -49,7 +49,11 @@ func (r *recordingDoorbell) pasted() []string {
 func newAgentMsgDaemon(t *testing.T) (*Daemon, *recordingDoorbell) {
 	t.Helper()
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	t.Cleanup(func() { _ = d.store.Close() })
+	t.Cleanup(func() {
+		d.sessionInputs().stopRetries()
+		d.stopAgentMailboxDoorbells()
+		_ = d.store.Close()
+	})
 	doorbell := &recordingDoorbell{}
 	d.ptyBackend = doorbell.backend()
 	return d, doorbell
@@ -89,24 +93,19 @@ func TestHandleAgentMsgNotifiesWithAnAttributedContentFreeDoorbell(t *testing.T)
 		t.Fatalf("typed %d prompts, want 1: %q", len(prompts), prompts)
 	}
 	prompt := prompts[0]
-	for _, want := range []string{
-		"📨 session sender-s (workspace-sender-session-id) sent message " + result.MessageID,
-		"attn agent inbox " + result.MessageID,
-	} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("prompt missing %q:\n%s", want, prompt)
-		}
+	if prompt != agentMailboxDoorbellText {
+		t.Fatalf("prompt = %q, want generic inbox doorbell", prompt)
 	}
 	if strings.Contains(prompt, "the migration landed") {
 		t.Fatalf("doorbell leaked the message body:\n%s", prompt)
 	}
 
-	queued, err := d.store.QueuedAgentMailboxDeliveries("target-session-id")
+	queued, err := d.store.UnreadAgentMailboxDeliveries("target-session-id")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(queued) != 0 {
-		t.Fatalf("a notified message is still queued: %+v", queued)
+	if len(queued) != 1 || queued[0].Item.ID != result.MessageID || queued[0].Item.NotifiedAt == "" {
+		t.Fatalf("notified message is not durably unread: %+v", queued)
 	}
 }
 
@@ -130,8 +129,7 @@ func TestHandleAgentMsgResolvesAnAwakeCrewMemberToItsLiveSession(t *testing.T) {
 	if resp.AgentMsgResult.Detail != "notified Keel" {
 		t.Fatalf("detail = %q, want the member's display name", resp.AgentMsgResult.Detail)
 	}
-	if prompts := doorbell.pasted(); len(prompts) != 1 || strings.Contains(prompts[0], "the garden is ready") ||
-		!strings.Contains(prompts[0], "attn agent inbox "+resp.AgentMsgResult.MessageID) {
+	if prompts := doorbell.pasted(); len(prompts) != 1 || prompts[0] != agentMailboxDoorbellText {
 		t.Fatalf("doorbell prompts = %q", prompts)
 	}
 	backend.mu.Lock()
@@ -177,28 +175,29 @@ func TestHandleAgentMsgWakesASleepingMemberBeforeNotifyingIt(t *testing.T) {
 	if writes != 0 {
 		t.Fatalf("the message was pasted %d times in addition to the initial prompt", writes)
 	}
-	queued, err := d.store.QueuedAgentMailboxDeliveries(result.TargetSessionID)
+	queued, err := d.store.UnreadAgentMailboxDeliveries(result.TargetSessionID)
 	if err != nil || len(queued) != 1 || queued[0].Item.ID != result.MessageID {
 		t.Fatalf("message was not durable before the wake completed: queued=%+v err=%v", queued, err)
 	}
 
 	drained := make(chan int, 1)
 	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
-	hook := callHandler(t, func(conn net.Conn) {
-		d.handleState(conn, &protocol.StateMessage{ID: result.TargetSessionID, State: protocol.StateWorking})
-	})
-	if !hook.Ok {
-		t.Fatalf("ready-state hook: %+v", hook)
+	if !d.applyState(sessionStateChange{
+		sessionID: result.TargetSessionID,
+		state:     protocol.StateIdle,
+		cause:     liveSignal{},
+	}) {
+		t.Fatal("idle state did not apply")
 	}
 	if delivered := <-drained; delivered != 1 {
 		t.Fatalf("ready-state drain delivered %d messages, want 1", delivered)
 	}
-	queued, err = d.store.QueuedAgentMailboxDeliveries(result.TargetSessionID)
-	if err != nil || len(queued) != 0 {
-		t.Fatalf("the ready-state hook left the notification queued: %+v, %v", queued, err)
+	queued, err = d.store.UnreadAgentMailboxDeliveries(result.TargetSessionID)
+	if err != nil || len(queued) != 1 || queued[0].Item.NotifiedAt == "" {
+		t.Fatalf("the idle transition lost the durable unread item: %+v, %v", queued, err)
 	}
 	if writes == 0 {
-		t.Fatal("the ready-state hook did not place the notification")
+		t.Fatal("the idle transition did not place the notification without a prompt hook")
 	}
 }
 
@@ -217,8 +216,8 @@ func TestHandleAgentMsgDuringWakePrimingDrainsAfterTheInitialPrompt(t *testing.T
 	if !second.Ok || second.AgentMsgResult == nil || second.AgentMsgResult.TargetSessionID != sessionID || second.AgentMsgResult.Status != protocol.AgentMsgStatusQueued {
 		t.Fatalf("second response = %+v, want a queue behind the same waking day", second)
 	}
-	queued, err := d.store.QueuedAgentMailboxDeliveries(sessionID)
-	if err != nil || len(queued) != 1 || queued[0].Item.ID != first.AgentMsgResult.MessageID {
+	queued, err := d.store.UnreadAgentMailboxDeliveries(sessionID)
+	if err != nil || len(queued) != 2 || queued[0].Item.ID != first.AgentMsgResult.MessageID || queued[1].Item.ID != second.AgentMsgResult.MessageID {
 		t.Fatalf("messages queued during priming = %+v, %v", queued, err)
 	}
 	if prompts := doorbell.pasted(); len(prompts) != 0 {
@@ -229,11 +228,12 @@ func TestHandleAgentMsgDuringWakePrimingDrainsAfterTheInitialPrompt(t *testing.T
 	drained := make(chan int, 1)
 	d.agentMailboxDrainScheduledHook = func(sessionID string) { scheduled <- sessionID }
 	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
-	hook := callHandler(t, func(conn net.Conn) {
-		d.handleState(conn, &protocol.StateMessage{ID: sessionID, State: protocol.StateWorking})
-	})
-	if !hook.Ok {
-		t.Fatalf("ready-state hook: %+v", hook)
+	if !d.applyState(sessionStateChange{
+		sessionID: sessionID,
+		state:     protocol.StateIdle,
+		cause:     liveSignal{},
+	}) {
+		t.Fatal("idle state did not apply")
 	}
 	select {
 	case got := <-scheduled:
@@ -246,17 +246,16 @@ func TestHandleAgentMsgDuringWakePrimingDrainsAfterTheInitialPrompt(t *testing.T
 	if delivered := <-drained; delivered != 1 {
 		t.Fatalf("drained %d messages behind the initial prompt, want 1", delivered)
 	}
-	queued, err = d.store.QueuedAgentMailboxDeliveries(sessionID)
-	if err != nil || len(queued) != 0 {
-		t.Fatalf("queue after first notification = %+v, %v", queued, err)
+	queued, err = d.store.UnreadAgentMailboxDeliveries(sessionID)
+	if err != nil || len(queued) != 2 || queued[0].Item.NotifiedAt == "" || queued[1].Item.NotifiedAt == "" {
+		t.Fatalf("unread inbox after notification = %+v, %v", queued, err)
 	}
 	prompts := doorbell.pasted()
-	if len(prompts) != 1 || !strings.Contains(prompts[0], first.AgentMsgResult.MessageID) ||
-		strings.Contains(prompts[0], "first ask") || strings.Contains(prompts[0], "second ask") {
+	if len(prompts) != 1 || prompts[0] != agentMailboxDoorbellText {
 		t.Fatalf("doorbell prompts after priming = %q", prompts)
 	}
 	secondRecord, err := d.store.PeerMessageRecord(second.AgentMsgResult.MessageID)
-	if err != nil || secondRecord.State() != agentmailbox.StateQueued {
+	if err != nil || secondRecord.State() != agentmailbox.StateNotified {
 		t.Fatalf("second message = %+v, %v", secondRecord, err)
 	}
 }
@@ -282,7 +281,7 @@ func TestHandleAgentMsgWakeLimitRefusalDeliversNothing(t *testing.T) {
 	if spawned != 0 {
 		t.Fatalf("the refused wake spawned %d sessions", spawned)
 	}
-	queued, err := d.store.TargetsWithQueuedAgentMailboxItems()
+	queued, err := d.store.TargetsWithUnreadAgentMailboxItems()
 	if err != nil || len(queued) != 0 {
 		t.Fatalf("the refused wake queued a message anyway: %v, %v", queued, err)
 	}
@@ -297,7 +296,7 @@ func TestHandleAgentMsgFailedWakeLeavesNoUndeliverableMessage(t *testing.T) {
 	if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), "would not start") {
 		t.Fatalf("response = %+v", resp)
 	}
-	targets, err := d.store.TargetsWithQueuedAgentMailboxItems()
+	targets, err := d.store.TargetsWithUnreadAgentMailboxItems()
 	if err != nil || len(targets) != 0 {
 		t.Fatalf("failed wake left an undeliverable row: %v, %v", targets, err)
 	}
@@ -362,15 +361,15 @@ func TestHandleAgentMsgQueuesUnderApprovalAndDrainsOnTheNextStateChange(t *testi
 		t.Fatalf("typed %d prompts after the drain, want 1: %q", len(prompts), prompts)
 	}
 	prompt := prompts[0]
-	if strings.Contains(prompt, "when you surface, rebase") || !strings.Contains(prompt, "attn agent inbox "+result.MessageID) {
+	if prompt != agentMailboxDoorbellText {
 		t.Fatalf("drained doorbell = %q", prompt)
 	}
-	queued, err := d.store.QueuedAgentMailboxDeliveries("target-session-id")
+	queued, err := d.store.UnreadAgentMailboxDeliveries("target-session-id")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(queued) != 0 {
-		t.Fatalf("still queued after the drain: %+v", queued)
+	if len(queued) != 1 || queued[0].Item.NotifiedAt == "" {
+		t.Fatalf("unread item was not stamped after the drain: %+v", queued)
 	}
 }
 
@@ -537,7 +536,7 @@ func TestHandleAgentMsgHeldOffByTypingLandsAfterTheQuietWindow(t *testing.T) {
 		default:
 			t.Fatal("nothing retried the delivery once the composer went quiet")
 		}
-		if prompts := doorbell.pasted(); len(prompts) != 1 || !strings.Contains(prompts[0], "attn agent inbox "+result.MessageID) {
+		if prompts := doorbell.pasted(); len(prompts) != 1 || prompts[0] != agentMailboxDoorbellText {
 			t.Fatalf("doorbells after the window = %q", doorbell.pasted())
 		}
 	})
