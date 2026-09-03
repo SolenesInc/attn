@@ -1,0 +1,4 @@
+kind: added
+area: terminal
+change: Copy terminal input diagnostics from the command menu when an agent stops accepting typing.
+notes: The dump includes focus, composition and connection evidence without typed text, and remains available after reopening the app.

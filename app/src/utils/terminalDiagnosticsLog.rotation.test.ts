@@ -16,6 +16,8 @@ vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => true }));
 vi.mock('@tauri-apps/plugin-fs', () => ({
   BaseDirectory: { AppLocalData: 'AppLocalData' },
   mkdir: async () => {},
+  exists: async (path: string) => files.has(path),
+  readTextFile: async (path: string) => files.get(path) ?? '',
   stat: async (path: string) => {
     const contents = files.get(path);
     if (contents === undefined) {
@@ -90,6 +92,44 @@ describe('diagnostics file rotation', () => {
   afterEach(() => {
     // The boundary case stubs Date.now; a leaked stub would freeze time for the rest of the file.
     vi.restoreAllMocks();
+  });
+
+  it('persists input evidence without copying its event history into later incident contexts', async () => {
+    const diagnostics = await loadModule();
+    const written = afterWrites(1);
+    diagnostics.recordDiag({
+      kind: 'input', pane: 'input-pane', reasons: ['composition_mismatch'],
+      recent: [{ event: 'keydown', outcome: 'composing' }],
+    });
+    await written;
+    const persisted = JSON.parse(files.get(LIFECYCLE_PATH)!.trim());
+    expect(persisted.recent).toEqual([{ event: 'keydown', outcome: 'composing' }]);
+    const summary = window.__ATTN_TERMINAL_DIAG_DUMP?.().find((event) => event.pane === 'input-pane');
+    expect(summary?.recent).toBeUndefined();
+    expect(summary?.detailsIn).toBe(diagnostics.TERMINAL_DIAGNOSTICS_FILE);
+  });
+
+  it('exports persisted and queued input records without unrelated or partial records', async () => {
+    const diagnostics = await loadModule();
+    files.set(LIFECYCLE_PATH, [
+      '{"kind":"input","pane":"before-restart"}',
+      '{"kind":"paint","text":"PRIVATE_OUTPUT","context":[{"kind":"input"}]}',
+      '{"kind":"input",',
+      'null',
+      '',
+    ].join('\n'));
+    diagnostics.recordDiag({ kind: 'input', pane: 'current-pane', reasons: ['composition_mismatch'] });
+
+    const dump = await diagnostics.readTerminalInputDiagnostics();
+    expect(dump.trim().split('\n').map((line) => JSON.parse(line).pane))
+      .toEqual(['before-restart', 'current-pane']);
+    expect(dump).not.toContain('PRIVATE_OUTPUT');
+    expect(dump.endsWith('\n')).toBe(true);
+  });
+
+  it('returns an empty dump when the diagnostic log does not exist', async () => {
+    const diagnostics = await loadModule();
+    expect(await diagnostics.readTerminalInputDiagnostics()).toBe('');
   });
 
   it('rotates before appending, so a near-cap file plus a model_fault capture stays under the cap', async () => {

@@ -110,6 +110,7 @@ import {
 } from '../utils/terminalDiagnosticsLog';
 import { createGhosttyModelOpRing, type ModelFaultCapture } from '../utils/ghosttyModelOpRing';
 import { captureUiSnapshot, recordUiDiag, UI_DIAGNOSTICS_FILE } from '../utils/uiDiagnosticsLog';
+import { observeTerminalInput } from '../utils/terminalInputDiagnostics';
 import type { TerminalVisibleContentSnapshot } from '../utils/terminalVisibleContent';
 import { analyzeTerminalVisibleLines } from '../utils/terminalVisibleContent';
 import type { TerminalVisibleStyleSnapshot, TerminalVisibleStyleLineSnapshot } from '../utils/terminalStyleSummary';
@@ -2011,6 +2012,19 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       const container = containerRef.current;
       const canvas = canvasRef.current;
       if (!container || !canvas) return;
+      const inputDiagnostics = observeTerminalInput(container, () => ({
+        runtimeId: runtimeMetaRef.current?.runtimeId,
+        sessionId: runtimeMetaRef.current?.sessionId,
+        paneId: runtimeMetaRef.current?.paneId,
+        active: Boolean(runtimeMetaRef.current?.isActiveSession && runtimeMetaRef.current?.isActivePane),
+        ready: readyRef.current,
+        model: terminalRef.current !== null,
+        surfaceReleased: surfaceReleasedRef.current,
+        findOpen: findOpenRef.current,
+        filterOpen: filterInputRef.current !== null,
+        lastWriteAt: lastWriteAtRef.current,
+        lastPaintAt: lastRenderAtRef.current,
+      }));
       const perfId = `ghostty-${debugNameRef.current}`;
       const resources = createRendererEffectResources();
 
@@ -2116,6 +2130,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         const interceptKey = createTerminalKeyInterceptor((data) => onInputRef.current(data, 'user'));
         inputRef.current = attachTerminalInput({
           element: container,
+          onDiagnostic: inputDiagnostics.record,
           terminal: () => terminalRef.current,
           send: (data) => onInputRef.current(data, 'user'),
           interceptKey: (event) => {
@@ -2267,6 +2282,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       });
       return () => {
         active = false;
+        inputDiagnostics.dispose();
         resources.dispose();
         recordDiag({
           kind: 'pane_unmount',

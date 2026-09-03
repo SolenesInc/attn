@@ -1,5 +1,6 @@
 /* app/src/components/UndoToast.css */
-.undo-toast {
+.undo-toast,
+.input-diagnostics-copied {
   position: fixed;
   bottom: 24px;
   left: 50%;

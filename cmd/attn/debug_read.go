@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +17,19 @@ import (
 var daemonLogTimestampPattern = regexp.MustCompile(`^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]`)
 
 const daemonLogTimestampLayout = "2006-01-02 15:04:05"
+
+func filterDiagnosticKind(lines []string, kind string) []string {
+	var result []string
+	for _, line := range lines {
+		var event struct {
+			Kind string `json:"kind"`
+		}
+		if json.Unmarshal([]byte(line), &event) == nil && event.Kind == kind {
+			result = append(result, line)
+		}
+	}
+	return result
+}
 
 // readLinesFile reads every line without bufio.Scanner's default token size limit,
 // which some diagnostic lines (an incident record's ring buffer) exceed.

@@ -8,6 +8,20 @@ import (
 	"time"
 )
 
+func TestFilterDiagnosticKind_ExportsOnlyInputRecords(t *testing.T) {
+	input := `{"kind":"input","runtimeId":"one","counts":{"keydown:composing":2}}`
+	lines := []string{
+		`{"kind":"paint","context":{"kind":"input"},"text":"private terminal output"}`,
+		input,
+		`{"kind":"input","truncated":`,
+		`not json`,
+	}
+	got := filterDiagnosticKind(lines, "input")
+	if len(got) != 1 || got[0] != input {
+		t.Fatalf("exported %v, want only the complete input record", got)
+	}
+}
+
 func TestReadLinesFile_MissingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nope.jsonl")
 	_, err := readLinesFile(path)

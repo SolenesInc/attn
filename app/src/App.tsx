@@ -44,6 +44,9 @@ import { WorkspaceContextNavigator, type WorkspaceContextView } from './componen
 import { NotebookBrowser } from './components/NotebookBrowser';
 import { NotificationsPanel } from './components/NotificationsPanel';
 import { ErrorToast, useErrorToast } from './components/ErrorToast';
+import { useSavedFlash } from './components/useSavedFlash';
+import { writeClipboardText } from './utils/clipboardBridge';
+import { readTerminalInputDiagnostics } from './utils/terminalDiagnosticsLog';
 import { ChordLeaderHud } from './components/ChordLeaderHud';
 import { DaemonProvider } from './contexts/DaemonContext';
 import { DaemonApiProvider, useDaemonApi } from './contexts/DaemonApiContext';
@@ -1446,6 +1449,20 @@ function AppContent({
 
   const [zoomModeBySessionId, setZoomModeBySessionId] = useState<Record<string, boolean>>({});
   const { message: errorMessage, durationMs: errorDurationMs, showError, clearError } = useErrorToast();
+  const inputDiagnosticsCopied = useSavedFlash();
+  const handleCopyInputDiagnostics = useCallback(async () => {
+    try {
+      const dump = await readTerminalInputDiagnostics();
+      if (!dump) {
+        showError('No terminal input diagnostics yet. Try typing in a terminal, then copy again.');
+        return;
+      }
+      await writeClipboardText(dump);
+      inputDiagnosticsCopied.flash('copied');
+    } catch (error) {
+      showError(`Could not copy terminal input diagnostics: ${String(error)}`);
+    }
+  }, [inputDiagnosticsCopied.flash, showError]);
   const [chiefTransferTarget, setChiefTransferTarget] = useState<{
     sessionId: string;
     targetLabel: string;
@@ -1836,7 +1853,15 @@ function AppContent({
       icon: <KeyboardActionIcon />,
       run: () => setShortcutEditorOpen(true),
     },
-  ], [openDockPanel, openWorkspaceContextNavigator, handleOpenNotebookTile, toggleGardenFrame, gardenMode, settings, handleToggleQueueMode, sendSetSetting]);
+    {
+      id: 'copy-terminal-input-diagnostics',
+      title: 'Copy terminal input diagnostics',
+      description: 'Copy a troubleshooting dump to share when a terminal stops accepting input',
+      keywords: ['debug', 'logs', 'dump', 'keyboard', 'typing', 'stuck', 'frozen'],
+      icon: <KeyboardActionIcon />,
+      run: () => { void handleCopyInputDiagnostics(); },
+    },
+  ], [openDockPanel, openWorkspaceContextNavigator, handleOpenNotebookTile, toggleGardenFrame, gardenMode, settings, handleToggleQueueMode, sendSetSetting, handleCopyInputDiagnostics]);
 
   const handleToggleActionMenu = useCallback(() => {
     if (actionMenuOpen) {
@@ -3937,6 +3962,9 @@ function AppContent({
         />
       )}
       <ErrorToast message={errorMessage} durationMs={errorDurationMs} onDone={clearError} />
+      {inputDiagnosticsCopied.saved('copied') && (
+        <div className="input-diagnostics-copied" role="status">Terminal input diagnostics copied</div>
+      )}
       <ChordLeaderHud />
       <WorkspaceContextNavigator
         isOpen={workspaceContextsOpen}

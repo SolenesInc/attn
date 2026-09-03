@@ -23,6 +23,7 @@ const CLIP_REPAIR_BACKOFF_MS = [3000, 10000];
 const CLIP_REPAIR_MAX_ATTEMPTS = 3;
 
 export type DiagKind =
+  | 'input'
   | 'pane_mount'
   | 'pane_unmount'
   | 'paint'
@@ -49,6 +50,7 @@ export interface DiagEvent {
 // Paint/write must stay out of the disk stream: an active agent paints many
 // times per second.
 const LIFECYCLE_KINDS = new Set<DiagKind>([
+  'input',
   'pane_mount',
   'pane_unmount',
   'resize',
@@ -235,6 +237,22 @@ function enqueueWrite(file: 'lifecycle' | 'incident', line: string) {
   fileWriteChain = fileWriteChain.catch(() => {}).then(() => appendToFile(file, line));
 }
 
+export async function readTerminalInputDiagnostics(): Promise<string> {
+  await fileWriteChain;
+  const { exists, readTextFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+  const options = { baseDir: BaseDirectory.AppLocalData };
+  if (!await exists(LIFECYCLE_FILE, options)) return '';
+  const contents = await readTextFile(LIFECYCLE_FILE, options);
+  const lines = contents.split('\n').filter((line) => {
+    try {
+      return JSON.parse(line)?.kind === 'input';
+    } catch {
+      return false;
+    }
+  });
+  return lines.length ? `${lines.join('\n')}\n` : '';
+}
+
 function pushRing(event: DiagEvent) {
   if (ring.length < RING_LIMIT) {
     ring.push(event);
@@ -276,7 +294,10 @@ export function recordDiag(event: Omit<DiagEvent, 'at'>): void {
   }
   const entry = { ...event, at: Date.now() } as DiagEvent;
   pushRing(
-    entry.capture
+    entry.kind === 'input'
+      ? { at: entry.at, kind: entry.kind, pane: entry.pane, session: entry.session,
+        runtimeId: entry.runtimeId, reasons: entry.reasons, detailsIn: TERMINAL_DIAGNOSTICS_FILE }
+      : entry.capture
       ? { ...entry, capture: summarizeCapture(entry.capture as ModelFaultCapture) }
       : entry,
   );
