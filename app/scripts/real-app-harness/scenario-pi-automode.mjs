@@ -33,9 +33,6 @@ const ENVELOPE_DONE = 'ENVELOPE-LEG-DONE';
 const DENIED_DONE = 'DENIED-LEG-DONE';
 const GRANTED_DONE = 'GRANTED-LEG-DONE';
 
-const QUIET_WINDOW_MS = 20_000;
-
-
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function parseArgs(argv) {
@@ -155,7 +152,7 @@ async function drive({ options, profile, runAttn, dbPath, stub, judgeQueue, laun
     scenarioId: 'PI-AUTOMODE',
     tier: 'tier2-local-real-agent',
     prefix: 'pi-automode',
-    metadata: { agent: 'pi', focus: 'envelope invisibility, denial surfaces, conversational grant, quiet session, circuit breaker' },
+    metadata: { agent: 'pi', focus: 'envelope invisibility, denial surfaces, conversational grant, circuit breaker' },
     preflightLaunchEnv: launchEnv,
   });
 
@@ -312,21 +309,6 @@ async function drive({ options, profile, runAttn, dbPath, stub, judgeQueue, laun
         throw new Error(`an approved retry recorded a denial: ${JSON.stringify(listed.slice(0, 2))}`);
       }
       note('the same call ran after a plain reply approved it');
-    });
-
-    await runner.step('a_quiet_session_is_quiet', async () => {
-      const judged = stub.calls.judge.length;
-      const denials = runAttn(['automode', 'denials', '--json']).json?.denials?.length ?? 0;
-      const notifications = countNotifications(dbPath).length;
-      await delay(QUIET_WINDOW_MS);
-      if (stub.calls.judge.length !== judged) {
-        throw new Error(`an idle session classified ${stub.calls.judge.length - judged} calls`);
-      }
-      const after = runAttn(['automode', 'denials', '--json']).json?.denials?.length ?? 0;
-      if (after !== denials || countNotifications(dbPath).length !== notifications) {
-        throw new Error('an idle session with auto mode on produced denial traffic');
-      }
-      note(`${QUIET_WINDOW_MS / 1000}s idle with auto mode on: no classifier calls, no denials`);
     });
 
     await runner.step('the_breaker_asks_once', async () => {

@@ -51,9 +51,12 @@ const KITTY_REPEAT_HEX = [
   '1b5b39373b313a3375',          // release: CSI 97;1:3u
 ].join('');
 
+const AFTER_KEYS_SENTINEL = '\x1e';
+
 const CAPTURE_PROGRAM = String.raw`
 const label = process.argv[2];
 const mode = process.argv[3] || 'normal';
+const sentinel = Buffer.from([0x1e]);
 if (!process.stdin.isTTY || typeof process.stdin.setRawMode !== 'function') {
   throw new Error('terminal input capture requires a TTY');
 }
@@ -73,14 +76,12 @@ const reset = mode === 'cursor'
       : '';
 const chunks = [];
 let done = false;
-let timer;
-function finish() {
+function finish(captured) {
   if (done) return;
   done = true;
-  clearTimeout(timer);
   process.stdin.setRawMode(false);
   process.stdin.pause();
-  const hex = Buffer.concat(chunks).toString('hex');
+  const hex = captured.toString('hex');
   let receipt = '\r\n' + reset + 'INPUT_BEGIN_' + label + '\r\n';
   for (let offset = 0; offset < hex.length; offset += 20) {
     receipt += 'INPUT_CHUNK_' + label + '=' + hex.slice(offset, offset + 20) + '\r\n';
@@ -92,11 +93,11 @@ process.stdin.setRawMode(true);
 process.stdin.resume();
 process.stdin.on('data', (chunk) => {
   chunks.push(Buffer.from(chunk));
-  clearTimeout(timer);
-  timer = setTimeout(finish, 2000);
+  const buffered = Buffer.concat(chunks);
+  const end = buffered.indexOf(sentinel);
+  if (end >= 0) finish(buffered.subarray(0, end));
 });
 process.stdout.write(start + '\r\nINPUT_READY_' + label + '\r\n');
-timer = setTimeout(finish, 5000);
 `;
 
 function parseArgs(argv) {
@@ -216,6 +217,17 @@ async function main() {
     });
   };
 
+  const waitForBinding = async (shortcutId, predicate, description, timeoutMs = 20_000) => {
+    const deadline = Date.now() + timeoutMs;
+    let last = null;
+    while (Date.now() < deadline) {
+      last = (await client.request('shortcut_binding', { shortcutId })).binding;
+      if (predicate(last)) return last;
+      await delay(100);
+    }
+    throw new Error(`Timed out waiting for ${description}. Last binding: ${JSON.stringify(last)}`);
+  };
+
   const pressShortcut = async (shortcutId, selector = terminalSelector) => {
     const { binding } = await client.request('shortcut_binding', { shortcutId });
     runner.assert(Boolean(binding), `shortcut ${shortcutId} is unbound in the app`);
@@ -260,6 +272,12 @@ async function main() {
   };
 
   const finishCapture = async (label, expectedHex) => {
+    await client.request('write_pane', {
+      sessionId,
+      paneId: pane.paneId,
+      text: AFTER_KEYS_SENTINEL,
+      submit: false,
+    });
     const beginMarker = `INPUT_BEGIN_${label}`;
     const chunkMarker = `INPUT_CHUNK_${label}=`;
     const endMarker = `INPUT_END_${label}`;
@@ -406,7 +424,11 @@ async function main() {
         },
       });
       await client.request('set_setting', { key: 'keybindings_config', value: chordConfig });
-      await delay(500);
+      await waitForBinding(
+        'terminal.toggleZoom',
+        (binding) => binding?.leader?.key === 'y',
+        'the custom leader chord to reach the shortcut registry',
+      );
       await beginCapture('chord');
       await pressShortcut('terminal.toggleZoom');
       await waitForZoom(client, sessionId, null, 'custom zoom chord');

@@ -330,6 +330,7 @@ function collectWorkspaceViewState(sessionId: string) {
   return {
     sessionVisible: parseDataFlag(workspaceRoot?.dataset.sessionVisible),
     activePaneId: workspaceRoot?.dataset.activePaneId || null,
+    activeLeafId: workspaceRoot?.dataset.activeLeafId || null,
     zoomedPaneId: workspaceRoot?.dataset.zoomedPaneId || null,
     maximizedPaneId: workspaceRoot?.dataset.maximizedPaneId || null,
   };

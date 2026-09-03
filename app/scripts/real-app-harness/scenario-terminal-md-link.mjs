@@ -44,19 +44,6 @@ function windowRelativePoint(pageX, pageY, windowBounds, innerWidth, innerHeight
   };
 }
 
-async function pollUntil(probe, description, timeoutMs = 15_000, intervalMs = 250) {
-  const deadline = Date.now() + timeoutMs;
-  let last = null;
-  for (;;) {
-    last = await probe();
-    if (last.ok) return last.value;
-    if (Date.now() >= deadline) {
-      throw new Error(`Timed out waiting for ${description}. Last: ${JSON.stringify(last.value)}`);
-    }
-    await delay(intervalMs);
-  }
-}
-
 function collectMarkdownTiles(layout) {
   if (!layout?.layout_json) return [];
   let root;
@@ -202,13 +189,16 @@ async function main() {
         paneId: pane.paneId,
         cell: { row, col },
       });
-      return windowRelativePoint(
-        cellRect.centerX,
-        cellRect.centerY,
-        windowBounds,
-        cellRect.innerWidth,
-        cellRect.innerHeight,
-      );
+      return {
+        cell: { row, col },
+        ...windowRelativePoint(
+          cellRect.centerX,
+          cellRect.centerY,
+          windowBounds,
+          cellRect.innerWidth,
+          cellRect.innerHeight,
+        ),
+      };
     };
 
     const markdownTileIds = async () => {
@@ -216,27 +206,52 @@ async function main() {
       return (state.tileIds || []).filter((id) => id.startsWith('tile-markdown'));
     };
 
-    const waitForMarkdownTileCount = (expected, description) => pollUntil(
-      async () => {
-        const ids = await markdownTileIds();
-        return { ok: ids.length === expected, value: ids };
-      },
-      description,
-      15_000,
-    );
+    const markdownTileNodes = () => collectMarkdownTiles(observer.workspacesBySessionId.get(sessionId));
 
-    // Path detection is hover-lazy with an async existence check, so the plain
-    // click also warms it at the exact point the Cmd+click must act on.
-    const cmdClickPath = async (relPath) => {
-      const target = await clickTargetFor(relPath);
-      // The hover detector runs on mousemove; a pointer already parked on the
-      // cell (the re-click) would click without ever moving.
+    const tileFocused = async (tileId) => {
+      const view = (await client.request('get_session_ui_state', { sessionId }))?.workspace?.view;
+      return view?.activeLeafId === tileId;
+    };
+
+    const movePointerOntoCellFromElsewhere = async (target) => {
       await driver.movePointerInWindow(0.5, 0.9);
       await driver.movePointerInWindow(target.relativeX, target.relativeY);
-      await delay(250);
-      await driver.clickWindow(target.relativeX, target.relativeY);
-      await delay(750);
+    };
+
+    // The pointer cursor is the receipt that the async path-exists check resolved.
+    const pointAtLiveLink = async (relPath, timeoutMs = 20_000) => {
+      const deadline = Date.now() + timeoutMs;
+      let cursor = null;
+      while (Date.now() < deadline) {
+        const target = await clickTargetFor(relPath);
+        ({ cursor } = await client.request('hover_pane_cell', {
+          sessionId,
+          paneId: pane.paneId,
+          cell: target.cell,
+          meta: true,
+        }));
+        if (cursor === 'pointer') {
+          await movePointerOntoCellFromElsewhere(target);
+          return target;
+        }
+        await delay(100);
+      }
+      throw new Error(`Timed out waiting for ${relPath} to become a live link (cursor ${cursor})`);
+    };
+
+    const waitFor = async (done, description, timeoutMs = 20_000) => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        if (await done()) return;
+        await delay(100);
+      }
+      throw new Error(`Timed out waiting for ${description}`);
+    };
+
+    const cmdClickPath = async (relPath, done, description) => {
+      const target = await pointAtLiveLink(relPath);
       await driver.clickWindow(target.relativeX, target.relativeY, { modifiers: { command: true } });
+      await waitFor(done, description);
     };
 
     await runner.step('echo_paths', async () => {
@@ -245,37 +260,29 @@ async function main() {
       await driver.activateApp();
     });
 
-    await runner.step('plain_click_stays_selection', async () => {
-      const plainTarget = await clickTargetFor('./alpha.md');
-      await driver.clickWindow(plainTarget.relativeX, plainTarget.relativeY);
-      await delay(1_500);
-      const tilesAfterPlainClick = await markdownTileIds();
-      runner.assert(
-        tilesAfterPlainClick.length === 0,
-        `Plain click must not open a markdown tile, but found: ${JSON.stringify(tilesAfterPlainClick)}`,
-      );
-    });
-
     let alphaTileId;
     let alphaNode;
-    await runner.step('cmd_click_alpha_docks_tile', async () => {
-      await cmdClickPath('./alpha.md');
-      const tilesAfterAlpha = await waitForMarkdownTileCount(1, 'alpha markdown tile docked');
+    await runner.step('plain_click_beta_opens_nothing_cmd_click_alpha_docks', async () => {
+      const plainTarget = await pointAtLiveLink('./beta.md');
+      await driver.clickWindow(plainTarget.relativeX, plainTarget.relativeY);
+
+      await cmdClickPath(
+        './alpha.md',
+        () => markdownTileNodes().some((node) => node.tile_params?.endsWith('/alpha.md')),
+        'the alpha markdown tile to dock',
+      );
+      const dockedTiles = markdownTileNodes();
+      runner.assert(
+        dockedTiles.length === 1,
+        `A plain click on the live ./beta.md link must open no markdown tile; docked ${JSON.stringify(dockedTiles)}`,
+      );
+      const tilesAfterAlpha = await markdownTileIds();
       alphaTileId = tilesAfterAlpha[0];
       runner.assert(
-        /^tile-markdown-[0-9a-f]{16}$/.test(alphaTileId),
-        `Unexpected markdown tile id: ${alphaTileId}`,
+        tilesAfterAlpha.length === 1 && /^tile-markdown-[0-9a-f]{16}$/.test(alphaTileId),
+        `Unexpected markdown tile ids: ${JSON.stringify(tilesAfterAlpha)}`,
       );
-
-      const alphaTiles = await pollUntil(
-        async () => {
-          const tiles = collectMarkdownTiles(observer.workspacesBySessionId.get(sessionId));
-          return { ok: tiles.length === 1, value: tiles };
-        },
-        'daemon layout carries the alpha markdown tile',
-        15_000,
-      );
-      alphaNode = alphaTiles[0];
+      alphaNode = dockedTiles[0];
       runner.assert(
         Boolean(alphaNode.tile_params?.endsWith('/alpha.md')),
         `Alpha tile params should end with /alpha.md: ${JSON.stringify(alphaNode)}`,
@@ -289,21 +296,18 @@ async function main() {
     let betaTileId;
     let betaNode;
     await runner.step('cmd_click_beta_docks_second_tile', async () => {
-      await cmdClickPath('./beta.md');
-      const tilesAfterBeta = await waitForMarkdownTileCount(2, 'beta markdown tile docked alongside alpha');
+      await cmdClickPath(
+        './beta.md',
+        () => markdownTileNodes().some((node) => node.tile_params?.endsWith('/beta.md')),
+        'the beta markdown tile to dock alongside alpha',
+      );
+      const tilesAfterBeta = await markdownTileIds();
       runner.assert(
-        tilesAfterBeta.includes(alphaTileId),
-        `Alpha tile disappeared after opening beta: ${JSON.stringify(tilesAfterBeta)}`,
+        tilesAfterBeta.length === 2 && tilesAfterBeta.includes(alphaTileId),
+        `Beta must dock a second tile beside alpha: ${JSON.stringify(tilesAfterBeta)}`,
       );
       betaTileId = tilesAfterBeta.find((id) => id !== alphaTileId);
-      const betaTiles = await pollUntil(
-        async () => {
-          const tiles = collectMarkdownTiles(observer.workspacesBySessionId.get(sessionId));
-          return { ok: tiles.length === 2, value: tiles };
-        },
-        'daemon layout carries both markdown tiles',
-        15_000,
-      );
+      const betaTiles = markdownTileNodes();
       betaNode = betaTiles.find((node) => node.tile_id === betaTileId);
       runner.assert(
         Boolean(betaNode?.tile_params?.endsWith('/beta.md')),
@@ -316,8 +320,11 @@ async function main() {
     });
 
     await runner.step('cmd_click_alpha_again_reuses_tile', async () => {
-      await cmdClickPath('./alpha.md');
-      await delay(2_000);
+      await cmdClickPath(
+        './alpha.md',
+        () => tileFocused(alphaTileId),
+        'the re-clicked alpha tile to take focus',
+      );
       const tilesAfterReuse = await markdownTileIds();
       runner.assert(
         tilesAfterReuse.length === 2 && tilesAfterReuse.includes(alphaTileId) && tilesAfterReuse.includes(betaTileId),

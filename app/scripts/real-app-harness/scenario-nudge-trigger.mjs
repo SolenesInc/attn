@@ -18,6 +18,8 @@ import { writeMockAgentFixture } from './mockAgent.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, socketPathForProfile } from './harnessProfile.mjs';
 
+const BUSY_RELEASE_FILE = 'busy-turn-release';
+
 const DOORBELL_SUBSTRING = 'Activity on a ticket that predates the garden';
 // Mirrors ticketNudgePrompt minus the leading emoji, which the grid can split.
 const DOORBELL_CORE = 'Activity on a ticket that predates the garden — run `attn ticket inbox` to read and acknowledge it.';
@@ -140,7 +142,7 @@ async function main() {
           {
             includes: 'foreground turn finished',
             actions: [
-              { type: 'delay', ms: 8_000 },
+              { type: 'wait_for_file', path: BUSY_RELEASE_FILE },
               { type: 'reply', text: 'foreground turn finished' },
             ],
           },
@@ -300,7 +302,7 @@ async function main() {
 
     await runner.step('deliver_busy_nudge', async () => {
       const pane = await waitForFirstWorkspacePane(client, targetId, `pane for ${targetId}`, 20_000);
-      const busyPrompt = 'Run `sleep 8`, then reply with the exact words: foreground turn finished';
+      const busyPrompt = 'Wait for the release file, then reply with the exact words: foreground turn finished';
       await submitPrompt(client, targetId, pane.paneId, busyPrompt);
       await pollFor(
         () => (observer.getSession(targetId)?.state === 'working' ? true : null),
@@ -326,6 +328,8 @@ async function main() {
       const busyClick = await client.request('click_nudge_trigger', {});
       runner.assert(busyClick?.clicked === true, `busy-state trigger button was clicked (got ${JSON.stringify(busyClick)})`, busyClick);
       note(`delivered a second nudge while Codex was working`, { surface: busyClick.surface });
+
+      fs.writeFileSync(path.join(repoDir, BUSY_RELEASE_FILE), 'release\n', 'utf8');
 
       await pollFor(
         () => (observer.getSession(targetId)?.ticket_unread === true ? null : true),

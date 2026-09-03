@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   createSessionAndWaitForInitialPane,
   launchFreshAppAndConnect,
@@ -50,6 +52,7 @@ async function main() {
   const seedAnchor = `SCROLL_HEAD_${Date.now()}`;
   const seedEnd = `SCROLL_SEED_END_${Date.now()}`;
   const streamEnd = `SCROLL_STREAM_END_${Date.now()}`;
+  const streamGate = path.join(runner.sessionDir, 'stream-gate');
   let sessionId = null;
   let shellPaneId = null;
 
@@ -119,7 +122,7 @@ async function main() {
       await client.request('write_pane', {
         sessionId,
         paneId: shellPaneId,
-        text: `sh -c 'sleep 3; i=1; while [ "$i" -le 40 ]; do printf "STREAM_%03d\\n" "$i"; sleep 0.02; i=$((i+1)); done; printf "${streamEnd}\\n"'`,
+        text: `sh -c 'while [ ! -f "${streamGate}" ]; do sleep 0.02; done; i=1; while [ "$i" -le 40 ]; do printf "STREAM_%03d\\n" "$i"; sleep 0.02; i=$((i+1)); done; printf "${streamEnd}\\n"'`,
       });
       await scrollPaneToTop(client, sessionId, shellPaneId);
       await waitForPaneState(
@@ -130,6 +133,7 @@ async function main() {
         'seed anchor re-anchored before stream output begins',
         10_000,
       );
+      fs.writeFileSync(streamGate, 'go\n', 'utf8');
       await waitForPaneText(
         client,
         sessionId,
