@@ -28,8 +28,6 @@ func (d *Daemon) isChiefOfStaffSession(sessionID string) bool {
 	return d.chiefOfStaffSessionID() == sessionID
 }
 
-const chiefOfStaffProtectedError = "chief of staff is protected from closing; unset the chief role first"
-
 func (d *Daemon) decorateChiefOfStaffWithSessionID(session *protocol.Session, chiefOfStaffSessionID string) {
 	if session == nil {
 		return

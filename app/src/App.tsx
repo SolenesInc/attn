@@ -140,6 +140,11 @@ const UPDATE_BANNER_DISMISSED_STORAGE_KEY = 'attn.update_banner.dismissed_versio
 const DOCK_PANEL_EXIT_MS = 260;
 const CHIEF_OF_STAFF_CLOSE_HINT = 'Chief of staff is protected — unset the chief role to close it.';
 
+function crewMemberCloseHint(memberId: string): string {
+  const name = crewDisplayName(memberId);
+  return `${name} is protected — put ${name} to sleep to close the day.`;
+}
+
 const TERMINAL_AGENT: SessionAgent = 'shell';
 
 type LocationPickerPurpose = 'workspace' | 'session';
@@ -2156,8 +2161,17 @@ function AppContent({
     setClosedWorktree({ id: cleanupRequestId, path: session.cwd, branch: session.branch });
   }, [alwaysKeepWorktrees, enrichedLocalSessions]);
 
-  const isChiefOfStaffSession = useCallback(
-    (id: string) => daemonSessions.some((ds) => ds.id === id && ds.chief_of_staff === true),
+  const closeProtectionForSession = useCallback(
+    (id: string) => {
+      const session = daemonSessions.find((candidate) => candidate.id === id);
+      if (session?.chief_of_staff === true) {
+        return CHIEF_OF_STAFF_CLOSE_HINT;
+      }
+      if (session?.crew_member) {
+        return crewMemberCloseHint(session.crew_member);
+      }
+      return null;
+    },
     [daemonSessions]
   );
 
@@ -2168,8 +2182,9 @@ function AppContent({
 
   const handleCloseSession = useCallback(
     async (id: string) => {
-      if (isChiefOfStaffSession(id)) {
-        showError(CHIEF_OF_STAFF_CLOSE_HINT);
+      const closeProtection = closeProtectionForSession(id);
+      if (closeProtection) {
+        showError(closeProtection);
         return;
       }
       const session = enrichedLocalSessions.find(s => s.id === id);
@@ -2186,12 +2201,13 @@ function AppContent({
         removeWorkspaceRef(session.workspaceId);
       }
     },
-    [closeSession, daemonSessions, enrichedLocalSessions, isChiefOfStaffSession, prepareWorktreeCleanupPrompt, removeWorkspaceRef, sendUnregisterSession, showError]
+    [closeProtectionForSession, closeSession, daemonSessions, enrichedLocalSessions, prepareWorktreeCleanupPrompt, removeWorkspaceRef, sendUnregisterSession, showError]
   );
 
   const handleClosePane = useCallback((sessionId: string, paneId: string) => {
-    if (isChiefOfStaffSession(sessionId)) {
-      showError(CHIEF_OF_STAFF_CLOSE_HINT);
+    const closeProtection = closeProtectionForSession(sessionId);
+    if (closeProtection) {
+      showError(closeProtection);
       return Promise.resolve();
     }
     const session = enrichedLocalSessions.find((entry) => entry.id === sessionId);
@@ -2215,7 +2231,7 @@ function AppContent({
         clearPreparedClosePaneFocus(sessionId);
         throw error;
       });
-  }, [clearPreparedClosePaneFocus, enrichedLocalSessions, isChiefOfStaffSession, prepareClosePaneFocus, prepareWorktreeCleanupPrompt, sendWorkspaceClosePane, sessions, setActiveSession, showError]);
+  }, [clearPreparedClosePaneFocus, closeProtectionForSession, enrichedLocalSessions, prepareClosePaneFocus, prepareWorktreeCleanupPrompt, sendWorkspaceClosePane, sessions, setActiveSession, showError]);
 
   const handleRequestCloseSession = useCallback((id: string) => {
     const session = sessions.find((entry) => entry.id === id);

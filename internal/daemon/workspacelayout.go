@@ -1098,9 +1098,9 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 		return
 	}
 
-	if d.isChiefOfStaffSession(sessionID) {
-		d.logf("refusing to close pane %s for chief-of-staff session %s; unset the chief role first", msg.PaneID, sessionID)
-		d.sendWorkspaceLayoutActionResult(client, protocol.CmdWorkspaceLayoutClosePane, msg.WorkspaceID, protocol.Ptr(msg.PaneID), fmt.Errorf("%s", chiefOfStaffProtectedError))
+	if closeErr := d.sessionCloseError(sessionID); closeErr != nil {
+		d.logf("refusing to close pane %s for protected session %s: %v", msg.PaneID, sessionID, closeErr)
+		d.sendWorkspaceLayoutActionResult(client, protocol.CmdWorkspaceLayoutClosePane, msg.WorkspaceID, protocol.Ptr(msg.PaneID), closeErr)
 		return
 	}
 

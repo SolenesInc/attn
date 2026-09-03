@@ -21,9 +21,9 @@ func (d *Daemon) handleClearWarningsWS() {
 }
 
 func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMessage) {
-	if d.isChiefOfStaffSession(msg.ID) {
-		d.logf("refusing to unregister chief-of-staff session %s; unset the chief role first", msg.ID)
-		d.sendCommandError(client, protocol.CmdUnregister, chiefOfStaffProtectedError)
+	if closeErr := d.sessionCloseError(msg.ID); closeErr != nil {
+		d.logf("refusing to unregister protected session %s: %v", msg.ID, closeErr)
+		d.sendCommandError(client, protocol.CmdUnregister, closeErr.Error())
 		return
 	}
 	d.logf("Unregistering session %s via WebSocket", msg.ID)
