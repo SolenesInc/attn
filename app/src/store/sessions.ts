@@ -36,8 +36,6 @@ export interface Session {
   resumeConversationFile?: string;
   autoMode?: boolean;
   transcriptMatched: boolean;
-  // Set from the local create until the daemon first reports the session; a
-  // sessions broadcast in that window must not prune it (see syncFromDaemonSessions).
   creating?: boolean;
   branch?: string;
   isWorktree?: boolean;

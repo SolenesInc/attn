@@ -284,8 +284,6 @@ describe('sessions store', () => {
     );
     expect(useSessionStore.getState().activeSessionId).toBe(sessionId);
 
-    // The daemon broadcasts sessions while the create is still in flight: the
-    // pane is not added yet, and the daemon has not been asked to spawn.
     useSessionStore.getState().syncFromDaemonSessions([neighbour]);
 
     const kept = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
