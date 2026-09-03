@@ -51,8 +51,7 @@ const KITTY_REPEAT_HEX = [
   '1b5b39373b313a3375',          // release: CSI 97;1:3u
 ].join('');
 
-// The harness ends a capture by writing SENTINEL straight to the pty, on the
-// same ordered channel the key bytes take, so no silence timer is needed.
+// Key bytes and this sentinel ride the same ordered pty channel, so a stray byte lands first.
 const SENTINEL = '\x1e';
 
 const CAPTURE_PROGRAM = String.raw`

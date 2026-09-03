@@ -82,8 +82,7 @@ async function runCommandAndWait(client, sessionId, paneId, command, expectedLin
     `output of ${expectedLine}`, 30_000);
 }
 
-// A pane keeps its old geometry until the resize lands, and a widening pane
-// never trips the reflow check on its own; the column count is the signal.
+// A widening pane never trips the reflow check on its own; its column count does.
 async function waitForPaneColumnsToChange(client, sessionId, paneId, previousCols) {
   await waitForPaneState(
     client,
@@ -107,8 +106,6 @@ async function clickOutputLine(client, sessionId, paneId, state, lineText) {
   if (bufferRow < 0) throw new Error(`line ${JSON.stringify(lineText)} not in pane text`);
   const viewportRow = bufferRow - Math.max(0, lines.length - state.rows);
   if (viewportRow < 0) throw new Error(`line ${JSON.stringify(lineText)} scrolled out of the viewport`);
-  // click_pane_cell settles the UI before it answers, so the selection it made
-  // is already in the state read next.
   await client.request('click_pane_cell', { sessionId, paneId, cell: { row: viewportRow, col: 2 } });
   return client.request('get_pane_block_state', { sessionId, paneId });
 }
@@ -214,8 +211,6 @@ async function main() {
       await waitForPaneVisible(client, sessionId, paneId, 20_000);
       await waitForPaneAttached(client, sessionId, paneId, 20_000);
       await waitForPaneShellReady(client, sessionId, paneId, { timeoutMs: 20_000, description: `${SHELL} shell ready` });
-      // fish runs --init-command after its config, so this line printing proves
-      // the exec landed AND attn's shell integration is loaded.
       await client.request('write_pane', { sessionId, paneId, text: `exec ${SHELL} --init-command 'echo ${shellReady}'` });
       await waitForPaneText(client, sessionId, paneId,
         (text) => text.split('\n').some((line) => line.trim() === shellReady),

@@ -189,13 +189,16 @@ async function main() {
         paneId: pane.paneId,
         cell: { row, col },
       });
-      return windowRelativePoint(
-        cellRect.centerX,
-        cellRect.centerY,
-        windowBounds,
-        cellRect.innerWidth,
-        cellRect.innerHeight,
-      );
+      return {
+        cell: { row, col },
+        ...windowRelativePoint(
+          cellRect.centerX,
+          cellRect.centerY,
+          windowBounds,
+          cellRect.innerWidth,
+          cellRect.innerHeight,
+        ),
+      };
     };
 
     const markdownTileIds = async () => {
@@ -210,31 +213,43 @@ async function main() {
       return view?.activeLeafId === tileId;
     };
 
-    const pointAtPath = async (relPath) => {
-      const target = await clickTargetFor(relPath);
-      // The hover detector runs on mousemove; a pointer already parked on the
-      // cell (the re-click) would click without ever moving.
-      await driver.movePointerInWindow(0.5, 0.9);
-      await driver.movePointerInWindow(target.relativeX, target.relativeY);
-      return target;
+    // The pointer cursor is the receipt that the async path-exists check resolved.
+    const pointAtLiveLink = async (relPath, timeoutMs = 20_000) => {
+      const deadline = Date.now() + timeoutMs;
+      let cursor = null;
+      while (Date.now() < deadline) {
+        const target = await clickTargetFor(relPath);
+        ({ cursor } = await client.request('hover_pane_cell', {
+          sessionId,
+          paneId: pane.paneId,
+          cell: target.cell,
+          meta: true,
+        }));
+        if (cursor === 'pointer') {
+          // The detector runs on mousemove, and the native pointer may already be
+          // parked on the cell from the previous click.
+          await driver.movePointerInWindow(0.5, 0.9);
+          await driver.movePointerInWindow(target.relativeX, target.relativeY);
+          return target;
+        }
+        await delay(100);
+      }
+      throw new Error(`Timed out waiting for ${relPath} to become a live link (cursor ${cursor})`);
     };
 
-    // Path detection is hover-lazy with an async existence check, so a Cmd+click
-    // can land before the link exists; retry until the app acts on it.
-    const cmdClickPath = async (relPath, done, description, timeoutMs = 20_000) => {
+    const waitFor = async (done, description, timeoutMs = 20_000) => {
       const deadline = Date.now() + timeoutMs;
-      for (let attempt = 1; ; attempt += 1) {
-        const target = await pointAtPath(relPath);
-        await driver.clickWindow(target.relativeX, target.relativeY, { modifiers: { command: true } });
-        const settleBy = Date.now() + 800;
-        do {
-          if (await done()) return attempt;
-          await delay(100);
-        } while (Date.now() < settleBy);
-        if (Date.now() >= deadline) {
-          throw new Error(`Timed out waiting for ${description} after ${attempt} Cmd+clicks on ${relPath}`);
-        }
+      while (Date.now() < deadline) {
+        if (await done()) return;
+        await delay(100);
       }
+      throw new Error(`Timed out waiting for ${description}`);
+    };
+
+    const cmdClickPath = async (relPath, done, description) => {
+      const target = await pointAtLiveLink(relPath);
+      await driver.clickWindow(target.relativeX, target.relativeY, { modifiers: { command: true } });
+      await waitFor(done, description);
     };
 
     await runner.step('echo_paths', async () => {
@@ -243,16 +258,14 @@ async function main() {
       await driver.activateApp();
     });
 
-    // The negative is settled by the next step: the Cmd+click on alpha travels
-    // the same ordered path, so a tile this click opened would be docked by then.
-    await runner.step('plain_click_stays_selection', async () => {
-      const plainTarget = await pointAtPath('./beta.md');
-      await driver.clickWindow(plainTarget.relativeX, plainTarget.relativeY);
-    });
-
     let alphaTileId;
     let alphaNode;
-    await runner.step('cmd_click_alpha_docks_tile', async () => {
+    await runner.step('plain_click_opens_nothing_cmd_click_docks_alpha', async () => {
+      const plainTarget = await pointAtLiveLink('./alpha.md');
+      await driver.clickWindow(plainTarget.relativeX, plainTarget.relativeY);
+
+      // The Cmd+click below rides the same OS event queue as the plain click, so
+      // alpha docking proves the plain click on that same live link was handled.
       await cmdClickPath(
         './alpha.md',
         () => markdownTileNodes().some((node) => node.tile_params?.endsWith('/alpha.md')),
@@ -261,7 +274,7 @@ async function main() {
       const alphaTiles = markdownTileNodes();
       runner.assert(
         alphaTiles.length === 1,
-        `The plain click on ./beta.md must not open a markdown tile; alpha's Cmd+click found ${JSON.stringify(alphaTiles)}`,
+        `A plain click on the live ./alpha.md link must open no markdown tile; found ${JSON.stringify(alphaTiles)}`,
       );
       const tilesAfterAlpha = await markdownTileIds();
       alphaTileId = tilesAfterAlpha[0];
@@ -307,8 +320,6 @@ async function main() {
     });
 
     await runner.step('cmd_click_alpha_again_reuses_tile', async () => {
-      // Every open focuses the tile it resolved to, so alpha's tile taking focus
-      // back from beta's is the receipt that this click was acted on.
       await cmdClickPath(
         './alpha.md',
         () => tileFocused(alphaTileId),

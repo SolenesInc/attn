@@ -329,8 +329,6 @@ async function main() {
       runner.assert(busyClick?.clicked === true, `busy-state trigger button was clicked (got ${JSON.stringify(busyClick)})`, busyClick);
       note(`delivered a second nudge while Codex was working`, { surface: busyClick.surface });
 
-      // The foreground turn is held open by this file, not by a sleep: it ends
-      // once the nudge has been delivered into the busy agent's queue.
       fs.writeFileSync(path.join(repoDir, BUSY_RELEASE_FILE), 'release\n', 'utf8');
 
       await pollFor(

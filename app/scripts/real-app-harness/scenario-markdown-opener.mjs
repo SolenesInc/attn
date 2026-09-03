@@ -305,8 +305,6 @@ async function main() {
       );
       await captureScreenshotData(path.join(runner.runDir, 'opener-recents.png'), { client }).catch(() => {});
 
-      // Alpha's tile holds the workspace focus from the previous step, so beta's
-      // taking it back is the receipt this pick was acted on.
       await pickRow(state, beta);
       await waitForOpener(client, (current) => !current.open, 'picking a recent closes the opener');
       await waitForSessionUi(
