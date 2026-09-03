@@ -20,6 +20,11 @@ import {
 } from './scenarioAssertions.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 
+// A long token on the prompt line soft-wraps on a narrow pane; rows join back into one line.
+function paneShowsAcrossWraps(text, token) {
+  return text.replace(/\r?\n/g, '').includes(token);
+}
+
 function parseArgs(argv) {
   const args = [...argv];
   if (args[0] === '--') {
@@ -248,7 +253,7 @@ async function main() {
         client,
         sessionId,
         pane.paneId,
-        (text) => text.includes(pasteToken),
+        (text) => paneShowsAcrossWraps(text, pasteToken),
         'pasted clipboard text reaches the PTY',
         10_000,
       );
