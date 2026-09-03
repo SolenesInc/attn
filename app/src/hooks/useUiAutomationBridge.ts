@@ -122,6 +122,13 @@ function nextAnimationFrame() {
   });
 }
 
+// ResizeObserver follow runs after layout, before paint: a read forced between
+// them sees a gap no frame ever shows. A task after the frame reads the painted state.
+async function afterNextPaint() {
+  await nextAnimationFrame();
+  await new Promise<void>((resolve) => { window.setTimeout(resolve, 0); });
+}
+
 function waitForBenchmarkDelay(delayMs: number) {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, delayMs);
@@ -3261,6 +3268,7 @@ export function useUiAutomationBridge({
       }
       case 'conversation_get_state': {
         const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
+        await afterNextPaint();
         const root = sessionId
           ? document.querySelector(`[data-testid="conversation-pane-${sessionId}"]`)
           : document.querySelector('.conversation-pane');
