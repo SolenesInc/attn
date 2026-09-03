@@ -4,6 +4,7 @@ import path from 'node:path';
 import { armAgentTripwire, ensureDaemonCarriesTripwire, formatReceiptFailure, formatTripwireFailure } from './agentTripwire.mjs';
 import { assertPackagedAppBuildMatchesCurrentSource } from './buildPreflight.mjs';
 import { createRunContext, emitVerdict, FIRST_FAILURE_MAX_LENGTH, restoreHarnessSettings } from './common.mjs';
+import { ensureMockGitHubServer } from './mockGitHub.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { allowRealAgentsForRunner } from './scenarioCatalog.mjs';
 import { createScenarioRecorder, recordingEnabled } from './windowRecording.mjs';
@@ -231,6 +232,7 @@ export function createScenarioRunner(options, {
   assertBuildMatches = assertPackagedAppBuildMatchesCurrentSource,
   armTripwire = armAgentTripwire,
   ensureDaemonArmed = ensureDaemonCarriesTripwire,
+  ensureMockGitHub = ensureMockGitHubServer,
   createRecorder = createScenarioRecorder,
   createRecordingDriver = (appPath) => createWindowDriver({ appPath }),
   emitRunnerVerdict = emitVerdict,
@@ -260,8 +262,15 @@ export function createScenarioRunner(options, {
     throw error;
   }
   const tripwire = armTripwire({ scenarioId, runDir, allowRealAgents: declaredAllowRealAgents });
+  const mockGitHub = ensureMockGitHub({ appPath: options?.appPath });
   try {
-    ensureDaemonArmed({ scenarioId, marker: tripwire.marker, armed: tripwire.armed, appPath: options?.appPath });
+    ensureDaemonArmed({
+      scenarioId,
+      marker: tripwire.marker,
+      armed: tripwire.armed,
+      mockGitHubURL: mockGitHub?.url ?? null,
+      appPath: options?.appPath,
+    });
   } catch (error) {
     if (tripwire.armed) {
       releaseScenarioLock();
@@ -296,6 +305,8 @@ export function createScenarioRunner(options, {
 
   const readDaemonReceipt = () => tripwire.readReceipt?.() || null;
   const headlessSwitchField = (receipt) => (receipt ? { headlessTasks: receipt.headlessTasks } : {});
+  // The receipt that this run never reached github.com.
+  const mockGitHubField = mockGitHub ? { mockGitHub: mockGitHub.url } : {};
 
   let recorder = null;
   if (isRecordingEnabled()) {
@@ -509,6 +520,7 @@ export function createScenarioRunner(options, {
         steps,
         assertions,
         ...headlessSwitchField(receipt),
+        ...mockGitHubField,
         ...summary,
       };
       const summaryPath = path.join(runDir, 'summary.json');
@@ -543,6 +555,7 @@ export function createScenarioRunner(options, {
           ? { recordingError: normalizeError(recorderError) }
           : {}),
         ...headlessSwitchField(readDaemonReceipt()),
+        ...mockGitHubField,
         ...(ledger.length > 0
           ? { agentTripwire: { count: ledger.length, ledgerPath: tripwire.ledgerPath, lines: ledger } }
           : {}),

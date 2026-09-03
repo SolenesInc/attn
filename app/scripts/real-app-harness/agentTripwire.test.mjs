@@ -342,6 +342,38 @@ describe('the daemon a scenario inherits', () => {
     expect(run.mock.calls[0][1]).toEqual(['daemon', 'stop']);
   });
 
+  it('stops a daemon that carries the marker but points at another GitHub', () => {
+    const run = vi.fn();
+    const result = ensureDaemonCarriesTripwire({
+      ...target,
+      marker: 'shims|claude',
+      mockGitHubURL: 'http://127.0.0.1:32556',
+      pidPath: pidFileFor(process.pid),
+      readEnvironment: () => `PATH=/usr/bin ${TRIPWIRE_MARKER_VAR}=shims|claude`,
+      run,
+      log: () => {},
+    });
+
+    expect(result).toEqual({ restarted: true, reason: 'daemon stopped' });
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a daemon alone once it carries this run mock GitHub', () => {
+    const run = vi.fn();
+    const result = ensureDaemonCarriesTripwire({
+      ...target,
+      marker: 'shims|claude',
+      mockGitHubURL: 'http://127.0.0.1:32556',
+      pidPath: pidFileFor(process.pid),
+      readEnvironment: () => `PATH=/usr/bin ${TRIPWIRE_MARKER_VAR}=shims|claude ATTN_MOCK_GH_URL=http://127.0.0.1:32556`,
+      run,
+      log: () => {},
+    });
+
+    expect(result).toEqual({ restarted: false, reason: 'daemon already armed' });
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it('never stops a production daemon', () => {
     const run = vi.fn();
     const result = ensureDaemonCarriesTripwire({

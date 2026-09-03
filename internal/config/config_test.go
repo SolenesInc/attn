@@ -493,6 +493,32 @@ func TestE2EPorts_NeverCollideWithRealDaemon(t *testing.T) {
 	}
 }
 
+func TestMockGitHubPort_HasItsOwnBand(t *testing.T) {
+	if got := MockGitHubPortForProfile(""); got != "19850" {
+		t.Errorf("MockGitHubPortForProfile(\"\") = %q, want 19850", got)
+	}
+	for _, profile := range []string{"", "dev", "agent7", "alpha", "ci-2", "z"} {
+		port, err := strconv.Atoi(MockGitHubPortForProfile(profile))
+		if err != nil {
+			t.Fatalf("MockGitHubPortForProfile(%q) not numeric: %v", profile, err)
+		}
+		if profile != "" && (port < 32000 || port > 32999) {
+			t.Errorf("mock GitHub port for %q = %d, want [32000,32999]", profile, port)
+		}
+		taken := []string{
+			WSPortForProfile(profile),
+			E2EDaemonPortForProfile(profile),
+			E2EVitePortForProfile(profile),
+			"9849", "29849", "1420", "1421", "19849",
+		}
+		for _, other := range taken {
+			if MockGitHubPortForProfile(profile) == other {
+				t.Errorf("mock GitHub port for %q = %s collides with %s", profile, MockGitHubPortForProfile(profile), other)
+			}
+		}
+	}
+}
+
 func TestAppLocalDataDirForProfile_FollowsThePlatformLayout(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", dataHome)

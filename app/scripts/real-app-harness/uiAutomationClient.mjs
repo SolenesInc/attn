@@ -5,6 +5,7 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { agentTripwireLaunchEnv } from './agentTripwire.mjs';
+import { mockGitHubLaunchEnv } from './mockGitHub.mjs';
 import { appDaemonInTree, appPlatform } from './platform.mjs';
 import {
   assertProductionRunAllowed,
@@ -122,21 +123,21 @@ export class UiAutomationClient {
     // Always-on-top keeps WKWebView rAF/ResizeObserver unthrottled; probes that
     // exercise focus-stealing set ATTN_HARNESS_ALWAYS_ON_TOP=0 to opt out.
     const alwaysOnTop = process.env.ATTN_HARNESS_ALWAYS_ON_TOP !== '0';
-    // The tripwire's PATH and agent overrides must reach the daemon the app
+    // The tripwire pins and the mock GitHub must reach the daemon the app
     // spawns, and `open` drops env: naming them forces the spawn-style launch.
-    const tripwireEnv = agentTripwireLaunchEnv();
+    const harnessDaemonEnv = { ...agentTripwireLaunchEnv(), ...mockGitHubLaunchEnv() };
     // Park the attn window off-screen by default so scenarios don't cover the
     // caller's work. Opt out with ATTN_HARNESS_PARK_VISIBLE_PX=0.
     const HARNESS_PARK_VISIBLE_PX_DEFAULT = '20';
     const parkPxStr = process.env.ATTN_HARNESS_PARK_VISIBLE_PX ?? HARNESS_PARK_VISIBLE_PX_DEFAULT;
     const effectiveLaunchEnv = alwaysOnTop
       ? {
-          ...tripwireEnv,
+          ...harnessDaemonEnv,
           ...this.launchEnv,
           ATTN_HARNESS_ALWAYS_ON_TOP: '1',
           ATTN_HARNESS_PARK_VISIBLE_PX: parkPxStr,
         }
-      : { ...tripwireEnv, ...this.launchEnv };
+      : { ...harnessDaemonEnv, ...this.launchEnv };
 
     const focusDriver = this.#focusDriver();
     const launched = await this.platform.launchApp({

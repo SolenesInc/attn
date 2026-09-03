@@ -19,6 +19,7 @@ import {
   hasRunAgainstProdFlag,
   isProductionHarnessTarget,
   manifestPathForProfile,
+  mockGitHubPortForProfile,
   profileCliEnv,
   profileForAppPath,
   resolveHarnessResources,
@@ -245,6 +246,8 @@ describeWithBinary('single authority (attn profile resolve)', () => {
       expect(resources.socket).toBe(r.socket);
       expect(resources.dataDir).toBe(r.dataDir);
       expect(resources.deepLinkScheme).toBe(r.deepLinkScheme);
+      expect(resources.mockGitHubPort).toBe(Number(r.mockGitHubPort));
+      expect(mockGitHubPortForProfile(profile)).toBe(Number(r.mockGitHubPort));
       expect(bundleIdentifierForProfile(profile)).toBe(r.bundleId);
       expect(defaultAppPathForProfile(profile)).toBe(r.appPath);
       expect(defaultDaemonPortForProfile(profile)).toBe(Number(r.wsPort));

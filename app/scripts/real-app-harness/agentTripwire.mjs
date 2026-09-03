@@ -6,6 +6,7 @@ import { harnessArtifactsRoot } from './common.mjs';
 import { MOCK_AGENT_AGENTS, MOCK_AGENT_EXECUTABLE } from './mockAgent.mjs';
 import { appDaemonInTree } from './platform.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
+import { MOCK_GITHUB_URL_VAR } from './mockGitHub.mjs';
 import {
   currentHarnessProfile,
   daemonPidFilePathForProfile,
@@ -317,12 +318,13 @@ export function formatUnarmedDaemonFailure({ scenarioId, pid, pidPath, marker, r
   ].join('\n');
 }
 
-// A daemon started before this scenario carries another run's PATH and agent
-// overrides, so the tripwire would watch a door the daemon never uses.
+// A daemon from another run carries its PATH, agent pins and GitHub host: the
+// tripwire would watch a door it never uses, and it would poll github.com.
 export function ensureDaemonCarriesTripwire({
   scenarioId = 'this scenario',
   marker,
   armed = false,
+  mockGitHubURL = null,
   profile = currentHarnessProfile(),
   appPath = defaultAppPathForProfile(profile),
   pidPath = daemonPidFilePathForProfile(profile),
@@ -350,7 +352,8 @@ export function ensureDaemonCarriesTripwire({
   }
   const carriesMarker = environment.includes(`${TRIPWIRE_MARKER_VAR}=${marker}`);
   const carriesSwitch = !armed || environment.includes(`${HEADLESS_TASKS_VAR}=off`);
-  if (carriesMarker && carriesSwitch) {
+  const carriesMock = !mockGitHubURL || environment.includes(`${MOCK_GITHUB_URL_VAR}=${mockGitHubURL}`);
+  if (carriesMarker && carriesSwitch && carriesMock) {
     return { restarted: false, reason: 'daemon already armed' };
   }
 
@@ -364,7 +367,8 @@ export function ensureDaemonCarriesTripwire({
     return { restarted: false, reason: 'target refuses a daemon restart' };
   }
 
-  log(`daemon pid ${pid} predates this tripwire — stopping it so the app relaunch brings one up armed.`);
+  const stale = carriesMock ? 'this tripwire' : 'this run\'s mock GitHub';
+  log(`daemon pid ${pid} predates ${stale} — stopping it so the app relaunch brings one up armed.`);
   run(appDaemonInTree(appPath), ['daemon', 'stop'], {
     encoding: 'utf8',
     env: profileCliEnv(profile),

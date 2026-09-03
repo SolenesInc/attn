@@ -267,6 +267,7 @@ function runnerWithTripwire({
   allowRealAgents = false,
   receipt = { headlessTasks: 'off', carriesMarker: true },
   ensureDaemonArmed = vi.fn(),
+  ensureMockGitHub = vi.fn(() => ({ url: 'http://127.0.0.1:32556', host: 'mock.github.local' })),
 } = {}) {
   let ledgerPath = null;
   const runner = createScenarioRunner({
@@ -291,10 +292,13 @@ function runnerWithTripwire({
       };
     }),
     ensureDaemonArmed,
+    ensureMockGitHub,
     emitRunnerVerdict: (verdict) => verdicts.push(verdict),
     isRecordingEnabled: () => false,
   });
-  return { runner, verdicts, ledgerPath: () => ledgerPath };
+  return {
+    runner, verdicts, ledgerPath: () => ledgerPath, ensureDaemonArmed, ensureMockGitHub,
+  };
 }
 
 describe('createScenarioRunner agent tripwire', () => {
@@ -305,6 +309,16 @@ describe('createScenarioRunner agent tripwire', () => {
 
     expect(summary.ok).toBe(true);
     expect(verdicts[0]).toMatchObject({ ok: true });
+  });
+
+  it('starts one mock GitHub, makes the daemon carry it, and records it as a receipt', async () => {
+    const { runner, ensureMockGitHub, ensureDaemonArmed } = runnerWithTripwire();
+
+    const summary = await runner.finishSuccess();
+
+    expect(ensureMockGitHub).toHaveBeenCalledTimes(1);
+    expect(ensureDaemonArmed.mock.calls[0][0]).toMatchObject({ mockGitHubURL: 'http://127.0.0.1:32556' });
+    expect(summary.mockGitHub).toBe('http://127.0.0.1:32556');
   });
 
   it('refuses to pass a scenario whose ledger caught a real agent exec', async () => {
@@ -421,6 +435,7 @@ describe('createScenarioRunner agent tripwire', () => {
       assertBuildMatches: vi.fn(),
       armTripwire: vi.fn(),
       ensureDaemonArmed: vi.fn(),
+      ensureMockGitHub: vi.fn(() => null),
       emitRunnerVerdict: vi.fn(),
       isRecordingEnabled: () => false,
     })).toThrow(/UNLISTED-PROBE.*no scenarioCatalog\.mjs entry/s);
@@ -439,6 +454,7 @@ describe('createScenarioRunner agent tripwire', () => {
       assertBuildMatches: vi.fn(),
       armTripwire,
       ensureDaemonArmed: vi.fn(),
+      ensureMockGitHub: vi.fn(() => null),
       emitRunnerVerdict: vi.fn(),
       isRecordingEnabled: () => false,
     });
@@ -467,6 +483,7 @@ describe('createScenarioRunner recording contract', () => {
       assertBuildMatches: vi.fn(),
       armTripwire: () => ({ marker: 'test-marker', ledgerPath: path.join(tmpDir, 'ledger'), armed: true, read: () => [], readReceipt: () => ({ headlessTasks: 'off', carriesMarker: true }) }),
       ensureDaemonArmed: vi.fn(),
+      ensureMockGitHub: vi.fn(() => null),
       createRecorder: () => recorder,
       createRecordingDriver: () => ({ mainWindowId: async () => 1 }),
       emitRunnerVerdict: (verdict) => verdicts.push(verdict),

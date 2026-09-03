@@ -219,7 +219,7 @@ function createCleanupFixture(root) {
 }
 
 async function startMock(sha) {
-  const child = spawn(process.execPath, [path.join(REPO_ROOT, 'scripts/automation-mock-github.mjs')], {
+  const child = spawn(process.execPath, [path.join(REPO_ROOT, 'scripts/mock-github.mjs')], {
     cwd: REPO_ROOT,
     env: { ...process.env, ATTN_AUTOMATION_MOCK_SHA: sha },
     stdio: ['ignore', 'pipe', 'pipe'],

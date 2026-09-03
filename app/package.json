@@ -101,6 +101,7 @@
     "real-app:scenario-present-submit-closes-window": "node scripts/real-app-harness/scenario-present-submit-closes-window.mjs",
     "real-app:serial-matrix": "node scripts/real-app-harness/run-serial-matrix.mjs",
     "real-app:soak": "node scripts/real-app-harness/run-soak.mjs",
+    "real-app:mock-github": "node scripts/real-app-harness/mock-github-cli.mjs",
     "e2e": "playwright test",
     "e2e:settings-visual": "playwright test e2e/settings-visual.spec.ts",
     "e2e:headed": "playwright test --headed",

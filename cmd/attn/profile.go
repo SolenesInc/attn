@@ -75,6 +75,7 @@ type profileResolved struct {
 	DesktopEntry   string `json:"desktopEntry,omitempty"`
 	E2EDaemonPort  string `json:"e2eDaemonPort"`
 	E2EVitePort    string `json:"e2eVitePort"`
+	MockGitHubPort string `json:"mockGitHubPort"`
 }
 
 func resolveProfile(profile string) profileResolved {
@@ -100,6 +101,7 @@ func resolveProfile(profile string) profileResolved {
 		DesktopEntry:   desktopEntryPath(config.AppNameForProfile(profile)),
 		E2EDaemonPort:  config.E2EDaemonPortForProfile(profile),
 		E2EVitePort:    config.E2EVitePortForProfile(profile),
+		MockGitHubPort: config.MockGitHubPortForProfile(profile),
 	}
 }
 
@@ -139,6 +141,8 @@ func (r profileResolved) field(key string) (string, bool) {
 		return r.E2EDaemonPort, true
 	case "e2eVitePort":
 		return r.E2EVitePort, true
+	case "mockGitHubPort":
+		return r.MockGitHubPort, true
 	}
 	return "", false
 }
@@ -159,7 +163,8 @@ func runProfileStatus() {
 	if r.DesktopEntry != "" {
 		fmt.Printf("  handler    %s  (%s)\n", r.DesktopEntry, ynLabel(fileExists(r.DesktopEntry), "registered", "not registered"))
 	}
-	fmt.Printf("  e2e ports  daemon %s · vite %s\n\n", r.E2EDaemonPort, r.E2EVitePort)
+	fmt.Printf("  e2e ports  daemon %s · vite %s\n", r.E2EDaemonPort, r.E2EVitePort)
+	fmt.Printf("  mock gh    %s\n\n", r.MockGitHubPort)
 
 	if err := config.ValidateProfileRouting(); err != nil {
 		fmt.Printf("CONFLICT — every other attn command refuses to run here:\n%v\n\n", err)
@@ -204,7 +209,7 @@ func runProfileResolve(args []string) {
 	if field != "" {
 		v, ok := r.field(field)
 		if !ok {
-			profileFatal(fmt.Sprintf("unknown field %q (valid: profile,label,dataDir,socket,dbPath,wsPort,bundleId,appName,appPath,appExecutable,appDaemon,appLocalDataDir,appLockPath,deepLinkScheme,desktopEntry,e2eDaemonPort,e2eVitePort)", field))
+			profileFatal(fmt.Sprintf("unknown field %q (valid: profile,label,dataDir,socket,dbPath,wsPort,bundleId,appName,appPath,appExecutable,appDaemon,appLocalDataDir,appLockPath,deepLinkScheme,desktopEntry,e2eDaemonPort,e2eVitePort,mockGitHubPort)", field))
 		}
 		fmt.Println(v)
 		return

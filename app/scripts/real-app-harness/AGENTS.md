@@ -126,6 +126,28 @@ fails the scenario on a non-empty ledger and prints the lines.
   local artifacts before it can pass. TR-502 and TR-504 launch the provisioned
   mock through the same command name on macOS and Linux.
 
+## Mock GitHub
+
+`scripts/mock-github.mjs` is the GitHub every harness run talks to. The daemon's
+`refreshGitHubHosts` returns the moment `ATTN_MOCK_GH_URL` is set: it registers
+that one host, drops every other, and never runs `gh` discovery, so the switch
+alone keeps a run off github.com.
+
+- `createScenarioRunner` ensures the server and puts `ATTN_MOCK_GH_URL`,
+  `ATTN_MOCK_GH_TOKEN` and `ATTN_MOCK_GH_HOST` in the environment the app launch
+  carries into the daemon. `summary.json` records the URL as the receipt.
+- The port is `attn profile resolve --field mockGitHubPort`, so one server serves
+  a whole matrix and a daemon between scenarios keeps working. A daemon carrying
+  another URL is stopped the way a daemon predating the tripwire is.
+- The serial matrix starts it before the first scenario and stops it after the
+  last. By hand: `pnpm --dir app run real-app:mock-github status|ensure|stop`.
+- A production target is skipped: a mock there would empty the user's live PRs.
+- `fixtures/github-snapshot.json` is the default seed — 14 synthetic PRs, sized
+  to keep an app-launch detail fetch (2 requests each, plus 3 searches) inside
+  the client's 60-request burst. A scenario wanting its own set posts to
+  `/__control/seed`; `/__control/requested` and `/__control/head` drive the
+  automation scenarios' review request and head SHA.
+
 ## Reading results
 
 - Read the last `ATTN_VERDICT ` stdout line; hand-rolled `main()` scenarios omit it.
