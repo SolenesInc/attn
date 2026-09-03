@@ -280,6 +280,7 @@ async function main() {
       CODEX_HOME: seedHome,
     });
     await runner.step('restart_isolated_daemon_with_mock', async () => {
+      runner.expectMockGitHub(mock.url);
       try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}
       run(binary, ['daemon', 'ensure'], daemonEnv);
       await poll(() => {

@@ -1,7 +1,5 @@
 #!/usr/bin/env node
 
-// Inspect and control the harness mock GitHub by hand:
-//   pnpm --dir app run real-app:mock-github status|ensure|stop
 
 import { currentHarnessProfile } from './harnessProfile.mjs';
 import { ensureMockGitHubServer, mockGitHubTarget, readMockGitHubStatus, stopMockGitHubServer } from './mockGitHub.mjs';

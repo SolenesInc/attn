@@ -123,8 +123,7 @@ export class UiAutomationClient {
     // Always-on-top keeps WKWebView rAF/ResizeObserver unthrottled; probes that
     // exercise focus-stealing set ATTN_HARNESS_ALWAYS_ON_TOP=0 to opt out.
     const alwaysOnTop = process.env.ATTN_HARNESS_ALWAYS_ON_TOP !== '0';
-    // The tripwire pins and the mock GitHub must reach the daemon the app
-    // spawns, and `open` drops env: naming them forces the spawn-style launch.
+    // `open` drops env, so naming these forces the spawn-style launch.
     const harnessDaemonEnv = { ...agentTripwireLaunchEnv(), ...mockGitHubLaunchEnv() };
     // Park the attn window off-screen by default so scenarios don't cover the
     // caller's work. Opt out with ATTN_HARNESS_PARK_VISIBLE_PX=0.

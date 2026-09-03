@@ -16,9 +16,8 @@ export const MOCK_GITHUB_SERVER = path.join(REPO_ROOT, 'scripts/mock-github.mjs'
 export const MOCK_GITHUB_FIXTURE = path.join(HARNESS_DIR, 'fixtures/github-snapshot.json');
 export const MOCK_GITHUB_HOST = 'mock.github.local';
 export const MOCK_GITHUB_TOKEN = 'test-token';
+export const MOCK_GITHUB_SIGNATURE = 'attn-harness-github';
 
-// internal/daemon/daemon.go: ATTN_MOCK_GH_URL makes refreshGitHubHosts register
-// this host and drop every other one, so `gh` discovery never runs.
 export const MOCK_GITHUB_URL_VAR = 'ATTN_MOCK_GH_URL';
 export const MOCK_GITHUB_VARS = [MOCK_GITHUB_URL_VAR, 'ATTN_MOCK_GH_TOKEN', 'ATTN_MOCK_GH_HOST'];
 
@@ -34,8 +33,6 @@ export function applyMockGitHubEnv(env, target) {
   return env;
 }
 
-// `open` drops env on macOS, so these have to be named for the spawn-style
-// launch that carries them into the daemon the app starts.
 export function mockGitHubLaunchEnv(env = process.env) {
   if (!env[MOCK_GITHUB_URL_VAR]) {
     return {};
@@ -51,8 +48,6 @@ function serverCommand(args, run) {
   }).trim());
 }
 
-// Production keeps its real GitHub: a mock there would empty the user's live PR
-// list. Every other profile gets one mock per port, shared by every scenario.
 export function ensureMockGitHubServer({
   profile = currentHarnessProfile(),
   appPath = defaultAppPathForProfile(profile),
@@ -71,7 +66,8 @@ export function ensureMockGitHubServer({
     run,
   );
   applyMockGitHubEnv(env, target);
-  log(`${started.started ? 'started' : 'reusing'} ${target.url} as ${target.host} (pid ${started.pid})`);
+  const disposition = started.replaced ? 'replaced a stale server on' : (started.started ? 'started' : 'reusing');
+  log(`${disposition} ${target.url} as ${target.host} (pid ${started.pid}, identity ${started.identity})`);
   return { ...target, ...started };
 }
 
@@ -90,7 +86,15 @@ export function stopMockGitHubServer({
   return result;
 }
 
-export function readMockGitHubStatus({ profile = currentHarnessProfile() } = {}) {
+export async function readMockGitHubStatus({ profile = currentHarnessProfile(), request = fetch } = {}) {
   const target = mockGitHubTarget(profile);
-  return fetch(`${target.url}/__control`).then((response) => response.json());
+  const response = await request(`${target.url}/__control`);
+  if (!response.ok) {
+    throw new Error(`mock GitHub status: ${target.url}/__control returned ${response.status}`);
+  }
+  const status = await response.json();
+  if (status?.mock !== MOCK_GITHUB_SIGNATURE) {
+    throw new Error(`mock GitHub status: ${target.url} answered without the ${MOCK_GITHUB_SIGNATURE} signature`);
+  }
+  return status;
 }

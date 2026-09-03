@@ -5190,8 +5190,6 @@ func (b *fakeSpawnBackend) upgradedSessions() []string {
 	return append([]string(nil), b.upgraded...)
 }
 
-// The harness points a whole matrix at a mock; one real host left in the
-// registry would send that run at github.com.
 func TestRefreshGitHubHosts_MockURLReplacesEveryDiscoveredHost(t *testing.T) {
 	mockGH := mockserver.New()
 	defer mockGH.Close()
@@ -5206,8 +5204,6 @@ func TestRefreshGitHubHosts_MockURLReplacesEveryDiscoveredHost(t *testing.T) {
 		t.Fatalf("precondition: hosts = %v, want [github.com]", hosts)
 	}
 
-	// An empty PATH proves discovery never runs: `gh` is unreachable, and the
-	// mock host still lands in the registry.
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("ATTN_MOCK_GH_URL", mockGH.URL)
 	t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")

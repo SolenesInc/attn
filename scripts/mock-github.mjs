@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 
-// The GitHub the harness talks to. A real-app run points its profile daemon at
-// this server (ATTN_MOCK_GH_URL) so no scenario reaches github.com.
-
 import { spawn } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -13,16 +11,20 @@ const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SIGNATURE = 'attn-harness-github';
 const DEFAULT_HOST = 'mock.github.local';
 
-// The legacy automation fixture: one review-requested PR the scenario toggles
-// on and off through /__control/requested.
 const AUTOMATION_OWNER = 'owner';
 const AUTOMATION_REPO = 'repo';
 const AUTOMATION_NUMBER = 42;
 
-// A whole matrix runs through one server; the log is for diagnosis, not
-// archival. A poll costs 3 entries and an app launch 2 per PR, so 500 holds
-// several launches of a 14-PR fixture.
+// A poll costs 3 log entries and an app launch 2 per PR, so 500 holds several
+// launches of the 14-PR fixture before the oldest entry falls off.
 const REQUEST_LOG_LIMIT = 500;
+
+function serverIdentity(fixturePath) {
+  const digest = crypto.createHash('sha256').update(fs.readFileSync(SCRIPT_PATH));
+  digest.update(String(fixturePath || ''));
+  if (fixturePath) digest.update(fs.readFileSync(fixturePath));
+  return digest.digest('hex').slice(0, 16);
+}
 
 function parseArgs(argv) {
   const options = {
@@ -89,18 +91,18 @@ function automationPR(host, sha) {
   }, host);
 }
 
-function createServer({ host, fixturePath }) {
-  let sha = String(process.env.ATTN_AUTOMATION_MOCK_SHA || '').trim().toLowerCase();
-  if (sha && !/^[0-9a-f]{40}$/.test(sha)) {
+function createServer({ host, fixturePath, identity }) {
+  const initialSHA = String(process.env.ATTN_AUTOMATION_MOCK_SHA || '').trim().toLowerCase();
+  if (initialSHA && !/^[0-9a-f]{40}$/.test(initialSHA)) {
     throw new Error('ATTN_AUTOMATION_MOCK_SHA must be a full commit SHA');
   }
-  let active = process.env.ATTN_AUTOMATION_MOCK_ACTIVE !== '0';
+  const initialActive = process.env.ATTN_AUTOMATION_MOCK_ACTIVE !== '0';
+  let sha = initialSHA;
+  let active = initialActive;
   let prs = loadFixture(fixturePath, host);
   const requests = [];
   let requestCount = 0;
 
-  // `active` is the automation scenario's review-request toggle: it hides the
-  // PR from search while the PR itself stays fetchable, as GitHub does.
   const allPRs = () => (sha ? [...prs, automationPR(host, sha)] : prs);
   const searchablePRs = () => (active ? allPRs() : prs);
 
@@ -155,8 +157,17 @@ function createServer({ host, fixturePath }) {
 
     if (url.pathname === '/__control' && request.method === 'GET') {
       json(response, 200, {
-        mock: SIGNATURE, host, pid: process.pid, active, sha, requestCount, requests, prs: allPRs().length,
+        mock: SIGNATURE, identity, host, pid: process.pid, active, sha, requestCount, requests, prs: allPRs().length,
       });
+      return;
+    }
+    if (url.pathname === '/__control/reset' && request.method === 'POST') {
+      sha = initialSHA;
+      active = initialActive;
+      prs = loadFixture(fixturePath, host);
+      requests.length = 0;
+      requestCount = 0;
+      json(response, 200, { reset: true, prs: prs.length });
       return;
     }
     if (url.pathname === '/__control/requested' && request.method === 'POST') {
@@ -183,7 +194,8 @@ function createServer({ host, fixturePath }) {
     }
     if (url.pathname === '/__control/stop' && request.method === 'POST') {
       json(response, 200, { stopping: true });
-      server.close(() => process.exit(0));
+      // server.close() would wait on the caller's kept-alive socket; --ensure probes the port.
+      response.on('finish', () => process.exit(0));
       return;
     }
 
@@ -260,18 +272,36 @@ async function waitForServer(port, deadlineMs) {
   }
 }
 
+async function waitForPortFree(port, deadlineMs) {
+  const deadline = Date.now() + deadlineMs;
+  for (;;) {
+    if (!(await probe(port))) return true;
+    if (Date.now() > deadline) throw new Error(`mock GitHub on port ${port} did not stop`);
+    await new Promise((resolve) => { setTimeout(resolve, 25); });
+  }
+}
+
 async function runEnsure({ port, host, fixture }) {
+  const url = `http://127.0.0.1:${port}`;
+  const identity = serverIdentity(fixture);
   const existing = await probe(port);
-  if (existing) {
-    process.stdout.write(`${JSON.stringify({ url: `http://127.0.0.1:${port}`, host: existing.host, pid: existing.pid, started: false })}\n`);
+  let replaced = false;
+  if (existing && existing.identity === identity) {
+    await control(port, 'POST', '/__control/reset', {});
+    process.stdout.write(`${JSON.stringify({ url, host: existing.host, pid: existing.pid, identity, started: false, replaced })}\n`);
     return;
+  }
+  if (existing) {
+    replaced = true;
+    await control(port, 'POST', '/__control/stop', {});
+    await waitForPortFree(port, 10_000);
   }
   const args = [SCRIPT_PATH, '--port', String(port), '--host', host, ...(fixture ? ['--fixture', fixture] : [])];
   const child = spawn(process.execPath, args, { detached: true, stdio: 'ignore' });
   child.unref();
   const status = await waitForServer(port, 10_000);
   if (!status) throw new Error(`mock GitHub did not come up on port ${port} (spawned pid ${child.pid})`);
-  process.stdout.write(`${JSON.stringify({ url: `http://127.0.0.1:${port}`, host: status.host, pid: status.pid, started: true })}\n`);
+  process.stdout.write(`${JSON.stringify({ url, host: status.host, pid: status.pid, identity: status.identity, started: true, replaced })}\n`);
 }
 
 async function runStop({ port }) {
@@ -285,7 +315,7 @@ async function runStop({ port }) {
 }
 
 function runServe({ port, host, fixture }) {
-  const server = createServer({ host, fixturePath: fixture });
+  const server = createServer({ host, fixturePath: fixture, identity: serverIdentity(fixture) });
   server.listen(port, '127.0.0.1', () => {
     const address = server.address();
     process.stdout.write(`${JSON.stringify({ url: `http://127.0.0.1:${address.port}`, host, pid: process.pid })}\n`);

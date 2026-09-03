@@ -290,8 +290,6 @@ async function main() {
   } else {
     await ensureFreshWorld({ profile, appPath });
   }
-  // One mock for the whole matrix: every scenario's daemon reads it out of the
-  // inherited environment instead of polling github.com.
   const mockGitHub = ensureMockGitHubServer({ profile, appPath });
   const preflightKeys = new Set();
   for (const scenario of scenarios) {

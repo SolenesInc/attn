@@ -290,22 +290,41 @@ export function readDaemonTripwireReceipt({
 } = {}) {
   const pid = livingDaemonPid(pidPath);
   if (!pid) {
-    return { headlessTasks: 'no daemon', carriesMarker: false };
+    return { headlessTasks: 'no daemon', carriesMarker: false, mockGitHub: 'no daemon' };
   }
   let environment;
   try {
     environment = readEnvironment(pid);
   } catch {
-    return { headlessTasks: 'unreadable', carriesMarker: false };
+    return { headlessTasks: 'unreadable', carriesMarker: false, mockGitHub: 'unreadable' };
   }
   return {
     headlessTasks: environment.includes(`${HEADLESS_TASKS_VAR}=off`) ? 'off' : 'on',
     carriesMarker: Boolean(marker) && environment.includes(`${TRIPWIRE_MARKER_VAR}=${marker}`),
+    mockGitHub: mockGitHubURLIn(environment),
   };
+}
+
+function mockGitHubURLIn(environment) {
+  const match = new RegExp(`(?:^|\\s)${MOCK_GITHUB_URL_VAR}=(\\S*)`).exec(environment);
+  return match ? match[1] : 'missing';
 }
 
 export function readDaemonHeadlessSwitch(options = {}) {
   return readDaemonTripwireReceipt(options).headlessTasks;
+}
+
+export function readDaemonMockGitHubURL(options = {}) {
+  return readDaemonTripwireReceipt(options).mockGitHub;
+}
+
+export function formatMockGitHubFailure({ scenarioId, expected, observed, pidPath = null }) {
+  return [
+    `mock GitHub: ${scenarioId} finished against a daemon that does not carry ${MOCK_GITHUB_URL_VAR}=${expected}.`,
+    `  the daemon reads ${JSON.stringify(observed)}, so this run cannot be proved to have stayed off github.com.`,
+    ...(pidPath ? [`daemon pid file: ${pidPath}`] : []),
+    'the harness starts one mock per run and the app launch carries it into the daemon; a daemon that predates the run is stopped so the relaunch brings up one that carries it.',
+  ].join('\n');
 }
 
 export function formatUnarmedDaemonFailure({ scenarioId, pid, pidPath, marker, read }) {
@@ -318,8 +337,8 @@ export function formatUnarmedDaemonFailure({ scenarioId, pid, pidPath, marker, r
   ].join('\n');
 }
 
-// A daemon from another run carries its PATH, agent pins and GitHub host: the
-// tripwire would watch a door it never uses, and it would poll github.com.
+// A daemon started before this scenario carries another run's PATH and agent
+// overrides, so the tripwire would watch a door the daemon never uses.
 export function ensureDaemonCarriesTripwire({
   scenarioId = 'this scenario',
   marker,

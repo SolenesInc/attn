@@ -1,7 +1,14 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { armAgentTripwire, ensureDaemonCarriesTripwire, formatReceiptFailure, formatTripwireFailure } from './agentTripwire.mjs';
+import {
+  armAgentTripwire,
+  ensureDaemonCarriesTripwire,
+  formatMockGitHubFailure,
+  formatReceiptFailure,
+  formatTripwireFailure,
+  readDaemonMockGitHubURL,
+} from './agentTripwire.mjs';
 import { assertPackagedAppBuildMatchesCurrentSource } from './buildPreflight.mjs';
 import { createRunContext, emitVerdict, FIRST_FAILURE_MAX_LENGTH, restoreHarnessSettings } from './common.mjs';
 import { ensureMockGitHubServer } from './mockGitHub.mjs';
@@ -233,6 +240,7 @@ export function createScenarioRunner(options, {
   armTripwire = armAgentTripwire,
   ensureDaemonArmed = ensureDaemonCarriesTripwire,
   ensureMockGitHub = ensureMockGitHubServer,
+  readDaemonMockGitHub = readDaemonMockGitHubURL,
   createRecorder = createScenarioRecorder,
   createRecordingDriver = (appPath) => createWindowDriver({ appPath }),
   emitRunnerVerdict = emitVerdict,
@@ -305,8 +313,9 @@ export function createScenarioRunner(options, {
 
   const readDaemonReceipt = () => tripwire.readReceipt?.() || null;
   const headlessSwitchField = (receipt) => (receipt ? { headlessTasks: receipt.headlessTasks } : {});
-  // The receipt that this run never reached github.com.
-  const mockGitHubField = mockGitHub ? { mockGitHub: mockGitHub.url } : {};
+  let expectedMockGitHubURL = mockGitHub?.url ?? null;
+  const observeMockGitHub = () => (expectedMockGitHubURL ? readDaemonMockGitHub({ pidPath: tripwire.pidPath }) : null);
+  const mockGitHubField = (observed) => (expectedMockGitHubURL ? { mockGitHub: observed } : {});
 
   let recorder = null;
   if (isRecordingEnabled()) {
@@ -489,6 +498,10 @@ export function createScenarioRunner(options, {
         throw new Error(message);
       }
     },
+    expectMockGitHub(url) {
+      expectedMockGitHubURL = String(url);
+      appendTrace('mock_github:expected', { url: expectedMockGitHubURL });
+    },
     async finishSuccess(summary = {}) {
       const recorderError = await finalizeRunner();
       if (recorderError) throw recorderError;
@@ -509,6 +522,17 @@ export function createScenarioRunner(options, {
         process.stdout.write(`${digest}\n`);
         throw new Error(digest);
       }
+      const observedMockGitHub = observeMockGitHub();
+      if (expectedMockGitHubURL && observedMockGitHub !== expectedMockGitHubURL) {
+        const digest = formatMockGitHubFailure({
+          scenarioId,
+          expected: expectedMockGitHubURL,
+          observed: observedMockGitHub,
+          pidPath: tripwire.pidPath,
+        });
+        process.stdout.write(`${digest}\n`);
+        throw new Error(digest);
+      }
       const finalSummary = {
         ok: true,
         scenarioId,
@@ -520,7 +544,7 @@ export function createScenarioRunner(options, {
         steps,
         assertions,
         ...headlessSwitchField(receipt),
-        ...mockGitHubField,
+        ...mockGitHubField(observedMockGitHub),
         ...summary,
       };
       const summaryPath = path.join(runDir, 'summary.json');
@@ -555,7 +579,7 @@ export function createScenarioRunner(options, {
           ? { recordingError: normalizeError(recorderError) }
           : {}),
         ...headlessSwitchField(readDaemonReceipt()),
-        ...mockGitHubField,
+        ...mockGitHubField(observeMockGitHub()),
         ...(ledger.length > 0
           ? { agentTripwire: { count: ledger.length, ledgerPath: tripwire.ledgerPath, lines: ledger } }
           : {}),

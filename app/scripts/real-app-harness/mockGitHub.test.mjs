@@ -5,11 +5,13 @@ import {
   MOCK_GITHUB_FIXTURE,
   MOCK_GITHUB_HOST,
   MOCK_GITHUB_SERVER,
+  MOCK_GITHUB_SIGNATURE,
   MOCK_GITHUB_TOKEN,
   MOCK_GITHUB_VARS,
   ensureMockGitHubServer,
   mockGitHubLaunchEnv,
   mockGitHubTarget,
+  readMockGitHubStatus,
   stopMockGitHubServer,
 } from './mockGitHub.mjs';
 
@@ -63,6 +65,20 @@ describe('the GitHub the harness daemon talks to', () => {
     ]);
   });
 
+  it('refuses a status answer that is not a running mock', async () => {
+    const notFound = { ok: false, status: 404, json: async () => ({ error: 'nope' }) };
+    await expect(readMockGitHubStatus({ profile: 'dev', request: async () => notFound }))
+      .rejects.toThrow('returned 404');
+
+    const impostor = { ok: true, status: 200, json: async () => ({ pid: 1 }) };
+    await expect(readMockGitHubStatus({ profile: 'dev', request: async () => impostor }))
+      .rejects.toThrow(MOCK_GITHUB_SIGNATURE);
+
+    const real = { ok: true, status: 200, json: async () => ({ mock: MOCK_GITHUB_SIGNATURE, pid: 9 }) };
+    await expect(readMockGitHubStatus({ profile: 'dev', request: async () => real }))
+      .resolves.toMatchObject({ pid: 9 });
+  });
+
   it('never points a production daemon away from the real github.com', () => {
     const run = vi.fn();
     const env = {};
@@ -75,20 +91,32 @@ describe('the GitHub the harness daemon talks to', () => {
 });
 
 describe('the mock server itself', () => {
-  // A port outside every derived band, so a live profile mock is never touched.
   const port = 39917;
-  // vitest's happy-dom blocks cross-origin fetch; the mock speaks plain HTTP.
   const control = (pathname) => new Promise((resolve, reject) => {
-    http.get(`http://127.0.0.1:${port}${pathname}`, (response) => {
+    http.get({ host: '127.0.0.1', port, path: pathname, agent: false }, (response) => {
       let body = '';
       response.setEncoding('utf8');
       response.on('data', (chunk) => { body += chunk; });
       response.on('end', () => resolve(JSON.parse(body)));
     }).on('error', reject);
   });
+  const post = (pathname, payload) => new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload);
+    const request = http.request({
+      host: '127.0.0.1', port, path: pathname, method: 'POST', agent: false, headers: { 'content-type': 'application/json' },
+    }, (response) => {
+      let text = '';
+      response.setEncoding('utf8');
+      response.on('data', (chunk) => { text += chunk; });
+      response.on('end', () => resolve(JSON.parse(text)));
+    });
+    request.on('error', reject);
+    request.end(body);
+  });
   const ensure = () => JSON.parse(execFileSync(process.execPath, [
     MOCK_GITHUB_SERVER, '--ensure', '--port', String(port), '--host', MOCK_GITHUB_HOST, '--fixture', MOCK_GITHUB_FIXTURE,
   ], { encoding: 'utf8' }).trim());
+  const stop = () => execFileSync(process.execPath, [MOCK_GITHUB_SERVER, '--stop', '--port', String(port)], { encoding: 'utf8' });
 
   it('starts once and is reused by every later ensure', async () => {
     const first = ensure();
@@ -107,7 +135,46 @@ describe('the mock server itself', () => {
       expect(detail.head.sha).toMatch(/^[0-9a-f]{40}$/);
       expect(detail.mergeable_state).toBeTruthy();
     } finally {
-      execFileSync(process.execPath, [MOCK_GITHUB_SERVER, '--stop', '--port', String(port)], { encoding: 'utf8' });
+      stop();
+    }
+  });
+
+  it('replaces a server left behind by another checkout instead of serving its fixture', async () => {
+    const stale = JSON.parse(execFileSync(process.execPath, [
+      MOCK_GITHUB_SERVER, '--ensure', '--port', String(port), '--host', MOCK_GITHUB_HOST,
+    ], { encoding: 'utf8' }).trim());
+    try {
+      expect((await control('/__control')).prs).toBe(0);
+
+      const replacing = ensure();
+
+      expect(replacing.replaced).toBe(true);
+      expect(replacing.pid).not.toBe(stale.pid);
+      expect(replacing.identity).not.toBe(stale.identity);
+      const status = await control('/__control');
+      expect(status.identity).toBe(replacing.identity);
+      expect(status.prs).toBeGreaterThan(0);
+    } finally {
+      stop();
+    }
+  });
+
+  it('resets a reused server, so no scenario inherits the last one\'s control state', async () => {
+    const first = ensure();
+    try {
+      const fresh = await control('/__control');
+      await post('/__control/requested', { active: false });
+      await post('/__control/seed', { prs: [{ repo: 'stale/repo', number: 1, title: 'stale' }] });
+      const mutated = await control('/__control');
+      expect(mutated.active).toBe(false);
+      expect(mutated.prs).toBe(1);
+
+      const reused = ensure();
+
+      expect(reused).toEqual({ ...first, started: false });
+      expect(await control('/__control')).toMatchObject({ active: true, prs: fresh.prs });
+    } finally {
+      stop();
     }
   });
 });

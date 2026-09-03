@@ -135,10 +135,20 @@ alone keeps a run off github.com.
 
 - `createScenarioRunner` ensures the server and puts `ATTN_MOCK_GH_URL`,
   `ATTN_MOCK_GH_TOKEN` and `ATTN_MOCK_GH_HOST` in the environment the app launch
-  carries into the daemon. `summary.json` records the URL as the receipt.
+  carries into the daemon. `open` drops env, so naming them forces the
+  spawn-style launch.
+- The receipt is the live daemon, not the harness's own intent: `finishSuccess`
+  reads `ATTN_MOCK_GH_URL` out of the running daemon's environment, fails the
+  scenario unless it is exactly the URL this run started, and records what it
+  read in `summary.json`. `missing`, `no daemon` and another run's URL each fail
+  by name.
 - The port is `attn profile resolve --field mockGitHubPort`, so one server serves
   a whole matrix and a daemon between scenarios keeps working. A daemon carrying
   another URL is stopped the way a daemon predating the tripwire is.
+- `--ensure` identifies a running server by a hash of the server source and its
+  fixture. A match is reset to fixture state, so no scenario inherits the last
+  one's `/__control` mutations; a mismatch — an interrupted run's server from
+  another checkout — is stopped and replaced.
 - The serial matrix starts it before the first scenario and stops it after the
   last. By hand: `pnpm --dir app run real-app:mock-github status|ensure|stop`.
 - A production target is skipped: a mock there would empty the user's live PRs.

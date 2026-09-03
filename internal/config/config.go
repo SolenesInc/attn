@@ -531,8 +531,7 @@ func E2EVitePortForProfile(profile string) string {
 	return fmt.Sprintf("%d", 31000+int(profileFNV(p)%1000))
 }
 
-// The real-app harness serves GitHub from a mock on this port so the profile's
-// daemon never reaches github.com. Named profiles hash into [32000,32999].
+// named profiles hash into [32000,32999]; the harness serves GitHub from here.
 func MockGitHubPortForProfile(profile string) string {
 	p := normalizeProfileForDerivation(profile)
 	if p == "" {

@@ -367,6 +367,7 @@ async function main() {
         ATTN_MOCK_GH_TOKEN: 'test-token',
         ATTN_AUTOMATION_SCHEDULE_INTERVAL: SCHEDULE_TICK_INTERVAL,
       });
+      runner.expectMockGitHub(mock.url);
       try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}
       run(binary, ['daemon', 'ensure'], daemonEnv);
       await waitForDaemonReady(binary, daemonEnv);
