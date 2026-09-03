@@ -119,6 +119,18 @@ func (d *Daemon) readCrewMembers() ([]crew.Member, map[string]docstore.Document,
 	return members, docs, nil
 }
 
+func (d *Daemon) resolveCrewMember(address string) (crew.Member, bool, error) {
+	if err := d.requireHome(crew.Surface); err != nil {
+		return crew.Member{}, false, err
+	}
+	members, _, err := d.readCrewMembers()
+	if err != nil {
+		return crew.Member{}, false, err
+	}
+	member, ok := crew.Resolve(address, members)
+	return member, ok, nil
+}
+
 // Reserved for startup import, where invalid copied rows must be enumerated.
 // Every operational read goes through readCrewMembers and its path fence.
 func (d *Daemon) readCrewMembersRaw() ([]crew.Member, map[string]docstore.Document, error) {

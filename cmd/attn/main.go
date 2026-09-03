@@ -634,7 +634,7 @@ func writeHelp(w io.Writer) {
 commands:
   presence                          check whether the current shell runs inside attn
   agent list                        name every session running here
-  agent peek <id>                   read a session without interrupting it
+  agent peek <session-or-member>    read a session without interrupting it
   agent msg <target> "text"            notify a live session, crew member or seed's tender
   agent inbox <message-id>              read a notified peer message
   agent msg-status <message-id>         inspect a sent peer message

@@ -780,7 +780,7 @@ model StateExplainMessage {
 // PTY or generates input, so watching costs the observed agent nothing.
 model AgentPeekMessage {
   cmd: "agent_peek";
-  target_session_id: string;    // full id or unique prefix (the short id from `attn agent list`)
+  target_session_id: string;    // crew name, full session id, or unique session prefix
 }
 
 // One agent sends another a message. The daemon persists the body and types a
