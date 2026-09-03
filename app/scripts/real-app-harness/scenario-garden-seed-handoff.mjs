@@ -131,9 +131,18 @@ async function main() {
       runner.assert(Boolean(shot?.pngBase64), 'the garden panel is on screen', {});
       fs.writeFileSync(path.join(runner.runDir, 'garden-list-dock.png'), Buffer.from(shot.pngBase64, 'base64'));
 
-      const full = await client.request('garden_toggle_frame');
+      let full = await client.request('garden_toggle_frame');
+      const layoutStartedAt = Date.now();
+      // The frame's geometry can settle before ResizeObserver updates the list.
+      // Wait for the rendered columns; keep the last state if they never appear.
+      while (full.frame === 'full' && full.layout !== 'columns' && Date.now() - layoutStartedAt < 5_000) {
+        await delay(100);
+        full = await client.request('garden_get_state');
+      }
       runner.assert(full.frame === 'full', 'the same list expands to the full window', { full });
-      runner.assert(full.layout === 'columns', 'the wide full window uses the column list', { full });
+      runner.assert(full.layout === 'columns', 'the wide full window uses the column list', {
+        full, layoutWaitMs: Date.now() - layoutStartedAt,
+      });
       const fullShot = await client.request('capture_screenshot_data', { selector: '.garden-frame' });
       runner.assert(Boolean(fullShot?.pngBase64), 'the full Garden list is on screen', {});
       fs.writeFileSync(path.join(runner.runDir, 'garden-list-full.png'), Buffer.from(fullShot.pngBase64, 'base64'));
