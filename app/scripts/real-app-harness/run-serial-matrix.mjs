@@ -14,6 +14,7 @@ import {
   isProductionHarnessTarget,
 } from './harnessProfile.mjs';
 import { formatResultTable, scenarioSkipReason, selectFailedScenarios } from './matrixDigest.mjs';
+import { ensureMockGitHubServer, stopMockGitHubServer } from './mockGitHub.mjs';
 import { resolveScenarios as resolveScenariosFromCatalog, scenarioCatalog, scenariosAllowingRealAgents } from './scenarioCatalog.mjs';
 import { acquireScenarioLock, packagedAppScenarioLockPath } from './scenarioRunner.mjs';
 
@@ -289,6 +290,7 @@ async function main() {
   } else {
     await ensureFreshWorld({ profile, appPath });
   }
+  const mockGitHub = ensureMockGitHubServer({ profile, appPath });
   const preflightKeys = new Set();
   for (const scenario of scenarios) {
     const preflightLaunchEnv = scenario.preflightLaunchEnv || null;
@@ -326,6 +328,10 @@ async function main() {
     }
   }
 
+  if (mockGitHub) {
+    stopMockGitHubServer({ profile, appPath });
+  }
+
   const failed = results.filter((result) => result.code !== 0);
   const skipped = results.filter((result) => result.skipped);
   const summary = {
@@ -333,6 +339,7 @@ async function main() {
     scenarioCount: results.length,
     failedCount: failed.length,
     skippedCount: skipped.length,
+    mockGitHub: mockGitHub?.url ?? null,
     results: results.map(({ outputTail: _outputTail, ...rest }) => rest),
   };
   console.log(`\nSerial matrix summary:\n${JSON.stringify(summary, null, 2)}`);

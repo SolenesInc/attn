@@ -5189,3 +5189,31 @@ func (b *fakeSpawnBackend) upgradedSessions() []string {
 	defer b.mu.Unlock()
 	return append([]string(nil), b.upgraded...)
 }
+
+func TestRefreshGitHubHosts_MockURLReplacesEveryDiscoveredHost(t *testing.T) {
+	mockGH := mockserver.New()
+	defer mockGH.Close()
+
+	realClient, err := github.NewClientForHost("github.com", "https://api.github.com", "real-token")
+	if err != nil {
+		t.Fatalf("NewClientForHost error: %v", err)
+	}
+	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
+	d := NewWithGitHubClient(sockPath, realClient)
+	if hosts := d.gitHubHosts(); len(hosts) != 1 || hosts[0] != "github.com" {
+		t.Fatalf("precondition: hosts = %v, want [github.com]", hosts)
+	}
+
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("ATTN_MOCK_GH_URL", mockGH.URL)
+	t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")
+	t.Setenv("ATTN_MOCK_GH_HOST", "mock.github.local")
+
+	if err := d.refreshGitHubHosts(); err != nil {
+		t.Fatalf("refreshGitHubHosts error: %v", err)
+	}
+
+	if hosts := d.gitHubHosts(); len(hosts) != 1 || hosts[0] != "mock.github.local" {
+		t.Fatalf("hosts = %v, want [mock.github.local]", hosts)
+	}
+}

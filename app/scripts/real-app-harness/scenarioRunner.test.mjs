@@ -267,6 +267,8 @@ function runnerWithTripwire({
   allowRealAgents = false,
   receipt = { headlessTasks: 'off', carriesMarker: true },
   ensureDaemonArmed = vi.fn(),
+  ensureMockGitHub = vi.fn(() => ({ url: 'http://127.0.0.1:32556', host: 'mock.github.local' })),
+  readDaemonMockGitHub = vi.fn(() => 'http://127.0.0.1:32556'),
 } = {}) {
   let ledgerPath = null;
   const runner = createScenarioRunner({
@@ -291,10 +293,14 @@ function runnerWithTripwire({
       };
     }),
     ensureDaemonArmed,
+    ensureMockGitHub,
+    readDaemonMockGitHub,
     emitRunnerVerdict: (verdict) => verdicts.push(verdict),
     isRecordingEnabled: () => false,
   });
-  return { runner, verdicts, ledgerPath: () => ledgerPath };
+  return {
+    runner, verdicts, ledgerPath: () => ledgerPath, ensureDaemonArmed, ensureMockGitHub, readDaemonMockGitHub,
+  };
 }
 
 describe('createScenarioRunner agent tripwire', () => {
@@ -305,6 +311,80 @@ describe('createScenarioRunner agent tripwire', () => {
 
     expect(summary.ok).toBe(true);
     expect(verdicts[0]).toMatchObject({ ok: true });
+  });
+
+  it('starts one mock GitHub, makes the daemon carry it, and records what the daemon reads', async () => {
+    const { runner, ensureMockGitHub, ensureDaemonArmed, readDaemonMockGitHub } = runnerWithTripwire();
+
+    const summary = await runner.finishSuccess();
+
+    expect(ensureMockGitHub).toHaveBeenCalledTimes(1);
+    expect(ensureDaemonArmed.mock.calls[0][0]).toMatchObject({ mockGitHubURL: 'http://127.0.0.1:32556' });
+    expect(readDaemonMockGitHub).toHaveBeenCalled();
+    expect(summary.mockGitHub).toBe('http://127.0.0.1:32556');
+    expect(JSON.parse(fs.readFileSync(path.join(runner.runDir, 'summary.json'), 'utf8')).mockGitHub)
+      .toBe('http://127.0.0.1:32556');
+  });
+
+  it.each([
+    ['missing', 'the launch dropped the variable'],
+    ['http://127.0.0.1:19850', 'the daemon carries another run\'s mock'],
+    ['no daemon', 'nothing was running to prove it'],
+  ])('refuses to pass a scenario whose daemon reads %s', async (observed) => {
+    const { runner, verdicts } = runnerWithTripwire({
+      scenarioId: 'MOCK-GH',
+      readDaemonMockGitHub: vi.fn(() => observed),
+    });
+
+    await expect(runner.finishSuccess()).rejects.toThrow(
+      `mock GitHub: MOCK-GH finished against a daemon that does not carry ATTN_MOCK_GH_URL=http://127.0.0.1:32556`,
+    );
+    await expect(runner.finishSuccess()).rejects.toThrow(JSON.stringify(observed));
+    expect(verdicts).toEqual([]);
+    expect(fs.existsSync(path.join(runner.runDir, 'summary.json'))).toBe(false);
+  });
+
+  it('lets a scenario that points the daemon at its own mock say so', async () => {
+    const { runner } = runnerWithTripwire({
+      scenarioId: 'AUTOMATION-LIFECYCLE',
+      readDaemonMockGitHub: vi.fn(() => 'http://127.0.0.1:64517'),
+    });
+
+    runner.expectMockGitHub('http://127.0.0.1:64517');
+    const summary = await runner.finishSuccess();
+
+    expect(summary.mockGitHub).toBe('http://127.0.0.1:64517');
+  });
+
+  it('still refuses a declared mock the daemon does not carry', async () => {
+    const { runner } = runnerWithTripwire({
+      scenarioId: 'AUTOMATION-LIFECYCLE',
+      readDaemonMockGitHub: vi.fn(() => 'http://127.0.0.1:32556'),
+    });
+
+    runner.expectMockGitHub('http://127.0.0.1:64517');
+
+    await expect(runner.finishSuccess()).rejects.toThrow('does not carry ATTN_MOCK_GH_URL=http://127.0.0.1:64517');
+  });
+
+  it('records what the daemon read on a failing scenario without asserting it', async () => {
+    const { runner } = runnerWithTripwire({
+      scenarioId: 'MOCK-GH',
+      readDaemonMockGitHub: vi.fn(() => 'missing'),
+    });
+
+    const failure = await runner.finishFailure(new Error('boom'));
+
+    expect(failure.mockGitHub).toBe('missing');
+  });
+
+  it('leaves the receipt out when no mock was started', async () => {
+    const { runner, readDaemonMockGitHub } = runnerWithTripwire({ ensureMockGitHub: vi.fn(() => null) });
+
+    const summary = await runner.finishSuccess();
+
+    expect(summary).not.toHaveProperty('mockGitHub');
+    expect(readDaemonMockGitHub).not.toHaveBeenCalled();
   });
 
   it('refuses to pass a scenario whose ledger caught a real agent exec', async () => {
@@ -421,6 +501,7 @@ describe('createScenarioRunner agent tripwire', () => {
       assertBuildMatches: vi.fn(),
       armTripwire: vi.fn(),
       ensureDaemonArmed: vi.fn(),
+      ensureMockGitHub: vi.fn(() => null),
       emitRunnerVerdict: vi.fn(),
       isRecordingEnabled: () => false,
     })).toThrow(/UNLISTED-PROBE.*no scenarioCatalog\.mjs entry/s);
@@ -439,6 +520,7 @@ describe('createScenarioRunner agent tripwire', () => {
       assertBuildMatches: vi.fn(),
       armTripwire,
       ensureDaemonArmed: vi.fn(),
+      ensureMockGitHub: vi.fn(() => null),
       emitRunnerVerdict: vi.fn(),
       isRecordingEnabled: () => false,
     });
@@ -467,6 +549,7 @@ describe('createScenarioRunner recording contract', () => {
       assertBuildMatches: vi.fn(),
       armTripwire: () => ({ marker: 'test-marker', ledgerPath: path.join(tmpDir, 'ledger'), armed: true, read: () => [], readReceipt: () => ({ headlessTasks: 'off', carriesMarker: true }) }),
       ensureDaemonArmed: vi.fn(),
+      ensureMockGitHub: vi.fn(() => null),
       createRecorder: () => recorder,
       createRecordingDriver: () => ({ mainWindowId: async () => 1 }),
       emitRunnerVerdict: (verdict) => verdicts.push(verdict),

@@ -11,6 +11,7 @@ import {
   ensureDaemonCarriesTripwire,
   HEADLESS_TASKS_VAR,
   readDaemonHeadlessSwitch,
+  readDaemonMockGitHubURL,
   readDaemonTripwireReceipt,
   readTripwireLedger,
   TRIPWIRE_BINARIES,
@@ -232,7 +233,7 @@ describe('the receipt that the switch was in force', () => {
       log: () => {},
     });
 
-    expect(tripwire.readReceipt()).toEqual({ headlessTasks: 'off', carriesMarker: true });
+    expect(tripwire.readReceipt()).toEqual({ headlessTasks: 'off', carriesMarker: true, mockGitHub: 'missing' });
   });
 
   it('says the daemon carries another run\'s shims when the marker differs', () => {
@@ -240,7 +241,7 @@ describe('the receipt that the switch was in force', () => {
       marker: 'shims|claude',
       pidPath: pidPath(),
       readEnvironment: () => `${TRIPWIRE_MARKER_VAR}=shims|pi ${HEADLESS_TASKS_VAR}=off`,
-    })).toEqual({ headlessTasks: 'off', carriesMarker: false });
+    })).toEqual({ headlessTasks: 'off', carriesMarker: false, mockGitHub: 'missing' });
   });
 
   it('says on when the daemon never got the switch', () => {
@@ -252,6 +253,34 @@ describe('the receipt that the switch was in force', () => {
 
   it('says so rather than guessing when no daemon is running', () => {
     expect(readDaemonHeadlessSwitch({
+      pidPath: path.join(tmpDir, 'missing.pid'),
+      readEnvironment: () => 'unused',
+    })).toBe('no daemon');
+  });
+
+  it('reads the mock GitHub the daemon actually carries', () => {
+    expect(readDaemonMockGitHubURL({
+      pidPath: pidPath(),
+      readEnvironment: () => `PATH=/usr/bin ATTN_MOCK_GH_URL=http://127.0.0.1:32876 ${HEADLESS_TASKS_VAR}=off`,
+    })).toBe('http://127.0.0.1:32876');
+  });
+
+  it('says missing when the daemon never got the mock GitHub', () => {
+    expect(readDaemonMockGitHubURL({
+      pidPath: pidPath(),
+      readEnvironment: () => 'PATH=/usr/bin ATTN_MOCK_GH_TOKEN=test-token',
+    })).toBe('missing');
+  });
+
+  it('reports the daemon\'s own value when it points at another mock', () => {
+    expect(readDaemonMockGitHubURL({
+      pidPath: pidPath(),
+      readEnvironment: () => 'ATTN_MOCK_GH_URL=http://127.0.0.1:19850 PATH=/usr/bin',
+    })).toBe('http://127.0.0.1:19850');
+  });
+
+  it('says so rather than guessing about the mock when no daemon is running', () => {
+    expect(readDaemonMockGitHubURL({
       pidPath: path.join(tmpDir, 'missing.pid'),
       readEnvironment: () => 'unused',
     })).toBe('no daemon');
@@ -340,6 +369,38 @@ describe('the daemon a scenario inherits', () => {
     expect(result).toEqual({ restarted: true, reason: 'daemon stopped' });
     expect(run).toHaveBeenCalledTimes(1);
     expect(run.mock.calls[0][1]).toEqual(['daemon', 'stop']);
+  });
+
+  it('stops a daemon that carries the marker but points at another GitHub', () => {
+    const run = vi.fn();
+    const result = ensureDaemonCarriesTripwire({
+      ...target,
+      marker: 'shims|claude',
+      mockGitHubURL: 'http://127.0.0.1:32556',
+      pidPath: pidFileFor(process.pid),
+      readEnvironment: () => `PATH=/usr/bin ${TRIPWIRE_MARKER_VAR}=shims|claude`,
+      run,
+      log: () => {},
+    });
+
+    expect(result).toEqual({ restarted: true, reason: 'daemon stopped' });
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a daemon alone once it carries this run mock GitHub', () => {
+    const run = vi.fn();
+    const result = ensureDaemonCarriesTripwire({
+      ...target,
+      marker: 'shims|claude',
+      mockGitHubURL: 'http://127.0.0.1:32556',
+      pidPath: pidFileFor(process.pid),
+      readEnvironment: () => `PATH=/usr/bin ${TRIPWIRE_MARKER_VAR}=shims|claude ATTN_MOCK_GH_URL=http://127.0.0.1:32556`,
+      run,
+      log: () => {},
+    });
+
+    expect(result).toEqual({ restarted: false, reason: 'daemon already armed' });
+    expect(run).not.toHaveBeenCalled();
   });
 
   it('never stops a production daemon', () => {

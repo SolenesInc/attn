@@ -26,6 +26,7 @@ const BUILTIN_RESOURCES = {
     socket: path.join(os.homedir(), '.attn', 'attn.sock'),
     dataDir: path.join(os.homedir(), '.attn'),
     deepLinkScheme: 'attn',
+    mockGitHubPort: 19850,
   },
   dev: {
     profile: 'dev',
@@ -35,6 +36,7 @@ const BUILTIN_RESOURCES = {
     socket: path.join(os.homedir(), '.attn-dev', 'attn.sock'),
     dataDir: path.join(os.homedir(), '.attn-dev'),
     deepLinkScheme: 'attn-dev',
+    mockGitHubPort: 32556,
   },
 };
 
@@ -120,6 +122,7 @@ function resolveViaAuthority(profile) {
     socket: resolved.socket,
     dataDir: resolved.dataDir,
     deepLinkScheme: resolved.deepLinkScheme,
+    mockGitHubPort: Number(resolved.mockGitHubPort),
   };
 }
 
@@ -176,6 +179,10 @@ export function defaultDaemonPortForProfile(profile = currentHarnessProfile()) {
 
 export function dataDirForProfile(profile = currentHarnessProfile()) {
   return resolveHarnessResources(profile).dataDir;
+}
+
+export function mockGitHubPortForProfile(profile = currentHarnessProfile()) {
+  return resolveHarnessResources(profile).mockGitHubPort;
 }
 
 // The daemon refuses a client_hello without this token.

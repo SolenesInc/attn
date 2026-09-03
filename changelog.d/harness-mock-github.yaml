@@ -1,0 +1,3 @@
+kind: internal
+area: harness
+change: The real-app harness serves GitHub from a local mock, so no scenario polls github.com.

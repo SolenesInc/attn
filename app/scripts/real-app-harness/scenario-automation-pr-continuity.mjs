@@ -127,7 +127,7 @@ function createCodexProbe(root) {
 }
 
 async function startMock(sha) {
-  const child = spawn(process.execPath, [path.join(REPO_ROOT, 'scripts/automation-mock-github.mjs')], {
+  const child = spawn(process.execPath, [path.join(REPO_ROOT, 'scripts/mock-github.mjs')], {
     cwd: REPO_ROOT,
     env: { ...process.env, ATTN_AUTOMATION_MOCK_SHA: sha },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -280,6 +280,7 @@ async function main() {
       CODEX_HOME: seedHome,
     });
     await runner.step('restart_isolated_daemon_with_mock', async () => {
+      runner.expectMockGitHub(mock.url);
       try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}
       run(binary, ['daemon', 'ensure'], daemonEnv);
       await poll(() => {
