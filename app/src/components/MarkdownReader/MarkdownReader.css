@@ -669,6 +669,8 @@
   top: 10px;
   right: 10px;
   bottom: 10px;
+  /* WebKit collapses the flex list inside an auto-height dialog. */
+  height: calc(100% - 20px);
   width: min(22rem, calc(100% - 20px));
   max-width: none;
   margin: 0;

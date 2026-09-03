@@ -13,6 +13,41 @@ interface HeaderReceipt {
   overlaps: boolean;
 }
 
+for (const notes of [1, 12]) {
+  test(`review notes stay readable and scroll within the tile with ${notes} notes`, async ({ page }) => {
+    await page.setViewportSize({ width: 1900, height: 700 });
+    await page.goto(`/test-harness/?component=TileHeader&notes=${notes}`);
+    const tile = page.locator('.workspace-dock-tile').first();
+    await tile.getByRole('button', { name: `Notes ${notes}` }).click();
+    const dialog = tile.getByRole('dialog', { name: 'Review notes' });
+    const cards = dialog.locator('.md-annotation-card');
+    await expect(cards).toHaveCount(notes);
+
+    for (const width of [1816, 960]) {
+      await page.getByTestId('three-leaf-workspace').evaluate((element, nextWidth) => {
+        element.style.width = `${nextWidth}px`;
+      }, width);
+      const list = dialog.locator('.md-sidebar-list');
+      await list.evaluate((element) => { element.scrollTop = 0; });
+      const first = await cards.first().boundingBox();
+      const viewport = await list.boundingBox();
+      expect(first!.y).toBeGreaterThanOrEqual(viewport!.y);
+      expect(first!.y + first!.height).toBeLessThanOrEqual(viewport!.y + viewport!.height);
+      await list.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+      const last = await cards.last().boundingBox();
+      expect(last!.y).toBeGreaterThanOrEqual(viewport!.y);
+      expect(last!.y + last!.height).toBeLessThanOrEqual(viewport!.y + viewport!.height);
+      const popup = await dialog.boundingBox();
+      const tileBounds = await tile.boundingBox();
+      expect(popup!.x).toBeGreaterThanOrEqual(tileBounds!.x);
+      expect(popup!.x + popup!.width).toBeLessThanOrEqual(tileBounds!.x + tileBounds!.width);
+      expect(popup!.y + popup!.height).toBeLessThanOrEqual(tileBounds!.y + tileBounds!.height);
+    }
+    await dialog.getByTitle('Close review notes').click();
+    await expect(dialog).not.toBeVisible();
+  });
+}
+
 test('three-leaf markdown headers switch modes before their controls collide', async ({ page }) => {
   await page.setViewportSize({ width: 1900, height: 700 });
   await page.goto('/test-harness/?component=TileHeader');
