@@ -417,6 +417,31 @@ describe('the crew in the sidebar', () => {
     expect(rows.filter((id) => id?.includes('keel'))).toEqual(['queue-crew-keel']);
   });
 
+  it('moves an opted-in awake member into the queue and keeps sleeping members pinned', () => {
+    const crewSession: TestSession = {
+      id: 'sess-keel',
+      label: 'keel of the day',
+      state: 'working',
+      workspaceId: 'ws-a',
+      crewMember: 'keel',
+      turnOwed: true,
+      turnOpenedAt: '2026-07-26T08:00:00Z',
+    };
+    const data = sidebarData([...sessions, crewSession]);
+    render(
+      <Sidebar
+        {...baseProps}
+        {...data}
+        crew={roster}
+        queue={buildQueueBands(data.workspaces, { crewInQueue: true })}
+      />,
+    );
+
+    expect(screen.getByTestId('queue-turn-sess-keel')).toBeInTheDocument();
+    expect(screen.queryByTestId('queue-crew-keel')).toBeNull();
+    expect(screen.getByTestId('queue-crew-alder')).toHaveAttribute('data-crew-state', 'asleep');
+  });
+
   it('wakes a sleeping member on the second click, asks an awake one to sleep, and focuses its day', () => {
     const onWakeCrewMember = vi.fn();
     const onSleepCrewMember = vi.fn();

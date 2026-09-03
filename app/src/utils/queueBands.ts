@@ -4,9 +4,14 @@ import { isSnoozed } from './snoozeDurations';
 /** Daemon-owned setting selecting the sidebar arrangement. Always read through
  * isQueueModeEnabled so no surface disagrees. */
 export const QUEUE_MODE_SETTING = 'queue_mode_enabled';
+export const QUEUE_CREW_SETTING = 'queue_crew_enabled';
 
 export function isQueueModeEnabled(settings: Record<string, string>): boolean {
   return (settings[QUEUE_MODE_SETTING] || 'false') === 'true';
+}
+
+export function isCrewQueueEnabled(settings: Record<string, string>): boolean {
+  return (settings[QUEUE_CREW_SETTING] || 'false') === 'true';
 }
 
 /** Auto-settle closes a turn once the user steered the agent and it went back to
@@ -44,6 +49,21 @@ export interface QueueBandSession extends WorkspaceViewSession {
   /** Set on a shell: the agent session it was split from. */
   parentSessionId?: string;
   crewMember?: string;
+  automation?: { definition_id: string };
+}
+
+export interface QueueBandOptions {
+  crewInQueue?: boolean;
+  now?: number;
+}
+
+/** Automation sessions have their own sidebar groups. Crew days only join the
+ * queue when the user opts them in. */
+export function sessionParticipatesInQueue(
+  session: Pick<QueueBandSession, 'automation' | 'crewMember'>,
+  crewInQueue = false,
+): boolean {
+  return !session.automation && (!session.crewMember || crewInQueue);
 }
 
 export interface QueueRow<TSession extends QueueBandSession> {
@@ -109,12 +129,14 @@ export interface QueueBands<TSession extends QueueBandSession> {
   snoozed: QueueRow<TSession>[];
 }
 
-/** Derive the sidebar's standing order. Every agent lands in exactly one band;
- * pinned or muted workspaces land in none. `turnOwed` is the daemon's answer. */
+/** Derive the sidebar's standing order. Every queue participant lands in one
+ * band; automation sessions and pinned or muted workspaces land in none. */
 export function buildQueueBands<TSession extends QueueBandSession>(
   workspaces: WorkspaceWithSessions<TSession>[],
-  now: number = Date.now(),
+  optionsOrNow: QueueBandOptions | number = {},
 ): QueueBands<TSession> {
+  const options = typeof optionsOrNow === 'number' ? { now: optionsOrNow } : optionsOrNow;
+  const now = options.now ?? Date.now();
   let chief: QueueRow<TSession> | null = null;
   const turns: QueueRow<TSession>[] = [];
   const settled: QueueRow<TSession>[] = [];
@@ -136,10 +158,15 @@ export function buildQueueBands<TSession extends QueueBandSession>(
         }
         continue;
       }
+      if (session.automation) {
+        continue;
+      }
       // Before the workspace's own pin or mute: a member's row is permanent and does not depend on where its day happens to be living.
       if (session.crewMember) {
         crew.push(row);
-        continue;
+        if (!options.crewInQueue) {
+          continue;
+        }
       }
       if (workspace.pinned || workspace.muted) {
         continue;

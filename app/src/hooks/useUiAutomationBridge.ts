@@ -2376,6 +2376,7 @@ export function useUiAutomationBridge({
         const chiefRow = band?.querySelector('[data-testid^="queue-chief-"]');
         const snoozedSection = document.querySelector('[data-testid="sidebar-snoozed"]');
         const snoozedHeader = snoozedSection?.querySelector('[data-testid="snoozed-section-header"]');
+        const automationGroups = Array.from(document.querySelectorAll('[data-automation-id]'));
         return {
           present: Boolean(band),
           empty: Boolean(band?.querySelector('[data-testid="queue-empty"]')),
@@ -2386,6 +2387,11 @@ export function useUiAutomationBridge({
             .map((row) => readRow(row, 'queue-settled-')),
           pinned: Array.from(band?.querySelectorAll('[data-testid^="queue-pinned-"]') || [])
             .map((row) => readRow(row, 'queue-pinned-')),
+          crew: Array.from(band?.querySelectorAll('.queue-row--crew[data-crew-member]') || [])
+            .map((row) => ({
+              member: row.getAttribute('data-crew-member') || '',
+              state: row.getAttribute('data-crew-state') || '',
+            })),
           snoozed: {
             present: Boolean(snoozedSection),
             header: snoozedHeader?.textContent?.trim() || '',
@@ -2393,6 +2399,13 @@ export function useUiAutomationBridge({
             rows: Array.from(snoozedSection?.querySelectorAll('[data-testid^="queue-snoozed-"]') || [])
               .map((row) => readRow(row, 'queue-snoozed-')),
           },
+          automations: automationGroups.map((group) => ({
+            id: group.getAttribute('data-automation-id') || '',
+            header: group.querySelector('.automation-session-header')?.textContent?.trim() || '',
+            expanded: group.querySelector('.automation-session-header')?.getAttribute('aria-expanded') === 'true',
+            sessionIds: Array.from(group.querySelectorAll('[data-testid^="sidebar-session-"]'))
+              .map((row) => (row.getAttribute('data-testid') || '').slice('sidebar-session-'.length)),
+          })),
           treeSessionIds: Array.from(document.querySelectorAll('.session-list [data-testid^="sidebar-session-"]'))
             .map((row) => (row.getAttribute('data-testid') || '').slice('sidebar-session-'.length)),
           treeWorkspaceIds: Array.from(document.querySelectorAll('.session-list [data-testid^="sidebar-workspace-"]'))

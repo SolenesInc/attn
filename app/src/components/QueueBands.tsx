@@ -228,7 +228,11 @@ export function QueueBands({
   const offScreen = (id: string) => !onScreenSessionIds?.has(id);
   const snoozeHandler = (session: QueueBandSessionView) =>
     onOpenSnooze && ((event: ReactMouseEvent) => onOpenSnooze(session, event));
-  const crewRows = buildCrewRows(crew, bands.crew);
+  const crewInOtherBands = new Set(
+    [...bands.turns, ...bands.settled, ...bands.pinned, ...bands.snoozed]
+      .flatMap((row) => row.session.crewMember ? [row.session.crewMember] : []),
+  );
+  const crewRows = buildCrewRows(crew, bands.crew, crewInOtherBands);
 
   return (
     <div className="queue-bands" data-testid="sidebar-queue">
@@ -328,6 +332,7 @@ export function QueueBands({
 function buildCrewRows(
   crew: CrewMemberView[] | undefined,
   awake: QueueRow<QueueBandSessionView>[],
+  membersInOtherBands: ReadonlySet<string>,
 ): { member: string; row?: QueueRow<QueueBandSessionView> }[] {
   const byMember = new Map<string, QueueRow<QueueBandSessionView>>();
   for (const row of awake) {
@@ -336,6 +341,7 @@ function buildCrewRows(
   }
   const members = new Set<string>([...(crew ?? []).map((entry) => entry.id), ...byMember.keys()]);
   return [...members]
+    .filter((member) => !membersInOtherBands.has(member))
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
     .map((member) => ({ member, row: byMember.get(member) }));
 }

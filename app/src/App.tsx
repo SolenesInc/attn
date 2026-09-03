@@ -122,9 +122,12 @@ import {
   advanceAfterTurnClosed,
   buildQueueBands,
   headOfQueue,
+  isCrewQueueEnabled,
   isQueueModeEnabled,
   oldestWantedTurn,
+  QUEUE_CREW_SETTING,
   QUEUE_MODE_SETTING,
+  sessionParticipatesInQueue,
   isAutoSettleEnabled,
   AUTO_SETTLE_ENABLED_SETTING,
 } from './utils/queueBands';
@@ -1664,6 +1667,9 @@ function AppContent({
   const handleToggleQueueMode = useCallback(() => {
     sendSetSetting(QUEUE_MODE_SETTING, isQueueModeEnabled(settings) ? 'false' : 'true');
   }, [sendSetSetting, settings]);
+  const handleToggleCrewQueue = useCallback(() => {
+    sendSetSetting(QUEUE_CREW_SETTING, isCrewQueueEnabled(settings) ? 'false' : 'true');
+  }, [sendSetSetting, settings]);
   const markdownOpenerTarget = useMemo(
     () => resolveMarkdownOpenerTarget(
       sessions.find((session) => session.id === activeSessionId),
@@ -2462,21 +2468,31 @@ function AppContent({
   );
 
   const queueModeEnabled = isQueueModeEnabled(settings);
+  const crewQueueEnabled = isCrewQueueEnabled(settings);
   const queueBands = useMemo(
-    () => (queueModeEnabled ? buildQueueBands(unmutedWorkspaceViews) : null),
-    [queueModeEnabled, unmutedWorkspaceViews],
+    () => (queueModeEnabled
+      ? buildQueueBands(unmutedWorkspaceViews, { crewInQueue: crewQueueEnabled })
+      : null),
+    [queueModeEnabled, crewQueueEnabled, unmutedWorkspaceViews],
   );
 
   const activeWorkspaceForCommands = useMemo(
     () => workspaceViews.find((workspace) => workspace.sessions.some((session) => session.id === activeSessionId)) ?? null,
     [workspaceViews, activeSessionId],
   );
+  const activeSessionForCommands = useMemo(
+    () => activeWorkspaceForCommands?.sessions.find((session) => session.id === activeSessionId) ?? null,
+    [activeWorkspaceForCommands, activeSessionId],
+  );
+  const activeSessionQueueEligible = Boolean(
+    activeSessionForCommands && sessionParticipatesInQueue(activeSessionForCommands, crewQueueEnabled),
+  );
 
   const actionMenuItemsWithWorkspaceActions = useMemo<ActionMenuItem[]>(() => {
     const workspace = activeWorkspaceForCommands;
     if (!workspace) return [...actionMenuItems, ...appViewMenuItems];
-    const activeSession = workspace.sessions.find((session) => session.id === activeSessionId);
-    const sessionPinItems: ActionMenuItem[] = activeSession && !activeSession.chiefOfStaff
+    const activeSession = activeSessionForCommands;
+    const sessionPinItems: ActionMenuItem[] = activeSession && activeSessionQueueEligible && !activeSession.chiefOfStaff
       ? [{
         id: 'pin-active-session',
         title: activeSession.pinnedAt ? `Unpin ${activeSession.label}` : `Pin ${activeSession.label}`,
@@ -2544,14 +2560,21 @@ function AppContent({
         run: () => sendMuteWorkspace(workspace.id, workspace.endpointId),
       },
     ];
-  }, [actionMenuItems, appViewMenuItems, activeWorkspaceForCommands, activeSessionId, seeds, sendPinWorkspace, sendPinSession, sendMuteWorkspace]);
+  }, [actionMenuItems, appViewMenuItems, activeWorkspaceForCommands, activeSessionForCommands, activeSessionQueueEligible, seeds, sendPinWorkspace, sendPinSession, sendMuteWorkspace]);
 
 
   const wantsAttention = useCallback(
-    (session: { state: UISessionState; turnOwed?: boolean }) => (
-      queueModeEnabled ? Boolean(session.turnOwed) : isAttentionSessionState(session.state)
+    (session: {
+      state: UISessionState;
+      turnOwed?: boolean;
+      crewMember?: string;
+      automation?: { definition_id: string };
+    }) => (
+      queueModeEnabled
+        ? sessionParticipatesInQueue(session, crewQueueEnabled) && Boolean(session.turnOwed)
+        : isAttentionSessionState(session.state)
     ),
-    [queueModeEnabled],
+    [queueModeEnabled, crewQueueEnabled],
   );
 
   const gridSessionTiles = useMemo<GridSessionTile[]>(() => {
@@ -2623,13 +2646,13 @@ function AppContent({
   const attentionCount = waitingLocalSessions.length + prsNeedingAttention.length;
 
   const handleSettleActiveTurn = useMemo(
-    () => (queueModeEnabled
+    () => (queueModeEnabled && activeSessionQueueEligible
       ? () => {
         if (!activeSessionId) return;
         sendSettleTurn(activeSessionId);
       }
       : undefined),
-    [queueModeEnabled, activeSessionId, sendSettleTurn],
+    [queueModeEnabled, activeSessionQueueEligible, activeSessionId, sendSettleTurn],
   );
 
   const [snoozeMenu, setSnoozeMenu] = useState<
@@ -2645,7 +2668,7 @@ function AppContent({
   );
 
   const handleSnoozeActiveSession = useMemo(
-    () => (queueModeEnabled
+    () => (queueModeEnabled && activeSessionQueueEligible
       ? () => {
         if (!activeSessionId) return;
         const session = enrichedLocalSessions.find((s) => s.id === activeSessionId);
@@ -2658,14 +2681,16 @@ function AppContent({
         });
       }
       : undefined),
-    [queueModeEnabled, activeSessionId, enrichedLocalSessions],
+    [queueModeEnabled, activeSessionQueueEligible, activeSessionId, enrichedLocalSessions],
   );
 
-  const activeSessionSnoozedUntil = enrichedLocalSessions.find(
-    (session) => session.id === activeSessionId,
-  )?.turnSnoozedUntil;
+  const activeSessionSnoozedUntil = activeSessionQueueEligible
+    ? activeSessionForCommands?.turnSnoozedUntil
+    : undefined;
   const actionMenuItemsWithQueueActions = useMemo<ActionMenuItem[]>(() => {
-    if (!queueModeEnabled || !activeSessionId) return actionMenuItemsWithWorkspaceActions;
+    if (!queueModeEnabled || !activeSessionId || !activeSessionQueueEligible) {
+      return actionMenuItemsWithWorkspaceActions;
+    }
     const items = [...actionMenuItemsWithWorkspaceActions];
     if (activeSessionSnoozedUntil) {
       items.push({
@@ -2692,6 +2717,7 @@ function AppContent({
     actionMenuItemsWithWorkspaceActions,
     queueModeEnabled,
     activeSessionId,
+    activeSessionQueueEligible,
     activeSessionSnoozedUntil,
     handleSnoozeActiveSession,
     sendWakeTurn,
@@ -3516,6 +3542,8 @@ function AppContent({
           onSleepCrewMember={handleSleepCrewMember}
           queueModeEnabled={queueModeEnabled}
           onToggleQueueMode={handleToggleQueueMode}
+          crewQueueEnabled={crewQueueEnabled}
+          onToggleCrewQueue={handleToggleCrewQueue}
           workspaceSelectionStyle={workspaceSelectionStyle}
           onWorkspaceSelectionStyleChange={handleWorkspaceSelectionStyleChange}
           leafDrag={leafWorkspaceDrag ? {
@@ -3562,6 +3590,7 @@ function AppContent({
           endpoints={daemonEndpoints}
           onRebootstrapEndpoint={handleRebootstrapEndpoint}
           queueModeEnabled={queueModeEnabled}
+          crewQueueEnabled={crewQueueEnabled}
           activityStaleMs={activityStaleMs(settings)}
           followNextTurn={followNextTurn}
           onToggleFollowNextTurn={() => setFollowNextTurn((armed) => !armed)}

@@ -8,7 +8,7 @@ import { useDaemonContext } from '../contexts/DaemonContext';
 import { getRepoName } from '../utils/repo';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type { UISessionState } from '../types/sessionState';
-import { compareTurnOrder, compareWakeOrder, formatTurnAge } from '../utils/queueBands';
+import { compareTurnOrder, compareWakeOrder, formatTurnAge, sessionParticipatesInQueue } from '../utils/queueBands';
 import { formatWakeTime, isSnoozed } from '../utils/snoozeDurations';
 import { useNow, TURN_AGE_TICK_MS } from '../hooks/useNow';
 import appIcon from '../assets/icon.png';
@@ -30,6 +30,7 @@ type DashboardSession = {
   turnOwed?: boolean;
   turnOpenedAt?: string;
   turnSnoozedUntil?: string;
+  crewMember?: string;
   activity?: string;
   activityAt?: string;
   automation?: AutomationProvenanceValue;
@@ -74,6 +75,7 @@ interface DashboardProps {
   onOpenSettings: () => void;
   onMutedGroupClick?: () => void;
   queueModeEnabled?: boolean;
+  crewQueueEnabled?: boolean;
   followNextTurn?: boolean;
   onToggleFollowNextTurn?: () => void;
   activityStaleMs?: number;
@@ -97,6 +99,7 @@ export function Dashboard({
   onOpenSettings,
   onMutedGroupClick,
   queueModeEnabled = false,
+  crewQueueEnabled = false,
   followNextTurn = false,
   onToggleFollowNextTurn,
   activityStaleMs = DEFAULT_ACTIVITY_STALE_MS,
@@ -117,9 +120,15 @@ export function Dashboard({
 
   const chiefSession = sessions.find((session) => session.chiefOfStaff);
 
+  const queueParticipants = useMemo(() => (
+    sessions.filter((session) => sessionParticipatesInQueue(session, crewQueueEnabled))
+  ), [sessions, crewQueueEnabled]);
+
   const snoozedSessions = useMemo(() => (
-    sessions.filter((s) => isSnoozed(s.turnSnoozedUntil, now)).sort(compareWakeOrder)
-  ), [sessions, now]);
+    (queueModeEnabled ? queueParticipants : sessions)
+      .filter((s) => isSnoozed(s.turnSnoozedUntil, now))
+      .sort(compareWakeOrder)
+  ), [queueModeEnabled, queueParticipants, sessions, now]);
 
   const awakeSessions = useMemo(() => {
     const deferred = new Set(snoozedSessions.map((s) => s.id));
@@ -128,9 +137,11 @@ export function Dashboard({
 
   const turnSessions = useMemo(() => (
     queueModeEnabled
-      ? awakeSessions.filter((s) => s.turnOwed && !s.chiefOfStaff).sort(compareTurnOrder)
+      ? awakeSessions
+        .filter((s) => sessionParticipatesInQueue(s, crewQueueEnabled) && s.turnOwed && !s.chiefOfStaff)
+        .sort(compareTurnOrder)
       : []
-  ), [queueModeEnabled, awakeSessions]);
+  ), [queueModeEnabled, crewQueueEnabled, awakeSessions]);
 
   const settledSessions = useMemo(() => (
     queueModeEnabled
@@ -144,7 +155,7 @@ export function Dashboard({
       .filter((group) => group.rows.length > 0)
   ), [settledSessions]);
 
-  const allSettled = queueModeEnabled && turnSessions.length === 0 && sessions.length > 0;
+  const allSettled = queueModeEnabled && turnSessions.length === 0 && queueParticipants.length > 0;
 
   const stillRunning = useMemo(() => {
     const counts = [
