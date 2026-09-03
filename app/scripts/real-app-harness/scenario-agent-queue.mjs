@@ -15,6 +15,7 @@ import {
   pressShortcutKeys,
   printCommonHelp,
   relaunchAppAndConnect,
+  submitPrompt,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
@@ -90,14 +91,6 @@ async function typePromptAsUser(client, sessionId, paneId, text) {
   await client.request('type_pane_via_ui', { sessionId, paneId, text });
   await delay(600);
   await client.request('type_pane_via_ui', { sessionId, paneId, text: '\r' });
-}
-
-// A fast write lands as a paste, so the submit has to be a lone carriage
-// return a beat later.
-async function submitPrompt(client, sessionId, paneId, text) {
-  await client.request('write_pane', { sessionId, paneId, text, submit: false });
-  await delay(600);
-  await client.request('write_pane', { sessionId, paneId, text: '\r', submit: false });
 }
 
 async function createAgent(client, observer, runner, dirName, label) {

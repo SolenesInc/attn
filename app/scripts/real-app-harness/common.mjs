@@ -321,6 +321,10 @@ export async function createSessionAndWaitForInitialPane({
   return result.sessionId;
 }
 
+export async function submitPrompt(client, sessionId, paneId, text) {
+  await client.request('write_pane', { sessionId, paneId, text, submit: true });
+}
+
 // `attn ticket new` is retired; the daemon commands behind it are not, and this
 // is the only way left to a legacy ticket.
 export async function legacyTicketRequest(socketPath, message, timeoutMs = 10_000) {

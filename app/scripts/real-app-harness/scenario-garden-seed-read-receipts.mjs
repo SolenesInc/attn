@@ -7,6 +7,7 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
+  submitPrompt,
 } from './common.mjs';
 import {
   waitForFirstWorkspacePane,
@@ -158,9 +159,7 @@ async function main() {
       });
       const first = await waitForFirstWorkspacePane(client, sessionId, 'watcher pane', 20_000);
       const pane = { sessionId, paneId: first.paneId };
-      await client.request('write_pane', { ...pane, text: `Watch seed ${seed}`, submit: false });
-      await delay(250);
-      await client.request('write_pane', { ...pane, text: '\r', submit: false });
+      await submitPrompt(client, pane.sessionId, pane.paneId, `Watch seed ${seed}`);
       await waitForAgentReads(client, pane, 0, 'SEED_WATCH_READY');
       return pane;
     });

@@ -9,6 +9,7 @@ import {
   legacyTicketRequest,
   parseCommonArgs,
   printCommonHelp,
+  submitPrompt,
 } from './common.mjs';
 import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
 import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
@@ -43,10 +44,6 @@ async function pollFor(fn, description, timeoutMs = 30_000, intervalMs = 250) {
 const IDLE_STATES = new Set(['idle', 'waiting_input']);
 
 const squashWs = (text) => text.replace(/\s+/g, '');
-
-async function submitPrompt(client, sessionId, paneId, text) {
-  await client.request('write_pane', { sessionId, paneId, text, submit: true });
-}
 
 async function readPaneText(client, sessionId) {
   const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${sessionId}`, 20_000);
