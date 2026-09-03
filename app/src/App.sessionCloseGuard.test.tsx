@@ -17,6 +17,7 @@ const { mockShowError, mockSendWorkspaceClosePane, mockSendUnregisterSession } =
 }));
 
 let chiefOfStaff: boolean;
+let crewMember: string | undefined;
 
 vi.mock('@tauri-apps/plugin-deep-link', () => ({
   onOpenUrl: vi.fn(async () => () => {}),
@@ -105,12 +106,13 @@ function triggerCmdW() {
   });
 }
 
-describe('chief-of-staff session is protected from close', () => {
+describe('chief and crew sessions are protected from close', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
     chiefOfStaff = false;
+    crewMember = undefined;
 
     mockUseSessionStore.mockReturnValue({
       sessions: [{
@@ -148,6 +150,7 @@ describe('chief-of-staff session is protected from close', () => {
         directory: '/tmp/repo',
         state: 'working',
         chief_of_staff: chiefOfStaff,
+        crew_member: crewMember,
       }],
       setDaemonSessions: vi.fn(),
       prs: [], setPRs: vi.fn(),
@@ -213,6 +216,28 @@ describe('chief-of-staff session is protected from close', () => {
     expect(mockSendWorkspaceClosePane).not.toHaveBeenCalled();
     expect(mockSendUnregisterSession).not.toHaveBeenCalled();
     expect(mockShowError).toHaveBeenCalledWith(expect.stringContaining('Chief of staff is protected'));
+  });
+
+  it('no-ops the close button on a crew member and points to Sleep', async () => {
+    crewMember = 'coda';
+    render(<App />);
+
+    await userEvent.click(screen.getByTestId('close-session'));
+
+    expect(mockSendWorkspaceClosePane).not.toHaveBeenCalled();
+    expect(mockSendUnregisterSession).not.toHaveBeenCalled();
+    expect(mockShowError).toHaveBeenCalledWith('Coda is protected — put Coda to sleep to close the day.');
+  });
+
+  it('no-ops the ⌘W shortcut on a crew member and points to Sleep', async () => {
+    crewMember = 'coda';
+    render(<App />);
+
+    triggerCmdW();
+
+    expect(mockSendWorkspaceClosePane).not.toHaveBeenCalled();
+    expect(mockSendUnregisterSession).not.toHaveBeenCalled();
+    expect(mockShowError).toHaveBeenCalledWith('Coda is protected — put Coda to sleep to close the day.');
   });
 
   it('closes an ordinary session normally and shows no hint', async () => {

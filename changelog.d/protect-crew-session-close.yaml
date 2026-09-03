@@ -1,0 +1,3 @@
+kind: fixed
+area: crew
+change: Crew members stay awake when their session is closed directly or through its pane; Sleep and Nap remain the ways to end their day.
