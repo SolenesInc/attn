@@ -1,0 +1,6 @@
+kind: internal
+area: harness
+change: >
+  The nudge-trigger real-app scenario submits its prompts through write_pane's
+  own submit, dropping two unmeasured 1.2s gaps that guarded a paste rule the
+  mock agent does not have.
