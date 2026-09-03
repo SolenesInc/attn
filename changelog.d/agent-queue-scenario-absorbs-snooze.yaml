@@ -1,0 +1,6 @@
+kind: internal
+area: harness
+change: >
+  The agent-queue real-app scenario absorbed agent-queue-snooze and every
+  timing constant in it now carries its measurement, taking the pair from 150s
+  to under 100s.

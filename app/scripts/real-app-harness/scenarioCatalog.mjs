@@ -170,16 +170,9 @@ export const scenarioCatalog = [
   {
     id: 'agent-queue',
     runnerId: 'AGENT-QUEUE',
-    label: 'Agent queue: a turn opens on a state and closes only when the user settles it',
+    label: 'Agent queue: a turn opens on a state, and closes only when the user settles or snoozes it',
     command: ['pnpm', 'run', 'real-app:scenario-agent-queue'],
     timeoutMs: 400_000,
-  },
-  {
-    id: 'agent-queue-snooze',
-    runnerId: 'AGENT-QUEUE-SNOOZE',
-    label: 'Agent queue snooze: a deferral closes the turn, suppresses the next one, and wakes to the tail',
-    command: ['pnpm', 'run', 'real-app:scenario-agent-queue-snooze'],
-    timeoutMs: 300_000,
   },
   {
     id: 'automation-lifecycle',
