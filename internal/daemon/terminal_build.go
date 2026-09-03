@@ -23,6 +23,10 @@ func inplaceUpgradeEnabled() bool {
 }
 
 func (d *Daemon) handleTerminalBuildChanged(sessionID, workerFormat string) {
+	if d.sessionCanReplayTerminalBuild(sessionID) {
+		d.publishFact(FactSessionTerminalBuildChanged, sessionID, nil)
+		return
+	}
 	upgrader, canUpgrade := d.ptyBackend.(ptybackend.WorkerUpgrader)
 	if !canUpgrade || !inplaceUpgradeEnabled() || workerFormat == buildinfo.SnapshotFormat {
 		d.publishFact(FactSessionTerminalBuildChanged, sessionID, nil)
@@ -84,7 +88,12 @@ func (d *Daemon) decorateSessionWithTerminalBuild(clone *protocol.Session) {
 	format, known := provider.SessionTerminalBuild(clone.ID)
 	// An unknown answer is not a verdict; an empty format is one — a worker built
 	// before the field existed is exactly what the next bump strands.
-	if known && format != buildinfo.SnapshotFormat {
+	if known && format != buildinfo.SnapshotFormat && !d.sessionCanReplayTerminalBuild(clone.ID) {
 		clone.TerminalBuildStale = protocol.Ptr(true)
 	}
+}
+
+func (d *Daemon) sessionCanReplayTerminalBuild(sessionID string) bool {
+	provider, ok := d.ptyBackend.(ptybackend.TerminalBuildCompatibilityProvider)
+	return ok && provider.SessionCanReplayWithFormat(sessionID, buildinfo.SnapshotFormat)
 }

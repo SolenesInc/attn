@@ -101,7 +101,8 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 
 ## Ownership
 
-- Production PTYs run in `internal/ptyworker`, using `internal/pty`.
+- New production PTYs run in the shared Rust `pty-host`; `internal/ptyworker`
+  and `internal/pty` retain live legacy sessions during migration.
 - `internal/store` owns SQLite/cache; `internal/attention` owns turn predicates.
   Derive `turn_owed` from persisted opened/settled timestamps.
 - `internal/jobs` owns background duties and periodic ticks;
@@ -148,7 +149,8 @@ Views import React through `@victorarias/attn-app` to share attn's instance.
 ## Diagnostics
 
 - Daemon: `<data-dir>/daemon.log`.
-- PTY: `<data-dir>/workers/<daemon-instance>/log/<session>.log`.
+- Dedicated PTY worker: `<data-dir>/workers/<daemon-instance>/log/<session>.log`.
+- Shared PTY host: `<data-dir>/pty-hosts/<daemon-instance>/log/host.log`.
 - Daemon code uses `d.logf(...)` or injected `LogFunc`; background stderr is lost.
 - To debug an isolated daemon, quit its app, then `DEBUG=debug attn daemon ensure`.
 

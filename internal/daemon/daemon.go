@@ -848,7 +848,7 @@ func (d *Daemon) Start() error {
 	}
 	selectedBackend := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_PTY_BACKEND")))
 	if selectedBackend == "" {
-		selectedBackend = "worker"
+		selectedBackend = "migrating"
 	}
 	switch selectedBackend {
 	case "embedded":
@@ -885,6 +885,76 @@ func (d *Daemon) Start() error {
 				d.ptyBackend = workerBackend
 				d.logf("using PTY backend: worker (startup probe disabled)")
 			}
+		}
+	case "shared":
+		sharedBackend, err := ptybackend.NewSharedHost(ptybackend.WorkerBackendConfig{
+			DataRoot:         d.dataRoot,
+			DaemonInstanceID: d.daemonInstanceID,
+			BinaryPath:       strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")),
+			Logf:             d.logf,
+			OnTerminalBuild:  d.handleTerminalBuildChanged,
+		})
+		if err != nil {
+			d.logf("failed to initialize shared PTY host: %v; falling back to embedded", err)
+			d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Failed to initialize shared PTY host (%v). Falling back to embedded.", err))
+		} else {
+			d.ptyBackend = sharedBackend
+			d.logf("using PTY backend: shared")
+		}
+	case "migrating":
+		legacyBackend, legacyErr := ptybackend.NewWorker(ptybackend.WorkerBackendConfig{
+			DataRoot:         d.dataRoot,
+			DaemonInstanceID: d.daemonInstanceID,
+			BinaryPath:       strings.TrimSpace(os.Getenv("ATTN_PTY_WORKER_BINARY")),
+			Logf:             d.logf,
+			OnTerminalBuild:  d.handleTerminalBuildChanged,
+		})
+		if legacyErr != nil {
+			d.logf("failed to initialize legacy PTY workers: %v; falling back to embedded", legacyErr)
+			d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Failed to initialize legacy PTY workers (%v). Falling back to embedded.", legacyErr))
+			break
+		}
+		sharedBackend, sharedErr := ptybackend.NewSharedHost(ptybackend.WorkerBackendConfig{
+			DataRoot:         d.dataRoot,
+			DaemonInstanceID: d.daemonInstanceID,
+			BinaryPath:       strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")),
+			Logf:             d.logf,
+			OnTerminalBuild:  d.handleTerminalBuildChanged,
+		})
+		if sharedErr != nil {
+			d.ptyBackend = legacyBackend
+			d.logf("shared PTY host initialization failed: %v; new sessions remain on legacy workers", sharedErr)
+			d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Shared PTY host is unavailable (%v). New terminals will keep using dedicated workers.", sharedErr))
+			break
+		}
+
+		useSharedForNew := false
+		if shouldRunWorkerStartupProbe() {
+			probeCtx, cancelProbe := context.WithTimeout(context.Background(), workerStartupProbeTimeout)
+			probeErr := sharedBackend.Probe(probeCtx)
+			cancelProbe()
+			if probeErr != nil {
+				d.logf("shared PTY host startup probe failed: %v; new sessions remain on legacy workers", probeErr)
+				d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Shared PTY host probe failed (%v). New terminals will keep using dedicated workers.", probeErr))
+			} else {
+				useSharedForNew = true
+			}
+		} else if strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")) != "" {
+			// Tests and controlled profiles can skip the process probe only when
+			// they name the host binary explicitly.
+			useSharedForNew = true
+		}
+		migratingBackend, err := ptybackend.NewMigrating(legacyBackend, sharedBackend, useSharedForNew)
+		if err != nil {
+			d.logf("failed to initialize PTY migration router: %v; using legacy workers", err)
+			d.ptyBackend = legacyBackend
+			break
+		}
+		d.ptyBackend = migratingBackend
+		if useSharedForNew {
+			d.logf("using PTY backend: migrating (existing=owner, new=shared)")
+		} else {
+			d.logf("using PTY backend: migrating (existing=owner, new=legacy)")
 		}
 	default:
 		d.logf("unsupported PTY backend %q, falling back to embedded", selectedBackend)
@@ -2085,14 +2155,14 @@ func (d *Daemon) maybeStartDiagServer() {
 }
 
 func (d *Daemon) diagStats() diag.Stats {
-	stats := diag.Stats{PtyBackend: "embedded"}
+	stats := diag.Stats{PtyBackend: d.ptyBackendMode()}
 	if d.ptyBackend == nil {
+		stats.PtyBackend = "embedded"
 		return stats
 	}
 	ctx := context.Background()
 	stats.Sessions = len(d.ptyBackend.SessionIDs(ctx))
 	if wp, ok := d.ptyBackend.(ptybackend.WorkerProcessProvider); ok {
-		stats.PtyBackend = "worker"
 		stats.WorkerPIDs = wp.WorkerPIDs(ctx)
 	}
 	return stats

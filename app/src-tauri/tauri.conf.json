@@ -35,7 +35,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "externalBin": ["binaries/attn"],
+    "externalBin": ["binaries/attn", "binaries/attn-pty-host"],
     "resources": {
       "bundled-plugins/": "plugins/",
       "app-runtime/": "app-runtime/"

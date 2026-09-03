@@ -70,6 +70,31 @@ func TestTerminalBuild_UnansweredWorkerIsNotStale(t *testing.T) {
 	}
 }
 
+type portableReplayBackend struct {
+	*fakeSpawnBackend
+}
+
+func (*portableReplayBackend) SessionCanReplayWithFormat(string, string) bool { return true }
+
+func TestTerminalBuild_PortableReplayNeedsNoInPlaceUpgrade(t *testing.T) {
+	backend := &fakeSpawnBackend{
+		terminalBuild:      "older-format",
+		terminalBuildKnown: true,
+	}
+	d, id := newTerminalBuildDaemon(t, backend)
+	d.ptyBackend = &portableReplayBackend{fakeSpawnBackend: backend}
+
+	d.handleTerminalBuildChanged(id, "older-format")
+	if got := backend.upgradedSessions(); len(got) != 0 {
+		t.Fatalf("portable session was upgraded in place: %v", got)
+	}
+
+	clone := d.sessionForBroadcast(d.store.Get(id))
+	if clone.TerminalBuildStale != nil {
+		t.Fatalf("terminal_build_stale = %v for portable replay", *clone.TerminalBuildStale)
+	}
+}
+
 func TestTerminalBuild_MismatchSwapsTheWorkerInPlace(t *testing.T) {
 	backend := &fakeSpawnBackend{
 		terminalBuild:      "0123456789ab",

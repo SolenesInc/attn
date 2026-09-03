@@ -23,9 +23,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/pty"
+	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
@@ -87,6 +89,13 @@ type WorkerBackendConfig struct {
 	OnTerminalBuild func(sessionID, snapshotFormat string)
 }
 
+type workerRuntimeKind uint8
+
+const (
+	workerRuntimeDedicated workerRuntimeKind = iota
+	workerRuntimeSharedHost
+)
+
 type workerSession struct {
 	SessionID    string
 	SocketPath   string
@@ -103,6 +112,7 @@ type workerSession struct {
 	lastState       string
 	lastStateSentAt time.Time
 	exitNotified    bool
+	evictionStarted bool
 	unreachable     bool
 	unreachableAt   time.Time
 	pollFailures    int
@@ -118,7 +128,8 @@ type workerSession struct {
 }
 
 type WorkerBackend struct {
-	cfg WorkerBackendConfig
+	cfg  WorkerBackendConfig
+	kind workerRuntimeKind
 
 	ownerPID       int
 	ownerStartedAt string
@@ -136,6 +147,15 @@ type WorkerBackend struct {
 	onState func(sessionID string, obs pty.Observation)
 
 	reqSeq atomic.Uint64
+
+	hostMu sync.Mutex
+
+	sharedControlMu sync.Mutex
+	sharedControls  map[string]*sharedHostControl
+
+	sharedMonitorMu sync.Mutex
+	sharedMonitors  map[string]*sharedHostMonitor
+	sharedStopping  bool
 }
 
 func (s *workerSession) notePollFailure(now time.Time) (logUnreachable bool, evict bool) {
@@ -176,6 +196,16 @@ func shouldForwardStateLocked(session *workerSession, state string, now time.Tim
 }
 
 func NewWorker(cfg WorkerBackendConfig) (*WorkerBackend, error) {
+	return newWorkerBackend(cfg, workerRuntimeDedicated)
+}
+
+// NewSharedHost speaks the worker protocol to one Rust process that owns every
+// session. Its registry namespace never overlaps dedicated Go workers.
+func NewSharedHost(cfg WorkerBackendConfig) (*WorkerBackend, error) {
+	return newWorkerBackend(cfg, workerRuntimeSharedHost)
+}
+
+func newWorkerBackend(cfg WorkerBackendConfig, kind workerRuntimeKind) (*WorkerBackend, error) {
 	if strings.TrimSpace(cfg.DataRoot) == "" {
 		return nil, fmt.Errorf("missing data root")
 	}
@@ -183,7 +213,12 @@ func NewWorker(cfg WorkerBackendConfig) (*WorkerBackend, error) {
 		return nil, fmt.Errorf("missing daemon instance id")
 	}
 	binaryPathExplicit := strings.TrimSpace(cfg.BinaryPath) != ""
-	if !binaryPathExplicit {
+	if !binaryPathExplicit && kind == workerRuntimeSharedHost {
+		cfg.BinaryPath = firstExecutable(sharedHostBinaryCandidates())
+		if cfg.BinaryPath == "" {
+			cfg.BinaryPath = "attn-pty-host"
+		}
+	} else if !binaryPathExplicit {
 		if wrapperPath := strings.TrimSpace(os.Getenv("ATTN_WRAPPER_PATH")); wrapperPath != "" {
 			cfg.BinaryPath = wrapperPath
 		} else {
@@ -215,12 +250,15 @@ func NewWorker(cfg WorkerBackendConfig) (*WorkerBackend, error) {
 
 	b := &WorkerBackend{
 		cfg:                cfg,
+		kind:               kind,
 		ownerPID:           cfg.OwnerPID,
 		ownerStartedAt:     cfg.OwnerStartedAt,
 		ownerNonce:         cfg.OwnerNonce,
 		binaryPath:         cfg.BinaryPath,
 		binaryPathExplicit: binaryPathExplicit,
 		sessions:           make(map[string]*workerSession),
+		sharedControls:     make(map[string]*sharedHostControl),
+		sharedMonitors:     make(map[string]*sharedHostMonitor),
 	}
 	if err := os.MkdirAll(b.registryDir(), 0700); err != nil {
 		return nil, fmt.Errorf("create worker registry dir: %w", err)
@@ -254,6 +292,20 @@ func (b *WorkerBackend) resolveBinaryPath() string {
 	}
 	b.cfg.Logf("worker binary missing at %s, re-resolving", binaryPath)
 
+	if b.kind == workerRuntimeSharedHost {
+		for _, candidate := range sharedHostBinaryCandidates() {
+			if isExecutableFile(candidate) {
+				b.cfg.Logf("PTY host binary re-resolved to %s", candidate)
+				b.binaryPathMu.Lock()
+				b.binaryPath = candidate
+				b.binaryPathMu.Unlock()
+				return candidate
+			}
+		}
+		b.cfg.Logf("PTY host binary re-resolve failed, using original %s", binaryPath)
+		return binaryPath
+	}
+
 	// os.Executable() is excluded: it returns the same stale path when
 	// BinaryPath came from it, and an unrelated binary under tests.
 	candidates := make([]string, 0, 4)
@@ -280,6 +332,44 @@ func (b *WorkerBackend) resolveBinaryPath() string {
 	}
 	b.cfg.Logf("worker binary re-resolve failed, using original %s; candidates=%v", binaryPath, candidates)
 	return binaryPath
+}
+
+func sharedHostBinaryCandidates() []string {
+	var candidates []string
+	if explicit := strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")); explicit != "" {
+		candidates = append(candidates, explicit)
+	}
+	if executable, err := os.Executable(); err == nil {
+		dir := filepath.Dir(executable)
+		candidates = append(candidates,
+			filepath.Join(dir, ptyhost.BinaryNameForProfile(config.Profile())),
+			filepath.Join(dir, ptyhost.BinaryName),
+		)
+	}
+	home, _ := os.UserHomeDir()
+	if home != "" {
+		candidates = append(candidates,
+			filepath.Join(home, ".local", "bin", ptyhost.BinaryNameForProfile(config.Profile())),
+			filepath.Join(home, ".local", "bin", ptyhost.BinaryName),
+			filepath.Join(home, "Applications", "attn.app", "Contents", "MacOS", ptyhost.BinaryName),
+		)
+	}
+	if runtime.GOOS == "darwin" {
+		candidates = append(candidates, filepath.Join(string(filepath.Separator), "Applications", "attn.app", "Contents", "MacOS", ptyhost.BinaryName))
+	}
+	if path, err := exec.LookPath(ptyhost.BinaryName); err == nil {
+		candidates = append(candidates, path)
+	}
+	return candidates
+}
+
+func firstExecutable(candidates []string) string {
+	for _, candidate := range candidates {
+		if isExecutableFile(candidate) {
+			return candidate
+		}
+	}
+	return ""
 }
 
 func bundledAttnCandidates(home string) []string {
@@ -317,6 +407,23 @@ func (b *WorkerBackend) SetExitHandler(handler func(ExitInfo)) {
 	b.hooksMu.Lock()
 	defer b.hooksMu.Unlock()
 	b.onExit = handler
+}
+
+func (b *WorkerBackend) PTYBackendMode() string {
+	if b.kind == workerRuntimeSharedHost {
+		return "shared"
+	}
+	return "worker"
+}
+
+func (b *WorkerBackend) SessionCanReplayWithFormat(sessionID, format string) bool {
+	if b.kind != workerRuntimeSharedHost || strings.TrimSpace(format) == "" {
+		return false
+	}
+	b.mu.RLock()
+	_, ok := b.sessions[sessionID]
+	b.mu.RUnlock()
+	return ok
 }
 
 func (b *WorkerBackend) SetStateHandler(handler func(sessionID string, obs pty.Observation)) {
@@ -448,6 +555,9 @@ func (b *WorkerBackend) spawnArgs(opts SpawnOptions, session *workerSession) ([]
 }
 
 func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
+	if b.kind == workerRuntimeSharedHost {
+		return b.spawnShared(ctx, opts)
+	}
 	if err := validateUnattendedSpawnOptions(opts); err != nil {
 		return err
 	}
@@ -963,7 +1073,7 @@ func (b *WorkerBackend) Recover(ctx context.Context) (RecoveryReport, error) {
 		if !pidAlive(entry.WorkerPID) {
 			report.Pruned++
 			_ = os.Remove(path)
-			_ = os.Remove(expectedSocketPath)
+			b.removeOwnedSocket(expectedSocketPath)
 			continue
 		}
 
@@ -978,7 +1088,7 @@ func (b *WorkerBackend) Recover(ctx context.Context) (RecoveryReport, error) {
 			if errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
 				report.Pruned++
 				_ = os.Remove(path)
-				_ = os.Remove(expectedSocketPath)
+				b.removeOwnedSocket(expectedSocketPath)
 				continue
 			}
 			if isTransientRecoveryError(err) {
@@ -1325,14 +1435,22 @@ func (b *WorkerBackend) Shutdown(_ context.Context) error {
 		}(s)
 	}
 	wg.Wait()
+	b.closeSharedMonitors()
+	b.closeSharedControls()
 	return nil
 }
 
 func (b *WorkerBackend) workerRoot() string {
+	if b.kind == workerRuntimeSharedHost {
+		return ptyhost.Root(b.cfg.DataRoot, b.cfg.DaemonInstanceID)
+	}
 	return filepath.Join(b.cfg.DataRoot, "workers", b.cfg.DaemonInstanceID)
 }
 
 func (b *WorkerBackend) registryDir() string {
+	if b.kind == workerRuntimeSharedHost {
+		return ptyhost.RegistryDir(b.cfg.DataRoot, b.cfg.DaemonInstanceID)
+	}
 	return filepath.Join(b.workerRoot(), "registry")
 }
 
@@ -1471,6 +1589,12 @@ func (b *WorkerBackend) callSimplePersistent(ctx context.Context, session *worke
 }
 
 func (b *WorkerBackend) callResultPersistent(ctx context.Context, session *workerSession, method string, params, result any) (bool, error) {
+	if b.kind == workerRuntimeSharedHost {
+		if method == ptyworker.MethodSignal || method == ptyworker.MethodRemove {
+			return false, b.callResultSharedOneShot(ctx, session, method, params, result)
+		}
+		return b.callResultSharedPersistent(ctx, session, method, params, result)
+	}
 	rpcCtx, cancel := withDefaultRPCTimeout(ctx)
 	defer cancel()
 
@@ -1689,6 +1813,8 @@ func (b *WorkerBackend) connectWithIdentity(
 		RPCMinor:         ptyworker.RPCMinor,
 		DaemonInstanceID: daemonInstanceID,
 		ControlToken:     controlToken,
+		SessionID:        session.SessionID,
+		SnapshotFormat:   buildinfo.SnapshotFormat,
 	}
 	if err := writeRequest(enc, helloID, ptyworker.MethodHello, helloParams); err != nil {
 		_ = conn.Close()
@@ -1730,7 +1856,7 @@ func (b *WorkerBackend) connectWithIdentity(
 		session.snapshotFormatKnown = true
 		session.snapshotFormat = hello.SnapshotFormat
 		session.mu.Unlock()
-		if changed && b.cfg.OnTerminalBuild != nil {
+		if changed && session.SessionID != "" && b.cfg.OnTerminalBuild != nil {
 			// The format travels with the call: this can run before the session is
 			// in b.sessions, where a consumer would read back "unknown".
 			b.cfg.OnTerminalBuild(session.SessionID, hello.SnapshotFormat)
@@ -1779,6 +1905,13 @@ func unixSocketPathFits(path string) bool {
 }
 
 func (b *WorkerBackend) expectedSocketPath(sessionID string) (string, error) {
+	if b.kind == workerRuntimeSharedHost {
+		generation, err := ptyhost.Generation(b.resolveBinaryPath(), buildinfo.SnapshotFormat)
+		if err != nil {
+			return "", err
+		}
+		return ptyhost.SocketPath(b.cfg.DataRoot, b.cfg.DaemonInstanceID, generation)
+	}
 	root := b.sockDir()
 
 	// Hashed to stay within the unix socket path limit; $HOME can be long.
@@ -1816,6 +1949,9 @@ func (b *WorkerBackend) expectedSocketPath(sessionID string) (string, error) {
 // Older attn versions named sockets "h-" + hex sha256, and live workers from
 // them still have registry entries pointing at that filename.
 func (b *WorkerBackend) legacyExpectedSocketPath(sessionID string) (string, error) {
+	if b.kind == workerRuntimeSharedHost {
+		return "", errors.New("shared PTY hosts have no legacy per-session socket")
+	}
 	root := b.sockDir()
 
 	sum := sha256.Sum256([]byte(sessionID))
@@ -1850,6 +1986,12 @@ func (b *WorkerBackend) legacyExpectedSocketPath(sessionID string) (string, erro
 }
 
 func (b *WorkerBackend) validateRegistrySocketPath(sessionID, socketPath string) (string, error) {
+	if b.kind == workerRuntimeSharedHost {
+		if err := ptyhost.ValidateSocketPath(b.cfg.DataRoot, b.cfg.DaemonInstanceID, socketPath); err != nil {
+			return "", fmt.Errorf("unexpected shared PTY host socket path for session %s: %w", sessionID, err)
+		}
+		return filepath.Clean(socketPath), nil
+	}
 	expected, err := b.expectedSocketPath(sessionID)
 	if err != nil {
 		return "", err
@@ -1996,6 +2138,9 @@ func (b *WorkerBackend) workerPIDForSession(session *workerSession) int {
 }
 
 func (b *WorkerBackend) reapWorkerPID(pid int, sessionID string) {
+	if b.kind == workerRuntimeSharedHost {
+		return
+	}
 	if pid <= 0 {
 		return
 	}
@@ -2032,6 +2177,9 @@ func (b *WorkerBackend) workerProcessAlive(session *workerSession) bool {
 // writing a handoff and exec'ing would litter it forever.
 func (b *WorkerBackend) pruneSessionFiles(sessionID, registryPath, socketPath string) {
 	_ = os.Remove(registryPath)
+	if b.kind == workerRuntimeSharedHost {
+		return
+	}
 	_ = os.Remove(socketPath)
 	ptyworker.RemoveHandoff(registryPath, sessionID)
 }
@@ -2049,6 +2197,9 @@ func (b *WorkerBackend) forceSessionEviction(session *workerSession) {
 }
 
 func (b *WorkerBackend) removeOwnedSocket(socketPath string) {
+	if b.kind == workerRuntimeSharedHost {
+		return
+	}
 	cleanPath := filepath.Clean(strings.TrimSpace(socketPath))
 	if cleanPath == "" || cleanPath == "." {
 		return
@@ -2065,6 +2216,9 @@ func (b *WorkerBackend) removeOwnedSocket(socketPath string) {
 }
 
 func (b *WorkerBackend) startPoller(session *workerSession) {
+	if b.kind == workerRuntimeSharedHost {
+		return
+	}
 	session.mu.Lock()
 	if session.pollStop != nil {
 		session.mu.Unlock()
@@ -2195,6 +2349,14 @@ var errLifecycleWatchUnsupported = errors.New("worker lifecycle watch unsupporte
 var errLifecycleWatchHandshakeTimeout = errors.New("worker lifecycle watch handshake timeout")
 
 func (b *WorkerBackend) startMonitor(session *workerSession) {
+	if b.kind == workerRuntimeSharedHost {
+		b.startSharedHostMonitor(session)
+		return
+	}
+	b.startSessionMonitor(session)
+}
+
+func (b *WorkerBackend) startSessionMonitor(session *workerSession) {
 	session.mu.Lock()
 	if session.monitorStop != nil || session.legacyLifecycle {
 		session.mu.Unlock()
@@ -2234,7 +2396,15 @@ func (b *WorkerBackend) startMonitor(session *workerSession) {
 				return
 			}
 			b.cfg.Logf("worker backend lifecycle watch disconnected for session %s: %v", session.SessionID, err)
-
+			if b.kind == workerRuntimeSharedHost {
+				probeCtx, cancel := context.WithTimeout(context.Background(), livenessRPCTimeout)
+				alive, probeErr := b.SessionLikelyAlive(probeCtx, session.SessionID)
+				cancel()
+				if probeErr == nil && !alive {
+					b.notifySharedHostSessionLost(session)
+					return
+				}
+			}
 			select {
 			case <-stopCh:
 				return
@@ -2405,6 +2575,9 @@ func (b *WorkerBackend) stopMonitor(session *workerSession) {
 }
 
 func (b *WorkerBackend) stopPoller(session *workerSession) {
+	if b.kind == workerRuntimeSharedHost {
+		return
+	}
 	session.mu.Lock()
 	stopCh := session.pollStop
 	doneCh := session.pollDone
@@ -2421,6 +2594,10 @@ func (b *WorkerBackend) stopPoller(session *workerSession) {
 }
 
 func writeRequest(enc *json.Encoder, id, method string, params any) error {
+	return writeRequestForSession(enc, id, method, "", params)
+}
+
+func writeRequestForSession(enc *json.Encoder, id, method, sessionID string, params any) error {
 	payload, err := json.Marshal(params)
 	if err != nil {
 		return err
@@ -2429,10 +2606,11 @@ func writeRequest(enc *json.Encoder, id, method string, params any) error {
 		payload = nil
 	}
 	return enc.Encode(ptyworker.RequestEnvelope{
-		Type:   "req",
-		ID:     id,
-		Method: method,
-		Params: payload,
+		Type:      "req",
+		ID:        id,
+		Method:    method,
+		SessionID: sessionID,
+		Params:    payload,
 	})
 }
 

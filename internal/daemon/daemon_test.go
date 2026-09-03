@@ -524,6 +524,34 @@ func TestDaemon_Start_SelectsWorkerBackendWhenRequested(t *testing.T) {
 	}
 }
 
+func TestDaemon_Start_DefaultUsesMigrationRouterWithoutMovingNewSessionsWhenHostIsUnprobed(t *testing.T) {
+	t.Setenv("ATTN_PTY_BACKEND", "")
+	t.Setenv("ATTN_PTY_SKIP_STARTUP_PROBE", "1")
+	t.Setenv("ATTN_PTY_HOST_BINARY", "")
+	useFreeWSPort(t)
+
+	sockPath := filepath.Join(shortTempDir(t), "migrating-select.sock")
+	d := NewForTesting(sockPath)
+	errCh := make(chan error, 1)
+	go func() { errCh <- d.Start() }()
+	if !d.waitStarted(3 * time.Second) {
+		select {
+		case err := <-errCh:
+			t.Fatalf("daemon start error: %v", err)
+		default:
+			t.Fatal("daemon did not signal startup")
+		}
+	}
+	defer d.Stop()
+
+	if _, ok := d.ptyBackend.(*ptybackend.MigratingBackend); !ok {
+		t.Fatalf("expected migration router, got %T", d.ptyBackend)
+	}
+	if got := d.ptyBackendMode(); got != "migrating" {
+		t.Fatalf("PTY backend mode = %q, want migrating", got)
+	}
+}
+
 func TestDaemon_Start_WorkerProbeFailureFallsBackToEmbedded(t *testing.T) {
 	t.Setenv("ATTN_PTY_BACKEND", "worker")
 	t.Setenv("ATTN_PTY_SKIP_STARTUP_PROBE", "0")
@@ -4115,6 +4143,24 @@ func TestDaemon_SettingsIncludePTYBackendMode(t *testing.T) {
 	settings = d.settingsWithAgentAvailability()
 	if got := settings[SettingPTYBackendMode]; got != "worker" {
 		t.Fatalf("settings[%s] = %v, want worker", SettingPTYBackendMode, got)
+	}
+
+	sharedBackend, err := ptybackend.NewSharedHost(ptybackend.WorkerBackendConfig{
+		DataRoot:         t.TempDir(),
+		DaemonInstanceID: "d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		BinaryPath:       "/bin/true",
+	})
+	if err != nil {
+		t.Fatalf("NewSharedHost() error: %v", err)
+	}
+	migrating, err := ptybackend.NewMigrating(workerBackend, sharedBackend, true)
+	if err != nil {
+		t.Fatalf("NewMigrating() error: %v", err)
+	}
+	d.ptyBackend = migrating
+	settings = d.settingsWithAgentAvailability()
+	if got := settings[SettingPTYBackendMode]; got != "migrating" {
+		t.Fatalf("settings[%s] = %v, want migrating", SettingPTYBackendMode, got)
 	}
 }
 

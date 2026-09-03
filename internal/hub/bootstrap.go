@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/enrollment"
+	"github.com/victorarias/attn/internal/ptyhost"
 )
 
 const githubRepo = "victorarias/attn"
@@ -37,6 +39,7 @@ type RemotePlatform struct {
 	GOARCH              string
 	ArtifactName        string
 	RuntimeArtifactName string
+	PTYHostArtifactName string
 	BunTarget           string
 }
 
@@ -137,6 +140,15 @@ func (b *Bootstrapper) makeRemoteReady(ctx context.Context, sshTarget, profile, 
 		if err := b.installRemoteBinary(ctx, sshTarget, profile, localBinary, remoteInstallPath); err != nil {
 			return ready, fmt.Errorf("install attn on %s: %w", sshTarget, err)
 		}
+		binariesUpdated = true
+	}
+
+	// Install before startup; a missing sidecar leaves new terminals on dedicated
+	// workers until the next daemon start repeats its one-time probe.
+	_, hostWasMissing, hostErr := b.ensureRemotePTYHost(ctx, sshTarget, profile, platform, localVersion, remoteInstallPath)
+	if hostErr != nil {
+		b.logf("%v", hostErr)
+	} else if hostWasMissing {
 		binariesUpdated = true
 	}
 
@@ -282,6 +294,7 @@ func remoteLinuxPlatform(machine string) (RemotePlatform, error) {
 			GOARCH:              "amd64",
 			ArtifactName:        "attn-linux-amd64",
 			RuntimeArtifactName: apps.RuntimeHostBinaryName + "-linux-amd64",
+			PTYHostArtifactName: ptyhost.BinaryName + "-linux-amd64",
 			BunTarget:           "bun-linux-x64",
 		}, nil
 	case "aarch64", "arm64":
@@ -290,6 +303,7 @@ func remoteLinuxPlatform(machine string) (RemotePlatform, error) {
 			GOARCH:              "arm64",
 			ArtifactName:        "attn-linux-arm64",
 			RuntimeArtifactName: apps.RuntimeHostBinaryName + "-linux-arm64",
+			PTYHostArtifactName: ptyhost.BinaryName + "-linux-arm64",
 			BunTarget:           "bun-linux-arm64",
 		}, nil
 	default:
@@ -429,6 +443,58 @@ func (b *Bootstrapper) ensureLocalAppRuntime(ctx context.Context, platform Remot
 	return "", fmt.Errorf("no %s available (%s)", platform.RuntimeArtifactName, strings.Join(reasons, "; "))
 }
 
+func ptyHostCacheDir(key string) string {
+	return filepath.Join(config.DataDir(), "remotes", "pty-host", key)
+}
+
+func (b *Bootstrapper) ensureLocalPTYHost(ctx context.Context, platform RemotePlatform, version string) (string, error) {
+	var reasons []string
+	if sourceCheckoutAvailable() {
+		if path, err := b.buildPTYHostFromSource(ctx, platform); err == nil {
+			return path, nil
+		} else {
+			reasons = append(reasons, fmt.Sprintf("source build: %v", err))
+		}
+	}
+
+	if version != "" && version != "dev" {
+		cachePath := filepath.Join(ptyHostCacheDir(version), platform.PTYHostArtifactName)
+		if info, err := os.Stat(cachePath); err == nil && info.Mode().IsRegular() {
+			return cachePath, nil
+		}
+		if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
+			return "", err
+		}
+		if err := b.downloadReleaseArtifact(ctx, version, platform.PTYHostArtifactName, filepath.Dir(cachePath)); err == nil {
+			return cachePath, nil
+		} else {
+			reasons = append(reasons, fmt.Sprintf("release download: %v", err))
+		}
+	} else {
+		reasons = append(reasons, "no published release to download it from (this hub reports version "+version+")")
+	}
+
+	return "", fmt.Errorf("no %s available (%s)", platform.PTYHostArtifactName, strings.Join(reasons, "; "))
+}
+
+func (b *Bootstrapper) buildPTYHostFromSource(ctx context.Context, platform RemotePlatform) (string, error) {
+	root := sourceRoot()
+	if root == "" {
+		return "", errors.New("source checkout not available")
+	}
+	target := "build-pty-host-linux-" + platform.GOARCH
+	cmd := exec.CommandContext(ctx, "make", target)
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("%s: %s", target, strings.TrimSpace(string(out)))
+	}
+	path := filepath.Join(root, "dist", "pty-host", platform.GOOS+"_"+platform.GOARCH, ptyhost.BinaryName)
+	if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
+		return "", fmt.Errorf("%s did not produce %s", target, path)
+	}
+	return path, nil
+}
+
 func (b *Bootstrapper) buildAppRuntimeFromSource(ctx context.Context, platform RemotePlatform, stageDir string) error {
 	root := sourceRoot()
 	if root == "" {
@@ -451,6 +517,41 @@ func (b *Bootstrapper) buildAppRuntimeFromSource(ctx context.Context, platform R
 
 func remoteAppRuntimePath(remoteInstallPath, profile string) string {
 	return filepath.Join(filepath.Dir(remoteInstallPath), apps.RuntimeHostBinaryNameForProfile(profile))
+}
+
+func remotePTYHostPath(remoteInstallPath, profile string) string {
+	return filepath.Join(filepath.Dir(remoteInstallPath), ptyhost.BinaryNameForProfile(profile))
+}
+
+// A newly installed host needs a restart for probing. Byte updates do not: the
+// running daemon starts their new generation on its next terminal spawn.
+func (b *Bootstrapper) ensureRemotePTYHost(ctx context.Context, sshTarget, profile string, platform RemotePlatform, version, remoteInstallPath string) (bool, bool, error) {
+	remotePath := remotePTYHostPath(remoteInstallPath, profile)
+	localPath, err := b.ensureLocalPTYHost(ctx, platform, version)
+	if err != nil {
+		return false, false, fmt.Errorf(
+			"the shared PTY host is missing from %s at %s: %w. New terminals there stay on dedicated Go workers until a host is installed",
+			sshTarget, remotePath, err)
+	}
+	localHash, err := fileSHA256(localPath)
+	if err != nil {
+		return false, false, fmt.Errorf("hash the local PTY host %s: %w", localPath, err)
+	}
+	remoteHash, err := b.remoteFileSHA256(ctx, sshTarget, profile, shellQuote(remotePath))
+	if err != nil {
+		return false, false, fmt.Errorf("hash the PTY host on %s at %s: %w", sshTarget, remotePath, err)
+	}
+	if remoteHash == localHash {
+		return false, false, nil
+	}
+	wasMissing := remoteHash == ""
+	if err := b.uploadRemoteFile(ctx, sshTarget, profile, localPath, remotePath); err != nil {
+		return false, wasMissing, fmt.Errorf(
+			"the shared PTY host could not be installed on %s at %s: %w. New terminals there stay on dedicated Go workers",
+			sshTarget, remotePath, err)
+	}
+	b.logf("installed the shared PTY host on %s at %s (%s)", sshTarget, remotePath, localHash[:12])
+	return true, wasMissing, nil
 }
 
 // Ships the sidecar and reports whether it changed. The gate is content: at ~90MB, a

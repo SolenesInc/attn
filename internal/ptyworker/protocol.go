@@ -64,10 +64,11 @@ type RPCError struct {
 }
 
 type RequestEnvelope struct {
-	Type   string          `json:"type"`
-	ID     string          `json:"id"`
-	Method string          `json:"method"`
-	Params json.RawMessage `json:"params,omitempty"`
+	Type      string          `json:"type"`
+	ID        string          `json:"id"`
+	Method    string          `json:"method"`
+	SessionID string          `json:"session_id,omitempty"`
+	Params    json.RawMessage `json:"params,omitempty"`
 }
 
 type ResponseEnvelope struct {
@@ -179,6 +180,11 @@ type HelloParams struct {
 	RPCMinor         int    `json:"rpc_minor"`
 	DaemonInstanceID string `json:"daemon_instance_id"`
 	ControlToken     string `json:"control_token"`
+	// Empty for a host-level call. Dedicated workers ignore this field.
+	SessionID string `json:"session_id,omitempty"`
+	// Shared hosts use this to choose between a native snapshot and portable VT
+	// replay. Dedicated workers ignore it, preserving the legacy handshake.
+	SnapshotFormat string `json:"snapshot_format,omitempty"`
 }
 
 type HelloResult struct {

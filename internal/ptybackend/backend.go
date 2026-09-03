@@ -240,6 +240,12 @@ type TerminalBuildProvider interface {
 	SessionTerminalBuild(sessionID string) (format string, known bool)
 }
 
+// Optional. A shared runtime can keep an older terminal model alive and replay
+// it portably when the daemon no longer understands its native snapshot.
+type TerminalBuildCompatibilityProvider interface {
+	SessionCanReplayWithFormat(sessionID, format string) bool
+}
+
 // Replaces the worker process image in place: same pid, same PTY, same child.
 type WorkerUpgrader interface {
 	UpgradeWorker(ctx context.Context, sessionID string) error
@@ -253,4 +259,8 @@ type RecoverableRuntime interface {
 	Backend
 	SessionInfoProvider
 	SessionLivenessProber
+}
+
+type ModeProvider interface {
+	PTYBackendMode() string
 }

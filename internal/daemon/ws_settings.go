@@ -342,9 +342,10 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 }
 
 func (d *Daemon) ptyBackendMode() string {
+	if provider, ok := d.ptyBackend.(ptybackend.ModeProvider); ok {
+		return provider.PTYBackendMode()
+	}
 	switch d.ptyBackend.(type) {
-	case *ptybackend.WorkerBackend:
-		return "worker"
 	case *ptybackend.EmbeddedBackend:
 		return "embedded"
 	default:

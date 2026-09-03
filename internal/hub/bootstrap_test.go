@@ -255,26 +255,44 @@ func TestRemoteAppRuntimePath(t *testing.T) {
 	}
 }
 
+func TestRemotePTYHostPath(t *testing.T) {
+	cases := []struct {
+		remoteInstallPath string
+		profile           string
+		want              string
+	}{
+		{"/home/v/.local/bin/attn", "", "/home/v/.local/bin/attn-pty-host"},
+		{"/home/v/.local/bin/attn-dev", "dev", "/home/v/.local/bin/attn-pty-host-dev"},
+		{"/home/v/.attn/harness/run-1/bin/attn", "", "/home/v/.attn/harness/run-1/bin/attn-pty-host"},
+	}
+	for _, c := range cases {
+		if got := remotePTYHostPath(c.remoteInstallPath, c.profile); got != c.want {
+			t.Errorf("remotePTYHostPath(%q, %q) = %q, want %q", c.remoteInstallPath, c.profile, got, c.want)
+		}
+	}
+}
+
 func TestRemoteLinuxPlatformArtifacts(t *testing.T) {
 	cases := []struct {
 		machine   string
 		goarch    string
 		runtime   string
+		ptyHost   string
 		bunTarget string
 	}{
-		{"x86_64", "amd64", "attn-app-runtime-linux-amd64", "bun-linux-x64"},
-		{"amd64", "amd64", "attn-app-runtime-linux-amd64", "bun-linux-x64"},
-		{"aarch64", "arm64", "attn-app-runtime-linux-arm64", "bun-linux-arm64"},
-		{"arm64", "arm64", "attn-app-runtime-linux-arm64", "bun-linux-arm64"},
+		{"x86_64", "amd64", "attn-app-runtime-linux-amd64", "attn-pty-host-linux-amd64", "bun-linux-x64"},
+		{"amd64", "amd64", "attn-app-runtime-linux-amd64", "attn-pty-host-linux-amd64", "bun-linux-x64"},
+		{"aarch64", "arm64", "attn-app-runtime-linux-arm64", "attn-pty-host-linux-arm64", "bun-linux-arm64"},
+		{"arm64", "arm64", "attn-app-runtime-linux-arm64", "attn-pty-host-linux-arm64", "bun-linux-arm64"},
 	}
 	for _, c := range cases {
 		platform, err := remoteLinuxPlatform(c.machine)
 		if err != nil {
 			t.Fatalf("remoteLinuxPlatform(%q): %v", c.machine, err)
 		}
-		if platform.GOARCH != c.goarch || platform.RuntimeArtifactName != c.runtime || platform.BunTarget != c.bunTarget {
-			t.Errorf("remoteLinuxPlatform(%q) = %+v, want goarch %s runtime %s bun %s",
-				c.machine, platform, c.goarch, c.runtime, c.bunTarget)
+		if platform.GOARCH != c.goarch || platform.RuntimeArtifactName != c.runtime || platform.PTYHostArtifactName != c.ptyHost || platform.BunTarget != c.bunTarget {
+			t.Errorf("remoteLinuxPlatform(%q) = %+v, want goarch %s runtime %s pty host %s bun %s",
+				c.machine, platform, c.goarch, c.runtime, c.ptyHost, c.bunTarget)
 		}
 	}
 	if _, err := remoteLinuxPlatform("riscv64"); err == nil {
