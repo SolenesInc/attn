@@ -23,6 +23,8 @@ const RINGING_NOTE = 'RING7';
 const BRIEF = `Live proof only. Read your assigned seed id from this prompt, run attn seed note SEED_ID -m ${RINGING_NOTE} --ring, then wait. Do not harvest until you are told.`;
 const HARVEST_REASON = 'the live doorbell proof is done';
 const RING_RELEASE_FILE = 'ring-now';
+const HARVEST_HOLD_FILE = 'harvest-hold';
+const HARVEST_RELEASE_FILE = 'harvest-now';
 const PACE_MS = recordingEnabled() ? 1_400 : 0;
 const GENERIC_DOORBELL = '📬 You have unread items in your attn inbox. Run attn agent inbox to read them.';
 
@@ -107,6 +109,8 @@ function writeDelegateFixture(cwd) {
           { type: 'capture', from: 'prompt', pattern: '(s-[a-z0-9]{6})', name: 'seed' },
           { type: 'wait_for_file', path: RING_RELEASE_FILE },
           { type: 'attn', args: ['seed', 'note', '{{seed}}', '-m', RINGING_NOTE, '--ring'] },
+          { type: 'touch', path: HARVEST_HOLD_FILE },
+          { type: 'wait_for_file', path: HARVEST_RELEASE_FILE },
         ],
       },
       {
@@ -152,6 +156,7 @@ async function main() {
   let dispatcher = null;
   let delegated = null;
   let seed = null;
+  let harvestMessage = null;
   try {
     await launchFreshAppAndConnect(client, observer);
     dispatcher = await runner.step('open_dispatcher', () => openDispatcher(client, observer, runner));
@@ -210,10 +215,18 @@ async function main() {
         `attn agent inbox --session ${dispatcher.sessionId}`, `${seed} moved: note`);
       await runInPane(client, dispatcher,
         `attn seed show ${seed} --session ${dispatcher.sessionId}`, RINGING_NOTE);
-      await runInPane(client, dispatcher,
+      await observer.waitFor(
+        () => fs.existsSync(path.join(runner.sessionDir, 'dispatcher', HARVEST_HOLD_FILE)),
+        'the delegated agent holding its working turn',
+        20_000,
+      );
+      const queued = await runInPane(client, dispatcher,
         `attn agent msg ${seed} "Now harvest your assigned seed with reason: ${HARVEST_REASON}" ` +
           `--source-session ${dispatcher.sessionId}`,
-        'notified seed-bell');
+        'queued: queued (target is not taking input right now');
+      harvestMessage = queued.match(/\(id ([0-9a-f-]{36})\)/)?.[1] ?? null;
+      runner.assert(Boolean(harvestMessage), 'the queued harvest request returned its message id', { queued });
+      fs.writeFileSync(path.join(runner.sessionDir, 'dispatcher', HARVEST_RELEASE_FILE), 'harvest\n');
       await waitForPaneOccurrences(client, dispatcher, GENERIC_DOORBELL, 2, 60_000);
       await waitForPaneShellReady(client, dispatcher.sessionId, dispatcher.paneId, {
         timeoutMs: 20_000,
@@ -221,6 +234,11 @@ async function main() {
       });
       await runInPane(client, dispatcher,
         `attn agent inbox --session ${dispatcher.sessionId}`, `${seed} moved: harvested`);
+      await runInPane(client, dispatcher,
+        `attn seed show ${seed} --session ${dispatcher.sessionId}`, 'status harvested');
+      await runInPane(client, dispatcher,
+        `attn agent msg-status ${harvestMessage} --session ${dispatcher.sessionId}`,
+        `read: message ${harvestMessage}`);
       const text = await paneText(client, dispatcher);
       runner.assert(saw(text, `${seed} moved: note`), 'the first doorbell remains visible', { text });
       runner.assert(saw(text, `${seed} moved: harvested`), 'the harvest rings after the read reset', { text });
@@ -230,11 +248,11 @@ async function main() {
       if (PACE_MS > 0) await delay(PACE_MS);
     });
 
-    const summary = await runner.finishSuccess({ seed, delegated });
+    const summary = await runner.finishSuccess({ seed, delegated, harvestMessage });
     console.log('[RealAppHarness] Garden seed nudges passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = await runner.finishFailure(error, { seed, delegated });
+    const summary = await runner.finishFailure(error, { seed, delegated, harvestMessage });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
