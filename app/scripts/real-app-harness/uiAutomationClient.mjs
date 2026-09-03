@@ -315,7 +315,12 @@ export class UiAutomationClient {
       let buffer = '';
       const timeout = setTimeout(() => {
         cleanup();
-        reject(new Error(`Automation request timed out: ${action} (${requestId}) after ${timeoutMs}ms`));
+        // A stalled screenshot means an occluded, rAF-throttled window; name
+        // it so the run fails on the cause instead of a bare timeout.
+        const hint = action === 'capture_screenshot_data'
+          ? ' (the window is likely occluded and rAF-throttled; harness always-on-top keeps it visible)'
+          : '';
+        reject(new Error(`Automation request timed out: ${action} (${requestId}) after ${timeoutMs}ms${hint}`));
       }, timeoutMs);
       const cleanup = () => {
         clearTimeout(timeout);

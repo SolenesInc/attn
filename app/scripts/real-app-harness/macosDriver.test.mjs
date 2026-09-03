@@ -1,5 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import { describeInputDriverFailure, withWindowTitleArgs } from './macosDriver.mjs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  assertHarnessWindowAcceptsKeys,
+  describeInputDriverFailure,
+  MacOSDriver,
+  withWindowTitleArgs,
+} from './macosDriver.mjs';
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('describeInputDriverFailure', () => {
   it('names a dark display as the cause, and says it is not the product', () => {
@@ -52,5 +61,73 @@ describe('withWindowTitleArgs', () => {
 
   it('ignores an empty-string windowTitle', () => {
     expect(withWindowTitleArgs(['windowid'], { windowTitle: '' })).toEqual(['windowid']);
+  });
+});
+
+describe('assertHarnessWindowAcceptsKeys', () => {
+  it('throws on macOS while the harness window is always-on-top', () => {
+    expect(() => assertHarnessWindowAcceptsKeys({}, 'darwin')).toThrow(/ATTN_HARNESS_ALWAYS_ON_TOP/);
+    expect(() => assertHarnessWindowAcceptsKeys({ ATTN_HARNESS_ALWAYS_ON_TOP: '1' }, 'darwin'))
+      .toThrow(/non-focusable/);
+  });
+
+  it('passes on macOS once the scenario opts out', () => {
+    expect(() => assertHarnessWindowAcceptsKeys({ ATTN_HARNESS_ALWAYS_ON_TOP: '0' }, 'darwin'))
+      .not.toThrow();
+  });
+
+  it('passes off macOS whatever the flag says', () => {
+    expect(() => assertHarnessWindowAcceptsKeys({ ATTN_HARNESS_ALWAYS_ON_TOP: '1' }, 'linux'))
+      .not.toThrow();
+  });
+});
+
+class StubInputDriver extends MacOSDriver {
+  constructor() {
+    super({ bundleId: 'test.harness', appPath: '/tmp/attn-harness-test.app' });
+    this.execCalls = [];
+  }
+
+  async runInputDriver(args) {
+    this.execCalls.push(args);
+  }
+}
+
+describe('MacOSDriver key entry points on a non-focusable window', () => {
+  const realPlatform = process.platform;
+  beforeEach(() => {
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+  });
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: realPlatform, configurable: true });
+  });
+
+  it('pressKey fails before touching the input driver', async () => {
+    vi.stubEnv('ATTN_HARNESS_ALWAYS_ON_TOP', '1');
+    const driver = new StubInputDriver();
+    await expect(driver.pressKey('a', {})).rejects.toThrow(/non-focusable/);
+    expect(driver.execCalls).toEqual([]);
+  });
+
+  it('pressEnter fails through its pressKeyCode delegation', async () => {
+    vi.stubEnv('ATTN_HARNESS_ALWAYS_ON_TOP', '1');
+    const driver = new StubInputDriver();
+    await expect(driver.pressEnter()).rejects.toThrow(/non-focusable/);
+    expect(driver.execCalls).toEqual([]);
+  });
+
+  it('typeText fails before touching the input driver', async () => {
+    vi.stubEnv('ATTN_HARNESS_ALWAYS_ON_TOP', '1');
+    const driver = new StubInputDriver();
+    await expect(driver.typeText('hello')).rejects.toThrow(/non-focusable/);
+    expect(driver.execCalls).toEqual([]);
+  });
+
+  it('pressKey reaches the driver once the scenario opts out', async () => {
+    vi.stubEnv('ATTN_HARNESS_ALWAYS_ON_TOP', '0');
+    const driver = new StubInputDriver();
+    driver.actionDelayMs = 0;
+    await driver.pressKey('a', {});
+    expect(driver.execCalls).toHaveLength(1);
   });
 });

@@ -107,9 +107,11 @@ async function drive({ options, replay }) {
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
 
+  // A stalled screenshot is an occluded window, not missing evidence: fail, never skip.
   const shot = async (name, selector) => {
-    const data = await client.request('capture_screenshot_data', { selector }).catch(() => null);
-    if (data?.pngBase64) fs.writeFileSync(path.join(runner.runDir, `${name}.png`), Buffer.from(data.pngBase64, 'base64'));
+    const data = await client.request('capture_screenshot_data', { selector });
+    if (!data?.pngBase64) throw new Error(`capture_screenshot_data returned no PNG data for ${name}`);
+    fs.writeFileSync(path.join(runner.runDir, `${name}.png`), Buffer.from(data.pngBase64, 'base64'));
   };
 
   try {
