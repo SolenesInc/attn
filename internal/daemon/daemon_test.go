@@ -3609,6 +3609,8 @@ func TestDaemon_SettingsValidation(t *testing.T) {
 		{"retired ticketBoardScale", "ticketBoardScale", "1.2", true},
 		{"valid tailscale_enabled true", "tailscale_enabled", "true", false},
 		{"valid tailscale_enabled false", "tailscale_enabled", "false", false},
+		{"valid queue_crew_enabled true", "queue_crew_enabled", "true", false},
+		{"invalid queue_crew_enabled", "queue_crew_enabled", "maybe", true},
 		{"valid summarize enabled false", "notebook.summarize_session.enabled", "false", false},
 		{"invalid summarize enabled", "notebook.summarize_session.enabled", "maybe", true},
 		{"valid narration enabled false", "notebook.narrate_workspace.enabled", "false", false},
@@ -3907,6 +3909,9 @@ func TestDaemon_SettingsWithAgentAvailability(t *testing.T) {
 	}
 	if got := settings[SettingTailscaleEnabled]; got != "false" {
 		t.Fatalf("settings[%s] = %v, want false", SettingTailscaleEnabled, got)
+	}
+	if got := settings[SettingQueueCrewEnabled]; got != "false" {
+		t.Fatalf("settings[%s] = %v, want false", SettingQueueCrewEnabled, got)
 	}
 	if got := settings["tailscale_status"]; got != tailscaleStatusDisabled {
 		t.Fatalf("settings[tailscale_status] = %v, want %s", got, tailscaleStatusDisabled)

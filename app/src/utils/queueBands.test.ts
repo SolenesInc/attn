@@ -4,6 +4,7 @@ import {
   buildQueueBands,
   headOfQueue,
   oldestWantedTurn,
+  sessionParticipatesInQueue,
   type QueueBandSession,
 } from './queueBands';
 import { buildWorkspaceViewModels } from './workspaceViewModels';
@@ -16,6 +17,15 @@ const workspaces = [
 function views(sessions: QueueBandSession[]) {
   return buildWorkspaceViewModels(workspaces, sessions);
 }
+
+describe('sessionParticipatesInQueue', () => {
+  it('keeps automation sessions out and makes crew participation opt-in', () => {
+    expect(sessionParticipatesInQueue({})).toBe(true);
+    expect(sessionParticipatesInQueue({ crewMember: 'goalie' })).toBe(false);
+    expect(sessionParticipatesInQueue({ crewMember: 'goalie' }, true)).toBe(true);
+    expect(sessionParticipatesInQueue({ automation: { definition_id: 'daily-review' } }, true)).toBe(false);
+  });
+});
 
 describe('buildQueueBands', () => {
   it('lists the oldest turn first, across workspaces', () => {
@@ -88,6 +98,25 @@ describe('buildQueueBands', () => {
 
     expect(bands.chief?.session.id).toBe('chief');
     expect(bands.turns.map((row) => row.session.id)).toEqual(['agent']);
+  });
+
+  it('leaves automation sessions out of every queue band', () => {
+    const bands = buildQueueBands(views([
+      {
+        id: 'automation-run',
+        label: 'automation-run',
+        workspaceId: 'ws-a',
+        turnOwed: true,
+        turnOpenedAt: '2026-07-26T09:00:00Z',
+        automation: { definition_id: 'review-sol' },
+      },
+      { id: 'agent', label: 'agent', workspaceId: 'ws-a' },
+    ]));
+
+    expect(bands.turns.map((row) => row.session.id)).toEqual([]);
+    expect(bands.settled.map((row) => row.session.id)).toEqual(['agent']);
+    expect(bands.pinned).toEqual([]);
+    expect(bands.snoozed).toEqual([]);
   });
 
   it('is empty when nothing is owed', () => {
@@ -546,6 +575,17 @@ describe('the crew band', () => {
     expect(bands.turns.map((row) => row.session.id)).toEqual(['worker']);
     expect(bands.pinned).toHaveLength(0);
     expect(bands.settled).toHaveLength(0);
+  });
+
+  it('lets awake members enter normal queue bands when enabled', () => {
+    const bands = buildQueueBands(views([
+      { id: 'owed', label: 'owed', workspaceId: 'ws-a', crewMember: 'trellis', turnOwed: true, turnOpenedAt: '2026-08-14T09:00:00Z' },
+      { id: 'settled', label: 'settled', workspaceId: 'ws-a', crewMember: 'keel' },
+    ]), { crewInQueue: true });
+
+    expect(bands.turns.map((row) => row.session.id)).toEqual(['owed']);
+    expect(bands.settled.map((row) => row.session.id)).toEqual(['settled']);
+    expect(bands.crew.map((row) => row.session.id)).toEqual(['settled', 'owed']);
   });
 
   it('keeps a member visible from a pinned or muted workspace', () => {

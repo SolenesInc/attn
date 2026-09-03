@@ -155,6 +155,7 @@ describe('Sidebar', () => {
     }];
 
     render(<Sidebar {...baseProps} {...buildSidebarData(sessions)} />);
+    fireEvent.click(screen.getByTestId('sidebar-automation-header-review-sol'));
 
     const row = screen.getByTestId('sidebar-session-s1');
     expect(row).toHaveTextContent('feed-nexus-web');
@@ -243,6 +244,69 @@ describe('Sidebar', () => {
       expect(entry?.textContent).toBe('#71');
       expect(entry?.getAttribute('title')).toBe('github.com/victorarias/attn#71 · checks running');
     });
+  });
+
+  it('groups every session from one automation below ordinary sessions and starts collapsed', () => {
+    const automation = {
+      run_id: 'run-1',
+      definition_id: 'review-sol',
+      definition_name: 'Requested PR review - GPT Sol medium',
+      trigger_type: 'github_review_requested',
+    };
+    const sessions: TestSession[] = [
+      { id: 'manual', label: 'manual', state: 'working', cwd: '/repo/manual' },
+      { id: 'run-a', label: 'review A', state: 'idle', cwd: '/repo/a', automation },
+      { id: 'run-b', label: 'review B', state: 'working', cwd: '/repo/b', automation: { ...automation, run_id: 'run-2' } },
+    ];
+
+    const data = buildSidebarData(sessions);
+    const mutedWorkspace = data.workspaces.find((workspace) => workspace.sessions.some((session) => session.id === 'run-b'))!;
+    const workspaces = data.workspaces.filter((workspace) => workspace.id !== mutedWorkspace.id);
+    render(
+      <Sidebar
+        {...baseProps}
+        {...data}
+        workspaces={workspaces}
+        visualOrder={workspaces}
+        mutedWorkspaces={[{ ...mutedWorkspace, muted: true }]}
+      />,
+    );
+
+    const group = screen.getByTestId('sidebar-automation-review-sol');
+    const header = screen.getByTestId('sidebar-automation-header-review-sol');
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+    expect(header).toHaveTextContent('Requested PR review - GPT Sol medium');
+    expect(header).toHaveTextContent('2 agents');
+    expect(screen.getByTestId('sidebar-session-manual')).toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-session-run-a')).toBeNull();
+    expect(screen.queryByTestId('sidebar-workspace-workspace-/repo/a')).toBeNull();
+    expect(screen.queryByText(/Muted Workspaces/)).toBeNull();
+    expect(screen.getByTestId('sidebar-session-manual').compareDocumentPosition(group))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+    fireEvent.click(header);
+
+    expect(header).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('sidebar-session-run-a')).toBeInTheDocument();
+    expect(screen.getByTestId('sidebar-session-run-b')).toBeInTheDocument();
+  });
+
+  it('uses singular agent count for an automation with one session', () => {
+    const sessions: TestSession[] = [{
+      id: 'run-a',
+      label: 'review A',
+      state: 'idle',
+      automation: {
+        run_id: 'run-1',
+        definition_id: 'review-sol',
+        definition_name: 'Requested PR review - GPT Sol medium',
+        trigger_type: 'github_review_requested',
+      },
+    }];
+
+    render(<Sidebar {...baseProps} {...buildSidebarData(sessions)} />);
+
+    expect(screen.getByTestId('sidebar-automation-header-review-sol')).toHaveTextContent('1 agent');
   });
 
   it('shows waiting badge in collapsed sidebar', () => {
@@ -676,6 +740,33 @@ describe('Sidebar', () => {
       />
     );
     expect(screen.getByTestId('toggle-queue-mode')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('keeps crew queue participation beside queue mode and off by default', () => {
+    const onToggleCrewQueue = vi.fn();
+    const { rerender } = render(
+      <Sidebar
+        {...baseProps}
+        {...buildSidebarData([])}
+        onToggleCrewQueue={onToggleCrewQueue}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sidebar settings' }));
+    const toggle = screen.getByTestId('toggle-crew-queue');
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(toggle);
+    expect(onToggleCrewQueue).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <Sidebar
+        {...baseProps}
+        {...buildSidebarData([])}
+        crewQueueEnabled
+        onToggleCrewQueue={onToggleCrewQueue}
+      />
+    );
+    expect(screen.getByTestId('toggle-crew-queue')).toHaveAttribute('aria-checked', 'true');
   });
 
   it('keeps display options visible after selecting a mode', () => {

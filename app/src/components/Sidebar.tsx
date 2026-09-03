@@ -1,6 +1,6 @@
 import './Sidebar.css';
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RenamePopover } from './RenamePopover';
 import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
 import { DelegatedFromChiefBadge } from './DelegatedFromChiefBadge';
@@ -20,7 +20,7 @@ import { tileContentKey, type TileContentState, type TileLeaf } from '../types/w
 import { deriveTileTitle } from '../utils/tilePresentation';
 import { useAppViewTitleResolver } from '../hooks/useAppViewTitle';
 import type { WorkspaceWithSessions } from '../utils/workspaceViewModels';
-import type { QueueBands as QueueBandsModel } from '../utils/queueBands';
+import { sessionParticipatesInQueue, type QueueBands as QueueBandsModel } from '../utils/queueBands';
 import type { WorkspaceSelectionStyle } from '../utils/workspaceSelectionStyle';
 import type {
   AutomationProvenance as AutomationProvenanceValue,
@@ -153,6 +153,116 @@ function TileSidebarRow({
   );
 }
 
+interface AutomationSessionGroup {
+  id: string;
+  name: string;
+  sessions: LocalSession[];
+}
+
+function groupAutomationSessions(workspaces: SidebarWorkspace[]): AutomationSessionGroup[] {
+  const groups = new Map<string, AutomationSessionGroup>();
+  for (const workspace of workspaces) {
+    for (const session of workspace.sessions) {
+      const automation = session.automation;
+      if (!automation) continue;
+      const existing = groups.get(automation.definition_id);
+      if (existing) {
+        existing.sessions.push(session);
+      } else {
+        groups.set(automation.definition_id, {
+          id: automation.definition_id,
+          name: automation.definition_name,
+          sessions: [session],
+        });
+      }
+    }
+  }
+  return [...groups.values()].sort((a, b) => (
+    a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
+  ));
+}
+
+function SidebarSessionRow({
+  session,
+  selected,
+  draggable = false,
+  dragging = false,
+  onSelect,
+  onClickCapture,
+  onPointerDown,
+  onOpenActions,
+  onTriggerNudge,
+  showSettling,
+}: {
+  session: LocalSession;
+  selected: boolean;
+  draggable?: boolean;
+  dragging?: boolean;
+  onSelect: () => void;
+  onClickCapture?: (event: ReactMouseEvent) => void;
+  onPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onOpenActions: (event: ReactMouseEvent) => void;
+  onTriggerNudge?: () => void;
+  showSettling: boolean;
+}) {
+  const nudgeMode = deriveNudgeMode({
+    ticketUnread: session.ticketUnread,
+    nudgeFiresAt: session.nudgeFiresAt,
+    state: session.state,
+    isActive: selected,
+  });
+  return (
+    <div
+      className={`session-item grouped ${selected ? 'selected' : ''} ${session.state === 'recoverable' ? 'recoverable' : ''} ${draggable ? 'session-item--draggable' : ''} ${dragging ? 'session-item--dragging' : ''}`.trim().replace(/\s+/g, ' ')}
+      data-testid={`sidebar-session-${session.id}`}
+      data-state={session.state}
+      onClick={onSelect}
+      onClickCapture={onClickCapture}
+      onPointerDown={onPointerDown}
+      title={session.state === 'recoverable' ? 'Session will be recovered when opened' : undefined}
+    >
+      <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
+      <span className="sidebar-session-identity">
+        <span className="sidebar-session-headline">
+          <SessionLabel label={session.label} />
+          <SidebarSessionPullRequest pullRequests={session.pullRequests} />
+        </span>
+        <SessionProvenance automation={session.automation} density="compact" />
+      </span>
+      {session.endpointName && (
+        <span className={`session-endpoint-badge status-${session.endpointStatus || 'connected'}`}>
+          {session.endpointName}
+        </span>
+      )}
+      {session.state === 'recoverable' && <span className="session-recoverable">recoverable</span>}
+      {session.chiefOfStaff && <ChiefOfStaffBadge />}
+      {session.delegatedFromChief && <DelegatedFromChiefBadge />}
+      {session.isWorktree && <span className="worktree-indicator">⎇</span>}
+      <div className="session-actions">
+        <button
+          className="session-action-btn session-more-btn"
+          data-testid={`session-actions-${session.id}`}
+          onClick={onOpenActions}
+          title={`Session actions (${formatShortcut('session.close')} closes)`}
+          aria-label={`Actions for ${session.label}`}
+        >
+          •••
+        </button>
+      </div>
+      {showSettling && (session.autoSettleFiresAt || session.autoSettleHeld) ? (
+        <SidebarSettlingBar firesAt={session.autoSettleFiresAt} held={session.autoSettleHeld} />
+      ) : null}
+      {nudgeMode ? (
+        <SidebarNudgeBar
+          mode={nudgeMode}
+          firesAt={session.nudgeFiresAt}
+          onTrigger={onTriggerNudge ?? (() => {})}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 interface SidebarProps {
   workspaces: SidebarWorkspace[];
   visualOrder: SidebarWorkspace[];
@@ -194,6 +304,8 @@ interface SidebarProps {
   onToggleShowSessionless?: () => void;
   queueModeEnabled?: boolean;
   onToggleQueueMode?: () => void;
+  crewQueueEnabled?: boolean;
+  onToggleCrewQueue?: () => void;
   workspaceSelectionStyle?: WorkspaceSelectionStyle;
   onWorkspaceSelectionStyleChange?: (style: WorkspaceSelectionStyle) => void;
   leafDrag?: { sourceWorkspaceId: string; endpointId?: string } | null;
@@ -386,6 +498,8 @@ export function Sidebar({
   onToggleShowSessionless,
   queueModeEnabled = false,
   onToggleQueueMode,
+  crewQueueEnabled = false,
+  onToggleCrewQueue,
   workspaceSelectionStyle = 'rail',
   onWorkspaceSelectionStyleChange,
   leafDrag = null,
@@ -411,11 +525,14 @@ export function Sidebar({
   onToggleCollapse,
 }: SidebarProps) {
   const sessionWantsAttention = (session: LocalSession) => (
-    queue ? Boolean(session.turnOwed) : isAttentionSessionState(session.state)
+    queue
+      ? sessionParticipatesInQueue(session, crewQueueEnabled) && Boolean(session.turnOwed)
+      : isAttentionSessionState(session.state)
   );
 
   const [mutedExpandedLocal, setMutedExpandedLocal] = useState(false);
   const [snoozedExpanded, setSnoozedExpanded] = useState(false);
+  const [expandedAutomationGroups, setExpandedAutomationGroups] = useState<Set<string>>(() => new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [displayMode, setDisplayMode] = useState<'open' | 'tight' | 'boxed'>('boxed');
   const [renameTarget, setRenameTarget] = useState<{
@@ -460,6 +577,28 @@ export function Sidebar({
     onMutedExpandedChange?.(v);
   };
 
+  const automationGroups = useMemo(
+    () => groupAutomationSessions([...workspaces, ...mutedWorkspaces]),
+    [workspaces, mutedWorkspaces],
+  );
+  const toggleAutomationGroup = (definitionId: string) => {
+    setExpandedAutomationGroups((current) => {
+      const next = new Set(current);
+      if (next.has(definitionId)) {
+        next.delete(definitionId);
+      } else {
+        next.add(definitionId);
+      }
+      return next;
+    });
+  };
+
+  const withoutAutomationRows = (workspace: SidebarWorkspace): SidebarWorkspace => ({
+    ...workspace,
+    sessions: workspace.sessions.filter((session) => !session.automation),
+    children: workspace.children.filter((child) => child.kind === 'tile' || !child.session.automation),
+  });
+
   // The chief holds its anchored slot whatever its workspace is, so a workspace
   // that survives in the tree must not draw it a second time.
   const withoutChiefRow = (workspace: SidebarWorkspace): SidebarWorkspace => {
@@ -480,9 +619,12 @@ export function Sidebar({
     !queue || workspace.pinned || isSessionless(workspace)
   );
   const visibleWorkspaces = workspaces.flatMap((candidate) => {
-    const workspace = withoutChiefRow(candidate);
+    const workspace = withoutChiefRow(withoutAutomationRows(candidate));
     return isWorkspaceVisible(workspace) && isTreeWorkspace(workspace) ? [workspace] : [];
   });
+  const visibleMutedWorkspaces = mutedWorkspaces
+    .map((workspace) => withoutChiefRow(withoutAutomationRows(workspace)))
+    .filter((workspace) => workspace.children.length > 0);
   const visibleVisualOrder = visualOrder.filter(isWorkspaceVisible);
   const visibleVisualIndexByWorkspaceId = new Map(
     visibleVisualOrder.map((workspace, index) => [workspace.id, index]),
@@ -914,6 +1056,17 @@ export function Sidebar({
                   <span className="sidebar-settings-switch-label">Agent queue</span>
                   <span className={`sidebar-settings-switch ${queueModeEnabled ? 'on' : ''}`} aria-hidden="true" />
                 </button>
+                <button
+                  type="button"
+                  className="sidebar-settings-switch-row sidebar-settings-switch-row--adjacent"
+                  role="switch"
+                  aria-checked={crewQueueEnabled}
+                  data-testid="toggle-crew-queue"
+                  onClick={() => onToggleCrewQueue?.()}
+                >
+                  <span className="sidebar-settings-switch-label">Crew in queue</span>
+                  <span className={`sidebar-settings-switch ${crewQueueEnabled ? 'on' : ''}`} aria-hidden="true" />
+                </button>
                 <span className="sidebar-settings-label">Display</span>
                 <div className="sidebar-display-toggle" role="group" aria-label="Sidebar display">
                   {(['open', 'tight', 'boxed'] as const).map((mode) => (
@@ -1122,71 +1275,65 @@ export function Sidebar({
                 const paneId = child.paneId;
                 const draggable = Boolean(paneId && onSessionDragStart);
                 return (
-                  <div
+                  <SidebarSessionRow
                     key={session.id}
-                    className={`session-item grouped ${selectedId === session.id ? 'selected' : ''} ${session.state === 'recoverable' ? 'recoverable' : ''} ${draggable ? 'session-item--draggable' : ''} ${draggingSessionId === session.id ? 'session-item--dragging' : ''}`.trim().replace(/\s+/g, ' ')}
-                    data-testid={`sidebar-session-${session.id}`}
-                    data-state={session.state}
-                    onClick={() => onSelectSession(session.id)}
+                    session={session}
+                    selected={selectedId === session.id}
+                    draggable={draggable}
+                    dragging={draggingSessionId === session.id}
+                    onSelect={() => onSelectSession(session.id)}
                     onClickCapture={draggable ? handleSessionClickCapture : undefined}
                     onPointerDown={draggable && paneId
                       ? (event) => handleSessionPointerDown(workspace, paneId, session.id, session.label, event)
                       : undefined}
-                    title={session.state === 'recoverable' ? 'Session will be recovered when opened' : undefined}
-                  >
-                    <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
-                    <span className="sidebar-session-identity">
-                      <span className="sidebar-session-headline">
-                        <SessionLabel label={session.label} />
-                        <SidebarSessionPullRequest pullRequests={session.pullRequests} />
-                      </span>
-                      <SessionProvenance automation={session.automation} density="compact" />
-                    </span>
-                    {session.endpointName && (
-                      <span className={`session-endpoint-badge status-${session.endpointStatus || 'connected'}`}>
-                        {session.endpointName}
-                      </span>
-                    )}
-                    {session.state === 'recoverable' && (
-                      <span className="session-recoverable">recoverable</span>
-                    )}
-                    {session.chiefOfStaff && <ChiefOfStaffBadge />}
-                    {session.delegatedFromChief && <DelegatedFromChiefBadge />}
-                    {session.isWorktree && <span className="worktree-indicator">⎇</span>}
-                    <div className="session-actions">
-                      <button
-                        className="session-action-btn session-more-btn"
-                        data-testid={`session-actions-${session.id}`}
-                        onClick={(event) => openSessionActions(session, event)}
-                        title={`Session actions (${formatShortcut('session.close')} closes)`}
-                        aria-label={`Actions for ${session.label}`}
-                      >
-                        •••
-                      </button>
-                    </div>
-                    {(session.autoSettleFiresAt || session.autoSettleHeld) && !onScreenSessionIds?.has(session.id) ? (
-                      <SidebarSettlingBar firesAt={session.autoSettleFiresAt} held={session.autoSettleHeld} />
-                    ) : null}
-                    {(() => {
-                      const nudgeMode = deriveNudgeMode({
-                        ticketUnread: session.ticketUnread,
-                        nudgeFiresAt: session.nudgeFiresAt,
-                        state: session.state,
-                        isActive: selectedId === session.id,
-                      });
-                      return nudgeMode ? (
-                        <SidebarNudgeBar
-                          mode={nudgeMode}
-                          firesAt={session.nudgeFiresAt}
-                          onTrigger={() => onTriggerNudge?.(session.id)}
-                        />
-                      ) : null;
-                    })()}
-                  </div>
+                    onOpenActions={(event) => openSessionActions(session, event)}
+                    onTriggerNudge={() => onTriggerNudge?.(session.id)}
+                    showSettling={!onScreenSessionIds?.has(session.id)}
+                  />
                 );
               })}
               </div>
               {workspace.id === lastReorderParticipantId && renderReorderSeam(reorderTrailingSeamIndex)}
+            </div>
+          );
+        })}
+        {automationGroups.map((group) => {
+          const expanded = expandedAutomationGroups.has(group.id);
+          return (
+            <div
+              className="automation-session-group"
+              data-testid={`sidebar-automation-${group.id}`}
+              data-automation-id={group.id}
+              key={group.id}
+            >
+              <button
+                type="button"
+                className="automation-session-header"
+                data-testid={`sidebar-automation-header-${group.id}`}
+                aria-expanded={expanded}
+                onClick={() => toggleAutomationGroup(group.id)}
+              >
+                <span className={`automation-session-chevron ${expanded ? 'expanded' : ''}`}>▸</span>
+                <span className="automation-session-name">{group.name}</span>
+                <span className="automation-session-count">
+                  {group.sessions.length} {group.sessions.length === 1 ? 'agent' : 'agents'}
+                </span>
+              </button>
+              {expanded && (
+                <div className="automation-session-list">
+                  {group.sessions.map((session) => (
+                    <SidebarSessionRow
+                      key={session.id}
+                      session={session}
+                      selected={selectedId === session.id}
+                      onSelect={() => onSelectSession(session.id)}
+                      onOpenActions={(event) => openSessionActions(session, event)}
+                      onTriggerNudge={() => onTriggerNudge?.(session.id)}
+                      showSettling={!onScreenSessionIds?.has(session.id)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
@@ -1228,7 +1375,7 @@ export function Sidebar({
         />
       )}
 
-      {mutedWorkspaces.length > 0 && (
+      {visibleMutedWorkspaces.length > 0 && (
         <div className="muted-sessions-section">
           <button
             className="muted-sessions-header"
@@ -1236,12 +1383,11 @@ export function Sidebar({
             aria-expanded={mutedExpanded}
           >
             <span className={`muted-sessions-chevron ${mutedExpanded ? 'expanded' : ''}`}>▸</span>
-            Muted Workspaces ({mutedWorkspaces.length})
+            Muted Workspaces ({visibleMutedWorkspaces.length})
           </button>
           {mutedExpanded && (
             <div className="muted-sessions-list">
-              {mutedWorkspaces.map((mutedWorkspace) => {
-                const workspace = withoutChiefRow(mutedWorkspace);
+              {visibleMutedWorkspaces.map((workspace) => {
                 return (
                 <div
                   key={`${workspace.endpointId || 'local'}:${workspace.id}`}

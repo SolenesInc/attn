@@ -245,6 +245,69 @@ describe('Dashboard in queue mode', () => {
     expect(screen.queryByTestId('all-settled')).not.toBeInTheDocument();
   });
 
+  it('keeps automation and opted-out crew sessions visible whether or not they owe a turn', () => {
+    const sessions = [
+      {
+        id: 'automation-owed',
+        label: 'automation owed',
+        state: 'waiting_input' as const,
+        cwd: '/automation-owed',
+        turnOwed: true,
+        turnOpenedAt: '2026-07-29T08:00:00Z',
+        automation: {
+          run_id: 'run-1',
+          definition_id: 'review-sol',
+          definition_name: 'Review with Sol',
+          trigger_type: 'schedule',
+        },
+      },
+      {
+        id: 'automation-settled',
+        label: 'automation settled',
+        state: 'working' as const,
+        cwd: '/automation-settled',
+        turnOwed: false,
+        automation: {
+          run_id: 'run-2',
+          definition_id: 'review-sol',
+          definition_name: 'Review with Sol',
+          trigger_type: 'schedule',
+        },
+      },
+      { id: 'crew-owed', label: 'crew owed', state: 'waiting_input' as const, cwd: '/crew-owed', crewMember: 'keel', turnOwed: true, turnOpenedAt: '2026-07-29T09:00:00Z' },
+      { id: 'crew-settled', label: 'crew settled', state: 'working' as const, cwd: '/crew-settled', crewMember: 'marlowe', turnOwed: false },
+      { id: 'ordinary', label: 'ordinary', state: 'waiting_input' as const, cwd: '/ordinary', turnOwed: true, turnOpenedAt: '2026-07-29T10:00:00Z' },
+    ];
+    const { rerender } = render(<Dashboard {...props} sessions={sessions} />);
+
+    const turns = screen.getByTestId('session-group-turns');
+    expect(turns).toContainElement(screen.getByTestId('session-ordinary'));
+    expect(turns).not.toContainElement(screen.getByTestId('session-crew-owed'));
+    expect(turns).not.toContainElement(screen.getByTestId('session-automation-owed'));
+
+    const waiting = screen.getByTestId('session-group-waiting');
+    expect(waiting).toContainElement(screen.getByTestId('session-automation-owed'));
+    expect(waiting).toContainElement(screen.getByTestId('session-crew-owed'));
+
+    const working = screen.getByTestId('session-group-working');
+    expect(working).toContainElement(screen.getByTestId('session-automation-settled'));
+    expect(working).toContainElement(screen.getByTestId('session-crew-settled'));
+
+    rerender(<Dashboard {...props} sessions={sessions} crewQueueEnabled />);
+
+    const names = Array.from(screen.getByTestId('session-group-turns').querySelectorAll('.session-name'))
+      .map((node) => node.textContent);
+    expect(names).toEqual(['crew owed', 'ordinary']);
+    expect(screen.getByTestId('session-group-waiting'))
+      .toContainElement(screen.getByTestId('session-automation-owed'));
+    expect(screen.getByTestId('session-group-waiting'))
+      .not.toContainElement(screen.getByTestId('session-crew-owed'));
+    expect(screen.getByTestId('session-group-working'))
+      .toContainElement(screen.getByTestId('session-automation-settled'));
+    expect(screen.getByTestId('session-group-working'))
+      .toContainElement(screen.getByTestId('session-crew-settled'));
+  });
+
   it('marks the state groups so a reader can tell them from the turn band', () => {
     const later = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     render(
