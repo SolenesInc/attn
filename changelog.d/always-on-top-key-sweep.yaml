@@ -1,0 +1,13 @@
+kind: fixed
+area: harness
+change: >
+  Real-app scenarios that press native keys now opt out of the always-on-top
+  harness window (non-focusable on macOS, so keys landed nowhere), and the
+  macOS input driver fails fast naming the opt-out instead of timing out a
+  step 17 s later. Stalled screenshots name occlusion instead of a bare
+  timeout, and scenario evidence screenshots fail instead of warning away.
+symptom: >
+  countdown-cancel, notebook-tile-close and terminal-block-copy pressed keys
+  against a non-focusable window, so their native-key claims were dead on
+  macOS; a stalled plot screenshot warned and left the artifact silently
+  missing.

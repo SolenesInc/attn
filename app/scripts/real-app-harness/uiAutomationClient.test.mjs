@@ -252,3 +252,35 @@ function recordSignals({ alive }) {
   });
   return signals;
 }
+
+describe('UiAutomationClient.requestOnce timeouts', () => {
+  it('names occlusion when a screenshot stalls to its cap', async () => {
+    const net = await import('node:net');
+    const server = net.createServer((socket) => {
+      socket.on('data', () => {});
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const manifestPath = path.join(
+      os.tmpdir(),
+      `attn-harness-manifest-silent-${process.pid}-${Date.now()}.json`,
+    );
+    const manifest = { token: 'test-token', port: server.address().port };
+    const fs = await import('node:fs');
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+    try {
+      const client = new UiAutomationClient({ manifestPath });
+      await expect(client.requestOnce('capture_screenshot_data', {}, 100)).rejects.toThrow(
+        /occluded and rAF-throttled/,
+      );
+      await expect(client.requestOnce('list_sessions', {}, 100)).rejects.toThrow(
+        /Automation request timed out: list_sessions/,
+      );
+      await expect(client.requestOnce('list_sessions', {}, 100)).rejects.not.toThrow(
+        /occluded/,
+      );
+    } finally {
+      fs.rmSync(manifestPath, { force: true });
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+});

@@ -41,6 +41,18 @@ export function withWindowTitleArgs(args, opts = {}) {
   return [...args, '--window-title', opts.windowTitle];
 }
 
+// A macOS always-on-top harness window is non-focusable (set_focusable(false)),
+// so synthetic keys land nowhere. Fail on the first keystroke, not a step timeout later.
+export function assertHarnessWindowAcceptsKeys(env = process.env, platform = process.platform) {
+  if (platform !== 'darwin' || env.ATTN_HARNESS_ALWAYS_ON_TOP === '0') {
+    return;
+  }
+  throw new Error(
+    'Synthetic keys cannot reach the non-focusable always-on-top harness window on macOS. '
+    + "Scenarios that press keys opt out with process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0' before launch.",
+  );
+}
+
 export class MacOSDriver {
   constructor({
     bundleId = null,
@@ -143,11 +155,13 @@ export class MacOSDriver {
   }
 
   async typeText(text) {
+    assertHarnessWindowAcceptsKeys();
     await this.runInputDriver(['text', '--text', text, '--prompt-accessibility']);
     await delay(this.actionDelayMs);
   }
 
   async pressKey(key, modifiers = {}) {
+    assertHarnessWindowAcceptsKeys();
     await this.runInputDriver([
       'key',
       '--key',
@@ -160,6 +174,7 @@ export class MacOSDriver {
   }
 
   async pressKeyCode(keyCode, modifiers = {}) {
+    assertHarnessWindowAcceptsKeys();
     await this.runInputDriver([
       'keycode',
       '--key-code',

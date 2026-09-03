@@ -192,16 +192,13 @@ async function main() {
         'the plot offers every child', { state, children },
       );
       const screenshotPath = path.join(runner.runDir, 'seed-tile-plot.png');
-      try {
-        const shot = await client.request('capture_screenshot_data', {
-          selector: `.seed-document[data-seed-id="${crown}"] .seed-document__plot`,
-        }, { timeoutMs: 8_000 });
-        if (shot.pngBase64) {
-          fs.writeFileSync(screenshotPath, Buffer.from(shot.pngBase64, 'base64'));
-        }
-      } catch (error) {
-        console.warn(`[RealAppHarness] Plot screenshot skipped: ${error instanceof Error ? error.message : String(error)}`);
+      const shot = await client.request('capture_screenshot_data', {
+        selector: `.seed-document[data-seed-id="${crown}"] .seed-document__plot`,
+      }, { timeoutMs: 8_000 });
+      if (!shot.pngBase64) {
+        throw new Error('capture_screenshot_data returned no PNG data for the seed plot');
       }
+      fs.writeFileSync(screenshotPath, Buffer.from(shot.pngBase64, 'base64'));
     });
 
     await runner.step('escape_unwinds_the_recursive_plot_trail', async () => {
