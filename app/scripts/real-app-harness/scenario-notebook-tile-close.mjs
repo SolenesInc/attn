@@ -110,7 +110,6 @@ async function main() {
 
   try {
     process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
-    // macOS makes an always-on-top window non-focusable: native keys land nowhere.
     process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
     await launchFreshAppAndConnect(client, observer);
     await closeExistingSessions(client, options.sessionRootDir);

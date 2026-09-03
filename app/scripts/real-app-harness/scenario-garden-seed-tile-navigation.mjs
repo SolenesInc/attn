@@ -192,7 +192,6 @@ async function main() {
         'the plot offers every child', { state, children },
       );
       const screenshotPath = path.join(runner.runDir, 'seed-tile-plot.png');
-      // A stalled screenshot is an occluded window, not missing evidence: fail, never skip.
       const shot = await client.request('capture_screenshot_data', {
         selector: `.seed-document[data-seed-id="${crown}"] .seed-document__plot`,
       }, { timeoutMs: 8_000 });
