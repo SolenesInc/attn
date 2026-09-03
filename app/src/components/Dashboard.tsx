@@ -145,9 +145,12 @@ export function Dashboard({
 
   const settledSessions = useMemo(() => (
     queueModeEnabled
-      ? awakeSessions.filter((s) => !(s.turnOwed && !s.chiefOfStaff))
+      ? awakeSessions.filter((s) => (
+        !sessionParticipatesInQueue(s, crewQueueEnabled)
+        || !(s.turnOwed && !s.chiefOfStaff)
+      ))
       : awakeSessions
-  ), [queueModeEnabled, awakeSessions]);
+  ), [queueModeEnabled, crewQueueEnabled, awakeSessions]);
 
   const stateGroups = useMemo(() => (
     STATE_GROUPS
