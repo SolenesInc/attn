@@ -17,12 +17,12 @@ const sessions = [
 
 const transport: MarkdownAnnotationsTransport = {
   getMarkdownAnnotations: async () => ({
-    annotations: [{
-      id: 'overall-1',
-      type: 'global',
-      text: 'Check the conclusion.',
-      created_at: 1,
-    }],
+    annotations: Array.from({ length: Number(new URLSearchParams(window.location.search).get('notes')) || 1 }, (_, index) => ({
+      id: `overall-${index + 1}`,
+      type: 'global' as const,
+      text: `Check the conclusion. Note ${index + 1}.`,
+      created_at: index + 1,
+    })),
     generation: 1,
   }),
   saveMarkdownAnnotations: async () => ({ stale: false }),
