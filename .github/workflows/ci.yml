@@ -114,7 +114,7 @@ jobs:
               - 'scripts/build-app-runtime-host.sh'
   changelog:
     name: Changelog
-    needs: changes
+    needs: [changes, app-acceptance]
     if: github.event_name == 'pull_request' || needs.changes.outputs.force_all == 'true'
     permissions:
       actions: read
@@ -474,6 +474,141 @@ jobs:
             (cd "$plugin" && bun test)
           done
 
+  app-acceptance:
+    name: App acceptance
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next'
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-24.04
+    # ubuntu-24.04 run 33657368804 took 35m42s end to end; its matrix took 24m07.635s.
+    # 60m leaves 24m18s of runner variance before releasing the repository-wide lock.
+    timeout-minutes: 60
+    concurrency:
+      group: app-acceptance-${{ github.repository }}
+      cancel-in-progress: false
+    env:
+      ATTN_PROFILE: app-acceptance
+      ATTN_HARNESS_PROFILE: app-acceptance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo add-apt-repository -y ppa:fish-shell/release-4
+          sudo apt-get update
+          sudo apt-get install -y bash coreutils curl desktop-file-utils fish imagemagick \
+            libayatana-appindicator3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev \
+            libxdo-dev sqlite3 xauth xclip xdg-utils xdotool xvfb zsh
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Read bun pin
+        id: bun
+        run: echo "version=$(awk '/^bun / { print $2 }' .tool-versions)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+
+      - name: Install packaged app and bundled plugin
+        env:
+          CI: 'true'
+        run: |
+          make install PROFILE="$ATTN_PROFILE"
+          ./attn plugin install-bundled attn-pi
+          mkdir -p "$RUNNER_TEMP/attn-harness-bin"
+          install -m 0755 app/scripts/real-app-harness/ci-xdg-open "$RUNNER_TEMP/attn-harness-bin/xdg-open"
+          echo "$RUNNER_TEMP/attn-harness-bin" >> "$GITHUB_PATH"
+          echo "$PWD/plugins/attn-pi/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Run serial matrix
+        id: matrix
+        continue-on-error: true
+        env:
+          ATTN_REAL_APP_ARTIFACTS_DIR: ${{ runner.temp }}/attn-real-app-harness
+        run: xvfb-run -a -s '-screen 0 1600x1000x24' pnpm --dir app run real-app:serial-matrix
+
+      - name: Collect daemon and worker logs
+        if: always()
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/attn-real-app-harness
+        run: |
+          data_dir="$(./attn profile resolve --field dataDir 2>/dev/null || true)"
+          mkdir -p "$EVIDENCE_DIR/daemon"
+          if [ -f "$data_dir/daemon.log" ]; then
+            cp "$data_dir/daemon.log" "$EVIDENCE_DIR/daemon/daemon.log"
+          fi
+          if [ -d "$data_dir/workers" ]; then
+            find "$data_dir/workers" -name '*.log' -exec cp {} "$EVIDENCE_DIR/daemon/" \;
+          fi
+          ls "$EVIDENCE_DIR/daemon"
+
+      - name: Upload app acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-acceptance-evidence-${{ github.run_attempt }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/attn-real-app-harness/matrix-digest.txt
+            ${{ runner.temp }}/attn-real-app-harness/**/*.txt
+            ${{ runner.temp }}/attn-real-app-harness/**/*.png
+            ${{ runner.temp }}/attn-real-app-harness/**/*.json
+            ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
+
+      - name: Clean profile
+        if: always()
+        run: ./attn profile clean "$ATTN_PROFILE"
+
+      - name: Gate app acceptance
+        if: always()
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          MATRIX_OUTCOME: ${{ steps.matrix.outcome }}
+        run: |
+          if [ "$MATRIX_OUTCOME" = success ]; then
+            echo "app acceptance: Linux serial matrix is green for $HEAD_SHA"
+            exit 0
+          fi
+          if [[ "$EVENT_NAME/$HEAD_BRANCH" =~ ^pull_request/(release/v[0-9]+\.[0-9]+\.[0-9]+|hotfix/.+)$ ]]; then
+            ./scripts/workflow-job-gate.sh \
+              app-acceptance.yml "$HEAD_SHA" workflow_dispatch main 'App acceptance'
+            echo "app acceptance: protected-main manual override is green for $HEAD_SHA"
+            exit 0
+          fi
+          if [ "$EVENT_NAME/$GITHUB_REF" = push/refs/heads/main ]; then
+            ./scripts/app-acceptance-gate.sh "$HEAD_SHA"
+            echo "app acceptance: candidate receipt covers main $HEAD_SHA"
+            exit 0
+          fi
+          echo "app acceptance: Linux serial matrix is $MATRIX_OUTCOME for $HEAD_SHA" >&2
+          exit 1
+
   release-preflight:
     name: Release preflight
     needs: changes
@@ -497,6 +632,7 @@ jobs:
       - rust
       - rust-gate
       - plugins
+      - app-acceptance
       - release-preflight
     permissions:
       contents: read
@@ -510,7 +646,7 @@ jobs:
         run: >-
           ./scripts/ci-gate.sh pr
           changes main-route changelog generated-types backend frontend frontend-e2e
-          frontend-e2e-gate rust rust-gate plugins release-preflight
+          frontend-e2e-gate rust rust-gate plugins app-acceptance release-preflight
 
   acceptance:
     name: Acceptance
@@ -527,6 +663,7 @@ jobs:
       - rust
       - rust-gate
       - plugins
+      - app-acceptance
       - release-preflight
     permissions:
       contents: read
@@ -540,7 +677,7 @@ jobs:
         run: >-
           ./scripts/ci-gate.sh acceptance
           changes main-route changelog generated-types backend frontend frontend-e2e
-          frontend-e2e-gate rust rust-gate plugins release-preflight
+          frontend-e2e-gate rust rust-gate plugins app-acceptance release-preflight
 
   branch-health:
     name: Report branch health

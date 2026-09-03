@@ -489,7 +489,7 @@ async function main() {
         }
       );
       await delay(500);
-      const actualResumeId = await queryStoredResumeId(dbPath, sessionId);
+      const actualResumeId = await waitForStoredResumeId(dbPath, sessionId, 30_000);
       const actualTranscriptPath = await queryStoredTranscriptPath(dbPath, sessionId);
       runner.assert(
         actualResumeId === expectedResumeId && actualTranscriptPath === expectedTranscriptPath,

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1:-}" in
+  http://127.0.0.1:*|http://localhost:*) exec curl --fail --silent --show-error "$1" ;;
+  *) exec /usr/bin/xdg-open "$@" ;;
+esac

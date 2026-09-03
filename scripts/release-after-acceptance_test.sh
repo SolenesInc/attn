@@ -46,6 +46,19 @@ if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/42/jobs?'* ]]
     'https://github.com/example/attn/actions/runs/42/job/7'
   exit 0
 fi
+if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/ci.yml/runs?event=push'* ]]; then
+  if [[ "${FAKE_CI_APP_MODE:-missing}" != missing ]]; then
+    printf '2026-08-29T10:00:00Z\t45\t%s\tcompleted\t%s\t%s\n' "$FAKE_EXPECTED_SHA" \
+      "${FAKE_CI_APP_CONCLUSION:-success}" \
+      'https://github.com/example/attn/actions/runs/45'
+  fi
+  exit 0
+fi
+if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/45/jobs?'* ]]; then
+  printf 'completed\t%s\t%s\n' "${FAKE_CI_APP_CONCLUSION:-success}" \
+    'https://github.com/example/attn/actions/runs/45/job/10'
+  exit 0
+fi
 if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/pulls/42/commits?'* ]]; then
   printf '%s\n' "$FAKE_CANDIDATE_SHA"
   exit 0
@@ -137,6 +150,8 @@ export FAKE_MAIN_TREE="$FAKE_CANDIDATE_TREE"
 export FAKE_CANDIDATE_MODE=success
 export FAKE_APP_MODE=success
 export FAKE_APP_CONCLUSION=success
+export FAKE_CI_APP_MODE=missing
+export FAKE_CI_APP_CONCLUSION=success
 export FAKE_MAIN_CHECK_COUNT="$work/main-check-count"
 export FAKE_MOVED_MAIN_SHA=cccccccccccccccccccccccccccccccccccccccc
 export FAKE_MOVE_MAIN_AT_CHECK=
@@ -156,6 +171,8 @@ setup_fixture() {
   export FAKE_CANDIDATE_MODE=success
   export FAKE_APP_MODE=success
   export FAKE_APP_CONCLUSION=success
+  export FAKE_CI_APP_MODE=missing
+  export FAKE_CI_APP_CONCLUSION=success
   export FAKE_MAIN_TREE="$FAKE_CANDIDATE_TREE"
   export FAKE_RELEASE_RUN_PAGE_2=0
   export FAKE_RELEASE_RUN_STATUS=completed
@@ -275,6 +292,16 @@ if git --git-dir="$fixture_origin" show-ref --verify --quiet "refs/tags/$candida
   echo "missing App acceptance created a tag" >&2
   exit 1
 fi
+
+setup_fixture automated-app
+export FAKE_CI_APP_MODE=success
+run_release_after_acceptance >"$work/automated-app.out"
+grep -Fq "CI App acceptance is green for main $candidate_sha" "$work/automated-app.out"
+if grep -q '/pulls' "$FAKE_GH_LOG"; then
+  echo "green main App acceptance queried the candidate override" >&2
+  exit 1
+fi
+export FAKE_CI_APP_MODE=missing
 
 setup_fixture moved-before-tag
 export FAKE_MOVE_MAIN_AT_CHECK=2

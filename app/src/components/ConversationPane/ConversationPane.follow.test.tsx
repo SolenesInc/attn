@@ -1,10 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { ConversationPane } from './index';
 import { DaemonApiProvider, type DaemonApi } from '../../contexts/DaemonApiContext';
 import { useConversationsStore } from '../../store/conversations';
 
 const SESSION = 'sess-follow';
+let resizeCallback: ResizeObserverCallback | null = null;
+
+class DrivableResizeObserver {
+  constructor(callback: ResizeObserverCallback) { resizeCallback = callback; }
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
 
 function renderPane() {
   const api = {
@@ -46,7 +54,13 @@ function snapshot(text: string, seq: number) {
 
 describe('ConversationPane follow mode', () => {
   beforeEach(() => {
+    vi.stubGlobal('ResizeObserver', DrivableResizeObserver);
+    resizeCallback = null;
     useConversationsStore.setState({ conversations: {} });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('opens on the newest message and keeps following it', () => {
@@ -89,5 +103,23 @@ describe('ConversationPane follow mode', () => {
     sizeList(list, { scrollHeight: 900, clientHeight: 100 });
     apply('message_delta', { id: 'm1', text: ' and more' }, 3);
     expect(list.scrollTop).toBe(900);
+  });
+
+  it('follows post-render growth without moving a reader who scrolled back', () => {
+    renderPane();
+    apply('session_ready', { state: 'working' }, 1);
+    const list = screen.getByTestId('conversation-messages');
+    sizeList(list, { scrollHeight: 600, clientHeight: 100 });
+    snapshot('first', 2);
+
+    sizeList(list, { scrollHeight: 900, clientHeight: 100 });
+    act(() => resizeCallback?.([], {} as ResizeObserver));
+    expect(list.scrollTop).toBe(900);
+
+    list.scrollTop = 200;
+    fireEvent.scroll(list);
+    sizeList(list, { scrollHeight: 1_200, clientHeight: 100 });
+    act(() => resizeCallback?.([], {} as ResizeObserver));
+    expect(list.scrollTop).toBe(200);
   });
 });

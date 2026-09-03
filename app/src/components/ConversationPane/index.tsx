@@ -80,6 +80,16 @@ export function ConversationPane({ sessionId, paneActive, sessionState, resolved
     if (followingRef.current) list.scrollTop = list.scrollHeight;
   }, [lastLength, items.length]);
 
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return undefined;
+    const observer = new ResizeObserver(() => {
+      if (followingRef.current) list.scrollTop = list.scrollHeight;
+    });
+    for (const item of list.children) observer.observe(item);
+    return () => observer.disconnect();
+  }, [items.length]);
+
   // A mermaid diagram draws one frame AFTER the text that carried it, growing
   // the document with no delta to notice.
   const followDiagramGrowth = useCallback(() => {

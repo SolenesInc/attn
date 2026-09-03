@@ -338,9 +338,10 @@ EOF
 else
   cat >>"$body" <<EOF
 
-## Manual app verification
+## App acceptance
 
-Run the packaged-app scenarios from this exact candidate, then attach the receipt to this SHA:
+CI builds the packaged Linux app and runs the real-app serial matrix on this exact
+candidate. If that job cannot cover the candidate, record a manual override:
 
 \`\`\`bash
 gh workflow run app-acceptance.yml \\
@@ -351,6 +352,9 @@ gh workflow run app-acceptance.yml \\
   -f evidence='<recording URL or concise receipt>' \\
   -f outcome=passed
 \`\`\`
+
+A manual dispatch does not restart this candidate's CI run. Rerun CI after
+recording the override.
 
 Do not merge until \`PR gate\` and \`App acceptance\` are green on \`${candidate_sha}\`.
 

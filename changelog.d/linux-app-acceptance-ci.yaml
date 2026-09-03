@@ -1,0 +1,5 @@
+kind: internal
+area: release
+change: >
+  GitHub Actions now installs the packaged Linux app and runs the real-app
+  serial matrix as App acceptance for every release-gated commit.

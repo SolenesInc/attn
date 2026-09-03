@@ -48,7 +48,13 @@ if [[ "$candidate_tree" != "$main_tree" ]]; then
   exit 1
 fi
 
-"$script_root/workflow-job-gate.sh" \
-  app-acceptance.yml "$candidate_sha" workflow_dispatch main 'App acceptance'
+if "$script_root/workflow-job-gate.sh" \
+  ci.yml "$candidate_sha" pull_request - 'App acceptance'; then
+  echo "app acceptance gate: CI App acceptance is green for $candidate_sha"
+else
+  "$script_root/workflow-job-gate.sh" \
+    app-acceptance.yml "$candidate_sha" workflow_dispatch main 'App acceptance'
+  echo "app acceptance gate: manual App acceptance override is green for $candidate_sha"
+fi
 
 echo "app acceptance gate: PR #$candidate_number $candidate_branch passed at $candidate_sha ($candidate_url)"

@@ -312,8 +312,8 @@ for value in '| Publication | `held` |' '## Publication hold' \
   'does not claim packaged-app verification' 'stop before App acceptance'; do
   grep -Fq -- "$value" "$FAKE_PR_BODY"
 done
-if grep -Fq '## Manual app verification' "$FAKE_PR_BODY"; then
-  echo "held candidate requested manual App acceptance" >&2
+if grep -Fq '## App acceptance' "$FAKE_PR_BODY"; then
+  echo "held candidate requested App acceptance" >&2
   exit 1
 fi
 

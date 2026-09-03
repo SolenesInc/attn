@@ -92,8 +92,10 @@ function writeDelegateFixture(cwd) {
         ],
       },
       {
-        includes: 'Now harvest your assigned seed',
+        includes: '📨 session',
         actions: [
+          { type: 'capture', from: 'prompt', pattern: 'message ([0-9a-f-]{36})', name: 'message' },
+          { type: 'attn', args: ['agent', 'inbox', '{{message}}'] },
           { type: 'attn', args: ['seed', 'harvest', '{{seed}}', '-m', HARVEST_REASON], state: 'idle' },
         ],
       },
@@ -188,7 +190,7 @@ async function main() {
       await runInPane(client, dispatcher,
         `attn agent msg ${seed} "Now harvest your assigned seed with reason: ${HARVEST_REASON}" ` +
           `--source-session ${dispatcher.sessionId}`,
-        'delivered');
+        'notified seed-bell');
       const text = await waitForPane(client, dispatcher, `${seed} moved: harvested`, 60_000);
       runner.assert(saw(text, `${seed} moved: note`), 'the first doorbell remains visible', { text });
       runner.assert(saw(text, `${seed} moved: harvested`), 'the harvest rings after the read reset', { text });

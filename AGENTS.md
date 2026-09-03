@@ -24,8 +24,8 @@ asks of you as a maintainer:
   rendered markdown file, comments on it, and sends the batch to a session as
   one message.
 
-The app (the Tauri UI) is mac only for now; Linux support is being worked upon.
-The daemon runs on Linux, so daemon code stays portable.
+The app (the Tauri UI) runs on macOS and Linux; Linux CI exercises its packaged
+application tree under Xvfb. The daemon stays portable across both platforms.
 
 ## What makes attn special?
 

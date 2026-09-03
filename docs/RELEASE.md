@@ -25,7 +25,7 @@ It then:
 3. Updates the app version and lockfiles.
 4. Writes `.github/release-candidate.yml` with the source and `main` baseline.
 5. Validates that the candidate contains release-only changes.
-6. Pushes the branch and opens a draft PR to `main`.
+6. Pushes the branch and opens a ready PR to `main`.
 
 It does not merge the PR, create a tag, or start the release workflow.
 The compiled section carries a hidden SHA-256 receipt over the frozen fragment
@@ -33,9 +33,12 @@ paths and Git blobs, which candidate validation checks before merge.
 
 ## Accept the candidate
 
-Review the generated changelog, then install and exercise the packaged app from
-the exact candidate head. The draft PR contains a ready-to-fill command for the
-manual receipt:
+Review the generated changelog and the automated `App acceptance` job. It builds
+the packaged Linux app from the exact candidate head, runs the real-app serial
+matrix under Xvfb, and uploads its digest, pane text, and screenshots.
+
+If Linux CI cannot cover the candidate, use the ready-to-fill command in the PR
+to record a manual override from protected `main`:
 
 ```bash
 gh workflow run app-acceptance.yml \
@@ -47,11 +50,11 @@ gh workflow run app-acceptance.yml \
   -f outcome=passed
 ```
 
-`App acceptance` loads its workflow and receipt script from protected `main`,
-then checks out the exact `candidate_sha` separately. Any candidate edit needs
-a new receipt. Make the PR ready only when `PR gate` and `App acceptance` are
-green for the same candidate head. The candidate's first CI run waits on this
-manual receipt; rerun it after recording acceptance.
+The override loads its workflow and receipt script from protected `main`, then
+checks out the exact `candidate_sha` separately. Any candidate edit needs a new
+automated or manual receipt. A manual dispatch does not restart candidate CI, so
+rerun it after recording the override. Merge only when `PR gate` and `App
+acceptance` are green for the same candidate head.
 
 ## Release preflight
 
@@ -88,10 +91,9 @@ The repository event loads the workflow from protected `main`, so an older tag
 cannot select an older release workflow. The validation job never executes
 gate code from the tag under inspection. The workflow rebuilds only after it
 proves the tag is the exact current `main`,
-its exact SHA has green `Acceptance` from
-`ci.yml`, its originating candidate has green exact-head `App acceptance` from
-the protected `main` copy of `app-acceptance.yml`, and its manifest
-and committed versions still agree.
+its exact SHA has green `Acceptance` and `App acceptance` from `ci.yml`, or its
+originating candidate has a green exact-head automated or protected-main manual
+receipt, and its manifest and committed versions still agree.
 Every build checks out the validated commit SHA. Publication stops if the
 remote tag no longer resolves to that SHA. Publishing an older build after a
 newer version has completed does not move GitHub's latest release or the
