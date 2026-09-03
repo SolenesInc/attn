@@ -1,8 +1,5 @@
 #!/usr/bin/env node
 
-// Shell contract: fish emits OSC 133, so blocks must exist and hit-test. The
-// no-integration legs live in internal/pty (TestShellIntegrationOptOutEmitsNoMarks).
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -82,7 +79,6 @@ async function runCommandAndWait(client, sessionId, paneId, command, expectedLin
     `output of ${expectedLine}`, 30_000);
 }
 
-// A widening pane never trips the reflow check on its own; its column count does.
 async function waitForPaneColumnsToChange(client, sessionId, paneId, previousCols) {
   await waitForPaneState(
     client,
@@ -260,12 +256,8 @@ async function main() {
       await selectAndWaitForPane(client, sessionId, paneId);
       const wideCols = (await client.request('get_pane_block_state', { sessionId, paneId })).cols;
       await client.request('split_pane', { sessionId, targetPaneId: paneId, direction: 'vertical' });
-      // The split focuses the new pane's session; re-select ours so bridge clicks
-      // resolve against the workspace view the DOM renders.
       await client.request('select_session', { sessionId });
       await waitForPaneColumnsToChange(client, sessionId, paneId, wideCols);
-      // History may be restored by a debounced replay re-request after the split's
-      // geometry change — wait for it rather than sampling once.
       await waitForPaneText(client, sessionId, paneId, (text) => {
         const lines = text.split('\n').map((line) => line.trim());
         return sentinels.every((sentinel) => lines.includes(sentinel));
@@ -294,8 +286,6 @@ async function main() {
       );
       await runCommandAndWait(client, sessionId, paneId, 'echo postclose', 'postclose');
       await clickAndExpectSelected(client, sessionId, paneId, 'postclose', 'echo postclose', `${SHELL} post-close`);
-      // Columns truncated at the narrow width stay truncated until the next replay
-      // re-parses the raw history (no-reflow resize).
       await waitForPaneText(client, sessionId, paneId, (text) => {
         const lines = text.split('\n').map((line) => line.trim());
         return [...sentinels, 'postsplit'].every((sentinel) => lines.includes(sentinel));

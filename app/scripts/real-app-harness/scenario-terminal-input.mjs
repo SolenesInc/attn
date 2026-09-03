@@ -51,8 +51,7 @@ const KITTY_REPEAT_HEX = [
   '1b5b39373b313a3375',          // release: CSI 97;1:3u
 ].join('');
 
-// Key bytes and this sentinel ride the same ordered pty channel, so a stray byte lands first.
-const SENTINEL = '\x1e';
+const AFTER_KEYS_SENTINEL = '\x1e';
 
 const CAPTURE_PROGRAM = String.raw`
 const label = process.argv[2];
@@ -218,7 +217,6 @@ async function main() {
     });
   };
 
-  // 20s is a tripwire: the setting round-trips through the daemon in milliseconds.
   const waitForBinding = async (shortcutId, predicate, description, timeoutMs = 20_000) => {
     const deadline = Date.now() + timeoutMs;
     let last = null;
@@ -277,7 +275,7 @@ async function main() {
     await client.request('write_pane', {
       sessionId,
       paneId: pane.paneId,
-      text: SENTINEL,
+      text: AFTER_KEYS_SENTINEL,
       submit: false,
     });
     const beginMarker = `INPUT_BEGIN_${label}`;

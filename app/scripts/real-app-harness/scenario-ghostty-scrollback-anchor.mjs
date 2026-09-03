@@ -133,7 +133,6 @@ async function main() {
         'seed anchor re-anchored before stream output begins',
         10_000,
       );
-      // The stream must start after the scroll, or the anchor holds trivially.
       fs.writeFileSync(streamGate, 'go\n', 'utf8');
       await waitForPaneText(
         client,

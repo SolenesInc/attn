@@ -213,6 +213,11 @@ async function main() {
       return view?.activeLeafId === tileId;
     };
 
+    const movePointerOntoCellFromElsewhere = async (target) => {
+      await driver.movePointerInWindow(0.5, 0.9);
+      await driver.movePointerInWindow(target.relativeX, target.relativeY);
+    };
+
     // The pointer cursor is the receipt that the async path-exists check resolved.
     const pointAtLiveLink = async (relPath, timeoutMs = 20_000) => {
       const deadline = Date.now() + timeoutMs;
@@ -226,10 +231,7 @@ async function main() {
           meta: true,
         }));
         if (cursor === 'pointer') {
-          // The detector runs on mousemove, and the native pointer may already be
-          // parked on the cell from the previous click.
-          await driver.movePointerInWindow(0.5, 0.9);
-          await driver.movePointerInWindow(target.relativeX, target.relativeY);
+          await movePointerOntoCellFromElsewhere(target);
           return target;
         }
         await delay(100);
@@ -260,21 +262,19 @@ async function main() {
 
     let alphaTileId;
     let alphaNode;
-    await runner.step('plain_click_opens_nothing_cmd_click_docks_alpha', async () => {
-      const plainTarget = await pointAtLiveLink('./alpha.md');
+    await runner.step('plain_click_beta_opens_nothing_cmd_click_alpha_docks', async () => {
+      const plainTarget = await pointAtLiveLink('./beta.md');
       await driver.clickWindow(plainTarget.relativeX, plainTarget.relativeY);
 
-      // The Cmd+click below rides the same OS event queue as the plain click, so
-      // alpha docking proves the plain click on that same live link was handled.
       await cmdClickPath(
         './alpha.md',
         () => markdownTileNodes().some((node) => node.tile_params?.endsWith('/alpha.md')),
         'the alpha markdown tile to dock',
       );
-      const alphaTiles = markdownTileNodes();
+      const dockedTiles = markdownTileNodes();
       runner.assert(
-        alphaTiles.length === 1,
-        `A plain click on the live ./alpha.md link must open no markdown tile; found ${JSON.stringify(alphaTiles)}`,
+        dockedTiles.length === 1,
+        `A plain click on the live ./beta.md link must open no markdown tile; docked ${JSON.stringify(dockedTiles)}`,
       );
       const tilesAfterAlpha = await markdownTileIds();
       alphaTileId = tilesAfterAlpha[0];
@@ -282,7 +282,7 @@ async function main() {
         tilesAfterAlpha.length === 1 && /^tile-markdown-[0-9a-f]{16}$/.test(alphaTileId),
         `Unexpected markdown tile ids: ${JSON.stringify(tilesAfterAlpha)}`,
       );
-      alphaNode = alphaTiles[0];
+      alphaNode = dockedTiles[0];
       runner.assert(
         Boolean(alphaNode.tile_params?.endsWith('/alpha.md')),
         `Alpha tile params should end with /alpha.md: ${JSON.stringify(alphaNode)}`,
