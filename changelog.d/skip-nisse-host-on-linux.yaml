@@ -1,0 +1,7 @@
+kind: internal
+area: harness
+change: >
+  The six real-app scenarios that run the attn-nisse host skip on Linux with
+  the reason in the matrix digest: the host exits seconds after spawn in some
+  Linux runs, and nisse is being deprecated. nisse-markdown-stream, which
+  replays a recording, still runs.
