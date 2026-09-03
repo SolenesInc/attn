@@ -14,9 +14,9 @@ describe('createResizeCoalescer', () => {
     const apply = vi.fn();
     const coalescer = createResizeCoalescer(apply);
 
-    coalescer.submit({ cols: 100, rows: 30 }, true);
-    coalescer.submit({ cols: 110, rows: 31 }, true);
-    coalescer.submit({ cols: 120, rows: 32 }, true);
+    coalescer.submit({ cols: 100, rows: 30 });
+    coalescer.submit({ cols: 110, rows: 31 });
+    coalescer.submit({ cols: 120, rows: 32 });
 
     expect(apply).toHaveBeenCalledTimes(1);
     expect(apply).toHaveBeenLastCalledWith({ cols: 100, rows: 30 });
@@ -29,20 +29,17 @@ describe('createResizeCoalescer', () => {
     expect(apply).toHaveBeenLastCalledWith({ cols: 120, rows: 32 });
   });
 
-  it('flushes final non-coalesced geometry immediately and cancels the trailing timer', () => {
+  it('finishes a sustained burst at the latest size and leaves no idle timer', () => {
     vi.useFakeTimers();
     const apply = vi.fn();
     const coalescer = createResizeCoalescer(apply);
-
-    coalescer.submit({ cols: 100, rows: 30 }, true);
-    coalescer.submit({ cols: 110, rows: 31 }, true);
-    coalescer.submit({ cols: 125, rows: 34 }, false);
-
-    expect(apply).toHaveBeenCalledTimes(2);
-    expect(apply).toHaveBeenLastCalledWith({ cols: 125, rows: 34 });
-
+    for (let step = 0; step <= 20; step++) {
+      coalescer.submit({ cols: 100 + step, rows: 30 });
+      vi.advanceTimersByTime(25);
+    }
     vi.advanceTimersByTime(250);
-    expect(apply).toHaveBeenCalledTimes(2);
+    expect(apply.mock.calls.map(([size]) => size.cols)).toEqual([100, 109, 119, 120]);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('drops pending geometry when cancelled', () => {
@@ -50,8 +47,8 @@ describe('createResizeCoalescer', () => {
     const apply = vi.fn();
     const coalescer = createResizeCoalescer(apply);
 
-    coalescer.submit({ cols: 100, rows: 30 }, true);
-    coalescer.submit({ cols: 110, rows: 31 }, true);
+    coalescer.submit({ cols: 100, rows: 30 });
+    coalescer.submit({ cols: 110, rows: 31 });
     coalescer.cancel();
     vi.advanceTimersByTime(250);
 

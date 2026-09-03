@@ -1575,7 +1575,7 @@ describe('SessionTerminalWorkspace', () => {
         agent: 'claude',
         policy: 'fresh_spawn',
       },
-      forceResizeBeforeAttach: false,
+      forceResizeBeforeAttach: true,
     });
   });
 });

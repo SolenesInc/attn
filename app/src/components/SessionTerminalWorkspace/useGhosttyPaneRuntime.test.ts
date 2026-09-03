@@ -96,7 +96,7 @@ describe('useGhosttyPaneRuntime', () => {
         agent: undefined,
         policy: 'fresh_spawn',
       },
-      forceResizeBeforeAttach: false,
+      forceResizeBeforeAttach: true,
     });
     expect(mockPtyWrite).toHaveBeenCalledWith({ id: 'runtime-1', data: 'hello', source: 'user' });
     expect((window as Window & {
@@ -212,7 +212,7 @@ describe('useGhosttyPaneRuntime', () => {
     expect(mockPtyResize).toHaveBeenCalledWith({ id: 'runtime-1', cols: 130, rows: 45, reason: 'test' });
   });
 
-  it('flushes the measured pane size after a fresh runtime finishes attaching', async () => {
+  it('uses the measured pixels before the first attach without resending the size afterwards', async () => {
     let resolveAttach: (() => void) | undefined;
     mockPtyAttach.mockReturnValueOnce(new Promise<void>((resolve) => {
       resolveAttach = resolve;
@@ -230,7 +230,7 @@ describe('useGhosttyPaneRuntime', () => {
 
     let readyPromise: Promise<void>;
     act(() => {
-      result.current.handleTerminalResize('pane-session')(106, 64, { reason: 'ghostty_fit' });
+      result.current.handleTerminalResize('pane-session')(106, 64, { reason: 'ghostty_fit', xpixel: 1908, ypixel: 2688 });
       readyPromise = result.current.handleTerminalReady('pane-session')(terminal);
     });
 
@@ -249,18 +249,34 @@ describe('useGhosttyPaneRuntime', () => {
         shell: false,
         agent: 'codex',
         policy: 'fresh_spawn',
+        xpixel: 1908,
+        ypixel: 2688,
       },
-      forceResizeBeforeAttach: false,
+      forceResizeBeforeAttach: true,
     });
-    expect(mockPtyResize).toHaveBeenCalledWith({
-      id: 'runtime-1',
-      cols: 106,
-      rows: 64,
-      reason: 'ghostty_fit',
+    expect(mockPtyResize).not.toHaveBeenCalled();
+  });
+
+  it('sends a newer fit that arrives while the measured attach is pending', async () => {
+    let resolveAttach!: () => void;
+    mockPtyAttach.mockReturnValueOnce(new Promise<void>((resolve) => { resolveAttach = resolve; }));
+    const { result } = renderHook(() => useGhosttyPaneRuntime([
+      { paneId: 'pane-session', runtimeId: 'runtime-1', paneKind: 'agent' },
+    ], 'pane-session', router, { current: true }));
+    let ready!: Promise<void>;
+    act(() => {
+      result.current.handleTerminalResize('pane-session')(120, 40, { xpixel: 2160, ypixel: 1680 });
+      ready = result.current.handleTerminalReady('pane-session')(createTerminal());
+      result.current.handleTerminalResize('pane-session')(125, 42, { xpixel: 2250, ypixel: 1764 });
+    });
+    expect(mockPtyResize).not.toHaveBeenCalled();
+    await act(async () => { resolveAttach(); await ready; });
+    expect(mockPtyResize).toHaveBeenCalledExactlyOnceWith({
+      id: 'runtime-1', cols: 125, rows: 42, reason: 'ghostty_fit', xpixel: 2250, ypixel: 1764,
     });
   });
 
-  it('resizes daemon-attached runtimes after their first delivered PTY event', async () => {
+  it('queues geometry during snapshot delivery until the pane finishes attaching', async () => {
     const { result } = renderHook(() => useGhosttyPaneRuntime([
       { paneId: 'pane-session', runtimeId: 'runtime-1', paneKind: 'agent' },
     ], 'pane-session', router, { current: true }));
@@ -276,6 +292,10 @@ describe('useGhosttyPaneRuntime', () => {
       result.current.handleTerminalResize('pane-session')(130, 45, { reason: 'attached' });
     });
 
+    expect(mockPtyResize).not.toHaveBeenCalled();
+    await act(async () => {
+      await result.current.handleTerminalReady('pane-session')(terminal);
+    });
     expect(mockPtyResize).toHaveBeenCalledWith({ id: 'runtime-1', cols: 130, rows: 45, reason: 'attached' });
   });
 
@@ -399,7 +419,7 @@ describe('useGhosttyPaneRuntime', () => {
         agent: undefined,
         policy: 'fresh_spawn',
       },
-      forceResizeBeforeAttach: false,
+      forceResizeBeforeAttach: true,
     });
     expect(mockPtyResize).not.toHaveBeenCalled();
   });

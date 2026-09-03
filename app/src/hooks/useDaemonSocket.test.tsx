@@ -1048,7 +1048,7 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     expect(waits).toEqual([25]);
   });
 
-  it('spawns daemon-known workspace runtimes before freshly attaching them', async () => {
+  it('leaves attachment to the mounted pane after spawning a daemon-known runtime', async () => {
     const onSessionsUpdate = vi.fn();
     const onWorkspacesUpdate = vi.fn();
     const onPRsUpdate = vi.fn();
@@ -1123,23 +1123,10 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       ws.emit({ event: 'spawn_result', id: 'runtime-shell-1', success: true });
     });
 
-    await waitFor(() => {
-      const sent = ws.sent.map((entry) => JSON.parse(entry));
-      expect(sent).toContainEqual({ cmd: 'attach_session', id: 'runtime-shell-1', attach_policy: 'fresh_spawn' });
-    });
-
-    act(() => {
-      ws.emit({
-        event: 'attach_result',
-        id: 'runtime-shell-1',
-        success: true,
-        cols: 80,
-        rows: 24,
-        running: true,
-      });
-    });
-
     await expect(spawnPromise).resolves.toBeUndefined();
+    expect(ws.sent.map((entry) => JSON.parse(entry)).filter((message) =>
+      message.cmd === 'attach_session' || message.cmd === 'pty_resize',
+    )).toEqual([]);
     unmount();
   });
 
@@ -1319,14 +1306,10 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     act(() => {
       ws.emit({ event: 'spawn_result', id: 'sess-new', success: true });
     });
-    await waitFor(() => {
-      const sent = ws.sent.map((entry) => JSON.parse(entry));
-      expect(sent).toContainEqual({ cmd: 'attach_session', id: 'sess-new', attach_policy: 'fresh_spawn' });
-    });
-    act(() => {
-      ws.emit({ event: 'attach_result', id: 'sess-new', success: true, cols: 80, rows: 24, running: true });
-    });
     await expect(spawnPromise).resolves.toBeUndefined();
+    expect(ws.sent.map((entry) => JSON.parse(entry)).filter((message) =>
+      message.cmd === 'attach_session' || message.cmd === 'pty_resize',
+    )).toEqual([]);
     unmount();
   });
 
@@ -2013,13 +1996,15 @@ describe('useDaemonSocket PTY kill sequencing', () => {
         shell: false,
         reason: 'remount_attach',
         policy: 'same_app_remount',
+        xpixel: 1044,
+        ypixel: 1932,
       },
       forceResizeBeforeAttach: true,
     });
 
     await waitFor(() => {
       const sent = ws.sent.map((entry) => JSON.parse(entry));
-      expect(sent).toContainEqual({ cmd: 'pty_resize', id: 'sess-existing', cols: 58, rows: 46 });
+      expect(sent).toContainEqual({ cmd: 'pty_resize', id: 'sess-existing', cols: 58, rows: 46, xpixel: 1044, ypixel: 1932 });
       expect(sent).toContainEqual({ cmd: 'attach_session', id: 'sess-existing', attach_policy: 'same_app_remount' });
     });
 

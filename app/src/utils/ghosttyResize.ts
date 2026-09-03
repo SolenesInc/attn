@@ -11,7 +11,7 @@ export interface TerminalDimensions {
 }
 
 export interface ResizeCoalescer {
-  submit: (dimensions: TerminalDimensions, coalesce: boolean) => void;
+  submit: (dimensions: TerminalDimensions) => void;
   cancel: () => void;
 }
 
@@ -42,15 +42,8 @@ export function createResizeCoalescer(
   };
 
   return {
-    submit(dimensions, coalesce) {
+    submit(dimensions) {
       pending = dimensions;
-      if (!coalesce) {
-        cancelTimer();
-        pending = null;
-        applyNow(dimensions);
-        return;
-      }
-
       const elapsed = lastAppliedAt == null ? intervalMs : Date.now() - lastAppliedAt;
       if (elapsed >= intervalMs) {
         cancelTimer();

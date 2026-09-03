@@ -93,7 +93,6 @@ import {
   fitRequiresTerminalResize,
   fitShouldBailAsSuspicious,
   geometryOverflowsContainer,
-  isWorkspaceResizeDragActive,
   isWorkspaceSuspensionAnimating,
   recoveryDelayMs,
 } from './ghosttyGeometry';
@@ -1946,7 +1945,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           (dimensions) => applyFitDimensionsRef.current(dimensions),
         );
       }
-      fitResizeCoalescerRef.current.submit(dims, isWorkspaceResizeDragActive(container));
+      fitResizeCoalescerRef.current.submit(dims);
     }, []);
 
     fitRef.current = fit;
@@ -2149,7 +2148,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         startupRef.current.firstReadyAt = Date.now();
         startupRef.current.firstReadyCols = terminal.cols;
         startupRef.current.firstReadyRows = terminal.rows;
-        resources.observeResize(container, fit);
+        // The workspace observer projects collapse/restore before the next frame.
+        resources.observeResize(container, scheduleCoalescedRefit);
         onReadyRef.current({
           fit,
           openFind,
@@ -2312,7 +2312,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       };
     // Ghostty cells hold resolved default RGB, so a theme change needs a fresh model.
     // fontSize is not a dep: rebuilding every pane exhausts WKWebView's context pool.
-    }, [cancelScheduledOutputRender, clearSynchronizedOutputRenderTimer, fit, getText, getVisibleContent, getVisibleStyleSummary, openFind, renderSurface, rendererEpoch, resizeLocal, resolvedTheme, restoreSnapshot, setSurfaceReleased, write]);
+    }, [cancelScheduledOutputRender, clearSynchronizedOutputRenderTimer, fit, getText, getVisibleContent, getVisibleStyleSummary, openFind, renderSurface, rendererEpoch, resizeLocal, resolvedTheme, restoreSnapshot, scheduleCoalescedRefit, setSurfaceReleased, write]);
 
     useEffect(() => {
       const renderer = rendererRef.current;

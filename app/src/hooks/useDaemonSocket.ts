@@ -63,7 +63,7 @@ import {
 } from '../pty/attachPlanning';
 import {
   normalizeAttachPolicy,
-  spawnPtyRuntime,
+  isAlreadyExistsError,
 } from '../pty/runtimeLifecycle';
 import { createPtyTransportState } from '../pty/transportState';
 import { enqueuePerKey } from '../pty/attachQueue';
@@ -118,7 +118,6 @@ import { controlBrowserHost, serializeBrowserControlResultMessage } from '../bro
 import { useWorkflowRunsStore } from '../store/workflowRuns';
 import { useConversationsStore, type AgentPromptMode } from '../store/conversations';
 import { useAutoModePushStore } from '../store/autoMode';
-import { conversationAgents } from '../utils/agentAvailability';
 import { useAutomationsStore } from '../store/automations';
 
 export type DaemonSession = GeneratedSession;
@@ -659,17 +658,6 @@ function invalidateWorkspaceLayoutsForSession(
     return { ...workspace, layout: undefined };
   });
   return changed ? nextWorkspaces : workspaces;
-}
-
-function workspacesIncludeRuntimeID(workspaces: DaemonWorkspace[], runtimeID: string): boolean {
-  for (const workspace of workspaces) {
-    for (const pane of workspace.layout?.panes || []) {
-      if (pane.runtime_id === runtimeID) {
-        return true;
-      }
-    }
-  }
-  return false;
 }
 
 function upsertEndpointByID(endpoints: DaemonEndpoint[], endpoint: DaemonEndpoint): DaemonEndpoint[] {
@@ -2335,8 +2323,7 @@ export function useDaemonSocket({
             break;
 
           case 'runtime_respawned':
-            // The daemon re-spawned this session's agent in place: mirror pty_desync and
-            // re-attach directly (spawnPtyRuntime would take the alreadyAttached path).
+            // The daemon replaced the runtime in place; restore its new stream and screen.
             if (data.id) {
               recordDiag({ kind: 'attach', session: data.id, reason: 'runtime_respawned' });
               emitPtyEvent({ event: 'reset', id: data.id, reason: 'respawn' });
@@ -3379,7 +3366,7 @@ export function useDaemonSocket({
   }, [sendPtyResize]);
 
   const attachExistingRuntime = useCallback(async (
-    args: Pick<PtyAttachArgs, 'id' | 'cols' | 'rows' | 'shell' | 'agent' | 'reason'>,
+    args: Pick<PtyAttachArgs, 'id' | 'cols' | 'rows' | 'shell' | 'agent' | 'reason' | 'xpixel' | 'ypixel'>,
     options: {
       policy: Extract<PtyAttachPolicy, 'relaunch_restore' | 'same_app_remount' | 'revive'>;
       forceResizeBeforeAttach?: boolean;
@@ -3393,7 +3380,9 @@ export function useDaemonSocket({
       agent: sessionAgent,
     }, options.policy);
     if (options?.forceResizeBeforeAttach) {
-      sendPtyResize(args.id, args.cols, args.rows, args.reason || 'remount_hydrate');
+      sendPtyResize(args.id, args.cols, args.rows, args.reason || 'remount_hydrate', {
+        xpixel: args.xpixel, ypixel: args.ypixel,
+      });
     }
     const attachResult = await sendAttachSessionWithRetry(
       args.id,
@@ -3859,28 +3848,13 @@ export function useDaemonSocket({
   useEffect(() => {
     setPtyBackend({
       spawn: async (args: PtySpawnArgs) => {
-        if (conversationAgents(settingsRef.current).has(args.agent ?? '')) {
+        if (ptyTransportRef.current.hasAttachedRuntime(args.id)) return;
+        try {
           await sendSpawnSession(args);
-          return;
+        } catch (error) {
+          if (!isAlreadyExistsError(error)) throw error;
         }
-        const existingSession = sessionsRef.current.find((session) => session.id === args.id);
-        await spawnPtyRuntime(
-          args,
-          {
-            runtimeKnownToDaemon: Boolean(existingSession)
-              || workspacesIncludeRuntimeID(workspacesRef.current, args.id),
-            alreadyAttached: ptyTransportRef.current.hasAttachedRuntime(args.id),
-          },
-          {
-            attachFreshRuntime: async (spawnArgs: PtySpawnArgs) => {
-              await sendAttachSessionWithRetry(spawnArgs.id, {
-                ...createAttachRequestContext(spawnArgs, 'fresh_spawn'),
-              });
-            },
-            spawnRuntime: sendSpawnSession,
-            resizeRuntime: sendPtyResize,
-          },
-        );
+        // The mounted pane owns attachment, including replay of startup output.
       },
       attach: async (args: PtyAttachArgs, options?: { forceResizeBeforeAttach?: boolean }) => {
         await attachExistingRuntime({

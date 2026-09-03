@@ -32,7 +32,7 @@ export interface PtySpawnArgs {
   copilot_executable?: string;
 }
 
-export interface PtyAttachArgs {
+export interface PtyAttachArgs extends PtyPixelGeometry {
   id: string;
   cols: number;
   rows: number;

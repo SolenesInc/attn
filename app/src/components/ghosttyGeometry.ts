@@ -2,13 +2,6 @@
 import { isSuspiciousTerminalSize } from '../utils/terminalDebug';
 import type { TerminalDimensions } from '../utils/ghosttyResize';
 
-export function isWorkspaceResizeDragActive(element: HTMLElement | null): boolean {
-  if (document.documentElement.dataset.attnWorkspaceResizing === '1') {
-    return true;
-  }
-  return Boolean(element?.closest('.session-terminal-panes[data-resizing-split-id]'));
-}
-
 // A fold eases the pane frame down to its 34px sliver; a fit mid-transition
 // would shrink the PTY to a few columns and truncate every row of scrollback.
 export function isWorkspaceSuspensionAnimating(element: HTMLElement | null): boolean {

@@ -241,6 +241,13 @@ export function useGhosttyPaneRuntime(
     // A pane mounted while its session is inactive never measured its container, so its
     // default size must not claim PTY geometry authority until a real fit.
     const geometryMeasured = terminal.hasMeasuredSize();
+    const forceResizeBeforeAttach = attachPolicy !== 'revive' && geometryMeasured;
+    const measuredResize = pendingResizeRef.current.get(pane.runtimeId);
+    const attachResize = measuredResize?.cols === size.cols && measuredResize.rows === size.rows
+      ? measuredResize : undefined;
+    if (forceResizeBeforeAttach && attachResize) {
+      pendingResizeRef.current.delete(pane.runtimeId);
+    }
     const attachPromise = ptyAttach({
       args: {
         id: pane.runtimeId,
@@ -249,8 +256,9 @@ export function useGhosttyPaneRuntime(
         shell: false,
         agent: pane.agent,
         policy: attachPolicy,
+        ...(attachResize && { xpixel: attachResize.xpixel, ypixel: attachResize.ypixel }),
       },
-      forceResizeBeforeAttach: attachPolicy === 'same_app_remount' && geometryMeasured,
+      forceResizeBeforeAttach,
     });
     connectingRef.current.set(pane.runtimeId, {
       generation: attachGeneration,
@@ -310,7 +318,7 @@ export function useGhosttyPaneRuntime(
     // legitimate small fits and stranded the PTY taller than the pane.
     if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols < 1 || rows < 1) return;
     const reason = options?.reason ?? 'ghostty_fit';
-    if (!readyRuntimesRef.current.has(pane.runtimeId)) {
+    if (!attachedRuntimesRef.current.has(pane.runtimeId)) {
       pendingResizeRef.current.set(pane.runtimeId, {
         cols, rows, reason, xpixel: options?.xpixel, ypixel: options?.ypixel,
       });
