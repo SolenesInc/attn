@@ -44,6 +44,7 @@ func TestAgentMsgNotificationDoesNotWaitForInputTaken(t *testing.T) {
 	addCharacterizationSession(t, d, "target-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
 
 	synctest.Test(t, func(t *testing.T) {
+		defer d.stopAgentMailboxDoorbells()
 		previous := sessionInputTakenWindow
 		sessionInputTakenWindow = time.Hour
 		t.Cleanup(func() { sessionInputTakenWindow = previous })
@@ -103,6 +104,11 @@ func TestAgentInboxReadsInFIFOOrderAndRearmsTheNextDoorbell(t *testing.T) {
 			secondRead.AgentInboxBatchResult.Items[0].Content != "second body" ||
 			secondRead.AgentInboxBatchResult.Remaining != 0 {
 			t.Fatalf("second batch = %+v", secondRead.AgentInboxBatchResult)
+		}
+		time.Sleep(time.Second)
+		synctest.Wait()
+		if prompts := doorbell.pasted(); len(prompts) != 2 {
+			t.Fatalf("doorbells after the final read = %q, want no further reminder", prompts)
 		}
 	})
 }

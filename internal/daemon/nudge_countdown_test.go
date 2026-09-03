@@ -550,6 +550,7 @@ func TestLegacyNudgeHeldOffByTypingWakesAfterQuiet(t *testing.T) {
 	agentID, inputs := armForTest(t, d)
 	quiesceTranscriptWatchers(t, d)
 	synctest.Test(t, func(t *testing.T) {
+		defer d.stopAgentMailboxDoorbells()
 		if err := d.writeSessionPTY(agentID, []byte("half written"), "user"); err != nil {
 			t.Fatalf("user input: %v", err)
 		}

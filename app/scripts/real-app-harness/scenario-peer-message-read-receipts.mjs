@@ -24,8 +24,10 @@ const GENERIC_DOORBELL = '📬 You have unread items in your attn inbox. Run att
 const GARDEN_ITEM_COUNT = 9;
 const BURST_PEER_BODY = 'BURST_PEER_BODY only the inbox may reveal';
 const LATER_PEER_BODY = 'LATER_PEER_BODY proves the missing hook did not latch the lane';
+const UNREAD_PEER_BODY = 'UNREAD_PEER_BODY survives until the cooldown reminder';
 const RELEASE_FILE = 'release-first-read';
 const READ_MARKER = 'AGENT_INBOX_READ';
+const UNREAD_READ_MARKER = 'UNREAD_AGENT_INBOX_READ';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -88,6 +90,36 @@ async function waitForRecipientReads(client, pane, count, timeoutMs = 60_000) {
   throw new Error(`recipient completed fewer than ${count} inbox reads:\n${text}`);
 }
 
+function timestampedDoorbells(transcript) {
+  const doorbells = [];
+  for (const line of String(transcript).split('\n')) {
+    if (!line.trim()) continue;
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const payload = entry?.type === 'response_item' ? entry.payload : entry?.message;
+    if (payload?.role !== 'user' || !Array.isArray(payload.content)) continue;
+    const text = payload.content.map((block) => block?.text || '').join('');
+    if (text === GENERIC_DOORBELL) doorbells.push({ text, timestamp: entry.timestamp });
+  }
+  return doorbells;
+}
+
+async function waitForDoorbells(cwd, count, timeoutMs = 70_000) {
+  const deadline = Date.now() + timeoutMs;
+  let transcript = '';
+  while (Date.now() < deadline) {
+    transcript = readRecipientTranscript(cwd);
+    const doorbells = timestampedDoorbells(transcript);
+    if (doorbells.length >= count) return { transcript, doorbells };
+    await delay(250);
+  }
+  throw new Error(`recipient received fewer than ${count} doorbells:\n${transcript}`);
+}
+
 function peerMessageID(output) {
   return output.match(/\(id([0-9a-f-]{36})\)/)?.[1] ?? null;
 }
@@ -109,6 +141,31 @@ function writeRecipientFixture(cwd) {
           { type: 'attn', args: ['agent', 'inbox', '--limit', '10', '--json'] },
           { type: 'attn', args: ['agent', 'inbox', '--limit', '10', '--json'] },
           { type: 'reply', text: READ_MARKER, state: 'idle' },
+        ],
+      },
+    ],
+  });
+}
+
+function writeUnreadRecipientFixture(cwd) {
+  writeMockAgentFixture(cwd, {
+    name: 'peer-message-unread-reminder',
+    minimumWorkingMs: 0,
+    turns: [
+      {
+        includes: 'Wait for a peer message without reading it',
+        actions: [{ type: 'reply', text: 'UNREAD_RECIPIENT_READY', state: 'idle' }],
+      },
+      {
+        includes: GENERIC_DOORBELL,
+        submitHook: false,
+        actions: [{ type: 'reply', text: 'DOORBELL_LEFT_UNREAD', state: 'idle' }],
+      },
+      {
+        includes: 'Read the waiting inbox item',
+        actions: [
+          { type: 'attn', args: ['agent', 'inbox', '--limit', '10', '--json'] },
+          { type: 'reply', text: UNREAD_READ_MARKER, state: 'idle' },
         ],
       },
     ],
@@ -147,15 +204,19 @@ async function main() {
     scenarioId: 'PeerMessageReadReceipts',
     tier: 'local',
     prefix: 'peer-message-read-receipts',
-    metadata: { agent: 'mock-codex', receipt: 'agent inbox without prompt-submit hooks' },
+    metadata: { agent: 'mock-codex', receipt: 'agent inbox without prompt-submit hooks and unread reminder' },
   });
 
   let author = null;
   let recipient = null;
   let recipientCwd = null;
+  let unreadRecipient = null;
+  let unreadRecipientCwd = null;
   const seedIDs = [];
   let burstPeerID = null;
   let laterPeerID = null;
+  let unreadPeerID = null;
+  let reminderIntervalMs = null;
   try {
     await launchFreshAppAndConnect(client, observer);
 
@@ -310,12 +371,78 @@ async function main() {
       runner.writeText('recipient-transcript.json', `${JSON.stringify(transcriptMessages(transcript), null, 2)}\n`);
     });
 
+    unreadRecipient = await runner.step('open_recipient_that_leaves_the_first_doorbell_unread', async () => {
+      unreadRecipientCwd = path.join(runner.sessionDir, 'unread-recipient');
+      fs.mkdirSync(unreadRecipientCwd, { recursive: true });
+      writeUnreadRecipientFixture(unreadRecipientCwd);
+      const sessionId = await createSessionAndWaitForInitialPane({
+        client, observer, cwd: unreadRecipientCwd, label: 'peer-message-unread-recipient', agent: 'codex',
+        promptReadyFn: ensureCodexPromptReadyViaPty, promptReadyTimeoutMs: 90_000,
+      });
+      const first = await waitForFirstWorkspacePane(client, sessionId, 'unread recipient pane', 20_000);
+      const pane = { sessionId, paneId: first.paneId };
+      await submitPrompt(client, pane.sessionId, pane.paneId, 'Wait for a peer message without reading it');
+      await waitForRecipient(client, pane, 'UNREAD_RECIPIENT_READY');
+      return pane;
+    });
+
+    await runner.step('unread_item_gets_one_doorbell_per_cooldown', async () => {
+      const peer = await runInShell(
+        client,
+        author,
+        `attn agent msg ${unreadRecipient.sessionId} "${UNREAD_PEER_BODY}" --source-session ${author.sessionId}`,
+        '(id',
+      );
+      unreadPeerID = peerMessageID(peer);
+      runner.assert(Boolean(unreadPeerID), 'the unread peer send returned its message id', { peer });
+
+      const observed = await waitForDoorbells(unreadRecipientCwd, 2);
+      runner.assert(observed.doorbells.length === 2,
+        'the unread item produced one initial doorbell and one reminder', { doorbells: observed.doorbells });
+      const firstAt = Date.parse(observed.doorbells[0].timestamp);
+      const secondAt = Date.parse(observed.doorbells[1].timestamp);
+      reminderIntervalMs = secondAt - firstAt;
+      runner.assert(Number.isFinite(reminderIntervalMs) && reminderIntervalMs >= 29_000,
+        'the reminder respected the 30 second cooldown', { reminderIntervalMs, doorbells: observed.doorbells });
+      runner.assert(observed.doorbells.every((doorbell) => !doorbell.text.includes(UNREAD_PEER_BODY)),
+        'the unread reminder contains no durable item body', { doorbells: observed.doorbells });
+      await runInShell(client, author,
+        `attn agent msg-status ${unreadPeerID} --session ${author.sessionId}`, 'notified:');
+
+      await submitPrompt(
+        client,
+        unreadRecipient.sessionId,
+        unreadRecipient.paneId,
+        'Read the waiting inbox item',
+      );
+      await waitForRecipient(client, unreadRecipient, UNREAD_READ_MARKER);
+      const transcript = readRecipientTranscript(unreadRecipientCwd);
+      const doorbells = timestampedDoorbells(transcript);
+      runner.assert(doorbells.length === 2, 'reading the inbox did not create another doorbell', { doorbells });
+      const batches = inboxBatches(transcript);
+      runner.assert(batches.length === 1, 'the unread recipient read its inbox exactly once', { batches });
+      const [batch] = batches;
+      runner.assert(batch.items.length === 1 && batch.remaining === 0,
+        'the unread recipient consumed its one durable item', { batch });
+      runner.assert(batch.items[0]?.source_id === unreadPeerID && batch.items[0]?.content === UNREAD_PEER_BODY,
+        'the cooldown reminder preserved the peer message body', { batch, unreadPeerID });
+      runner.assert(Boolean(batch.items[0]?.notified_at) && Boolean(batch.items[0]?.read_at),
+        'the reminded item carries notified and read receipts', { batch });
+      await runInShell(client, author,
+        `attn agent msg-status ${unreadPeerID} --session ${author.sessionId}`, 'read:');
+      runner.writeText('unread-reminder-transcript.json', `${JSON.stringify(transcriptMessages(transcript), null, 2)}\n`);
+      runner.writeText('unread-reminder-interval.txt', `${reminderIntervalMs}ms\n`);
+    });
+
     const summary = await runner.finishSuccess({
       authorSessionId: author.sessionId,
       recipientSessionId: recipient.sessionId,
+      unreadRecipientSessionId: unreadRecipient.sessionId,
       seedIDs,
       burstPeerID,
       laterPeerID,
+      unreadPeerID,
+      reminderIntervalMs,
     });
     console.log('[RealAppHarness] Peer message read receipts passed.');
     console.log(JSON.stringify(summary, null, 2));
@@ -323,14 +450,17 @@ async function main() {
     const summary = await runner.finishFailure(error, {
       authorSessionId: author?.sessionId ?? null,
       recipientSessionId: recipient?.sessionId ?? null,
+      unreadRecipientSessionId: unreadRecipient?.sessionId ?? null,
       seedIDs,
       burstPeerID,
       laterPeerID,
+      unreadPeerID,
+      reminderIntervalMs,
     });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
-    for (const id of [recipient?.sessionId, author?.sessionId]) {
+    for (const id of [unreadRecipient?.sessionId, recipient?.sessionId, author?.sessionId]) {
       if (id) await client.request('close_session', { sessionId: id }).catch(() => {});
     }
     await client.quitApp().catch(() => {});

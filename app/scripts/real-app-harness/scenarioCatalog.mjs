@@ -134,7 +134,7 @@ export const scenarioCatalog = [
   {
     id: 'peer-message-read-receipts',
     runnerId: 'PeerMessageReadReceipts',
-    label: 'Agent inbox burst: nine Garden events and one peer message share a doorbell, then a later item wakes',
+    label: 'Agent inbox: a mixed burst shares one doorbell and an unread item gets a cooldown reminder',
     command: ['pnpm', 'run', 'real-app:scenario-peer-message-read-receipts'],
     timeoutMs: 240_000,
   },

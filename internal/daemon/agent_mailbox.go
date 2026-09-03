@@ -24,7 +24,6 @@ type agentMailboxDoorbellState struct {
 	outstanding bool
 	delivering  bool
 	lastSentAt  time.Time
-	readVersion uint64
 	retry       *time.Timer
 }
 
@@ -71,7 +70,6 @@ func (d *Daemon) deliverAgentMailboxDoorbell(sessionID string) error {
 		return errAgentMailboxDoorbellInFlight
 	}
 	state.delivering = true
-	readVersion := state.readVersion
 	if state.retry != nil {
 		state.retry.Stop()
 		state.retry = nil
@@ -114,18 +112,18 @@ func (d *Daemon) deliverAgentMailboxDoorbell(sessionID string) error {
 	state.unread = unread
 	if !unread {
 		delete(d.agentMailboxDoorbells, sessionID)
-	} else if succeeded && state.readVersion == readVersion {
-		state.outstanding = true
-		state.lastSentAt = time.Now()
 	} else if d.store.Get(sessionID) == nil {
 		delete(d.agentMailboxDoorbells, sessionID)
 	} else {
 		after := d.agentMailboxCooldown()
 		if succeeded {
-			state.outstanding = false
+			state.outstanding = true
 			state.lastSentAt = time.Now()
-		} else if retryAfter, retryable := sessionInputRetryDelay(attempt.err); retryable && retryAfter > 0 {
-			after = retryAfter
+		} else {
+			state.outstanding = false
+			if retryAfter, retryable := sessionInputRetryDelay(attempt.err); retryable && retryAfter > 0 {
+				after = retryAfter
+			}
 		}
 		d.armAgentMailboxDoorbellLocked(sessionID, state, after)
 	}
@@ -149,11 +147,12 @@ func (d *Daemon) armAgentMailboxDoorbellLocked(sessionID string, state *agentMai
 		}
 		d.agentMailboxMu.Lock()
 		current := d.agentMailboxDoorbells[sessionID]
-		if current != state || state.retry != timer || state.outstanding || state.delivering || !state.unread {
+		if current != state || state.retry != timer || state.delivering || !state.unread {
 			d.agentMailboxMu.Unlock()
 			return
 		}
 		state.retry = nil
+		state.outstanding = false
 		d.agentMailboxMu.Unlock()
 		d.drainQueuedAgentMailboxItems(sessionID)
 	})
@@ -283,9 +282,6 @@ func (d *Daemon) noteAgentMailboxRead(sessionID string, remaining int) {
 		}
 	}
 	state := d.agentMailboxDoorbells[sessionID]
-	if state != nil {
-		state.readVersion++
-	}
 	if !unread {
 		if state != nil && state.retry != nil {
 			state.retry.Stop()
@@ -301,7 +297,7 @@ func (d *Daemon) noteAgentMailboxRead(sessionID string, remaining int) {
 		d.agentMailboxDoorbells[sessionID] = state
 	}
 	state.unread = true
-	state.outstanding = false
+	state.outstanding = true
 	if state.delivering {
 		return
 	}

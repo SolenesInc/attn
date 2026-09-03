@@ -515,6 +515,7 @@ func TestHandleAgentMsgHeldOffByTypingLandsAfterTheQuietWindow(t *testing.T) {
 	d, doorbell, drained := newHeldDoorbellDaemon(t)
 	quiesceTranscriptWatchers(t, d)
 	synctest.Test(t, func(t *testing.T) {
+		defer d.stopAgentMailboxDoorbells()
 		typeIntoTarget(t, d)
 
 		resp := callAgentMsg(t, d, "target-session-id", "sender-session-id", "the migration landed")
