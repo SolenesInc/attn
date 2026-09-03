@@ -3386,6 +3386,7 @@ export function useUiAutomationBridge({
         control.click();
         await settleUi(2);
         await gardenFrameAtRest();
+        await afterNextPaint();
         return collectGardenUiState();
       }
       case 'garden_open_plot':
