@@ -46,7 +46,7 @@ export function TendedSeedsPopover({
   const single = rows.length === 1 || (rows.length === 2 && rows[0].role === 'tended' && rows[1].role === 'crown');
   const primary = rows[0];
 
-  useEscapeStack(onClose, true);
+  useEscapeStack(onClose, pinned);
 
   useLayoutEffect(() => {
     const el = containerRef.current;

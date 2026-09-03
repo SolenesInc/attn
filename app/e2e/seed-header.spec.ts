@@ -44,6 +44,18 @@ test('hover motion finishes and context fits a narrow viewport', async ({ page }
   await expect(page.getByTestId('opened')).toHaveText('s-growing');
 });
 
+test('an unpinned hover leaves Escape with the focused keyboard target', async ({ page }) => {
+  const terminal = page.getByRole('textbox', { name: 'Terminal keyboard target' });
+  await terminal.focus();
+  await page.getByTestId('seed-chip-garden-agent').hover();
+  const preview = page.getByRole('dialog', { name: 'Seed context' });
+  await expect(preview).toBeVisible();
+  await expect(terminal).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('terminal-escapes')).toHaveText('1');
+  await expect(preview).toBeVisible();
+});
+
 test('reduced motion keeps every state still, including on hover', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   for (const state of ['planted', 'growing', 'dormant', 'harvested', 'withered']) {

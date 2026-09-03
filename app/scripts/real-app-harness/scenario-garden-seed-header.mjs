@@ -86,6 +86,12 @@ async function main() {
             const result = await client.request('dom_text', { selector: '.pane-seed-context' }).catch(() => null);
             return result?.text?.includes('The silhouettes work at 24px.') ? result : null;
           }, 'the hover preview');
+          await client.request('dom_terminal_key', {
+            selector: '.terminal-wrapper.active .terminal-container', key: 'Escape', code: 'Escape',
+          });
+          const afterEscape = await client.request('dom_text', { selector: '.pane-seed-context' });
+          runner.assert(afterEscape.text.includes('The silhouettes work at 24px.'),
+            'an unpinned hover leaves terminal Escape alone', afterEscape);
           hoverBounds = (await client.request('dom_hover', { selector: '.tended-seeds-popover' })).bounds;
         }
         await client.request('dom_key', { selector: selector(), key: 'ArrowDown' });

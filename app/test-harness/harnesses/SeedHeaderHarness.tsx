@@ -25,6 +25,7 @@ const api = {
 export function SeedHeaderHarness({ onReady, setTriggerRerender }: HarnessProps) {
   const [status, setStatus] = useState('growing');
   const [opened, setOpened] = useState('');
+  const [terminalEscapes, setTerminalEscapes] = useState(0);
   useEffect(() => { onReady(); setTriggerRerender(() => () => {}); }, [onReady, setTriggerRerender]);
   const seed = { ...base, id: `s-${status}`, status, tender_session: status === 'growing' ? 'garden-agent' : '' };
   const plot = { ...base, id: 's-plot', title: 'Polish the Garden', plot_progress: { done: 3, total: 7, ready: 0, growing: 2, blocked: 0, dormant: 1, withered: 1 } };
@@ -46,6 +47,11 @@ export function SeedHeaderHarness({ onReady, setTriggerRerender }: HarnessProps)
           <PaneSeedChip display={{ kind: 'plot', plot, tended: [base, { ...base, id: 's-b', title: 'Useful previews', body: 'Show the latest note and outcome.' }] }} unread={false} sessionId="plot" pinned={false} onOpenSeed={setOpened} onPopoverClosed={() => {}} />
         </div>
         <output data-testid="opened">{opened}</output>
+        <textarea
+          aria-label="Terminal keyboard target"
+          onKeyDown={(event) => { if (event.key === 'Escape') setTerminalEscapes((count) => count + 1); }}
+        />
+        <output data-testid="terminal-escapes">{terminalEscapes}</output>
       </div>
     </DaemonApiProvider>
   );
