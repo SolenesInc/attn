@@ -44,8 +44,6 @@ const IDLE_STATES = new Set(['idle', 'waiting_input']);
 
 const squashWs = (text) => text.replace(/\s+/g, '');
 
-// The mock agent submits on any CR outside a bracketed paste, and nothing between
-// write_pane and its stdin adds paste markers, so no gap belongs before the CR.
 async function submitPrompt(client, sessionId, paneId, text) {
   await client.request('write_pane', { sessionId, paneId, text, submit: true });
 }
@@ -58,7 +56,6 @@ async function readPaneText(client, sessionId) {
   return { paneId: pane.paneId, text: res?.text || '' };
 }
 
-// A booted agent reaches `idle` only after a completed turn.
 async function driveAgentToIdle(client, observer, sessionId, note) {
   const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${sessionId}`, 20_000);
   const reply = 'initial turn ready';
