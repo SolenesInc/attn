@@ -41,6 +41,7 @@ function parseArgs(argv) {
 async function readPersistedResumeId(dataDir, sessionId) {
   const dbPath = path.join(dataDir, 'attn.db');
   const { stdout } = await execFileAsync('sqlite3', [
+    '-cmd', '.timeout 5000',
     `file:${dbPath}?mode=ro`,
     `select coalesce(resume_session_id, '') from sessions where id = '${sessionId}';`,
   ]);
