@@ -51,9 +51,10 @@ function focusKind(element: Element | null): string {
 function installDocumentListener(doc: Document): void {
   if (documentListeners.has(doc)) return;
   const keydown = (event: KeyboardEvent) => {
+    const path = new Set(event.composedPath());
     for (const trace of traces) {
       if (trace.element.ownerDocument !== doc) continue;
-      const inTerminal = event.composedPath().includes(trace.element);
+      const inTerminal = path.has(trace.element);
       if (!inTerminal && !trace.state().active) continue;
       trace.note({
         event: 'document_keydown', inTerminal,
