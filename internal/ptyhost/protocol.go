@@ -12,6 +12,7 @@ const (
 	MethodSpawn    = "spawn"
 	MethodHostInfo = "host_info"
 	MethodWatchAll = "watch_all"
+	MethodShutdown = "shutdown"
 )
 
 type SpawnParams struct {

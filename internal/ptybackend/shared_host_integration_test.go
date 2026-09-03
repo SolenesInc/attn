@@ -330,6 +330,49 @@ func TestSharedHost_OneLifecycleStreamCoversMultipleSessions(t *testing.T) {
 	}
 }
 
+func TestSharedHost_ShellCloseUsesHangup(t *testing.T) {
+	binary := os.Getenv("ATTN_TEST_PTY_HOST")
+	if binary == "" {
+		t.Skip("set ATTN_TEST_PTY_HOST to an attn-pty-host binary")
+	}
+	root, err := os.MkdirTemp("/tmp", "pty-hangup-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(root)
+	backend, err := NewSharedHost(WorkerBackendConfig{DataRoot: root, DaemonInstanceID: "d-hangup", BinaryPath: binary})
+	if err != nil {
+		t.Fatal(err)
+	}
+	exited := make(chan ExitInfo, 1)
+	backend.SetExitHandler(func(info ExitInfo) { exited <- info })
+	if err := backend.Spawn(context.Background(), SpawnOptions{ID: "shell", CWD: root, Agent: "shell", Cols: 80, Rows: 24}); err != nil {
+		t.Fatal(err)
+	}
+	pid := backend.WorkerPIDs(context.Background())["shell"]
+	t.Cleanup(func() { _ = backend.Shutdown(context.Background()); _ = syscall.Kill(pid, syscall.SIGTERM) })
+	_, stream, err := backend.Attach(context.Background(), "shell", "hangup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	if err := backend.Input(context.Background(), "shell", []byte("exec /bin/sh -c 'trap \"exit 23\" TERM; printf \"__REA%s__\\n\" DY; while :; do read line || exit; done'\n")); err != nil {
+		t.Fatal(err)
+	}
+	waitForStreamText(t, stream, "__READY__")
+	if err := backend.Kill(context.Background(), "shell", syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case info := <-exited:
+		if info.Signal != "SIGHUP" {
+			t.Fatalf("shell exit = %+v, want SIGHUP without a preceding SIGTERM", info)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("missing shell exit notification")
+	}
+}
+
 func TestSharedHost_CrashEvictsEverySessionAndRestartsCleanly(t *testing.T) {
 	binary := os.Getenv("ATTN_TEST_PTY_HOST")
 	if binary == "" {

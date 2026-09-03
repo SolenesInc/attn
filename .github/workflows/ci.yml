@@ -288,6 +288,8 @@ jobs:
         run: bash scripts/test-pty-upgrade.sh
       - name: Verify shared host protocol and lifecycle
         run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./internal/ptybackend -run '^Test(SharedHost_|MigratingHost_)' -count=1
+      - name: Verify profile cleanup with live host generations
+        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./cmd/attn -run '^TestProfileClean.*SharedHost' -count=1
 
   frontend:
     name: Frontend
@@ -610,6 +612,9 @@ jobs:
           fi
           if [ -d "$data_dir/workers" ]; then
             find "$data_dir/workers" -name '*.log' -exec cp {} "$EVIDENCE_DIR/daemon/" \;
+          fi
+          if [ -d "$data_dir/pty-hosts" ]; then
+            find "$data_dir/pty-hosts" -name '*.log' -exec cp {} "$EVIDENCE_DIR/daemon/" \;
           fi
           ls "$EVIDENCE_DIR/daemon"
 

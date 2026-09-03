@@ -553,6 +553,14 @@ impl Session {
     }
 
     pub fn signal(&self, signal: i32) -> Result<(), String> {
+        if !self.is_running() {
+            return Ok(());
+        }
+        let signal = if self.is_shell() && signal == libc::SIGTERM {
+            libc::SIGHUP
+        } else {
+            signal
+        };
         if unsafe { libc::kill(-self.child_pid, signal) } != 0 {
             let error = std::io::Error::last_os_error();
             if error.raw_os_error() != Some(libc::ESRCH) {
@@ -561,9 +569,11 @@ impl Session {
         }
         let deadline = Instant::now() + TERMINATE_TIMEOUT;
         if signal == libc::SIGTERM && !self.wait_for_exit(SIGTERM_TO_HUP_GRACE) {
+            self.publish_escalation(signal, libc::SIGHUP);
             let _ = unsafe { libc::kill(-self.child_pid, libc::SIGHUP) };
         }
         if !self.wait_for_exit(deadline.saturating_duration_since(Instant::now())) {
+            self.publish_escalation(signal, libc::SIGKILL);
             let _ = unsafe { libc::kill(-self.child_pid, libc::SIGKILL) };
             if !self.wait_for_exit(TERMINATE_TIMEOUT) {
                 return Err("timed out waiting for terminal process to exit".to_owned());
@@ -573,8 +583,22 @@ impl Session {
     }
 
     pub fn remove(self: &Arc<Self>) {
-        let _ = self.signal(libc::SIGTERM);
+        if let Err(error) = self.remove_checked() {
+            eprintln!("terminal {} cleanup failed: {error}", self.id);
+        }
+    }
+
+    pub fn remove_checked(self: &Arc<Self>) -> Result<(), String> {
+        self.signal(libc::SIGTERM)?;
         self.finish_cleanup();
+        Ok(())
+    }
+
+    fn publish_escalation(&self, requested: i32, escalated: i32) {
+        let event = json!({"type": "evt", "event": "teardown_escalated", "session_id": self.id,
+            "reason": signal_name(requested), "exit_signal": signal_name(escalated)});
+        self.broadcast_watch(event.clone());
+        (self.broadcast)(event);
     }
 
     fn wait_for_exit(&self, timeout: Duration) -> bool {

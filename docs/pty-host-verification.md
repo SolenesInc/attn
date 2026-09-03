@@ -41,6 +41,13 @@ three Linux ARM64 runs in disposable containers. Shared-host integration tests
 also passed on macOS under the Go race detector and on Linux ARM64. The CI job
 runs the upgrade and shared-host integration tests on macOS and Linux.
 
+Profile cleanup authenticates each live host, verifies its PID, and asks it to
+stop its children before deleting profile data. The live cleanup test covers two
+generations with four PTYs, refuses forged tokens and mismatched PIDs, and keeps
+an unreachable host's registry for a later attempt. It passed three repeats on
+macOS with the race detector and three on Linux ARM64. Shell-close coverage
+checks that termination begins with SIGHUP.
+
 Two temporary Go build overlays checked the test's sensitivity:
 
 | Deliberate break | Observed failure |
@@ -117,3 +124,10 @@ without defining slow-consumer behavior. A separate change must test bounded
 backpressure, cross-session responsiveness, and disconnect/resnapshot recovery
 before retaining those much larger CPU gains. The two retained changes passed
 all six detached/attached transfers without losing output.
+
+A repeat after the profile-cleanup and shell-close changes passed all six
+transfers. Empty-host physical footprint was 2,146,664 bytes at one PTY,
+3,965,312 at eight, and 8,405,400 at 32 (2.05 MiB and 8.02 MiB at the endpoints,
+181 KiB per additional PTY from eight to 32). Detached and attached instruction
+medians were 3.762 and 4.515 billion per 8 MiB; CPU medians were 281.77 and
+450.95 ms. This was a separate run, not a paired CPU comparison with the baseline.

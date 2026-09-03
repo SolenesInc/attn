@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex, Weak};
 use std::thread;
@@ -57,6 +57,7 @@ pub struct Host {
     spawning: Mutex<HashSet<String>>,
     conn_seq: AtomicU64,
     idle_epoch: AtomicU64,
+    shutting_down: AtomicBool,
     watchers: Mutex<HashMap<String, HostWatcher>>,
     reaper: ChildReaper,
 }
@@ -90,6 +91,7 @@ impl Host {
             spawning: Mutex::new(HashSet::new()),
             conn_seq: AtomicU64::new(0),
             idle_epoch: AtomicU64::new(0),
+            shutting_down: AtomicBool::new(false),
             watchers: Mutex::new(HashMap::new()),
             reaper: ChildReaper::start()?,
         });
@@ -165,6 +167,9 @@ impl Host {
         }
         {
             let mut spawning = self.spawning.lock().expect("spawning mutex poisoned");
+            if self.shutting_down.load(Ordering::Acquire) {
+                return Err("host is shutting down".to_owned());
+            }
             if !spawning.insert(id.clone()) {
                 return Err(format!("session {id} spawn already in progress"));
             }
@@ -191,13 +196,13 @@ impl Host {
             &self.cfg.control_token,
             SessionRuntime::new(cleanup, broadcast, self.reaper.clone()),
         );
-        self.spawning
-            .lock()
-            .expect("spawning mutex poisoned")
-            .remove(&id);
         let session = match result {
             Ok(session) => session,
             Err(error) => {
+                self.spawning
+                    .lock()
+                    .expect("spawning mutex poisoned")
+                    .remove(&id);
                 self.schedule_idle_if_empty();
                 return Err(error);
             }
@@ -207,15 +212,64 @@ impl Host {
             self.sessions
                 .lock()
                 .expect("sessions mutex poisoned")
-                .insert(id, Arc::clone(&session));
+                .insert(id.clone(), Arc::clone(&session));
             for _ in &*watchers {
                 session.note_connected();
             }
         }
+        self.spawning
+            .lock()
+            .expect("spawning mutex poisoned")
+            .remove(&id);
         for event in session.lifecycle_events() {
             self.broadcast_lifecycle(&event);
         }
         Ok(session)
+    }
+
+    fn shutdown_sessions(&self) -> Result<(), String> {
+        let sessions = {
+            let spawning = self.spawning.lock().expect("spawning mutex poisoned");
+            if !spawning.is_empty() || self.shutting_down.swap(true, Ordering::AcqRel) {
+                return Err("host has a spawn or shutdown in progress".to_owned());
+            }
+            self.sessions
+                .lock()
+                .expect("sessions mutex poisoned")
+                .values()
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        let mut tasks = Vec::new();
+        let mut failure = None;
+        for session in sessions {
+            let child = Arc::clone(&session);
+            match thread::Builder::new()
+                .name("pty-shutdown".to_owned())
+                .stack_size(128 * 1024)
+                .spawn(move || child.remove_checked())
+            {
+                Ok(task) => tasks.push(task),
+                Err(_) => {
+                    if let Err(error) = session.remove_checked() {
+                        failure = Some(error);
+                    }
+                }
+            }
+        }
+        for task in tasks {
+            if let Err(error) = task
+                .join()
+                .unwrap_or_else(|_| Err("terminal shutdown panicked".to_owned()))
+            {
+                failure = Some(error);
+            }
+        }
+        if let Some(error) = failure {
+            self.shutting_down.store(false, Ordering::Release);
+            return Err(error);
+        }
+        Ok(())
     }
 
     fn schedule_idle_if_empty(self: &Arc<Self>) {
@@ -372,6 +426,11 @@ impl Host {
     }
 }
 
+enum CloseAction {
+    Detach,
+    ShutdownHost,
+}
+
 struct Connection {
     id: String,
     sender: SyncSender<Value>,
@@ -382,6 +441,7 @@ struct Connection {
     watching_all: bool,
     authed: bool,
     snapshot_format: String,
+    close_action: CloseAction,
 }
 
 impl Connection {
@@ -442,6 +502,7 @@ fn handle_connection(host: Arc<Host>, stream: UnixStream, id: u64) {
         watching_all: false,
         authed: false,
         snapshot_format: String::new(),
+        close_action: CloseAction::Detach,
     };
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
@@ -486,6 +547,11 @@ fn handle_connection(host: Arc<Host>, stream: UnixStream, id: u64) {
     }
     drop(connection.sender);
     let _ = writer.join();
+    if matches!(connection.close_action, CloseAction::ShutdownHost) {
+        let _ = fs::remove_file(&host.cfg.host_registry_path);
+        let _ = fs::remove_file(&host.cfg.socket_path);
+        std::process::exit(0);
+    }
 }
 
 #[allow(clippy::needless_pass_by_value, clippy::too_many_lines)]
@@ -503,6 +569,21 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
     }
 
     match request.method.as_str() {
+        "shutdown" => {
+            if connection.selected.is_some() {
+                return connection.fail(
+                    &request.id,
+                    ERR_BAD_REQUEST,
+                    "shutdown requires a host-level hello",
+                );
+            }
+            if let Err(error) = host.shutdown_sessions() {
+                return connection.fail(&request.id, ERR_IO, error);
+            }
+            connection.close_action = CloseAction::ShutdownHost;
+            connection.send(response(&request.id, json!({"ok": true})));
+            false
+        }
         "spawn" => {
             if connection.selected.is_some() {
                 return connection.fail(
