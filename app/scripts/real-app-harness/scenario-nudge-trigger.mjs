@@ -42,9 +42,13 @@ async function pollFor(fn, description, timeoutMs = 30_000, intervalMs = 250) {
 
 const IDLE_STATES = new Set(['idle', 'waiting_input']);
 
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 const squashWs = (text) => text.replace(/\s+/g, '');
+
+// The mock agent submits on any CR outside a bracketed paste, and nothing between
+// write_pane and its stdin adds paste markers, so no gap belongs before the CR.
+async function submitPrompt(client, sessionId, paneId, text) {
+  await client.request('write_pane', { sessionId, paneId, text, submit: true });
+}
 
 async function readPaneText(client, sessionId) {
   const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${sessionId}`, 20_000);
@@ -54,15 +58,12 @@ async function readPaneText(client, sessionId) {
   return { paneId: pane.paneId, text: res?.text || '' };
 }
 
-// A booted agent reaches `idle` only after a completed turn. Text and Enter go as
-// SEPARATE writes: a burst ending in CR is treated as a paste and never submits.
+// A booted agent reaches `idle` only after a completed turn.
 async function driveAgentToIdle(client, observer, sessionId, note) {
   const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${sessionId}`, 20_000);
   const reply = 'initial turn ready';
   const prompt = `Reply with the exact words: ${reply}`;
-  await client.request('write_pane', { sessionId, paneId: pane.paneId, text: prompt, submit: false });
-  await delay(1_200);
-  await client.request('write_pane', { sessionId, paneId: pane.paneId, text: '\r', submit: false });
+  await submitPrompt(client, sessionId, pane.paneId, prompt);
   const stateOf = () => observer.getSession(sessionId)?.state || 'unknown';
   await pollFor(() => (stateOf() === 'working' ? true : null), `${sessionId} to start working after the prompt`, 30_000, 500);
   note(`target started working (prompt accepted)`);
@@ -303,9 +304,7 @@ async function main() {
     await runner.step('deliver_busy_nudge', async () => {
       const pane = await waitForFirstWorkspacePane(client, targetId, `pane for ${targetId}`, 20_000);
       const busyPrompt = 'Run `sleep 8`, then reply with the exact words: foreground turn finished';
-      await client.request('write_pane', { sessionId: targetId, paneId: pane.paneId, text: busyPrompt, submit: false });
-      await delay(1_200);
-      await client.request('write_pane', { sessionId: targetId, paneId: pane.paneId, text: '\r', submit: false });
+      await submitPrompt(client, targetId, pane.paneId, busyPrompt);
       await pollFor(
         () => (observer.getSession(targetId)?.state === 'working' ? true : null),
         'Codex to start the foreground busy turn',
