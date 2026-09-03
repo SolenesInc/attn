@@ -576,6 +576,7 @@ jobs:
             ${{ runner.temp }}/attn-real-app-harness/matrix-digest.txt
             ${{ runner.temp }}/attn-real-app-harness/**/*.txt
             ${{ runner.temp }}/attn-real-app-harness/**/*.png
+            ${{ runner.temp }}/attn-real-app-harness/**/*.json
             ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
 
       - name: Clean profile
