@@ -13,7 +13,7 @@ import {
 import { waitForPaneVisible, waitForSessionWorkspace } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { currentHarnessProfile, socketPathForProfile } from './harnessProfile.mjs';
+import { currentHarnessProfile, profileCliEnv, socketPathForProfile } from './harnessProfile.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -39,7 +39,7 @@ function makeAttnRunner(attnBin, profile) {
     try {
       const stdout = execFileSync(attnBin, args, {
         encoding: 'utf8',
-        env: { ...process.env, ATTN_PROFILE: profile, ATTN_SOCKET_PATH: socketPath },
+        env: profileCliEnv(profile, { ATTN_SOCKET_PATH: socketPath }),
       });
       const brace = stdout.indexOf('{');
       return { stdout, status: 0, stderr: '', json: brace >= 0 ? JSON.parse(stdout.slice(brace)) : null };

@@ -1,0 +1,13 @@
+kind: internal
+area: harness
+change: >
+  The real-app harness drops the routing overrides its shell inherited
+  (ATTN_DATA_DIR, ATTN_WS_PORT, ATTN_SOCKET_PATH, ATTN_DB_PATH,
+  ATTN_CONFIG_PATH, ATTN_PLUGIN_DIR) from every child it spawns, and logs once
+  which ones it dropped. Only an override the caller passes deliberately
+  survives.
+notes: >
+  A shell inside an attn session exports all six, each of which outranks the
+  profile the harness targets, so the fresh-world preflight stopped the hosting
+  session's daemon instead of the profile's and the launched app came up in the
+  wrong world.

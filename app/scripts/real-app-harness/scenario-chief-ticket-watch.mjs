@@ -12,7 +12,7 @@ import {
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { currentHarnessProfile } from './harnessProfile.mjs';
+import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
 import {
   preTrustClaudeFolder,
   ensureClaudePromptReadyViaPty,
@@ -96,8 +96,7 @@ function resolveAttnBin() {
 
 function makeAttnRunner(attnBin, profile) {
   return function runAttn(args) {
-    const env = { ...process.env, ATTN_PROFILE: profile };
-    delete env.ATTN_SOCKET_PATH;
+    const env = profileCliEnv(profile);
     delete env.ATTN_SESSION_ID;
     delete env.ATTN_WRAPPER_PATH;
     const stdout = execFileSync(attnBin, args, {

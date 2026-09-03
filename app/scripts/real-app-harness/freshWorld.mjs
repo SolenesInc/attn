@@ -5,6 +5,7 @@ import {
   currentHarnessProfile,
   defaultAppPathForProfile,
   isProductionHarnessTarget,
+  profileCliEnv,
 } from './harnessProfile.mjs';
 
 export function assertFreshWorldTargetSafe({ profile, appPath } = {}) {
@@ -45,7 +46,10 @@ function requestAppQuit({ profile, appPath, bundleId }) {
     }
     return;
   }
-  spawnSync(attnBinaryPath(appPath), ['profile', 'stop-app', '--profile', profile], { stdio: 'pipe' });
+  spawnSync(attnBinaryPath(appPath), ['profile', 'stop-app', '--profile', profile], {
+    env: profileCliEnv(profile),
+    stdio: 'pipe',
+  });
 }
 
 // pgrep -f exits 1 on no matches; that is "no pids", not an error.
@@ -97,7 +101,7 @@ export async function ensureFreshWorld({
   let daemonStopped = false;
   log(`stopping daemon for profile '${profile}'`);
   const stopResult = spawnSync(attnBinaryPath(appPath), ['daemon', 'stop'], {
-    env: { ...process.env, ATTN_PROFILE: profile },
+    env: profileCliEnv(profile),
     encoding: 'utf8',
   });
   if (stopResult.error) {

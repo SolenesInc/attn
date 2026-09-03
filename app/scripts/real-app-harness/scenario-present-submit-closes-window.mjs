@@ -15,7 +15,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
-import { currentHarnessProfile } from './harnessProfile.mjs';
+import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -31,7 +31,7 @@ function makeAttnRunner(attnBin, profile) {
   return function runAttn(args) {
     const stdout = execFileSync(attnBin, args, {
       encoding: 'utf8',
-      env: { ...process.env, ATTN_PROFILE: profile },
+      env: profileCliEnv(profile),
     });
     const brace = stdout.indexOf('{');
     return { stdout, json: brace >= 0 ? JSON.parse(stdout.slice(brace)) : null };

@@ -10,7 +10,7 @@ import { appDaemonInTree, delay } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile, socketPathForProfile } from './harnessProfile.mjs';
+import { currentHarnessProfile, profileCliEnv, socketPathForProfile } from './harnessProfile.mjs';
 
 const SLOT = 'domains';
 const TYPED = 'grafana.harness.corp';
@@ -38,7 +38,7 @@ function makeAttnRunner(attnBin, profile) {
     const stdout = execFileSync(attnBin, args, {
       encoding: 'utf8',
       input,
-      env: { ...process.env, ATTN_PROFILE: profile, ATTN_SOCKET_PATH: socketPath },
+      env: profileCliEnv(profile, { ATTN_SOCKET_PATH: socketPath }),
     });
     return { stdout, json: parseAttnJSON(stdout) };
   };

@@ -21,7 +21,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile, dataDirForProfile } from './harnessProfile.mjs';
+import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
 import { ensureClaudePromptReadyViaPty, writeQueueAgentFixture } from './scenarioAgents.mjs';
 import { waitForFirstWorkspacePane, waitForPaneInputFocus } from './scenarioAssertions.mjs';
 import { registeredAgentPid } from './workerRegistry.mjs';
@@ -207,7 +207,7 @@ async function main() {
   const profile = currentHarnessProfile();
   const attnBin = resolveAttnBin();
   const dataDir = dataDirForProfile(profile);
-  const daemonEnv = { ...process.env, ATTN_PROFILE: profile };
+  const daemonEnv = profileCliEnv(profile);
   const createdSessionIds = [];
 
   runner.log('run context', { runDir: runner.runDir, sessionDir: runner.sessionDir, profile });

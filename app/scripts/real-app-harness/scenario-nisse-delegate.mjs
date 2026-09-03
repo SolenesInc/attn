@@ -14,7 +14,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { bash, scriptedAgent, startStubWorld, stubAgentModel } from './piStubProvider.mjs';
-import { currentHarnessProfile, dataDirForProfile, socketPathForProfile } from './harnessProfile.mjs';
+import { currentHarnessProfile, dataDirForProfile, profileCliEnv, socketPathForProfile } from './harnessProfile.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -69,7 +69,7 @@ function makeAttnRunner(attnBin, profile) {
     try {
       const stdout = execFileSync(attnBin, args, {
         encoding: 'utf8',
-        env: { ...process.env, ATTN_PROFILE: profile, ATTN_SOCKET_PATH: socketPath },
+        env: profileCliEnv(profile, { ATTN_SOCKET_PATH: socketPath }),
       });
       return { stdout, status: 0, stderr: '', json: parseAttnJSON(stdout) };
     } catch (error) {

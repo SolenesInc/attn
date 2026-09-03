@@ -14,7 +14,7 @@ import {
   printCommonHelp,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { socketPathForProfile } from './harnessProfile.mjs';
+import { currentHarnessProfile, profileCliEnv, socketPathForProfile } from './harnessProfile.mjs';
 import {
   waitForFirstWorkspacePane,
   waitForPaneShellReady,
@@ -149,7 +149,7 @@ async function main() {
       const markdownPath = path.join(cwd, 'notes.md');
       fs.writeFileSync(markdownPath, '# Tile only notes\n\nDocked content.\n', 'utf8');
       const openOutput = execFileSync(ATTN_BIN, ['open', markdownPath, '--session', sessionId], {
-        env: { ...process.env, ATTN_SOCKET_PATH: socketPath },
+        env: profileCliEnv(currentHarnessProfile(), { ATTN_SOCKET_PATH: socketPath }),
         encoding: 'utf8',
       });
       note(`attn open -> ${openOutput.trim()}`);

@@ -16,7 +16,7 @@ import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
 import { ensureClaudePromptReadyViaPty, ensureCodexPromptReadyViaPty, preTrustClaudeFolder } from './scenarioAgents.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { currentHarnessProfile } from './harnessProfile.mjs';
+import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -56,7 +56,7 @@ function makeAttnRunner(attnBin, profile) {
   return function runAttn(args) {
     const stdout = execFileSync(attnBin, args, {
       encoding: 'utf8',
-      env: { ...process.env, ATTN_PROFILE: profile },
+      env: profileCliEnv(profile),
     }).trim();
     // The profile banner goes to stderr, so --json stdout is pure JSON
     // (object or array depending on the command).

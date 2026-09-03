@@ -15,7 +15,7 @@ import { writeMockAgentFixture } from './mockAgent.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { currentHarnessProfile, dataDirForProfile } from './harnessProfile.mjs';
+import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
 import { appDaemonInTree } from './platform.mjs';
 
 function parseArgs(argv) {
@@ -48,7 +48,7 @@ function makeAttnRunner(attnBin, profile) {
   return function runAttn(args) {
     return execFileSync(attnBin, args, {
       encoding: 'utf8',
-      env: { ...process.env, ATTN_PROFILE: profile },
+      env: profileCliEnv(profile),
     }).trim();
   };
 }
@@ -137,7 +137,7 @@ async function main() {
 
   const token = `REVIVED${Date.now()}`;
   const secondToken = `AGAIN${Date.now()}`;
-  const dbPath = process.env.ATTN_DB_PATH || path.join(dataDir, 'attn.db');
+  const dbPath = path.join(dataDir, 'attn.db');
   const repoDir = path.join(runner.sessionDir, 'target-repo');
   let sessionId = null;
   let paneId = null;
