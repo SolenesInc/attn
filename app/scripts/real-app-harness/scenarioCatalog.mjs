@@ -427,7 +427,6 @@ export const scenarioCatalog = [
     id: 'nisse-markdown-stream',
     runnerId: 'NISSE-MARKDOWN-STREAM',
     allowRealAgents: ['pi'],
-    skipOn: { linux: 'follow mode drifts past its 80px budget in about one Linux run in four (s-k5mf6n); nisse is being deprecated, so its Linux witness is off until its fate is decided' },
     label: 'Conversation session: a recorded reply replayed into the pane renders as markdown while it streams',
     command: ['pnpm', 'run', 'real-app:scenario-nisse-markdown-stream'],
     // Needs attn-pi installed, like the other nisse scenarios, but calls no model:
