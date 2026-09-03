@@ -1,12 +1,40 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { appPlatformFor } from './platform.mjs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { appPlatform, appPlatformFor } from './platform.mjs';
 import { LinuxDriver } from './linuxDriver.mjs';
 
 const darwin = appPlatformFor('darwin');
 const linux = appPlatformFor('linux');
+
+const INHERITED_ROUTING = {
+  ATTN_DATA_DIR: '/Users/nobody/.attn-hosting-session',
+  ATTN_WS_PORT: '9849',
+  ATTN_SOCKET_PATH: '/Users/nobody/.attn-hosting-session/attn.sock',
+  ATTN_DB_PATH: '/Users/nobody/.attn-hosting-session/attn.db',
+  ATTN_CONFIG_PATH: '/Users/nobody/.attn-hosting-session/config.json',
+  ATTN_PLUGIN_DIR: '/Users/nobody/.attn-hosting-session/plugins',
+};
+
+function writeEnvDumpingApp(root, appName) {
+  const appPath = path.join(root, process.platform === 'darwin' ? `${appName}.app` : appName);
+  const executable = appPlatform.appExecutableInTree(appPath);
+  const dumpPath = path.join(root, 'child-env');
+  fs.mkdirSync(path.dirname(executable), { recursive: true });
+  fs.writeFileSync(executable, `#!/bin/sh\nenv > ${JSON.stringify(dumpPath)}\n`);
+  fs.chmodSync(executable, 0o755);
+  return { appPath, dumpPath };
+}
+
+function readEnvDump(dumpPath) {
+  const dump = {};
+  for (const line of fs.readFileSync(dumpPath, 'utf8').split('\n')) {
+    const eq = line.indexOf('=');
+    if (eq > 0) dump[line.slice(0, eq)] = line.slice(eq + 1);
+  }
+  return dump;
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -267,5 +295,44 @@ describe('darwin pid ownership', () => {
       launch: { spawned: true, pid: 909, child: aliveChild },
     })).toEqual({ pids: [4242], staleManifest: false });
     expect(darwin.ownedPids({ manifestPid: null })).toEqual({ pids: [], staleManifest: false });
+  });
+});
+
+// The app the harness launches is the child that decides which daemon comes up,
+// so this asserts the environment it actually received, not the one we built.
+describe('launched app environment', () => {
+  const original = { ...process.env };
+  let root = null;
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-harness-launch-env-'));
+    Object.assign(process.env, INHERITED_ROUTING);
+  });
+
+  afterEach(() => {
+    for (const key of Object.keys(INHERITED_ROUTING)) {
+      if (original[key] === undefined) delete process.env[key];
+      else process.env[key] = original[key];
+    }
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('hands the app the named profile instead of the shell routing it inherited', async () => {
+    const { appPath, dumpPath } = writeEnvDumpingApp(root, 'attn-agent7');
+
+    const launched = await appPlatform.launchApp({
+      appPath,
+      env: { ATTN_HARNESS_ALWAYS_ON_TOP: '1', ATTN_DB_PATH: path.join(root, 'chosen.db') },
+    });
+    await new Promise((resolve) => launched.child.on('exit', resolve));
+    const childEnv = readEnvDump(dumpPath);
+
+    expect(childEnv.ATTN_PROFILE).toBe('agent7');
+    expect(childEnv.ATTN_HARNESS_ALWAYS_ON_TOP).toBe('1');
+    expect(childEnv.ATTN_DB_PATH).toBe(path.join(root, 'chosen.db'));
+    for (const key of ['ATTN_DATA_DIR', 'ATTN_WS_PORT', 'ATTN_SOCKET_PATH', 'ATTN_CONFIG_PATH', 'ATTN_PLUGIN_DIR']) {
+      expect(childEnv[key]).toBeUndefined();
+    }
+    expect(childEnv.PATH).toBe(process.env.PATH);
   });
 });

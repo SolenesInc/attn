@@ -16,7 +16,7 @@ import { createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { buildPresentFixtureRepo } from './presentFixtureRepo.mjs';
 import { getPresentations, getPresentationRound, submitPresentationRound } from './presentDaemon.mjs';
-import { currentHarnessProfile, defaultDaemonPortForProfile, socketPathForProfile } from './harnessProfile.mjs';
+import { currentHarnessProfile, defaultDaemonPortForProfile, profileCliEnv, socketPathForProfile } from './harnessProfile.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 // The em dash (U+2014) must match the native window title set in
@@ -53,12 +53,10 @@ function resolveAttnBin() {
 function startWaitingPresent(attnBin, profile, { cwd, sessionId }) {
   const child = spawn(attnBin, ['present', '--wait', '--json'], {
     cwd,
-    env: {
-      ...process.env,
-      ATTN_PROFILE: profile,
+    env: profileCliEnv(profile, {
       ATTN_SOCKET_PATH: socketPathForProfile(profile),
       ATTN_SESSION_ID: sessionId,
-    },
+    }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stdout = '';

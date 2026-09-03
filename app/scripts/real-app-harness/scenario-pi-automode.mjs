@@ -13,7 +13,7 @@ import { waitForFirstWorkspacePane, waitForPaneText } from './scenarioAssertions
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile, dataDirForProfile, socketPathForProfile } from './harnessProfile.mjs';
+import { currentHarnessProfile, dataDirForProfile, profileCliEnv, socketPathForProfile } from './harnessProfile.mjs';
 import {
   resolveAttnBinary,
   restartDaemonWithStubEnv,
@@ -69,7 +69,7 @@ function makeAttnRunner(attnBin, profile) {
     try {
       const stdout = execFileSync(attnBin, args, {
         encoding: 'utf8',
-        env: { ...process.env, ATTN_PROFILE: profile, ATTN_SOCKET_PATH: socketPath },
+        env: profileCliEnv(profile, { ATTN_SOCKET_PATH: socketPath }),
       });
       return { stdout, stderr: '', status: 0, json: parseAttnJSON(stdout) };
     } catch (error) {
@@ -114,7 +114,7 @@ async function main() {
   }
   const attnBin = resolveAttnBinary(options.appPath);
   const runAttn = makeAttnRunner(attnBin, profile);
-  const dbPath = process.env.ATTN_DB_PATH || path.join(dataDirForProfile(profile), 'attn.db');
+  const dbPath = path.join(dataDirForProfile(profile), 'attn.db');
 
   const judgeQueue = [];
   const stub = await startPiStubProvider({

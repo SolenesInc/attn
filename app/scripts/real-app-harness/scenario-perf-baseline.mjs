@@ -9,7 +9,7 @@ import { promisify } from 'node:util';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createRunContext, createSessionAndWaitForInitialPane, emitVerdict, parseCommonArgs, printCommonHelp } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
-import { profileForAppPath, socketPathForProfile } from './harnessProfile.mjs';
+import { currentHarnessProfile, profileCliEnv, profileForAppPath, socketPathForProfile } from './harnessProfile.mjs';
 import { getMachineFingerprint, loadBaseline, recordOrCompareBaseline } from './machineRegistry.mjs';
 import { buildBaselineVerdict, evaluateRssBaseline } from './rssBaselineVerdict.mjs';
 import { captureFrontWindowScreenshot, getFrontWindowBounds, setFrontWindowBounds } from './nativeWindowCapture.mjs';
@@ -174,7 +174,7 @@ function warmLiveCount(limit, sessions) {
 function reportSessionState(bin, socketPath, sessionId, state) {
   return new Promise((resolve) => {
     const child = spawn(bin, ['_hook-state', sessionId, state], {
-      env: { ...process.env, ATTN_SOCKET_PATH: socketPath },
+      env: profileCliEnv(currentHarnessProfile(), { ATTN_SOCKET_PATH: socketPath }),
       stdio: ['ignore', 'ignore', 'ignore'],
     });
     child.on('close', () => resolve());

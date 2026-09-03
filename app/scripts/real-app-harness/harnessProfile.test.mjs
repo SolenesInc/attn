@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   appLocalDataDirForProfile,
   assertProductionRunAllowed,
@@ -285,6 +285,7 @@ describe('profileCliEnv', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     for (const key of Object.keys(routing)) delete process.env[key];
   });
 
@@ -304,5 +305,36 @@ describe('profileCliEnv', () => {
     const env = profileCliEnv('agent7', { ATTN_SOCKET_PATH: '/tmp/chosen.sock' });
     expect(env.ATTN_SOCKET_PATH).toBe('/tmp/chosen.sock');
     expect(env.ATTN_DATA_DIR).toBeUndefined();
+  });
+
+  it('leaves the unnamed production profile with the ambient routing it was given', () => {
+    const env = profileCliEnv('');
+    expect(env.ATTN_PROFILE).toBe('');
+    for (const [key, value] of Object.entries(routing)) expect(env[key]).toBe(value);
+  });
+
+  it('names the overrides it dropped once per run, not once per child', async () => {
+    vi.resetModules();
+    const { profileCliEnv: freshProfileCliEnv } = await import('./harnessProfile.mjs');
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    freshProfileCliEnv('agent7');
+    freshProfileCliEnv('agent7');
+
+    expect(log).toHaveBeenCalledTimes(1);
+    const line = log.mock.calls[0][0];
+    expect(line).toContain("profile 'agent7'");
+    for (const key of Object.keys(routing)) expect(line).toContain(key);
+  });
+
+  it('says nothing when the shell carried no routing to drop', async () => {
+    for (const key of Object.keys(routing)) delete process.env[key];
+    vi.resetModules();
+    const { profileCliEnv: freshProfileCliEnv } = await import('./harnessProfile.mjs');
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    freshProfileCliEnv('agent7');
+
+    expect(log).not.toHaveBeenCalled();
   });
 });

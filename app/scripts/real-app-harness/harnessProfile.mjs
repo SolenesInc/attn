@@ -223,8 +223,8 @@ export function deepLinkSchemeForProfile(profile = currentHarnessProfile()) {
   return resolveHarnessResources(profile).deepLinkScheme;
 }
 
-// An attn-hosted shell exports ATTN_DATA_DIR and ATTN_WS_PORT, and `attn
-// profile-env` clears neither: miss one and the command lands in prod ~/.attn.
+// An attn-hosted shell exports all six, and each one outranks the profile name:
+// miss one and the child lands in the hosting session's world, not the profile's.
 const ROUTING_OVERRIDE_ENV = [
   'ATTN_DATA_DIR',
   'ATTN_WS_PORT',
@@ -234,11 +234,29 @@ const ROUTING_OVERRIDE_ENV = [
   'ATTN_PLUGIN_DIR',
 ];
 
+let routingDropAnnounced = false;
+
+function announceRoutingDrop(profile, dropped) {
+  if (routingDropAnnounced || dropped.length === 0) return;
+  routingDropAnnounced = true;
+  console.log(
+    `[harness-profile] profile '${profile}': dropped inherited routing overrides from every child `
+    + `environment: ${dropped.join(', ')}`,
+  );
+}
+
+// A named profile decides where a child lands, so the shell's own routing must
+// go; the unnamed (production) profile has nothing to conflict with.
 export function profileCliEnv(profile = currentHarnessProfile(), extra = {}) {
   const env = { ...process.env, ATTN_PROFILE: profile, ...extra };
+  if (!profile) return env;
+  const dropped = [];
   for (const key of ROUTING_OVERRIDE_ENV) {
-    if (!(key in extra)) delete env[key];
+    if (key in extra || !(key in env)) continue;
+    delete env[key];
+    dropped.push(key);
   }
+  announceRoutingDrop(profile, dropped);
   return env;
 }
 

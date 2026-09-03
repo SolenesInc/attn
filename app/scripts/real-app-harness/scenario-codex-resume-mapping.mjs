@@ -21,7 +21,7 @@ import {
 } from './scenarioAssertions.mjs';
 import { ensureCodexInitialPanePromptReady } from './scenarioAgents.mjs';
 import { agentHomeRoots, writeMockAgentFixture, MOCK_AGENT_NEW_CONVERSATION } from './mockAgent.mjs';
-import { currentHarnessProfile, dataDirForProfile } from './harnessProfile.mjs';
+import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
 import { appDaemonInTree } from './platform.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -44,7 +44,7 @@ async function submitCodexPromptViaUi(client, sessionId, paneId, text) {
 }
 
 function dbPathForHarnessProfile() {
-  return process.env.ATTN_DB_PATH || path.join(dataDirForProfile(currentHarnessProfile()), 'attn.db');
+  return path.join(dataDirForProfile(currentHarnessProfile()), 'attn.db');
 }
 
 function sqlString(value) {
@@ -325,7 +325,7 @@ async function main() {
 
   const dbPath = dbPathForHarnessProfile();
   const attnBin = appDaemonInTree(options.appPath);
-  const daemonEnv = { ...process.env, ATTN_PROFILE: currentHarnessProfile() };
+  const daemonEnv = profileCliEnv(currentHarnessProfile());
   const firstReply = 'ATTN_FIRST_TURN_COMPLETE';
   const successorReply = 'new-ok';
   let sessionId = null;

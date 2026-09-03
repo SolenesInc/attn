@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { socketPathForProfile } from './harnessProfile.mjs';
+import { profileCliEnv, socketPathForProfile } from './harnessProfile.mjs';
 import { queueDaemonSettingRestore } from './common.mjs';
 import { appDaemonInTree } from './platform.mjs';
 
@@ -219,7 +219,7 @@ export function resolveAttnBinary(appPath) {
 // from an earlier run is restarted with the stub agent dir before the app connects.
 export async function restartDaemonWithStubEnv({ appPath, profile, agentDir }) {
   const attnBin = resolveAttnBinary(appPath);
-  const env = { ...process.env, ATTN_PROFILE: profile, ATTN_SOCKET_PATH: socketPathForProfile(profile) };
+  const env = profileCliEnv(profile, { ATTN_SOCKET_PATH: socketPathForProfile(profile) });
   try {
     execFileSync(attnBin, ['daemon', 'stop'], { encoding: 'utf8', env });
   } catch {

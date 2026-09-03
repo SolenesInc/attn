@@ -4,6 +4,7 @@ import { execFile, execFileSync, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { LinuxDriver } from './linuxDriver.mjs';
 import { MacOSDriver } from './macosDriver.mjs';
+import { profileCliEnv, profileForAppPath } from './harnessProfile.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -22,11 +23,11 @@ function parsePids(stdout) {
     .filter((value) => Number.isInteger(value) && value > 0);
 }
 
-function spawnDetached(executablePath, env) {
+function spawnDetached(executablePath, env, appPath) {
   const child = spawn(executablePath, [], {
     detached: true,
     stdio: 'ignore',
-    env: { ...process.env, ...env },
+    env: profileCliEnv(profileForAppPath(appPath), env ?? {}),
   });
   child.unref();
   return { spawned: true, pid: Number.isInteger(child.pid) ? child.pid : null, child };
@@ -131,7 +132,7 @@ const darwinPlatform = {
     if (env && Object.keys(env).length > 0) {
       // LaunchServices and `open` do not reliably propagate env into Tauri's
       // window-creation path, so custom env needs spawn-style delivery.
-      return spawnDetached(this.appExecutableInTree(appPath), env);
+      return spawnDetached(this.appExecutableInTree(appPath), env, appPath);
     }
     await execFileAsync('open', background ? ['-g', appPath] : [appPath]);
     return { spawned: false, pid: null };
@@ -214,7 +215,7 @@ const linuxPlatform = {
   },
 
   async launchApp({ appPath, env = null }) {
-    return spawnDetached(this.appExecutableInTree(appPath), this.launchEnvironment(env));
+    return spawnDetached(this.appExecutableInTree(appPath), this.launchEnvironment(env), appPath);
   },
 
   async requestQuit({ pids = [] }) {
