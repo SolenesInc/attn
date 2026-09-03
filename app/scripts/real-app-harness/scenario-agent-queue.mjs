@@ -23,11 +23,11 @@ import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, dataDirForProfile } from './harnessProfile.mjs';
 import { ensureClaudePromptReadyViaPty, writeQueueAgentFixture } from './scenarioAgents.mjs';
 import { waitForFirstWorkspacePane, waitForPaneInputFocus } from './scenarioAssertions.mjs';
+import { registeredAgentPid } from './workerRegistry.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 const TURN_OPENING_STATES = new Set(['waiting_input', 'pending_approval', 'unknown']);
-// A snoozed agent's turn never opens, so its run ends in idle instead.
 const STOPPED_STATES = new Set([...TURN_OPENING_STATES, 'idle']);
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -72,34 +72,6 @@ function settledIds(queue) {
 
 function snoozedIds(queue) {
   return (queue.snoozed?.rows || []).map((row) => row.id);
-}
-
-function processAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// The pty worker registry names the agent process it spawned for a session.
-// Matching a command line instead would enumerate every agent on this machine.
-function registeredAgentPid(dataDir, sessionId) {
-  const workersRoot = path.join(dataDir, 'workers');
-  for (const instance of fs.readdirSync(workersRoot)) {
-    const registryDir = path.join(workersRoot, instance, 'registry');
-    if (!fs.existsSync(registryDir)) continue;
-    for (const entry of fs.readdirSync(registryDir)) {
-      const record = JSON.parse(fs.readFileSync(path.join(registryDir, entry), 'utf8'));
-      // A relaunch leaves the previous daemon instance's entry behind, naming
-      // the pid of a process that is already gone.
-      if (record.session_id !== sessionId) continue;
-      const pid = Number(record.child_pid);
-      if (processAlive(pid)) return pid;
-    }
-  }
-  return null;
 }
 
 async function paneIdFor(client, workspaceSessionId, sessionId) {
@@ -154,19 +126,15 @@ function questionPrompt(token) {
   ].join(' ');
 }
 
-// A queue read is a bridge round trip (measured p100 14ms over a run) on top of
-// this scenario's own 500ms poll gap, so four reads land inside this window.
+// 4 reads of this scenario's 500ms poll gap + the measured 14ms p100 bridge trip.
 const WORKING_WINDOW_MS = 2_500;
 const SHORT_RUN_PROMPT = 'Reply with the single word: done. Do not ask me anything and do not use any tools.';
 const LONG_RUN_PROMPT = 'Count from 1 to 500, one number per line, nothing else. Do not use any tools.';
-// Auto-settle's floors are a 5s arm and a 3s countdown; measured 8.1s from the
-// run starting to the handover, and this run has to outlast that.
+// Past the measured 8.06s auto-settle chain (5s arm floor + 3s countdown floor).
 const LONG_RUN_MS = 12_000;
-// A daemon broadcast reaches the band within one poll, measured 505ms worst
-// case: past this window, what the band shows is what it is going to show.
+// 3x the measured 505ms worst case for a daemon broadcast to reach the band.
 const BAND_UPDATE_WINDOW_MS = 1_500;
-// The band has to be read closed before this deadline wakes the row again; that
-// read landed 0.5s after the command, and the wake fires within 0.1s of it.
+// 10x the measured 504ms read of the closed band; the wake itself fired 69ms late.
 const SHORT_SNOOZE_MS = 5_000;
 const QUEUE_TURNS = [
   { includes: 'single word: done', actions: [{ type: 'reply', text: 'done', state: 'idle' }] },
@@ -273,8 +241,7 @@ async function main() {
   try {
     await runner.step('launch_app_with_queue_mode', async () => {
       process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
-      // macOS makes an always-on-top harness window non-focusable, so every
-      // native key in this scenario would land nowhere.
+      // macOS makes an always-on-top window non-focusable: native keys land nowhere.
       process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
       await launchFreshAppAndConnect(client, observer);
       await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
@@ -905,10 +872,9 @@ async function main() {
       const session = await pollFor(
         () => {
           const current = observer.getSession(alpha.sessionId);
-          // turn_owed is omitted from the broadcast when false.
           return current && !current.turn_owed && current.turn_snoozed_until ? current : null;
         },
-        'the daemon to broadcast the closed turn and the deadline',
+        'the daemon to broadcast turn_owed falsy (it is omitted when false) and a deadline',
         15_000,
       );
       runner.log('broadcast deadline', {
@@ -1012,10 +978,10 @@ async function main() {
     });
 
     await runner.step('a_dead_agent_breaks_through_its_own_snooze', async () => {
+      const pid = registeredAgentPid(dataDir, alpha.sessionId, alpha.cwd);
+      runner.assert(pid, `the registry names a live agent process in ${alpha.cwd}: ${pid}`);
       // SIGKILL, not a clean exit: a clean exit is auto-close's business and
       // would take the row away instead of ringing.
-      const pid = registeredAgentPid(dataDir, alpha.sessionId);
-      runner.assert(pid, `found the deferred agent's process: ${pid}`);
       process.kill(pid, 'SIGKILL');
 
       const queue = await pollFor(
