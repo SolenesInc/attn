@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -47,7 +48,9 @@ async function main() {
   const observer = new DaemonObserver(options);
   const runner = createScenarioRunner(options, { scenarioId: 'PromptComposition', tier: 'local', prefix: 'prompt-composition' });
   const sessions = [];
-  const crewHome = path.join(resources.dataDir, 'crew', 'promptprobe');
+  const crewName = `promptprobe-${randomUUID().slice(0, 8)}`;
+  const crewLabel = `Promptprobe${crewName.slice('promptprobe'.length)}`;
+  const crewHome = path.join(resources.dataDir, 'crew', crewName);
   try {
     await client.quitApp();
     cli(['daemon', 'stop']);
@@ -102,21 +105,21 @@ async function main() {
       runner.writeText('peer-message.jsonl', text);
     });
     await runner.step('crew_wake_sleep_and_successor', async () => {
-      cli(['crew', 'set', 'promptprobe', '--agent', 'codex', '--model', 'claude-haiku-4-5']);
-      const first = JSON.parse(cli(['crew', 'wake', 'promptprobe', '--json']));
+      cli(['crew', 'set', crewName, '--agent', 'codex', '--model', 'claude-haiku-4-5']);
+      const first = JSON.parse(cli(['crew', 'wake', crewName, '--json']));
       sessions.push(first.session_id);
       await observer.waitForSession({ id: first.session_id });
       await waitForFirstWorkspacePane(client, first.session_id, 'crew member', 20_000);
       const captured = await waitFor(() => transcripts(crewHome).find(file => file.text.includes('CREW_READY')), 'crew wake prompt');
-      runner.assert(instructions(captured.text, 'codex').includes('You are **Promptprobe**'), 'crew identity reaches developer instructions');
-      const duplicate = JSON.parse(cli(['crew', 'wake', 'promptprobe', '--json']));
+      runner.assert(instructions(captured.text, 'codex').includes(`You are **${crewLabel}**`), 'crew identity reaches developer instructions');
+      const duplicate = JSON.parse(cli(['crew', 'wake', crewName, '--json']));
       runner.assert(duplicate.already_awake === true && duplicate.session_id === first.session_id, 'wake does not create a second day');
-      cli(['crew', 'sleep', 'promptprobe', '--json']);
+      cli(['crew', 'sleep', crewName, '--json']);
       await waitFor(() => fs.existsSync(path.join(crewHome, 'sleep-received')), 'sleep prompt receipt');
       runner.assert(transcripts(crewHome).some(file => file.text.includes('user is asking you to close')), 'inbox read delivers the sleep request');
       await waitFor(() => fs.existsSync(path.join(crewHome, 'handoffs')) && fs.readdirSync(path.join(crewHome, 'handoffs')).length, 'filed handoff');
       await waitFor(() => !observer.sessionsById.has(first.session_id), 'first day closed');
-      const second = JSON.parse(cli(['crew', 'wake', 'promptprobe', '--json']));
+      const second = JSON.parse(cli(['crew', 'wake', crewName, '--json']));
       sessions.push(second.session_id);
       const successor = await waitFor(() => transcripts(crewHome).find(file => file.name !== captured.name && file.text.includes('CREW_READY')), 'successor wake');
       runner.assert(instructions(successor.text, 'codex').includes('PROMPT_TEST_LETTER'), 'successor receives the filed letter');
@@ -126,6 +129,12 @@ async function main() {
       }
       runner.writeText('crew-first.jsonl', transcripts(crewHome).find(file => file.name === captured.name).text);
       runner.writeText('crew-successor.jsonl', successor.text);
+      // Handoff filenames have minute precision. Retain the verified first letter
+      // as evidence before closing the successor in the same minute.
+      for (const name of fs.readdirSync(path.join(crewHome, 'handoffs')))
+        fs.renameSync(path.join(crewHome, 'handoffs', name), path.join(runner.sessionDir, name));
+      cli(['crew', 'sleep', crewName, '--json']);
+      await waitFor(() => !observer.sessionsById.has(second.session_id), 'successor day closed');
     });
     await runner.finishSuccess({ sessions });
   } catch (error) {
