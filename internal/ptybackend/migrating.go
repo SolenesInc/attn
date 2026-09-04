@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"sync"
 	"syscall"
@@ -166,7 +167,7 @@ func (b *MigratingBackend) Remove(ctx context.Context, sessionID string) error {
 		return err
 	}
 	err = backend.Remove(ctx, sessionID)
-	if err == nil || errors.Is(err, pty.ErrSessionNotFound) {
+	if err == nil || errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
 		b.mu.Lock()
 		delete(b.owners, sessionID)
 		b.mu.Unlock()

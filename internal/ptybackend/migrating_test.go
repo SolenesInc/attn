@@ -3,6 +3,8 @@ package ptybackend
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sync"
 	"syscall"
@@ -21,6 +23,7 @@ type migrationTestBackend struct {
 	shutdown    error
 	beforeSpawn func()
 	probe       func(context.Context) error
+	removeErr   error
 }
 
 func newMigrationTestBackend(ids ...string) *migrationTestBackend {
@@ -135,8 +138,71 @@ func (b *migrationTestBackend) Kill(context.Context, string, syscall.Signal) err
 func (b *migrationTestBackend) Remove(_ context.Context, id string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.removeErr != nil {
+		return b.removeErr
+	}
 	delete(b.ids, id)
 	return nil
+}
+
+func TestMigratingBackendMissingLegacySocketDoesNotBlockReplacement(t *testing.T) {
+	root := newWorkerBackendTestRoot(t)
+	legacy, err := NewWorker(WorkerBackendConfig{
+		DataRoot: root, DaemonInstanceID: "d-missing-worker", BinaryPath: "/bin/true",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const id = "reload-after-exit"
+	legacy.sessions[id] = &workerSession{
+		SessionID: id, SocketPath: filepath.Join(root, "gone.sock"),
+		RegistryPath: filepath.Join(root, "gone.json"),
+	}
+	shared := newMigrationTestBackend()
+	backend, err := NewMigrating(legacy, shared, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend.owners[id] = ownerLegacy
+	ctx := context.Background()
+	if err := backend.Remove(ctx, id); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Remove() = %v, want missing worker socket", err)
+	}
+	if ids := legacy.SessionIDs(ctx); len(ids) != 0 {
+		t.Fatalf("legacy still owns %v", ids)
+	}
+	if err := backend.Spawn(ctx, SpawnOptions{ID: id}); err != nil {
+		t.Fatalf("replacement spawn: %v", err)
+	}
+	if !reflect.DeepEqual(shared.spawned, []string{id}) {
+		t.Fatalf("replacement launches = %v", shared.spawned)
+	}
+}
+
+func TestMigratingBackendFailedRemovalKeepsOwner(t *testing.T) {
+	legacy := newMigrationTestBackend("running")
+	legacy.removeErr = errors.New("worker is busy")
+	shared := newMigrationTestBackend()
+	backend, err := NewMigrating(legacy, shared, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := backend.Recover(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := backend.Remove(ctx, "running"); !errors.Is(err, legacy.removeErr) {
+		t.Fatalf("Remove() = %v, want original failure", err)
+	}
+	if err := backend.Spawn(ctx, SpawnOptions{ID: "running"}); err == nil {
+		t.Fatal("spawn replaced a worker whose removal failed")
+	}
+	if err := backend.Input(ctx, "running", []byte("still-owned")); err != nil {
+		t.Fatal(err)
+	}
+	if len(legacy.inputs["running"]) != 1 || len(shared.spawned) != 0 {
+		t.Fatal("failed removal changed the session owner")
+	}
 }
 
 func (b *migrationTestBackend) SessionIDs(context.Context) []string {

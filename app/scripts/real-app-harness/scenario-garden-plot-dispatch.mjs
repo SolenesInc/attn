@@ -7,13 +7,12 @@ import {
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
-import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
+import { runShellCommandInPane, waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
 import { delay } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { recordingEnabled } from './windowRecording.mjs';
-import { createPaneCommand } from './paneCommand.mjs';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -37,11 +36,6 @@ async function pace() {
   if (PACE_MS > 0) await delay(PACE_MS);
 }
 
-async function paneText(client, pane) {
-  const payload = await client.request('read_pane_text', pane);
-  return payload.text || '';
-}
-
 // A pane wraps at its own width and a break landing on a space swallows it, so
 // everything read here is matched with the whitespace taken out of both sides.
 function flat(text) {
@@ -57,23 +51,9 @@ function saw(haystack, needle) {
 }
 
 async function runInPane(client, pane, command, expected, timeoutMs = 30_000) {
-  const framed = createPaneCommand(command);
-  await client.request('write_pane', { ...pane, text: framed.text });
-  const deadline = Date.now() + timeoutMs;
-  let text = '';
-  while (Date.now() < deadline) {
-    await delay(250);
-    text = flat(await paneText(client, pane));
-    const out = framed.readOutput(text);
-    if (out !== null) {
-      if (saw(out, expected)) {
-        await pace();
-        return out;
-      }
-      throw new Error(`${JSON.stringify(command)} did not answer with ${JSON.stringify(expected)}:\n${out}`);
-    }
-  }
-  throw new Error(`pane never finished ${JSON.stringify(command)}:\n${text}`);
+  const output = await runShellCommandInPane(client, pane, command, expected, timeoutMs);
+  await pace();
+  return output;
 }
 
 async function openPane(client, observer, runner, label) {

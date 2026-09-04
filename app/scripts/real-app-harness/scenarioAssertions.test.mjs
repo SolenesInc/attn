@@ -1,11 +1,54 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import {
   assertPaneVisibleContentPreserved,
+  runShellCommandInPane,
   waitForFirstWorkspacePane,
   waitForPaneInputFocus,
   waitForPaneTextChange,
   waitForPaneVisible,
 } from './scenarioAssertions.mjs';
+
+describe('runShellCommandInPane', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('ignores repeated input echoes until the shell prints the completion markers', async () => {
+    vi.useFakeTimers();
+    let script;
+    let reads = 0;
+    const client = { request: vi.fn(async (method, args) => {
+      if (method === 'write_pane') { script = args.text; return {}; }
+      reads += 1;
+      const echo = `$ ${script}\nnotification\n$ ${script}\n`;
+      const output = execFileSync('/bin/sh', ['-c', script], { encoding: 'utf8' });
+      if (reads === 1) return { text: echo };
+      const [begin, result] = output.trim().split('\n');
+      if (reads === 2) return { text: `${echo}${begin}\n${result}\n` };
+      return { text: echo + output.replace(/(.{7})/g, '$1\n') };
+    }) };
+    let settled = false;
+    const pending = runShellCommandInPane(client, { paneId: 'pane' }, "printf 'is harvested'", 'is harvested');
+    pending.then(() => { settled = true; });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(250);
+    await expect(pending).resolves.toBe('is harvested');
+    expect(reads).toBe(3);
+  });
+
+  it('does not accept an expected phrase that appears only in the echoed command', async () => {
+    vi.useFakeTimers();
+    let script;
+    const client = { request: vi.fn(async (method, args) => {
+      if (method === 'write_pane') { script = args.text; return {}; }
+      return { text: `$ ${script}\n${execFileSync('/bin/sh', ['-c', script], { encoding: 'utf8' })}` };
+    }) };
+    const pending = runShellCommandInPane(client, {}, ": 'is harvested'; printf 'permission denied'", 'is harvested');
+    const assertion = expect(pending).rejects.toThrow('permission denied');
+    await vi.advanceTimersByTimeAsync(250);
+    await assertion;
+  });
+});
 
 describe('waitForPaneTextChange', () => {
   afterEach(() => {

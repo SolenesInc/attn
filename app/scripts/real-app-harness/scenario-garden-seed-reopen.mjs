@@ -7,7 +7,7 @@ import {
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
-import { waitForFirstWorkspacePane, waitForPaneShellReady } from './scenarioAssertions.mjs';
+import { runShellCommandInPane as runInPane, waitForFirstWorkspacePane, waitForPaneShellReady } from './scenarioAssertions.mjs';
 import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { delay } from './platform.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
@@ -35,31 +35,6 @@ function squash(text) {
 function saw(haystack, needle) {
   return squash(haystack).includes(squash(needle));
 }
-
-let marks = 0;
-
-// The marker appears twice, once as typed and once as the shell prints it, so
-// the command's output is what lies between them.
-async function runInPane(client, pane, command, expected, timeoutMs = 30_000) {
-  const mark = `mark${++marks}x`;
-  await client.request('write_pane', { ...pane, text: `${command}; echo ${mark}` });
-  const deadline = Date.now() + timeoutMs;
-  let text = '';
-  while (Date.now() < deadline) {
-    await delay(250);
-    const raw = (await client.request('read_pane_text', pane)).text || '';
-    text = flat(raw);
-    if (raw.split('\n').some((line) => line.trim() === mark)) {
-      const typed = text.lastIndexOf(`echo ${mark}`);
-      const first = typed >= 0 ? typed + `echo ${mark}`.length : text.indexOf(mark) + mark.length;
-      const out = text.slice(first, text.lastIndexOf(mark));
-      if (saw(out, expected)) return out;
-      throw new Error(`${JSON.stringify(command)} did not answer with ${JSON.stringify(expected)}:\n${out}`);
-    }
-  }
-  throw new Error(`pane never finished ${JSON.stringify(command)}:\n${text}`);
-}
-
 
 async function openPane(client, observer, runner, label) {
   const cwd = path.join(runner.sessionDir, label);
