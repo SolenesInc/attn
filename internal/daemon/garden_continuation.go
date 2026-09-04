@@ -249,7 +249,7 @@ func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garde
 }
 
 // Closing preserves the latest stored identity before removal; Git discovery belongs
-// to explicit continuation capture and worktree cleanup, where the directory still exists.
+// to crash recovery, explicit continuation capture, and worktree cleanup.
 func (d *Daemon) captureGardenSessionSnapshot(session *protocol.Session) (garden.Dispatch, error) {
 	return d.updateGardenDispatch(session.ID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
 		observed := snapshotGardenExecution(session, d.store.GetResumeSessionID(session.ID), d.gardenTime())

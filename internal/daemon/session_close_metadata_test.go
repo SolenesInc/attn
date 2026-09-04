@@ -86,6 +86,31 @@ func TestClosePanePreservesExecutionWithoutRunningGit(t *testing.T) {
 	}
 }
 
+func TestReapedSessionPreservesCheckedOutBranch(t *testing.T) {
+	d, _, workspaceID, sessionID, _ := closeMetadataFixture(t)
+	cwd := d.store.Get(sessionID).Directory
+	runGit(t, cwd, "init", "-b", "feature/current")
+	runGit(t, cwd, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "Initial commit")
+	if _, err := d.captureGardenSessionExecution(d.store.Get(sessionID)); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, cwd, "checkout", "-b", "feature/checked-out")
+	if got := protocol.Deref(d.store.Get(sessionID).Branch); got != "feature/current" {
+		t.Fatalf("cached branch = %q, want feature/current", got)
+	}
+
+	d.removeReapedSession(sessionID)
+
+	if d.store.Get(sessionID) != nil || d.store.GetWorkspaceLayout(workspaceID) != nil {
+		t.Fatal("reaping retained the session or its layout")
+	}
+	execution, ok := d.gardenDispatch(sessionID)
+	if !ok || execution.Branch != "feature/checked-out" || execution.Resume != "native-current" ||
+		!sameDirectory(execution.RepositoryRoot, cwd) {
+		t.Fatalf("reaped execution = %+v, found=%v", execution, ok)
+	}
+}
+
 func TestClosePaneWinsOverInFlightExecutionCapture(t *testing.T) {
 	for _, beforeRemoval := range []bool{true, false} {
 		name := "after record removal"
