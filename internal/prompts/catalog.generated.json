@@ -522,33 +522,65 @@
           }
         },
         {
-          "id": "peer-notification",
+          "id": "inbox-notification",
           "delivery": "user_message",
-          "description": "Notification directing the recipient to the durable inbox.",
+          "description": "Generic notification directing the recipient to the durable inbox.",
           "body": {
             "kind": "text",
-            "id": "session.peer-notification",
-            "source": "content/session/peer-notification.md",
+            "id": "session.inbox-notification",
+            "source": "content/session/inbox-notification.md"
+          }
+        },
+        {
+          "id": "inbox-empty",
+          "delivery": "cli_output",
+          "description": "No unread items remain.",
+          "body": {
+            "kind": "text",
+            "id": "session.inbox-empty",
+            "source": "content/session/inbox-empty.md"
+          }
+        },
+        {
+          "id": "inbox-more",
+          "delivery": "cli_output",
+          "description": "Read the next batch of unread items.",
+          "body": {
+            "kind": "text",
+            "id": "session.inbox-more",
+            "source": "content/session/inbox-more.md",
             "bindings": [
               {
-                "name": "origin",
+                "name": "remaining",
                 "node": {
                   "kind": "input",
                   "field": {
-                    "name": "origin",
+                    "name": "remaining",
                     "kind": "text",
-                    "description": "Sender identity."
+                    "description": "Unread items remaining."
                   }
                 }
-              },
+              }
+            ]
+          }
+        },
+        {
+          "id": "inbox-item",
+          "delivery": "cli_output",
+          "description": "An inbox item other than a peer message or maintenance prompt.",
+          "body": {
+            "kind": "text",
+            "id": "session.inbox-item",
+            "source": "content/session/inbox-item.md",
+            "bindings": [
               {
-                "name": "message_id",
+                "name": "content",
                 "node": {
                   "kind": "input",
                   "field": {
-                    "name": "message_id",
+                    "name": "content",
                     "kind": "text",
-                    "description": "Message to read."
+                    "description": "Rendered inbox item."
                   }
                 }
               }
@@ -807,13 +839,13 @@
           }
         },
         {
-          "id": "garden-bell",
-          "delivery": "user_message",
-          "description": "A watched seed moved; delivered through the peer mailbox.",
+          "id": "garden-update",
+          "delivery": "inbox_content",
+          "description": "A watched seed moved; returned by the durable inbox.",
           "body": {
             "kind": "text",
-            "id": "session.garden-bell",
-            "source": "content/session/garden-bell.md",
+            "id": "session.garden-update",
+            "source": "content/session/garden-update.md",
             "bindings": [
               {
                 "name": "seed_id",
@@ -4511,5 +4543,5 @@
       ]
     }
   ],
-  "definitions_hash": "cf091687ca7166e3fe8e232e07c3a3b87053d2cc15178dcdaff3be20744b5ae3"
+  "definitions_hash": "56eebca1d81f2dec4695724b6db80e08ac4c892a91c32371b509999b284abf59"
 }
