@@ -13,6 +13,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { recordingEnabled } from './windowRecording.mjs';
+import { createPaneCommand } from './paneCommand.mjs';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -36,16 +37,6 @@ async function pace() {
   if (PACE_MS > 0) await delay(PACE_MS);
 }
 
-function occurrences(haystack, needle) {
-  let count = 0;
-  let at = haystack.indexOf(needle);
-  while (at !== -1) {
-    count += 1;
-    at = haystack.indexOf(needle, at + needle.length);
-  }
-  return count;
-}
-
 async function paneText(client, pane) {
   const payload = await client.request('read_pane_text', pane);
   return payload.text || '';
@@ -65,21 +56,16 @@ function saw(haystack, needle) {
   return squash(haystack).includes(squash(needle));
 }
 
-let marks = 0;
-
-// runInPane's marker prints twice — as typed and as echoed — so this command's
-// answer is what lies between them, not what the scrolling pane contains.
 async function runInPane(client, pane, command, expected, timeoutMs = 30_000) {
-  const mark = `mark${++marks}x`;
-  await client.request('write_pane', { ...pane, text: `${command}; echo ${mark}` });
+  const framed = createPaneCommand(command);
+  await client.request('write_pane', { ...pane, text: framed.text });
   const deadline = Date.now() + timeoutMs;
   let text = '';
   while (Date.now() < deadline) {
     await delay(250);
     text = flat(await paneText(client, pane));
-    if (occurrences(text, mark) >= 2) {
-      const first = text.indexOf(mark) + mark.length;
-      const out = text.slice(first, text.lastIndexOf(mark));
+    const out = framed.readOutput(text);
+    if (out !== null) {
       if (saw(out, expected)) {
         await pace();
         return out;
