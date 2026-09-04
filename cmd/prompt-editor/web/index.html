@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="/style.css" />
     <script type="module" src="/app.js"></script>
   </head>
-  <body>
+  <body inert>
     <header class="app-header">
       <div class="brand">
         <span class="mark" aria-hidden="true">↳</span
@@ -114,7 +114,7 @@
           </button>
         </div>
         <div id="file-error" class="error" role="alert" hidden></div>
-        <textarea
+        <textarea readonly
           id="source"
           aria-label="Markdown source"
           spellcheck="false"

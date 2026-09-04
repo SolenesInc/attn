@@ -26,7 +26,7 @@ export function collaborate({ state, $, api, selectEvent, selectSource, renderNa
         $("archive-draft").hidden = !draft || !!review || draft.archived;
         $("restore-draft").hidden = !draft?.archived;
         $("save").textContent = draft ? "Apply draft" : "Save file ⌘S";
-        const readonly = !!review || !!draft?.archived;
+        const readonly = !initialized || !!review || !!draft?.archived;
         $("apply-draft").disabled = !draft || draft.archived || (!Object.keys(draft.files).length && !pending.size);
         $("return-draft").hidden = !review;
         $("source").disabled = !state.catalog.sources[state.path];
@@ -508,8 +508,8 @@ export function collaborate({ state, $, api, selectEvent, selectSource, renderNa
                 await loadDraft(params.get("draft"), true);
             if (state.catalog.validation)
                 showError(new Error(state.catalog.validation));
-            contextLabel();
             initialized = true;
+            contextLabel();
             if (refreshPending) queueRefresh();
         },
     };

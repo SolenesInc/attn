@@ -58,10 +58,24 @@ try {
     browser = await chromium.launch({ headless: true });
     context = await browser.newContext({ viewport: { width: 1512, height: 1050 }, permissions: ["clipboard-read", "clipboard-write"], ...(artifacts ? { recordVideo: { dir: artifacts, size: { width: 1512, height: 1050 } } } : {}) });
     const page = await context.newPage();
-    page.on("pageerror", (error) => errors.push(String(error)));
-    await page.goto(`${url}/#crew/wake`);
+    page.on("pageerror", (error) => errors.push(error.stack || String(error)));
+    let releaseCatalog;
+    let catalogRequested;
+    const heldCatalog = new Promise((resolve) => { releaseCatalog = resolve; });
+    const catalogArrived = new Promise((resolve) => { catalogRequested = resolve; });
+    await page.route("**/api/catalog", async (route) => {
+        catalogRequested();
+        await heldCatalog;
+        await route.continue();
+    });
+    await page.goto(`${url}/#crew/wake`, { waitUntil: "domcontentloaded" });
+    await catalogArrived;
+    await page.locator("#source-edit").click({ force: true });
+    releaseCatalog();
+    await page.unrouteAll({ behavior: "wait" });
     await expect(page.locator("#source")).toHaveValue("Wake from the base.\n");
     await expect(page.locator("#saved-scenario option")).toHaveCount(8);
+    await expect(page.locator("#base-status")).toContainText("Merge base");
     await page.locator("#saved-scenario").selectOption("crew-wake");
     page.once("dialog", (dialog) => dialog.accept("Clear wake instructions"));
     await page.locator("#new-draft").click();
@@ -88,7 +102,7 @@ try {
     await page.locator("#follow-agent").uncheck();
     secondContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
     const second = await secondContext.newPage();
-    second.on("pageerror", (error) => errors.push(String(error)));
+    second.on("pageerror", (error) => errors.push(error.stack || String(error)));
     await second.goto(link.url);
     await expect(second.locator("#source")).toHaveValue("Wake with the agent's clarification.\n");
     let release;
@@ -145,9 +159,7 @@ try {
     assert.equal(cli("inspect", "--review", reviewID).result.text, "Keep this concurrent agent edit.");
     await page.locator(".shared-tools summary").click();
     await page.locator("#copy-agent-context").click();
-    await expect(page.locator("#draft-state")).toHaveText("Agent context copied");
-    const clipboard = await page.evaluate(() => navigator.clipboard.readText());
-    assert.ok(clipboard.includes(`inspect --review ${reviewID} --json`));
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(`inspect --review ${reviewID} --json`);
     if (artifacts)
         await page.screenshot({ path: path.join(artifacts, "review-feedback.png") });
     await page.locator("#return-draft").click();
@@ -172,9 +184,24 @@ try {
     await page.locator("#restore-draft").click();
     await expect(page.locator("#source")).toHaveJSProperty("readOnly", false);
     const reviewURL = cli("show", "--review", reviewID).url;
-    await page.goto(reviewURL);
+    let releaseRefs;
+    let refsRequested;
+    const heldRefs = new Promise((resolve) => { releaseRefs = resolve; });
+    const refsArrived = new Promise((resolve) => { refsRequested = resolve; });
+    await page.route("**/api/refs", async (route) => {
+        refsRequested();
+        await heldRefs;
+        await route.continue();
+    });
+    await page.goto(reviewURL, { waitUntil: "domcontentloaded" });
+    await refsArrived;
     await expect(page.locator("#source")).toHaveJSProperty("readOnly", true);
     await expect(page.locator("#source")).toHaveValue("Keep this concurrent agent edit.\n");
+    await expect(page.locator("#base-status")).toContainText(`Review base · ${git("rev-parse", "HEAD").slice(0, 8)}`);
+    releaseRefs();
+    await page.unrouteAll({ behavior: "wait" });
+    await expect(page.locator("#base-refs option")).toHaveCount(1);
+    await expect(page.locator("#base-status")).toContainText("Review base");
     await page.locator("#source-edit").click();
     await expect(page.locator("#source")).toBeVisible();
     await page.locator("#source").focus();

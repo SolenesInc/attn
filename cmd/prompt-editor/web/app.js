@@ -524,7 +524,7 @@ async function loadRefs() {
       option.label = ref;
       $("base-refs").append(option);
     }
-    if (data.default) {
+    if (data.default && !collaboration.active()) {
       $("base-ref").value = data.default.replace(/^refs\/(heads|remotes)\//, "");
       await selectBase();
     }
@@ -650,11 +650,13 @@ try {
   const requestedKey = location.hash.slice(1) || "session/launch";
   selectEvent(requestedKey);
   if (!state.key) selectEvent("session/launch");
-  await loadRefs();
-  if (state.key !== requestedKey) selectEvent(requestedKey);
   collaboration = collaborate({ state, $, api, selectEvent, selectSource, renderNavigation, schedulePreview, status });
   await collaboration.init();
+  document.body.inert = false;
+  await loadRefs();
+  if (!collaboration.active() && state.key !== requestedKey) selectEvent(requestedKey);
 } catch (error) {
+  document.body.inert = false;
   $("global-status").textContent = "Could not open catalog";
   $("file-error").hidden = false;
   $("file-error").textContent = error.message;
