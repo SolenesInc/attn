@@ -4594,18 +4594,20 @@ func TestDaemon_InitialState_IncludesRepoStates(t *testing.T) {
 	os.Remove(sockPath)
 
 	d := NewForTesting(sockPath)
-
-	go func() {
-		if err := d.Start(); err != nil {
-			t.Logf("Daemon start error: %v", err)
-		}
-	}()
+	startErr := make(chan error, 1)
+	go func() { startErr <- d.Start() }()
 	defer func() {
 		d.Stop()
 		os.Remove(sockPath)
 	}()
 
-	time.Sleep(200 * time.Millisecond)
+	select {
+	case <-d.startedCh:
+	case err := <-startErr:
+		t.Fatalf("Daemon start error: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("daemon did not signal startup")
+	}
 
 	c := client.New(sockPath)
 	err := c.ToggleMuteRepo("owner/test-repo")
@@ -4613,20 +4615,12 @@ func TestDaemon_InitialState_IncludesRepoStates(t *testing.T) {
 		t.Fatalf("ToggleMuteRepo error: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	wsURL := "ws://127.0.0.1:" + wsPort + "/ws"
-	var wsConn *websocket.Conn
-	maxRetries := 20
-	for i := 0; i < maxRetries; i++ {
-		time.Sleep(100 * time.Millisecond)
-		var dialErr error
-		wsConn, _, dialErr = websocket.Dial(ctx, wsURL, nil)
-		if dialErr == nil {
-			break
-		}
-		if i == maxRetries-1 {
-			t.Fatalf("WebSocket dial error after %d retries: %v", maxRetries, dialErr)
-		}
+	wsConn, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatalf("WebSocket dial error: %v", err)
 	}
 	defer wsConn.Close(websocket.StatusNormalClosure, "")
 
@@ -4939,13 +4933,20 @@ func TestDaemon_StopCommand_CompletedTodos_ProceedsToClassification(t *testing.T
 	os.Remove(sockPath)
 
 	d := NewForTesting(sockPath)
-	go d.Start()
+	startErr := make(chan error, 1)
+	go func() { startErr <- d.Start() }()
 	defer func() {
 		d.Stop()
 		os.Remove(sockPath)
 	}()
 
-	waitForSocket(t, sockPath, 5*time.Second)
+	select {
+	case <-d.startedCh:
+	case err := <-startErr:
+		t.Fatalf("Daemon start error: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("daemon did not signal startup")
+	}
 
 	c := client.New(sockPath)
 
