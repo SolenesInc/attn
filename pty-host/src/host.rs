@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex, Weak};
 use std::thread;
@@ -53,13 +53,67 @@ struct HostRegistry<'a> {
 
 pub struct Host {
     cfg: Config,
-    sessions: Mutex<HashMap<String, Arc<Session>>>,
-    spawning: Mutex<HashSet<String>>,
+    // Lock watchers before state; release state before session callbacks or IO.
+    state: Mutex<HostState>,
     conn_seq: AtomicU64,
-    idle_epoch: AtomicU64,
-    shutting_down: AtomicBool,
     watchers: Mutex<HashMap<String, HostWatcher>>,
     reaper: ChildReaper,
+}
+
+#[derive(Default)]
+struct HostState {
+    sessions: HashMap<String, Arc<Session>>,
+    spawning: HashSet<String>,
+    idle_epoch: u64,
+    shutting_down: bool,
+}
+
+impl HostState {
+    fn begin_spawn(&mut self, id: &str) -> Result<(), String> {
+        if id.trim().is_empty() || id.contains('/') || id.contains('\\') || id == "." || id == ".."
+        {
+            return Err("invalid session id".to_owned());
+        }
+        if self.shutting_down {
+            return Err("host is shutting down".to_owned());
+        }
+        if self.sessions.contains_key(id) {
+            return Err(format!("session {id} already exists"));
+        }
+        if !self.spawning.insert(id.to_owned()) {
+            return Err(format!("session {id} spawn already in progress"));
+        }
+        self.idle_epoch = self.idle_epoch.wrapping_add(1);
+        Ok(())
+    }
+
+    fn idle(&self) -> bool {
+        !self.shutting_down && self.sessions.is_empty() && self.spawning.is_empty()
+    }
+
+    fn schedule_idle(&mut self) -> Option<u64> {
+        if !self.idle() {
+            return None;
+        }
+        self.idle_epoch = self.idle_epoch.wrapping_add(1);
+        Some(self.idle_epoch)
+    }
+
+    fn begin_idle_shutdown(&mut self, epoch: u64) -> bool {
+        if self.idle_epoch != epoch || !self.idle() {
+            return false;
+        }
+        self.shutting_down = true;
+        true
+    }
+
+    fn begin_shutdown(&mut self) -> Result<Vec<Arc<Session>>, String> {
+        if !self.spawning.is_empty() || self.shutting_down {
+            return Err("host has a spawn or shutdown in progress".to_owned());
+        }
+        self.shutting_down = true;
+        Ok(self.sessions.values().cloned().collect())
+    }
 }
 
 struct HostWatcher {
@@ -87,11 +141,8 @@ impl Host {
             .map_err(|error| format!("protect host socket: {error}"))?;
         let host = Arc::new(Self {
             cfg,
-            sessions: Mutex::new(HashMap::new()),
-            spawning: Mutex::new(HashSet::new()),
+            state: Mutex::new(HostState::default()),
             conn_seq: AtomicU64::new(0),
-            idle_epoch: AtomicU64::new(0),
-            shutting_down: AtomicBool::new(false),
             watchers: Mutex::new(HashMap::new()),
             reaper: ChildReaper::start()?,
         });
@@ -145,35 +196,20 @@ impl Host {
     }
 
     fn session(&self, id: &str) -> Option<Arc<Session>> {
-        self.sessions
+        self.state
             .lock()
-            .expect("sessions mutex poisoned")
+            .expect("host state mutex poisoned")
+            .sessions
             .get(id)
             .cloned()
     }
 
     fn spawn(self: &Arc<Self>, params: SpawnParams) -> Result<Arc<Session>, String> {
-        self.idle_epoch.fetch_add(1, Ordering::AcqRel);
         let id = params.session_id.clone();
-        if id.trim().is_empty() || id.contains('/') || id.contains('\\') || id == "." || id == ".."
-        {
-            return Err("invalid session id".to_owned());
-        }
-        {
-            let sessions = self.sessions.lock().expect("sessions mutex poisoned");
-            if sessions.contains_key(&id) {
-                return Err(format!("session {id} already exists"));
-            }
-        }
-        {
-            let mut spawning = self.spawning.lock().expect("spawning mutex poisoned");
-            if self.shutting_down.load(Ordering::Acquire) {
-                return Err("host is shutting down".to_owned());
-            }
-            if !spawning.insert(id.clone()) {
-                return Err(format!("session {id} spawn already in progress"));
-            }
-        }
+        self.state
+            .lock()
+            .expect("host state mutex poisoned")
+            .begin_spawn(&id)?;
 
         let weak = Arc::downgrade(self);
         let cleanup_host = weak.clone();
@@ -199,9 +235,10 @@ impl Host {
         let session = match result {
             Ok(session) => session,
             Err(error) => {
-                self.spawning
+                self.state
                     .lock()
-                    .expect("spawning mutex poisoned")
+                    .expect("host state mutex poisoned")
+                    .spawning
                     .remove(&id);
                 self.schedule_idle_if_empty();
                 return Err(error);
@@ -209,18 +246,15 @@ impl Host {
         };
         {
             let watchers = self.watchers.lock().expect("host watchers mutex poisoned");
-            self.sessions
-                .lock()
-                .expect("sessions mutex poisoned")
-                .insert(id.clone(), Arc::clone(&session));
+            {
+                let mut state = self.state.lock().expect("host state mutex poisoned");
+                state.sessions.insert(id.clone(), Arc::clone(&session));
+                state.spawning.remove(&id);
+            }
             for _ in &*watchers {
                 session.note_connected();
             }
         }
-        self.spawning
-            .lock()
-            .expect("spawning mutex poisoned")
-            .remove(&id);
         for event in session.lifecycle_events() {
             self.broadcast_lifecycle(&event);
         }
@@ -228,18 +262,11 @@ impl Host {
     }
 
     fn shutdown_sessions(&self) -> Result<(), String> {
-        let sessions = {
-            let spawning = self.spawning.lock().expect("spawning mutex poisoned");
-            if !spawning.is_empty() || self.shutting_down.swap(true, Ordering::AcqRel) {
-                return Err("host has a spawn or shutdown in progress".to_owned());
-            }
-            self.sessions
-                .lock()
-                .expect("sessions mutex poisoned")
-                .values()
-                .cloned()
-                .collect::<Vec<_>>()
-        };
+        let sessions = self
+            .state
+            .lock()
+            .expect("host state mutex poisoned")
+            .begin_shutdown()?;
         let mut tasks = Vec::new();
         let mut failure = None;
         for session in sessions {
@@ -266,22 +293,24 @@ impl Host {
             }
         }
         if let Some(error) = failure {
-            self.shutting_down.store(false, Ordering::Release);
+            self.state
+                .lock()
+                .expect("host state mutex poisoned")
+                .shutting_down = false;
             return Err(error);
         }
         Ok(())
     }
 
     fn schedule_idle_if_empty(self: &Arc<Self>) {
-        if !self
-            .sessions
+        let Some(epoch) = self
+            .state
             .lock()
-            .expect("sessions mutex poisoned")
-            .is_empty()
-        {
+            .expect("host state mutex poisoned")
+            .schedule_idle()
+        else {
             return;
-        }
-        let epoch = self.idle_epoch.fetch_add(1, Ordering::AcqRel) + 1;
+        };
         let host = Arc::downgrade(self);
         let _ = thread::Builder::new()
             .name("pty-host-idle".to_owned())
@@ -291,12 +320,11 @@ impl Host {
                 let Some(host) = host.upgrade() else {
                     return;
                 };
-                if host.idle_epoch.load(Ordering::Acquire) != epoch
-                    || !host
-                        .sessions
-                        .lock()
-                        .expect("sessions mutex poisoned")
-                        .is_empty()
+                if !host
+                    .state
+                    .lock()
+                    .expect("host state mutex poisoned")
+                    .begin_idle_shutdown(epoch)
                 {
                     return;
                 }
@@ -308,9 +336,10 @@ impl Host {
 
     fn host_info(&self) -> Value {
         let mut ids: Vec<String> = self
-            .sessions
+            .state
             .lock()
-            .expect("sessions mutex poisoned")
+            .expect("host state mutex poisoned")
+            .sessions
             .keys()
             .cloned()
             .collect();
@@ -325,9 +354,10 @@ impl Host {
     fn watch_all(&self, watcher_id: String, sender: SyncSender<Value>, shutdown: UnixStream) {
         let mut watchers = self.watchers.lock().expect("host watchers mutex poisoned");
         let sessions = self
-            .sessions
+            .state
             .lock()
-            .expect("sessions mutex poisoned")
+            .expect("host state mutex poisoned")
+            .sessions
             .values()
             .cloned()
             .collect::<Vec<_>>();
@@ -352,9 +382,10 @@ impl Host {
             if watchers.remove(watcher_id).is_none() {
                 return;
             }
-            self.sessions
+            self.state
                 .lock()
-                .expect("sessions mutex poisoned")
+                .expect("host state mutex poisoned")
+                .sessions
                 .values()
                 .cloned()
                 .collect::<Vec<_>>()
@@ -381,9 +412,10 @@ impl Host {
             let sessions = if dropped.is_empty() {
                 Vec::new()
             } else {
-                self.sessions
+                self.state
                     .lock()
-                    .expect("sessions mutex poisoned")
+                    .expect("host state mutex poisoned")
+                    .sessions
                     .values()
                     .cloned()
                     .collect::<Vec<_>>()
@@ -409,9 +441,10 @@ impl Host {
                         return;
                     };
                     let sessions = host
-                        .sessions
+                        .state
                         .lock()
-                        .expect("sessions mutex poisoned")
+                        .expect("host state mutex poisoned")
+                        .sessions
                         .values()
                         .filter(|session| session.is_shell() && session.is_running())
                         .cloned()
@@ -907,9 +940,10 @@ fn remove_session(host: &Weak<Host>, session_id: &str) {
     let Some(host) = host.upgrade() else {
         return;
     };
-    host.sessions
+    host.state
         .lock()
-        .expect("sessions mutex poisoned")
+        .expect("host state mutex poisoned")
+        .sessions
         .remove(session_id);
     host.schedule_idle_if_empty();
 }
@@ -957,4 +991,73 @@ fn unix_timestamp() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::HostState;
+
+    #[test]
+    fn idle_retirement_closes_spawn_admission() {
+        let mut state = HostState::default();
+        let epoch = state.schedule_idle().unwrap();
+        assert!(state.begin_idle_shutdown(epoch));
+        assert!(
+            state.begin_spawn("late-terminal").is_err(),
+            "retiring host admitted a new terminal"
+        );
+    }
+
+    #[test]
+    fn pending_spawn_prevents_retirement_and_shutdown() {
+        let mut state = HostState::default();
+        let epoch = state.schedule_idle().unwrap();
+        state.begin_spawn("new-terminal").unwrap();
+        assert!(!state.begin_idle_shutdown(epoch));
+        assert!(!state.begin_idle_shutdown(state.idle_epoch));
+        assert!(state.schedule_idle().is_none());
+        assert!(state.begin_shutdown().is_err());
+        assert!(!state.shutting_down);
+    }
+
+    #[test]
+    fn cancelled_spawn_can_retire_on_a_fresh_timer_only() {
+        let mut state = HostState::default();
+        let old_epoch = state.schedule_idle().unwrap();
+        state.begin_spawn("failed-terminal").unwrap();
+        state.spawning.remove("failed-terminal");
+        let new_epoch = state.schedule_idle().unwrap();
+        assert!(!state.begin_idle_shutdown(old_epoch));
+        assert!(state.begin_idle_shutdown(new_epoch));
+    }
+
+    #[test]
+    fn shutdown_closes_spawn_admission_and_rejects_idle_retirement() {
+        let mut state = HostState::default();
+        let epoch = state.schedule_idle().unwrap();
+        assert!(state.begin_shutdown().unwrap().is_empty());
+        assert!(state.begin_spawn("late-terminal").is_err());
+        assert!(state.begin_shutdown().is_err());
+        assert!(state.schedule_idle().is_none());
+        assert!(!state.begin_idle_shutdown(epoch));
+    }
+
+    #[test]
+    fn duplicate_spawn_keeps_the_original_reservation() {
+        let mut state = HostState::default();
+        state.begin_spawn("terminal").unwrap();
+        assert!(state.begin_spawn("terminal").is_err());
+        assert!(state.spawning.contains("terminal"));
+        assert!(state.schedule_idle().is_none());
+    }
+
+    #[test]
+    fn invalid_spawn_does_not_cancel_idle_retirement() {
+        for id in ["", " ", ".", "..", "a/b", "a\\b"] {
+            let mut state = HostState::default();
+            let epoch = state.schedule_idle().unwrap();
+            assert!(state.begin_spawn(id).is_err());
+            assert!(state.begin_idle_shutdown(epoch));
+        }
+    }
 }

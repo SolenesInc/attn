@@ -64,6 +64,46 @@ function renderModal(overrides: Record<string, unknown> = {}) {
 }
 
 describe('SettingsModal sections', () => {
+  it('keeps the shared PTY experiment off until the daemon confirms opt-in', async () => {
+    const onSetSetting = renderModal({ settings: { pty_backend_mode: 'migrating' } });
+    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    const toggle = await screen.findByRole('switch', { name: 'Shared PTY host (experimental)' });
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByTestId('settings-shared-pty-host-status')).toHaveTextContent('New sessions use dedicated Go workers.');
+    fireEvent.click(toggle);
+    expect(onSetSetting).toHaveBeenCalledWith('pty_shared_host_enabled', 'true');
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('can turn the shared host off without claiming existing terminals will move', async () => {
+    const onSetSetting = renderModal({ settings: {
+      pty_backend_mode: 'migrating', pty_shared_host_enabled: 'true', pty_shared_host_active: 'true',
+    } });
+    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    const toggle = await screen.findByRole('switch', { name: 'Shared PTY host (experimental)' });
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('settings-shared-pty-host-status')).toHaveTextContent('New sessions use the shared Rust host.');
+    expect(screen.getByText(/Running sessions stay untouched/)).toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(onSetSetting).toHaveBeenCalledWith('pty_shared_host_enabled', 'false');
+  });
+
+  it('shows when a saved opt-in fell back to dedicated workers', async () => {
+    renderModal({ settings: { pty_backend_mode: 'migrating', pty_shared_host_enabled: 'true', pty_shared_host_active: 'false' } });
+    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    expect(await screen.findByTestId('settings-shared-pty-host-status')).toHaveTextContent('Shared host unavailable.');
+    expect(screen.getByRole('switch', { name: 'Shared PTY host (experimental)' })).toBeEnabled();
+  });
+
+  it.each(['worker', 'shared', 'embedded', 'unknown'])('disables the experiment control on the %s backend', async (mode) => {
+    const onSetSetting = renderModal({ settings: { pty_backend_mode: mode } });
+    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    const toggle = await screen.findByRole('switch', { name: 'Shared PTY host (experimental)' });
+    expect(toggle).toBeDisabled();
+    fireEvent.click(toggle);
+    expect(onSetSetting).not.toHaveBeenCalled();
+  });
+
   it('gives every published section id a nav item that renders a block', async () => {
     renderModal();
 

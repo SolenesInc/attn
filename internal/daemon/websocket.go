@@ -1127,7 +1127,12 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdGetSettings: // wire: get_settings
 		d.handleGetSettingsWS(client)
 	case protocol.CmdSetSetting: // wire: set_setting
-		d.handleSetSettingWS(client, msg.(*protocol.SetSettingMessage))
+		setting := msg.(*protocol.SetSettingMessage)
+		if setting.Key == SettingSharedPTYHostEnabled {
+			go d.handleSetSettingWS(client, setting)
+		} else {
+			d.handleSetSettingWS(client, setting)
+		}
 	case protocol.CmdListPlugins: // wire: list_plugins
 		d.handleListPluginsWS(client)
 	case protocol.CmdInstallPlugin: // wire: install_plugin

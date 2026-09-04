@@ -142,6 +142,8 @@ type Daemon struct {
 	legacyTicketSnapshotRead          func(string) (store.LegacyTicketSnapshotRead, error)
 	legacyRecoveryArtifactWrite       func(string, []byte) error
 	ptyBackend                        ptybackend.Backend
+	ptySettingsMu                     sync.Mutex
+	ptySettingsChangeMu               sync.Mutex
 	upgradingMu                       sync.Mutex
 	upgradingWorkers                  map[string]bool
 	hostSessions                      *hostsession.Manager
@@ -929,7 +931,8 @@ func (d *Daemon) Start() error {
 		}
 
 		useSharedForNew := false
-		if shouldRunWorkerStartupProbe() {
+		sharedEnabled := parseBooleanSetting(d.store.GetSetting(SettingSharedPTYHostEnabled))
+		if sharedEnabled && shouldRunWorkerStartupProbe() {
 			probeCtx, cancelProbe := context.WithTimeout(context.Background(), workerStartupProbeTimeout)
 			probeErr := sharedBackend.Probe(probeCtx)
 			cancelProbe()
@@ -939,7 +942,7 @@ func (d *Daemon) Start() error {
 			} else {
 				useSharedForNew = true
 			}
-		} else if strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")) != "" {
+		} else if sharedEnabled && strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")) != "" {
 			// Tests and controlled profiles can skip the process probe only when
 			// they name the host binary explicitly.
 			useSharedForNew = true

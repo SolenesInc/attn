@@ -1,9 +1,17 @@
 # Shared PTY host verification
 
-New terminals use the Rust host. Existing Go workers keep their terminals until
-those terminals exit or the user reloads them. A daemon restart recovers both
-backends; a host binary change starts a new host generation without moving
-sessions out of the old one.
+The shared Rust PTY host is experimental and off by default. Enable it under
+Settings → Agents → PTY Backend. New and explicitly reloaded sessions use the
+selected backend; changing the setting never moves or stops a running session.
+Turning it off returns future launches to dedicated Go workers.
+
+Enabling probes the host before saving the setting. A failed probe or save
+leaves the previous selection intact. On restart, a saved opt-in is probed again;
+if the host is unavailable, new launches use Go and Settings reports the fallback.
+Recovery always handles both backends, even with the experiment off or the host
+executable missing. A host binary change starts a new generation without moving
+sessions out of the old one. Explicit `ATTN_PTY_BACKEND` overrides disable the
+Settings control.
 
 ## Reproduce the upgrade test
 
@@ -21,12 +29,18 @@ temporary data directories. No installed daemon or real provider is involved.
 1. Start the old daemon with a shell and two fixture agents on Go workers.
 2. Kill that daemon, start the new binary, and exchange fresh input/output with
    every surviving process.
-3. Start an agent on Rust. Reload one old agent onto the same Rust host, checking
-   that its native conversation ID resumes and the other processes stay put.
-4. Restart the daemon and recover the mixed Go/Rust population.
-5. Change the host executable identity and start another agent. Verify that it
+3. Confirm the default is off and a new agent still uses Go. Enable the setting,
+   start an agent on Rust, and reload one old agent onto that same Rust host.
+   Check that its native conversation ID resumes and other processes stay put.
+4. Restart with the opt-in saved and recover the mixed population. Disable it,
+   explicitly reload the promoted agent back onto Go, launch another Go agent,
+   and restart again. Both populations retain their remaining PIDs and exchange
+   fresh input/output; another new launch still uses Go.
+5. Re-enable, change the host executable identity, and start another agent. Verify that it
    uses a different host PID while every earlier agent and worker keeps its PID.
-6. Resize the old shell, exchange more input/output, and close every pane.
+6. Resize the old shell. Restart with the host executable missing; confirm the
+   reported fallback, a new Go launch, and working sessions on both old host
+   generations. Close every pane.
 
 Readiness comes from filesystem events and the daemon's `initial_state` message.
 Every survival assertion uses a unique input challenge, the registry's child and
@@ -35,11 +49,9 @@ barriers. Deadlines only terminate stalled tests. A wrapper changes the host
 executable hash for generation testing; it does not claim compatibility with an
 arbitrary future host protocol.
 
-On 2026-09-03, this passed five consecutive macOS runs with development-format
-binaries, three macOS runs built from scratch with release-format stamps, and
-three Linux ARM64 runs in disposable containers. Shared-host integration tests
-also passed on macOS under the Go race detector and on Linux ARM64. The CI job
-runs the upgrade and shared-host integration tests on macOS and Linux.
+The complete opt-in matrix passed three consecutive macOS runs and three Linux
+ARM64 runs on 2026-09-04, with release-format stamps and the pinned old daemon.
+The CI job runs the upgrade and shared-host integration tests on macOS and Linux.
 
 Profile cleanup authenticates each live host, verifies its PID, and asks it to
 stop its children before deleting profile data. The live cleanup test covers two
@@ -48,18 +60,50 @@ an unreachable host's registry for a later attempt. It passed three repeats on
 macOS with the race detector and three on Linux ARM64. Shell-close coverage
 checks that termination begins with SIGHUP.
 
-Two temporary Go build overlays checked the test's sensitivity:
+Idle retirement and spawn admission share one host-state lock. Six Rust tests
+cover retirement closing admission, pending spawns, stale timers after failed
+spawns, shutdown, duplicate reservations, and invalid session IDs. The
+retirement test failed against the original admission and retirement logic.
+Removing the admission gate or the pending-spawn check also fails the matching
+test; both deliberate mutations were reverted.
+
+All 22 Rust tests, clippy, the macOS backend suite with the race detector, and
+the Linux shared-host and mixed-backend suites passed. Setting tests cover probe
+failure, failed persistence, concurrent writes, read-only status, and overrides.
+Router tests cover pending spawns retaining their owner and existing IO continuing
+during a probe. A paused probe also leaves Settings snapshots and the client's
+command loop available. The full frontend suite passed.
+
+Nested-shell prompt markers retain their foreground process-group owner until
+pre-exec or a foreground handoff. Deterministic Rust tests cover keepalives,
+command end, and stale ownership. A live nested-shell test passes three repeats
+under the race detector and fails against the pre-fix host when its next poll
+overwrites the prompt with a busy claim.
+
+Temporary Go build overlays checked the upgrade test's sensitivity:
 
 | Deliberate break | Observed failure |
 | --- | --- |
 | Route new sessions to Go despite shared-host support | The new agent has no Rust session registry. |
 | Attribute recovered Go sessions to the Rust backend | Attaching the surviving legacy shell returns `session not found`. |
+| Ignore the saved opt-in and enable Rust on startup | The initial default-off assertion sees active Rust launches. |
+| Skip Rust recovery while the experiment is off | The existing Rust agent returns `session not found` after restart. |
+| Run the enable probe on the client command loop | The barrier-based responsiveness test stalls inside the probe and times out. |
 
-Neither mutation is present in the working implementation. The packaged app's
+None of these mutations is present in the working implementation. The packaged app's
 `TERMINAL-INPUT` scenario passed using its bundled Rust host, with mock-agent
 tripwires and headless model tasks disabled. It covered navigation and modifier
 keys, application cursor mode, Kitty key events, Unicode, bracketed paste,
 image paste, shortcuts, and zoomed terminal input.
+
+The recorded `PTY-HOST-SETTING` scenario exercised the Settings toggle in the
+packaged app. Off/on/off launched dedicated Go, shared Rust, and dedicated Go
+terminals. All three retained their worker and child PIDs and returned fresh
+challenge output after the toggles. Screenshots verify the effective-backend
+text in each state. Headless tasks were off and the mock-agent ledger was empty.
+
+The full concurrent Go suite passed, including all five daemon shards and the
+store/docstore race checks. No test deadlines were extended or assertions removed.
 
 ## Resource experiment
 
@@ -131,3 +175,11 @@ transfers. Empty-host physical footprint was 2,146,664 bytes at one PTY,
 181 KiB per additional PTY from eight to 32). Detached and attached instruction
 medians were 3.762 and 4.515 billion per 8 MiB; CPU medians were 281.77 and
 450.95 ms. This was a separate run, not a paired CPU comparison with the baseline.
+
+The 2026-09-04 lifecycle-cleanup comparison passed all twelve detached/attached
+transfers. Empty 32-PTY footprint was 8,323,480 bytes before and 8,356,272 after
+(about 7.94 and 7.97 MiB); the eight-to-32 slope was 176.7 and 178.0 KiB per PTY.
+Detached/attached instruction medians changed by less than 1%. Idle samples used
+0.0013–0.0025% of one core. CPU medians were 343.24/527.46 ms before and
+337.91/471.29 ms after, but a single pair does not establish a speedup. These
+checks support roughly unchanged resource use, not an optimization claim.

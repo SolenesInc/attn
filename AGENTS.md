@@ -101,8 +101,8 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 
 ## Ownership
 
-- New production PTYs run in the shared Rust `pty-host`; `internal/ptyworker`
-  and `internal/pty` retain live legacy sessions during migration.
+- PTYs use dedicated Go workers by default. The experimental shared Rust
+  `pty-host` setting changes future launches only; recovery always handles both.
 - `internal/store` owns SQLite/cache; `internal/attention` owns turn predicates.
   Derive `turn_owed` from persisted opened/settled timestamps.
 - `internal/jobs` owns background duties and periodic ticks;

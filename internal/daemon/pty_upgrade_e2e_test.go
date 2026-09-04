@@ -6,10 +6,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -88,10 +90,15 @@ done
 	old.stop()
 
 	current := start(newBinary, hostBinary)
+	current.assertSharedSetting(false, false)
 	for _, id := range []string{"legacy-shell", "legacy-agent", "promote-agent"} {
 		current.assertIdentity(id, false, identities[id])
 		current.probe(id, identities[id].ChildPID, "new-daemon")
 	}
+	current.spawn("default-agent", "codex", fixture)
+	identities["default-agent"] = current.identity("default-agent", false)
+	current.probe("default-agent", identities["default-agent"].ChildPID, "default-off")
+	current.setSharedSetting(true)
 	current.spawn("new-agent", "codex", fixture)
 	identities["new-agent"] = current.identity("new-agent", true)
 	current.probe("new-agent", identities["new-agent"].ChildPID, "rust-agent")
@@ -107,18 +114,47 @@ done
 	if !strings.Contains(output, "__RESUME_native-promote-agent__") || agentPIDs["promote-agent"] == priorAgentPID {
 		t.Fatalf("reload lost native conversation identity: %q", output)
 	}
+	sharedSessions := map[string]bool{"promote-agent": true, "new-agent": true}
 	assertAll := func(d *upgradeDaemon, phase string) {
-		for _, id := range []string{"legacy-shell", "legacy-agent", "promote-agent", "new-agent"} {
-			shared := id == "promote-agent" || id == "new-agent"
-			d.assertIdentity(id, shared, identities[id])
-			d.probe(id, identities[id].ChildPID, phase)
+		for _, id := range slices.Sorted(maps.Keys(identities)) {
+			identity := identities[id]
+			shared := sharedSessions[id]
+			d.assertIdentity(id, shared, identity)
+			d.probe(id, identity.ChildPID, phase)
 		}
 	}
 	assertAll(current, "after-reload")
 	current.stop()
 
 	current = start(newBinary, hostBinary)
+	current.assertSharedSetting(true, true)
 	assertAll(current, "mixed-restart")
+	current.setSharedSetting(false)
+	current.command(map[string]any{"cmd": "reload_session", "id": "promote-agent", "cols": 80, "rows": 24}, "reload_session_result", "promote-agent")
+	dedicated := current.identity("promote-agent", false)
+	if dedicated.ChildPID == promoted.ChildPID || dedicated.WorkerPID == promoted.WorkerPID {
+		t.Fatalf("reload while disabled did not move the selected session to Go: before=%+v after=%+v", promoted, dedicated)
+	}
+	identities["promote-agent"] = dedicated
+	delete(sharedSessions, "promote-agent")
+	priorAgentPID = agentPIDs["promote-agent"]
+	delete(agentPIDs, "promote-agent")
+	output = current.probe("promote-agent", dedicated.ChildPID, "reloaded-off")
+	if !strings.Contains(output, "__RESUME_native-promote-agent__") || agentPIDs["promote-agent"] == priorAgentPID {
+		t.Fatalf("reload while disabled lost native conversation identity: %q", output)
+	}
+	current.spawn("disabled-agent", "codex", fixture)
+	identities["disabled-agent"] = current.identity("disabled-agent", false)
+	assertAll(current, "disabled-live")
+	current.stop()
+
+	current = start(newBinary, hostBinary)
+	current.assertSharedSetting(false, false)
+	assertAll(current, "disabled-restart")
+	current.spawn("restart-off-agent", "codex", fixture)
+	identities["restart-off-agent"] = current.identity("restart-off-agent", false)
+	assertAll(current, "new-after-disabled-restart")
+	current.setSharedSetting(true)
 	current.stop()
 
 	// A wrapper changes the host binary identity while running the same protocol.
@@ -128,9 +164,12 @@ done
 		t.Fatal(err)
 	}
 	current = start(newBinary, nextHost)
+	current.assertSharedSetting(true, true)
 	assertAll(current, "host-upgrade")
 	current.spawn("next-agent", "codex", fixture)
 	next := current.identity("next-agent", true)
+	identities["next-agent"] = next
+	sharedSessions["next-agent"] = true
 	if next.WorkerPID == identities["new-agent"].WorkerPID {
 		t.Fatal("new host generation reused the old host")
 	}
@@ -138,7 +177,15 @@ done
 	assertAll(current, "all-generations-alive")
 	current.command(map[string]any{"cmd": "pty_resize", "id": "legacy-shell", "cols": 97, "rows": 31}, "pty_resized", "legacy-shell")
 	current.probe("legacy-shell", identities["legacy-shell"].ChildPID, "resized")
-	for _, id := range []string{"legacy-shell", "legacy-agent", "promote-agent", "new-agent", "next-agent"} {
+	current.stop()
+
+	current = start(newBinary, filepath.Join(root, "missing-host"))
+	current.assertSharedSetting(true, false)
+	assertAll(current, "unavailable-host-restart")
+	current.spawn("fallback-agent", "codex", fixture)
+	identities["fallback-agent"] = current.identity("fallback-agent", false)
+	assertAll(current, "fallback-new-agent")
+	for _, id := range slices.Sorted(maps.Keys(identities)) {
 		current.command(map[string]any{"cmd": "workspace_layout_close_pane", "workspace_id": "upgrade", "pane_id": "pane-" + id}, "workspace_layout_action_result", "")
 	}
 	current.stop()
@@ -314,6 +361,42 @@ func (d *upgradeDaemon) command(value any, event, id string) map[string]any {
 	d.t.Helper()
 	d.write(value)
 	return d.event(event, id)
+}
+
+func (d *upgradeDaemon) assertSharedSetting(enabled, active bool) {
+	d.t.Helper()
+	d.write(map[string]any{"cmd": "get_settings"})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	for {
+		event, _, _ := d.read(ctx)
+		if event["event"] != "settings_updated" || event["changed_key"] != nil {
+			continue
+		}
+		settings, ok := event["settings"].(map[string]any)
+		if !ok || settings[SettingSharedPTYHostEnabled] != strconv.FormatBool(enabled) || settings[SettingSharedPTYHostActive] != strconv.FormatBool(active) {
+			d.t.Fatalf("want shared enabled=%v active=%v, got %v", enabled, active, settings)
+		}
+		return
+	}
+}
+
+func (d *upgradeDaemon) setSharedSetting(enabled bool) {
+	d.t.Helper()
+	d.write(map[string]any{"cmd": "set_setting", "key": SettingSharedPTYHostEnabled, "value": strconv.FormatBool(enabled)})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	for {
+		event, _, _ := d.read(ctx)
+		if event["event"] != "settings_updated" || event["changed_key"] != SettingSharedPTYHostEnabled {
+			continue
+		}
+		if event["success"] == false {
+			d.t.Fatalf("toggle failed: %v", event)
+		}
+		break
+	}
+	d.assertSharedSetting(enabled, enabled)
 }
 
 func (d *upgradeDaemon) spawn(id, agent, executable string) {

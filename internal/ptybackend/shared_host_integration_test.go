@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyhost"
 )
 
@@ -98,6 +99,76 @@ func TestSharedHost_MultipleSessionsAndBackendRecovery(t *testing.T) {
 			t.Fatalf("Remove(%s): %v", id, err)
 		}
 	}
+}
+
+func TestSharedHost_InnerShellPromptSurvivesForegroundPolling(t *testing.T) {
+	binary := os.Getenv("ATTN_TEST_PTY_HOST")
+	if binary == "" {
+		t.Skip("set ATTN_TEST_PTY_HOST to an attn-pty-host binary")
+	}
+	root, err := os.MkdirTemp("/tmp", "attn-inner-shell-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(root)
+	backend, err := NewSharedHost(WorkerBackendConfig{
+		DataRoot: root, DaemonInstanceID: "d-inner-shell", BinaryPath: binary,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	observations := make(chan pty.Observation, 64)
+	backend.SetStateHandler(func(_ string, obs pty.Observation) { observations <- obs })
+	defer backend.Shutdown(context.Background())
+	const id = "inner-shell"
+	if err := backend.Spawn(context.Background(), SpawnOptions{
+		ID: id, CWD: root, Agent: "shell", Cols: 80, Rows: 24,
+		ExternalCommand: []string{"/bin/bash", "--noprofile", "--norc", "-i"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	hostPID := backend.WorkerPIDs(context.Background())[id]
+	defer func() {
+		_ = backend.Remove(context.Background(), id)
+		_ = syscall.Kill(hostPID, syscall.SIGTERM)
+		_ = waitForPIDsGone(3*time.Second, hostPID)
+	}()
+	waitFor := func(claim, detail string, rejectBusy bool) {
+		t.Helper()
+		deadline := time.After(10 * time.Second)
+		for {
+			select {
+			case obs := <-observations:
+				if rejectBusy && obs.Claim == "busy" {
+					t.Fatalf("foreground poll overwrote the inner prompt: %+v", obs)
+				}
+				if obs.Claim == claim && obs.Detail == detail {
+					return
+				}
+			case <-deadline:
+				t.Fatalf("timed out waiting for %s: %s", claim, detail)
+			}
+		}
+	}
+	input := func(command string) {
+		t.Helper()
+		if err := backend.Input(context.Background(), id, []byte(command+"\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	waitFor("not_busy", "shell at prompt", false)
+	input(`/bin/sh -c 'read -r token; printf "\033]133;A\007"; read -r token; printf "\033]133;C\007"; read -r token; printf "\033]133;D;0\007"; read -r token'`)
+	waitFor("busy", "foreground command running", false)
+	input("prompt")
+	waitFor("not_busy", "shell at prompt", false)
+	waitFor("not_busy", "inner shell at prompt", true)
+	input("start")
+	waitFor("busy", "command started", false)
+	input("finish")
+	waitFor("not_busy", "command exited 0", false)
+	waitFor("not_busy", "inner shell at prompt", true)
+	input("exit")
+	waitFor("not_busy", "shell at prompt", true)
 }
 
 func TestSharedHost_ReplacedSubscriberCannotDetachReplacement(t *testing.T) {

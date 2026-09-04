@@ -220,6 +220,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-terminal-input'],
   },
   {
+    id: 'pty-host-setting',
+    runnerId: 'PTY-HOST-SETTING',
+    label: 'Experimental shared PTY opt-in preserves existing terminals',
+    command: ['node', 'scripts/real-app-harness/scenario-pty-host-setting.mjs'],
+  },
+  {
     id: 'terminal-osc8-link',
     runnerId: 'TERMINAL-OSC8-LINK',
     label: 'OSC 8 hyperlink Cmd+click via native click + local HTTP probe',

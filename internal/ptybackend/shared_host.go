@@ -53,24 +53,19 @@ func (b *WorkerBackend) callResultSharedOneShot(ctx context.Context, session *wo
 	if err := writeRequest(enc, reqID, method, params); err != nil {
 		return err
 	}
-	for {
-		frameType, res, _, err := readFrame(dec)
-		if err != nil {
-			return err
-		}
-		if frameType != "res" || res.ID != reqID {
-			continue
-		}
-		if !res.OK {
-			return b.rpcError(session.SessionID, res.Error)
-		}
-		if result != nil {
-			if err := json.Unmarshal(res.Result, result); err != nil {
-				return fmt.Errorf("decode shared PTY host %s result: %w", method, err)
-			}
-		}
-		return nil
+	res, err := readMatchingResponse(dec, reqID)
+	if err != nil {
+		return err
 	}
+	if !res.OK {
+		return b.rpcError(session.SessionID, res.Error)
+	}
+	if result != nil {
+		if err := json.Unmarshal(res.Result, result); err != nil {
+			return fmt.Errorf("decode shared PTY host %s result: %w", method, err)
+		}
+	}
+	return nil
 }
 
 func (b *WorkerBackend) callResultSharedPersistent(ctx context.Context, session *workerSession, method string, params, result any) (bool, error) {
@@ -139,25 +134,20 @@ func (b *WorkerBackend) callResultOnSharedControlLocked(ctx context.Context, con
 		b.closeSharedControlLocked(control)
 		return err
 	}
-	for {
-		frameType, res, _, err := readFrame(control.dec)
-		if err != nil {
-			b.closeSharedControlLocked(control)
-			return err
-		}
-		if frameType != "res" || res.ID != reqID {
-			continue
-		}
-		if !res.OK {
-			return b.rpcError(sessionID, res.Error)
-		}
-		if result != nil {
-			if err := json.Unmarshal(res.Result, result); err != nil {
-				return fmt.Errorf("decode shared PTY host %s result: %w", method, err)
-			}
-		}
-		return nil
+	res, err := readMatchingResponse(control.dec, reqID)
+	if err != nil {
+		b.closeSharedControlLocked(control)
+		return err
 	}
+	if !res.OK {
+		return b.rpcError(sessionID, res.Error)
+	}
+	if result != nil {
+		if err := json.Unmarshal(res.Result, result); err != nil {
+			return fmt.Errorf("decode shared PTY host %s result: %w", method, err)
+		}
+	}
+	return nil
 }
 
 func (b *WorkerBackend) closeSharedControlLocked(control *sharedHostControl) {
@@ -556,7 +546,7 @@ func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) erro
 		opts.Rows = 24
 	}
 
-	prepared, err := pty.PrepareLaunch(sharedPTYSpawnOptions(opts), b.cfg.Logf)
+	prepared, err := pty.PrepareLaunch(toPTYSpawnOptions(opts), b.cfg.Logf)
 	if err != nil {
 		return err
 	}
@@ -642,39 +632,6 @@ func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) erro
 	b.startMonitor(session)
 	b.cfg.Logf("shared PTY host spawn ready: session=%s host_pid=%d child_pid=%d", opts.ID, session.WorkerPID, result.ChildPID)
 	return nil
-}
-
-func sharedPTYSpawnOptions(opts SpawnOptions) pty.SpawnOptions {
-	return pty.SpawnOptions{
-		ID:                      opts.ID,
-		CWD:                     opts.CWD,
-		Agent:                   opts.Agent,
-		Label:                   opts.Label,
-		Cols:                    opts.Cols,
-		Rows:                    opts.Rows,
-		ResumeSessionID:         opts.ResumeSessionID,
-		ResumePicker:            opts.ResumePicker,
-		YoloMode:                opts.YoloMode,
-		InitialPromptFile:       opts.InitialPromptFile,
-		Executable:              opts.Executable,
-		ClaudeExecutable:        opts.ClaudeExecutable,
-		CodexExecutable:         opts.CodexExecutable,
-		CopilotExecutable:       opts.CopilotExecutable,
-		ExternalCommand:         opts.ExternalCommand,
-		ExternalEnv:             opts.ExternalEnv,
-		ExternalCWD:             opts.ExternalCWD,
-		DaemonEnv:               opts.DaemonEnv,
-		LifecycleID:             opts.LifecycleID,
-		LoginShellEnv:           opts.LoginShellEnv,
-		WorkflowGuidanceEnabled: opts.WorkflowGuidanceEnabled,
-		AutoApprove:             opts.AutoApprove,
-		TrustWorkingDirectory:   opts.TrustWorkingDirectory,
-		Model:                   opts.Model,
-		Effort:                  opts.Effort,
-		ContextWindowCap:        opts.ContextWindowCap,
-		UnattendedLaunch:        opts.UnattendedLaunch,
-		Theme:                   opts.Theme,
-	}
 }
 
 func (b *WorkerBackend) ensureSharedHost(ctx context.Context) (ptyhost.HostRegistry, error) {
@@ -826,22 +783,17 @@ func (b *WorkerBackend) callSharedHost(ctx context.Context, host ptyhost.HostReg
 	if err := writeRequest(enc, reqID, method, params); err != nil {
 		return err
 	}
-	for {
-		frameType, res, _, err := readFrame(dec)
-		if err != nil {
-			return err
-		}
-		if frameType != "res" || res.ID != reqID {
-			continue
-		}
-		if !res.OK {
-			return b.rpcError("", res.Error)
-		}
-		if result != nil {
-			if err := json.Unmarshal(res.Result, result); err != nil {
-				return fmt.Errorf("decode shared PTY host %s result: %w", method, err)
-			}
-		}
-		return nil
+	res, err := readMatchingResponse(dec, reqID)
+	if err != nil {
+		return err
 	}
+	if !res.OK {
+		return b.rpcError("", res.Error)
+	}
+	if result != nil {
+		if err := json.Unmarshal(res.Result, result); err != nil {
+			return fmt.Errorf("decode shared PTY host %s result: %w", method, err)
+		}
+	}
+	return nil
 }

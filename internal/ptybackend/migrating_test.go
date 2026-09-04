@@ -12,13 +12,15 @@ import (
 )
 
 type migrationTestBackend struct {
-	mu       sync.Mutex
-	ids      map[string]struct{}
-	spawned  []string
-	inputs   map[string][][]byte
-	report   RecoveryReport
-	recover  error
-	shutdown error
+	mu          sync.Mutex
+	ids         map[string]struct{}
+	spawned     []string
+	inputs      map[string][][]byte
+	report      RecoveryReport
+	recover     error
+	shutdown    error
+	beforeSpawn func()
+	probe       func(context.Context) error
 }
 
 func newMigrationTestBackend(ids ...string) *migrationTestBackend {
@@ -30,11 +32,81 @@ func newMigrationTestBackend(ids ...string) *migrationTestBackend {
 }
 
 func (b *migrationTestBackend) Spawn(_ context.Context, opts SpawnOptions) error {
+	if b.beforeSpawn != nil {
+		b.beforeSpawn()
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.ids[opts.ID] = struct{}{}
 	b.spawned = append(b.spawned, opts.ID)
 	return nil
+}
+
+func (b *migrationTestBackend) Probe(ctx context.Context) error {
+	return b.probe(ctx)
+}
+
+func TestMigratingBackendToggleKeepsExistingAndPendingOwners(t *testing.T) {
+	legacy, shared := newMigrationTestBackend(), newMigrationTestBackend()
+	backend, err := NewMigrating(legacy, shared, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started, release := make(chan struct{}), make(chan struct{})
+	legacy.beforeSpawn = func() { close(started); <-release }
+	done := make(chan error, 1)
+	go func() { done <- backend.Spawn(context.Background(), SpawnOptions{ID: "pending-legacy"}) }()
+	<-started
+	backend.SetSharedForNewSessions(true)
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	legacy.beforeSpawn = nil
+	if err := backend.Spawn(context.Background(), SpawnOptions{ID: "shared"}); err != nil {
+		t.Fatal(err)
+	}
+	backend.SetSharedForNewSessions(false)
+	if backend.SharedForNewSessions() {
+		t.Fatal("selection stayed enabled")
+	}
+	if err := backend.Spawn(context.Background(), SpawnOptions{ID: "legacy"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"pending-legacy", "shared", "legacy"} {
+		if err := backend.Input(context.Background(), id, []byte(id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !reflect.DeepEqual(legacy.spawned, []string{"pending-legacy", "legacy"}) || !reflect.DeepEqual(shared.spawned, []string{"shared"}) {
+		t.Fatalf("unexpected launches: legacy=%v shared=%v", legacy.spawned, shared.spawned)
+	}
+	if len(legacy.inputs["pending-legacy"]) != 1 || len(legacy.inputs["legacy"]) != 1 || len(shared.inputs["shared"]) != 1 {
+		t.Fatal("toggle moved a session to a different owner")
+	}
+}
+
+func TestMigratingBackendProbeDoesNotBlockExistingIO(t *testing.T) {
+	legacy, shared := newMigrationTestBackend("running"), newMigrationTestBackend()
+	backend, err := NewMigrating(legacy, shared, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := backend.Recover(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	started, release := make(chan struct{}), make(chan struct{})
+	shared.probe = func(context.Context) error { close(started); <-release; return nil }
+	done := make(chan error, 1)
+	go func() { done <- backend.ProbeShared(context.Background()) }()
+	<-started
+	if err := backend.Input(context.Background(), "running", []byte("still-alive")); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (b *migrationTestBackend) Attach(context.Context, string, string, ...AttachOptions) (AttachInfo, Stream, error) {

@@ -2614,6 +2614,18 @@ func writeRequestForSession(enc *json.Encoder, id, method, sessionID string, par
 	})
 }
 
+func readMatchingResponse(dec *json.Decoder, reqID string) (ptyworker.ResponseEnvelope, error) {
+	for {
+		frameType, res, _, err := readFrame(dec)
+		if err != nil {
+			return ptyworker.ResponseEnvelope{}, err
+		}
+		if frameType == "res" && res.ID == reqID {
+			return res, nil
+		}
+	}
+}
+
 func readFrame(dec *json.Decoder) (string, ptyworker.ResponseEnvelope, ptyworker.EventEnvelope, error) {
 	var raw map[string]json.RawMessage
 	if err := dec.Decode(&raw); err != nil {

@@ -50,6 +50,27 @@ func (b *MigratingBackend) PTYBackendMode() string {
 	return "migrating"
 }
 
+func (b *MigratingBackend) ProbeShared(ctx context.Context) error {
+	probe, ok := b.shared.(interface{ Probe(context.Context) error })
+	if !ok {
+		return errors.New("shared PTY backend does not support probing")
+	}
+	return probe.Probe(ctx)
+}
+
+// Selection changes affect future admissions only, including explicit reloads.
+func (b *MigratingBackend) SetSharedForNewSessions(enabled bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.useShared = enabled
+}
+
+func (b *MigratingBackend) SharedForNewSessions() bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.useShared
+}
+
 func (b *MigratingBackend) SetExitHandler(handler func(ExitInfo)) {
 	for _, backend := range []Backend{b.legacy, b.shared} {
 		if hooks, ok := backend.(LifecycleHooks); ok {
