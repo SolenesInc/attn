@@ -1,0 +1,30 @@
+name: Set up Linux sandbox
+description: Install bubblewrap and permit its user namespaces on Ubuntu runners.
+runs:
+  using: composite
+  steps:
+    - name: Install bubblewrap
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bubblewrap
+
+    - name: Allow bubblewrap user namespaces
+      shell: bash
+      run: |
+        # Ubuntu restricts user namespaces even after installing bubblewrap.
+        # Grant them to /usr/bin/bwrap while keeping the system restriction enabled.
+        if [[ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+          sudo tee /etc/apparmor.d/bwrap > /dev/null <<'PROFILE'
+        abi <abi/4.0>,
+        include <tunables/global>
+        profile bwrap /usr/bin/bwrap flags=(unconfined) {
+          userns,
+        }
+        PROFILE
+          sudo apparmor_parser -r /etc/apparmor.d/bwrap
+        fi
+
+    - name: Verify sandbox startup as the runner user
+      shell: bash
+      run: bwrap --unshare-all --ro-bind / / --proc /proc --dev /dev -- /bin/true

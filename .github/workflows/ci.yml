@@ -454,10 +454,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Linux sandbox dependency
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y bubblewrap
+      - name: Set up Linux sandbox
+        uses: ./.github/actions/setup-linux-sandbox
 
       - name: Read bun pin
         id: bun
@@ -501,11 +499,14 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
+      - name: Set up Linux sandbox
+        uses: ./.github/actions/setup-linux-sandbox
+
       - name: Install Linux desktop dependencies
         run: |
           sudo add-apt-repository -y ppa:fish-shell/release-4
           sudo apt-get update
-          sudo apt-get install -y bash bubblewrap coreutils curl desktop-file-utils fish imagemagick \
+          sudo apt-get install -y bash coreutils curl desktop-file-utils fish imagemagick \
             libayatana-appindicator3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev \
             libxdo-dev sqlite3 xauth xclip xdg-utils xdotool xvfb zsh
 
