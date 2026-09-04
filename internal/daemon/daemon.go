@@ -1807,7 +1807,7 @@ func (d *Daemon) unregisterSession(sessionID string, sig syscall.Signal) *protoc
 		session = d.hubManager.RemoteSession(sessionID)
 	}
 	if session != nil {
-		if _, err := d.captureGardenSessionExecution(session); err != nil {
+		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
 			d.logf("garden: preserving execution %s before session removal: %v", sessionID, err)
 		}
 	}
@@ -1822,7 +1822,7 @@ func (d *Daemon) prepareSessionTeardown(sessionID string) (*sessionTeardown, err
 		session = d.hubManager.RemoteSession(sessionID)
 	}
 	if session != nil {
-		if _, err := d.captureGardenSessionExecution(session); err != nil {
+		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
 			d.logf("garden: preserving execution %s before session removal: %v", sessionID, err)
 		}
 	}
@@ -1953,7 +1953,7 @@ func (d *Daemon) removeReapedSession(sessionID string) {
 func (d *Daemon) dropSessionRecord(sessionID string) {
 	d.stopTranscriptWatcher(sessionID)
 	if session := d.store.Get(sessionID); session != nil {
-		if _, err := d.captureGardenSessionExecution(session); err != nil {
+		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
 			d.logf("garden: preserving execution %s before dropping its record: %v", sessionID, err)
 		}
 		d.reconcileTicketsOnSessionEnd(sessionID, string(session.State))

@@ -1,0 +1,4 @@
+kind: fixed
+area: sessions
+change: Closing panes no longer waits for Git metadata queries.
+symptom: Slow repositories could delay pane removal and subsequent app actions for several seconds.
