@@ -698,44 +698,43 @@ function ModelCatalog({ policy, models, onPick }: ModelCatalogProps) {
 
   const chosen = new Set(models);
   const reachable = catalog.providers.filter((provider) => provider.models.length > 0);
-  if (reachable.length === 0) {
-    return (
-      <span className="settings-hint" data-testid="automode-models-catalog-empty">
-        pi has no model catalog yet. `pi update` fetches one.
-      </span>
-    );
-  }
 
   return (
     <div className="automode-models-catalog" data-testid="automode-models-catalog">
-      <select
-        className="settings-input"
-        data-testid="automode-models-select"
-        aria-label="Models pi can reach"
-        value=""
-        onChange={(event) => {
-          if (event.target.value !== '') onPick(event.target.value);
-        }}
-      >
-        <option value="">Pick a model…</option>
-        {reachable.map((provider) => (
-          <optgroup
-            key={provider.provider}
-            label={provider.ready
-              ? provider.provider
-              : `${provider.provider} — ${provider.detail ?? 'pi cannot use this one'}`}
-          >
-            {provider.models.map((model) => {
-              const value = `${provider.provider}/${model.id}`;
-              return (
-                <option key={value} value={value} disabled={!provider.ready || chosen.has(value)}>
-                  {model.name ?? model.id}
-                </option>
-              );
-            })}
-          </optgroup>
-        ))}
-      </select>
+      {reachable.length === 0 ? (
+        <span className="settings-hint" data-testid="automode-models-catalog-empty">
+          Pi has no available models. Configure a provider in Pi, then refresh.
+        </span>
+      ) : (
+        <select
+          className="settings-input"
+          data-testid="automode-models-select"
+          aria-label="Models pi can reach"
+          value=""
+          onChange={(event) => {
+            if (event.target.value !== '') onPick(event.target.value);
+          }}
+        >
+          <option value="">Pick a model…</option>
+          {reachable.map((provider) => (
+            <optgroup
+              key={provider.provider}
+              label={provider.ready
+                ? provider.provider
+                : `${provider.provider} — ${provider.detail ?? 'pi cannot use this one'}`}
+            >
+              {provider.models.map((model) => {
+                const value = `${provider.provider}/${model.id}`;
+                return (
+                  <option key={value} value={value} disabled={!provider.ready || chosen.has(value)}>
+                    {model.name ?? model.id}
+                  </option>
+                );
+              })}
+            </optgroup>
+          ))}
+        </select>
+      )}
       <button
         type="button"
         className="settings-action"

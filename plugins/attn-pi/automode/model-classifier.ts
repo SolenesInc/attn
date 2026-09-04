@@ -12,8 +12,9 @@ import {
   type ParsedSeverity,
   type PromptInput,
 } from "./prompt";
-import { callSignature } from "./policy";
+import { callSignature, describeCall, isSandboxRequest } from "./policy";
 import type { UsageLike } from "./usage";
+import { credentials } from "../security/filter";
 
 export const classifierThinkingLevel = "minimal";
 
@@ -92,10 +93,15 @@ export class ModelClassifier implements Classifier {
   constructor(private readonly options: ModelClassifierOptions) {}
 
   async classify(request: ClassifierRequest): Promise<ClassifierVerdict> {
+    return credentials.value(await this.classifyRequest(request));
+  }
+
+  private async classifyRequest(request: ClassifierRequest): Promise<ClassifierVerdict> {
+    request = { ...credentials.value({ ...request, signal: undefined }), signal: request.signal };
     const input: PromptInput = {
       transcript: request.transcript ?? [],
       environment: request.environment,
-      action: callSignature(request.call),
+      action: isSandboxRequest(request.call) ? describeCall(request.call) : callSignature(request.call),
       tool: request.call.toolName,
       reason: request.reason,
       cwd: request.cwd,
@@ -103,7 +109,9 @@ export class ModelClassifier implements Classifier {
     const grant = request.grant?.trim();
     const preamble = grant && grant !== "" ? [grantPrompt(grant)] : [];
 
-    const systemPrompt = classifierSystemPrompt(request.environment);
+    const systemPrompt = classifierSystemPrompt(request.environment) + "\n\n" +
+      `Current sandbox build-cache grants (from the executor, not the transcript): ${JSON.stringify(request.cacheWritePaths ?? [])}. ` +
+      "Only these directories qualify for the Configured Build Caches exception. An empty list means the exception is unavailable.";
 
     const harmMessages = [...preamble, classifierUserPrompt(input, "harm")];
     const harmPrompt: ClassifierPrompt = {
@@ -222,6 +230,10 @@ export class ModelClassifier implements Classifier {
 
     const auth = await registry.getApiKeyAndHeaders(model);
     if (!auth.ok) throw new Error(auth.error ?? `no credential for ${model.provider}`);
+    credentials.remember(auth.apiKey);
+    for (const [name, value] of Object.entries(auth.headers ?? {})) {
+      if (value && /authorization|api.?key|token|cookie|identity/i.test(name)) credentials.remember(value);
+    }
     const baseUrl = (await registry.getProviderAuth(model.provider))?.auth?.baseUrl;
     const timestamp = Date.now();
 
@@ -229,10 +241,10 @@ export class ModelClassifier implements Classifier {
       .streamSimple(
         baseUrl ? { ...model, baseUrl } : model,
         {
-          systemPrompt: input.systemPrompt,
+          systemPrompt: credentials.text(input.systemPrompt),
           messages: input.messages.map((text) => ({
             role: "user" as const,
-            content: [{ type: "text" as const, text }],
+            content: [{ type: "text" as const, text: credentials.text(text) }],
             timestamp,
           })),
         },

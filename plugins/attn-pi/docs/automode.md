@@ -1,5 +1,20 @@
 # pi auto mode
 
+- **Configured build caches are ordinary development access.** The security
+  executor supplies its active cache paths to both classifier stages. Build,
+  test and dependency commands can use them without separate consent for the
+  path. Disabling or editing `/security caches` changes that context on the
+  next review; command effects still follow the other rules. A supported scoped
+  access request is not itself a bypass or self-modification.
+
+- **Sandbox retries are reviewed with their scope.** A `bash` call can request
+  temporary extra write directories or networking with a `sandbox` argument.
+  The security executor validates the request, then uses the same classifier,
+  conversation, denial record, and circuit breaker as ordinary calls. The
+  classifier sees both the command and requested access. A command allow
+  pattern cannot skip this review; hard-deny patterns still refuse it.
+  Approval applies to that execution and its children, never saved settings.
+
 - **The order a tool call walks:** the user's allow patterns (which skip
   everything below), the user's deny patterns and the ones attn ships, a
   refusal for anything reaching auto mode's own config or its record of past
@@ -45,6 +60,12 @@
   a session until the user promotes it.
 - **Config reaches the next session that launches.** A running one keeps what
   it started with.
+- **The model picker asks the installed Pi runtime.** A short-lived offline
+  RPC process loads the user's providers and extensions from the home directory,
+  then returns `get_available_models` using Pi's authentication checks. No prompt
+  is sent or session saved. Refresh starts a new query; concurrent requests share
+  the current one. Only provider, model id, display name and context size reach
+  the app, because runtime models can include resolved credentials.
 - **Two scripts under `receipts/` spend real model calls to measure this**:
   `stage-one-severities.ts` for what stage 1 grades a call at, and
   `classifier-verdicts.ts` for verdicts over the corpus. Run them when the

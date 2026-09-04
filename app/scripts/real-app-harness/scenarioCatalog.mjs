@@ -441,6 +441,14 @@ export const scenarioCatalog = [
     timeoutMs: 600_000,
   },
   {
+    id: 'pi-security',
+    runnerId: 'PI-SECURITY',
+    label: 'Pi sandbox and credential filtering',
+    command: ['pnpm', 'run', 'real-app:scenario-pi-security'],
+    allowRealAgents: ['pi'],
+    timeoutMs: 360_000,
+  },
+  {
     id: 'pi-automode',
     runnerId: 'PI-AUTOMODE',
     allowRealAgents: ['pi'],

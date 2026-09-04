@@ -15,6 +15,7 @@ export type ClassifierRequest = {
   grant?: string;
 
   signal?: AbortSignal;
+  cacheWritePaths?: readonly string[];
 };
 
 export type ClassifierLayer = "harm" | "intent";

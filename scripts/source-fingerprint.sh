@@ -69,6 +69,7 @@ should_exclude_path() {
     plugins/attn-pi/src/*) return 1 ;;
     plugins/attn-pi/suite/*) return 1 ;;
     plugins/attn-pi/host/*) return 1 ;;
+    plugins/attn-pi/security/*) return 1 ;;
     # The receipts are the pin-bump gate, run by hand against a checkout.
     # Nothing in it is staged into the bundle.
     plugins/attn-pi/receipts/*) return 0 ;;

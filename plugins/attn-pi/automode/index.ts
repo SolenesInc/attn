@@ -1,8 +1,8 @@
 import type { Classifier, ClassifierPrompt } from "./classifier";
 import type { AutoModeConfig } from "./config";
-import { denialToolResult } from "./denial";
+import { denialToolResult, sandboxDenialToolResult } from "./denial";
 import type { DenialLedgerLike } from "./ledger";
-import { describeCall, type ToolCall } from "./policy";
+import { describeCall, isSandboxRequest, type ToolCall } from "./policy";
 import { AutoModeSession, type SessionDecision } from "./session";
 import {
   autoModeDenialWidgetKey,
@@ -14,6 +14,7 @@ import {
   type AutoModeUILike,
 } from "./ui";
 import { mergeUsage, UsageLedger, type UsageLike } from "./usage";
+import { credentials } from "../security/filter";
 
 export type ToolCallEventLike = {
   type: "tool_call";
@@ -23,6 +24,7 @@ export type ToolCallEventLike = {
 };
 
 export type ToolCallEventResultLike = { block?: boolean; reason?: string };
+export type ToolCallReview = (event: ToolCallEventLike, ctx: AutoModeContextLike) => Promise<ToolCallEventResultLike | undefined>;
 
 export type InputEventLike = {
   type: "input";
@@ -112,6 +114,9 @@ export type AutoModeOptions = {
   onWaitingForUser?: (waiting: boolean) => void;
   /** Where the classifier's usage waits for a tool result to ride into the totals. */
   usageLedger?: UsageLedger;
+  onReady?: (review: ToolCallReview) => void;
+  sandboxReviewInExecutor?: boolean;
+  cacheWritePaths?: () => readonly string[];
 };
 
 // pi re-runs the factory on every session transition, so a new, forked, or resumed
@@ -140,10 +145,10 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
     let standing: AutoModeDenial[] = [];
     let breakerAsked = false;
 
-    pi.on("tool_call", async (event, ctx) => {
+    const review: ToolCallReview = async (event, ctx) => {
       if (options.isEnabled?.() === false) return undefined;
       const call: ToolCall = { toolName: event.toolName, input: event.input };
-      const decideOptions = { cwd: ctx.cwd, signal: ctx.signal };
+      const decideOptions = { cwd: ctx.cwd, signal: ctx.signal, cacheWritePaths: options.cacheWritePaths?.() };
       let decision: SessionDecision;
       judging = ctx;
       deciding += 1;
@@ -165,14 +170,15 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
         }
       } catch (error) {
         // pi blocks a tool whose tool_call handler throws, but the model would get pi's error text instead of the denial contract.
-        return { block: true, reason: denialToolResult({ action: describeCall(call), reason: failureReason(error) }) };
+        const render = isSandboxRequest(call) ? sandboxDenialToolResult : denialToolResult;
+        return { block: true, reason: credentials.text(render({ action: describeCall(call), reason: failureReason(error), judged: false })) };
       } finally {
         deciding -= 1;
         // Held only while a call is in flight: a ctx from a superseded session generation throws on any use.
         if (deciding === 0) judging = undefined;
       }
       if (decision.outcome === "run") return undefined;
-      const denial: AutoModeDenial = {
+      const denial: AutoModeDenial = credentials.value({
         toolCallId: event.toolCallId,
         tool: call.toolName,
         action: decision.action,
@@ -181,7 +187,7 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
         at: new Date().toISOString(),
         ...(decision.clearable === false ? { clearable: false } : {}),
         ...(decision.prompt ? { prompt: decision.prompt } : {}),
-      };
+      });
       // The record first, the report second: the relay may lose a denial, the file may not.
       try {
         options.ledger?.record(denial);
@@ -195,7 +201,13 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
       }
       standing = [...standing, denial];
       showDenial(ctx, denial, standing);
-      return { block: true, reason: decision.toolResult };
+      return { block: true, reason: credentials.text(decision.toolResult) };
+    };
+    options.onReady?.(review);
+    pi.on("tool_call", (event, ctx) => {
+      // The protected bash executor validates the scope before asking this same reviewer.
+      if (options.sandboxReviewInExecutor && isSandboxRequest({ toolName: event.toolName, input: event.input })) return undefined;
+      return review(event, ctx);
     });
 
     // before_agent_start carries no source of its own, so an extension's own prompt is remembered here for the seam that cannot see it.

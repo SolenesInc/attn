@@ -174,6 +174,23 @@ describe('setting the models from the app', () => {
     ]));
   });
 
+  it('refreshes an empty catalog after a provider becomes available', async () => {
+    const loadModels = vi.fn()
+      .mockResolvedValueOnce(catalog({ providers: [] }))
+      .mockResolvedValueOnce(catalog());
+    const { setModels } = renderPane({ loadModels });
+    await screen.findByTestId('automode-models');
+    fireEvent.click(screen.getByTestId('automode-models-browse'));
+
+    expect(await screen.findByTestId('automode-models-catalog-empty'))
+      .toHaveTextContent('Configure a provider in Pi');
+    fireEvent.click(screen.getByTestId('automode-models-refresh'));
+
+    expect(await screen.findByTestId('automode-models-select')).toBeTruthy();
+    expect(loadModels).toHaveBeenCalledTimes(2);
+    expect(setModels).not.toHaveBeenCalled();
+  });
+
   it('a pi that cannot answer leaves the typed field working', async () => {
     const loadModels = vi.fn(async () => {
       throw new Error('plugin "attn-pi" is not connected');
