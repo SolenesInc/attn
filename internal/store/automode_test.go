@@ -294,6 +294,52 @@ func TestAutoModeDenialsTrimToTheRowCap(t *testing.T) {
 	}
 }
 
+func TestAutoModeDenialConcurrentDeliveryKeepsOneRow(t *testing.T) {
+	s := New()
+	now := time.Date(2026, 8, 18, 10, 0, 0, 123_000_000, time.UTC)
+	denial := AutoModeDenial{
+		SessionID: "pi-1", Tool: "bash", Signature: "bash: curl https://one.example",
+		Reason: "outside the envelope", Rule: "classifier-intent",
+	}
+	var wg sync.WaitGroup
+	ids := make(chan int64, 8)
+	for range cap(ids) {
+		wg.Go(func() {
+			recorded, dropped, err := s.RecordAutoModeDenial(denial, now)
+			if err != nil || dropped != 0 {
+				t.Errorf("record denial: dropped=%d error=%v", dropped, err)
+			}
+			ids <- recorded.ID
+		})
+	}
+	wg.Wait()
+	close(ids)
+	rows, err := s.ListAutoModeDenials(10)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("concurrent deliveries produced %+v, error=%v, want one row", rows, err)
+	}
+	for id := range ids {
+		if id != rows[0].ID {
+			t.Errorf("delivery returned id %d, want %d", id, rows[0].ID)
+		}
+	}
+	for _, other := range []struct {
+		session, action string
+		at              time.Time
+	}{
+		{"pi-2", denial.Signature, now},
+		{denial.SessionID, "write /etc/hosts", now},
+		{denial.SessionID, denial.Signature, now.Add(time.Millisecond)},
+	} {
+		distinct := denial
+		distinct.SessionID, distinct.Signature = other.session, other.action
+		row, _, err := s.RecordAutoModeDenial(distinct, other.at)
+		if err != nil || row.ID == rows[0].ID {
+			t.Errorf("distinct denial reused the original row: %+v, error=%v", other, err)
+		}
+	}
+}
+
 func TestAutoModeMigrationCreatesItsTables(t *testing.T) {
 	s := New()
 	for _, table := range []string{"automode_config", "automode_proposals", "automode_denials"} {

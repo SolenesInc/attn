@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: Run app acceptance independently across pull requests and branches so waiting checks no longer cancel one another.

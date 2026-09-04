@@ -389,6 +389,17 @@ func (s *Store) RecordAutoModeDenial(denial AutoModeDenial, now time.Time) (Auto
 	if s.db == nil {
 		return AutoModeDenial{}, 0, fmt.Errorf("store: no database")
 	}
+	// Ledger recovery can beat the relay. Check their shared identity under the insertion lock.
+	existing, err := scanAutoModeDenial(s.db.QueryRow(`
+		SELECT id, session_id, tool, signature, reason, rule, created_at
+		FROM automode_denials WHERE session_id = ? AND signature = ? AND created_at = ?
+		ORDER BY id LIMIT 1`, denial.SessionID, denial.Signature, now.UTC().Format(sortableTimeFormat)))
+	if err == nil {
+		return existing, 0, nil
+	}
+	if err != sql.ErrNoRows {
+		return AutoModeDenial{}, 0, err
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return AutoModeDenial{}, 0, err
@@ -442,15 +453,23 @@ func (s *Store) ListAutoModeDenials(limit int) ([]AutoModeDenial, error) {
 	defer rows.Close()
 	var out []AutoModeDenial
 	for rows.Next() {
-		var d AutoModeDenial
-		var created string
-		if err := rows.Scan(&d.ID, &d.SessionID, &d.Tool, &d.Signature, &d.Reason, &d.Rule, &created); err != nil {
+		d, err := scanAutoModeDenial(rows)
+		if err != nil {
 			return nil, err
 		}
-		d.CreatedAt = parseStoredTime(created)
 		out = append(out, d)
 	}
 	return out, rows.Err()
+}
+
+func scanAutoModeDenial(row interface{ Scan(...any) error }) (AutoModeDenial, error) {
+	var d AutoModeDenial
+	var created string
+	if err := row.Scan(&d.ID, &d.SessionID, &d.Tool, &d.Signature, &d.Reason, &d.Rule, &created); err != nil {
+		return AutoModeDenial{}, err
+	}
+	d.CreatedAt = parseStoredTime(created)
+	return d, nil
 }
 
 func (s *Store) mutateAutoModeConfig(now time.Time, apply func(*automode.Config) error) (automode.Config, error) {
