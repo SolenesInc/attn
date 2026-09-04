@@ -81,6 +81,31 @@ func TestReconcileDoesNotDoubleWhatTheRelayDelivered(t *testing.T) {
 	}
 }
 
+func TestRelayDoesNotDoubleWhatTheLedgerRecovered(t *testing.T) {
+	d := newDaemonForTest(t)
+	const stamp = "2026-08-18T10:00:00.123Z"
+	const action = "bash: curl https://one.example"
+	writeSessionLedger(t, ledgerLine("pi-1", action, stamp))
+	before := listDenials(t, d).Denials
+	if len(before) != 1 {
+		t.Fatalf("recovered denials = %+v, want one", before)
+	}
+	if err := d.recordAutoModeDenial(pluginReportAutoModeDenialParams{
+		SessionID: "pi-1", Tool: "bash", Action: action,
+		Reason: "outside the envelope", Rule: "classifier-2a", At: stamp,
+	}); err != nil {
+		t.Fatalf("late relay: %v", err)
+	}
+	after := listDenials(t, d).Denials
+	if len(after) != 1 || after[0].ID != before[0].ID {
+		t.Fatalf("late relay changed the recovered denial: before=%+v after=%+v", before, after)
+	}
+	notes, err := d.store.ListNotifications()
+	if err != nil || len(notes) != 1 || notes[0].Kind != notificationKindAutoModeDenied {
+		t.Fatalf("late relay notifications = %+v, error = %v, want one denial notice", notes, err)
+	}
+}
+
 func TestReconcileImportsARecordOnlyOnce(t *testing.T) {
 	d := newDaemonForTest(t)
 	writeSessionLedger(t, ledgerLine("pi-1", "bash: curl https://one.example", "2026-08-18T10:00:00.000Z"))
