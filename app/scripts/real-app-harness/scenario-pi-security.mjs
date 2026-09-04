@@ -8,7 +8,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { waitForFirstWorkspacePane, waitForPaneText } from './scenarioAssertions.mjs';
 import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
-import { startStubWorld, scriptedAgent, stubAgentModel, stubJudgeModel, resolveAttnBinary } from './piStubProvider.mjs';
+import { startStubWorld, scriptedAgent, stubAgentModel, stubJudgeModel, resolveAttnBinary, waitForPiPreflight } from './piStubProvider.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const quote = (value) => `'${value.replace(/'/g, `'"'"'`)}'`;
@@ -116,7 +116,13 @@ try {
     await launchFreshAppAndConnect(client, observer);
   } });
   runner.writeJson('app-build.json', (await client.request('get_state')).appBuild);
-  runner.writeJson('pi-preflight.json', JSON.parse(attn(['preflight', '--agent', 'pi', '--model', stubAgentModel, '--json'])));
+  await waitForPiPreflight({
+    run: () => attn(['preflight', '--agent', 'pi', '--model', stubAgentModel, '--json']),
+    save: (attempts) => {
+      runner.writeJson('pi-preflight-attempts.json', attempts);
+      runner.writeJson('pi-preflight.json', attempts.at(-1).report ?? null);
+    },
+  });
   const proposed = JSON.parse(attn(['automode', 'model', stubJudgeModel, '--json']));
   observer.send({ cmd: 'automode_promote', id: proposed.proposal?.id ?? proposed.id, request_id: 'security-model' });
   for (let i = 0; ; i++) {

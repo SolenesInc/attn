@@ -215,6 +215,38 @@ export function resolveAttnBinary(appPath) {
   throw new Error(`no attn binary found for ${appPath}`);
 }
 
+export async function waitForPiPreflight({ run, save, timeoutMs = 30_000 }) {
+  const deadline = Date.now() + timeoutMs;
+  const attempts = [];
+  for (;;) {
+    let stdout = '', stderr = '', commandError;
+    try {
+      stdout = run();
+    } catch (error) {
+      commandError = error;
+      stdout = String(error.stdout ?? '');
+      stderr = String(error.stderr ?? '');
+    }
+    let report;
+    try { report = JSON.parse(stdout); } catch { /* Preserve malformed output below. */ }
+    attempts.push({ report, stdout, stderr });
+    save(attempts);
+    if (!report?.checks) throw new Error(`Pi preflight did not return a report: ${stderr || stdout || commandError}`);
+    const failures = report.checks.filter((check) => check.status === 'fail');
+    const health = report.checks.find((check) => check.name === 'plugin.attn-pi');
+    if (!commandError && report.status !== 'fail' && health?.status === 'pass') return report;
+
+    // The first health poll can precede pi --version; the daemon caches it for 15s.
+    // Retry only startup checks, so tool, path, routing and protocol failures stay fatal.
+    const starting = (check) => check.name === 'launch.agent'
+      || (check.name === 'plugin.attn-pi' && check.summary.includes('pi availability has not been checked'));
+    if (failures.some((check) => !starting(check)) || Date.now() >= deadline) {
+      throw new Error(`Pi preflight failed: ${failures.map((check) => `${check.name}: ${check.summary}`).join('; ') || health?.summary || 'Pi did not become healthy'}`);
+    }
+    await delay(250);
+  }
+}
+
 // pi reads its agent dir from the daemon's environment, so a daemon left over
 // from an earlier run is restarted with the stub agent dir before the app connects.
 export async function restartDaemonWithStubEnv({ appPath, profile, agentDir }) {

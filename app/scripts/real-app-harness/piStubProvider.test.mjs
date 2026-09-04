@@ -1,6 +1,65 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
-import { bash, rememberedWord, scriptedAgent, startPiStubProvider, stubAgentModel } from './piStubProvider.mjs';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { bash, rememberedWord, scriptedAgent, startPiStubProvider, stubAgentModel, waitForPiPreflight } from './piStubProvider.mjs';
+
+describe('Pi startup preflight', () => {
+  afterEach(() => vi.useRealTimers());
+  const check = (name, status, summary = name) => ({ name, status, summary });
+  const output = (...checks) => JSON.stringify({ status: checks.some((c) => c.status === 'fail') ? 'fail' : 'pass', checks });
+  const startup = output(check('plugin.attn-pi', 'fail', 'daemon cannot launch pi: pi availability has not been checked'));
+  const failedCommand = (stdout) => Object.assign(new Error('exit 1'), { stdout, stderr: 'profile banner' });
+
+  it('keeps the failed report and waits for the cached startup health to settle', async () => {
+    vi.useFakeTimers();
+    const run = vi.fn().mockImplementationOnce(() => { throw failedCommand(startup); })
+      .mockReturnValue(output(check('plugin.attn-pi', 'pass', 'pi is ready')));
+    const receipts = [];
+    const pending = waitForPiPreflight({ run, save: (attempts) => receipts.push(structuredClone(attempts)) });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(receipts[0][0]).toMatchObject({ stdout: startup, stderr: 'profile banner', report: { status: 'fail' } });
+    await vi.advanceTimersByTimeAsync(250);
+    await expect(pending).resolves.toMatchObject({ status: 'pass' });
+    expect(receipts.at(-1)).toHaveLength(2);
+  });
+
+  it('waits for an agent that has not registered or received its first health check', async () => {
+    vi.useFakeTimers();
+    const run = vi.fn().mockImplementationOnce(() => { throw failedCommand(output(check('launch.agent', 'fail'))); })
+      .mockReturnValueOnce(output(check('plugin.attn-pi', 'warn')))
+      .mockReturnValue(output(check('plugin.attn-pi', 'pass')));
+    const pending = waitForPiPreflight({ run, save: () => {} });
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(pending).resolves.toMatchObject({ status: 'pass' });
+    expect(run).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(['tool.go', 'path.go_caches', 'routing.daemon', 'protocol.cli_app', 'plugin.attn-pi'])
+    ('fails immediately for %s errors even during startup', async (name) => {
+      const run = vi.fn(() => { throw failedCommand(output(...JSON.parse(startup).checks, check(name, 'fail', 'broken'))); });
+      const save = vi.fn();
+      await expect(waitForPiPreflight({ run, save })).rejects.toThrow(`${name}: broken`);
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(save).toHaveBeenCalledOnce();
+    });
+
+  it('fails after the startup deadline with the last report saved', async () => {
+    vi.useFakeTimers();
+    const run = vi.fn(() => { throw failedCommand(startup); });
+    const save = vi.fn();
+    const pending = expect(waitForPiPreflight({ run, save, timeoutMs: 500 })).rejects.toThrow('availability has not been checked');
+    await vi.advanceTimersByTimeAsync(500);
+    await pending;
+    expect(run).toHaveBeenCalledTimes(3);
+    expect(save.mock.lastCall[0]).toHaveLength(3);
+  });
+
+  it('saves malformed output before failing', async () => {
+    const save = vi.fn();
+    await expect(waitForPiPreflight({ run: () => { throw failedCommand('not JSON'); }, save }))
+      .rejects.toThrow('did not return a report');
+    expect(save.mock.lastCall[0][0]).toMatchObject({ stdout: 'not JSON', stderr: 'profile banner' });
+  });
+});
 
 async function ask(stub, messages) {
   const response = await fetch(`${stub.baseUrl}/chat/completions`, {
