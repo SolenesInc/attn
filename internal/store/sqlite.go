@@ -1184,6 +1184,12 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 		DROP TABLE garden_seed_bells;
 		DROP TABLE agent_messages;
 	`},
+	{133, "index unread agent mailbox delivery", `
+		DROP INDEX IF EXISTS idx_agent_mailbox_recipient_queued;
+		CREATE INDEX IF NOT EXISTS idx_agent_mailbox_recipient_unread
+			ON agent_mailbox_items(recipient_session_id, created_at, id)
+			WHERE read_at = '';
+	`},
 }
 
 const migration99SQL = `

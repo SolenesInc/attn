@@ -1,7 +1,9 @@
 package store
 
 import (
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,45 +29,58 @@ func enqueuePeer(t *testing.T, s *Store, id, sender, recipient, body string, cre
 	return delivery
 }
 
-func TestAgentMailboxQueuesItemsUntilTheirNotificationIsStamped(t *testing.T) {
+func TestReadAgentMailboxReturnsABoundedFIFOAndExactReceipts(t *testing.T) {
 	s := newAgentMailboxStore(t)
-	now := time.Now()
-	enqueuePeer(t, s, "second", "sender", "target", "later", now)
-	enqueuePeer(t, s, "first", "sender", "target", "earlier", now.Add(-time.Minute))
-	enqueuePeer(t, s, "other-target", "sender", "elsewhere", "not yours", now)
+	base := time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC)
+	enqueuePeer(t, s, "third", "sender", "target", "third body", base.Add(2*time.Second))
+	enqueuePeer(t, s, "first", "sender", "target", "first body", base)
+	enqueuePeer(t, s, "second", "sender", "target", "second body", base.Add(time.Second))
+	enqueuePeer(t, s, "other-target", "sender", "elsewhere", "not yours", base)
 
-	queued, err := s.QueuedAgentMailboxDeliveries("target")
+	notifiedAt := base.Add(3 * time.Second)
+	changed, err := s.MarkAgentMailboxNotified("target", notifiedAt)
+	if err != nil || changed != 3 {
+		t.Fatalf("MarkAgentMailboxNotified = %d, %v", changed, err)
+	}
+	unread, err := s.UnreadAgentMailboxDeliveries("target")
+	if err != nil || len(unread) != 3 || unread[0].Item.ID != "first" || unread[2].Item.ID != "third" {
+		t.Fatalf("unread inspection = %+v, %v", unread, err)
+	}
+	wantNotified := notifiedAt.Format(sortableTimeFormat)
+	for _, delivery := range unread {
+		if delivery.Item.NotifiedAt != wantNotified || delivery.Item.ReadAt != "" {
+			t.Fatalf("unread receipt for %s = %q/%q", delivery.Item.ID,
+				delivery.Item.NotifiedAt, delivery.Item.ReadAt)
+		}
+	}
+	readAt := base.Add(4 * time.Second)
+	items, remaining, err := s.ReadAgentMailbox("target", 2, readAt)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(queued) != 1 || queued[0].Item.ID != "first" {
-		t.Fatalf("queue exposed more than the oldest unread peer: %+v", queued)
+	if len(items) != 2 || items[0].Item.ID != "first" || items[1].Item.ID != "second" || remaining != 1 {
+		t.Fatalf("first batch = %+v, remaining %d", items, remaining)
 	}
-	if queued[0].Peer == nil || queued[0].Peer.Body != "earlier" || queued[0].Peer.SenderSessionID != "sender" {
-		t.Fatalf("peer payload = %+v", queued[0].Peer)
+	if items[0].Peer == nil || items[0].Peer.Body != "first body" || items[1].Peer == nil || items[1].Peer.Body != "second body" {
+		t.Fatalf("peer payloads = %+v", items)
 	}
-	if pending, err := s.AgentMailboxItemQueued("first"); err != nil || !pending {
-		t.Fatalf("AgentMailboxItemQueued(first) = %v, %v", pending, err)
+	wantRead := readAt.Format(sortableTimeFormat)
+	for _, delivery := range items {
+		if delivery.Item.NotifiedAt != wantNotified || delivery.Item.ReadAt != wantRead {
+			t.Fatalf("receipts for %s = %q/%q, want %q/%q", delivery.Item.ID,
+				delivery.Item.NotifiedAt, delivery.Item.ReadAt, wantNotified, wantRead)
+		}
 	}
 
-	recipients, err := s.TargetsWithQueuedAgentMailboxItems()
-	if err != nil || len(recipients) != 2 {
-		t.Fatalf("queued recipients = %v, %v", recipients, err)
+	last, remaining, err := s.ReadAgentMailbox("target", 2, readAt.Add(time.Second))
+	if err != nil || len(last) != 1 || last[0].Item.ID != "third" || remaining != 0 {
+		t.Fatalf("second batch = %+v, remaining %d, err %v", last, remaining, err)
 	}
-
-	if err := s.MarkAgentMailboxItemNotified("first", now); err != nil {
-		t.Fatal(err)
+	if hasUnread, err := s.HasUnreadAgentMailboxItems("target"); err != nil || hasUnread {
+		t.Fatalf("target unread = %v, %v", hasUnread, err)
 	}
-	queued, err = s.QueuedAgentMailboxDeliveries("target")
-	if err != nil || len(queued) != 0 {
-		t.Fatalf("a second peer passed the notified unread message: %+v, %v", queued, err)
-	}
-	if _, changed, err := s.ReadPeerMessage("first", "target", now.Add(time.Second)); err != nil || !changed {
-		t.Fatalf("read first = %v, %v", changed, err)
-	}
-	queued, err = s.QueuedAgentMailboxDeliveries("target")
-	if err != nil || len(queued) != 1 || queued[0].Item.ID != "second" {
-		t.Fatalf("after reading first, queue = %+v, %v", queued, err)
+	if hasUnread, err := s.HasUnreadAgentMailboxItems("elsewhere"); err != nil || !hasUnread {
+		t.Fatalf("other target unread = %v, %v", hasUnread, err)
 	}
 }
 
@@ -85,31 +100,30 @@ func TestAgentMailboxPeerFIFOUsesChronologicalOrderWithinASecond(t *testing.T) {
 	enqueue("later", base.Add(time.Nanosecond))
 	enqueue("earlier", base)
 
-	queued, err := s.QueuedAgentMailboxDeliveries("target")
+	items, remaining, err := s.ReadAgentMailbox("target", 1, base.Add(time.Second))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(queued) != 1 || queued[0].Item.ID != "earlier" {
-		t.Fatalf("oldest unread peer = %+v, want earlier", queued)
+	if len(items) != 1 || items[0].Item.ID != "earlier" || remaining != 1 {
+		t.Fatalf("oldest unread peer = %+v (%d remaining), want earlier", items, remaining)
 	}
 	want := base.Format(sortableTimeFormat)
-	if queued[0].Item.CreatedAt != want || queued[0].Peer == nil || queued[0].Peer.CreatedAt != want {
-		t.Fatalf("created_at = %q/%v, want %q", queued[0].Item.CreatedAt, queued[0].Peer, want)
+	if items[0].Item.CreatedAt != want || items[0].Peer == nil || items[0].Peer.CreatedAt != want {
+		t.Fatalf("created_at = %q/%v, want %q", items[0].Item.CreatedAt, items[0].Peer, want)
 	}
 }
 
-func TestAgentMailboxDoesNotPassAnAlreadyNotifiedNewerPeer(t *testing.T) {
+func TestAgentMailboxUnreadRecipientQueriesIncludeNotifiedItems(t *testing.T) {
 	s := newAgentMailboxStore(t)
 	now := time.Now()
-	enqueuePeer(t, s, "newer", "sender", "target", "landed first", now)
-	if err := s.MarkAgentMailboxItemNotified("newer", now); err != nil {
-		t.Fatal(err)
+	enqueuePeer(t, s, "target-message", "sender", "target", "landed", now)
+	enqueuePeer(t, s, "other-message", "sender", "other", "waiting", now)
+	if changed, err := s.MarkAgentMailboxNotified("target", now.Add(time.Second)); err != nil || changed != 1 {
+		t.Fatalf("mark notified = %d, %v", changed, err)
 	}
-	enqueuePeer(t, s, "older", "sender", "target", "persisted late", now.Add(-time.Second))
-
-	queued, err := s.QueuedAgentMailboxDeliveries("target")
-	if err != nil || len(queued) != 0 {
-		t.Fatalf("queued behind a notified peer = %+v, %v", queued, err)
+	recipients, err := s.TargetsWithUnreadAgentMailboxItems()
+	if err != nil || fmt.Sprint(recipients) != "[other target]" {
+		t.Fatalf("unread recipients = %v, %v", recipients, err)
 	}
 }
 
@@ -124,8 +138,8 @@ func TestReadPeerMessageRequiresItsRecipientAndNotification(t *testing.T) {
 	if _, _, err := s.ReadPeerMessage("message", "target", now); err != ErrPeerMessageNotNotified {
 		t.Fatalf("queued read error = %v", err)
 	}
-	if err := s.MarkAgentMailboxItemNotified("message", now); err != nil {
-		t.Fatal(err)
+	if changed, err := s.MarkAgentMailboxNotified("target", now); err != nil || changed != 1 {
+		t.Fatalf("mark notified = %d, %v", changed, err)
 	}
 	record, changed, err := s.ReadPeerMessage("message", "target", now.Add(time.Second))
 	if err != nil || !changed || record.State() != agentmailbox.StateRead || record.Message.Body != "hello" {
@@ -143,20 +157,30 @@ func TestAgentMailboxReceiptTimestampsAreWriteOnce(t *testing.T) {
 	if _, err := s.EnqueueMaintenancePrompt("once", "target", "hello", first); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAgentMailboxItemHandled("once", first); err != nil {
-		t.Fatal(err)
+	if changed, err := s.MarkAgentMailboxNotified("target", first); err != nil || changed != 1 {
+		t.Fatalf("first notify = %d, %v", changed, err)
 	}
-	if err := s.MarkAgentMailboxItemHandled("once", time.Now()); err != nil {
-		t.Fatal(err)
+	if changed, err := s.MarkAgentMailboxNotified("target", time.Now()); err != nil || changed != 0 {
+		t.Fatalf("second notify = %d, %v", changed, err)
+	}
+	readTime := first.Add(time.Minute)
+	items, remaining, err := s.ReadAgentMailbox("target", 1, readTime)
+	if err != nil || len(items) != 1 || remaining != 0 {
+		t.Fatalf("read = %+v, remaining %d, err %v", items, remaining, err)
+	}
+	again, remaining, err := s.ReadAgentMailbox("target", 1, time.Now())
+	if err != nil || len(again) != 0 || remaining != 0 {
+		t.Fatalf("repeated read = %+v, remaining %d, err %v", again, remaining, err)
 	}
 
 	var notifiedAt, readAt string
 	if err := s.db.QueryRow(`SELECT notified_at, read_at FROM agent_mailbox_items WHERE id = 'once'`).Scan(&notifiedAt, &readAt); err != nil {
 		t.Fatal(err)
 	}
-	want := first.UTC().Format(sortableTimeFormat)
-	if notifiedAt != want || readAt != want {
-		t.Fatalf("receipts = %q/%q, want %q", notifiedAt, readAt, want)
+	wantNotified := first.UTC().Format(sortableTimeFormat)
+	wantRead := readTime.UTC().Format(sortableTimeFormat)
+	if notifiedAt != wantNotified || readAt != wantRead {
+		t.Fatalf("receipts = %q/%q, want %q/%q", notifiedAt, readAt, wantNotified, wantRead)
 	}
 }
 
@@ -178,11 +202,11 @@ func TestDeleteQueuedPeerMessageLeavesHandledHistory(t *testing.T) {
 	s := newAgentMailboxStore(t)
 	now := time.Now()
 	enqueuePeer(t, s, "queued", "sender", "target", "not launched", now)
-	enqueuePeer(t, s, "handled", "sender", "target", "already read", now.Add(time.Second))
-	if err := s.MarkAgentMailboxItemNotified("handled", now.Add(time.Second)); err != nil {
-		t.Fatal(err)
+	enqueuePeer(t, s, "handled", "sender", "handled-target", "already read", now.Add(time.Second))
+	if changed, err := s.MarkAgentMailboxNotified("handled-target", now.Add(time.Second)); err != nil || changed != 1 {
+		t.Fatalf("mark notified = %d, %v", changed, err)
 	}
-	if _, changed, err := s.ReadPeerMessage("handled", "target", now.Add(2*time.Second)); err != nil || !changed {
+	if _, changed, err := s.ReadPeerMessage("handled", "handled-target", now.Add(2*time.Second)); err != nil || !changed {
 		t.Fatal(err)
 	}
 
@@ -225,7 +249,118 @@ func TestPeerMessageGuardCountsScopeEachLimit(t *testing.T) {
 	}
 }
 
-func TestMigration129SeparatesMailboxReceiptsAndPayloads(t *testing.T) {
+func TestReadAgentMailboxEnforcesDefaultAndMaximumBatchLimits(t *testing.T) {
+	s := newAgentMailboxStore(t)
+	base := time.Date(2026, 9, 3, 11, 0, 0, 0, time.UTC)
+	for i := range 71 {
+		id := fmt.Sprintf("item-%02d", i)
+		if _, err := s.EnqueueMaintenancePrompt(id, "target", id, base.Add(time.Duration(i)*time.Nanosecond)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, remaining, err := s.ReadAgentMailbox("target", 0, base.Add(time.Minute))
+	if err != nil || len(first) != agentmailbox.DefaultInboxLimit || remaining != 51 {
+		t.Fatalf("default batch = %d items, %d remaining, %v", len(first), remaining, err)
+	}
+	second, remaining, err := s.ReadAgentMailbox("target", 500, base.Add(2*time.Minute))
+	if err != nil || len(second) != agentmailbox.MaxInboxLimit || remaining != 1 {
+		t.Fatalf("maximum batch = %d items, %d remaining, %v", len(second), remaining, err)
+	}
+}
+
+func TestEnqueueMaintenancePromptOnceIsIdempotentAndRefreshesCoalescedContent(t *testing.T) {
+	s := newAgentMailboxStore(t)
+	base := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
+	first, claimed, err := s.EnqueueMaintenancePromptOnce(
+		"ticket-1", "target", "3", "legacy-ticket", "read through 3", base,
+	)
+	if err != nil || !claimed || first.Item.ID != "ticket-1" {
+		t.Fatalf("first enqueue = %+v, %v, %v", first, claimed, err)
+	}
+	retried, claimed, err := s.EnqueueMaintenancePromptOnce(
+		"ticket-1", "target", "4", "legacy-ticket", "read through 4", base.Add(time.Second),
+	)
+	if err != nil || claimed || retried.Item.SourceID != "4" || retried.Item.Prompt != "read through 4" {
+		t.Fatalf("same-id retry = %+v, %v, %v", retried, claimed, err)
+	}
+	coalesced, claimed, err := s.EnqueueMaintenancePromptOnce(
+		"ticket-2", "target", "5", "legacy-ticket", "read through 5", base.Add(2*time.Second),
+	)
+	if err != nil || claimed || coalesced.Item.ID != "ticket-1" ||
+		coalesced.Item.SourceID != "5" || coalesced.Item.Prompt != "read through 5" || coalesced.Item.CreatedAt != first.Item.CreatedAt {
+		t.Fatalf("coalesced enqueue = %+v, %v, %v", coalesced, claimed, err)
+	}
+
+	read, remaining, err := s.ReadAgentMailboxItems(
+		"target", agentmailbox.KindMaintenancePrompt, "legacy-ticket", base.Add(3*time.Second),
+	)
+	if err != nil || read != 1 || remaining != 0 {
+		t.Fatalf("adapter read = %d, remaining %d, %v", read, remaining, err)
+	}
+	afterRead, claimed, err := s.EnqueueMaintenancePromptOnce(
+		"ticket-2", "target", "6", "legacy-ticket", "read through 6", base.Add(4*time.Second),
+	)
+	if err != nil || !claimed || afterRead.Item.ID != "ticket-2" {
+		t.Fatalf("enqueue after read = %+v, %v, %v", afterRead, claimed, err)
+	}
+}
+
+func TestReadAgentMailboxItemsReportsAllRemainingUnread(t *testing.T) {
+	s := newAgentMailboxStore(t)
+	base := time.Date(2026, 9, 3, 13, 0, 0, 0, time.UTC)
+	if _, _, err := s.EnqueueMaintenancePromptOnce(
+		"ticket", "target", "9", "legacy-ticket", "ticket inbox", base,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.EnqueueMaintenancePromptOnce(
+		"present", "target", "round-1", "present-round-1", "present handback", base.Add(time.Second),
+	); err != nil {
+		t.Fatal(err)
+	}
+	read, remaining, err := s.ReadAgentMailboxItems(
+		"target", agentmailbox.KindMaintenancePrompt, "legacy-ticket", base.Add(2*time.Second),
+	)
+	if err != nil || read != 1 || remaining != 1 {
+		t.Fatalf("targeted read = %d, remaining %d, %v", read, remaining, err)
+	}
+	read, remaining, err = s.ReadAgentMailboxItems(
+		"target", agentmailbox.KindMaintenancePrompt, "legacy-ticket", base.Add(3*time.Second),
+	)
+	if err != nil || read != 0 || remaining != 1 {
+		t.Fatalf("repeated read = %d, remaining %d, %v", read, remaining, err)
+	}
+}
+
+func TestAgentMailboxUnreadItemsSurviveReopen(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "mailbox.db")
+	s, err := NewWithDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	createdAt := time.Date(2026, 9, 3, 14, 0, 0, 0, time.UTC)
+	if _, err := s.EnqueueMaintenancePrompt("durable", "target", "survives restart", createdAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.MarkAgentMailboxNotified("target", createdAt.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err = NewWithDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	items, remaining, err := s.ReadAgentMailbox("target", 1, createdAt.Add(time.Minute))
+	if err != nil || len(items) != 1 || items[0].Item.Prompt != "survives restart" || remaining != 0 {
+		t.Fatalf("read after reopen = %+v, remaining %d, %v", items, remaining, err)
+	}
+}
+
+func TestMigration132SeparatesMailboxReceiptsAndPayloads(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)
 	if err != nil {
@@ -264,12 +399,15 @@ func TestMigration129SeparatesMailboxReceiptsAndPayloads(t *testing.T) {
 		t.Fatalf("migrateDB: %v", err)
 	}
 
-	queued, err := s.QueuedAgentMailboxDeliveries("target")
-	if err != nil {
+	var unread int
+	if err := s.db.QueryRow(`
+		SELECT COUNT(*) FROM agent_mailbox_items
+		WHERE recipient_session_id = 'target' AND read_at = ''
+	`).Scan(&unread); err != nil {
 		t.Fatal(err)
 	}
-	if len(queued) != 3 {
-		t.Fatalf("queued deliveries = %+v, want peer, maintenance and Garden", queued)
+	if unread != 4 {
+		t.Fatalf("unread mailbox items = %d, want queued peer, maintenance and two Garden items", unread)
 	}
 	var peerNotified, peerRead, seedNotified, seedRead, maintenancePrompt string
 	if err := s.db.QueryRow(`SELECT notified_at, read_at FROM agent_mailbox_items WHERE id = 'peer-done'`).Scan(&peerNotified, &peerRead); err != nil {
@@ -288,6 +426,49 @@ func TestMigration129SeparatesMailboxReceiptsAndPayloads(t *testing.T) {
 	for _, table := range []string{"agent_messages", "garden_seed_bells"} {
 		if err := s.db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(new(int)); err == nil {
 			t.Fatalf("legacy table %s survived migration", table)
+		}
+	}
+}
+
+func TestMigration133IndexesUnreadMailboxFIFO(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "migration-133.db")
+	s, err := NewWithDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if _, err := s.db.Exec(`
+		DROP INDEX idx_agent_mailbox_recipient_unread;
+		CREATE INDEX idx_agent_mailbox_recipient_queued
+			ON agent_mailbox_items(recipient_session_id, notified_at, created_at, id);
+		DELETE FROM schema_migrations WHERE version >= 133;
+	`); err != nil {
+		t.Fatalf("rewind migration 133: %v", err)
+	}
+	if err := migrateDB(s.db, dbPath); err != nil {
+		t.Fatalf("migrateDB: %v", err)
+	}
+
+	var oldIndexes int
+	if err := s.db.QueryRow(`
+		SELECT COUNT(*) FROM sqlite_master
+		WHERE type = 'index' AND name = 'idx_agent_mailbox_recipient_queued'
+	`).Scan(&oldIndexes); err != nil {
+		t.Fatal(err)
+	}
+	if oldIndexes != 0 {
+		t.Fatal("queued mailbox index survived migration 133")
+	}
+	var indexSQL string
+	if err := s.db.QueryRow(`
+		SELECT sql FROM sqlite_master
+		WHERE type = 'index' AND name = 'idx_agent_mailbox_recipient_unread'
+	`).Scan(&indexSQL); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"recipient_session_id, created_at, id", "WHERE read_at = ''"} {
+		if !strings.Contains(indexSQL, want) {
+			t.Fatalf("unread index %q does not contain %q", indexSQL, want)
 		}
 	}
 }

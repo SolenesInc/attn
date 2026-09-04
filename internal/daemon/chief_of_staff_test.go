@@ -242,13 +242,13 @@ func TestNudgeChiefOfStaffHeldOffByTypingLandsAfterTheQuietWindow(t *testing.T) 
 		if d.nudgeChiefOfStaff("inbox-1", prompt) {
 			t.Fatal("the nudge claimed a composer the user had just used")
 		}
-		if chiefWasNudged(inputs(chiefID), prompt) {
+		if chiefWasNudged(inputs(chiefID), agentMailboxDoorbellText) {
 			t.Fatalf("typed into a composer the user just used: %q", inputs(chiefID))
 		}
 
 		time.Sleep(sessionInputQuietWindow)
 		settleResend(t)
-		if !chiefWasNudged(inputs(chiefID), prompt) {
+		if !chiefWasNudged(inputs(chiefID), agentMailboxDoorbellText) {
 			t.Fatalf("nothing resent the chief nudge once the composer went quiet: %q", inputs(chiefID))
 		}
 	})

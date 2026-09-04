@@ -185,6 +185,35 @@ func TestParseSessionTranscript(t *testing.T) {
 	}
 }
 
+func TestParseAgentInboxSupportsBatchAndLegacyMessages(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		input     string
+		messageID string
+		limit     int
+	}{
+		{
+			name: "batch", input: `{"cmd":"agent_inbox","recipient_session_id":"session-1","limit":7}`,
+			limit: 7,
+		},
+		{
+			name: "legacy message", input: `{"cmd":"agent_inbox","recipient_session_id":"session-1","message_id":"message-1"}`,
+			messageID: "message-1",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, data, err := ParseMessage([]byte(tt.input))
+			if err != nil || cmd != CmdAgentInbox {
+				t.Fatalf("ParseMessage() = %q, %#v, %v", cmd, data, err)
+			}
+			msg, ok := data.(*AgentInboxMessage)
+			if !ok || msg.RecipientSessionID != "session-1" || Deref(msg.MessageID) != tt.messageID || Deref(msg.Limit) != tt.limit {
+				t.Fatalf("message = %#v", data)
+			}
+		})
+	}
+}
+
 func TestParseDelegatePlacementAndWorktree(t *testing.T) {
 	input := `{"cmd":"delegate","source_session_id":"source-1","brief":"Investigate this","agent":"codex","placement":"new_workspace","worktree":{"repo":"/repo","branch":"feat/delegated","starting_from":"main"}}`
 	cmd, data, err := ParseMessage([]byte(input))

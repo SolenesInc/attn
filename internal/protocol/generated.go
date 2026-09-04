@@ -96,12 +96,55 @@ type AgentHistoryMessage struct {
 	ID string `json:"id"`
 }
 
+type AgentInboxBatchResult struct {
+	// Items corresponds to the JSON schema field "items".
+	Items []AgentInboxItem `json:"items"`
+
+	// Remaining corresponds to the JSON schema field "remaining".
+	Remaining int `json:"remaining"`
+}
+
+type AgentInboxItem struct {
+	// Content corresponds to the JSON schema field "content".
+	Content string `json:"content"`
+
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt string `json:"created_at"`
+
+	// Hint corresponds to the JSON schema field "hint".
+	Hint *string `json:"hint,omitempty,omitzero"`
+
+	// ItemID corresponds to the JSON schema field "item_id".
+	ItemID string `json:"item_id"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind string `json:"kind"`
+
+	// NotifiedAt corresponds to the JSON schema field "notified_at".
+	NotifiedAt string `json:"notified_at"`
+
+	// ReadAt corresponds to the JSON schema field "read_at".
+	ReadAt string `json:"read_at"`
+
+	// SenderLabel corresponds to the JSON schema field "sender_label".
+	SenderLabel *string `json:"sender_label,omitempty,omitzero"`
+
+	// SenderSessionID corresponds to the JSON schema field "sender_session_id".
+	SenderSessionID *string `json:"sender_session_id,omitempty,omitzero"`
+
+	// SourceID corresponds to the JSON schema field "source_id".
+	SourceID *string `json:"source_id,omitempty,omitzero"`
+}
+
 type AgentInboxMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// Limit corresponds to the JSON schema field "limit".
+	Limit *int `json:"limit,omitempty,omitzero"`
+
 	// MessageID corresponds to the JSON schema field "message_id".
-	MessageID string `json:"message_id"`
+	MessageID *string `json:"message_id,omitempty,omitzero"`
 
 	// RecipientSessionID corresponds to the JSON schema field "recipient_session_id".
 	RecipientSessionID string `json:"recipient_session_id"`
@@ -6474,6 +6517,10 @@ type Response struct {
 	// ActivityStatusResult corresponds to the JSON schema field
 	// "activity_status_result".
 	ActivityStatusResult *ActivityStatusResult `json:"activity_status_result,omitempty,omitzero"`
+
+	// AgentInboxBatchResult corresponds to the JSON schema field
+	// "agent_inbox_batch_result".
+	AgentInboxBatchResult *AgentInboxBatchResult `json:"agent_inbox_batch_result,omitempty,omitzero"`
 
 	// AgentInboxResult corresponds to the JSON schema field "agent_inbox_result".
 	AgentInboxResult *AgentPeerMessage `json:"agent_inbox_result,omitempty,omitzero"`

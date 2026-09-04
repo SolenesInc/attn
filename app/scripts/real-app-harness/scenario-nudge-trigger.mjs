@@ -15,15 +15,15 @@ import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
 import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { writeMockAgentFixture } from './mockAgent.mjs';
+import { transcriptMessages, writeMockAgentFixture } from './mockAgent.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, socketPathForProfile } from './harnessProfile.mjs';
 
 const BUSY_RELEASE_FILE = 'busy-turn-release';
 
-const DOORBELL_SUBSTRING = 'Activity on a ticket that predates the garden';
+const GENERIC_DOORBELL = '📬 You have unread items in your attn inbox. Run attn agent inbox to read them.';
 // Mirrors ticketNudgePrompt minus the leading emoji, which the grid can split.
-const DOORBELL_CORE = 'Activity on a ticket that predates the garden — run `attn ticket inbox` to read and acknowledge it.';
+const LEGACY_ITEM_CORE = 'Activity on a ticket that predates the garden — run `attn ticket inbox` to read and acknowledge it.';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -46,6 +46,25 @@ async function pollFor(fn, description, timeoutMs = 30_000, intervalMs = 250) {
 const IDLE_STATES = new Set(['idle', 'waiting_input']);
 
 const squashWs = (text) => text.replace(/\s+/g, '');
+
+function readTargetTranscript(cwd) {
+  const dir = path.join(cwd, '.attn-mock-agent');
+  const file = fs.readdirSync(dir).find((entry) => entry.endsWith('.jsonl'));
+  if (!file) throw new Error(`no mock transcript in ${dir}`);
+  return fs.readFileSync(path.join(dir, file), 'utf8');
+}
+
+function inboxBatches(transcript) {
+  return transcriptMessages(transcript).flatMap((message) => {
+    if (message.role !== 'assistant') return [];
+    try {
+      const parsed = JSON.parse(message.text);
+      return Array.isArray(parsed?.items) ? [parsed] : [];
+    } catch {
+      return [];
+    }
+  });
+}
 
 async function readPaneText(client, sessionId) {
   const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${sessionId}`, 20_000);
@@ -97,7 +116,7 @@ async function main() {
     prefix: 'nudge-trigger',
     metadata: {
       agent: 'mock-codex',
-      focus: 'ticket-nudge deliver-now button, idle and busy delivery paths',
+      focus: 'legacy ticket items use the generic inbox across missing-hook and busy delivery paths',
     },
   });
 
@@ -125,22 +144,19 @@ async function main() {
         name: 'nudge mock',
         turns: [
           {
-            includes: 'ticket that predates the garden',
+            includes: GENERIC_DOORBELL,
+            submitHook: false,
             actions: [
+              { type: 'attn', args: ['agent', 'inbox', '--json'] },
               { type: 'attn', args: ['ticket', 'inbox'] },
+              { type: 'wait_for_file', path: BUSY_RELEASE_FILE },
+              { type: 'reply', text: 'LEGACY_INBOX_TURN_RELEASED' },
             ],
           },
           {
             includes: 'initial turn ready',
             actions: [
               { type: 'reply', text: 'initial turn ready' },
-            ],
-          },
-          {
-            includes: 'foreground turn finished',
-            actions: [
-              { type: 'wait_for_file', path: BUSY_RELEASE_FILE },
-              { type: 'reply', text: 'foreground turn finished' },
             ],
           },
         ],
@@ -238,8 +254,8 @@ async function main() {
       const beforeClick = await readPaneText(client, targetId);
       runner.writeText('pane-before-click.txt', beforeClick.text);
       runner.assert(
-        !beforeClick.text.includes(DOORBELL_SUBSTRING),
-        `no doorbell injected before the click (the countdown gate held); pane unexpectedly contains "${DOORBELL_SUBSTRING}"`,
+        !beforeClick.text.includes(GENERIC_DOORBELL),
+        `no doorbell injected before the click (the countdown gate held); pane unexpectedly contains "${GENERIC_DOORBELL}"`,
       );
       note(`gate held: no doorbell in target pane before click`);
 
@@ -259,7 +275,7 @@ async function main() {
       const started = await pollFor(
         () => (observer.getSession(targetId)?.state === 'working' ? true : null),
         'Codex to start a turn from the delivered doorbell',
-        30_000,
+        60_000,
         100,
       ).catch(() => null);
 
@@ -271,43 +287,42 @@ async function main() {
       );
       note(`doorbell submitted: Codex entered working state`);
 
-      const settledState = await pollFor(
-        () => {
-          const state = observer.getSession(targetId)?.state;
-          return IDLE_STATES.has(state) ? state : null;
-        },
-        'Codex to finish the nudge turn',
-        90_000,
-        250,
-      );
       await pollFor(
         () => (observer.getSession(targetId)?.ticket_unread === true ? null : true),
-        'the submitted nudge turn to consume the ticket inbox',
+        'the missing-hook nudge turn to consume the ticket inbox',
         30_000,
         250,
       );
+      runner.assert(observer.getSession(targetId)?.state === 'working',
+        'the first missing-hook doorbell turn remains busy after reading its inbox');
 
       afterText = (await readPaneText(client, targetId)).text;
-      runner.writeText('pane-after-settle.txt', afterText);
-      const wantedCore = squashWs(DOORBELL_CORE);
+      runner.writeText('pane-after-inbox-read.txt', afterText);
+      const wantedCore = squashWs(LEGACY_ITEM_CORE);
       runner.assert(
         squashWs(afterText).includes(wantedCore),
-        `the submitted transcript contains the complete doorbell message (see pane-after-settle.txt)`,
+        `the durable inbox read contains the complete legacy ticket item (see pane-after-inbox-read.txt)`,
       );
-      note(`nudge turn settled with inbox consumed and no stranded composer text`, { state: settledState });
+      const transcript = readTargetTranscript(repoDir);
+      const doorbells = transcriptMessages(transcript)
+        .filter((message) => message.role === 'user' && message.text === GENERIC_DOORBELL);
+      const batches = inboxBatches(transcript);
+      runner.assert(doorbells.length === 1, 'the idle legacy event produced one generic doorbell', { doorbells });
+      runner.assert(batches.length === 1 && batches[0].items.length === 1,
+        'the idle doorbell exposed one durable legacy maintenance item', { batches });
+      runner.assert(batches[0].items[0].kind === 'maintenance_prompt' &&
+        squashWs(batches[0].items[0].content).includes(wantedCore),
+      'the item body stayed in the inbox rather than the terminal prompt', { batches });
+      runner.assert(Boolean(batches[0].items[0].read_at),
+        'reading the inbox wrote the legacy item receipt', { batches });
+      note(`missing-hook doorbell read both inboxes and remains busy for the queued-item check`, {
+        state: observer.getSession(targetId)?.state,
+      });
     });
 
-    await runner.step('deliver_busy_nudge', async () => {
-      const pane = await waitForFirstWorkspacePane(client, targetId, `pane for ${targetId}`, 20_000);
-      const busyPrompt = 'Wait for the release file, then reply with the exact words: foreground turn finished';
-      await submitPrompt(client, targetId, pane.paneId, busyPrompt);
-      await pollFor(
-        () => (observer.getSession(targetId)?.state === 'working' ? true : null),
-        'Codex to start the foreground busy turn',
-        30_000,
-        100,
-      );
-
+    await runner.step('queue_legacy_item_then_wake_on_idle', async () => {
+      runner.assert(observer.getSession(targetId)?.state === 'working',
+        'the first missing-hook doorbell still owns the busy turn before the second item');
       await legacyTicketRequest(socketPath, {
         cmd: 'ticket_comment',
         source_session_id: authorId,
@@ -339,7 +354,7 @@ async function main() {
           const state = observer.getSession(targetId)?.state;
           return IDLE_STATES.has(state) ? state : null;
         },
-        'Codex to settle after the foreground and queued nudge turns',
+        'Codex to settle after the missing-hook and queued nudge turns',
         120_000,
         250,
       );
@@ -349,11 +364,25 @@ async function main() {
         squashWs(afterBusy).includes(squashWs('Busy-state follow-up.')),
         'the queued nudge turn read the busy-state ticket event (see pane-after-busy-nudge.txt)',
       );
-      note(`busy-state nudge processed through Codex queue semantics`, { state: busySettledState });
+      const transcript = readTargetTranscript(repoDir);
+      const messages = transcriptMessages(transcript);
+      const doorbells = messages
+        .filter((message) => message.role === 'user' && message.text === GENERIC_DOORBELL);
+      runner.assert(doorbells.length === 2,
+        'the idle and busy legacy items each produced one generic doorbell', { doorbells });
+      runner.assert(doorbells.every((message) => !message.text.includes(LEGACY_ITEM_CORE)),
+        'legacy item bodies were never injected as terminal prompts', { doorbells });
+      const batches = inboxBatches(transcript);
+      runner.assert(batches.length === 2 && batches[1].items.length === 1,
+        'the later automatic wake exposed exactly the busy legacy item', { batches });
+      runner.assert(Boolean(batches[1].items[0].read_at),
+        'the busy legacy item got its own read receipt', { batches });
+      runner.writeText('target-transcript.json', `${JSON.stringify(messages, null, 2)}\n`);
+      note(`busy-state item woke on idle after the earlier missing submit hook`, { state: busySettledState });
     });
 
     const summary = await runner.finishSuccess({ targetId, authorId, ticketId });
-    console.log('[nudge-trigger] Nudge trigger scenario passed: idle and busy Codex nudges submitted and consumed ticket activity.');
+    console.log('[nudge-trigger] Nudge trigger scenario passed: generic inbox doorbells consumed idle and busy legacy ticket activity without submit hooks.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
     const summary = await runner.finishFailure(error, { targetId, authorId });

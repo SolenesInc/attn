@@ -661,7 +661,7 @@ func TestMaybeGenerateSessionTitleFromPrompt_UncorrelatedReceiptLeavesAttemptAva
 
 	d.maybeGenerateSessionTitleFromPrompt("sess-1", "ticket nudge: please reconcile", maintenanceInput("tickets"))
 	runSessionTitleJobs(t, d)
-	d.maybeGenerateSessionTitleFromPrompt("sess-1", "peer says hi", peerAgentInput("sess-2"))
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "another maintenance prompt", maintenanceInput("other-maintenance"))
 	runSessionTitleJobs(t, d)
 	if calls != 0 {
 		t.Fatalf("exec calls after maintenance and peer receipts = %d, want 0", calls)

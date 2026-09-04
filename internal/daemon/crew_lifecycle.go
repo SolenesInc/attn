@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/jobs"
@@ -249,9 +250,6 @@ func (d *Daemon) crewLifecycleTick(now time.Time) {
 }
 
 func (d *Daemon) actOnCrewMember(member crew.Member, sessionID string, action crew.Action, cache crew.CacheState, now time.Time) {
-	resend := func() {
-		d.actOnCrewMember(member, sessionID, action, cache, time.Now())
-	}
 	switch action {
 	case crew.ActionHeartbeat:
 		session := d.store.Get(sessionID)
@@ -261,7 +259,10 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID string, action cr
 		generation := protocol.Deref(session.LastModelRequestAt)
 		id := inputAttemptID("crew-heartbeat", sessionID+"/"+generation)
 		delivery := maintenanceSessionInput("crew-heartbeat", sessionID+"/"+generation, sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
-		delivery.resend = resend
+		d.sessionInputs().forgetSuperseded(sessionID, id, delivery.origin)
+		delivery.resend = func() {
+			d.actOnCrewMember(member, sessionID, action, cache, time.Now())
+		}
 		attempt := d.sessionInputs().try(context.Background(), delivery)
 		if attempt.err != nil {
 			d.logf("crew: %s's heartbeat did not reach session %s: %v", crew.DisplayName(member.ID), sessionID, attempt.err)
@@ -271,6 +272,9 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID string, action cr
 			attempt = d.sessionInputs().await(sessionID, id, attempt.wait, sessionInputTakenWindow)
 		}
 		if attempt.stage != sessionInputTaken {
+			if attempt.stage == sessionInputPlaced {
+				d.sessionInputs().relinquishComposer(sessionID, id)
+			}
 			d.logf("crew: %s's heartbeat was placed in session %s but no model request took it", crew.DisplayName(member.ID), sessionID)
 			return
 		}
@@ -279,14 +283,22 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID string, action cr
 		d.logf("crew: warmed %s's context in session %s (cache estimated %s old against a %s assumption)",
 			crew.DisplayName(member.ID), sessionID, cache.Age.Round(time.Second), cache.TTL)
 	case crew.ActionSleep:
-		delivery := maintenanceSessionInput("crew-sleep", sessionID, sessionID, crewSleepPrompt, sessionInputAtTurnBoundary)
-		delivery.resend = resend
-		attempt := d.sessionInputs().try(context.Background(), delivery)
-		if attempt.err != nil {
-			d.logf("crew: %s was not asked to close its day: %v", crew.DisplayName(member.ID), attempt.err)
+		delivery, _, err := d.store.EnqueueMaintenancePromptOnce(
+			"crew-auto-sleep/"+uuid.NewString(),
+			sessionID,
+			member.ID,
+			"crew-auto-sleep",
+			crewSleepPrompt,
+			now,
+		)
+		if err != nil {
+			d.logf("crew: %s's sleep request could not be recorded: %v", crew.DisplayName(member.ID), err)
 			return
 		}
-		d.sessionInputs().release(sessionID, delivery.id)
+		if err := d.deliverAgentMailboxItem(delivery); err != nil {
+			d.logf("crew: %s's sleep request is queued for session %s: %v", crew.DisplayName(member.ID), sessionID, err)
+			return
+		}
 		d.logf("crew: asked %s to close its day — the user has been away and the cache is %s from lapsing",
 			crew.DisplayName(member.ID), cache.Remaining().Round(time.Second))
 	}

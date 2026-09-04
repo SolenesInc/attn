@@ -1,0 +1,6 @@
+kind: fixed
+area: agents
+change: >
+  Background notifications now share one durable inbox and at most one generic
+  doorbell per cooldown, so a missing prompt hook cannot block later notifications
+  or turn a burst into a stream of terminal prompts.

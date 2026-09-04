@@ -550,8 +550,23 @@ func TestPluginReportedStateFlushesDeferredTicketNudge(t *testing.T) {
 			t.Fatal("eligible plugin state did not re-arm the deferred nudge")
 		}
 		fireNudgeNow(t, d, sessionID)
+		if wasNudged(inputs(sessionID)) {
+			t.Fatal("working plugin session received terminal input")
+		}
+		if unread, err := d.store.HasUnreadAgentMailboxItems(sessionID); err != nil || !unread {
+			t.Fatalf("working plugin session lost the durable nudge: unread=%v err=%v", unread, err)
+		}
+		if !d.applyPluginReportedState(pluginReportStateParams{
+			SessionID: sessionID,
+			RunID:     "run-nudge",
+			Seq:       3,
+			State:     protocol.StateIdle,
+		}) {
+			t.Fatal("idle plugin report was rejected")
+		}
+		synctest.Wait()
 		if !wasNudged(inputs(sessionID)) {
-			t.Fatal("eligible plugin session was not nudged after approval cleared")
+			t.Fatal("idle plugin session was not woken for queued activity")
 		}
 	})
 }

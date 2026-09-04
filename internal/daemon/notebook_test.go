@@ -611,9 +611,12 @@ func TestNotebookSendToChiefAppendsAndNudges(t *testing.T) {
 	got := append([]string(nil), inputs...)
 	mu.Unlock()
 	wantNudge := chiefInboxNudgePrompt(d.store.GetSetting(SettingNotebookRoot))
-	wantPaste := sessionInputPasteStart + wantNudge + sessionInputPasteEnd
+	wantPaste := sessionInputPasteStart + agentMailboxDoorbellText + sessionInputPasteEnd
 	if len(got) != 2 || got[0] != wantPaste || got[1] != "\r" {
-		t.Fatalf("PTY inputs = %q, want a bracketed nudge-prompt write followed by Enter", got)
+		t.Fatalf("PTY inputs = %q, want one generic bracketed doorbell followed by Enter", got)
+	}
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("chief"); err != nil || len(unread) != 1 || unread[0].Item.Prompt != wantNudge {
+		t.Fatalf("chief durable inbox = %+v, %v", unread, err)
 	}
 
 	body := readInboxNote(t, d)
@@ -647,7 +650,7 @@ func TestNotebookSendToChiefQueuesWithoutLiveChief(t *testing.T) {
 	}
 }
 
-func TestNotebookSendToChiefNudgesWorkingChief(t *testing.T) {
+func TestNotebookSendToChiefQueuesForWorkingChiefAndWakesOnIdle(t *testing.T) {
 	d := newNotebookDaemon(t)
 	var mu sync.Mutex
 	var inputs []string
@@ -662,14 +665,30 @@ func TestNotebookSendToChiefNudgesWorkingChief(t *testing.T) {
 
 	var res protocol.NotebookSendToChiefResultMessage
 	readNotebookWSEvent(t, client.send, &res)
-	if !res.Success || res.Result == nil || !res.Result.Nudged {
-		t.Fatalf("send-to-chief result = %+v, want success with working chief nudged", res.Result)
+	if !res.Success || res.Result == nil || res.Result.Nudged {
+		t.Fatalf("send-to-chief result = %+v, want a durable queue for the working chief", res.Result)
 	}
 	mu.Lock()
 	n := len(inputs)
 	mu.Unlock()
+	if n != 0 {
+		t.Fatalf("PTY inputs = %d, want none while the chief is working", n)
+	}
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("chief"); err != nil || len(unread) != 1 {
+		t.Fatalf("working chief inbox = %+v, %v", unread, err)
+	}
+
+	drained := make(chan int, 1)
+	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
+	d.applyState(sessionStateChange{sessionID: "chief", state: protocol.StateIdle, cause: liveSignal{}})
+	if delivered := <-drained; delivered != 1 {
+		t.Fatalf("idle drain delivered %d doorbells, want 1", delivered)
+	}
+	mu.Lock()
+	n = len(inputs)
+	mu.Unlock()
 	if n != 2 {
-		t.Fatalf("PTY inputs = %d, want a bracketed prompt write plus Enter", n)
+		t.Fatalf("PTY inputs after idle = %d, want a bracketed doorbell plus Enter", n)
 	}
 }
 

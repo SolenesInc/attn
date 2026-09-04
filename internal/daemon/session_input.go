@@ -62,7 +62,6 @@ const (
 	sessionInputOriginUnknown sessionInputOriginKind = iota
 	sessionInputOriginUserConversation
 	sessionInputOriginMaintenance
-	sessionInputOriginPeerAgent
 )
 
 type sessionInputOrigin struct {
@@ -76,10 +75,6 @@ func userConversationInput() sessionInputOrigin {
 
 func maintenanceInput(source string) sessionInputOrigin {
 	return sessionInputOrigin{kind: sessionInputOriginMaintenance, source: strings.TrimSpace(source)}
-}
-
-func peerAgentInput(sourceSessionID string) sessionInputOrigin {
-	return sessionInputOrigin{kind: sessionInputOriginPeerAgent, source: strings.TrimSpace(sourceSessionID)}
 }
 
 type sessionInputAttemptID struct {
@@ -106,6 +101,7 @@ type sessionInputDelivery struct {
 	placement         sessionInputPlacement
 	hostDelivery      hostsession.Delivery
 	allowUserComposer bool
+	bypassInitialGate bool
 	resend            func()
 }
 
@@ -133,16 +129,6 @@ func annotationSessionInput(key, sessionID, text string) sessionInputDelivery {
 	delivery := userConversationSessionInput(key, sessionID, text, sessionInputAtTurnBoundary)
 	delivery.allowUserComposer = true
 	return delivery
-}
-
-func peerAgentSessionInput(key, sourceSessionID, targetSessionID, text string) sessionInputDelivery {
-	return sessionInputDelivery{
-		id:        inputAttemptID("agent-message", key),
-		sessionID: strings.TrimSpace(targetSessionID),
-		text:      text,
-		origin:    peerAgentInput(sourceSessionID),
-		placement: sessionInputAtTurnBoundary,
-	}
 }
 
 type sessionInputRunRef struct {
@@ -175,6 +161,7 @@ type sessionInputFingerprint struct {
 	placement         sessionInputPlacement
 	host              hostsession.Delivery
 	allowUserComposer bool
+	bypassInitialGate bool
 }
 
 type sessionInputAttemptState struct {
@@ -278,11 +265,6 @@ type sessionInputRetry struct {
 // span. Read once: tests move sessionInputTakenWindow.
 var sessionInputComposerRetry = sessionInputTakenWindow
 
-func sessionInputQuietDeferral(err error) bool {
-	var quiet *sessionInputQuietError
-	return errors.As(err, &quiet)
-}
-
 func sessionInputRetryDelay(err error) (time.Duration, bool) {
 	var quiet *sessionInputQuietError
 	if errors.As(err, &quiet) {
@@ -358,6 +340,57 @@ func (m *sessionInputModule) forget(sessionID string, id sessionInputAttemptID) 
 	delete(lane.attempts, key)
 	lane.removePending(id)
 	lane.mu.Unlock()
+}
+
+func (m *sessionInputModule) relinquishComposer(sessionID string, id sessionInputAttemptID) {
+	key := id.String()
+	if key == "" || strings.TrimSpace(sessionID) == "" {
+		return
+	}
+	m.mu.Lock()
+	lane := m.lanes[sessionID]
+	m.mu.Unlock()
+	if lane == nil {
+		return
+	}
+	lane.mu.Lock()
+	if state := lane.attempts[key]; state != nil && state.stage == sessionInputPlaced {
+		state.composer = false
+	}
+	lane.mu.Unlock()
+}
+
+func (m *sessionInputModule) forgetSuperseded(sessionID string, current sessionInputAttemptID, origin sessionInputOrigin) {
+	currentKey := current.String()
+	if currentKey == "" || strings.TrimSpace(sessionID) == "" {
+		return
+	}
+	m.mu.Lock()
+	lane := m.lanes[sessionID]
+	m.mu.Unlock()
+	if lane == nil {
+		return
+	}
+	lane.mu.Lock()
+	defer lane.mu.Unlock()
+	for key, state := range lane.attempts {
+		if key == currentKey || state.fingerprint.origin != origin || state.composer {
+			continue
+		}
+		for i := 0; i < len(lane.pending); {
+			if lane.pending[i].attempt.String() == key {
+				lane.pending = append(lane.pending[:i], lane.pending[i+1:]...)
+				continue
+			}
+			i++
+		}
+		select {
+		case <-state.wait:
+		default:
+			close(state.wait)
+		}
+		delete(lane.attempts, key)
+	}
 }
 
 // Closed in place before it is dropped: a callback resuming mid-drain finds a
@@ -486,6 +519,7 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 		placement:         delivery.placement,
 		host:              delivery.hostDelivery,
 		allowUserComposer: delivery.allowUserComposer,
+		bypassInitialGate: delivery.bypassInitialGate,
 	}
 	if existing := lane.attempts[key]; existing != nil {
 		if existing.fingerprint != fingerprint {
@@ -538,7 +572,7 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 	if state == nil {
 		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonGone, err: fmt.Errorf("session %s is gone", delivery.sessionID)}
 	}
-	if m.daemon.initialPromptPending(delivery.sessionID) {
+	if !delivery.bypassInitialGate && m.daemon.initialPromptPending(delivery.sessionID) {
 		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonInitialPrompt, err: errSessionInputInitialPrompt}
 	}
 	if reason, ok := deliveryAllowedForPhase(delivery.placement, state.State); !ok {

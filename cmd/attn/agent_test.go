@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -302,7 +303,7 @@ func TestAgentMsgErrorMessageSeparatesTargetFromSender(t *testing.T) {
 	}
 }
 
-func TestParseAgentMailboxArgsResolvesIdentity(t *testing.T) {
+func TestParseAgentMsgStatusArgsResolvesIdentity(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		args    []string
@@ -324,7 +325,53 @@ func TestParseAgentMailboxArgsResolvesIdentity(t *testing.T) {
 		{name: "extra argument", args: []string{"message-id", "other"}, env: "session-id", wantErr: "usage:"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseAgentMailboxArgs("inbox", tt.args, tt.env)
+			got, err := parseAgentMailboxArgs("msg-status", tt.args, tt.env)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("error = %v, want one mentioning %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil || got != tt.want {
+				t.Fatalf("parsed = %+v, %v, want %+v", got, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseAgentInboxArgsSupportsBatchAndLegacyReads(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		args    []string
+		env     string
+		want    agentInboxArgs
+		wantErr string
+	}{
+		{
+			name: "batch defaults", env: "session-id",
+			want: agentInboxArgs{sessionID: "session-id", limit: agentmailbox.DefaultInboxLimit},
+		},
+		{
+			name: "bounded batch", args: []string{"--limit", "7", "--session", "other", "--json"}, env: "session-id",
+			want: agentInboxArgs{sessionID: "other", limit: 7, json: true},
+		},
+		{
+			name: "legacy message", args: []string{"message-id"}, env: "session-id",
+			want: agentInboxArgs{messageID: "message-id", sessionID: "session-id", limit: agentmailbox.DefaultInboxLimit},
+		},
+		{
+			name: "flags before legacy message", args: []string{"--json", "message-id"}, env: "session-id",
+			want: agentInboxArgs{messageID: "message-id", sessionID: "session-id", limit: agentmailbox.DefaultInboxLimit, json: true},
+		},
+		{name: "no identity", wantErr: "--session"},
+		{name: "zero limit", args: []string{"--limit", "0"}, env: "session-id", wantErr: "between 1 and 50"},
+		{name: "over limit", args: []string{"--limit", "51"}, env: "session-id", wantErr: "between 1 and 50"},
+		{name: "limit with legacy message", args: []string{"message-id", "--limit", "1"}, env: "session-id", wantErr: "cannot be used"},
+		{name: "empty message id", args: []string{""}, env: "session-id", wantErr: "usage:"},
+		{name: "extra argument", args: []string{"one", "two"}, env: "session-id", wantErr: "usage:"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseAgentInboxArgs(tt.args, tt.env)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("error = %v, want one mentioning %q", err, tt.wantErr)
@@ -352,6 +399,56 @@ func TestPrintAgentInboxKeepsTheBodyBehindTheSecurityBoundary(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("output missing %q:\n%s", want, text)
 		}
+	}
+}
+
+func TestPrintAgentInboxBatchKeepsFIFOContentAndPeerBoundary(t *testing.T) {
+	var out bytes.Buffer
+	printAgentInboxBatch(&out, &protocol.AgentInboxBatchResult{
+		Items: []protocol.AgentInboxItem{
+			{
+				ItemID: "garden-item", Kind: string(agentmailbox.KindGardenSeed),
+				Content:   "Garden seed s-first moved: harvested",
+				CreatedAt: "2026-09-03T10:00:00Z", NotifiedAt: "2026-09-03T10:00:02Z", ReadAt: "2026-09-03T10:00:03Z",
+			},
+			{
+				ItemID: "ticket-item", Kind: string(agentmailbox.KindMaintenancePrompt),
+				Content:   "📋 Read ticket activity with `attn ticket inbox`.",
+				CreatedAt: "2026-09-03T10:00:00.500000000Z", NotifiedAt: "2026-09-03T10:00:02Z", ReadAt: "2026-09-03T10:00:03Z",
+			},
+			{
+				ItemID: "peer-item", Kind: string(agentmailbox.KindPeerMessage), Content: "peer body",
+				SenderSessionID: protocol.Ptr("sender-session-id"), SenderLabel: protocol.Ptr("reviewer"),
+				CreatedAt: "2026-09-03T10:00:01Z", NotifiedAt: "2026-09-03T10:00:02Z", ReadAt: "2026-09-03T10:00:03Z",
+			},
+		},
+		Remaining: 4,
+	})
+	text := out.String()
+	gardenAt := strings.Index(text, "Garden seed s-first moved")
+	ticketAt := strings.Index(text, "Read ticket activity")
+	peerAt := strings.Index(text, "peer body")
+	if gardenAt < 0 || ticketAt < gardenAt || peerAt < ticketAt {
+		t.Fatalf("batch lost FIFO order:\n%s", text)
+	}
+	if strings.Contains(text, "🔔 📋") {
+		t.Fatalf("maintenance content gained a second icon:\n%s", text)
+	}
+	for _, want := range []string{
+		"sender-s (reviewer)", "another agent, not from your user",
+		`attn agent msg sender-s "..."`, "4 more unread",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("output missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestPrintAgentInboxBatchNamesAnEmptyInbox(t *testing.T) {
+	var out bytes.Buffer
+	printAgentInboxBatch(&out, &protocol.AgentInboxBatchResult{})
+	if got := out.String(); got != "inbox empty\n" {
+		t.Fatalf("output = %q", got)
 	}
 }
 

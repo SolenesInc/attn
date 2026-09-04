@@ -105,9 +105,11 @@ func TestHandbackPresentationRoundNudgesEligibleBareSession(t *testing.T) {
 		state string
 		want  bool
 	}{
-		{name: "working", state: protocol.StateWorking, want: true},
-		{name: "launching", state: protocol.StateLaunching, want: true},
-		{name: "unknown", state: protocol.StateUnknown, want: true},
+		{name: "idle", state: protocol.StateIdle, want: true},
+		{name: "waiting input", state: protocol.StateWaitingInput, want: true},
+		{name: "working", state: protocol.StateWorking, want: false},
+		{name: "launching", state: protocol.StateLaunching, want: false},
+		{name: "unknown", state: protocol.StateUnknown, want: false},
 		{name: "pending approval", state: protocol.StatePendingApproval, want: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -122,13 +124,17 @@ func TestHandbackPresentationRoundNudgesEligibleBareSession(t *testing.T) {
 			d.handbackPresentationRound(pres, 1, "approved")
 			gotDoorbell := false
 			for _, input := range inputs(sessionID) {
-				if strings.Contains(input, "attn present feedback") {
+				if strings.Contains(input, agentMailboxDoorbellText) {
 					gotDoorbell = true
 					break
 				}
 			}
 			if gotDoorbell != tc.want {
 				t.Fatalf("handback doorbell = %v, want %v for state %s", gotDoorbell, tc.want, tc.state)
+			}
+			unread, err := d.store.UnreadAgentMailboxDeliveries(sessionID)
+			if err != nil || len(unread) != 1 || !strings.Contains(unread[0].Item.Prompt, "attn present feedback") {
+				t.Fatalf("durable presentation handback = %+v, %v", unread, err)
 			}
 		})
 	}
@@ -988,14 +994,14 @@ func TestParsePresentNumstat(t *testing.T) {
 func TestHandbackPresentationRoundHeldOffByTypingLandsAfterTheQuietWindow(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	_, sessionID, inputs := delegateForNotify(t, d, "codex")
-	d.store.UpdateState(sessionID, protocol.StateWorking)
+	d.store.UpdateState(sessionID, protocol.StateWaitingInput)
 	pres, err := d.store.CreatePresentation(sessionID, nil, "Review", "changes", t.TempDir(), time.Now())
 	if err != nil {
 		t.Fatalf("CreatePresentation: %v", err)
 	}
 	handedBack := func() bool {
 		for _, input := range inputs(sessionID) {
-			if strings.Contains(input, "attn present feedback") {
+			if strings.Contains(input, agentMailboxDoorbellText) {
 				return true
 			}
 		}
@@ -1012,7 +1018,7 @@ func TestHandbackPresentationRoundHeldOffByTypingLandsAfterTheQuietWindow(t *tes
 		}
 
 		time.Sleep(sessionInputQuietWindow)
-		settleResend(t)
+		synctest.Wait()
 		if !handedBack() {
 			t.Fatalf("nothing resent the handback once the composer went quiet: %q", inputs(sessionID))
 		}

@@ -16,6 +16,11 @@ import (
 	"pgregory.net/rapid"
 )
 
+func sessionInputQuietDeferral(err error) bool {
+	var quiet *sessionInputQuietError
+	return errors.As(err, &quiet)
+}
+
 func newSessionInputDaemon(t *testing.T, state protocol.SessionState) (*Daemon, *fakeSpawnBackend, string) {
 	t.Helper()
 	d := NewForTesting(filepath.Join(t.TempDir(), "session-input.sock"))
@@ -142,7 +147,7 @@ func TestSessionInput_RetryPressesEnterWithoutRepasting(t *testing.T) {
 	backend.onInput = func(_ string, data []byte) { writes = append(writes, append([]byte(nil), data...)) }
 	delivery := sessionInputDelivery{
 		id: inputAttemptID("agent-message", "message-1"), sessionID: sessionID, text: "hello",
-		origin: peerAgentInput("sender"), placement: sessionInputAtTurnBoundary,
+		origin: maintenanceInput("retry-test"), placement: sessionInputAtTurnBoundary,
 	}
 	if attempt := d.sessionInputs().try(context.Background(), delivery); attempt.err != nil {
 		t.Fatalf("first attempt: %v", attempt.err)

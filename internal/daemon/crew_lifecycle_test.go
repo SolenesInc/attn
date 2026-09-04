@@ -158,7 +158,7 @@ func TestCrewLifecycleTick_WarmsAContextThatIsAboutToLapse(t *testing.T) {
 	}
 }
 
-func TestCrewLifecycleTick_UntakenHeartbeatLeavesClockAndRetryDoesNotRepaste(t *testing.T) {
+func TestCrewLifecycleTick_UntakenHeartbeatLeavesClockAndReleasesTheLane(t *testing.T) {
 	d, sessionID, recorder := newLifecycleDaemon(t)
 	recorder.setAutoTake(false)
 	now := time.Now()
@@ -185,13 +185,43 @@ func TestCrewLifecycleTick_UntakenHeartbeatLeavesClockAndRetryDoesNotRepaste(t *
 		t.Fatalf("untaken retry moved last_model_request_at from %s to %s", requestAt, got)
 	}
 
-	recorder.setAutoTake(true)
-	d.crewLifecycleTick(now.Add(2 * time.Minute))
-	if d.crewMemo().heartbeatDue(sessionID, now.Add(3*time.Minute), d.crewHeartbeatLead()) {
-		t.Fatal("a positively taken heartbeat did not start its grace")
+	delivery, err := d.store.EnqueueMaintenancePrompt("after-untaken-heartbeat", sessionID, "durable follow-up", now.Add(2*time.Minute))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got := protocol.Timestamp(protocol.Deref(d.store.Get(sessionID).LastModelRequestAt)).Time(); !got.After(requestTime) {
-		t.Fatalf("taken heartbeat left last_model_request_at at %s, want after %s", got, requestTime)
+	if err := d.deliverAgentMailboxItem(delivery); err != nil {
+		t.Fatalf("untaken heartbeat blocked a later inbox doorbell: %v", err)
+	}
+	if got := recorder.prompts(); len(got) != 2 || got[0] != crewHeartbeatPrompt || got[1] != agentMailboxDoorbellText {
+		t.Fatalf("prompts after the untaken heartbeat = %q, want heartbeat then generic doorbell", got)
+	}
+	if got := protocol.Timestamp(protocol.Deref(d.store.Get(sessionID).LastModelRequestAt)).Time(); !got.Equal(requestTime) {
+		t.Fatalf("untaken heartbeat moved last_model_request_at from %s to %s", requestTime, got)
+	}
+}
+
+func TestCrewLifecycleTick_MissingHeartbeatReceiptsKeepOneLateCandidate(t *testing.T) {
+	d, sessionID, recorder := newLifecycleDaemon(t)
+	recorder.setAutoTake(false)
+	base := time.Now()
+	member := crewMemberRecord(t, d, "trellis")
+
+	for generation := 0; generation < 5; generation++ {
+		requestAt := base.Add(time.Duration(generation) * time.Hour)
+		setSessionActivity(t, d, sessionID, protocol.SessionStateWaitingInput, requestAt)
+		d.actOnCrewMember(member, sessionID, crew.ActionHeartbeat, crew.CacheState{}, requestAt.Add(time.Minute))
+
+		lane := d.sessionInputs().lane(sessionID)
+		lane.mu.Lock()
+		attempts := len(lane.attempts)
+		pending := len(lane.pending)
+		lane.mu.Unlock()
+		if attempts != 1 || pending != 1 {
+			t.Fatalf("generation %d retained attempts=%d pending=%d, want one late heartbeat", generation, attempts, pending)
+		}
+	}
+	if got := recorder.prompts(); len(got) != 5 {
+		t.Fatalf("heartbeat generations pasted %d prompts, want 5", len(got))
 	}
 }
 
@@ -204,12 +234,39 @@ func TestCrewLifecycleTick_AsksForTheHandoffWhenTheUserIsGone(t *testing.T) {
 	d.crewLifecycleTick(now)
 
 	prompts := recorder.prompts()
-	if len(prompts) != 1 || prompts[0] != crewSleepPrompt {
+	if len(prompts) != 1 || prompts[0] != agentMailboxDoorbellText {
 		t.Fatalf("the tick sent %q, want the handoff ask", prompts)
 	}
 	d.crewLifecycleTick(now.Add(2 * time.Minute))
 	if got := recorder.prompts(); len(got) != 1 {
 		t.Fatalf("the handoff was asked for %d times inside the grace", len(got))
+	}
+}
+
+func TestCrewLifecycleTick_CanAskAgainAfterTheInboxReadAndGrace(t *testing.T) {
+	d, sessionID, recorder := newLifecycleDaemon(t)
+	now := time.Now()
+	setSessionActivity(t, d, sessionID, protocol.SessionStateIdle, now.Add(-58*time.Minute))
+	setUserAway(d, now.Add(-3*time.Hour))
+
+	d.crewLifecycleTick(now)
+	first, remaining, err := d.store.ReadAgentMailbox(sessionID, 1, now.Add(time.Minute))
+	if err != nil || len(first) != 1 || remaining != 0 {
+		t.Fatalf("first auto-sleep inbox read = %+v, remaining=%d err=%v", first, remaining, err)
+	}
+	d.noteAgentMailboxRead(sessionID, remaining)
+
+	retryAt := now.Add(d.crewCacheTTL(string(d.store.Get(sessionID).Agent)))
+	d.crewLifecycleTick(retryAt)
+	second, err := d.store.UnreadAgentMailboxDeliveries(sessionID)
+	if err != nil || len(second) != 1 {
+		t.Fatalf("second auto-sleep inbox = %+v, %v", second, err)
+	}
+	if second[0].Item.ID == first[0].Item.ID {
+		t.Fatalf("auto-sleep reused read mailbox id %q", second[0].Item.ID)
+	}
+	if got := recorder.prompts(); len(got) != 2 || got[0] != agentMailboxDoorbellText || got[1] != agentMailboxDoorbellText {
+		t.Fatalf("auto-sleep prompts across the read = %q, want two generic doorbells", got)
 	}
 }
 
@@ -251,7 +308,7 @@ func TestCrewLifecycleTick_WarmsAWaitingDaySafely(t *testing.T) {
 	}
 	d.crewLifecycleTick(now.Add(58 * time.Minute))
 	prompts := recorder.prompts()
-	if len(prompts) != 2 || prompts[1] != crewSleepPrompt {
+	if len(prompts) != 2 || prompts[1] != agentMailboxDoorbellText {
 		t.Fatalf("the tick sent %q, want the handoff ask", prompts)
 	}
 }
@@ -552,7 +609,7 @@ func TestCrewLifecycleTick_SleepAskHeldOffByTypingLandsAfterTheQuietWindow(t *te
 
 		time.Sleep(sessionInputQuietWindow)
 		settleResend(t)
-		if got := recorder.prompts(); len(got) != 1 || got[0] != crewSleepPrompt {
+		if got := recorder.prompts(); len(got) != 1 || got[0] != agentMailboxDoorbellText {
 			t.Fatalf("prompts after the window = %q, want one sleep ask", got)
 		}
 	})

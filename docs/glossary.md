@@ -13,9 +13,10 @@
 - Session input: ordered delivery to a live session with evidence of receipt.
 - Input evidence: deferred = untouched; placed = adapter-owned; taken = reading begun; indeterminate = uncertain.
 - Quiet window: automated input waits 30s after the user's last keystroke in a pane; mouse and focus reports are not keystrokes. The session input lane owns the retry: every deferred delivery is re-run there when the window closes, recomputing its prompt, so a deferral is never a drop. A closed lane refuses both, so nothing armed against a stopped daemon or a replaced session runtime can still place.
-- Agent mailbox: durable agent-addressed notification queue, separate from the app-wide user notification feed.
-- Mailbox item: one durable notification. Safe session-input placement proves notified; agent-facing items prove read only through their domain CLI.
-- Peer message: stored agent-to-agent body with a content-free mailbox doorbell. One unread doorbell is notified per recipient; `attn agent inbox` returns the body, proves read, and releases the next.
+- Agent mailbox: durable agent-addressed notification queue, separate from the app-wide user notification feed. Producers write here before asking for terminal input.
+- Mailbox item: one durable notification. `attn agent inbox` reads a bounded FIFO batch and writes each item's exact read receipt. Domain views such as `attn seed show` can write the same receipt.
+- Inbox doorbell: one generic terminal prompt for a session with unread mailbox items. A safe paste plus Enter completes the attempt; prompt-submit hooks do not hold the input lane. Another doorbell may follow a cooldown while unread items remain.
+- Peer message: stored agent-to-agent body read through the agent mailbox. `attn agent inbox <message-id>` remains a single-message compatibility view.
 - Turn: attention owed to an agent; viewing it does not settle it.
 - Auto-settle: closes a turn after proven user-conversation input and uninterrupted working time.
 - Standing dismissal: suppresses the next auto-settle for the current working stretch.

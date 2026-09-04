@@ -31,18 +31,24 @@ func TestGardenSeedWatchAndBellLifecycle(t *testing.T) {
 	if err != nil || claimed {
 		t.Fatalf("coalesced bell claimed=%v err=%v", claimed, err)
 	}
-	queued, err := s.QueuedAgentMailboxDeliveries("watcher")
-	if err != nil || len(queued) != 1 || queued[0].Item.ID != "bell-1" || queued[0].Item.SourceID != "s-7k3f9m" {
-		t.Fatalf("queued bells=%+v err=%v", queued, err)
+	var itemID, sourceID string
+	if err := s.db.QueryRow(`
+		SELECT id, source_id FROM agent_mailbox_items
+		WHERE recipient_session_id = 'watcher' AND read_at = ''
+	`).Scan(&itemID, &sourceID); err != nil || itemID != "bell-1" || sourceID != "s-7k3f9m" {
+		t.Fatalf("unread bell=%s/%s err=%v", itemID, sourceID, err)
 	}
 
-	consumed, err := s.ReadGardenSeedMailboxItems("watcher", "s-7k3f9m", now)
+	consumed, remaining, err := s.ReadGardenSeedMailboxItems("watcher", "s-7k3f9m", now)
 	if err != nil || !consumed {
 		t.Fatalf("consume=%v err=%v", consumed, err)
 	}
-	queued, err = s.QueuedAgentMailboxDeliveries("watcher")
-	if err != nil || len(queued) != 0 {
-		t.Fatalf("queued after read=%+v err=%v", queued, err)
+	if remaining != 0 {
+		t.Fatalf("remaining=%d, want 0", remaining)
+	}
+	unread, err := s.HasUnreadAgentMailboxItems("watcher")
+	if err != nil || unread {
+		t.Fatalf("unread after read=%v err=%v", unread, err)
 	}
 	claimed, err = s.ClaimGardenSeedMailboxItem("watcher", "s-7k3f9m", "harvested", "bell-2", now.Add(time.Second))
 	if err != nil || !claimed {

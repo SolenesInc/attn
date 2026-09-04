@@ -355,10 +355,11 @@ func TestTriggerNudgeFiresImmediately(t *testing.T) {
 	}
 }
 
-func TestTriggerNudgeDeliversWhenUnknown(t *testing.T) {
+func TestTriggerNudgeQueuesWhenUnknownAndWakesOnIdle(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
 	t.Cleanup(d.stopNudgeCountdowns)
+	t.Cleanup(d.stopAgentMailboxDoorbells)
 	agentID, inputs := armForTest(t, d)
 	d.store.UpdateState(agentID, protocol.StateUnknown)
 
@@ -367,15 +368,33 @@ func TestTriggerNudgeDeliversWhenUnknown(t *testing.T) {
 		SessionID: agentID,
 	})
 
+	if wasNudged(inputs(agentID)) {
+		t.Fatal("trigger_nudge typed into a session whose prompt state was unknown")
+	}
+	if unread, err := d.store.HasUnreadAgentMailboxItems(agentID); err != nil || !unread {
+		t.Fatalf("unknown session lost the durable nudge: unread=%v err=%v", unread, err)
+	}
+
+	drained := make(chan int, 1)
+	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
+	d.applyState(sessionStateChange{
+		sessionID: agentID,
+		state:     protocol.StateIdle,
+		cause:     resolverObservation{},
+	})
+	if delivered := <-drained; delivered != 1 {
+		t.Fatalf("idle drain delivered %d doorbells, want 1", delivered)
+	}
 	if !wasNudged(inputs(agentID)) {
-		t.Fatal("trigger_nudge did not doorbell an at-rest unknown session")
+		t.Fatal("queued trigger_nudge did not wake when the session became idle")
 	}
 }
 
-func TestTriggerNudgeDeliversWhileWorking(t *testing.T) {
+func TestTriggerNudgeQueuesWhileWorkingAndWakesOnIdle(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
 	t.Cleanup(d.stopNudgeCountdowns)
+	t.Cleanup(d.stopAgentMailboxDoorbells)
 	agentID, inputs := armForTest(t, d)
 	d.store.UpdateState(agentID, protocol.StateWorking)
 
@@ -384,8 +403,25 @@ func TestTriggerNudgeDeliversWhileWorking(t *testing.T) {
 		SessionID: agentID,
 	})
 
+	if wasNudged(inputs(agentID)) {
+		t.Fatal("trigger_nudge typed into a working session")
+	}
+	if unread, err := d.store.HasUnreadAgentMailboxItems(agentID); err != nil || !unread {
+		t.Fatalf("working session lost the durable nudge: unread=%v err=%v", unread, err)
+	}
+
+	drained := make(chan int, 1)
+	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
+	d.applyState(sessionStateChange{
+		sessionID: agentID,
+		state:     protocol.StateIdle,
+		cause:     resolverObservation{},
+	})
+	if delivered := <-drained; delivered != 1 {
+		t.Fatalf("idle drain delivered %d doorbells, want 1", delivered)
+	}
 	if !wasNudged(inputs(agentID)) {
-		t.Fatal("trigger_nudge did not deliver on demand into a working session")
+		t.Fatal("queued trigger_nudge did not wake when the session became idle")
 	}
 }
 
@@ -393,6 +429,7 @@ func TestTriggerNudgeSkipsPendingApproval(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
 	t.Cleanup(d.stopNudgeCountdowns)
+	t.Cleanup(d.stopAgentMailboxDoorbells)
 	agentID, inputs := armForTest(t, d)
 	d.store.UpdateState(agentID, protocol.StatePendingApproval)
 
@@ -404,12 +441,16 @@ func TestTriggerNudgeSkipsPendingApproval(t *testing.T) {
 	if wasNudged(inputs(agentID)) {
 		t.Fatal("trigger_nudge typed a doorbell into an approval prompt")
 	}
+	if unread, err := d.store.HasUnreadAgentMailboxItems(agentID); err != nil || !unread {
+		t.Fatalf("approval-waiting session lost the durable nudge: unread=%v err=%v", unread, err)
+	}
 }
 
-func TestNudgeCountdownReArmsAfterRecentKeystroke(t *testing.T) {
+func TestNudgeCountdownHandsRecentKeystrokeRetryToMailbox(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
 	t.Cleanup(d.stopNudgeCountdowns)
+	t.Cleanup(d.stopAgentMailboxDoorbells)
 	var action string
 	d.nudgeFireHook = func(_, a string) { action = a }
 	agentID, inputs := armForTest(t, d)
@@ -417,14 +458,20 @@ func TestNudgeCountdownReArmsAfterRecentKeystroke(t *testing.T) {
 	d.noteUserInput(agentID, "", []byte("k"))
 	fireNudgeNow(t, d, agentID)
 
-	if action != "rearm" {
-		t.Fatalf("fire action = %q, want rearm (keystroke guard)", action)
+	if action != "queued" {
+		t.Fatalf("fire action = %q, want queued (mailbox owns the retry)", action)
 	}
 	if wasNudged(inputs(agentID)) {
 		t.Fatal("doorbell spliced onto a session the user was actively typing into")
 	}
-	if currentNudgeTimer(d, agentID) == nil {
-		t.Fatal("guard dropped the nudge instead of re-arming")
+	if currentNudgeTimer(d, agentID) != nil {
+		t.Fatal("legacy nudge countdown retained a retry after durable enqueue")
+	}
+	d.agentMailboxMu.Lock()
+	mailbox := d.agentMailboxDoorbells[agentID]
+	d.agentMailboxMu.Unlock()
+	if mailbox == nil || !mailbox.unread || mailbox.retry == nil {
+		t.Fatal("mailbox did not retain the unread item and its quiet-window retry")
 	}
 }
 
@@ -472,8 +519,8 @@ func TestHandlePtyInputRecordsKeystrokeForGuard(t *testing.T) {
 				Data:   "x",
 				Source: tc.source,
 			})
-			if got := d.recentUserInput(sessionID, time.Hour); got != tc.want {
-				t.Fatalf("recentUserInput after handlePtyInput(source=%v) = %v, want %v",
+			if got := d.userInputQuietRemaining(sessionID, time.Hour) > 0; got != tc.want {
+				t.Fatalf("userInputQuietRemaining after handlePtyInput(source=%v) > 0 = %v, want %v",
 					protocol.Deref(tc.source), got, tc.want)
 			}
 		})
@@ -495,29 +542,30 @@ func TestStopNudgeCountdownsClearsTimers(t *testing.T) {
 	}
 }
 
-func TestNudgeHeldOffByTypingIsResentByTheLane(t *testing.T) {
+func TestLegacyNudgeHeldOffByTypingWakesAfterQuiet(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
 	t.Cleanup(d.stopNudgeCountdowns)
+	t.Cleanup(d.stopAgentMailboxDoorbells)
 	agentID, inputs := armForTest(t, d)
 	quiesceTranscriptWatchers(t, d)
 	synctest.Test(t, func(t *testing.T) {
+		defer d.stopAgentMailboxDoorbells()
 		if err := d.writeSessionPTY(agentID, []byte("half written"), "user"); err != nil {
 			t.Fatalf("user input: %v", err)
 		}
-		delivery := maintenanceSessionInput("ticket-nudge", agentID+"/1", agentID, ticketNudgePrompt, sessionInputAtTurnBoundary)
-		delivery.resend = func() { d.deliverNudgeOrReArm(agentID) }
-		if attempt := d.sessionInputs().try(context.Background(), delivery); !sessionInputQuietDeferral(attempt.err) {
-			t.Fatalf("nudge into a typed-in composer = %v, want the quiet-window deferral", attempt.err)
-		}
+		d.handleTriggerNudge(&protocol.TriggerNudgeMessage{
+			Cmd:       protocol.CmdTriggerNudge,
+			SessionID: agentID,
+		})
 		if wasNudged(inputs(agentID)) {
 			t.Fatalf("typed into a composer the user just used: %q", inputs(agentID))
 		}
 
 		time.Sleep(sessionInputQuietWindow)
-		settleResend(t)
+		synctest.Wait()
 		if !wasNudged(inputs(agentID)) {
-			t.Fatalf("nothing resent the nudge once the composer went quiet: %q", inputs(agentID))
+			t.Fatalf("mailbox did not wake once the composer went quiet: %q", inputs(agentID))
 		}
 	})
 }
