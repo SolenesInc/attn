@@ -1,5 +1,6 @@
 import { getPtyPerfSnapshot } from './ptyPerf';
 import { recordTerminalIncident } from './terminalDiagnosticsLog';
+import { noteTerminalInputReceipt } from './terminalInputDiagnostics';
 
 export const TERMINAL_INPUT_SLOW_MS = 250;
 export const TERMINAL_INPUT_PROBE_INTERVAL_MS = 2_000;
@@ -225,6 +226,12 @@ export function completeTerminalInputProbe(
   pendingProbeByRuntime.delete(pending.runtimeId);
 
   const latencyMs = Math.max(0, monotonicNow - pending.startedAt);
+  noteTerminalInputReceipt(pending.runtimeId, {
+    probeId: result.probe_id,
+    success: result.success,
+    roundTripMs: roundedMs(latencyMs),
+    daemonWriteMs: roundedMs(Math.max(0, result.write_duration_us / 1_000)),
+  });
   const daemonWriteMs = Math.max(0, result.write_duration_us / 1_000);
   pushSample({
     at: wallNow,

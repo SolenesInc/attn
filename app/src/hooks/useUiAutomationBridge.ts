@@ -2096,26 +2096,28 @@ export function useUiAutomationBridge({
         if (!selector || text === null) {
           throw new Error('dom_compose_text requires selector and text');
         }
+        const phase = payload.phase ?? 'complete';
+        if (phase !== 'complete' && phase !== 'start' && phase !== 'end') {
+          throw new Error('dom_compose_text phase must be complete, start, or end');
+        }
         const element = document.querySelector(selector);
         if (!(element instanceof HTMLElement)) {
           throw new Error(`dom_compose_text selector not found in DOM: ${selector}`);
         }
         element.focus();
-        element.dispatchEvent(new CompositionEvent('compositionstart', {
-          bubbles: true,
-          cancelable: true,
-          data: '',
-        }));
-        element.dispatchEvent(new CompositionEvent('compositionupdate', {
-          bubbles: true,
-          cancelable: true,
-          data: text,
-        }));
-        element.dispatchEvent(new CompositionEvent('compositionend', {
-          bubbles: true,
-          cancelable: true,
-          data: text,
-        }));
+        if (phase !== 'end') {
+          element.dispatchEvent(new CompositionEvent('compositionstart', {
+            bubbles: true, cancelable: true, data: '',
+          }));
+          element.dispatchEvent(new CompositionEvent('compositionupdate', {
+            bubbles: true, cancelable: true, data: text,
+          }));
+        }
+        if (phase !== 'start') {
+          element.dispatchEvent(new CompositionEvent('compositionend', {
+            bubbles: true, cancelable: true, data: text,
+          }));
+        }
         await settleUi(2);
         return { composed: true, text };
       }

@@ -21,6 +21,7 @@ import {
 } from './gridConfig';
 import './grid.css';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
+import { observeTerminalInput } from '../../utils/terminalInputDiagnostics';
 
 export interface GridSessionTile {
   runtimeId: string;
@@ -122,6 +123,16 @@ export function GridView({
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
+    const inputDiagnostics = observeTerminalInput(stage, () => {
+      const runtimeId = gridRef.current?.zoomedId() ?? undefined;
+      return {
+        runtimeId,
+        sessionId: tilesRef.current.find((tile) => tile.runtimeId === runtimeId)?.sessionId,
+        active: Boolean(runtimeId),
+        ready: gridRef.current !== null,
+        model: Boolean(gridRef.current?.inputTarget()),
+      };
+    });
 
     let disposed = false;
     let unlisten: (() => void) | null = null;
@@ -163,10 +174,11 @@ export function GridView({
 
       const forward = (data: string) => {
         const id = gridRef.current?.zoomedId();
-        if (id) void ptyWrite({ id, data });
+        if (id) void ptyWrite({ id, data, source: 'user' });
       };
       disposeInput = attachTerminalInput({
         element: stage,
+        onDiagnostic: inputDiagnostics.record,
         terminal: () => gridRef.current?.inputTarget() ?? null,
         send: forward,
         interceptKey: createTerminalKeyInterceptor(forward),
@@ -231,6 +243,7 @@ export function GridView({
 
     return () => {
       disposed = true;
+      inputDiagnostics.dispose();
       setGridAutomationHandle(null);
       disposeInput?.();
       unlisten?.();

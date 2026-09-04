@@ -202,6 +202,18 @@ export interface TerminalInputOptions {
   send: (data: string) => void;
   interceptKey: (event: KeyboardEvent) => boolean;
   onError: (operation: 'key' | 'paste', error: unknown) => void;
+  onDiagnostic?: (event: TerminalInputDiagnostic) => void;
+}
+
+export interface TerminalInputDiagnostic {
+  event: 'keydown' | 'paste' | 'compositionstart' | 'compositionend';
+  outcome: 'composing' | 'intercepted' | 'browser' | 'dead' | 'unmapped' | 'no_target' | 'error' | 'sent' | 'empty' | 'started' | 'ended';
+  composing: boolean;
+  browserComposing?: boolean;
+  legacyComposition?: boolean;
+  keyClass?: 'text' | 'modifier' | 'enter' | 'escape' | 'dead' | 'other';
+  repeat?: boolean;
+  modifiers?: number;
 }
 
 function modifierState(event: KeyboardEvent, name: string): boolean {
@@ -306,25 +318,63 @@ export function attachTerminalInput(options: TerminalInputOptions): () => void {
   const forwarded = new Map<string, TerminalInputTarget>();
   let composing = false;
   let disposed = false;
+  let diagnosticFailed = false;
+
+  const diagnose = (event: TerminalInputDiagnostic['event'], outcome: TerminalInputDiagnostic['outcome'], key?: KeyboardEvent) => {
+    if (!options.onDiagnostic || diagnosticFailed) return;
+    try {
+      options.onDiagnostic({
+        event, outcome, composing,
+        ...(key ? {
+          browserComposing: key.isComposing,
+          legacyComposition: key.keyCode === 229,
+          keyClass: Array.from(key.key).length === 1 ? 'text'
+            : ['Shift', 'Control', 'Alt', 'Meta'].includes(key.key) ? 'modifier'
+              : key.key === 'Enter' ? 'enter' : key.key === 'Escape' ? 'escape'
+                : key.key === 'Dead' ? 'dead' : 'other',
+          repeat: key.repeat,
+          modifiers: modifiers(key),
+        } : {}),
+      });
+    } catch (error) {
+      diagnosticFailed = true;
+      console.warn('[TerminalInput] diagnostics disabled after failure', error);
+    }
+  };
 
   if (!element.hasAttribute('tabindex')) element.setAttribute('tabindex', '0');
 
   const keydown = (event: KeyboardEvent) => {
-    if (disposed || composing || event.isComposing || event.keyCode === 229) return;
+    if (disposed) return;
+    if (composing || event.isComposing || event.keyCode === 229) {
+      diagnose('keydown', 'composing', event);
+      return;
+    }
     if (interceptKey(event)) {
+      diagnose('keydown', 'intercepted', event);
       consumeBrowserEvent(event);
       return;
     }
-    if (browserOwnsKey(event)) return;
+    if (browserOwnsKey(event)) {
+      diagnose('keydown', 'browser', event);
+      return;
+    }
     // Dead keys continue through WebKit's composition events.
-    if (event.key === 'Dead') return;
+    if (event.key === 'Dead') {
+      diagnose('keydown', 'dead', event);
+      return;
+    }
 
     const text = printableText(event);
     const key = KEY_BY_CODE[event.code] ?? (text ? 'UNIDENTIFIED' : null);
-    if (!key) return;
+    if (!key) {
+      diagnose('keydown', 'unmapped', event);
+      return;
+    }
 
     const target = terminal();
     if (!target) {
+      diagnose('keydown', 'no_target', event);
       consumeBrowserEvent(event);
       return;
     }
@@ -344,6 +394,7 @@ export function attachTerminalInput(options: TerminalInputOptions): () => void {
       });
     } catch (error) {
       forwarded.delete(id);
+      diagnose('keydown', 'error', event);
       consumeBrowserEvent(event);
       onError('key', error);
       return;
@@ -352,6 +403,7 @@ export function attachTerminalInput(options: TerminalInputOptions): () => void {
       consumeBrowserEvent(event);
       send(data);
     }
+    diagnose('keydown', data ? 'sent' : 'empty', event);
   };
 
   const keyup = (event: KeyboardEvent) => {
@@ -389,28 +441,39 @@ export function attachTerminalInput(options: TerminalInputOptions): () => void {
   const paste = (event: ClipboardEvent) => {
     if (disposed || event.defaultPrevented) return;
     const text = event.clipboardData?.getData('text/plain') ?? '';
-    if (!text) return;
+    if (!text) {
+      diagnose('paste', 'empty');
+      return;
+    }
     consumeBrowserEvent(event);
     const target = terminal();
-    if (!target) return;
+    if (!target) {
+      diagnose('paste', 'no_target');
+      return;
+    }
     let data: string;
     try {
       data = target.formatPaste(text);
     } catch (error) {
+      diagnose('paste', 'error');
       onError('paste', error);
       return;
     }
     send(data);
+    diagnose('paste', 'sent');
   };
 
   const compositionstart = () => {
-    if (!disposed) composing = true;
+    if (disposed) return;
+    composing = true;
+    diagnose('compositionstart', 'started');
   };
   const compositionupdate = () => undefined;
   const compositionend = (event: CompositionEvent) => {
     if (disposed) return;
     composing = false;
     if (event.data) send(event.data);
+    diagnose('compositionend', 'ended');
     removeCompositionTextNodes(element);
   };
 

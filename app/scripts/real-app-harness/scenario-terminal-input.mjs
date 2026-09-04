@@ -2,6 +2,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import {
   createSessionAndWaitForInitialPane,
   launchFreshAppAndConnect,
@@ -9,7 +10,8 @@ import {
   printCommonHelp,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { delay } from './platform.mjs';
+import { appDaemonInTree, appPlatform, delay } from './platform.mjs';
+import { profileCliEnv, profileForAppPath } from './harnessProfile.mjs';
 import {
   captureSessionArtifacts,
   waitForPaneAttached,
@@ -204,6 +206,8 @@ async function main() {
   runner.registerCleanup('restore_keybindings', () => (
     client.request('set_setting', { key: 'keybindings_config', value: '' }).catch(() => {})
   ));
+  const savedClipboard = appPlatform.readClipboard();
+  runner.registerCleanup('restore_clipboard', () => appPlatform.writeClipboard(savedClipboard));
   const focusPane = async () => {
     await client.request('focus_pane', { sessionId, paneId: pane.paneId });
   };
@@ -393,6 +397,71 @@ async function main() {
       await finishCapture('composition', Buffer.from(text).toString('hex'));
     });
 
+    await runner.step('interrupted_composition_input_dump', async () => {
+      const privateText = `DO_NOT_RECORD_${runner.runId}`;
+      await beginCapture('composition-interrupted');
+      await client.request('dom_compose_text', {
+        selector: terminalSelector, text: privateText, phase: 'start',
+      });
+      try {
+        await pressKey({ key: 'a', code: 'KeyA' });
+        const deadline = Date.now() + 5_000;
+        let found = false;
+        while (Date.now() < deadline) {
+          const dump = execFileSync(appDaemonInTree(options.appPath), ['debug', 'input', '--tail', '0'], {
+            encoding: 'utf8', env: profileCliEnv(profileForAppPath(options.appPath)),
+          });
+          if (dump.includes(privateText)) throw new Error('Input diagnostics exposed composition text');
+          const records = dump.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
+          found = records.some((record) => record.runtimeId === pane.runtimeId
+            && record.reasons?.includes('composition_mismatch')
+            && record.composing === true
+            && record.counts['keydown:composing'] > 0
+            && record.focus.terminalFocused === true);
+          if (found) {
+            fs.writeFileSync(path.join(runner.runDir, 'attn-input-dump.jsonl'), dump);
+            break;
+          }
+          await delay(100);
+        }
+        if (!found) throw new Error('CLI input dump did not capture the suppressed key');
+
+        await pressShortcut('ui.actionMenu');
+        await client.request('dom_type', {
+          selector: '.action-menu input', text: 'terminal input diagnostics',
+        });
+        const menu = await client.request('dom_text', { selector: '.action-menu' });
+        runner.assert(menu.text.includes('Copy terminal input diagnostics'), 'Input diagnostics action is searchable');
+        if (process.env.ATTN_HARNESS_RECORD === '1') await delay(1_000);
+        appPlatform.writeClipboard('input-diagnostics-copy-pending');
+        await pressKey(KEY.ENTER, {}, '.action-menu input');
+        const copyDeadline = Date.now() + 5_000;
+        let copied = '';
+        while (Date.now() < copyDeadline) {
+          const notice = await client.request('dom_text', { selector: '.input-diagnostics-copied' }).catch(() => null);
+          if (notice?.text === 'Terminal input diagnostics copied') {
+            copied = appPlatform.readClipboard();
+            break;
+          }
+          await delay(100);
+        }
+        if (!copied) throw new Error('Input diagnostics copy did not report success');
+        if (copied.includes(privateText)) throw new Error('Copied diagnostics exposed composition text');
+        const copiedRecords = copied.trim().split('\n').map((line) => JSON.parse(line));
+        runner.assert(copiedRecords.every((record) => record.kind === 'input'), 'Clipboard contains only input diagnostics');
+        runner.assert(copiedRecords.some((record) => record.runtimeId === pane.runtimeId
+          && record.reasons?.includes('composition_mismatch')), 'Clipboard contains the suppressed key incident');
+        fs.writeFileSync(path.join(runner.runDir, 'palette-input-dump.jsonl'), copied);
+        if (process.env.ATTN_HARNESS_RECORD === '1') await delay(1_000);
+      } finally {
+        await client.request('dom_compose_text', {
+          selector: terminalSelector, text: '', phase: 'end',
+        });
+      }
+      await pressKey({ key: 'b', code: 'KeyB' });
+      await finishCapture('composition-interrupted', Buffer.from('b').toString('hex'));
+    });
+
     await runner.step('bracketed_unicode_text_paste', async () => {
       const text = 'one\nå🙂';
       const normalized = 'one\rå🙂';
@@ -478,6 +547,8 @@ async function main() {
         'application-cursor',
         'kitty-press-repeat-release',
         'unicode-composition',
+        'interrupted-composition-input-dump',
+        'command-palette-input-dump',
         'bracketed-unicode-paste',
         'image-paste',
         'shortcut-chord-consumption',
@@ -503,6 +574,7 @@ async function main() {
     }
     await client.quitApp().catch(() => {});
     await observer.close();
+    appPlatform.writeClipboard(savedClipboard);
   }
 }
 

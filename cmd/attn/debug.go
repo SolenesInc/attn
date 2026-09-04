@@ -34,13 +34,19 @@ func runDebug() {
 			writeDebugHelp(os.Stdout)
 			return
 		}
-		runDebugJSONL(debugIncidentsFile, "debug incidents", os.Args[3:])
+		runDebugJSONL(debugIncidentsFile, "debug incidents", "", os.Args[3:])
 	case "diagnostics":
 		if hasHelpFlag(os.Args[3:]) {
 			writeDebugHelp(os.Stdout)
 			return
 		}
-		runDebugJSONL(debugDiagnosticsFile, "debug diagnostics", os.Args[3:])
+		runDebugJSONL(debugDiagnosticsFile, "debug diagnostics", "", os.Args[3:])
+	case "input":
+		if hasHelpFlag(os.Args[3:]) {
+			writeDebugHelp(os.Stdout)
+			return
+		}
+		runDebugJSONL(debugDiagnosticsFile, "debug input", "input", os.Args[3:])
 	case "daemon-log":
 		if hasHelpFlag(os.Args[3:]) {
 			writeDebugHelp(os.Stdout)
@@ -65,6 +71,9 @@ commands:
         print lines from terminal-incidents.jsonl (auto-captured render bugs)
   diagnostics [--tail N] [--grep PATTERN] [--json]
         print lines from terminal-diagnostics.jsonl (lifecycle stream)
+  input [--tail N] [--grep PATTERN] [--json]
+        print terminal input decisions, focus/composition state and PTY receipts;
+        export with: attn debug input --tail 0 > attn-input-dump.jsonl
   daemon-log [--tail N] [--since DUR] [--grep PATTERN]
         print lines from the profile's daemon.log; --since takes a Go
         duration (e.g. 10m, 1h) and filters to lines timestamped within it
@@ -126,7 +135,7 @@ func runDebugLs(args []string) {
 	}
 }
 
-func runDebugJSONL(fileName, cmdName string, args []string) {
+func runDebugJSONL(fileName, cmdName, kind string, args []string) {
 	fs := flag.NewFlagSet(cmdName, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	tail := fs.Int("tail", defaultDebugTail, "only the last N lines (0 means no limit)")
@@ -146,6 +155,9 @@ func runDebugJSONL(fileName, cmdName string, args []string) {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+	if kind != "" {
+		lines = filterDiagnosticKind(lines, kind)
 	}
 	lines, err = grepLines(lines, *grep)
 	if err != nil {

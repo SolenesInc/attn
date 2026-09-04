@@ -43,6 +43,7 @@ import type {
   SeedSendToChiefResult as GeneratedSeedSendToChiefResult,
 } from '../types/generated';
 import type { SessionMessageWindowStatus } from './daemonSessionAnnotationEvents';
+import { noteTerminalInputTransport } from '../utils/terminalInputDiagnostics';
 import {
   emitPtyEvent,
   setPtyBackend,
@@ -3072,6 +3073,13 @@ export function useDaemonSocket({
       });
     }
     const probeId = maybeStartTerminalInputProbe(id, source);
+    if (source === 'user') {
+      noteTerminalInputTransport(id, {
+        socketState: ws?.readyState ?? null,
+        initialStateReceived: hasReceivedInitialStateRef.current,
+        probeId,
+      });
+    }
     recordPtyCommand('pty_input', id, data.length, source);
     sendOrQueueCommand(
       {
