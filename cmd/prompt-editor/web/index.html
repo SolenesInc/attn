@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Prompt workshop</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <span class="mark" aria-hidden="true">↳</span
+        ><strong>Prompt workshop</strong
+        ><span class="subtitle">attn / maintainer tools</span>
+      </div>
+      <span id="global-status" role="status">Opening catalog…</span>
+    </header>
+    <section class="collaboration-bar" aria-label="Shared editing">
+      <div class="shared-controls">
+        <label for="shared-draft">Working on</label><select id="shared-draft"><option value="">Checkout only</option></select>
+        <button id="new-draft">New draft</button>
+        <button id="apply-draft" class="primary" hidden>Apply draft</button>
+        <button id="share-review" disabled>Capture review</button>
+        <button id="return-draft" hidden>Back to draft</button>
+        <label class="follow-control"><input id="follow-agent" type="checkbox" /> Follow shared focus</label>
+        <span id="draft-state" role="status">Checkout files</span>
+      </div>
+      <details class="shared-tools">
+        <summary>Reviews &amp; tools <span id="review-notification"></span></summary>
+        <div class="shared-controls">
+          <label for="saved-review">Review</label><select id="saved-review"><option value="">Open a review…</option></select>
+          <button id="copy-agent-context">Copy agent context</button>
+          <label for="editor-author">Author</label><input id="editor-author" value="maintainer" autocomplete="off" />
+          <button id="sync-draft" hidden>Sync definitions</button>
+          <button id="archive-draft" hidden>Archive draft</button>
+          <button id="restore-draft" hidden>Restore draft</button>
+          <button id="refresh-checkout">Refresh Go definitions</button>
+        </div>
+      </details>
+    </section>
+    <div id="collaboration-error" class="error" role="alert" hidden></div>
+    <div id="resolve-conflict" class="conflict-actions" hidden>
+      Your edit is still here. <button id="fork-local">Keep mine in a new draft</button><button id="load-shared">Discard mine and load shared edit</button>
+    </div>
+    <section class="comparison-bar" aria-label="Git comparison">
+      <form id="base-form">
+        <label for="base-ref">Compare with</label>
+        <input id="base-ref" list="base-refs" placeholder="Branch, tag, or commit" autocomplete="off" spellcheck="false" />
+        <datalist id="base-refs"></datalist>
+        <select id="base-mode" aria-label="Comparison mode">
+          <option value="merge-base">Merge base (branch changes)</option>
+          <option value="tip">Branch tip</option>
+        </select>
+        <button id="compare-base" type="submit" title="Resolve the ref again and refresh the comparison">Compare / refresh</button>
+        <button id="clear-base" type="button">Clear</button>
+      </form>
+      <span id="base-status" role="status">Choose a base for comparison.</span>
+    </section>
+    <div id="base-error" class="error" role="alert" hidden></div>
+    <div class="workspace">
+      <nav class="catalog" aria-label="Prompt catalog">
+        <label class="search-label" for="search"
+          >Find a recipient or source</label
+        ><input
+          type="search"
+          id="search"
+          placeholder="Search prompts…"
+          autocomplete="off"
+        />
+        <label class="changed-filter"><input id="changed-only" type="checkbox" /> Changes only</label>
+        <div id="recipients"></div>
+        <details class="all-sources">
+          <summary>All Markdown sources</summary>
+          <div id="all-sources"></div>
+        </details>
+      </nav>
+      <main class="source-pane">
+        <div class="event-heading">
+          <div class="event-title">
+            <span id="recipient-name"></span><span aria-hidden="true"> / </span
+            ><strong id="event-name"></strong>
+          </div>
+          <span id="delivery" class="badge"></span>
+          <span id="event-change" class="change-badge"></span>
+          <p id="event-description"></p>
+        </div>
+        <div class="composition">
+          <div class="section-label">
+            Composition <span>select a source to edit it</span>
+          </div>
+          <div id="tree" aria-label="Composition tree"></div>
+        </div>
+        <div class="file-toolbar">
+          <div class="file-label">
+            <strong id="filename">Select a source</strong
+            ><span id="file-state"></span>
+          </div>
+          <div class="view-switch" aria-label="Source view">
+            <button id="source-edit" aria-pressed="true">Edit</button><button id="source-compare" aria-pressed="false">Diff</button>
+          </div>
+          <button
+            id="reload"
+            title="Reload this file from disk and discard its draft"
+          >
+            Reload file</button
+          ><button id="reset" title="Discard this file's draft">Reset</button
+          ><button
+            id="save"
+            class="primary"
+            title="Save this file (⌘S / Ctrl+S)"
+          >
+            Save file <kbd>⌘S</kbd>
+          </button>
+        </div>
+        <div id="file-error" class="error" role="alert" hidden></div>
+        <textarea
+          id="source"
+          aria-label="Markdown source"
+          spellcheck="false"
+          autocapitalize="off"
+          autocomplete="off"
+          wrap="soft"
+        ></textarea>
+        <div id="source-diff" class="diff-view" tabindex="0" aria-label="Source diff" hidden></div>
+        <div class="source-footer">
+          <span id="uses"></span><span id="source-size"></span>
+        </div>
+      </main>
+      <aside class="preview-pane" aria-label="Scenario preview">
+        <div class="preview-header">
+          <h1>Scenario preview</h1>
+          <p id="preview-description">
+            The content this definition would supply.
+          </p>
+        </div>
+        <details class="scenario" open>
+          <summary>Inputs <span id="input-count"></span></summary>
+          <div class="scenario-toolbar"><label for="saved-scenario">Scenario</label><select id="saved-scenario"><option value="">Custom inputs</option></select><button id="save-scenario">Save scenario</button></div>
+          <div id="presets"></div>
+          <form id="inputs"></form>
+        </details>
+        <div class="preview-toolbar">
+          <strong>Resolved text</strong>
+          <div class="view-switch" aria-label="Preview view">
+            <button id="prompt-current" aria-pressed="true">Current</button><button id="prompt-compare" aria-pressed="false">Diff</button>
+          </div>
+          <span id="output-size"></span
+          ><button id="copy">Copy</button>
+        </div>
+        <div id="preview-error" class="error" role="alert" hidden></div>
+        <pre id="output" tabindex="0" aria-label="Resolved prompt"></pre>
+        <div id="prompt-diff" class="diff-view" tabindex="0" aria-label="Composed prompt diff" hidden></div>
+        <details id="discussion" class="discussion">
+          <summary>Feedback <span id="feedback-count"></span></summary>
+          <p id="selection-context">Feedback includes this scenario and its exact prompt revision.</p>
+          <div id="feedback-list"></div>
+          <label for="feedback-message">Comment on this prompt or selected text</label>
+          <textarea id="feedback-message" rows="2" placeholder="What should change, and why?"></textarea>
+          <button id="send-feedback">Save comment</button>
+        </details>
+        <div class="preview-footer">
+          Preview uses Markdown from this checkout. Rebuild Go and Pi after
+          saving. Use Refresh Go definitions after changing composition code.
+        </div>
+      </aside>
+    </div>
+  </body>
+</html>

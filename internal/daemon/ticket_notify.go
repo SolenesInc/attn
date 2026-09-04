@@ -6,13 +6,14 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/crew"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
 
 // A bounded "go look" trigger, never event content: the daemon signals, it never
 // streams a ticket's content into the PTY.
-const ticketNudgePrompt = "📋 Activity on a ticket that predates the garden — run `attn ticket inbox` to read and acknowledge it."
+var ticketNudgePrompt = prompts.RenderText("session", "legacy-ticket-nudge", prompts.Values{})
 
 const legacyTicketMailboxCoalesceKey = "legacy-ticket"
 

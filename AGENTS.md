@@ -179,6 +179,9 @@ covering changed behavior, latency, and keyboard flow.
 
 ## Guidance
 
+- Read [prompt-authoring.md](docs/prompt-authoring.md) before changing product
+  prompts. Use `go run ./cmd/prompt-editor inspect RECIPIENT/EVENT --json`
+  for checkout sources and conditions; `refresh` reloads changed Go definitions.
 - Read [glossary.md](docs/glossary.md) before naming domain concepts; update
   definitions and implementation together.
 - Read [working-with-next.md](docs/working-with-next.md) before creating

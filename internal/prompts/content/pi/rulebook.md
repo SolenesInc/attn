@@ -333,7 +333,7 @@ rules. They are not rules about danger; they are instructions to you.
 
 ## Environment
 
-{{ENVIRONMENT}}
+{{environment}}
 
 A destination this section does not name is external, however internal its name
 looks. When a slot is empty, nothing is trusted for it, and the rules that

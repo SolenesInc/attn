@@ -1,0 +1,6 @@
+{
+  "request/0": " Task {{literal}} λ\nnext \n\nWhen you have the final answer, you MUST call the `return_result` tool exactly once with a JSON object that satisfies the provided schema. Do not reply in plain text; the run only completes when `return_result` is called with a schema-valid object.",
+  "request/1": " Task {{literal}} λ\nnext \n\nYour previous attempt did not produce a result: you did not call `return_result` with a schema-valid object. Call the `return_result` tool now, exactly once, with a JSON object matching the provided schema.",
+  "result": "\n\nWhen you have the final answer, you MUST call the `return_result` tool exactly once with a JSON object that satisfies the provided schema. Do not reply in plain text; the run only completes when `return_result` is called with a schema-valid object.",
+  "retry": "\n\nYour previous attempt did not produce a result: you did not call `return_result` with a schema-valid object. Call the `return_result` tool now, exactly once, with a JSON object matching the provided schema."
+}

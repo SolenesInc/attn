@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/victorarias/attn/internal/prompts"
 )
 
 type ConversationSlice struct {
@@ -21,20 +23,14 @@ func (s ConversationSlice) Empty() bool {
 }
 
 func (s ConversationSlice) Render() string {
-	var sections []string
-	if s.Brief != "" {
-		sections = append(sections, "## TICKET BRIEF (first human turn)\n"+s.Brief)
-	}
-	if len(s.Rescoping) > 0 {
-		sections = append(sections, "## LATER HUMAN TURNS (re-scoping)\n"+strings.Join(s.Rescoping, "\n---\n"))
-	}
-	if s.Summary != "" {
-		sections = append(sections, "## COMPACTION SUMMARY (most recent)\n"+s.Summary)
-	}
-	if len(s.AgentTurns) > 0 {
-		sections = append(sections, "## AGENT'S LAST STATUS TURNS\n"+strings.Join(s.AgentTurns, "\n---\n"))
-	}
-	return strings.Join(sections, "\n\n")
+	return prompts.RenderText("conversation-evidence", "slice", prompts.Values{
+		"has_brief":       fmt.Sprint(s.Brief != ""),
+		"has_rescoping":   fmt.Sprint(len(s.Rescoping) > 0),
+		"has_summary":     fmt.Sprint(s.Summary != ""),
+		"has_agent_turns": fmt.Sprint(len(s.AgentTurns) > 0),
+		"brief":           s.Brief, "rescoping": strings.Join(s.Rescoping, "\n---\n"),
+		"summary": s.Summary, "agent_turns": strings.Join(s.AgentTurns, "\n---\n"),
+	})
 }
 
 type SliceOptions struct {
@@ -301,7 +297,7 @@ func (b *sliceBuilder) processLine(line []byte) {
 func capText(s string, n int) string {
 	s = strings.TrimSpace(s)
 	if n > 0 && len(s) > n {
-		return s[:n] + fmt.Sprintf("\n...[truncated, %d chars total]", len(s))
+		return prompts.RenderText("conversation-evidence", "truncated", prompts.Values{"text": s[:n], "total": fmt.Sprint(len(s))})
 	}
 	return s
 }

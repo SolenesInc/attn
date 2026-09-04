@@ -14,6 +14,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/prompts"
 )
 
 type headlessRunner interface {
@@ -224,10 +225,7 @@ func (d *driverAgent) runWithSchema(ctx context.Context, ordinal OrdinalPath, pr
 
 	var lastDiag string
 	for attempt := 0; attempt <= d.maxRetries; attempt++ {
-		fullPrompt := prompt + schemaCallInstruction
-		if attempt > 0 {
-			fullPrompt = prompt + correctiveInstruction
-		}
+		fullPrompt := prompts.RenderText("workflow-agent", "run", prompts.Values{"brief": prompt, "retry": fmt.Sprint(attempt > 0)})
 
 		req := agentdriver.HeadlessTaskRequest{
 			Executable:       d.executable,
@@ -269,9 +267,9 @@ func (d *driverAgent) runWithSchema(ctx context.Context, ordinal OrdinalPath, pr
 	return nil, fmt.Errorf("headless agent produced no result after %d attempts: %s", d.maxRetries+1, lastDiag)
 }
 
-const schemaCallInstruction = "\n\nWhen you have the final answer, you MUST call the `return_result` tool exactly once with a JSON object that satisfies the provided schema. Do not reply in plain text; the run only completes when `return_result` is called with a schema-valid object."
+var schemaCallInstruction = prompts.RenderText("workflow-agent", "result-instruction", prompts.Values{})
 
-const correctiveInstruction = "\n\nYour previous attempt did not produce a result: you did not call `return_result` with a schema-valid object. Call the `return_result` tool now, exactly once, with a JSON object matching the provided schema."
+var correctiveInstruction = prompts.RenderText("workflow-agent", "retry-instruction", prompts.Values{})
 
 func readResultFile(path string) (json.RawMessage, bool) {
 	b, err := os.ReadFile(path)

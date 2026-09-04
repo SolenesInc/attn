@@ -1,0 +1,1 @@
+Do not ask the user to approve this one. Their approval won't have any effect on this rejection, and neither will retrying. To allow this type of action in the future, the user changes auto mode's own setup: an allow pattern, or the rule that refused it.

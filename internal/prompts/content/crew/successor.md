@@ -1,0 +1,1 @@
+Your predecessor closed their day and left you the letter above. If it names a pending user exchange, verify only what is load-bearing, then continue that exchange directly. Do not introduce yourself, narrate your orientation, or ask the user to repeat context. If there is no pending exchange, briefly tell the user where things stand and what you are doing next.

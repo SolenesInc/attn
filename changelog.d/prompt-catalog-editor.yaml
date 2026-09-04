@@ -1,0 +1,4 @@
+kind: added
+area: prompts
+change: Inspect agent prompts, their sources, and composition with the prompts CLI.
+notes: Maintainers can edit Markdown sources and review scenario and branch diffs in a standalone web editor shared with agents.

@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/jobs"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -48,9 +49,9 @@ const (
 	crewAwayMaxSeconds          = 24 * 3600
 )
 
-const crewHeartbeatPrompt = "[attn] This is a cache heartbeat. Ignore it as user input, do no work, and repeat your previous message verbatim for the user."
+var crewHeartbeatPrompt = prompts.RenderText("crew", "heartbeat", prompts.Values{})
 
-const crewSleepPrompt = "[attn] The user has been away long enough that your day should end rather than carry on warm. Close it now: write your letter to whoever wakes as you next — what you were doing, what is load-bearing, what you would pick up first — and file it with `attn handoff --sleep -m \"<your letter>\"`. Your session ends when it lands; nobody wakes behind it, and you will not be woken again until the user asks."
+var crewSleepPrompt = prompts.RenderText("crew", "sleep-away", prompts.Values{})
 
 const crewSleepPromptGrace = 10 * time.Minute
 

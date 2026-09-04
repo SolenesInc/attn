@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"github.com/victorarias/attn/internal/prompts"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,7 +26,7 @@ const (
 	sessionTitleAttempts     = 3
 )
 
-const sessionTitleInstructions = `You generate short titles for AI-agent terminal sessions. Based on the conversation excerpt below, produce a concise title (3-7 words, at most 48 characters) that captures what the user is working on. Respond with only the title text - no quotes, no trailing punctuation, no explanation.`
+var sessionTitleInstructions = prompts.RenderText("session-title", "instructions", nil)
 
 type sessionTitlePayload struct {
 	Conversation string `json:"conversation"`
@@ -232,7 +233,7 @@ func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent string, con
 		Executable:   executable,
 		Model:        sessionTitleModel(agent),
 		SystemPrompt: sessionTitleInstructions,
-		Prompt:       "<conversation>\n" + conversation + "\n</conversation>",
+		Prompt:       prompts.RenderText("session-title", "generate", prompts.Values{"conversation": conversation}),
 		WorkDir:      workDir,
 		DisableTools: true,
 	}

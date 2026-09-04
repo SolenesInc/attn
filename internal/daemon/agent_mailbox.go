@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/prompts"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,7 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-const agentMailboxDoorbellText = "📬 You have unread items in your attn inbox. Run attn agent inbox to read them."
+var agentMailboxDoorbellText = prompts.RenderText("session", "inbox-notification", nil)
 
 var (
 	errAgentMailboxDoorbellOutstanding = errors.New("agent inbox doorbell already outstanding")

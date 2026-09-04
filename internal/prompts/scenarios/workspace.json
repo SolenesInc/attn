@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "id": "workspace",
+  "description": "Ordinary workspace session with workflow guidance.",
+  "recipient": "session",
+  "event": "launch",
+  "values": {
+    "notebook_root": "",
+    "workflow_enabled": "true",
+    "garden_available": "true",
+    "crew_priming": "",
+    "self_report_pull_requests": "false"
+  }
+}

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"github.com/victorarias/attn/internal/prompts"
 	"net"
 	"strings"
 	"time"
@@ -57,10 +58,7 @@ func chiefSeedAssignmentNote(
 }
 
 func chiefSeedAssignmentPrompt(seedID string) string {
-	return fmt.Sprintf(
-		"The user sent seed `%s` to you to decide how it should continue. You are now its tender. Read the seed and its latest log note with `attn seed show %s`, then choose the working context and hand it over as appropriate.",
-		seedID, seedID,
-	)
+	return prompts.RenderText("chief", "seed-assignment", prompts.Values{"seed_id": seedID})
 }
 
 func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID, seedID string) (protocol.AgentMsgStatus, string) {

@@ -5,3 +5,6 @@
 internal/pty/testdata/corpus/*.bytes -whitespace
 # Also binary: `git grep -I` and diff skip them instead of spraying escape codes.
 internal/pty/testdata/corpus/* binary
+
+# Prompt sources retain the trailing newlines emitted by the original builders.
+internal/prompts/content/** whitespace=-blank-at-eof
