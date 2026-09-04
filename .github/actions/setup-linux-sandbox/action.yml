@@ -1,13 +1,13 @@
 name: Set up Linux sandbox
-description: Install bubblewrap and permit its user namespaces on Ubuntu runners.
+description: Install sandbox and search dependencies, and permit bubblewrap user namespaces on Ubuntu runners.
 runs:
   using: composite
   steps:
-    - name: Install bubblewrap
+    - name: Install sandbox and search dependencies
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt-get install -y bubblewrap
+        sudo apt-get install -y bubblewrap ripgrep
 
     - name: Allow bubblewrap user namespaces
       shell: bash
