@@ -7,7 +7,7 @@ import {
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
-import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
+import { waitForFirstWorkspacePane, waitForPaneAttached, waitForPaneVisible } from './scenarioAssertions.mjs';
 import { delay } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -59,13 +59,16 @@ function saw(haystack, needle) {
 }
 
 let marks = 0;
-// A docked seed tile weighs 1.5 terminals; 1440px keeps the terminal at 576px,
-// above the 480px fold whose released surface reads empty.
+// Leave room for the terminal and seed tile; peer panes may still fold.
 const WIDE_WINDOW = 1440;
 
 // The marker appears twice — in the line as typed and again as the shell
 // prints it — so the output is what lies between them.
 async function runInPane(client, pane, command, expected, timeoutMs = 30_000) {
+  // Opening a tile can fold this pane and release its text buffer.
+  await client.request('click_pane', pane);
+  await waitForPaneVisible(client, pane.sessionId, pane.paneId);
+  await waitForPaneAttached(client, pane.sessionId, pane.paneId);
   const mark = `mark${++marks}x`;
   await client.request('write_pane', { ...pane, text: `${command}; echo ${mark}` });
   const deadline = Date.now() + timeoutMs;

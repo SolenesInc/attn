@@ -3695,6 +3695,7 @@ function AppContent({
                       isActive: entry.id === activeSessionId,
                       presentation: presentationBySessionId.get(entry.id),
                       seedId: entry.seedId,
+                      crewMember: entry.crewMember,
                       automation: entry.automation,
                       pullRequests: entry.pullRequests,
                     }))}

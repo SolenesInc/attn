@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Seed } from '../hooks/useDaemonSocket';
-import { derivePaneSeedDisplay, popoverRows } from './paneSeedDisplay';
+import { derivePaneSeedDisplay, popoverRows, tendedSeeds } from './paneSeedDisplay';
 
 function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
   return {
@@ -27,7 +27,40 @@ function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
 
 const SESSION = 'sess-a';
 
+describe('tendedSeeds', () => {
+  const memberClaim = seed({ id: 's-member', title: 'Member work', tender_member: 'fern' });
+  const sessionClaim = seed({ id: 's-session', title: 'Session work', tender_session: SESSION, tender_member: 'fern' });
+  const otherClaim = seed({ id: 's-other', title: 'Other work', tender_member: 'oak' });
+
+  it('includes member-only and session claims once each for the active crew session', () => {
+    expect(tendedSeeds([memberClaim, sessionClaim, otherClaim], SESSION, 'fern')).toEqual([memberClaim, sessionClaim]);
+  });
+
+  it('carries member-only claims into a new session without carrying an old session claim', () => {
+    expect(tendedSeeds([memberClaim, sessionClaim], 'sess-new', 'fern')).toEqual([memberClaim]);
+  });
+
+  it('does not lend member claims to ordinary sessions or an absent session', () => {
+    expect(tendedSeeds([memberClaim, sessionClaim], SESSION)).toEqual([sessionClaim]);
+    expect(tendedSeeds([memberClaim], '', 'fern')).toEqual([]);
+  });
+
+  it('drops a member claim when its tender is cleared on release', () => {
+    for (const status of ['dormant', 'harvested', 'withered']) {
+      expect(tendedSeeds([{ ...memberClaim, status, tender_member: '' }], SESSION, 'fern')).toEqual([]);
+    }
+  });
+});
+
 describe('derivePaneSeedDisplay', () => {
+  it('uses the existing multi-seed presentation for crew claims and deduplicates the reporting seed', () => {
+    const first = seed({ id: 's-first', title: 'First task', tender_member: 'fern' });
+    const second = seed({ id: 's-second', title: 'Second task', tender_member: 'fern' });
+    const display = derivePaneSeedDisplay([first, second], SESSION, first.id, 'fern');
+    expect(display.kind).toBe('multi');
+    expect(popoverRows(display, first.id).map((row) => row.seedId)).toEqual([first.id, second.id]);
+  });
+
   it('is none with no crown and nothing tended', () => {
     expect(derivePaneSeedDisplay([], SESSION, undefined)).toEqual({ kind: 'none' });
   });
