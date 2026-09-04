@@ -36,6 +36,11 @@ export function decideStatically(call: ToolCall, config: AutoModeConfig, cwd: st
     return { outcome: "block", rule: "hard-deny", reason: `denied by the configured pattern ${denied}` };
   }
 
+  if (isSandboxRequest(call)) return {
+    outcome: "classify", rule: "unjudged-bash",
+    reason: "This bash call requests extra sandbox access for one execution and its children through the supported permission interface. The request is not itself Auto-Mode Bypass or Self-Modification, and an OS permission error is not a classifier refusal. Review the command together with every requested write directory and network change, including effects outside the project. The agent's reason is not user approval. Saved permissions, protected paths, and credential filtering remain unchanged.",
+  };
+
   const allowed = matchesAnyPattern(config.allow, signature);
   if (allowed !== undefined) return { outcome: "run", rule: "allow-list" };
 
@@ -110,7 +115,11 @@ export function normalizedIntent(call: ToolCall): string {
 
 export function describeCall(call: ToolCall): string {
   const signature = callSignature(call).replace(/\s+/g, " ").trim();
-  return call.toolName === "bash" ? `bash: ${signature}` : signature;
+  return call.toolName === "bash" ? `bash: ${signature}${isSandboxRequest(call) ? `; sandbox request: ${JSON.stringify(call.input.sandbox)}` : ""}` : signature;
+}
+
+export function isSandboxRequest(call: ToolCall): boolean {
+  return call.toolName === "bash" && Object.hasOwn(call.input, "sandbox");
 }
 
 function stringInput(call: ToolCall, key: string): string {

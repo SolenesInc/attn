@@ -7,11 +7,13 @@ import {
   type AutoModeContextLike,
   type AutoModeDenial,
   type AutoModeExtensionAPILike,
+  type ToolCallReview,
 } from "./index";
 import type { DenialLedgerLike } from "./ledger";
 import { ModelClassifier, type ModelRegistryLike } from "./model-classifier";
 import { autoModeStatusKey, autoModeStatusText } from "./ui";
 import { UsageLedger } from "./usage";
+import { reviewUnavailable } from "../security/recovery";
 
 export type AutoModeSessionContextLike = AutoModeContextLike & {
   modelRegistry?: ModelRegistryLike;
@@ -41,6 +43,8 @@ export type AutoModeSetup = {
   sessionKey?: string;
 
   notice?: string;
+  sandboxReviewInExecutor?: boolean;
+  cacheWritePaths?: () => readonly string[];
 };
 
 export class AutoMode {
@@ -51,6 +55,7 @@ export class AutoMode {
   private choice: boolean | undefined;
   private flag: boolean | undefined;
   private noticed = false;
+  private review: ToolCallReview | undefined;
 
   constructor(private readonly setup: AutoModeSetup) {
     this.extension = createAutoMode({
@@ -61,6 +66,9 @@ export class AutoMode {
       onDenial: setup.onDenial,
       onWaitingForUser: setup.onWaitingForUser,
       usageLedger: this.usage,
+      onReady: (review) => { this.review = review; },
+      sandboxReviewInExecutor: setup.sandboxReviewInExecutor,
+      cacheWritePaths: setup.cacheWritePaths,
     });
   }
 
@@ -68,6 +76,15 @@ export class AutoMode {
     if (this.setup.config.models.length === 0) return false;
     return this.choice ?? this.flag ?? this.setup.config.enabledDefault;
   }
+
+  readonly canReviewSandbox = (): boolean => this.enabled() && !!this.review && !!this.registry;
+
+  readonly reviewSandbox: ToolCallReview = async (event, ctx) => {
+    if (!this.enabled() || !this.review) return { block: true, reason: reviewUnavailable };
+    const result = await this.review(event, ctx);
+    if (!this.enabled()) return { block: true, reason: reviewUnavailable };
+    return result;
+  };
 
   register(pi: AutoModePiLike): void {
     pi.registerFlag("auto", { description: "Start with attn auto mode on", type: "boolean" });

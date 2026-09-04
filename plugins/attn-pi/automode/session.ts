@@ -1,7 +1,7 @@
 import type { Classifier, ClassifierPrompt } from "./classifier";
 import type { AutoModeConfig } from "./config";
-import { denialToolResult } from "./denial";
-import { callSignature, decideStatically, describeCall, type StaticRule, type ToolCall } from "./policy";
+import { denialToolResult, sandboxDenialToolResult } from "./denial";
+import { callSignature, decideStatically, describeCall, isSandboxRequest, type StaticRule, type ToolCall } from "./policy";
 import { TranscriptWindow } from "./transcript";
 
 export const consecutiveDenialLimit = 3;
@@ -42,6 +42,7 @@ export type BreakerState = {
 export type DecideOptions = {
   cwd: string;
   signal?: AbortSignal;
+  cacheWritePaths?: readonly string[];
 };
 
 export class AutoModeSession {
@@ -116,6 +117,7 @@ export class AutoModeSession {
       transcript: this.transcript.snapshot(),
       ...(grant === undefined ? {} : { grant }),
       signal: options.signal,
+      cacheWritePaths: options.cacheWritePaths,
     });
     const prompt = judged.verdict === "deny" ? judged.prompt : undefined;
     if (judged.verdict === "deny" && judged.tooLong === true) {
@@ -165,7 +167,7 @@ export class AutoModeSession {
       rule,
       action,
       reason,
-      toolResult: denialToolResult({ action, reason, judged: kind.judged ?? true, clearable: kind.clearable ?? true }),
+      toolResult: (isSandboxRequest(call) ? sandboxDenialToolResult : denialToolResult)({ action, reason, judged: kind.judged ?? true, clearable: kind.clearable ?? true }),
       ...(kind.clearable === false ? { clearable: false } : {}),
       ...(kind.prompt ? { prompt: kind.prompt } : {}),
     };

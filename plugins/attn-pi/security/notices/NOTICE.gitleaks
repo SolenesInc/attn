@@ -1,0 +1,19 @@
+Gitleaks credential detection rules
+Copyright (c) 2019 Zachary Rice
+
+Source:
+https://github.com/gitleaks/gitleaks/blob/b58d3f102cf3a2c84cb7f923d05c25c9b1aed84b/config/gitleaks.toml
+
+Licensed under MIT; see LICENSE.gitleaks.
+credential-patterns.ts adapts the named token rules, plus openai-api-key,
+anthropic-api-key, sendgrid-api-token and mailgun-private-api-token.
+Rules are case-adjusted for JavaScript and omit surrounding context checks.
+Lengths have minimums without maximums to redact extended token formats.
+AI-provider, SendGrid and Mailgun rules conservatively match their prefixes.
+
+Additional recognizers use the public token formats and protocols described at:
+https://www.twilio.com/docs/iam/api/account
+https://console.groq.com/docs/production-readiness/security-onboarding
+https://docs.x.ai/developers/rest-api-reference/management/auth
+https://www.rfc-editor.org/rfc/rfc6750#section-2.1
+https://www.rfc-editor.org/rfc/rfc7519#section-3

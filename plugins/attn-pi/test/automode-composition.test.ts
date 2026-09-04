@@ -46,7 +46,7 @@ class CountingRegistry implements ModelRegistryLike {
   }
 
   async getApiKeyAndHeaders(): Promise<RequestAuthLike> {
-    return { ok: true, apiKey: "key" };
+    return { ok: true, apiKey: "synthetic-provider-credential" };
   }
 
   async getProviderAuth() {

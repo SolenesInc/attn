@@ -37,7 +37,7 @@ describe("suite composition", () => {
     const registered = await load(suiteEntry, {
       [autoModeConfigEnvVar]: JSON.stringify({ enabled_default: true }),
     });
-    expect(registered.commands).toEqual(["auto"]);
+    expect(registered.commands).toEqual(["security", "auto"]);
     expect(registered.flags).toEqual(["auto", "no-auto"]);
     expect(registered.events).toContain("tool_call");
     expect(registered.events).toContain("session_start");

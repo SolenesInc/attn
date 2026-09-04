@@ -1,6 +1,7 @@
 // pi re-runs this default export on every session transition, so the suite lives in a
 // process-wide slot — module scope is NOT one, see ./singleton.
-import { VERSION } from "@earendil-works/pi-coding-agent";
+import { VERSION, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { PiSecurity } from "../security/index";
 import { AutoMode, type AutoModePiLike } from "../automode/mode";
 import { denialLedgerFor } from "../automode/ledger";
 import { attnAutoModeSource } from "../automode/source";
@@ -22,6 +23,8 @@ const autoMode = processSingleton("attn:pi-automode", () => {
   return source
     ? new AutoMode({
         config: source.config,
+        sandboxReviewInExecutor: true,
+        cacheWritePaths: () => security.cacheWritePaths(),
         notice: source.problem,
         ...(process.env.ATTN_SESSION_ID ? { sessionKey: process.env.ATTN_SESSION_ID } : {}),
         ledger: denialLedgerFor(process.env),
@@ -31,7 +34,10 @@ const autoMode = processSingleton("attn:pi-automode", () => {
     : undefined;
 });
 
-export default function attnPiSuite(pi: ExtensionAPILike & AutoModePiLike): void {
+const security = processSingleton("attn:pi-security", () => new PiSecurity(undefined, autoMode?.reviewSandbox, autoMode?.canReviewSandbox));
+
+export default function attnPiSuite(pi: ExtensionAPILike & AutoModePiLike & ExtensionAPI): void {
+  if (autoMode) security.register(pi);
   suite.register(pi);
   autoMode?.register(pi);
 }

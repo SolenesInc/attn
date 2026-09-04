@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PiDriver, type CommandResult, type RunCommand } from "../src/driver";
+import type { AvailableModels, ModelQuery } from "../automode/models";
 import { RelayServer } from "../src/relay";
 import type { DriverSpawnParams } from "../src/types";
 
@@ -78,12 +79,12 @@ function newDriver(options: {
   suitePath?: string;
   unbackedGraceMs?: number;
   env?: Record<string, string | undefined>;
-  readFile?: (path: string) => string | undefined;
+  queryModels?: ModelQuery;
 }): PiDriver {
   return new PiDriver({
     rpc: options.rpc,
     env: options.env,
-    readFile: options.readFile,
+    queryModels: options.queryModels,
     runCommand: options.runCommand ?? fakeRunCommand(),
     executable: options.executable ?? "pi",
     relay: noopRelay(),
@@ -754,56 +755,46 @@ describe("PiDriver: coming back after attn had nothing", () => {
 });
 
 describe("the models pi can reach", () => {
-  const catalog = JSON.stringify({
-    openai: { models: [{ id: "gpt-5.6", name: "GPT 5.6" }], checkedAt: 1787510377984 },
-    vendor: { models: [{ id: "one" }] },
-  });
+  const catalog: AvailableModels = {
+    providers: [{ provider: "extension", ready: true, models: [{ id: "judge" }] }],
+  };
 
-  function driverAnswering(statuses: Record<string, unknown>) {
-    const asked: string[] = [];
-    const runCommand: RunCommand = async (argv) => {
-      const provider = argv[argv.indexOf("--provider") + 1];
-      asked.push(argv.join(" "));
-      return { exitCode: 0, stdout: JSON.stringify(statuses[provider] ?? {}), stderr: "" };
-    };
+  test("queries the configured Pi executable and environment", async () => {
+    const env = { PI_CODING_AGENT_DIR: "/pi-agent" };
+    const asked: unknown[] = [];
     const driver = newDriver({
-      rpc: new FakeRPC(),
-      runCommand,
-      env: { PI_CODING_AGENT_DIR: "/pi-agent" },
-      readFile: (path) => (path.endsWith("models-store.json") ? catalog : undefined),
+      rpc: new FakeRPC(), executable: "/custom/pi", env,
+      queryModels: async (...args) => { asked.push(args); return catalog; },
     });
-    return { driver, asked };
-  }
-
-  test("asks pi about each provider without refreshing credentials", async () => {
-    const { driver, asked } = driverAnswering({ openai: { status: "ready" }, vendor: { status: "ready" } });
-    await driver.models();
-    expect(asked).toHaveLength(2);
-    expect(asked[0]).toContain("auth check --provider openai --json --no-refresh");
+    expect(await driver.models()).toEqual(catalog);
+    expect(asked).toEqual([["/custom/pi", env]]);
   });
 
-  test("a provider pi cannot use carries pi's own reason", async () => {
-    const { driver } = driverAnswering({
-      openai: { status: "ready" },
-      vendor: { status: "not_ready", reason: "provider_not_found" },
-    });
-    const answer = await driver.models();
-    const vendor = answer.providers.find((provider) => provider.provider === "vendor")!;
-    expect(vendor.ready).toBe(false);
-    expect(vendor.detail).toBe("provider_not_found");
-    expect(answer.providers.find((provider) => provider.provider === "openai")!.ready).toBe(true);
+  test("shares an in-flight query and refreshes on the next request", async () => {
+    let calls = 0;
+    let finish!: (value: AvailableModels) => void;
+    const driver = newDriver({ rpc: new FakeRPC(), queryModels: () => {
+      calls++;
+      return new Promise((resolve) => { finish = resolve; });
+    } });
+    const first = driver.models();
+    expect(driver.models()).toBe(first);
+    expect(calls).toBe(1);
+    finish(catalog);
+    await first;
+    const refresh = driver.models();
+    expect(calls).toBe(2);
+    finish(catalog);
+    expect(await refresh).toEqual(catalog);
   });
 
-  test("an auth check that answers nothing readable leaves the provider unusable", async () => {
-    const runCommand: RunCommand = async () => ({ exitCode: 1, stdout: "", stderr: "pi: boom\n" });
-    const driver = newDriver({
-      rpc: new FakeRPC(),
-      runCommand,
-      env: { PI_CODING_AGENT_DIR: "/pi-agent" },
-      readFile: (path) => (path.endsWith("models-store.json") ? catalog : undefined),
-    });
-    const answer = await driver.models();
-    expect(answer.providers.every((provider) => !provider.ready)).toBe(true);
-    expect(answer.providers[0].detail).toBe("pi: boom");
+  test("a failed query can be retried", async () => {
+    let calls = 0;
+    const driver = newDriver({ rpc: new FakeRPC(), queryModels: async () => {
+      if (calls++ === 0) throw new Error("Pi unavailable");
+      return catalog;
+    } });
+    await expect(driver.models()).rejects.toThrow("Pi unavailable");
+    expect(await driver.models()).toEqual(catalog);
   });
 });

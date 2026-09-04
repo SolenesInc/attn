@@ -4,6 +4,10 @@ attn driver plugin for [pi](https://github.com/earendil-works/pi): pi launches,
 resumes, and lives as an attn session. Pure driver with dumb state — the daemon
 owns the PTY and session records; this plugin only decides what argv to run.
 
+Pi sessions also load [execution security](docs/security.md): an OS sandbox
+for built-in tools and credential filtering, independent of auto mode.
+Use `/security` for interactive settings, path lists and effective permissions.
+
 ## Auto mode outside attn
 
 `automode.js` is pi's permission system on its own: a safety envelope around

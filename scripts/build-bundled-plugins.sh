@@ -123,16 +123,18 @@ stage_plugin() {
   chmod 0755 "${stage_dir}/bin/${name}"
   fix_bun_compile_codesign "${stage_dir}/bin/${name}"
   if [[ "${name}" == "attn-pi" ]]; then
-    # The suite runs inside pi's node runtime; pi resolves
-    # @earendil-works/pi-coding-agent as a virtual module at load time, so it
-    # must stay an external import.
+    # Pi supplies these modules at load time, including shared TUI keybindings.
+    # Keep them external so extensions use the running Pi instance.
     bun build "${source_dir}/suite/index.ts" --target=node --format=esm --minify \
-      --external "@earendil-works/pi-coding-agent" --outfile "${stage_dir}/suite.js"
+      --external "@earendil-works/pi-coding-agent" --external "@earendil-works/pi-tui" --outfile "${stage_dir}/suite.js"
     # Auto mode ships inside suite.js by import; this second bundle is the same
     # extension for a pi that knows nothing about attn (`pi -e automode.js`),
     # under the same external rule.
     bun build "${source_dir}/automode/standalone.ts" --target=node --format=esm --minify \
-      --external "@earendil-works/pi-coding-agent" --outfile "${stage_dir}/automode.js"
+      --external "@earendil-works/pi-coding-agent" --external "@earendil-works/pi-tui" --outfile "${stage_dir}/automode.js"
+    bun build "${source_dir}/security/standalone.ts" --target=node --format=esm --minify \
+      --external "@earendil-works/pi-coding-agent" --external "@earendil-works/pi-tui" --outfile "${stage_dir}/security.js"
+    cp -R "${source_dir}/security/notices" "${stage_dir}/notices"
     # nisse is its own process: attn's daemon spawns one per conversation
     # session and talks to it over pipes, so it is a second executable beside
     # the driver rather than code inside it. pi is bundled in (not external)

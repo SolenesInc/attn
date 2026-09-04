@@ -1,0 +1,4 @@
+kind: added
+area: agents
+change: Pi tools now run with filesystem restrictions and credential filtering, independently of auto mode.
+notes: /security opens interactive settings for the sandbox, network, cache directories and protected paths. Standard build caches are writable by default and can be customized or disabled. Agents receive current permissions and can request temporary extra access through auto mode.

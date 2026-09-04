@@ -2,6 +2,7 @@ import { appendFileSync, mkdirSync, readFileSync, renameSync, statSync } from "n
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import type { AutoModeDenial } from "./index";
+import { credentials } from "../security/filter";
 
 export const denialLedgerEnvVar = "ATTN_PI_AUTOMODE_DENIAL_LOG";
 
@@ -56,6 +57,7 @@ export class DenialLedger implements DenialLedgerLike {
   ) {}
 
   record(denial: AutoModeDenial): void {
+    denial = credentials.value(denial);
     const line: DenialLedgerRecord = {
       session_id: this.sessionID,
       tool_call_id: denial.toolCallId,

@@ -50,7 +50,7 @@ class DenyingRegistry implements ModelRegistryLike {
   }
 
   async getApiKeyAndHeaders(): Promise<RequestAuthLike> {
-    return { ok: true, apiKey: "key" };
+    return { ok: true, apiKey: "synthetic-provider-credential" };
   }
 
   async getProviderAuth() {
@@ -149,6 +149,19 @@ describe("where the ledger lives", () => {
 });
 
 describe("what a denial leaves behind", () => {
+  test("filters credentials before writing a denial to disk", () => {
+    const path = tempPath();
+    const token = `ghp_${"z".repeat(36)}`;
+    new DenialLedger(path, "synthetic-session").record(denial({
+      action: `bash: echo ${token}`,
+      reason: `Refused ${token}`,
+      prompt: { layer: "harm", system: "policy", user: token },
+    }));
+    const saved = readFileSync(path, "utf8");
+    expect(saved).not.toContain(token);
+    expect(saved).toContain("REDACTED");
+  });
+
   test("a denial with no relay at all is still recorded — this is bare pi", async () => {
     const path = tempPath();
     await denyOneCall({ path });

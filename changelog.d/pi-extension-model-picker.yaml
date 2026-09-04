@@ -1,0 +1,3 @@
+kind: fixed
+area: auto mode
+change: The model picker includes authenticated providers registered by Pi extensions, and an empty list can be refreshed after configuring a provider.

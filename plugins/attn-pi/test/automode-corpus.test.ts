@@ -173,7 +173,7 @@ class ScriptedRegistry implements ModelRegistryLike {
   }
 
   async getApiKeyAndHeaders() {
-    return { ok: true, apiKey: "key" };
+    return { ok: true, apiKey: "synthetic-provider-credential" };
   }
 
   async getProviderAuth() {

@@ -1,0 +1,14 @@
+OpenAI Codex
+Copyright 2025 OpenAI
+
+seatbelt-base.ts contains the base and network policies from:
+https://github.com/openai/codex/tree/03467026f2426fafd3d33bbdfc78ec5f9d79f6f0/codex-rs/sandboxing/src
+
+Licensed under Apache-2.0; see LICENSE.codex.
+Adaptations: comments removed and policies exported as TypeScript strings.
+Filesystem and network access rules are supplied separately by the caller.
+
+The upstream policies credit Chromium sandbox policies as inspiration:
+https://source.chromium.org/chromium/chromium/src/+/main:sandbox/policy/mac/common.sb;drc=7b3962fe2e5fc9e2ee58000dc8fbf3429d84d3bd
+https://source.chromium.org/chromium/chromium/src/+/main:sandbox/policy/mac/renderer.sb;drc=7b3962fe2e5fc9e2ee58000dc8fbf3429d84d3bd
+https://source.chromium.org/chromium/chromium/src/+/main:sandbox/policy/mac/network.sb;drc=f8f264d5e4e7509c913f4c60c2639d15905a07e4
