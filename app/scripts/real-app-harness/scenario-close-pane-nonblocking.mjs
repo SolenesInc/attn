@@ -2,21 +2,49 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFile, execFileSync } from 'node:child_process';
+import { promisify } from 'node:util';
+import { readProcessEnvironment } from './agentTripwire.mjs';
 import {
   createSessionAndWaitForInitialPane,
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
+  restoreHarnessSettings,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { currentHarnessProfile, dataDirForProfile } from './harnessProfile.mjs';
+import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
+import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
+import { appDaemonInTree } from './platform.mjs';
 import { ensureCodexInitialPanePromptReady } from './scenarioAgents.mjs';
 import { waitForFirstWorkspacePane, waitForPaneVisible } from './scenarioAssertions.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const CLOSE_BUDGET_MS = 1_000;
+const execFileAsync = promisify(execFile);
+
+function prepareSlowGit(sessionDir) {
+  const env = profileCliEnv();
+  const realGit = execFileSync('/bin/sh', ['-c', 'command -v git'], { encoding: 'utf8', env }).trim();
+  execFileSync(realGit, ['init', '-q'], { cwd: sessionDir, env });
+  const binDir = path.join(sessionDir, 'slow-git-bin');
+  fs.mkdirSync(binDir);
+  const executable = path.join(binDir, 'git');
+  const gate = path.join(sessionDir, 'slow-git-enabled');
+  // Remove this shim from PATH before calling a Git wrapper that may resolve Git again.
+  fs.writeFileSync(executable, '#!/bin/sh\nif [ -f "$ATTN_CLOSE_GIT_GATE" ]; then sleep 3; fi\nexport PATH="$ATTN_CLOSE_GIT_BASE_PATH"\nexec "$ATTN_CLOSE_REAL_GIT" "$@"\n', { mode: 0o755 });
+  return {
+    executable, gate, binDir,
+    env: {
+      PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      ATTN_CLOSE_GIT_BASE_PATH: process.env.PATH,
+      ATTN_CLOSE_GIT_GATE: gate,
+      ATTN_CLOSE_REAL_GIT: realGit,
+    },
+  };
+}
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -60,6 +88,8 @@ async function main() {
   }
 
   const profile = currentHarnessProfile();
+  assertFreshWorldTargetSafe({ profile, appPath: options.appPath });
+  const daemonBinary = appDaemonInTree(options.appPath);
   const dataDir = dataDirForProfile(profile);
   const runner = createScenarioRunner(options, {
     scenarioId: 'CLOSE-PANE-NONBLOCKING',
@@ -67,12 +97,13 @@ async function main() {
     prefix: 'close-pane-nonblocking',
     metadata: {
       agent: 'codex',
-      focus: 'a pane disappears before its SIGTERM-ignoring mock agent finishes teardown',
+      focus: 'a pane disappears despite slow Git and a SIGTERM-ignoring mock agent',
       profile,
     },
   });
 
-  const client = new UiAutomationClient({ appPath: options.appPath });
+  const slowGit = prepareSlowGit(runner.sessionDir);
+  const client = new UiAutomationClient({ appPath: options.appPath, launchEnv: slowGit.env });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   let sessionId = null;
 
@@ -87,6 +118,8 @@ async function main() {
     });
 
     await runner.step('launch_app', async () => {
+      await client.quitApp();
+      await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) });
       await launchFreshAppAndConnect(client, observer);
     });
 
@@ -105,6 +138,20 @@ async function main() {
       await ensureCodexInitialPanePromptReady(client, sessionId, 45_000);
       pane = await waitForFirstWorkspacePane(client, sessionId, 'stubborn mock agent pane', 20_000);
       await waitForPaneVisible(client, sessionId, pane.paneId, 20_000);
+    });
+
+    const slowGitProbeMs = await runner.step('arm_slow_git', async () => {
+      const daemonPid = Number(fs.readFileSync(path.join(dataDir, 'attn.pid'), 'utf8').trim());
+      runner.assert(readProcessEnvironment(daemonPid).includes(`PATH=${slowGit.binDir}${path.delimiter}`),
+        'The daemon must resolve Git through the slow wrapper');
+      fs.writeFileSync(slowGit.gate, 'enabled\n');
+      const start = performance.now();
+      await execFileAsync(slowGit.executable, ['rev-parse', '--show-toplevel'], {
+        cwd: runner.sessionDir, env: profileCliEnv(profile, slowGit.env),
+      });
+      const elapsedMs = performance.now() - start;
+      runner.assert(elapsedMs >= 3_000, 'Git probe must take at least three seconds', { elapsedMs });
+      return elapsedMs;
     });
 
     let closeElapsedMs;
@@ -126,7 +173,7 @@ async function main() {
       return line;
     });
 
-    const summary = await runner.finishSuccess({ sessionId, paneId: pane.paneId, closeElapsedMs, escalationLog });
+    const summary = await runner.finishSuccess({ sessionId, paneId: pane.paneId, closeElapsedMs, slowGitProbeMs, escalationLog });
     console.log('[RealAppHarness] Non-blocking pane close passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
@@ -134,9 +181,12 @@ async function main() {
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
+    fs.rmSync(slowGit.gate, { force: true });
     if (sessionId) await client.request('close_session', { sessionId }).catch(() => {});
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
+    await restoreHarnessSettings();
+    await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) }).catch(() => {});
   }
 }
 

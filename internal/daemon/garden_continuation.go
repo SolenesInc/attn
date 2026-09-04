@@ -74,27 +74,30 @@ func (d *Daemon) gardenSession(sessionID string) *protocol.Session {
 	return nil
 }
 
-func observedGardenExecution(session *protocol.Session, resumeID string, now time.Time) garden.Dispatch {
+func snapshotGardenExecution(session *protocol.Session, resumeID string, now time.Time) garden.Dispatch {
 	if session == nil {
 		return garden.Dispatch{}
 	}
 	execution := garden.Dispatch{
-		SessionID:  strings.TrimSpace(session.ID),
-		Cwd:        strings.TrimSpace(session.Directory),
-		Agent:      strings.TrimSpace(string(session.Agent)),
-		Resume:     strings.TrimSpace(resumeID),
-		CapturedAt: formatGardenTime(now),
+		SessionID:      strings.TrimSpace(session.ID),
+		Cwd:            strings.TrimSpace(session.Directory),
+		Agent:          strings.TrimSpace(string(session.Agent)),
+		Resume:         strings.TrimSpace(resumeID),
+		CapturedAt:     formatGardenTime(now),
+		HostKind:       garden.HostLocal,
+		Branch:         strings.TrimSpace(protocol.Deref(session.Branch)),
+		RepositoryRoot: strings.TrimSpace(protocol.Deref(session.MainRepo)),
 	}
 	if endpointID := strings.TrimSpace(protocol.Deref(session.EndpointID)); endpointID != "" {
 		execution.HostKind = garden.HostRemote
 		execution.EndpointID = endpointID
-		execution.RepositoryRoot = strings.TrimSpace(protocol.Deref(session.MainRepo))
-		execution.Branch = strings.TrimSpace(protocol.Deref(session.Branch))
-		return execution
 	}
+	return execution
+}
 
-	execution.HostKind = garden.HostLocal
-	if execution.Cwd == "" {
+func observedGardenExecution(session *protocol.Session, resumeID string, now time.Time) garden.Dispatch {
+	execution := snapshotGardenExecution(session, resumeID, now)
+	if execution.HostKind != garden.HostLocal || execution.Cwd == "" {
 		return execution
 	}
 	checkoutRoot, err := attngit.GetRepoRoot(execution.Cwd)
@@ -230,8 +233,26 @@ func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garde
 	if d.store.Get(session.ID) != nil {
 		resumeID = d.store.GetResumeSessionID(session.ID)
 	}
-	observed := observedGardenExecution(session, resumeID, d.gardenTime())
+	startedAt := d.gardenTime()
+	observed := observedGardenExecution(session, resumeID, startedAt)
 	return d.updateGardenDispatch(session.ID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
+		// Close can save a newer snapshot while Git is running, before removing the session.
+		if capturedAt, err := time.Parse(time.RFC3339Nano, current.CapturedAt); err == nil && capturedAt.After(startedAt) {
+			return current, false, nil
+		}
+		if d.gardenSession(session.ID) == nil {
+			return current, false, nil
+		}
+		observed.Resume = d.store.GetResumeSessionID(session.ID)
+		return mergeGardenExecution(current, observed), true, nil
+	})
+}
+
+// Closing preserves the latest stored identity before removal; Git discovery belongs
+// to crash recovery, explicit continuation capture, and worktree cleanup.
+func (d *Daemon) captureGardenSessionSnapshot(session *protocol.Session) (garden.Dispatch, error) {
+	return d.updateGardenDispatch(session.ID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
+		observed := snapshotGardenExecution(session, d.store.GetResumeSessionID(session.ID), d.gardenTime())
 		return mergeGardenExecution(current, observed), true, nil
 	})
 }
