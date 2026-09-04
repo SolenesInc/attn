@@ -199,11 +199,6 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 		opts.Rows = 24
 	}
 
-	agent := normalizeAgent(opts.Agent, len(opts.ExternalCommand) > 0)
-	// Every PTY resolves bare `attn` to the installation that launched it;
-	// managed-agent identity stays conditional in buildSpawnEnv.
-	attnPath := launchenv.ActiveAttnExecutable()
-
 	m.mu.Lock()
 	if _, exists := m.sessions[opts.ID]; exists {
 		m.mu.Unlock()
@@ -224,9 +219,10 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 		m.testHookAfterSpawnReserve()
 	}
 
-	loginShell := GetUserLoginShell()
-	shellCandidates := preferredShellCandidates(loginShell)
-	cmdEnv := buildSpawnEnv(loginShell, opts, agent, attnPath, m.logf)
+	prepared, err := PrepareLaunch(opts, m.logf)
+	if err != nil {
+		return err
+	}
 
 	var (
 		cmd        *exec.Cmd
@@ -235,43 +231,30 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 		usedShell  string
 		overlayDir string
 	)
-	for i, shellPath := range shellCandidates {
-		attemptEnv := cmdEnv
-		if agent == "shell" {
-			launch, err := prepareShellPaneLaunch(shellPath, cmdEnv)
-			if err != nil {
-				lastErr = err
-				return fmt.Errorf("prepare terminal shell %s: %w", shellPath, err)
-			}
-			cmd = launch.command
-			attemptEnv = launch.env
-			overlayDir = launch.overlayDir
-		} else {
-			cmd = buildSpawnCommand(opts, agent, shellPath, attnPath, cmdEnv)
-		}
-		cmd.Dir = opts.CWD
-		if strings.TrimSpace(opts.ExternalCWD) != "" {
-			cmd.Dir = opts.ExternalCWD
-		}
-		cmd.Env = attemptEnv
-
+	startedAttempt := -1
+	for i, attempt := range prepared.Attempts {
+		cmd = commandFromPrepared(attempt)
+		overlayDir = attempt.CleanupDir
 		ptmx, lastErr = creackpty.StartWithSize(cmd, &creackpty.Winsize{
 			Cols: opts.Cols,
 			Rows: opts.Rows,
 		})
 		if lastErr == nil {
-			usedShell = shellPath
+			usedShell = attempt.ShellPath
+			startedAttempt = i
 			break
 		}
 		removeShellOverlay(overlayDir)
 		overlayDir = ""
 
-		if i < len(shellCandidates)-1 && shouldFallbackShell(lastErr) {
-			m.logf("pty spawn: failed with shell=%s id=%s err=%v; trying fallback shell", shellPath, opts.ID, lastErr)
+		if i < len(prepared.Attempts)-1 && shouldFallbackShell(lastErr) {
+			m.logf("pty spawn: failed with shell=%s id=%s err=%v; trying fallback shell", attempt.ShellPath, opts.ID, lastErr)
 			continue
 		}
+		prepared.CleanupExcept(-1)
 		return fmt.Errorf("spawn session %s: %w", opts.ID, lastErr)
 	}
+	prepared.CleanupExcept(startedAttempt)
 	pollable, pollErr := pollablePTMX(ptmx)
 	if pollErr != nil {
 		if cmd != nil && cmd.Process != nil {
@@ -282,14 +265,14 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 		return fmt.Errorf("spawn session %s: %w", opts.ID, pollErr)
 	}
 	ptmx = pollable
-	if usedShell != "" && usedShell != loginShell {
-		m.logf("pty spawn: using fallback shell=%s (preferred=%s) id=%s", usedShell, loginShell, opts.ID)
+	if usedShell != "" && usedShell != prepared.Attempts[0].ShellPath {
+		m.logf("pty spawn: using fallback shell=%s (preferred=%s) id=%s", usedShell, prepared.Attempts[0].ShellPath, opts.ID)
 	}
 
 	session := &Session{
 		id:          opts.ID,
 		cwd:         opts.CWD,
-		agent:       agent,
+		agent:       prepared.Agent,
 		cols:        opts.Cols,
 		rows:        opts.Rows,
 		ptmx:        ptmx,
@@ -335,7 +318,7 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 	session.kittyEpoch = mintKittyEpoch()
 	session.wireFeed = newWireFeeder(gt, session.kittyEpoch, m.logf, kittyLimit)
 
-	m.logf("pty spawn: id=%s agent=%s cwd=%s pid=%d", opts.ID, agent, opts.CWD, cmd.Process.Pid)
+	m.logf("pty spawn: id=%s agent=%s cwd=%s pid=%d", opts.ID, prepared.Agent, opts.CWD, cmd.Process.Pid)
 	m.start(session, opts.LifecycleID)
 	return nil
 }

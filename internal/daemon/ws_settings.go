@@ -21,23 +21,25 @@ import (
 )
 
 const (
-	SettingProjectsDirectory = "projects_directory"
-	SettingUIScale           = "uiScale"
-	SettingGardenScale       = "gardenScale"
-	SettingClaudeExecutable  = "claude_executable"
-	SettingCodexExecutable   = "codex_executable"
-	SettingCopilotExecutable = "copilot_executable"
-	SettingEditorExecutable  = "editor_executable"
-	SettingNewSessionAgent   = "new_session_agent"
-	SettingClaudeAvailable   = "claude_available"
-	SettingCodexAvailable    = "codex_available"
-	SettingCopilotAvailable  = "copilot_available"
-	SettingPTYBackendMode    = "pty_backend_mode"
-	SettingTheme             = "theme"
-	SettingReviewerModel     = "reviewer_model"
-	SettingKeeperCompact     = "workspace_keeper_compact"
-	SettingTailscaleEnabled  = "tailscale_enabled"
-	SettingWorkflowsEnabled  = "workflows_enabled"
+	SettingProjectsDirectory    = "projects_directory"
+	SettingUIScale              = "uiScale"
+	SettingGardenScale          = "gardenScale"
+	SettingClaudeExecutable     = "claude_executable"
+	SettingCodexExecutable      = "codex_executable"
+	SettingCopilotExecutable    = "copilot_executable"
+	SettingEditorExecutable     = "editor_executable"
+	SettingNewSessionAgent      = "new_session_agent"
+	SettingClaudeAvailable      = "claude_available"
+	SettingCodexAvailable       = "codex_available"
+	SettingCopilotAvailable     = "copilot_available"
+	SettingPTYBackendMode       = "pty_backend_mode"
+	SettingSharedPTYHostEnabled = "pty_shared_host_enabled"
+	SettingSharedPTYHostActive  = "pty_shared_host_active"
+	SettingTheme                = "theme"
+	SettingReviewerModel        = "reviewer_model"
+	SettingKeeperCompact        = "workspace_keeper_compact"
+	SettingTailscaleEnabled     = "tailscale_enabled"
+	SettingWorkflowsEnabled     = "workflows_enabled"
 	// Explicit, local-only opt-in: captured terminal text can contain secrets.
 	SettingModelCaptureEnabled             = "model_capture.enabled"
 	SettingModelCaptureIntervalSeconds     = "model_capture.interval_seconds"
@@ -103,7 +105,11 @@ func (d *Daemon) handleGetSettingsWS(client *wsClient) {
 
 func (d *Daemon) handleSetSettingWS(client *wsClient, msg *protocol.SetSettingMessage) {
 	d.logf("Setting %s = %s", msg.Key, msg.Value)
-	if err := d.validateSetting(msg.Key, msg.Value); err != nil {
+	err := d.validateSetting(msg.Key, msg.Value)
+	if err == nil && msg.Key == SettingSharedPTYHostEnabled {
+		err = d.setSharedPTYHostEnabled(parseBooleanSetting(msg.Value))
+	}
+	if err != nil {
 		d.logf("Setting validation failed: %v", err)
 		d.sendToClient(client, &protocol.SettingsUpdatedMessage{
 			Event:      protocol.EventSettingsUpdated,
@@ -115,7 +121,9 @@ func (d *Daemon) handleSetSettingWS(client *wsClient, msg *protocol.SetSettingMe
 		return
 	}
 
-	d.store.SetSetting(msg.Key, msg.Value)
+	if msg.Key != SettingSharedPTYHostEnabled {
+		d.store.SetSetting(msg.Key, msg.Value)
+	}
 	if isSessionCostPriceSetting(msg.Key) {
 		d.publishSessionCostReprices()
 	}
@@ -260,6 +268,9 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 		settings[SettingCopilotAvailable] = settings[availabilitySettingKey(string(protocol.SessionAgentCopilot))]
 	}
 	settings[SettingPTYBackendMode] = d.ptyBackendMode()
+	sharedEnabled, sharedActive := d.sharedPTYHostSettings()
+	settings[SettingSharedPTYHostEnabled] = strconv.FormatBool(sharedEnabled)
+	settings[SettingSharedPTYHostActive] = strconv.FormatBool(sharedActive)
 	if cfg, err := d.store.GetAutoModeConfig(); err == nil {
 		settings[SettingAutoModeEnabledDefault] = strconv.FormatBool(cfg.EnabledDefault)
 	}
@@ -342,9 +353,10 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 }
 
 func (d *Daemon) ptyBackendMode() string {
+	if provider, ok := d.ptyBackend.(ptybackend.ModeProvider); ok {
+		return provider.PTYBackendMode()
+	}
 	switch d.ptyBackend.(type) {
-	case *ptybackend.WorkerBackend:
-		return "worker"
 	case *ptybackend.EmbeddedBackend:
 		return "embedded"
 	default:
@@ -463,6 +475,8 @@ func (d *Daemon) validateSetting(key, value string) error {
 		return d.validateNewSessionAgent(value)
 	case SettingTheme:
 		return validateTheme(value)
+	case SettingSharedPTYHostEnabled:
+		return validateBooleanSetting(value)
 	case SettingTailscaleEnabled, SettingWorkflowsEnabled, SettingAutoApproveEnabled, SettingNotebookTasksEnabled, SettingNotebookSummarizeSessionEnabled, SettingNotebookNarrateWorkspaceEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled:
 		return validateBooleanSetting(value)
 	case SettingModelCaptureIntervalSeconds:

@@ -3,6 +3,7 @@ import {
   evaluatePaneNativePaintCoverage,
 } from './paneNativeAnalysis.mjs';
 import { capturePaneNativeMetrics } from './paneNativeMetrics.mjs';
+import { createPaneCommand } from './paneCommand.mjs';
 
 export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -10,6 +11,22 @@ export function sleep(ms) {
 
 export function compactTerminalText(text) {
   return String(text || '').replace(/\s+/g, '');
+}
+
+export async function runShellCommandInPane(client, pane, command, expected, timeoutMs = 30_000) {
+  const framed = createPaneCommand(command);
+  await client.request('write_pane', { ...pane, text: framed.text });
+  const deadline = Date.now() + timeoutMs;
+  let text = '';
+  while (Date.now() < deadline) {
+    await sleep(250);
+    text = String((await client.request('read_pane_text', pane)).text || '');
+    const output = framed.readOutput(text);
+    if (output === null) continue;
+    if (compactTerminalText(output).includes(compactTerminalText(expected))) return output;
+    throw new Error(`${JSON.stringify(command)} did not answer with ${JSON.stringify(expected)}:\n${output}`);
+  }
+  throw new Error(`pane never finished ${JSON.stringify(command)}:\n${text}`);
 }
 
 function terminalTextIncludes(text, needle, { allowWrapped = false } = {}) {

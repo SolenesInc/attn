@@ -21,6 +21,7 @@ import (
 	"github.com/victorarias/attn/internal/hostsession"
 	"github.com/victorarias/attn/internal/plugins"
 	"github.com/victorarias/attn/internal/procreap"
+	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
@@ -385,6 +386,13 @@ func cleanProfile(w io.Writer, r profileResolved) error {
 	// The data dir removal below destroys the registry workers are found through:
 	// reap before it goes, or a live worker is stranded.
 	reportWorkerReap(w, ptyworker.ReapDataDir(r.DataDir))
+	sharedHosts := ptyhost.ReapDataDir(r.DataDir)
+	reportProcReap(w, "pty hosts", "generation", sharedHosts)
+	for _, result := range sharedHosts {
+		if result.Outcome != procreap.ReapTerminated && result.Outcome != procreap.ReapAlreadyGone {
+			return fmt.Errorf("shared PTY host %s was not stopped (%s): %v; profile data was preserved", result.ID, result.Outcome, result.Err)
+		}
+	}
 
 	// A daemon that skipped its shutdown leaves these reparented to init, findable
 	// only through these registries: reap before the registries go.

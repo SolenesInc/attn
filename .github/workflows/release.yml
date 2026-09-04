@@ -104,8 +104,10 @@ jobs:
       - name: Build bundled daemon binary
         run: |
           GOOS=darwin GOARCH=arm64 make build VERSION="${RELEASE_VERSION}" OUTPUT=/tmp/attn
+          make build-pty-host
           mkdir -p app/src-tauri/binaries
           cp /tmp/attn "app/src-tauri/binaries/attn-aarch64-apple-darwin"
+          cp pty-host/target/release/attn-pty-host "app/src-tauri/binaries/attn-pty-host-aarch64-apple-darwin"
 
       - name: Read bun pin
         id: bun
@@ -322,6 +324,11 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
+
       - name: Build Linux amd64 daemon
         run: |
           GOOS=linux GOARCH=amd64 make build VERSION="${RELEASE_VERSION}" OUTPUT=/tmp/attn-linux-amd64
@@ -336,6 +343,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "${RELEASE_TAG}" /tmp/attn-linux-amd64 --clobber
+
+      - name: Build Linux amd64 shared PTY host
+        run: |
+          make build-pty-host
+          cp pty-host/target/release/attn-pty-host /tmp/attn-pty-host-linux-amd64
+          file /tmp/attn-pty-host-linux-amd64
+
+      - name: Upload Linux amd64 shared PTY host
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${RELEASE_TAG}" /tmp/attn-pty-host-linux-amd64 --clobber
 
       # The app runtime host travels with the daemon: a hub installed from a
       # release has no source checkout to build one from, so without this asset
@@ -401,6 +420,11 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
+
       - name: Build Linux arm64 daemon
         run: |
           GOOS=linux GOARCH=arm64 make build VERSION="${RELEASE_VERSION}" OUTPUT=/tmp/attn-linux-arm64
@@ -415,6 +439,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "${RELEASE_TAG}" /tmp/attn-linux-arm64 --clobber
+
+      - name: Build Linux arm64 shared PTY host
+        run: |
+          make build-pty-host
+          cp pty-host/target/release/attn-pty-host /tmp/attn-pty-host-linux-arm64
+          file /tmp/attn-pty-host-linux-arm64
+
+      - name: Upload Linux arm64 shared PTY host
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${RELEASE_TAG}" /tmp/attn-pty-host-linux-arm64 --clobber
 
       # The app runtime host travels with the daemon: a hub installed from a
       # release has no source checkout to build one from, so without this asset

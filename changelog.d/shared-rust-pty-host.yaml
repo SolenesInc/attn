@@ -1,0 +1,3 @@
+kind: added
+area: terminals
+change: An experimental shared PTY host can reduce terminal memory use. Enable it in Settings under Agents; it is off by default and only affects new or explicitly reloaded sessions. Existing terminals keep running through daemon and worker upgrades.

@@ -21,11 +21,13 @@ jobs:
             runs_on: ubuntu-24.04
             goarch: amd64
             output: /tmp/attn-linux-amd64
+            pty_output: /tmp/attn-pty-host-linux-amd64
             artifact: attn-linux-amd64
           - label: arm64
             runs_on: ubuntu-24.04-arm
             goarch: arm64
             output: /tmp/attn-linux-arm64
+            pty_output: /tmp/attn-pty-host-linux-arm64
             artifact: attn-linux-arm64
 
     steps:
@@ -35,6 +37,11 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
 
       - name: Build daemon
         env:
@@ -52,6 +59,12 @@ jobs:
             exit 1
           fi
           file ${{ matrix.output }}
+
+      - name: Build shared PTY host
+        run: |
+          make build-pty-host
+          cp pty-host/target/release/attn-pty-host ${{ matrix.pty_output }}
+          file ${{ matrix.pty_output }}
 
       # The release publishes the app runtime host beside the daemon, because a
       # hub installed from a release has no way to build one for a Linux remote.
@@ -75,6 +88,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: ${{ matrix.output }}
+          path: |
+            ${{ matrix.output }}
+            ${{ matrix.pty_output }}
           if-no-files-found: error
           retention-days: 7

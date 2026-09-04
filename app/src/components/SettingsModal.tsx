@@ -63,6 +63,29 @@ import { formatShortcut } from '../shortcuts/formatShortcut';
 
 const OPEN_SENT_FILES_ENABLED_SETTING = 'open_sent_files_enabled';
 
+const PTY_BACKENDS: Record<string, { label: string; hint: string }> = {
+  migrating: {
+    label: 'Dedicated + shared workers',
+    hint: 'Existing terminals keep their worker, including across daemon restarts.',
+  },
+  shared: {
+    label: 'Shared Rust host',
+    hint: 'New terminals share a Rust host. Selected by a backend override.',
+  },
+  worker: {
+    label: 'Dedicated Go workers',
+    hint: 'Sessions run in per-session worker processes and can survive daemon restarts.',
+  },
+  embedded: {
+    label: 'Embedded in daemon',
+    hint: 'Sessions run inside the daemon process and stop if the daemon restarts.',
+  },
+  unknown: {
+    label: 'Unknown',
+    hint: 'Backend mode is not currently reported by the daemon.',
+  },
+};
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -399,21 +422,12 @@ export function SettingsModal({
     [],
   );
   const rawPtyBackendMode = (settings.pty_backend_mode || 'unknown').toLowerCase();
-  const ptyBackendMode = rawPtyBackendMode === 'worker' || rawPtyBackendMode === 'embedded'
+  const ptyBackendMode = Object.prototype.hasOwnProperty.call(PTY_BACKENDS, rawPtyBackendMode)
     ? rawPtyBackendMode
     : 'unknown';
-  const ptyBackendLabel =
-    ptyBackendMode === 'worker'
-      ? 'External worker sidecar'
-      : ptyBackendMode === 'embedded'
-        ? 'Embedded in daemon'
-        : 'Unknown';
-  const ptyBackendHint =
-    ptyBackendMode === 'worker'
-      ? 'Sessions run in per-session worker processes and can survive daemon restarts.'
-      : ptyBackendMode === 'embedded'
-      ? 'Sessions run inside the daemon process and stop if the daemon restarts.'
-      : 'Backend mode is not currently reported by the daemon.';
+  const { label: ptyBackendLabel, hint: ptyBackendHint } = PTY_BACKENDS[ptyBackendMode];
+  const sharedPtyHostEnabled = settings.pty_shared_host_enabled === 'true';
+  const sharedPtyHostActive = settings.pty_shared_host_active === 'true';
 
   const draftDeps = { active: isOpen, onSetSetting, savedFlash };
   const projectsDirDraft = useSettingDraft({
@@ -2176,6 +2190,37 @@ export function SettingsModal({
             <span className={`settings-status mode-${ptyBackendMode}`}>
               {ptyBackendLabel}
             </span>
+          </div>
+          <div className="settings-row-card">
+            <div>
+              <p className="settings-row-title">Shared PTY host (experimental)</p>
+              <p className="settings-row-copy" id="shared-pty-host-description">
+                Off by default. Use a shared Rust process for new terminals and agents to reduce memory use.
+                Changes apply to new or explicitly reloaded sessions. Running sessions stay untouched.
+              </p>
+              <p className="settings-row-copy" data-testid="settings-shared-pty-host-status">
+                {ptyBackendMode !== 'migrating'
+                  ? 'This setting requires the default daemon backend.'
+                  : sharedPtyHostActive
+                    ? 'New sessions use the shared Rust host.'
+                    : sharedPtyHostEnabled
+                      ? 'Shared host unavailable. New sessions use dedicated Go workers; disable and re-enable to retry.'
+                      : 'New sessions use dedicated Go workers.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-label="Shared PTY host (experimental)"
+              aria-checked={sharedPtyHostEnabled}
+              aria-describedby="shared-pty-host-description"
+              className="settings-action"
+              data-testid="settings-shared-pty-host-toggle"
+              disabled={ptyBackendMode !== 'migrating'}
+              onClick={() => onSetSetting('pty_shared_host_enabled', sharedPtyHostEnabled ? 'false' : 'true')}
+            >
+              {sharedPtyHostEnabled ? 'Disable' : 'Enable'}
+            </button>
           </div>
         </div>
       </section>

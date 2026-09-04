@@ -32,9 +32,9 @@ func TestUnattendedLaunchContractParityAcrossBackends(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			embedded := embeddedSpawnOptions(SpawnOptions{Agent: tt.spec.Agent, UnattendedLaunch: tt.spec})
-			if !reflect.DeepEqual(embedded.UnattendedLaunch, tt.spec) {
-				t.Fatalf("embedded contract = %#v, want %#v", embedded.UnattendedLaunch, tt.spec)
+			prepared := toPTYSpawnOptions(SpawnOptions{Agent: tt.spec.Agent, UnattendedLaunch: tt.spec})
+			if !reflect.DeepEqual(prepared.UnattendedLaunch, tt.spec) {
+				t.Fatalf("PTY launch contract = %#v, want %#v", prepared.UnattendedLaunch, tt.spec)
 			}
 
 			args, err := appendUnattendedLaunchArgs(nil, tt.spec)

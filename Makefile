@@ -1,4 +1,4 @@
-.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
+.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -83,6 +83,7 @@ VT_GOOS := $(or $(GOOS),$(shell go env GOOS))
 VT_GOARCH := $(or $(GOARCH),$(shell go env GOARCH))
 VT_PLATFORM := $(VT_GOOS)_$(VT_GOARCH)
 NATIVE_VT_LIB := third_party/ghostty-vt/$(VT_PLATFORM)/lib/libghostty-vt.a
+NATIVE_VT_LIBS := $(addprefix third_party/ghostty-vt/,$(addsuffix /lib/libghostty-vt.a,darwin_arm64 linux_amd64 linux_arm64))
 # Only the tuples that link the real cgo library need the archive; kept in
 # lockstep with the //go:build constraint in internal/ghosttyvt.
 ifeq ($(filter $(VT_PLATFORM),darwin_arm64 linux_amd64 linux_arm64),)
@@ -101,8 +102,10 @@ endif
 # asset (new sha) forces everyone to re-fetch. GHOSTTY_VT_GOOS/GOARCH pin the
 # script to the same target the archive path resolves, so it installs into
 # third_party/ghostty-vt/$(VT_PLATFORM)/.
-$(NATIVE_VT_LIB): ghostty-vt.pin scripts/build-libghostty-vt.sh scripts/lib/libghostty-vt.sh $(wildcard ghostty-vt-native.lock)
-	GHOSTTY_VT_GOOS=$(VT_GOOS) GHOSTTY_VT_GOARCH=$(VT_GOARCH) ./scripts/build-libghostty-vt.sh
+$(NATIVE_VT_LIBS): ghostty-vt.pin scripts/build-libghostty-vt.sh scripts/lib/libghostty-vt.sh $(wildcard ghostty-vt-native.lock)
+	@target='$@'; platform=$${target#third_party/ghostty-vt/}; platform=$${platform%%/*}; \
+		goos=$${platform%%_*}; goarch=$${platform##*_}; \
+		GHOSTTY_VT_GOOS=$$goos GHOSTTY_VT_GOARCH=$$goarch ./scripts/build-libghostty-vt.sh
 
 # Rebuild the native archives for EVERY supported target from source and publish
 # them as prebuilt assets. Run after changing the shared ghostty-vt.pin; needs
@@ -121,6 +124,13 @@ publish-ghostty-vt-wasm:
 build: $(NATIVE_VT_DEP)
 	go build -ldflags "$(GO_LDFLAGS)" -o $(OUTPUT) $(BUILD_DIR)
 
+PTY_HOST_BINARY := pty-host/target/release/attn-pty-host
+
+# Phony on purpose: the computed snapshot format must reach rustc even when no
+# Rust source or native archive timestamp changed.
+build-pty-host: pty-host/Cargo.toml pty-host/Cargo.lock pty-host/build.rs $(wildcard pty-host/src/*) $(NATIVE_VT_DEP) ghostty-vt.pin
+	ATTN_PTY_HOST_SNAPSHOT_FORMAT='$(SNAPSHOT_FORMAT)' cargo build --manifest-path pty-host/Cargo.toml --release --locked
+
 # Cross-compile the headless Linux daemon from macOS. Recurse into `build` with
 # the target GOOS/GOARCH + zig as the cgo cross-compiler: passing them on the
 # sub-make command line exports them, so the sub-make's `go env` resolves the
@@ -128,12 +138,12 @@ build: $(NATIVE_VT_DEP)
 # The daemon's Linux targets carry the app runtime host with them. A daemon that
 # runs on a Linux remote and cannot start its runtime there is a silently
 # darwin-only platform, so the two travel together rather than by convention.
-build-linux-amd64: build-app-runtime-host-linux-amd64
+build-linux-amd64: build-app-runtime-host-linux-amd64 build-pty-host-linux-amd64
 	$(MAKE) build GOOS=linux GOARCH=amd64 CGO_ENABLED=1 \
 		CC='$(ZIG) cc -target x86_64-linux-gnu' \
 		CXX='$(ZIG) c++ -target x86_64-linux-gnu'
 
-build-linux-arm64: build-app-runtime-host-linux-arm64
+build-linux-arm64: build-app-runtime-host-linux-arm64 build-pty-host-linux-arm64
 	$(MAKE) build GOOS=linux GOARCH=arm64 CGO_ENABLED=1 \
 		CC='$(ZIG) cc -target aarch64-linux-gnu' \
 		CXX='$(ZIG) c++ -target aarch64-linux-gnu'
@@ -151,6 +161,26 @@ build-app-runtime-host-linux-amd64:
 
 build-app-runtime-host-linux-arm64:
 	bash ./scripts/build-app-runtime-host.sh dist/app-runtime/linux_arm64 bun-linux-arm64
+
+build-pty-host-linux-amd64: third_party/ghostty-vt/linux_amd64/lib/libghostty-vt.a
+	@mkdir -p dist/pty-host/linux_amd64
+	ATTN_PTY_HOST_SNAPSHOT_FORMAT='$(SNAPSHOT_FORMAT)' \
+		ATTN_RUST_LINK_TARGET=x86_64-linux-gnu \
+		CC_x86_64_unknown_linux_gnu='$(CURDIR)/scripts/rust-zig-linker.sh' \
+		AR_x86_64_unknown_linux_gnu='$(CURDIR)/scripts/rust-zig-ar.sh' \
+		CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER='$(CURDIR)/scripts/rust-zig-linker.sh' \
+		cargo build --manifest-path pty-host/Cargo.toml --release --locked --target x86_64-unknown-linux-gnu
+	cp pty-host/target/x86_64-unknown-linux-gnu/release/attn-pty-host dist/pty-host/linux_amd64/attn-pty-host
+
+build-pty-host-linux-arm64: third_party/ghostty-vt/linux_arm64/lib/libghostty-vt.a
+	@mkdir -p dist/pty-host/linux_arm64
+	ATTN_PTY_HOST_SNAPSHOT_FORMAT='$(SNAPSHOT_FORMAT)' \
+		ATTN_RUST_LINK_TARGET=aarch64-linux-gnu \
+		CC_aarch64_unknown_linux_gnu='$(CURDIR)/scripts/rust-zig-linker.sh' \
+		AR_aarch64_unknown_linux_gnu='$(CURDIR)/scripts/rust-zig-ar.sh' \
+		CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER='$(CURDIR)/scripts/rust-zig-linker.sh' \
+		cargo build --manifest-path pty-host/Cargo.toml --release --locked --target aarch64-unknown-linux-gnu
+	cp pty-host/target/aarch64-unknown-linux-gnu/release/attn-pty-host dist/pty-host/linux_arm64/attn-pty-host
 
 GOTESTSUM=$(HOME)/go/bin/gotestsum
 
@@ -306,7 +336,7 @@ install: build-app
 
 # Fast path: swap just the Go daemon sidecar into the already-installed PROFILE
 # bundle, re-sign, and restart its daemon. `make install-daemon PROFILE=agent7`.
-install-daemon: ensure-codesign-identity build
+install-daemon: ensure-codesign-identity build build-pty-host
 	@set -e; \
 	profile="$(PROFILE)"; \
 	attn="$(CURDIR)/$(OUTPUT)"; \
@@ -322,11 +352,15 @@ install-daemon: ensure-codesign-identity build
 	: "(ETXTBSY), while a rename leaves the running inode alone."; \
 	cp $(OUTPUT) "$$app_binary.new"; \
 	mv -f "$$app_binary.new" "$$app_binary"; \
+	host_binary="$$(dirname "$$app_binary")/attn-pty-host"; \
+	cp "$(CURDIR)/$(PTY_HOST_BINARY)" "$$host_binary.new"; \
+	mv -f "$$host_binary.new" "$$host_binary"; \
 	if [ "$(UNAME_S)" = "Darwin" ]; then \
 		identity="$(MACOS_CODESIGN_IDENTITY)"; \
 		if [ -z "$$identity" ]; then identity="$$(bash ./scripts/macos-codesign-identity.sh find)"; fi; \
 		if [ -z "$$identity" ]; then identity="-"; fi; \
 		codesign --force --sign "$$identity" "$$app_binary"; \
+		codesign --force --sign "$$identity" "$$host_binary"; \
 		codesign --force --sign "$$identity" "$$app_bundle"; \
 	fi; \
 	if [ -n "$$profile" ]; then \
@@ -465,8 +499,9 @@ check-sdk: generate-sdk
 # profile::automation_enabled) — a profiled build sees its ATTN_PROFILE and
 # enables automation for any named profile (dev, ticketqa, agent7, …); prod (the
 # empty-profile bundle) stays off unless ATTN_AUTOMATION=1.
-build-app: ensure-codesign-identity build
+build-app: ensure-codesign-identity build build-pty-host
 	@PROFILE="$(PROFILE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" \
+		ATTN_PTY_HOST_BIN="$(CURDIR)/$(PTY_HOST_BINARY)" \
 		VERSION='$(VERSION)' SOURCE_FINGERPRINT='$(SOURCE_FINGERPRINT)' \
 		GIT_COMMIT='$(GIT_COMMIT)' BUILD_TIME='$(BUILD_TIME)' \
 		MACOS_CODESIGN_IDENTITY='$(MACOS_CODESIGN_IDENTITY)' \
@@ -496,6 +531,7 @@ sign-app: ensure-codesign-identity
 		if [ -z "$$identity" ]; then identity="$$(bash ./scripts/macos-codesign-identity.sh find)"; fi; \
 		if [ -z "$$identity" ]; then identity="-"; fi; \
 		codesign --force --sign "$$identity" ~/Applications/attn.app/Contents/MacOS/attn; \
+		codesign --force --sign "$$identity" ~/Applications/attn.app/Contents/MacOS/attn-pty-host; \
 		codesign --force --sign "$$identity" ~/Applications/attn.app; \
 		echo "Signed ~/Applications/attn.app with identity $$identity"; \
 	else \

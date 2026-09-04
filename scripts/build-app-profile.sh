@@ -20,6 +20,7 @@ set -eo pipefail
 profile="${PROFILE:-}"
 harness_default="${ATTN_BUILD_DEFAULT_PROFILE_HARNESS:-}"
 attn="${ATTN_BIN:?ATTN_BIN (path to built attn binary) is required}"
+pty_host="${ATTN_PTY_HOST_BIN:?ATTN_PTY_HOST_BIN is required}"
 : "${VERSION:?VERSION is required}"
 : "${SOURCE_FINGERPRINT:?SOURCE_FINGERPRINT is required}"
 : "${GIT_COMMIT:?GIT_COMMIT is required}"
@@ -54,6 +55,7 @@ if [ -z "$host_triple" ]; then
 fi
 mkdir -p app/src-tauri/binaries
 cp "$attn" "app/src-tauri/binaries/attn-${host_triple}"
+cp "$pty_host" "app/src-tauri/binaries/attn-pty-host-${host_triple}"
 
 # Compile first-party plugins before Tauri collects resources. Bundled means
 # available in the catalog; the daemon still requires a per-profile opt-in.
@@ -125,6 +127,7 @@ if [ "$(uname -s)" != "Darwin" ]; then
   mkdir -p "${tree_dir}/bin" "${tree_dir}/resources"
   cp "${release_dir}/app" "${tree_dir}/bin/attn-app"
   cp "$attn" "${tree_dir}/bin/attn"
+  cp "$pty_host" "${tree_dir}/bin/attn-pty-host"
   cp -R app/src-tauri/bundled-plugins "${tree_dir}/resources/plugins"
   cp -R app/src-tauri/app-runtime "${tree_dir}/resources/app-runtime"
   write_build_identity "${tree_dir}/resources/build-identity.json"
@@ -147,6 +150,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
     codesign --force --sign "$identity" "$executable"
   done < <(find "${bundle_dir}/Contents/Resources/plugins" "${bundle_dir}/Contents/Resources/app-runtime" -type f -perm -111 2>/dev/null | sort)
   codesign --force --sign "$identity" "${bundle_dir}/Contents/MacOS/attn"
+  codesign --force --sign "$identity" "${bundle_dir}/Contents/MacOS/attn-pty-host"
   codesign --force --sign "$identity" "${bundle_dir}"
 fi
 

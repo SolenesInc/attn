@@ -524,6 +524,34 @@ func TestDaemon_Start_SelectsWorkerBackendWhenRequested(t *testing.T) {
 	}
 }
 
+func TestDaemon_Start_DefaultUsesMigrationRouterWithoutMovingNewSessionsWhenHostIsUnprobed(t *testing.T) {
+	t.Setenv("ATTN_PTY_BACKEND", "")
+	t.Setenv("ATTN_PTY_SKIP_STARTUP_PROBE", "1")
+	t.Setenv("ATTN_PTY_HOST_BINARY", "")
+	useFreeWSPort(t)
+
+	sockPath := filepath.Join(shortTempDir(t), "migrating-select.sock")
+	d := NewForTesting(sockPath)
+	errCh := make(chan error, 1)
+	go func() { errCh <- d.Start() }()
+	if !d.waitStarted(3 * time.Second) {
+		select {
+		case err := <-errCh:
+			t.Fatalf("daemon start error: %v", err)
+		default:
+			t.Fatal("daemon did not signal startup")
+		}
+	}
+	defer d.Stop()
+
+	if _, ok := d.ptyBackend.(*ptybackend.MigratingBackend); !ok {
+		t.Fatalf("expected migration router, got %T", d.ptyBackend)
+	}
+	if got := d.ptyBackendMode(); got != "migrating" {
+		t.Fatalf("PTY backend mode = %q, want migrating", got)
+	}
+}
+
 func TestDaemon_Start_WorkerProbeFailureFallsBackToEmbedded(t *testing.T) {
 	t.Setenv("ATTN_PTY_BACKEND", "worker")
 	t.Setenv("ATTN_PTY_SKIP_STARTUP_PROBE", "0")
@@ -4116,6 +4144,24 @@ func TestDaemon_SettingsIncludePTYBackendMode(t *testing.T) {
 	if got := settings[SettingPTYBackendMode]; got != "worker" {
 		t.Fatalf("settings[%s] = %v, want worker", SettingPTYBackendMode, got)
 	}
+
+	sharedBackend, err := ptybackend.NewSharedHost(ptybackend.WorkerBackendConfig{
+		DataRoot:         t.TempDir(),
+		DaemonInstanceID: "d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		BinaryPath:       "/bin/true",
+	})
+	if err != nil {
+		t.Fatalf("NewSharedHost() error: %v", err)
+	}
+	migrating, err := ptybackend.NewMigrating(workerBackend, sharedBackend, true)
+	if err != nil {
+		t.Fatalf("NewMigrating() error: %v", err)
+	}
+	d.ptyBackend = migrating
+	settings = d.settingsWithAgentAvailability()
+	if got := settings[SettingPTYBackendMode]; got != "migrating" {
+		t.Fatalf("settings[%s] = %v, want migrating", SettingPTYBackendMode, got)
+	}
 }
 
 func TestDaemon_SettingsWithClaudeAvailability_InstallsClaudeSkill(t *testing.T) {
@@ -4548,18 +4594,20 @@ func TestDaemon_InitialState_IncludesRepoStates(t *testing.T) {
 	os.Remove(sockPath)
 
 	d := NewForTesting(sockPath)
-
-	go func() {
-		if err := d.Start(); err != nil {
-			t.Logf("Daemon start error: %v", err)
-		}
-	}()
+	startErr := make(chan error, 1)
+	go func() { startErr <- d.Start() }()
 	defer func() {
 		d.Stop()
 		os.Remove(sockPath)
 	}()
 
-	time.Sleep(200 * time.Millisecond)
+	select {
+	case <-d.startedCh:
+	case err := <-startErr:
+		t.Fatalf("Daemon start error: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("daemon did not signal startup")
+	}
 
 	c := client.New(sockPath)
 	err := c.ToggleMuteRepo("owner/test-repo")
@@ -4567,20 +4615,12 @@ func TestDaemon_InitialState_IncludesRepoStates(t *testing.T) {
 		t.Fatalf("ToggleMuteRepo error: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	wsURL := "ws://127.0.0.1:" + wsPort + "/ws"
-	var wsConn *websocket.Conn
-	maxRetries := 20
-	for i := 0; i < maxRetries; i++ {
-		time.Sleep(100 * time.Millisecond)
-		var dialErr error
-		wsConn, _, dialErr = websocket.Dial(ctx, wsURL, nil)
-		if dialErr == nil {
-			break
-		}
-		if i == maxRetries-1 {
-			t.Fatalf("WebSocket dial error after %d retries: %v", maxRetries, dialErr)
-		}
+	wsConn, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatalf("WebSocket dial error: %v", err)
 	}
 	defer wsConn.Close(websocket.StatusNormalClosure, "")
 
@@ -4893,13 +4933,20 @@ func TestDaemon_StopCommand_CompletedTodos_ProceedsToClassification(t *testing.T
 	os.Remove(sockPath)
 
 	d := NewForTesting(sockPath)
-	go d.Start()
+	startErr := make(chan error, 1)
+	go func() { startErr <- d.Start() }()
 	defer func() {
 		d.Stop()
 		os.Remove(sockPath)
 	}()
 
-	waitForSocket(t, sockPath, 5*time.Second)
+	select {
+	case <-d.startedCh:
+	case err := <-startErr:
+		t.Fatalf("Daemon start error: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("daemon did not signal startup")
+	}
 
 	c := client.New(sockPath)
 

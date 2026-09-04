@@ -43,6 +43,7 @@ jobs:
           filters: |
             daemon:
               - '**/*.go'
+              - 'pty-host/**'
               - 'cmd/**'
               - 'internal/**'
               - 'test/**'
@@ -86,6 +87,13 @@ jobs:
               - '.github/workflows/ci.yml'
             tauri:
               - 'app/src-tauri/**'
+              - 'pty-host/**'
+              - 'internal/ptyhost/**'
+              - 'scripts/rust-zig-linker.sh'
+              - 'scripts/rust-zig-ar.sh'
+              - 'ghostty-vt.pin'
+              - 'ghostty-vt-native.lock'
+              - 'Makefile'
               - '.github/workflows/ci.yml'
             # The plugin tests read Go sources and fixtures verbatim, and attn-pi
             # speaks the daemon's plugin-driver and conversation-host wire.
@@ -111,6 +119,11 @@ jobs:
               - 'cmd/**'
               - 'internal/**'
               - 'apphost/**'
+              - 'pty-host/**'
+              - 'ghostty-vt.pin'
+              - 'ghostty-vt-native.lock'
+              - 'scripts/rust-zig-linker.sh'
+              - 'scripts/rust-zig-ar.sh'
               - 'scripts/build-app-runtime-host.sh'
   changelog:
     name: Changelog
@@ -249,6 +262,34 @@ jobs:
 
       - name: Test repository scripts
         run: make test-scripts
+
+  pty-compatibility:
+    name: PTY upgrade (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Build host and native terminal library
+        run: make build-pty-host
+      - name: Verify old daemon and mixed host generations
+        run: bash scripts/test-pty-upgrade.sh
+      - name: Verify shared host protocol and lifecycle
+        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./internal/ptybackend -run '^Test(SharedHost_|MigratingHost_)' -count=1
+      - name: Verify profile cleanup with live host generations
+        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./cmd/attn -run '^TestProfileClean.*SharedHost' -count=1
 
   frontend:
     name: Frontend
@@ -411,10 +452,19 @@ jobs:
           cd ../..
           ./scripts/build-libghostty-vt.sh
           go build -o /tmp/attn ./cmd/attn
+          make build-pty-host
           target_triple="$(rustc -vV | awk '/host:/ {print $2}')"
           mkdir -p app/src-tauri/binaries
           cp /tmp/attn "app/src-tauri/binaries/attn-${target_triple}"
+          cp pty-host/target/release/attn-pty-host "app/src-tauri/binaries/attn-pty-host-${target_triple}"
           cd app/src-tauri
+
+      - name: PTY host fmt, clippy, and test
+        run: |
+          cd ../..
+          cargo fmt --manifest-path pty-host/Cargo.toml -- --check
+          cargo clippy --manifest-path pty-host/Cargo.toml --all-targets -- -D warnings
+          cargo test --manifest-path pty-host/Cargo.toml
 
       - name: Cargo fmt
         run: cargo fmt -- --check
@@ -563,6 +613,9 @@ jobs:
           if [ -d "$data_dir/workers" ]; then
             find "$data_dir/workers" -name '*.log' -exec cp {} "$EVIDENCE_DIR/daemon/" \;
           fi
+          if [ -d "$data_dir/pty-hosts" ]; then
+            find "$data_dir/pty-hosts" -name '*.log' -exec cp {} "$EVIDENCE_DIR/daemon/" \;
+          fi
           ls "$EVIDENCE_DIR/daemon"
 
       - name: Upload app acceptance evidence
@@ -625,6 +678,7 @@ jobs:
       - changelog
       - generated-types
       - backend
+      - pty-compatibility
       - frontend
       - frontend-e2e
       - frontend-e2e-gate
@@ -645,7 +699,7 @@ jobs:
         run: >-
           ./scripts/ci-gate.sh pr
           changes main-route changelog generated-types backend frontend frontend-e2e
-          frontend-e2e-gate rust rust-gate plugins app-acceptance release-preflight
+          frontend-e2e-gate rust rust-gate plugins app-acceptance release-preflight pty-compatibility
 
   acceptance:
     name: Acceptance
@@ -656,6 +710,7 @@ jobs:
       - changelog
       - generated-types
       - backend
+      - pty-compatibility
       - frontend
       - frontend-e2e
       - frontend-e2e-gate
@@ -676,7 +731,7 @@ jobs:
         run: >-
           ./scripts/ci-gate.sh acceptance
           changes main-route changelog generated-types backend frontend frontend-e2e
-          frontend-e2e-gate rust rust-gate plugins app-acceptance release-preflight
+          frontend-e2e-gate rust rust-gate plugins app-acceptance release-preflight pty-compatibility
 
   branch-health:
     name: Report branch health
