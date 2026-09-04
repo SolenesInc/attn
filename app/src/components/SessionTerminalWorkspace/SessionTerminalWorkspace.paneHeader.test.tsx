@@ -215,4 +215,25 @@ describe('SessionTerminalWorkspace pane header', () => {
 
     expect(screen.queryByTestId('seed-chip-sess-1')).not.toBeInTheDocument();
   });
+
+  it('shows and opens the current crew member-only claim', () => {
+    const onOpenSeed = vi.fn();
+    renderLonePane({
+      workspaceSessions: [{
+        id: 'sess-1', label: 'Fern', agent: 'claude', cwd: '/tmp/project', crewMember: 'fern',
+      }],
+      gardenSeeds: [{
+        id: 's-crew11', title: 'Member work', body: '', status: 'growing', step_slug: 'member-work',
+        planter_session: '', planter_member: '', tender_session: '', tender_member: 'fern',
+        edges: [], ready: false, template: false, gate: false, vars: [], rev: 1,
+        created_at: '2026-09-04T12:00:00Z', updated_at: '2026-09-04T12:00:00Z',
+        state_changed_at: '2026-09-04T12:00:00Z', state_changed_at_exact: true,
+      }],
+      onOpenSeed,
+    });
+
+    expect(screen.getByText('Member work')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('seed-chip-sess-1'));
+    expect(onOpenSeed).toHaveBeenCalledWith('s-crew11');
+  });
 });

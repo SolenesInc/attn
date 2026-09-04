@@ -119,6 +119,7 @@ interface SessionTerminalWorkspaceProps {
     isActive?: boolean;
     presentation?: Presentation;
     seedId?: string;
+    crewMember?: string;
     automation?: AutomationProvenanceValue;
     pullRequests?: SessionPullRequest[];
   }>;
@@ -1055,7 +1056,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
               isActive: Boolean(paneSession.isActive),
             })
           : null;
-        const paneSeedDisplay = derivePaneSeedDisplay(gardenSeeds, agentPane.sessionId, paneSession?.seedId);
+        const paneSeedDisplay = derivePaneSeedDisplay(gardenSeeds, agentPane.sessionId, paneSession?.seedId, paneSession?.crewMember);
         const autoSettleFiresAt = paneSession?.autoSettleFiresAt;
         const autoSettleHeld = paneSession?.autoSettleHeld;
         const autoSettleDismissArmed = paneSession?.autoSettleDismissArmed;
