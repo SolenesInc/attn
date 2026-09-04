@@ -1,0 +1,4 @@
+kind: fixed
+area: terminals
+change: Group terminal resizes during window changes and attach new panes at their measured size.
+symptom: Resizing a window repeatedly redrew terminal applications, and new panes briefly cycled through unnecessary sizes.

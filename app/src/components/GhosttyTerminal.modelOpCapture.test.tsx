@@ -149,6 +149,7 @@ describe('GhosttyTerminal model-op capture', () => {
         resizeCallbacks[0]([], {} as ResizeObserver);
         await terminal.drain();
       });
+      await waitFor(() => expect(terminal.getSize()).toEqual({ cols: 81, rows: 24 }));
       await act(async () => {
         await terminal.write('after resize');
       });

@@ -1,33 +1,12 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   fitRequiresTerminalResize,
   fitShouldBailAsSuspicious,
   geometryOverflowsContainer,
-  isWorkspaceResizeDragActive,
   isWorkspaceSuspensionAnimating,
 } from './ghosttyGeometry';
 
 describe('ghosttyGeometry resize policy', () => {
-  afterEach(() => {
-    delete document.documentElement.dataset.attnWorkspaceResizing;
-  });
-
-  it('detects when a workspace split drag is active', () => {
-    const panes = document.createElement('div');
-    panes.className = 'session-terminal-panes';
-    panes.dataset.resizingSplitId = 'root';
-    const terminal = document.createElement('div');
-    panes.appendChild(terminal);
-
-    expect(isWorkspaceResizeDragActive(terminal)).toBe(true);
-
-    delete panes.dataset.resizingSplitId;
-    expect(isWorkspaceResizeDragActive(terminal)).toBe(false);
-
-    document.documentElement.dataset.attnWorkspaceResizing = '1';
-    expect(isWorkspaceResizeDragActive(terminal)).toBe(true);
-  });
-
   it('holds fits while a fold or restore animates the pane frame', () => {
     const panes = document.createElement('div');
     panes.className = 'session-terminal-panes';
