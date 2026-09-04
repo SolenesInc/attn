@@ -1,0 +1,3 @@
+kind: changed
+area: garden
+change: Agent headers show distinct garden icons and labels for each seed state, including after work is paused or completed. Hover to read the latest note and outcome; plot headers show state counts.

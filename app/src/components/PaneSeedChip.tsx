@@ -1,37 +1,21 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import './PaneSeedChip.css';
 import type { PaneSeedDisplay } from './paneSeedDisplay';
-import { popoverRows } from './paneSeedDisplay';
+import { plotStateCounts, popoverRows, seedChipPresentation } from './paneSeedDisplay';
 import { TendedSeedsPopover } from './TendedSeedsPopover';
+import { SeedPlotIcon, SeedStateIcon } from './SeedStateIcon';
 
 const HOVER_OPEN_MS = 160;
 const HOVER_CLOSE_MS = 240;
 
-// Guards the leaf-drag: onPointerDown stops propagation so a click that drifts >=4px
-// cannot relocate the pane, and onClick stops the header from re-selecting it.
-export function PaneSeedChip({
-  display,
-  crownSeedId,
-  unread,
-  sessionId,
-  pinned,
-  onOpenSeed,
-  onPopoverClosed,
-}: {
-  display: PaneSeedDisplay;
-  crownSeedId?: string;
-  unread: boolean;
-  sessionId: string;
-  pinned: boolean;
-  onOpenSeed: (seedId: string) => void;
-  onPopoverClosed: () => void;
-}) {
+function useSeedChipPopover(pinned: boolean, onPopoverClosed: () => void) {
   const chipRef = useRef<HTMLButtonElement>(null);
   const [hoverOpen, setHoverOpen] = useState(false);
   const [clickPinned, setClickPinned] = useState(false);
   const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
   const openTimer = useRef<number | undefined>(undefined);
   const closeTimer = useRef<number | undefined>(undefined);
+  const [replay, setReplay] = useState(0);
 
   const popoverPinned = pinned || clickPinned;
   const popoverOpen = popoverPinned || hoverOpen;
@@ -56,6 +40,7 @@ export function PaneSeedChip({
     window.clearTimeout(closeTimer.current);
     window.clearTimeout(openTimer.current);
     openTimer.current = window.setTimeout(() => setHoverOpen(true), HOVER_OPEN_MS);
+    setReplay((value) => value + 1);
   }, []);
 
   const scheduleClose = useCallback(() => {
@@ -72,81 +57,96 @@ export function PaneSeedChip({
     if (pinned) onPopoverClosed();
   }, [pinned, onPopoverClosed]);
 
-  if (display.kind === 'none') return null;
+  return {
+    chipRef, anchor, replay,
+    open: popoverOpen,
+    pinned: popoverPinned,
+    scheduleOpen, scheduleClose,
+    close: closePopover,
+    pin: () => setClickPinned(true),
+    replayAnimation: () => setReplay((value) => value + 1),
+    cancelClose: () => window.clearTimeout(closeTimer.current),
+  };
+}
+
+// Guards the leaf-drag: onPointerDown stops propagation so a click that drifts >=4px
+// cannot relocate the pane, and onClick stops the header from re-selecting it.
+export function PaneSeedChip({
+  display,
+  crownSeedId,
+  unread,
+  sessionId,
+  pinned,
+  onOpenSeed,
+  onPopoverClosed,
+}: {
+  display: PaneSeedDisplay;
+  crownSeedId?: string;
+  unread: boolean;
+  sessionId: string;
+  pinned: boolean;
+  onOpenSeed: (seedId: string) => void;
+  onPopoverClosed: () => void;
+}) {
+  const popover = useSeedChipPopover(pinned, onPopoverClosed);
+  const presentation = seedChipPresentation(display);
+  if (!presentation) return null;
 
   const rows = popoverRows(display, crownSeedId);
-
-  let label: string;
-  let idText: string | null = null;
-  let status: string;
-  let fraction: string | null = null;
-  switch (display.kind) {
-    case 'crown': {
-      label = display.seed?.title.trim() || display.seedId;
-      idText = display.seed?.title.trim() ? display.seedId : null;
-      status = 'crown';
-      break;
-    }
-    case 'seed': {
-      label = display.seed.title.trim() || display.seed.id;
-      idText = display.seed.title.trim() ? display.seed.id : null;
-      status = display.seed.status;
-      break;
-    }
-    case 'plot': {
-      label = display.plot.title.trim() || display.plot.id;
-      status = 'plot';
-      const progress = display.plot.plot_progress;
-      if (progress && progress.total) fraction = `${progress.done}/${progress.total}`;
-      break;
-    }
-    case 'multi': {
-      label = `tending ${display.tended.length}`;
-      status = 'multi';
-      break;
-    }
-  }
-
-  const clickTarget = display.kind === 'crown' ? display.seedId : display.kind === 'seed' ? display.seed.id : null;
+  const { label, status, stateLabel, aggregate, seedId, clickTarget, fraction } = presentation;
 
   return (
     <>
       <button
-        ref={chipRef}
+        ref={popover.chipRef}
         type="button"
         className="pane-seed-chip"
         data-kind={display.kind}
         data-status={status}
+        data-seed-state={aggregate ? 'growing' : status}
+        data-seed-id={seedId}
         data-testid={`seed-chip-${sessionId}`}
+        title=""
+        aria-label={`${label}, ${stateLabel}${unread ? ', unread activity' : ''}. ${clickTarget ? 'Open seed' : 'Show seeds'}`}
+        aria-haspopup={aggregate ? 'listbox' : undefined}
+        aria-expanded={popover.open}
         onPointerDown={(event) => event.stopPropagation()}
-        onPointerEnter={scheduleOpen}
-        onPointerLeave={scheduleClose}
-        onClick={(event) => {
-          event.stopPropagation();
-          if (popoverPinned) {
-            closePopover();
-          } else if (clickTarget) {
-            closePopover();
-            onOpenSeed(clickTarget);
-          } else {
-            setClickPinned(true);
+        onPointerEnter={popover.scheduleOpen}
+        onPointerLeave={popover.scheduleClose}
+        onFocus={popover.replayAnimation}
+        onBlur={popover.scheduleClose}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            event.stopPropagation();
+            popover.pin();
           }
         }}
-        title={display.kind === 'multi' ? 'Seeds this agent is tending' : `${label}. Click to open`}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (popover.pinned) {
+            popover.close();
+          } else if (clickTarget) {
+            popover.close();
+            onOpenSeed(clickTarget);
+          } else {
+            popover.pin();
+          }
+        }}
       >
-        {display.kind === 'plot' ? (
-          <span className="pane-seed-chip-mark pane-seed-chip-mark--plot" aria-hidden="true">
-            <i /><i /><i /><i />
-          </span>
-        ) : (
-          <span
-            className={`pane-seed-chip-mark ${display.kind === 'crown' ? 'pane-seed-chip-mark--crown' : 'pane-seed-chip-mark--seed'}`}
-            aria-hidden="true"
-          />
-        )}
+        {aggregate ? <SeedPlotIcon /> : <SeedStateIcon status={status} replay={popover.replay} />}
         <span className="pane-seed-chip-title">{label}</span>
+        {display.kind === 'plot' ? (
+          <span className="pane-seed-counts">
+            {plotStateCounts(display.plot).map(([state, count]) => (
+              <span key={state} data-seed-state={state} title={`${count} ${state}`}>
+                <SeedStateIcon status={state} size={18} />{count}
+              </span>
+            ))}
+          </span>
+        ) : null}
         {fraction ? <span className="pane-seed-chip-fraction">{fraction}</span> : null}
-        {idText ? <span className="pane-seed-chip-id">{idText}</span> : null}
+        {!aggregate ? <span className="seed-state-label">{stateLabel}</span> : null}
         {unread ? (
           <span
             className="pane-seed-chip-unread"
@@ -155,16 +155,17 @@ export function PaneSeedChip({
           />
         ) : null}
       </button>
-      {popoverOpen && anchor && rows.length > 0 ? (
+      {popover.open && popover.anchor && rows.length > 0 ? (
         <TendedSeedsPopover
           rows={rows}
-          anchor={anchor}
-          anchorRef={chipRef}
-          pinned={popoverPinned}
+          crownSeedId={crownSeedId}
+          anchor={popover.anchor}
+          anchorRef={popover.chipRef}
+          pinned={popover.pinned}
           onOpenSeed={onOpenSeed}
-          onClose={closePopover}
-          onPointerEnter={() => window.clearTimeout(closeTimer.current)}
-          onPointerLeave={scheduleClose}
+          onClose={popover.close}
+          onPointerEnter={popover.cancelClose}
+          onPointerLeave={popover.scheduleClose}
         />
       ) : null}
     </>

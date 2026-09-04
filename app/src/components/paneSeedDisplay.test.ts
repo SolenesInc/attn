@@ -89,11 +89,14 @@ describe('derivePaneSeedDisplay', () => {
 describe('popoverRows', () => {
   it('appends the crown as context when it is not among the tended rows', () => {
     const tended = seed({ id: 's-work11', title: 'move the wire', tender_session: SESSION });
-    const rows = popoverRows({ kind: 'seed', seed: tended }, 's-crown1');
+    const crown = seed({ id: 's-crown1', title: 'the plan', status: 'dormant' });
+    const display = derivePaneSeedDisplay([tended, crown], SESSION, crown.id);
+    const rows = popoverRows(display, crown.id);
     expect(rows.map((row) => [row.seedId, row.role])).toEqual([
       ['s-work11', 'tended'],
       ['s-crown1', 'crown'],
     ]);
+    expect(rows[1].seed).toEqual(crown);
   });
 
   it('heads a plot display with the plot row', () => {

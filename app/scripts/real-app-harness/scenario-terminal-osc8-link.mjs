@@ -98,17 +98,18 @@ async function main() {
 
   runner.log('run context', { runDir: runner.runDir, sessionDir: runner.sessionDir, wsUrl: options.wsUrl, probeServerPort: port });
 
-  // Runner cleanups run in REVERSE registration order, so the effective order
-  // below is: close probe server, close panes, quitApp, observer.close.
-  runner.registerCleanup('close_observer', () => observer.close());
-  runner.registerCleanup('quit_app', () => client.quitApp());
-  runner.registerCleanup('close_session_panes', async () => {
+  const closeSessionPane = async () => {
     if (!sessionId) return;
     const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-    for (const pane of workspace?.panes || []) {
-      await client.request('close_pane', { sessionId, paneId: pane.paneId }).catch(() => {});
-    }
-  });
+    const paneId = workspace?.panes?.[0]?.paneId;
+    if (paneId) await client.request('close_pane', { sessionId, paneId }).catch(() => {});
+  };
+
+  // Runner cleanups run in REVERSE registration order, so the effective order
+  // below is: close probe server, close pane, quitApp, observer.close.
+  runner.registerCleanup('close_observer', () => observer.close());
+  runner.registerCleanup('quit_app', () => client.quitApp());
+  runner.registerCleanup('close_session_pane', closeSessionPane);
   runner.registerCleanup('close_probe_server', () => closeServer(server));
 
   try {
@@ -167,27 +168,23 @@ async function main() {
       // from following the escape's URI.
       label = 'CLICK_ME_LINK';
       url = `http://127.0.0.1:${port}/osc8-hit`;
-      // Literal shell source text: printf itself turns \e into ESC and \\ into a
-      // single backslash when it interprets the format string.
-      const esc = '\\e';
-      const st = `${esc}\\\\`; // string terminator: ESC + a single literal backslash
+      // Octal escapes produce the same OSC bytes in bash, zsh, and fish.
+      const esc = '\\033';
+      const st = `${esc}\\134`; // string terminator: ESC + a single literal backslash
       const printfCommand = `printf '${esc}]8;;${url}${st}${label}${esc}]8;;${st}\\n'`;
       await client.request('write_pane', { sessionId, paneId: pane.paneId, text: printfCommand });
+      // The shell echoes the command before printing the hyperlink on its own row.
       paneState = await waitForPaneText(
         client,
         sessionId,
         pane.paneId,
-        (text) => text.includes(label),
+        (text) => text.split('\n').some((line) => line.trim() === label),
         'OSC 8 link label rendered',
         20_000,
       );
       const read = await client.request('read_pane_text', { sessionId, paneId: pane.paneId });
       const lines = read.text.split('\n');
-      // The echoed printf command also contains the label; the rendered hyperlink
-      // is the line whose visible text is exactly the label. Prefer it.
-      const exact = lines.map((line, i) => [line.trim(), i]).filter(([t]) => t === label).map(([, i]) => i);
-      const loose = lines.map((line, i) => [line, i]).filter(([line]) => line.includes(label)).map(([, i]) => i);
-      labelRow = exact.length ? exact[exact.length - 1] : (loose.length ? loose[loose.length - 1] : -1);
+      labelRow = lines.findLastIndex((line) => line.trim() === label);
       runner.assert(labelRow >= 0, `Link label row disappeared. Pane text:\n${read.text}`);
       labelCol = lines[labelRow].indexOf(label) + Math.floor(label.length / 2);
 
@@ -249,12 +246,7 @@ async function main() {
     process.exitCode = 1;
   } finally {
     await closeServer(server).catch(() => {});
-    if (sessionId) {
-      const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-      for (const pane of workspace?.panes || []) {
-        await client.request('close_pane', { sessionId, paneId: pane.paneId }).catch(() => {});
-      }
-    }
+    await closeSessionPane();
     await client.quitApp().catch(() => {});
     await observer.close();
   }

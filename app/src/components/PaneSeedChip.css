@@ -1,73 +1,35 @@
 .pane-seed-chip {
-  --psc-tint: var(--color-border-hover);
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  flex: none;
-  max-width: 240px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 300px;
   margin: 0;
-  padding: 2px 9px;
+  padding: 0 4px;
   font-family: inherit;
-  font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
   line-height: 1;
   cursor: pointer;
-  border: 1px solid color-mix(in srgb, var(--psc-tint) 55%, transparent);
+  border: 1px solid transparent;
   border-radius: 5px;
-  background: color-mix(in srgb, var(--psc-tint) 12%, transparent);
+  background: transparent;
   color: var(--color-text-secondary);
   user-select: none;
   -webkit-user-select: none;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: background 120ms ease;
 }
 
-.pane-seed-chip:hover {
-  background: color-mix(in srgb, var(--psc-tint) 22%, transparent);
-  border-color: color-mix(in srgb, var(--psc-tint) 85%, transparent);
+.pane-seed-chip:hover,
+.pane-seed-chip[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--seed-state-color) 8%, transparent);
   color: var(--color-text-primary);
 }
 
-.pane-seed-chip[data-kind='crown'] {
-  background: none;
-  border-style: dashed;
-  color: var(--color-text-tertiary);
-}
-
-.pane-seed-chip[data-kind='crown']:hover {
-  background: color-mix(in srgb, var(--psc-tint) 10%, transparent);
-  color: var(--color-text-secondary);
-}
-
-.pane-seed-chip-mark {
-  flex: none;
-}
-
-.pane-seed-chip-mark--seed {
-  width: 6px;
-  height: 6px;
-  border-radius: 2px;
-  background: var(--psc-tint);
-}
-
-.pane-seed-chip-mark--crown {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  border: 1.5px solid var(--psc-tint);
-  background: none;
-}
-
-.pane-seed-chip-mark--plot {
-  display: grid;
-  grid-template-columns: 3px 3px;
-  gap: 1.5px;
-}
-
-.pane-seed-chip-mark--plot i {
-  width: 3px;
-  height: 3px;
-  border-radius: 1px;
-  background: var(--psc-tint);
+.pane-seed-chip:focus-visible {
+  outline: 1px solid var(--seed-state-color);
+  outline-offset: 2px;
 }
 
 .pane-seed-chip-title {
@@ -80,59 +42,35 @@
 .pane-seed-chip-fraction {
   flex: none;
   color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
-
-.pane-seed-chip:hover .pane-seed-chip-fraction {
-  color: var(--color-text-secondary);
-}
-
-.pane-seed-chip-id {
-  flex: none;
-  color: var(--color-text-dimmed);
-  font-family: 'SF Mono', 'Monaco', 'Menlo', 'DejaVu Sans Mono', monospace;
-  font-size: 0.9em;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.pane-seed-chip:hover .pane-seed-chip-id {
-  color: var(--color-text-secondary);
 }
 
 .pane-seed-chip-unread {
   flex: none;
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--color-error, #ef4444);
-  box-shadow: 0 0 7px 1px color-mix(in srgb, var(--color-error, #ef4444) 70%, transparent);
 }
 
-/* Per-status tint, mirroring GardenPanel.css's seed-row statuses. */
-.pane-seed-chip[data-status='planted'] {
-  --psc-tint: var(--color-border-hover);
+.pane-seed-counts {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+}
+.pane-seed-counts > span {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  color: var(--seed-state-color);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
 }
 
-.pane-seed-chip[data-status='growing'],
-.pane-seed-chip[data-status='plot'],
-.pane-seed-chip[data-status='multi'] {
-  --psc-tint: var(--accent);
-}
-
-.pane-seed-chip[data-status='dormant'] {
-  --psc-tint: color-mix(in srgb, var(--accent) 45%, var(--color-text-tertiary));
-}
-
-.pane-seed-chip[data-status='harvested'] {
-  --psc-tint: var(--color-text-muted);
-}
-
-.pane-seed-chip[data-status='withered'] {
-  --psc-tint: var(--color-error, #ef4444);
-}
-
-.pane-seed-chip[data-status='crown'] {
-  --psc-tint: var(--color-border-hover);
+@media (prefers-reduced-motion: reduce) {
+  .pane-seed-chip {
+    transition: none;
+  }
 }

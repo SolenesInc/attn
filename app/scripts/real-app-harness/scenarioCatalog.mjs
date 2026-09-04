@@ -146,6 +146,13 @@ export const scenarioCatalog = [
     timeoutMs: 240_000,
   },
   {
+    id: 'garden-seed-header',
+    runnerId: 'GardenSeedHeader',
+    label: 'Garden header: five lifecycle states, latest note, outcome, and seed navigation',
+    command: ['node', 'scripts/real-app-harness/scenario-garden-seed-header.mjs'],
+    timeoutMs: 180_000,
+  },
+  {
     id: 'delegate-workspace-placement',
     runnerId: 'DELEGATE-WORKSPACE-PLACEMENT',
     label: 'Delegate placement: --workspace places the pane, --no-worktree keeps the source checkout',

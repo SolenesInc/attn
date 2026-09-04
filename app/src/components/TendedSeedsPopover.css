@@ -1,110 +1,76 @@
 .tended-seeds-popover {
   position: fixed;
   z-index: 60;
-  min-width: 240px;
-  max-width: 340px;
-  padding: 4px;
+  width: 360px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 5px;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border-hover);
-  border-radius: 8px;
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+  border-radius: 10px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.25);
   outline: none;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
 }
 
 .tended-seeds-popover-list {
   margin: 0;
   padding: 0;
   list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
 }
 
 .tended-seeds-row {
-  --tsp-tint: var(--color-border-hover);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   width: 100%;
-  padding: 5px 8px;
+  padding: 9px 8px;
   border: none;
-  border-radius: 5px;
+  border-radius: 6px;
   background: none;
   color: var(--color-text-secondary);
-  font-family: inherit;
-  font-size: var(--font-size-sm);
+  font: inherit;
   text-align: left;
   cursor: pointer;
-  user-select: none;
-  -webkit-user-select: none;
 }
-
-.tended-seeds-row[data-status='planted'] { --tsp-tint: var(--color-border-hover); }
-.tended-seeds-row[data-status='growing'] { --tsp-tint: var(--accent); }
-.tended-seeds-row[data-status='dormant'] { --tsp-tint: color-mix(in srgb, var(--accent) 45%, var(--color-text-tertiary)); }
-.tended-seeds-row[data-status='harvested'] { --tsp-tint: var(--color-text-muted); }
-.tended-seeds-row[data-status='withered'] { --tsp-tint: var(--color-error, #ef4444); }
 
 .tended-seeds-row:hover,
 .tended-seeds-row--selected {
-  background: color-mix(in srgb, var(--tsp-tint) 14%, transparent);
+  background: color-mix(in srgb, var(--seed-state-color) 9%, transparent);
   color: var(--color-text-primary);
 }
 
 .tended-seeds-row--plot {
   color: var(--color-text-primary);
-  font-weight: 600;
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-radius: 0;
 }
 
-.tended-seeds-row--crown {
-  color: var(--color-text-tertiary);
-}
-
-.tended-seeds-mark {
-  flex: none;
-}
-
-.tended-seeds-mark--seed {
-  width: 6px;
-  height: 6px;
-  border-radius: 2px;
-  background: var(--tsp-tint);
-}
-
-.tended-seeds-mark--crown {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  border: 1.5px solid var(--color-text-muted);
-  background: none;
-}
-
-.tended-seeds-mark--plot {
-  display: grid;
-  grid-template-columns: 3px 3px;
-  gap: 1.5px;
-}
-
-.tended-seeds-mark--plot i {
-  width: 3px;
-  height: 3px;
-  border-radius: 1px;
-  background: var(--tsp-tint);
+.tended-seeds-row-content {
+  flex: 1;
+  min-width: 0;
 }
 
 .tended-seeds-row-title {
-  flex: 1 1 auto;
-  min-width: 0;
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.tended-seeds-row-id {
-  flex: none;
-  color: var(--color-text-dimmed);
-  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+.tended-seeds-row-note {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--color-text-tertiary);
   font-size: var(--font-size-xs);
+  line-height: 1.45;
 }
 
 .tended-seeds-row-fraction {
@@ -112,23 +78,106 @@
   color: var(--color-text-tertiary);
   font-variant-numeric: tabular-nums;
   font-size: var(--font-size-xs);
-  font-weight: 600;
-}
-
-.tended-seeds-row-note {
-  flex: none;
-  color: var(--color-text-dimmed);
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .tended-seeds-popover-hint {
   display: flex;
   gap: 10px;
-  padding: 5px 8px 3px;
+  padding: 8px;
   border-top: 1px solid var(--color-border-subtle);
-  margin-top: 3px;
-  color: var(--color-text-dimmed);
+  color: var(--color-text-tertiary);
   font-size: var(--font-size-xs);
+}
+
+.pane-seed-context {
+  padding: 11px 11px 4px;
+}
+.pane-seed-context-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pane-seed-context-state > div {
+  flex: 1;
+}
+.pane-seed-context-state strong {
+  display: block;
+  color: var(--seed-state-color);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+.pane-seed-context-state span {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: 1.45;
+}
+.pane-seed-context time {
+  flex: none;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+}
+.pane-seed-context-state > time {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+.pane-seed-context-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+}
+.pane-seed-context-note {
+  margin-top: 16px;
+  padding: 11px 12px;
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+}
+.pane-seed-context p {
+  margin: 7px 0 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.pane-seed-context-outcome {
+  margin-top: 14px;
+}
+.pane-seed-context .pane-seed-context-relation {
+  margin-top: 13px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+}
+.pane-seed-context-open, .pane-seed-context-report {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 10px 11px;
+  border-radius: 6px;
+}
+.pane-seed-context-open {
+  margin-top: 7px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+.pane-seed-context-report {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+}
+.pane-seed-context-open:hover, .pane-seed-context-report:hover {
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+}
+.pane-seed-context-id {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
 }

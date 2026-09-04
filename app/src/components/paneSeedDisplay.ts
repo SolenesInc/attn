@@ -1,11 +1,13 @@
 import type { Seed } from '../hooks/useDaemonSocket';
+import { seedStateLabel } from './seedStatePresentation';
 
-export type PaneSeedDisplay =
+export type PaneSeedDisplay = (
   | { kind: 'none' }
   | { kind: 'crown'; seedId: string; seed?: Seed }
   | { kind: 'seed'; seed: Seed }
   | { kind: 'plot'; plot: Seed; tended: Seed[] }
-  | { kind: 'multi'; tended: Seed[] };
+  | { kind: 'multi'; tended: Seed[] }
+) & { crownSeed?: Seed };
 
 // Tender is cleared on park/harvest/wither: a matching tender_session IS "actively tended".
 export function tendedSeeds(seeds: Seed[], sessionId: string): Seed[] {
@@ -46,21 +48,82 @@ export function derivePaneSeedDisplay(
   crownSeedId: string | undefined,
 ): PaneSeedDisplay {
   const tended = tendedSeeds(seeds, sessionId);
+  const crownSeed = crownSeedId ? seeds.find((seed) => seed.id === crownSeedId) : undefined;
   if (tended.length === 0) {
     if (!crownSeedId) return { kind: 'none' };
-    return { kind: 'crown', seedId: crownSeedId, seed: seeds.find((seed) => seed.id === crownSeedId) };
+    return { kind: 'crown', seedId: crownSeedId, seed: crownSeed };
   }
-  if (tended.length === 1) return { kind: 'seed', seed: tended[0] };
+  if (tended.length === 1) return { kind: 'seed', seed: tended[0], crownSeed };
   const byId = new Map(seeds.map((seed) => [seed.id, seed]));
   const plot = commonPlot(tended, byId);
-  if (plot) return { kind: 'plot', plot, tended };
-  return { kind: 'multi', tended };
+  if (plot) return { kind: 'plot', plot, tended, crownSeed };
+  return { kind: 'multi', tended, crownSeed };
 }
 
 export interface PaneSeedPopoverRow {
   seed?: Seed;
   seedId: string;
   role: 'plot' | 'tended' | 'crown';
+}
+
+interface SeedChipPresentation {
+  label: string;
+  status: string;
+  stateLabel: string;
+  aggregate: boolean;
+  seedId?: string;
+  clickTarget?: string;
+  fraction?: string;
+}
+
+function singleSeedPresentation(seedId: string, seed?: Seed): SeedChipPresentation {
+  const status = seed?.status ?? 'unknown';
+  return {
+    label: seed?.title.trim() || seedId,
+    status,
+    stateLabel: seedStateLabel(status),
+    aggregate: false,
+    seedId,
+    clickTarget: seedId,
+  };
+}
+
+export function seedChipPresentation(display: PaneSeedDisplay): SeedChipPresentation | null {
+  switch (display.kind) {
+    case 'none': return null;
+    case 'crown': return singleSeedPresentation(display.seedId, display.seed);
+    case 'seed': return singleSeedPresentation(display.seed.id, display.seed);
+    case 'plot': {
+      const progress = display.plot.plot_progress;
+      const fraction = progress?.total ? `${progress.done}/${progress.total}` : undefined;
+      return {
+        label: display.plot.title.trim() || display.plot.id,
+        status: 'plot',
+        stateLabel: fraction ? `${fraction} harvested` : 'Growing',
+        aggregate: true,
+        seedId: display.plot.id,
+        fraction,
+      };
+    }
+    case 'multi': return {
+      label: `tending ${display.tended.length}`,
+      status: 'multi',
+      stateLabel: 'Growing',
+      aggregate: true,
+    };
+  }
+}
+
+export function plotStateCounts(seed: Seed): Array<[string, number]> {
+  const progress = seed.plot_progress;
+  if (!progress) return [];
+  return Object.entries({
+    growing: progress.growing,
+    dormant: progress.dormant,
+    harvested: progress.done,
+    withered: progress.withered,
+    planted: Math.max(0, progress.total - progress.growing - progress.dormant - progress.done - progress.withered),
+  }).filter(([, count]) => count > 0);
 }
 
 export function popoverRows(display: PaneSeedDisplay, crownSeedId: string | undefined): PaneSeedPopoverRow[] {
@@ -85,7 +148,7 @@ export function popoverRows(display: PaneSeedDisplay, crownSeedId: string | unde
       break;
   }
   if (crownSeedId && !rows.some((row) => row.seedId === crownSeedId)) {
-    rows.push({ seedId: crownSeedId, role: 'crown' });
+    rows.push({ seed: display.crownSeed, seedId: crownSeedId, role: 'crown' });
   }
   return rows;
 }

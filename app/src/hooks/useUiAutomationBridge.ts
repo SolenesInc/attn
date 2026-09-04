@@ -2624,9 +2624,10 @@ export function useUiAutomationBridge({
         return {
           present: true,
           title: chip.querySelector('.pane-seed-chip-title')?.textContent?.trim() ?? '',
-          id: chip.querySelector('.pane-seed-chip-id')?.textContent?.trim() ?? '',
-          hint: chip.getAttribute('title') ?? '',
+          id: chip.getAttribute('data-seed-id') ?? '',
+          hint: chip.getAttribute('aria-label') ?? '',
           status: chip.getAttribute('data-status') ?? '',
+          animationsRunning: chip.getAnimations({ subtree: true }).filter((animation) => animation.playState === 'running').length,
           unread: Boolean(chip.querySelector(`[data-testid="seed-chip-unread-${sessionId}"]`)),
         };
       }
