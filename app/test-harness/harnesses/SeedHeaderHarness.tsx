@@ -14,6 +14,7 @@ const base: Seed = {
   planter_session: '', planter_member: '', tender_session: 'garden-agent', tender_member: '',
   edges: [], ready: false, template: false, gate: false, vars: [], rev: 1, created_at: now, updated_at: now,
 };
+const plot = { ...base, id: 's-plot', title: 'Polish the Garden', plot_progress: { done: 3, total: 7, ready: 0, growing: 2, blocked: 0, dormant: 1, withered: 1 } };
 const api = {
   sendSeedDocumentGet: async (id: string) => ({
     seed: { ...base, id, status: id.startsWith('s-') && states.includes(id.slice(2)) ? id.slice(2) : 'growing' },
@@ -28,7 +29,6 @@ export function SeedHeaderHarness({ onReady, setTriggerRerender }: HarnessProps)
   const [terminalEscapes, setTerminalEscapes] = useState(0);
   useEffect(() => { onReady(); setTriggerRerender(() => () => {}); }, [onReady, setTriggerRerender]);
   const seed = { ...base, id: `s-${status}`, status, tender_session: status === 'growing' ? 'garden-agent' : '' };
-  const plot = { ...base, id: 's-plot', title: 'Polish the Garden', plot_progress: { done: 3, total: 7, ready: 0, growing: 2, blocked: 0, dormant: 1, withered: 1 } };
   return (
     <DaemonApiProvider api={api}>
       <div style={{ padding: 28, color: 'var(--color-text-primary)', background: 'var(--color-bg-app)', minHeight: '100vh' }}>

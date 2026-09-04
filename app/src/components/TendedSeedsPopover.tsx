@@ -4,7 +4,8 @@ import { createPortal } from 'react-dom';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import type { PaneSeedPopoverRow } from './paneSeedDisplay';
 import { PaneSeedContext } from './PaneSeedContext';
-import { SeedPlotIcon, SeedStateIcon, seedStateLabel } from './SeedStateIcon';
+import { SeedPlotIcon, SeedStateIcon } from './SeedStateIcon';
+import { seedStateLabel } from './seedStatePresentation';
 import { terminalSeedBodyExcerpt } from '../utils/terminalSeedPreviewText';
 import './TendedSeedsPopover.css';
 

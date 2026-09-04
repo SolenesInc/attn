@@ -270,9 +270,10 @@ async function main() {
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
-    for (const id of [handedOver, reopened, delegated, pane?.sessionId]) {
-      if (id) await client.request('close_session', { sessionId: id }).catch(() => {});
-    }
+    if (handedOver) await client.request('close_session', { sessionId: handedOver }).catch(() => {});
+    if (reopened) await client.request('close_session', { sessionId: reopened }).catch(() => {});
+    if (delegated) await client.request('close_session', { sessionId: delegated }).catch(() => {});
+    if (pane?.sessionId) await client.request('close_session', { sessionId: pane.sessionId }).catch(() => {});
     await client.quitApp().catch(() => {});
     await observer.close();
   }

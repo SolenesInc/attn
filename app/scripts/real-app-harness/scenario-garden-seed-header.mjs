@@ -129,8 +129,10 @@ async function main() {
         await delay(2000);
         const current = await snapshot(appPid, readLiveDaemonPid(profile), webkitBaseline);
         const pids = new Set(appPids(current));
-        const cpu = (await readProcessTable()).filter((process) => pids.has(process.pid))
-          .map(({ pid, cpuPct }) => ({ pid, cpuPct }));
+        const cpu = [];
+        for (const { pid, cpuPct } of await readProcessTable()) {
+          if (pids.has(pid)) cpu.push({ pid, cpuPct });
+        }
         samples.push({ footprint: await readAppFootprint(current), cpu, processes: current });
       }
       runner.writeText('idle-app.json', JSON.stringify(samples, null, 2));
@@ -147,7 +149,8 @@ async function main() {
     console.error((await runner.finishFailure(error, { seedId, agent })).error);
     process.exitCode = 1;
   } finally {
-    for (const sessionId of [agent, dispatcher]) if (sessionId) await client.request('close_session', { sessionId }).catch(() => {});
+    if (agent) await client.request('close_session', { sessionId: agent }).catch(() => {});
+    if (dispatcher) await client.request('close_session', { sessionId: dispatcher }).catch(() => {});
     await client.quitApp().catch(() => {});
     await observer.close();
   }
