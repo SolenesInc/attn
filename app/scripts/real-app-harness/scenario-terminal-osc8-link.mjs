@@ -168,10 +168,9 @@ async function main() {
       // from following the escape's URI.
       label = 'CLICK_ME_LINK';
       url = `http://127.0.0.1:${port}/osc8-hit`;
-      // Literal shell source text: printf itself turns \e into ESC and \\ into a
-      // single backslash when it interprets the format string.
-      const esc = '\\e';
-      const st = `${esc}\\\\`; // string terminator: ESC + a single literal backslash
+      // Octal escapes produce the same OSC bytes in bash, zsh, and fish.
+      const esc = '\\033';
+      const st = `${esc}\\134`; // string terminator: ESC + a single literal backslash
       const printfCommand = `printf '${esc}]8;;${url}${st}${label}${esc}]8;;${st}\\n'`;
       await client.request('write_pane', { sessionId, paneId: pane.paneId, text: printfCommand });
       // The shell echoes the command before printing the hyperlink on its own row.
