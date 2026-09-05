@@ -77,6 +77,9 @@ function rowFor(state, sessionId) {
   return state.rows.find((row) => row.id === sessionId) ?? null;
 }
 
+// Probes settle in about a tenth of a second, too fast to see in a clip.
+const hold = () => (process.env.ATTN_HARNESS_RECORD === '1' ? sleep(1200) : Promise.resolve());
+
 async function main() {
   const { options, help } = parseArgs(process.argv.slice(2));
   if (help) {
@@ -149,6 +152,7 @@ async function main() {
         runner.assert(!!rowFor(state, id), `session ${id} must be listed`, { rows: state.rows });
       }
       runner.writeJson('surface-opened.json', state);
+      await hold();
       return state;
     });
 
@@ -162,6 +166,7 @@ async function main() {
         'a session from another repository must drop out of the filtered list',
         { rows: settled.rows });
       runner.writeJson('filtered-by-repository.json', { filtered, settled });
+      await hold();
       await client.request('sessions_set_filter', { repository: '' });
       await waitForSessions(client, (s) => s.rows.length >= 3, 'the filter to be lifted');
     });
@@ -181,6 +186,7 @@ async function main() {
       runner.assert(after.rows.length === before.rows.length,
         'the close replaces the row rather than adding one', { before: before.rows.length, after: after.rows.length });
       runner.writeJson('row-after-close.json', after);
+      await hold();
     });
 
     await runner.step('the_live_scope_drops_the_closed_row', async () => {
@@ -188,6 +194,7 @@ async function main() {
       const settled = await waitForSessions(client, (s) => !rowFor(s, sessions.two),
         'the Live scope to drop the session that just closed');
       runner.writeJson('live-scope.json', { live, settled });
+      await hold();
 
       await client.request('sessions_set_filter', { scope: 'Closed' });
       const closed = await waitForSessions(client, (s) => !!rowFor(s, sessions.two),
@@ -195,6 +202,7 @@ async function main() {
       runner.assert(closed.rows.every((row) => row.state === 'closed'),
         'the Closed scope holds closed rows only', { rows: closed.rows });
       runner.writeJson('closed-scope.json', closed);
+      await hold();
     });
 
     await runner.step('a_date_preset_and_a_custom_range_both_filter', async () => {
@@ -202,6 +210,7 @@ async function main() {
       const today = await waitForSessions(client, (s) => s.rows.length >= 3,
         'today to hold the sessions this run just made');
       runner.writeJson('range-today.json', today);
+      await hold();
 
       const wayBack = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const alsoBack = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -210,9 +219,11 @@ async function main() {
         'a window before this run started to hold nothing');
       runner.assert(empty.state.length > 0, 'an empty list says why it is empty', { state: empty.state });
       runner.writeJson('range-custom-empty.json', empty);
+      await hold();
 
       await client.request('sessions_set_filter', { range: 'any' });
       await waitForSessions(client, (s) => s.rows.length >= 3, 'the range to be lifted');
+      await hold();
     });
 
     await runner.step('the_cli_and_the_surface_agree', async () => {
