@@ -181,7 +181,7 @@ describe("classifier prompt", () => {
     const user = messagesOf(call).join("\n");
     expect(user).toContain('{"user":"address the PR feedback and get CI green"}');
     expect(user).toContain('{"assistant":"I\'ll fix the retry and run the suite."}');
-    expect(user).toContain('{"bash":"git push --force origin main"}');
+    expect(user).toContain('"input":{"command":"git push --force origin main"}');
     expect(user).toContain("/work/repo");
     expect(user).toContain("git push is not in the read-only set");
   });
@@ -252,7 +252,7 @@ describe("the session's opening message rides in its own seat", () => {
     expect(messages[0]).toContain("force-push your own branch whenever you need to");
     expect(messages[0]).toContain("explicitly authorizes the SPECIFIC action");
     expect(messages[0]).toContain("is not authorization");
-    expect(messages[1]).toContain('{"bash":"git push --force origin main"}');
+    expect(messages[1]).toContain('"input":{"command":"git push --force origin main"}');
   });
 
   test("no opening message means no extra seat", async () => {

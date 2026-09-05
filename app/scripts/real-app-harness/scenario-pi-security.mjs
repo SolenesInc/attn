@@ -8,6 +8,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { waitForFirstWorkspacePane, waitForPaneText } from './scenarioAssertions.mjs';
 import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
+import { readProcessTable, collectDescendantPids, readLiveDaemonPid } from './perfMeasure.mjs';
 import { startStubWorld, scriptedAgent, stubAgentModel, stubJudgeModel, resolveAttnBinary, waitForPiPreflight } from './piStubProvider.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -24,11 +25,19 @@ let standardCache;
 let initialSettings;
 let world;
 let refuseScope = false;
+let evidenceReview = false;
+let oversized = false;
+const evidenceBody = 'console.log("EVIDENCE-A");\n';
+const editedBody = 'console.log("EVIDENCE-B");\n';
+const onlyEdit = (input) => input.edits?.length === 1 ? input.edits[0] : input;
+const evidenceEntries = (call) => (call.prompt.match(/<transcript>\n([\s\S]*?)\n<\/transcript>/)?.[1] ?? '')
+  .split('\n').filter((line) => line.startsWith('{')).map((line) => JSON.parse(line));
 const buildCommand = () => 'node build.cjs';
 const cacheRequest = () => ({ allowWrite: [outside], reason: 'The build writes compiled output to this cache directory.' });
 world = await startStubWorld({
   scenario: 'pi-security', appPath: options.appPath, profile,
-  judge: () => refuseScope ? { verdict: 'deny', reason: 'Write access to this shared build cache needs your explicit approval.' } : { verdict: 'allow' },
+  judge: () => oversized ? { error: 'context_length_exceeded' } : refuseScope ?
+    { verdict: 'deny', reason: 'Write access to this shared build cache needs your explicit approval.' } : { verdict: 'allow', forceIntent: evidenceReview },
   agent: scriptedAgent([
     { when: 'use configured build cache', tools: () => [{ name: 'bash', args: { command: 'node build-standard.cjs' } }], text: (request) => `PRESET-${request.prompt.split(' ').at(-1)}-DONE` },
     { when: 'recover the build cache', tools: (request) => {
@@ -49,6 +58,17 @@ world = await startStubWorld({
     ], text: 'SECURITY-INITIAL-DONE' },
     { when: 'outside after auto off', tools: () => [{ name: 'bash', args: { command: `printf forbidden > ${quote(path.join(outside, 'auto-off.txt'))}` } }], text: 'SECURITY-AUTO-OFF-DONE' },
     { when: 'write using grant', tools: () => [{ name: 'write', args: { path: path.join(outside, 'granted.txt'), content: 'explicit grant worked\n' } }], text: 'SECURITY-GRANT-DONE' },
+    { when: 'inspect evidence history', tools: () => [
+      { name: 'write', args: { path: 'evidence.cjs', content: evidenceBody } },
+      { name: 'edit', args: { path: 'evidence.cjs', oldText: evidenceBody, newText: editedBody } },
+      { name: 'bash', args: { command: 'node evidence.cjs' } },
+    ], text: 'EVIDENCE-HISTORY-DONE' },
+    { when: 'inspect pending evidence', tools: () => [
+      { name: 'write', args: { path: path.join(outside, 'evidence.cjs'), content: evidenceBody } },
+      { name: 'edit', args: { path: path.join(outside, 'evidence.cjs'), oldText: evidenceBody, newText: editedBody } },
+    ], text: 'EVIDENCE-PENDING-DONE' },
+    { when: 'oversize approve', tools: () => [{ name: 'write', args: { path: path.join(outside, 'inspected.txt'), content: 'EXACT-INSPECTED-CONTENT\n' } }], text: 'EVIDENCE-APPROVAL-DONE' },
+    { when: 'oversize cancel', tools: () => [{ name: 'write', args: { path: path.join(outside, 'cancelled.txt'), content: 'CANCELLED-CONTENT\n' } }], text: 'EVIDENCE-CANCEL-DONE' },
     { when: 'write after revoke', tools: () => [{ name: 'write', args: { path: path.join(outside, 'revoked.txt'), content: 'must not exist' } }], text: 'SECURITY-REVOKE-DONE' },
     { when: 'network while provider works', tools: () => [{ name: 'bash', args: { command: `curl --max-time 3 -sS ${world.stub.baseUrl}/ok` } }], text: 'SECURITY-NETWORK-DONE' },
     { when: 'after new', tools: [{ name: 'write', args: { path: 'after-new.txt', content: 'new session works\n' } }], text: 'SECURITY-NEW-DONE' },
@@ -184,7 +204,10 @@ try {
     runner.assert(!fs.existsSync(path.join(outside, 'scope-leaked.txt')), 'The next command did not inherit the grant');
     const results = world.stub.calls.agent.at(-1).toolResults;
     runner.assert(results[0].includes('retry bash with sandbox:') && results[1].includes('approved temporary sandbox access'), 'Agent received recovery guidance and the reviewed execution result');
-    runner.assert(world.stub.calls.judge.some((call) => call.prompt.includes('sandbox request:') && call.prompt.includes(outside)), 'Classifier reviewed command and exact cache scope together');
+    runner.assert(world.stub.calls.judge.some((call) => {
+      const input = evidenceEntries(call).at(-1)?.bash?.input;
+      return input?.command === buildCommand() && input.sandbox?.allowWrite?.[0] === outside;
+    }), 'Classifier reviewed command and exact cache scope together');
   });
   await runner.step('refused_scope_can_be_reconsidered_after_user_reply', async () => {
     fs.unlinkSync(path.join(outside, 'build-artifact'));
@@ -244,6 +267,62 @@ try {
     await closeSecurity();
     await prompt('write using grant', 'SECURITY-GRANT-DONE');
     runner.assert(fs.existsSync(path.join(outside, 'granted.txt')), 'Explicit write grant worked');
+  });
+  await runner.step('pending_and_historical_arguments_reach_both_passes', async () => {
+    await submit('/auto on');
+    await expectPane('auto: on');
+    evidenceReview = true;
+    let start = world.stub.calls.judge.length;
+    await prompt('inspect evidence history', 'EVIDENCE-HISTORY-DONE');
+    let reviews = world.stub.calls.judge.slice(start);
+    runner.writeJson('evidence-history-requests.json', reviews);
+    runner.assert(reviews.length === 2, 'Project write/edit needed no model calls; the shell execution used both passes');
+    for (const review of reviews) {
+      const history = evidenceEntries(review).filter((entry) => entry.tool_call?.call.input?.path === 'evidence.cjs').map((entry) => entry.tool_call);
+      runner.assert(history.length === 2 && history.every((entry) => entry.observation === 'succeeded'), 'Both passes saw successful write and edit results');
+      const edit = onlyEdit(history[1].call.input);
+      runner.assert(history[0].call.input.content === evidenceBody && edit.oldText === evidenceBody && edit.newText === editedBody, 'Historical write and edit contents were complete', history);
+    }
+    runner.assert(world.stub.calls.agent.at(-1).toolResults.at(-1).includes('EVIDENCE-B'), 'Real Pi executed the edited script');
+    start = world.stub.calls.judge.length;
+    await prompt('inspect pending evidence', 'EVIDENCE-PENDING-DONE');
+    reviews = world.stub.calls.judge.slice(start);
+    runner.assert(reviews.length === 4, 'Outside write and edit each received both passes');
+    for (const review of reviews) {
+      const pending = evidenceEntries(review).at(-1);
+      const action = pending.write ?? pending.edit;
+      runner.assert(action.toolCallId && action.cwd === repoDir, 'Pending evidence retained call identity and cwd');
+      const edit = onlyEdit(action.input);
+      runner.assert(pending.write ? action.input.content === evidenceBody : edit.oldText === evidenceBody && edit.newText === editedBody, 'Pending arguments were complete in each pass');
+    }
+    runner.writeJson('evidence-requests.json', reviews.map((review) => ({ body: review.body, bytes: Buffer.byteLength(JSON.stringify(review.body)) })));
+    runner.assert(fs.readFileSync(path.join(outside, 'evidence.cjs'), 'utf8') === editedBody, 'Approved outside edit ran with the inspected contents');
+    evidenceReview = false;
+  });
+  await runner.step('oversized_review_requires_inspection_and_confirmation', async () => {
+    oversized = true;
+    await submit('oversize approve');
+    const preview = await expectPane('Review pending arguments');
+    runner.assert(preview.text.includes('EXACT-INSPECTED-CONTENT') && preview.text.includes('inspected.txt'), 'Native Pi editor showed the full action for inspection');
+    runner.writeText('evidence-preview.txt', preview.text);
+    runner.assert(!fs.existsSync(path.join(outside, 'inspected.txt')), 'Preview did not run the action');
+    await key('\r');
+    await expectPane('exact arguments');
+    runner.assert(!fs.existsSync(path.join(outside, 'inspected.txt')), 'Submitting the preview still required confirmation');
+    await key('\r');
+    await expectPane('EVIDENCE-APPROVAL-DONE');
+    runner.assert(fs.readFileSync(path.join(outside, 'inspected.txt'), 'utf8') === 'EXACT-INSPECTED-CONTENT\n', 'Explicit one-call confirmation ran the exact write');
+    await submit('oversize cancel');
+    await expectPane('Review pending arguments');
+    await key('\x1b');
+    await expectPane('EVIDENCE-CANCEL-DONE');
+    runner.assert(!fs.existsSync(path.join(outside, 'cancelled.txt')), 'Cancelling the native preview blocked execution');
+    runner.assert(world.stub.calls.agent.at(-1).toolResults[0].includes('could not complete this review'), 'Agent received the incomplete-review recovery guidance');
+    oversized = false;
+    await submit('/auto off');
+    await expectPane('auto: off');
+  });
+  await runner.step('revoking_write_access_restores_containment', async () => {
     await openSecurity();
     await chooseSecurity('Extra writable directories', 'Security / Extra writable directories');
     await chooseSecurity('/outside', 'Edit path…');
@@ -260,6 +339,16 @@ try {
     await prompt('network while provider works', 'SECURITY-NETWORK-DONE');
     const result = world.stub.calls.agent.at(-1).toolResults.join('\n');
     runner.assert(!result.includes('STUB-OK') && /denied|Failed|not permitted|Couldn't connect/i.test(result), 'Tool network was blocked while model requests continued');
+  });
+  await runner.step('idle_resource_observations', async () => {
+    const samples = [];
+    for (let index = 0; index < 4; index++) {
+      await delay(2000);
+      const table = await readProcessTable();
+      const owned = collectDescendantPids(table, readLiveDaemonPid(profile));
+      samples.push({ at: new Date().toISOString(), processes: table.filter((proc) => owned.has(proc.pid)) });
+    }
+    runner.writeJson('evidence-idle-processes.json', samples);
   });
   await runner.step('new_session_rebuilds_security', async () => {
     await submit('/new');

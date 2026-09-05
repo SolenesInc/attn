@@ -3,6 +3,7 @@ import {
   createLocalBashOperations, createLsToolDefinition, createReadToolDefinition, createWriteToolDefinition,
   truncateHead, type BashOperations, type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { CredentialFilter, FilteredStream } from "./filter";
 import { SandboxedFilesystem } from "./filesystem";
 import { assertPath, type SecurityPolicy } from "./policy";
@@ -132,9 +133,9 @@ export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter,
   } };
   tools.push(protectedGrep);
   return tools.map((tool) => ({ ...tool,
-    renderCall: tool.name === "edit" ? (args, theme) => ({
-      render: () => [theme.fg("toolTitle", "edit") + " " + filter.text(String((args as { path?: string }).path ?? ""))], invalidate() {},
-    }) : tool.renderCall ? (args, theme, context) => tool.renderCall!(filter.value(args), theme, context) : undefined,
+    renderCall: tool.name === "edit" ? (args, theme) => new Text(
+      theme.fg("toolTitle", "edit") + " " + filter.text(String((args as { path?: string }).path ?? "")), 0, 0,
+    ) : tool.renderCall ? (args, theme, context) => tool.renderCall!(filter.value(args), theme, context) : undefined,
     async execute(id, args, signal, onUpdate, ctx) {
     if (signal?.aborted) throw new Error("Aborted");
     const abort = () => fs.close();

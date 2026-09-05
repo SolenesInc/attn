@@ -1,6 +1,7 @@
 import { type Environment } from "./environment";
 import type { ToolCall } from "./policy";
 import type { TranscriptEntry } from "./transcript";
+import type { ToolEvidenceLimits } from "./evidence";
 
 export type ClassifierRequest = {
   call: ToolCall;
@@ -45,10 +46,12 @@ export type ClassifierVerdict =
       unreadable?: boolean;
 
       tooLong?: boolean;
+      incomplete?: boolean;
     };
 
 export interface Classifier {
   classify(request: ClassifierRequest): Promise<ClassifierVerdict>;
+  evidenceLimits?(): ToolEvidenceLimits;
 }
 
 export class StubClassifier implements Classifier {

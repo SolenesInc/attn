@@ -188,7 +188,7 @@ describe("what a denial leaves behind", () => {
     expect(prompt?.layer).toBe("intent");
     expect(prompt?.system).toContain("You are a security monitor for an autonomous coding agent.");
     expect(prompt?.user).toContain("you may force-push this branch, it is mine");
-    expect(prompt?.user).toContain('{"bash":"git push --force origin main"}');
+    expect(prompt?.user).toContain('"input":{"command":"git push --force origin main"}');
   });
 
   test("a call no classifier judged carries no prompt", async () => {

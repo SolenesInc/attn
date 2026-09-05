@@ -21,10 +21,12 @@ describe("the transcript window", () => {
     expect(renderTranscript(transcript.snapshot())).toBe('{"assistant":"on it"}\n{"user":"then push"}');
   });
 
-  test("projects a tool call under the tool's own name", () => {
+  test("projects a tool call with arguments and observed status", () => {
     const transcript = rollingWindowOf([]);
-    transcript.recordToolCall("bash", "go test ./...");
-    expect(renderTranscript(transcript.snapshot())).toBe('{"bash":"go test ./..."}');
+    transcript.recordAction({ toolCallId: "call", toolName: "bash", cwd: "/work", input: { command: "go test ./..." } }, "allowed-to-run");
+    const entry = JSON.parse(renderTranscript(transcript.snapshot())).tool_call;
+    expect(entry.call.input.command).toBe("go test ./...");
+    expect(entry.observation).toBe("allowed-to-run");
   });
 
   test("drops empty and whitespace-only turns", () => {

@@ -10,6 +10,7 @@ import { protectedBash, protectedTools } from "../security/tools";
 import { PiSecurity } from "../security/index";
 import { createServer } from "node:net";
 import { shellQuote } from "../security/sandbox";
+import { visibleWidth } from "@earendil-works/pi-tui";
 
 const directories: string[] = [];
 const workers: SandboxedFilesystem[] = [];
@@ -34,6 +35,19 @@ function fixture(): { root: string; policy: SecurityPolicy; fs: SandboxedFilesys
   workers.push(fs);
   return { root, policy, fs, filter };
 }
+
+test("protected edit titles wrap long paths and filter credentials at terminal widths", () => {
+  const { policy, filter, fs } = fixture();
+  const tool = protectedTools(policy, filter, fs).find((tool) => tool.name === "edit")!;
+  const path = `/outside/${"long-😀-directory/".repeat(12)}synthetic-provider-credential/file.txt`;
+  const component = tool.renderCall!({ path }, { fg: (_color: string, text: string) => text } as never, {} as never)!;
+  for (const width of [20, 36, 106]) {
+    const lines = component.render(width);
+    expect(lines.every((line) => visibleWidth(line) <= width)).toBe(true);
+    expect(lines.join("")).not.toContain("synthetic-provider-credential");
+    expect(lines.join("")).toContain("REDACTED");
+  }
+});
 
 describe("credential filtering", () => {
   test("filters provider tokens and generic credential headers without relying on environment values", () => {

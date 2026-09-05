@@ -121,6 +121,11 @@ export class FakeUI implements AutoModeUILike {
   readonly workingMessages: (string | undefined)[] = [];
   readonly questions: { title: string; message: string }[] = [];
   answer = false;
+  readonly previews: string[] = [];
+  async editor(_title: string, prefill = ""): Promise<string | undefined> {
+    this.previews.push(prefill);
+    return prefill;
+  }
 
   setStatus(key: string, text: string | undefined): void {
     this.statuses.set(key, text);

@@ -4,6 +4,7 @@ import { matchesAnyPattern, type AutoModeConfig } from "./config";
 import { locatePath } from "./paths";
 
 export type ToolCall = {
+  toolCallId?: string;
   toolName: string;
   input: Record<string, unknown>;
 };

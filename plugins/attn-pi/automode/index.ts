@@ -15,6 +15,7 @@ import {
 } from "./ui";
 import { mergeUsage, UsageLedger, type UsageLike } from "./usage";
 import { credentials } from "../security/filter";
+import { actionEvidence, inputFingerprint, snapshotCall, toolEvidenceLimits } from "./evidence";
 
 export type ToolCallEventLike = {
   type: "tool_call";
@@ -50,6 +51,7 @@ export type ToolResultEventLike = {
   type: "tool_result";
   toolCallId: string;
   usage?: UsageLike;
+  isError?: boolean;
 };
 
 export type ToolResultEventResultLike = { usage?: UsageLike };
@@ -129,6 +131,7 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
     let deciding = 0;
     let checking = 0;
     const classifier: Classifier = {
+      evidenceLimits: () => options.classifier.evidenceLimits?.() ?? toolEvidenceLimits(),
       classify: async (request) => {
         const ui = uiOf(judging);
         checking += 1;
@@ -146,29 +149,41 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
     let breakerAsked = false;
 
     const review: ToolCallReview = async (event, ctx) => {
-      if (options.isEnabled?.() === false) return undefined;
-      const call: ToolCall = { toolName: event.toolName, input: event.input };
+      const fingerprint = inputFingerprint(event.input);
+      const call = snapshotCall({ toolCallId: event.toolCallId, toolName: event.toolName, input: event.input });
+      if (options.isEnabled?.() === false) {
+        session.noteApprovedCall(call, ctx.cwd);
+        return undefined;
+      }
+      const assertCurrent = () => {
+        ctx.signal?.throwIfAborted();
+        if (inputFingerprint(event.input) !== fingerprint) throw new Error("Tool arguments changed during approval. Submit the updated call for a fresh review.");
+      };
       const decideOptions = { cwd: ctx.cwd, signal: ctx.signal, cacheWritePaths: options.cacheWritePaths?.() };
       let decision: SessionDecision;
       judging = ctx;
       deciding += 1;
       try {
         decision = await session.decide(call, decideOptions);
+        assertCurrent();
         if (decision.outcome === "block" && decision.rule === "circuit-breaker" && !breakerAsked) {
           breakerAsked = true;
           if (await askToResume(session, ctx, options.onWaitingForUser)) {
             breakerAsked = false;
             session.resumeAfterBreaker();
             decision = await session.decide(call, decideOptions);
+            assertCurrent();
           }
         }
         if (decision.outcome === "block" && decision.rule === "classifier-too-long") {
-          if (await askToRun(decision.action, ctx, options.onWaitingForUser)) {
-            session.noteApprovedCall(call);
+          if (await askToRun(call, ctx, options.onWaitingForUser)) {
+            assertCurrent();
+            session.noteApprovedCall(call, ctx.cwd);
             return undefined;
           }
         }
       } catch (error) {
+        session.noteBlockedCall(call, ctx.cwd);
         // pi blocks a tool whose tool_call handler throws, but the model would get pi's error text instead of the denial contract.
         const render = isSandboxRequest(call) ? sandboxDenialToolResult : denialToolResult;
         return { block: true, reason: credentials.text(render({ action: describeCall(call), reason: failureReason(error), judged: false })) };
@@ -240,6 +255,7 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
     });
 
     pi.on("tool_result", (event) => {
+      session.noteToolResult(event.toolCallId, event.isError);
       const held = options.usageLedger?.drain();
       return held ? { usage: mergeUsage(event.usage, held) } : undefined;
     });
@@ -280,15 +296,23 @@ async function askToResume(
 }
 
 async function askToRun(
-  action: string,
+  call: ToolCall,
   ctx: AutoModeContextLike,
   onWaitingForUser?: (waiting: boolean) => void,
 ): Promise<boolean> {
   const ui = uiOf(ctx);
-  if (!ui) return false;
-  const question = tooLongQuestion(action);
+  if (!ui?.editor) return false;
+  const question = tooLongQuestion(describeCall(call));
   announceWaiting(ctx, onWaitingForUser, true);
   try {
+    const preview = JSON.stringify(actionEvidence(call, ctx.cwd), null, 2);
+    const inspected = await ui.editor("Review pending arguments; submit unchanged to continue", preview);
+    if (inspected === undefined) return false;
+    if (inspected !== preview) {
+      ui.notify("Changes in the preview are not applied. The call was blocked; ask the agent to submit the changed arguments.", "warning");
+      return false;
+    }
+    ctx.signal?.throwIfAborted();
     return await ui.confirm(question.title, question.message);
   } catch {
     return false;

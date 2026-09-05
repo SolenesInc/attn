@@ -18,6 +18,7 @@ const DENY_SEVERITY = 60;
 const HARD_BLOCK_RULE = 'Data Exfiltration';
 
 function severityAnswer(verdict, pass) {
+  if (pass === 1 && verdict.forceIntent) return `<severity>${DENY_SEVERITY}</severity>`;
   if (verdict.verdict === 'allow') return `<severity>${ALLOW_SEVERITY}</severity>`;
   if (pass === 1) return `<severity>${DENY_SEVERITY}</severity>`;
   const category = verdict.boundary === true ? HARD_BLOCK_RULE : (verdict.category ?? 'Destructive Operation');
@@ -98,7 +99,7 @@ export function startPiStubProvider({ agent, judge }) {
       const request = { body, messages, systemPrompt, turn: calls[role].length, prompt: prompts.at(-1) ?? '', prompts, toolResults };
       calls[role].push(request);
 
-      res.writeHead(200, {
+      const stream = () => res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
@@ -112,9 +113,15 @@ export function startPiStubProvider({ agent, judge }) {
           const pass = userText.includes(PASS_ONE) ? 1 : 2;
           if (pass === 1) held = judge(request);
           const verdict = held ?? { verdict: 'deny', reason: 'the stub had no scripted verdict' };
+          if (verdict.error) {
+            res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: { message: verdict.error, code: verdict.error } }));
+            return;
+          }
+          stream();
           writeText(res, severityAnswer(verdict, pass));
         } else {
           const answer = await agent(request);
+          stream();
           if (answer.holdMs) await delay(answer.holdMs);
           if (answer.tool) {
             writeToolCall(res, {
@@ -127,6 +134,7 @@ export function startPiStubProvider({ agent, judge }) {
           }
         }
       } catch (error) {
+        if (!res.headersSent) stream();
         writeText(res, `stub provider failed: ${error?.message ?? error}`);
       }
       res.write('data: [DONE]\n\n');

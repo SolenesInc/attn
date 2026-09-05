@@ -14,6 +14,7 @@ import { ModelClassifier, type ModelRegistryLike } from "./model-classifier";
 import { autoModeStatusKey, autoModeStatusText } from "./ui";
 import { UsageLedger } from "./usage";
 import { reviewUnavailable } from "../security/recovery";
+import { toolEvidenceLimits } from "./evidence";
 
 export type AutoModeSessionContextLike = AutoModeContextLike & {
   modelRegistry?: ModelRegistryLike;
@@ -60,7 +61,10 @@ export class AutoMode {
   constructor(private readonly setup: AutoModeSetup) {
     this.extension = createAutoMode({
       config: setup.config,
-      classifier: { classify: (request) => this.judge().classify(request) },
+      classifier: {
+        classify: (request) => this.judge().classify(request),
+        evidenceLimits: () => this.registry ? this.judge().evidenceLimits?.() ?? toolEvidenceLimits() : toolEvidenceLimits(),
+      },
       isEnabled: () => this.enabled(),
       ledger: setup.ledger,
       onDenial: setup.onDenial,

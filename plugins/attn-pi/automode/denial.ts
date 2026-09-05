@@ -8,9 +8,11 @@ export type Denial = {
   judged?: boolean;
 
   clearable?: boolean;
+  incomplete?: boolean;
 };
 
 export function sandboxDenialToolResult(denial: Denial): string {
+  if (denial.incomplete) return incompleteReview(denial);
   return [
     "Auto mode did not approve this sandbox access request. The command did not run with extra access.",
     `Blocked: ${oneLine(denial.action)}`, `Reason: ${oneLine(denial.reason)}`,
@@ -23,6 +25,7 @@ export function sandboxDenialToolResult(denial: Denial): string {
 }
 
 export function denialToolResult(denial: Denial): string {
+  if (denial.incomplete) return incompleteReview(denial);
   const lines = [
     "Permission for this action was denied by the attn auto mode classifier.",
     `Blocked: ${oneLine(denial.action)}`,
@@ -66,6 +69,15 @@ export function denialToolResult(denial: Denial): string {
     );
   }
   return lines.join("\n");
+}
+
+function incompleteReview(denial: Denial): string {
+  return [
+    "Auto mode could not complete this review. The action did not run.",
+    `Blocked: ${oneLine(denial.action)}`, `Reason: ${oneLine(denial.reason)}`,
+    "Explain the missing evidence to the user. Supply that evidence or propose a smaller reviewable action. Interactive Pi can offer one-call approval for an oversized request after the user inspects its exact arguments.",
+    "Continue independent work. Do not disable security, change allow patterns or hide effects to evade this incomplete review. Existing sandbox limits and protected paths still apply.",
+  ].join("\n");
 }
 
 function oneLine(text: string): string {
