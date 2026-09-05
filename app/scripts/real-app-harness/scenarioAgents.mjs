@@ -6,8 +6,9 @@ import {
   waitForFirstWorkspacePane,
   waitForPaneInputFocus,
   waitForPaneVisible,
+  waitForPaneVisibleContent,
 } from './scenarioAssertions.mjs';
-import { writeMockAgentFixture } from './mockAgent.mjs';
+import { mockAgentSplash, writeMockAgentFixture } from './mockAgent.mjs';
 
 // Writes into the real ~/.claude.json. Safe only because the harness session dir
 // is fresh per run, so the entry cannot shadow a user-curated trust decision.
@@ -256,6 +257,26 @@ export function writeStructuredBlockFixture(cwd, token, lineCount) {
       actions: [{ type: 'reply', text: structuredBlockLines(token, lineCount).join('\n') }],
     }],
   });
+}
+
+// On resize the mock agent clears and repaints its splash at the new width;
+// until then the pane shows the old splash reflowed, with no closing corner.
+export function mockAgentRepaintedToWidth(visibleContent) {
+  const cols = visibleContent?.cols;
+  if (typeof cols !== 'number' || cols <= 0) return false;
+  const firstLine = (visibleContent.lines || []).find((line) => line.trim() !== '');
+  return firstLine !== undefined && firstLine.trimEnd() === mockAgentSplash({ header: '', cols })[0];
+}
+
+export async function waitForMockAgentRepaintedToWidth(client, sessionId, paneId, timeoutMs = 20_000, description) {
+  return waitForPaneVisibleContent(
+    client,
+    sessionId,
+    paneId,
+    mockAgentRepaintedToWidth,
+    description || `pane ${paneId} repainted by the mock agent at its current width`,
+    timeoutMs,
+  );
 }
 
 export async function promptAgentForStructuredBlock(client, sessionId, token, lineCount = 8) {

@@ -19,7 +19,6 @@ import {
   captureSessionArtifacts,
   waitForNewShellPane,
   waitForFirstWorkspacePane,
-  waitForPaneReflowed,
   waitForPaneState,
   waitForPaneText,
   waitForPaneVisible,
@@ -29,6 +28,7 @@ import {
 import {
   ensureClaudeInitialPanePromptReady,
   promptAgentForStructuredBlock,
+  waitForMockAgentRepaintedToWidth,
   writeStructuredBlockFixture,
 } from './scenarioAgents.mjs';
 
@@ -117,7 +117,9 @@ async function main() {
         20_000,
       );
 
-      await waitForPaneReflowed(client, sessionId, initialPaneId, 20_000, 'initial pane reflowed after split before baseline capture');
+      // The daemon reflows the old frame before the agent repaints at the new
+      // width; a baseline taken in between never matches the restored pane.
+      await waitForMockAgentRepaintedToWidth(client, sessionId, initialPaneId, 20_000, 'initial pane repainted after split before baseline capture');
 
       const baselineMainState = await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         contains: agentToken,

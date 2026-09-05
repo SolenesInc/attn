@@ -383,7 +383,7 @@ export async function waitForNewShellPane(client, sessionId, existingPaneIds, de
   });
 }
 
-async function waitForPaneVisibleContent(
+export async function waitForPaneVisibleContent(
   client,
   sessionId,
   paneId,
