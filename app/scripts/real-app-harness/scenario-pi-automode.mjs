@@ -8,6 +8,7 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
+  queryDaemonDb,
 } from './common.mjs';
 import { waitForFirstWorkspacePane, waitForPaneText } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -90,15 +91,11 @@ async function submitPrompt(client, sessionId, paneId, text) {
 }
 
 function countNotifications(dbPath) {
-  try {
-    const stdout = execFileSync('sqlite3', [
-      dbPath,
-      `SELECT id || '|' || title || '|' || detail FROM notifications WHERE kind = 'automode_denied' ORDER BY created_at;`,
-    ], { encoding: 'utf8', timeout: 5_000 });
-    return stdout.split('\n').map((line) => line.trim()).filter((line) => line !== '');
-  } catch {
-    return [];
-  }
+  const stdout = queryDaemonDb(
+    dbPath,
+    `SELECT id || '|' || title || '|' || detail FROM notifications WHERE kind = 'automode_denied' ORDER BY created_at;`,
+  );
+  return stdout.split('\n').map((line) => line.trim()).filter((line) => line !== '');
 }
 
 async function main() {

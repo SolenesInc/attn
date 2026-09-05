@@ -9,6 +9,7 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
+  queryDaemonDb,
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -51,35 +52,20 @@ function sqlString(value) {
   return `'${String(value).replaceAll("'", "''")}'`;
 }
 
-async function queryStoredResumeId(dbPath, sessionId) {
+function queryStoredResumeId(dbPath, sessionId) {
   const sql = `SELECT resume_session_id FROM sessions WHERE id = ${sqlString(sessionId)} LIMIT 1;`;
-  try {
-    const { stdout } = await execFileAsync('sqlite3', [dbPath, sql], { timeout: 5_000 });
-    return stdout.trim();
-  } catch {
-    return '';
-  }
+  return queryDaemonDb(dbPath, sql);
 }
 
-async function queryStoredTranscriptPath(dbPath, sessionId) {
+function queryStoredTranscriptPath(dbPath, sessionId) {
   const sql = `SELECT transcript_path FROM sessions WHERE id = ${sqlString(sessionId)} LIMIT 1;`;
-  try {
-    const { stdout } = await execFileAsync('sqlite3', [dbPath, sql], { timeout: 5_000 });
-    return stdout.trim();
-  } catch {
-    return '';
-  }
+  return queryDaemonDb(dbPath, sql);
 }
 
-async function queryStoredSessionCost(dbPath, sessionId) {
+function queryStoredSessionCost(dbPath, sessionId) {
   const sql = `SELECT session_cost_json FROM sessions WHERE id = ${sqlString(sessionId)} LIMIT 1;`;
-  try {
-    const { stdout } = await execFileAsync('sqlite3', [dbPath, sql], { timeout: 5_000 });
-    const raw = stdout.trim();
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+  const raw = queryDaemonDb(dbPath, sql);
+  return raw ? JSON.parse(raw) : null;
 }
 
 function sessionCostObservationCount(cost) {
@@ -100,7 +86,7 @@ async function waitForSessionCostAdvance(dbPath, sessionId, previousCost = null,
   const startedAt = Date.now();
   let lastCost = null;
   while (Date.now() - startedAt < timeoutMs) {
-    lastCost = await queryStoredSessionCost(dbPath, sessionId);
+    lastCost = queryStoredSessionCost(dbPath, sessionId);
     if (
       sessionCostObservationCount(lastCost) > previousObservations &&
       sessionCostTokenTotal(lastCost) > previousTokens
@@ -118,7 +104,7 @@ async function waitForStoredResumeId(dbPath, sessionId, timeoutMs = 30_000) {
   const startedAt = Date.now();
   let lastValue = '';
   while (Date.now() - startedAt < timeoutMs) {
-    lastValue = await queryStoredResumeId(dbPath, sessionId);
+    lastValue = queryStoredResumeId(dbPath, sessionId);
     if (lastValue) {
       return lastValue;
     }
@@ -131,7 +117,7 @@ async function waitForStoredResumeIdChange(dbPath, sessionId, previousId, timeou
   const startedAt = Date.now();
   let lastValue = '';
   while (Date.now() - startedAt < timeoutMs) {
-    lastValue = await queryStoredResumeId(dbPath, sessionId);
+    lastValue = queryStoredResumeId(dbPath, sessionId);
     if (lastValue && lastValue !== previousId) {
       return lastValue;
     }
@@ -146,7 +132,7 @@ async function waitForStoredTranscriptPath(dbPath, sessionId, expectedPath, time
   const startedAt = Date.now();
   let lastValue = '';
   while (Date.now() - startedAt < timeoutMs) {
-    lastValue = await queryStoredTranscriptPath(dbPath, sessionId);
+    lastValue = queryStoredTranscriptPath(dbPath, sessionId);
     if (lastValue && normalizeExistingPath(lastValue) === normalizeExistingPath(expectedPath)) {
       return lastValue;
     }
@@ -463,8 +449,8 @@ async function main() {
     });
 
     await runner.step('assert_pathless_root_hook_cannot_replace_successor_binding', async () => {
-      const expectedResumeId = await queryStoredResumeId(dbPath, sessionId);
-      const expectedTranscriptPath = await queryStoredTranscriptPath(dbPath, sessionId);
+      const expectedResumeId = queryStoredResumeId(dbPath, sessionId);
+      const expectedTranscriptPath = queryStoredTranscriptPath(dbPath, sessionId);
       const hookOutput = execFileSync(attnBin, ['_hook-session-start', sessionId], {
         env: {
           ...daemonEnv,
@@ -490,7 +476,7 @@ async function main() {
       );
       await delay(500);
       const actualResumeId = await waitForStoredResumeId(dbPath, sessionId, 30_000);
-      const actualTranscriptPath = await queryStoredTranscriptPath(dbPath, sessionId);
+      const actualTranscriptPath = queryStoredTranscriptPath(dbPath, sessionId);
       runner.assert(
         actualResumeId === expectedResumeId && actualTranscriptPath === expectedTranscriptPath,
         'a pathless root hook cannot replace the path-bearing successor binding',

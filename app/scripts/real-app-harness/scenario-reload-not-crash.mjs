@@ -11,6 +11,7 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
+  queryDaemonDb,
 } from './common.mjs';
 import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
 import { ensureClaudePromptReadyViaPty, ensureCodexPromptReadyViaPty, preTrustClaudeFolder } from './scenarioAgents.mjs';
@@ -74,8 +75,7 @@ function ticketStatus(runAttn, ticketId) {
 
 function reconcileTaskCount(profile, ticketId) {
   const dbPath = path.join(os.homedir(), `.attn-${profile}`, 'attn.db');
-  const out = execFileSync('sqlite3', [dbPath, `SELECT COUNT(*) FROM tasks WHERE kind='reconcile' AND subject='${ticketId}';`], { encoding: 'utf8' });
-  return Number(out.trim());
+  return Number(queryDaemonDb(dbPath, `SELECT COUNT(*) FROM tasks WHERE kind='reconcile' AND subject='${ticketId}';`));
 }
 
 function workerPid(sessionId) {

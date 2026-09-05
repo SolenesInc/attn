@@ -8,7 +8,7 @@ import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
-import { parseCommonArgs, printCommonHelp, launchFreshAppAndConnect } from './common.mjs';
+import { parseCommonArgs, printCommonHelp, launchFreshAppAndConnect, queryDaemonDb } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import {
   currentHarnessProfile,
@@ -77,7 +77,7 @@ async function poll(fn, description, timeoutMs = 30_000, intervalMs = 150) {
 }
 
 function sqliteRow(dbPath, sql) {
-  const out = execFileSync('sqlite3', ['-cmd', '.timeout 5000', dbPath, sql], { encoding: 'utf8' }).trim();
+  const out = queryDaemonDb(dbPath, sql);
   return out.length === 0 ? null : out.split('|');
 }
 

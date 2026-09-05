@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { captureScreenshot, ensureDir } from './common.mjs';
+import { captureScreenshot, ensureDir, queryDaemonDb } from './common.mjs';
 import {
   assertDefaultProfileHarnessIsolation,
   defaultProfileHarnessEnv,
@@ -65,19 +65,8 @@ function run(binary, args, env, timeout = 60_000) {
   });
 }
 
-function sqlite(dbPath, sql) {
-  return execFileSync('sqlite3', ['-batch', '-cmd', '.timeout 5000', dbPath, sql], {
-    encoding: 'utf8',
-    timeout: 30_000,
-  }).trim();
-}
-
 function sqliteRows(dbPath, sql) {
-  const output = execFileSync('sqlite3', ['-json', '-batch', '-cmd', '.timeout 5000', dbPath, sql], {
-    encoding: 'utf8',
-    timeout: 30_000,
-  }).trim();
-  return output ? JSON.parse(output) : [];
+  return queryDaemonDb(dbPath, sql, { json: true });
 }
 
 function sqlString(value) {
@@ -152,7 +141,7 @@ function createWorld(resources, name, includeWarnings) {
 
 async function waitForRecovery(world) {
   return poll(() => {
-    const state = sqlite(world.dbPath, `SELECT state FROM legacy_ticket_recovery_runs WHERE version=${RECOVERY_VERSION};`);
+    const state = queryDaemonDb(world.dbPath, `SELECT state FROM legacy_ticket_recovery_runs WHERE version=${RECOVERY_VERSION};`);
     return state === 'succeeded' || state === 'warned' ? state : null;
   }, `${world.name} recovery terminal state`, 90_000);
 }
@@ -280,18 +269,18 @@ function seedDatabaseFixture(world) {
       VALUES
         ('orphan-request','orphan-operation','{"brief":"keep exact request"}','completed','done','','','orphan-delegation','',0,'{"summary":"keep exact result"}','',${sqlString(old)},${sqlString(closed)});`;
   }
-  sqlite(world.dbPath, script);
+  queryDaemonDb(world.dbPath, script);
 
   const backupDir = path.join(world.dataDir, 'backups');
   fs.mkdirSync(backupDir, { recursive: true });
   const backups = [];
   for (let day = 1; day <= 13; day += 1) {
     const target = path.join(backupDir, `attn-202601${String(day).padStart(2, '0')}-000000.db`);
-    sqlite(world.dbPath, `VACUUM INTO ${sqlString(target)};`);
+    queryDaemonDb(world.dbPath, `VACUUM INTO ${sqlString(target)};`);
     backups.push(target);
   }
 
-  sqlite(world.dbPath, `
+  queryDaemonDb(world.dbPath, `
     DELETE FROM ticket_activity WHERE ticket_id IN ('backup-failed','auto-done');
     DELETE FROM tickets WHERE id IN ('backup-failed','auto-done');
     DELETE FROM delegation_operations WHERE request_id='orphan-request';
@@ -400,11 +389,11 @@ function idempotenceReceipt(world, conversations) {
     if (fs.existsSync(candidate)) artifactPaths.push(candidate);
   }
   return {
-    runCount: Number(sqlite(world.dbPath, `SELECT COUNT(*) FROM legacy_ticket_recovery_runs WHERE version=${RECOVERY_VERSION};`)),
-    itemCount: Number(sqlite(world.dbPath, 'SELECT COUNT(*) FROM legacy_ticket_recovery_items;')),
-    linkCount: Number(sqlite(world.dbPath, 'SELECT COUNT(*) FROM legacy_ticket_seed_links;')),
-    notificationCount: Number(sqlite(world.dbPath, "SELECT COUNT(*) FROM notifications WHERE kind='legacy_ticket_recovery_warned';")),
-    ticketCount: Number(sqlite(world.dbPath, "SELECT COUNT(*) FROM tickets WHERE id IN ('live-done','backup-failed','transcript-done','copilot-failed');")),
+    runCount: Number(queryDaemonDb(world.dbPath, `SELECT COUNT(*) FROM legacy_ticket_recovery_runs WHERE version=${RECOVERY_VERSION};`)),
+    itemCount: Number(queryDaemonDb(world.dbPath, 'SELECT COUNT(*) FROM legacy_ticket_recovery_items;')),
+    linkCount: Number(queryDaemonDb(world.dbPath, 'SELECT COUNT(*) FROM legacy_ticket_seed_links;')),
+    notificationCount: Number(queryDaemonDb(world.dbPath, "SELECT COUNT(*) FROM notifications WHERE kind='legacy_ticket_recovery_warned';")),
+    ticketCount: Number(queryDaemonDb(world.dbPath, "SELECT COUNT(*) FROM tickets WHERE id IN ('live-done','backup-failed','transcript-done','copilot-failed');")),
     artifacts: Object.fromEntries(artifactPaths.map((file) => [file, sha256(file)])),
   };
 }
@@ -478,7 +467,7 @@ async function exerciseWorld(runner, world, binary) {
   const fixture = await runner.step(`${world.name}:initialize_fixture`, () => initializeWorld(world, binary));
   run(binary, ['daemon', 'ensure'], world.env, 60_000);
   const state = await waitForRecovery(world);
-  await poll(() => sqlite(world.dbPath, "SELECT COUNT(*) FROM tickets WHERE id='auto-live';") === '0', `${world.name} Automation retention`, 20_000);
+  await poll(() => queryDaemonDb(world.dbPath, "SELECT COUNT(*) FROM tickets WHERE id='auto-live';") === '0', `${world.name} Automation retention`, 20_000);
   await poll(() => {
     const dir = path.join(world.dataDir, 'backups');
     return fs.readdirSync(dir).filter((name) => /^attn-\d{8}-\d{6}\.db$/.test(name)).length <= 12;
