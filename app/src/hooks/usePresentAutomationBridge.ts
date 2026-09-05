@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { emit, listen } from '@tauri-apps/api/event';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { nextAnimationFrame, settleBeforeBridgeRequest } from './uiAutomationSettle';
 
 // Wire strings shared with useUiAutomationBridge.ts by value: ui_automation.rs
 // broadcasts these to EVERY webview window, so both bridges must agree.
@@ -28,10 +29,6 @@ interface AutomationResponse {
   ok: boolean;
   result?: unknown;
   error?: string;
-}
-
-function nextAnimationFrame(): Promise<void> {
-  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
 async function waitForSubmitDialog(timeoutMs = 1_000): Promise<HTMLElement> {
@@ -101,6 +98,7 @@ export function usePresentAutomationBridge(): void {
 
       let response: AutomationResponse;
       try {
+        await settleBeforeBridgeRequest(request.action);
         const result = await handlePresentWindowAction(request.action, request.payload);
         response = { request_id: request.request_id, ok: true, result };
       } catch (error) {

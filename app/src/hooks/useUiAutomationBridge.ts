@@ -30,6 +30,12 @@ import type { TerminalVisibleContentSnapshot } from '../utils/terminalVisibleCon
 import type { TerminalVisibleStyleSnapshot } from '../utils/terminalStyleSummary';
 import type { BlockStateSnapshot, PlacementStateSnapshot } from '../components/GhosttyTerminal';
 import { isPresentWindowAction } from './usePresentAutomationBridge';
+import {
+  afterFramePaints,
+  nextAnimationFrame,
+  settleBeforeBridgeRequest,
+  settleUi,
+} from './uiAutomationSettle';
 
 const UI_AUTOMATION_REQUEST_EVENT = 'attn://ui-automation/request';
 const UI_AUTOMATION_RESPONSE_EVENT = 'attn://ui-automation/response';
@@ -106,29 +112,6 @@ interface UseUiAutomationBridgeArgs {
   drainSessionPaneTerminal: (sessionId: string, paneId: string) => Promise<boolean>;
 }
 
-function nextAnimationFrame() {
-  return new Promise<void>((resolve) => {
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      resolve();
-    };
-    const timeoutId = window.setTimeout(finish, 50);
-    window.requestAnimationFrame(() => {
-      window.clearTimeout(timeoutId);
-      finish();
-    });
-  });
-}
-
-// ResizeObserver follow runs after layout, before paint: a read forced between
-// them sees a gap no frame ever shows. A task after the frame reads the painted state.
-async function afterNextPaint() {
-  await nextAnimationFrame();
-  await new Promise<void>((resolve) => { window.setTimeout(resolve, 0); });
-}
-
 function waitForBenchmarkDelay(delayMs: number) {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, delayMs);
@@ -142,9 +125,13 @@ async function waitForSeededPaint(
   maxFrames = 120,
 ): Promise<void> {
   for (let frame = 0; frame < maxFrames; frame += 1) {
-    if ((readPerf()?.renderCount ?? 0) > renderCountBeforeSeed) return;
+    if ((readPerf()?.renderCount ?? 0) > renderCountBeforeSeed) {
+      await afterFramePaints();
+      return;
+    }
     await nextAnimationFrame();
   }
+  await afterFramePaints();
 }
 
 async function waitForPaneWriteQuiescence(
@@ -160,14 +147,7 @@ async function waitForPaneWriteQuiescence(
     quiet = current === last ? quiet + 1 : 0;
     last = current;
   }
-}
-
-// The awaits must stay sequential: nextAnimationFrame() registers its callback when it
-// is constructed, so building them all up front queues them onto the same frame.
-async function settleUi(frames = 2) {
-  for (let index = 0; index < frames; index += 1) {
-    await nextAnimationFrame();
-  }
+  await afterFramePaints();
 }
 
 function resolvePaneId(
@@ -1286,7 +1266,10 @@ function clickTestId(testid: string) {
 
 async function waitForTestId(testid: string, maxFrames = 120) {
   for (let frame = 0; frame < maxFrames; frame += 1) {
-    if (document.querySelector(`[data-testid="${testid}"]`) instanceof HTMLElement) return;
+    if (document.querySelector(`[data-testid="${testid}"]`) instanceof HTMLElement) {
+      await afterFramePaints();
+      return;
+    }
     await nextAnimationFrame();
   }
   throw new Error(`Element not found: [data-testid="${testid}"]`);
@@ -1308,7 +1291,10 @@ async function gardenFrameAtRest() {
     still = width === last ? still + 1 : 0;
     last = width;
     // Three frames unchanged: an eased transition never repeats a width, so one repeat means it landed.
-    if (still >= 3) return;
+    if (still >= 3) {
+      await afterFramePaints();
+      return;
+    }
   }
   // The flight is 180ms — about 11 frames at 60Hz — so reaching this means the box never settled.
   throw new Error(
@@ -1935,6 +1921,7 @@ export function useUiAutomationBridge({
 }: UseUiAutomationBridgeArgs) {
   const handleAutomationRequest = useCallback(async (request: AutomationRequest) => {
     const payload = request.payload || {};
+    await settleBeforeBridgeRequest(request.action);
 
     switch (request.action) {
       case 'ping':
@@ -3284,7 +3271,6 @@ export function useUiAutomationBridge({
       }
       case 'conversation_get_state': {
         const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
-        await afterNextPaint();
         const root = sessionId
           ? document.querySelector(`[data-testid="conversation-pane-${sessionId}"]`)
           : document.querySelector('.conversation-pane');
@@ -3402,7 +3388,6 @@ export function useUiAutomationBridge({
         control.click();
         await settleUi(2);
         await gardenFrameAtRest();
-        await afterNextPaint();
         return collectGardenUiState();
       }
       case 'garden_open_plot':
@@ -3471,7 +3456,7 @@ export function useUiAutomationBridge({
           const toggle = document.querySelector('.garden-page .garden-closed-toggle[aria-expanded="false"]');
           if (toggle instanceof HTMLElement) {
             toggle.click();
-            await settleUi(1);
+            await settleUi();
           }
         }
         return collectGardenSeedPage();
