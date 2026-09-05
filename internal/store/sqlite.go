@@ -1202,6 +1202,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 			'notebook.dreaming.frequency', 'notebook.dreaming.timezone', 'notebook.dreaming.enabled'
 		);
 		DELETE FROM jobs WHERE kind IN ('compact_context', 'summarize_session', 'narrate_workspace', 'notebook_cron');
+		DELETE FROM tasks WHERE kind IN ('compact_context', 'summarize_session', 'narrate_workspace', 'notebook_cron');
 	`},
 }
 

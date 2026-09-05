@@ -1657,6 +1657,7 @@ func TestMigration134DropsTheWorkspaceContextAndKeeperState(t *testing.T) {
 		`INSERT INTO workspace_contexts (workspace_id, content) VALUES ('workspace-1', '# Workspace Context')`,
 		`INSERT INTO settings (key, value) VALUES ('workspace_keeper_compact', '{"agent":"claude","model":"haiku"}'), ('notebook.summarize_session.enabled', 'false'), ('notebook.cron.frequency', '0 3 * * *'), ('notebook.root', '/tmp/notebook')`,
 		`INSERT INTO jobs (id, kind, unique_key, state, scheduled_at, created_at, updated_at) VALUES ('job-1', 'summarize_session', 'session-1', 'queued', '2026-09-05T00:00:00Z', '2026-09-05T00:00:00Z', '2026-09-05T00:00:00Z'), ('job-2', 'compact_context', 'workspace-1', 'queued', '2026-09-05T00:00:00Z', '2026-09-05T00:00:00Z', '2026-09-05T00:00:00Z'), ('job-3', 'session_title', 'session-1', 'queued', '2026-09-05T00:00:00Z', '2026-09-05T00:00:00Z', '2026-09-05T00:00:00Z')`,
+		`INSERT INTO tasks (id, kind, subject, state, attempts, next_attempt_at, last_error, meta_json, requeued, created_at, updated_at) VALUES ('summarize_session:s-2', 'summarize_session', 's-2', 'queued', 1, '2026-09-05T00:00:00Z', '', '{}', 0, '2026-09-05T00:00:00Z', '2026-09-05T00:00:00Z'), ('reconcile:t-2', 'reconcile', 't-2', 'queued', 1, '2026-09-05T00:00:00Z', '', '{}', 0, '2026-09-05T00:00:00Z', '2026-09-05T00:00:00Z')`,
 		`DELETE FROM schema_migrations WHERE version >= 134`,
 	}
 	for _, stmt := range statements {
@@ -1699,6 +1700,23 @@ func TestMigration134DropsTheWorkspaceContextAndKeeperState(t *testing.T) {
 	}
 	if len(kinds) != 1 || kinds[0] != "session_title" {
 		t.Fatalf("jobs after migration = %v, want only session_title", kinds)
+	}
+
+	// The legacy handover runs after the purge, so a retired kind left in tasks would come back as a dead job.
+	moved, err := s.MigrateLegacyTasks(func(rec LegacyTaskRecord) JobRecord {
+		return JobRecord{ID: rec.ID, Kind: rec.Kind, UniqueKey: rec.Subject, State: rec.State, ScheduledAt: rec.NextAttemptAt, CreatedAt: rec.CreatedAt, UpdatedAt: rec.UpdatedAt}
+	})
+	if err != nil {
+		t.Fatalf("legacy handover: %v", err)
+	}
+	if moved != 1 {
+		t.Fatalf("legacy handover moved %d rows, want only the reconcile row", moved)
+	}
+	if _, ok, err := s.GetJob("summarize_session:s-2"); err != nil || ok {
+		t.Fatalf("legacy keeper task came back as a job (ok=%v err=%v)", ok, err)
+	}
+	if _, ok, err := s.GetJob("reconcile:t-2"); err != nil || !ok {
+		t.Fatalf("legacy reconcile task was lost (ok=%v err=%v)", ok, err)
 	}
 }
 
