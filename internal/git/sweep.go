@@ -18,8 +18,8 @@ type WorktreeState struct {
 	Prunable bool
 }
 
-// Deliberately does NOT prune first, unlike ListWorktrees: a prunable worktree is
-// shown as stale rather than vanishing behind the user's back.
+// Deliberately does NOT prune first, unlike ListWorktrees: a prunable worktree
+// reads as stale instead of vanishing.
 func ListWorktreeStates(repoDir string) ([]WorktreeState, error) {
 	out, err := runGitOutput(OpWorktree, repoDir, "worktree", "list", "--porcelain")
 	if err != nil {
@@ -56,7 +56,7 @@ func ListWorktreeStates(repoDir string) ([]WorktreeState, error) {
 	return states, nil
 }
 
-// Untracked files count: 7 of 141 worktrees in the spike were untracked-only.
+// Untracked files count as dirty. Receipt in docs/worktree-sweep.md.
 func WorktreeDirtyCount(path string) (int, error) {
 	out, err := runGitOutput(OpStatus, CanonicalizePath(path), "status", "--porcelain", "--untracked-files=all")
 	if err != nil {
@@ -69,7 +69,7 @@ func WorktreeDirtyCount(path string) (int, error) {
 	return len(strings.Split(trimmed, "\n")), nil
 }
 
-// 5 ms per branch. Any error reports false: an unresolvable ref never reads as merged.
+// Any error reports false: an unresolvable ref never reads as merged.
 func IsAncestor(repoDir, commit, base string) bool {
 	if commit == "" || base == "" {
 		return false
@@ -85,7 +85,6 @@ func CommitsAhead(repoDir, base, ref string) (int, error) {
 	return strconv.Atoi(strings.TrimSpace(string(out)))
 }
 
-// Every tree hash reachable from base: 24 ms once per repository, then a map lookup.
 func TreeHashesOnHistory(repoDir, base string) (map[string]bool, error) {
 	out, err := runGitOutput(OpMetadata, repoDir, "rev-list", "--format=%T", base)
 	if err != nil {
@@ -148,7 +147,6 @@ func LastCommitTime(dir string) (time.Time, error) {
 	return time.Parse(time.RFC3339, strings.TrimSpace(string(out)))
 }
 
-// A stale node_modules or target must not make an abandoned worktree look busy.
 var idleWalkSkipDirs = map[string]bool{
 	".git":         true,
 	"node_modules": true,
@@ -161,7 +159,6 @@ var idleWalkSkipDirs = map[string]bool{
 	"__pycache__":  true,
 }
 
-// The newest modification time in the tree, 8.9 ms p50 per worktree measured.
 func NewestTreeModTime(path string) (time.Time, error) {
 	newest := time.Time{}
 	err := filepath.WalkDir(path, func(name string, entry fs.DirEntry, err error) error {

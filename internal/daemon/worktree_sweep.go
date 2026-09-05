@@ -21,11 +21,9 @@ const (
 	worktreeSweepTimeout = 30 * time.Minute
 )
 
-// Sits in a measured gap: nothing worked with passes 10 days idle, and the next
-// candidate is at 19. Receipt in docs/worktree-sweep.md.
+// Sits in a measured gap. Receipt in docs/worktree-sweep.md.
 const defaultWorktreeSweepIdleDays = 14
 
-// A full pass is ~12 s of git for 147 worktrees, far under the window it watches.
 const defaultWorktreeSweepInterval = time.Hour
 
 func worktreeSweepIdle() time.Duration {
@@ -46,7 +44,7 @@ func worktreeSweepInterval() time.Duration {
 	return defaultWorktreeSweepInterval
 }
 
-// On by default: the gates were verified at 29 of 29 genuinely merged.
+// On by default. Receipt in docs/worktree-sweep.md.
 func (d *Daemon) worktreeSweepEnabled() bool {
 	if d.store == nil {
 		return false
@@ -182,8 +180,7 @@ func worktreeSweepVerdict(wt *store.Worktree, facts sweepContext, now time.Time,
 	if base == "" {
 		base = "the integration branch"
 	}
-	// 22 of the 23 detached worktrees in the sample held commits on no branch at
-	// all; deleting one destroys them with nothing to recover them from.
+	// Detached worktrees hold commits on no branch: a delete destroys them.
 	if wt.Detached && wt.MergedSignal != store.MergedSignalAncestor {
 		return sweepVerdict{store.WorktreeSweepKeptDetached,
 			fmt.Sprintf("detached HEAD at %s is not on %s, so its commits are on no branch", shortSHA(wt.HeadSHA), base), time.Time{}}
@@ -283,7 +280,6 @@ func (d *Daemon) seedsForWorktree(wt *store.Worktree) []string {
 	return seeds
 }
 
-// Planted, growing and dormant count; a harvested or withered seed does not.
 func (d *Daemon) openSeedsByWorktree(repo string) map[string][]string {
 	byPath := make(map[string][]string)
 	if d.store == nil {

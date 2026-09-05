@@ -5048,7 +5048,6 @@ export function useDaemonSocket({
     }, 'List workflow runs timed out');
   }, [sendKeyedRequest]);
 
-  // Reads the registry, never git, so it answers however slow the repository is.
   const listWorktrees = useCallback((mainRepo?: string): Promise<WorktreeListResult> => {
     return sendRequest<WorktreeListResult>(
       'worktree_list',

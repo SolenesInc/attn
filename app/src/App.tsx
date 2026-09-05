@@ -1649,7 +1649,6 @@ function AppContent({
     [daemonSessions],
   );
 
-  // Forced only after the row's "Delete, losing changes" confirmation.
   const handleDeleteWorktreeFromPanel = useCallback(async (path: string, force: boolean) => {
     const result = await sendDeleteWorktree(path, undefined, force ? { force: true } : {});
     if (!result.success) {

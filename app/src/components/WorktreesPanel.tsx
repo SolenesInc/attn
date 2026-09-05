@@ -174,8 +174,7 @@ export function WorktreesPanel({
     });
   }, [setKeep, withBusy]);
 
-  // The daemon's push drops the row and writes the entry; a local guess would
-  // be a second one.
+  // The daemon's push drops the row and writes the entry; a guess here would be a second one.
   const remove = useCallback((worktree: Worktree) => {
     setConfirmDelete(null);
     return withBusy(worktree.path, () => deleteWorktree(worktree.path, Boolean(worktree.dirty)));

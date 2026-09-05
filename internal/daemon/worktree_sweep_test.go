@@ -40,8 +40,7 @@ func newSweepRepo(t *testing.T) *sweepRepo {
 	return repo
 }
 
-// The message is a parameter because two commits with the same tree, parent,
-// author and second hash identically, and some cases need them distinct.
+// Two commits with the same tree, parent, author and second hash identically.
 func (r *sweepRepo) commitIn(dir, file, content, message string) string {
 	r.t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o600); err != nil {
@@ -106,7 +105,6 @@ func TestWorktreeRefreshObservesEachMergedSignal(t *testing.T) {
 	base := strings.TrimSpace(gitOutput(t, repo.main, "rev-parse", "HEAD"))
 	ancestor := repo.worktree("ancestor", "feat/ancestor", base)
 
-	// What a squash or rebase merge leaves behind.
 	tree := repo.worktree("tree", "feat/tree", base)
 	repo.commitIn(tree, "shared.txt", "shared\n", "on the branch")
 	repo.commitOnMain("shared.txt", "shared\n", "on main")

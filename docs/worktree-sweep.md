@@ -71,6 +71,9 @@ Detached HEAD is its own gate because 22 of the 23 detached worktrees in the
 sample held commits on no branch at all: deleting one destroys work with nothing
 to recover it from.
 
+Untracked files count as dirty: 7 of 141 worktrees in the spike were
+untracked-only, and some of those files were real work.
+
 "Commits the merge does not account for" is subtler than "unpushed". A naive
 unpushed gate blocks exactly the squash-merge case the pull request record exists
 to catch, so an `ancestor` or `tree` signal accounts for everything, and a
@@ -99,6 +102,28 @@ merged-pull-request API call per repository, measured at 899 ms. The cron runs
 hourly, which is far off any request path and far under the window it watches.
 
 Override with `ATTN_WORKTREE_SWEEP_INTERVAL`.
+
+What the pass is made of, measured on the same machine:
+
+| Work | Cost | Scope |
+| --- | --- | --- |
+| Merged pull requests | 899 ms | once per repository |
+| Tree hashes on the integration history | 24 ms | once per repository, then a map lookup per branch |
+| Stash counts | one reflog read | once per repository |
+| Ancestry of one branch | 5 ms | per branch |
+| Newest mtime in the tree | 8.9 ms p50 | per worktree |
+
+The repository-wide reads are built once per pass, so 141 worktrees cost one git
+call each rather than 141.
+
+Two page sizes come out of these numbers. The merged-pull-request query asks for
+300, past the 152 and 200 the measured repositories carry. The worktree list
+refuses above 5000 rows, a tripwire rather than a budget: the largest registry
+measured is 147 rows across two repositories.
+
+`real-app:scenario-worktree-surface` builds a deliberately slow repository to
+watch the surface stay answering: 40,000 files, measured at 6.5 s of
+`git status --untracked-files=all` and 1.9 s of tree walking on macOS/APFS.
 
 ## Reversal and inspection
 

@@ -532,7 +532,6 @@ export function SettingsModal({
     }
   }, [actualDefaultAgent, agentAvailability, onSetSetting]);
 
-  // The daemon's default is on, so an unset value reads as enabled here too.
   const worktreeSweepEnabled = settings['worktree_sweep_enabled'] !== 'false';
 
   const handleToggleWorktreeSweep = useCallback(() => {

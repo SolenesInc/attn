@@ -14,7 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Read-only against real repositories; run it before changing a gate. How: docs/worktree-sweep.md.
+// Read-only against real repositories. How to run it: docs/worktree-sweep.md.
 func TestWorktreeSweepReceipt(t *testing.T) {
 	repos := strings.Split(strings.TrimSpace(os.Getenv("ATTN_SWEEP_RECEIPT_REPOS")), ",")
 	if len(repos) == 0 || repos[0] == "" {

@@ -12,10 +12,8 @@ import (
 )
 
 // Resolved from where a repository's pull requests actually merge, not origin/HEAD.
-// Receipt in docs/worktree-sweep.md.
 const integrationBranchTTL = 24 * time.Hour
 
-// Built once per repository pass: 141 worktrees cost one git call each, not 141.
 type repositoryFacts struct {
 	repo              string
 	integrationBranch string
@@ -138,8 +136,8 @@ func (d *Daemon) repositoryFacts(repo string, now time.Time) (*repositoryFacts, 
 	stashes, stashErr := git.StashCountsByBranch(repo)
 	finish(stashErr)
 	if stashErr != nil {
-		// A missing stash map reads as no stash, and that gate is all that stands
-		// between a stashed worktree and a removal that destroys it.
+		// A missing stash map reads as no stash, and that gate is all that keeps
+		// a removal off a stashed worktree.
 		return nil, fmt.Errorf("stash counts for %s: %w", repo, stashErr)
 	}
 	facts.treeHashes = treeHashes
@@ -178,7 +176,6 @@ func (d *Daemon) sessionActivityByWorktree(liveSessions map[string][]string) map
 	return activity
 }
 
-// One `gh pr list`-equivalent call per repository, measured at 899 ms.
 func (d *Daemon) refreshMergedPullRequests(repo string, now time.Time) {
 	host, ownerRepo := git.OriginHostOwnerRepo(repo)
 	if host == "" || ownerRepo == "" {
@@ -320,8 +317,7 @@ func observeWorktree(facts *repositoryFacts, state git.WorktreeState, now time.T
 	return observation, nil
 }
 
-// The ladder, first hit wins. No patch-id probe: it writes a loose object per
-// branch into the user's repository. See docs/worktree-sweep.md.
+// No patch-id probe: it writes a loose object per branch into the user's repository.
 func mergedSignal(facts *repositoryFacts, state git.WorktreeState) store.MergedSignal {
 	if _, merged := facts.mergedBranches[state.Branch]; merged && state.Branch != "" {
 		return store.MergedSignalPullRequest
@@ -344,8 +340,7 @@ func mergedSignal(facts *repositoryFacts, state git.WorktreeState) store.MergedS
 	return store.MergedSignalNone
 }
 
-// Not commits ahead: a squash merge accounts for the branch only up to the tip
-// GitHub recorded as merged.
+// Not commits ahead: a squash merge accounts for the branch up to the merged tip.
 func commitsBeyondTheMerge(facts *repositoryFacts, state git.WorktreeState, signal store.MergedSignal) int {
 	if facts.integrationBranch == "" || state.Branch == "" {
 		return 0

@@ -30,7 +30,6 @@ const (
 	WorktreeSweepRemoved         WorktreeSweepStatus = "removed"
 )
 
-// Which rung of the merged ladder answered, strongest first. See docs/worktree-sweep.md.
 type MergedSignal string
 
 const (
@@ -86,7 +85,6 @@ const worktreeColumns = `path, branch, main_repo, created_at, origin, pinned_at,
 	observed_at, head_sha, detached, dirty, dirty_files, stashes, unpushed, merged_signal,
 	prunable, last_activity_at, sweep_status, sweep_reason, sweep_at, refresh_error`
 
-// Adoption is a refresh: the row keeps its pin, origin and observed state.
 func (s *Store) AddWorktree(wt *Worktree) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

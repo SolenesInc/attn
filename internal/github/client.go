@@ -690,7 +690,7 @@ type MergedPullRequest struct {
 	MergedAt string
 }
 
-// 300 merged pull requests, past the 152 and 200 the measured repositories carry.
+// Past what the measured repositories carry. Receipt in docs/worktree-sweep.md.
 const mergedPullRequestPageLimit = 3
 
 func (c *Client) ListMergedPullRequests(repo string) ([]MergedPullRequest, error) {

@@ -22,7 +22,6 @@ const REMOVAL_TIMEOUT_MS = 60_000;
 const RESTART_READY_TIMEOUT_MS = 60_000;
 const DELEGATE_TIMEOUT_MS = 180_000;
 
-// Measured here (macOS, APFS): 6.5 s of `git status`, 1.9 s of tree walking.
 const SLOW_REPO_FILES = 40_000;
 const FILLER_WORKTREES = 6;
 

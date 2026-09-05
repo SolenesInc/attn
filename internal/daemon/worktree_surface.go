@@ -12,10 +12,9 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// A page that fits an 80x24 terminal. The surface asks for everything; only the CLI pages.
 const defaultWorktreeListLimit = 20
 
-// A tripwire, not a budget: the largest registry measured is 147 rows.
+// A tripwire, not a budget. Receipt in docs/worktree-sweep.md.
 const maxWorktreeListLimit = 5000
 
 func (d *Daemon) worktreeListResult(mainRepo string, limit int) *protocol.WorktreeListResult {
