@@ -278,7 +278,8 @@ try {
     runner.writeJson('evidence-history-requests.json', reviews);
     runner.assert(reviews.length === 2, 'Project write/edit needed no model calls; the shell execution used both passes');
     for (const review of reviews) {
-      const history = evidenceEntries(review).filter((entry) => entry.tool_call?.call.input?.path === 'evidence.cjs').map((entry) => entry.tool_call);
+      const history = evidenceEntries(review).flatMap((entry) =>
+        entry.tool_call?.call.input?.path === 'evidence.cjs' ? [entry.tool_call] : []);
       runner.assert(history.length === 2 && history.every((entry) => entry.observation === 'succeeded'), 'Both passes saw successful write and edit results');
       const edit = onlyEdit(history[1].call.input);
       runner.assert(history[0].call.input.content === evidenceBody && edit.oldText === evidenceBody && edit.newText === editedBody, 'Historical write and edit contents were complete', history);
