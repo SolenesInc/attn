@@ -102,6 +102,11 @@ async function main() {
         45_000,
       );
 
+      const preSplitState = await client.request('get_pane_state', { sessionId, paneId: initialPaneId });
+      const preSplitCols = preSplitState?.pane?.visibleContent?.cols;
+      if (typeof preSplitCols !== 'number' || preSplitCols <= 0) {
+        throw new Error(`initial pane has no column count before split: ${JSON.stringify(preSplitState?.pane?.visibleContent)}`);
+      }
       const workspaceBefore = await client.request('get_workspace', { sessionId });
       const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
       await client.request('split_pane', {
@@ -117,9 +122,10 @@ async function main() {
         20_000,
       );
 
-      // The daemon reflows the old frame before the agent repaints at the new
-      // width; a baseline taken in between never matches the restored pane.
-      await waitForMockAgentRepaintedToWidth(client, sessionId, initialPaneId, 20_000, 'initial pane repainted after split before baseline capture');
+      await waitForMockAgentRepaintedToWidth(client, sessionId, initialPaneId, {
+        previousCols: preSplitCols,
+        description: 'initial pane resized and repainted after split before baseline capture',
+      });
 
       const baselineMainState = await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         contains: agentToken,

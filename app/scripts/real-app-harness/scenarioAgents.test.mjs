@@ -73,6 +73,19 @@ describe('mockAgentRepaintedToWidth', () => {
     expect(mockAgentRepaintedToWidth({ cols, lines })).toBe(true);
   });
 
+  it('rejects the pre-split frame whose width has not changed yet', () => {
+    const wide = mockAgentSplash({ header: 'Claude Code mock agent', cwd: '/tmp/x', cols: 150 });
+    const lines = ['', ...wide, '', '• token line 1', '', '❯'];
+    expect(mockAgentRepaintedToWidth({ cols: 150, lines }, { previousCols: 150 })).toBe(false);
+    expect(mockAgentRepaintedToWidth({ cols: 150, lines })).toBe(true);
+  });
+
+  it('accepts the splash repainted at a new width', () => {
+    const narrow = mockAgentSplash({ header: 'Claude Code mock agent', cwd: '/tmp/x', cols });
+    const lines = ['', ...narrow, '', '❯'];
+    expect(mockAgentRepaintedToWidth({ cols, lines }, { previousCols: 150 })).toBe(true);
+  });
+
   it('rejects panes without geometry or content', () => {
     expect(mockAgentRepaintedToWidth(null)).toBe(false);
     expect(mockAgentRepaintedToWidth({ cols: 0, lines: ['╭╮'] })).toBe(false);

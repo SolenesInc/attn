@@ -259,22 +259,25 @@ export function writeStructuredBlockFixture(cwd, token, lineCount) {
   });
 }
 
-// On resize the mock agent clears and repaints its splash at the new width;
-// until then the pane shows the old splash reflowed, with no closing corner.
-export function mockAgentRepaintedToWidth(visibleContent) {
+export function mockAgentRepaintedToWidth(visibleContent, { previousCols } = {}) {
   const cols = visibleContent?.cols;
-  if (typeof cols !== 'number' || cols <= 0) return false;
+  if (typeof cols !== 'number' || cols <= 0 || cols === previousCols) return false;
   const firstLine = (visibleContent.lines || []).find((line) => line.trim() !== '');
   return firstLine !== undefined && firstLine.trimEnd() === mockAgentSplash({ header: '', cols })[0];
 }
 
-export async function waitForMockAgentRepaintedToWidth(client, sessionId, paneId, timeoutMs = 20_000, description) {
+export async function waitForMockAgentRepaintedToWidth(
+  client,
+  sessionId,
+  paneId,
+  { previousCols, timeoutMs = 20_000, description } = {},
+) {
   return waitForPaneVisibleContent(
     client,
     sessionId,
     paneId,
-    mockAgentRepaintedToWidth,
-    description || `pane ${paneId} repainted by the mock agent at its current width`,
+    (visibleContent) => mockAgentRepaintedToWidth(visibleContent, { previousCols }),
+    description || `pane ${paneId} repainted by the mock agent at a width other than ${previousCols}`,
     timeoutMs,
   );
 }
