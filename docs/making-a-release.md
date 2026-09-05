@@ -78,8 +78,19 @@ a ready PR to `main`. If `main` moves, prepare again from current `main`.
 ## App acceptance
 
 `ci.yml` installs the packaged Linux app from the exact head and runs the
-real-app serial matrix under Xvfb. Its `App acceptance` job is required by both
-`PR gate` and exact-SHA `Acceptance`.
+real-app serial matrix under Xvfb. `Run serial matrix` is `continue-on-error`,
+so a red matrix does not fail the job by itself: the verdict is the `Gate app
+acceptance` step, which also accepts the candidate receipt on `main` and the
+protected-`main` override.
+
+The job costs around 35 minutes, so it runs only where its receipt is needed:
+pushes to `next` and `main`, PRs onto `main` (`release/v*` and `hotfix/*`, the
+only branches `main-route.sh` admits), and PRs that touch the harness, the Tauri
+shell, the app runtime host, or the job's own definition — the `harness` filter
+in the `changes` job lists the paths. Every other PR skips it, and `PR gate`
+accepts `skipped`. For those changes the receipt is the `Acceptance` run on
+`next` after merge, which still requires `App acceptance` to succeed; a red
+there blocks release eligibility until it is fixed.
 
 Use the command generated in the candidate PR when the automated job cannot
 cover the candidate and a manual override is warranted:

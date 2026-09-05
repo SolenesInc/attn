@@ -28,6 +28,7 @@ jobs:
       tauri: ${{ steps.filter.outputs.tauri }}
       plugins: ${{ steps.filter.outputs.plugins }}
       release_preflight: ${{ steps.filter.outputs.release_preflight }}
+      harness: ${{ steps.filter.outputs.harness }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -112,6 +113,13 @@ jobs:
               - 'internal/hostsession/**'
               - 'internal/daemon/host_*'
               - 'internal/daemon/plugin_*'
+            harness:
+              - 'app/scripts/real-app-harness/**'
+              - 'app/src-tauri/**'
+              - 'apphost/**'
+              - 'scripts/build-app-runtime-host.sh'
+              - '.github/workflows/app-acceptance.yml'
+              - '.github/workflows/ci.yml'
             release_preflight:
               - '.github/workflows/ci.yml'
               - '.github/workflows/release.yml'
@@ -132,8 +140,12 @@ jobs:
               - 'scripts/build-app-runtime-host.sh'
   changelog:
     name: Changelog
+    # Waits on app-acceptance because candidate-gate.sh reads that job's result,
+    # and !cancelled() keeps the gate running when the job is filtered out.
     needs: [changes, app-acceptance]
-    if: github.event_name == 'pull_request' || needs.changes.outputs.force_all == 'true'
+    if: >-
+      !cancelled() &&
+      (github.event_name == 'pull_request' || needs.changes.outputs.force_all == 'true')
     permissions:
       actions: read
       checks: read
@@ -568,7 +580,9 @@ jobs:
 
   app-acceptance:
     name: App acceptance
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next'
+    needs: changes
+    # main-route.sh admits only release/hotfix onto main, so force_all covers them.
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.harness == 'true'
     permissions:
       actions: read
       contents: read

@@ -35,7 +35,9 @@ paths and Git blobs, which candidate validation checks before merge.
 
 Review the generated changelog and the automated `App acceptance` job. It builds
 the packaged Linux app from the exact candidate head, runs the real-app serial
-matrix under Xvfb, and uploads its digest, pane text, and screenshots.
+matrix under Xvfb, and uploads its digest, pane text, and screenshots. Candidate
+PRs always run it because they target `main`; ordinary PRs onto `next` skip it
+and earn their receipt from the `Acceptance` run on `next` after merge.
 
 If Linux CI cannot cover the candidate, use the ready-to-fill command in the PR
 to record a manual override from protected `main`:
