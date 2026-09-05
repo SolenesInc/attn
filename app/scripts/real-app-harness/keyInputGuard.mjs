@@ -1,14 +1,20 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import { manifestPathForProfile, profileForAppPath } from './harnessProfile.mjs';
+import {
+  appExecutableForAppPath,
+  manifestPathForProfile,
+  profileForAppPath,
+} from './harnessProfile.mjs';
 
 export const ALWAYS_ON_TOP_VAR = 'ATTN_HARNESS_ALWAYS_ON_TOP';
 
 const OPT_OUT_FIX = `Set process.env.${ALWAYS_ON_TOP_VAR} = '0' before the app launch in this scenario, as the `
   + 'other key-pressing scenarios do, and the window takes focus for the run.';
 
-function readAppEnvironment(pid) {
-  return String(execFileSync('ps', ['eww', '-p', String(pid)], { encoding: 'utf8' }));
+// `ps eww -o command=` prints the executable, its arguments, then its
+// environment, so one read answers both which app this is and how it launched.
+function readAppCommand(pid) {
+  return String(execFileSync('ps', ['eww', '-p', String(pid), '-o', 'command='], { encoding: 'utf8' })).trim();
 }
 
 function appPidFromManifest(manifestPath) {
@@ -25,7 +31,8 @@ function appPidFromManifest(manifestPath) {
 export function keyInputVerdict({
   platform = process.platform,
   appRunning = false,
-  appEnvironment = null,
+  appCommand = null,
+  appExecutable = '',
 } = {}) {
   if (platform !== 'darwin') {
     return { reaches: true, reason: `${platform} leaves the window focusable` };
@@ -33,7 +40,7 @@ export function keyInputVerdict({
   if (!appRunning) {
     return { reaches: true, reason: 'no launched app is running to press at' };
   }
-  if (typeof appEnvironment !== 'string' || appEnvironment === '') {
+  if (typeof appCommand !== 'string' || appCommand === '') {
     return {
       reaches: false,
       reason: `its environment could not be read, so whether ${ALWAYS_ON_TOP_VAR}=1 left the window `
@@ -41,7 +48,18 @@ export function keyInputVerdict({
       fix: `Check the app is still running and that 'ps eww -p <pid>' answers for it. ${OPT_OUT_FIX}`,
     };
   }
-  if (new RegExp(`(^|\\s)${ALWAYS_ON_TOP_VAR}=1(\\s|$)`).test(appEnvironment)) {
+  // A dead app leaves its manifest behind, and macOS reuses pids: without this
+  // a stranger's environment answers for the app and every press is permitted.
+  if (appCommand !== appExecutable && !appCommand.startsWith(`${appExecutable} `)) {
+    return {
+      reaches: false,
+      reason: `that pid is running ${appCommand.split(' ')[0] || 'something unreadable'}, not ${appExecutable}, `
+        + 'so the ui-automation manifest is stale and nothing here knows how the running app was launched.',
+      fix: 'Launch the app through the harness (launchFreshAppAndConnect) so the manifest names it, or delete the '
+        + 'stale manifest if no app should be running.',
+    };
+  }
+  if (new RegExp(`(^|\\s)${ALWAYS_ON_TOP_VAR}=1(\\s|$)`).test(appCommand)) {
     return {
       reaches: false,
       reason: `it was launched with ${ALWAYS_ON_TOP_VAR}=1, which makes its window non-focusable, so macOS `
@@ -59,8 +77,9 @@ export function formatKeyInputFailure({ action, pid, reason, fix }) {
 export function createKeyInputGuard({
   appPath = null,
   platform = process.platform,
+  appExecutable = appExecutableForAppPath(appPath),
   manifestPath = manifestPathForProfile(profileForAppPath(appPath)),
-  readEnvironment = readAppEnvironment,
+  readCommand = readAppCommand,
   readAppPid = appPidFromManifest,
 } = {}) {
   let cached = null;
@@ -78,16 +97,16 @@ export function createKeyInputGuard({
     if (cached?.pid === pid) {
       return cached;
     }
-    let appEnvironment = null;
+    let appCommand = null;
     try {
-      appEnvironment = readEnvironment(pid);
+      appCommand = readCommand(pid);
     } catch {
-      appEnvironment = null;
+      appCommand = null;
     }
-    const answer = { pid, ...keyInputVerdict({ platform, appRunning: true, appEnvironment }) };
+    const answer = { pid, ...keyInputVerdict({ platform, appRunning: true, appCommand, appExecutable }) };
     // A failed read is a transient ps hiccup as often as a dead app; caching it
     // would poison every later press in the run.
-    if (appEnvironment !== null) {
+    if (appCommand !== null) {
       cached = answer;
     }
     return answer;

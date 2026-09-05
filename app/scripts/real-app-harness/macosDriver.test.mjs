@@ -60,19 +60,21 @@ describe('withWindowTitleArgs', () => {
   });
 });
 
-const APP_ENV_ALWAYS_ON_TOP = `${ALWAYS_ON_TOP_VAR}=1 HOME=/Users/x`;
-const APP_ENV_OPTED_OUT = `${ALWAYS_ON_TOP_VAR}=0 HOME=/Users/x`;
+const APP = '/tmp/attn-harness-test.app/Contents/MacOS/app';
+const APP_ALWAYS_ON_TOP = `${APP} ${ALWAYS_ON_TOP_VAR}=1 HOME=/Users/x`;
+const APP_OPTED_OUT = `${APP} ${ALWAYS_ON_TOP_VAR}=0 HOME=/Users/x`;
 
 class StubInputDriver extends MacOSDriver {
-  constructor(appEnvironment) {
+  constructor(appCommand) {
     super({
       bundleId: 'test.harness',
       appPath: '/tmp/attn-harness-test.app',
       keyInputGuard: createKeyInputGuard({
         platform: 'darwin',
+        appExecutable: APP,
         manifestPath: '/does/not/matter',
         readAppPid: () => 4242,
-        readEnvironment: () => appEnvironment,
+        readCommand: () => appCommand,
       }),
     });
     this.actionDelayMs = 0;
@@ -86,25 +88,25 @@ class StubInputDriver extends MacOSDriver {
 
 describe('MacOSDriver key entry points on a non-focusable window', () => {
   it('pressKey fails before touching the input driver', async () => {
-    const driver = new StubInputDriver(APP_ENV_ALWAYS_ON_TOP);
+    const driver = new StubInputDriver(APP_ALWAYS_ON_TOP);
     await expect(driver.pressKey('a', {})).rejects.toThrow(/pressKey\(a, no modifiers\) cannot reach attn/);
     expect(driver.execCalls).toEqual([]);
   });
 
   it('pressEnter fails through its pressKeyCode delegation', async () => {
-    const driver = new StubInputDriver(APP_ENV_ALWAYS_ON_TOP);
+    const driver = new StubInputDriver(APP_ALWAYS_ON_TOP);
     await expect(driver.pressEnter()).rejects.toThrow(/pressKeyCode\(36, no modifiers\) cannot reach attn/);
     expect(driver.execCalls).toEqual([]);
   });
 
   it('typeText fails before touching the input driver', async () => {
-    const driver = new StubInputDriver(APP_ENV_ALWAYS_ON_TOP);
+    const driver = new StubInputDriver(APP_ALWAYS_ON_TOP);
     await expect(driver.typeText('hello')).rejects.toThrow(/typeText\("hello"\) cannot reach attn/);
     expect(driver.execCalls).toEqual([]);
   });
 
   it('pressKey reaches the driver once the launched app opted out', async () => {
-    const driver = new StubInputDriver(APP_ENV_OPTED_OUT);
+    const driver = new StubInputDriver(APP_OPTED_OUT);
     await driver.pressKey('a', {});
     expect(driver.execCalls).toHaveLength(1);
   });
