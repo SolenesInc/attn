@@ -167,7 +167,6 @@ kbd {
   .header-controls { gap: 0; }
 }
 .workspace {
-  height: calc(100dvh - 58px);
   display: grid;
   grid-template-columns: 225px minmax(380px, 1fr) minmax(350px, 0.9fr);
 }
@@ -270,7 +269,6 @@ input[type="search"] {
   color: var(--muted);
 }
 .composition {
-  max-height: 29%;
   overflow: auto;
   padding: 14px 22px;
   border-bottom: 1px solid var(--line);
@@ -562,7 +560,6 @@ input[type="search"] {
   }
   .catalog {
     grid-row: span 2;
-    max-height: calc(100dvh - 58px);
     position: sticky;
     top: 0;
   }
@@ -577,9 +574,6 @@ input[type="search"] {
   .scenario {
     max-height: none;
   }
-  .composition {
-    max-height: 22%;
-  }
   .app-header {
     padding: 0 12px;
   }
@@ -593,7 +587,6 @@ input[type="search"] {
   }
   .catalog {
     position: static;
-    max-height: 220px;
     border-bottom: 1px solid var(--line);
   }
   .source-pane {

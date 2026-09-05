@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -288,27 +287,7 @@ func (e *editor) saveSource(w http.ResponseWriter, request editRequest) {
 		problem(w, 500, err)
 		return
 	}
-	temporary := path.Join(path.Dir(request.Path), ".prompt-"+rand.Text())
-	f, err := e.root.OpenFile(temporary, os.O_CREATE|os.O_EXCL|os.O_WRONLY, info.Mode().Perm())
-	if err != nil {
-		problem(w, 500, err)
-		return
-	}
-	defer e.root.Remove(temporary)
-	_, writeErr := f.WriteString(request.Text)
-	if writeErr == nil {
-		writeErr = f.Sync()
-	}
-	closeErr := f.Close()
-	if writeErr != nil {
-		problem(w, 500, writeErr)
-		return
-	}
-	if closeErr != nil {
-		problem(w, 500, closeErr)
-		return
-	}
-	if err := e.root.Rename(temporary, request.Path); err != nil {
+	if err := atomicWrite(e.root, request.Path, []byte(request.Text), info.Mode().Perm()); err != nil {
 		problem(w, 500, err)
 		return
 	}

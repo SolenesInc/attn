@@ -10,24 +10,34 @@ func piSecurityRecipient() Recipient {
 	writeRecovery := text("write-recovery",
 		Bind("paths", field("write_paths", "Writable paths joined with commas.")),
 		Bind("guidance", Choose(review, text("write-request"), text("review-unavailable"))))
+	sandboxGuidance := text("enabled",
+		Bind("paths", field("write_paths", "JSON array of writable paths.")),
+		Bind("caches", field("cache_paths", "JSON array of cache grants, or disabled.")),
+		Bind("unavailable", When(Enabled(FlagField("has_unavailable_caches", "Some cache grants are unavailable.")),
+			Exact(text("unavailable-caches", Bind("paths", field("unavailable_caches", "JSON array of unavailable cache grants.")))))),
+		Bind("review", field("review", "Available or unavailable, derived from reviewer configuration.")),
+		Bind("request", Choose(review, text("access-request"), text("review-unavailable"))),
+		Bind("local_cache", text("local-cache")),
+		Bind("refusal", text("refusal")))
+	instructions := text("instructions",
+		Bind("sandbox", field("sandbox", "Enabled or disabled, derived from policy.")),
+		Bind("network", field("network", "Effective tool networking policy.")),
+		Bind("guidance", Choose(Enabled(FlagField("enabled", "The OS sandbox is enabled.")), sandboxGuidance, text("disabled"))),
+		Bind("credentials", text("credentials")))
+
+	networkRecovery := Choose(review, text("network-request"), text("review-unavailable"))
+	writeFailureNetworkAdvice := Choose(network, Compose(),
+		When(Enabled(FlagField("network_denied", "Tool networking is denied.")),
+			When(review, Join("\n", Compose(), text("network-request")))))
+	recovery := Join("\n",
+		Choose(network, text("network-failure"), text("permission-failure")),
+		Join("", Choose(network, networkRecovery, writeRecovery), writeFailureNetworkAdvice),
+		text("execution-scope"))
+
 	return Recipient{ID: "pi-security", Description: "Execution permissions supplied to the working Pi agent and sandbox tool guidance.", Events: []Event{
-		On("instructions", "system_prompt", "Appended before each agent start; values come from the executor's current policy.", text("instructions",
-			Bind("sandbox", field("sandbox", "Enabled or disabled, derived from policy.")),
-			Bind("network", field("network", "Effective tool networking policy.")),
-			Bind("guidance", Choose(Enabled(FlagField("enabled", "The OS sandbox is enabled.")), text("enabled",
-				Bind("paths", field("write_paths", "JSON array of writable paths.")),
-				Bind("caches", field("cache_paths", "JSON array of cache grants, or disabled.")),
-				Bind("unavailable", When(Enabled(FlagField("has_unavailable_caches", "Some cache grants are unavailable.")), Exact(text("unavailable-caches", Bind("paths", field("unavailable_caches", "JSON array of unavailable cache grants.")))))),
-				Bind("review", field("review", "Available or unavailable, derived from reviewer configuration.")),
-				Bind("request", Choose(review, text("access-request"), text("review-unavailable"))),
-				Bind("local_cache", text("local-cache")), Bind("refusal", text("refusal"))), text("disabled"))),
-			Bind("credentials", text("credentials")))),
+		On("instructions", "system_prompt", "Appended before each agent start; values come from the executor's current policy.", instructions),
 		On("write-recovery", "tool_result", "Guidance after a sandbox write failure.", writeRecovery),
-		On("recovery", "tool_result", "Appended to failed commands; distinguishes OS errors from review refusals.", Join("\n",
-			Choose(network, text("network-failure"), text("permission-failure")),
-			Join("", Choose(network, Choose(review, text("network-request"), text("review-unavailable")), writeRecovery),
-				Choose(network, Compose(), When(Enabled(FlagField("network_denied", "Tool networking is denied.")), When(review, Join("\n", Compose(), text("network-request")))))),
-			text("execution-scope"))),
+		On("recovery", "tool_result", "Appended to failed commands; distinguishes OS errors from review refusals.", recovery),
 		On("denial", "tool_result", "An access request refused by auto mode.", text("denial",
 			Bind("action", field("action", "Action collapsed to one line.")), Bind("reason", field("reason", "Reason collapsed to one line.")),
 			Bind("outage", When(Enabled(FlagField("outage", "No classifier answered.")), Exact(text("denial-outage")))),
