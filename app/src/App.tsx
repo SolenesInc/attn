@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { onOpenUrl, getCurrent } from '@tauri-apps/plugin-deep-link';
 import { invoke, isTauri } from '@tauri-apps/api/core';
@@ -110,6 +110,7 @@ import { useClientPresence } from './hooks/useClientPresence';
 import { ptySpawn } from './pty/bridge';
 import { clearBrowserHostFocus, controlBrowserHost, isBrowserHostOwnedTarget } from './browser/host';
 import { probeUiAfterSwitch, UI_DIAGNOSTICS_FILE_DISPLAY } from './utils/uiDiagnosticsLog';
+import { renderWarningSegments } from './utils/warningLinks';
 import {
   agentLabel,
   conversationAgents,
@@ -673,6 +674,11 @@ function App() {
           settings={settings}
           updateAvailableVersion={updateAvailableVersion}
           onOpenLatestRelease={handleOpenLatestRelease}
+          onOpenWarningUrl={(url) => {
+            openUrl(url).catch((err) => {
+              console.error('[App] Failed to open warning link:', err);
+            });
+          }}
           onDismissLatestRelease={handleDismissLatestRelease}
           presentationNotices={presentationNotices}
           settingError={settingError}
@@ -702,6 +708,7 @@ interface AppContentProps {
   settings: Record<string, string>;
   updateAvailableVersion: string | null;
   onOpenLatestRelease: () => Promise<void>;
+  onOpenWarningUrl: (url: string) => void;
   onDismissLatestRelease: () => void;
   presentationNotices: Presentation[];
   settingError: string | null;
@@ -726,6 +733,7 @@ function AppContent({
   settings,
   updateAvailableVersion,
   onOpenLatestRelease,
+  onOpenWarningUrl,
   onDismissLatestRelease,
   presentationNotices,
   settingError,
@@ -3507,7 +3515,12 @@ function AppContent({
       )}
       {warnings.length > 0 && (
         <div className={`warning-banner ${connectionError ? 'with-connection-error' : ''}`}>
-          <span>{warnings.map(w => w.message).join(' ')}</span>
+          <span>{warnings.map((w, i) => (
+            <Fragment key={`${w.code}-${i}`}>
+              {renderWarningSegments(w.message, onOpenWarningUrl)}
+              {i < warnings.length - 1 ? ' ' : null}
+            </Fragment>
+          ))}</span>
           <button className="warning-dismiss" onClick={clearWarnings} title="Dismiss">×</button>
         </div>
       )}
