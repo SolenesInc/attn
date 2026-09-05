@@ -645,16 +645,14 @@ jobs:
         with:
           include-wasm: 'true'
 
-      # Two release cargo builds, pty-host then the Tauri app: the install step
-      # below ran 399s cold, 143s warm incl. a 10s restore (runs 33973903937, 33975425685).
+      # Install step: 399s cold, 143s warm incl. a 10s restore (run 33975425685).
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             app/src-tauri
             pty-host
-          # A red matrix fails this job at the gate below, so success-only saving
-          # would keep it cold exactly when a fast re-push matters most.
+          # The gate below fails this job on a red matrix, so the default would never save.
           cache-on-failure: 'true'
 
       - name: Install packaged app and bundled plugin
