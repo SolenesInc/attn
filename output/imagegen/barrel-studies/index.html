@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barrel studies</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --sea: #071f2d;
+    --shadow: #0c374c;
+    --foam: #e0f0e8;
+    --muted: #9ec2c1;
+    --glint: #83ddd1;
+    font-family: "Avenir Next", Avenir, sans-serif;
+    background: var(--sea);
+    color: var(--foam);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  main { max-width: 2200px; margin: auto; padding: 36px clamp(16px, 3vw, 56px); }
+  h1 { margin: 0 0 8px; font-size: clamp(28px, 3vw, 42px); font-weight: 500; }
+  .intro { margin: 0 0 30px; max-width: 65ch; line-height: 1.6; color: var(--muted); }
+  .studies { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+  figure { margin: 0; min-width: 0; }
+  .art { display: block; background: var(--shadow); }
+  img { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+  h2 { font-size: 21px; font-weight: 500; margin: 18px 0 8px; }
+  figcaption p { color: var(--muted); line-height: 1.6; max-width: 45ch; margin: 0; }
+  a { color: var(--glint); text-underline-offset: 4px; }
+  a:focus-visible { outline: 3px solid var(--glint); outline-offset: 6px; }
+  .question { font-size: 22px; margin: 38px 0 12px; }
+  footer { margin-top: 32px; color: var(--muted); line-height: 1.7; font-size: 14px; }
+  @media (max-width: 850px) {
+    .studies { grid-template-columns: 1fr; gap: 36px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Barrel studies</h1>
+  <p class="intro">Three ways to show depth inside a wave. Open an image to see it at full size.</p>
+  <section class="studies" aria-label="Compare barrel treatments">
+    <figure>
+      <a class="art" href="a-shadowed-wall.png" aria-label="Open A, shadowed wall, at full size">
+        <img src="a-shadowed-wall.png" width="1672" height="941" alt="Side-view pixel surfer beneath a long, almost horizontal crest with a broad dark-blue shadow behind them.">
+      </a>
+      <figcaption>
+        <h2>A. Shadowed wall</h2>
+        <p>A long overhang and deep shadow. The surfer stays clearly visible against the back wall.</p>
+      </figcaption>
+    </figure>
+    <figure>
+      <a class="art" href="b-open-hollow.png" aria-label="Open B, open hollow, at full size">
+        <img src="b-open-hollow.png" width="1672" height="941" alt="The same surfer inside a rounded hollow wave, with a thick curling roof and dark interior.">
+      </a>
+      <figcaption>
+        <h2>B. Open hollow</h2>
+        <p>A curved roof wraps over the surfer. The opening feels deeper and more enclosed.</p>
+      </figcaption>
+    </figure>
+    <figure>
+      <a class="art" href="c-water-curtain.png" aria-label="Open C, water curtain, at full size">
+        <img src="c-water-curtain.png" width="1672" height="941" alt="The same surfer partly visible through a turquoise sheet of falling water in front of a shadowed barrel.">
+      </a>
+      <figcaption>
+        <h2>C. Water curtain</h2>
+        <p>A translucent sheet passes in front of the surfer. You can see the rider through the water.</p>
+      </figcaption>
+    </figure>
+  </section>
+  <p class="question">Which shape and shading feel closest?</p>
+  <p class="intro">You can combine treatments, such as B's shape with C's transparency.</p>
+  <footer>
+    Static concept art made with the built-in image-generation tool.
+    These images are visual references, not frames from the game.
+    The live game's speed, controls and audio are unchanged.
+    <a href="prompts.md">Generation prompts</a>
+  </footer>
+</main>
+</body>
+</html>

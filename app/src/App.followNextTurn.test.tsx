@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { act, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import App from './App';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 
@@ -37,7 +37,13 @@ vi.mock('./components/Sidebar', () => ({
   Sidebar: () => null,
 }));
 
-vi.mock('./components/Dashboard', () => ({ Dashboard: () => null }));
+vi.mock('./components/Dashboard', () => ({ Dashboard: ({ onSurf }: { onSurf: () => void }) => <button onClick={onSurf}>Go surfing</button> }));
+vi.mock('./components/SurfBreak/SurfBreak', () => ({
+  SurfIcon: () => null,
+  SurfBreak: ({ waitingCount, onReturnToWaiting }: { waitingCount: number; onReturnToWaiting: () => void }) => (
+    <button onClick={onReturnToWaiting}>{waitingCount} agents waiting in Swell</button>
+  ),
+}));
 vi.mock('./components/grid/GridView', () => ({ GridView: () => null }));
 vi.mock('./components/AttentionDrawer', () => ({ AttentionDrawer: () => null }));
 vi.mock('./components/LocationPicker', () => ({ LocationPicker: () => null }));
@@ -226,6 +232,18 @@ describe('waiting at home for the next turn', () => {
     broadcast();
 
     expect(activeSessionId).toBe('s2');
+  });
+
+  it('disarms the automatic return while surfing and lets the user return explicitly', () => {
+    workTheQueueDownToHome();
+    fireEvent.click(screen.getByRole('button', { name: 'Go surfing' }));
+    turnOwed.s2 = true;
+    broadcast();
+    expect(activeSessionId).toBeNull();
+    expect(shortcutHandlers<{ enabled: boolean }>().enabled).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: '1 agents waiting in Swell' }));
+    expect(activeSessionId).toBe('s2');
+    expect(screen.queryByText('1 agents waiting in Swell')).toBeNull();
   });
 
   it('leaves the user alone at a home they walked to', () => {

@@ -1,0 +1,93 @@
+.surf-break {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  overflow: hidden;
+  background: #95c3f2;
+  color: #e3fff0;
+  font-family: var(--font-ui, 'Inter', sans-serif);
+  user-select: none;
+}
+
+.surf-break canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  outline: none;
+}
+
+.surf-break button {
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  padding: 8px 10px;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.surf-break button:hover { background: #ffffff16; }
+.surf-break button:disabled { opacity: 0.45; cursor: default; }
+.surf-break button:focus-visible { outline: 2px solid #fff0c8; outline-offset: 4px; }
+.surf-break kbd { font: inherit; font-size: 11px; opacity: 0.65; margin-left: 7px; }
+.surf-header, .surf-footer { position: absolute; left: 4%; right: 4%; }
+.surf-header { top: 5%; display: flex; align-items: center; justify-content: space-between; color: #213e52; }
+.surf-name { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 500; letter-spacing: -0.5px; }
+.surf-name svg { width: 30px; height: 30px; }
+.surf-invitation { position: absolute; top: 24%; left: 9%; color: #213e52; }
+.surf-invitation h1 { margin: 0; font-size: clamp(26px, 4vw, 54px); letter-spacing: -2px; font-weight: 450; line-height: 1.2; }
+.surf-invitation p { margin: 12px 0 23px; font-size: 15px; }
+.surf-break .surf-start { background: #fff0d5; color: #4a4b64; padding: 12px 18px; box-shadow: 0 3px 0 #4a4b6433; }
+.surf-start span { margin-left: 18px; }
+.surf-pause { position: absolute; top: 26%; left: 0; right: 0; text-align: center; color: #213e52; }
+.surf-pause p { font-size: 25px; margin: 0 0 10px; }
+.surf-pause button { background: #e3fff077; }
+.surf-footer { bottom: 4%; font-size: 12px; }
+.surf-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
+.surf-controls kbd { margin-left: 0; margin-right: 5px; opacity: 1; }
+.surf-rest { margin: 0 0 12px 10px; opacity: 0.8; font-size: 11px; }
+.surf-controls button[aria-pressed="true"] { background: #245d69; box-shadow: inset 0 0 0 1px #b4f7e866; }
+.surf-jump { padding: 8px 10px; }
+.surf-footer-bottom, .surf-audio-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.surf-status { padding: 8px 10px; opacity: 0.75; }
+.surf-waiting-dot { display: inline-block; width: 5px; height: 5px; background: #ffe0a1; margin: 0 9px 2px 0; border-radius: 50%; }
+.surf-break .surf-waiting { background: #164e6177; }
+.surf-footer button, .surf-status { background: #173c50b8; }
+.surf-footer button:hover { background: #173c50ed; }
+.surf-rest { text-shadow: 0 1px 3px #173c50; }
+.surf-header button:focus-visible, .surf-invitation button:focus-visible, .surf-pause button:focus-visible { outline-color: #213e52; }
+
+.surf-header .surf-beach-button { margin-left: auto; margin-right: 14px; background: #edf9f54d; }
+.surf-beach-button span { margin-left: 10px; }
+.surf-beach-picker { position: absolute; top: 14%; right: 4%; width: min(340px, 84%); padding: 22px; background: #edf9f5; color: #213e52; border-radius: 8px; box-shadow: 0 8px 28px #213e5226; }
+.surf-beach-picker label { display: flex; flex-direction: column; gap: 7px; font-size: 12px; }
+.surf-beach-picker select { font: inherit; font-size: 14px; color: #213e52; background: #fff; border: 1px solid #9abfbd; border-radius: 4px; padding: 9px; width: 100%; }
+.surf-beach-picker select:focus-visible { outline: 2px solid #246da0; outline-offset: 2px; }
+.surf-beach-picker p { font-size: 13px; line-height: 1.6; margin: 14px 0 20px; }
+.surf-condition-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.surf-picker-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 22px; }
+.surf-beach-picker button:focus-visible { outline-color: #246da0; }
+
+@media (max-aspect-ratio: 4/3) {
+  .surf-break canvas { object-fit: contain; }
+  .surf-invitation { top: 19%; }
+  .surf-rest { color: #213e52; text-shadow: none; }
+}
+
+@media (max-width: 540px) {
+  .surf-header { left: 3%; right: 3%; }
+  .surf-name { font-size: 15px; gap: 4px; }
+  .surf-header .surf-beach-button { margin-right: 2px; font-size: 11px; }
+  .surf-header kbd { display: none; }
+  .surf-beach-picker { padding: 16px; }
+  .surf-rest { display: none; }
+  .surf-controls { flex-wrap: wrap; gap: 2px; }
+  .surf-footer-bottom { flex-wrap: wrap; }
+  .surf-controls { margin-bottom: 4px; }
+  .surf-invitation h1 { letter-spacing: -1px; }
+}

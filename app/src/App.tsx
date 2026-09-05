@@ -6,6 +6,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { Sidebar, type SidebarHeaderAction, type DockItem, WorkflowIcon, EditorIcon, PRsIcon, NotebookIcon } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
+import { SurfBreak, SurfIcon } from './components/SurfBreak/SurfBreak';
 import { activityStaleMs } from './utils/activitySettings';
 import { crewDisplayName } from './utils/crewName';
 import { AttentionDrawer } from './components/AttentionDrawer';
@@ -1207,9 +1208,10 @@ function AppContent({
   const [sidebarMutedExpanded, setSidebarMutedExpanded] = useState(false);
 
   const [view, setView] = useState<'dashboard' | 'session' | 'grid'>('dashboard');
+  const [surfOpen, setSurfOpen] = useState(false);
 
   useClientPresence(sendSetClientPresence, {
-    dashboardVisible: view === 'dashboard',
+    dashboardVisible: view === 'dashboard' && !surfOpen,
     connected: hasReceivedInitialState,
   });
   const appShellRef = useRef<HTMLDivElement>(null);
@@ -1295,6 +1297,11 @@ function AppContent({
   const goToDashboard = useCallback(() => enterHome(false), [enterHome]);
 
   const goHomeAwaitingNextTurn = useCallback(() => enterHome(true), [enterHome]);
+
+  const openSurf = useCallback(() => {
+    enterHome(false);
+    setSurfOpen(true);
+  }, [enterHome]);
 
   useEffect(() => {
     if (view !== 'dashboard') setFollowNextTurn(false);
@@ -1546,6 +1553,7 @@ function AppContent({
   });
   const [gardenSlotRef, gardenDockRect] = useDockSlotRect();
   const blockingOverlayOpen = locationPickerOpen
+    || surfOpen
     || whatsNew.isOpen
     || settingsOpen
     || shortcutsOpen
@@ -1733,6 +1741,14 @@ function AppContent({
 
   const actionMenuItems = useMemo<ActionMenuItem[]>(() => [
     {
+      id: 'surf-break',
+      title: 'Go surfing',
+      description: 'Take a break on an endless wave',
+      keywords: ['surf', 'swell', 'game', 'relax', 'ocean', 'break'],
+      icon: <SurfIcon />,
+      run: openSurf,
+    },
+    {
       id: 'open-markdown-file',
       title: 'Open a markdown file',
       description: 'Recently opened documents, then a fuzzy search of this session\u2019s folder',
@@ -1804,7 +1820,7 @@ function AppContent({
       icon: <KeyboardActionIcon />,
       run: () => setShortcutEditorOpen(true),
     },
-  ], [openDockPanel, openWorkspaceContextNavigator, handleOpenNotebookTile, toggleGardenFrame, gardenMode, settings, handleToggleQueueMode, sendSetSetting]);
+  ], [openSurf, openDockPanel, openWorkspaceContextNavigator, handleOpenNotebookTile, toggleGardenFrame, gardenMode, settings, handleToggleQueueMode, sendSetSetting]);
 
   const handleToggleActionMenu = useCallback(() => {
     if (actionMenuOpen) {
@@ -3313,6 +3329,7 @@ function AppContent({
   }, []);
 
   const appShortcutsEnabled = !locationPickerOpen
+    && !surfOpen
     && !whatsNew.isOpen
     && !actionMenuOpen
     && !markdownOpenerOpen
@@ -3508,6 +3525,7 @@ function AppContent({
       {/* Always rendered; shown/hidden via z-index. */}
       <div className={`view-container ${view === 'dashboard' ? 'visible' : 'hidden'}`}>
         <Dashboard
+          onSurf={openSurf}
           sessions={unmutedEnrichedSessions}
           mutedWorkspaces={mutedWorkspaceViews}
           prs={prs}
@@ -3758,6 +3776,13 @@ function AppContent({
       </div>
         </div>
       </div>
+
+      {surfOpen && <SurfBreak
+        waitingCount={waitingLocalSessions.length}
+        connected={hasReceivedInitialState && !connectionError}
+        onClose={() => setSurfOpen(false)}
+        onReturnToWaiting={() => { setSurfOpen(false); handleJumpToWaiting(); }}
+      />}
 
       {/* Mounted only while active, so its WebGL context is released on exit. */}
       {view === 'grid' && (

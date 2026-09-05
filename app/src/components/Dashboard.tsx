@@ -16,6 +16,7 @@ import type { AutomationProvenance as AutomationProvenanceValue } from '../types
 import { AutomationProvenance } from './AutomationProvenance';
 import './Dashboard.css';
 import { formatShortcut } from '../shortcuts/formatShortcut';
+import { SurfIcon } from './SurfBreak/SurfBreak';
 
 type DashboardSession = {
   id: string;
@@ -72,6 +73,7 @@ interface DashboardProps {
   onRefreshPRs?: () => void;
   onOpenPR?: (pr: DaemonPR) => void;
   onOpenSettings: () => void;
+  onSurf?: () => void;
   onMutedGroupClick?: () => void;
   queueModeEnabled?: boolean;
   followNextTurn?: boolean;
@@ -95,6 +97,7 @@ export function Dashboard({
   onRefreshPRs,
   onOpenPR,
   onOpenSettings,
+  onSurf,
   onMutedGroupClick,
   queueModeEnabled = false,
   followNextTurn = false,
@@ -384,6 +387,10 @@ export function Dashboard({
           </svg>
         </button>
       </header>
+
+      {onSurf && <button type="button" className="dashboard-surf" onClick={onSurf}>
+        <SurfIcon /><span>Go surfing</span><span className="dashboard-surf-hint">Float awhile, catch a wave</span>
+      </button>}
 
       {/* Only in queue mode: only there does an agent stop wanting you without
           its state changing. */}

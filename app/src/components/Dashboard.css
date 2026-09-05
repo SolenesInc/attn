@@ -1086,3 +1086,21 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.dashboard-surf {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  margin-bottom: 20px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.dashboard-surf svg { width: 22px; height: 22px; }
+.dashboard-surf-hint { opacity: 0.55; font-size: 12px; }
+.dashboard-surf:hover { color: var(--color-accent); }
+.dashboard-surf:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }

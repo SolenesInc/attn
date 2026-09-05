@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barrel studies: concept and canvas</title>
+<style>
+  :root { color-scheme: dark; font-family: "Avenir Next", Avenir, sans-serif; background: #071f2d; color: #e0f0e8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  main { max-width: 1840px; margin: auto; padding: 32px clamp(16px, 3vw, 48px); }
+  header { margin-bottom: 36px; }
+  h1 { margin: 0 0 10px; font-size: clamp(27px, 3vw, 40px); font-weight: 500; }
+  h2 { margin: 0 0 8px; font-size: 24px; font-weight: 500; }
+  p { max-width: 72ch; color: #9ec2c1; line-height: 1.6; margin: 0 0 18px; }
+  a { color: #83ddd1; text-underline-offset: 4px; }
+  a:focus-visible { outline: 3px solid #83ddd1; outline-offset: 5px; }
+  nav { display: flex; gap: 22px; flex-wrap: wrap; }
+  section { margin: 0 0 44px; scroll-margin-top: 20px; }
+  .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  figure { margin: 0; min-width: 0; }
+  figcaption { color: #9ec2c1; font-size: 14px; margin-top: 8px; }
+  img, canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; background: #0c374c; }
+  footer { max-width: 80ch; color: #9ec2c1; line-height: 1.7; font-size: 14px; }
+  @media (max-width: 720px) { .pair { grid-template-columns: 1fr; } }
+</style>
+<script src="renderer.js" defer></script>
+</head>
+<body>
+<main>
+  <header>
+    <h1>From concept to canvas</h1>
+    <p>The approved concepts on the left, the canvas studies on the right. Follow the foam ribbons and smaller pixel clusters around the curl, through the shadow and down to the trough. These frames stay still.</p>
+    <nav aria-label="Barrel studies"><a href="#wall">A. Long wall</a><a href="#hollow">B. Open hollow</a><a href="#curtain">C. Water curtain</a><a href="index.html">Original studies</a></nav>
+  </header>
+  <section id="wall">
+    <h2>A. Long wall</h2>
+    <p>A long, shaded face for Long Point.</p>
+    <div class="pair">
+      <figure><img src="a-shadowed-wall.png" width="1672" height="941" alt="Approved concept of a long wave wall with a dark horizontal cavity."><figcaption>Approved concept</figcaption></figure>
+      <figure><canvas data-treatment="wall" width="800" height="450" aria-label="Canvas rendering of the long shadowed wall">Canvas rendering requires JavaScript.</canvas><figcaption data-status="wall">Loading canvas drawing…</figcaption></figure>
+    </div>
+  </section>
+  <section id="hollow">
+    <h2>B. Open hollow</h2>
+    <p>A rounded roof and deeper space for Reef and Nazaré.</p>
+    <div class="pair">
+      <figure><img src="b-open-hollow.png" width="1672" height="941" alt="Approved concept of a rounded, hollow wave around the surfer."><figcaption>Approved concept</figcaption></figure>
+      <figure><canvas data-treatment="hollow" width="800" height="450" aria-label="Canvas rendering of the rounded open hollow">Canvas rendering requires JavaScript.</canvas><figcaption data-status="hollow">Loading canvas drawing…</figcaption></figure>
+    </div>
+  </section>
+  <section id="curtain">
+    <h2>C. Water curtain</h2>
+    <p>One continuous lip stays overhead, then falls on the left. That falling sheet creates the tube while the shoulder remains open to the right.</p>
+    <div class="pair">
+      <figure><img src="c-water-curtain.png" width="1672" height="941" alt="Approved concept with the surfer partly visible through a falling water curtain."><figcaption>Approved concept</figcaption></figure>
+      <figure><canvas data-treatment="curtain" width="800" height="450" aria-label="Canvas rendering with transparent water in front of the surfer">Canvas rendering requires JavaScript.</canvas><figcaption data-status="curtain">Loading canvas drawing…</figcaption></figure>
+    </div>
+  </section>
+  <footer>C now derives its roof, opening, shadow and impact from one falling lip. The large repeated ribbons are gone. The wave pose is still frozen for visual approval; normal gameplay, wave speed and audio are unchanged. <a href="renderer-notes.md">Implementation and checks</a></footer>
+</main>
+</body>
+</html>
