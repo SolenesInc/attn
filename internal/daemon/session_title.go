@@ -201,16 +201,47 @@ func (d *Daemon) sessionMayBeAutoTitled(session *protocol.Session) bool {
 
 // Wired onto d.sessionTitleExec in New(); test daemons leave it nil.
 func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
-	agent := string(session.Agent)
-	switch agent {
-	case "claude", "codex", "copilot":
-		return d.execSessionTitleHeadless(ctx, agent, conversation)
-	default:
-		return "", fmt.Errorf("unsupported agent for title generation: %s", agent)
+	var sessionAgent string
+	if session != nil {
+		sessionAgent = string(session.Agent)
 	}
+	providerAgent := titleProviderAgent(sessionAgent)
+	if providerAgent == "" {
+		return "", fmt.Errorf("no title provider available for agent %q", sessionAgent)
+	}
+	model := sessionTitleModel(sessionAgent)
+	if model == "" {
+		model = sessionTitleModel(providerAgent)
+	}
+	return d.execSessionTitleHeadless(ctx, providerAgent, model, conversation)
 }
 
-func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent string, conversation string) (string, error) {
+// A title is a cheap summary, so any headless-capable CLI will do: prefer the
+// session's own agent, else fall back to the first available native one.
+func titleProviderAgent(sessionAgent string) string {
+	candidates := []string{sessionAgent, "claude", "codex", "copilot"}
+	seen := make(map[string]struct{}, len(candidates))
+	for _, name := range candidates {
+		if name == "" {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		driver := agentdriver.Get(name)
+		if _, ok := driver.(agentdriver.HeadlessTaskProvider); !ok {
+			continue
+		}
+		if available, _ := agentdriver.HeadlessTaskAvailability(driver); !available {
+			continue
+		}
+		return name
+	}
+	return ""
+}
+
+func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent, model, conversation string) (string, error) {
 	driver := agentdriver.Get(agent)
 	if driver == nil {
 		return "", fmt.Errorf("%s driver unavailable", agent)
@@ -231,7 +262,7 @@ func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent string, con
 
 	request := agentdriver.HeadlessTaskRequest{
 		Executable:   executable,
-		Model:        sessionTitleModel(agent),
+		Model:        model,
 		SystemPrompt: sessionTitleInstructions,
 		Prompt:       prompts.RenderText("session-title", "generate", prompts.Values{"conversation": conversation}),
 		WorkDir:      workDir,
@@ -328,6 +359,18 @@ func sessionTitleModel(agent string) string {
 			return v
 		}
 		return "claude-haiku-4.5"
+	// Plugin agents title through the fallback provider above; an override
+	// travels raw to that provider's CLI, so it must name one of its models.
+	case "pi":
+		if v := strings.TrimSpace(os.Getenv("ATTN_PI_TITLE_MODEL")); v != "" {
+			return v
+		}
+		return ""
+	case "nisse":
+		if v := strings.TrimSpace(os.Getenv("ATTN_NISSE_TITLE_MODEL")); v != "" {
+			return v
+		}
+		return ""
 	default:
 		return ""
 	}
