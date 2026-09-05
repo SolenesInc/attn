@@ -224,6 +224,9 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Cache ghostty-vt artifacts
+        uses: ./.github/actions/cache-ghostty-vt
+
       # internal/ghosttyvt links libghostty-vt via cgo on Linux; fetch the
       # prebuilt native archive (download-first, no zig) so vet/build/test link.
       - name: Ensure native VT library
@@ -292,6 +295,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - name: Cache ghostty-vt artifacts
+        uses: ./.github/actions/cache-ghostty-vt
       - name: Build host and native terminal library
         run: make build-pty-host
       - name: Verify old daemon and mixed host generations
@@ -389,6 +394,13 @@ jobs:
         with:
           version: 9
 
+      # The wasm module too: every shard fetched it at web-server start, and a
+      # reset mid-download (run 33740630608) failed the shard before a test ran.
+      - name: Cache ghostty-vt artifacts
+        uses: ./.github/actions/cache-ghostty-vt
+        with:
+          include-wasm: 'true'
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -477,6 +489,9 @@ jobs:
         with:
           toolchain: '1.95.0'
           components: clippy, rustfmt
+
+      - name: Cache ghostty-vt artifacts
+        uses: ./.github/actions/cache-ghostty-vt
 
       - name: Build attn binary
         run: |
@@ -626,6 +641,24 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ steps.bun.outputs.version }}
+
+      - name: Cache ghostty-vt artifacts
+        uses: ./.github/actions/cache-ghostty-vt
+        with:
+          include-wasm: 'true'
+
+      # `make install` runs two release cargo builds, pty-host then the Tauri app.
+      # Cold, the install step below ran 316-418s across the seven next runs to
+      # 2026-09-05 (353s on run 33969888792); warm it runs <WARM>s.
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src-tauri
+            pty-host
+          # A red serial matrix fails this job at the gate below, so saving only
+          # on success would leave the cache permanently cold.
+          cache-on-failure: 'true'
 
       - name: Install packaged app and bundled plugin
         env:

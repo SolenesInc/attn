@@ -1,0 +1,28 @@
+name: Cache ghostty-vt artifacts
+description: >-
+  Restore the pinned native libghostty-vt archive, and optionally the browser
+  ghostty-vt.wasm, so a build or test never depends on a release-asset download.
+inputs:
+  include-wasm:
+    description: Also cache app/vendor/ghostty-vt/ghostty-vt.wasm, for jobs that build or serve the frontend.
+    required: false
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    # Both consumers re-verify a restored artifact against its lock before use,
+    # so a stale or truncated entry downloads again instead of poisoning a build.
+    - name: Cache native libghostty-vt
+      uses: actions/cache@v4
+      with:
+        path: third_party/ghostty-vt
+        key: ${{ runner.os }}-${{ runner.arch }}-libghostty-vt-${{ hashFiles('ghostty-vt.pin', 'ghostty-vt-native.lock') }}
+
+    # A separate entry on purpose: cache keys are write-once, so a job that never
+    # builds the frontend would otherwise claim a shared key with no wasm in it.
+    - name: Cache browser ghostty-vt.wasm
+      if: inputs.include-wasm == 'true'
+      uses: actions/cache@v4
+      with:
+        path: app/vendor/ghostty-vt
+        key: ${{ runner.os }}-ghostty-vt-wasm-${{ hashFiles('ghostty-vt-wasm.lock') }}
