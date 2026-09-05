@@ -18,7 +18,6 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 		"wake": crewWakePrompt, "successor": crewNapPrompt, "sleep-requested": crewRequestedSleepPrompt,
 		"heartbeat": crewHeartbeatPrompt, "sleep-away": crewSleepPrompt,
 		"ticket-nudge": ticketNudgePrompt, "chief-inbox": chiefInboxNudgePrompt("/tmp/book {{literal}}"),
-		"summarize": buildSummarizeSessionPrompt("/tmp/transcript", "session-1", "/tmp/digest"),
 	}
 	for _, body := range []string{"", " Brief λ {{literal}}\nnext line "} {
 		for _, seed := range []string{"", "s-example"} {
@@ -29,13 +28,6 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 				}
 			}
 		}
-	}
-	for mask := 0; mask < 4; mask++ {
-		in := narrateWorkspacePromptInputs{WorkspaceTitle: "A workspace", WorkspaceID: "workspace-1", ContextSnapshotPath: "/tmp/context", RawSessionsDir: "/tmp/raw", JournalPath: "/tmp/journal/today.md", JournalDir: "/tmp/journal", KnowledgeDir: "/tmp/knowledge", IsRemovalPass: mask&1 != 0}
-		if mask&2 != 0 {
-			in.TranscriptPaths = []string{"/tmp/one", "/tmp/two {{literal}}"}
-		}
-		out[fmt.Sprint("narrate/", mask)] = buildNarrateWorkspacePrompt(in)
 	}
 	for mask := 0; mask < 16; mask++ {
 		s := transcript.ConversationSlice{}

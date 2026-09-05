@@ -41,7 +41,7 @@ func storeWithRaggedJobs(t *testing.T) *Store {
 	t.Helper()
 	s := New()
 	for _, r := range raggedJobOffsets {
-		if err := s.UpsertJob(newJobRecord(r.id, "compact_context", jobBase().Add(r.offset))); err != nil {
+		if err := s.UpsertJob(newJobRecord(r.id, "session_activity", jobBase().Add(r.offset))); err != nil {
 			t.Fatalf("upsert %s: %v", r.id, err)
 		}
 	}
@@ -51,7 +51,7 @@ func storeWithRaggedJobs(t *testing.T) *Store {
 func TestAJobScheduledOnAWholeSecondIsClaimableAtThatSecond(t *testing.T) {
 	s := New()
 	at := jobBase()
-	if err := s.UpsertJob(newJobRecord("whole", "compact_context", at)); err != nil {
+	if err := s.UpsertJob(newJobRecord("whole", "session_activity", at)); err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
 
@@ -94,7 +94,7 @@ func TestListJobsIsNewestUpdatedFirstWithinASecond(t *testing.T) {
 func TestTrimDoneJobsDeletesByTimeWithinASecond(t *testing.T) {
 	s := New()
 	for _, r := range raggedJobOffsets {
-		rec := newJobRecord(r.id, "compact_context", jobBase().Add(r.offset))
+		rec := newJobRecord(r.id, "session_activity", jobBase().Add(r.offset))
 		rec.State = "done"
 		if err := s.UpsertJob(rec); err != nil {
 			t.Fatalf("upsert %s: %v", r.id, err)
@@ -148,7 +148,7 @@ func TestMigration94RewritesJobAndNotificationStampsThatDoNotSort(t *testing.T) 
 	defer s.Close()
 
 	for _, r := range raggedJobOffsets {
-		if err := s.UpsertJob(newJobRecord(r.id, "compact_context", jobBase().Add(r.offset))); err != nil {
+		if err := s.UpsertJob(newJobRecord(r.id, "session_activity", jobBase().Add(r.offset))); err != nil {
 			t.Fatalf("upsert %s: %v", r.id, err)
 		}
 		if _, err := s.AddNotification(

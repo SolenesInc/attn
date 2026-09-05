@@ -254,29 +254,6 @@ func TestParseMessageRejectsRetiredDispatchCommands(t *testing.T) {
 	}
 }
 
-func TestParseWorkspaceContextCommands(t *testing.T) {
-	tests := []struct {
-		input string
-		cmd   string
-	}{
-		{`{"cmd":"workspace_context_checkout","source_session_id":"session-1","force":true}`, CmdWorkspaceContextCheckout},
-		{`{"cmd":"workspace_context_update","source_session_id":"session-1"}`, CmdWorkspaceContextUpdate},
-		{`{"cmd":"workspace_context_status","source_session_id":"session-1"}`, CmdWorkspaceContextStatus},
-		{`{"cmd":"workspace_context_list","request_id":"request-1"}`, CmdWorkspaceContextList},
-		{`{"cmd":"workspace_context_compact","source_session_id":"session-1"}`, CmdWorkspaceContextCompact},
-		{`{"cmd":"workspace_context_rollback","source_session_id":"session-1"}`, CmdWorkspaceContextRollback},
-	}
-	for _, test := range tests {
-		cmd, _, err := ParseMessage([]byte(test.input))
-		if err != nil {
-			t.Fatalf("ParseMessage(%s) error = %v", test.input, err)
-		}
-		if cmd != test.cmd {
-			t.Fatalf("ParseMessage(%s) cmd = %q, want %q", test.input, cmd, test.cmd)
-		}
-	}
-}
-
 func TestParseWorkspaceLayoutSetSplitRatio(t *testing.T) {
 	input := `{"cmd":"workspace_layout_set_split_ratio","workspace_id":"ws1","split_id":"split-1","ratio":0.3}`
 	cmd, data, err := ParseMessage([]byte(input))

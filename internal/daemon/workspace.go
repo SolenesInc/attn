@@ -481,10 +481,7 @@ func (d *Daemon) setWorkspacePinned(workspaceID string, pinned bool) (protocol.W
 
 func (d *Daemon) tearDownRemovedWorkspace(snapshot protocol.Workspace) {
 	id := snapshot.ID
-	d.forgetWorkspaceContextCompaction(id)
-	d.snapshotWorkspaceContextOnRemove(id, snapshot.Title)
 	d.store.RemoveWorkspace(id)
-	d.enqueueFinalNarrateWorkspace(id)
 	d.pruneTileContentSubscriptionsForLayout(id, nil)
 	// Rides in the payload: the registry entry is gone by projection time.
 	d.publishFact(FactWorkspaceUnregistered, id, snapshot)
@@ -550,10 +547,6 @@ func (d *Daemon) loadWorkspacesFromStore() []string {
 				!ws.Pinned &&
 				!d.workspaceHasPendingSpawn(ws.ID) &&
 				!d.workspaceHasSessionlessContent(ws.ID) {
-				// This runs during Start() before the compaction runner exists, so
-				// the final-narrate enqueue is deferred to Start via `reaped`.
-				d.forgetWorkspaceContextCompaction(ws.ID)
-				d.snapshotWorkspaceContextOnRemove(ws.ID, ws.Title)
 				d.store.RemoveWorkspace(ws.ID)
 				reaped = append(reaped, ws.ID)
 				continue

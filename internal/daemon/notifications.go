@@ -123,10 +123,7 @@ func (d *Daemon) sendNotificationMarkReadWSResult(client *wsClient, requestID st
 const notificationKindTaskFailed = "task_failed"
 
 var taskFailureTitles = map[string]string{
-	compactContextKind:           "Context compaction failed",
-	notebookSummarizeSessionKind: "Session summary failed",
-	notebookNarrateWorkspaceKind: "Workspace narration failed",
-	reconcileKind:                "Ticket reconciliation failed",
+	reconcileKind: "Ticket reconciliation failed",
 }
 
 // Runs on the job runner's goroutine, so it must not block or panic.

@@ -115,13 +115,12 @@ fails the scenario on a non-empty ledger and prints the lines.
   `nisse-markdown-stream` replays a recording, and the other nisse scenarios
   point the `attn-nisse` host at the stub (`startStubWorld` and `scriptedAgent`
   in `piStubProvider.mjs`).
-- Arming also sets `ATTN_HEADLESS_TASKS=off`, so the daemon refuses narration,
+- Arming also sets `ATTN_HEADLESS_TASKS=off`, so the daemon refuses
   classification, titling and every other headless LLM task (`internal/headless`)
-  instead of enqueueing one. Without it the ledger check races the daemon:
-  `narrate_workspace` debounces two minutes and retries, so its `claude --print`
-  lands after `summary.json`, and the single `current-run` pointer stamps it with
-  whichever scenario is armed by then. A scenario that allows real agents keeps
-  headless tasks on.
+  instead of enqueueing one. Without it the ledger check races the daemon: a
+  debounced headless task's `claude --print` can land after `summary.json`, and
+  the single `current-run` pointer stamps it with whichever scenario is armed by
+  then. A scenario that allows real agents keeps headless tasks on.
 - `summary.json` carries `headlessTasks`, read from the environment of the
   daemon the scenario ran against, so a green run states the switch was in force
   rather than leaving it assumed. Counting `headless task refused` lines instead

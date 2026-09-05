@@ -69,11 +69,9 @@
 
 ## Knowledge
 
-- Workspace context: current, potentially stale account of one workspace.
 - Notebook: profile-wide durable markdown; files are authoritative.
-- Journal: dated work history. Knowledge base: lasting knowledge. Raw tier: machine inputs to the keeper.
+- Journal: dated work history. Knowledge base: lasting knowledge.
 - Note title: first H1 outside fenced code; filename fallback. Frontmatter `title` is ignored.
-- Keeper: maintains workspace context and journal narration.
 - Chief of staff: coordinates work across workspaces.
 
 ## Apps and events

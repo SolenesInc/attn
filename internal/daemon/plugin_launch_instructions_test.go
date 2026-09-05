@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -29,9 +28,6 @@ func TestPreparePluginLaunchInstructionsBeforeSessionPersistence(t *testing.T) {
 	if strings.Contains(instructions.Content, "shared context") {
 		t.Fatalf("launch instructions still point at the workspace context: %q", instructions.Content)
 	}
-	if _, err := os.Stat(workspaceContextCheckoutDir(d.dataRoot, "session-a")); !os.IsNotExist(err) {
-		t.Fatalf("launch preparation created a workspace checkout: %v", err)
-	}
 }
 
 func TestPreparePluginChiefInstructionsUsesNotebook(t *testing.T) {
@@ -50,9 +46,6 @@ func TestPreparePluginChiefInstructionsUsesNotebook(t *testing.T) {
 	}
 	if !strings.Contains(instructions.Content, "You are the chief of staff") || !strings.Contains(instructions.Content, notebookRoot) || !strings.Contains(instructions.Content, hooks.GardenGuidance) {
 		t.Fatalf("chief guidance = %q", instructions.Content)
-	}
-	if _, err := os.Stat(workspaceContextCheckoutDir(d.dataRoot, "session-a")); !os.IsNotExist(err) {
-		t.Fatalf("chief preparation created workspace checkout: %v", err)
 	}
 }
 

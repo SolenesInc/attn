@@ -304,25 +304,11 @@ test.describe('Keyboard Shortcuts', () => {
 
       await page.keyboard.press('Meta+k');
       await expect(page.getByRole('dialog', { name: 'Action menu' })).toBeVisible();
-      await expect(page.getByText('Browse workspace contexts')).toBeVisible();
+      await expect(page.getByText('Open attention drawer')).toBeVisible();
 
       await page.keyboard.press('Meta+n');
       await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
 
-      await page.getByText('Browse workspace contexts').click();
-      const contextNavigator = page.getByRole('dialog', { name: 'Workspace contexts on this machine' });
-      await expect(contextNavigator).toBeVisible();
-
-      await page.keyboard.press('Meta+n');
-      await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
-      await expect(contextNavigator).toBeVisible();
-
-      await page.keyboard.press('Meta+k');
-      await expect(page.getByRole('dialog', { name: 'Action menu' })).not.toBeVisible();
-      await expect(contextNavigator).toBeVisible();
-
-      await page.keyboard.press('Escape');
-      await page.keyboard.press('Meta+k');
       await page.getByText('Open attention drawer').click();
       await expect(page.locator('.side-panel-shell.is-open .attention-drawer .attention-drawer-panel')).toBeVisible();
     });

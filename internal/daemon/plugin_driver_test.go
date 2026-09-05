@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -229,9 +228,6 @@ func TestHandleSpawnSession_PluginDriverClosesRunWhenPTYSpawnFails(t *testing.T)
 		Cols:        80,
 		Rows:        24,
 	})
-	if _, err := os.Stat(workspaceContextCheckoutDir(d.dataRoot, "snipe-failed-spawn")); !os.IsNotExist(err) {
-		t.Fatalf("failed plugin spawn left workspace checkout behind: %v", err)
-	}
 
 	params := <-closed
 	if params.SessionID != "snipe-failed-spawn" || params.RunID == "" || params.Reason != "launch_failed" {

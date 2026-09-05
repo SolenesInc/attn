@@ -11,7 +11,7 @@ func Definitions() []Recipient {
 	recipients := append(append([]Recipient{s}, lifecycleRecipients()...), originRecipients()...)
 	recipients = append(recipients, gardenAdvisorRecipient(), piRecipient(), piEnvironmentRecipient(), piSessionRecipient(), piSecurityRecipient(), activityRecipient(), skillRecipient(), resourceRecipient(), annotationLabelRecipient(), evidenceRecipient())
 	recipients = append(recipients, annotationRecipients()...)
-	order := []string{"session", "crew", "chief", "delegation", "automation", "pi-permission", "pi-session", "activity", "turn-classifier", "session-title", "session-instructions", "keeper", "ticket-reconciler", "workflow-agent", "attn-skill"}
+	order := []string{"session", "crew", "chief", "delegation", "automation", "pi-permission", "pi-session", "activity", "turn-classifier", "session-title", "session-instructions", "ticket-reconciler", "workflow-agent", "attn-skill"}
 	rank := func(id string) int {
 		for i, name := range order {
 			if name == id {

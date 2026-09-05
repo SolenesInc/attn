@@ -63,8 +63,6 @@ var commandsPredatingTheScopeGuard = map[string]bool{
 	"task_retry": true, "ticket_comment": true, "ticket_list": true, "ticket_show": true, "ticket_subscribe": true,
 	"ticket_take": true, "ticket_unsubscribe": true, "unregister_workspace": true, "workflow_call_upsert": true,
 	"workflow_run_cancel": true, "workflow_run_get": true, "workflow_run_list": true, "workflow_run_upsert": true,
-	"workspace_context_checkout": true, "workspace_context_compact": true, "workspace_context_list": true,
-	"workspace_context_rollback": true, "workspace_context_status": true, "workspace_context_update": true,
 }
 
 func TestEveryProtocolCommandIsClassified(t *testing.T) {

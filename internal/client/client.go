@@ -850,67 +850,6 @@ func (c *Client) TakeTicket(sourceSessionID, ticketID string, confirm bool) (*pr
 	return resp.TicketTakeResult, nil
 }
 
-func (c *Client) CheckoutWorkspaceContext(sourceSessionID string, force bool) (*protocol.WorkspaceContextResult, error) {
-	msg := protocol.WorkspaceContextCheckoutMessage{
-		Cmd:             protocol.CmdWorkspaceContextCheckout,
-		SourceSessionID: sourceSessionID,
-	}
-	if force {
-		msg.Force = protocol.Ptr(true)
-	}
-	return c.workspaceContextResult(msg)
-}
-
-func (c *Client) UpdateWorkspaceContext(sourceSessionID string) (*protocol.WorkspaceContextResult, error) {
-	return c.workspaceContextResult(protocol.WorkspaceContextUpdateMessage{
-		Cmd:             protocol.CmdWorkspaceContextUpdate,
-		SourceSessionID: sourceSessionID,
-	})
-}
-
-func (c *Client) WorkspaceContextStatus(sourceSessionID string) (*protocol.WorkspaceContextResult, error) {
-	return c.workspaceContextResult(protocol.WorkspaceContextStatusMessage{
-		Cmd:             protocol.CmdWorkspaceContextStatus,
-		SourceSessionID: sourceSessionID,
-	})
-}
-
-func (c *Client) CompactWorkspaceContext(sourceSessionID string) (*protocol.WorkspaceContextMaintenanceResult, error) {
-	return c.workspaceContextMaintenanceResult(protocol.WorkspaceContextCompactMessage{
-		Cmd:             protocol.CmdWorkspaceContextCompact,
-		SourceSessionID: sourceSessionID,
-	})
-}
-
-func (c *Client) RollbackWorkspaceContext(sourceSessionID string) (*protocol.WorkspaceContextMaintenanceResult, error) {
-	return c.workspaceContextMaintenanceResult(protocol.WorkspaceContextRollbackMessage{
-		Cmd:             protocol.CmdWorkspaceContextRollback,
-		SourceSessionID: sourceSessionID,
-	})
-}
-
-func (c *Client) workspaceContextResult(msg interface{}) (*protocol.WorkspaceContextResult, error) {
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.WorkspaceContextResult == nil {
-		return nil, errors.New("daemon returned no workspace context result")
-	}
-	return resp.WorkspaceContextResult, nil
-}
-
-func (c *Client) workspaceContextMaintenanceResult(msg interface{}) (*protocol.WorkspaceContextMaintenanceResult, error) {
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.WorkspaceContextMaintenanceResult == nil {
-		return nil, errors.New("daemon returned no workspace context maintenance result")
-	}
-	return resp.WorkspaceContextMaintenanceResult, nil
-}
-
 func (c *Client) NotebookGuide(sessionID string) (*protocol.NotebookGuideResult, error) {
 	msg := protocol.NotebookGuideMessage{Cmd: protocol.CmdNotebookGuide}
 	if sessionID != "" {
@@ -927,7 +866,7 @@ func (c *Client) NotebookGuide(sessionID string) (*protocol.NotebookGuideResult,
 }
 
 // AppendJournal goes through the daemon's serialized notebook.Store writer: editing
-// journal/<date>.md directly races the keeper's own writes. Empty date means today.
+// journal/<date>.md directly races other agents' writes. Empty date means today.
 func (c *Client) AppendJournal(sourceSessionID, date, entry string) (*protocol.JournalAppendResult, error) {
 	msg := protocol.JournalAppendMessage{Cmd: protocol.CmdJournalAppend, Entry: entry}
 	if sourceSessionID != "" {

@@ -10,12 +10,7 @@ import (
 
 // One-time handover from the retired task runner's `tasks` table to the job queue. The
 // legacy meta keys are pinned literally: they describe a format nothing writes anymore.
-const (
-	legacyMetaTranscript      = "transcript"
-	legacyMetaWorkspace       = "workspace"
-	legacyMetaDailyPass       = "daily_pass"
-	legacyMetaReconcileInputs = "reconcile_inputs"
-)
+const legacyMetaReconcileInputs = "reconcile_inputs"
 
 // importLegacyTasks runs before the queue is constructed, so nothing races it, and the
 // move is atomic in the store: any failure leaves every old row for the next start.
@@ -69,29 +64,8 @@ func legacyTaskPayload(rec store.LegacyTaskRecord) (string, error) {
 	if err := json.Unmarshal([]byte(raw), &meta); err != nil {
 		return "", err
 	}
-	var payload any
-	switch rec.Kind {
-	case notebookSummarizeSessionKind:
-		p := summarizeSessionPayload{Transcript: meta[legacyMetaTranscript]}
-		// Pointer set only when the key was present: "carried empty" (solo bucket)
-		// vs "carried nothing" (fall back to the live session row).
-		if ws, ok := meta[legacyMetaWorkspace]; ok {
-			p.WorkspaceID = &ws
-		}
-		payload = p
-	case notebookNarrateWorkspaceKind:
-		if meta[legacyMetaDailyPass] != "1" {
-			return "", nil
-		}
-		payload = narrateWorkspacePayload{DailyPass: true}
-	case reconcileKind:
+	if rec.Kind == reconcileKind {
 		return meta[legacyMetaReconcileInputs], nil
-	default:
-		return "", nil
 	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
+	return "", nil
 }

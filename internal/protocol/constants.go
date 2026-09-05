@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "286"
+const ProtocolVersion = "287"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -90,12 +90,6 @@ const (
 	CmdGetPresentationRound                  = "get_presentation_round"
 	CmdPresentSubmitRound                    = "present_submit_round"
 	CmdPresentClose                          = "present_close"
-	CmdWorkspaceContextCheckout              = "workspace_context_checkout"
-	CmdWorkspaceContextUpdate                = "workspace_context_update"
-	CmdWorkspaceContextStatus                = "workspace_context_status"
-	CmdWorkspaceContextList                  = "workspace_context_list"
-	CmdWorkspaceContextCompact               = "workspace_context_compact"
-	CmdWorkspaceContextRollback              = "workspace_context_rollback"
 	CmdNotebookList                          = "notebook_list"
 	CmdNotebookRead                          = "notebook_read"
 	CmdNotebookWrite                         = "notebook_write"
@@ -341,7 +335,6 @@ const (
 	EventWorkspaceRegistered             = "workspace_registered"
 	EventWorkspaceUnregistered           = "workspace_unregistered"
 	EventWorkspaceStateChanged           = "workspace_state_changed"
-	EventWorkspaceContextChanged         = "workspace_context_changed"
 	EventNotebookChanged                 = "notebook_changed"
 	EventSessionTodosUpdated             = "session_todos_updated"
 	EventSessionsUpdated                 = "sessions_updated"
@@ -366,8 +359,6 @@ const (
 	EventPresentationUpdated             = "presentation_updated"
 	EventDelegateResult                  = "delegate_result"
 	EventDelegationOperation             = "delegation_operation"
-	EventWorkspaceContextResult          = "workspace_context_result"
-	EventWorkspaceContextListResult      = "workspace_context_list_result"
 	EventNotebookListResult              = "notebook_list_result"
 	EventNotebookReadResult              = "notebook_read_result"
 	EventNotebookBacklinksResult         = "notebook_backlinks_result"
@@ -927,48 +918,6 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdPresentClose:
 		var msg PresentCloseMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceContextCheckout:
-		var msg WorkspaceContextCheckoutMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceContextUpdate:
-		var msg WorkspaceContextUpdateMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceContextStatus:
-		var msg WorkspaceContextStatusMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceContextList:
-		var msg WorkspaceContextListMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceContextCompact:
-		var msg WorkspaceContextCompactMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdWorkspaceContextRollback:
-		var msg WorkspaceContextRollbackMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}

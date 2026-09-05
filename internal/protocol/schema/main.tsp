@@ -84,11 +84,6 @@ enum AttachPolicy {
   revive,
 }
 
-enum WorkspaceContextMaintenanceAction {
-  compact,
-  rollback,
-}
-
 enum GitOperationKind {
   delete_worktree,
 }
@@ -229,14 +224,6 @@ model Workspace {
   rank: string;                 // Fractional-index sort key; default order is opening (creation) order.
   layout?: WorkspaceLayout;
   endpoint_id?: string;         // Set by a hub daemon on workspaces mirrored from a remote endpoint; absent/empty means the workspace is local to this daemon. Remote daemons never set this themselves — the hub stamps it at ingest.
-}
-
-model WorkspaceContext {
-  workspace_id: string;
-  content: string;
-  revision: int32;
-  updated_by_session_id: string;
-  updated_at: string;
 }
 
 // PresentAnnotation is an author-pinned note or thread, resolved at query
@@ -1189,37 +1176,6 @@ model TicketAttachResultMessage {
 }
 
 
-model WorkspaceContextCheckoutMessage {
-  cmd: "workspace_context_checkout";
-  source_session_id: string;
-  force?: boolean;
-}
-
-model WorkspaceContextUpdateMessage {
-  cmd: "workspace_context_update";
-  source_session_id: string;
-}
-
-model WorkspaceContextStatusMessage {
-  cmd: "workspace_context_status";
-  source_session_id: string;
-}
-
-model WorkspaceContextListMessage {
-  cmd: "workspace_context_list";
-  request_id: string;
-}
-
-model WorkspaceContextCompactMessage {
-  cmd: "workspace_context_compact";
-  source_session_id: string;
-}
-
-model WorkspaceContextRollbackMessage {
-  cmd: "workspace_context_rollback";
-  source_session_id: string;
-}
-
 // ============================================================================
 // Notebook (durable, profile-wide markdown: a dated journal + a PARA knowledge
 // base).
@@ -1278,11 +1234,8 @@ model NotebookGuideMessage {
 // JournalAppendMessage appends one markdown block to the notebook's dated daily
 // journal (journal/<date>.md) through the daemon's serialized notebook.Store
 // writer, instead of an agent editing the file directly with its own file-edit
-// tools. The chief of staff and the daemon's own keeper both write the same
-// journal file; a direct file edit races the keeper's writes and hits
-// "file modified since read" on nearly every append. Routing through the daemon's
-// single cached Store per root serializes all writers through one append, which
-// never conflicts (unlike a hash-CAS note edit). Not identity-scoped (like
+// tools. Routing through the daemon's single cached Store per root serializes
+// all writers through one append, which never conflicts (unlike a hash-CAS note edit). Not identity-scoped (like
 // notebook_guide); source_session_id is optional and unused, present only for
 // command-shape uniformity with the ticket verbs.
 model JournalAppendMessage {
@@ -3132,14 +3085,6 @@ model WorkspaceUnregisteredMessage {
 model WorkspaceStateChangedMessage {
   event: "workspace_state_changed";
   workspace: Workspace;
-}
-
-model WorkspaceContextChangedMessage {
-  event: "workspace_context_changed";
-  workspace_id: string;
-  revision: int32;
-  updated_by_session_id: string;
-  updated_at: string;
 }
 
 // Broadcast when notebook content changes. origin is agent|ui|external.
@@ -6004,9 +5949,6 @@ model Response {
   data?: string;
   delegate_result?: DelegateResult;
   delegation_operation?: DelegationOperation;
-  workspace_context_result?: WorkspaceContextResult;
-  workspace_context_maintenance_result?: WorkspaceContextMaintenanceResult;
-  workspace_contexts?: WorkspaceContext[];
   sessions?: Session[];
   workspaces?: Workspace[];
   prs?: PR[];
@@ -6510,28 +6452,6 @@ model DelegationOperationMessage {
   operation?: DelegationOperation;
 }
 
-model WorkspaceContextResult {
-  workspace_id: string;
-  session_id: string;
-  path: string;
-  revision: int32;
-  canonical_revision: int32;
-  modified: boolean;
-  stale: boolean;
-  updated_by_session_id?: string;
-  updated_at?: string;
-}
-
-model WorkspaceContextMaintenanceResult {
-  action: WorkspaceContextMaintenanceAction;
-  workspace_id: string;
-  source_revision: int32;
-  result_revision: int32;
-  changed: boolean;
-  agent?: string;
-  agent_model?: string;
-}
-
 // One notebook note as surfaced by notebook_list (metadata only, no body).
 model NotebookEntry {
   path: string;
@@ -6892,22 +6812,6 @@ model FsChangedMessage {
   root: string; // the resolved absolute root the change happened under
 }
 
-model WorkspaceContextResultMessage {
-  event: "workspace_context_result";
-  action: string;
-  success: boolean;
-  error?: string;
-  result?: WorkspaceContextResult;
-}
-
-model WorkspaceContextListResultMessage {
-  event: "workspace_context_list_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  contexts?: WorkspaceContext[];
-}
-
 // Warning for non-critical issues (e.g., gh version too old)
 model DaemonWarning {
   code: string;    // e.g., "gh_version_too_old"
@@ -7007,11 +6911,9 @@ model WebSocketEvent {
   reason?: string;
   signal?: string;
 
-  workspace_context_result?: WorkspaceContextResult;
   ticket?: Ticket;
   seeds?: Seed[];
   total?: int32;
-  workspace_contexts?: WorkspaceContext[];
 }
 
 alias DaemonEvent =
@@ -7022,7 +6924,6 @@ alias DaemonEvent =
   | WorkspaceRegisteredMessage
   | WorkspaceUnregisteredMessage
   | WorkspaceStateChangedMessage
-  | WorkspaceContextChangedMessage
   | NotebookChangedMessage
   | SessionTodosUpdatedMessage
   | SessionsUpdatedMessage
@@ -7090,8 +6991,6 @@ alias DaemonEvent =
   | AutomationDeleteResultMessage
   | AutomationCleanupResultMessage
   | AutomationsChangedMessage
-  | WorkspaceContextResultMessage
-  | WorkspaceContextListResultMessage
   | NotebookListResultMessage
   | NotebookReadResultMessage
   | NotebookBacklinksResultMessage

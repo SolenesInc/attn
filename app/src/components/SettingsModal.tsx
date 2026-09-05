@@ -43,17 +43,6 @@ import {
   orderedAgents,
   resolvePreferredAgent,
 } from '../utils/agentAvailability';
-import {
-  defaultKeeperDutyModel,
-  keeperDutyModelSelection,
-  KEEPER_DUTIES,
-  KEEPER_DUTY_BY_KEY,
-  parseKeeperConfig,
-  serializeKeeperConfig,
-  type KeeperConfig,
-  type KeeperDutyDescriptor,
-  type KeeperDutyKey,
-} from '../utils/keeperDuties';
 import { SessionActivitySettings } from './SessionActivitySettings';
 import { GardenAdvisorSettings } from './GardenAdvisorSettings';
 import { parseGardenAdvisorSetting } from '../utils/gardenAdvisorSettings';
@@ -132,7 +121,6 @@ type SettingsSectionID =
   | 'workspace'
   | 'hygiene'
   | 'agents'
-  | 'keeper'
   | 'autoMode'
   | 'connectivity'
   | 'plugins'
@@ -172,28 +160,6 @@ interface SettingsNavItem {
 interface SettingsNavGroup {
   label: string;
   items: SettingsNavItem[];
-}
-
-interface KeeperDraft {
-  agent: SessionAgent | '';
-  model: string;
-}
-
-const emptyKeeperDrafts: Record<KeeperDutyKey, KeeperDraft> = {
-  summarize: { agent: '', model: '' },
-  narrate: { agent: '', model: '' },
-  compact: { agent: '', model: '' },
-};
-
-function initialKeeperDraft(
-  duty: KeeperDutyDescriptor,
-  saved: KeeperConfig | null,
-  agents: readonly SessionAgent[],
-): KeeperDraft {
-  if (saved) return { agent: saved.agent, model: saved.model };
-  if (duty.optInOnly) return { agent: '', model: '' };
-  const agent = agents.includes('claude') ? 'claude' : agents[0] ?? '';
-  return { agent, model: agent ? defaultKeeperDutyModel(duty.key, agent) : '' };
 }
 
 export function SettingsModal({
@@ -260,9 +226,6 @@ export function SettingsModal({
   });
   const savedFlash = useSavedFlash();
   const [defaultAgent, setDefaultAgent] = useState<SessionAgent>('claude');
-  const [keeperDrafts, setKeeperDrafts] = useState<Record<KeeperDutyKey, KeeperDraft>>(
-    emptyKeeperDrafts,
-  );
   const [selectedSection, setSelectedSection] = useState<SettingsSectionID>('connectivity');
   const [settingsSearch, setSettingsSearch] = useState('');
   const endpointPanel = useEndpointPanel();
@@ -305,22 +268,6 @@ export function SettingsModal({
   const autoSettleEnabled = isAutoSettleEnabled(settings);
   const actualAutoSettleArm = String(autoSettleSeconds(settings, AUTO_SETTLE_ARM_SETTING));
   const actualAutoSettleCountdown = String(autoSettleSeconds(settings, AUTO_SETTLE_COUNTDOWN_SETTING));
-  const actualKeeperConfigs = useMemo(() => {
-    const configs = {} as Record<KeeperDutyKey, KeeperConfig | null>;
-    for (const duty of KEEPER_DUTIES) {
-      configs[duty.key] = parseKeeperConfig(settings[duty.settingKey]);
-    }
-    return configs;
-  }, [settings]);
-  const keeperTasksEnabled = (settings['notebook.tasks_enabled'] ?? 'true') !== 'false';
-  const keeperDutyEnabled = useMemo(() => {
-    const enabled = {} as Record<KeeperDutyKey, boolean>;
-    for (const duty of KEEPER_DUTIES) {
-      enabled[duty.key] = duty.enabledSettingKey === undefined
-        || (settings[duty.enabledSettingKey] ?? 'true') !== 'false';
-    }
-    return enabled;
-  }, [settings]);
   const resolvedDefaultAgent = resolvePreferredAgent(actualDefaultAgent, agentAvailability, 'codex');
   const orderedAgentList = useMemo(
     () => orderedAgents(agentAvailability, resolvedDefaultAgent, 'codex'),
@@ -393,20 +340,11 @@ export function SettingsModal({
     }
     return out;
   }, [settings, defaultOverrideAgentList]);
-  const keeperAgents = useMemo(() => {
-    const eligible = orderedAgentList.filter((agent) => (
-      ['codex', 'claude'].includes(agent)
-      && isAgentAvailable(agentAvailability, agent)
-      && actualAgentCapabilities[agent]?.headless_task === true
-    ));
-    for (const duty of KEEPER_DUTIES) {
-      const configured = actualKeeperConfigs[duty.key]?.agent;
-      if (configured && ['codex', 'claude'].includes(configured) && !eligible.includes(configured)) {
-        eligible.push(configured);
-      }
-    }
-    return eligible;
-  }, [actualAgentCapabilities, actualKeeperConfigs, agentAvailability, orderedAgentList]);
+  const activityAgents = useMemo(() => orderedAgentList.filter((agent) => (
+    ['codex', 'claude'].includes(agent)
+    && isAgentAvailable(agentAvailability, agent)
+    && actualAgentCapabilities[agent]?.headless_task === true
+  )), [actualAgentCapabilities, agentAvailability, orderedAgentList]);
   const gardenAdvisorAgents = useMemo(() => {
     const eligible = orderedAgentList.filter((agent) => (
       ['codex', 'claude', 'copilot'].includes(agent)
@@ -499,14 +437,9 @@ export function SettingsModal({
   useEffect(() => {
     if (!isOpen) return;
     setDefaultAgent(resolvedDefaultAgent);
-    setKeeperDrafts({
-      summarize: initialKeeperDraft(KEEPER_DUTY_BY_KEY.summarize, actualKeeperConfigs.summarize, keeperAgents),
-      narrate: initialKeeperDraft(KEEPER_DUTY_BY_KEY.narrate, actualKeeperConfigs.narrate, keeperAgents),
-      compact: initialKeeperDraft(KEEPER_DUTY_BY_KEY.compact, actualKeeperConfigs.compact, keeperAgents),
-    });
     reopenEndpointPanel();
     setPluginSourcePath('');
-  }, [isOpen, resolvedDefaultAgent, actualKeeperConfigs, keeperAgents, reopenEndpointPanel, setPluginSourcePath]);
+  }, [isOpen, resolvedDefaultAgent, reopenEndpointPanel, setPluginSourcePath]);
 
   useEscapeStack(onClose, isOpen);
 
@@ -598,63 +531,6 @@ export function SettingsModal({
       onSetSetting('new_session_agent', agent);
     }
   }, [actualDefaultAgent, agentAvailability, onSetSetting]);
-
-  const handleToggleKeeperTasks = useCallback(() => {
-    onSetSetting('notebook.tasks_enabled', keeperTasksEnabled ? 'false' : 'true');
-  }, [keeperTasksEnabled, onSetSetting]);
-
-  const handleToggleKeeperDuty = useCallback((dutyKey: KeeperDutyKey) => {
-    const duty = KEEPER_DUTY_BY_KEY[dutyKey];
-    if (!duty.enabledSettingKey) return;
-    onSetSetting(duty.enabledSettingKey, keeperDutyEnabled[dutyKey] ? 'false' : 'true');
-  }, [keeperDutyEnabled, onSetSetting]);
-
-  const commitKeeperDuty = useCallback((
-    dutyKey: KeeperDutyKey,
-    agent: SessionAgent | '',
-    rawModel: string,
-  ) => {
-    const model = rawModel.trim();
-    if (!agent || !model) return;
-    onSetSetting(
-      KEEPER_DUTY_BY_KEY[dutyKey].settingKey,
-      serializeKeeperConfig({ agent, model }),
-    );
-    savedFlash.flash(KEEPER_DUTY_BY_KEY[dutyKey].settingKey);
-  }, [onSetSetting, savedFlash]);
-
-  const handleKeeperAgentChange = useCallback((dutyKey: KeeperDutyKey, agent: SessionAgent | '') => {
-    const model = agent ? defaultKeeperDutyModel(dutyKey, agent) : '';
-    setKeeperDrafts((prev) => ({ ...prev, [dutyKey]: { agent, model } }));
-    commitKeeperDuty(dutyKey, agent, model);
-  }, [commitKeeperDuty]);
-
-  const handleKeeperModelSelection = useCallback((dutyKey: KeeperDutyKey, model: string) => {
-    const next = model === 'custom' ? '' : model;
-    setKeeperDrafts((prev) => ({ ...prev, [dutyKey]: { ...prev[dutyKey], model: next } }));
-    if (next) commitKeeperDuty(dutyKey, keeperDrafts[dutyKey].agent, next);
-  }, [commitKeeperDuty, keeperDrafts]);
-
-  const handleKeeperCustomModelChange = useCallback((dutyKey: KeeperDutyKey, model: string) => {
-    setKeeperDrafts((prev) => ({
-      ...prev,
-      [dutyKey]: { ...prev[dutyKey], model },
-    }));
-  }, []);
-
-  const commitKeeperCustomModel = useCallback((dutyKey: KeeperDutyKey) => {
-    const draft = keeperDrafts[dutyKey];
-    commitKeeperDuty(dutyKey, draft.agent, draft.model);
-  }, [commitKeeperDuty, keeperDrafts]);
-
-  const clearKeeperDuty = useCallback((dutyKey: KeeperDutyKey) => {
-    const duty = KEEPER_DUTY_BY_KEY[dutyKey];
-    onSetSetting(duty.settingKey, '');
-    setKeeperDrafts((prev) => ({
-      ...prev,
-      [dutyKey]: initialKeeperDraft(duty, null, keeperAgents),
-    }));
-  }, [keeperAgents, onSetSetting]);
 
   const handleAddEndpoint = useCallback(async () => {
     const name = endpointPanel.draft.name.trim();
@@ -829,14 +705,6 @@ export function SettingsModal({
           keywords: 'agents executables claude codex copilot default capabilities pty backend editor model effort chief reviewer review garden advisor sdk context window cap tokens compaction headless workflows auto-approve unattended',
         },
         {
-          id: 'keeper',
-          label: 'Context maintenance',
-          title: 'Context maintenance',
-          description: 'The keeper: which agent summarizes, narrates and compacts your workspace context, and whether it runs at all.',
-          count: 4,
-          keywords: 'keeper context maintenance summarize summaries narrate compact background tasks duty roster haiku costs',
-        },
-        {
           id: 'autoMode',
           label: 'Auto mode',
           title: 'Auto mode',
@@ -961,14 +829,6 @@ export function SettingsModal({
             </span>
             <span className={`settings-pill ${hasReviewModelChange ? 'warn' : 'good'}`}>
               {hasReviewModelChange ? 'reviewer model edited' : 'reviewer model saved'}
-            </span>
-          </>
-        );
-      case 'keeper':
-        return (
-          <>
-            <span className={`settings-pill ${keeperTasksEnabled ? 'good' : ''}`}>
-              {keeperTasksEnabled ? 'keeper on' : 'keeper off'}
             </span>
           </>
         );
@@ -1830,7 +1690,7 @@ export function SettingsModal({
 
       <SessionActivitySettings
         settings={settings}
-        agents={keeperAgents}
+        agents={activityAgents}
         onSetSetting={onSetSetting}
       />
 
@@ -2049,8 +1909,8 @@ export function SettingsModal({
           <p className="settings-description">
             Token thresholds at which auto-compaction fires instead of waiting for the
             model's full window. Lower caps keep the chief cheaper on each cache-cold
-            wake and keep one-shot headless runs (keeper narration, reconciliation,
-            workflow subagents) from ballooning; leave those at {DEFAULT_CONTEXT_WINDOW_CAP.toLocaleString()} for
+            wake and keep one-shot headless runs (reconciliation, workflow
+            subagents) from ballooning; leave those at {DEFAULT_CONTEXT_WINDOW_CAP.toLocaleString()} for
             the default. The per-agent caps apply to every session of that agent —
             raise one to make long-lived sessions compact later. Blank means the
             agent's own compaction behavior; a chief launch still takes the chief cap.
@@ -2256,163 +2116,6 @@ export function SettingsModal({
               />
               <SavedMark shown={savedFlash.saved('reviewer_model')} testID="settings-reviewer-model-saved" />
             </div>
-          </div>
-        </div>
-      </section>
-    </>
-  );
-
-  const renderKeeperSettings = () => (
-    <>
-      <section className="settings-block">
-        <div className="settings-block-intro">
-          <div className="settings-kicker">Notebook</div>
-          <h3>Keeper</h3>
-          <p className="settings-description">
-            The keeper runs three background duties off the notebook: it summarizes finished
-            sessions, curates the work journal, and compacts large shared workspace contexts.
-            Each duty picks its own non-interactive agent and model.
-          </p>
-        </div>
-        <div className="settings-block-body">
-          <div className="settings-row-card">
-            <div>
-              <p className="settings-row-title">Background tasks</p>
-              <p className="settings-row-copy">
-                Master switch for every keeper duty below. While off, the keeper queues and
-                runs no background work; the per-duty agent and model stay configurable.
-                Turning it off won't interrupt a run already in flight.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="settings-action"
-              data-testid="settings-keeper-tasks-toggle"
-              onClick={handleToggleKeeperTasks}
-            >
-              {keeperTasksEnabled ? 'Disable' : 'Enable'}
-            </button>
-          </div>
-          {keeperAgents.length === 0 && (
-            <div className="settings-warning">No installed agent supports scoped headless tasks.</div>
-          )}
-          <div className={`settings-keeper-duties${keeperTasksEnabled ? '' : ' is-disabled'}`}>
-            {KEEPER_DUTIES.map((duty) => {
-              const draft = keeperDrafts[duty.key];
-              const presets = duty.modelPresets(draft.agent);
-              const modelSelection = keeperDutyModelSelection(duty.key, draft.agent, draft.model);
-              const hasOverride = actualKeeperConfigs[duty.key] !== null;
-              const agentId = `${duty.testIdPrefix}-agent`;
-              const modelId = `${duty.testIdPrefix}-model`;
-              const customId = `${duty.testIdPrefix}-model-custom`;
-              const dutyEnabled = keeperDutyEnabled[duty.key];
-              return (
-                <div
-                  className={`settings-keeper-duty${dutyEnabled ? '' : ' is-disabled'}`}
-                  key={duty.key}
-                >
-                  <div className="settings-keeper-duty-head">
-                    <div>
-                      <p className="settings-row-title">{duty.title}</p>
-                      <p className="settings-row-copy">{duty.description}</p>
-                    </div>
-                    {duty.enabledSettingKey && (
-                      <button
-                        type="button"
-                        className="settings-action"
-                        data-testid={`${duty.testIdPrefix}-toggle`}
-                        aria-label={`${dutyEnabled ? 'Disable' : 'Enable'} ${duty.title.toLowerCase()}`}
-                        onClick={() => handleToggleKeeperDuty(duty.key)}
-                      >
-                        {dutyEnabled ? 'Disable' : 'Enable'}
-                      </button>
-                    )}
-                  </div>
-                  <div className="settings-field-grid two-column">
-                    <div className="settings-field">
-                      <label className="settings-label" htmlFor={agentId}>Agent</label>
-                      <select
-                        id={agentId}
-                        data-testid={agentId}
-                        className="settings-input"
-                        value={draft.agent}
-                        onChange={(event) => handleKeeperAgentChange(duty.key, event.target.value as SessionAgent | '')}
-                      >
-                        {duty.optInOnly && <option value="">Disabled</option>}
-                        {keeperAgents.map((agent) => (
-                          <option key={agent} value={agent}>{agentLabel(agent)}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="settings-field">
-                      <label className="settings-label" htmlFor={modelId}>Model</label>
-                      <select
-                        id={modelId}
-                        data-testid={modelId}
-                        value={modelSelection}
-                        onChange={(event) => handleKeeperModelSelection(duty.key, event.target.value)}
-                        className="settings-input"
-                        disabled={!draft.agent}
-                      >
-                        {!draft.agent && <option value="">Select an agent</option>}
-                        {presets.map((preset) => (
-                          <option key={preset.value} value={preset.value}>{preset.label}</option>
-                        ))}
-                        <option value="custom">Custom...</option>
-                      </select>
-                    </div>
-                  </div>
-                  {draft.agent && modelSelection === 'custom' && (
-                    <div className="settings-field">
-                      <label className="settings-label" htmlFor={customId}>Custom model</label>
-                      <input
-                        id={customId}
-                        data-testid={customId}
-                        type="text"
-                        value={draft.model}
-                        onChange={(event) => handleKeeperCustomModelChange(duty.key, event.target.value)}
-                        onBlur={() => commitKeeperCustomModel(duty.key)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') commitKeeperCustomModel(duty.key);
-                        }}
-                        placeholder={draft.agent === 'claude' ? 'claude-opus-4-6' : 'model ID'}
-                        className="settings-input"
-                        autoCapitalize="none"
-                        autoCorrect="off"
-                        spellCheck={false}
-                      />
-                    </div>
-                  )}
-                  <div className="settings-row-inline">
-                    <SavedMark
-                      shown={savedFlash.saved(duty.settingKey)}
-                      testID={`${duty.testIdPrefix}-saved`}
-                    />
-                    <button
-                      type="button"
-                      className="settings-action"
-                      data-testid={`${duty.testIdPrefix}-clear`}
-                      onClick={() => clearKeeperDuty(duty.key)}
-                      disabled={!hasOverride}
-                    >
-                      {duty.optInOnly ? 'Disable' : 'Use default'}
-                    </button>
-                  </div>
-                  {duty.optInOnly ? (
-                    <div className="settings-hint">
-                      Runs after a 10-minute debounce when canonical context exceeds 12 KiB. Use
-                      `attn workspace context compact` to run it immediately.
-                    </div>
-                  ) : (
-                    <div className="settings-hint">
-                      {duty.enabledSettingKey && !dutyEnabled
-                        ? `Disabled. Its ${duty.defaultLabel} model setting is preserved.`
-                        : `Defaults to ${duty.defaultLabel} when unset.`}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
           </div>
         </div>
       </section>
@@ -2699,8 +2402,6 @@ export function SettingsModal({
         return renderAppearanceSettings();
       case 'workspace':
         return renderWorkspaceSettings();
-      case 'keeper':
-        return renderKeeperSettings();
       case 'plugins':
         return renderPluginSettings();
       case 'agents':

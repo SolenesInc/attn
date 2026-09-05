@@ -57,12 +57,6 @@ func TestWireTraceProducerGolden(t *testing.T) {
 		{"workspace_state_changed via mute", func() { d.setWorkspaceMuted("workspace-1", true) }},
 		{"workspace_state_changed via pin", func() { d.setWorkspacePinned("workspace-1", true) }},
 		{"workspace_state_changed via mute toggle", func() { d.toggleWorkspaceMute("workspace-1") }},
-		{"workspace_context_changed", func() {
-			d.broadcastWorkspaceContextChanged(&protocol.WorkspaceContext{
-				WorkspaceID: "workspace-1", Content: "# Context\n", Revision: 3,
-				UpdatedAt: now, UpdatedBySessionID: "sess-1",
-			})
-		}},
 		{"workflow_run_updated", func() {
 			d.publishFact(FactWorkflowRunUpdated, "run-1", &protocol.WorkflowRun{
 				RunID: "run-1", Status: protocol.WorkflowRunStatusRunning,

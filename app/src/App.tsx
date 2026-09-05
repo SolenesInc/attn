@@ -40,7 +40,6 @@ import { SnoozeMenu } from './components/SnoozeMenu';
 import { MarkdownOpener, OPENER_EXTENSIONS } from './components/palette/MarkdownOpener';
 import { resolveMarkdownOpenerTarget } from './components/palette/openerTarget';
 import { claimPaletteFocus } from './components/palette/paletteClaim';
-import { WorkspaceContextNavigator, type WorkspaceContextView } from './components/WorkspaceContextNavigator';
 import { NotebookBrowser } from './components/NotebookBrowser';
 import { NotificationsPanel } from './components/NotificationsPanel';
 import { ErrorToast, useErrorToast } from './components/ErrorToast';
@@ -781,7 +780,6 @@ function AppContent({
     sendRemoveEndpoint,
     sendSetEndpointRemoteWeb,
     sendBootstrapEndpoint,
-    sendListWorkspaceContexts,
     sendFsList,
     sendFsRead,
     sendFsWrite,
@@ -1015,13 +1013,9 @@ function AppContent({
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [seedPopoverRequest, setSeedPopoverRequest] = useState<{ sessionId: string; nonce: number }>();
   const [usagePopoverRequest, setUsagePopoverRequest] = useState<{ sessionId: string; nonce: number }>();
-  const [workspaceContextsOpen, setWorkspaceContextsOpen] = useState(false);
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [notebookRequestedPath, setNotebookRequestedPath] = useState<string | null>(null);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
-  const [workspaceContextsLoading, setWorkspaceContextsLoading] = useState(false);
-  const [workspaceContextsError, setWorkspaceContextsError] = useState<string | null>(null);
-  const [workspaceContexts, setWorkspaceContexts] = useState<Awaited<ReturnType<typeof sendListWorkspaceContexts>>>([]);
   const whatsNew = useWhatsNew();
   const { repoStates, authorStates, seeds, seedsTotal, apps, crew } = useDaemonStore();
   const mutedRepos = useMemo(() =>
@@ -1594,7 +1588,6 @@ function AppContent({
     || shortcutsOpen
     || shortcutEditorOpen
     || actionMenuOpen
-    || workspaceContextsOpen
     || notebookOpen
     || gardenHoldsWindow
     || chiefTransferTarget !== null
@@ -1620,46 +1613,6 @@ function AppContent({
     window.addEventListener('focus', claimShellFocus);
     return () => window.removeEventListener('focus', claimShellFocus);
   }, [activeSessionId, blockingOverlayOpen, view]);
-
-  const workspaceContextViews = useMemo<WorkspaceContextView[]>(() => {
-    const workspacesById = new Map(
-      daemonWorkspaces
-        .filter((workspace) => !workspace.endpoint_id)
-        .map((workspace) => [workspace.id, workspace]),
-    );
-    const sessionsById = new Map(daemonSessions.map((session) => [session.id, session]));
-    return workspaceContexts.map((context) => {
-      const workspace = workspacesById.get(context.workspace_id);
-      const updatedBy = sessionsById.get(context.updated_by_session_id);
-      // 'attn-keeper' is a PERSISTED sentinel value; migration 51 realigned existing rows off the old 'attn-janitor'.
-      const updatedByLabel = context.updated_by_session_id === 'attn-keeper'
-        ? 'Attn Keeper'
-        : updatedBy?.label;
-      return {
-        context,
-        title: workspace?.title || context.workspace_id,
-        directory: workspace?.directory || 'Workspace no longer registered',
-        updatedByLabel,
-      };
-    });
-  }, [daemonSessions, daemonWorkspaces, workspaceContexts]);
-
-  const loadWorkspaceContexts = useCallback(async () => {
-    setWorkspaceContextsLoading(true);
-    setWorkspaceContextsError(null);
-    try {
-      setWorkspaceContexts(await sendListWorkspaceContexts());
-    } catch (error) {
-      setWorkspaceContextsError(error instanceof Error ? error.message : 'Failed to load workspace contexts');
-    } finally {
-      setWorkspaceContextsLoading(false);
-    }
-  }, [sendListWorkspaceContexts]);
-
-  const openWorkspaceContextNavigator = useCallback(() => {
-    setWorkspaceContextsOpen(true);
-    void loadWorkspaceContexts();
-  }, [loadWorkspaceContexts]);
 
   const openNotebookBrowser = useCallback(() => {
     setNotebookOpen(true);
@@ -1801,14 +1754,6 @@ function AppContent({
       run: handleOpenNotebookTile,
     },
     {
-      id: 'workspace-contexts',
-      title: 'Browse workspace contexts',
-      description: 'Navigate shared contexts stored on this machine',
-      keywords: ['memory', 'shared', 'agents', 'context'],
-      icon: <ContextActionIcon />,
-      run: openWorkspaceContextNavigator,
-    },
-    {
       id: 'attention',
       title: 'Open attention drawer',
       description: 'Show sessions and pull requests that need a response',
@@ -1862,7 +1807,7 @@ function AppContent({
       icon: <KeyboardActionIcon />,
       run: () => { void handleCopyInputDiagnostics(); },
     },
-  ], [openDockPanel, openWorkspaceContextNavigator, handleOpenNotebookTile, toggleGardenFrame, gardenMode, settings, handleToggleQueueMode, sendSetSetting, handleCopyInputDiagnostics]);
+  ], [openDockPanel, handleOpenNotebookTile, toggleGardenFrame, gardenMode, settings, handleToggleQueueMode, sendSetSetting, handleCopyInputDiagnostics]);
 
   const handleToggleActionMenu = useCallback(() => {
     if (actionMenuOpen) {
@@ -1870,7 +1815,7 @@ function AppContent({
       return;
     }
     if (settingsOpen || shortcutsOpen || locationPickerOpen || whatsNew.isOpen
-      || workspaceContextsOpen || notebookOpen || gardenHoldsWindow
+      || notebookOpen || gardenHoldsWindow
       || chiefTransferTarget !== null || contextCapPromptSession !== null
       || appViewParamsPrompt !== null || closedWorktree !== null || pendingSessionClose !== null
       || sessionCreationJob !== null || openPRLauncherJob !== null) {
@@ -1890,7 +1835,6 @@ function AppContent({
     settingsOpen,
     shortcutsOpen,
     whatsNew.isOpen,
-    workspaceContextsOpen,
     notebookOpen,
     gardenHoldsWindow,
   ]);
@@ -3436,7 +3380,6 @@ function AppContent({
     && !actionMenuOpen
     && !markdownOpenerOpen
     && !shortcutEditorOpen
-    && !workspaceContextsOpen
     && !notebookOpen;
   useKeyboardShortcuts({
     onNewSession: () => handleNewSession('vertical'),
@@ -3960,14 +3903,6 @@ function AppContent({
         <div className="input-diagnostics-copied" role="status">Terminal input diagnostics copied</div>
       )}
       <ChordLeaderHud />
-      <WorkspaceContextNavigator
-        isOpen={workspaceContextsOpen}
-        contexts={workspaceContextViews}
-        isLoading={workspaceContextsLoading}
-        error={workspaceContextsError}
-        onClose={() => setWorkspaceContextsOpen(false)}
-        onRetry={() => void loadWorkspaceContexts()}
-      />
       <NotebookBrowser
         isOpen={notebookOpen}
         initialPath={notebookRequestedPath}

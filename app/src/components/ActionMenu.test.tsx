@@ -5,10 +5,10 @@ import { ActionMenu, type ActionMenuItem } from './ActionMenu';
 function actions(overrides: Partial<ActionMenuItem>[] = []): ActionMenuItem[] {
   const base: ActionMenuItem[] = [
     {
-      id: 'contexts',
-      title: 'Browse workspace contexts',
-      description: 'Navigate shared context',
-      keywords: ['memory'],
+      id: 'notebook-tile',
+      title: 'Open Editor tile',
+      description: 'Dock an editor beside your terminals',
+      keywords: ['notebook'],
       icon: <span>C</span>,
       run: vi.fn(),
     },
@@ -30,8 +30,8 @@ describe('ActionMenu', () => {
     const onClose = vi.fn();
     render(<ActionMenu isOpen actions={items} onClose={onClose} />);
 
-    fireEvent.change(screen.getByLabelText('Search actions'), { target: { value: 'memory' } });
-    expect(screen.getByText('Browse workspace contexts')).toBeVisible();
+    fireEvent.change(screen.getByLabelText('Search actions'), { target: { value: 'notebook' } });
+    expect(screen.getByText('Open Editor tile')).toBeVisible();
     expect(screen.queryByText('Open attention drawer')).toBeNull();
 
     fireEvent.keyDown(screen.getByLabelText('Search actions'), { key: 'Enter' });
