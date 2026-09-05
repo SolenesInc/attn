@@ -224,7 +224,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Cache ghostty-vt artifacts
+      - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
 
       # internal/ghosttyvt links libghostty-vt via cgo on Linux; fetch the
@@ -295,7 +295,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - name: Cache ghostty-vt artifacts
+      - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
       - name: Build host and native terminal library
         run: make build-pty-host
@@ -396,7 +396,7 @@ jobs:
 
       # The wasm module too: every shard fetched it at web-server start, and a
       # reset mid-download (run 33740630608) failed the shard before a test ran.
-      - name: Cache ghostty-vt artifacts
+      - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
         with:
           include-wasm: 'true'
@@ -490,7 +490,7 @@ jobs:
           toolchain: '1.95.0'
           components: clippy, rustfmt
 
-      - name: Cache ghostty-vt artifacts
+      - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
 
       - name: Build attn binary
@@ -642,7 +642,7 @@ jobs:
         with:
           bun-version: ${{ steps.bun.outputs.version }}
 
-      - name: Cache ghostty-vt artifacts
+      - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
         with:
           include-wasm: 'true'

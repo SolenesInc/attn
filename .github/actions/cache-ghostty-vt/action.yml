@@ -1,7 +1,8 @@
-name: Cache ghostty-vt artifacts
+name: Ensure ghostty-vt artifacts
 description: >-
-  Restore the pinned native libghostty-vt archive, and optionally the browser
-  ghostty-vt.wasm, so a build or test never depends on a release-asset download.
+  Put the pinned native libghostty-vt archive, and optionally the browser
+  ghostty-vt.wasm, on disk from a cache, so no later build or test step depends
+  on a release-asset download.
 inputs:
   include-wasm:
     description: Also cache app/vendor/ghostty-vt/ghostty-vt.wasm, for jobs that build or serve the frontend.
@@ -10,19 +11,50 @@ inputs:
 runs:
   using: composite
   steps:
-    # Both consumers re-verify a restored artifact against its lock before use,
-    # so a stale or truncated entry downloads again instead of poisoning a build.
-    - name: Cache native libghostty-vt
-      uses: actions/cache@v4
+    # Fetch and save here rather than leaving it to the build step that needs
+    # the artifact: actions/cache only saves post-job on success, and the jobs
+    # this runs in fail often enough that the entry would rarely populate.
+    - name: Restore native libghostty-vt
+      id: native
+      uses: actions/cache/restore@v4
       with:
         path: third_party/ghostty-vt
         key: ${{ runner.os }}-${{ runner.arch }}-libghostty-vt-${{ hashFiles('ghostty-vt.pin', 'ghostty-vt-native.lock') }}
 
-    # A separate entry on purpose: cache keys are write-once, so a job that never
-    # builds the frontend would otherwise claim a shared key with no wasm in it.
-    - name: Cache browser ghostty-vt.wasm
+    - name: Fetch native libghostty-vt
+      if: steps.native.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: ./scripts/build-libghostty-vt.sh
+
+    # Concurrent jobs in one run race for this key; the loser logs that the
+    # cache already exists and carries on, which is the outcome we want.
+    - name: Save native libghostty-vt
+      if: steps.native.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: third_party/ghostty-vt
+        key: ${{ runner.os }}-${{ runner.arch }}-libghostty-vt-${{ hashFiles('ghostty-vt.pin', 'ghostty-vt-native.lock') }}
+
+    # A separate entry from the native archive on purpose: cache keys are
+    # write-once, so one shared key would seal with whatever the first job had.
+    - name: Restore browser ghostty-vt.wasm
+      id: wasm
       if: inputs.include-wasm == 'true'
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
+      with:
+        path: app/vendor/ghostty-vt
+        key: ${{ runner.os }}-ghostty-vt-wasm-${{ hashFiles('ghostty-vt-wasm.lock') }}
+
+    - name: Fetch browser ghostty-vt.wasm
+      if: inputs.include-wasm == 'true' && steps.wasm.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: bash app/scripts/ensure-ghostty-vt-wasm.sh
+
+    - name: Save browser ghostty-vt.wasm
+      if: inputs.include-wasm == 'true' && steps.wasm.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
       with:
         path: app/vendor/ghostty-vt
         key: ${{ runner.os }}-ghostty-vt-wasm-${{ hashFiles('ghostty-vt-wasm.lock') }}
