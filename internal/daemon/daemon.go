@@ -2218,6 +2218,19 @@ func (d *Daemon) refreshGitHubHostsLoop() {
 	}
 }
 
+// ghVersionWarning maps a RequireGHVersion failure to the banner the app shows.
+// Warning keys are part of the daemon/app contract; only the text varies.
+func ghVersionWarning(err error) (string, string) {
+	if errors.Is(err, exec.ErrNotFound) {
+		return warnGHNotInstalled, "GitHub CLI not installed. PR monitoring disabled. " + github.InstallHint()
+	}
+	var tooOld *github.VersionTooOldError
+	if errors.As(err, &tooOld) {
+		return warnGHVersionTooOld, "GitHub CLI v" + tooOld.Have + " needs upgrade to v" + tooOld.Want + "+ for PR monitoring. " + github.UpgradeHint()
+	}
+	return warnGHVersionTooOld, "GitHub CLI needs upgrade to v2.81.0+ for PR monitoring. " + github.UpgradeHint()
+}
+
 func (d *Daemon) refreshGitHubHosts() error {
 	if d.ghRegistry == nil {
 		d.ghRegistry = github.NewClientRegistry()
@@ -2234,13 +2247,9 @@ func (d *Daemon) refreshGitHubHosts() error {
 	}
 
 	if err := github.RequireGHVersion("2.81.0"); err != nil {
-		if errors.Is(err, exec.ErrNotFound) {
-			d.logf("gh CLI not available: %v", err)
-			d.addWarning(warnGHNotInstalled, "GitHub CLI not installed. PR monitoring disabled. Run: brew install gh")
-		} else {
-			d.logf("gh CLI version too old (need 2.81.0+): %v", err)
-			d.addWarning(warnGHVersionTooOld, "GitHub CLI needs upgrade to v2.81.0+ for PR monitoring. Run: brew upgrade gh")
-		}
+		code, message := ghVersionWarning(err)
+		d.logf("gh CLI unavailable (need 2.81.0+): %v", err)
+		d.addWarning(code, message)
 		return nil
 	}
 

@@ -1,0 +1,4 @@
+kind: fixed
+area: github
+change: The missing-or-outdated GitHub CLI banner names the actual problem and
+  points at install instructions for the daemon's platform.
