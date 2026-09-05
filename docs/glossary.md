@@ -15,7 +15,7 @@
 - Quiet window: automated input waits 30s after the user's last keystroke in a pane; mouse and focus reports are not keystrokes. The session input lane owns the retry: every deferred delivery is re-run there when the window closes, recomputing its prompt, so a deferral is never a drop. A closed lane refuses both, so nothing armed against a stopped daemon or a replaced session runtime can still place.
 - Agent mailbox: durable agent-addressed notification queue, separate from the app-wide user notification feed. Producers write here before asking for terminal input.
 - Mailbox item: one durable notification. `attn agent inbox` reads a bounded FIFO batch and writes each item's exact read receipt. Domain views such as `attn seed show` can write the same receipt.
-- Inbox doorbell: one generic terminal prompt for a session with unread mailbox items. A safe paste plus Enter completes the attempt; prompt-submit hooks do not hold the input lane. Another doorbell may follow a cooldown while unread items remain.
+- Inbox doorbell: one generic terminal prompt for a session with unread mailbox items. A safe paste plus Enter completes the attempt; prompt-submit hooks do not hold the input lane. Another doorbell may follow a cooldown while unread items remain. A shell pane never gets one: it has no agent to read it, so its items wait for `attn agent inbox`.
 - Peer message: stored agent-to-agent body read through the agent mailbox. `attn agent inbox <message-id>` remains a single-message compatibility view.
 - Turn: attention owed to an agent; viewing it does not settle it.
 - Auto-settle: closes a turn after proven user-conversation input and uninterrupted working time.

@@ -531,3 +531,36 @@ func TestAgentMailboxDoorbellCoalescesMixedBurstAndBatchReadsEachBodyOnce(t *tes
 		t.Fatalf("second inbox read duplicated content: %+v", again)
 	}
 }
+
+func TestAgentMailboxDoorbellNeverTypesAtAShellPane(t *testing.T) {
+	d, doorbell := newAgentMailboxDoorbellDaemon(t, protocol.SessionStateIdle)
+	d.agentMailboxCooldownOverride = time.Second
+	addCharacterizationSession(t, d, "mailbox-shell", protocol.SessionAgentShell, protocol.SessionStateIdle)
+
+	synctest.Test(t, func(t *testing.T) {
+		delivery, err := d.store.EnqueueMaintenancePrompt("shell-item", "mailbox-shell", "a delegate reported", time.Now())
+		if err != nil {
+			t.Fatalf("enqueue item for the shell pane: %v", err)
+		}
+		if err := d.deliverAgentMailboxItem(delivery); !errors.Is(err, errAgentMailboxNoPromptReader) {
+			t.Fatalf("deliver to a shell pane = %v, want %v", err, errAgentMailboxNoPromptReader)
+		}
+		if got := recordedDoorbellWrites(doorbell); len(got) != 0 {
+			t.Fatalf("attn typed at a shell pane: %q", got)
+		}
+
+		time.Sleep(10 * time.Second)
+		synctest.Wait()
+		if got := recordedDoorbellWrites(doorbell); len(got) != 0 {
+			t.Fatalf("a shell pane was nagged after the cooldown: %q", got)
+		}
+	})
+
+	if attempts, pending := mailboxLaneCounts(d, "mailbox-shell"); attempts != 0 || pending != 0 {
+		t.Fatalf("skipped doorbell held lane state: attempts=%d pending=%d", attempts, pending)
+	}
+	batch := readAgentMailboxBatch(t, d, "mailbox-shell", 5)
+	if len(batch.Items) != 1 || batch.Items[0].ItemID != "shell-item" || batch.Items[0].Content != "a delegate reported" {
+		t.Fatalf("shell pane inbox = %+v, want the item still readable", batch)
+	}
+}

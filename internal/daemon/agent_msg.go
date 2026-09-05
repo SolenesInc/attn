@@ -178,6 +178,9 @@ func (d *Daemon) replyAgentMsgError(conn net.Conn, code, message string) {
 }
 
 func agentMessageQueuedDetail(err error) string {
+	if errors.Is(err, errAgentMailboxNoPromptReader) {
+		return "queued (target is a shell pane, so attn will not type at it; the message waits for `attn agent inbox` there)"
+	}
 	if errors.Is(err, errAgentMailboxDoorbellOutstanding) {
 		return "queued (target already has an inbox doorbell; this message is in the same unread batch)"
 	}

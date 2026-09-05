@@ -542,3 +542,29 @@ func TestHandleAgentMsgHeldOffByTypingLandsAfterTheQuietWindow(t *testing.T) {
 		}
 	})
 }
+
+func TestHandleAgentMsgToAShellPaneQueuesInsteadOfTypingAtIt(t *testing.T) {
+	d, doorbell := newAgentMsgDaemon(t)
+	addCharacterizationSession(t, d, "sender-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
+	addCharacterizationSession(t, d, "shell-session-id", protocol.SessionAgentShell, protocol.SessionStateIdle)
+
+	resp := callAgentMsg(t, d, "shell-session-id", "sender-session-id", "the migration landed")
+	if !resp.Ok || resp.AgentMsgResult == nil {
+		t.Fatalf("response = %+v", resp)
+	}
+	result := resp.AgentMsgResult
+	if result.Status != protocol.AgentMsgStatusQueued || !strings.Contains(result.Detail, "shell pane") {
+		t.Fatalf("status = %q detail = %q, want a queued status naming the shell pane", result.Status, result.Detail)
+	}
+	if got := recordedDoorbellWrites(doorbell); len(got) != 0 {
+		t.Fatalf("attn typed at a shell pane: %q", got)
+	}
+
+	queued, err := d.store.UnreadAgentMailboxDeliveries("shell-session-id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queued) != 1 || queued[0].Item.ID != result.MessageID {
+		t.Fatalf("message is not durably readable from the shell pane's inbox: %+v", queued)
+	}
+}
