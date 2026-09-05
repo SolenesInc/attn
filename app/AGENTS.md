@@ -37,6 +37,8 @@ Daemon connection paths are relative to `app/src`.
 
 ## Small traps
 
+- UI automation bridge reads settle in the dispatcher, not per handler. A handler
+  that acts and then reads needs `settleUi()`: one frame lands before the commit.
 - `sendCreateWorktreeFromBranch` and local `sendCreateWorktree` share `_local`
   pending-action keys; do not run both concurrently.
 - Reconnect's circuit breaker stays open until the user clicks retry.

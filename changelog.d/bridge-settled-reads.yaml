@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: UI automation bridge commands read a settled DOM, so app acceptance stops reporting layout no frame painted.
