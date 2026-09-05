@@ -46,6 +46,11 @@
   scrollable editor, then confirm that exact call once. Changes in the preview
   do not change the call and cause it to be blocked. Cancelling or running
   without an interactive UI blocks the call. Existing sandbox limits still apply.
+- **Built-in executors check approval after extension handlers finish.** A
+  later handler changing the tool arguments invalidates the one-call approval.
+  Execution uses a private copy, so later asynchronous mutations cannot change
+  what runs. This applies to the suite and standalone auto-mode extension;
+  custom tools and extensions replacing tool definitions remain trusted.
 - **The machine description is a fixed set of slots, and the rules look them
   up by name**: whether a domain, a bucket or an org is trusted, where
   sensitive data lives, what counts as production. A slot exists because a rule

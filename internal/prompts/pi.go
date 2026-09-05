@@ -26,6 +26,7 @@ func piRecipient() Recipient {
 
 func piSessionRecipient() Recipient {
 	return Recipient{ID: "pi-session", Description: "The working Pi agent, receiving tool permission results.", Events: []Event{
+		On("execution-changed", "message_fragment", "Final execution arguments did not match a one-call approval.", Use("pi.execution-changed", "content/pi/execution-changed.md")),
 		On("incomplete-review", "tool_result", "Missing evidence or an oversized request prevented review.",
 			template("pi.incomplete-review", "content/pi/incomplete-review.md",
 				TextField("action", "Action collapsed to one line."), TextField("reason", "Reason collapsed to one line."))),

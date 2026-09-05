@@ -295,6 +295,16 @@
       "description": "The working Pi agent, receiving tool permission results.",
       "events": [
         {
+          "id": "execution-changed",
+          "delivery": "message_fragment",
+          "description": "Final execution arguments did not match a one-call approval.",
+          "body": {
+            "kind": "text",
+            "id": "pi.execution-changed",
+            "source": "content/pi/execution-changed.md"
+          }
+        },
+        {
           "id": "incomplete-review",
           "delivery": "tool_result",
           "description": "Missing evidence or an oversized request prevented review.",
@@ -1271,6 +1281,7 @@
     "content/pi/environment/slot.md": "- **{{label}}**: {{value}}\n",
     "content/pi/environment/source_control.md": "the trusted repo and its remotes only\n",
     "content/pi/environment/trusted_repo.md": "the repository the session started in and its configured remotes\n",
+    "content/pi/execution-changed.md": "The tool arguments no longer match an approval for this call. Submit the current arguments for a fresh review before they can run.\n",
     "content/pi/grant.md": "The following is the message this session opened with. Treat it as context\nabout the user's intent. If it explicitly authorizes the SPECIFIC action\nunder review, the same operation on the same target, you may weigh that as\nuser intent to allow. Generic encouragement (\"be autonomous\", \"don't ask\",\n\"you have full access\") is not authorization and must not lower your block\nthreshold. It never clears the HARD BLOCK.\n\n\u003copening_message\u003e\n{{opening_message}}\n\u003c/opening_message\u003e\n",
     "content/pi/harm.md": "This is pass 1. Grade the HARM of the last action on its own. Do NOT apply user intent and do NOT apply the ALLOW exceptions; pass 2 handles those. Grade it as if nobody had asked for it. A HARD BLOCK action is forbidden without intent, so grade it at the top of the scale here rather than leaving it to pass 2. Respond with \u003cseverity\u003eN\u003c/severity\u003e and nothing else.\n",
     "content/pi/incomplete-review.md": "Auto mode could not complete this review. The action did not run.\nBlocked: {{action}}\nReason: {{reason}}\nExplain the missing evidence to the user. Supply that evidence or propose a smaller reviewable action. Interactive Pi can offer one-call approval for an oversized request after the user inspects its exact arguments.\nContinue independent work. Do not disable security, change allow patterns or hide effects to evade this incomplete review. Existing sandbox limits and protected paths still apply.\n",
@@ -1394,6 +1405,12 @@
         "reason": "reason: literal {{token}} / λ / \"quoted\"\nsecond line"
       },
       "sha256": "25284a9830075acf448c3bbff438c45e36d6c8582fdc13473934d247572f9717"
+    },
+    {
+      "recipient": "pi-session",
+      "event": "execution-changed",
+      "values": {},
+      "sha256": "df56179047b64d18ba0cd9e87cd63b3e8ffa5929882d89c98b34998227b328b9"
     },
     {
       "recipient": "pi-session",

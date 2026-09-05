@@ -8,6 +8,7 @@ import {
   type AutoModeDenial,
   type AutoModeExtensionAPILike,
   type ToolCallReview,
+  type ToolExecutionCheck,
 } from "./index";
 import type { DenialLedgerLike } from "./ledger";
 import { ModelClassifier, type ModelRegistryLike } from "./model-classifier";
@@ -57,6 +58,7 @@ export class AutoMode {
   private flag: boolean | undefined;
   private noticed = false;
   private review: ToolCallReview | undefined;
+  private executionCheck: ToolExecutionCheck | undefined;
 
   constructor(private readonly setup: AutoModeSetup) {
     this.extension = createAutoMode({
@@ -70,7 +72,7 @@ export class AutoMode {
       onDenial: setup.onDenial,
       onWaitingForUser: setup.onWaitingForUser,
       usageLedger: this.usage,
-      onReady: (review) => { this.review = review; },
+      onReady: (review, checkExecution) => { this.review = review; this.executionCheck = checkExecution; },
       sandboxReviewInExecutor: setup.sandboxReviewInExecutor,
       cacheWritePaths: setup.cacheWritePaths,
     });
@@ -82,6 +84,11 @@ export class AutoMode {
   }
 
   readonly canReviewSandbox = (): boolean => this.enabled() && !!this.review && !!this.registry;
+
+  readonly checkExecution: ToolExecutionCheck = (event, ctx) => {
+    if (!this.executionCheck) throw new Error(reviewUnavailable);
+    this.executionCheck(event, ctx);
+  };
 
   readonly reviewSandbox: ToolCallReview = async (event, ctx) => {
     if (!this.enabled() || !this.review) return { block: true, reason: reviewUnavailable };
@@ -103,6 +110,8 @@ export class AutoMode {
     });
 
     pi.on("session_start", (_event, ctx) => {
+      // Pi parses extension flags after loading the factory and before session_start.
+      this.flag = pi.getFlag("no-auto") === true ? false : pi.getFlag("auto") === true ? true : undefined;
       if (ctx.modelRegistry) this.registry = ctx.modelRegistry;
       this.paint(ctx);
       if (this.setup.notice !== undefined && !this.noticed && ctx.ui) {

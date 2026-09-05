@@ -34,7 +34,7 @@ const autoMode = processSingleton("attn:pi-automode", () => {
     : undefined;
 });
 
-const security = processSingleton("attn:pi-security", () => new PiSecurity(undefined, autoMode?.reviewSandbox, autoMode?.canReviewSandbox));
+const security = processSingleton("attn:pi-security", () => new PiSecurity(undefined, autoMode?.reviewSandbox, autoMode?.canReviewSandbox, autoMode?.checkExecution));
 
 export default function attnPiSuite(pi: ExtensionAPILike & AutoModePiLike & ExtensionAPI): void {
   if (autoMode) security.register(pi);

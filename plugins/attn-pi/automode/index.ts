@@ -16,6 +16,7 @@ import {
 import { mergeUsage, UsageLedger, type UsageLike } from "./usage";
 import { credentials } from "../security/filter";
 import { actionEvidence, inputFingerprint, snapshotCall, toolEvidenceLimits } from "./evidence";
+import { renderPrompt } from "./prompt-catalog";
 
 export type ToolCallEventLike = {
   type: "tool_call";
@@ -26,6 +27,7 @@ export type ToolCallEventLike = {
 
 export type ToolCallEventResultLike = { block?: boolean; reason?: string };
 export type ToolCallReview = (event: ToolCallEventLike, ctx: AutoModeContextLike) => Promise<ToolCallEventResultLike | undefined>;
+export type ToolExecutionCheck = (event: ToolCallEventLike, ctx: AutoModeContextLike) => void;
 
 export type InputEventLike = {
   type: "input";
@@ -116,7 +118,7 @@ export type AutoModeOptions = {
   onWaitingForUser?: (waiting: boolean) => void;
   /** Where the classifier's usage waits for a tool result to ride into the totals. */
   usageLedger?: UsageLedger;
-  onReady?: (review: ToolCallReview) => void;
+  onReady?: (review: ToolCallReview, checkExecution: ToolExecutionCheck) => void;
   sandboxReviewInExecutor?: boolean;
   cacheWritePaths?: () => readonly string[];
 };
@@ -147,10 +149,14 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
     const session = new AutoModeSession(options.config, classifier);
     let standing: AutoModeDenial[] = [];
     let breakerAsked = false;
+    const approvals = new Map<string, string>();
+    const executionFingerprint = (call: ToolCall, cwd: string) => inputFingerprint({ toolName: call.toolName, input: call.input, cwd });
 
     const review: ToolCallReview = async (event, ctx) => {
+      approvals.delete(event.toolCallId);
       const fingerprint = inputFingerprint(event.input);
       const call = snapshotCall({ toolCallId: event.toolCallId, toolName: event.toolName, input: event.input });
+      const approved = () => { approvals.set(event.toolCallId, executionFingerprint(call, ctx.cwd)); };
       if (options.isEnabled?.() === false) {
         session.noteApprovedCall(call, ctx.cwd);
         return undefined;
@@ -179,6 +185,7 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
           if (await askToRun(call, ctx, options.onWaitingForUser)) {
             assertCurrent();
             session.noteApprovedCall(call, ctx.cwd);
+            approved();
             return undefined;
           }
         }
@@ -192,7 +199,7 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
         // Held only while a call is in flight: a ctx from a superseded session generation throws on any use.
         if (deciding === 0) judging = undefined;
       }
-      if (decision.outcome === "run") return undefined;
+      if (decision.outcome === "run") { approved(); return undefined; }
       const denial: AutoModeDenial = credentials.value({
         toolCallId: event.toolCallId,
         tool: call.toolName,
@@ -218,7 +225,24 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
       showDenial(ctx, denial, standing);
       return { block: true, reason: credentials.text(decision.toolResult) };
     };
-    options.onReady?.(review);
+    const checkExecution: ToolExecutionCheck = (event, ctx) => {
+      const approval = approvals.get(event.toolCallId);
+      approvals.delete(event.toolCallId);
+      const call = snapshotCall({ toolCallId: event.toolCallId, toolName: event.toolName, input: event.input });
+      if (options.sandboxReviewInExecutor && isSandboxRequest(call)) return;
+      if (options.isEnabled?.() === false) {
+        session.noteApprovedCall(call, ctx.cwd);
+        return;
+      }
+      if (approval !== executionFingerprint(call, ctx.cwd)) {
+        session.noteBlockedCall(call, ctx.cwd);
+        throw new Error(credentials.text(denialToolResult({
+          action: describeCall(call), incomplete: true,
+          reason: renderPrompt("execution-changed", {}, "pi-session"),
+        })));
+      }
+    };
+    options.onReady?.(review, checkExecution);
     pi.on("tool_call", (event, ctx) => {
       // The protected bash executor validates the scope before asking this same reviewer.
       if (options.sandboxReviewInExecutor && isSandboxRequest({ toolName: event.toolName, input: event.input })) return undefined;
@@ -240,6 +264,7 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
 
     // noteUserInput drops the repeat when a message arrives on both seams.
     pi.on("before_agent_start", (event) => {
+      approvals.clear();
       if (promptIsUsers) session.noteUserInput(event.prompt);
       return {};
     });
@@ -255,6 +280,7 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
     });
 
     pi.on("tool_result", (event) => {
+      approvals.delete(event.toolCallId);
       session.noteToolResult(event.toolCallId, event.isError);
       const held = options.usageLedger?.drain();
       return held ? { usage: mergeUsage(event.usage, held) } : undefined;

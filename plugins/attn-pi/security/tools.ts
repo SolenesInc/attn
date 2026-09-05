@@ -11,6 +11,7 @@ import { assertPath, type SecurityPolicy } from "./policy";
 import { bashSandbox, shellQuote } from "./sandbox";
 import { Type } from "typebox";
 import { reviewUnavailable, sandboxRecovery, sandboxRequestSchema, scopedPolicy, type SandboxReview } from "./recovery";
+import type { ToolExecutionCheck } from "../automode/index";
 
 export function protectedBash(policy: SecurityPolicy, filter: CredentialFilter, reviewAvailable = () => false): BashOperations {
   const local = createLocalBashOperations({ shellPath: "/bin/bash" });
@@ -48,7 +49,7 @@ export function protectedBash(policy: SecurityPolicy, filter: CredentialFilter, 
   };
 }
 
-export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter, fs: SandboxedFilesystem, review?: SandboxReview, reviewAvailable = () => !!review): ToolDefinition[] {
+export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter, fs: SandboxedFilesystem, review?: SandboxReview, reviewAvailable = () => !!review, checkExecution?: ToolExecutionCheck): ToolDefinition[] {
   const bash = protectedBash(policy, filter, reviewAvailable);
   const bashTool = createBashToolDefinition(policy.cwd, { operations: bash, shellPath: "/bin/bash" });
   const parameters = Type.Object({ ...bashTool.parameters.properties, sandbox: Type.Optional(sandboxRequestSchema) });
@@ -142,6 +143,8 @@ export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter,
     const abort = () => fs.close();
     signal?.addEventListener("abort", abort, { once: true });
     try {
+      args = structuredClone(args);
+      checkExecution?.({ type: "tool_call", toolCallId: id, toolName: tool.name, input: args }, { ...ctx, cwd: policy.cwd, signal });
       return filter.value(await tool.execute(id, args, signal, onUpdate ? (update) => onUpdate(filter.value(update)) : undefined, ctx));
     } catch (error) {
       throw new Error(filter.text(error instanceof Error ? error.message : String(error)));

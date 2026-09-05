@@ -2271,6 +2271,16 @@
       "description": "The working Pi agent, receiving tool permission results.",
       "events": [
         {
+          "id": "execution-changed",
+          "delivery": "message_fragment",
+          "description": "Final execution arguments did not match a one-call approval.",
+          "body": {
+            "kind": "text",
+            "id": "pi.execution-changed",
+            "source": "content/pi/execution-changed.md"
+          }
+        },
+        {
           "id": "incomplete-review",
           "delivery": "tool_result",
           "description": "Missing evidence or an oversized request prevented review.",
@@ -5203,5 +5213,5 @@
       ]
     }
   ],
-  "definitions_hash": "00b94ae02b3a2b959ba44d698bb30c4dafd5766cc54d7170b3b2cde9f9ef2d18"
+  "definitions_hash": "c2609a2c61fbf9ae86a90fdcadbb0e5fd9a4e2e56686b26f555de6f07a0242fa"
 }
