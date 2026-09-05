@@ -52,18 +52,6 @@ When attn sends an update notification, run the suggested command to read it. Re
     attn seed export <id> [--out <path>]    the seed and its log as one markdown file
     attn seed set-resume <id> --resume-session-id <id> --cwd <path> --agent <name>    make an ended conversation resumable from the seed; --clear forgets it
 
-Delegating:
-
-    attn delegate --brief "…" --model <m>   starts a visible agent session the user can inspect and steer, not a native subagent, and plants a seed bound to it
-                                              the brief is the seed's body; the delegate is its tender; the report lands on the seed's log
-        --plot <seed>                       dispatch at an existing seed instead of planting one; the delegate becomes its tender and reports to it
-        --brief-file <path>                 the brief from a file; --effort <level> sets reasoning where the agent supports it
-        --new-workspace | --workspace <id> | --cwd <path>    where it runs; --worktree <branch> gives it its own checkout
-    attn agent msg <seed-id> "…"            reaches whoever tends it now; an untended seed refuses by name
-    attn seed show <id>                     the delegate's report, once it lands; no need to watch the session
-    attn agent close <seed-or-session> -m "…"   ends a session you dispatched once you have what you needed; the reason
-                                              is required and lands as a note on the seed, which keeps its tender and does not move
-
 Use attn agent msg for attn-managed sessions; keep Claude's SendMessage for follow-ups to the native subagents this session spawned.
 
 `attn seed --help` has every flag. `attn seed guide` has how to write a body worth handing to somebody else.
