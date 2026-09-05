@@ -37,13 +37,13 @@ for contract in \
   fi
 done
 
-# The matrix step is continue-on-error; "Gate app acceptance" is the verdict.
 for contract in \
   'continue-on-error: true' \
   'name: Gate app acceptance' \
   "if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.harness == 'true'"; do
   if ! grep -Fq "$contract" <<<"$app_acceptance_job"; then
-    echo "App acceptance must keep its policy and its gate step: $contract" >&2
+    echo "App acceptance needs its path policy, and its verdict in the gate step" >&2
+    echo "rather than the continue-on-error matrix: $contract" >&2
     exit 1
   fi
 done
@@ -81,6 +81,7 @@ for path in \
   "app/scripts/real-app-harness/**" \
   "app/src-tauri/**" \
   "apphost/**" \
+  "scripts/build-app-runtime-host.sh" \
   ".github/workflows/app-acceptance.yml" \
   ".github/workflows/ci.yml"; do
   if ! grep -Fq "              - '$path'" <<<"$(sed -n '/^            harness:/,/^            release_preflight:/p' "$workflow")"; then

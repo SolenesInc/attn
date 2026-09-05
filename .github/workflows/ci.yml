@@ -113,8 +113,6 @@ jobs:
               - 'internal/hostsession/**'
               - 'internal/daemon/host_*'
               - 'internal/daemon/plugin_*'
-            # The serial matrix is the only job that runs the packaged app, so it
-            # gates edits to itself, to the harness, and to the shell it drives.
             harness:
               - 'app/scripts/real-app-harness/**'
               - 'app/src-tauri/**'
@@ -583,8 +581,7 @@ jobs:
   app-acceptance:
     name: App acceptance
     needs: changes
-    # force_all covers next, main, and the release/hotfix PRs main-route.sh
-    # allows onto main; every other PR pays the ~35 minutes only when it must.
+    # main-route.sh admits only release/hotfix onto main, so force_all covers them.
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.harness == 'true'
     permissions:
       actions: read
