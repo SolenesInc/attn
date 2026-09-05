@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Wait for the mock agent repaint before capturing the TR-201 relaunch baseline, so fast runners do not race the daemon reflow.

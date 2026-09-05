@@ -19,7 +19,6 @@ import {
   captureSessionArtifacts,
   waitForNewShellPane,
   waitForFirstWorkspacePane,
-  waitForPaneReflowed,
   waitForPaneState,
   waitForPaneText,
   waitForPaneVisible,
@@ -29,6 +28,7 @@ import {
 import {
   ensureClaudeInitialPanePromptReady,
   promptAgentForStructuredBlock,
+  waitForMockAgentRepaintedToWidth,
   writeStructuredBlockFixture,
 } from './scenarioAgents.mjs';
 
@@ -102,6 +102,11 @@ async function main() {
         45_000,
       );
 
+      const preSplitState = await client.request('get_pane_state', { sessionId, paneId: initialPaneId });
+      const preSplitCols = preSplitState?.pane?.visibleContent?.cols;
+      if (typeof preSplitCols !== 'number' || preSplitCols <= 0) {
+        throw new Error(`initial pane has no column count before split: ${JSON.stringify(preSplitState?.pane?.visibleContent)}`);
+      }
       const workspaceBefore = await client.request('get_workspace', { sessionId });
       const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
       await client.request('split_pane', {
@@ -117,7 +122,10 @@ async function main() {
         20_000,
       );
 
-      await waitForPaneReflowed(client, sessionId, initialPaneId, 20_000, 'initial pane reflowed after split before baseline capture');
+      await waitForMockAgentRepaintedToWidth(client, sessionId, initialPaneId, {
+        previousCols: preSplitCols,
+        description: 'initial pane resized and repainted after split before baseline capture',
+      });
 
       const baselineMainState = await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         contains: agentToken,
