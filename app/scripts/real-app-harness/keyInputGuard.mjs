@@ -1,7 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import {
-  appExecutableForAppPath,
+  appExecutableInAppTree,
+  defaultAppPathForProfile,
   manifestPathForProfile,
   profileForAppPath,
 } from './harnessProfile.mjs';
@@ -74,10 +75,12 @@ export function formatKeyInputFailure({ action, pid, reason, fix }) {
   return `[key-input] ${action} cannot reach attn (app pid ${pid}): ${reason} ${fix}`;
 }
 
+// The manifest travels with the bundle id the profile baked in; the executable
+// is a file inside whatever tree `--app-path` pointed the run at.
 export function createKeyInputGuard({
-  appPath = null,
+  appPath = defaultAppPathForProfile(),
   platform = process.platform,
-  appExecutable = appExecutableForAppPath(appPath),
+  appExecutable = appExecutableInAppTree(appPath, platform),
   manifestPath = manifestPathForProfile(profileForAppPath(appPath)),
   readCommand = readAppCommand,
   readAppPid = appPidFromManifest,

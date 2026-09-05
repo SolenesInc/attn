@@ -152,6 +152,40 @@ describe('createKeyInputGuard', () => {
     expect(() => guard.assertReaches('pressKey w')).not.toThrow();
   });
 
+  it('expects the executable inside the app tree the run was pointed at', () => {
+    const overridden = '/tmp/attn-dev.app';
+    const guard = createKeyInputGuard({
+      appPath: overridden,
+      platform: 'darwin',
+      manifestPath: '/does/not/matter',
+      readAppPid: () => 4242,
+      readCommand: () => `${overridden}/Contents/MacOS/app ${ALWAYS_ON_TOP_VAR}=1`,
+    });
+    expect(() => guard.assertReaches('pressKey w')).toThrow(new RegExp(`${ALWAYS_ON_TOP_VAR}=1`));
+  });
+
+  it('does not take the standard install for an app the run pointed elsewhere', () => {
+    const guard = createKeyInputGuard({
+      appPath: '/tmp/attn-dev.app',
+      platform: 'darwin',
+      manifestPath: '/does/not/matter',
+      readAppPid: () => 4242,
+      readCommand: () => `${APP} ${ALWAYS_ON_TOP_VAR}=0`,
+    });
+    expect(() => guard.assertReaches('pressKey w')).toThrow(/manifest is stale/);
+  });
+
+  it('finds the Linux executable inside the same tree', () => {
+    const guard = createKeyInputGuard({
+      appPath: '/tmp/attn-dev',
+      platform: 'linux',
+      manifestPath: '/does/not/matter',
+      readAppPid: () => 4242,
+      readCommand: () => '/tmp/attn-dev/bin/attn-app',
+    });
+    expect(guard.verdict().reaches).toBe(true);
+  });
+
   it('stays out of the way when no app is running to ask', () => {
     const guard = createKeyInputGuard({
       platform: 'darwin',
