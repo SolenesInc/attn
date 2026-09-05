@@ -2040,6 +2040,44 @@
           }
         },
         {
+          "id": "system-with-cache-grants",
+          "delivery": "system_prompt",
+          "description": "Both classifier passes receive the rulebook and current executor cache grants.",
+          "body": {
+            "kind": "join",
+            "separator": "\n\n",
+            "children": [
+              {
+                "kind": "input",
+                "field": {
+                  "name": "rulebook",
+                  "kind": "text",
+                  "description": "Rulebook with the rendered environment.",
+                  "from": "pi-permission/system"
+                }
+              },
+              {
+                "kind": "text",
+                "id": "pi-security.cache-grants",
+                "source": "content/pi/security/cache-grants.md",
+                "bindings": [
+                  {
+                    "name": "paths",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "paths",
+                        "kind": "text",
+                        "description": "JSON array of current executor build-cache grants."
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
           "id": "grant",
           "delivery": "user_message",
           "description": "Opening-message authorization context, when supplied.",
@@ -3559,6 +3597,594 @@
       ]
     },
     {
+      "id": "pi-security",
+      "description": "Execution permissions supplied to the working Pi agent and sandbox tool guidance.",
+      "events": [
+        {
+          "id": "instructions",
+          "delivery": "system_prompt",
+          "description": "Appended before each agent start; values come from the executor's current policy.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.instructions",
+            "source": "content/pi/security/instructions.md",
+            "bindings": [
+              {
+                "name": "sandbox",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "sandbox",
+                    "kind": "text",
+                    "description": "Enabled or disabled, derived from policy."
+                  }
+                }
+              },
+              {
+                "name": "network",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "network",
+                    "kind": "text",
+                    "description": "Effective tool networking policy."
+                  }
+                }
+              },
+              {
+                "name": "guidance",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "enabled",
+                      "kind": "flag",
+                      "description": "The OS sandbox is enabled."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "pi-security.enabled",
+                      "source": "content/pi/security/enabled.md",
+                      "bindings": [
+                        {
+                          "name": "paths",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "write_paths",
+                              "kind": "text",
+                              "description": "JSON array of writable paths."
+                            }
+                          }
+                        },
+                        {
+                          "name": "caches",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "cache_paths",
+                              "kind": "text",
+                              "description": "JSON array of cache grants, or disabled."
+                            }
+                          }
+                        },
+                        {
+                          "name": "unavailable",
+                          "node": {
+                            "kind": "when",
+                            "condition": {
+                              "field": {
+                                "name": "has_unavailable_caches",
+                                "kind": "flag",
+                                "description": "Some cache grants are unavailable."
+                              },
+                              "test": "enabled"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "pi-security.unavailable-caches",
+                                "source": "content/pi/security/unavailable-caches.md",
+                                "keep_final_newline": true,
+                                "bindings": [
+                                  {
+                                    "name": "paths",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "unavailable_caches",
+                                        "kind": "text",
+                                        "description": "JSON array of unavailable cache grants."
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "name": "review",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "review",
+                              "kind": "text",
+                              "description": "Available or unavailable, derived from reviewer configuration."
+                            }
+                          }
+                        },
+                        {
+                          "name": "request",
+                          "node": {
+                            "kind": "choose",
+                            "condition": {
+                              "field": {
+                                "name": "review_available",
+                                "kind": "flag",
+                                "description": "Auto-mode access review is available."
+                              },
+                              "test": "enabled"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "pi-security.access-request",
+                                "source": "content/pi/security/access-request.md"
+                              },
+                              {
+                                "kind": "text",
+                                "id": "pi-security.review-unavailable",
+                                "source": "content/pi/security/review-unavailable.md"
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "name": "local_cache",
+                          "node": {
+                            "kind": "text",
+                            "id": "pi-security.local-cache",
+                            "source": "content/pi/security/local-cache.md"
+                          }
+                        },
+                        {
+                          "name": "refusal",
+                          "node": {
+                            "kind": "text",
+                            "id": "pi-security.refusal",
+                            "source": "content/pi/security/refusal.md"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "text",
+                      "id": "pi-security.disabled",
+                      "source": "content/pi/security/disabled.md"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "credentials",
+                "node": {
+                  "kind": "text",
+                  "id": "pi-security.credentials",
+                  "source": "content/pi/security/credentials.md"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "write-recovery",
+          "delivery": "tool_result",
+          "description": "Guidance after a sandbox write failure.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.write-recovery",
+            "source": "content/pi/security/write-recovery.md",
+            "bindings": [
+              {
+                "name": "paths",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "write_paths",
+                    "kind": "text",
+                    "description": "Writable paths joined with commas."
+                  }
+                }
+              },
+              {
+                "name": "guidance",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "review_available",
+                      "kind": "flag",
+                      "description": "Auto-mode access review is available."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "pi-security.write-request",
+                      "source": "content/pi/security/write-request.md"
+                    },
+                    {
+                      "kind": "text",
+                      "id": "pi-security.review-unavailable",
+                      "source": "content/pi/security/review-unavailable.md"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "recovery",
+          "delivery": "tool_result",
+          "description": "Appended to failed commands; distinguishes OS errors from review refusals.",
+          "body": {
+            "kind": "join",
+            "separator": "\n",
+            "children": [
+              {
+                "kind": "choose",
+                "condition": {
+                  "field": {
+                    "name": "network_failure",
+                    "kind": "flag",
+                    "description": "The command reported a network failure."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "pi-security.network-failure",
+                    "source": "content/pi/security/network-failure.md"
+                  },
+                  {
+                    "kind": "text",
+                    "id": "pi-security.permission-failure",
+                    "source": "content/pi/security/permission-failure.md"
+                  }
+                ]
+              },
+              {
+                "kind": "join",
+                "children": [
+                  {
+                    "kind": "choose",
+                    "condition": {
+                      "field": {
+                        "name": "network_failure",
+                        "kind": "flag",
+                        "description": "The command reported a network failure."
+                      },
+                      "test": "enabled"
+                    },
+                    "children": [
+                      {
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "review_available",
+                            "kind": "flag",
+                            "description": "Auto-mode access review is available."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "pi-security.network-request",
+                            "source": "content/pi/security/network-request.md"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "pi-security.review-unavailable",
+                            "source": "content/pi/security/review-unavailable.md"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "text",
+                        "id": "pi-security.write-recovery",
+                        "source": "content/pi/security/write-recovery.md",
+                        "bindings": [
+                          {
+                            "name": "paths",
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "write_paths",
+                                "kind": "text",
+                                "description": "Writable paths joined with commas."
+                              }
+                            }
+                          },
+                          {
+                            "name": "guidance",
+                            "node": {
+                              "kind": "choose",
+                              "condition": {
+                                "field": {
+                                  "name": "review_available",
+                                  "kind": "flag",
+                                  "description": "Auto-mode access review is available."
+                                },
+                                "test": "enabled"
+                              },
+                              "children": [
+                                {
+                                  "kind": "text",
+                                  "id": "pi-security.write-request",
+                                  "source": "content/pi/security/write-request.md"
+                                },
+                                {
+                                  "kind": "text",
+                                  "id": "pi-security.review-unavailable",
+                                  "source": "content/pi/security/review-unavailable.md"
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "choose",
+                    "condition": {
+                      "field": {
+                        "name": "network_failure",
+                        "kind": "flag",
+                        "description": "The command reported a network failure."
+                      },
+                      "test": "enabled"
+                    },
+                    "children": [
+                      {
+                        "kind": "compose"
+                      },
+                      {
+                        "kind": "when",
+                        "condition": {
+                          "field": {
+                            "name": "network_denied",
+                            "kind": "flag",
+                            "description": "Tool networking is denied."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "when",
+                            "condition": {
+                              "field": {
+                                "name": "review_available",
+                                "kind": "flag",
+                                "description": "Auto-mode access review is available."
+                              },
+                              "test": "enabled"
+                            },
+                            "children": [
+                              {
+                                "kind": "join",
+                                "separator": "\n",
+                                "children": [
+                                  {
+                                    "kind": "compose"
+                                  },
+                                  {
+                                    "kind": "text",
+                                    "id": "pi-security.network-request",
+                                    "source": "content/pi/security/network-request.md"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "id": "pi-security.execution-scope",
+                "source": "content/pi/security/execution-scope.md"
+              }
+            ]
+          }
+        },
+        {
+          "id": "denial",
+          "delivery": "tool_result",
+          "description": "An access request refused by auto mode.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.denial",
+            "source": "content/pi/security/denial.md",
+            "bindings": [
+              {
+                "name": "action",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "action",
+                    "kind": "text",
+                    "description": "Action collapsed to one line."
+                  }
+                }
+              },
+              {
+                "name": "reason",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "reason",
+                    "kind": "text",
+                    "description": "Reason collapsed to one line."
+                  }
+                }
+              },
+              {
+                "name": "outage",
+                "node": {
+                  "kind": "when",
+                  "condition": {
+                    "field": {
+                      "name": "outage",
+                      "kind": "flag",
+                      "description": "No classifier answered."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "pi-security.denial-outage",
+                      "source": "content/pi/security/denial-outage.md",
+                      "keep_final_newline": true
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "guidance",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "hard_block",
+                      "kind": "flag",
+                      "description": "User approval cannot clear this rejection."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "pi-security.denial-hard-block",
+                      "source": "content/pi/security/denial-hard-block.md"
+                    },
+                    {
+                      "kind": "text",
+                      "id": "pi-security.denial-retry",
+                      "source": "content/pi/security/denial-retry.md"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "boundary",
+                "node": {
+                  "kind": "text",
+                  "id": "pi-security.denial-boundary",
+                  "source": "content/pi/security/denial-boundary.md"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "review-unavailable",
+          "delivery": "tool_result",
+          "description": "No access reviewer is available.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.review-unavailable",
+            "source": "content/pi/security/review-unavailable.md"
+          }
+        },
+        {
+          "id": "startup-failure",
+          "delivery": "tool_result",
+          "description": "The OS sandbox could not start.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.startup-failure",
+            "source": "content/pi/security/startup-failure.md"
+          }
+        },
+        {
+          "id": "configuration-error",
+          "delivery": "system_prompt",
+          "description": "Security configuration prevents tool execution.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.configuration-error",
+            "source": "content/pi/security/configuration-error.md",
+            "bindings": [
+              {
+                "name": "problem",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "problem",
+                    "kind": "text",
+                    "description": "Security configuration error."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "not-initialized",
+          "delivery": "system_prompt",
+          "description": "Security has not initialized.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.not-initialized",
+            "source": "content/pi/security/not-initialized.md"
+          }
+        },
+        {
+          "id": "bash-description",
+          "delivery": "tool_description",
+          "description": "Appended to the harness's bash description.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.bash-description",
+            "source": "content/pi/security/bash-description.md"
+          }
+        },
+        {
+          "id": "bash-guidance",
+          "delivery": "tool_guideline",
+          "description": "Sandbox access guidance for bash.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.bash-guidance",
+            "source": "content/pi/security/bash-guidance.md"
+          }
+        },
+        {
+          "id": "bash-credentials",
+          "delivery": "tool_guideline",
+          "description": "Credential restrictions for bash.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.bash-credentials",
+            "source": "content/pi/security/bash-credentials.md"
+          }
+        }
+      ]
+    },
+    {
       "id": "authoring-agent",
       "description": "Agent-facing guidance loaded from CLI output or a generated project file.",
       "events": [
@@ -4543,5 +5169,5 @@
       ]
     }
   ],
-  "definitions_hash": "56eebca1d81f2dec4695724b6db80e08ac4c892a91c32371b509999b284abf59"
+  "definitions_hash": "2ffae2530fb6b1ab687876e562d0984bf54ca442b64d73daad7f546f6469283e"
 }

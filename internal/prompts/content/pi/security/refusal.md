@@ -1,0 +1,1 @@
+After a review refusal, follow its stated recovery instructions. Use a materially safer alternative or explain the exact command, access, refusal and needed user decision. Retry after relevant user approval only when the refusal permits it. Do not disguise the action or repeat an unchanged request without new information. Continue independent work.

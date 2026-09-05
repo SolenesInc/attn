@@ -1,0 +1,1 @@
+Extra sandbox access was not granted: auto mode is off or no reviewer is configured. Continue within the sandbox, or explain the exact command, path and reason to the user. The user can enable /auto on with a configured classifier or grant the directory with /security allow-write <directory>. Do not turn security off or edit its settings yourself.

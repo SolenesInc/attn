@@ -29,6 +29,12 @@ baseline revision. Generated catalog
 parity hashes serve a separate purpose: they check that Go and TypeScript render
 the same declaration, rather than proving compatibility with the old output.
 
+Pi's rulebook expectations also include the sandbox and build-cache wording from
+`385cb4fda`, edited at the changed source-text boundaries. Its
+`test/testdata/security-prompts.json` captures that revision's security guidance
+and denial builders before moving them into the catalog, across enabled/disabled
+sandboxes, network policies, cache grants and reviewer availability.
+
 There is no update switch. An intentional prompt change should update the
 relevant expectation in the same review, with its wording change explained.
 Do not regenerate compatibility fixtures from the new renderer to make a failure

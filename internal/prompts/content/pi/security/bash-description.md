@@ -1,0 +1,1 @@
+When sandbox access review is available, supply sandbox.allowWrite (existing directories) and/or sandbox.network (allow), plus sandbox.reason. Auto mode must approve the command and extra access before execution. See the current Pi execution permissions for availability and existing grants.
