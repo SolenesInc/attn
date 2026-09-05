@@ -25,6 +25,7 @@
 - Sliver: a pane or tile suspended to a thin strip showing its name and state, when the workspace cannot give every leaf its minimum size or a drag pushes one below it. The victim is the smallest unfocused leaf, never the focused one; it expands on its own when room returns.
 - Pinned sliver: folded by a drag; stays folded until clicked or a drag gives its side room. Boundaries beside a sliver resize its visible neighbors.
 - Activity: generated status line. Activity cursor: transcript position already summarized.
+- Session usage: token and price receipt for one session's native conversation and native subagents. A visible delegation is another session with its own receipt.
 - Presence: watching = home visible; present = recent input elsewhere in app; away = neither.
 - Recoverable: runtime gone, conversation restorable. Reaped: unrestorable session removed.
 - Snapshot: current conversation state. Epoch: host generation. Scroll-back: older paged history.

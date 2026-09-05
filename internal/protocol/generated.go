@@ -7966,12 +7966,6 @@ type Session struct {
 	// ContextWindowCap corresponds to the JSON schema field "context_window_cap".
 	ContextWindowCap *int `json:"context_window_cap,omitempty,omitzero"`
 
-	// CostUnknown corresponds to the JSON schema field "cost_unknown".
-	CostUnknown *bool `json:"cost_unknown,omitempty,omitzero"`
-
-	// CostUsd corresponds to the JSON schema field "cost_usd".
-	CostUsd *float64 `json:"cost_usd,omitempty,omitzero"`
-
 	// CrewMember corresponds to the JSON schema field "crew_member".
 	CrewMember *string `json:"crew_member,omitempty,omitzero"`
 
@@ -8047,6 +8041,9 @@ type Session struct {
 
 	// TurnSnoozedUntil corresponds to the JSON schema field "turn_snoozed_until".
 	TurnSnoozedUntil *string `json:"turn_snoozed_until,omitempty,omitzero"`
+
+	// Usage corresponds to the JSON schema field "usage".
+	Usage *SessionUsage `json:"usage,omitempty,omitzero"`
 
 	// WorkspaceID corresponds to the JSON schema field "workspace_id".
 	WorkspaceID string `json:"workspace_id"`
@@ -8489,6 +8486,62 @@ type SessionUnregisteredMessage struct {
 
 	// Session corresponds to the JSON schema field "session".
 	Session Session `json:"session"`
+}
+
+type SessionUsage struct {
+	// CostUsd corresponds to the JSON schema field "cost_usd".
+	CostUsd *float64 `json:"cost_usd,omitempty,omitzero"`
+
+	// HasUnpricedUsage corresponds to the JSON schema field "has_unpriced_usage".
+	HasUnpricedUsage bool `json:"has_unpriced_usage"`
+
+	// MeasurementIncomplete corresponds to the JSON schema field
+	// "measurement_incomplete".
+	MeasurementIncomplete *bool `json:"measurement_incomplete,omitempty,omitzero"`
+
+	// Models corresponds to the JSON schema field "models".
+	Models []SessionUsageModel `json:"models"`
+
+	// TotalTokens corresponds to the JSON schema field "total_tokens".
+	TotalTokens int `json:"total_tokens"`
+}
+
+type SessionUsageModel struct {
+	// CacheReadTokens corresponds to the JSON schema field "cache_read_tokens".
+	CacheReadTokens int `json:"cache_read_tokens"`
+
+	// CacheWrite1HTokens corresponds to the JSON schema field
+	// "cache_write_1h_tokens".
+	CacheWrite1HTokens int `json:"cache_write_1h_tokens"`
+
+	// CacheWrite5MTokens corresponds to the JSON schema field
+	// "cache_write_5m_tokens".
+	CacheWrite5MTokens int `json:"cache_write_5m_tokens"`
+
+	// CacheWriteUnclassifiedTokens corresponds to the JSON schema field
+	// "cache_write_unclassified_tokens".
+	CacheWriteUnclassifiedTokens int `json:"cache_write_unclassified_tokens"`
+
+	// CostUsd corresponds to the JSON schema field "cost_usd".
+	CostUsd *float64 `json:"cost_usd,omitempty,omitzero"`
+
+	// HasUnpricedUsage corresponds to the JSON schema field "has_unpriced_usage".
+	HasUnpricedUsage bool `json:"has_unpriced_usage"`
+
+	// InputTokens corresponds to the JSON schema field "input_tokens".
+	InputTokens int `json:"input_tokens"`
+
+	// Model corresponds to the JSON schema field "model".
+	Model string `json:"model"`
+
+	// OutputTokens corresponds to the JSON schema field "output_tokens".
+	OutputTokens int `json:"output_tokens"`
+
+	// TotalTokens corresponds to the JSON schema field "total_tokens".
+	TotalTokens int `json:"total_tokens"`
+
+	// UnpricedReason corresponds to the JSON schema field "unpriced_reason".
+	UnpricedReason *string `json:"unpriced_reason,omitempty,omitzero"`
 }
 
 type SessionsUpdatedMessage struct {

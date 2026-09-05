@@ -10,8 +10,6 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/sessioncost"
-	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
@@ -312,99 +310,24 @@ func (d *Daemon) restoreTranscriptWatchers() {
 	}
 }
 
-func (d *Daemon) newSessionCostFollower(w *transcriptWatcher, path string) (*transcript.Follower, error) {
-	state, err := d.store.SessionCost(w.sessionID)
-	if err != nil {
-		return nil, err
-	}
-	if !state.Initialized {
-		cursor, err := transcript.HeadCursor(path)
-		if err != nil {
-			return nil, err
-		}
-		if err := d.store.SetSessionCostCursor(w.sessionID, cursor); err != nil {
-			return nil, err
-		}
-		if cursor == "" {
-			return transcript.NewFollower(path, string(w.agent), 0)
-		}
-		return transcript.NewFollowerAfterCursor(path, string(w.agent), cursor)
-	}
-	if state.Cursor == "" {
-		return transcript.NewFollower(path, string(w.agent), 0)
-	}
-	follower, err := transcript.NewFollowerAfterCursor(path, string(w.agent), state.Cursor)
-	if err == nil {
-		return follower, nil
-	}
-	if !errors.Is(err, transcript.ErrCursorMismatch) &&
-		!errors.Is(err, transcript.ErrCursorPastEnd) &&
-		!errors.Is(err, transcript.ErrInvalidCursor) {
-		return nil, err
-	}
-
-	// A cursor that no longer names this file cannot prove where new traffic begins.
-	// Seed at head: replaying double-charges Codex records.
-	cursor, err := transcript.HeadCursor(path)
-	if err != nil {
-		return nil, err
-	}
-	if err := d.store.SetSessionCostCursor(w.sessionID, cursor); err != nil {
-		return nil, err
-	}
-	if cursor == "" {
-		return transcript.NewFollower(path, string(w.agent), 0)
-	}
-	return transcript.NewFollowerAfterCursor(path, string(w.agent), cursor)
-}
-
-func (d *Daemon) applySessionCostBatch(w *transcriptWatcher, follower *transcript.Follower, batch transcript.FollowBatch) error {
+func (d *Daemon) applySessionUsageAvailability(w *transcriptWatcher, batch transcript.FollowBatch) error {
 	if len(batch.Records) == 0 {
 		return nil
 	}
-	cursor := follower.Cursor()
+	if transcript.SupportsUsage(string(w.agent)) {
+		return nil
+	}
 	changed := false
-	if !transcript.SupportsUsage(string(w.agent)) {
-		for _, event := range batch.Events {
-			if event.Kind == transcript.EventKindAssistant {
-				var err error
-				changed, err = d.store.MarkSessionCostUsageUnavailable(w.sessionID, cursor)
-				if err != nil {
-					return err
-				}
-				break
-			}
-		}
-		if !changed {
-			if err := d.store.SetSessionCostCursor(w.sessionID, cursor); err != nil {
-				return err
-			}
-		}
-	} else {
-		observations := make([]store.SessionCostObservation, 0, len(batch.Usage))
-		for _, usage := range batch.Usage {
-			model := strings.TrimSpace(usage.Model)
-			if model == "" {
-				model = "<unknown>"
-			}
-			observations = append(observations, store.SessionCostObservation{
-				ObservationID: usage.Key,
-				Model:         model,
-				Usage: sessioncost.Usage{
-					InputTokens:                  usage.InputTokens,
-					OutputTokens:                 usage.OutputTokens,
-					CacheReadInputTokens:         usage.CacheReadTokens,
-					CacheWrite5mInputTokens:      usage.CacheWrite5mTokens,
-					CacheWrite1hInputTokens:      usage.CacheWrite1hTokens,
-					UnclassifiedCacheWriteTokens: usage.CacheWriteUnclassifiedTokens,
-				},
-			})
+	for _, event := range batch.Events {
+		if event.Kind != transcript.EventKindAssistant {
+			continue
 		}
 		var err error
-		changed, err = d.store.ApplySessionCostObservations(w.sessionID, cursor, observations)
+		changed, err = d.store.MarkSessionCostUsageUnavailable(w.sessionID, "")
 		if err != nil {
 			return err
 		}
+		break
 	}
 	if changed {
 		d.publishFact(FactSessionCostChanged, w.sessionID, nil)
@@ -472,9 +395,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 	var (
 		transcriptPath string
 		follower       *transcript.Follower
-		costFollower   *transcript.Follower
-		costAttempted  bool
-		costFileSize   int64 = -1
+		usageTracker   *sessionUsageTracker
 		readFileInfo   os.FileInfo
 
 		lastAssistantAt time.Time
@@ -484,17 +405,23 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 
 		discoveryDeadline = d.transcriptDiscoveryDeadline(w, time.Now())
 		fallbackAttempted bool
+		usageState        = w.state()
 	)
 
 	for {
 		select {
 		case <-w.stopCh:
+			if usageTracker != nil {
+				usageTracker.Reconcile()
+			}
 			d.logf("transcript watcher: stopped session=%s", w.sessionID)
 			return
 		case <-ticker.C:
 		}
 
 		sessionState := w.state()
+		usageSettled := usageState == protocol.SessionStateWorking && sessionState != protocol.SessionStateWorking
+		usageState = sessionState
 		windowChanged := false
 
 		if transcriptPath == "" {
@@ -538,18 +465,8 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			w.resetSource(protocol.SessionMessageWindowStatusReady, transcriptPath, "", startOffset > 0)
 			windowChanged = true
 			fallbackAttempted = false
-			costAttempted = false
+			usageTracker = d.newSessionUsageTracker(w, transcriptPath)
 			d.logf("transcript watcher: transcript discovered session=%s path=%s offset=%d", w.sessionID, transcriptPath, startOffset)
-		}
-		if !costAttempted {
-			costAttempted = true
-			var costErr error
-			costFollower, costErr = d.newSessionCostFollower(w, transcriptPath)
-			if costErr != nil {
-				d.logf("transcript watcher: cost follower init failed session=%s path=%s err=%v", w.sessionID, transcriptPath, costErr)
-			} else {
-				costFileSize = -1
-			}
 		}
 
 		info, err := os.Stat(transcriptPath)
@@ -559,9 +476,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			d.publishFact(FactSessionAssistantWindowChanged, w.sessionID, nil)
 			transcriptPath = ""
 			follower = nil
-			costFollower = nil
-			costAttempted = false
-			costFileSize = -1
+			usageTracker = nil
 			readFileInfo = nil
 			discoveryDeadline = d.transcriptDiscoveryDeadline(w, time.Now())
 			fallbackAttempted = false
@@ -635,26 +550,19 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 				}
 			}
 			windowChanged = w.applyEvents(batch.Events) || windowChanged
-			readFileInfo = info
-		}
-		// The watcher's stat is the movement gate: accounting opens the transcript
-		// only on a byte-length change, so an idle session adds no file reads.
-		if info.Size() > 0 && costFollower != nil && info.Size() != costFileSize {
-			batch, readErr := costFollower.Read()
-			if readErr != nil {
-				d.logf("transcript watcher: cost read failed session=%s path=%s err=%v", w.sessionID, transcriptPath, readErr)
-				costFollower = nil
-				costFileSize = -1
-			} else if err := d.applySessionCostBatch(w, costFollower, batch); err != nil {
-				d.logf("transcript watcher: cost persist failed session=%s path=%s err=%v", w.sessionID, transcriptPath, err)
-				costFollower = nil
-				costFileSize = -1
-			} else {
-				costFileSize = info.Size()
+			if err := d.applySessionUsageAvailability(w, batch); err != nil {
+				d.logf("transcript watcher: usage availability persist failed session=%s err=%v", w.sessionID, err)
 			}
+			if usageTracker != nil {
+				usageTracker.Reconcile()
+			}
+			readFileInfo = info
 		}
 		if windowChanged {
 			d.publishFact(FactSessionAssistantWindowChanged, w.sessionID, nil)
+		}
+		if usageSettled && usageTracker != nil {
+			usageTracker.Reconcile()
 		}
 
 		tickResult := w.behavior.Tick(time.Now(), sessionState)

@@ -30,6 +30,28 @@ export interface SessionPullRequest {
   readonly status_fetched_at?: string
 }
 
+export interface SessionUsageModel {
+  readonly model: string
+  readonly input_tokens: number
+  readonly output_tokens: number
+  readonly cache_read_tokens: number
+  readonly cache_write_5m_tokens: number
+  readonly cache_write_1h_tokens: number
+  readonly cache_write_unclassified_tokens: number
+  readonly total_tokens: number
+  readonly cost_usd?: number
+  readonly has_unpriced_usage: boolean
+  readonly unpriced_reason?: string
+}
+
+export interface SessionUsage {
+  readonly total_tokens: number
+  readonly cost_usd?: number
+  readonly has_unpriced_usage: boolean
+  readonly measurement_incomplete?: boolean
+  readonly models: readonly SessionUsageModel[]
+}
+
 export interface Session {
   readonly activity?: string
   readonly activity_at?: string
@@ -41,8 +63,6 @@ export interface Session {
   readonly branch?: string
   readonly chief_of_staff?: boolean
   readonly context_window_cap?: number
-  readonly cost_unknown?: boolean
-  readonly cost_usd?: number
   readonly crew_member?: string
   readonly delegated_from_chief?: boolean
   readonly directory: string
@@ -68,6 +88,7 @@ export interface Session {
   readonly turn_opened_at?: string
   readonly turn_owed?: boolean
   readonly turn_snoozed_until?: string
+  readonly usage?: SessionUsage
   readonly workspace_id: string
   readonly workspace_muted?: boolean
 }

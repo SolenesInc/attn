@@ -155,6 +155,28 @@ model AutomationProvenance {
   pull_request?: PullRequestProvenance;
 }
 
+model SessionUsageModel {
+  `model`: string;
+  input_tokens: safeint;
+  output_tokens: safeint;
+  cache_read_tokens: safeint;
+  cache_write_5m_tokens: safeint;
+  cache_write_1h_tokens: safeint;
+  cache_write_unclassified_tokens: safeint;
+  total_tokens: safeint;
+  cost_usd?: float64;
+  has_unpriced_usage: boolean;
+  unpriced_reason?: string;
+}
+
+model SessionUsage {
+  total_tokens: safeint;
+  cost_usd?: float64;
+  has_unpriced_usage: boolean;
+  measurement_incomplete?: boolean;
+  models: SessionUsageModel[];
+}
+
 model Session {
   id: string;
   label: string;
@@ -188,8 +210,7 @@ model Session {
   parent_session_id?: string;   // The agent session a shell was split from. Spawn-time provenance resolved by the daemon, always an agent id and never another shell's, so there is no chain to walk. Whether the link is live is judged at read (parent present in the same workspace), so the field itself is never cleared.
   activity?: string;            // One short present-tense line saying what the agent is doing right now, generated from its transcript by a headless agent. Display only — it never feeds attention, the queue, or state classification. Absent when the feature is off or nothing has been generated for this session yet.
   activity_at?: string;         // ISO timestamp the activity line was generated. Present whenever activity is, so a client can age out a line the generator has stopped refreshing rather than showing it as current.
-  cost_usd?: float64;           // Accrued token cost in USD. Present only after usage exists and every observed model has a price.
-  cost_unknown?: boolean;       // True after usage exists when any observed model has no price. Mutually exclusive with cost_usd; both absent means no usage yet.
+  usage?: SessionUsage;         // Primary native conversation plus native subagents. Visible attn delegations remain separate sessions.
   automation?: AutomationProvenance; // Present when this session was launched by an automation; latest run wins for a continuity thread.
   pull_requests?: SessionPullRequest[]; // Pull requests this session's agent opened, newest first. Joined at broadcast from the session_pull_requests table, never stored on the session row.
   terminal_build_stale?: boolean; // True when this session's pty-worker was built against a different libghostty-vt than the daemon, which happens when the app updates under a running session. The two then hold different terminal implementations and stop agreeing about the grid, so the app offers a reload. Derived at broadcast from the format tag the worker reports at its handshake; never stored, and absent for every same-build session, which is all of them outside an upgrade window.

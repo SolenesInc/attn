@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { SessionTerminalWorkspace } from './index';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
 import type { TerminalWorkspaceState } from '../../types/workspace';
+import type { SessionUsage } from '../../types/generated';
 
 vi.mock('../GhosttyTerminal', async () => {
   const React = await import('react');
@@ -40,6 +41,26 @@ function renderLonePane(props: Partial<React.ComponentProps<typeof SessionTermin
       {...props}
     />,
   );
+}
+
+function usage(costUsd?: number, hasUnpricedUsage = false, totalTokens = 3_550): SessionUsage {
+  return {
+    total_tokens: totalTokens,
+    cost_usd: costUsd,
+    has_unpriced_usage: hasUnpricedUsage,
+    models: [{
+      model: 'claude-opus-5',
+      input_tokens: 4,
+      output_tokens: totalTokens - 4,
+      cache_read_tokens: 0,
+      cache_write_5m_tokens: 0,
+      cache_write_1h_tokens: 0,
+      cache_write_unclassified_tokens: 0,
+      total_tokens: totalTokens,
+      cost_usd: costUsd,
+      has_unpriced_usage: hasUnpricedUsage,
+    }],
+  };
 }
 
 describe('SessionTerminalWorkspace pane header', () => {
@@ -112,11 +133,11 @@ describe('SessionTerminalWorkspace pane header', () => {
         label: GENERATED_NAME,
         agent: 'claude',
         cwd: '/tmp/project',
-        costUsd: 1.234,
+        usage: usage(1.234),
       }],
     });
 
-    expect(screen.getByLabelText('Session cost $1.23 USD')).toHaveTextContent('$1.23');
+    expect(screen.getByLabelText('Session usage $1.23')).toHaveTextContent('$1.23');
   });
 
   it('does not round real sub-cent usage down to free', () => {
@@ -126,31 +147,45 @@ describe('SessionTerminalWorkspace pane header', () => {
         label: GENERATED_NAME,
         agent: 'claude',
         cwd: '/tmp/project',
-        costUsd: 0.004,
+        usage: usage(0.004),
       }],
     });
 
-    expect(screen.getByLabelText('Session cost <$0.01 USD')).toHaveTextContent('<$0.01');
+    expect(screen.getByLabelText('Session usage <$0.01')).toHaveTextContent('<$0.01');
   });
 
-  it('shows unknown when usage exists but its model has no price', () => {
+  it('keeps the known dollar amount and marks partially priced usage', () => {
     renderLonePane({
       workspaceSessions: [{
         id: 'sess-1',
         label: GENERATED_NAME,
         agent: 'claude',
         cwd: '/tmp/project',
-        costUnknown: true,
+        usage: usage(1.234, true),
       }],
     });
 
-    expect(screen.getByLabelText('Session cost unknown')).toHaveTextContent('unknown');
+    expect(screen.getByLabelText('Session usage $1.23*, some usage has no price')).toHaveTextContent('$1.23*');
+  });
+
+  it('falls back to compact tokens when none of the usage can be priced', () => {
+    renderLonePane({
+      workspaceSessions: [{
+        id: 'sess-1',
+        label: GENERATED_NAME,
+        agent: 'claude',
+        cwd: '/tmp/project',
+        usage: usage(undefined, true, 184_000),
+      }],
+    });
+
+    expect(screen.getByLabelText('Session usage 184k tokens, some usage has no price')).toHaveTextContent('184k tokens');
   });
 
   it('shows no cost before the session has usage', () => {
     renderLonePane();
 
-    expect(screen.queryByLabelText(/Session cost/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Session usage/)).not.toBeInTheDocument();
   });
 
   it('updates the visible cost when fresh session usage arrives', () => {
@@ -160,11 +195,11 @@ describe('SessionTerminalWorkspace pane header', () => {
         label: GENERATED_NAME,
         agent: 'claude',
         cwd: '/tmp/project',
-        costUsd: 0.42,
+        usage: usage(0.42),
       }],
     });
 
-    expect(screen.getByLabelText('Session cost $0.42 USD')).toBeInTheDocument();
+    expect(screen.getByLabelText('Session usage $0.42')).toBeInTheDocument();
 
     rerender(
       <SessionTerminalWorkspace
@@ -174,7 +209,7 @@ describe('SessionTerminalWorkspace pane header', () => {
           label: GENERATED_NAME,
           agent: 'claude',
           cwd: '/tmp/project',
-          costUsd: 0.73,
+          usage: usage(0.73),
         }]}
         workspace={loneAgentWorkspace()}
         activePaneId="pane-1"
@@ -189,8 +224,39 @@ describe('SessionTerminalWorkspace pane header', () => {
       />,
     );
 
-    expect(screen.queryByLabelText('Session cost $0.42 USD')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Session cost $0.73 USD')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Session usage $0.42')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Session usage $0.73')).toBeInTheDocument();
+  });
+
+  it('pins the active session usage when the Action menu requests it', async () => {
+    const session = {
+      id: 'sess-1',
+      label: GENERATED_NAME,
+      agent: 'claude',
+      cwd: '/tmp/project',
+      usage: usage(0.73),
+    };
+    const { rerender } = renderLonePane({ workspaceSessions: [session] });
+
+    rerender(
+      <SessionTerminalWorkspace
+        workspaceId="workspace-1"
+        workspaceSessions={[session]}
+        usagePopoverRequest={{ sessionId: 'sess-1', nonce: 1 }}
+        workspace={loneAgentWorkspace()}
+        activePaneId="pane-1"
+        fontSize={13}
+        enabled
+        isActiveSession
+        eventRouter={createPaneRuntimeEventRouterController()}
+        onSplitPane={vi.fn()}
+        onClosePane={vi.fn()}
+        onFocusPane={vi.fn()}
+        onNavigateOutOfSession={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByRole('dialog', { name: 'Session usage breakdown' })).toHaveTextContent('esc close');
   });
 
   it('falls back to the pane title when the session carries no label', () => {

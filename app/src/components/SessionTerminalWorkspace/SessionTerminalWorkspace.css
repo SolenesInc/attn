@@ -485,14 +485,137 @@
   white-space: nowrap;
 }
 
-.workspace-pane-cost {
+.workspace-pane-usage {
   flex: none;
+  margin: 0;
+  padding: 2px 3px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
   color: var(--color-text-tertiary);
+  cursor: pointer;
+  font-family: inherit;
   font-size: var(--font-size-xs);
   font-variant-numeric: tabular-nums;
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
+}
+
+.workspace-pane-usage:hover,
+.workspace-pane-usage[aria-expanded='true'] {
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+}
+
+.workspace-pane-usage:focus-visible {
+  outline: 1px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+.session-usage-popover {
+  position: fixed;
+  z-index: 60;
+  width: 390px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 6px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-hover);
+  border-radius: 10px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.25);
+  outline: none;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+}
+
+.session-usage-summary,
+.session-usage-model header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.session-usage-summary {
+  padding: 10px;
+}
+
+.session-usage-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.session-usage-summary span,
+.session-usage-model header span {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.session-usage-models {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.session-usage-model {
+  padding: 10px;
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+}
+
+.session-usage-model header strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-usage-model dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 18px;
+  margin: 10px 0 0;
+}
+
+.session-usage-model dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.session-usage-model dt {
+  color: var(--color-text-tertiary);
+}
+
+.session-usage-model dd {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.session-usage-unpriced {
+  margin: 9px 0 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.session-usage-hint {
+  padding: 8px 10px 3px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+@media (max-width: 440px) {
+  .session-usage-model dl {
+    grid-template-columns: 1fr;
+  }
 }
 
 .workspace-pane-rename-btn {

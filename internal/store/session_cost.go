@@ -16,16 +16,29 @@ type SessionCostObservation struct {
 }
 
 type SessionCostState struct {
-	Initialized      bool                              `json:"initialized,omitempty"`
-	Cursor           string                            `json:"cursor,omitempty"`
-	UsageUnavailable bool                              `json:"usage_unavailable,omitempty"`
-	Ledger           sessioncost.Ledger                `json:"ledger,omitempty"`
-	Observations     map[string]SessionCostObservation `json:"observations,omitempty"`
+	Initialized           bool                              `json:"initialized,omitempty"`
+	Cursor                string                            `json:"cursor,omitempty"`
+	UsageUnavailable      bool                              `json:"usage_unavailable,omitempty"`
+	MeasurementIncomplete bool                              `json:"measurement_incomplete,omitempty"`
+	Sources               map[string]SessionCostSourceState `json:"sources,omitempty"`
+	Ledger                sessioncost.Ledger                `json:"ledger,omitempty"`
+	Observations          map[string]SessionCostObservation `json:"observations,omitempty"`
+}
+
+type SessionCostSourceState struct {
+	Cursor string `json:"cursor,omitempty"`
 }
 
 func cloneSessionCostState(state SessionCostState) SessionCostState {
 	clone := SessionCostState{
 		Initialized: state.Initialized, Cursor: state.Cursor, UsageUnavailable: state.UsageUnavailable,
+		MeasurementIncomplete: state.MeasurementIncomplete,
+	}
+	if state.Sources != nil {
+		clone.Sources = make(map[string]SessionCostSourceState, len(state.Sources))
+		for id, source := range state.Sources {
+			clone.Sources[id] = source
+		}
 	}
 	if state.Ledger != nil {
 		clone.Ledger = make(sessioncost.Ledger, len(state.Ledger))
@@ -83,6 +96,45 @@ func (s *Store) InitializeSessionCostTracking(sessionID string) error {
 	})
 }
 
+// InitializeSessionCostSources records one discovery pass atomically. An
+// uninitialized resumed session baselines every source from the same snapshot.
+func (s *Store) InitializeSessionCostSources(sessionID string, cursors map[string]string) error {
+	return s.updateSessionCost(sessionID, func(state *SessionCostState) {
+		if state.Sources == nil {
+			state.Sources = make(map[string]SessionCostSourceState)
+		}
+		for id, cursor := range cursors {
+			id = strings.TrimSpace(id)
+			if id == "" {
+				continue
+			}
+			if _, exists := state.Sources[id]; !exists {
+				state.Sources[id] = SessionCostSourceState{Cursor: strings.TrimSpace(cursor)}
+			}
+		}
+		state.Initialized = true
+	})
+}
+
+func (s *Store) SetSessionCostSourceCursor(sessionID, sourceID, cursor string) error {
+	return s.updateSessionCost(sessionID, func(state *SessionCostState) {
+		if state.Sources == nil {
+			state.Sources = make(map[string]SessionCostSourceState)
+		}
+		state.Initialized = true
+		state.Sources[strings.TrimSpace(sourceID)] = SessionCostSourceState{Cursor: strings.TrimSpace(cursor)}
+	})
+}
+
+func (s *Store) MarkSessionCostMeasurementIncomplete(sessionID string) (bool, error) {
+	changed := false
+	err := s.updateSessionCost(sessionID, func(state *SessionCostState) {
+		changed = !state.MeasurementIncomplete
+		state.MeasurementIncomplete = true
+	})
+	return changed, err
+}
+
 func (s *Store) MarkSessionCostUsageUnavailable(sessionID, cursor string) (bool, error) {
 	changed := false
 	err := s.updateSessionCost(sessionID, func(state *SessionCostState) {
@@ -97,33 +149,52 @@ func (s *Store) MarkSessionCostUsageUnavailable(sessionID, cursor string) (bool,
 func (s *Store) ApplySessionCostObservations(sessionID, cursor string, observations []SessionCostObservation) (bool, error) {
 	changed := false
 	err := s.updateSessionCost(sessionID, func(state *SessionCostState) {
-		state.Initialized = true
-		if state.Ledger == nil {
-			state.Ledger = make(sessioncost.Ledger)
-		}
-		if state.Observations == nil {
-			state.Observations = make(map[string]SessionCostObservation)
-		}
-		for _, observation := range observations {
-			observation.ObservationID = strings.TrimSpace(observation.ObservationID)
-			observation.Model = strings.TrimSpace(observation.Model)
-			if observation.ObservationID == "" || observation.Model == "" || !observation.Usage.HasUsage() {
-				continue
-			}
-			prior, exists := state.Observations[observation.ObservationID]
-			if exists && reflect.DeepEqual(prior, observation) {
-				continue
-			}
-			if exists {
-				state.Ledger[prior.Model] = state.Ledger[prior.Model].Subtract(prior.Usage)
-			}
-			state.Ledger[observation.Model] = state.Ledger[observation.Model].Add(observation.Usage)
-			state.Observations[observation.ObservationID] = observation
-			changed = true
-		}
+		changed = applySessionCostObservations(state, observations)
 		state.Cursor = strings.TrimSpace(cursor)
 	})
 	return changed, err
+}
+
+func (s *Store) ApplySessionCostSourceObservations(sessionID, sourceID, cursor string, observations []SessionCostObservation) (bool, error) {
+	changed := false
+	err := s.updateSessionCost(sessionID, func(state *SessionCostState) {
+		state.Initialized = true
+		if state.Sources == nil {
+			state.Sources = make(map[string]SessionCostSourceState)
+		}
+		state.Sources[strings.TrimSpace(sourceID)] = SessionCostSourceState{Cursor: strings.TrimSpace(cursor)}
+		changed = applySessionCostObservations(state, observations)
+	})
+	return changed, err
+}
+
+func applySessionCostObservations(state *SessionCostState, observations []SessionCostObservation) bool {
+	state.Initialized = true
+	if state.Ledger == nil {
+		state.Ledger = make(sessioncost.Ledger)
+	}
+	if state.Observations == nil {
+		state.Observations = make(map[string]SessionCostObservation)
+	}
+	changed := false
+	for _, observation := range observations {
+		observation.ObservationID = strings.TrimSpace(observation.ObservationID)
+		observation.Model = strings.TrimSpace(observation.Model)
+		if observation.ObservationID == "" || observation.Model == "" || !observation.Usage.HasUsage() {
+			continue
+		}
+		prior, exists := state.Observations[observation.ObservationID]
+		if exists && reflect.DeepEqual(prior, observation) {
+			continue
+		}
+		if exists {
+			state.Ledger[prior.Model] = state.Ledger[prior.Model].Subtract(prior.Usage)
+		}
+		state.Ledger[observation.Model] = state.Ledger[observation.Model].Add(observation.Usage)
+		state.Observations[observation.ObservationID] = observation
+		changed = true
+	}
+	return changed
 }
 
 func (s *Store) updateSessionCost(sessionID string, mutate func(*SessionCostState)) error {

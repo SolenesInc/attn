@@ -1014,6 +1014,7 @@ function AppContent({
   const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [seedPopoverRequest, setSeedPopoverRequest] = useState<{ sessionId: string; nonce: number }>();
+  const [usagePopoverRequest, setUsagePopoverRequest] = useState<{ sessionId: string; nonce: number }>();
   const [workspaceContextsOpen, setWorkspaceContextsOpen] = useState(false);
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [notebookRequestedPath, setNotebookRequestedPath] = useState<string | null>(null);
@@ -1187,8 +1188,7 @@ function AppContent({
       autoSettleHeld: daemonSession?.auto_settle_held ?? false,
       autoSettleDismissArmed: daemonSession?.auto_settle_dismiss_armed ?? false,
       terminalBuildStale: daemonSession?.terminal_build_stale ?? false,
-      costUsd: daemonSession?.cost_usd,
-      costUnknown: daemonSession?.cost_unknown ?? false,
+      usage: daemonSession?.usage,
       automation: daemonSession?.automation ?? s.automation,
       pullRequests: daemonSession?.pull_requests ?? s.pullRequests,
       state_reason: paneState ? undefined : daemonSession?.state_reason,
@@ -2551,6 +2551,18 @@ function AppContent({
         run: () => setSeedPopoverRequest((prev) => ({ sessionId: activeSession.id, nonce: (prev?.nonce ?? 0) + 1 })),
       }]
       : [];
+    const sessionUsageItems: ActionMenuItem[] = activeSession?.usage
+      && !activeSession.usage.measurement_incomplete
+      && activeSession.usage.total_tokens > 0
+      ? [{
+        id: 'show-session-usage',
+        title: `Show ${activeSession.label}'s usage`,
+        description: 'Token and cost totals for each model in this session',
+        keywords: ['usage', 'tokens', 'cost', 'models', 'agent', 'session'],
+        icon: <ContextActionIcon />,
+        run: () => setUsagePopoverRequest((prev) => ({ sessionId: activeSession.id, nonce: (prev?.nonce ?? 0) + 1 })),
+      }]
+      : [];
     const sessionCapItems: ActionMenuItem[] = activeSession && ['claude', 'codex'].includes((activeSession.agent ?? '').toLowerCase())
       ? [{
         id: 'set-session-context-cap',
@@ -2574,6 +2586,7 @@ function AppContent({
       ...appViewMenuItems,
       ...sessionPinItems,
       ...sessionSeedItems,
+      ...sessionUsageItems,
       ...sessionCapItems,
       {
         id: 'pin-active-workspace',
@@ -3670,8 +3683,7 @@ function AppContent({
                       autoSettleHeld: entry.autoSettleHeld,
                       autoSettleDismissArmed: entry.autoSettleDismissArmed,
                       terminalBuildStale: entry.terminalBuildStale,
-                      costUsd: entry.costUsd,
-                      costUnknown: entry.costUnknown,
+                      usage: entry.usage,
                       isActive: entry.id === activeSessionId,
                       presentation: presentationBySessionId.get(entry.id),
                       seedId: entry.seedId,
@@ -3688,6 +3700,7 @@ function AppContent({
                     onOpenSeed={handleOpenSeedTile}
                     onRevealSeedInGarden={handleRevealSeedInGarden}
                     seedPopoverRequest={seedPopoverRequest}
+                    usagePopoverRequest={usagePopoverRequest}
                     conversationAgents={conversationPaneAgents}
                     annotationApi={annotationApi}
                     onTriggerNudge={sendTriggerNudge}

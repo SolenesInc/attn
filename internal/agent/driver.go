@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/hooks"
+	"github.com/victorarias/attn/internal/transcript"
 )
 
 type Driver interface {
@@ -330,6 +331,12 @@ type TranscriptFinder interface {
 	BootstrapBytes() int64
 }
 
+// TranscriptUsageSourceProvider finds the native conversations whose usage belongs to one
+// attn session. Its resolver keeps provider-specific discovery state for the watcher lifetime.
+type TranscriptUsageSourceProvider interface {
+	NewTranscriptUsageSourceResolver(rootPath string) transcript.UsageSourceResolver
+}
+
 type ClassifierProvider interface {
 	Classify(text string, timeout time.Duration) (string, error)
 }
@@ -407,6 +414,14 @@ func GetTranscriptFinder(d Driver) (TranscriptFinder, bool) {
 	}
 	tf, ok := d.(TranscriptFinder)
 	return tf, ok
+}
+
+func GetTranscriptUsageSourceProvider(d Driver) (TranscriptUsageSourceProvider, bool) {
+	if d == nil || !EffectiveCapabilities(d).HasTranscript {
+		return nil, false
+	}
+	provider, ok := d.(TranscriptUsageSourceProvider)
+	return provider, ok
 }
 
 func GetClassifier(d Driver) (ClassifierProvider, bool) {
