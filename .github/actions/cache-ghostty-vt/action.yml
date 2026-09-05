@@ -1,0 +1,57 @@
+name: Ensure ghostty-vt artifacts
+description: >-
+  Put the pinned native libghostty-vt archive, and optionally the browser
+  ghostty-vt.wasm, on disk from a cache, so no later build or test step depends
+  on a release-asset download.
+inputs:
+  include-wasm:
+    description: Also cache app/vendor/ghostty-vt/ghostty-vt.wasm, for jobs that build or serve the frontend.
+    required: false
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    # actions/cache saves post-job only on success, and these jobs go red often.
+    - name: Restore native libghostty-vt
+      id: native
+      uses: actions/cache/restore@v4
+      with:
+        path: third_party/ghostty-vt
+        key: ${{ runner.os }}-${{ runner.arch }}-libghostty-vt-${{ hashFiles('ghostty-vt.pin', 'ghostty-vt-native.lock') }}
+
+    - name: Fetch native libghostty-vt
+      if: steps.native.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: ./scripts/build-libghostty-vt.sh
+
+    # Concurrent jobs race for this key; the loser logs a duplicate and carries on.
+    - name: Save native libghostty-vt
+      if: steps.native.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: third_party/ghostty-vt
+        key: ${{ runner.os }}-${{ runner.arch }}-libghostty-vt-${{ hashFiles('ghostty-vt.pin', 'ghostty-vt-native.lock') }}
+
+    # The generated file alone: its siblings in that directory are checked in.
+    - name: Restore browser ghostty-vt.wasm
+      id: wasm
+      if: inputs.include-wasm == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: app/vendor/ghostty-vt/ghostty-vt.wasm
+        key: ${{ runner.os }}-ghostty-vt-wasm-${{ hashFiles('ghostty-vt-wasm.lock') }}
+
+    - name: Fetch browser ghostty-vt.wasm
+      if: inputs.include-wasm == 'true' && steps.wasm.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: bash app/scripts/ensure-ghostty-vt-wasm.sh
+
+    # Separate key: keys are write-once, so a shared one could seal without the wasm.
+    - name: Save browser ghostty-vt.wasm
+      if: inputs.include-wasm == 'true' && steps.wasm.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: app/vendor/ghostty-vt/ghostty-vt.wasm
+        key: ${{ runner.os }}-ghostty-vt-wasm-${{ hashFiles('ghostty-vt-wasm.lock') }}

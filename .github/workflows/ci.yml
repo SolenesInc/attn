@@ -236,6 +236,9 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Ensure ghostty-vt artifacts
+        uses: ./.github/actions/cache-ghostty-vt
+
       # internal/ghosttyvt links libghostty-vt via cgo on Linux; fetch the
       # prebuilt native archive (download-first, no zig) so vet/build/test link.
       - name: Ensure native VT library
@@ -304,6 +307,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - name: Ensure ghostty-vt artifacts
+        uses: ./.github/actions/cache-ghostty-vt
       - name: Build host and native terminal library
         run: make build-pty-host
       - name: Verify old daemon and mixed host generations
@@ -401,6 +406,11 @@ jobs:
         with:
           version: 9
 
+      - name: Ensure ghostty-vt artifacts
+        uses: ./.github/actions/cache-ghostty-vt
+        with:
+          include-wasm: 'true'
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -489,6 +499,9 @@ jobs:
         with:
           toolchain: '1.95.0'
           components: clippy, rustfmt
+
+      - name: Ensure ghostty-vt artifacts
+        uses: ./.github/actions/cache-ghostty-vt
 
       - name: Build attn binary
         run: |
@@ -640,6 +653,21 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ steps.bun.outputs.version }}
+
+      - name: Ensure ghostty-vt artifacts
+        uses: ./.github/actions/cache-ghostty-vt
+        with:
+          include-wasm: 'true'
+
+      # Install step: 399s cold, 143s warm incl. a 10s restore (run 33975425685).
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src-tauri
+            pty-host
+          # The gate below fails this job on a red matrix, so the default would never save.
+          cache-on-failure: 'true'
 
       - name: Install packaged app and bundled plugin
         env:

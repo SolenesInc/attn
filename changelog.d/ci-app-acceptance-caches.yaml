@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: Cache the Rust builds behind the app acceptance install and the pinned ghostty-vt artifacts every job downloads.
