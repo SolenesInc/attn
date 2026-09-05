@@ -9,14 +9,14 @@ const VIEWPORT_MARGIN = 8;
 const usdFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2,
 });
-const exactTokenFormatter = new Intl.NumberFormat();
+const exactTokenFormatter = new Intl.NumberFormat('en-US');
 
-export function formatSessionUsageUSD(costUsd: number): string {
+function formatSessionUsageUSD(costUsd: number): string {
   if (costUsd > 0 && costUsd < 0.01) return '<$0.01';
   return usdFormatter.format(costUsd);
 }
 
-export function formatCompactTokens(tokens: number): string {
+function formatCompactTokens(tokens: number): string {
   if (tokens >= 1_000_000_000) return `${compactNumber(tokens, 1_000_000_000)}b tokens`;
   if (tokens >= 1_000_000) return `${compactNumber(tokens, 1_000_000)}m tokens`;
   if (tokens >= 1_000) return `${compactNumber(tokens, 1_000)}k tokens`;

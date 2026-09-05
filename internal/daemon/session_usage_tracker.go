@@ -54,7 +54,8 @@ func (t *sessionUsageTracker) Reconcile() {
 		return
 	}
 
-	if !state.Initialized {
+	legacyBaseline := state.Initialized && len(state.Sources) == 0 && strings.TrimSpace(state.Cursor) != ""
+	if !state.Initialized || legacyBaseline {
 		cursors := make(map[string]string, len(sources))
 		baselineFailed := false
 		for _, source := range sources {
@@ -86,9 +87,6 @@ func (t *sessionUsageTracker) Reconcile() {
 		sourceState, exists := state.Sources[source.ID]
 		if !exists {
 			cursor := ""
-			if source.Root && len(state.Sources) == 0 && strings.TrimSpace(state.Cursor) != "" {
-				cursor = state.Cursor
-			}
 			if err := t.daemon.store.InitializeSessionCostSources(t.watcher.sessionID, map[string]string{source.ID: cursor}); err != nil {
 				t.daemon.logf("transcript watcher: usage source persist failed session=%s path=%s err=%v", t.watcher.sessionID, source.Path, err)
 				continue

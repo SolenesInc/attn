@@ -145,6 +145,14 @@ func TestSessionUsageTrackerIncludesClaudeSubagentsAndRevisions(t *testing.T) {
 }
 
 func TestSessionUsageTrackerBaselinesAllSourcesWhenResuming(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		t.Run(fmt.Sprintf("legacy=%t", legacy), func(t *testing.T) {
+			testSessionUsageResumeBaseline(t, legacy)
+		})
+	}
+}
+
+func testSessionUsageResumeBaseline(t *testing.T, legacy bool) {
 	d := newTurnDaemon(t)
 	addCostSession(t, d, "resumed", protocol.SessionAgentClaude)
 	root := filepath.Join(t.TempDir(), "resume.jsonl")
@@ -155,6 +163,16 @@ func TestSessionUsageTrackerBaselinesAllSourcesWhenResuming(t *testing.T) {
 	child := filepath.Join(childDir, "agent-old.jsonl")
 	writeUsageLines(t, root, claudeUsageLine("old-root", "claude-opus-5", 100, 10))
 	writeUsageLines(t, child, claudeUsageLine("old-child", "claude-sonnet-4-5", 200, 20))
+
+	if legacy {
+		cursor, err := transcript.HeadCursor(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := d.store.SetSessionCostCursor("resumed", cursor); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	w := &transcriptWatcher{sessionID: "resumed", agent: protocol.SessionAgentClaude}
 	tracker := d.newSessionUsageTracker(w, root)
