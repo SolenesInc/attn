@@ -258,6 +258,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-terminal-seed-preview'],
   },
   {
+    id: 'session-usage',
+    runnerId: 'SESSION-USAGE',
+    label: 'Session usage combines native subagents, keeps partial costs, and opens from the Action menu',
+    command: ['pnpm', 'run', 'real-app:scenario-session-usage'],
+  },
+  {
     id: 'terminal-block-resize',
     runnerId: 'BLOCK-RESIZE',
     label: 'Block geometry through relaunch replay + split/close-split',

@@ -1,73 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import './PaneSeedChip.css';
 import type { PaneSeedDisplay } from './paneSeedDisplay';
 import { plotStateCounts, popoverRows, seedChipPresentation } from './paneSeedDisplay';
 import { TendedSeedsPopover } from './TendedSeedsPopover';
 import { SeedPlotIcon, SeedStateIcon } from './SeedStateIcon';
-
-const HOVER_OPEN_MS = 160;
-const HOVER_CLOSE_MS = 240;
-
-function useSeedChipPopover(pinned: boolean, onPopoverClosed: () => void) {
-  const chipRef = useRef<HTMLButtonElement>(null);
-  const [hoverOpen, setHoverOpen] = useState(false);
-  const [clickPinned, setClickPinned] = useState(false);
-  const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
-  const openTimer = useRef<number | undefined>(undefined);
-  const closeTimer = useRef<number | undefined>(undefined);
-  const [replay, setReplay] = useState(0);
-
-  const popoverPinned = pinned || clickPinned;
-  const popoverOpen = popoverPinned || hoverOpen;
-
-  // Measured once per open: a per-render rect is a fresh object every time and
-  // would loop the popover's layout effect.
-  useLayoutEffect(() => {
-    if (!popoverOpen) {
-      setAnchor(null);
-      return;
-    }
-    const rect = chipRef.current?.getBoundingClientRect();
-    if (rect) setAnchor({ top: rect.bottom + 4, right: rect.right });
-  }, [popoverOpen]);
-
-  useEffect(() => () => {
-    window.clearTimeout(openTimer.current);
-    window.clearTimeout(closeTimer.current);
-  }, []);
-
-  const scheduleOpen = useCallback(() => {
-    window.clearTimeout(closeTimer.current);
-    window.clearTimeout(openTimer.current);
-    openTimer.current = window.setTimeout(() => setHoverOpen(true), HOVER_OPEN_MS);
-    setReplay((value) => value + 1);
-  }, []);
-
-  const scheduleClose = useCallback(() => {
-    window.clearTimeout(openTimer.current);
-    window.clearTimeout(closeTimer.current);
-    closeTimer.current = window.setTimeout(() => setHoverOpen(false), HOVER_CLOSE_MS);
-  }, []);
-
-  const closePopover = useCallback(() => {
-    window.clearTimeout(openTimer.current);
-    window.clearTimeout(closeTimer.current);
-    setHoverOpen(false);
-    setClickPinned(false);
-    if (pinned) onPopoverClosed();
-  }, [pinned, onPopoverClosed]);
-
-  return {
-    chipRef, anchor, replay,
-    open: popoverOpen,
-    pinned: popoverPinned,
-    scheduleOpen, scheduleClose,
-    close: closePopover,
-    pin: () => setClickPinned(true),
-    replayAnimation: () => setReplay((value) => value + 1),
-    cancelClose: () => window.clearTimeout(closeTimer.current),
-  };
-}
+import { useAnchoredPopover } from './useAnchoredPopover';
 
 // Guards the leaf-drag: onPointerDown stops propagation so a click that drifts >=4px
 // cannot relocate the pane, and onClick stops the header from re-selecting it.
@@ -88,7 +25,8 @@ export function PaneSeedChip({
   onOpenSeed: (seedId: string) => void;
   onPopoverClosed: () => void;
 }) {
-  const popover = useSeedChipPopover(pinned, onPopoverClosed);
+  const popover = useAnchoredPopover(pinned, onPopoverClosed);
+  const [replay, setReplay] = useState(0);
   const presentation = seedChipPresentation(display);
   if (!presentation) return null;
 
@@ -98,7 +36,7 @@ export function PaneSeedChip({
   return (
     <>
       <button
-        ref={popover.chipRef}
+        ref={popover.anchorRef}
         type="button"
         className="pane-seed-chip"
         data-kind={display.kind}
@@ -111,9 +49,12 @@ export function PaneSeedChip({
         aria-haspopup={aggregate ? 'listbox' : undefined}
         aria-expanded={popover.open}
         onPointerDown={(event) => event.stopPropagation()}
-        onPointerEnter={popover.scheduleOpen}
+        onPointerEnter={() => {
+          popover.scheduleOpen();
+          setReplay((value) => value + 1);
+        }}
         onPointerLeave={popover.scheduleClose}
-        onFocus={popover.replayAnimation}
+        onFocus={() => setReplay((value) => value + 1)}
         onBlur={popover.scheduleClose}
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown') {
@@ -134,7 +75,7 @@ export function PaneSeedChip({
           }
         }}
       >
-        {aggregate ? <SeedPlotIcon /> : <SeedStateIcon status={status} replay={popover.replay} />}
+        {aggregate ? <SeedPlotIcon /> : <SeedStateIcon status={status} replay={replay} />}
         <span className="pane-seed-chip-title">{label}</span>
         {display.kind === 'plot' ? (
           <span className="pane-seed-counts">
@@ -160,7 +101,7 @@ export function PaneSeedChip({
           rows={rows}
           crownSeedId={crownSeedId}
           anchor={popover.anchor}
-          anchorRef={popover.chipRef}
+          anchorRef={popover.anchorRef}
           pinned={popover.pinned}
           onOpenSeed={onOpenSeed}
           onClose={popover.close}

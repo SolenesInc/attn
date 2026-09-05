@@ -116,6 +116,8 @@ export type {
   SeedPlotProgress,
   SeedVar,
   Session,
+  SessionUsage,
+  SessionUsageModel,
   TicketRow,
   Workspace,
   WorkspaceLayout,

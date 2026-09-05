@@ -1,8 +1,6 @@
 package daemon
 
 import (
-	"database/sql"
-	"errors"
 	"strings"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -15,24 +13,47 @@ func (d *Daemon) decorateSessionWithCost(session *protocol.Session) {
 	}
 	state, err := d.store.SessionCost(session.ID)
 	if err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			session.CostUnknown = protocol.Ptr(true)
-		}
 		return
 	}
 	if state.UsageUnavailable {
-		session.CostUnknown = protocol.Ptr(true)
 		return
 	}
-	usd, known, hasUsage := sessioncost.Price(state.Ledger, d.store.GetAllSettings())
-	if !hasUsage {
+	summary := sessioncost.Summarize(state.Ledger, d.store.GetAllSettings())
+	if !summary.HasUsage || !summary.Valid {
 		return
 	}
-	if !known {
-		session.CostUnknown = protocol.Ptr(true)
-		return
+	usage := &protocol.SessionUsage{
+		TotalTokens:      int(summary.TotalTokens),
+		HasUnpricedUsage: summary.HasUnpricedUsage,
+		Models:           make([]protocol.SessionUsageModel, 0, len(summary.Models)),
 	}
-	session.CostUsd = protocol.Ptr(usd)
+	if state.MeasurementIncomplete {
+		usage.MeasurementIncomplete = protocol.Ptr(true)
+	}
+	if summary.CostUSD != nil {
+		usage.CostUsd = protocol.Ptr(*summary.CostUSD)
+	}
+	for _, row := range summary.Models {
+		model := protocol.SessionUsageModel{
+			Model:                        row.Model,
+			InputTokens:                  int(row.Usage.InputTokens),
+			OutputTokens:                 int(row.Usage.OutputTokens),
+			CacheReadTokens:              int(row.Usage.CacheReadInputTokens),
+			CacheWrite5MTokens:           int(row.Usage.CacheWrite5mInputTokens),
+			CacheWrite1HTokens:           int(row.Usage.CacheWrite1hInputTokens),
+			CacheWriteUnclassifiedTokens: int(row.Usage.UnclassifiedCacheWriteTokens),
+			TotalTokens:                  int(row.TotalTokens),
+			HasUnpricedUsage:             row.HasUnpricedUsage,
+		}
+		if row.CostUSD != nil {
+			model.CostUsd = protocol.Ptr(*row.CostUSD)
+		}
+		if row.UnpricedReason != "" {
+			model.UnpricedReason = protocol.Ptr(row.UnpricedReason)
+		}
+		usage.Models = append(usage.Models, model)
+	}
+	session.Usage = usage
 }
 
 func isSessionCostPriceSetting(key string) bool {
@@ -45,8 +66,8 @@ func (d *Daemon) publishSessionCostReprices() {
 		if err != nil {
 			continue
 		}
-		_, _, hasUsage := sessioncost.Price(state.Ledger, nil)
-		if hasUsage || state.UsageUnavailable {
+		summary := sessioncost.Summarize(state.Ledger, nil)
+		if summary.HasUsage || state.UsageUnavailable {
 			d.publishFact(FactSessionCostChanged, session.ID, nil)
 		}
 	}

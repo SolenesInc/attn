@@ -30,7 +30,7 @@ import { HeaderPresentationChip } from '../PresentationChip';
 import { PaneSeedChip } from '../PaneSeedChip';
 import { derivePaneSeedDisplay } from '../paneSeedDisplay';
 import type { Seed } from '../../hooks/useDaemonSocket';
-import type { Presentation } from '../../types/generated';
+import type { Presentation, SessionUsage } from '../../types/generated';
 import { useGhosttyPaneRuntime } from './useGhosttyPaneRuntime';
 import type { PaneRuntimeEventRouter } from './paneRuntimeEventRouter';
 import { isSuspiciousTerminalSize } from '../../utils/terminalDebug';
@@ -45,7 +45,7 @@ import { WorkspaceDockTile, type WorkspaceTileSessionOption } from './WorkspaceD
 import { startLeafDrag, type LeafDropSnapshot } from './leafDrag';
 import type { DockTarget } from './dockTarget';
 import type { WorkspaceSelectionStyle } from '../../utils/workspaceSelectionStyle';
-import { HeaderSessionCost } from './SessionCost';
+import { HeaderSessionUsage } from './SessionUsage';
 import type {
   AutomationProvenance as AutomationProvenanceValue,
   SessionPullRequest,
@@ -108,8 +108,7 @@ interface SessionTerminalWorkspaceProps {
     cwd: string;
     endpointId?: string;
     state?: UISessionState;
-    costUsd?: number;
-    costUnknown?: boolean;
+    usage?: SessionUsage;
     ticketUnread?: boolean;
     nudgeFiresAt?: string;
     autoSettleFiresAt?: string;
@@ -128,6 +127,7 @@ interface SessionTerminalWorkspaceProps {
   onOpenSeed?: (seedId: string) => void;
   onRevealSeedInGarden?: (seedId: string) => void;
   seedPopoverRequest?: { sessionId: string; nonce: number };
+  usagePopoverRequest?: { sessionId: string; nonce: number };
   // The daemon decides this from the driver's `conversation` capability; never
   // recompute it here.
   conversationAgents?: ReadonlySet<string>;
@@ -191,6 +191,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     onOpenSeed,
     onRevealSeedInGarden,
     seedPopoverRequest,
+    usagePopoverRequest,
     conversationAgents,
     annotationApi,
     workspace,
@@ -246,6 +247,10 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     useEffect(() => {
       if (seedPopoverRequest) setPinnedSeedPopover(seedPopoverRequest.sessionId);
     }, [seedPopoverRequest]);
+    const [pinnedUsagePopover, setPinnedUsagePopover] = useState<string | null>(null);
+    useEffect(() => {
+      if (usagePopoverRequest) setPinnedUsagePopover(usagePopoverRequest.sessionId);
+    }, [usagePopoverRequest]);
     const [draggingLeafId, setDraggingLeafId] = useState<string | null>(null);
     const [dockTarget, setDockTarget] = useState<DockTarget | null>(null);
     const [ghostPos, setGhostPos] = useState<{ x: number; y: number } | null>(null);
@@ -1091,9 +1096,11 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
               <span className="workspace-pane-identity">
                 <span className="workspace-pane-identity-main">
                   <span className="workspace-pane-title">{paneTitle}</span>
-                  <HeaderSessionCost
-                    costUsd={paneSession?.costUsd}
-                    unknown={paneSession?.costUnknown}
+                  <HeaderSessionUsage
+                    usage={paneSession?.usage}
+                    sessionId={agentPane.sessionId}
+                    pinned={pinnedUsagePopover === agentPane.sessionId}
+                    onPopoverClosed={() => setPinnedUsagePopover(null)}
                   />
                 </span>
                 <SessionProvenance
@@ -1334,6 +1341,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       onOpenSeed,
       onRevealSeedInGarden,
       pinnedSeedPopover,
+      pinnedUsagePopover,
       conversationAgents,
       annotationApi,
       onCancelCountdown,

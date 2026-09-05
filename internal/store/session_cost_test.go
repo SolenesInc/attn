@@ -66,3 +66,46 @@ func TestSessionCostObservationsPersistAndReplaceAcrossRestart(t *testing.T) {
 		t.Fatalf("unavailable state = %+v", state)
 	}
 }
+
+func TestSessionCostSourceCursorsPersistIndependently(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "attn.db")
+	s, err := NewWithDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Add(&protocol.Session{ID: "usage", Label: "usage"})
+	if err := s.InitializeSessionCostSources("usage", map[string]string{
+		"root": "root-head", "child": "child-head",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	observation := SessionCostObservation{
+		ObservationID: "native:child:message", Model: "claude-sonnet-4-5",
+		Usage: sessioncost.Usage{InputTokens: 3, OutputTokens: 5},
+	}
+	if changed, err := s.ApplySessionCostSourceObservations("usage", "child", "child-next", []SessionCostObservation{observation}); err != nil || !changed {
+		t.Fatalf("apply changed=%v err=%v", changed, err)
+	}
+	if _, err := s.MarkSessionCostMeasurementIncomplete("usage"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err = NewWithDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	state, err := s.SessionCost("usage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Sources["root"].Cursor != "root-head" || state.Sources["child"].Cursor != "child-next" {
+		t.Fatalf("source cursors = %+v", state.Sources)
+	}
+	if !state.MeasurementIncomplete || state.Ledger["claude-sonnet-4-5"] != observation.Usage {
+		t.Fatalf("reopened state = %+v", state)
+	}
+}

@@ -26,6 +26,52 @@ func TestLedgerAdd(t *testing.T) {
 	}
 }
 
+func TestSummarizeKeepsPartialCostAndPerModelReceipts(t *testing.T) {
+	settings := map[string]string{
+		SessionCostPricePrefix + "broken": `{"input_usd_per_mtok":`,
+	}
+	summary := Summarize(Ledger{
+		"claude-opus-5": {InputTokens: 1_000_000, UnclassifiedCacheWriteTokens: 17},
+		"future-model":  {OutputTokens: 42},
+		"broken":        {InputTokens: 9},
+	}, settings)
+	if !summary.Valid || !summary.HasUsage || summary.CostUSD == nil || *summary.CostUSD == 0 {
+		t.Fatalf("partial summary = %+v", summary)
+	}
+	if !summary.HasUnpricedUsage || summary.TotalTokens != 1_000_068 || len(summary.Models) != 3 {
+		t.Fatalf("summary receipts = %+v", summary)
+	}
+	if summary.Models[0].Model != "broken" || summary.Models[0].UnpricedReason != "Price override is invalid." {
+		t.Fatalf("malformed override row = %+v", summary.Models[0])
+	}
+	if summary.Models[1].Model != "claude-opus-5" || summary.Models[1].CostUSD == nil || !summary.Models[1].HasUnpricedUsage {
+		t.Fatalf("partially priced row = %+v", summary.Models[1])
+	}
+	if summary.Models[2].Model != "future-model" || summary.Models[2].CostUSD != nil {
+		t.Fatalf("unknown model row = %+v", summary.Models[2])
+	}
+}
+
+func TestSummarizeReturnsTokenOnlyAndRecognizesAZeroRate(t *testing.T) {
+	tokenOnly := Summarize(Ledger{"future-model": {InputTokens: 184_000}}, nil)
+	if tokenOnly.CostUSD != nil || tokenOnly.TotalTokens != 184_000 || !tokenOnly.HasUnpricedUsage {
+		t.Fatalf("token-only summary = %+v", tokenOnly)
+	}
+
+	zero := `{"input_usd_per_mtok":0,"output_usd_per_mtok":0,"cache_read_usd_per_mtok":0,"cache_write_5m_usd_per_mtok":0,"cache_write_1h_usd_per_mtok":0}`
+	free := Summarize(Ledger{"free-model": {InputTokens: 1}}, map[string]string{SessionCostPricePrefix + "free-model": zero})
+	if free.CostUSD == nil || *free.CostUSD != 0 || free.HasUnpricedUsage {
+		t.Fatalf("zero-rate summary = %+v", free)
+	}
+}
+
+func TestSummarizeRejectsATotalTokenOverflow(t *testing.T) {
+	summary := Summarize(Ledger{"overflow": {InputTokens: math.MaxInt64, OutputTokens: 1}}, nil)
+	if summary.Valid {
+		t.Fatalf("overflow summary = %+v", summary)
+	}
+}
+
 func TestLedgerAddRejectsOverflowAtomically(t *testing.T) {
 	ledger := Ledger{"model": {InputTokens: math.MaxInt64, OutputTokens: 7}}
 	if ledger.Add("model", Usage{InputTokens: 1, OutputTokens: 2}) {

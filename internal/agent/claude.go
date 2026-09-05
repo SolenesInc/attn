@@ -495,6 +495,10 @@ func (c *Claude) BootstrapBytes() int64 {
 	return 256 * 1024
 }
 
+func (c *Claude) NewTranscriptUsageSourceResolver(rootPath string) transcript.UsageSourceResolver {
+	return transcript.NewClaudeUsageSourceResolver(rootPath)
+}
+
 func (c *Claude) NewTranscriptWatcherBehavior() TranscriptWatcherBehavior {
 	return &claudeTranscriptWatcherBehavior{}
 }

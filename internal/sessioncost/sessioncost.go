@@ -85,6 +85,24 @@ type RateCard struct {
 	CacheWrite1hUSDPerMTok float64 `json:"cache_write_1h_usd_per_mtok"`
 }
 
+type ModelSummary struct {
+	Model            string
+	Usage            Usage
+	TotalTokens      int64
+	CostUSD          *float64
+	HasUnpricedUsage bool
+	UnpricedReason   string
+}
+
+type Summary struct {
+	Models           []ModelSummary
+	TotalTokens      int64
+	CostUSD          *float64
+	HasUnpricedUsage bool
+	HasUsage         bool
+	Valid            bool
+}
+
 func ParseOverrides(settings map[string]string) (map[string]RateCard, error) {
 	keys := make([]string, 0)
 	for key := range settings {
@@ -114,49 +132,91 @@ func ParseOverrides(settings map[string]string) (map[string]RateCard, error) {
 }
 
 func Price(ledger Ledger, settings map[string]string) (usd float64, known bool, hasUsage bool) {
-	for _, usage := range ledger {
-		if usage.hasAnyValue() {
-			hasUsage = true
-			break
-		}
-	}
-	if !hasUsage {
+	summary := Summarize(ledger, settings)
+	if !summary.HasUsage {
 		return 0, false, false
 	}
-
-	overrides, err := ParseOverrides(settings)
-	if err != nil {
+	if !summary.Valid || summary.HasUnpricedUsage || summary.CostUSD == nil {
 		return 0, false, true
 	}
+	return *summary.CostUSD, true, true
+}
+
+func Summarize(ledger Ledger, settings map[string]string) Summary {
+	summary := Summary{Valid: true}
+	models := make([]string, 0, len(ledger))
 	for model, usage := range ledger {
-		if !usage.hasAnyValue() {
-			continue
-		}
-		if !usage.valid() {
-			return 0, false, true
-		}
-		// An aggregate cache-creation count does not say whether the writes billed
-		// at the 5-minute or 1-hour rate, so the whole total stays unknown.
-		if usage.UnclassifiedCacheWriteTokens > 0 {
-			return 0, false, true
-		}
-		card, ok := overrides[model]
-		if !ok {
-			card, ok = builtInRateCards[model]
-		}
-		if !ok {
-			return 0, false, true
-		}
-		priced := priceUsage(usage, card)
-		if math.IsNaN(priced) || math.IsInf(priced, 0) {
-			return 0, false, true
-		}
-		usd += priced
-		if math.IsNaN(usd) || math.IsInf(usd, 0) {
-			return 0, false, true
+		if usage.hasAnyValue() {
+			models = append(models, model)
 		}
 	}
-	return usd, true, true
+	sort.Strings(models)
+	for _, model := range models {
+		usage := ledger[model]
+		summary.HasUsage = true
+		if !usage.valid() {
+			summary.Valid = false
+			return summary
+		}
+		total, ok := usage.totalTokens()
+		if !ok || total > math.MaxInt64-summary.TotalTokens {
+			summary.Valid = false
+			return summary
+		}
+		row := ModelSummary{Model: model, Usage: usage, TotalTokens: total}
+		summary.TotalTokens += total
+
+		card, cardKnown, invalidOverride := rateCardForModel(model, settings)
+		if invalidOverride {
+			row.HasUnpricedUsage = true
+			row.UnpricedReason = "Price override is invalid."
+		} else if !cardKnown {
+			row.HasUnpricedUsage = true
+			row.UnpricedReason = "No price is configured for this model."
+		} else {
+			classified := usage
+			classified.UnclassifiedCacheWriteTokens = 0
+			if classified.hasUsage() {
+				priced := priceUsage(classified, card)
+				if math.IsNaN(priced) || math.IsInf(priced, 0) {
+					summary.Valid = false
+					return summary
+				}
+				row.CostUSD = floatPtr(priced)
+			}
+			if usage.UnclassifiedCacheWriteTokens > 0 {
+				row.HasUnpricedUsage = true
+				row.UnpricedReason = "Cache write duration is unavailable."
+			}
+		}
+
+		if row.CostUSD != nil {
+			if summary.CostUSD == nil {
+				summary.CostUSD = floatPtr(0)
+			}
+			*summary.CostUSD += *row.CostUSD
+			if math.IsNaN(*summary.CostUSD) || math.IsInf(*summary.CostUSD, 0) {
+				summary.Valid = false
+				return summary
+			}
+		}
+		summary.HasUnpricedUsage = summary.HasUnpricedUsage || row.HasUnpricedUsage
+		summary.Models = append(summary.Models, row)
+	}
+	return summary
+}
+
+func rateCardForModel(model string, settings map[string]string) (RateCard, bool, bool) {
+	if raw, ok := settings[SessionCostPricePrefix+model]; ok && strings.TrimSpace(raw) != "" {
+		card, err := parseRateCard(strings.TrimSpace(raw))
+		return card, err == nil, err != nil
+	}
+	card, ok := builtInRateCards[model]
+	return card, ok, false
+}
+
+func floatPtr(value float64) *float64 {
+	return &value
 }
 
 func (u Usage) hasUsage() bool {
@@ -184,6 +244,24 @@ func (u Usage) valid() bool {
 		u.CacheWrite5mInputTokens >= 0 &&
 		u.CacheWrite1hInputTokens >= 0 &&
 		u.UnclassifiedCacheWriteTokens >= 0
+}
+
+func (u Usage) totalTokens() (int64, bool) {
+	total := int64(0)
+	for _, value := range [...]int64{
+		u.InputTokens,
+		u.OutputTokens,
+		u.CacheReadInputTokens,
+		u.CacheWrite5mInputTokens,
+		u.CacheWrite1hInputTokens,
+		u.UnclassifiedCacheWriteTokens,
+	} {
+		if value < 0 || value > math.MaxInt64-total {
+			return 0, false
+		}
+		total += value
+	}
+	return total, true
 }
 
 func addUsage(a, b Usage) (Usage, bool) {

@@ -434,6 +434,10 @@ func (c *Codex) BootstrapBytes() int64 {
 	return 256 * 1024
 }
 
+func (c *Codex) NewTranscriptUsageSourceResolver(rootPath string) transcript.UsageSourceResolver {
+	return transcript.NewCodexUsageSourceResolver(rootPath)
+}
+
 func (c *Codex) NewTranscriptWatcherBehavior() TranscriptWatcherBehavior {
 	return &codexTranscriptWatcherBehavior{}
 }
