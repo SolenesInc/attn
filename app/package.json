@@ -116,7 +116,8 @@
     "real-app:scenario-pi-automode": "node scripts/real-app-harness/scenario-pi-automode.mjs",
     "real-app:scenario-pi-security": "node scripts/real-app-harness/scenario-pi-security.mjs",
     "real-app:scenario-automode-environment": "node scripts/real-app-harness/scenario-automode-environment.mjs",
-    "real-app:scenario-automode-no-model": "node scripts/real-app-harness/scenario-automode-no-model.mjs"
+    "real-app:scenario-automode-no-model": "node scripts/real-app-harness/scenario-automode-no-model.mjs",
+    "real-app:linux": "node scripts/real-app-harness/linux-runner.mjs"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",

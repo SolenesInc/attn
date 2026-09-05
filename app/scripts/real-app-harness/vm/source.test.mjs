@@ -1,0 +1,50 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, expect, it } from 'vitest';
+import { makeSourceArchive, syncScript } from './source.mjs';
+import { run } from './providers.mjs';
+
+const directories = [];
+afterEach(() => { for (const dir of directories.splice(0)) fs.rmSync(dir, { recursive: true, force: true }); });
+
+it.runIf(process.platform === 'linux')('syncs staged/unstaged/new/deleted files and preserves ignored guest caches', () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-source-test-'));
+  directories.push(temp);
+  const repo = path.join(temp, 'host repo');
+  const root = path.join(temp, "guest's runner");
+  fs.mkdirSync(repo);
+  const git = (...args) => run('git', ['-C', repo, ...args], { stdio: 'pipe' });
+  git('init', '-q');
+  fs.writeFileSync(path.join(repo, '.gitignore'), 'cache/\n.env\n');
+  fs.writeFileSync(path.join(repo, 'tracked'), 'original\n');
+  fs.writeFileSync(path.join(repo, 'deleted'), 'remove me');
+  git('add', '.');
+  git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Fixture');
+  fs.writeFileSync(path.join(repo, 'tracked'), 'staged\n');
+  git('add', 'tracked');
+  fs.writeFileSync(path.join(repo, 'tracked'), 'unstaged\n');
+  fs.rmSync(path.join(repo, 'deleted'));
+  fs.writeFileSync(path.join(repo, "new ' file"), 'new\n');
+  fs.writeFileSync(path.join(repo, '.env'), 'must not transfer');
+  fs.symlinkSync('tracked', path.join(repo, 'link'));
+  const sync = () => {
+    const pack = fs.mkdtempSync(path.join(temp, 'pack-'));
+    const archive = makeSourceArchive(repo, pack);
+    run('bash', ['-c', syncScript(root)], { input: fs.readFileSync(archive), stdio: 'pipe' });
+  };
+  sync();
+  const checkout = path.join(root, 'source');
+  expect(fs.readFileSync(path.join(checkout, 'tracked'), 'utf8')).toBe('unstaged\n');
+  expect(run('git', ['-C', checkout, 'show', ':tracked'], { stdio: 'pipe' })).toBe('staged\n');
+  expect(fs.existsSync(path.join(checkout, 'deleted'))).toBe(false);
+  expect(fs.existsSync(path.join(checkout, '.env'))).toBe(false);
+  expect(fs.readlinkSync(path.join(checkout, 'link'))).toBe('tracked');
+  fs.mkdirSync(path.join(checkout, 'cache'));
+  fs.writeFileSync(path.join(checkout, 'cache', 'keep'), 'cached');
+  fs.rmSync(path.join(repo, "new ' file"));
+  sync();
+  expect(fs.existsSync(path.join(checkout, "new ' file"))).toBe(false);
+  expect(fs.readFileSync(path.join(checkout, 'cache', 'keep'), 'utf8')).toBe('cached');
+  expect(run('git', ['-C', checkout, 'rev-parse', 'HEAD'], { stdio: 'pipe' })).toBe(git('rev-parse', 'HEAD'));
+});

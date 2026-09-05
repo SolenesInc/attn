@@ -39,6 +39,9 @@ ad-hoc signing loses persistent permissions.
 On Linux, `make install PROFILE=<name>` stages an unprivileged application tree.
 The `App acceptance` CI job uses that same path before running the serial matrix.
 
+For a local Linux VM, see [Local Linux runner](linux-runner.md). It builds and
+verifies named profiles through Lima, OrbStack, or an existing SSH machine.
+
 ## Linux deep links
 
 macOS registers the profile's resolved `<deepLinkScheme>://` on the app bundle
