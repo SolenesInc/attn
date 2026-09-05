@@ -1,8 +1,9 @@
 import type { Classifier, ClassifierPrompt } from "./classifier";
 import type { AutoModeConfig } from "./config";
 import { denialToolResult, sandboxDenialToolResult } from "./denial";
-import { callSignature, decideStatically, describeCall, isSandboxRequest, type StaticRule, type ToolCall } from "./policy";
+import { decideStatically, describeCall, isSandboxRequest, type StaticRule, type ToolCall } from "./policy";
 import { TranscriptWindow } from "./transcript";
+import { actionEvidence, snapshotCall, toolEvidenceLimits } from "./evidence";
 
 export const consecutiveDenialLimit = 3;
 
@@ -15,6 +16,7 @@ export type DecisionRule =
   | "classifier-intent"
   | "classifier-unavailable"
   | "classifier-too-long"
+  | "classifier-incomplete"
   | "circuit-breaker";
 
 export type SessionDecision =
@@ -46,7 +48,7 @@ export type DecideOptions = {
 };
 
 export class AutoModeSession {
-  private readonly transcript = new TranscriptWindow();
+  private readonly transcript: TranscriptWindow;
   private consecutiveDenials = 0;
   private totalDenials = 0;
   private totalOutages = 0;
@@ -54,7 +56,9 @@ export class AutoModeSession {
   constructor(
     private readonly config: AutoModeConfig,
     private readonly classifier: Classifier,
-  ) {}
+  ) {
+    this.transcript = new TranscriptWindow(() => classifier.evidenceLimits?.() ?? toolEvidenceLimits());
+  }
 
   breaker(): BreakerState {
     return {
@@ -85,8 +89,16 @@ export class AutoModeSession {
     this.transcript.record("assistant", text);
   }
 
-  noteApprovedCall(call: ToolCall): void {
-    this.transcript.recordToolCall(call.toolName, callSignature(call));
+  noteApprovedCall(call: ToolCall, cwd: string): void {
+    this.transcript.recordAction(actionEvidence(call, cwd), "allowed-to-run");
+  }
+
+  noteBlockedCall(call: ToolCall, cwd: string): void {
+    this.transcript.recordAction(actionEvidence(call, cwd), "blocked");
+  }
+
+  noteToolResult(toolCallId: string, isError?: boolean): void {
+    this.transcript.recordResult(toolCallId, isError);
   }
 
   noteCompaction(): void {
@@ -94,9 +106,15 @@ export class AutoModeSession {
   }
 
   async decide(call: ToolCall, options: DecideOptions): Promise<SessionDecision> {
+    call = snapshotCall(call);
+    const decision = await this.decideCall(call, options);
+    this.transcript.recordAction(actionEvidence(call, options.cwd), decision.outcome === "run" ? "allowed-to-run" : "blocked");
+    return decision;
+  }
+
+  private async decideCall(call: ToolCall, options: DecideOptions): Promise<SessionDecision> {
     const staticDecision = decideStatically(call, this.config, options.cwd);
     if (staticDecision.outcome === "run") {
-      this.transcript.recordToolCall(call.toolName, callSignature(call));
       return this.allowed(staticDecision.rule);
     }
     if (staticDecision.outcome === "block") {
@@ -125,15 +143,18 @@ export class AutoModeSession {
         outage: false,
         judged: false,
         clearable: false,
+        incomplete: true,
         prompt,
       });
     }
+    if (judged.verdict === "deny" && judged.incomplete) return this.denied(call, "classifier-incomplete", judged.reason, {
+      outage: false, judged: false, incomplete: true, prompt,
+    });
     if (judged.verdict === "deny" && judged.unavailable === true) {
       return this.denied(call, "classifier-unavailable", judged.reason, { outage: true, judged: false, prompt });
     }
     const rule: DecisionRule = judged.layer ? `classifier-${judged.layer}` : "classifier";
     if (judged.verdict === "allow") {
-      this.transcript.recordToolCall(call.toolName, callSignature(call));
       return this.allowed(rule);
     }
     const reason = judged.reason;
@@ -156,7 +177,7 @@ export class AutoModeSession {
     call: ToolCall,
     rule: DecisionRule,
     reason: string,
-    kind: { outage: boolean; judged?: boolean; clearable?: boolean; prompt?: ClassifierPrompt } = { outage: false },
+    kind: { outage: boolean; judged?: boolean; clearable?: boolean; incomplete?: boolean; prompt?: ClassifierPrompt } = { outage: false },
   ): SessionDecision {
     this.consecutiveDenials += 1;
     this.totalDenials += 1;
@@ -167,7 +188,7 @@ export class AutoModeSession {
       rule,
       action,
       reason,
-      toolResult: (isSandboxRequest(call) ? sandboxDenialToolResult : denialToolResult)({ action, reason, judged: kind.judged ?? true, clearable: kind.clearable ?? true }),
+      toolResult: (isSandboxRequest(call) ? sandboxDenialToolResult : denialToolResult)({ action, reason, judged: kind.judged ?? true, clearable: kind.clearable ?? true, incomplete: kind.incomplete }),
       ...(kind.clearable === false ? { clearable: false } : {}),
       ...(kind.prompt ? { prompt: kind.prompt } : {}),
     };

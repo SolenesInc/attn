@@ -11,7 +11,7 @@ func piRecipient() Recipient {
 			Bind("reason", Input(TextField("reason", "Why the deterministic path could not decide."))),
 			Bind("stage", Use("pi."+stage, "content/pi/"+stage+".md")))
 	}
-	return Recipient{ID: "pi-permission", Description: "Separate permission classifier. Both passes receive the same system rulebook; the intent pass runs only when harm exceeds the existing threshold.", Events: []Event{
+	return Recipient{ID: "pi-permission", Description: "Separate permission classifier. Both passes receive the same system rulebook; the intent pass runs when harm exceeds the threshold or tool history contains omissions.", Events: []Event{
 		On("unreadable", "message_fragment", "Diagnostic supplied as a denial reason.", template("pi.unreadable", "content/pi/unreadable.md", TextField("excerpt", "Bounded classifier output."))),
 		On("nothing", "message_fragment", "An empty classifier response.", Use("pi.nothing", "content/pi/nothing.md")),
 		On("system", "system_prompt", "Shared by both permission passes.", Exact(template("pi.rulebook", "content/pi/rulebook.md", environment))),
@@ -26,6 +26,10 @@ func piRecipient() Recipient {
 
 func piSessionRecipient() Recipient {
 	return Recipient{ID: "pi-session", Description: "The working Pi agent, receiving tool permission results.", Events: []Event{
+		On("execution-changed", "message_fragment", "Final execution arguments did not match a one-call approval.", Use("pi.execution-changed", "content/pi/execution-changed.md")),
+		On("incomplete-review", "tool_result", "Missing evidence or an oversized request prevented review.",
+			template("pi.incomplete-review", "content/pi/incomplete-review.md",
+				TextField("action", "Action collapsed to one line."), TextField("reason", "Reason collapsed to one line."))),
 		On("not-stated", "message_fragment", "An empty action or reason in a denial.", Use("pi.not-stated", "content/pi/not-stated.md")),
 		On("denial", "tool_result", "Auto-mode denial, with distinct outage and hard-block guidance.",
 			Use("pi.denial", "content/pi/denial.md",

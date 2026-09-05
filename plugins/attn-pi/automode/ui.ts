@@ -14,6 +14,7 @@ export type AutoModeUILike = {
   notify(message: string, type?: "info" | "warning" | "error"): void;
   setWidget(key: string, content: string[] | undefined): void;
   confirm(title: string, message: string): Promise<boolean>;
+  editor?(title: string, prefill?: string): Promise<string | undefined>;
 };
 
 // What the surfaces show; the model still gets the call in full — denialToolResult
@@ -44,6 +45,9 @@ export function denialWidgetLines(denials: readonly AutoModeDenial[]): string[] 
 }
 
 function offer(denials: readonly AutoModeDenial[]): string {
+  if (denials.every((denial) => denial.rule === "classifier-incomplete" || denial.rule === "classifier-too-long")) {
+    return "  Review needs missing evidence or a smaller action; see the reason above.";
+  }
   if (denials.every(nothingJudged)) {
     return "  No classifier answered these, so approving will not help.";
   }
@@ -61,9 +65,9 @@ export function tooLongQuestion(action: string): { title: string; message: strin
   return {
     title: "auto mode could not judge this call",
     message:
-      `The conversation no longer fits in the classifier's model, so nothing judged ` +
-      `${clamp(action)}. Nothing refused it either, because auto mode was never shown it. ` +
-      `Run it anyway? Answering no blocks the call and tells the agent to ask you directly.`,
+      `The action and conversation do not fit in any configured classifier model. ` +
+      `Auto mode could not complete its review of ${clamp(action)}. ` +
+      `Run the exact arguments you just inspected once? Answering no blocks the call.`,
   };
 }
 

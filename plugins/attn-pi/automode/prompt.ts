@@ -1,6 +1,7 @@
 import { renderPrompt } from "./prompt-catalog";
 import { renderEnvironment, type Environment } from "./environment";
 import { renderTranscript, type TranscriptEntry } from "./transcript";
+import type { ActionEvidence } from "./evidence";
 
 export const stageOneAllowCeiling = 25;
 export const blockLine = 35;
@@ -17,7 +18,7 @@ export type PromptInput = {
   transcript: readonly TranscriptEntry[];
   environment: Environment;
 
-  action: string;
+  action: ActionEvidence | string;
 
   tool: string;
 

@@ -1959,5 +1959,14 @@
     "kind": "review-unavailable",
     "input": {},
     "expected": "Extra sandbox access was not granted: auto mode is off or no reviewer is configured. Continue within the sandbox, or explain the exact command, path and reason to the user. The user can enable /auto on with a configured classifier or grant the directory with /security allow-write <directory>. Do not turn security off or edit its settings yourself."
+  },
+  {
+    "kind": "sandbox-denial",
+    "input": {
+      "action": "write /outside/release.sh",
+      "reason": "Earlier script contents were omitted.",
+      "incomplete": true
+    },
+    "expected": "Auto mode could not complete this review. The action did not run.\nBlocked: write /outside/release.sh\nReason: Earlier script contents were omitted.\nExplain the missing evidence to the user. Supply that evidence or propose a smaller reviewable action. Interactive Pi can offer one-call approval for an oversized request after the user inspects its exact arguments.\nContinue independent work. Do not disable security, change allow patterns or hide effects to evade this incomplete review. Existing sandbox limits and protected paths still apply."
   }
 ]

@@ -15,15 +15,42 @@
   pattern cannot skip this review; hard-deny patterns still refuse it.
   Approval applies to that execution and its children, never saved settings.
 
-- **The order a tool call walks:** the user's allow patterns (which skip
-  everything below), the user's deny patterns and the ones attn ships, a
-  refusal for anything reaching auto mode's own config or its record of past
-  denials, the static rules (read-only commands and work inside the session's
-  own directory run free), the circuit breaker, stage 1, stage 2.
+- **The order a tool call walks:** configured hard-deny patterns, review of any
+  extra sandbox access, configured allow patterns, static rules, the circuit
+  breaker, stage 1, then stage 2. Ordinary project writes remain automatic.
+  Sandbox path protections apply independently of the approval decision.
 - **Both stages get the same prompt**: the rulebook, carrying what the user
   said about the machine they run attn on, then the working directory, a
-  flattened transcript, and the pending call. Only the closing instruction
+  structured transcript, and the pending call's complete filtered arguments.
+  Writes include content; edits include every old/new replacement, including
+  normalized edit arrays. Only the closing instruction
   differs.
+- **Earlier calls retain their inputs and execution status.** Both automatic
+  and reviewed calls are recorded, including calls while auto mode is off.
+  Permission to run is distinguished from observed success or failure. A failed
+  operation may have partial effects; a missing result never proves success.
+  Tool output bodies are excluded. Arguments are untrusted data and confer no consent.
+- **Tool history is bounded separately from conversation messages.** Its byte
+  budget is one half of the smallest configured model's context-token count,
+  capped at 512 KiB, with at most 128 entries. Missing model metadata uses
+  128,000 tokens (64,000 bytes of history). A single input can occupy half that
+  budget, at most 64 KiB. These are byte estimates, not exact tokenizer counts.
+  Oversized historical inputs are replaced by explicit omission records; older
+  calls are evicted with a count. Missing history forces stage 2, which must
+  report `Incomplete Evidence` when it needs omitted content to judge the action.
+  Session replacement resets this history. Compaction clears it along with
+  later conversation messages, keeping the opening request.
+- **Pending arguments are never truncated to obtain approval.** Configured
+  fallback models receive the same action. If none can accept the request,
+  interactive Pi lets the user inspect the complete filtered arguments in a
+  scrollable editor, then confirm that exact call once. Changes in the preview
+  do not change the call and cause it to be blocked. Cancelling or running
+  without an interactive UI blocks the call. Existing sandbox limits still apply.
+- **Built-in executors check approval after extension handlers finish.** A
+  later handler changing the tool arguments invalidates the one-call approval.
+  Execution uses a private copy, so later asynchronous mutations cannot change
+  what runs. This applies to the suite and standalone auto-mode extension;
+  custom tools and extensions replacing tool definitions remain trusted.
 - **The machine description is a fixed set of slots, and the rules look them
   up by name**: whether a domain, a bucket or an org is trusted, where
   sensitive data lives, what counts as production. A slot exists because a rule

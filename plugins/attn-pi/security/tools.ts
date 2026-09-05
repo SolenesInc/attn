@@ -4,12 +4,14 @@ import {
   createLocalBashOperations, createLsToolDefinition, createReadToolDefinition, createWriteToolDefinition,
   truncateHead, type BashOperations, type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { CredentialFilter, FilteredStream } from "./filter";
 import { SandboxedFilesystem } from "./filesystem";
 import { assertPath, type SecurityPolicy } from "./policy";
 import { bashSandbox, shellQuote } from "./sandbox";
 import { Type } from "typebox";
 import { reviewUnavailable, sandboxRecovery, sandboxRequestSchema, scopedPolicy, type SandboxReview } from "./recovery";
+import type { ToolExecutionCheck } from "../automode/index";
 
 export function protectedBash(policy: SecurityPolicy, filter: CredentialFilter, reviewAvailable = () => false): BashOperations {
   const local = createLocalBashOperations({ shellPath: "/bin/bash" });
@@ -47,7 +49,7 @@ export function protectedBash(policy: SecurityPolicy, filter: CredentialFilter, 
   };
 }
 
-export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter, fs: SandboxedFilesystem, review?: SandboxReview, reviewAvailable = () => !!review): ToolDefinition[] {
+export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter, fs: SandboxedFilesystem, review?: SandboxReview, reviewAvailable = () => !!review, checkExecution?: ToolExecutionCheck): ToolDefinition[] {
   const bash = protectedBash(policy, filter, reviewAvailable);
   const bashTool = createBashToolDefinition(policy.cwd, { operations: bash, shellPath: "/bin/bash" });
   const parameters = Type.Object({ ...bashTool.parameters.properties, sandbox: Type.Optional(sandboxRequestSchema) });
@@ -133,14 +135,16 @@ export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter,
   } };
   tools.push(protectedGrep);
   return tools.map((tool) => ({ ...tool,
-    renderCall: tool.name === "edit" ? (args, theme) => ({
-      render: () => [theme.fg("toolTitle", "edit") + " " + filter.text(String((args as { path?: string }).path ?? ""))], invalidate() {},
-    }) : tool.renderCall ? (args, theme, context) => tool.renderCall!(filter.value(args), theme, context) : undefined,
+    renderCall: tool.name === "edit" ? (args, theme) => new Text(
+      theme.fg("toolTitle", "edit") + " " + filter.text(String((args as { path?: string }).path ?? "")), 0, 0,
+    ) : tool.renderCall ? (args, theme, context) => tool.renderCall!(filter.value(args), theme, context) : undefined,
     async execute(id, args, signal, onUpdate, ctx) {
     if (signal?.aborted) throw new Error("Aborted");
     const abort = () => fs.close();
     signal?.addEventListener("abort", abort, { once: true });
     try {
+      args = structuredClone(args);
+      checkExecution?.({ type: "tool_call", toolCallId: id, toolName: tool.name, input: args }, { ...ctx, cwd: policy.cwd, signal });
       return filter.value(await tool.execute(id, args, signal, onUpdate ? (update) => onUpdate(filter.value(update)) : undefined, ctx));
     } catch (error) {
       throw new Error(filter.text(error instanceof Error ? error.message : String(error)));

@@ -106,7 +106,9 @@ describe("auto mode extension", () => {
     on = true;
     expect((await push())?.block).toBe(true);
     expect(classifier.requests[0]?.grant).toBe("clean up the branch");
-    expect(classifier.requests[0]?.transcript).toEqual([]);
+    expect(classifier.requests[0]?.transcript?.[0]?.evidence).toMatchObject({
+      call: { input: { command: "git push --force" } }, observation: "allowed-to-run",
+    });
   });
 
   test("auto mode off leaves the system prompt alone", () => {

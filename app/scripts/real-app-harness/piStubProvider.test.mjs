@@ -78,6 +78,27 @@ async function ask(stub, messages) {
 }
 
 describe('scriptedAgent over the stub provider', () => {
+  it('can require both judge passes and return a provider context limit', async () => {
+    let oversized = false;
+    const stub = await startPiStubProvider({ agent: () => ({ text: 'unused' }), judge: () => oversized ?
+      { error: 'context_length_exceeded' } : { verdict: 'allow', forceIntent: true } });
+    const messages = (pass) => [
+      { role: 'system', content: 'You are a security monitor for an autonomous coding agent' },
+      { role: 'user', content: `This is pass ${pass}` },
+    ];
+    try {
+      expect((await ask(stub, messages(1))).text).toContain('<severity>60</severity>');
+      expect((await ask(stub, messages(2))).text).toContain('<severity>5</severity>');
+      oversized = true;
+      const response = await fetch(`${stub.baseUrl}/chat/completions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: messages(1) }),
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: { message: 'context_length_exceeded', code: 'context_length_exceeded' } });
+    } finally { await stub.close(); }
+  });
+
   it('issues each scripted tool once, then the text, keyed on the latest prompt', async () => {
     const stub = await startPiStubProvider({
       agent: scriptedAgent([

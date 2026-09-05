@@ -146,6 +146,22 @@ describe("turning auto mode on and off", () => {
     expect(off.enabled()).toBe(false);
   });
 
+  test("launch flags parsed after factory loading take effect when the session starts", async () => {
+    for (const flag of ["auto", "no-auto"] as const) {
+      const enabled = flag === "auto";
+      const mode = new AutoMode({ config: { ...judgingConfig, enabledDefault: !enabled } });
+      const pi = new FakePi();
+      const ctx = uiContext(new FakeUI());
+      mode.register(pi);
+      pi.pass(flag);
+      pi.start(ctx);
+      expect(mode.enabled()).toBe(enabled);
+      await pi.run("auto", enabled ? "off" : "on", ctx);
+      pi.start(ctx);
+      expect(mode.enabled()).toBe(!enabled);
+    }
+  });
+
   test("no model to judge with means auto mode is off, whatever anyone asks for", async () => {
     const noModel = { ...defaultAutoModeConfig, enabledDefault: true, models: [] };
     expect(new AutoMode({ config: noModel }).enabled()).toBe(false);

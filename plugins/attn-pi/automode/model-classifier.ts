@@ -13,7 +13,7 @@ import {
   type ParsedSeverity,
   type PromptInput,
 } from "./prompt";
-import { callSignature, describeCall, isSandboxRequest } from "./policy";
+import { actionEvidence, toolEvidenceLimits } from "./evidence";
 import type { UsageLike } from "./usage";
 import { credentials } from "../security/filter";
 
@@ -27,7 +27,7 @@ export const classifierCacheRetention = "long";
 
 export const attemptsPerModel = 2;
 
-export type ModelLike = { provider: string; id: string; baseUrl?: string };
+export type ModelLike = { provider: string; id: string; baseUrl?: string; contextWindow?: number };
 
 export type CompletionMessage = {
   role: "user";
@@ -93,6 +93,12 @@ export type ModelClassifierOptions = {
 export class ModelClassifier implements Classifier {
   constructor(private readonly options: ModelClassifierOptions) {}
 
+  evidenceLimits() {
+    const windows = this.options.config.models.map((spec) => this.resolve(spec)?.contextWindow ?? 128_000)
+      .filter((size) => Number.isFinite(size) && size > 0);
+    return toolEvidenceLimits(windows.length ? Math.min(...windows) : undefined);
+  }
+
   async classify(request: ClassifierRequest): Promise<ClassifierVerdict> {
     return credentials.value(await this.classifyRequest(request));
   }
@@ -102,7 +108,7 @@ export class ModelClassifier implements Classifier {
     const input: PromptInput = {
       transcript: request.transcript ?? [],
       environment: request.environment,
-      action: isSandboxRequest(request.call) ? describeCall(request.call) : callSignature(request.call),
+      action: actionEvidence(request.call, request.cwd),
       tool: request.call.toolName,
       reason: request.reason,
       cwd: request.cwd,
@@ -131,7 +137,8 @@ export class ModelClassifier implements Classifier {
       signal: request.signal,
     });
     if (harm.answered === false) return unansweredVerdict(harm, harmPrompt);
-    if (harm.parsed && harm.parsed.severity <= stageOneAllowCeiling) {
+    const incompleteHistory = input.transcript.some((entry) => entry.omittedCalls || entry.evidence?.omission);
+    if (harm.parsed && harm.parsed.severity <= stageOneAllowCeiling && !incompleteHistory) {
       return { verdict: "allow", layer: "harm", severity: harm.parsed.severity };
     }
 
@@ -160,6 +167,10 @@ export class ModelClassifier implements Classifier {
         unreadable: true,
       };
     }
+    if (intent.parsed.category === "Incomplete Evidence") return {
+      verdict: "deny", layer: "intent", prompt: intentPrompt, incomplete: true,
+      reason: intent.parsed.thinking ?? "The reviewer needs omitted tool contents to assess this action. Explain the missing evidence to the user.",
+    };
     return settle(intent.parsed, intentPrompt);
   }
 

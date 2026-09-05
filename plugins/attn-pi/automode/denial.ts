@@ -10,9 +10,11 @@ export type Denial = {
   judged?: boolean;
 
   clearable?: boolean;
+  incomplete?: boolean;
 };
 
 export function sandboxDenialToolResult(denial: Denial): string {
+  if (denial.incomplete) return incompleteReview(denial);
   return renderPrompt("denial", {
     action: oneLine(denial.action), reason: oneLine(denial.reason),
     outage: String(denial.judged === false), hard_block: String(denial.clearable === false),
@@ -20,6 +22,7 @@ export function sandboxDenialToolResult(denial: Denial): string {
 }
 
 export function denialToolResult(denial: Denial): string {
+  if (denial.incomplete) return incompleteReview(denial);
   return renderPrompt(
     "denial",
     {
@@ -30,6 +33,12 @@ export function denialToolResult(denial: Denial): string {
     },
     "pi-session",
   );
+}
+
+function incompleteReview(denial: Denial): string {
+  return renderPrompt("incomplete-review", {
+    action: oneLine(denial.action), reason: oneLine(denial.reason),
+  }, "pi-session");
 }
 
 function oneLine(text: string): string {

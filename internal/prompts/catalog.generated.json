@@ -1979,7 +1979,7 @@
     },
     {
       "id": "pi-permission",
-      "description": "Separate permission classifier. Both passes receive the same system rulebook; the intent pass runs only when harm exceeds the existing threshold.",
+      "description": "Separate permission classifier. Both passes receive the same system rulebook; the intent pass runs when harm exceeds the threshold or tool history contains omissions.",
       "events": [
         {
           "id": "unreadable",
@@ -2270,6 +2270,50 @@
       "id": "pi-session",
       "description": "The working Pi agent, receiving tool permission results.",
       "events": [
+        {
+          "id": "execution-changed",
+          "delivery": "message_fragment",
+          "description": "Final execution arguments did not match a one-call approval.",
+          "body": {
+            "kind": "text",
+            "id": "pi.execution-changed",
+            "source": "content/pi/execution-changed.md"
+          }
+        },
+        {
+          "id": "incomplete-review",
+          "delivery": "tool_result",
+          "description": "Missing evidence or an oversized request prevented review.",
+          "body": {
+            "kind": "text",
+            "id": "pi.incomplete-review",
+            "source": "content/pi/incomplete-review.md",
+            "bindings": [
+              {
+                "name": "action",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "action",
+                    "kind": "text",
+                    "description": "Action collapsed to one line."
+                  }
+                }
+              },
+              {
+                "name": "reason",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "reason",
+                    "kind": "text",
+                    "description": "Reason collapsed to one line."
+                  }
+                }
+              }
+            ]
+          }
+        },
         {
           "id": "not-stated",
           "delivery": "message_fragment",
@@ -5169,5 +5213,5 @@
       ]
     }
   ],
-  "definitions_hash": "c7a04a9cf5fb99343ec2d4f6d855273167d24af04afe493b4f71b7aedb755514"
+  "definitions_hash": "c2609a2c61fbf9ae86a90fdcadbb0e5fd9a4e2e56686b26f555de6f07a0242fa"
 }

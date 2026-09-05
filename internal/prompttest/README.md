@@ -35,6 +35,10 @@ Pi's rulebook expectations also include the sandbox and build-cache wording from
 and denial builders before moving them into the catalog, across enabled/disabled
 sandboxes, network policies, cache grants and reviewer availability.
 
+Pi's harm/intent expectations and incomplete-review responses were captured from
+the evidence-aware builders at `029a4410`. They preserve the full-input and
+omission guidance when moving it into the shared catalog.
+
 There is no update switch. An intentional prompt change should update the
 relevant expectation in the same review, with its wording change explained.
 Do not regenerate compatibility fixtures from the new renderer to make a failure

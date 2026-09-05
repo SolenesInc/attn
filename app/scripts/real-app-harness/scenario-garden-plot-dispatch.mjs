@@ -7,7 +7,7 @@ import {
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
-import { runShellCommandInPane, waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
+import { runShellCommandInPane, waitForFirstWorkspacePane, waitForPaneShellReady } from './scenarioAssertions.mjs';
 import { delay } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -63,6 +63,7 @@ async function openPane(client, observer, runner, label) {
     client, observer, cwd, label, agent: 'shell',
   });
   const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${label}`, 20_000);
+  await waitForPaneShellReady(client, sessionId, pane.paneId);
   return { sessionId, paneId: pane.paneId };
 }
 
@@ -127,6 +128,7 @@ async function main() {
         return Boolean(spawned);
       }, 'the delegated session exists', 60_000);
       await client.request('select_session', { sessionId: pane.sessionId });
+      await waitForPaneShellReady(client, pane.sessionId, pane.paneId);
       await runInPane(client, pane, 'true', '');
       return spawned;
     });
@@ -234,6 +236,7 @@ async function main() {
         return Boolean(second);
       }, 'the second delegated session exists', 60_000);
       await client.request('select_session', { sessionId: pane.sessionId });
+      await waitForPaneShellReady(client, pane.sessionId, pane.paneId);
       await runInPane(client, pane, 'true', '');
 
       const offered = await runInPane(client, pane, `attn seed ready --all --session ${second}`, 'ready in the garden');

@@ -14,13 +14,14 @@ import { reviewUnavailable, type SandboxReview } from "./recovery";
 import { changeSecurityConfig } from "./settings";
 import { SecurityPanel, type SecuritySnapshot } from "./ui";
 import { securityInstructions, securityPrompt } from "./guidance";
+import type { ToolExecutionCheck } from "../automode/index";
 
 export class PiSecurity {
   private fs: SandboxedFilesystem | undefined;
   private temp: string | undefined;
   private policy: SecurityPolicy | undefined;
   private problem: string | undefined;
-  constructor(private readonly configPath = join(getAgentDir(), "attn-security.json"), private readonly review?: SandboxReview, private readonly reviewAvailable = () => !!review) {}
+  constructor(private readonly configPath = join(getAgentDir(), "attn-security.json"), private readonly review?: SandboxReview, private readonly reviewAvailable = () => !!review, private readonly checkExecution?: ToolExecutionCheck) {}
 
   cacheWritePaths(): readonly string[] { return this.problem ? [] : this.policy?.cacheWritePaths ?? []; }
 
@@ -90,7 +91,7 @@ export class PiSecurity {
         if (this.policy !== policy) throw new Error("Security settings or session changed during review; command was not run. Submit the request again.");
         return result;
       };
-      for (const tool of protectedTools(policy, credentials, this.fs, review, this.reviewAvailable)) pi.registerTool(tool);
+      for (const tool of protectedTools(policy, credentials, this.fs, review, this.reviewAvailable, this.checkExecution)) pi.registerTool(tool);
     } catch (error) {
       this.problem = credentials.text(error instanceof Error ? error.message : String(error));
       for (const make of [createBashToolDefinition, createReadToolDefinition, createWriteToolDefinition, createEditToolDefinition, createLsToolDefinition, createFindToolDefinition, createGrepToolDefinition]) {
