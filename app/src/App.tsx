@@ -110,6 +110,7 @@ import { useClientPresence } from './hooks/useClientPresence';
 import { ptySpawn } from './pty/bridge';
 import { clearBrowserHostFocus, controlBrowserHost, isBrowserHostOwnedTarget } from './browser/host';
 import { probeUiAfterSwitch, UI_DIAGNOSTICS_FILE_DISPLAY } from './utils/uiDiagnosticsLog';
+import { BannerStack } from './components/BannerStack';
 import {
   agentLabel,
   conversationAgents,
@@ -3500,40 +3501,19 @@ function AppContent({
     <DaemonProvider sendPRAction={sendPRAction} sendMutePR={sendMutePR} sendMuteRepo={sendMuteRepo} sendMuteAuthor={sendMuteAuthor} sendPRVisited={sendPRVisited}>
     <NotebookSurfaceProvider value={notebookSurfaceContextValue}>
     <div className="app" ref={appShellRef} tabIndex={-1} style={{ outline: 'none' }} onPointerDownCapture={handleAppPointerDownCapture}>
-      {connectionError && (
-        <div className="connection-error-banner">
-          {connectionError}
-        </div>
-      )}
-      {warnings.length > 0 && (
-        <div className={`warning-banner ${connectionError ? 'with-connection-error' : ''}`}>
-          <span>{warnings.map(w => w.message).join(' ')}</span>
-          <button className="warning-dismiss" onClick={clearWarnings} title="Dismiss">×</button>
-        </div>
-      )}
-      {updateAvailableVersion && (
-        <div className={`update-banner ${connectionError ? 'with-connection-error' : ''} ${warnings.length > 0 ? 'with-warning' : ''}`}>
-          <span>
-            Version {updateAvailableVersion} is available on GitHub.
-          </span>
-          <button
-            type="button"
-            className="update-install"
-            onClick={() => void onOpenLatestRelease()}
-          >
-            View Release
-          </button>
-          <button
-            type="button"
-            className="update-dismiss"
-            onClick={onDismissLatestRelease}
-            title="Dismiss"
-            aria-label="Dismiss update banner"
-          >
-            ×
-          </button>
-        </div>
-      )}
+      <BannerStack
+        connectionError={connectionError}
+        warnings={warnings}
+        updateAvailableVersion={updateAvailableVersion}
+        onOpenWarningUrl={(url) => {
+          openUrl(url).catch((err) => {
+            console.error('[App] Failed to open warning link:', err);
+          });
+        }}
+        onClearWarnings={clearWarnings}
+        onOpenLatestRelease={onOpenLatestRelease}
+        onDismissLatestRelease={onDismissLatestRelease}
+      />
       {openPRLauncherJob && (
         <OpenPRLauncherProgress
           repo={openPRLauncherJob.pr.repo}

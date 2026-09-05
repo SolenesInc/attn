@@ -4,11 +4,41 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 )
 
 var ghVersionRe = regexp.MustCompile(`(?m)^gh version ([0-9]+\.[0-9]+\.[0-9]+)`)
+
+// VersionTooOldError reports a gh CLI that is present but below the minimum.
+type VersionTooOldError struct {
+	Have string
+	Want string
+}
+
+func (e *VersionTooOldError) Error() string {
+	return fmt.Sprintf("gh CLI v%s is too old (need v%s+). %s", e.Have, e.Want, UpgradeHint())
+}
+
+// hint builds the platform fix for a missing or outdated gh CLI: brew on
+// macOS; the upstream install doc on Linux, where managers vary and lag.
+func hint(goos, brewCmd string) string {
+	if goos == "darwin" {
+		return "Run: " + brewCmd
+	}
+	return "See https://github.com/cli/cli/blob/trunk/docs/install_linux.md"
+}
+
+// InstallHint tells the user how to install the gh CLI on this platform.
+func InstallHint() string {
+	return hint(runtime.GOOS, "brew install gh")
+}
+
+// UpgradeHint tells the user how to upgrade the gh CLI on this platform.
+func UpgradeHint() string {
+	return hint(runtime.GOOS, "brew upgrade gh")
+}
 
 // Note: Daemon ensures PATH is set at startup via pathutil.EnsureGUIPath()
 func CheckGHVersion() (string, error) {
@@ -34,7 +64,7 @@ func RequireGHVersion(minVersion string) error {
 		return err
 	}
 	if cmp < 0 {
-		return fmt.Errorf("GitHub Enterprise support requires gh CLI v%s or later. Current version: %s. Please upgrade: brew upgrade gh", minVersion, version)
+		return &VersionTooOldError{Have: version, Want: minVersion}
 	}
 	return nil
 }

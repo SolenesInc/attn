@@ -409,6 +409,22 @@ html, body, #root {
   opacity: 1;
 }
 
+.warning-link {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  font-size: var(--font-size);
+  font-weight: 600;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.warning-link:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
 .update-banner {
   position: fixed;
   top: 0;
