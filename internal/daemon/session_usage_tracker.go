@@ -59,6 +59,10 @@ func (t *sessionUsageTracker) Reconcile() {
 		cursors := make(map[string]string, len(sources))
 		baselineFailed := false
 		for _, source := range sources {
+			if legacyBaseline && source.Root {
+				cursors[source.ID] = state.Cursor
+				continue
+			}
 			cursor, cursorErr := transcript.HeadCursor(source.Path)
 			if cursorErr != nil {
 				t.daemon.logf("transcript watcher: usage baseline failed session=%s path=%s err=%v", t.watcher.sessionID, source.Path, cursorErr)

@@ -172,13 +172,18 @@ func testSessionUsageResumeBaseline(t *testing.T, legacy bool) {
 		if err := d.store.SetSessionCostCursor("resumed", cursor); err != nil {
 			t.Fatal(err)
 		}
+		appendUsageLines(t, root, claudeUsageLine("unread-root", "claude-opus-5", 7, 8))
 	}
 
 	w := &transcriptWatcher{sessionID: "resumed", agent: protocol.SessionAgentClaude}
 	tracker := d.newSessionUsageTracker(w, root)
 	tracker.Reconcile()
 	state, _ := d.store.SessionCost("resumed")
-	if len(state.Ledger) != 0 {
+	if legacy {
+		if got := state.Ledger["claude-opus-5"]; got.InputTokens != 7 || got.OutputTokens != 8 || len(state.Ledger) != 1 {
+			t.Fatalf("migration must retain unread root usage without old child history: %+v", state.Ledger)
+		}
+	} else if len(state.Ledger) != 0 {
 		t.Fatalf("resume backfilled old usage: %+v", state.Ledger)
 	}
 
@@ -186,7 +191,11 @@ func testSessionUsageResumeBaseline(t *testing.T, legacy bool) {
 	appendUsageLines(t, child, claudeUsageLine("new-child", "claude-sonnet-4-5", 5, 6))
 	tracker.Reconcile()
 	state, _ = d.store.SessionCost("resumed")
-	if got := state.Ledger["claude-opus-5"]; got.InputTokens != 3 || got.OutputTokens != 4 {
+	wantInput, wantOutput := int64(3), int64(4)
+	if legacy {
+		wantInput, wantOutput = 10, 12
+	}
+	if got := state.Ledger["claude-opus-5"]; got.InputTokens != wantInput || got.OutputTokens != wantOutput {
 		t.Fatalf("new root usage = %+v", got)
 	}
 	if got := state.Ledger["claude-sonnet-4-5"]; got.InputTokens != 5 || got.OutputTokens != 6 {
