@@ -259,7 +259,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'tr205-probe-codex',
-    skipOn: { linux: { reason: 'needs the attn-remote OrbStack VM; set ATTN_HARNESS_REMOTE_SSH_TARGET to a reachable target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
+    skipOn: { linux: { reason: 'needs a provisioned SSH machine; set ATTN_HARNESS_REMOTE_SSH_TARGET to its target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
     runnerId: 'TR-205',
     label: 'TR-205 remote probe (codex vocabulary)',
     command: ['pnpm', 'run', 'real-app:scenario-tr205', '--', '--remote-agent', 'probe:codex'],
@@ -267,7 +267,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'tr205-probe-claude',
-    skipOn: { linux: { reason: 'needs the attn-remote OrbStack VM; set ATTN_HARNESS_REMOTE_SSH_TARGET to a reachable target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
+    skipOn: { linux: { reason: 'needs a provisioned SSH machine; set ATTN_HARNESS_REMOTE_SSH_TARGET to its target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
     runnerId: 'TR-205',
     label: 'TR-205 remote probe (claude vocabulary)',
     command: ['pnpm', 'run', 'real-app:scenario-tr205', '--', '--remote-agent', 'probe:claude'],
@@ -275,7 +275,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'tr502',
-    skipOn: { linux: { reason: 'needs the attn-remote OrbStack VM; set ATTN_HARNESS_REMOTE_SSH_TARGET to a reachable target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
+    skipOn: { linux: { reason: 'needs a provisioned SSH machine; set ATTN_HARNESS_REMOTE_SSH_TARGET to its target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
     runnerId: 'TR-502',
     label: 'TR-502 remote relaunch splits',
     command: ['pnpm', 'run', 'real-app:scenario-tr502'],
@@ -283,7 +283,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'tr504',
-    skipOn: { linux: { reason: 'needs the attn-remote OrbStack VM; set ATTN_HARNESS_REMOTE_SSH_TARGET to a reachable target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
+    skipOn: { linux: { reason: 'needs a provisioned SSH machine; set ATTN_HARNESS_REMOTE_SSH_TARGET to its target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
     runnerId: 'TR-504',
     label: 'TR-504 remote cleanup',
     command: ['pnpm', 'run', 'real-app:scenario-tr504'],
