@@ -22,7 +22,7 @@ to read referenced context before delegated work. These expectations were edited
 at the source-text boundaries. Scenario inputs, surrounding launch arguments and
 unrelated output retain the captured baseline.
 
-The `launch.json` and `seed-guide.json` Garden expectations also carry the
+The `launch.json`, `seed-guide.json` and `agent-delivery.json` Garden expectations also carry the
 `attn seed harvest --when-merged` lines, edited at the source-text boundary when
 harvest-on-merge landed.
 
