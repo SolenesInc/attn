@@ -1,0 +1,5173 @@
+{
+  "version": 1,
+  "recipients": [
+    {
+      "id": "session",
+      "description": "Working session: launch instructions and later notifications. Harness-owned context remains outside this catalog.",
+      "events": [
+        {
+          "id": "launch",
+          "delivery": "launch_instructions",
+          "description": "hooks.Launch.Instructions: Claude appends system instructions; Codex sets developer instructions; capable plugins receive launch instructions. Triggering and delivery remain with the existing adapters.",
+          "body": {
+            "kind": "compose",
+            "children": [
+              {
+                "kind": "choose",
+                "condition": {
+                  "field": {
+                    "name": "notebook_root",
+                    "kind": "text",
+                    "description": "Notebook directory; a nonempty value selects chief guidance.",
+                    "trim_space": true
+                  },
+                  "test": "present"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "session.chief",
+                    "source": "content/chief.md",
+                    "bindings": [
+                      {
+                        "name": "notebook_root",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "notebook_root",
+                            "kind": "text",
+                            "description": "Notebook directory; a nonempty value selects chief guidance.",
+                            "trim_space": true
+                          }
+                        }
+                      },
+                      {
+                        "name": "delegation_boundary",
+                        "node": {
+                          "kind": "text",
+                          "id": "delegation.boundary",
+                          "source": "content/delegation-boundary.md"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "compose",
+                    "children": [
+                      {
+                        "kind": "text",
+                        "id": "session.agent",
+                        "source": "content/agent.md",
+                        "bindings": [
+                          {
+                            "name": "delegation_boundary",
+                            "node": {
+                              "kind": "text",
+                              "id": "delegation.boundary",
+                              "source": "content/delegation-boundary.md"
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "when",
+                        "condition": {
+                          "field": {
+                            "name": "workflow_enabled",
+                            "kind": "flag",
+                            "description": "Include opt-in workflow guidance for an ordinary session."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "session.workflow",
+                            "source": "content/workflow.md"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "garden_available",
+                    "kind": "flag",
+                    "description": "Include Garden guidance when the session has a home Garden."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "session.garden",
+                    "source": "content/garden.md"
+                  }
+                ]
+              },
+              {
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "self_report_pull_requests",
+                    "kind": "flag",
+                    "description": "Ask the agent to record PRs when the harness cannot report them."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "session.pull-request-guidance",
+                    "source": "content/session/pull-request-guidance.md"
+                  }
+                ]
+              },
+              {
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "crew_priming",
+                    "kind": "text",
+                    "description": "Rendered crew identity and predecessor letter, supplied by internal/crew.",
+                    "trim_space": true,
+                    "from": "crew/priming"
+                  },
+                  "test": "present"
+                },
+                "children": [
+                  {
+                    "kind": "input",
+                    "field": {
+                      "name": "crew_priming",
+                      "kind": "text",
+                      "description": "Rendered crew identity and predecessor letter, supplied by internal/crew.",
+                      "trim_space": true,
+                      "from": "crew/priming"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "agent-guidance",
+          "delivery": "message_fragment",
+          "description": "Non-chief trust and delegation guidance.",
+          "body": {
+            "kind": "text",
+            "id": "session.agent",
+            "source": "content/agent.md",
+            "bindings": [
+              {
+                "name": "delegation_boundary",
+                "node": {
+                  "kind": "text",
+                  "id": "delegation.boundary",
+                  "source": "content/delegation-boundary.md"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "garden-guidance",
+          "delivery": "message_fragment",
+          "description": "Garden instructions when a home is available.",
+          "body": {
+            "kind": "text",
+            "id": "session.garden",
+            "source": "content/garden.md"
+          }
+        },
+        {
+          "id": "workflow-guidance",
+          "delivery": "message_fragment",
+          "description": "Opt-in workflow instructions.",
+          "body": {
+            "kind": "text",
+            "id": "session.workflow",
+            "source": "content/workflow.md"
+          }
+        },
+        {
+          "id": "pull-request-guidance",
+          "delivery": "message_fragment",
+          "description": "Self-report instructions for harnesses without automatic PR reporting.",
+          "body": {
+            "kind": "text",
+            "id": "session.pull-request-guidance",
+            "source": "content/session/pull-request-guidance.md"
+          }
+        },
+        {
+          "id": "legacy-ticket-nudge",
+          "delivery": "user_message",
+          "description": "internal/daemon/ticket_notify.go: ticketNudgePrompt",
+          "body": {
+            "kind": "text",
+            "id": "session.legacy-ticket-nudge",
+            "source": "content/session/legacy-ticket-nudge.md"
+          }
+        },
+        {
+          "id": "garden-ready",
+          "delivery": "hook_context",
+          "description": "Garden readiness appended by session-start hooks and attn seed prime.",
+          "body": {
+            "kind": "text",
+            "id": "session.garden-ready",
+            "source": "content/session/garden-ready.md",
+            "bindings": [
+              {
+                "name": "body",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "has_crown",
+                      "kind": "flag",
+                      "description": "This session reports to a seed."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "choose",
+                      "condition": {
+                        "field": {
+                          "name": "is_plot",
+                          "kind": "flag",
+                          "description": "The reporting seed is a plot."
+                        },
+                        "test": "enabled"
+                      },
+                      "children": [
+                        {
+                          "kind": "choose",
+                          "condition": {
+                            "field": {
+                              "name": "has_ready",
+                              "kind": "flag",
+                              "description": "The ready list is nonempty."
+                            },
+                            "test": "enabled"
+                          },
+                          "children": [
+                            {
+                              "kind": "text",
+                              "id": "session.plot-ready",
+                              "source": "content/session/plot-ready.md",
+                              "bindings": [
+                                {
+                                  "name": "seed_id",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "seed_id",
+                                      "kind": "text",
+                                      "description": "Reporting seed, if one is bound to the session."
+                                    }
+                                  }
+                                },
+                                {
+                                  "name": "title",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "title",
+                                      "kind": "text",
+                                      "description": "Quoted reporting seed title."
+                                    }
+                                  }
+                                },
+                                {
+                                  "name": "rows",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "rows",
+                                      "kind": "text",
+                                      "description": "Ready seeds and handoff rows, including their leading newlines.",
+                                      "from": "session/garden-row"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "kind": "text",
+                              "id": "session.plot-blocked",
+                              "source": "content/session/plot-blocked.md",
+                              "bindings": [
+                                {
+                                  "name": "seed_id",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "seed_id",
+                                      "kind": "text",
+                                      "description": "Reporting seed, if one is bound to the session."
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "text",
+                          "id": "session.dispatched-seed",
+                          "source": "content/session/dispatched-seed.md",
+                          "bindings": [
+                            {
+                              "name": "seed_id",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "seed_id",
+                                  "kind": "text",
+                                  "description": "Reporting seed, if one is bound to the session."
+                                }
+                              }
+                            },
+                            {
+                              "name": "title",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "title",
+                                  "kind": "text",
+                                  "description": "Quoted reporting seed title."
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "choose",
+                      "condition": {
+                        "field": {
+                          "name": "has_ready",
+                          "kind": "flag",
+                          "description": "The ready list is nonempty."
+                        },
+                        "test": "enabled"
+                      },
+                      "children": [
+                        {
+                          "kind": "choose",
+                          "condition": {
+                            "field": {
+                              "name": "one_ready",
+                              "kind": "flag",
+                              "description": "Exactly one seed is ready."
+                            },
+                            "test": "enabled"
+                          },
+                          "children": [
+                            {
+                              "kind": "text",
+                              "id": "session.ready-one",
+                              "source": "content/session/ready-one.md"
+                            },
+                            {
+                              "kind": "text",
+                              "id": "session.ready-many",
+                              "source": "content/session/ready-many.md",
+                              "bindings": [
+                                {
+                                  "name": "count",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "count",
+                                      "kind": "text",
+                                      "description": "Number of ready seeds."
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "text",
+                          "id": "session.ready-none",
+                          "source": "content/session/ready-none.md"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "garden-row",
+          "delivery": "message_fragment",
+          "description": "A ready seed and its latest handoff.",
+          "body": {
+            "kind": "text",
+            "id": "session.garden-row",
+            "source": "content/session/garden-row.md",
+            "bindings": [
+              {
+                "name": "seed_id",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "seed_id",
+                    "kind": "text",
+                    "description": "Reporting seed, if one is bound to the session."
+                  }
+                }
+              },
+              {
+                "name": "slug",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "slug",
+                    "kind": "text",
+                    "description": "Seed slug."
+                  }
+                }
+              },
+              {
+                "name": "title",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "title",
+                    "kind": "text",
+                    "description": "Seed title."
+                  }
+                }
+              },
+              {
+                "name": "handoff",
+                "node": {
+                  "kind": "when",
+                  "condition": {
+                    "field": {
+                      "name": "handoff",
+                      "kind": "text",
+                      "description": "Latest handoff body.",
+                      "trim_space": true
+                    },
+                    "test": "present"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "session.garden-handoff",
+                      "source": "content/session/garden-handoff.md",
+                      "bindings": [
+                        {
+                          "name": "body",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "handoff",
+                              "kind": "text",
+                              "description": "Latest handoff body.",
+                              "trim_space": true
+                            }
+                          }
+                        },
+                        {
+                          "name": "author",
+                          "node": {
+                            "kind": "choose",
+                            "condition": {
+                              "field": {
+                                "name": "author",
+                                "kind": "text",
+                                "description": "Handoff author, when known."
+                              },
+                              "test": "present"
+                            },
+                            "children": [
+                              {
+                                "kind": "input",
+                                "field": {
+                                  "name": "author",
+                                  "kind": "text",
+                                  "description": "Handoff author, when known."
+                                }
+                              },
+                              {
+                                "kind": "text",
+                                "id": "session.previous-tender",
+                                "source": "content/session/previous-tender.md"
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "inbox-notification",
+          "delivery": "user_message",
+          "description": "Generic notification directing the recipient to the durable inbox.",
+          "body": {
+            "kind": "text",
+            "id": "session.inbox-notification",
+            "source": "content/session/inbox-notification.md"
+          }
+        },
+        {
+          "id": "inbox-empty",
+          "delivery": "cli_output",
+          "description": "No unread items remain.",
+          "body": {
+            "kind": "text",
+            "id": "session.inbox-empty",
+            "source": "content/session/inbox-empty.md"
+          }
+        },
+        {
+          "id": "inbox-more",
+          "delivery": "cli_output",
+          "description": "Read the next batch of unread items.",
+          "body": {
+            "kind": "text",
+            "id": "session.inbox-more",
+            "source": "content/session/inbox-more.md",
+            "bindings": [
+              {
+                "name": "remaining",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "remaining",
+                    "kind": "text",
+                    "description": "Unread items remaining."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "inbox-item",
+          "delivery": "cli_output",
+          "description": "An inbox item other than a peer message or maintenance prompt.",
+          "body": {
+            "kind": "text",
+            "id": "session.inbox-item",
+            "source": "content/session/inbox-item.md",
+            "bindings": [
+              {
+                "name": "content",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "content",
+                    "kind": "text",
+                    "description": "Rendered inbox item."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "peer-message",
+          "delivery": "cli_output",
+          "description": "Attributed peer message, including the trust boundary and reply command.",
+          "body": {
+            "kind": "text",
+            "id": "session.peer-message",
+            "source": "content/session/peer-message.md",
+            "bindings": [
+              {
+                "name": "origin",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "origin",
+                    "kind": "text",
+                    "description": "Sender identity."
+                  }
+                }
+              },
+              {
+                "name": "message",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "message",
+                    "kind": "text",
+                    "description": "Literal peer message."
+                  }
+                }
+              },
+              {
+                "name": "sender_id",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "sender_id",
+                    "kind": "text",
+                    "description": "Reply target."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "present-feedback",
+          "delivery": "seed_note",
+          "description": "Review notice appended to the reporting seed.",
+          "body": {
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "approved",
+                "kind": "flag",
+                "description": "The user approved the review round."
+              },
+              "test": "enabled"
+            },
+            "children": [
+              {
+                "kind": "text",
+                "id": "session.present-approved",
+                "source": "content/session/present-approved.md",
+                "bindings": [
+                  {
+                    "name": "round",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "round",
+                        "kind": "text",
+                        "description": "Review round number."
+                      }
+                    }
+                  },
+                  {
+                    "name": "title",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "title",
+                        "kind": "text",
+                        "description": "Quoted presentation title."
+                      }
+                    }
+                  },
+                  {
+                    "name": "presentation_id",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "presentation_id",
+                        "kind": "text",
+                        "description": "Presentation ID."
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "id": "session.present-submitted",
+                "source": "content/session/present-submitted.md",
+                "bindings": [
+                  {
+                    "name": "round",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "round",
+                        "kind": "text",
+                        "description": "Review round number."
+                      }
+                    }
+                  },
+                  {
+                    "name": "title",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "title",
+                        "kind": "text",
+                        "description": "Quoted presentation title."
+                      }
+                    }
+                  },
+                  {
+                    "name": "presentation_id",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "presentation_id",
+                        "kind": "text",
+                        "description": "Presentation ID."
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "present-handback",
+          "delivery": "user_message",
+          "description": "Review notice delivered to an unbound session.",
+          "body": {
+            "kind": "text",
+            "id": "session.present-handback",
+            "source": "content/session/present-handback.md",
+            "bindings": [
+              {
+                "name": "notice",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "approved",
+                      "kind": "flag",
+                      "description": "The user approved the review round."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "session.present-approved",
+                      "source": "content/session/present-approved.md",
+                      "bindings": [
+                        {
+                          "name": "round",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "round",
+                              "kind": "text",
+                              "description": "Review round number."
+                            }
+                          }
+                        },
+                        {
+                          "name": "title",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "title",
+                              "kind": "text",
+                              "description": "Quoted presentation title."
+                            }
+                          }
+                        },
+                        {
+                          "name": "presentation_id",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "presentation_id",
+                              "kind": "text",
+                              "description": "Presentation ID."
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "text",
+                      "id": "session.present-submitted",
+                      "source": "content/session/present-submitted.md",
+                      "bindings": [
+                        {
+                          "name": "round",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "round",
+                              "kind": "text",
+                              "description": "Review round number."
+                            }
+                          }
+                        },
+                        {
+                          "name": "title",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "title",
+                              "kind": "text",
+                              "description": "Quoted presentation title."
+                            }
+                          }
+                        },
+                        {
+                          "name": "presentation_id",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "presentation_id",
+                              "kind": "text",
+                              "description": "Presentation ID."
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "garden-update",
+          "delivery": "inbox_content",
+          "description": "A watched seed moved; returned by the durable inbox.",
+          "body": {
+            "kind": "text",
+            "id": "session.garden-update",
+            "source": "content/session/garden-update.md",
+            "bindings": [
+              {
+                "name": "seed_id",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "seed_id",
+                    "kind": "text",
+                    "description": "Reporting seed, if one is bound to the session."
+                  }
+                }
+              },
+              {
+                "name": "event_kind",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "event_kind",
+                    "kind": "text",
+                    "description": "Garden event kind."
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "crew",
+      "description": "Permanent crew member: launch identity and lifecycle messages.",
+      "events": [
+        {
+          "id": "truncated-handoff",
+          "delivery": "message_fragment",
+          "description": "The adapter cuts the letter at a UTF-8 boundary; the catalog adds its full-file location.",
+          "body": {
+            "kind": "text",
+            "id": "crew.truncated-handoff",
+            "source": "content/crew/truncated-handoff.md",
+            "bindings": [
+              {
+                "name": "text",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "text",
+                    "kind": "text",
+                    "description": "Bounded letter."
+                  }
+                }
+              },
+              {
+                "name": "limit",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "limit",
+                    "kind": "text",
+                    "description": "Filing limit in bytes."
+                  }
+                }
+              },
+              {
+                "name": "total",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "total",
+                    "kind": "text",
+                    "description": "Original bytes."
+                  }
+                }
+              },
+              {
+                "name": "path",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "path",
+                    "kind": "text",
+                    "description": "Full letter path."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "priming",
+          "delivery": "launch_instructions",
+          "description": "internal/crew.Priming.Block: appended to launch instructions. The adapter prepares paths, display name and bounded handoff text.",
+          "body": {
+            "kind": "compose",
+            "children": [
+              {
+                "kind": "join",
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "crew.identity",
+                    "source": "content/crew/identity.md",
+                    "bindings": [
+                      {
+                        "name": "display_name",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "display_name",
+                            "kind": "text",
+                            "description": "Display name"
+                          }
+                        }
+                      },
+                      {
+                        "name": "home_dir",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "home_dir",
+                            "kind": "text",
+                            "description": "Home dir"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "choose",
+                    "condition": {
+                      "field": {
+                        "name": "has_charter",
+                        "kind": "flag",
+                        "description": "A charter exists"
+                      },
+                      "test": "enabled"
+                    },
+                    "children": [
+                      {
+                        "kind": "text",
+                        "id": "crew.charter",
+                        "source": "content/crew/charter.md",
+                        "bindings": [
+                          {
+                            "name": "charter_file",
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "charter_file",
+                                "kind": "text",
+                                "description": "Charter file"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "text",
+                        "id": "crew.first-day",
+                        "source": "content/crew/first-day.md",
+                        "bindings": [
+                          {
+                            "name": "charter_path",
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "charter_path",
+                                "kind": "text",
+                                "description": "Charter path"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "when",
+                    "condition": {
+                      "field": {
+                        "name": "cwd",
+                        "kind": "text",
+                        "description": "Cwd"
+                      },
+                      "test": "present"
+                    },
+                    "children": [
+                      {
+                        "kind": "text",
+                        "id": "crew.cwd",
+                        "source": "content/crew/cwd.md",
+                        "bindings": [
+                          {
+                            "name": "cwd",
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "cwd",
+                                "kind": "text",
+                                "description": "Cwd"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "when",
+                    "condition": {
+                      "field": {
+                        "name": "awareness_dirs",
+                        "kind": "text",
+                        "description": "Awareness dirs"
+                      },
+                      "test": "present"
+                    },
+                    "children": [
+                      {
+                        "kind": "text",
+                        "id": "crew.awareness",
+                        "source": "content/crew/awareness.md",
+                        "bindings": [
+                          {
+                            "name": "awareness_dirs",
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "awareness_dirs",
+                                "kind": "text",
+                                "description": "Awareness dirs"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "choose",
+                "condition": {
+                  "field": {
+                    "name": "handoff",
+                    "kind": "text",
+                    "description": "Handoff"
+                  },
+                  "test": "present"
+                },
+                "children": [
+                  {
+                    "kind": "compose",
+                    "children": [
+                      {
+                        "kind": "join",
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "crew.letter",
+                            "source": "content/crew/letter.md",
+                            "bindings": [
+                              {
+                                "name": "handoff_name",
+                                "node": {
+                                  "kind": "input",
+                                  "field": {
+                                    "name": "handoff_name",
+                                    "kind": "text",
+                                    "description": "Handoff name"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "kind": "when",
+                            "condition": {
+                              "field": {
+                                "name": "older_handoffs",
+                                "kind": "text",
+                                "description": "Older handoffs"
+                              },
+                              "test": "present"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "crew.older-letters",
+                                "source": "content/crew/older-letters.md",
+                                "bindings": [
+                                  {
+                                    "name": "handoffs_dirname",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "handoffs_dirname",
+                                        "kind": "text",
+                                        "description": "Handoffs dirname"
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "name": "older_handoffs",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "older_handoffs",
+                                        "kind": "text",
+                                        "description": "Older handoffs"
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "input",
+                        "field": {
+                          "name": "handoff",
+                          "kind": "text",
+                          "description": "Handoff"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "text",
+                    "id": "crew.no-letter",
+                    "source": "content/crew/no-letter.md",
+                    "bindings": [
+                      {
+                        "name": "handoffs_dir",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "handoffs_dir",
+                            "kind": "text",
+                            "description": "Handoffs dir"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "id": "crew.closure",
+                "source": "content/crew/closure.md",
+                "bindings": [
+                  {
+                    "name": "handoffs_dirname",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "handoffs_dirname",
+                        "kind": "text",
+                        "description": "Handoffs dirname"
+                      }
+                    }
+                  },
+                  {
+                    "name": "display_name",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "display_name",
+                        "kind": "text",
+                        "description": "Display name"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "wake",
+          "delivery": "user_message",
+          "description": "crew_wake.go: today's first message.",
+          "body": {
+            "kind": "text",
+            "id": "crew.wake",
+            "source": "content/crew/wake.md"
+          }
+        },
+        {
+          "id": "successor",
+          "delivery": "user_message",
+          "description": "crew_handoff.go: successor after a nap.",
+          "body": {
+            "kind": "text",
+            "id": "crew.successor",
+            "source": "content/crew/successor.md"
+          }
+        },
+        {
+          "id": "sleep-requested",
+          "delivery": "user_message",
+          "description": "crew_sleep.go: user requested closure.",
+          "body": {
+            "kind": "text",
+            "id": "crew.sleep-requested",
+            "source": "content/crew/sleep-requested.md"
+          }
+        },
+        {
+          "id": "heartbeat",
+          "delivery": "user_message",
+          "description": "crew_lifecycle.go: keep the context cache warm.",
+          "body": {
+            "kind": "text",
+            "id": "crew.heartbeat",
+            "source": "content/crew/heartbeat.md"
+          }
+        },
+        {
+          "id": "sleep-away",
+          "delivery": "user_message",
+          "description": "crew_lifecycle.go: close after the user has been away.",
+          "body": {
+            "kind": "text",
+            "id": "crew.sleep-away",
+            "source": "content/crew/sleep-away.md"
+          }
+        }
+      ]
+    },
+    {
+      "id": "chief",
+      "description": "Chief",
+      "events": [
+        {
+          "id": "seed-assignment",
+          "delivery": "user_message",
+          "description": "User assigned a seed to the chief to choose its working context.",
+          "body": {
+            "kind": "text",
+            "id": "chief.seed-assignment",
+            "source": "content/chief/seed-assignment.md",
+            "bindings": [
+              {
+                "name": "seed_id",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "seed_id",
+                    "kind": "text",
+                    "description": "Reporting seed, if one is bound to the session."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "inbox",
+          "delivery": "user_message",
+          "description": "internal/daemon/notebook.go: chiefInboxNudgePrompt",
+          "body": {
+            "kind": "text",
+            "id": "chief.inbox",
+            "source": "content/chief/inbox.md",
+            "bindings": [
+              {
+                "name": "inbox_path",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "inbox_path",
+                    "kind": "text",
+                    "description": "Inbox path"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "delegation",
+      "description": "Visible delegated session; appended after launch instructions.",
+      "events": [
+        {
+          "id": "handover",
+          "delivery": "opening_message",
+          "description": "Existing seed assigned to a new tender with a handoff.",
+          "body": {
+            "kind": "text",
+            "id": "delegation.opening",
+            "source": "content/delegation/opening.md",
+            "bindings": [
+              {
+                "name": "identity",
+                "node": {
+                  "kind": "text",
+                  "id": "delegation.identity",
+                  "source": "content/delegation/identity.md"
+                }
+              },
+              {
+                "name": "brief",
+                "node": {
+                  "kind": "trim",
+                  "children": [
+                    {
+                      "kind": "compose",
+                      "children": [
+                        {
+                          "kind": "trim",
+                          "children": [
+                            {
+                              "kind": "input",
+                              "field": {
+                                "name": "brief",
+                                "kind": "text",
+                                "description": "Configured task or delegation brief."
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "when",
+                          "condition": {
+                            "field": {
+                              "name": "handoff",
+                              "kind": "text",
+                              "description": "Letter for the new tender.",
+                              "trim_space": true
+                            },
+                            "test": "present"
+                          },
+                          "children": [
+                            {
+                              "kind": "text",
+                              "id": "delegation.handover-letter",
+                              "source": "content/delegation/handover-letter.md",
+                              "bindings": [
+                                {
+                                  "name": "handoff",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "handoff",
+                                      "kind": "text",
+                                      "description": "Letter for the new tender.",
+                                      "trim_space": true
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "text",
+                          "id": "delegation.handover-seed",
+                          "source": "content/delegation/handover-seed.md",
+                          "bindings": [
+                            {
+                              "name": "seed_id",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "seed_id",
+                                  "kind": "text",
+                                  "description": "Reporting seed, if one is bound to the session."
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "handover-brief",
+          "delivery": "message_fragment",
+          "description": "Seed handover before the leaf identity wrapper.",
+          "body": {
+            "kind": "compose",
+            "children": [
+              {
+                "kind": "trim",
+                "children": [
+                  {
+                    "kind": "input",
+                    "field": {
+                      "name": "brief",
+                      "kind": "text",
+                      "description": "Configured task or delegation brief."
+                    }
+                  }
+                ]
+              },
+              {
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "handoff",
+                    "kind": "text",
+                    "description": "Letter for the new tender.",
+                    "trim_space": true
+                  },
+                  "test": "present"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "delegation.handover-letter",
+                    "source": "content/delegation/handover-letter.md",
+                    "bindings": [
+                      {
+                        "name": "handoff",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "handoff",
+                            "kind": "text",
+                            "description": "Letter for the new tender.",
+                            "trim_space": true
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "id": "delegation.handover-seed",
+                "source": "content/delegation/handover-seed.md",
+                "bindings": [
+                  {
+                    "name": "seed_id",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "seed_id",
+                        "kind": "text",
+                        "description": "Reporting seed, if one is bound to the session."
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "opening",
+          "delivery": "opening_message",
+          "description": "Delegation brief and reporting contract, wrapped in leaf identity.",
+          "body": {
+            "kind": "text",
+            "id": "delegation.opening",
+            "source": "content/delegation/opening.md",
+            "bindings": [
+              {
+                "name": "identity",
+                "node": {
+                  "kind": "text",
+                  "id": "delegation.identity",
+                  "source": "content/delegation/identity.md"
+                }
+              },
+              {
+                "name": "brief",
+                "node": {
+                  "kind": "trim",
+                  "children": [
+                    {
+                      "kind": "join",
+                      "children": [
+                        {
+                          "kind": "trim",
+                          "children": [
+                            {
+                              "kind": "input",
+                              "field": {
+                                "name": "brief",
+                                "kind": "text",
+                                "description": "Configured task or delegation brief."
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "when",
+                          "condition": {
+                            "field": {
+                              "name": "seed_id",
+                              "kind": "text",
+                              "description": "Reporting seed, if one is bound to the session."
+                            },
+                            "test": "present"
+                          },
+                          "children": [
+                            {
+                              "kind": "text",
+                              "id": "delegation.seed",
+                              "source": "content/delegation/seed.md",
+                              "bindings": [
+                                {
+                                  "name": "seed_id",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "seed_id",
+                                      "kind": "text",
+                                      "description": "Reporting seed, if one is bound to the session."
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "brief",
+          "delivery": "message_fragment",
+          "description": "Reporting contract before the leaf wrapper.",
+          "body": {
+            "kind": "join",
+            "children": [
+              {
+                "kind": "trim",
+                "children": [
+                  {
+                    "kind": "input",
+                    "field": {
+                      "name": "brief",
+                      "kind": "text",
+                      "description": "Configured task or delegation brief."
+                    }
+                  }
+                ]
+              },
+              {
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "seed_id",
+                    "kind": "text",
+                    "description": "Reporting seed, if one is bound to the session."
+                  },
+                  "test": "present"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "delegation.seed",
+                    "source": "content/delegation/seed.md",
+                    "bindings": [
+                      {
+                        "name": "seed_id",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "seed_id",
+                            "kind": "text",
+                            "description": "Reporting seed, if one is bound to the session."
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "identity",
+          "delivery": "message_fragment",
+          "description": "Leaf wrapper shared by delegation and automation.",
+          "body": {
+            "kind": "text",
+            "id": "delegation.opening",
+            "source": "content/delegation/opening.md",
+            "bindings": [
+              {
+                "name": "identity",
+                "node": {
+                  "kind": "text",
+                  "id": "delegation.identity",
+                  "source": "content/delegation/identity.md"
+                }
+              },
+              {
+                "name": "brief",
+                "node": {
+                  "kind": "trim",
+                  "children": [
+                    {
+                      "kind": "input",
+                      "field": {
+                        "name": "brief",
+                        "kind": "text",
+                        "description": "Configured task or delegation brief."
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "automation",
+      "description": "Scheduled or event-triggered visible session.",
+      "events": [
+        {
+          "id": "opening",
+          "delivery": "opening_message",
+          "description": "Configured task, local-review restriction, reporting seed and occurrence input.",
+          "body": {
+            "kind": "text",
+            "id": "delegation.opening",
+            "source": "content/delegation/opening.md",
+            "bindings": [
+              {
+                "name": "identity",
+                "node": {
+                  "kind": "text",
+                  "id": "delegation.identity",
+                  "source": "content/delegation/identity.md"
+                }
+              },
+              {
+                "name": "brief",
+                "node": {
+                  "kind": "trim",
+                  "children": [
+                    {
+                      "kind": "join",
+                      "children": [
+                        {
+                          "kind": "join",
+                          "children": [
+                            {
+                              "kind": "trim",
+                              "children": [
+                                {
+                                  "kind": "join",
+                                  "children": [
+                                    {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "brief",
+                                        "kind": "text",
+                                        "description": "Configured task or delegation brief."
+                                      }
+                                    },
+                                    {
+                                      "kind": "when",
+                                      "condition": {
+                                        "field": {
+                                          "name": "local_review",
+                                          "kind": "flag",
+                                          "description": "The automation permits only a local review."
+                                        },
+                                        "test": "enabled"
+                                      },
+                                      "children": [
+                                        {
+                                          "kind": "text",
+                                          "id": "automation.local-review",
+                                          "source": "content/automation/local-review.md"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "kind": "when",
+                              "condition": {
+                                "field": {
+                                  "name": "seed_id",
+                                  "kind": "text",
+                                  "description": "Reporting seed, if one is bound to the session."
+                                },
+                                "test": "present"
+                              },
+                              "children": [
+                                {
+                                  "kind": "text",
+                                  "id": "delegation.seed",
+                                  "source": "content/delegation/seed.md",
+                                  "bindings": [
+                                    {
+                                      "name": "seed_id",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "seed_id",
+                                          "kind": "text",
+                                          "description": "Reporting seed, if one is bound to the session."
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "choose",
+                          "condition": {
+                            "field": {
+                              "name": "has_target",
+                              "kind": "flag",
+                              "description": "A local review has structured pull request identity."
+                            },
+                            "test": "enabled"
+                          },
+                          "children": [
+                            {
+                              "kind": "join",
+                              "separator": "\n\n---\n\n",
+                              "children": [
+                                {
+                                  "kind": "compose"
+                                },
+                                {
+                                  "kind": "text",
+                                  "id": "automation.target",
+                                  "source": "content/automation/target.md",
+                                  "bindings": [
+                                    {
+                                      "name": "definition",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "definition",
+                                          "kind": "text",
+                                          "description": "Quoted automation name."
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "name": "repository",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "repository",
+                                          "kind": "text",
+                                          "description": "Repository identity."
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "name": "number",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "number",
+                                          "kind": "text",
+                                          "description": "Pull request number."
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "name": "url",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "url",
+                                          "kind": "text",
+                                          "description": "Pull request URL."
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "name": "head_sha",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "head_sha",
+                                          "kind": "text",
+                                          "description": "Checked-out head."
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "name": "input_path",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "input_path",
+                                          "kind": "text",
+                                          "description": "Path to untrusted occurrence data."
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "kind": "text",
+                              "id": "automation.data",
+                              "source": "content/automation/data.md",
+                              "bindings": [
+                                {
+                                  "name": "input_path",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "input_path",
+                                      "kind": "text",
+                                      "description": "Path to untrusted occurrence data."
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "target",
+          "delivery": "message_fragment",
+          "description": "Authoritative pull request identity followed by the untrusted-data contract.",
+          "body": {
+            "kind": "text",
+            "id": "automation.target",
+            "source": "content/automation/target.md",
+            "bindings": [
+              {
+                "name": "definition",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "definition",
+                    "kind": "text",
+                    "description": "Quoted automation name."
+                  }
+                }
+              },
+              {
+                "name": "repository",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "repository",
+                    "kind": "text",
+                    "description": "Repository identity."
+                  }
+                }
+              },
+              {
+                "name": "number",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "number",
+                    "kind": "text",
+                    "description": "Pull request number."
+                  }
+                }
+              },
+              {
+                "name": "url",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "url",
+                    "kind": "text",
+                    "description": "Pull request URL."
+                  }
+                }
+              },
+              {
+                "name": "head_sha",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "head_sha",
+                    "kind": "text",
+                    "description": "Checked-out head."
+                  }
+                }
+              },
+              {
+                "name": "input_path",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "input_path",
+                    "kind": "text",
+                    "description": "Path to untrusted occurrence data."
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "pi-permission",
+      "description": "Separate permission classifier. Both passes receive the same system rulebook; the intent pass runs only when harm exceeds the existing threshold.",
+      "events": [
+        {
+          "id": "unreadable",
+          "delivery": "message_fragment",
+          "description": "Diagnostic supplied as a denial reason.",
+          "body": {
+            "kind": "text",
+            "id": "pi.unreadable",
+            "source": "content/pi/unreadable.md",
+            "bindings": [
+              {
+                "name": "excerpt",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "excerpt",
+                    "kind": "text",
+                    "description": "Bounded classifier output."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "nothing",
+          "delivery": "message_fragment",
+          "description": "An empty classifier response.",
+          "body": {
+            "kind": "text",
+            "id": "pi.nothing",
+            "source": "content/pi/nothing.md"
+          }
+        },
+        {
+          "id": "system",
+          "delivery": "system_prompt",
+          "description": "Shared by both permission passes.",
+          "body": {
+            "kind": "text",
+            "id": "pi.rulebook",
+            "source": "content/pi/rulebook.md",
+            "keep_final_newline": true,
+            "bindings": [
+              {
+                "name": "environment",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "environment",
+                    "kind": "text",
+                    "description": "Environment rendered from configured slots and notes by Pi.",
+                    "from": "pi-environment/render"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "system-with-cache-grants",
+          "delivery": "system_prompt",
+          "description": "Both classifier passes receive the rulebook and current executor cache grants.",
+          "body": {
+            "kind": "join",
+            "separator": "\n\n",
+            "children": [
+              {
+                "kind": "input",
+                "field": {
+                  "name": "rulebook",
+                  "kind": "text",
+                  "description": "Rulebook with the rendered environment.",
+                  "from": "pi-permission/system"
+                }
+              },
+              {
+                "kind": "text",
+                "id": "pi-security.cache-grants",
+                "source": "content/pi/security/cache-grants.md",
+                "bindings": [
+                  {
+                    "name": "paths",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "paths",
+                        "kind": "text",
+                        "description": "JSON array of current executor build-cache grants."
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "grant",
+          "delivery": "user_message",
+          "description": "Opening-message authorization context, when supplied.",
+          "body": {
+            "kind": "text",
+            "id": "pi.grant",
+            "source": "content/pi/grant.md",
+            "bindings": [
+              {
+                "name": "opening_message",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "opening_message",
+                    "kind": "text",
+                    "description": "The session's opening message."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "harm",
+          "delivery": "user_message",
+          "description": "First pass: classify harm without user intent.",
+          "body": {
+            "kind": "text",
+            "id": "pi.action",
+            "source": "content/pi/action.md",
+            "bindings": [
+              {
+                "name": "cwd",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "cwd",
+                    "kind": "text",
+                    "description": "Working directory."
+                  }
+                }
+              },
+              {
+                "name": "conversation",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "has_conversation",
+                      "kind": "flag",
+                      "description": "The transcript contains at least one entry."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "input",
+                      "field": {
+                        "name": "conversation",
+                        "kind": "text",
+                        "description": "Rendered transcript."
+                      }
+                    },
+                    {
+                      "kind": "text",
+                      "id": "pi.empty-transcript",
+                      "source": "content/pi/empty-transcript.md"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "action",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "action",
+                    "kind": "text",
+                    "description": "JSON object containing tool name and action."
+                  }
+                }
+              },
+              {
+                "name": "reason",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "reason",
+                    "kind": "text",
+                    "description": "Why the deterministic path could not decide."
+                  }
+                }
+              },
+              {
+                "name": "stage",
+                "node": {
+                  "kind": "text",
+                  "id": "pi.harm",
+                  "source": "content/pi/harm.md"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "intent",
+          "delivery": "user_message",
+          "description": "Second pass: apply authorization and exceptions.",
+          "body": {
+            "kind": "text",
+            "id": "pi.action",
+            "source": "content/pi/action.md",
+            "bindings": [
+              {
+                "name": "cwd",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "cwd",
+                    "kind": "text",
+                    "description": "Working directory."
+                  }
+                }
+              },
+              {
+                "name": "conversation",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "has_conversation",
+                      "kind": "flag",
+                      "description": "The transcript contains at least one entry."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "input",
+                      "field": {
+                        "name": "conversation",
+                        "kind": "text",
+                        "description": "Rendered transcript."
+                      }
+                    },
+                    {
+                      "kind": "text",
+                      "id": "pi.empty-transcript",
+                      "source": "content/pi/empty-transcript.md"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "action",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "action",
+                    "kind": "text",
+                    "description": "JSON object containing tool name and action."
+                  }
+                }
+              },
+              {
+                "name": "reason",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "reason",
+                    "kind": "text",
+                    "description": "Why the deterministic path could not decide."
+                  }
+                }
+              },
+              {
+                "name": "stage",
+                "node": {
+                  "kind": "text",
+                  "id": "pi.intent",
+                  "source": "content/pi/intent.md"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "pi-session",
+      "description": "The working Pi agent, receiving tool permission results.",
+      "events": [
+        {
+          "id": "not-stated",
+          "delivery": "message_fragment",
+          "description": "An empty action or reason in a denial.",
+          "body": {
+            "kind": "text",
+            "id": "pi.not-stated",
+            "source": "content/pi/not-stated.md"
+          }
+        },
+        {
+          "id": "denial",
+          "delivery": "tool_result",
+          "description": "Auto-mode denial, with distinct outage and hard-block guidance.",
+          "body": {
+            "kind": "text",
+            "id": "pi.denial",
+            "source": "content/pi/denial.md",
+            "bindings": [
+              {
+                "name": "action",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "action",
+                    "kind": "text",
+                    "description": "Action collapsed to one line."
+                  }
+                }
+              },
+              {
+                "name": "reason",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "reason",
+                    "kind": "text",
+                    "description": "Reason collapsed to one line."
+                  }
+                }
+              },
+              {
+                "name": "outage",
+                "node": {
+                  "kind": "when",
+                  "condition": {
+                    "field": {
+                      "name": "outage",
+                      "kind": "flag",
+                      "description": "No classifier answered."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "pi.denial-outage",
+                      "source": "content/pi/denial-outage.md"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "guidance",
+                "node": {
+                  "kind": "text",
+                  "id": "pi.denial-guidance",
+                  "source": "content/pi/denial-guidance.md"
+                }
+              },
+              {
+                "name": "settings",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "hard_block",
+                      "kind": "flag",
+                      "description": "User approval cannot clear this rejection."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "pi.denial-hard-block",
+                      "source": "content/pi/denial-hard-block.md"
+                    },
+                    {
+                      "kind": "text",
+                      "id": "pi.denial-settings",
+                      "source": "content/pi/denial-settings.md"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "activity",
+      "description": "Separate model writing a session's dashboard status line.",
+      "events": [
+        {
+          "id": "system",
+          "delivery": "system_prompt",
+          "description": "Invariant instructions, replacing the headless harness system prompt.",
+          "body": {
+            "kind": "trim",
+            "children": [
+              {
+                "kind": "text",
+                "id": "activity.system",
+                "source": "content/activity/baseline.md",
+                "part": {
+                  "marker": "{{USER}}",
+                  "index": 0
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "user",
+          "delivery": "user_message",
+          "description": "Run data and fallbacks for missing reason, previous line and events.",
+          "body": {
+            "kind": "trim",
+            "children": [
+              {
+                "kind": "text",
+                "id": "activity.user",
+                "source": "content/activity/baseline.md",
+                "bindings": [
+                  {
+                    "name": "STATE",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "state",
+                        "kind": "text",
+                        "description": "Current state.",
+                        "trim_space": true
+                      }
+                    }
+                  },
+                  {
+                    "name": "STATE_REASON",
+                    "node": {
+                      "kind": "choose",
+                      "condition": {
+                        "field": {
+                          "name": "state_reason",
+                          "kind": "text",
+                          "description": "State reason.",
+                          "trim_space": true
+                        },
+                        "test": "present"
+                      },
+                      "children": [
+                        {
+                          "kind": "input",
+                          "field": {
+                            "name": "state_reason",
+                            "kind": "text",
+                            "description": "State reason.",
+                            "trim_space": true
+                          }
+                        },
+                        {
+                          "kind": "text",
+                          "id": "activity.unspecified",
+                          "source": "content/activity/unspecified.md"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "name": "PREVIOUS",
+                    "node": {
+                      "kind": "choose",
+                      "condition": {
+                        "field": {
+                          "name": "previous",
+                          "kind": "text",
+                          "description": "Previous status line.",
+                          "trim_space": true
+                        },
+                        "test": "present"
+                      },
+                      "children": [
+                        {
+                          "kind": "input",
+                          "field": {
+                            "name": "previous",
+                            "kind": "text",
+                            "description": "Previous status line.",
+                            "trim_space": true
+                          }
+                        },
+                        {
+                          "kind": "text",
+                          "id": "activity.first-line",
+                          "source": "content/activity/first-line.md"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "name": "WINDOW",
+                    "node": {
+                      "kind": "choose",
+                      "condition": {
+                        "field": {
+                          "name": "window",
+                          "kind": "text",
+                          "description": "Rendered transcript events.",
+                          "trim_space": true
+                        },
+                        "test": "present"
+                      },
+                      "children": [
+                        {
+                          "kind": "input",
+                          "field": {
+                            "name": "window",
+                            "kind": "text",
+                            "description": "Rendered transcript events.",
+                            "trim_space": true
+                          }
+                        },
+                        {
+                          "kind": "text",
+                          "id": "activity.empty-window",
+                          "source": "content/activity/empty-window.md"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "part": {
+                  "marker": "{{USER}}",
+                  "index": 1
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "state-reason",
+          "delivery": "message_fragment",
+          "description": "Also used by custom benchmark templates.",
+          "body": {
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "state_reason",
+                "kind": "text",
+                "description": "State reason.",
+                "trim_space": true
+              },
+              "test": "present"
+            },
+            "children": [
+              {
+                "kind": "input",
+                "field": {
+                  "name": "state_reason",
+                  "kind": "text",
+                  "description": "State reason.",
+                  "trim_space": true
+                }
+              },
+              {
+                "kind": "text",
+                "id": "activity.unspecified",
+                "source": "content/activity/unspecified.md"
+              }
+            ]
+          }
+        },
+        {
+          "id": "previous",
+          "delivery": "message_fragment",
+          "description": "Also used by custom benchmark templates.",
+          "body": {
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "previous",
+                "kind": "text",
+                "description": "Previous status line.",
+                "trim_space": true
+              },
+              "test": "present"
+            },
+            "children": [
+              {
+                "kind": "input",
+                "field": {
+                  "name": "previous",
+                  "kind": "text",
+                  "description": "Previous status line.",
+                  "trim_space": true
+                }
+              },
+              {
+                "kind": "text",
+                "id": "activity.first-line",
+                "source": "content/activity/first-line.md"
+              }
+            ]
+          }
+        },
+        {
+          "id": "window",
+          "delivery": "message_fragment",
+          "description": "Also used by custom benchmark templates.",
+          "body": {
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "window",
+                "kind": "text",
+                "description": "Rendered transcript events.",
+                "trim_space": true
+              },
+              "test": "present"
+            },
+            "children": [
+              {
+                "kind": "input",
+                "field": {
+                  "name": "window",
+                  "kind": "text",
+                  "description": "Rendered transcript events.",
+                  "trim_space": true
+                }
+              },
+              {
+                "kind": "text",
+                "id": "activity.empty-window",
+                "source": "content/activity/empty-window.md"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "turn-classifier",
+      "description": "Separate model deciding whether a turn needs user input.",
+      "events": [
+        {
+          "id": "classify",
+          "delivery": "headless_prompt",
+          "description": "internal/classifier.BuildPrompt",
+          "body": {
+            "kind": "text",
+            "id": "turn-classifier.classify",
+            "source": "content/turn-classifier/classify.md",
+            "bindings": [
+              {
+                "name": "message",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "message",
+                    "kind": "text",
+                    "description": "Message"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-title",
+      "description": "Session title",
+      "events": [
+        {
+          "id": "instructions",
+          "delivery": "system_prompt",
+          "description": "Title generation instructions.",
+          "body": {
+            "kind": "text",
+            "id": "session-title.instructions",
+            "source": "content/session-title/instructions.md"
+          }
+        },
+        {
+          "id": "generate",
+          "delivery": "user_message",
+          "description": "internal/daemon/session_title.go: execSessionTitleHeadless",
+          "body": {
+            "kind": "text",
+            "id": "session-title.generate",
+            "source": "content/session-title/generate.md",
+            "bindings": [
+              {
+                "name": "conversation",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "conversation",
+                    "kind": "text",
+                    "description": "Conversation"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "session-instructions",
+      "description": "Separate model answering questions about conversation evidence.",
+      "events": [
+        {
+          "id": "question",
+          "delivery": "headless_prompt",
+          "description": "Labeled conversation and optional validation retry.",
+          "body": {
+            "kind": "text",
+            "id": "session-instructions.question",
+            "source": "content/session-instructions/question.md",
+            "bindings": [
+              {
+                "name": "question",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "question",
+                    "kind": "text",
+                    "description": "Question to answer."
+                  }
+                }
+              },
+              {
+                "name": "conversation",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "conversation",
+                    "kind": "text",
+                    "description": "Labeled turns, including trailing newlines."
+                  }
+                }
+              },
+              {
+                "name": "retry",
+                "node": {
+                  "kind": "when",
+                  "condition": {
+                    "field": {
+                      "name": "retry",
+                      "kind": "flag",
+                      "description": "Retry after validation errors."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "session-instructions.retry",
+                      "source": "content/session-instructions/retry.md",
+                      "bindings": [
+                        {
+                          "name": "errors",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "errors",
+                              "kind": "text",
+                              "description": "Validation errors separated by newline and dash."
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "keeper",
+      "description": "Background Notebook and workspace maintenance.",
+      "events": [
+        {
+          "id": "transcript-paths",
+          "delivery": "message_fragment",
+          "description": "Resolved transcript paths or their absence.",
+          "body": {
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "has_paths",
+                "kind": "flag",
+                "description": "At least one transcript resolved."
+              },
+              "test": "enabled"
+            },
+            "children": [
+              {
+                "kind": "text",
+                "id": "keeper.transcript-paths",
+                "source": "content/keeper/transcript-paths.md",
+                "bindings": [
+                  {
+                    "name": "paths",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "paths",
+                        "kind": "text",
+                        "description": "Resolved paths."
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "id": "keeper.no-transcripts",
+                "source": "content/keeper/no-transcripts.md"
+              }
+            ]
+          }
+        },
+        {
+          "id": "compact",
+          "delivery": "headless_prompt",
+          "description": "Workspace context compaction",
+          "body": {
+            "kind": "text",
+            "id": "keeper.compact",
+            "source": "content/keeper/compact.md",
+            "bindings": [
+              {
+                "name": "source_path",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "source_path",
+                    "kind": "text",
+                    "description": "Source path"
+                  }
+                }
+              },
+              {
+                "name": "candidate_path",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "candidate_path",
+                    "kind": "text",
+                    "description": "Candidate path"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "summarize",
+          "delivery": "headless_prompt",
+          "description": "internal/daemon/notebook_narration_prompts.go: buildSummarizeSessionPrompt",
+          "body": {
+            "kind": "text",
+            "id": "keeper.summarize",
+            "source": "content/keeper/summarize.md",
+            "bindings": [
+              {
+                "name": "transcript_path",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "transcript_path",
+                    "kind": "text",
+                    "description": "Transcript path"
+                  }
+                }
+              },
+              {
+                "name": "session_id",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "session_id",
+                    "kind": "text",
+                    "description": "Session id"
+                  }
+                }
+              },
+              {
+                "name": "raw_digest_path",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "raw_digest_path",
+                    "kind": "text",
+                    "description": "Raw digest path"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "narrate",
+          "delivery": "headless_prompt",
+          "description": "internal/daemon/notebook_narration_prompts.go: buildNarrateWorkspacePrompt",
+          "body": {
+            "kind": "text",
+            "id": "keeper.narrate",
+            "source": "content/keeper/narrate.md",
+            "bindings": [
+              {
+                "name": "workspace_title",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "workspace_title",
+                    "kind": "text",
+                    "description": "Workspace title"
+                  }
+                }
+              },
+              {
+                "name": "workspace_id",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "workspace_id",
+                    "kind": "text",
+                    "description": "Workspace id"
+                  }
+                }
+              },
+              {
+                "name": "context_snapshot_path",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "context_snapshot_path",
+                    "kind": "text",
+                    "description": "Context snapshot path"
+                  }
+                }
+              },
+              {
+                "name": "raw_sessions_dir",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "raw_sessions_dir",
+                    "kind": "text",
+                    "description": "Raw sessions dir"
+                  }
+                }
+              },
+              {
+                "name": "transcript_paths",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "transcript_paths",
+                    "kind": "text",
+                    "description": "Transcript paths",
+                    "from": "keeper/transcript-paths"
+                  }
+                }
+              },
+              {
+                "name": "journal_path",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "journal_path",
+                    "kind": "text",
+                    "description": "Journal path"
+                  }
+                }
+              },
+              {
+                "name": "journal_dir",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "journal_dir",
+                    "kind": "text",
+                    "description": "Journal dir"
+                  }
+                }
+              },
+              {
+                "name": "knowledge_dir",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "knowledge_dir",
+                    "kind": "text",
+                    "description": "Knowledge dir"
+                  }
+                }
+              },
+              {
+                "name": "is_removal_pass",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "is_removal_pass",
+                    "kind": "text",
+                    "description": "Is removal pass"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "ticket-reconciler",
+      "description": "Ticket reconciler",
+      "events": [
+        {
+          "id": "reconcile",
+          "delivery": "headless_prompt",
+          "description": "internal/daemon/ticket_reconcile.go: buildTicketReconcilePrompt",
+          "body": {
+            "kind": "text",
+            "id": "ticket-reconciler.reconcile",
+            "source": "content/ticket-reconciler/reconcile.md",
+            "bindings": [
+              {
+                "name": "ticket_id",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "ticket_id",
+                    "kind": "text",
+                    "description": "Ticket id"
+                  }
+                }
+              },
+              {
+                "name": "title",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "title",
+                    "kind": "text",
+                    "description": "Title"
+                  }
+                }
+              },
+              {
+                "name": "brief",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "brief",
+                    "kind": "text",
+                    "description": "Brief"
+                  }
+                }
+              },
+              {
+                "name": "status",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "status",
+                    "kind": "text",
+                    "description": "Status"
+                  }
+                }
+              },
+              {
+                "name": "close_context",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "close_context",
+                    "kind": "text",
+                    "description": "Close context"
+                  }
+                }
+              },
+              {
+                "name": "conversation",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "conversation",
+                    "kind": "text",
+                    "description": "Conversation"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "workflow-agent",
+      "description": "Workflow agent",
+      "events": [
+        {
+          "id": "run",
+          "delivery": "headless_prompt",
+          "description": "User task followed by the structured-result contract or its retry.",
+          "body": {
+            "kind": "join",
+            "children": [
+              {
+                "kind": "input",
+                "field": {
+                  "name": "brief",
+                  "kind": "text",
+                  "description": "Configured task or delegation brief."
+                }
+              },
+              {
+                "kind": "choose",
+                "condition": {
+                  "field": {
+                    "name": "retry",
+                    "kind": "flag",
+                    "description": "A previous attempt produced no valid result."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "workflow-agent.retry-instruction",
+                    "source": "content/workflow-agent/retry-instruction.md"
+                  },
+                  {
+                    "kind": "text",
+                    "id": "workflow-agent.result-instruction",
+                    "source": "content/workflow-agent/result-instruction.md"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "result-instruction",
+          "delivery": "user_message",
+          "description": "internal/workflow/driveragent.go: schemaCallInstruction",
+          "body": {
+            "kind": "text",
+            "id": "workflow-agent.result-instruction",
+            "source": "content/workflow-agent/result-instruction.md"
+          }
+        },
+        {
+          "id": "retry-instruction",
+          "delivery": "user_message",
+          "description": "internal/workflow/driveragent.go: correctiveInstruction",
+          "body": {
+            "kind": "text",
+            "id": "workflow-agent.retry-instruction",
+            "source": "content/workflow-agent/retry-instruction.md"
+          }
+        }
+      ]
+    },
+    {
+      "id": "attn-skill",
+      "description": "Installed skill and references. Availability does not establish that the harness loaded them.",
+      "events": [
+        {
+          "id": "available",
+          "delivery": "available_skill",
+          "description": "Installed for supported harnesses by internal/agent; the harness decides when to load it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill",
+            "source": "content/skills/attn/SKILL.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "browser",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.browser",
+            "source": "content/skills/attn/references/browser.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "converse-and-observe",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.converse-and-observe",
+            "source": "content/skills/attn/references/converse-and-observe.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "delegated-agent",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.delegated-agent",
+            "source": "content/skills/attn/references/delegated-agent.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "delegation",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.delegation",
+            "source": "content/skills/attn/references/delegation.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "garden",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.garden",
+            "source": "content/skills/attn/references/garden.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "markdown",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.markdown",
+            "source": "content/skills/attn/references/markdown.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "notebook",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.notebook",
+            "source": "content/skills/attn/references/notebook.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "present",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.present",
+            "source": "content/skills/attn/references/present.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "showing",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.showing",
+            "source": "content/skills/attn/references/showing.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "tickets",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.tickets",
+            "source": "content/skills/attn/references/tickets.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "workflow",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.workflow",
+            "source": "content/skills/attn/references/workflow.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "garden-advisor",
+      "description": "Tool-free model recommending a seed action or drafting its handoff.",
+      "events": [
+        {
+          "id": "instructions",
+          "delivery": "system_prompt",
+          "description": "Shared output contract for the Garden advisor.",
+          "body": {
+            "kind": "text",
+            "id": "garden-advisor.instructions",
+            "source": "content/garden-advisor/instructions.md"
+          }
+        },
+        {
+          "id": "advice",
+          "delivery": "user_message",
+          "description": "Recommend one available action for a seed.",
+          "body": {
+            "kind": "text",
+            "id": "garden-advisor.advice",
+            "source": "content/garden-advisor/advice.md",
+            "bindings": [
+              {
+                "name": "evidence",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "evidence",
+                    "kind": "text",
+                    "description": "Bounded seed and evidence serialized as JSON by the daemon."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "handoff",
+          "delivery": "user_message",
+          "description": "Draft a handoff for a seed's next tender.",
+          "body": {
+            "kind": "text",
+            "id": "garden-advisor.handoff",
+            "source": "content/garden-advisor/handoff.md",
+            "bindings": [
+              {
+                "name": "evidence",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "evidence",
+                    "kind": "text",
+                    "description": "Bounded seed and evidence serialized as JSON by the daemon."
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "pi-environment",
+      "description": "Environment supplied to both permission passes, including the rulebook's defaults.",
+      "events": [
+        {
+          "id": "unset-trusted_repo",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-trusted_repo",
+            "source": "content/pi/environment/trusted_repo.md"
+          }
+        },
+        {
+          "id": "unset-repo_visibility",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-repo_visibility",
+            "source": "content/pi/environment/repo_visibility.md"
+          }
+        },
+        {
+          "id": "unset-domains",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-domains",
+            "source": "content/pi/environment/domains.md"
+          }
+        },
+        {
+          "id": "unset-buckets",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-buckets",
+            "source": "content/pi/environment/buckets.md"
+          }
+        },
+        {
+          "id": "unset-services",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-services",
+            "source": "content/pi/environment/services.md"
+          }
+        },
+        {
+          "id": "unset-source_control",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-source_control",
+            "source": "content/pi/environment/source_control.md"
+          }
+        },
+        {
+          "id": "unset-registry",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-registry",
+            "source": "content/pi/environment/registry.md"
+          }
+        },
+        {
+          "id": "unset-sensitive_data",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-sensitive_data",
+            "source": "content/pi/environment/sensitive_data.md"
+          }
+        },
+        {
+          "id": "unset-audiences",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-audiences",
+            "source": "content/pi/environment/audiences.md"
+          }
+        },
+        {
+          "id": "unset-remote_targets",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-remote_targets",
+            "source": "content/pi/environment/remote_targets.md"
+          }
+        },
+        {
+          "id": "unset-iac_scopes",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-iac_scopes",
+            "source": "content/pi/environment/iac_scopes.md"
+          }
+        },
+        {
+          "id": "render",
+          "delivery": "message_fragment",
+          "description": "Ordered environment slots and optional user notes.",
+          "body": {
+            "kind": "join",
+            "children": [
+              {
+                "kind": "input",
+                "field": {
+                  "name": "slots",
+                  "kind": "text",
+                  "description": "Rendered slots joined with newlines.",
+                  "from": "pi-environment/slot"
+                }
+              },
+              {
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "has_notes",
+                    "kind": "flag",
+                    "description": "At least one nonblank note."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "join",
+                    "separator": "\n\n",
+                    "children": [
+                      {
+                        "kind": "compose"
+                      },
+                      {
+                        "kind": "text",
+                        "id": "pi-environment.notes",
+                        "source": "content/pi/environment/notes.md",
+                        "bindings": [
+                          {
+                            "name": "notes",
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "notes",
+                                "kind": "text",
+                                "description": "Quoted note lines."
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "slot",
+          "delivery": "message_fragment",
+          "description": "One configured environment slot, or its default meaning.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.slot",
+            "source": "content/pi/environment/slot.md",
+            "bindings": [
+              {
+                "name": "label",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "label",
+                    "kind": "text",
+                    "description": "Schema label."
+                  }
+                }
+              },
+              {
+                "name": "value",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "value",
+                    "kind": "text",
+                    "description": "Configured values or the slot's rendered default."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "notes",
+          "delivery": "message_fragment",
+          "description": "Nonempty notes supplied by the user.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.notes",
+            "source": "content/pi/environment/notes.md",
+            "bindings": [
+              {
+                "name": "notes",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "notes",
+                    "kind": "text",
+                    "description": "Quoted note lines."
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "pi-security",
+      "description": "Execution permissions supplied to the working Pi agent and sandbox tool guidance.",
+      "events": [
+        {
+          "id": "instructions",
+          "delivery": "system_prompt",
+          "description": "Appended before each agent start; values come from the executor's current policy.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.instructions",
+            "source": "content/pi/security/instructions.md",
+            "bindings": [
+              {
+                "name": "sandbox",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "sandbox",
+                    "kind": "text",
+                    "description": "Enabled or disabled, derived from policy."
+                  }
+                }
+              },
+              {
+                "name": "network",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "network",
+                    "kind": "text",
+                    "description": "Effective tool networking policy."
+                  }
+                }
+              },
+              {
+                "name": "guidance",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "enabled",
+                      "kind": "flag",
+                      "description": "The OS sandbox is enabled."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "pi-security.enabled",
+                      "source": "content/pi/security/enabled.md",
+                      "bindings": [
+                        {
+                          "name": "paths",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "write_paths",
+                              "kind": "text",
+                              "description": "JSON array of writable paths."
+                            }
+                          }
+                        },
+                        {
+                          "name": "caches",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "cache_paths",
+                              "kind": "text",
+                              "description": "JSON array of cache grants, or disabled."
+                            }
+                          }
+                        },
+                        {
+                          "name": "unavailable",
+                          "node": {
+                            "kind": "when",
+                            "condition": {
+                              "field": {
+                                "name": "has_unavailable_caches",
+                                "kind": "flag",
+                                "description": "Some cache grants are unavailable."
+                              },
+                              "test": "enabled"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "pi-security.unavailable-caches",
+                                "source": "content/pi/security/unavailable-caches.md",
+                                "keep_final_newline": true,
+                                "bindings": [
+                                  {
+                                    "name": "paths",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "unavailable_caches",
+                                        "kind": "text",
+                                        "description": "JSON array of unavailable cache grants."
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "name": "review",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "review",
+                              "kind": "text",
+                              "description": "Available or unavailable, derived from reviewer configuration."
+                            }
+                          }
+                        },
+                        {
+                          "name": "request",
+                          "node": {
+                            "kind": "choose",
+                            "condition": {
+                              "field": {
+                                "name": "review_available",
+                                "kind": "flag",
+                                "description": "Auto-mode access review is available."
+                              },
+                              "test": "enabled"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "pi-security.access-request",
+                                "source": "content/pi/security/access-request.md"
+                              },
+                              {
+                                "kind": "text",
+                                "id": "pi-security.review-unavailable",
+                                "source": "content/pi/security/review-unavailable.md"
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "name": "local_cache",
+                          "node": {
+                            "kind": "text",
+                            "id": "pi-security.local-cache",
+                            "source": "content/pi/security/local-cache.md"
+                          }
+                        },
+                        {
+                          "name": "refusal",
+                          "node": {
+                            "kind": "text",
+                            "id": "pi-security.refusal",
+                            "source": "content/pi/security/refusal.md"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "text",
+                      "id": "pi-security.disabled",
+                      "source": "content/pi/security/disabled.md"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "credentials",
+                "node": {
+                  "kind": "text",
+                  "id": "pi-security.credentials",
+                  "source": "content/pi/security/credentials.md"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "write-recovery",
+          "delivery": "tool_result",
+          "description": "Guidance after a sandbox write failure.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.write-recovery",
+            "source": "content/pi/security/write-recovery.md",
+            "bindings": [
+              {
+                "name": "paths",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "write_paths",
+                    "kind": "text",
+                    "description": "Writable paths joined with commas."
+                  }
+                }
+              },
+              {
+                "name": "guidance",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "review_available",
+                      "kind": "flag",
+                      "description": "Auto-mode access review is available."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "pi-security.write-request",
+                      "source": "content/pi/security/write-request.md"
+                    },
+                    {
+                      "kind": "text",
+                      "id": "pi-security.review-unavailable",
+                      "source": "content/pi/security/review-unavailable.md"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "recovery",
+          "delivery": "tool_result",
+          "description": "Appended to failed commands; distinguishes OS errors from review refusals.",
+          "body": {
+            "kind": "join",
+            "separator": "\n",
+            "children": [
+              {
+                "kind": "choose",
+                "condition": {
+                  "field": {
+                    "name": "network_failure",
+                    "kind": "flag",
+                    "description": "The command reported a network failure."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "pi-security.network-failure",
+                    "source": "content/pi/security/network-failure.md"
+                  },
+                  {
+                    "kind": "text",
+                    "id": "pi-security.permission-failure",
+                    "source": "content/pi/security/permission-failure.md"
+                  }
+                ]
+              },
+              {
+                "kind": "join",
+                "children": [
+                  {
+                    "kind": "choose",
+                    "condition": {
+                      "field": {
+                        "name": "network_failure",
+                        "kind": "flag",
+                        "description": "The command reported a network failure."
+                      },
+                      "test": "enabled"
+                    },
+                    "children": [
+                      {
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "review_available",
+                            "kind": "flag",
+                            "description": "Auto-mode access review is available."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "pi-security.network-request",
+                            "source": "content/pi/security/network-request.md"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "pi-security.review-unavailable",
+                            "source": "content/pi/security/review-unavailable.md"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "text",
+                        "id": "pi-security.write-recovery",
+                        "source": "content/pi/security/write-recovery.md",
+                        "bindings": [
+                          {
+                            "name": "paths",
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "write_paths",
+                                "kind": "text",
+                                "description": "Writable paths joined with commas."
+                              }
+                            }
+                          },
+                          {
+                            "name": "guidance",
+                            "node": {
+                              "kind": "choose",
+                              "condition": {
+                                "field": {
+                                  "name": "review_available",
+                                  "kind": "flag",
+                                  "description": "Auto-mode access review is available."
+                                },
+                                "test": "enabled"
+                              },
+                              "children": [
+                                {
+                                  "kind": "text",
+                                  "id": "pi-security.write-request",
+                                  "source": "content/pi/security/write-request.md"
+                                },
+                                {
+                                  "kind": "text",
+                                  "id": "pi-security.review-unavailable",
+                                  "source": "content/pi/security/review-unavailable.md"
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "choose",
+                    "condition": {
+                      "field": {
+                        "name": "network_failure",
+                        "kind": "flag",
+                        "description": "The command reported a network failure."
+                      },
+                      "test": "enabled"
+                    },
+                    "children": [
+                      {
+                        "kind": "compose"
+                      },
+                      {
+                        "kind": "when",
+                        "condition": {
+                          "field": {
+                            "name": "network_denied",
+                            "kind": "flag",
+                            "description": "Tool networking is denied."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "when",
+                            "condition": {
+                              "field": {
+                                "name": "review_available",
+                                "kind": "flag",
+                                "description": "Auto-mode access review is available."
+                              },
+                              "test": "enabled"
+                            },
+                            "children": [
+                              {
+                                "kind": "join",
+                                "separator": "\n",
+                                "children": [
+                                  {
+                                    "kind": "compose"
+                                  },
+                                  {
+                                    "kind": "text",
+                                    "id": "pi-security.network-request",
+                                    "source": "content/pi/security/network-request.md"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "id": "pi-security.execution-scope",
+                "source": "content/pi/security/execution-scope.md"
+              }
+            ]
+          }
+        },
+        {
+          "id": "denial",
+          "delivery": "tool_result",
+          "description": "An access request refused by auto mode.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.denial",
+            "source": "content/pi/security/denial.md",
+            "bindings": [
+              {
+                "name": "action",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "action",
+                    "kind": "text",
+                    "description": "Action collapsed to one line."
+                  }
+                }
+              },
+              {
+                "name": "reason",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "reason",
+                    "kind": "text",
+                    "description": "Reason collapsed to one line."
+                  }
+                }
+              },
+              {
+                "name": "outage",
+                "node": {
+                  "kind": "when",
+                  "condition": {
+                    "field": {
+                      "name": "outage",
+                      "kind": "flag",
+                      "description": "No classifier answered."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "pi-security.denial-outage",
+                      "source": "content/pi/security/denial-outage.md",
+                      "keep_final_newline": true
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "guidance",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "hard_block",
+                      "kind": "flag",
+                      "description": "User approval cannot clear this rejection."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "pi-security.denial-hard-block",
+                      "source": "content/pi/security/denial-hard-block.md"
+                    },
+                    {
+                      "kind": "text",
+                      "id": "pi-security.denial-retry",
+                      "source": "content/pi/security/denial-retry.md"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "boundary",
+                "node": {
+                  "kind": "text",
+                  "id": "pi-security.denial-boundary",
+                  "source": "content/pi/security/denial-boundary.md"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "review-unavailable",
+          "delivery": "tool_result",
+          "description": "No access reviewer is available.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.review-unavailable",
+            "source": "content/pi/security/review-unavailable.md"
+          }
+        },
+        {
+          "id": "startup-failure",
+          "delivery": "tool_result",
+          "description": "The OS sandbox could not start.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.startup-failure",
+            "source": "content/pi/security/startup-failure.md"
+          }
+        },
+        {
+          "id": "configuration-error",
+          "delivery": "system_prompt",
+          "description": "Security configuration prevents tool execution.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.configuration-error",
+            "source": "content/pi/security/configuration-error.md",
+            "bindings": [
+              {
+                "name": "problem",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "problem",
+                    "kind": "text",
+                    "description": "Security configuration error."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "not-initialized",
+          "delivery": "system_prompt",
+          "description": "Security has not initialized.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.not-initialized",
+            "source": "content/pi/security/not-initialized.md"
+          }
+        },
+        {
+          "id": "bash-description",
+          "delivery": "tool_description",
+          "description": "Appended to the harness's bash description.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.bash-description",
+            "source": "content/pi/security/bash-description.md"
+          }
+        },
+        {
+          "id": "bash-guidance",
+          "delivery": "tool_guideline",
+          "description": "Sandbox access guidance for bash.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.bash-guidance",
+            "source": "content/pi/security/bash-guidance.md"
+          }
+        },
+        {
+          "id": "bash-credentials",
+          "delivery": "tool_guideline",
+          "description": "Credential restrictions for bash.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.bash-credentials",
+            "source": "content/pi/security/bash-credentials.md"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authoring-agent",
+      "description": "Agent-facing guidance loaded from CLI output or a generated project file.",
+      "events": [
+        {
+          "id": "seed-guide",
+          "delivery": "cli_output",
+          "description": "attn seed guide: guidance for planning and reporting work.",
+          "body": {
+            "kind": "text",
+            "id": "authoring.seed-guide",
+            "source": "content/resources/seed-guide.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "app-guidance",
+          "delivery": "project_instructions",
+          "description": "AGENTS.md written by app scaffolding; the harness loads it from the generated project.",
+          "body": {
+            "kind": "text",
+            "id": "authoring.app-guidance",
+            "source": "content/resources/app-guidance.md",
+            "bindings": [
+              {
+                "name": "app_name",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "app_name",
+                    "kind": "text",
+                    "description": "App name."
+                  }
+                }
+              },
+              {
+                "name": "sdk_module",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "sdk_module",
+                    "kind": "text",
+                    "description": "SDK import path."
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "annotation-label",
+      "description": "Built-in quick-label instructions included with selected feedback.",
+      "events": [
+        {
+          "id": "verify-this",
+          "delivery": "message_fragment",
+          "description": "Tip attached when this feedback label is selected.",
+          "body": {
+            "kind": "text",
+            "id": "annotation-label.verify-this",
+            "source": "content/annotations/labels/verify-this.md"
+          }
+        },
+        {
+          "id": "show-the-receipt",
+          "delivery": "message_fragment",
+          "description": "Tip attached when this feedback label is selected.",
+          "body": {
+            "kind": "text",
+            "id": "annotation-label.show-the-receipt",
+            "source": "content/annotations/labels/show-the-receipt.md"
+          }
+        },
+        {
+          "id": "give-me-an-example",
+          "delivery": "message_fragment",
+          "description": "Tip attached when this feedback label is selected.",
+          "body": {
+            "kind": "text",
+            "id": "annotation-label.give-me-an-example",
+            "source": "content/annotations/labels/give-me-an-example.md"
+          }
+        },
+        {
+          "id": "consider-alternatives",
+          "delivery": "message_fragment",
+          "description": "Tip attached when this feedback label is selected.",
+          "body": {
+            "kind": "text",
+            "id": "annotation-label.consider-alternatives",
+            "source": "content/annotations/labels/consider-alternatives.md"
+          }
+        }
+      ]
+    },
+    {
+      "id": "conversation-evidence",
+      "description": "Labeled evidence supplied to title generation and reconciliation.",
+      "events": [
+        {
+          "id": "slice",
+          "delivery": "message_fragment",
+          "description": "The adapter joins and bounds the recorded turns.",
+          "body": {
+            "kind": "compose",
+            "children": [
+              {
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "has_brief",
+                    "kind": "flag",
+                    "description": "The source section is present."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "conversation-evidence.brief",
+                    "source": "content/evidence/brief.md",
+                    "bindings": [
+                      {
+                        "name": "brief",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "brief",
+                            "kind": "text",
+                            "description": "Prepared conversation evidence."
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "has_rescoping",
+                    "kind": "flag",
+                    "description": "The source section is present."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "conversation-evidence.rescoping",
+                    "source": "content/evidence/rescoping.md",
+                    "bindings": [
+                      {
+                        "name": "rescoping",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "rescoping",
+                            "kind": "text",
+                            "description": "Prepared conversation evidence."
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "has_summary",
+                    "kind": "flag",
+                    "description": "The source section is present."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "conversation-evidence.summary",
+                    "source": "content/evidence/summary.md",
+                    "bindings": [
+                      {
+                        "name": "summary",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "summary",
+                            "kind": "text",
+                            "description": "Prepared conversation evidence."
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "has_agent_turns",
+                    "kind": "flag",
+                    "description": "The source section is present."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "conversation-evidence.agent_turns",
+                    "source": "content/evidence/agent_turns.md",
+                    "bindings": [
+                      {
+                        "name": "agent_turns",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "agent_turns",
+                            "kind": "text",
+                            "description": "Prepared conversation evidence."
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "truncated",
+          "delivery": "message_fragment",
+          "description": "The adapter applies the original byte limit.",
+          "body": {
+            "kind": "text",
+            "id": "conversation-evidence.truncated",
+            "source": "content/evidence/truncated.md",
+            "bindings": [
+              {
+                "name": "text",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "text",
+                    "kind": "text",
+                    "description": "Bounded evidence."
+                  }
+                }
+              },
+              {
+                "name": "total",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "total",
+                    "kind": "text",
+                    "description": "Original length."
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "annotation-markdown",
+      "description": "Feedback sent from a Markdown document or seed to a session or seed log.",
+      "events": [
+        {
+          "id": "submit",
+          "delivery": "user_message",
+          "description": "Sorted feedback entries and label counts are prepared by the adapter.",
+          "body": {
+            "kind": "text",
+            "id": "annotation-markdown.submit",
+            "source": "content/annotations/markdown-submit.md",
+            "bindings": [
+              {
+                "name": "subject",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "seed",
+                      "kind": "flag",
+                      "description": "seed"
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "annotation-markdown.seed",
+                      "source": "content/annotations/markdown-seed.md",
+                      "bindings": [
+                        {
+                          "name": "seed_id",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "seed_id",
+                              "kind": "text",
+                              "description": "Reporting seed, if one is bound to the session."
+                            }
+                          }
+                        },
+                        {
+                          "name": "title",
+                          "node": {
+                            "kind": "when",
+                            "condition": {
+                              "field": {
+                                "name": "has_title",
+                                "kind": "flag",
+                                "description": "has_title"
+                              },
+                              "test": "enabled"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "annotation-markdown.title",
+                                "source": "content/annotations/markdown-title.md",
+                                "keep_final_newline": true,
+                                "bindings": [
+                                  {
+                                    "name": "title",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "title",
+                                        "kind": "text",
+                                        "description": "title"
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "text",
+                      "id": "annotation-markdown.file",
+                      "source": "content/annotations/markdown-file.md",
+                      "keep_final_newline": true,
+                      "bindings": [
+                        {
+                          "name": "path",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "path",
+                              "kind": "text",
+                              "description": "path"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "count",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "count",
+                    "kind": "text",
+                    "description": "count"
+                  }
+                }
+              },
+              {
+                "name": "pieces",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "singular",
+                      "kind": "flag",
+                      "description": "singular"
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "annotation-markdown.piece",
+                      "source": "content/annotations/markdown-piece.md",
+                      "keep_final_newline": true
+                    },
+                    {
+                      "kind": "text",
+                      "id": "annotation-markdown.pieces",
+                      "source": "content/annotations/markdown-pieces.md",
+                      "keep_final_newline": true
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "entries",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "entries",
+                    "kind": "text",
+                    "description": "entries",
+                    "from": "annotation-markdown/entry"
+                  }
+                }
+              },
+              {
+                "name": "summary",
+                "node": {
+                  "kind": "when",
+                  "condition": {
+                    "field": {
+                      "name": "summary_rows",
+                      "kind": "text",
+                      "description": "summary_rows"
+                    },
+                    "test": "present"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "annotation-markdown.summary",
+                      "source": "content/annotations/markdown-summary.md",
+                      "keep_final_newline": true,
+                      "bindings": [
+                        {
+                          "name": "summary_rows",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "summary_rows",
+                              "kind": "text",
+                              "description": "summary_rows"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "entry",
+          "delivery": "message_fragment",
+          "description": "One annotation, including line position, type and optional quick-label guidance.",
+          "body": {
+            "kind": "text",
+            "id": "annotation-markdown.entry",
+            "source": "content/annotations/markdown-entry.md",
+            "keep_final_newline": true,
+            "bindings": [
+              {
+                "name": "index",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "index",
+                    "kind": "text",
+                    "description": "index"
+                  }
+                }
+              },
+              {
+                "name": "line",
+                "node": {
+                  "kind": "when",
+                  "condition": {
+                    "field": {
+                      "name": "has_anchor",
+                      "kind": "flag",
+                      "description": "has_anchor"
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "join",
+                      "separator": " ",
+                      "children": [
+                        {
+                          "kind": "choose",
+                          "condition": {
+                            "field": {
+                              "name": "orphaned",
+                              "kind": "flag",
+                              "description": "orphaned"
+                            },
+                            "test": "enabled"
+                          },
+                          "children": [
+                            {
+                              "kind": "text",
+                              "id": "annotation-markdown.moved",
+                              "source": "content/annotations/markdown-moved.md",
+                              "keep_final_newline": true,
+                              "bindings": [
+                                {
+                                  "name": "start_line",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "start_line",
+                                      "kind": "text",
+                                      "description": "start_line"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "kind": "choose",
+                              "condition": {
+                                "field": {
+                                  "name": "multiline",
+                                  "kind": "flag",
+                                  "description": "multiline"
+                                },
+                                "test": "enabled"
+                              },
+                              "children": [
+                                {
+                                  "kind": "text",
+                                  "id": "annotation-markdown.range",
+                                  "source": "content/annotations/markdown-range.md",
+                                  "keep_final_newline": true,
+                                  "bindings": [
+                                    {
+                                      "name": "start_line",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "start_line",
+                                          "kind": "text",
+                                          "description": "start_line"
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "name": "end_line",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "end_line",
+                                          "kind": "text",
+                                          "description": "end_line"
+                                        }
+                                      }
+                                    }
+                                  ]
+                                },
+                                {
+                                  "kind": "text",
+                                  "id": "annotation-markdown.line",
+                                  "source": "content/annotations/markdown-line.md",
+                                  "keep_final_newline": true,
+                                  "bindings": [
+                                    {
+                                      "name": "start_line",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "start_line",
+                                          "kind": "text",
+                                          "description": "start_line"
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "compose"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "body",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "deletion",
+                      "kind": "flag",
+                      "description": "deletion"
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "annotation-markdown.deletion",
+                      "source": "content/annotations/markdown-deletion.md",
+                      "keep_final_newline": true,
+                      "bindings": [
+                        {
+                          "name": "quote",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "quote",
+                              "kind": "text",
+                              "description": "quote"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "choose",
+                      "condition": {
+                        "field": {
+                          "name": "global",
+                          "kind": "flag",
+                          "description": "global"
+                        },
+                        "test": "enabled"
+                      },
+                      "children": [
+                        {
+                          "kind": "text",
+                          "id": "annotation-markdown.global",
+                          "source": "content/annotations/markdown-global.md",
+                          "keep_final_newline": true,
+                          "bindings": [
+                            {
+                              "name": "comment",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "comment",
+                                  "kind": "text",
+                                  "description": "comment"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "choose",
+                          "condition": {
+                            "field": {
+                              "name": "quick_label",
+                              "kind": "flag",
+                              "description": "quick_label"
+                            },
+                            "test": "enabled"
+                          },
+                          "children": [
+                            {
+                              "kind": "join",
+                              "children": [
+                                {
+                                  "kind": "text",
+                                  "id": "annotation-markdown.quick-label",
+                                  "source": "content/annotations/markdown-quick-label.md",
+                                  "keep_final_newline": true,
+                                  "bindings": [
+                                    {
+                                      "name": "label",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "label",
+                                          "kind": "text",
+                                          "description": "label"
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "name": "quote",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "quote",
+                                          "kind": "text",
+                                          "description": "quote"
+                                        }
+                                      }
+                                    }
+                                  ]
+                                },
+                                {
+                                  "kind": "when",
+                                  "condition": {
+                                    "field": {
+                                      "name": "has_tip",
+                                      "kind": "flag",
+                                      "description": "has_tip"
+                                    },
+                                    "test": "enabled"
+                                  },
+                                  "children": [
+                                    {
+                                      "kind": "text",
+                                      "id": "annotation-markdown.comment-line",
+                                      "source": "content/annotations/markdown-comment-line.md",
+                                      "keep_final_newline": true,
+                                      "bindings": [
+                                        {
+                                          "name": "tip",
+                                          "node": {
+                                            "kind": "input",
+                                            "field": {
+                                              "name": "tip",
+                                              "kind": "text",
+                                              "description": "tip"
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "kind": "text",
+                              "id": "annotation-markdown.comment",
+                              "source": "content/annotations/markdown-comment.md",
+                              "keep_final_newline": true,
+                              "bindings": [
+                                {
+                                  "name": "quote",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "quote",
+                                      "kind": "text",
+                                      "description": "quote"
+                                    }
+                                  }
+                                },
+                                {
+                                  "name": "comment",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "comment",
+                                      "kind": "text",
+                                      "description": "comment"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "annotation-terminal",
+      "description": "Feedback sent from annotated terminal output.",
+      "events": [
+        {
+          "id": "submit",
+          "delivery": "user_message",
+          "description": "Ordered entries and an optional overall note; the frontend trims trailing JavaScript whitespace.",
+          "body": {
+            "kind": "text",
+            "id": "annotation-terminal.submit",
+            "source": "content/annotations/terminal-submit.md",
+            "bindings": [
+              {
+                "name": "note",
+                "node": {
+                  "kind": "when",
+                  "condition": {
+                    "field": {
+                      "name": "note",
+                      "kind": "text",
+                      "description": "note"
+                    },
+                    "test": "present"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "annotation-terminal.note",
+                      "source": "content/annotations/terminal-note.md",
+                      "keep_final_newline": true,
+                      "bindings": [
+                        {
+                          "name": "note",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "note",
+                              "kind": "text",
+                              "description": "note"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "entries",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "entries",
+                    "kind": "text",
+                    "description": "entries",
+                    "from": "annotation-terminal/entry"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "entry",
+          "delivery": "message_fragment",
+          "description": "One terminal selection; the adapter quotes lines and resolves a quick label.",
+          "body": {
+            "kind": "text",
+            "id": "annotation-terminal.entry",
+            "source": "content/annotations/terminal-entry.md",
+            "keep_final_newline": true,
+            "bindings": [
+              {
+                "name": "index",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "index",
+                    "kind": "text",
+                    "description": "index"
+                  }
+                }
+              },
+              {
+                "name": "heading",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "heading",
+                      "kind": "text",
+                      "description": "heading"
+                    },
+                    "test": "present"
+                  },
+                  "children": [
+                    {
+                      "kind": "input",
+                      "field": {
+                        "name": "heading",
+                        "kind": "text",
+                        "description": "heading"
+                      }
+                    },
+                    {
+                      "kind": "text",
+                      "id": "annotation-terminal.comment-heading",
+                      "source": "content/annotations/terminal-comment-heading.md",
+                      "keep_final_newline": true
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "quote",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "quote",
+                    "kind": "text",
+                    "description": "quote"
+                  }
+                }
+              },
+              {
+                "name": "tip",
+                "node": {
+                  "kind": "when",
+                  "condition": {
+                    "field": {
+                      "name": "tip",
+                      "kind": "text",
+                      "description": "tip"
+                    },
+                    "test": "present"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "annotation-terminal.tip",
+                      "source": "content/annotations/terminal-tip.md",
+                      "keep_final_newline": true,
+                      "bindings": [
+                        {
+                          "name": "tip",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "tip",
+                              "kind": "text",
+                              "description": "tip"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "comment",
+                "node": {
+                  "kind": "when",
+                  "condition": {
+                    "field": {
+                      "name": "has_comment",
+                      "kind": "flag",
+                      "description": "The comment is nonempty."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "annotation-terminal.comment",
+                      "source": "content/annotations/terminal-comment.md",
+                      "keep_final_newline": true,
+                      "bindings": [
+                        {
+                          "name": "comment",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "comment",
+                              "kind": "text",
+                              "description": "comment"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "definitions_hash": "c7a04a9cf5fb99343ec2d4f6d855273167d24af04afe493b4f71b7aedb755514"
+}

@@ -3,12 +3,12 @@ package daemon
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
 	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/agentmailbox"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -86,8 +86,7 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string,
 func mailboxItemContent(delivery agentmailbox.Delivery) string {
 	switch delivery.Item.Kind {
 	case agentmailbox.KindGardenSeed:
-		return fmt.Sprintf("%s moved: %s — read it with `attn seed show %s`.",
-			delivery.Item.SourceID, delivery.Item.Hint, delivery.Item.SourceID)
+		return prompts.RenderText("session", "garden-update", prompts.Values{"seed_id": delivery.Item.SourceID, "event_kind": delivery.Item.Hint})
 	case agentmailbox.KindPeerMessage:
 		if delivery.Peer != nil {
 			return delivery.Peer.Body

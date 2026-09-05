@@ -1,0 +1,1 @@
+An approved request applies only to this execution and its children. Protected paths and credential filtering remain enforced. Follow any review refusal's instructions; do not repeat an unchanged request or evade it through another tool.

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "id": "delegation",
+  "description": "Delegated review with a reporting seed.",
+  "recipient": "delegation",
+  "event": "opening",
+  "values": {
+    "brief": "Review the local change and report your findings.",
+    "seed_id": "s-example"
+  }
+}

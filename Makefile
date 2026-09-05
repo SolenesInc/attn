@@ -121,7 +121,7 @@ publish-native-vt:
 publish-ghostty-vt-wasm:
 	./scripts/publish-ghostty-vt-wasm.sh
 
-build: $(NATIVE_VT_DEP)
+build: generate-prompts $(NATIVE_VT_DEP)
 	go build -ldflags "$(GO_LDFLAGS)" -o $(OUTPUT) $(BUILD_DIR)
 
 PTY_HOST_BINARY := pty-host/target/release/attn-pty-host
@@ -200,6 +200,7 @@ test-hooks:
 
 # Same blind spot for the shell an agent runs by hand.
 test-scripts:
+	@bash ./scripts/source-fingerprint_test.sh
 	@bash ./scripts/pr-evidence_test.sh
 	@bash ./scripts/ci-acceptance_test.sh
 	@bash ./scripts/app-acceptance_test.sh
@@ -238,6 +239,7 @@ lint-go:
 
 lint-frontend:
 	cd app && pnpm run lint
+	app/node_modules/.bin/oxlint --deny-warnings cmd/prompt-editor/web cmd/prompt-editor/test
 
 test-e2e:
 	@# Ensure stale Vite test server is not running
@@ -548,3 +550,20 @@ release:
 
 release-hotfix:
 	./scripts/release.sh $(VERSION_TAG) --hotfix
+
+.PHONY: generate-prompts check-prompts prompt-editor test-prompt-editor
+generate-prompts:
+	GOOS=$$(go env GOHOSTOS) GOARCH=$$(go env GOHOSTARCH) CGO_ENABLED=0 go run ./cmd/promptgen
+
+check-prompts:
+	GOOS=$$(go env GOHOSTOS) GOARCH=$$(go env GOHOSTARCH) CGO_ENABLED=0 go run ./cmd/promptgen --check
+
+prompt-editor:
+	go run ./cmd/prompt-editor
+
+test-prompt-editor:
+	go test ./cmd/prompt-editor ./cmd/promptgen ./internal/prompts
+	go run ./cmd/prompt-editor check
+	node --test cmd/prompt-editor/test/compare.test.mjs
+	node cmd/prompt-editor/test/browser.mjs
+	node cmd/prompt-editor/test/collaboration.mjs

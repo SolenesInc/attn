@@ -1,0 +1,1 @@
+The OS sandbox could not start. Extra write access will not fix this. Explain the startup error to the user so they can check sandbox support on this host. Do not disable security or retry the command without containment.

@@ -7,7 +7,7 @@ import (
 )
 
 func TestEverySlotIsReadByARuleThatExists(t *testing.T) {
-	source, err := os.ReadFile("../../plugins/attn-pi/automode/rulebook.md")
+	source, err := os.ReadFile("../prompts/content/pi/rulebook.md")
 	if err != nil {
 		t.Fatalf("read the rulebook: %v", err)
 	}
@@ -26,7 +26,7 @@ func TestEverySlotIsReadByARuleThatExists(t *testing.T) {
 }
 
 func TestEveryEnvironmentLookupHasSomewhereToLand(t *testing.T) {
-	source, err := os.ReadFile("../../plugins/attn-pi/automode/rulebook.md")
+	source, err := os.ReadFile("../prompts/content/pi/rulebook.md")
 	if err != nil {
 		t.Fatalf("read the rulebook: %v", err)
 	}

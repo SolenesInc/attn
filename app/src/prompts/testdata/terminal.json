@@ -1,0 +1,475 @@
+[
+  {
+    "annotations": [],
+    "note": "ignored",
+    "expected": ""
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "",
+        "comment": "",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "",
+    "expected": "Feedback on your last message.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 💬 Comment\n\n> later λ\n> {{literal}}"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "",
+        "comment": "comment",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "  Overall note.  ",
+    "expected": "Feedback on your last message.\n\nOverall note.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 💬 Comment\n\n> later λ\n> {{literal}}\n\ncomment"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "i-agree",
+        "comment": "",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "",
+    "expected": "Feedback on your last message.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 👍 I agree\n\n> later λ\n> {{literal}}"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "i-agree",
+        "comment": "comment",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "  Overall note.  ",
+    "expected": "Feedback on your last message.\n\nOverall note.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 👍 I agree\n\n> later λ\n> {{literal}}\n\ncomment"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "exactly-this",
+        "comment": "",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "",
+    "expected": "Feedback on your last message.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 💯 Exactly this\n\n> later λ\n> {{literal}}"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "exactly-this",
+        "comment": "comment",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "  Overall note.  ",
+    "expected": "Feedback on your last message.\n\nOverall note.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 💯 Exactly this\n\n> later λ\n> {{literal}}\n\ncomment"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "this-is-wrong",
+        "comment": "",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "",
+    "expected": "Feedback on your last message.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. ❌ This is wrong\n\n> later λ\n> {{literal}}"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "this-is-wrong",
+        "comment": "comment",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "  Overall note.  ",
+    "expected": "Feedback on your last message.\n\nOverall note.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. ❌ This is wrong\n\n> later λ\n> {{literal}}\n\ncomment"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "dont-love-this",
+        "comment": "",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "",
+    "expected": "Feedback on your last message.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 😕 I don't love this\n\n> later λ\n> {{literal}}"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "dont-love-this",
+        "comment": "comment",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "  Overall note.  ",
+    "expected": "Feedback on your last message.\n\nOverall note.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 😕 I don't love this\n\n> later λ\n> {{literal}}\n\ncomment"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "clarify-this",
+        "comment": "",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "",
+    "expected": "Feedback on your last message.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. ❓ Clarify this\n\n> later λ\n> {{literal}}"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "clarify-this",
+        "comment": "comment",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "  Overall note.  ",
+    "expected": "Feedback on your last message.\n\nOverall note.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. ❓ Clarify this\n\n> later λ\n> {{literal}}\n\ncomment"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "verify-this",
+        "comment": "",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "",
+    "expected": "Feedback on your last message.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 🔍 Verify this\n\n> later λ\n> {{literal}}\n\nThis seems like an assumption. Verify by reading the actual code before proceeding."
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "verify-this",
+        "comment": "comment",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "  Overall note.  ",
+    "expected": "Feedback on your last message.\n\nOverall note.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 🔍 Verify this\n\n> later λ\n> {{literal}}\n\nThis seems like an assumption. Verify by reading the actual code before proceeding.\ncomment"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "show-the-receipt",
+        "comment": "",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "",
+    "expected": "Feedback on your last message.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 🧾 Show the receipt\n\n> later λ\n> {{literal}}\n\nYou asserted this as fact. Name what backs it — the file and line, the measurement, the command output — or say plainly that it is an assumption."
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "show-the-receipt",
+        "comment": "comment",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "  Overall note.  ",
+    "expected": "Feedback on your last message.\n\nOverall note.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 🧾 Show the receipt\n\n> later λ\n> {{literal}}\n\nYou asserted this as fact. Name what backs it — the file and line, the measurement, the command output — or say plainly that it is an assumption.\ncomment"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "give-me-an-example",
+        "comment": "",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "",
+    "expected": "Feedback on your last message.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 🔬 Give me an example\n\n> later λ\n> {{literal}}\n\nThis is too abstract. Show a before/after, a sample input/output, or a specific scenario."
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "give-me-an-example",
+        "comment": "comment",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "  Overall note.  ",
+    "expected": "Feedback on your last message.\n\nOverall note.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 🔬 Give me an example\n\n> later λ\n> {{literal}}\n\nThis is too abstract. Show a before/after, a sample input/output, or a specific scenario.\ncomment"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "consider-alternatives",
+        "comment": "",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "",
+    "expected": "Feedback on your last message.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 🔄 Consider alternatives\n\n> later λ\n> {{literal}}\n\nPropose 2-3 alternative approaches with trade-offs based on the actual codebase."
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "consider-alternatives",
+        "comment": "comment",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "  Overall note.  ",
+    "expected": "Feedback on your last message.\n\nOverall note.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 🔄 Consider alternatives\n\n> later λ\n> {{literal}}\n\nPropose 2-3 alternative approaches with trade-offs based on the actual codebase.\ncomment"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "cut-this",
+        "comment": "",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "",
+    "expected": "Feedback on your last message.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 🪓 Cut this\n\n> later λ\n> {{literal}}"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "cut-this",
+        "comment": "comment",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "  Overall note.  ",
+    "expected": "Feedback on your last message.\n\nOverall note.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 🪓 Cut this\n\n> later λ\n> {{literal}}\n\ncomment"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "your-call",
+        "comment": "",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "",
+    "expected": "Feedback on your last message.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 🪙 Your call\n\n> later λ\n> {{literal}}"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "your-call",
+        "comment": "comment",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "  Overall note.  ",
+    "expected": "Feedback on your last message.\n\nOverall note.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 🪙 Your call\n\n> later λ\n> {{literal}}\n\ncomment"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "ask-me-first",
+        "comment": "",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "",
+    "expected": "Feedback on your last message.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 🙋 Ask me first\n\n> later λ\n> {{literal}}"
+  },
+  {
+    "annotations": [
+      {
+        "quote": "later λ\n{{literal}}",
+        "quickLabelId": "ask-me-first",
+        "comment": "comment",
+        "start": 10
+      },
+      {
+        "quote": "first",
+        "quickLabelId": "",
+        "comment": "first comment",
+        "start": 1
+      }
+    ],
+    "note": "  Overall note.  ",
+    "expected": "Feedback on your last message.\n\nOverall note.\n\n## 1. 💬 Comment\n\n> first\n\nfirst comment\n\n## 2. 🙋 Ask me first\n\n> later λ\n> {{literal}}\n\ncomment"
+  }
+]

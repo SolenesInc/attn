@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -20,7 +21,7 @@ import (
 // Measured 2026-08-14: `claude --session-id <id>` refuses a second launch under an id
 // it already used, so the resume-preserving reload cannot serve the nap.
 
-const crewNapPrompt = "Your predecessor closed their day and left you the letter above. If it names a pending user exchange, verify only what is load-bearing, then continue that exchange directly. Do not introduce yourself, narrate your orientation, or ask the user to repeat context. If there is no pending exchange, briefly tell the user where things stand and what you are doing next."
+var crewNapPrompt = prompts.RenderText("crew", "successor", prompts.Values{})
 
 func (d *Daemon) transferCrewBinding(memberID, from, to string) error {
 	_, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {

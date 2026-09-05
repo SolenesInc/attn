@@ -1,9 +1,11 @@
 package activity
 
 import (
-	_ "embed"
+	"io/fs"
 	"os"
 	"strings"
+
+	"github.com/victorarias/attn/internal/prompts"
 )
 
 type Input struct {
@@ -39,18 +41,13 @@ func LoadTemplate(name, path string) (Template, error) {
 
 // Render substitutes {{STATE}}, {{STATE_REASON}}, {{PREVIOUS}} and {{WINDOW}} as literal tokens, not text/template actions, so prompts carry braces unescaped.
 func (t Template) Render(in Input) Rendered {
-	reason := strings.TrimSpace(in.StateReason)
-	if reason == "" {
-		reason = "unspecified"
+	if t.Body == baselineBody {
+		values := prompts.Values{"state": in.State, "state_reason": in.StateReason, "previous": in.Previous, "window": in.Window}
+		return Rendered{System: prompts.RenderText("activity", "system", nil), User: prompts.RenderText("activity", "user", values)}
 	}
-	previous := strings.TrimSpace(in.Previous)
-	if previous == "" {
-		previous = "(none — this is the first line for this session)"
-	}
-	window := strings.TrimSpace(in.Window)
-	if window == "" {
-		window = "(nothing new since the last line)"
-	}
+	reason := prompts.RenderText("activity", "state-reason", prompts.Values{"state_reason": in.StateReason})
+	previous := prompts.RenderText("activity", "previous", prompts.Values{"previous": in.Previous})
+	window := prompts.RenderText("activity", "window", prompts.Values{"window": in.Window})
 	replacer := strings.NewReplacer(
 		"{{STATE}}", strings.TrimSpace(in.State),
 		"{{STATE_REASON}}", reason,
@@ -65,7 +62,12 @@ func (t Template) Render(in Input) Rendered {
 	return Rendered{System: strings.TrimSpace(system), User: strings.TrimSpace(user)}
 }
 
-//go:embed prompts/baseline.md
-var baselineBody string
+var baselineBody = func() string {
+	data, err := fs.ReadFile(prompts.Files(), "content/activity/baseline.md")
+	if err != nil {
+		panic(err)
+	}
+	return string(data)
+}()
 
 func Baseline() Template { return Template{Name: "baseline", Body: baselineBody} }

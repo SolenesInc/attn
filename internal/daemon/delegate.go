@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -958,38 +959,12 @@ func (d *Daemon) completedDelegationResult(session *protocol.Session, placement 
 	return result
 }
 
-const leafIdentityPreamble = "You are a delegated attn session — a leaf, not a " +
-	"coordinator. Do the work below in this session. For your own subtasks, use " +
-	"native subagents (your Task/Agent tools), not `attn delegate` — delegating " +
-	"offloads your assigned work into a session the user who delegated you isn't " +
-	"watching. Spawn a visible attn agent only if the user steering this session " +
-	"explicitly asks for one."
-
 func withLeafIdentity(prompt string) string {
-	return leafIdentityPreamble + "\n\n---\n\n" + strings.TrimSpace(prompt)
+	return prompts.RenderText("delegation", "identity", prompts.Values{"brief": prompt})
 }
 
 func delegatedBriefPrompt(brief, seedID string) string {
-	brief = strings.TrimSpace(brief)
-	if strings.TrimSpace(seedID) == "" {
-		return brief
-	}
-	return brief + `
-
----
-Your work is seed ` + "`" + seedID + "`" + ` in the garden — the brief above is its body, and
-you are its tender. Read the body and log with:
-
-    attn seed show ` + seedID + `
-
-Report progress, what you learned, and decisions needed on the log:
-
-    attn seed note ` + seedID + ` -m "<what happened and what you learned>"
-
-Harvest the seed when the outcome and required verification in its body are
-complete:
-
-    attn seed harvest ` + seedID + ` -m "<what got done>"`
+	return prompts.RenderText("delegation", "brief", prompts.Values{"brief": brief, "seed_id": seedID})
 }
 
 func (d *Daemon) handleDelegate(conn net.Conn, msg *protocol.DelegateMessage) {
