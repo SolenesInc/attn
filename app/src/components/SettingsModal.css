@@ -545,40 +545,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.settings-keeper-duties {
-  display: grid;
-  gap: 10px;
-}
-
-/* When the master switch is off the per-duty pickers stay usable (configurable while
-   disabled), but dim to signal that nothing runs until the toggle is back on. */
-.settings-keeper-duties.is-disabled {
-  opacity: 0.6;
-}
-
-.settings-keeper-duty {
-  display: grid;
-  gap: 10px;
-  border: 1px solid var(--color-border);
-  border-radius: 7px;
-  background: var(--color-bg-elevated);
-  padding: 12px 14px;
-}
-
-.settings-keeper-duty-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 16px;
-}
-
-/* A duty can be independently off while its model remains editable, just like
-   the master switch leaves all duty configuration reachable. */
-.settings-keeper-duty.is-disabled > :not(.settings-keeper-duty-head),
-.settings-keeper-duty.is-disabled .settings-keeper-duty-head > div {
-  opacity: 0.6;
-}
-
 .settings-token-list {
   display: flex;
   flex-wrap: wrap;

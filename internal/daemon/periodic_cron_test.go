@@ -17,7 +17,7 @@ func TestStartJobQueueArmsThePeriodicTicks(t *testing.T) {
 		t.Cleanup(runner.Stop)
 		synctest.Wait()
 
-		for _, kind := range []string{notebookCronKind, automationScheduleKind, crewLifecycleKind, sessionPullRequestRefreshKind} {
+		for _, kind := range []string{automationScheduleKind, crewLifecycleKind, sessionPullRequestRefreshKind} {
 			entry, err := runner.CronEntry(kind)
 			if err != nil {
 				t.Fatalf("cron entry for %s: %v", kind, err)
@@ -36,7 +36,7 @@ func TestStartJobQueueArmsThePeriodicTicks(t *testing.T) {
 		}
 		for _, job := range list {
 			switch job.Kind {
-			case notebookCronKind, automationScheduleKind, crewLifecycleKind, sessionPullRequestRefreshKind:
+			case automationScheduleKind, crewLifecycleKind, sessionPullRequestRefreshKind:
 				t.Fatalf("the work list included the %s heartbeat: %+v", job.Kind, job)
 			}
 		}

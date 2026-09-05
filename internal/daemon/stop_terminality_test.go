@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -327,4 +329,15 @@ func waitForResolvedState(t *testing.T, d *Daemon, sessionID string, want protoc
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("session %s state = %s, want %s", sessionID, last, want)
+}
+
+func drainingConn(t *testing.T) net.Conn {
+	t.Helper()
+	client, server := net.Pipe()
+	go io.Copy(io.Discard, server)
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = server.Close()
+	})
+	return client
 }

@@ -21,7 +21,7 @@ func TestJobs_UpsertGetDelete(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	rec := JobRecord{
 		ID:          "job-1",
-		Kind:        "compact_context",
+		Kind:        "session_activity",
 		UniqueKey:   "ws-1",
 		Priority:    7,
 		Payload:     `{"workspace_id":"ws-1"}`,

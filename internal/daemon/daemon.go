@@ -349,8 +349,6 @@ type Daemon struct {
 
 	automationsBroadcastHook func(*protocol.AutomationsChangedMessage)
 
-	workspaceContextCheckoutMu sync.Mutex
-
 	eventBus       *bus.Bus
 	busUnsubscribe func()
 
@@ -377,30 +375,8 @@ type Daemon struct {
 
 	// Guards the POINTER swap only (startJobQueue replaces the placeholder late
 	// in Start); read via jobQueueRef(), write via setJobQueue().
-	jobQueueMu                          sync.RWMutex
-	jobQueue                            *jobs.Runner
-	keeperCompactThreshold              int
-	keeperCompactDebounce               time.Duration
-	keeperCompactTimeout                time.Duration
-	workspaceContextBeforeKeeperApply   func()
-	workspaceContextCompactionExecution func(
-		ctx context.Context,
-		config keeperCompactConfig,
-		canonical *protocol.WorkspaceContext,
-	) (keeperCompactExecution, error)
-
-	summarizeSessionExecution func(
-		ctx context.Context,
-		provider agentdriver.HeadlessTaskProvider,
-		request agentdriver.HeadlessTaskRequest,
-	) (agentdriver.HeadlessTaskResult, error)
-	narrateWorkspaceExecution func(
-		ctx context.Context,
-		provider agentdriver.HeadlessTaskProvider,
-		request agentdriver.HeadlessTaskRequest,
-	) (agentdriver.HeadlessTaskResult, error)
-	narrationNowOverride func() time.Time
-
+	jobQueueMu               sync.RWMutex
+	jobQueue                 *jobs.Runner
 	sessionActivityExecution func(
 		ctx context.Context,
 		provider agentdriver.HeadlessTaskProvider,
@@ -412,9 +388,6 @@ type Daemon struct {
 
 	sessionActivityRunsMu sync.Mutex
 	sessionActivityRuns   map[string]sessionActivityRun
-
-	notebookNarrateActivityMu sync.Mutex
-	notebookNarrateActivity   map[string]struct{}
 }
 
 func (d *Daemon) addWarning(code, message string) {
@@ -815,7 +788,7 @@ func (d *Daemon) Start() error {
 	if err := d.startEventBus(); err != nil {
 		return fmt.Errorf("start event bus: %w", err)
 	}
-	reapedWorkspaceIDs := d.loadWorkspacesFromStore()
+	d.loadWorkspacesFromStore()
 	if d.daemonInstanceID == "" {
 		instanceID, err := enrollment.EnsureDaemonID(d.dataRoot)
 		if err != nil {
@@ -1015,8 +988,6 @@ func (d *Daemon) Start() error {
 	go d.runHTTPServer()
 	d.maybeStartDiagServer()
 	d.removeLegacyEmbeddedTailscaleState()
-	d.migrateKeeperCompactSettingKey()
-	d.migrateNotebookCronSettingKeys()
 	go d.ensureTailscaleServeFromSettingsAndBroadcast()
 	d.hubManager.Start(d.doneContext())
 
@@ -1047,10 +1018,6 @@ func (d *Daemon) Start() error {
 		d.finishLegacyTicketRecoveryUpgrade()
 	}
 	d.startPermanentMaintenance()
-
-	for _, wsID := range reapedWorkspaceIDs {
-		d.enqueueFinalNarrateWorkspace(wsID)
-	}
 
 	go func() {
 		d.performStartupPTYRecovery(recoveryStartedAt)
@@ -2569,18 +2536,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handlePresentFeedback(conn, msg.(*protocol.PresentFeedbackMessage))
 	case protocol.CmdTicketTake: // wire: ticket_take
 		d.handleTicketTake(conn, msg.(*protocol.TicketTakeMessage))
-	case protocol.CmdWorkspaceContextCheckout: // wire: workspace_context_checkout
-		d.handleWorkspaceContextCheckout(conn, msg.(*protocol.WorkspaceContextCheckoutMessage))
-	case protocol.CmdWorkspaceContextUpdate: // wire: workspace_context_update
-		d.handleWorkspaceContextUpdate(conn, msg.(*protocol.WorkspaceContextUpdateMessage))
-	case protocol.CmdWorkspaceContextStatus: // wire: workspace_context_status
-		d.handleWorkspaceContextStatus(conn, msg.(*protocol.WorkspaceContextStatusMessage))
-	case protocol.CmdWorkspaceContextList: // wire: workspace_context_list
-		d.handleWorkspaceContextList(conn)
-	case protocol.CmdWorkspaceContextCompact: // wire: workspace_context_compact
-		d.handleWorkspaceContextCompact(conn, msg.(*protocol.WorkspaceContextCompactMessage))
-	case protocol.CmdWorkspaceContextRollback: // wire: workspace_context_rollback
-		d.handleWorkspaceContextRollback(conn, msg.(*protocol.WorkspaceContextRollbackMessage))
 	case protocol.CmdNotebookGuide: // wire: notebook_guide
 		d.handleNotebookGuide(conn, msg.(*protocol.NotebookGuideMessage))
 	case protocol.CmdJournalAppend: // wire: journal_append
@@ -2968,15 +2923,6 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	}
 	d.store.Touch(msg.ID)
 	d.sendOK(conn)
-
-	stopWorkspaceID := d.resolveStopWorkspaceID(msg.ID)
-	d.enqueueSummarizeSession(msg.ID, msg.TranscriptPath, stopWorkspaceID)
-	if stopWorkspaceID != "" {
-		d.markNotebookWorkspaceActivity(stopWorkspaceID)
-		if d.store.GetWorkspace(stopWorkspaceID) != nil {
-			d.enqueueNarrateWorkspace(stopWorkspaceID)
-		}
-	}
 
 	if d.consumeForcedStopClassification(msg.ID) {
 		d.logf("handleStop: skipping classification for daemon-terminated session=%s", msg.ID)

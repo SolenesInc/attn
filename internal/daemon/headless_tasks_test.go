@@ -11,7 +11,6 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/headless"
-	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -138,65 +137,6 @@ func TestHeadlessSwitchOffRefusesSessionTitle(t *testing.T) {
 	requireRefusal(t, readLog, "session_title")
 }
 
-func TestHeadlessSwitchOffRefusesNotebookNarration(t *testing.T) {
-	cases := []struct {
-		name  string
-		kind  string
-		key   string
-		drive func(*Daemon)
-	}{
-		{
-			name:  "summarize_session",
-			kind:  notebookSummarizeSessionKind,
-			key:   "sess-1",
-			drive: func(d *Daemon) { d.enqueueSummarizeSession("sess-1", "", "workspace-1") },
-		},
-		{
-			name:  "narrate_workspace",
-			kind:  notebookNarrateWorkspaceKind,
-			key:   "workspace-1",
-			drive: func(d *Daemon) { d.enqueueNarrateWorkspace("workspace-1") },
-		},
-		{
-			name:  "narrate_workspace_daily",
-			kind:  notebookNarrateWorkspaceKind,
-			key:   "workspace-1",
-			drive: func(d *Daemon) { d.enqueueDailyNarrateWorkspace("workspace-1") },
-		},
-		{
-			name:  "narrate_workspace_final",
-			kind:  notebookNarrateWorkspaceKind,
-			key:   "workspace-1",
-			drive: func(d *Daemon) { d.enqueueFinalNarrateWorkspace("workspace-1") },
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name+"/control", func(t *testing.T) {
-			t.Setenv(headless.EnvVar, "on")
-			d, _ := newHeadlessDaemon(t)
-			installNotebookNarrationRunner(t, d)
-			tc.drive(d)
-			if job, err := d.jobQueue.GetByKey(tc.kind, tc.key); err != nil || job == nil {
-				t.Fatalf("switch on queued nothing (job=%v err=%v)", job, err)
-			}
-		})
-		t.Run(tc.name+"/refused", func(t *testing.T) {
-			t.Setenv(headless.EnvVar, "off")
-			d, readLog := newHeadlessDaemon(t)
-			installNotebookNarrationRunner(t, d)
-			tc.drive(d)
-			job, err := d.jobQueue.GetByKey(tc.kind, tc.key)
-			if err != nil {
-				t.Fatalf("lookup job: %v", err)
-			}
-			if job != nil {
-				t.Fatalf("a refused duty queued %s/%s", tc.kind, tc.key)
-			}
-			requireRefusal(t, readLog, tc.kind)
-		})
-	}
-}
-
 func TestHeadlessSwitchOffRefusesTicketReconcile(t *testing.T) {
 	t.Setenv(headless.EnvVar, "off")
 	d, readLog := newHeadlessDaemon(t)
@@ -214,36 +154,6 @@ func TestHeadlessSwitchOffRefusesTicketReconcile(t *testing.T) {
 		t.Fatalf("reconcile classifier ran %d times, want 0", *calls)
 	}
 	requireRefusal(t, readLog, reconcileKind)
-}
-
-func TestHeadlessSwitchOffRefusesKeeperCompact(t *testing.T) {
-	t.Setenv(headless.EnvVar, "off")
-	d, readLog := newHeadlessDaemon(t)
-	setupWorkspaceContextSession(t, d, "session-1", "workspace-1")
-	d.store.SetSetting(SettingKeeperCompact, `{"agent":"codex","model":"gpt-test"}`)
-	d.keeperCompactThreshold = 1
-	if !d.jobQueue.Disabled() {
-		t.Fatal("expected a disabled runner, so the inline compaction path is the one under test")
-	}
-	d.workspaceContextCompactionExecution = fakeCompaction(keeperCandidate)
-
-	if _, _, err := d.store.UpdateWorkspaceContext("workspace-1", keeperSource, "session-1", 0); err != nil {
-		t.Fatalf("seed context: %v", err)
-	}
-	canonical, err := d.store.GetWorkspaceContext("workspace-1")
-	if err != nil {
-		t.Fatalf("get canonical: %v", err)
-	}
-	d.enqueueWorkspaceContextCompaction(canonical)
-
-	current, err := d.store.GetWorkspaceContext("workspace-1")
-	if err != nil {
-		t.Fatalf("get current context: %v", err)
-	}
-	if current.Revision != 1 || current.Content != keeperSource {
-		t.Fatalf("a refused duty compacted the context anyway: %+v", current)
-	}
-	requireRefusal(t, readLog, compactContextKind)
 }
 
 func TestHeadlessSwitchOffRefusesSessionInstructions(t *testing.T) {
@@ -342,16 +252,6 @@ func TestHeadlessRefusalFollowsTheWork(t *testing.T) {
 		work   func(*testing.T, *Daemon)
 	}{
 		{
-			name:   "compact_context",
-			caller: compactContextKind,
-			idle: func(t *testing.T, d *Daemon) {
-				compactWorkspaceOfSize(t, d, 1<<20)
-			},
-			work: func(t *testing.T, d *Daemon) {
-				compactWorkspaceOfSize(t, d, 1)
-			},
-		},
-		{
 			name:   "session_title",
 			caller: "session_title",
 			idle: func(t *testing.T, d *Daemon) {
@@ -382,31 +282,6 @@ func TestHeadlessRefusalFollowsTheWork(t *testing.T) {
 				t0 := time.Now()
 				d.ticketReconcileSweepPass(t0)
 				d.ticketReconcileSweepPass(t0.Add(ticketReconcileGrace() + time.Minute))
-			},
-		},
-		{
-			name:   "summarize_session",
-			caller: notebookSummarizeSessionKind,
-			idle: func(t *testing.T, d *Daemon) {
-				installNotebookNarrationRunner(t, d)
-				runNotebookJob(t, d, d.summarizeSessionHandler, notebookSummarizeSessionKind, "sess-gone")
-			},
-			work: func(t *testing.T, d *Daemon) {
-				installNotebookNarrationRunner(t, d)
-				addActivitySession(t, d, "sess-1", protocol.SessionStateWorking)
-				runNotebookJob(t, d, d.summarizeSessionHandler, notebookSummarizeSessionKind, "sess-1")
-			},
-		},
-		{
-			name:   "narrate_workspace",
-			caller: notebookNarrateWorkspaceKind,
-			idle: func(t *testing.T, d *Daemon) {
-				installNotebookNarrationRunner(t, d)
-				runNotebookJob(t, d, d.narrateWorkspaceHandler, notebookNarrateWorkspaceKind, "")
-			},
-			work: func(t *testing.T, d *Daemon) {
-				installNotebookNarrationRunner(t, d)
-				runNotebookJob(t, d, d.narrateWorkspaceHandler, notebookNarrateWorkspaceKind, "workspace-1")
 			},
 		},
 	}
@@ -482,33 +357,12 @@ func seedActivityCursorFor(t *testing.T, d *Daemon, sessionID, transcriptPath st
 
 // The error is discarded on purpose: a handler that bails on ineligibility is
 // exactly the idle case, and the refusal count is the assertion.
-func runNotebookJob(t *testing.T, d *Daemon, handler func(context.Context, *jobs.Job) (any, error), kind, subject string) {
-	t.Helper()
-	_, _ = handler(context.Background(), &jobs.Job{Kind: kind, UniqueKey: subject})
-}
-
 func refusingTitleExec(t *testing.T) func(context.Context, *protocol.Session, string) (string, error) {
 	t.Helper()
 	return func(context.Context, *protocol.Session, string) (string, error) {
 		t.Error("a refused duty called the title model")
 		return "", nil
 	}
-}
-
-func compactWorkspaceOfSize(t *testing.T, d *Daemon, threshold int) {
-	t.Helper()
-	setupWorkspaceContextSession(t, d, "session-1", "workspace-1")
-	d.store.SetSetting(SettingKeeperCompact, `{"agent":"codex","model":"gpt-test"}`)
-	d.keeperCompactThreshold = threshold
-	d.workspaceContextCompactionExecution = fakeCompaction(keeperCandidate)
-	if _, _, err := d.store.UpdateWorkspaceContext("workspace-1", keeperSource, "session-1", 0); err != nil {
-		t.Fatalf("seed context: %v", err)
-	}
-	canonical, err := d.store.GetWorkspaceContext("workspace-1")
-	if err != nil {
-		t.Fatalf("get canonical: %v", err)
-	}
-	d.enqueueWorkspaceContextCompaction(canonical)
 }
 
 func TestSettingsSnapshotSeparatesStoredHeadlessValueFromTheEffectiveOne(t *testing.T) {

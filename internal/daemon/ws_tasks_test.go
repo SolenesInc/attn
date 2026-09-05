@@ -256,3 +256,23 @@ func TestTasksChangedBroadcastReachesClient(t *testing.T) {
 		}
 	}
 }
+
+func requireTaskState(t *testing.T, d *Daemon, kind, subject string, want jobs.State) *jobs.Job {
+	t.Helper()
+	synctest.Wait()
+	task, err := d.jobQueue.GetByKey(kind, subject)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if task == nil || task.State != want {
+		t.Fatalf("task %s:%s settled at %s, want %s (last=%+v)", kind, subject, taskState(task), want, task)
+	}
+	return task
+}
+
+func taskState(task *jobs.Job) jobs.State {
+	if task == nil {
+		return "<absent>"
+	}
+	return task.State
+}

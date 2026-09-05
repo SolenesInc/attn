@@ -87,7 +87,7 @@ func TestOpenDB_CreatesSchema(t *testing.T) {
 	}
 	defer db.Close()
 
-	tables := []string{"sessions", "prs", "repos", "workspace_contexts", "workspace_keeper_compact_backups", "profile_roles", "chief_of_staff_dispatches", "peer_messages", "agent_mailbox_items", "delegation_operations", "automation_provider_cursors", "automation_review_request_edges", "automation_continuity_bindings", "automation_ticket_occurrence_events", "legacy_ticket_recovery_runs", "legacy_ticket_recovery_sources", "legacy_ticket_recovery_items", "legacy_ticket_seed_links"}
+	tables := []string{"sessions", "prs", "repos", "profile_roles", "chief_of_staff_dispatches", "peer_messages", "agent_mailbox_items", "delegation_operations", "automation_provider_cursors", "automation_review_request_edges", "automation_continuity_bindings", "automation_ticket_occurrence_events", "legacy_ticket_recovery_runs", "legacy_ticket_recovery_sources", "legacy_ticket_recovery_items", "legacy_ticket_seed_links"}
 	for _, table := range tables {
 		var count int
 		err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count)
@@ -1643,7 +1643,7 @@ func TestMigration31_IdempotentWhenEndpointIDColumnAlreadyExists(t *testing.T) {
 	}
 }
 
-func TestMigration52RenamesKeeperBackupsAndRealignsSentinel(t *testing.T) {
+func TestMigration134DropsTheWorkspaceContextAndKeeperState(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)
 	if err != nil {
@@ -1651,49 +1651,72 @@ func TestMigration52RenamesKeeperBackupsAndRealignsSentinel(t *testing.T) {
 	}
 	defer s.Close()
 
-	// getCurrentVersion is MAX-based, so a higher recorded version would gate the
-	// re-run out. The later migrations are idempotent and re-run as no-ops.
-	s.AddWorkspace(&protocol.Workspace{ID: "workspace-1", Title: "W", Directory: t.TempDir()})
-	if _, _, err := s.UpdateWorkspaceContext("workspace-1", "ctx", "session-1", 0); err != nil {
-		t.Fatalf("seed context: %v", err)
+	statements := []string{
+		`CREATE TABLE workspace_contexts (workspace_id TEXT PRIMARY KEY, content TEXT NOT NULL)`,
+		`CREATE TABLE workspace_keeper_compact_backups (workspace_id TEXT PRIMARY KEY, source_content TEXT NOT NULL)`,
+		`INSERT INTO workspace_contexts (workspace_id, content) VALUES ('workspace-1', '# Workspace Context')`,
+		`INSERT INTO settings (key, value) VALUES ('workspace_keeper_compact', '{"agent":"claude","model":"haiku"}'), ('notebook.summarize_session.enabled', 'false'), ('notebook.cron.frequency', '0 3 * * *'), ('notebook.root', '/tmp/notebook')`,
+		`INSERT INTO jobs (id, kind, unique_key, state, scheduled_at, created_at, updated_at) VALUES ('job-1', 'summarize_session', 'session-1', 'queued', '2026-09-05T00:00:00Z', '2026-09-05T00:00:00Z', '2026-09-05T00:00:00Z'), ('job-2', 'compact_context', 'workspace-1', 'queued', '2026-09-05T00:00:00Z', '2026-09-05T00:00:00Z', '2026-09-05T00:00:00Z'), ('job-3', 'session_title', 'session-1', 'queued', '2026-09-05T00:00:00Z', '2026-09-05T00:00:00Z', '2026-09-05T00:00:00Z')`,
+		`INSERT INTO tasks (id, kind, subject, state, attempts, next_attempt_at, last_error, meta_json, requeued, created_at, updated_at) VALUES ('summarize_session:s-2', 'summarize_session', 's-2', 'queued', 1, '2026-09-05T00:00:00Z', '', '{}', 0, '2026-09-05T00:00:00Z', '2026-09-05T00:00:00Z'), ('reconcile:t-2', 'reconcile', 't-2', 'queued', 1, '2026-09-05T00:00:00Z', '', '{}', 0, '2026-09-05T00:00:00Z', '2026-09-05T00:00:00Z')`,
+		`DELETE FROM schema_migrations WHERE version >= 134`,
 	}
-	if _, err := s.db.Exec(`UPDATE workspace_contexts SET updated_by_session_id = 'attn-janitor' WHERE workspace_id = 'workspace-1'`); err != nil {
-		t.Fatalf("plant legacy sentinel: %v", err)
-	}
-	if _, err := s.db.Exec(`DROP TABLE workspace_keeper_compact_backups`); err != nil {
-		t.Fatalf("drop keeper table: %v", err)
-	}
-	if _, err := s.db.Exec(`CREATE TABLE workspace_context_janitor_backups (
-		workspace_id TEXT PRIMARY KEY,
-		source_revision INTEGER NOT NULL,
-		source_content TEXT NOT NULL,
-		result_revision INTEGER NOT NULL,
-		agent TEXT NOT NULL,
-		model TEXT NOT NULL,
-		created_at TEXT NOT NULL
-	)`); err != nil {
-		t.Fatalf("recreate legacy table: %v", err)
-	}
-	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 52`); err != nil {
-		t.Fatalf("unrecord migration 52: %v", err)
+	for _, stmt := range statements {
+		if _, err := s.db.Exec(stmt); err != nil {
+			t.Fatalf("%s: %v", stmt, err)
+		}
 	}
 
 	if err := migrateDB(s.db, dbPath); err != nil {
 		t.Fatalf("migrateDB error: %v", err)
 	}
 
-	if !tableExistsForTest(t, s.db, "workspace_keeper_compact_backups") {
-		t.Fatal("workspace_keeper_compact_backups missing after migration 52")
+	for _, table := range []string{"workspace_contexts", "workspace_keeper_compact_backups"} {
+		if tableExistsForTest(t, s.db, table) {
+			t.Fatalf("%s still present after migration 134", table)
+		}
 	}
-	if tableExistsForTest(t, s.db, "workspace_context_janitor_backups") {
-		t.Fatal("legacy workspace_context_janitor_backups still present after migration 52")
+	var settings int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM settings WHERE key IN ('workspace_keeper_compact', 'notebook.summarize_session.enabled', 'notebook.cron.frequency')`).Scan(&settings); err != nil {
+		t.Fatalf("count keeper settings: %v", err)
 	}
-	var updater string
-	if err := s.db.QueryRow(`SELECT updated_by_session_id FROM workspace_contexts WHERE workspace_id = 'workspace-1'`).Scan(&updater); err != nil {
-		t.Fatalf("read sentinel: %v", err)
+	if settings != 0 {
+		t.Fatalf("keeper settings remaining = %d, want 0", settings)
 	}
-	if updater != "attn-keeper" {
-		t.Fatalf("sentinel = %q, want attn-keeper", updater)
+	if got := s.GetSetting("notebook.root"); got != "/tmp/notebook" {
+		t.Fatalf("notebook.root = %q, want it untouched", got)
+	}
+	var kinds []string
+	rows, err := s.db.Query(`SELECT kind FROM jobs ORDER BY id`)
+	if err != nil {
+		t.Fatalf("list jobs: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var kind string
+		if err := rows.Scan(&kind); err != nil {
+			t.Fatalf("scan job: %v", err)
+		}
+		kinds = append(kinds, kind)
+	}
+	if len(kinds) != 1 || kinds[0] != "session_title" {
+		t.Fatalf("jobs after migration = %v, want only session_title", kinds)
+	}
+
+	// The legacy handover runs after the purge, so a retired kind left in tasks would come back as a dead job.
+	moved, err := s.MigrateLegacyTasks(func(rec LegacyTaskRecord) JobRecord {
+		return JobRecord{ID: rec.ID, Kind: rec.Kind, UniqueKey: rec.Subject, State: rec.State, ScheduledAt: rec.NextAttemptAt, CreatedAt: rec.CreatedAt, UpdatedAt: rec.UpdatedAt}
+	})
+	if err != nil {
+		t.Fatalf("legacy handover: %v", err)
+	}
+	if moved != 1 {
+		t.Fatalf("legacy handover moved %d rows, want only the reconcile row", moved)
+	}
+	if _, ok, err := s.GetJob("summarize_session:s-2"); err != nil || ok {
+		t.Fatalf("legacy keeper task came back as a job (ok=%v err=%v)", ok, err)
+	}
+	if _, ok, err := s.GetJob("reconcile:t-2"); err != nil || !ok {
+		t.Fatalf("legacy reconcile task was lost (ok=%v err=%v)", ok, err)
 	}
 }
 

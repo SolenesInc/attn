@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/robfig/cron/v3"
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/headless"
@@ -37,61 +36,53 @@ const (
 	SettingSharedPTYHostActive  = "pty_shared_host_active"
 	SettingTheme                = "theme"
 	SettingReviewerModel        = "reviewer_model"
-	SettingKeeperCompact        = "workspace_keeper_compact"
 	SettingTailscaleEnabled     = "tailscale_enabled"
 	SettingWorkflowsEnabled     = "workflows_enabled"
 	// Explicit, local-only opt-in: captured terminal text can contain secrets.
-	SettingModelCaptureEnabled             = "model_capture.enabled"
-	SettingModelCaptureIntervalSeconds     = "model_capture.interval_seconds"
-	SettingModelCaptureMaxGB               = "model_capture.max_gb"
-	SettingModelCapturePath                = "model_capture.path"
-	SettingModelCaptureBytes               = "model_capture.bytes"
-	SettingQueueModeEnabled                = "queue_mode_enabled"
-	SettingQueueCrewEnabled                = "queue_crew_enabled"
-	SettingAutoApproveEnabled              = "auto_approve_enabled"
-	SettingOpenSentFilesEnabled            = "open_sent_files_enabled"
-	SettingAutoSettleEnabled               = "auto_settle_enabled"
-	SettingAutoSettleArmSeconds            = "auto_settle_arm_seconds"
-	SettingAutoSettleCountdownSeconds      = "auto_settle_countdown_seconds"
-	SettingKeybindingsConfig               = "keybindings_config"
-	SettingNewSessionYoloPrefix            = "new_session_yolo_"
-	SettingNewSessionDestinationPrefix     = "new_session_destination_"
-	DestinationNewWorktree                 = "new_worktree"
-	DestinationMainRepo                    = "main_repo"
-	SettingChiefModelPrefix                = "chief_model_"
-	SettingChiefEffortPrefix               = "chief_effort_"
-	SettingDefaultModelPrefix              = "default_model_"
-	SettingDefaultEffortPrefix             = "default_effort_"
-	SettingNotebookRoot                    = "notebook.root"
-	SettingNotebookRootEffective           = "notebook.root.effective"
-	SettingAutoModeEnabledDefault          = "automode_enabled_default"
-	SettingNotebookCronFrequency           = "notebook.cron.frequency"
-	SettingNotebookCronTimezone            = "notebook.cron.timezone"
-	SettingNotebookSummarizeSession        = "notebook.summarize_session"
-	SettingNotebookSummarizeSessionEnabled = "notebook.summarize_session.enabled"
-	SettingNotebookNarrateWorkspace        = "notebook.narrate_workspace"
-	SettingNotebookNarrateWorkspaceEnabled = "notebook.narrate_workspace.enabled"
-	SettingActivityEnabled                 = "activity.enabled"
-	SettingActivityConfig                  = "activity.config"
-	SettingActivityIntervals               = "activity.intervals"
-	SettingActivityPresenceIdleSeconds     = "activity.presence_idle_seconds"
-	SettingGardenAdvisor                   = "garden.advisor"
-	SettingCrewHeartbeatEnabled            = "crew.heartbeat_enabled"
-	SettingCrewAutoSleepEnabled            = "crew.autosleep_enabled"
-	SettingCrewCacheTTLSeconds             = "crew.cache_ttl_seconds"
-	SettingCrewCacheTTLPrefix              = "crew.cache_ttl_seconds."
-	SettingCrewHeartbeatLeadSeconds        = "crew.heartbeat_lead_seconds"
-	SettingCrewAwaySeconds                 = "crew.away_seconds"
-	SettingCrewWakeLimit                   = "crew.wake_limit"
-	SettingCrewWakeLimitWindowSeconds      = "crew.wake_limit_window_seconds"
-	SettingChiefContextWindowCap           = "chief_context_window_cap"
-	SettingHeadlessContextWindowCap        = "headless_context_window_cap"
-	SettingDefaultContextWindowCapPrefix   = "default_context_window_cap_"
-	SettingNotebookTasksEnabled            = "notebook.tasks_enabled"
-	SettingHeadlessTasksEnabled            = headless.SettingKey
-	SettingHeadlessTasksEnabledStored      = headless.SettingKey + ".stored"
-	SettingHeadlessTasksEnabledOverride    = headless.SettingKey + ".override"
-	SettingDBLastBackupAt                  = "db.last_backup_at"
+	SettingModelCaptureEnabled           = "model_capture.enabled"
+	SettingModelCaptureIntervalSeconds   = "model_capture.interval_seconds"
+	SettingModelCaptureMaxGB             = "model_capture.max_gb"
+	SettingModelCapturePath              = "model_capture.path"
+	SettingModelCaptureBytes             = "model_capture.bytes"
+	SettingQueueModeEnabled              = "queue_mode_enabled"
+	SettingQueueCrewEnabled              = "queue_crew_enabled"
+	SettingAutoApproveEnabled            = "auto_approve_enabled"
+	SettingOpenSentFilesEnabled          = "open_sent_files_enabled"
+	SettingAutoSettleEnabled             = "auto_settle_enabled"
+	SettingAutoSettleArmSeconds          = "auto_settle_arm_seconds"
+	SettingAutoSettleCountdownSeconds    = "auto_settle_countdown_seconds"
+	SettingKeybindingsConfig             = "keybindings_config"
+	SettingNewSessionYoloPrefix          = "new_session_yolo_"
+	SettingNewSessionDestinationPrefix   = "new_session_destination_"
+	DestinationNewWorktree               = "new_worktree"
+	DestinationMainRepo                  = "main_repo"
+	SettingChiefModelPrefix              = "chief_model_"
+	SettingChiefEffortPrefix             = "chief_effort_"
+	SettingDefaultModelPrefix            = "default_model_"
+	SettingDefaultEffortPrefix           = "default_effort_"
+	SettingNotebookRoot                  = "notebook.root"
+	SettingNotebookRootEffective         = "notebook.root.effective"
+	SettingAutoModeEnabledDefault        = "automode_enabled_default"
+	SettingActivityEnabled               = "activity.enabled"
+	SettingActivityConfig                = "activity.config"
+	SettingActivityIntervals             = "activity.intervals"
+	SettingActivityPresenceIdleSeconds   = "activity.presence_idle_seconds"
+	SettingGardenAdvisor                 = "garden.advisor"
+	SettingCrewHeartbeatEnabled          = "crew.heartbeat_enabled"
+	SettingCrewAutoSleepEnabled          = "crew.autosleep_enabled"
+	SettingCrewCacheTTLSeconds           = "crew.cache_ttl_seconds"
+	SettingCrewCacheTTLPrefix            = "crew.cache_ttl_seconds."
+	SettingCrewHeartbeatLeadSeconds      = "crew.heartbeat_lead_seconds"
+	SettingCrewAwaySeconds               = "crew.away_seconds"
+	SettingCrewWakeLimit                 = "crew.wake_limit"
+	SettingCrewWakeLimitWindowSeconds    = "crew.wake_limit_window_seconds"
+	SettingChiefContextWindowCap         = "chief_context_window_cap"
+	SettingHeadlessContextWindowCap      = "headless_context_window_cap"
+	SettingDefaultContextWindowCapPrefix = "default_context_window_cap_"
+	SettingHeadlessTasksEnabled          = headless.SettingKey
+	SettingHeadlessTasksEnabledStored    = headless.SettingKey + ".stored"
+	SettingHeadlessTasksEnabledOverride  = headless.SettingKey + ".override"
+	SettingDBLastBackupAt                = "db.last_backup_at"
 )
 
 func (d *Daemon) handleGetSettingsWS(client *wsClient) {
@@ -303,9 +294,6 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 	settings[SettingAutoSettleCountdownSeconds] = strconv.Itoa(int(resolveAutoSettleSeconds(stored[SettingAutoSettleCountdownSeconds], defaultAutoSettleCountdownSeconds) / time.Second))
 	// Default-ON settings send their EFFECTIVE value so an absent key is never read as off.
 	// activity.config stays un-normalized: blank means no agent has been chosen.
-	settings[SettingNotebookTasksEnabled] = strconv.FormatBool(d.notebookTasksEnabled())
-	settings[SettingNotebookSummarizeSessionEnabled] = strconv.FormatBool(d.notebookSummariesEnabled())
-	settings[SettingNotebookNarrateWorkspaceEnabled] = strconv.FormatBool(d.notebookWorkspaceNarrationEnabled())
 	settings[SettingOpenSentFilesEnabled] = strconv.FormatBool(d.openSentFilesEnabled())
 	settings[SettingHeadlessTasksEnabled] = strconv.FormatBool(headless.Enabled())
 	settings[SettingHeadlessTasksEnabledStored] = strconv.FormatBool(d.headlessTasksStored())
@@ -477,7 +465,7 @@ func (d *Daemon) validateSetting(key, value string) error {
 		return validateTheme(value)
 	case SettingSharedPTYHostEnabled:
 		return validateBooleanSetting(value)
-	case SettingTailscaleEnabled, SettingWorkflowsEnabled, SettingAutoApproveEnabled, SettingNotebookTasksEnabled, SettingNotebookSummarizeSessionEnabled, SettingNotebookNarrateWorkspaceEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled:
+	case SettingTailscaleEnabled, SettingWorkflowsEnabled, SettingAutoApproveEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled:
 		return validateBooleanSetting(value)
 	case SettingModelCaptureIntervalSeconds:
 		return validateModelCaptureInterval(value)
@@ -489,12 +477,6 @@ func (d *Daemon) validateSetting(key, value string) error {
 		return validateAutoSettleSeconds("auto-settle countdown", value, autoSettleCountdownMinSeconds, autoSettleCountdownMaxSeconds)
 	case SettingChiefContextWindowCap, SettingHeadlessContextWindowCap:
 		return validateContextWindowCap(value)
-	case SettingKeeperCompact:
-		return d.validateKeeperCompactSetting(value)
-	case SettingNotebookSummarizeSession:
-		return d.validateNotebookNarrationSetting(notebookSummarizeSessionKind, value)
-	case SettingNotebookNarrateWorkspace:
-		return d.validateNotebookNarrationSetting(notebookNarrateWorkspaceKind, value)
 	case SettingActivityConfig:
 		return d.validateActivitySetting(value)
 	case SettingGardenAdvisor:
@@ -524,10 +506,6 @@ func (d *Daemon) validateSetting(key, value string) error {
 		return validateBoundedIntSetting("crew wake limit window", value, crewWakeLimitWindowMinSecs, crewWakeLimitWindowMaxSecs)
 	case SettingNotebookRoot:
 		return validateNotebookRoot(value)
-	case SettingNotebookCronFrequency:
-		return validateNotebookCronFrequency(value)
-	case SettingNotebookCronTimezone:
-		return validateNotebookCronTimezone(value)
 	case SettingKeybindingsConfig:
 		return validateKeybindingsConfig(value)
 	case SettingReviewerModel:
@@ -714,40 +692,6 @@ func canonicalizeForComparison(path string) string {
 		return clean
 	}
 	return filepath.Join(append([]string{resolved}, remainder...)...)
-}
-
-func validateNotebookCronFrequency(value string) error {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return nil
-	}
-	if hasCronTZPrefix(trimmed) {
-		return fmt.Errorf("notebook.cron.frequency must not embed a CRON_TZ=/TZ= prefix; set notebook.cron.timezone instead")
-	}
-	sched, err := cron.ParseStandard(trimmed)
-	if err != nil {
-		return fmt.Errorf("notebook.cron.frequency must be a cron expression (5 fields, or a descriptor like @daily): %w", err)
-	}
-	// robfig returns the zero time for a never-occurring date like Feb 30, which
-	// the scheduler would re-fire in a loop.
-	if sched.Next(time.Now()).IsZero() {
-		return fmt.Errorf("notebook.cron.frequency %q describes a time that never occurs", trimmed)
-	}
-	return nil
-}
-
-func hasCronTZPrefix(expr string) bool {
-	return strings.HasPrefix(expr, "TZ=") || strings.HasPrefix(expr, "CRON_TZ=")
-}
-
-func validateNotebookCronTimezone(value string) error {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	if _, err := time.LoadLocation(strings.TrimSpace(value)); err != nil {
-		return fmt.Errorf("notebook.cron.timezone must be an IANA timezone: %w", err)
-	}
-	return nil
 }
 
 func validateProjectsDirectory(path string) error {

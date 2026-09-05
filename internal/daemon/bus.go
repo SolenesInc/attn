@@ -53,7 +53,6 @@ const (
 	FactWorkspaceUnregistered       = "workspace.unregistered"
 	FactWorkspaceLayoutChanged      = "workspace.layout.changed"
 	FactWorkspaceLayoutRepublished  = "workspace.layout.republished"
-	FactWorkspaceContextChanged     = "workspace.context.changed"
 
 	FactPRAppeared       = "pr.appeared"
 	FactPRUpdated        = "pr.updated"
@@ -286,10 +285,6 @@ func buildWireProjections() []projection {
 		{
 			filter: bus.Filter{FactWorkspaceLayoutRepublished},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectWorkspaceLayoutRepublished(ev.Subject) },
-		},
-		{
-			filter: bus.Filter{FactWorkspaceContextChanged},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectWorkspaceContextChanged(ev) },
 		},
 		{
 			filter: bus.Filter{

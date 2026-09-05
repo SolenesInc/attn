@@ -10,8 +10,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Appends through the per-root cached notebook.Store, so the write cannot race
-// the keeper's own writes the way a direct file edit does.
+// Appends through the per-root cached notebook.Store, so concurrent agent writes
+// serialize instead of racing the way direct file edits do.
 func (d *Daemon) handleJournalAppend(conn net.Conn, msg *protocol.JournalAppendMessage) {
 	entry := strings.TrimSpace(msg.Entry)
 	if entry == "" {

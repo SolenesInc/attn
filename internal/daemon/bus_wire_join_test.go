@@ -169,17 +169,6 @@ var wireFixtures = map[string]wireFixture{
 		events:  []string{protocol.EventWorkspaceLayout},
 		subject: (*wireWorld).workspace,
 	},
-	FactWorkspaceContextChanged: {
-		events:  []string{protocol.EventWorkspaceContextChanged},
-		subject: (*wireWorld).workspace,
-		payload: func(w *wireWorld) any {
-			return protocol.WorkspaceContextChangedMessage{
-				Event:       protocol.EventWorkspaceContextChanged,
-				WorkspaceID: w.workspaceID,
-				Revision:    1,
-			}
-		},
-	},
 
 	FactGardenPlanted:               {events: []string{protocol.EventGardenSeedsUpdated}},
 	FactGardenBodyEdited:            {events: []string{protocol.EventGardenSeedsUpdated}},

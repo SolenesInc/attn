@@ -1,0 +1,3 @@
+kind: changed
+area: sessions
+change: Remove the keeper and the workspace context. Session summaries, workspace narration, context compaction, the shared context file, its settings, CLI verbs, and app navigator are gone; the Notebook journal is written only by agents and people.

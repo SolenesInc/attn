@@ -5,7 +5,6 @@ const SETTINGS_SECTION_IDS = [
   'workspace',
   'hygiene',
   'agents',
-  'keeper',
   'autoMode',
   'connectivity',
   'plugins',

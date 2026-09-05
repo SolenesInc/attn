@@ -974,23 +974,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		go d.handleDelegateWS(client, msg.(*protocol.DelegateMessage))
 	case protocol.CmdDelegateStatus: // wire: delegate_status
 		go d.handleDelegateStatusWS(client, msg.(*protocol.DelegateStatusMessage))
-	case protocol.CmdWorkspaceContextCheckout: // wire: workspace_context_checkout
-		go func() {
-			result, err := d.checkoutWorkspaceContext(msg.(*protocol.WorkspaceContextCheckoutMessage))
-			d.sendWorkspaceContextWSResult(client, "checkout", result, err)
-		}()
-	case protocol.CmdWorkspaceContextUpdate: // wire: workspace_context_update
-		go func() {
-			result, _, err := d.updateWorkspaceContext(msg.(*protocol.WorkspaceContextUpdateMessage))
-			d.sendWorkspaceContextWSResult(client, "update", result, err)
-		}()
-	case protocol.CmdWorkspaceContextStatus: // wire: workspace_context_status
-		go func() {
-			result, err := d.workspaceContextStatus(msg.(*protocol.WorkspaceContextStatusMessage))
-			d.sendWorkspaceContextWSResult(client, "status", result, err)
-		}()
-	case protocol.CmdWorkspaceContextList: // wire: workspace_context_list
-		go d.sendWorkspaceContextListWSResult(client, msg.(*protocol.WorkspaceContextListMessage).RequestID)
 	case protocol.CmdNotebookList: // wire: notebook_list
 		nbList := msg.(*protocol.NotebookListMessage)
 		go d.sendNotebookListWSResult(client, protocol.Deref(nbList.RequestID), protocol.Deref(nbList.Prefix))

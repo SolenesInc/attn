@@ -78,20 +78,6 @@ func TestParseGardenAdvisorConfigRejectsUnsupportedRecipes(t *testing.T) {
 	}
 }
 
-func TestToolUsingHeadlessConfigsRejectCopilot(t *testing.T) {
-	if _, err := parseNotebookNarrationConfig(
-		notebookNarrateWorkspaceKind,
-		`{"agent":"copilot","model":"claude-sonnet-4.6"}`,
-	); err == nil || !strings.Contains(err.Error(), "tool-free") {
-		t.Fatalf("notebook narration error = %v, want tool-free capability error", err)
-	}
-	if _, err := parseKeeperCompactConfig(
-		`{"agent":"copilot","model":"claude-sonnet-4.6"}`,
-	); err == nil || !strings.Contains(err.Error(), "tool-free") {
-		t.Fatalf("keeper compact error = %v, want tool-free capability error", err)
-	}
-}
-
 func TestValidateGardenAdvisorSettingUsesConfiguredExecutable(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "advisor.sock"))
 	t.Cleanup(d.stopEventBus)

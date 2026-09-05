@@ -717,3 +717,30 @@ func TestDisablingActivityClearsEveryLine(t *testing.T) {
 		}
 	}
 }
+
+func writeFakeAgentExecutable(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "fake-agent")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write fake agent: %v", err)
+	}
+	return path
+}
+
+func waitForTaskState(t *testing.T, d *Daemon, kind, subject string, want jobs.State) *jobs.Job {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		task, err := d.jobQueue.GetByKey(kind, subject)
+		if err != nil {
+			t.Fatalf("get task: %v", err)
+		}
+		if task != nil && task.State == want {
+			return task
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("task %s:%s did not reach %s (last=%+v)", kind, subject, want, task)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+}

@@ -1190,6 +1190,20 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 			ON agent_mailbox_items(recipient_session_id, created_at, id)
 			WHERE read_at = '';
 	`},
+	{134, "remove the workspace context and the keeper duties", `
+		DROP TABLE IF EXISTS workspace_keeper_compact_backups;
+		DROP TABLE IF EXISTS workspace_context_janitor_backups;
+		DROP TABLE IF EXISTS workspace_contexts;
+		DELETE FROM settings WHERE key IN (
+			'workspace_keeper_compact', 'workspace_context_janitor',
+			'notebook.summarize_session', 'notebook.summarize_session.enabled',
+			'notebook.narrate_workspace', 'notebook.narrate_workspace.enabled',
+			'notebook.tasks_enabled', 'notebook.cron.frequency', 'notebook.cron.timezone',
+			'notebook.dreaming.frequency', 'notebook.dreaming.timezone', 'notebook.dreaming.enabled'
+		);
+		DELETE FROM jobs WHERE kind IN ('compact_context', 'summarize_session', 'narrate_workspace', 'notebook_cron');
+		DELETE FROM tasks WHERE kind IN ('compact_context', 'summarize_session', 'narrate_workspace', 'notebook_cron');
+	`},
 }
 
 const migration99SQL = `

@@ -348,30 +348,6 @@ func TestChiefOfStaffDelegationPreservesCoordinationIdentityAcrossPlacements(t *
 			if err != nil || seed.TenderSession != spawn.ID {
 				t.Fatalf("bound seed = %+v, err=%v", seed, err)
 			}
-
-			checkout, err := d.checkoutWorkspaceContext(&protocol.WorkspaceContextCheckoutMessage{
-				SourceSessionID: spawn.ID,
-			})
-			if err != nil {
-				t.Fatalf("checkout workspace context: %v", err)
-			}
-			if checkout.SessionID != spawn.ID || checkout.WorkspaceID != result.WorkspaceID {
-				t.Fatalf("checkout = %+v, spawn = %+v, result = %+v", checkout, spawn, result)
-			}
-			if err := os.WriteFile(checkout.Path, []byte("# Workspace Context\n\n## Area\nDelegation identity.\n\n## Current Picture\nCoordination is routed by the delegated session.\n"), 0o600); err != nil {
-				t.Fatalf("edit workspace context: %v", err)
-			}
-			updated, changed, err := d.updateWorkspaceContext(&protocol.WorkspaceContextUpdateMessage{
-				SourceSessionID: spawn.ID,
-			})
-			if err != nil || !changed || updated.SessionID != spawn.ID ||
-				updated.WorkspaceID != result.WorkspaceID {
-				t.Fatalf("workspace context update = %+v, changed=%v, err=%v", updated, changed, err)
-			}
-			canonical, err := d.store.GetWorkspaceContext(result.WorkspaceID)
-			if err != nil || canonical.UpdatedBySessionID != spawn.ID {
-				t.Fatalf("canonical workspace context = %+v, err=%v", canonical, err)
-			}
 		})
 	}
 }

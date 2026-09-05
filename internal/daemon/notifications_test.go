@@ -13,8 +13,8 @@ func TestNotifyTaskTerminalFailurePersistsNotification(t *testing.T) {
 
 	d.notifyTaskTerminalFailure(&jobs.Job{
 		ID:        "job-1",
-		Kind:      compactContextKind,
-		UniqueKey: "ws-1",
+		Kind:      reconcileKind,
+		UniqueKey: "t-1",
 		State:     jobs.StateDead,
 		Attempts:  3,
 		LastError: "boom: context deadline exceeded",
@@ -31,7 +31,7 @@ func TestNotifyTaskTerminalFailurePersistsNotification(t *testing.T) {
 	if n.Kind != notificationKindTaskFailed {
 		t.Fatalf("kind = %q, want %q", n.Kind, notificationKindTaskFailed)
 	}
-	if n.Title != "Context compaction failed" {
+	if n.Title != "Ticket reconciliation failed" {
 		t.Fatalf("title = %q", n.Title)
 	}
 	if n.Detail != "boom: context deadline exceeded" {
@@ -81,7 +81,7 @@ func TestTaskFailureNotificationIsWarning(t *testing.T) {
 
 	d := &Daemon{store: store.New()}
 	d.notifyTaskTerminalFailure(&jobs.Job{
-		ID: "job-1", Kind: compactContextKind, State: jobs.StateDead, Attempts: 3,
+		ID: "job-1", Kind: reconcileKind, State: jobs.StateDead, Attempts: 3,
 	})
 	list, err := d.store.ListNotifications()
 	if err != nil {

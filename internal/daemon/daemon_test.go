@@ -3688,9 +3688,6 @@ func TestDaemon_SettingsValidation(t *testing.T) {
 		{"empty copilot_executable", "copilot_executable", "", false},
 		{"empty reviewer_model", "reviewer_model", "", false},
 		{"custom reviewer_model", "reviewer_model", "claude-sonnet-4-6", false},
-		{"empty keeper compact", "workspace_keeper_compact", "", false},
-		{"invalid keeper compact json", "workspace_keeper_compact", "{", true},
-		{"incomplete keeper compact", "workspace_keeper_compact", `{"agent":"codex"}`, true},
 		{"valid gardenScale", "gardenScale", "1.2", false},
 		{"empty gardenScale matches app", "gardenScale", "", false},
 		{"gardenScale out of range", "gardenScale", "3.0", true},
@@ -3700,10 +3697,6 @@ func TestDaemon_SettingsValidation(t *testing.T) {
 		{"valid tailscale_enabled false", "tailscale_enabled", "false", false},
 		{"valid queue_crew_enabled true", "queue_crew_enabled", "true", false},
 		{"invalid queue_crew_enabled", "queue_crew_enabled", "maybe", true},
-		{"valid summarize enabled false", "notebook.summarize_session.enabled", "false", false},
-		{"invalid summarize enabled", "notebook.summarize_session.enabled", "maybe", true},
-		{"valid narration enabled false", "notebook.narrate_workspace.enabled", "false", false},
-		{"invalid narration enabled", "notebook.narrate_workspace.enabled", "maybe", true},
 		{"empty keybindings_config", "keybindings_config", "", false},
 		{"valid keybindings_config", "keybindings_config", `{"version":1,"overrides":{"session.new":{"key":"m","meta":true}}}`, false},
 		{"invalid keybindings_config json", "keybindings_config", "{not json", true},
@@ -3931,32 +3924,6 @@ func TestDaemon_ApplyHeadlessContextWindowCap(t *testing.T) {
 	d.applyHeadlessContextWindowCap()
 	if got := agentdriver.HeadlessContextWindowCap(); got != 180000 {
 		t.Fatalf("headless cap = %d, want 180000", got)
-	}
-}
-
-func TestDaemon_ValidatesKeeperCompactAgentAndExecutable(t *testing.T) {
-	tempDir := t.TempDir()
-	executable := filepath.Join(tempDir, "custom-codex")
-	if err := os.WriteFile(executable, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatalf("write fake codex: %v", err)
-	}
-	t.Setenv("PATH", tempDir)
-
-	d := &Daemon{store: store.New()}
-	d.store.SetSetting(SettingCodexExecutable, "custom-codex")
-	if err := d.validateSetting(
-		SettingKeeperCompact,
-		`{"agent":"codex","model":"gpt-test"}`,
-	); err != nil {
-		t.Fatalf("valid keeper compact setting rejected: %v", err)
-	}
-
-	d.store.SetSetting(SettingCodexExecutable, "missing-codex")
-	if err := d.validateSetting(
-		SettingKeeperCompact,
-		`{"agent":"codex","model":"gpt-test"}`,
-	); err == nil {
-		t.Fatal("keeper compact setting accepted a missing configured executable")
 	}
 }
 

@@ -250,9 +250,6 @@ func main() {
 	case "present":
 		maybePrintProfileBanner()
 		runPresent()
-	case "workspace":
-		maybePrintProfileBanner()
-		runWorkspace()
 	case "profile":
 		// No banner: `attn profile resolve --field …` must print only the value for the Makefile / harness.
 		runProfile()
@@ -645,7 +642,6 @@ commands:
   delegate --brief-file <path> --model <name>  start another agent with a delegated brief
   delegate --plot <seed-id> --model <name>     start another agent at an existing seed
   journal append --entry <text>     serialized append to the daily notebook journal
-  workspace context <command>       edit shared workspace context
   open <file.md|seed-id> [--session <id>]   show a document in attn
   browser <command>                 open and control the in-app browser
   workflow <command>                run, inspect, and resume durable workflows
@@ -1223,7 +1219,7 @@ func parseJournalAppendArgs(args []string) (journalAppendArgs, error) {
 	}, nil
 }
 
-// Appends through the daemon's single serialized notebook writer; editing journal/<date>.md directly races the keeper.
+// Appends through the daemon's single serialized notebook writer; editing journal/<date>.md directly races other agents.
 func runJournalAppend(args []string) {
 	parsed, err := parseJournalAppendArgs(args)
 	if err != nil {
@@ -1251,7 +1247,7 @@ commands:
         serialized append to the notebook's daily journal (journal/<date>.md)
         through the daemon — the contention-safe way an agent writes the
         journal, instead of editing the file directly with its own file-edit
-        tools (which races the daemon's own keeper writes to the same file).
+        tools (which races other agents writing the same file).
         date defaults to today. --json prints rel_path and hash.
 
 The session defaults to ATTN_SESSION_ID.
@@ -1574,32 +1570,6 @@ func resolveDispatchSession(value string) (string, error) {
 	return source, nil
 }
 
-func runWorkspace() {
-	if len(os.Args) < 3 || os.Args[2] == "-h" || os.Args[2] == "--help" {
-		writeWorkspaceHelp(os.Stdout)
-		return
-	}
-	if os.Args[2] != "context" {
-		fmt.Fprintf(os.Stderr, "workspace: unknown command %q\n\n", os.Args[2])
-		writeWorkspaceHelp(os.Stderr)
-		os.Exit(2)
-	}
-	runWorkspaceContext(os.Args[3:])
-}
-
-func writeWorkspaceHelp(w io.Writer) {
-	fmt.Fprint(w, `usage: attn workspace context <command>
-
-commands:
-  show [--session <id>] [--force]  print the editable context file path
-  checkout                         alias for show
-  update [--session <id>]          publish local edits if the revision matches
-  status [--session <id>]          show local and canonical revision state
-  compact [--session <id>]         compact now with the configured keeper
-  rollback [--session <id>]        restore the latest pre-compaction snapshot
-`)
-}
-
 type notebookGuideClient interface {
 	NotebookGuide(sessionID string) (*protocol.NotebookGuideResult, error)
 }
@@ -1610,79 +1580,6 @@ func resolveChiefNotebookRoot(c notebookGuideClient, sessionID string) string {
 		return ""
 	}
 	return guide.Root
-}
-
-func workspaceContextSourceSession(args []string, allowForce bool) (string, bool, error) {
-	fs := flag.NewFlagSet("workspace context", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	sessionID := fs.String("session", "", "source session id (defaults to ATTN_SESSION_ID)")
-	force := fs.Bool("force", false, "discard local edits and replace the checkout")
-	if err := fs.Parse(args); err != nil {
-		return "", false, err
-	}
-	if fs.NArg() != 0 {
-		return "", false, fmt.Errorf("unexpected arguments: %v", fs.Args())
-	}
-	if !allowForce && *force {
-		return "", false, errors.New("--force is only valid with show or checkout")
-	}
-	source := strings.TrimSpace(*sessionID)
-	if source == "" {
-		source = strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
-	}
-	if source == "" {
-		return "", false, errors.New("no source session; run inside attn or pass --session")
-	}
-	return source, *force, nil
-}
-
-func runWorkspaceContext(args []string) {
-	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
-		writeWorkspaceHelp(os.Stdout)
-		return
-	}
-	warnIfDaemonVersionMismatch()
-	action := args[0]
-	switch action {
-	case "show", "checkout", "update", "status", "compact", "rollback":
-	default:
-		fmt.Fprintf(os.Stderr, "workspace context: unknown command %q\n\n", action)
-		writeWorkspaceHelp(os.Stderr)
-		os.Exit(2)
-	}
-	sourceSessionID, force, err := workspaceContextSourceSession(args[1:], action == "show" || action == "checkout")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "workspace context: %v\n", err)
-		os.Exit(2)
-	}
-	c := client.New("")
-	var result *protocol.WorkspaceContextResult
-	var maintenanceResult *protocol.WorkspaceContextMaintenanceResult
-	switch action {
-	case "show", "checkout":
-		result, err = c.CheckoutWorkspaceContext(sourceSessionID, force)
-		if err == nil {
-			fmt.Println(result.Path)
-			return
-		}
-	case "update":
-		result, err = c.UpdateWorkspaceContext(sourceSessionID)
-	case "status":
-		result, err = c.WorkspaceContextStatus(sourceSessionID)
-	case "compact":
-		maintenanceResult, err = c.CompactWorkspaceContext(sourceSessionID)
-	case "rollback":
-		maintenanceResult, err = c.RollbackWorkspaceContext(sourceSessionID)
-	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "workspace context %s: %v\n", action, err)
-		os.Exit(1)
-	}
-	if maintenanceResult != nil {
-		printJSON(maintenanceResult)
-		return
-	}
-	printJSON(result)
 }
 
 type delegateCLIArgs struct {

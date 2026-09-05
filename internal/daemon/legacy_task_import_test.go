@@ -36,45 +36,12 @@ func TestImportCarriesEachKindsInputsOntoItsPayload(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
 	translateAndWrite(t, d,
-		legacyRow(notebookSummarizeSessionKind, "s-1", `{"transcript":"/tmp/turn.jsonl","workspace":"ws-1"}`),
-		legacyRow(notebookNarrateWorkspaceKind, "ws-2", `{"daily_pass":"1"}`),
 		legacyRow(reconcileKind, "t-3", `{"reconcile_inputs":"{\"TicketID\":\"t-3\",\"Title\":\"ship it\"}"}`),
-		legacyRow(compactContextKind, "ws-4", ""),
 	)
 
 	d.startJobQueue()
 	runner := d.jobQueueRef()
 	t.Cleanup(runner.Stop)
-
-	summarize, err := runner.GetByKey(notebookSummarizeSessionKind, "s-1")
-	if err != nil || summarize == nil {
-		t.Fatalf("imported summarize job: %v (%+v)", err, summarize)
-	}
-	if summarize.ID != "summarize_session:s-1" {
-		t.Fatalf("import minted a new id (%s), breaking existing notification links", summarize.ID)
-	}
-	var carried summarizeSessionPayload
-	if err := summarize.DecodePayload(&carried); err != nil {
-		t.Fatalf("decode imported summarize payload: %v", err)
-	}
-	if carried.Transcript != "/tmp/turn.jsonl" {
-		t.Fatalf("imported summarize lost its transcript: %+v", carried)
-	}
-	if carried.WorkspaceID == nil || *carried.WorkspaceID != "ws-1" {
-		t.Fatalf("imported summarize lost its workspace: %v", carried.WorkspaceID)
-	}
-
-	narrate, err := runner.GetByKey(notebookNarrateWorkspaceKind, "ws-2")
-	if err != nil || narrate == nil {
-		t.Fatalf("imported narrate job: %v (%+v)", err, narrate)
-	}
-	var daily narrateWorkspacePayload
-	if err := narrate.DecodePayload(&daily); err != nil {
-		t.Fatalf("decode imported narrate payload: %v", err)
-	}
-	if !daily.DailyPass {
-		t.Fatal("imported narrate lost its daily-pass flag, which would turn a no-op refresh into a retried failure")
-	}
 
 	reconcile, err := runner.GetByKey(reconcileKind, "t-3")
 	if err != nil || reconcile == nil {
@@ -87,17 +54,13 @@ func TestImportCarriesEachKindsInputsOntoItsPayload(t *testing.T) {
 	if in.TicketID != "t-3" || in.Title != "ship it" {
 		t.Fatalf("imported reconcile lost its inputs: %+v", in)
 	}
-
-	if compact, err := runner.GetByKey(compactContextKind, "ws-4"); err != nil || compact == nil {
-		t.Fatalf("imported compact job: %v (%+v)", err, compact)
-	}
 }
 
 func TestImportKeepsARowWithUnreadableMeta(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	translateAndWrite(t, d, legacyRow(notebookSummarizeSessionKind, "s-broken", `{not json`))
+	translateAndWrite(t, d, legacyRow(reconcileKind, "t-broken", `{not json`))
 
-	job, ok, err := d.store.GetJob("summarize_session:s-broken")
+	job, ok, err := d.store.GetJob("reconcile:t-broken")
 	if err != nil {
 		t.Fatalf("get imported job: %v", err)
 	}

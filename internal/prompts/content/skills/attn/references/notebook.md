@@ -25,8 +25,7 @@ Then browse the relevant subtree (`ls`/`grep` under `<root>/knowledge/...` or
 
 - **The journal** — `<root>/journal/<date>.md`, dated entries: the durable,
   curated, cross-workspace log of what was done in attn, kept for the user's
-  recall and reviews (not a raw dump — raw machine inputs stay in the raw tier,
-  never the journal). Entries carry `type: journal`.
+  recall and reviews, not a raw dump. Entries carry `type: journal`.
 - **The knowledge base** — `<root>/knowledge/`, distilled, timeless notes worth
   keeping: decisions, gotchas, domain knowledge that outlived a single PR. It is
   organized **PARA-style**: `projects/` (bounded efforts, roughly one per
@@ -35,10 +34,9 @@ Then browse the relevant subtree (`ls`/`grep` under `<root>/knowledge/...` or
   finishes, promote its durable knowledge up into `areas/`.
 
 When a `projects/<slug>/` folder corresponds to a workspace, stamp its `index.md`
-frontmatter with `resource: attn:workspace/<id>`. That link lets the keeper file
-the folder under `archive/` automatically when the workspace is removed — so
-promote anything durable into `areas/` before then, since archived notes drop out
-of the active view.
+frontmatter with `resource: attn:workspace/<id>`. Move the folder under `archive/`
+yourself when the work ends, and promote anything durable into `areas/` first,
+since archived notes drop out of the active view.
 
 The knowledge base is not a task tracker. Capture what is *known*, not what is
 *to do*.
@@ -94,7 +92,6 @@ filesystem watcher notices your change and refreshes any open in-app browser.
 The Notebook is your home. When you are promoted to the role mid-session, attn
 points you at `<root>/index.md` — read it to orient. Read `<root>/knowledge/index.md`,
 record durable decisions in the knowledge base as you make them, and keep the
-day's journal current with your cross-workspace view. The keeper already narrates
-each workspace's own work into the journal, so write at a chief-of-staff
+day's journal current with your cross-workspace view. Write at a chief-of-staff
 altitude — what moved across workspaces, what you delegated and decided — not a
 per-workspace play-by-play. You remain profile-wide.

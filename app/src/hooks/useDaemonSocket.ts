@@ -18,7 +18,6 @@ import type {
   RecentLocation as GeneratedRecentLocation,
   WorkflowRun as GeneratedWorkflowRun,
   WarningElement as GeneratedWarning,
-  WorkspaceContext as GeneratedWorkspaceContext,
   Task as GeneratedTask,
   Notification as GeneratedNotification,
   Seed as GeneratedSeed,
@@ -198,7 +197,6 @@ export type RecentLocation = GeneratedRecentLocation;
 export type WorkflowRunState = GeneratedWorkflowRun;
 export type DaemonSettings = Record<string, string>;
 export type DaemonWarning = GeneratedWarning;
-export type DaemonWorkspaceContext = GeneratedWorkspaceContext;
 export interface SessionMessageWindow {
   messages: DaemonSessionMessage[];
   status: SessionMessageWindowStatus;
@@ -271,7 +269,6 @@ type WebSocketEvent = GeneratedWebSocketEvent & {
   plugins?: DaemonPlugin[];
   issues?: DaemonPluginIssue[];
   github_hosts?: string[];
-  contexts?: DaemonWorkspaceContext[];
   review_id?: string;
   session_id?: string;
   content?: string;
@@ -290,7 +287,7 @@ export interface RateLimitState {
 
 // Protocol version - must match daemon's ProtocolVersion
 
-export const PROTOCOL_VERSION = '286';
+export const PROTOCOL_VERSION = '287';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -1683,29 +1680,6 @@ export function useDaemonSocket({
               callbacksRef.current.onWorkspacesUpdate(nextWorkspaces);
             }
             break;
-
-          case 'workspace_context_changed':
-          case 'workspace_context_result':
-            break;
-
-          case 'workspace_context_list_result': {
-            const requestId = data.request_id;
-            if (typeof requestId !== 'string') {
-              break;
-            }
-            const key = `workspace_context_list:${requestId}`;
-            const pending = pendingActionsRef.current.get(key);
-            if (!pending) {
-              break;
-            }
-            pendingActionsRef.current.delete(key);
-            if (data.success) {
-              pending.resolve(data.contexts || []);
-            } else {
-              pending.reject(new Error(data.error || 'Workspace context list failed'));
-            }
-            break;
-          }
 
           case 'tasks_changed':
             callbacksRef.current.onTasksChanged?.();
@@ -4532,12 +4506,6 @@ export function useDaemonSocket({
     return sendKeyedRequest<DaemonEndpoint[]>(key, { cmd: 'list_endpoints' }, 'List endpoints timed out');
   }, [sendKeyedRequest]);
 
-  const sendListWorkspaceContexts = useCallback((): Promise<DaemonWorkspaceContext[]> => {
-    const requestId = nextRequestID('workspace_context_list');
-    const key = `workspace_context_list:${requestId}`;
-    return sendKeyedRequest<DaemonWorkspaceContext[]>(key, { cmd: 'workspace_context_list', request_id: requestId }, 'Workspace context list timed out');
-  }, [nextRequestID, sendKeyedRequest]);
-
   const sendNotebookList = useCallback((prefix?: string): Promise<NotebookEntry[]> =>
     sendRequest<NotebookEntry[]>('notebook_list', prefix ? { prefix } : {}, 'Notebook list timed out'), [sendRequest]);
 
@@ -5370,7 +5338,6 @@ export function useDaemonSocket({
     sendSetEndpointRemoteWeb,
     sendBootstrapEndpoint,
     sendListEndpoints,
-    sendListWorkspaceContexts,
     sendNotebookList,
     sendNotebookRead,
     sendSessionMessagesGet,

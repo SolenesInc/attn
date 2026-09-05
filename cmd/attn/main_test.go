@@ -766,24 +766,6 @@ func TestParseDelegateArgsAcceptsCwdWithWorktree(t *testing.T) {
 	}
 }
 
-func TestWorkspaceContextSourceSessionDefaultsToEnvironment(t *testing.T) {
-	t.Setenv("ATTN_SESSION_ID", "session-1")
-	sessionID, force, err := workspaceContextSourceSession([]string{"--force"}, true)
-	if err != nil {
-		t.Fatalf("workspaceContextSourceSession error: %v", err)
-	}
-	if sessionID != "session-1" || !force {
-		t.Fatalf("workspaceContextSourceSession = (%q, %v)", sessionID, force)
-	}
-}
-
-func TestWorkspaceContextSourceSessionRejectsForceForStatus(t *testing.T) {
-	_, _, err := workspaceContextSourceSession([]string{"--session", "session-1", "--force"}, false)
-	if err == nil || !strings.Contains(err.Error(), "--force is only valid") {
-		t.Fatalf("workspaceContextSourceSession error = %v", err)
-	}
-}
-
 func TestApplyLegacyBuildInfoOverrides_UsesLegacyMainInjectionWhenNeeded(t *testing.T) {
 	previousBuildinfoVersion := buildinfo.Version
 	previousBuildinfoBuildTime := buildinfo.BuildTime

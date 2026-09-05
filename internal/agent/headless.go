@@ -52,8 +52,8 @@ func (b *boundedHeadlessOutput) Write(p []byte) (int, error) {
 
 const headlessFailureOutputLimit = 4 << 10 // 4 KiB per stream
 
-// The error STRING stays free of child output: it travels into keeper/journal
-// surfaces that must not echo workspace content.
+// The error STRING stays free of child output: it travels into notification and
+// journal surfaces that must not echo workspace content.
 func runHeadlessCommand(
 	ctx context.Context,
 	executable string,
