@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Prompt workshop</title>
+    <script src="/theme.js"></script>
     <link rel="stylesheet" href="/style.css" />
     <script type="module" src="/app.js"></script>
   </head>
@@ -14,7 +15,12 @@
         ><strong>Prompt workshop</strong
         ><span class="subtitle">attn / maintainer tools</span>
       </div>
-      <span id="global-status" role="status">Opening catalog…</span>
+      <div class="header-controls">
+        <span id="global-status" role="status">Opening catalog…</span>
+        <label class="theme-control" for="theme">Theme
+          <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
+        </label>
+      </div>
     </header>
     <section class="collaboration-bar" aria-label="Shared editing">
       <div class="shared-controls">
@@ -75,6 +81,30 @@
           <div id="all-sources"></div>
         </details>
       </nav>
+      <section id="context-review" class="context-review" aria-label="Full text comparison" hidden>
+        <header class="context-review-toolbar">
+          <div class="review-heading"><strong id="review-title"></strong><span id="review-context"></span></div>
+          <div class="view-switch" aria-label="Compare content">
+            <button id="review-source" aria-pressed="true">Source file</button><button id="review-prompt" aria-pressed="false">Composed prompt</button>
+          </div>
+          <button id="review-close">Back to editor <kbd>Esc</kbd></button>
+        </header>
+        <div class="context-review-columns">
+          <section class="full-text-pane" aria-label="Complete text">
+            <header class="full-text-toolbar">
+              <label for="review-version">Full text</label>
+              <select id="review-version"><option value="current">Current</option><option value="base">Base</option></select>
+              <span id="review-full-label"></span>
+            </header>
+            <pre id="review-full-text" tabindex="0" aria-label="Full source text"></pre>
+          </section>
+          <section class="review-diff-pane" aria-label="Changes">
+            <header class="full-text-toolbar"><strong>Changes</strong></header>
+            <div id="source-diff" class="diff-view" tabindex="0" aria-label="Source diff" hidden></div>
+            <div id="prompt-diff" class="diff-view" tabindex="0" aria-label="Composed prompt diff" hidden></div>
+          </section>
+        </div>
+      </section>
       <main class="source-pane">
         <div class="event-heading">
           <div class="event-title">
@@ -122,7 +152,6 @@
           autocomplete="off"
           wrap="soft"
         ></textarea>
-        <div id="source-diff" class="diff-view" tabindex="0" aria-label="Source diff" hidden></div>
         <div class="source-footer">
           <span id="uses"></span><span id="source-size"></span>
         </div>
@@ -150,7 +179,6 @@
         </div>
         <div id="preview-error" class="error" role="alert" hidden></div>
         <pre id="output" tabindex="0" aria-label="Resolved prompt"></pre>
-        <div id="prompt-diff" class="diff-view" tabindex="0" aria-label="Composed prompt diff" hidden></div>
         <details id="discussion" class="discussion">
           <summary>Feedback <span id="feedback-count"></span></summary>
           <p id="selection-context">Feedback includes this scenario and its exact prompt revision.</p>

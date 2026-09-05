@@ -3,19 +3,41 @@
 Use the checkout CLI from the repository root. It works without a daemon or
 browser. `attn prompts` inspects the catalog embedded in the installed binary.
 
-## Inspect before editing
+## Assess the instructions before editing
+
+Follow the [authoring workflow](../cmd/prompt-editor/authoring.md) for every
+prompt change. `context` returns that workflow with the complete relevant
+instructions. Start from an event, source, scenario or shared draft:
 
 ```sh
-go run ./cmd/prompt-editor list --json
-go run ./cmd/prompt-editor inspect session/launch --json
-go run ./cmd/prompt-editor inspect --scenario chief-with-handoff --json
-go run ./cmd/prompt-editor uses content/crew/wake.md --json
+go run ./cmd/prompt-editor context crew/priming --include crew/wake --base next --json
+go run ./cmd/prompt-editor context --scenario chief-with-handoff --json
+go run ./cmd/prompt-editor context --draft DRAFT_ID --json
 ```
 
-`inspect` returns Markdown sources, revisions, inputs, composition and Go
-locations. Supply `--scenario ID`, `--set name=value` or `--values FILE` to render.
-`uses` follows producer links to indirect consumers. Use `help` for command syntax
-and `--repo PATH` to select another checkout.
+Read `workflow`, `scope` and `events`, then the full `sources` and `scenarios`.
+Sources include revisions and uses; events include both revisions' composition
+definitions; scenarios include complete output and delivery type. Shared context
+includes every draft edit, source changes against its base, and the selected
+inputs. A review freezes that scope, including edits already applied to the checkout.
+`base_same_as_current: true` reuses the current text or definition for the base.
+
+`unrendered_events` and `unrendered_sources` identify gaps in the current outputs.
+Their `unrendered_base_*` counterparts identify gaps in the base outputs.
+Resolve relevant gaps with saved scenarios or custom inputs, for example
+`context --scenario plain-session --set garden_available=true --json`.
+Custom inputs add an example alongside saved scenarios. Source uses and producer
+links cannot identify every related instruction; use repeatable `--include`
+arguments for related skills, references or events. Read `limits` before treating
+the report as complete. Scenario presence does not prove all branches were covered.
+
+For large reports, redirect JSON to a file and read each full source and scenario
+from it. A truncated tool response is insufficient for this review.
+
+Use `list --json` to discover events, `inspect RECIPIENT/EVENT --json` for one
+definition and its Go declarations, and `uses FRAGMENT_OR_PATH --json` to explore
+consumers. `authoring` prints the workflow alone. Use `help` for syntax and
+`--repo PATH` for another checkout.
 
 Trace the daemon or harness adapter when checking delivery. A preview shows what
 the definition composes; `available_skill` and `reference` do not prove loading.
@@ -77,13 +99,18 @@ cycles are rejected. The id must match the filename.
 ```sh
 go run ./cmd/prompt-editor check
 go run ./cmd/prompt-editor compare --base next --json
+go run ./cmd/prompt-editor context crew/priming --include crew/wake --base next --json
 ```
 
-Add `--scenario ID` to narrow either command. Comparison defaults to merge-base;
+Add `--scenario ID` to narrow `check` or `compare`. Comparison defaults to merge-base;
 use `--mode tip` for the selected revision itself. It reads Git without fetching
 or switching branches. Each side uses its own definitions and sources, including
 producer output. Check `unavailable` before claiming composed parity: bases with
 missing, unsupported or invalid manifests permit source comparison only.
+
+Rerun `context` after edits and read the full results against the intended behavior.
+It evaluates the selected dataset's scenario inputs against both revisions.
+Shared context uses its pinned base unless `--base` selects another comparison.
 
 ## Share work with a maintainer
 
@@ -93,17 +120,18 @@ checkout's ignored `.prompt-editor/` directory.
 
 ```sh
 go run ./cmd/prompt-editor draft create --title 'Clarify wake instructions' --json
-go run ./cmd/prompt-editor inspect crew/wake --draft DRAFT_ID --json
+go run ./cmd/prompt-editor context crew/wake --draft DRAFT_ID --json
 go run ./cmd/prompt-editor draft put DRAFT_ID content/crew/wake.md \
   --file /tmp/wake.md --expect SOURCE_REVISION --author agent
 go run ./cmd/prompt-editor draft focus DRAFT_ID --scenario crew-wake --base next
 go run ./cmd/prompt-editor check --draft DRAFT_ID
 go run ./cmd/prompt-editor compare --draft DRAFT_ID --base next --json
+go run ./cmd/prompt-editor context --draft DRAFT_ID --base next --json
 go run ./cmd/prompt-editor draft get DRAFT_ID --json
 ```
 
-Use the source revision from `inspect` for `--expect`. Use the latest draft
-revision from `draft get` for either operation:
+Use `sources[PATH].current.revision` from `context` for `--expect`. Use the latest
+draft revision from `draft get` for either operation:
 
 ```sh
 go run ./cmd/prompt-editor draft apply DRAFT_ID --revision N
@@ -115,7 +143,7 @@ sources, scenarios, selected inputs and the comparison commit. Creating a review
 or adding feedback advances the parent draft revision; reread it before applying.
 
 ```sh
-go run ./cmd/prompt-editor inspect --review REVIEW_ID --json
+go run ./cmd/prompt-editor context --review REVIEW_ID --json
 go run ./cmd/prompt-editor review get REVIEW_ID --json
 go run ./cmd/prompt-editor watch --review REVIEW_ID --after 0 --timeout 30s --json
 ```
@@ -123,6 +151,10 @@ go run ./cmd/prompt-editor watch --review REVIEW_ID --after 0 --timeout 30s --js
 Read feedback with `review get`; add it with `review comment`. `watch --after N`
 counts review comments or, with `--draft`, uses the draft revision. A timeout
 returns `changed: false`.
+
+**Copy agent context** includes the same authoring workflow, a command to read
+the complete frozen context, and feedback commands. The agent continues in the
+shared draft and reassesses the complete results after editing.
 
 Source/scenario writes use `--expect HASH`; draft apply, sync, archive and restore
 use `--revision N`. Conflicts exit 3, invalid requests exit 2, failed scenario
@@ -135,6 +167,9 @@ before reapplying the intended edit. `draft archive` is reversed by `draft resto
 When presenting prompt changes, open the relevant draft or review and give the
 user its exact URL with a sentence about what to inspect. Use a draft for live
 editing or a review for feedback tied to fixed text.
+
+Explain the intended behavior and how the instructions now fit together. Use
+the full source and composed text beside the diff to review the overall result.
 
 Reuse the editor for this checkout. If `show` reports that none is running,
 start `make prompt-editor` in a persistent terminal, then retry. Keep it running

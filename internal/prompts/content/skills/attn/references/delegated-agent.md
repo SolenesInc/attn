@@ -13,12 +13,16 @@ otherwise, use native subagents.
 An attn delegation creates a visible agent session the user can inspect,
 converse with, and steer directly. Native subagents report to you.
 
-## Report On Your Seed
+## Start from your seed
 
-Your work is a **seed** in the garden — the brief you launched with is its body,
-and you are its tender. Its id is in your launch prompt. The log is the only
-channel back to the session that delegated you and to whoever else is watching,
-so write to it when you:
+If your launch prompt names a seed, you are its tender. Before working,
+read its current body and log with `attn seed show <seed-id>`, then follow the
+references it names for the assignment. Parent and sibling bodies require
+separate reads; you do not inherit the delegator's conversation.
+
+## Report on your seed
+
+Write to the log for the session that delegated you and anyone watching when you:
 
 - reach a meaningful milestone
 - need input or are blocked

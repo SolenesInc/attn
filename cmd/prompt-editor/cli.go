@@ -21,6 +21,14 @@ import (
 
 type assignments map[string]string
 
+type targets []string
+
+func (t *targets) String() string { return strings.Join(*t, ", ") }
+func (t *targets) Set(value string) error {
+	*t = append(*t, value)
+	return nil
+}
+
 func (a assignments) String() string { return "name=value" }
 func (a assignments) Set(value string) error {
 	name, text, ok := strings.Cut(value, "=")
@@ -64,6 +72,7 @@ func runCLI(ctx context.Context, args []string, stdin io.Reader, stdout, stderr 
 	timeout := flags.Duration("timeout", 30*time.Second, "Watch timeout")
 	flags.Var(assignments(q.Values), "set", "Scenario input name=value; repeatable")
 	flags.Var(assignments(q.Inputs), "input", "Producer binding field=scenario; repeatable")
+	flags.Var((*targets)(&q.Include), "include", "Related event, fragment or source to include in context; repeatable")
 	flags.Usage = func() { fmt.Fprint(stderr, cliHelp) }
 	var options, words []string
 	bools := map[string]bool{"--json": true, "--open": true, "--help": true, "-h": true}
@@ -274,6 +283,10 @@ func printResult(w io.Writer, q operationRequest, result any) {
 			fmt.Fprintf(w, "  %s: %s\n", comment.Author, comment.Message)
 		}
 	case map[string]any:
+		if q.Op == "authoring" {
+			fmt.Fprint(w, value["workflow"])
+			return
+		}
 		if q.Op == "inspect" {
 			fmt.Fprintf(w, "%s\n", value["event"])
 			if fields, ok := value["fields"].([]prompts.Field); ok {
@@ -393,8 +406,11 @@ const cliHelp = `usage: prompt-editor [command] [options]
 
 A maintainer tool for the checkout's prompt catalog. Omitting the command starts the editor.
 Every operation supports --repo PATH and --json. Text files accept - for stdin.
+Start prompt changes with context. Read its workflow and complete instructions before editing.
 
   serve [--port N] [--base REF]           start the browser editor
+  authoring                              read the prompt revision workflow
+  context EVENT_OR_SOURCE [--base REF]   full sources, uses, scenarios and coverage gaps
   list                                   list events
   inspect RECIPIENT/EVENT [--scenario ID] inspect sources, inputs and declarations
   uses FRAGMENT_OR_PATH                  direct and producer usages
@@ -420,7 +436,11 @@ Every operation supports --repo PATH and --json. Text files accept - for stdin.
   show --draft ID|--review ID [--open]    print an exact editor link
   watch --draft ID|--review ID --after N [--timeout 30s]
 
-Use --draft ID or --review ID with inspect/check/compare to inspect shared work.
+Use --draft ID or --review ID with context/inspect/check/compare for shared work.
+context includes every changed draft source; reviews retain that scope. Use
+--include EVENT_OR_SOURCE (repeatable) to include semantically related guidance.
+--scenario ID selects context; custom --set/--input values add an example without
+replacing saved scenarios. Without --base, shared context uses its pinned base.
 Use --set name=value for scenario inputs; --input field=scenario binds a producer.
 Use --author NAME on changes. Revision conflicts exit 3; invalid input exits 2;
 a failed scenario check exits 1. Reviews retain their own sources and definitions.

@@ -1,9 +1,8 @@
 # The garden: seeds, plots, and reporting
 
-The garden is where work lives. Run `attn seed prime` for the rules an agent
-follows while working, and `attn seed guide` for the craft of writing a body,
-planning a plot, deciding what done means, and handing work over. Syntax lives
-in `attn seed --help`.
+The garden is where work lives. Run `attn seed prime` for working rules.
+Before writing a plot, read `attn seed guide` for body authoring, a complete
+plot example and completion checks. Syntax lives in `attn seed --help`.
 
 ## Speaking the user's language
 
@@ -16,26 +15,21 @@ exchange. Do not correct them or switch the other concepts unless they do.
 
 Track work in seeds, not in markdown TODO lists or your own todo tool. Plant a seed for any work that outlives this turn: a bug you found, a follow-up you are not doing now, a piece you split off. Plant work before you start it, so the claim and the log exist while you work. Under a plot, plant with `--part-of <plot>` so it stays with its plan. If you discover work while tending another seed, add `--discovered-from <seed>` so its origin is on record. Before your turn ends, plant what is still undone.
 
+Every seed body, including a plot child, is a work prompt for someone without
+this conversation. State its task and outcome, starting context, constraints
+and completion check. A short body is enough when it supplies that direction.
+
 ## Planting a plot
 
+Keep the shared plan in the parent. Each child names its own work and tells the
+reader which parent section, sibling result or artifact it needs and why.
+Read those references before starting; related bodies are not included
+automatically in a delegation.
+
 `attn seed plot -f <payload.json>` plants a plot and its children in one move.
-The payload names sibling blockers by slug:
-
-```json
-{
-  "title": "Search moves to the daemon",
-  "body": "Outcome: the app asks the daemon for search results...",
-  "children": [
-    {"title": "Daemon search endpoint", "body": "..."},
-    {"title": "App calls the endpoint", "body": "...", "blocks": ["remove-the-client-index"]},
-    {"title": "Remove the client index", "body": "..."}
-  ]
-}
-```
-
-The slug is the sibling title without its stop words (a, the, of, in, on...),
-lowercased and dash-joined; writing the sibling's title works too. Two siblings
-that derive the same slug are refused. Pass `-` to read the payload from stdin.
+The example in `attn seed guide` shows complete bodies and dependencies. Each
+child's `blocks` array names siblings that must wait for it, by slug or full
+title. Leave independent children parallel. Pass `-` to read from stdin.
 
 ## Speaking of seeds
 

@@ -22,9 +22,10 @@ import (
 )
 
 type catalogSnapshot struct {
-	Manifest  json.RawMessage     `json:"manifest"`
-	Sources   map[string]source   `json:"sources"`
-	Scenarios map[string]scenario `json:"scenarios,omitempty"`
+	Manifest      json.RawMessage     `json:"manifest"`
+	Sources       map[string]source   `json:"sources"`
+	Scenarios     map[string]scenario `json:"scenarios,omitempty"`
+	EditedSources []string            `json:"edited_sources"`
 }
 
 func visitNode(n prompts.Node, visit func(prompts.Node)) {

@@ -19,12 +19,11 @@ Interpret the requested object first:
 - "delegate subagents to review" means native subagents
 - "dispatch subagents to investigate" means native subagents
 
-Attn delegation starts another agent with a focused brief; it does not create
-durable parent-child lineage. Every delegation binds a **seed** to the delegated
-session — the brief is its body, the session is its tender — and the seed is the
-channel in both directions: the agent writes what happened onto its log, and you
-reach the agent by seed id with `attn agent msg <seed-id> "<note>"`. Read the
-work back with `attn seed show <seed-id>`. See [garden.md](garden.md).
+Attn delegation starts another agent with a focused brief and binds it to a
+seed. A new seed stores the brief as its body; an existing seed keeps its body.
+The session becomes the seed's tender. It reports on the log, and you reach it
+with `attn agent msg <seed-id> "<note>"`. Read its work back with
+`attn seed show <seed-id>`. See [garden.md](garden.md).
 
 Follow-up: read the seed. Never park a blocking Monitor on attn activity: a
 Monitor-blocked session reads as busy, which suppresses crew heartbeats and
@@ -37,43 +36,43 @@ path, pass that path and its repository in the follow-on brief and say that Git
 remains canonical. Otherwise pass the canonical Notebook document. The next agent
 edits that authority instead of creating a copy.
 
-## Brief Workflow
+## Write the brief
 
-Prefer a brief file so the task can be drafted and revised before submission:
+The brief is the delegate's starting prompt. Write it for an agent without your
+conversation: state the task and outcome, starting context, constraints and
+scope, and how to verify and report completion. Follow `attn seed guide` for
+body authoring. Use plain words and a sketch when it explains the work more
+clearly ([showing.md](showing.md)).
+
+For a plot child, name the parent sections, sibling results or artifacts the
+delegate must read and why. Related seed bodies are not included automatically.
+Check that the brief and those references give enough direction to start.
+
+Prefer a file so you can read and revise the complete brief before dispatch:
 
     brief_file="$(mktemp "${TMPDIR:-/tmp}/attn-delegate.XXXXXX")"
-    # Write a concise task, relevant context, constraints, and expected output.
+    # Write the work prompt to this file.
     attn delegate --brief-file "$brief_file" --model <model>
 
-The brief should let the delegated agent start immediately. Include:
+Use `--brief <text>` for short tasks. To track the same work without starting
+an agent, use `attn seed plant "<title>" -m "<brief>"`.
 
-1. the concrete objective
-2. relevant paths, decisions, or evidence
-3. constraints and explicit non-goals
-4. the expected deliverable or stopping condition
+## Dispatch at an existing seed
 
-A delegation brief *is* the seed's body, so the fuller craft in
-[garden.md](garden.md) applies here too — write the objective as a stop
-condition, give a verification contract, and let the shape bend by deliverable
-type. Write it to be easy to read without losing precision — plain words,
-short paragraphs, sketches where they say more ([showing.md](showing.md)).
+Read the current body and log first:
 
-Use `--brief <text>` only for short, simple tasks.
-
-> The same brief is the seed's body. To capture work *without* delegating, plant a seed — `attn seed plant "<title>" -m "<brief>"` (see [garden.md](garden.md)).
-
-## Dispatch at an Existing Seed
-
-When the work is already planted, dispatch at it instead of planting a duplicate:
-
+    attn seed show <seed-id>
     attn delegate --brief-file "$brief_file" --plot <seed-id> --model <model>
 
-The delegate binds that seed rather than a new one, launches knowing it, and
-becomes its tender. A seed a live session is already tending refuses the
-dispatch, naming who holds it, before any worktree or agent exists.
-Aimed at a **plot**, a flag-free `attn seed ready` inside the delegate answers
-with that plot's ready seeds. `--name`, placement, and worktree flags behave as
-usual.
+`--plot` binds the existing seed, but the opening prompt uses the supplied brief;
+it does not load or replace the stored body. Put the body's assignment and
+required references in the brief. Keep it consistent with the body, updating
+the body when the agreed task changes so a later handover gets that assignment.
+
+The delegate becomes the seed's tender. A seed held by a live session refuses
+dispatch before any worktree or agent is created, naming who holds it. When the
+seed is a plot, `attn seed ready` in the delegate lists that plot's ready children.
+`--name`, placement and worktree flags behave as usual.
 
 ## Agent Selection
 

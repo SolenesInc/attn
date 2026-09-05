@@ -150,8 +150,7 @@ export function collaborate({ state, $, api, selectEvent, selectSource, renderNa
         state.shared = payload();
         await setBase(review.focus.base_commit);
         setFocus(review.focus);
-        state.sourceView = state.base ? "diff" : "edit";
-        state.promptView = state.base ? "diff" : "current";
+        state.reviewTarget = state.base ? "source" : "";
         setLocation();
         await lists();
         renderNavigation();
@@ -338,6 +337,10 @@ export function collaborate({ state, $, api, selectEvent, selectSource, renderNa
             const selection = window.getSelection();
             if (selection && !selection.isCollapsed && $("output").contains(selection.anchorNode) && $("output").contains(selection.focusNode))
                 sourceSelection = { target: "prompt", selection: selection.toString() };
+            if (state.reviewTarget && selection && !selection.isCollapsed && $("review-full-text").contains(selection.anchorNode) && $("review-full-text").contains(selection.focusNode))
+                sourceSelection = $("review-version").value === "current"
+                    ? { target: state.reviewTarget, ...(state.reviewTarget === "source" ? { path: state.path } : {}), selection: selection.toString() }
+                    : null;
         }
         $("selection-context").textContent = sourceSelection ? `Selected ${sourceSelection.target}: ${sourceSelection.selection.slice(0, 100)}` : "Feedback includes this scenario and its exact prompt revision.";
     }
@@ -417,9 +420,10 @@ export function collaborate({ state, $, api, selectEvent, selectSource, renderNa
     });
     action("copy-agent-context", async () => {
         const captured = await captureReview();
-        const command = `go run ./cmd/prompt-editor inspect --review ${captured.id} --json`;
+        const guidance = await op({ op: "authoring" });
+        const command = `go run ./cmd/prompt-editor context --review ${captured.id} --json`;
         const feedback = `go run ./cmd/prompt-editor review get ${captured.id} --json`;
-        await navigator.clipboard.writeText(`${captured.title}\n${location.href}\n\nInspect the exact prompt and its source provenance:\n${command}\nRead feedback:\n${feedback}\nContinue editing shared draft ${captured.draft_id}.`);
+        await navigator.clipboard.writeText(`${captured.title}\n${location.href}\n\n${guidance.workflow}\nRead the complete review context, including every changed source and affected scenario:\n${command}\nExpand related guidance with --include EVENT_OR_SOURCE. Resolve relevant coverage gaps before editing.\nRead feedback:\n${feedback}\nContinue editing shared draft ${captured.draft_id}; rerun context --draft ${captured.draft_id} after edits and show the complete results in the browser.`);
         $("draft-state").textContent = "Agent context copied";
     });
     $("shared-draft").addEventListener("change", async () => { try {
@@ -470,8 +474,10 @@ export function collaborate({ state, $, api, selectEvent, selectSource, renderNa
                 shareFocus().catch(showError);
         });
     $("source").addEventListener("select", rememberSelection);
-    $("output").addEventListener("mouseup", rememberSelection);
-    $("output").addEventListener("keyup", rememberSelection);
+    for (const id of ["output", "review-full-text"]) {
+        $(id).addEventListener("mouseup", rememberSelection);
+        $(id).addEventListener("keyup", rememberSelection);
+    }
     const events = new EventSource("/api/events");
     function queueRefresh() {
         if (!initialized) { refreshPending = true; return; }

@@ -17,6 +17,11 @@ arguments for Claude, Codex and Copilot, installed skill documents, and headless
 system/user channel handling. Fixtures live here so packages use one comparison
 helper without maintaining copies of the old builders.
 
+Seed-authoring expectations include the revised body/plot guidance and instructions
+to read referenced context before delegated work. These expectations were edited
+at the source-text boundaries. Scenario inputs, surrounding launch arguments and
+unrelated output retain the captured baseline.
+
 The frontend's `src/prompts/testdata` and Pi's `test/testdata/prompts.json` were
 captured from the original TypeScript builders at
 `f68ab3f02f329f46d3b9b3d1e7603f545c27dd50`; those builders are unchanged at the Go

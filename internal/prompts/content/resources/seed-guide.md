@@ -2,129 +2,106 @@ The garden holds the work. Syntax: `attn seed --help`.
 
 WRITING A BODY
 
-The body is the brief. A delegate dispatched at the seed gets it as its
-prompt, and whoever picks the seed up later reads it with none of what you
-know now. Write it for that reader.
+A seed body is a prompt for the agent who will do the work. A new delegation
+stores its brief as the body; handover sends the stored body to the next agent.
+Write every body, including plot children, for someone without this conversation.
+Do this even when you plan to do the work yourself.
 
-- Outcome first. What done looks like, not a procedure. "X is the only
-  backend the daemon talks to, the old path is deleted, tests green", not
-  "migrate the store to X".
-- Just enough context. The paths, the one non-obvious constraint, the why.
-- Verification. How completion is known and what evidence gets attached.
-- Scope. What is deferred, and what is a blocker versus a call the tender
-  makes alone.
+- Lead with the task and outcome: what to do and what done looks like.
+- Give starting context: the problem, relevant paths or evidence, and constraints.
+  Point to shared context and say what the reader needs from it.
+- Define scope: what this seed owns and which decisions need the user.
+- Specify completion: how to verify the result and where to leave the deliverable
+  and evidence.
 
-The body is the contract, still true when somebody else tends the seed
-tomorrow. The log is the live thread. What happens along the way goes in
-notes and steering, not in the body.
+Include an agreed design when there is one. Leave implementation choices open
+where they are still for the tender to make. Scale the detail to the task; a few
+sentences can be a complete prompt.
 
-WRITING A PLAN
+Keep the agreed task current in the body. Progress, evidence and handoffs go in
+the log. When the task changes, update the body and note what changed.
 
-A plan is a plot: the body is the plan, each child is one unit somebody can
-tend alone, and `blocks` is the only ordering. Leave children parallel unless
-one truly needs another's result; every edge is a wait.
+WRITING A PLOT
 
-The body is read by whoever comes next with none of what you know now: an
-agent starting cold, or the user at the end of a long day. Both skim it to
-decide what to do and what to change. Every section survives a skim: the
-point first, short prose, the smallest picture that makes it clear. Lead
-with the choices the user would change on review (the data model, the
-interfaces, what people will see); the mechanical work goes last. A body is
-a review surface before it is a to-do list.
+A plot holds the shared plan. Its children are units of work that can each be
+tended on their own; a child can itself be a plot. Keep shared decisions in the
+parent. Each child states its own assignment and names any parent section,
+sibling result or artifact it needs to read, with a reason. Those references
+save repetition, but their text is not included automatically in a delegation.
 
-The default shape, trimmed or grown as the work needs:
+Use `blocks` only when one child needs another's result. Otherwise leave them
+parallel. The children's states record progress, so the plan needs no checklist.
 
-- Goal. What done looks like, as an outcome. One paragraph.
-- Shape. The implementation shape in repo terms, not generic layers, as a
-  picture (below).
-- Data model and interfaces. Only when the work crosses a boundary: the
-  records, config, state and messages that cross it, and which side
-  creates, owns, or only reads each. Loose pseudocode beats exact types.
-- Boundaries. What each component owns and what it must not know about.
-- Decisions. Three to five, each with its reason: the choices that would
-  surprise the next implementer, or where a plausible alternative was
-  rejected.
-- Open questions. What is a blocker and needs the user, versus a call the
-  tender makes.
+Write the parent for an implementer starting fresh and a user reviewing the
+direction. Put the choices the user might change first. Include what the work
+needs:
 
-A call stack is usually the cheapest picture with the most payoff: who calls
-whom, in what order, where the boundaries sit.
+- The goal and how the children together complete it.
+- The proposed shape in repository terms. Show ownership, interfaces and data
+  when they cross boundaries.
+- Shared decisions and their reasons, constraints, and unresolved questions.
+  Say which questions block work and which the tender can decide.
 
-    handleSubmit
-      createSession
-        persistPrompt
-        launchAgent
-      navigateToSession
+Use short prose and the smallest picture that explains the design: a call tree
+for control flow, a file tree for ownership, or a sequence diagram for messages
+between processes. Show changed code structure as a diff when that is clearer.
+Put each picture next to the explanation; show separate production and test
+wiring when the distinction matters.
 
-When the code exists, show what changes as a diff over its shape rather than
-before and after copies.
+Example: move session search to the daemon while preserving its behavior.
+The endpoint child records a contract that the app child needs before starting.
 
-    handleSubmit
-      createSession
-        persistPrompt
-    +   expandSkillMention
-        launchAgent
+    attn seed plot -f plan.json
 
-Pick the picture by what the reader must see: a call stack for control flow
-and ownership; a shallow file tree with one-line responsibilities for a broad
-refactor; a component tree for UI; a mermaid sequence diagram for anything
-crossing a process, network or queue. Text trees and mermaid both render when
-the body is opened in attn. Show production and test wiring when they
-differ. One or two pictures is typical; a picture that needs studying has
-failed. Prose that restates a picture is waste: a sentence introduces it and
-stops. Put each picture next to the claim it supports, never in an appendix.
-Use pseudocode and small code examples freely when they tell the simpler
-story.
-
-The children are the steps. Their bodies follow the rules for any body and
-do not repeat the plan; they point at it. Their states are the progress, so
-the plan carries no checklist. When the work forces a deviation, take the
-conservative option, note it on the plot with what triggered it, and keep
-going; a silent deviation is how the next plan repeats the mistake. Deferred
-work is a seed, planted under the plot or beside it, not a paragraph.
-
-    attn seed plot -f plan.json              all of it in one move; plan.json looks like
-
+```json
+{
+  "title": "Search moves to the daemon",
+  "body": "Move session search from the app to the daemon.\n\n## Search behavior\nPreserve the current matching, ordering and keyboard behavior in app/src.\n\n## Ownership\ninternal/daemon owns searching session data. app/src sends queries and renders results. Keep the client index until the app uses daemon results.\n\n## Completion\nBoth children are complete, with endpoint tests and running-app evidence on their logs.",
+  "children": [
     {
-      "title": "Search moves to the daemon",
-      "body": "# Search moves to the daemon\n\n## Goal\n... (the plan, as above)",
-      "children": [
-        {"title": "Daemon search endpoint", "body": "..."},
-        {"title": "App calls the endpoint", "body": "...", "blocks": ["remove-the-client-index"]},
-        {"title": "Remove the client index", "body": "..."}
-      ]
+      "title": "Daemon search endpoint",
+      "body": "Add session search in internal/daemon. Read the parent plot's Search behavior section and trace the existing search in app/src to preserve its behavior. Follow repository protocol guidance. Test empty queries, matching, ordering and session changes. Record the query and response contract and test results on this seed for the app child. App integration belongs to that child.",
+      "blocks": ["app-calls-endpoint"]
+    },
+    {
+      "title": "App calls the endpoint",
+      "body": "Route session search in app/src through the daemon, then remove the obsolete client index. Read the parent plot's Search behavior and Ownership sections and the Daemon search endpoint seed's recorded API contract. Preserve keyboard selection and prevent stale results when queries overlap. Verify search, rapid query changes and keyboard navigation in the running app; record the results and a recording on this seed."
     }
+  ]
+}
+```
 
-    attn seed plant "…" --part-of <plot>     one more child, later
-    attn delegate --brief "…" --plot <plot>  a tender for the whole plot; its ready
-                                             answers from the plot, oldest first
-    attn seed edit <id> -m "…"               the plan changed; say what in a note
-    attn open <plot>                         read it rendered, the way the user does
+Each child's `blocks` array names the siblings that wait for it. Use the sibling's
+slug or full title. Pass `-` instead of a file to read the payload from stdin.
 
-Before planting, check: can an implementer name the first files to edit from
-the body alone? Would a thirty-second skim of the headings and pictures give
-the goal and the shape? Is prose doing work a small tree would do better?
+    attn seed plant "..." --part-of <plot>   add another child
+    attn seed edit <id> -m "..."             update the agreed task; note what changed
+    attn open <plot>                        read the rendered plan
+
+Before planting or delegating, read each body with its named references as a
+fresh agent. Can you tell what to do, where to start, which constraints apply,
+and how to establish completion? Fill any gaps before handing it off. Read
+referenced seed bodies with `attn seed show <id>`.
+
+Update the shared plan when an agreed decision changes, and note why. Plant
+deferred work under the plot or beside it so it remains tracked.
 
 WHAT DONE IS, BY DELIVERABLE
 
-A few examples; the shape carries to any deliverable.
+Adapt the assignment and its completion check to the work:
 
-    code       behavior exists and its required verification is green. Prescribe
-               the outcome and the constraints, not the implementation, unless
-               the user hands you the design too (an API contract, a call stack)
-               so the tender does not have to invent one.
-    bug fix    root cause found, then fixed, with a regression test. Give the
-               symptom and a repro only; prescribing the fix invites
-               symptom-patching.
-    research   a sourced answer that feeds a decision. Frame the question, not
-               a task.
-    docs       the point made durably, the old text superseded. Give the
-               audience, what it replaces, the one idea.
-    refactor   the code issue is gone, behavior unchanged. Name the issue
-               being fixed: the duplication, the function doing two jobs,
-               the module that knows too much.
-    prototype  a decision or a feel, then thrown away. Name the question it
-               answers; tests optional.
+    code       The requested behavior exists and required verification passes.
+               Give the starting points, constraints and any agreed design.
+    bug fix    The cause is found and fixed, with a regression test. Give the
+               symptom, reproduction and known evidence; leave an unproven fix open.
+    research   A sourced answer supports a decision. State the question, the
+               decision it informs and the expected report.
+    docs       The intended audience can understand or act on the result.
+               Name what it must explain and which existing text it replaces.
+    refactor   The named code issue is gone and behavior is preserved.
+               Identify the issue and the checks that establish preservation.
+    prototype  The result answers a design question or lets the user judge the
+               experience. State what to demonstrate; tests may be optional.
 
 Harvest when the outcome and required verification in the body are complete.
 

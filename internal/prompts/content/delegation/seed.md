@@ -1,10 +1,13 @@
 
 
 ---
-Your work is seed `{{seed_id}}` in the garden — the brief above is its body, and
-you are its tender. Read the body and log with:
+Your work is seed `{{seed_id}}` in the garden, and you are its tender.
+Before working, read its current body and log:
 
     attn seed show {{seed_id}}
+
+Follow the body's references to the parent plan, sibling results or artifacts
+you need for this assignment.
 
 Report progress, what you learned, and decisions needed on the log:
 

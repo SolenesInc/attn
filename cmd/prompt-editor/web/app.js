@@ -17,8 +17,7 @@ const state = {
   base: null,
   comparison: null,
   baseVersion: 0,
-  sourceView: "edit",
-  promptView: "current",
+  reviewTarget: "",
 };
 let previewTimer;
 let previewAbort;
@@ -365,7 +364,7 @@ function selectSource(path) {
     ? path.replace("content/", "")
     : "This event has no Markdown source";
   $("source").value = path ? state.catalog.sources[path] ? textFor(path) : state.base?.sources[path]?.text || "" : "";
-  if (path && !state.catalog.sources[path]) state.sourceView = "diff";
+  if (path && !state.catalog.sources[path]) state.reviewTarget = "source";
   $("uses").replaceChildren();
   if (path) {
     $("uses").append(element("span", "Used by "));
@@ -383,16 +382,14 @@ function selectSource(path) {
   schedulePreview();
 }
 function renderViews() {
-  const sourceDiff = state.sourceView === "diff";
-  const promptDiff = state.promptView === "diff";
-  $("source").hidden = sourceDiff;
+  const sourceDiff = state.reviewTarget === "source";
+  const promptDiff = state.reviewTarget === "prompt";
+  $("context-review").hidden = !state.reviewTarget;
+  document.querySelector(".workspace").classList.toggle("reviewing", !!state.reviewTarget);
   $("source-diff").hidden = !sourceDiff;
-  $("output").hidden = promptDiff;
   $("prompt-diff").hidden = !promptDiff;
-  $("source-edit").setAttribute("aria-pressed", String(!sourceDiff));
-  $("source-compare").setAttribute("aria-pressed", String(sourceDiff));
-  $("prompt-current").setAttribute("aria-pressed", String(!promptDiff));
-  $("prompt-compare").setAttribute("aria-pressed", String(promptDiff));
+  $("review-source").setAttribute("aria-pressed", String(sourceDiff));
+  $("review-prompt").setAttribute("aria-pressed", String(promptDiff));
   const comparison = state.comparison;
   const label = state.base ? `${state.base.ref.replace(/^refs\/(heads|remotes)\//, "")} · ${state.base.commit.slice(0, 8)}` : "Base";
   const currentLabel = collaboration?.reviewEvent() ? "Review snapshot" : "Working copy + drafts";
@@ -410,11 +407,45 @@ function renderViews() {
     else message = "No text changes for these inputs.";
   }
   renderDiff($("prompt-diff"), comparison?.prompt_diff, message, label, currentLabel);
+  renderFullText(label, currentLabel);
   const before = comparison?.base.result?.delivery;
   const after = comparison?.current.result?.delivery;
   $("delivery").textContent = before && after && before !== after
     ? `${before} → ${after}`.replaceAll("_", " ")
     : current().event.delivery.replaceAll("_", " ");
+}
+function renderFullText(baseLabel, currentLabel) {
+  if (!state.reviewTarget) return;
+  const source = state.reviewTarget === "source";
+  const base = $("review-version").value === "base";
+  $("review-title").textContent = source ? state.path || "No source selected" : state.key;
+  $("review-context").textContent = source ? state.key : $("saved-scenario").selectedOptions[0]?.textContent || "Custom inputs";
+  $("review-full-label").textContent = base ? baseLabel : currentLabel;
+  $("review-full-text").setAttribute("aria-label", source ? "Full source text" : "Full composed prompt");
+  let text;
+  if (base && !state.base) text = "Choose a base above to read its full text.";
+  else if (source) {
+    const entry = (base ? state.base : state.catalog).sources[state.path];
+    text = entry ? (base ? entry.text : textFor(state.path)) || "(Empty file.)"
+      : !state.path ? "This event has no Markdown source." : base ? "This source does not exist in the base." : "This source was removed from the current catalog.";
+  } else if (state.base) {
+    const side = base ? state.comparison?.base : state.comparison?.current;
+    text = !side ? "Updating comparison…" : side.error || (side.status === "absent"
+      ? "This event does not exist in this revision." : side.result?.text ?? "Preview unavailable.");
+  } else text = $("copy").disabled ? "Updating preview…" : state.result?.text ?? "Preview unavailable.";
+  const content = text || "(No content for these inputs.)";
+  if ($("review-full-text").textContent !== content) $("review-full-text").textContent = content;
+}
+function openComparison(target) {
+  state.reviewTarget = target;
+  renderViews();
+  $("review-full-text").focus({ preventScroll: true });
+}
+function closeComparison() {
+  const target = state.reviewTarget;
+  state.reviewTarget = "";
+  renderViews();
+  $(target === "prompt" ? "prompt-compare" : "source-compare").focus({ preventScroll: true });
 }
 function schedulePreview() {
   clearTimeout(previewTimer);
@@ -616,10 +647,19 @@ $("clear-base").addEventListener("click", () => {
   $("changed-only").checked = false;
   refreshSelection();
 });
-for (const [id, key, value] of [
-  ["source-edit", "sourceView", "edit"], ["source-compare", "sourceView", "diff"],
-  ["prompt-current", "promptView", "current"], ["prompt-compare", "promptView", "diff"],
-]) $(id).addEventListener("click", () => { state[key] = value; renderViews(); });
+for (const id of ["source-compare", "review-source"])
+  $(id).addEventListener("click", () => openComparison("source"));
+for (const id of ["prompt-compare", "review-prompt"])
+  $(id).addEventListener("click", () => openComparison("prompt"));
+for (const id of ["source-edit", "prompt-current", "review-close"])
+  $(id).addEventListener("click", closeComparison);
+$("review-version").addEventListener("change", renderViews);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.reviewTarget && event.target.tagName !== "SELECT") {
+    event.preventDefault();
+    closeComparison();
+  }
+});
 $("inputs").addEventListener("submit", (event) => event.preventDefault());
 $("copy").addEventListener("click", async () => {
   if (!state.result) return;

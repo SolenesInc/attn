@@ -230,12 +230,15 @@ func (e *editor) draftSnapshot(d sharedDraft) (catalogSnapshot, error) {
 	if !sameDefinitions(d.Manifest, snapshot.Manifest) {
 		return snapshot, conflict("composition changed; sync this draft before continuing", nil)
 	}
+	snapshot.EditedSources = []string{}
 	for name, file := range d.Files {
 		if _, ok := snapshot.Sources[name]; !ok {
 			return snapshot, fmt.Errorf("unregistered source: %s", name)
 		}
 		snapshot.Sources[name] = source{file.Text, file.Revision}
+		snapshot.EditedSources = append(snapshot.EditedSources, name)
 	}
+	sort.Strings(snapshot.EditedSources)
 	return snapshot, nil
 }
 

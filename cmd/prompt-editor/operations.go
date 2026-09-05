@@ -32,6 +32,7 @@ type operationRequest struct {
 	Target    string            `json:"target,omitempty"`
 	Selection string            `json:"selection,omitempty"`
 	Focus     *focus            `json:"focus,omitempty"`
+	Include   []string          `json:"include,omitempty"`
 }
 
 func (e *editor) dataset(draftID, reviewID string) (catalogSnapshot, *focus, error) {
@@ -78,6 +79,8 @@ func (e *editor) operation(ctx context.Context, q operationRequest) (any, error)
 		q.Author = "maintainer"
 	}
 	switch q.Op {
+	case "authoring":
+		return map[string]any{"guide": "docs/prompt-authoring.md", "workflow": authoringWorkflow}, nil
 	case "refresh":
 		return e.withState(func(*os.Root) (any, error) { return e.refresh(ctx) })
 	case "scenarios":
@@ -124,6 +127,9 @@ func (e *editor) operation(ctx context.Context, q operationRequest) (any, error)
 	scenarios, err := e.selectedScenarios(snapshot, q.ReviewID)
 	if err != nil {
 		return nil, err
+	}
+	if q.Op == "context" {
+		return e.authoringContext(ctx, q, snapshot, selected, catalog, scenarios)
 	}
 	if q.Op == "check" || q.Op == "compare" {
 		return e.checkScenarios(ctx, q, snapshot, catalog, scenarios)

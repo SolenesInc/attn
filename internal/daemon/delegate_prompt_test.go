@@ -2,14 +2,17 @@ package daemon
 
 import "testing"
 
-func TestDelegatedBriefPromptCarriesOnlyTheSeedReportingContract(t *testing.T) {
+func TestDelegatedBriefPromptCarriesSeedContextAndReporting(t *testing.T) {
 	const want = `Fix the launch guidance.
 
 ---
-Your work is seed ` + "`s-abc123`" + ` in the garden — the brief above is its body, and
-you are its tender. Read the body and log with:
+Your work is seed ` + "`s-abc123`" + ` in the garden, and you are its tender.
+Before working, read its current body and log:
 
     attn seed show s-abc123
+
+Follow the body's references to the parent plan, sibling results or artifacts
+you need for this assignment.
 
 Report progress, what you learned, and decisions needed on the log:
 
