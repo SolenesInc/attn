@@ -1,10 +1,10 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { isDirectoryUnderRoot, parseCommonArgs } from './common.mjs';
+import { isDirectoryUnderRoot, parseCommonArgs, queryDaemonDb } from './common.mjs';
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -144,5 +144,64 @@ describe('isDirectoryUnderRoot', () => {
   it('matches against any of multiple root candidates (symlink realpath form)', () => {
     const roots = ['/var/folders/xy/attn-real-app-sessions', '/private/var/folders/xy/attn-real-app-sessions'];
     expect(isDirectoryUnderRoot('/private/var/folders/xy/attn-real-app-sessions/run-2/ws', roots)).toBe(true);
+  });
+});
+
+// A sqlite3 child holding BEGIN EXCLUSIVE is the daemon write a scenario races:
+// with a rollback journal only the commit's exclusive lock shuts readers out.
+function holdExclusiveLock(dbPath) {
+  const child = spawn('sqlite3', ['-batch', dbPath], { stdio: ['pipe', 'pipe', 'pipe'] });
+  child.stdin.write("BEGIN EXCLUSIVE;\nSELECT 'held';\n");
+  return new Promise((resolve, reject) => {
+    let out = '';
+    child.stdout.on('data', (chunk) => {
+      out += chunk;
+      if (out.includes('held')) resolve(child);
+    });
+    child.on('error', reject);
+    child.on('exit', (code) => reject(new Error(`lock holder exited early (${code})`)));
+  });
+}
+
+describe('queryDaemonDb', () => {
+  let dir;
+  let dbPath;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-query-daemon-db-'));
+    dbPath = path.join(dir, 'attn.db');
+    execFileSync('sqlite3', ['-batch', dbPath, "CREATE TABLE sessions (id TEXT, resume_session_id TEXT); INSERT INTO sessions VALUES ('s1', 'r1');"]);
+  });
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('returns a trimmed scalar and parsed rows', () => {
+    expect(queryDaemonDb(dbPath, 'SELECT resume_session_id FROM sessions;')).toBe('r1');
+    expect(queryDaemonDb(dbPath, 'SELECT * FROM sessions;', { json: true })).toEqual([
+      { id: 's1', resume_session_id: 'r1' },
+    ]);
+    expect(queryDaemonDb(dbPath, "SELECT id FROM sessions WHERE id = 'absent';", { json: true })).toEqual([]);
+  });
+
+  it('waits out a writer holding the database instead of failing busy', async () => {
+    const holder = await holdExclusiveLock(dbPath);
+    const releaser = spawn('sh', ['-c', `sleep 0.3; kill ${holder.pid}`]);
+    try {
+      expect(queryDaemonDb(dbPath, 'SELECT resume_session_id FROM sessions;')).toBe('r1');
+    } finally {
+      releaser.kill();
+    }
+  });
+
+  it('names the busy timeout and the SQL when the read cannot get through', async () => {
+    const holder = await holdExclusiveLock(dbPath);
+    try {
+      expect(() => queryDaemonDb(dbPath, 'SELECT resume_session_id FROM sessions;', { busyMs: 0 }))
+        .toThrow(/busy_timeout=0ms[\s\S]*SELECT resume_session_id/);
+    } finally {
+      holder.kill();
+    }
   });
 });

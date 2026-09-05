@@ -67,6 +67,8 @@ Run commands from the repository root.
   `idle` when the turn was silent). Arming turns headless tasks off, which is what
   makes the daemon read that marker instead of a model.
 - Crew fixtures use synthetic names and `claude-haiku-4-5` unless stronger reasoning is required.
+- Read the live daemon DB through `queryDaemonDb` in `common.mjs`. A bare
+  `sqlite3` call has no busy timeout and dies on the first write it races.
 - Resolve pane ids from app/daemon state. Assert empty workspaces are removed.
   Shortcuts use registry ids.
 - Keep OS-specific install paths, launch, observation, and quit behavior in

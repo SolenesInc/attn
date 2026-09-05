@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Real-app scenarios read the live daemon DB through one queryDaemonDb helper that always sets a SQLite busy timeout.

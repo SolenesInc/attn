@@ -7,7 +7,7 @@ import net from 'node:net';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
-import { parseCommonArgs, printCommonHelp, launchFreshAppAndConnect } from './common.mjs';
+import { parseCommonArgs, printCommonHelp, launchFreshAppAndConnect, queryDaemonDb } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -401,7 +401,7 @@ async function main() {
       await socketRequest(resources.socket, { cmd: 'set_session_resume_id', id: sessionID, resume_session_id: seed.id });
       run(binary, ['seed', 'harvest', seedID, '-m', 'first review complete', '--session', sessionID], daemonEnv);
       const db = path.join(dataDirForProfile(profile), 'attn.db');
-      execFileSync('sqlite3', ['-cmd', '.timeout 5000', db, `UPDATE tickets SET archived_at=datetime('now') WHERE id='${ticketID.replaceAll("'", "''")}';`]);
+      queryDaemonDb(db, `UPDATE tickets SET archived_at=datetime('now') WHERE id='${ticketID.replaceAll("'", "''")}';`);
       await client.request('close_session', { sessionId: sessionID });
       await observer.waitFor(() => !observer.getSession(sessionID) ? true : null, 'origin reviewer to unregister');
     });

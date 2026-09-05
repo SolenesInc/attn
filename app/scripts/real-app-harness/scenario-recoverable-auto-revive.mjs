@@ -8,6 +8,7 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
+  queryDaemonDb,
 } from './common.mjs';
 import { sleep, waitForFirstWorkspacePane, waitForPaneText } from './scenarioAssertions.mjs';
 import { ensureClaudeInitialPanePromptReady } from './scenarioAgents.mjs';
@@ -78,12 +79,8 @@ function registeredWorkerPid(dataDir, sessionId) {
 
 function sessionCostJson(dbPath, sessionId) {
   const sql = `SELECT session_cost_json FROM sessions WHERE id = '${sessionId.replaceAll("'", "''")}' LIMIT 1;`;
-  try {
-    const raw = execFileSync('sqlite3', [dbPath, sql], { encoding: 'utf8' }).trim();
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+  const raw = queryDaemonDb(dbPath, sql);
+  return raw ? JSON.parse(raw) : null;
 }
 
 function costObservationCount(cost) {

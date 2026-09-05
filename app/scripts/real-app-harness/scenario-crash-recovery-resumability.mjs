@@ -2,13 +2,12 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import {
   createSessionAndWaitForInitialPane,
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
+  queryDaemonDb,
   relaunchAppAndConnect,
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -29,8 +28,6 @@ import {
 import { agentHomeRoots, writeMockAgentFixture } from './mockAgent.mjs';
 import { currentHarnessProfile, dataDirForProfile } from './harnessProfile.mjs';
 
-const execFileAsync = promisify(execFile);
-
 function parseArgs(argv) {
   const args = [...argv];
   if (args[0] === '--') args.shift();
@@ -38,14 +35,12 @@ function parseArgs(argv) {
   return { options, help: args.includes('--help') || args.includes('-h') };
 }
 
-async function readPersistedResumeId(dataDir, sessionId) {
+function readPersistedResumeId(dataDir, sessionId) {
   const dbPath = path.join(dataDir, 'attn.db');
-  const { stdout } = await execFileAsync('sqlite3', [
-    '-cmd', '.timeout 5000',
-    `file:${dbPath}?mode=ro`,
+  return queryDaemonDb(
+    dbPath,
     `select coalesce(resume_session_id, '') from sessions where id = '${sessionId}';`,
-  ]);
-  return stdout.trim();
+  );
 }
 
 // A rollout's first line carries the session_meta naming its id, which is how
@@ -190,7 +185,7 @@ async function main() {
       const pane = await waitForFirstWorkspacePane(client, sessionId, 'codex pane', 20_000);
       codexResumeId = await waitFor(
         'codex to report its native resume id',
-        async () => (await readPersistedResumeId(dataDir, sessionId)) || null,
+        async () => (readPersistedResumeId(dataDir, sessionId)) || null,
         90_000,
       );
       await submitCodexPrompt(client, sessionId, pane.paneId, `Reply with exactly ${token} and nothing else.`);
@@ -224,7 +219,7 @@ async function main() {
     });
 
     await runner.step('record_state_before_the_crash', async () => {
-      const claudeResumeId = await readPersistedResumeId(dataDir, claudeSessionId);
+      const claudeResumeId = readPersistedResumeId(dataDir, claudeSessionId);
       const claudeTranscript = agentHomeRoots().claudeProjects;
       const claudeHasTranscript = fs.existsSync(claudeTranscript)
         && fs.readdirSync(claudeTranscript).some((dir) => fs.existsSync(path.join(claudeTranscript, dir, `${claudeResumeId}.jsonl`)));

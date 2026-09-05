@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
@@ -106,6 +107,28 @@ export function harnessArtifactsRoot(env = process.env) {
 
 export function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
+}
+
+// Measured on a 137MB attn.db: a write holds the exclusive lock 0.6ms typical,
+// 3.9ms worst of 50. 5000ms is a tripwire only a wedged writer reaches.
+export const DAEMON_DB_BUSY_MS = 5000;
+
+// A bare sqlite3 call has no busy handler, so it dies on the first daemon write
+// it races. Every harness read or write of a live daemon DB goes through here.
+export function queryDaemonDb(dbPath, sql, { busyMs = DAEMON_DB_BUSY_MS, json = false, timeoutMs = 30_000, env } = {}) {
+  const args = ['-batch', '-cmd', `.timeout ${busyMs}`];
+  if (json) args.push('-json');
+  args.push(dbPath, sql);
+  let stdout;
+  try {
+    stdout = execFileSync('sqlite3', args, { encoding: 'utf8', timeout: timeoutMs, env });
+  } catch (error) {
+    const detail = String(error?.stderr || error?.message || error).trim();
+    throw new Error(`sqlite3 on ${dbPath} failed after busy_timeout=${busyMs}ms, exec timeout=${timeoutMs}ms: ${detail}\nSQL: ${sql}`);
+  }
+  const trimmed = stdout.trim();
+  if (!json) return trimmed;
+  return trimmed ? JSON.parse(trimmed) : [];
 }
 
 export async function captureScreenshot(driver, outputPath) {

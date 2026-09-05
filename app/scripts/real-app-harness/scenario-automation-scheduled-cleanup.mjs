@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { parseCommonArgs, printCommonHelp } from './common.mjs';
+import { parseCommonArgs, printCommonHelp, queryDaemonDb } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, dataDirForProfile, resolveHarnessResources, profileCliEnv as profileEnv } from './harnessProfile.mjs';
 import { ensureFreshWorld } from './freshWorld.mjs';
@@ -59,7 +59,7 @@ async function poll(fn, description, timeoutMs = 30_000) {
 }
 
 function sqliteRow(dbPath, sql) {
-  const out = execFileSync('sqlite3', ['-cmd', '.timeout 5000', dbPath, sql], { encoding: 'utf8' }).trim();
+  const out = queryDaemonDb(dbPath, sql);
   return out.length === 0 ? null : out.split('|');
 }
 

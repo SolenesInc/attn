@@ -7,6 +7,7 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
+  queryDaemonDb,
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -174,10 +175,7 @@ async function main() {
   const reconciles = (name) => invocations(name).filter((row) => row.kind === 'reconcile');
   const causedBy = (row, cause) => (row?.reconcile?.causes || []).includes(cause);
 
-  const sqlite = (statement) =>
-    execFileSync('sqlite3', [dbPath, statement], { encoding: 'utf8', timeout: 30_000 }).trim();
-  const readOnlySqlite = (statement) =>
-    execFileSync('sqlite3', [`file:${dbPath}?immutable=1`, statement], { encoding: 'utf8', timeout: 30_000 }).trim();
+  const sqlite = (statement) => queryDaemonDb(dbPath, statement);
 
   const restartDaemon = (env) => {
     try { run(binary, ['daemon', 'stop'], env); } catch { }
@@ -361,7 +359,7 @@ async function main() {
       runner.assert(/removed \d+ event/.test(trimmed), `the trim removed nothing: ${trimmed}`);
       for (let i = 0; i < 2; i += 1) publishSeed('after-the-trim');
       await sleep(2000);
-      const earliest = Number(readOnlySqlite('select coalesce(min(seq), 0) from bus_events;'));
+      const earliest = Number(sqlite('select coalesce(min(seq), 0) from bus_events;'));
       runner.assert(
         earliest > cursor,
         `the trim did not move the oldest surviving fact past historian's cursor (earliest ${earliest}, cursor ${cursor})`,
@@ -407,7 +405,7 @@ async function main() {
         appStatus(HISTORIAN).reconcile,
       );
 
-      const notification = readOnlySqlite(
+      const notification = sqlite(
         "select body from notifications where kind = 'app_auto_disabled' order by rowid desc limit 1;",
       );
       runner.assert(
