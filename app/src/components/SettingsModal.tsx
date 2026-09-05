@@ -532,6 +532,13 @@ export function SettingsModal({
     }
   }, [actualDefaultAgent, agentAvailability, onSetSetting]);
 
+  // The daemon's default is on, so an unset value reads as enabled here too.
+  const worktreeSweepEnabled = settings['worktree_sweep_enabled'] !== 'false';
+
+  const handleToggleWorktreeSweep = useCallback(() => {
+    onSetSetting('worktree_sweep_enabled', worktreeSweepEnabled ? 'false' : 'true');
+  }, [worktreeSweepEnabled, onSetSetting]);
+
   const handleAddEndpoint = useCallback(async () => {
     const name = endpointPanel.draft.name.trim();
     const sshTarget = endpointPanel.draft.target.trim();
@@ -679,9 +686,9 @@ export function SettingsModal({
           id: 'workspace',
           label: 'Files and locations',
           title: 'Files and locations',
-          description: 'Where attn opens repositories and worktrees, where your Notebook lives, and what it does with a file an agent sends you.',
-          count: 3,
-          keywords: 'projects directory worktrees roots notebook folder knowledge base journal location sent files tiles open markdown',
+          description: 'Where attn opens repositories and worktrees, when merged worktrees are reclaimed, where your Notebook lives, and what it does with a file an agent sends you.',
+          count: 4,
+          keywords: 'projects directory worktrees roots notebook folder knowledge base journal location sent files tiles open markdown worktree sweep reclaim merged keep pin',
         },
         {
           id: 'hygiene',
@@ -1056,6 +1063,40 @@ export function SettingsModal({
             />
             <button className="settings-action" onClick={handleBrowse}>
               Browse
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-block">
+        <div className="settings-block-intro">
+          <div className="settings-kicker">Worktrees</div>
+          <h3>Worktree sweep</h3>
+          <p className="settings-description">
+            Reclaims worktrees whose work has landed. A worktree is only removed when it has
+            been idle for 14 days, has no uncommitted or stashed changes, has nothing unpushed
+            beyond what merged, holds no live session or open seed, and its branch is on the
+            repository's integration branch — as a merged pull request, as an ancestor, or with
+            an identical tree. Everything it keeps says why, and every removal lands in the
+            sweep log and as a note on the seeds that worked there. On by default.
+          </p>
+        </div>
+        <div className="settings-block-body">
+          <div className="settings-row-card">
+            <div>
+              <p className="settings-row-title">Reclaim merged worktrees in the background</p>
+              <p className="settings-row-copy">
+                Turning it off stops removals; the daemon keeps refreshing worktree state so the
+                Worktrees panel stays accurate, and the keep-forever pins you set stay set.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="settings-action"
+              data-testid="settings-worktree-sweep-toggle"
+              onClick={handleToggleWorktreeSweep}
+            >
+              {worktreeSweepEnabled ? 'Disable' : 'Enable'}
             </button>
           </div>
         </div>

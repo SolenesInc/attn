@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "289"
+const ProtocolVersion = "290"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -188,6 +188,10 @@ const (
 	CmdListWorktrees                         = "list_worktrees"
 	CmdCreateWorktree                        = "create_worktree"
 	CmdDeleteWorktree                        = "delete_worktree"
+	CmdWorktreeList                          = "worktree_list"
+	CmdWorktreeKeep                          = "worktree_keep"
+	CmdWorktreeSweepLog                      = "worktree_sweep_log"
+	CmdWorktreeRefresh                       = "worktree_refresh"
 	CmdGetSettings                           = "get_settings"
 	CmdSetSetting                            = "set_setting"
 	CmdListPlugins                           = "list_plugins"
@@ -398,6 +402,12 @@ const (
 	EventWorktreeCreated                 = "worktree_created"
 	EventWorktreeDeleted                 = "worktree_deleted"
 	EventWorktreesUpdated                = "worktrees_updated"
+	EventWorktreeStateChanged            = "worktree_state_changed"
+	EventWorktreeSwept                   = "worktree_swept"
+	EventWorktreeListResult              = "worktree_list_result"
+	EventWorktreeKeepResult              = "worktree_keep_result"
+	EventWorktreeSweepLogResult          = "worktree_sweep_log_result"
+	EventWorktreeRefreshResult           = "worktree_refresh_result"
 	EventCreateWorktreeResult            = "create_worktree_result"
 	EventDeleteWorktreeResult            = "delete_worktree_result"
 	EventGitOperationStarted             = "git_operation_started"
@@ -1607,6 +1617,34 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdDeleteWorktree:
 		var msg DeleteWorktreeMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdWorktreeList:
+		var msg WorktreeListMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdWorktreeKeep:
+		var msg WorktreeKeepMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdWorktreeSweepLog:
+		var msg WorktreeSweepLogMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdWorktreeRefresh:
+		var msg WorktreeRefreshMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}

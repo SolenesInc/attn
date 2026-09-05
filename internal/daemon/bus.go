@@ -67,6 +67,8 @@ const (
 	FactWorktreeCreated        = "worktree.created"
 	FactWorktreeDeleted        = "worktree.deleted"
 	FactWorktreeListReconciled = "worktree.list.reconciled"
+	FactWorktreeStateChanged   = "worktree.state.changed"
+	FactWorktreeSwept          = "worktree.swept"
 
 	FactGitOperationStarted  = "git.operation.started"
 	FactGitOperationFinished = "git.operation.finished"
@@ -338,6 +340,14 @@ func buildWireProjections() []projection {
 		{
 			filter: bus.Filter{FactWorktreeListReconciled},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectWorktreesUpdated(ev) },
+		},
+		{
+			filter: bus.Filter{FactWorktreeStateChanged},
+			apply:  func(d *Daemon, ev bus.Event) { d.projectWorktreeStateChanged(ev) },
+		},
+		{
+			filter: bus.Filter{FactWorktreeSwept},
+			apply:  func(d *Daemon, ev bus.Event) { d.projectWorktreeSwept(ev) },
 		},
 		{
 			filter: bus.Filter{FactGitOperationStarted, FactGitOperationFinished},

@@ -250,6 +250,9 @@ func main() {
 	case "present":
 		maybePrintProfileBanner()
 		runPresent()
+	case "worktree":
+		maybePrintProfileBanner()
+		runWorktree()
 	case "profile":
 		// No banner: `attn profile resolve --field …` must print only the value for the Makefile / harness.
 		runProfile()
@@ -651,6 +654,7 @@ commands:
   pr record|ls|forget <url>         pull requests this session opened
   list                              list sessions and workspaces
   activity [clear <id>]             what each agent is doing right now
+  worktree <command>                every tracked worktree, the sweep and the keep pin
   present <command>                 open a review presentation and read feedback
   debug <command>                   probe debug artifacts (incidents, logs)
   db <command>                      database maintenance (restore from backup)
