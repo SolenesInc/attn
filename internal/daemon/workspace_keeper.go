@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/jobs"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -525,7 +526,7 @@ func (d *Daemon) executeKeeperCompact(
 	request := agentdriver.HeadlessTaskRequest{
 		Executable: executablePath,
 		Model:      config.Model,
-		Prompt:     fmt.Sprintf(keeperCompactPrompt, sourcePath, candidatePath),
+		Prompt:     prompts.RenderText("keeper", "compact", prompts.Values{"source_path": sourcePath, "candidate_path": candidatePath}),
 		WorkDir:    tempDir,
 	}
 	result, err := provider.RunHeadlessTask(ctx, request)
@@ -553,21 +554,6 @@ func (d *Daemon) executeKeeperCompact(
 
 // Format string: the two %s are the absolute source path (read) and the
 // candidate path (write).
-const keeperCompactPrompt = `Compact the workspace context file without changing its meaning.
-
-Read the file at %s. Write the complete compacted result to %s. Do not modify any other file. Write the candidate file exactly once with the full result; do not leave it empty.
-
-Preserve:
-- Area and all current truths
-- unresolved open edges
-- decisions and constraints
-- source links and useful timeline turning points
-
-You may shorten prose, deduplicate facts, and merge overlapping Threads. Remove stale or superseded material only when the document itself establishes that it is stale or superseded.
-
-Do not add facts, dates, chronology, causality, ownership, thread structure, or conclusions. If uncertain, preserve the content. A byte-identical copy is valid.
-
-The result must contain exactly one "# Workspace Context" heading, a non-empty "## Area", and a non-empty "## Current Picture".`
 
 func validateKeeperCompactCandidate(source, candidate string) error {
 	if len([]byte(candidate)) > len([]byte(source)) {

@@ -17,6 +17,7 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/hooks"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -252,41 +253,33 @@ func seedClient() *client.Client {
 	return client.New(config.SocketPath())
 }
 
-const seedPrimeText = hooks.GardenGuidance
+var seedPrimeText = hooks.GardenGuidance
 
 func seedPrimeTailFromReady(ready *protocol.SeedReadyResult) string {
-	var tail strings.Builder
-	switch {
-	case ready.Crown == nil:
-		switch len(ready.Seeds) {
-		case 0:
-			tail.WriteString("Nothing is ready now.")
-		case 1:
-			tail.WriteString("One seed is ready now.")
-		default:
-			fmt.Fprintf(&tail, "%d seeds are ready now.", len(ready.Seeds))
-		}
-	case ready.Crown.PlotProgress == nil:
-		fmt.Fprintf(&tail, "You were dispatched to work on seed `%s`, %q. Read it with `attn seed show %s`.",
-			ready.Crown.ID, ready.Crown.Title, ready.Crown.ID)
-	case len(ready.Seeds) == 0:
-		fmt.Fprintf(&tail, "Nothing in this plot is ready now; its seeds are blocked, held, or done. `attn seed show %s` shows what blocks what.", ready.Crown.ID)
-	default:
-		fmt.Fprintf(&tail, "You were dispatched to work at plot `%s`, %q. Read the plan with `attn seed show %s`. Tend or plant anything, here or elsewhere.\n\nReady in this plot now, oldest first:\n",
-			ready.Crown.ID, ready.Crown.Title, ready.Crown.ID)
-		handoffs := freshestHandoffs(ready.Handoffs)
-		for _, seed := range ready.Seeds {
-			fmt.Fprintf(&tail, "\n- `%s` %s: %s", seed.ID, seed.StepSlug, seed.Title)
-			if handoff, ok := handoffs[seed.ID]; ok && strings.TrimSpace(handoff.Body) != "" {
-				author := crew.HolderName(handoff.AuthorMember, handoff.AuthorSession)
-				if author == "" {
-					author = "a previous tender"
-				}
-				fmt.Fprintf(&tail, "\n  handoff from %s: %s", author, strings.TrimSpace(handoff.Body))
-			}
-		}
+	values := prompts.Values{
+		"has_crown": fmt.Sprint(ready.Crown != nil),
+		"has_ready": fmt.Sprint(len(ready.Seeds) > 0),
+		"one_ready": fmt.Sprint(len(ready.Seeds) == 1),
+		"count":     fmt.Sprint(len(ready.Seeds)),
+		"is_plot":   "false",
+		"seed_id":   "",
+		"title":     "",
+		"rows":      "",
 	}
-	return tail.String() + "\n"
+	if ready.Crown != nil {
+		values["seed_id"] = ready.Crown.ID
+		values["title"] = fmt.Sprintf("%q", ready.Crown.Title)
+		values["is_plot"] = fmt.Sprint(ready.Crown.PlotProgress != nil)
+	}
+	var rows strings.Builder
+	handoffs := freshestHandoffs(ready.Handoffs)
+	for _, seed := range ready.Seeds {
+		handoff := handoffs[seed.ID]
+		rows.WriteString(prompts.RenderText("session", "garden-row", prompts.Values{"seed_id": seed.ID, "slug": seed.StepSlug, "title": seed.Title, "handoff": handoff.Body, "author": crew.HolderName(handoff.AuthorMember, handoff.AuthorSession)}))
+	}
+
+	values["rows"] = rows.String()
+	return prompts.RenderText("session", "garden-ready", values)
 }
 
 func seedPrimeFromReady(ready *protocol.SeedReadyResult) string {

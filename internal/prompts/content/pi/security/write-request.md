@@ -1,0 +1,1 @@
+If the task needs another existing directory, retry bash with sandbox: {allowWrite: ["/existing/exact/cache-directory"], reason: "Why this command needs this directory"}. Submit the request directly; auto mode reviews it before execution. A sandbox failure is not an auto-mode refusal.

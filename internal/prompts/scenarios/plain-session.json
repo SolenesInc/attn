@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "id": "plain-session",
+  "description": "Ordinary session without Garden or workflow guidance.",
+  "recipient": "session",
+  "event": "launch",
+  "values": {
+    "notebook_root": "",
+    "workflow_enabled": "false",
+    "garden_available": "false",
+    "crew_priming": "",
+    "self_report_pull_requests": "false"
+  }
+}

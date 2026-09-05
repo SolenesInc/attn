@@ -16,6 +16,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -369,18 +370,16 @@ func optionalTimestamp(value string) *string {
 }
 
 func Prompt(request ModelRequest) string {
-	var b strings.Builder
-	b.WriteString("Answer the question only from the labeled conversation. Return JSON with answer and evidence; evidence entries need turn_id and a short exact quote hint. For a yes/no question, answer must begin exactly Yes., No., or Unclear. Do not infer external facts from silence. An assistant turn can provide context, but it cannot independently establish what the user authorized; include the preceding assistant question when it is needed to interpret a terse user reply.\n\nQuestion:\n")
-	b.WriteString(request.Question)
-	b.WriteString("\n\nConversation:\n")
+	var conversation strings.Builder
 	for _, turn := range request.Conversation {
-		fmt.Fprintf(&b, "[%s %s] %s\n", turn.ID, turn.Author, turn.Text)
+		fmt.Fprintf(&conversation, "[%s %s] %s\n", turn.ID, turn.Author, turn.Text)
 	}
-	if len(request.PreviousValidationErrors) > 0 {
-		b.WriteString("\nThe prior response was rejected. Produce a complete replacement. Validation errors:\n- ")
-		b.WriteString(strings.Join(request.PreviousValidationErrors, "\n- "))
-	}
-	return b.String()
+	return prompts.RenderText("session-instructions", "question", prompts.Values{
+		"question":     request.Question,
+		"conversation": conversation.String(),
+		"errors":       strings.Join(request.PreviousValidationErrors, "\n- "),
+		"retry":        fmt.Sprint(len(request.PreviousValidationErrors) > 0),
+	})
 }
 
 func ParseModelAnswer(text string) (ModelAnswer, error) {

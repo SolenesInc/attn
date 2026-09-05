@@ -1,0 +1,411 @@
+{
+  "version": 1,
+  "recipients": [
+    {
+      "id": "annotation-label",
+      "description": "Built-in quick-label instructions included with selected feedback.",
+      "events": [
+        {
+          "id": "verify-this",
+          "delivery": "message_fragment",
+          "description": "Tip attached when this feedback label is selected.",
+          "body": {
+            "kind": "text",
+            "id": "annotation-label.verify-this",
+            "source": "content/annotations/labels/verify-this.md"
+          }
+        },
+        {
+          "id": "show-the-receipt",
+          "delivery": "message_fragment",
+          "description": "Tip attached when this feedback label is selected.",
+          "body": {
+            "kind": "text",
+            "id": "annotation-label.show-the-receipt",
+            "source": "content/annotations/labels/show-the-receipt.md"
+          }
+        },
+        {
+          "id": "give-me-an-example",
+          "delivery": "message_fragment",
+          "description": "Tip attached when this feedback label is selected.",
+          "body": {
+            "kind": "text",
+            "id": "annotation-label.give-me-an-example",
+            "source": "content/annotations/labels/give-me-an-example.md"
+          }
+        },
+        {
+          "id": "consider-alternatives",
+          "delivery": "message_fragment",
+          "description": "Tip attached when this feedback label is selected.",
+          "body": {
+            "kind": "text",
+            "id": "annotation-label.consider-alternatives",
+            "source": "content/annotations/labels/consider-alternatives.md"
+          }
+        }
+      ]
+    },
+    {
+      "id": "annotation-terminal",
+      "description": "Feedback sent from annotated terminal output.",
+      "events": [
+        {
+          "id": "submit",
+          "delivery": "user_message",
+          "description": "Ordered entries and an optional overall note; the frontend trims trailing JavaScript whitespace.",
+          "body": {
+            "kind": "text",
+            "id": "annotation-terminal.submit",
+            "source": "content/annotations/terminal-submit.md",
+            "bindings": [
+              {
+                "name": "note",
+                "node": {
+                  "kind": "when",
+                  "condition": {
+                    "field": {
+                      "name": "note",
+                      "kind": "text",
+                      "description": "note"
+                    },
+                    "test": "present"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "annotation-terminal.note",
+                      "source": "content/annotations/terminal-note.md",
+                      "keep_final_newline": true,
+                      "bindings": [
+                        {
+                          "name": "note",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "note",
+                              "kind": "text",
+                              "description": "note"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "entries",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "entries",
+                    "kind": "text",
+                    "description": "entries",
+                    "from": "annotation-terminal/entry"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "entry",
+          "delivery": "message_fragment",
+          "description": "One terminal selection; the adapter quotes lines and resolves a quick label.",
+          "body": {
+            "kind": "text",
+            "id": "annotation-terminal.entry",
+            "source": "content/annotations/terminal-entry.md",
+            "keep_final_newline": true,
+            "bindings": [
+              {
+                "name": "index",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "index",
+                    "kind": "text",
+                    "description": "index"
+                  }
+                }
+              },
+              {
+                "name": "heading",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "heading",
+                      "kind": "text",
+                      "description": "heading"
+                    },
+                    "test": "present"
+                  },
+                  "children": [
+                    {
+                      "kind": "input",
+                      "field": {
+                        "name": "heading",
+                        "kind": "text",
+                        "description": "heading"
+                      }
+                    },
+                    {
+                      "kind": "text",
+                      "id": "annotation-terminal.comment-heading",
+                      "source": "content/annotations/terminal-comment-heading.md",
+                      "keep_final_newline": true
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "quote",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "quote",
+                    "kind": "text",
+                    "description": "quote"
+                  }
+                }
+              },
+              {
+                "name": "tip",
+                "node": {
+                  "kind": "when",
+                  "condition": {
+                    "field": {
+                      "name": "tip",
+                      "kind": "text",
+                      "description": "tip"
+                    },
+                    "test": "present"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "annotation-terminal.tip",
+                      "source": "content/annotations/terminal-tip.md",
+                      "keep_final_newline": true,
+                      "bindings": [
+                        {
+                          "name": "tip",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "tip",
+                              "kind": "text",
+                              "description": "tip"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "comment",
+                "node": {
+                  "kind": "when",
+                  "condition": {
+                    "field": {
+                      "name": "has_comment",
+                      "kind": "flag",
+                      "description": "The comment is nonempty."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "annotation-terminal.comment",
+                      "source": "content/annotations/terminal-comment.md",
+                      "keep_final_newline": true,
+                      "bindings": [
+                        {
+                          "name": "comment",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "comment",
+                              "kind": "text",
+                              "description": "comment"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "sources": {
+    "content/annotations/labels/consider-alternatives.md": "Propose 2-3 alternative approaches with trade-offs based on the actual codebase.\n",
+    "content/annotations/labels/give-me-an-example.md": "This is too abstract. Show a before/after, a sample input/output, or a specific scenario.\n",
+    "content/annotations/labels/show-the-receipt.md": "You asserted this as fact. Name what backs it — the file and line, the measurement, the command output — or say plainly that it is an assumption.\n",
+    "content/annotations/labels/verify-this.md": "This seems like an assumption. Verify by reading the actual code before proceeding.\n",
+    "content/annotations/terminal-comment-heading.md": "💬 Comment",
+    "content/annotations/terminal-comment.md": "{{comment}}\n",
+    "content/annotations/terminal-entry.md": "## {{index}}. {{heading}}\n\n\u003e {{quote}}\n\n{{tip}}{{comment}}\n",
+    "content/annotations/terminal-note.md": "{{note}}\n\n",
+    "content/annotations/terminal-submit.md": "Feedback on your last message.\n\n{{note}}{{entries}}\n",
+    "content/annotations/terminal-tip.md": "{{tip}}\n"
+  },
+  "parity": [
+    {
+      "recipient": "annotation-label",
+      "event": "verify-this",
+      "values": {},
+      "sha256": "144cefe405b9d7c6bf58e994a40e9ac2963bbcb1bdcca38c20a5eb3b3e80b6e4"
+    },
+    {
+      "recipient": "annotation-label",
+      "event": "show-the-receipt",
+      "values": {},
+      "sha256": "cde260818554dd34f73015c2567b7bc54897e0557b02229b6cae231a3090de0a"
+    },
+    {
+      "recipient": "annotation-label",
+      "event": "give-me-an-example",
+      "values": {},
+      "sha256": "00d8821f214da8fa38fcb5e9a752f10b278287d1d1335ee94c263cd3b3db057d"
+    },
+    {
+      "recipient": "annotation-label",
+      "event": "consider-alternatives",
+      "values": {},
+      "sha256": "6b2f750fff18be772a90ed2db3222727958031b8b3dfca09d9cd226bc19c3309"
+    },
+    {
+      "recipient": "annotation-terminal",
+      "event": "submit",
+      "values": {
+        "entries": "entries: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "note": " \n\t"
+      },
+      "sha256": "642e6475fe3af77e413e9cc7614f388e9459ed6d90553f6ec5e419dba95b2b4b"
+    },
+    {
+      "recipient": "annotation-terminal",
+      "event": "submit",
+      "values": {
+        "entries": "entries: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "note": "note: literal {{token}} / λ / \"quoted\"\nsecond line"
+      },
+      "sha256": "1722e78d0ceac2672d9294e9b7a087b1780d15e31961be1f07d7fad259b7859c"
+    },
+    {
+      "recipient": "annotation-terminal",
+      "event": "entry",
+      "values": {
+        "comment": "comment: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "has_comment": "false",
+        "heading": " \n\t",
+        "index": "index: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "quote": "quote: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "tip": " \n\t"
+      },
+      "sha256": "00b30c33fbcb77bf41f9ee226a95f127d312ab7c502ffc845f01766361ef755a"
+    },
+    {
+      "recipient": "annotation-terminal",
+      "event": "entry",
+      "values": {
+        "comment": "comment: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "has_comment": "true",
+        "heading": " \n\t",
+        "index": "index: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "quote": "quote: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "tip": " \n\t"
+      },
+      "sha256": "09c4f1bdd39dcd29e0389eda8a9ee42239fffc7f52f3947da7717fe944c49f94"
+    },
+    {
+      "recipient": "annotation-terminal",
+      "event": "entry",
+      "values": {
+        "comment": "comment: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "has_comment": "false",
+        "heading": "heading: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "index": "index: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "quote": "quote: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "tip": " \n\t"
+      },
+      "sha256": "5901664a4ec93200688d7e013de9e39450760b8880cf0383c9cb89987bd7952d"
+    },
+    {
+      "recipient": "annotation-terminal",
+      "event": "entry",
+      "values": {
+        "comment": "comment: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "has_comment": "true",
+        "heading": "heading: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "index": "index: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "quote": "quote: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "tip": " \n\t"
+      },
+      "sha256": "a5212c74d7b8de9207ca8c449ddadfbfa4cb5fe5230b5a29972fb0aafbb9c4b7"
+    },
+    {
+      "recipient": "annotation-terminal",
+      "event": "entry",
+      "values": {
+        "comment": "comment: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "has_comment": "false",
+        "heading": " \n\t",
+        "index": "index: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "quote": "quote: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "tip": "tip: literal {{token}} / λ / \"quoted\"\nsecond line"
+      },
+      "sha256": "4649bade3c1f3485d205bb15416195e98236d2c6a9186db981560a3fb96447e1"
+    },
+    {
+      "recipient": "annotation-terminal",
+      "event": "entry",
+      "values": {
+        "comment": "comment: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "has_comment": "true",
+        "heading": " \n\t",
+        "index": "index: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "quote": "quote: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "tip": "tip: literal {{token}} / λ / \"quoted\"\nsecond line"
+      },
+      "sha256": "b67576bbd2582e808cd181af13915d835ac16cfdab25da08e89fdb3e11d13629"
+    },
+    {
+      "recipient": "annotation-terminal",
+      "event": "entry",
+      "values": {
+        "comment": "comment: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "has_comment": "false",
+        "heading": "heading: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "index": "index: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "quote": "quote: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "tip": "tip: literal {{token}} / λ / \"quoted\"\nsecond line"
+      },
+      "sha256": "b3abe4e532a21c18933fc6cb732280dadf531a79f473562f9edc16f195ba5ee5"
+    },
+    {
+      "recipient": "annotation-terminal",
+      "event": "entry",
+      "values": {
+        "comment": "comment: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "has_comment": "true",
+        "heading": "heading: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "index": "index: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "quote": "quote: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "tip": "tip: literal {{token}} / λ / \"quoted\"\nsecond line"
+      },
+      "sha256": "ff46613d8431f2dd9cb9b3225abd962db8c726fbed3640574adac9c73440ceb4"
+    }
+  ]
+}

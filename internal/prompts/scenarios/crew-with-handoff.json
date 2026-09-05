@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "id": "crew-with-handoff",
+  "description": "Crew identity with a charter and predecessor letter.",
+  "recipient": "crew",
+  "event": "priming",
+  "values": {
+    "display_name": "Maintainer",
+    "home_dir": "/workspace/crew/maintainer",
+    "has_charter": "true",
+    "cwd": "/workspace/project",
+    "awareness_dirs": "/workspace/project",
+    "handoff": "The previous day ended after verification. Inspect current changes before continuing.",
+    "older_handoffs": "",
+    "handoffs_dirname": "handoffs",
+    "charter_file": "/workspace/crew/maintainer/charter.md",
+    "charter_path": "",
+    "handoff_name": "previous.md",
+    "handoffs_dir": "/workspace/crew/maintainer/handoffs"
+  }
+}

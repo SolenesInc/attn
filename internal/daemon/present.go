@@ -3,6 +3,7 @@ package daemon
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/victorarias/attn/internal/prompts"
 	"net"
 	"strconv"
 	"strings"
@@ -525,12 +526,8 @@ func (d *Daemon) handlePresentSubmitRound(client *wsClient, msg *protocol.Presen
 }
 
 func (d *Daemon) handbackPresentationRound(pres *store.Presentation, seq int, verdict string) {
-	var notice string
-	if verdict == "approved" {
-		notice = fmt.Sprintf("Present round %d of %q approved — run `attn present feedback %s`", seq, pres.Title, pres.ID)
-	} else {
-		notice = fmt.Sprintf("Present round %d of %q submitted — run `attn present feedback %s`", seq, pres.Title, pres.ID)
-	}
+	values := prompts.Values{"round": fmt.Sprint(seq), "title": fmt.Sprintf("%q", pres.Title), "presentation_id": pres.ID, "approved": fmt.Sprint(verdict == "approved")}
+	notice := prompts.RenderText("session", "present-feedback", values)
 
 	if pres.TicketID != nil && strings.TrimSpace(*pres.TicketID) != "" {
 		ticketID := strings.TrimSpace(*pres.TicketID)
@@ -552,7 +549,7 @@ func (d *Daemon) handbackPresentationRound(pres *store.Presentation, seq int, ve
 		pres.SessionID,
 		pres.ID,
 		"",
-		"\U0001F4FD "+notice+".",
+		prompts.RenderText("session", "present-handback", values),
 		time.Now(),
 	)
 	if err != nil {

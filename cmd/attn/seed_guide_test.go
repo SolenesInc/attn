@@ -17,7 +17,7 @@ func TestSeedHelpNamesTheGuide(t *testing.T) {
 func TestSeedGuideDefinesCompletionFromTheBody(t *testing.T) {
 	for _, want := range []string{
 		"Harvest when the outcome and required verification in the body are complete",
-		"behavior exists and its required verification is green",
+		"behavior exists and required verification passes",
 	} {
 		if !strings.Contains(seedGuideText, want) {
 			t.Fatalf("seed guide dropped %q:\n%s", want, seedGuideText)

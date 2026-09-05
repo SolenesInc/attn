@@ -1,0 +1,1 @@
+When you open a pull request from this session, report it to attn right after with `attn pr record <url>`, passing the URL that `gh pr create` printed. attn attaches the pull request to the session, shows it on the session header, and keeps its status fresh. `attn pr ls` shows what this session has recorded, and `attn pr forget <url>` drops one.

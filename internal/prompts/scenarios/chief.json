@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "id": "chief",
+  "description": "Chief with Notebook and Garden guidance.",
+  "recipient": "session",
+  "event": "launch",
+  "values": {
+    "notebook_root": "/workspace/notebook",
+    "workflow_enabled": "false",
+    "garden_available": "true",
+    "crew_priming": "",
+    "self_report_pull_requests": "false"
+  }
+}

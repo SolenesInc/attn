@@ -4,6 +4,8 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 stage_root="${1:-${repo_root}/app/src-tauri/bundled-plugins}"
 
+(cd "${repo_root}" && GOOS="$(go env GOHOSTOS)" GOARCH="$(go env GOHOSTARCH)" CGO_ENABLED=0 go run ./cmd/promptgen)
+
 # Set, not inherited: a work machine commonly exports NPM_CONFIG_REGISTRY for a
 # corporate mirror, and every public package a bundled plugin pins then comes
 # back 401. ATTN_NPM_REGISTRY overrides it, matching internal/appbuild.
