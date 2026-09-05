@@ -245,6 +245,20 @@ func seedToProtocol(seed garden.Seed, doc docstore.Document, ready bool) protoco
 		out.ResumeCwd = protocol.Ptr(seed.ResumeCwd)
 		out.ResumeAgent = protocol.Ptr(seed.ResumeAgent)
 	}
+	if seed.HarvestWhen != nil {
+		condition := protocol.SeedHarvestCondition{
+			PullRequest: seed.HarvestWhen.PullRequest,
+			URL:         seed.HarvestWhen.URL,
+			SetAt:       seed.HarvestWhen.SetAt,
+		}
+		if seed.HarvestWhen.SetBySession != "" {
+			condition.SetBySession = protocol.Ptr(seed.HarvestWhen.SetBySession)
+		}
+		if seed.HarvestWhen.SetByMember != "" {
+			condition.SetByMember = protocol.Ptr(seed.HarvestWhen.SetByMember)
+		}
+		out.HarvestWhen = &condition
+	}
 	for _, e := range seed.Edges {
 		out.Edges = append(out.Edges, protocol.SeedEdge{Kind: e.Kind, To: e.To})
 	}
@@ -1266,6 +1280,18 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 		Reason: protocol.Deref(msg.Reason),
 		Force:  protocol.Deref(msg.Force),
 	}
+	if harvestWhenRequested(msg) {
+		seed, doc, err := d.applyHarvestWhenRequest(msg, verb, ask, sessionID)
+		if err != nil {
+			d.sendGardenError(conn, string(verb), err)
+			return
+		}
+		d.sendGardenResponse(conn, protocol.Response{
+			Ok:                   true,
+			SeedTransitionResult: &protocol.SeedTransitionResult{Seed: d.seedTransitionWire(seed, doc)},
+		})
+		return
+	}
 	seed, doc, notes, err := d.applySeedTransitionDetailed(
 		msg.SeedID, verb, ask, protocol.Deref(msg.Comment))
 	if err != nil {
@@ -1275,13 +1301,7 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 	for _, note := range notes.all() {
 		d.mirrorSeedNoteOntoTicket(sessionID, seed.ID, note.Body)
 	}
-	result := &protocol.SeedTransitionResult{Seed: seedToProtocol(seed, doc, false)}
-	if read, err := d.readGarden(); err == nil {
-		result.Seed.Ready = read.ready[seed.ID]
-		if progress, ok := read.progress(seed.ID); ok {
-			result.Seed.PlotProgress = progress
-		}
-	}
+	result := &protocol.SeedTransitionResult{Seed: d.seedTransitionWire(seed, doc)}
 	if verb == garden.VerbTend {
 		result.Handoff = d.gardenHandoff(seed.ID)
 	}
@@ -1290,6 +1310,17 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 	d.mirrorSeedMoveOntoTicket(sessionID, seed.ID, verb, protocol.Deref(msg.Reason))
 	d.ringSeedActivity(seed.ID, gardenRingEvents[verb], sessionID)
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedTransitionResult: result})
+}
+
+func (d *Daemon) seedTransitionWire(seed garden.Seed, doc docstore.Document) protocol.Seed {
+	wire := seedToProtocol(seed, doc, false)
+	if read, err := d.readGarden(); err == nil {
+		wire.Ready = read.ready[seed.ID]
+		if progress, ok := read.progress(seed.ID); ok {
+			wire.PlotProgress = progress
+		}
+	}
+	return wire
 }
 
 func (d *Daemon) applySeedTransition(id string, verb garden.Verb, ask garden.Ask) (garden.Seed, docstore.Document, error) {
@@ -1338,6 +1369,9 @@ func (d *Daemon) applySeedTransitionDetailedAs(
 	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, sessionLive, 0)
 }
 
+// Wrapped into the revision refusal so a caller that can re-read tells it apart.
+var errSeedRevisionMoved = errors.New("")
+
 func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(string) bool, expectedRev int64,
 ) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
@@ -1369,7 +1403,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 		}
 		if expectedRev > 0 && doc.Rev != expectedRev {
 			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(
-				"%s changed since you reviewed it; refresh the garden", id)
+				"%s changed since you reviewed it; refresh the garden%w", id, errSeedRevisionMoved)
 		}
 		var displaced *garden.Tender
 		if held := seed.Tender(); ask.Force && held.Holds(sessionLive) && !held.Is(ask.Actor) {
@@ -1391,6 +1425,9 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 		}
 		var written docstore.Document
 		notes := seedTransitionNotes{}
+		if d.beforeSeedMoveWrite != nil {
+			d.beforeSeedMoveWrite(id)
+		}
 		if displaced == nil && comment == "" {
 			written, err = d.writeSeed(*schema, next, doc.Rev, fact)
 		} else {
@@ -1430,7 +1467,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 		}
 		if expectedRev > 0 {
 			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(
-				"%s changed while the reviewed action was being applied; refresh the garden", id)
+				"%s changed while the reviewed action was being applied; refresh the garden%w", id, errSeedRevisionMoved)
 		}
 	}
 	return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(

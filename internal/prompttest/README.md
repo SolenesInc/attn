@@ -22,6 +22,10 @@ to read referenced context before delegated work. These expectations were edited
 at the source-text boundaries. Scenario inputs, surrounding launch arguments and
 unrelated output retain the captured baseline.
 
+The `launch.json`, `seed-guide.json` and `agent-delivery.json` Garden expectations also carry the
+`attn seed harvest --when-merged` lines, edited at the source-text boundary when
+harvest-on-merge landed.
+
 The frontend's `src/prompts/testdata` and Pi's `test/testdata/prompts.json` were
 captured from the original TypeScript builders at
 `f68ab3f02f329f46d3b9b3d1e7603f545c27dd50`; those builders are unchanged at the Go

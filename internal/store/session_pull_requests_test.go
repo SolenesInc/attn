@@ -78,3 +78,37 @@ func TestRecordSessionPullRequestIsIdempotentPerSession(t *testing.T) {
 		t.Errorf("s2 = %+v, want its row untouched", got)
 	}
 }
+
+func TestSessionPullRequestByIDTakesTheFreshestRowAcrossSessions(t *testing.T) {
+	s := newSessionPRStore(t)
+	base := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
+	prID := "github.com:victorarias/attn#113"
+	recordPR(t, s, "s1", prID, 113, base)
+	recordPR(t, s, "s2", prID, 113, base.Add(time.Minute))
+
+	if _, found := s.SessionPullRequestByID("github.com:victorarias/attn#999"); found {
+		t.Fatal("a pull request nobody recorded came back found")
+	}
+
+	if err := s.UpdateSessionPullRequestStatus(prID, SessionPullRequestStatus{
+		Title: "Harvest a seed when its pull request merges", State: "merged",
+	}, base.Add(2*time.Minute)); err != nil {
+		t.Fatalf("update status: %v", err)
+	}
+	rec, found := s.SessionPullRequestByID(prID)
+	if !found {
+		t.Fatal("the recorded pull request came back missing")
+	}
+	if rec.State != "merged" || rec.Title != "Harvest a seed when its pull request merges" {
+		t.Fatalf("row = %+v, want the merged status", rec)
+	}
+
+	// A row a session forgot leaves the other one answering for the pull request.
+	if _, err := s.ForgetSessionPullRequest("s2", prID); err != nil {
+		t.Fatalf("forget: %v", err)
+	}
+	rec, found = s.SessionPullRequestByID(prID)
+	if !found || rec.SessionID != "s1" {
+		t.Fatalf("row = %+v found=%v, want s1 still answering", rec, found)
+	}
+}

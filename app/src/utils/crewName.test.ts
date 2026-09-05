@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { crewDisplayName, crewHolderName } from './crewName';
+import { CREW_DAEMON_ID, crewDisplayName, crewHolderName } from './crewName';
 
 describe('crewDisplayName', () => {
   it('writes a member id as a name', () => {
@@ -21,6 +21,11 @@ describe('crewDisplayName', () => {
 
   it('matches the daemon rule on a non-ASCII first letter', () => {
     expect(crewDisplayName('ólafur')).toBe('Ólafur');
+  });
+
+  it('leaves attn itself lowercase — it moves seeds under its own name', () => {
+    expect(crewDisplayName(CREW_DAEMON_ID)).toBe('attn');
+    expect(crewHolderName('attn', '')).toBe('attn');
   });
 });
 

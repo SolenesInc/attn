@@ -169,6 +169,9 @@ func Transition(seed Seed, verb Verb, ask Ask, sessionLive func(sessionID string
 	case verb == VerbReplant:
 		next.Reason = ""
 	}
+	if Closed(next.Status) {
+		next.HarvestWhen = nil
+	}
 	return next, nil
 }
 
@@ -237,6 +240,14 @@ const (
 	MaxReasonChars = 400
 	ShowNotes      = 5
 )
+
+func TrimReason(reason string) string {
+	reason = strings.TrimSpace(reason)
+	if utf8.RuneCountInString(reason) <= MaxReasonChars {
+		return reason
+	}
+	return strings.TrimSpace(string([]rune(reason)[:MaxReasonChars-1])) + "…"
+}
 
 func ValidateNote(body string) error {
 	if strings.TrimSpace(body) == "" {

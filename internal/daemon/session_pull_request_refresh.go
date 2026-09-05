@@ -136,6 +136,9 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 			}
 		})
 	}
+	if changed > 0 {
+		d.settleHarvestConditions()
+	}
 	return fetched, changed
 }
 

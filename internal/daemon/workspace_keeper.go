@@ -326,6 +326,7 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) {
 	d.setJobQueue(runner)
 	d.reconcileSnoozeWakeJobs()
 	d.resumeGardenReviews()
+	d.settleHarvestConditions()
 }
 
 func (d *Daemon) enqueueWorkspaceContextCompaction(canonical *protocol.WorkspaceContext) {

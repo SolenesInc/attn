@@ -196,3 +196,77 @@ func TestSchemasAreValid(t *testing.T) {
 		}
 	}
 }
+
+func TestSeedCarriesAHarvestCondition(t *testing.T) {
+	want := Seed{
+		ID: "s-7k3f9m", Title: "ship it", Status: StatusDormant,
+		HarvestWhen: &HarvestCondition{
+			PullRequest:  "github.com:victorarias/attn#113",
+			URL:          "https://github.com/victorarias/attn/pull/113",
+			SetAt:        "2026-09-02T00:21:00Z",
+			SetBySession: "sess-a",
+		},
+	}
+	raw, err := want.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatalf("stored body is not an object: %v", err)
+	}
+	if body["harvest_when_pull_request"] != want.HarvestWhen.PullRequest {
+		t.Fatalf("the queryable field does not mirror the condition: %s", raw)
+	}
+	got, err := Decode(raw)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got.HarvestWhen == nil || *got.HarvestWhen != *want.HarvestWhen {
+		t.Fatalf("round trip changed the condition: %+v", got.HarvestWhen)
+	}
+}
+
+func TestAnUnarmedSeedCarriesNoCondition(t *testing.T) {
+	armed, err := Seed{
+		ID: "s-7k3f9m", Title: "ship it", Status: StatusDormant,
+		HarvestWhen: &HarvestCondition{PullRequest: "github.com:victorarias/attn#113", URL: "u", SetAt: "t"},
+	}.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	seed, err := Decode(armed)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	seed.HarvestWhen = nil
+	raw, err := seed.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatalf("stored body is not an object: %v", err)
+	}
+	if _, ok := body["harvest_when"]; ok {
+		t.Fatalf("a disarmed seed still carries a condition: %s", raw)
+	}
+	if body["harvest_when_pull_request"] != "" {
+		t.Fatalf("a disarmed seed still answers a query for armed seeds: %s", raw)
+	}
+}
+
+func TestValidateHarvestConditionNeedsThePullRequestAndItsURL(t *testing.T) {
+	if err := ValidateHarvestCondition(HarvestCondition{URL: "https://example.com/pull/1"}); err == nil {
+		t.Fatalf("a condition with no pull request was accepted")
+	}
+	if err := ValidateHarvestCondition(HarvestCondition{PullRequest: "github.com:victorarias/attn#113"}); err == nil {
+		t.Fatalf("a condition with no url was accepted")
+	}
+	if err := ValidateHarvestCondition(HarvestCondition{
+		PullRequest: "github.com:victorarias/attn#113",
+		URL:         "https://github.com/victorarias/attn/pull/113",
+	}); err != nil {
+		t.Fatalf("a healthy condition was refused: %v", err)
+	}
+}

@@ -24,6 +24,18 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 		return
 	}
 	ask := garden.Ask{Reason: protocol.Deref(msg.Reason), Force: protocol.Deref(msg.Force)}
+	if harvestWhenRequested(msg) {
+		seed, doc, err := d.applyHarvestWhenRequest(msg, verb, ask, "")
+		if err != nil {
+			fail(err)
+			return
+		}
+		wire := d.seedTransitionWire(seed, doc)
+		result.Seed = &wire
+		result.Success = true
+		d.sendToClient(client, result)
+		return
+	}
 	expectedRev := int64(0)
 	if msg.Review != nil {
 		item, reviewErr := d.validateGardenReviewAction(msg.Review, msg.SeedID, string(verb))
@@ -45,13 +57,7 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 	for _, note := range notes.all() {
 		d.mirrorSeedNoteOntoTicket("", seed.ID, note.Body)
 	}
-	wire := seedToProtocol(seed, doc, false)
-	if read, err := d.readGarden(); err == nil {
-		wire.Ready = read.ready[seed.ID]
-		if progress, ok := read.progress(seed.ID); ok {
-			wire.PlotProgress = progress
-		}
-	}
+	wire := d.seedTransitionWire(seed, doc)
 	d.mirrorSeedMoveOntoTicket("", seed.ID, verb, protocol.Deref(msg.Reason))
 	d.ringSeedActivity(seed.ID, gardenRingEvents[verb], "")
 	result.Seed = &wire

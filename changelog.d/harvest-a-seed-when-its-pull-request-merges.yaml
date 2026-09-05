@@ -1,0 +1,13 @@
+kind: added
+area: garden
+change: >
+  A seed whose only remaining work is a pull request merging can now close
+  itself. `attn seed harvest <id> --when-merged [<pr-url>]` points the seed at
+  a pull request the session opened, releases the tender's claim, and attn
+  harvests the seed as soon as the merge lands, with the reason
+  `PR #n merged: <title>`. With no url it takes the session's single open pull
+  request and names them when there is more than one. While a seed waits, the
+  garden panel, the board and the seed page say `harvests on #n`, and
+  `attn seed show`, `ls` and `ready` say `harvests when owner/repo#n merges`.
+  A pull request closed without merging clears the arming and rings instead of
+  closing the seed; `--when-merged --clear` takes it back by hand.

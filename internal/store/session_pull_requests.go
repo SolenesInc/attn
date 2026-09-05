@@ -135,6 +135,29 @@ func (s *Store) OpenSessionPullRequests() []SessionPullRequestRecord {
 	return records
 }
 
+func (s *Store) SessionPullRequestByID(prID string) (SessionPullRequestRecord, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return SessionPullRequestRecord{}, false
+	}
+
+	rows, err := s.db.Query(`
+		SELECT `+sessionPullRequestColumns+`
+		FROM session_pull_requests WHERE pr_id = ?
+		ORDER BY status_fetched_at DESC, last_activity_at DESC, rowid DESC
+		LIMIT 1`, prID)
+	if err != nil {
+		return SessionPullRequestRecord{}, false
+	}
+	defer rows.Close()
+	records, err := scanSessionPullRequests(rows)
+	if err != nil || len(records) == 0 {
+		return SessionPullRequestRecord{}, false
+	}
+	return records[0], true
+}
+
 func (s *Store) UpdateSessionPullRequestStatus(prID string, status SessionPullRequestStatus, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -97,6 +97,10 @@ const MaxIDChars = 40
 
 var memberIDRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
+// The name the daemon moves a seed under when it acts on its own. No crew file
+// can claim it, and it is displayed the way the product is written: lowercase.
+const DaemonID = "attn"
+
 func ValidateID(id string) error {
 	if id == "" {
 		return fmt.Errorf("a member id is required")
@@ -107,6 +111,9 @@ func ValidateID(id string) error {
 	if !memberIDRe.MatchString(id) {
 		return fmt.Errorf("%q is not a member id: lowercase letters, digits and - only, starting with a letter, like `trellis`", id)
 	}
+	if id == DaemonID {
+		return fmt.Errorf("%q is the name attn itself moves seeds under; pick another id for a crew member", id)
+	}
 	return docstore.ValidateDocumentID(id)
 }
 
@@ -116,6 +123,9 @@ func DisplayName(id string) string {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return ""
+	}
+	if id == DaemonID {
+		return id
 	}
 	first, size := utf8.DecodeRuneInString(id)
 	return string(unicode.ToUpper(first)) + id[size:]

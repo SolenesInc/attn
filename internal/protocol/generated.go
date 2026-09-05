@@ -6852,6 +6852,9 @@ type Seed struct {
 	// Gate corresponds to the JSON schema field "gate".
 	Gate bool `json:"gate"`
 
+	// HarvestWhen corresponds to the JSON schema field "harvest_when".
+	HarvestWhen *SeedHarvestCondition `json:"harvest_when,omitempty,omitzero"`
+
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
@@ -7214,6 +7217,28 @@ type SeedHandoverRequest struct {
 
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
+}
+
+type SeedHarvestCondition struct {
+	// PullRequest corresponds to the JSON schema field "pull_request".
+	PullRequest string `json:"pull_request"`
+
+	// SetAt corresponds to the JSON schema field "set_at".
+	SetAt string `json:"set_at"`
+
+	// SetByMember corresponds to the JSON schema field "set_by_member".
+	SetByMember *string `json:"set_by_member,omitempty,omitzero"`
+
+	// SetBySession corresponds to the JSON schema field "set_by_session".
+	SetBySession *string `json:"set_by_session,omitempty,omitzero"`
+
+	// URL corresponds to the JSON schema field "url".
+	URL string `json:"url"`
+}
+
+type SeedHarvestWhenMerged struct {
+	// PullRequestURL corresponds to the JSON schema field "pull_request_url".
+	PullRequestURL *string `json:"pull_request_url,omitempty,omitzero"`
 }
 
 type SeedLinkMessage struct {
@@ -7802,6 +7827,9 @@ type SeedShowResult struct {
 }
 
 type SeedTransitionMessage struct {
+	// ClearHarvestWhen corresponds to the JSON schema field "clear_harvest_when".
+	ClearHarvestWhen *bool `json:"clear_harvest_when,omitempty,omitzero"`
+
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
@@ -7831,6 +7859,9 @@ type SeedTransitionMessage struct {
 
 	// Verb corresponds to the JSON schema field "verb".
 	Verb string `json:"verb"`
+
+	// WhenMerged corresponds to the JSON schema field "when_merged".
+	WhenMerged *SeedHarvestWhenMerged `json:"when_merged,omitempty,omitzero"`
 }
 
 type SeedTransitionResult struct {

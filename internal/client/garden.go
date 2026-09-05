@@ -222,8 +222,24 @@ func (c *Client) SeedEdit(seedID, body string) (*protocol.SeedEditResult, error)
 	return resp.SeedEditResult, nil
 }
 
-func (c *Client) SeedTransition(sessionID, seedID, verb, reason, member string, force bool) (*protocol.SeedTransitionResult, error) {
+type SeedTransitionOptions struct {
+	WhenMerged       bool
+	PullRequestURL   string
+	ClearHarvestWhen bool
+}
+
+func (c *Client) SeedTransition(sessionID, seedID, verb, reason, member string, force bool, opts SeedTransitionOptions) (*protocol.SeedTransitionResult, error) {
 	msg := protocol.SeedTransitionMessage{Cmd: protocol.CmdSeedTransition, SeedID: seedID, Verb: verb}
+	if opts.WhenMerged {
+		merged := protocol.SeedHarvestWhenMerged{}
+		if opts.PullRequestURL != "" {
+			merged.PullRequestURL = protocol.Ptr(opts.PullRequestURL)
+		}
+		msg.WhenMerged = &merged
+	}
+	if opts.ClearHarvestWhen {
+		msg.ClearHarvestWhen = protocol.Ptr(true)
+	}
 	if sessionID != "" {
 		msg.SourceSessionID = protocol.Ptr(sessionID)
 	}

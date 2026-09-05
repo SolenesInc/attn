@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -48,6 +49,142 @@ func TestFprintTransitionStaysQuietWhenNothingIsStranded(t *testing.T) {
 			fprintTransition(&buf, &protocol.SeedTransitionResult{Seed: tc.seed})
 			if strings.Contains(buf.String(), "open seed") {
 				t.Fatalf("warned with nothing stranded:\n%s", buf.String())
+			}
+		})
+	}
+}
+
+func TestFprintTransitionSaysWhatTheSeedWaitsOn(t *testing.T) {
+	var buf bytes.Buffer
+	fprintTransition(&buf, &protocol.SeedTransitionResult{
+		Seed: protocol.Seed{
+			ID: "s-7k3f9m", StepSlug: "harvest-on-merge", Status: "dormant",
+			HarvestWhen: &protocol.SeedHarvestCondition{
+				PullRequest: "github.com:victorarias/attn#118",
+				URL:         "https://github.com/victorarias/attn/pull/118",
+				SetAt:       "2026-09-02T00:00:00Z",
+			},
+		},
+	})
+	out := buf.String()
+	if !strings.Contains(out, "s-7k3f9m (harvest-on-merge) is dormant") {
+		t.Fatalf("the move itself is not confirmed:\n%s", out)
+	}
+	if !strings.Contains(out, "harvests when victorarias/attn#118 merges") {
+		t.Fatalf("an armed seed never says what it waits on:\n%s", out)
+	}
+}
+
+func TestFprintTransitionConfirmsAClearedCondition(t *testing.T) {
+	var buf bytes.Buffer
+	fprintTransition(&buf, &protocol.SeedTransitionResult{
+		Seed: protocol.Seed{ID: "s-7k3f9m", Status: "growing"},
+	}, true)
+	if !strings.Contains(buf.String(), "harvest-on-merge cleared") {
+		t.Fatalf("clearing the condition said nothing:\n%s", buf.String())
+	}
+}
+
+func TestFprintSeedShowsTheHarvestCondition(t *testing.T) {
+	var buf bytes.Buffer
+	fprintSeed(&buf, protocol.Seed{
+		ID: "s-7k3f9m", Status: "dormant",
+		HarvestWhen: &protocol.SeedHarvestCondition{
+			PullRequest: "github.com:victorarias/attn#118",
+			URL:         "https://github.com/victorarias/attn/pull/118",
+		},
+	})
+	if !strings.Contains(buf.String(), "harvests when") || !strings.Contains(buf.String(), "victorarias/attn#118 merges") {
+		t.Fatalf("show never says the seed is armed:\n%s", buf.String())
+	}
+}
+
+func TestHarvestWhenSuffixIsShortAndOnlyForArmedSeeds(t *testing.T) {
+	if got := harvestWhenSuffix(protocol.Seed{ID: "s-7k3f9m"}); got != "" {
+		t.Fatalf("an unarmed seed carries a suffix: %q", got)
+	}
+	got := harvestWhenSuffix(protocol.Seed{HarvestWhen: &protocol.SeedHarvestCondition{
+		PullRequest: "github.com:victorarias/attn#118",
+	}})
+	if got != "  [harvests when victorarias/attn#118 merges]" {
+		t.Fatalf("row suffix = %q", got)
+	}
+}
+
+func TestHarvestWhenArgsReadsTheOptionalURL(t *testing.T) {
+	cases := []struct {
+		name    string
+		verb    string
+		args    []string
+		seedID  string
+		opts    client.SeedTransitionOptions
+		refusal string
+	}{
+		{
+			name: "a plain harvest arms nothing",
+			verb: "harvest", args: []string{"s-7k3f9m", "-m", "done"}, seedID: "s-7k3f9m",
+		},
+		{
+			name: "arming infers the pull request",
+			verb: "harvest", args: []string{"s-7k3f9m", "--when-merged"}, seedID: "s-7k3f9m",
+			opts: client.SeedTransitionOptions{WhenMerged: true},
+		},
+		{
+			name: "arming takes the url after the id",
+			verb: "harvest", args: []string{"s-7k3f9m", "--when-merged", "https://github.com/victorarias/attn/pull/118"},
+			seedID: "s-7k3f9m",
+			opts:   client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: "https://github.com/victorarias/attn/pull/118"},
+		},
+		{
+			name: "arming takes the url before the id",
+			verb: "harvest", args: []string{"--when-merged", "s-7k3f9m", "https://github.com/victorarias/attn/pull/118"},
+			seedID: "s-7k3f9m",
+			opts:   client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: "https://github.com/victorarias/attn/pull/118"},
+		},
+		{
+			name: "clearing disarms without a reason",
+			verb: "harvest", args: []string{"s-7k3f9m", "--when-merged", "--clear"}, seedID: "s-7k3f9m",
+			opts: client.SeedTransitionOptions{ClearHarvestWhen: true},
+		},
+		{
+			name: "a reason belongs to the merge",
+			verb: "harvest", args: []string{"s-7k3f9m", "--when-merged", "-m", "done"},
+			refusal: "takes no -m",
+		},
+		{
+			name: "a second positional must be a pull request url",
+			verb: "harvest", args: []string{"s-7k3f9m", "--when-merged", "s-2p4qxv"},
+			refusal: "is not a pull request url",
+		},
+		{
+			name: "clear alone says the whole form",
+			verb: "harvest", args: []string{"s-7k3f9m", "--clear"},
+			refusal: "--when-merged --clear",
+		},
+		{
+			name: "only harvest arms",
+			verb: "park", args: []string{"s-7k3f9m", "--when-merged"},
+			refusal: "belongs to harvest",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newSeedFlags(tc.verb)
+			seedID, opts, err := harvestWhenArgs(tc.verb, f, f.parse(tc.verb, tc.args))
+			if tc.refusal != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.refusal) {
+					t.Fatalf("refusal = %v, want text %q", err, tc.refusal)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if seedID != tc.seedID {
+				t.Fatalf("seed id = %q, want %q", seedID, tc.seedID)
+			}
+			if opts != tc.opts {
+				t.Fatalf("options = %+v, want %+v", opts, tc.opts)
 			}
 		})
 	}

@@ -38,6 +38,25 @@ messages to other agents. To the user, say the slug: `mermaid-rendered-grid`
 (`s-7k3f9m`) on first mention, then the slug alone. A person should never have
 to decode an id.
 
+## Harvesting on a merge
+
+When the only thing left on a seed is a pull request merging, say so once and
+let attn close it:
+
+    attn seed harvest <id> --when-merged [<pr-url>]
+    attn seed harvest <id> --when-merged --clear
+
+With no url it takes this session's single open pull request, and names them
+when there is more than one. A seed you were growing goes dormant and lets go
+of your claim; every surface then reads `harvests when owner/repo#n merges`.
+attn harvests it as the member `attn`, with the reason `PR #n merged: <title>`,
+when the merge lands. A pull request closed without merging clears the arming
+and rings instead, leaving the seed where it was.
+
+Reach for it only when the merge is genuinely the last step. Review notes to
+answer, docs to write or evidence to attach are work, and work belongs to a
+tender.
+
 ## Rings and watches
 
 Lifecycle moves ring the sessions with a stake in the seed. Notes stay quiet

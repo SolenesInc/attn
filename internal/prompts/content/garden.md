@@ -20,6 +20,8 @@ The loop:
     attn seed note <id> -m "…"       what happened and what you learned, tending it or not; --handoff addresses the next tender
                                      --ring tells watchers to look
     attn seed harvest <id> -m "…"    done; the reason is required and fits in 400 characters, the long version goes in a note
+    attn seed harvest <id> --when-merged [pr-url]    only when a merge is all that is left: the seed lets go and harvests itself when that pull request merges
+                                     with no url it takes this session's single open pull request; --when-merged --clear takes the arming back
     attn seed wither <id> [-m "…"]   abandoned, nobody will pick it up
     attn seed park <id>              put down, claim released; tend it again to resume
     attn seed replant <id>           a harvested or withered seed back to planted

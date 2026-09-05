@@ -135,6 +135,7 @@ const (
 	FactGardenLinked                = "garden.linked"
 	FactGardenUnlinked              = "garden.unlinked"
 	FactGardenReviewChanged         = "garden.review.changed"
+	FactGardenHarvestWhenChanged    = "garden.harvest_when.changed"
 
 	FactCrewRegistered = "crew.registered"
 	FactCrewBound      = "crew.bound"
@@ -295,7 +296,7 @@ func buildWireProjections() []projection {
 				FactGardenPlanted, FactGardenBodyEdited, FactGardenResumeIdentityChanged,
 				FactGardenTended, FactGardenParked, FactGardenHarvested, FactGardenWithered,
 				FactGardenReplanted, FactGardenNoted, FactGardenArtifactChanged,
-				FactGardenLinked, FactGardenUnlinked,
+				FactGardenLinked, FactGardenUnlinked, FactGardenHarvestWhenChanged,
 			},
 			apply: func(d *Daemon, _ bus.Event) { d.projectGardenSeeds() },
 		},

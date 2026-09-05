@@ -4430,11 +4430,24 @@ model Seed {
   "plot_progress"?: SeedPlotProgress;
   // Why the seed was harvested or withered.
   "reason"?: string;
+  // Present while the seed is armed to harvest itself when a pull request merges.
+  "harvest_when"?: SeedHarvestCondition;
   // The document's own revision and stamps. `rev` is what a conditional write
   // hands back; the stamps are the store's, not a copy kept in the body.
   "rev": safeint;
   "created_at": string;
   "updated_at": string;
+}
+
+// What a seed waits on before it harvests itself. The daemon settles it when the
+// pull request merges; a pull request closed without merging clears it instead.
+model SeedHarvestCondition {
+  // host:owner/repo#number, the session pull request id.
+  "pull_request": string;
+  "url": string;
+  "set_at": string;
+  "set_by_session"?: string;
+  "set_by_member"?: string;
 }
 
 model SeedContinuation {
@@ -4824,6 +4837,17 @@ model SeedTransitionMessage {
   "force"?: boolean;
   // Present only when this lifecycle move resolves one captured Review garden item.
   "review"?: SeedReviewActionContext;
+  // Arms harvest-on-merge instead of harvesting now. Its presence is the flag,
+  // whatever it carries. Only meaningful with the harvest verb.
+  "when_merged"?: SeedHarvestWhenMerged;
+  // Drops any harvest condition and leaves the seed's state alone.
+  "clear_harvest_when"?: boolean;
+}
+
+// The pull request a harvest waits on. An absent or empty url means infer it from
+// the source session's open pull requests.
+model SeedHarvestWhenMerged {
+  "pull_request_url"?: string;
 }
 
 // SeedTransitionResultMessage replies to a WebSocket seed_transition,

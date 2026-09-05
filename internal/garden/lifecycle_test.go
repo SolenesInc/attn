@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 const (
@@ -404,5 +405,47 @@ func TestNoteIDsAreTheirOwnShape(t *testing.T) {
 	}
 	if err := ValidateID(id); err == nil {
 		t.Fatalf("note id %q validates as a seed id", id)
+	}
+}
+
+func TestClosingASeedDropsItsHarvestCondition(t *testing.T) {
+	condition := &HarvestCondition{
+		PullRequest: "github.com:victorarias/attn#113",
+		URL:         "https://github.com/victorarias/attn/pull/113",
+		SetAt:       "2026-09-02T00:21:00Z",
+	}
+	for _, tc := range []struct {
+		verb Verb
+		ask  Ask
+		kept bool
+	}{
+		{verb: VerbHarvest, ask: Ask{Actor: Tender{Session: me}, Reason: "the pull request landed"}},
+		{verb: VerbWither, ask: Ask{Actor: Tender{Session: me}}},
+		{verb: VerbPark, ask: Ask{Actor: Tender{Session: me}}, kept: true},
+	} {
+		t.Run(string(tc.verb), func(t *testing.T) {
+			seed := seedIn(StatusPlanted, Tender{})
+			seed.HarvestWhen = condition
+			next, err := Transition(seed, tc.verb, tc.ask, alive)
+			if err != nil {
+				t.Fatalf("%s: %v", tc.verb, err)
+			}
+			if tc.kept != (next.HarvestWhen != nil) {
+				t.Fatalf("%s left the condition as %+v, want kept=%v", tc.verb, next.HarvestWhen, tc.kept)
+			}
+		})
+	}
+}
+
+func TestTrimReasonFitsTheLimitAndSaysItWasCut(t *testing.T) {
+	if got := TrimReason("  PR #71 merged  "); got != "PR #71 merged" {
+		t.Fatalf("a reason that fits came back as %q", got)
+	}
+	long := TrimReason("PR #71 merged: " + strings.Repeat("x", MaxReasonChars))
+	if n := utf8.RuneCountInString(long); n > MaxReasonChars {
+		t.Fatalf("a trimmed reason is %d characters, over the %d limit", n, MaxReasonChars)
+	}
+	if !strings.HasSuffix(long, "…") {
+		t.Fatalf("a trimmed reason does not show it was cut: %q", long)
 	}
 }

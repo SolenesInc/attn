@@ -3,6 +3,7 @@ import type {
   Seed,
   SeedDocument as GeneratedSeedDocument,
 } from '../types/generated';
+import { HarvestWhenLine } from './HarvestWhenLine';
 import { Markdown } from './Markdown';
 import { MarkdownReader, type MarkdownAnnotationsSendHandle } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
@@ -140,6 +141,7 @@ export function SeedDocumentView({
           <span aria-hidden="true" />
           {seed.status}
         </span>
+        <HarvestWhenLine condition={seed.harvest_when} />
         {tender && <span>tended by {tender}</span>}
         {progress && <span>{progress}</span>}
         <span className="seed-document__id">{seed.id}</span>

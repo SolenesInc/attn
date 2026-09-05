@@ -4,6 +4,7 @@ import type { Seed, SeedHandoverOptions, SeedSendToChiefOptions } from '../hooks
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { isAccelKeyPressed } from '../shortcuts/platform';
 import { crewDisplayName } from '../utils/crewName';
+import { harvestWhenDisplay } from '../utils/harvestWhen';
 import {
   IS_VALUES,
   buildIndex,
@@ -16,6 +17,7 @@ import {
   type SearchEntry,
   type SeedMatch,
 } from './gardenSearch';
+import { HarvestWhenLine } from './HarvestWhenLine';
 import { Markdown } from './Markdown';
 import { MarkdownReader } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
@@ -252,6 +254,7 @@ function SeedRow({
 }: RowProps) {
   const progress = seed.plot_progress;
   const signal = signalOf(seed, blockers);
+  const armed = harvestWhenDisplay(seed.harvest_when);
   const tender = tenderOf(seed, tenderSessionLabels);
   return (
     <li
@@ -271,7 +274,12 @@ function SeedRow({
             <span className="garden-row__title">
               <Marked text={seed.title} ranges={match?.titleRanges ?? []} />
             </span>
-            {signal && <span className={`garden-row__signal is-${signal.tone}`}>{signal.text}</span>}
+            {signal && !(armed && signal.text === 'parked') && (
+              <span className={`garden-row__signal is-${signal.tone}`}>{signal.text}</span>
+            )}
+            {armed && (
+              <span className="garden-row__armed" title={armed.sentence}>{armed.marker}</span>
+            )}
           </span>
           <span className="garden-row__meta">
             <span className={`garden-row__id${match?.idHit ? ' garden-hit' : ''}`}>{seed.id}</span>
@@ -1112,6 +1120,7 @@ export function GardenPanel({
             <span className="garden-row__pip" aria-hidden="true" />
             {here.status}
           </span>
+          <HarvestWhenLine condition={here.harvest_when} />
           {tenderOf(here, tenderSessionLabels) && (
             <span title={here.tender_session || undefined}>
               tended by {tenderOf(here, tenderSessionLabels)}
