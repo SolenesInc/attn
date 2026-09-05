@@ -1,14 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  assertHarnessWindowAcceptsKeys,
   describeInputDriverFailure,
   MacOSDriver,
   withWindowTitleArgs,
 } from './macosDriver.mjs';
-
-afterEach(() => {
-  vi.unstubAllEnvs();
-});
+import { ALWAYS_ON_TOP_VAR, createKeyInputGuard } from './keyInputGuard.mjs';
 
 describe('describeInputDriverFailure', () => {
   it('names a dark display as the cause, and says it is not the product', () => {
@@ -64,27 +60,24 @@ describe('withWindowTitleArgs', () => {
   });
 });
 
-describe('assertHarnessWindowAcceptsKeys', () => {
-  it('throws on macOS while the harness window is always-on-top', () => {
-    expect(() => assertHarnessWindowAcceptsKeys({}, 'darwin')).toThrow(/ATTN_HARNESS_ALWAYS_ON_TOP/);
-    expect(() => assertHarnessWindowAcceptsKeys({ ATTN_HARNESS_ALWAYS_ON_TOP: '1' }, 'darwin'))
-      .toThrow(/non-focusable/);
-  });
-
-  it('passes on macOS once the scenario opts out', () => {
-    expect(() => assertHarnessWindowAcceptsKeys({ ATTN_HARNESS_ALWAYS_ON_TOP: '0' }, 'darwin'))
-      .not.toThrow();
-  });
-
-  it('passes off macOS whatever the flag says', () => {
-    expect(() => assertHarnessWindowAcceptsKeys({ ATTN_HARNESS_ALWAYS_ON_TOP: '1' }, 'linux'))
-      .not.toThrow();
-  });
-});
+const APP = '/tmp/attn-harness-test.app/Contents/MacOS/app';
+const APP_ALWAYS_ON_TOP = `${APP} ${ALWAYS_ON_TOP_VAR}=1 HOME=/Users/x`;
+const APP_OPTED_OUT = `${APP} ${ALWAYS_ON_TOP_VAR}=0 HOME=/Users/x`;
 
 class StubInputDriver extends MacOSDriver {
-  constructor() {
-    super({ bundleId: 'test.harness', appPath: '/tmp/attn-harness-test.app' });
+  constructor(appCommand) {
+    super({
+      bundleId: 'test.harness',
+      appPath: '/tmp/attn-harness-test.app',
+      keyInputGuard: createKeyInputGuard({
+        platform: 'darwin',
+        appExecutable: APP,
+        manifestPath: '/does/not/matter',
+        readAppPid: () => 4242,
+        readCommand: () => appCommand,
+      }),
+    });
+    this.actionDelayMs = 0;
     this.execCalls = [];
   }
 
@@ -94,39 +87,26 @@ class StubInputDriver extends MacOSDriver {
 }
 
 describe('MacOSDriver key entry points on a non-focusable window', () => {
-  const realPlatform = process.platform;
-  beforeEach(() => {
-    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
-  });
-  afterEach(() => {
-    Object.defineProperty(process, 'platform', { value: realPlatform, configurable: true });
-  });
-
   it('pressKey fails before touching the input driver', async () => {
-    vi.stubEnv('ATTN_HARNESS_ALWAYS_ON_TOP', '1');
-    const driver = new StubInputDriver();
-    await expect(driver.pressKey('a', {})).rejects.toThrow(/non-focusable/);
+    const driver = new StubInputDriver(APP_ALWAYS_ON_TOP);
+    await expect(driver.pressKey('a', {})).rejects.toThrow(/pressKey\(a, no modifiers\) cannot reach attn/);
     expect(driver.execCalls).toEqual([]);
   });
 
   it('pressEnter fails through its pressKeyCode delegation', async () => {
-    vi.stubEnv('ATTN_HARNESS_ALWAYS_ON_TOP', '1');
-    const driver = new StubInputDriver();
-    await expect(driver.pressEnter()).rejects.toThrow(/non-focusable/);
+    const driver = new StubInputDriver(APP_ALWAYS_ON_TOP);
+    await expect(driver.pressEnter()).rejects.toThrow(/pressKeyCode\(36, no modifiers\) cannot reach attn/);
     expect(driver.execCalls).toEqual([]);
   });
 
   it('typeText fails before touching the input driver', async () => {
-    vi.stubEnv('ATTN_HARNESS_ALWAYS_ON_TOP', '1');
-    const driver = new StubInputDriver();
-    await expect(driver.typeText('hello')).rejects.toThrow(/non-focusable/);
+    const driver = new StubInputDriver(APP_ALWAYS_ON_TOP);
+    await expect(driver.typeText('hello')).rejects.toThrow(/typeText\("hello"\) cannot reach attn/);
     expect(driver.execCalls).toEqual([]);
   });
 
-  it('pressKey reaches the driver once the scenario opts out', async () => {
-    vi.stubEnv('ATTN_HARNESS_ALWAYS_ON_TOP', '0');
-    const driver = new StubInputDriver();
-    driver.actionDelayMs = 0;
+  it('pressKey reaches the driver once the launched app opted out', async () => {
+    const driver = new StubInputDriver(APP_OPTED_OUT);
     await driver.pressKey('a', {});
     expect(driver.execCalls).toHaveLength(1);
   });

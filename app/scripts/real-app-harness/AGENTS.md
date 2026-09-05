@@ -38,6 +38,13 @@ Run commands from the repository root.
 ## Writing scenarios
 
 - Exercise actual app actions/order; update scenarios when product flows change.
+- Pressing native keys (`driver.press*`, `driver.typeText`, `pressShortcutKeys`)
+  needs `process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0'` before the launch: macOS
+  makes the always-on-top window non-focusable, so a keystroke reaches nothing.
+  The macOS driver reads the launched app's own environment and fails the press
+  when it says otherwise, and `alwaysOnTopSweep.test.mjs` fails a scenario that
+  neither opts out nor states why it need not. Clicks, drags and `driver.menu`
+  reach the window either way.
 - The mock agent is the default agent. An armed scenario launches `mockAgent.mjs`
   for `claude` and `codex`: the tripwire pins both `ATTN_<AGENT>_EXECUTABLE` at it
   and `launchFreshAppAndConnect` writes the matching `<agent>_executable` setting,

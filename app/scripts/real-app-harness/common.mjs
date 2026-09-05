@@ -12,7 +12,6 @@ import {
   harnessClientHello,
   defaultAppPathForProfile,
   defaultWSURLForProfile,
-  deepLinkSchemeForProfile,
   profileForAppPath,
 } from './harnessProfile.mjs';
 
@@ -405,74 +404,4 @@ export function createRunContext(options, prefix) {
   ensureDir(runDir);
   ensureDir(sessionDir);
   return { runId, runDir, sessionDir };
-}
-
-export async function bootstrapPackagedAppSession({
-  driver,
-  observer,
-  runDir,
-  sessionDir,
-  sessionLabel,
-}) {
-  await driver.launchApp();
-  await observer.connect();
-  await driver.activateBackground();
-  await captureScreenshot(driver, path.join(runDir, '01-app-launched.png'));
-
-  const scheme = deepLinkSchemeForProfile(profileForAppPath(driver.appPath));
-  const deepLink = `${scheme}://spawn?cwd=${encodeURIComponent(sessionDir)}&label=${encodeURIComponent(sessionLabel)}`;
-  console.log(`[RealAppHarness] deepLink=${deepLink}`);
-  await driver.openDeepLink(deepLink);
-
-  const session = await observer.waitForSession({
-    label: sessionLabel,
-    directory: sessionDir,
-    timeoutMs: 30_000,
-  });
-
-  console.log(`[RealAppHarness] session=${session.id} agent=${session.agent} state=${session.state}`);
-
-  await observer.waitForWorkspace(
-    session.id,
-    (workspace) => (workspace.panes || []).length >= 1,
-    `initial workspace for session ${session.id}`,
-    30_000
-  );
-
-  await driver.activateBackground();
-  await captureScreenshot(driver, path.join(runDir, '02-session-opened.png'));
-  return session;
-}
-
-export async function splitAndFocusUtilityPane({
-  driver,
-  observer,
-  sessionId,
-  runDir,
-  screenshotName,
-  clickX = 0.75,
-  clickY = 0.5,
-}) {
-  const existingPaneIds = new Set(
-    (observer.getWorkspace(sessionId)?.panes || []).map((pane) => pane.pane_id),
-  );
-  await driver.pressKey('d', { command: true });
-  const utilityPane = await observer.waitForUtilityPane(sessionId, 20_000, existingPaneIds);
-  if (!utilityPane?.runtime_id) {
-    throw new Error(`Utility pane missing runtime_id for session ${sessionId}`);
-  }
-  console.log(`[RealAppHarness] utilityPane=${utilityPane.pane_id} runtime=${utilityPane.runtime_id}`);
-
-  await driver.activateBackground();
-  await driver.clickWindow(clickX, clickY);
-  if (runDir && screenshotName) {
-    await captureScreenshot(driver, path.join(runDir, screenshotName));
-  }
-
-  return utilityPane;
-}
-
-export async function typeIntoFocusedPane(driver, text) {
-  await driver.typeText(text);
-  await driver.pressEnter();
 }

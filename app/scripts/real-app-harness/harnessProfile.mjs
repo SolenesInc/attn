@@ -51,19 +51,27 @@ function appLocalDataDir(bundleId) {
   return path.join(xdgDataHome(), bundleId);
 }
 
+// The executable inside an app tree the caller names, which `--app-path` can
+// place anywhere; deriving it from a profile would answer for another install.
+export function appExecutableInAppTree(appPath, platform = process.platform) {
+  return platform === 'darwin'
+    ? path.join(appPath, 'Contents', 'MacOS', 'app')
+    : path.join(appPath, 'bin', 'attn-app');
+}
+
 function installedApp(appName) {
   if (process.platform === 'darwin') {
     const appPath = path.join(os.homedir(), 'Applications', `${appName}.app`);
     return {
       appPath,
-      appExecutable: path.join(appPath, 'Contents', 'MacOS', 'app'),
+      appExecutable: appExecutableInAppTree(appPath),
       appDaemon: path.join(appPath, 'Contents', 'MacOS', 'attn'),
     };
   }
   const appPath = path.join(xdgDataHome(), appName);
   return {
     appPath,
-    appExecutable: path.join(appPath, 'bin', 'attn-app'),
+    appExecutable: appExecutableInAppTree(appPath),
     appDaemon: path.join(appPath, 'bin', 'attn'),
   };
 }
