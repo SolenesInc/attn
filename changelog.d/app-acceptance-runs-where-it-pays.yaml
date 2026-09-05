@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: Run app acceptance on next, main, release and hotfix candidates, and pull requests that touch the harness or the packaged app; other pull requests skip it.

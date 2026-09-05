@@ -37,6 +37,24 @@ for contract in \
   fi
 done
 
+# The matrix step is continue-on-error; "Gate app acceptance" is the verdict.
+for contract in \
+  'continue-on-error: true' \
+  'name: Gate app acceptance' \
+  "if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.harness == 'true'"; do
+  if ! grep -Fq "$contract" <<<"$app_acceptance_job"; then
+    echo "App acceptance must keep its policy and its gate step: $contract" >&2
+    exit 1
+  fi
+done
+
+changelog_job="$(sed -n '/^  changelog:/,/^  main-route:/p' "$workflow")"
+if ! grep -Fq 'app-acceptance' <<<"$changelog_job" ||
+  ! grep -Fq '!cancelled()' <<<"$changelog_job"; then
+  echo "Changelog must wait on App acceptance and survive it being filtered out" >&2
+  exit 1
+fi
+
 react_doctor="$root/.github/workflows/react-doctor.yml"
 react_doctor_triggers="$(sed -n '/^on:/,/^permissions:/p' "$react_doctor")"
 if ! grep -Fq 'pull_request:' <<<"$react_doctor_triggers" ||
@@ -55,6 +73,21 @@ if ! grep -Fq "              - 'scripts/**'" "$workflow"; then
   echo "Daemon path filter must cover every repository script" >&2
   exit 1
 fi
+if ! grep -Fq 'harness: ${{ steps.filter.outputs.harness }}' <<<"$changes_job"; then
+  echo "Changes must publish the harness filter App acceptance gates on" >&2
+  exit 1
+fi
+for path in \
+  "app/scripts/real-app-harness/**" \
+  "app/src-tauri/**" \
+  "apphost/**" \
+  ".github/workflows/app-acceptance.yml" \
+  ".github/workflows/ci.yml"; do
+  if ! grep -Fq "              - '$path'" <<<"$(sed -n '/^            harness:/,/^            release_preflight:/p' "$workflow")"; then
+    echo "Harness path filter must cover: $path" >&2
+    exit 1
+  fi
+done
 
 sed -n '/^jobs:/,$p' "$workflow" \
   | sed -nE 's/^  ([a-z0-9-]+):$/\1/p' \
@@ -104,6 +137,9 @@ NEEDS_JSON="$filtered" "$root/scripts/ci-gate.sh" pr changes backend >/dev/null
 expect_failure env NEEDS_JSON="$filtered" "$root/scripts/ci-gate.sh" acceptance changes backend
 expect_failure env NEEDS_JSON="$failed" "$root/scripts/ci-gate.sh" pr changes backend
 expect_failure env NEEDS_JSON="$cancelled" "$root/scripts/ci-gate.sh" pr app-acceptance
+skipped_acceptance='{"app-acceptance":{"result":"skipped"}}'
+NEEDS_JSON="$skipped_acceptance" "$root/scripts/ci-gate.sh" pr app-acceptance >/dev/null
+expect_failure env NEEDS_JSON="$skipped_acceptance" "$root/scripts/ci-gate.sh" acceptance app-acceptance
 expect_failure env NEEDS_JSON="$cancelled" "$root/scripts/ci-gate.sh" acceptance app-acceptance
 expect_failure env NEEDS_JSON="$missing" "$root/scripts/ci-gate.sh" acceptance changes backend
 expect_failure env NEEDS_JSON="$success" "$root/scripts/ci-gate.sh" acceptance changes
