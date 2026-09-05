@@ -1,16 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
-import { BannerStack, stackTops } from './BannerStack';
-
-describe('stackTops', () => {
-  it('stacks the update banner under the measured warning', () => {
-    expect(stackTops(0, 46)).toEqual({ warningTop: 0, updateTop: 46 });
-  });
-
-  it('includes the connection banner in both offsets', () => {
-    expect(stackTops(48, 46)).toEqual({ warningTop: 48, updateTop: 94 });
-  });
-});
+import { BannerStack } from './BannerStack';
 
 interface Observed {
   callback: (entries: Array<{ target: HTMLElement }>) => void;

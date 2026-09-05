@@ -16,18 +16,6 @@ interface BannerStackProps {
   onDismissLatestRelease: () => void;
 }
 
-// stackTops derives each banner's top offset from the measured heights above
-// it, so a wrapped or large-font banner never slides under the next one.
-export function stackTops(
-  connectionHeight: number,
-  warningHeight: number,
-): { warningTop: number; updateTop: number } {
-  return {
-    warningTop: connectionHeight,
-    updateTop: connectionHeight + warningHeight,
-  };
-}
-
 // useBannerHeight tracks a banner's border-box height. Null while the banner
 // is absent or unmeasurable; then the fixed CSS offsets apply as before.
 function useBannerHeight(active: boolean): [RefObject<HTMLDivElement | null>, number | null] {
