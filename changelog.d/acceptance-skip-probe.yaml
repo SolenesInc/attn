@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: Probe fragment for the app acceptance skip receipt.
