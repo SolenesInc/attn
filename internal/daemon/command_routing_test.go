@@ -129,6 +129,7 @@ var sessionCommandsAnsweredWhereTheyLand = map[string]string{
 
 	protocol.CmdSessionList: sessionLedgerIsPerDaemon,
 	protocol.CmdSessionShow: sessionLedgerIsPerDaemon,
+	protocol.CmdSessionReopen: sessionLedgerIsPerDaemon,
 
 	protocol.CmdTicketAttach:   "the ticket board is the hub's own store",
 	protocol.CmdBrowserControl: "handleRemoteBrowserControl resolves the browser host itself",
