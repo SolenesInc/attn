@@ -191,6 +191,8 @@ func main() {
 		runPresence()
 	case "skill":
 		runSkill()
+	case "prompts":
+		runPrompts()
 	case "activity":
 		maybePrintProfileBanner()
 		runActivity()
@@ -669,6 +671,7 @@ commands:
   profile <status|resolve|list>     show / resolve the active profile's resources
   profile-env <profile|--unset>     print shell commands for selecting a profile
   skill [--reference <name>|--list] print the bundled agent skill and its references
+  prompts <command>                inspect prompt sources and scenario composition
   version                           print version information
 `)
 }

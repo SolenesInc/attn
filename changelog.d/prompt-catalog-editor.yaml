@@ -1,0 +1,4 @@
+kind: added
+area: prompts
+change: Inspect agent prompts, their sources, and composition with the prompts CLI.
+notes: Maintainers and agents can review complete instructions beside source and scenario diffs, share drafts and feedback, and choose a light or dark editor theme. Seed guidance now explains how to write child bodies as complete work prompts with explicit context references.

@@ -8,10 +8,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crew"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-const crewRequestedSleepPrompt = "[attn] The user is asking you to close your day and sleep. Finish what you need to settle, write your handoff letter, and file it with `attn handoff --sleep -m \"<your letter>\"`. This is consented closure, not a hard stop; nobody wakes behind you when the letter lands."
+var crewRequestedSleepPrompt = prompts.RenderText("crew", "sleep-requested", prompts.Values{})
 
 func (d *Daemon) handleCrewSleep(conn net.Conn, msg *protocol.CrewSleepMessage) {
 	result, err := d.crewSleep(strings.TrimSpace(msg.Member))

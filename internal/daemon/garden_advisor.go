@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/prompts"
 	"os"
 	"slices"
 	"strings"
@@ -52,7 +53,7 @@ const gardenHandoffOutputSchema = `{
 	"additionalProperties": false
 }`
 
-const gardenAdvisorSystemPrompt = `Review one open Garden seed using only the supplied seed and evidence. Return one JSON object matching the requested shape, with no markdown or surrounding text.`
+var gardenAdvisorSystemPrompt = prompts.RenderText("garden-advisor", "instructions", nil)
 
 var (
 	compiledGardenAdviceSchema  = mustCompileGardenAdvisorSchema("advice", gardenAdviceOutputSchema)
@@ -85,27 +86,20 @@ type gardenHandoffDraft struct {
 type gardenAdvisorTask struct {
 	name   string
 	schema string
-	prompt string
+}
+
+func (task gardenAdvisorTask) prompt(evidence string) string {
+	return prompts.RenderText("garden-advisor", task.name, prompts.Values{"evidence": evidence})
 }
 
 var (
 	gardenAdviceTask = gardenAdvisorTask{
 		name:   "advice",
 		schema: gardenAdviceOutputSchema,
-		prompt: `Recommend one action from available_actions:
-- resume: continue the saved conversation
-- handover: give this seed to a new agent
-- keep_growing: leave the seed growing without an agent and review it again after seven quiet days
-- park: keep the work without starting an agent now
-- harvest: the seed's stated outcome and required verification are complete
-- wither: the work should be abandoned
-
-Explain the recommendation and cite the supplied evidence.`,
 	}
 	gardenHandoffTask = gardenAdvisorTask{
 		name:   "handoff",
 		schema: gardenHandoffOutputSchema,
-		prompt: `Draft a handoff for the new agent that will tend this seed. State the outcome, useful current state, next work, and required verification.`,
 	}
 )
 
@@ -212,7 +206,7 @@ func executeGardenAdvisor(
 		Executable:      executable,
 		Model:           config.Model,
 		ReasoningEffort: config.Effort,
-		Prompt:          task.prompt + "\n\nSeed and evidence:\n" + string(payload),
+		Prompt:          task.prompt(string(payload)),
 		SystemPrompt:    gardenAdvisorSystemPrompt,
 		WorkDir:         workDir,
 		DisableTools:    true,

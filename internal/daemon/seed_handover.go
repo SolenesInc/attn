@@ -3,6 +3,7 @@ package daemon
 import (
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/prompts"
 	"path/filepath"
 	"strings"
 
@@ -157,24 +158,7 @@ func (d *Daemon) prepareSeedHandover(
 }
 
 func handoverPrompt(body, handoff, seedID string) string {
-	var prompt strings.Builder
-	prompt.WriteString(strings.TrimSpace(body))
-	if text := strings.TrimSpace(handoff); text != "" {
-		if prompt.Len() > 0 {
-			prompt.WriteString("\n\n")
-		}
-		prompt.WriteString("Handoff:\n")
-		prompt.WriteString(text)
-	}
-	if prompt.Len() > 0 {
-		prompt.WriteString("\n\n")
-	}
-	prompt.WriteString("---\nYour work is seed `")
-	prompt.WriteString(seedID)
-	prompt.WriteString("` in the garden. You are its new tender. Read its current body and log with:\n\n    attn seed show ")
-	prompt.WriteString(seedID)
-	prompt.WriteString("\n\nReport progress on the log and harvest it when its outcome and required verification are complete.")
-	return prompt.String()
+	return prompts.RenderText("delegation", "handover-brief", prompts.Values{"brief": body, "handoff": handoff, "seed_id": seedID})
 }
 
 func (d *Daemon) gardenDispatchDocument(sessionID string) (garden.Dispatch, docstore.Document, bool, error) {

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"github.com/victorarias/attn/internal/prompts"
 	"sort"
 	"strings"
 
@@ -38,69 +39,37 @@ func formatMarkdownAnnotationPayload(source annotationDocumentSource, anns []pro
 	})
 	sorted := append(anchored, globals...)
 
-	var b strings.Builder
-	piece := "pieces"
-	if len(sorted) == 1 {
-		piece = "piece"
-	}
-	subject := "File: " + source.path
-	if source.kind == annotationSourceSeed {
-		subject = "Seed: " + source.seedID
-		if source.seedTitle != "" {
-			subject += " — " + source.seedTitle
-		}
-	}
-	fmt.Fprintf(&b, "# Markdown Annotations\n\n%s\n\nI've reviewed this document and have %d %s of feedback:\n\n", subject, len(sorted), piece)
-
+	var entries strings.Builder
 	var labelOrder []string
 	labelCounts := map[string]int{}
-
 	for i, a := range sorted {
-		fmt.Fprintf(&b, "## %d. ", i+1)
-		label := markdownAnnotationLineLabel(a, orphaned)
-		if label != "" {
-			b.WriteString(label)
-			b.WriteString(" ")
-		}
-		exact := ""
+		start, end, quote := 0, 0, ""
 		if a.Anchor != nil {
-			exact = a.Anchor.Exact
+			start, end, quote = a.Anchor.StartLine, a.Anchor.EndLine, a.Anchor.Exact
 		}
-		switch {
-		case a.Type == markdownAnnotationTypeDeletion:
-			b.WriteString("Remove this\n")
-			fmt.Fprintf(&b, "```\n%s\n```\n", exact)
-			b.WriteString("> I don't want this in the document.\n")
-		case a.Type == markdownAnnotationTypeGlobal:
-			b.WriteString("General feedback about the document\n")
-			fmt.Fprintf(&b, "> %s\n", protocol.Deref(a.Text))
-		case a.QuickLabelID != nil && *a.QuickLabelID != "":
-			display := markdownQuickLabelDisplay(a)
-			if _, seen := labelCounts[display]; !seen {
-				labelOrder = append(labelOrder, display)
+		quick := protocol.Deref(a.QuickLabelID) != ""
+		label := markdownQuickLabelDisplay(a)
+		if a.Type != markdownAnnotationTypeDeletion && a.Type != markdownAnnotationTypeGlobal && quick {
+			if _, seen := labelCounts[label]; !seen {
+				labelOrder = append(labelOrder, label)
 			}
-			labelCounts[display]++
-			fmt.Fprintf(&b, "[%s] Feedback on: \"%s\"\n", display, exact)
-			if tip := protocol.Deref(a.QuickLabelTip); tip != "" {
-				fmt.Fprintf(&b, "> %s\n", tip)
-			}
-		default:
-			fmt.Fprintf(&b, "Feedback on: \"%s\"\n", exact)
-			fmt.Fprintf(&b, "> %s\n", protocol.Deref(a.Text))
+			labelCounts[label]++
 		}
-		b.WriteString("\n")
+		entries.WriteString(prompts.RenderText("annotation-markdown", "entry", prompts.Values{
+			"index": fmt.Sprint(i + 1), "has_anchor": fmt.Sprint(a.Anchor != nil), "orphaned": fmt.Sprint(orphaned[a.ID]), "multiline": fmt.Sprint(end > start),
+			"start_line": fmt.Sprint(start), "end_line": fmt.Sprint(end), "quote": quote, "comment": protocol.Deref(a.Text),
+			"deletion": fmt.Sprint(a.Type == markdownAnnotationTypeDeletion), "global": fmt.Sprint(a.Type == markdownAnnotationTypeGlobal),
+			"quick_label": fmt.Sprint(quick), "label": label, "tip": protocol.Deref(a.QuickLabelTip), "has_tip": fmt.Sprint(protocol.Deref(a.QuickLabelTip) != ""),
+		}))
 	}
-
-	b.WriteString("---\n")
-	if len(labelOrder) > 0 {
-		b.WriteString("## Label Summary\n\n")
-		for _, display := range labelOrder {
-			fmt.Fprintf(&b, "- **%s**: %d\n", display, labelCounts[display])
-		}
-		b.WriteString("\n")
+	var summary strings.Builder
+	for _, label := range labelOrder {
+		fmt.Fprintf(&summary, "- **%s**: %d\n", label, labelCounts[label])
 	}
-	b.WriteString("Please address the annotation feedback above.")
-	return b.String()
+	return prompts.RenderText("annotation-markdown", "submit", prompts.Values{
+		"has_title": fmt.Sprint(source.seedTitle != ""), "seed": fmt.Sprint(source.kind == annotationSourceSeed), "seed_id": source.seedID, "title": source.seedTitle, "path": source.path,
+		"count": fmt.Sprint(len(sorted)), "singular": fmt.Sprint(len(sorted) == 1), "entries": entries.String(), "summary_rows": summary.String(),
+	})
 }
 
 func anchorSortKey(a protocol.MarkdownAnnotation) (line, start int) {
@@ -108,19 +77,6 @@ func anchorSortKey(a protocol.MarkdownAnnotation) (line, start int) {
 		return 0, 0
 	}
 	return a.Anchor.StartLine, a.Anchor.Start
-}
-
-func markdownAnnotationLineLabel(a protocol.MarkdownAnnotation, orphaned map[string]bool) string {
-	if a.Anchor == nil {
-		return ""
-	}
-	if orphaned[a.ID] {
-		return fmt.Sprintf("(~line %d, moved)", a.Anchor.StartLine)
-	}
-	if a.Anchor.EndLine <= a.Anchor.StartLine {
-		return fmt.Sprintf("(line %d)", a.Anchor.StartLine)
-	}
-	return fmt.Sprintf("(lines %d–%d)", a.Anchor.StartLine, a.Anchor.EndLine)
 }
 
 func markdownQuickLabelDisplay(a protocol.MarkdownAnnotation) string {

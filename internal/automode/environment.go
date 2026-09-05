@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/victorarias/attn/internal/prompts"
 )
 
 const (
@@ -32,68 +34,68 @@ func Slots() []Slot {
 		{
 			ID: "trusted_repo", Label: "Trusted repo", Kind: SlotList, Detected: true,
 			Detail: "The repository this session works in, and its remotes.",
-			Unset:  "the repository the session started in and its configured remotes",
+			Unset:  prompts.RenderText("pi-environment", "unset-trusted_repo", prompts.Values{}),
 			ReadBy: []string{"Data Exfiltration", "Confidential data"},
 		},
 		{
 			ID: "repo_visibility", Label: "Repository visibility", Kind: SlotChoice, Detected: true,
 			Choices: []string{"private", "public"},
 			Detail:  "Whether that repository is private or public.",
-			Unset:   "assume private unless the transcript shows otherwise",
+			Unset:   prompts.RenderText("pi-environment", "unset-repo_visibility", prompts.Values{}),
 			ReadBy:  []string{"Data Exfiltration"},
 		},
 		{
 			ID: "domains", Label: "Trusted internal domains", Kind: SlotList,
 			Detail: "Hosts the agent may send data to. One per entry.",
-			Unset:  "None configured",
+			Unset:  prompts.RenderText("pi-environment", "unset-domains", prompts.Values{}),
 			ReadBy: []string{"Data Exfiltration", "Exfil Scouting", "Trusted Internal Infra"},
 		},
 		{
 			ID: "buckets", Label: "Trusted cloud buckets", Kind: SlotList,
 			Detail: "Object storage that belongs to this work, such as s3://acme-artifacts.",
-			Unset:  "None configured",
+			Unset:  prompts.RenderText("pi-environment", "unset-buckets", prompts.Values{}),
 			ReadBy: []string{"Trusted Internal Infra"},
 		},
 		{
 			ID: "services", Label: "Key internal services", Kind: SlotList,
 			Detail: "Named services the agent may talk to in the normal way.",
-			Unset:  "None configured",
+			Unset:  prompts.RenderText("pi-environment", "unset-services", prompts.Values{}),
 			ReadBy: []string{"Trusted Internal Infra"},
 		},
 		{
 			ID: "source_control", Label: "Source-control orgs", Kind: SlotList,
 			Detail: "Orgs whose code may be pulled in and run.",
-			Unset:  "the trusted repo and its remotes only",
+			Unset:  prompts.RenderText("pi-environment", "unset-source_control", prompts.Values{}),
 			ReadBy: []string{"Untrusted Code Integration"},
 		},
 		{
 			ID: "registry", Label: "Internal package registry", Kind: SlotList,
 			Detail: "An internal registry or mirror, when you have one.",
-			Unset:  "None configured",
+			Unset:  prompts.RenderText("pi-environment", "unset-registry", prompts.Values{}),
 			ReadBy: []string{"Package Registry Bypass"},
 		},
 		{
 			ID: "sensitive_data", Label: "Sensitive data locations", Kind: SlotList,
 			Detail: "Where personal, customer or regulated data lives.",
-			Unset:  "any store holding personal, confidential, credential or regulated material",
+			Unset:  prompts.RenderText("pi-environment", "unset-sensitive_data", prompts.Values{}),
 			ReadBy: []string{"PII Data Handling"},
 		},
 		{
 			ID: "audiences", Label: "Cleared audiences", Kind: SlotList,
 			Detail: "Who may see data read from those locations.",
-			Unset:  "None configured, so nobody is cleared",
+			Unset:  prompts.RenderText("pi-environment", "unset-audiences", prompts.Values{}),
 			ReadBy: []string{"PII Data Handling"},
 		},
 		{
 			ID: "remote_targets", Label: "Sensitive remote targets", Kind: SlotList,
 			Detail: "Namespaces, hosts or workloads that are live.",
-			Unset:  "any name carrying prod or production as a whole word",
+			Unset:  prompts.RenderText("pi-environment", "unset-remote_targets", prompts.Values{}),
 			ReadBy: []string{"Sensitive Remote Exec"},
 		},
 		{
 			ID: "iac_scopes", Label: "Protected IaC scopes", Kind: SlotList,
 			Detail: "Infrastructure whose apply or destroy needs a person.",
-			Unset:  "IAM, RBAC, networking, quota and node pools, and anything carrying prod",
+			Unset:  prompts.RenderText("pi-environment", "unset-iac_scopes", prompts.Values{}),
 			ReadBy: []string{"Protected-Scope IaC Apply"},
 		},
 	}

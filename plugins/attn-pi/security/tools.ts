@@ -1,3 +1,4 @@
+import { securityPrompt } from "./guidance";
 import {
   createBashToolDefinition, createEditToolDefinition, createFindToolDefinition, createGrepToolDefinition,
   createLocalBashOperations, createLsToolDefinition, createReadToolDefinition, createWriteToolDefinition,
@@ -35,7 +36,7 @@ export function protectedBash(policy: SecurityPolicy, filter: CredentialFilter, 
         stream.finish();
         if (policy.enabled && result.exitCode !== 0 && (permissionError || (policy.network === "deny" && networkError))) {
           const guidance = startupError
-            ? "The OS sandbox could not start. Extra write access will not fix this. Explain the startup error to the user so they can check sandbox support on this host. Do not disable security or retry the command without containment."
+            ? securityPrompt("startup-failure")
             : sandboxRecovery(policy, reviewAvailable(), permissionError ? "permission" : "network");
           options.onData(Buffer.from(`\n${filter.text(guidance)}\n`));
         }
@@ -54,10 +55,10 @@ export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter,
   const reviewedBash: ToolDefinition<typeof parameters> = {
     ...bashTool,
     parameters,
-    description: `${bashTool.description}\nWhen sandbox access review is available, supply sandbox.allowWrite (existing directories) and/or sandbox.network (allow), plus sandbox.reason. Auto mode must approve the command and extra access before execution. See the current Pi execution permissions for availability and existing grants.`,
+    description: `${bashTool.description}\n${securityPrompt("bash-description")}`,
     promptGuidelines: [
-      "Use bash with the current Pi execution permissions. Existing build-cache grants need no sandbox request. When additional access is needed and review is available, submit a narrow bash.sandbox request directly. An OS error is not an auto-mode refusal; follow a refusal's stated recovery instructions.",
-      "Pi filters credentials from tool results and removes sensitive environment variables from bash subprocesses. Sandbox requests cannot restore credentials or override protected paths; explain credential access requirements to the user.",
+      securityPrompt("bash-guidance"),
+      securityPrompt("bash-credentials"),
     ],
     async execute(id, args, signal, onUpdate, ctx) {
       if (!Object.hasOwn(args, "sandbox")) return bashTool.execute(id, args, signal, onUpdate, ctx);

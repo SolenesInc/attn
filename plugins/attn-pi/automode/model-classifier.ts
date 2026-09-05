@@ -1,3 +1,4 @@
+import { renderPrompt } from "./prompt-catalog";
 import type { Classifier, ClassifierLayer, ClassifierPrompt, ClassifierRequest, ClassifierVerdict } from "./classifier";
 import type { AutoModeConfig } from "./config";
 import {
@@ -115,9 +116,10 @@ export class ModelClassifier implements Classifier {
     const grant = request.grant?.trim();
     const preamble = grant && grant !== "" ? [grantPrompt(grant)] : [];
 
-    const systemPrompt = classifierSystemPrompt(request.environment) + "\n\n" +
-      `Current sandbox build-cache grants (from the executor, not the transcript): ${JSON.stringify(request.cacheWritePaths ?? [])}. ` +
-      "Only these directories qualify for the Configured Build Caches exception. An empty list means the exception is unavailable.";
+    const systemPrompt = renderPrompt("system-with-cache-grants", {
+      rulebook: classifierSystemPrompt(request.environment),
+      paths: JSON.stringify(request.cacheWritePaths ?? []),
+    });
 
     const harmMessages = [...preamble, classifierUserPrompt(input, "harm")];
     const harmPrompt: ClassifierPrompt = {

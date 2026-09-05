@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"embed"
 	"fmt"
 	"io/fs"
 	"os"
@@ -10,14 +9,12 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/toolhome"
 )
 
-// attn_skill/references/showing.md adapts the show-me skill from
-// github.com/humanlayer/skills (MIT, Copyright (c) 2026 HumanLayer).
-//
-//go:embed attn_skill
-var attnSkillFiles embed.FS
+// content/skills/attn/references/showing.md retains its HumanLayer MIT attribution.
+var attnSkillFiles = prompts.AttnSkillFiles()
 
 func installAttnSkill(skillDir string) error {
 	expected := map[string]bool{}
@@ -36,7 +33,7 @@ func installAttnSkill(skillDir string) error {
 			return nil
 		}
 
-		content, err := attnSkillFiles.ReadFile(path)
+		content, err := fs.ReadFile(attnSkillFiles, path)
 		if err != nil {
 			return fmt.Errorf("read bundled attn skill file %s: %w", path, err)
 		}
@@ -82,7 +79,7 @@ func pruneOrphanedSkillFiles(skillDir string, expected map[string]bool) error {
 }
 
 func SkillFile(relative string) ([]byte, error) {
-	return attnSkillFiles.ReadFile(path.Join("attn_skill", relative))
+	return fs.ReadFile(attnSkillFiles, path.Join("attn_skill", relative))
 }
 
 func SkillReferenceNames() []string {

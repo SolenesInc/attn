@@ -66,6 +66,8 @@ should_exclude_path() {
   # harness scripts, and CI config — can change without invalidating the
   # packaged app bundle, so skipping those paths keeps iteration fast.
   case "${relative_path}" in
+    internal/prompts/content/*) return 1 ;;
+    cmd/prompt-editor/*|internal/prompts/scenarios/*|.prompt-editor/*) return 0 ;;
     plugins/attn-pi/src/*) return 1 ;;
     plugins/attn-pi/suite/*) return 1 ;;
     plugins/attn-pi/host/*) return 1 ;;

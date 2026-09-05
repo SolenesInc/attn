@@ -13,7 +13,7 @@ import { protectedBash, protectedTools } from "./tools";
 import { reviewUnavailable, type SandboxReview } from "./recovery";
 import { changeSecurityConfig } from "./settings";
 import { SecurityPanel, type SecuritySnapshot } from "./ui";
-import { securityInstructions } from "./guidance";
+import { securityInstructions, securityPrompt } from "./guidance";
 
 export class PiSecurity {
   private fs: SandboxedFilesystem | undefined;
@@ -29,8 +29,8 @@ export class PiSecurity {
     pi.on("session_start", (_event, ctx) => this.configure(pi, ctx));
     pi.on("session_shutdown", () => this.close());
     pi.on("before_agent_start", (event) => ({ systemPrompt: event.systemPrompt + "\n\n" + credentials.text(
-      this.problem ? `Pi tools are blocked by a security configuration error: ${this.problem}. Explain this to the user; do not work around it.`
-        : this.policy ? securityInstructions(this.policy, this.reviewAvailable()) : "Pi security is not initialized; tools cannot run.",
+      this.problem ? securityPrompt("configuration-error", { problem: this.problem })
+        : this.policy ? securityInstructions(this.policy, this.reviewAvailable()) : securityPrompt("not-initialized"),
     ) }));
     pi.on("tool_result", (event) => {
       try { return credentials.value({ content: event.content, details: event.details }); }

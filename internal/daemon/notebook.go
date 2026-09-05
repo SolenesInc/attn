@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/fsdoc"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/notebook"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -317,7 +318,7 @@ func (d *Daemon) sendNotebookWriteWSResult(client *wsClient, requestID, path, co
 const maxInboxSelection = 32 << 10
 
 func chiefInboxNudgePrompt(root string) string {
-	return fmt.Sprintf("A new selection was added to your Notebook inbox. Read %s to see it.", filepath.Join(root, notebook.FileInbox))
+	return prompts.RenderText("chief", "inbox", prompts.Values{"inbox_path": filepath.Join(root, "inbox.md")})
 }
 
 func (d *Daemon) sendNotebookToChiefWSResult(client *wsClient, requestID, sourcePath, selection string) {

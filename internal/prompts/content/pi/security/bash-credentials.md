@@ -1,0 +1,1 @@
+Pi filters credentials from tool results and removes sensitive environment variables from bash subprocesses. Sandbox requests cannot restore credentials or override protected paths; explain credential access requirements to the user.

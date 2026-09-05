@@ -1,0 +1,78 @@
+[
+  {
+    "id": "i-agree",
+    "emoji": "👍",
+    "text": "I agree",
+    "color": "green"
+  },
+  {
+    "id": "exactly-this",
+    "emoji": "💯",
+    "text": "Exactly this",
+    "color": "green"
+  },
+  {
+    "id": "this-is-wrong",
+    "emoji": "❌",
+    "text": "This is wrong",
+    "color": "red"
+  },
+  {
+    "id": "dont-love-this",
+    "emoji": "😕",
+    "text": "I don't love this",
+    "color": "orange"
+  },
+  {
+    "id": "clarify-this",
+    "emoji": "❓",
+    "text": "Clarify this",
+    "color": "yellow"
+  },
+  {
+    "id": "verify-this",
+    "emoji": "🔍",
+    "text": "Verify this",
+    "color": "blue",
+    "tip": "This seems like an assumption. Verify by reading the actual code before proceeding."
+  },
+  {
+    "id": "show-the-receipt",
+    "emoji": "🧾",
+    "text": "Show the receipt",
+    "color": "teal",
+    "tip": "You asserted this as fact. Name what backs it — the file and line, the measurement, the command output — or say plainly that it is an assumption."
+  },
+  {
+    "id": "give-me-an-example",
+    "emoji": "🔬",
+    "text": "Give me an example",
+    "color": "cyan",
+    "tip": "This is too abstract. Show a before/after, a sample input/output, or a specific scenario."
+  },
+  {
+    "id": "consider-alternatives",
+    "emoji": "🔄",
+    "text": "Consider alternatives",
+    "color": "pink",
+    "tip": "Propose 2-3 alternative approaches with trade-offs based on the actual codebase."
+  },
+  {
+    "id": "cut-this",
+    "emoji": "🪓",
+    "text": "Cut this",
+    "color": "amber"
+  },
+  {
+    "id": "your-call",
+    "emoji": "🪙",
+    "text": "Your call",
+    "color": "green"
+  },
+  {
+    "id": "ask-me-first",
+    "emoji": "🙋",
+    "text": "Ask me first",
+    "color": "yellow"
+  }
+]

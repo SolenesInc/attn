@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -49,7 +50,7 @@ func (d *Daemon) crewAgentAvailable(agent string) bool {
 	return ok
 }
 
-const crewWakePrompt = "You have been woken for today. Orient from your charter and your predecessor's letter, verify anything load-bearing they left you, then greet the user in a few lines: who you are, what you were left with, what you believe the current state is, and what you would do next."
+var crewWakePrompt = prompts.RenderText("crew", "wake", prompts.Values{})
 
 func crewWorkspaceID(memberID string) string { return "workspace-crew-" + memberID }
 

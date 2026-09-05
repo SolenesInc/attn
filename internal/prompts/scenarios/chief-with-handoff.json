@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "chief-with-handoff",
+  "description": "Chief launch including rendered crew priming.",
+  "recipient": "session",
+  "event": "launch",
+  "values": {
+    "notebook_root": "/workspace/notebook",
+    "workflow_enabled": "false",
+    "garden_available": "true",
+    "self_report_pull_requests": "false"
+  },
+  "inputs": {
+    "crew_priming": "crew-with-handoff"
+  }
+}
