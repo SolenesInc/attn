@@ -287,12 +287,6 @@ func buildStoredIntentSpawn(session *protocol.Session, intent store.LaunchIntent
 	if intent.Effort != "" {
 		spawnMsg.Effort = protocol.Ptr(intent.Effort)
 	}
-	if intent.InitialPrompt != "" {
-		spawnMsg.InitialPrompt = protocol.Ptr(intent.InitialPrompt)
-	}
-	if intent.ResumeConversationFile != "" {
-		spawnMsg.ResumeConversationFile = protocol.Ptr(intent.ResumeConversationFile)
-	}
 	launch := intent.UnattendedLaunch
 	if !launch.IsZero() {
 		launch = launch.WithLegacyDefaults()
@@ -762,14 +756,6 @@ func (d *Daemon) handleKillSession(client *wsClient, msg *protocol.KillSessionMe
 }
 
 func (d *Daemon) killSessionRuntimeAsync(sessionID string, sig syscall.Signal) {
-	if d.isHostSession(sessionID) {
-		if err := d.killSessionRuntime(sessionID); err != nil {
-			d.logf("kill_session failed for host %s: %v", sessionID, err)
-			return
-		}
-		d.closePluginDriverSession(sessionID, "killed", nil, signalName(sig))
-		return
-	}
 	err := d.ptyBackend.Kill(context.Background(), sessionID, sig)
 	if err == nil || errors.Is(err, pty.ErrSessionNotFound) {
 		// Production backends return from Kill only once the child has exited.

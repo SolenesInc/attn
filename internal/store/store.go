@@ -64,17 +64,14 @@ type ActiveAgentDriverRun struct {
 type LaunchIntent struct {
 	YoloMode bool `json:"yolo_mode,omitempty"`
 	// nil means "follow the promoted config", not off.
-	AutoMode               *bool                        `json:"auto_mode,omitempty"`
-	ApprovalRoute          launchcontract.ApprovalRoute `json:"approval_route,omitempty"`
-	Executable             string                       `json:"executable,omitempty"`
-	Model                  string                       `json:"model,omitempty"`
-	Effort                 string                       `json:"effort,omitempty"`
-	ChiefOfStaff           bool                         `json:"chief_of_staff,omitempty"`
-	ResumeConversationFile string                       `json:"resume_conversation_file,omitempty"`
+	AutoMode      *bool                        `json:"auto_mode,omitempty"`
+	ApprovalRoute launchcontract.ApprovalRoute `json:"approval_route,omitempty"`
+	Executable    string                       `json:"executable,omitempty"`
+	Model         string                       `json:"model,omitempty"`
+	Effort        string                       `json:"effort,omitempty"`
+	ChiefOfStaff  bool                         `json:"chief_of_staff,omitempty"`
 	// Zero value means attended.
 	UnattendedLaunch launchcontract.UnattendedLaunchSpec `json:"unattended_launch,omitzero"`
-	// Empty for every PTY session: a PTY relaunch resumes a transcript, so replaying the prompt re-runs work already done. Filled only for drivers declaring the `conversation` capability.
-	InitialPrompt string `json:"initial_prompt,omitempty"`
 }
 
 func New() *Store {

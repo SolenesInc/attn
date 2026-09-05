@@ -151,12 +151,6 @@ func (d *Daemon) reloadSessionForClient(sessionID string, cols, rows int) error 
 	lock.Lock()
 	defer lock.Unlock()
 
-	// A conversation session's runtime is a host, not a worker: sessionHasLiveWorker
-	// reports false for a live one, so fork before either branch.
-	if d.isConversationAgent(string(session.Agent)) {
-		return d.reloadConversationSession(session)
-	}
-
 	if d.sessionHasLiveWorker(sessionID) {
 		opts, err := d.buildReloadSpawnOptions(session)
 		if err != nil {

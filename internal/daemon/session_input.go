@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/victorarias/attn/internal/hostsession"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -44,7 +43,6 @@ type sessionInputRoute uint8
 
 const (
 	sessionInputRouteNone sessionInputRoute = iota
-	sessionInputRouteHost
 	sessionInputRoutePlugin
 	sessionInputRoutePTY
 )
@@ -99,7 +97,6 @@ type sessionInputDelivery struct {
 	text              string
 	origin            sessionInputOrigin
 	placement         sessionInputPlacement
-	hostDelivery      hostsession.Delivery
 	allowUserComposer bool
 	bypassInitialGate bool
 	resend            func()
@@ -159,7 +156,6 @@ type sessionInputFingerprint struct {
 	text              string
 	origin            sessionInputOrigin
 	placement         sessionInputPlacement
-	host              hostsession.Delivery
 	allowUserComposer bool
 	bypassInitialGate bool
 }
@@ -517,7 +513,6 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 		text:              delivery.text,
 		origin:            delivery.origin,
 		placement:         delivery.placement,
-		host:              delivery.hostDelivery,
 		allowUserComposer: delivery.allowUserComposer,
 		bypassInitialGate: delivery.bypassInitialGate,
 	}
@@ -588,28 +583,6 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 	inputID := key
 	candidate := sessionInputCandidate{inputID: inputID, attempt: delivery.id, text: delivery.text, origin: delivery.origin}
 
-	if m.daemon.isHostSession(delivery.sessionID) {
-		how := delivery.hostDelivery
-		if how == "" {
-			how = hostsession.DeliverySteer
-		}
-		attempt.route = sessionInputRouteHost
-		lane.pending = append(lane.pending, candidate)
-		lane.placing = true
-		lane.mu.Unlock()
-		err := m.daemon.deliverToHostSessionWithInput(delivery.sessionID, how, delivery.text, inputID)
-		lane.mu.Lock()
-		lane.placing = false
-		if err != nil && attempt.stage != sessionInputTaken {
-			lane.removePending(delivery.id)
-			delete(lane.attempts, key)
-			return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, route: sessionInputRouteHost, reason: sessionInputReasonTransport, err: err}
-		}
-		if attempt.stage != sessionInputTaken {
-			attempt.stage = sessionInputPlaced
-		}
-		return attemptFromState(delivery.id, attempt)
-	}
 	if m.daemon.sessionUsesPluginMessageDelivery(state) {
 		attempt.route = sessionInputRoutePlugin
 		lane.pending = append(lane.pending, candidate)

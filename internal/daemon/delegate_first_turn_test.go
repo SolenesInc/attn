@@ -19,6 +19,15 @@ func delegateForFirstTurn(t *testing.T, d *Daemon, sourceID string) (*protocol.D
 	})
 }
 
+func queueWorkingPluginReportDuringLaunch(d *Daemon, sessionID string) bool {
+	params := pluginReportStateParams{SessionID: sessionID, RunID: "run-1", State: protocol.StateWorking}
+	return d.queueReportDuringPluginLaunch(
+		&pluginConnection{name: "attn-pi"},
+		sessionID,
+		pendingPluginReport{State: &params},
+	)
+}
+
 func TestDelegateFailsWhenTheAgentExitsBeforeItsFirstTurn(t *testing.T) {
 	d := newDelegationDaemon(t)
 	backend := &fakeSpawnBackend{screen: "Error: Model \"gpt-5.6-sol\" is ambiguous across providers\n"}
@@ -130,7 +139,7 @@ func TestPluginLaunchExitBeforeReportFailsTheDelegation(t *testing.T) {
 		if !d.queueExitDuringPluginLaunch(ptybackend.ExitInfo{ID: opts.ID, ExitCode: 1, LifecycleID: "run-1"}) {
 			t.Fatal("exit not queued during the plugin launch")
 		}
-		if !d.queueHostReportDuringLaunch(opts.ID, pluginReportStateParams{SessionID: opts.ID, RunID: "run-1", State: protocol.StateWorking}) {
+		if !queueWorkingPluginReportDuringLaunch(d, opts.ID) {
 			t.Fatal("report not queued during the plugin launch")
 		}
 	}
@@ -160,7 +169,7 @@ func TestPluginLaunchReportDuringTheExitSnapshotStillFailsTheDelegation(t *testi
 				reported := make(chan struct{})
 				go func() {
 					defer close(reported)
-					d.queueHostReportDuringLaunch(opts.ID, pluginReportStateParams{SessionID: opts.ID, RunID: "run-1", State: protocol.StateWorking})
+					queueWorkingPluginReportDuringLaunch(d, opts.ID)
 				}()
 				<-reported
 			})

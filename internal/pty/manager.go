@@ -624,8 +624,6 @@ func readCachedShellEnvFromProcess() []string {
 	return env
 }
 
-// The identity block has a twin in spawnHostSession (internal/daemon); change
-// one and change the other, each test-pinned separately.
 func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath string, logf LogFunc) []string {
 	env := os.Environ()
 	launchEnv := []string(nil)

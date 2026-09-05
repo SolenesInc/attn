@@ -52,22 +52,6 @@ type AddEndpointMessage struct {
 	SshTarget string `json:"ssh_target"`
 }
 
-type AgentAttachMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-}
-
-type AgentClearQueueMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-}
-
 type AgentCloseMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -107,34 +91,6 @@ type AgentCloseRule string
 const AgentCloseRuleChiefOfStaff AgentCloseRule = "chief_of_staff"
 const AgentCloseRuleDispatcher AgentCloseRule = "dispatcher"
 const AgentCloseRuleSelf AgentCloseRule = "self"
-
-type AgentEventMessage struct {
-	// Body corresponds to the JSON schema field "body".
-	Body RecordUnknown `json:"body"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-
-	// Kind corresponds to the JSON schema field "kind".
-	Kind string `json:"kind"`
-
-	// Seq corresponds to the JSON schema field "seq".
-	Seq int `json:"seq"`
-}
-
-type AgentHistoryMessage struct {
-	// Before corresponds to the JSON schema field "before".
-	Before string `json:"before"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-}
 
 type AgentInboxBatchResult struct {
 	// Items corresponds to the JSON schema field "items".
@@ -349,48 +305,6 @@ type AgentPeerMessage struct {
 
 	// TargetSessionID corresponds to the JSON schema field "target_session_id".
 	TargetSessionID string `json:"target_session_id"`
-}
-
-type AgentPromptMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-
-	// InputID corresponds to the JSON schema field "input_id".
-	InputID string `json:"input_id"`
-
-	// Mode corresponds to the JSON schema field "mode".
-	Mode *string `json:"mode,omitempty,omitzero"`
-
-	// Text corresponds to the JSON schema field "text".
-	Text string `json:"text"`
-}
-
-type AgentSetModelMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-
-	// Model corresponds to the JSON schema field "model".
-	Model string `json:"model"`
-}
-
-type AgentToolDetailMessage struct {
-	// CallID corresponds to the JSON schema field "call_id".
-	CallID string `json:"call_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Full corresponds to the JSON schema field "full".
-	Full *bool `json:"full,omitempty,omitzero"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
 }
 
 type AppApplyMessage struct {
@@ -4692,14 +4606,6 @@ type ListEndpointsMessage struct {
 	Cmd string `json:"cmd"`
 }
 
-type ListPastConversationsMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-}
-
 type ListPluginsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -5652,49 +5558,6 @@ type PRsUpdatedMessage struct {
 	Prs []PR `json:"prs,omitempty,omitzero"`
 }
 
-type PastConversation struct {
-	// Bytes corresponds to the JSON schema field "bytes".
-	Bytes int `json:"bytes"`
-
-	// Cwd corresponds to the JSON schema field "cwd".
-	Cwd string `json:"cwd"`
-
-	// File corresponds to the JSON schema field "file".
-	File string `json:"file"`
-
-	// Live corresponds to the JSON schema field "live".
-	Live bool `json:"live"`
-
-	// Modified corresponds to the JSON schema field "modified".
-	Modified int `json:"modified"`
-
-	// Preview corresponds to the JSON schema field "preview".
-	Preview string `json:"preview"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
-}
-
-type PastConversationsResultMessage struct {
-	// Conversations corresponds to the JSON schema field "conversations".
-	Conversations []PastConversation `json:"conversations"`
-
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-
-	// Truncated corresponds to the JSON schema field "truncated".
-	Truncated bool `json:"truncated"`
-}
-
 type PathInspection struct {
 	// Exists corresponds to the JSON schema field "exists".
 	Exists bool `json:"exists"`
@@ -6369,8 +6232,6 @@ type RecentLocationsResultMessage struct {
 }
 
 type RecordString map[string]interface{}
-
-type RecordUnknown map[string]interface{}
 
 type RefreshPRsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
@@ -9116,10 +8977,6 @@ type SpawnSessionMessage struct {
 
 	// Model corresponds to the JSON schema field "model".
 	Model *string `json:"model,omitempty,omitzero"`
-
-	// ResumeConversationFile corresponds to the JSON schema field
-	// "resume_conversation_file".
-	ResumeConversationFile *string `json:"resume_conversation_file,omitempty,omitzero"`
 
 	// ResumePicker corresponds to the JSON schema field "resume_picker".
 	ResumePicker *bool `json:"resume_picker,omitempty,omitzero"`

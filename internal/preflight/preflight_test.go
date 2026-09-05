@@ -64,8 +64,8 @@ func TestRunChecksPluginAgentsAgainstTheDaemonCatalog(t *testing.T) {
 	report = run(context.Background(), Options{Agent: "pi", Effort: "high", WorkingDir: t.TempDir()}, passingProber(t))
 	assertCheck(t, report, "launch.effort", StatusFail, "does not support effort pins")
 
-	report = run(context.Background(), Options{Agent: "nisse", WorkingDir: t.TempDir()}, passingProber(t))
-	assertCheck(t, report, "launch.agent", StatusFail, `daemon does not provide agent "nisse"; it provides codex, pi`)
+	report = run(context.Background(), Options{Agent: "plugin-agent", WorkingDir: t.TempDir()}, passingProber(t))
+	assertCheck(t, report, "launch.agent", StatusFail, `daemon does not provide agent "plugin-agent"; it provides codex, pi`)
 }
 
 func TestRunReportsTheDaemonsViewOfBuiltInExecutables(t *testing.T) {

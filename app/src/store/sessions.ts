@@ -33,7 +33,6 @@ export interface Session {
   endpointId?: string;
   yoloMode?: boolean;
   chiefOfStaff?: boolean;
-  resumeConversationFile?: string;
   autoMode?: boolean;
   transcriptMatched: boolean;
   creating?: boolean;
@@ -82,7 +81,6 @@ interface SessionStore {
     yoloMode: boolean | undefined,
     workspaceId: string,
     chiefOfStaff?: boolean,
-    resumeConversationFile?: string,
     autoMode?: boolean,
   ) => Promise<string>;
   closeSession: (id: string) => void;
@@ -207,7 +205,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     yoloMode: boolean | undefined,
     providedWorkspaceId: string,
     chiefOfStaff?: boolean,
-    resumeConversationFile?: string,
     autoMode?: boolean,
   ) => {
     const id = providedId || crypto.randomUUID();
@@ -226,7 +223,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       endpointId,
       yoloMode: yoloMode ?? false,
       chiefOfStaff: chiefOfStaff ?? false,
-      resumeConversationFile,
       autoMode,
       transcriptMatched: resolvedAgent !== 'codex',
       creating: true,
@@ -308,7 +304,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       resume_session_id: null,
       yolo_mode: session.yoloMode ?? null,
       ...(session.chiefOfStaff ? { chief_of_staff: true } : {}),
-      ...(session.resumeConversationFile ? { resume_conversation_file: session.resumeConversationFile } : {}),
       // Explicit false is a real answer here, so the field is sent whenever it was
       // set and is never `&&`-collapsed away.
       ...(session.autoMode !== undefined ? { auto_mode: session.autoMode } : {}),

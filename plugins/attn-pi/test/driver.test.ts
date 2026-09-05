@@ -482,8 +482,8 @@ describe("PiDriver", () => {
       );
     });
 
-    test("runs belonging to the other agent this plugin registers are left alone", async () => {
-      const { rpc } = registerWith([{ session_id: "nisse-1", run_id: "run-9", seq: 4 }]);
+    test("an active run without pi metadata is left alone", async () => {
+      const { rpc } = registerWith([{ session_id: "other-1", run_id: "run-9", seq: 4 }]);
       const driver = newDriver({ rpc });
       await driver.initialize();
 

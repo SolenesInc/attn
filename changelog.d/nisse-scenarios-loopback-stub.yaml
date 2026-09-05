@@ -1,9 +1,0 @@
-kind: internal
-area: harness
-change: >
-  The six nisse scenarios (conversation, nudge, tools, revive, delegate,
-  history) run against the loopback stub provider instead of a real model:
-  the stub gains per-scenario scripted replies and tool calls, and the
-  attn-nisse host now resolves its agent dir and models through pi's own
-  runtime (PI_CODING_AGENT_DIR, models.json) instead of a built-in-only
-  lookup.

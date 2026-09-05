@@ -47,10 +47,6 @@ type SpawnOptions struct {
 	DaemonEnv   []string
 	LifecycleID string
 
-	// The host forks this file instead of appending, so two sessions can start
-	// from the same one. PTY-backed agents resume through ResumeSessionID.
-	ResumeConversationFile string
-
 	// Skips the ~130ms readLoginShellEnv in workers.
 	LoginShellEnv []string
 

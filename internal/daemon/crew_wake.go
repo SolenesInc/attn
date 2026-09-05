@@ -326,9 +326,6 @@ func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, deliv
 }
 
 func (d *Daemon) crewSessionActuallyLive(sessionID string) (bool, error) {
-	if d.isHostSession(sessionID) {
-		return true, nil
-	}
 	if d.store == nil || d.store.Get(sessionID) == nil {
 		return false, nil
 	}

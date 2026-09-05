@@ -272,7 +272,6 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 	spawnMsg.Model = d.crewWakeModel(member, spawnMsg.Agent)
 	// A resume would carry the closed day's transcript into the new one.
 	spawnMsg.ResumeSessionID = nil
-	spawnMsg.ResumeConversationFile = nil
 	if strings.TrimSpace(spawnMsg.WorkspaceID) == "" {
 		spawnMsg.WorkspaceID = crewWorkspaceID(member.ID)
 	}

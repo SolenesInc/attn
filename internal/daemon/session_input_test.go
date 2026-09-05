@@ -11,7 +11,6 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/victorarias/attn/internal/hostsession"
 	"github.com/victorarias/attn/internal/protocol"
 	"pgregory.net/rapid"
 )
@@ -354,39 +353,6 @@ func TestSessionInput_SameTextFromUserAndAutomationIsIndeterminate(t *testing.T)
 	}
 	if _, user := d.sessionInputs().currentUserRun(sessionID); user {
 		t.Fatal("ambiguous same-text observation granted user credit")
-	}
-}
-
-func TestSessionInput_HostReceiptIsFencedToTheCurrentRuntime(t *testing.T) {
-	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
-	if !d.store.BeginAgentDriverRun(sessionID, "attn-pi", "run-current") {
-		t.Fatal("begin current host run")
-	}
-	delivery := maintenanceSessionInput("host-test", "input-1", sessionID, "hello", sessionInputAtTurnBoundary)
-	if attempt := d.sessionInputs().try(context.Background(), delivery); attempt.err != nil {
-		t.Fatalf("place input: %v", attempt.err)
-	}
-	d.handleHostEvent(hostsession.Event{
-		SessionID: sessionID, LifecycleID: "run-stale", Seq: 1, Kind: "input_taken",
-		Body: map[string]interface{}{"input_id": delivery.id.String()},
-	})
-	if attempt := d.sessionInputs().lookup(sessionID, delivery.id); attempt.stage != sessionInputPlaced {
-		t.Fatalf("stale receipt moved attempt to %v, want placed", attempt.stage)
-	}
-	d.handleHostEvent(hostsession.Event{
-		SessionID: sessionID, LifecycleID: "run-current", Seq: 1, Kind: "input_taken",
-		Body: map[string]interface{}{"input_id": delivery.id.String()},
-	})
-	if attempt := d.sessionInputs().lookup(sessionID, delivery.id); attempt.stage != sessionInputTaken {
-		t.Fatalf("current receipt moved attempt to %v, want taken", attempt.stage)
-	}
-	requestAt := protocol.Deref(d.store.Get(sessionID).LastModelRequestAt)
-	d.handleHostEvent(hostsession.Event{
-		SessionID: sessionID, LifecycleID: "run-current", Seq: 2, Kind: "input_taken",
-		Body: map[string]interface{}{"input_id": delivery.id.String()},
-	})
-	if got := protocol.Deref(d.store.Get(sessionID).LastModelRequestAt); got != requestAt {
-		t.Fatalf("duplicate receipt moved request clock from %s to %s", requestAt, got)
 	}
 }
 

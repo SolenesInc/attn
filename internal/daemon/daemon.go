@@ -33,7 +33,6 @@ import (
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/headless"
-	"github.com/victorarias/attn/internal/hostsession"
 	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/logging"
@@ -151,8 +150,6 @@ type Daemon struct {
 	ptySettingsChangeMu               sync.Mutex
 	upgradingMu                       sync.Mutex
 	upgradingWorkers                  map[string]bool
-	hostSessions                      *hostsession.Manager
-	hostSessionsMu                    sync.Mutex
 	watchersMu                        sync.Mutex
 	transcriptWatch                   map[string]*transcriptWatcher
 	transcriptWatcherSessionLookup    func(string) *protocol.Session
@@ -1099,6 +1096,13 @@ func (d *Daemon) pruneSessionsWithoutPTY(cutoff time.Time) int {
 	return removed
 }
 
+func (d *Daemon) liveRuntimeSessionIDs(ctx context.Context) []string {
+	if d.ptyBackend == nil {
+		return nil
+	}
+	return d.ptyBackend.SessionIDs(ctx)
+}
+
 func (d *Daemon) canReviveSession(session *protocol.Session) bool {
 	if session == nil || d.store == nil {
 		return false
@@ -1121,17 +1125,6 @@ func (d *Daemon) sessionConversationSurvives(session *protocol.Session, intent s
 	resumeID := agentdriver.ResolveSpawnResumeSessionID(driver, session.ID, "", d.store.GetResumeSessionID(session.ID))
 	if agentdriver.ResumeAvailable(driver, resumeID) {
 		return true
-	}
-	if hostSessionStateDirHoldsConversation(session.ID) {
-		return true
-	}
-	if strings.TrimSpace(intent.InitialPrompt) != "" {
-		return true
-	}
-	if resumeFile := strings.TrimSpace(intent.ResumeConversationFile); resumeFile != "" {
-		if _, err := os.Stat(resumeFile); err == nil {
-			return true
-		}
 	}
 	return d.store.GetAgentDriverRun(session.ID).RunID != "" ||
 		strings.TrimSpace(d.store.GetAgentMetadata(session.ID)) != ""
@@ -1656,7 +1649,6 @@ func (d *Daemon) Stop() {
 	if d.ptyBackend != nil {
 		_ = d.ptyBackend.Shutdown(context.Background())
 	}
-	d.ensureHostSessions().Shutdown()
 	if d.httpServer != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -1835,14 +1827,6 @@ func (d *Daemon) terminateSessionChecked(sessionID string, sig syscall.Signal) e
 }
 
 func (d *Daemon) terminateSessionRuntimeChecked(sessionID string, sig syscall.Signal) error {
-	if d.isHostSession(sessionID) {
-		if err := d.ensureHostSessions().Kill(sessionID); err != nil && !errors.Is(err, hostsession.ErrNotFound) {
-			return err
-		}
-		d.stopTranscriptWatcher(sessionID)
-		return nil
-	}
-
 	if d.ptyBackend == nil {
 		d.stopTranscriptWatcher(sessionID)
 		return nil

@@ -12,7 +12,6 @@ func isUserPresenceCommand(cmd string) bool {
 		protocol.CmdWorkspaceSelected,
 		protocol.CmdPRVisited,
 		protocol.CmdPtyInput,
-		protocol.CmdAgentPrompt,
 		protocol.CmdPtyResize:
 		return true
 	default:

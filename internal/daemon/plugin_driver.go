@@ -228,7 +228,6 @@ func validatePluginDriverCapabilities(values map[string]bool) (map[string]bool, 
 		"model_pin":              {},
 		"effort_pin":             {},
 		"launch_instructions":    {},
-		"conversation":           {},
 		"auto_mode":              {},
 		"pull_request_reporting": {},
 	}
@@ -516,20 +515,6 @@ func (d *Daemon) queueReportDuringPluginLaunch(plugin *pluginConnection, session
 	if report.State != nil || report.Stop != nil {
 		watch = d.claimLaunchWatch(sessionID)
 	}
-	d.pluginDriverMu.Unlock()
-	watch.settle(launchOutcome{startedAt: time.Now()})
-	return true
-}
-
-func (d *Daemon) queueHostReportDuringLaunch(sessionID string, params pluginReportStateParams) bool {
-	d.pluginDriverMu.Lock()
-	launch, ok := d.pluginLaunching[sessionID]
-	if !ok || launch.RunID == "" || launch.RunID != strings.TrimSpace(params.RunID) {
-		d.pluginDriverMu.Unlock()
-		return false
-	}
-	d.pluginReports[sessionID] = append(d.pluginReports[sessionID], pendingPluginReport{State: &params})
-	watch := d.claimLaunchWatch(sessionID)
 	d.pluginDriverMu.Unlock()
 	watch.settle(launchOutcome{startedAt: time.Now()})
 	return true

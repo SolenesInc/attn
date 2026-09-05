@@ -1,42 +1,24 @@
-# pi receipts, the pin-bump gate
+# Auto-mode classifier receipts
 
-Scripts that measure pi and attn's auto mode against real models. Most drive
-pi's SDK directly, without attn. They are the evidence behind the headless
-host's design, and they are the gate a pi version bump has
-to pass: run them against the current pin first, then against the new one,
-and treat any difference as a breaking change until proven otherwise. pi ships breaking changes every few releases and
-has no compat gate — an extension built against old types loads silently and
-fails at the first missing call site — so nothing else tells you what moved.
+Scripts that measure attn's auto-mode classifier against real models. Run them
+against the current implementation before changing its model or thresholds,
+then compare the candidate behavior.
 
 Run them from a checkout, never from a packaged app:
 
 ```bash
 cd plugins/attn-pi/receipts
 bun install
-bun smoke.js
+bun classifier-cost.js
 ```
 
 | Scenario | What it pins down |
 | --- | --- |
-| `smoke.js` | `createAgentSession` + `bindExtensions`, where the session file lands and when, event ordering around `agent_end`/`agent_settled` |
-| `delta-rate.js` | assistant delta rate — the receipt behind the host's ~30 ms coalescing window |
-| `steer.js` | steering a live run (slice 2) |
-| `abort.js` | aborting a run mid-flight |
-| `child-processes.js` | what happens to pi's tool subprocesses |
-| `crash-revive.js`, `crash-revive-host.js` | the orphan-on-hard-kill receipt: killing the host strands the tool subprocesses, which is why attn's daemon owns the host's process group and kills the group |
-| `memory-slope.js` | memory over a long session |
 | `classifier-cost.js` | auto-mode classifier latency/cost/quality across candidate models, against an inline prompt |
 | `classifier-verdicts.ts` | what the shipped two-stage classifier decides over the corpus |
 | `stage-one-severities.ts` | what stage 1 grades each case at, which is what a threshold change is measured against |
 | `replay-loop.ts` | replays a denial from the live ledger by timestamp (`bun run replay-loop.ts 2026-09-05T23:08 16 provider/model minimal asis|current`; `current` swaps in the checkout's pass-2 instruction), reporting unreadable answers per run: the receipt behind dropping tagged thinking from pass 2 |
 | `reason-presence.ts` | how often a model returns a native reasoning block, and whether a trailing `<reason>` tag is answered, at a given effort level |
 
-Each scenario writes JSONL to `logs/` and pi session files to `sessions/`, both
-gitignored: the scripts are the gate, what they produce is per-run. Session
-storage is redirected under this directory and asserted to be — the harness
-refuses to run if it would write into `~/.pi/agent/sessions`. The real
-`~/.pi/agent` is still read, for auth and resource discovery, exactly the way a
-bare `pi` invocation reads it.
-
-The model is pinned in `common.js` and costs real money. Keep the scenarios
-short.
+Each scenario writes per-run JSONL to the gitignored `logs/` directory. The
+model calls cost real money, so keep the corpus focused.

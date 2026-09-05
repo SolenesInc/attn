@@ -1,0 +1,6 @@
+kind: removed
+area: agents
+change: >
+  Remove the app-rendered headless conversation agent as attn moves toward a
+  terminal multiplexer built on pi extensions. The pi terminal driver and
+  shared streaming Markdown renderer remain available.
