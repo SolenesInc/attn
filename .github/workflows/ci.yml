@@ -394,8 +394,6 @@ jobs:
         with:
           version: 9
 
-      # The wasm module too: every shard fetched it at web-server start, and a
-      # reset mid-download (run 33740630608) failed the shard before a test ran.
       - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
         with:
@@ -655,8 +653,8 @@ jobs:
           workspaces: |
             app/src-tauri
             pty-host
-          # A red serial matrix fails this job at the gate below, so saving only
-          # on success would leave the cache permanently cold.
+          # A red matrix fails this job at the gate below, so success-only saving
+          # would keep it cold exactly when a fast re-push matters most.
           cache-on-failure: 'true'
 
       - name: Install packaged app and bundled plugin

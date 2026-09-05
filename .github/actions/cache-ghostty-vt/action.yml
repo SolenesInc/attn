@@ -11,9 +11,7 @@ inputs:
 runs:
   using: composite
   steps:
-    # Fetch and save here rather than leaving it to the build step that needs
-    # the artifact: actions/cache only saves post-job on success, and the jobs
-    # this runs in fail often enough that the entry would rarely populate.
+    # actions/cache saves post-job only on success, and these jobs go red often.
     - name: Restore native libghostty-vt
       id: native
       uses: actions/cache/restore@v4
@@ -27,8 +25,7 @@ runs:
       working-directory: ${{ github.workspace }}
       run: ./scripts/build-libghostty-vt.sh
 
-    # Concurrent jobs in one run race for this key; the loser logs that the
-    # cache already exists and carries on, which is the outcome we want.
+    # Concurrent jobs race for this key; the loser logs a duplicate and carries on.
     - name: Save native libghostty-vt
       if: steps.native.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
@@ -36,14 +33,13 @@ runs:
         path: third_party/ghostty-vt
         key: ${{ runner.os }}-${{ runner.arch }}-libghostty-vt-${{ hashFiles('ghostty-vt.pin', 'ghostty-vt-native.lock') }}
 
-    # A separate entry from the native archive on purpose: cache keys are
-    # write-once, so one shared key would seal with whatever the first job had.
+    # The generated file alone: its siblings in that directory are checked in.
     - name: Restore browser ghostty-vt.wasm
       id: wasm
       if: inputs.include-wasm == 'true'
       uses: actions/cache/restore@v4
       with:
-        path: app/vendor/ghostty-vt
+        path: app/vendor/ghostty-vt/ghostty-vt.wasm
         key: ${{ runner.os }}-ghostty-vt-wasm-${{ hashFiles('ghostty-vt-wasm.lock') }}
 
     - name: Fetch browser ghostty-vt.wasm
@@ -52,9 +48,10 @@ runs:
       working-directory: ${{ github.workspace }}
       run: bash app/scripts/ensure-ghostty-vt-wasm.sh
 
+    # Separate key: keys are write-once, so a shared one could seal without the wasm.
     - name: Save browser ghostty-vt.wasm
       if: inputs.include-wasm == 'true' && steps.wasm.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
-        path: app/vendor/ghostty-vt
+        path: app/vendor/ghostty-vt/ghostty-vt.wasm
         key: ${{ runner.os }}-ghostty-vt-wasm-${{ hashFiles('ghostty-vt-wasm.lock') }}
