@@ -27,7 +27,6 @@ const (
 	reopenPlaceAdd    = "add"
 )
 
-// Every field costs a git command, which is why it is observed off the request path.
 type branchInspection struct {
 	State             string
 	Remote            string
@@ -112,7 +111,6 @@ func (d *Daemon) reopenExecution(entry *protocol.SessionLedgerEntry) garden.Disp
 	return execution
 }
 
-// Answers from stored state alone; an uninspected branch leaves the verdict checking.
 func (d *Daemon) reopenVerdict(sessionID string) (*sessionReopenVerdict, bool) {
 	sessionID = strings.TrimSpace(sessionID)
 	entry := d.store.SessionLedgerEntry(sessionID)
@@ -167,7 +165,6 @@ func (d *Daemon) workspaceLayoutHasSessionPane(workspaceID, sessionID string) bo
 	return ok && paneID != "" && holder == workspaceID
 }
 
-// Reports whether the verdict can go on being decided on this daemon.
 func decideReopenHost(verdict *sessionReopenVerdict, endpoints []protocol.EndpointInfo) bool {
 	if strings.TrimSpace(verdict.Execution.HostKind) != garden.HostRemote {
 		return true
@@ -291,7 +288,6 @@ func (d *Daemon) decideMissingDirectory(verdict *sessionReopenVerdict, conversat
 	}
 }
 
-// A worktree action here would promise a resume the conversation cannot deliver.
 func (d *Daemon) freshActionsForMissingDirectory(
 	verdict *sessionReopenVerdict, inspection branchInspection,
 ) []protocol.SessionReopenAction {
@@ -363,7 +359,6 @@ func (d *Daemon) reopenBranchWarning(execution garden.Dispatch) string {
 	return ""
 }
 
-// Serves the last observation and starts a new one when there is none; never waits on git.
 func (d *Daemon) branchInspection(sessionID, repo, branch string) (branchInspection, bool) {
 	key := branchInspectionKey(repo, branch)
 	d.branchInspectionsMu.Lock()
@@ -423,7 +418,6 @@ func (d *Daemon) inspectBranchInBackground(sessionID, repo, branch string) <-cha
 	return done
 }
 
-// A fetch or a branch created outside attn outdates the last inspection.
 func (d *Daemon) refreshReopenBranch(verdict *sessionReopenVerdict) {
 	if verdict.BranchState == "" || verdict.BranchState == branchStateUnknown {
 		return
@@ -489,7 +483,6 @@ type sessionReopenOutcome struct {
 	WorktreeCreated string
 }
 
-// Garden Resume runs the same spawn through reopenSessionRuntime with its own bookkeeping.
 func (d *Daemon) reopenSession(
 	sessionID string, action protocol.SessionReopenAction, directory string,
 ) (*sessionReopenOutcome, error) {
@@ -515,8 +508,7 @@ func (d *Daemon) reopenSession(
 	if action == "" {
 		action = protocol.SessionReopenActionReopen
 	}
-	// An in-flight branch check decides which worktree action is offered, so an
-	// explicit ask waits for it rather than losing to a verdict that is not final.
+	// An explicit ask waits for an in-flight branch check rather than losing to a stale verdict.
 	if verdict.Checking && !verdict.offers(action) {
 		<-d.inspectBranchInBackground(sessionID, verdict.Execution.RepositoryRoot, verdict.Execution.Branch)
 		verdict, found = d.reopenVerdict(sessionID)
@@ -665,13 +657,12 @@ func (d *Daemon) recreateReopenWorktree(
 }
 
 type sessionReopenPlan struct {
-	SessionID   string
-	Directory   string
-	Agent       string
-	ResumeID    string
-	Title       string
-	WorkspaceID string
-	// Start the agent without the conversation the closed run was bound to.
+	SessionID         string
+	Directory         string
+	Agent             string
+	ResumeID          string
+	Title             string
+	WorkspaceID       string
 	FreshConversation bool
 }
 
@@ -680,7 +671,6 @@ type sessionRuntimeReopened struct {
 	WorkspaceID string
 }
 
-// Every step undoes itself on a later failure, the ledger close included.
 func (d *Daemon) reopenSessionRuntime(
 	plan sessionReopenPlan,
 	rollback *delegationRollback,
@@ -783,7 +773,6 @@ func (d *Daemon) reopenSessionRuntime(
 	return &sessionRuntimeReopened{SessionID: plan.SessionID, WorkspaceID: workspaceID}, nil
 }
 
-// Returns the row to the ledger under its original close instead of reaping its history.
 func (r *delegationRollback) onSessionReopened(sessionID string, closed store.SessionCloseRecord) {
 	r.undo = append(r.undo, func() error {
 		r.d.terminateSession(sessionID, syscall.SIGTERM)
@@ -806,7 +795,6 @@ func (r *delegationRollback) onConversationForgotten(sessionID string, prior sto
 	})
 }
 
-// The dispatch doc mirrors the resume id; a fresh start drops that mirror too.
 func (d *Daemon) forgetDispatchResume(sessionID string) {
 	if _, err := d.updateGardenDispatch(sessionID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
 		if strings.TrimSpace(current.Resume) == "" {
