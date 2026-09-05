@@ -1,0 +1,9 @@
+kind: fixed
+area: sessions
+change: >
+  The agent inbox doorbell no longer types at a shell pane. Behind a shell
+  prompt there is no agent to read the nudge, so it ran as a command, and
+  when it arrived mid-command it corrupted the line being typed. Items
+  addressed to a shell pane stay durably readable with `attn agent inbox`,
+  and `attn agent msg` now answers "queued" and says the target is a shell
+  pane instead of claiming it was notified.

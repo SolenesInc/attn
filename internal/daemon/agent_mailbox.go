@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/victorarias/attn/internal/prompts"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/agentmailbox"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -18,7 +19,14 @@ var (
 	errAgentMailboxDoorbellOutstanding = errors.New("agent inbox doorbell already outstanding")
 	errAgentMailboxDoorbellInFlight    = errors.New("agent inbox doorbell delivery already in flight")
 	errAgentMailboxRecipientGone       = errors.New("agent inbox recipient is gone")
+	errAgentMailboxNoPromptReader      = errors.New("agent inbox recipient is a shell pane, not an agent that reads prompts")
 )
+
+// A doorbell is a paste plus Enter. Behind a shell pane's prompt there is no
+// agent to read it, so it would run as a command, mid-command.
+func sessionReadsInboxDoorbells(session *protocol.Session) bool {
+	return session != nil && !strings.EqualFold(strings.TrimSpace(string(session.Agent)), protocol.AgentShellValue)
+}
 
 type agentMailboxDoorbellState struct {
 	unread      bool
@@ -52,9 +60,16 @@ func (d *Daemon) deliverAgentMailboxItem(delivery agentmailbox.Delivery) error {
 }
 
 func (d *Daemon) deliverAgentMailboxDoorbell(sessionID string) error {
-	if d.store.Get(sessionID) == nil {
+	session := d.store.Get(sessionID)
+	if session == nil {
 		d.forgetAgentMailboxDoorbell(sessionID)
 		return fmt.Errorf("%w: %s", errAgentMailboxRecipientGone, sessionID)
+	}
+	// Dropped, not deferred: a shell pane never becomes a reader, so a retry
+	// would nag the pane forever. The items stay unread for `attn agent inbox`.
+	if !sessionReadsInboxDoorbells(session) {
+		d.forgetAgentMailboxDoorbell(sessionID)
+		return fmt.Errorf("%w: %s", errAgentMailboxNoPromptReader, sessionID)
 	}
 
 	d.agentMailboxMu.Lock()
@@ -262,6 +277,8 @@ func (d *Daemon) drainQueuedAgentMailboxItems(sessionID string) {
 	delivered := 0
 	if err == nil {
 		delivered = 1
+	} else if errors.Is(err, errAgentMailboxNoPromptReader) {
+		d.logf("agent inbox doorbell skipped: session=%s is a shell pane; its unread items wait for `attn agent inbox`", sessionID)
 	} else if !errors.Is(err, errAgentMailboxDoorbellOutstanding) && !errors.Is(err, errAgentMailboxDoorbellInFlight) {
 		d.logf("agent inbox doorbell deferred: session=%s err=%v", sessionID, err)
 	}
