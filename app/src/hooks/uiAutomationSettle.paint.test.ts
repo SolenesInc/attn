@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SETTLED_READ_FRAMES, settleBeforeBridgeRequest, settleUi } from './uiAutomationSettle';
 
-// Counts frames and reports whether the task after the last one has run — the place an
-// unsettled read lands is inside a frame callback, before that task.
 function frameWatcher() {
   const state = { frames: 0, ranAfterFrame: false };
   const observe = () => {

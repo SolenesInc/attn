@@ -1921,7 +1921,6 @@ export function useUiAutomationBridge({
 }: UseUiAutomationBridgeArgs) {
   const handleAutomationRequest = useCallback(async (request: AutomationRequest) => {
     const payload = request.payload || {};
-    await settleBeforeBridgeRequest(request.action);
 
     switch (request.action) {
       case 'ping':
@@ -3989,6 +3988,9 @@ export function useUiAutomationBridge({
       }
       let response: AutomationResponse;
       try {
+        // Settle before reading the ref: the wait spans renders, so a handler picked
+        // beforehand would answer with a settled DOM and the props of an older render.
+        await settleBeforeBridgeRequest(request.action);
         const result = await handleAutomationRequestRef.current(request);
         response = {
           request_id: request.request_id,

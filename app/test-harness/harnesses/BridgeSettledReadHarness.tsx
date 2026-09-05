@@ -1,5 +1,3 @@
-// A DOM change, the ResizeObserver that measures it after layout, and the React commit that
-// observer schedules: happy-dom has no layout, so this ordering needs a real browser.
 import { useEffect, useRef, useState } from 'react';
 import { afterFramePaints, nextAnimationFrame, settleUi } from '../../src/hooks/uiAutomationSettle';
 import type { HarnessProps } from '../types';
