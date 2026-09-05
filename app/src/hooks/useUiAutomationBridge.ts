@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { emit, listen } from '@tauri-apps/api/event';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -3967,7 +3967,11 @@ export function useUiAutomationBridge({
   ]);
 
   const handleAutomationRequestRef = useRef(handleAutomationRequest);
-  handleAutomationRequestRef.current = handleAutomationRequest;
+  // The dispatcher dereferences this two frames after the request arrives, so only a committed
+  // render may publish here: a concurrent render React discards must not become the handler.
+  useLayoutEffect(() => {
+    handleAutomationRequestRef.current = handleAutomationRequest;
+  }, [handleAutomationRequest]);
 
   useEffect(() => {
     // Runtime gate injected by the Rust shell; the rule lives in
