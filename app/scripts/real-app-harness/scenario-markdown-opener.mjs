@@ -72,6 +72,19 @@ async function waitForSessionUi(client, sessionId, predicate, description, timeo
   throw new Error(`Timed out waiting for ${description}. Last session UI state:\n${JSON.stringify(last, null, 2)}`);
 }
 
+async function waitForElement(client, selector, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      return await client.request('capture_screenshot_data', { selector });
+    } catch (error) {
+      if (!String(error).includes('Screenshot selector not found in DOM')) throw error;
+      await delay(150);
+    }
+  }
+  throw new Error(`Timed out waiting for ${selector}`);
+}
+
 function markdownTileIds(state) {
   return (state?.tileIds || []).filter((id) => id.startsWith('tile-markdown'));
 }
@@ -239,14 +252,17 @@ async function main() {
         `The newly opened document must be visible and enter Focus: ${JSON.stringify(focused.workspace?.view)}`,
       );
 
+      await waitForElement(client, `[data-pane-id="${openedTileId}"] .md-reader--annotating h1`);
       await client.request('dom_click', {
         selector: `[data-pane-id="${openedTileId}"] .workspace-dock-tile-review-button--overall`,
       });
+      await waitForElement(client, '.md-annotation-popover .md-popover-textarea');
       await client.request('dom_focus', { selector: '.md-annotation-popover .md-popover-textarea' });
       await driver.pressKeyCode(53);
       await client.request('dom_click', {
         selector: `[data-pane-id="${openedTileId}"] .workspace-dock-tile-review-button:not(.workspace-dock-tile-review-button--overall)`,
       });
+      await waitForElement(client, '.md-annotations-sidebar .md-sidebar-title');
       await client.request('dom_click', { selector: '.md-annotations-sidebar .md-sidebar-title' });
       await driver.pressKeyCode(53);
       const stillFocused = await waitForSessionUi(

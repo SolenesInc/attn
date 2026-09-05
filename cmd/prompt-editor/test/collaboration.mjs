@@ -74,7 +74,8 @@ try {
     releaseCatalog();
     await page.unrouteAll({ behavior: "wait" });
     await expect(page.locator("#source")).toHaveValue("Wake from the base.\n");
-    await expect(page.locator("#saved-scenario option")).toHaveCount(8);
+    const scenarioCount = (await fs.readdir(path.join(root, "scenarios"))).filter((name) => name.endsWith(".json")).length;
+    await expect(page.locator("#saved-scenario option")).toHaveCount(scenarioCount + 1);
     await expect(page.locator("#base-status")).toContainText("Merge base");
     await page.locator("#saved-scenario").selectOption("crew-wake");
     page.once("dialog", (dialog) => dialog.accept("Clear wake instructions"));
@@ -134,7 +135,8 @@ try {
     await page.locator("#share-review").click();
     await expect(page.locator("#draft-state")).toContainText("snapshot of revision");
     const reviewID = new URL(page.url()).searchParams.get("review");
-    if (await page.locator("#review-close").isVisible()) await page.locator("#review-close").click();
+    await page.locator("#review-close").click();
+    await expect(page.locator("#context-review")).toBeHidden();
     await expect(page.locator("#source")).toHaveJSProperty("readOnly", true);
     await expect(page.locator("#output")).toContainText("Keep this concurrent agent edit.");
     if (artifacts)

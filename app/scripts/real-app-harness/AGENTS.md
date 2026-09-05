@@ -24,7 +24,11 @@ Run commands from the repository root.
   child's environment with it, never `{ ...process.env }`; only an override you
   pass it deliberately survives.
 - Install the current checkout; source fingerprint mismatches fail.
-- Remote target: `attn-remote@orb`; provision with
+- Linux VM runner: `pnpm --dir app real-app:linux provision` sets up Lima.
+  Select `--provider orb` or `--provider ssh --target user@host` for other tools;
+  see [linux-runner.md](../../../docs/linux-runner.md).
+- Remote scenario target: set `ATTN_HARNESS_REMOTE_SSH_TARGET` to a reachable
+  SSH alias. The legacy default remains `attn-remote@orb`; provision it with
   `pnpm --dir app run real-app:provision-remote`.
   Provisioning installs the mock-agent command and four tripwire shims; it does
   not need provider credentials. The `tr*` probes are remote by definition; a
