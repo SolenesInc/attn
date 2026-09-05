@@ -1,0 +1,9 @@
+kind: internal
+area: harness
+change: >
+  The macOS harness driver now decides whether a keystroke can reach the app by
+  reading the launched app's own environment, not the runner's, so a scenario
+  that sets the always-on-top opt-out too late fails on the press instead of
+  passing on a keystroke that landed nowhere. A frontend test sweeps every
+  harness file that posts native keys and fails one that neither opts out nor
+  states why it need not.

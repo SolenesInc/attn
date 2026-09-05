@@ -10,6 +10,7 @@ import {
   bundleIdentifierForAppPath,
   defaultAppPathForProfile,
 } from './harnessProfile.mjs';
+import { createKeyInputGuard } from './keyInputGuard.mjs';
 
 const execFileAsync = promisify(execFile);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -41,29 +42,19 @@ export function withWindowTitleArgs(args, opts = {}) {
   return [...args, '--window-title', opts.windowTitle];
 }
 
-// A macOS always-on-top harness window is non-focusable (set_focusable(false)),
-// so synthetic keys land nowhere. Fail on the first keystroke, not a step timeout later.
-export function assertHarnessWindowAcceptsKeys(env = process.env, platform = process.platform) {
-  if (platform !== 'darwin' || env.ATTN_HARNESS_ALWAYS_ON_TOP === '0') {
-    return;
-  }
-  throw new Error(
-    'Synthetic keys cannot reach the non-focusable always-on-top harness window on macOS. '
-    + "Scenarios that press keys opt out with process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0' before launch.",
-  );
-}
-
 export class MacOSDriver {
   constructor({
     bundleId = null,
     appPath = defaultAppPathForProfile(),
     actionDelayMs = 250,
+    keyInputGuard = null,
   } = {}) {
     const resolvedBundleId = bundleId || bundleIdentifierForAppPath(appPath);
     assertProductionRunAllowed({ appPath, bundleId: resolvedBundleId });
     this.bundleId = resolvedBundleId;
     this.appPath = appPath;
     this.actionDelayMs = actionDelayMs;
+    this.keyInputGuard = keyInputGuard || createKeyInputGuard({ appPath });
   }
 
   async launchApp() {
@@ -155,13 +146,13 @@ export class MacOSDriver {
   }
 
   async typeText(text) {
-    assertHarnessWindowAcceptsKeys();
+    this.keyInputGuard.assertReaches(`typeText(${JSON.stringify(text.slice(0, 20))})`);
     await this.runInputDriver(['text', '--text', text, '--prompt-accessibility']);
     await delay(this.actionDelayMs);
   }
 
   async pressKey(key, modifiers = {}) {
-    assertHarnessWindowAcceptsKeys();
+    this.keyInputGuard.assertReaches(`pressKey(${key}, ${this.serializeModifiers(modifiers) || 'no modifiers'})`);
     await this.runInputDriver([
       'key',
       '--key',
@@ -174,7 +165,7 @@ export class MacOSDriver {
   }
 
   async pressKeyCode(keyCode, modifiers = {}) {
-    assertHarnessWindowAcceptsKeys();
+    this.keyInputGuard.assertReaches(`pressKeyCode(${keyCode}, ${this.serializeModifiers(modifiers) || 'no modifiers'})`);
     await this.runInputDriver([
       'keycode',
       '--key-code',
