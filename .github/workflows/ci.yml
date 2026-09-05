@@ -647,9 +647,8 @@ jobs:
         with:
           include-wasm: 'true'
 
-      # `make install` runs two release cargo builds, pty-host then the Tauri app.
-      # Cold, the install step below ran 316-418s across the seven next runs to
-      # 2026-09-05 (353s on run 33969888792); warm it runs <WARM>s.
+      # Two release cargo builds, pty-host then the Tauri app: the install step
+      # below ran 399s cold, 143s warm incl. a 10s restore (runs 33973903937, 33975425685).
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
