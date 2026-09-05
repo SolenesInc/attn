@@ -29,8 +29,6 @@ func delegateForNotify(t *testing.T, d *Daemon, agent string) (chiefID, agentID 
 	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, chiefID); err != nil {
 		t.Fatalf("set chief role: %v", err)
 	}
-	// The source pane spawns as a shell; the Chief is a crew agent, and only an
-	// agent is nudged.
 	setSessionAgent(t, d, chiefID, protocol.SessionAgentClaude)
 	consumeDelegatedPrompt(t, backend)
 	result, err := d.delegate(&protocol.DelegateMessage{

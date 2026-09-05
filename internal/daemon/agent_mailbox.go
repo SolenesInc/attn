@@ -22,8 +22,6 @@ var (
 	errAgentMailboxNoPromptReader      = errors.New("agent inbox recipient is a shell pane, not an agent that reads prompts")
 )
 
-// A doorbell is a paste plus Enter. Behind a shell pane's prompt there is no
-// agent to read it, so it would run as a command, mid-command.
 func sessionReadsInboxDoorbells(session *protocol.Session) bool {
 	return session != nil && !strings.EqualFold(strings.TrimSpace(string(session.Agent)), protocol.AgentShellValue)
 }
