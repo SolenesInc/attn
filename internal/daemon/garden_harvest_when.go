@@ -225,6 +225,8 @@ func (d *Daemon) fulfilHarvestWhen(
 	}
 	d.mirrorSeedMoveOntoTicket("", seed.ID, garden.VerbHarvest, reason)
 	d.ringSeedActivity(seed.ID, gardenRingEvents[garden.VerbHarvest], excludedSessions...)
+	unblocked, _ := d.seedUnblocked(seed.ID)
+	d.ringSeedUnblocked(unblocked, excludedSessions...)
 	return harvested, doc, nil
 }
 

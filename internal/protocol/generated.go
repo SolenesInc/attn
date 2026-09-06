@@ -8057,6 +8057,9 @@ type SeedTransitionResult struct {
 
 	// Seed corresponds to the JSON schema field "seed".
 	Seed Seed `json:"seed"`
+
+	// Unblocked corresponds to the JSON schema field "unblocked".
+	Unblocked []Seed `json:"unblocked,omitempty,omitzero"`
 }
 
 type SeedTransitionResultMessage struct {

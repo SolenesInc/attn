@@ -5001,6 +5001,9 @@ model SeedTransitionResult {
   // is the one move whose answer has to prime the tender. The other four are
   // fate calls and nobody is picking the seed up.
   "handoff"?: SeedNote;
+  // What the close set free, on harvest and wither alone: the seeds this one
+  // was the last blocker of. Absent when the move freed nothing.
+  "unblocked"?: Seed[];
 }
 
 // One entry on a seed's log: what happened and what was learned, written for

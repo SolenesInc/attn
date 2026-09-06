@@ -29,6 +29,8 @@ The loop:
 
 `attn seed tend`, `attn seed park`, `attn seed harvest`, `attn seed wither` and `attn seed replant` all check who holds the seed. If a live session or crew member holds it, the command refuses it by naming the holder. `--force` performs the move anyway, and the log records who forced it. A seed whose session ended is not held. `--member <name>` on any of these commands acts as a crew member instead of this session, and a member's claim never expires.
 
+Harvest and wither print the seeds the close set free — the ones it was the last blocker of — and ring whoever holds one.
+
 Plans:
 
     attn seed plot -f <file.json>    a whole plot in one move; - reads stdin. The file is

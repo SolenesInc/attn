@@ -1,0 +1,4 @@
+kind: added
+area: garden
+change: Harvesting or withering a seed prints the seeds the close set free, and rings whoever holds one.
+symptom: Closing a blocker readied its dependents silently, so nobody saw the work that had just become possible.

@@ -1252,9 +1252,35 @@ func fprintTransition(w io.Writer, result *protocol.SeedTransitionResult, cleare
 	if open := openPlotSeeds(result.Seed); open > 0 && closedSeedStatus(string(result.Seed.Status)) {
 		fmt.Fprintf(w, "its plot still holds %d open seed(s) — a closed plot over open work reads as done; close them too, or replant this one\n", open)
 	}
+	fprintUnblocked(w, result.Unblocked)
 	if result.Handoff != nil {
 		fmt.Fprintln(w)
 		fprintHandoff(w, result.Handoff)
+	}
+}
+
+// The ripple of a close: the seeds it was the last blocker of, quiet when it
+// freed none.
+func fprintUnblocked(out io.Writer, seeds []protocol.Seed) {
+	if len(seeds) == 0 {
+		return
+	}
+	fmt.Fprintf(out, "this unblocked %d seed(s):\n", len(seeds))
+	free := false
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	for _, seed := range seeds {
+		tender := crew.HolderName(seed.TenderMember, seed.TenderSession)
+		held := ""
+		if tender == "" {
+			free = true
+		} else {
+			held = " — tended by " + tender
+		}
+		fmt.Fprintf(w, "  %s\t%s\t%s%s\n", seed.ID, orDash(seed.StepSlug), seed.Title, held)
+	}
+	w.Flush()
+	if free {
+		fmt.Fprintln(out, "`attn seed tend <id>` claims one")
 	}
 }
 

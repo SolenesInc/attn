@@ -17,6 +17,58 @@ var gardenRingEvents = map[garden.Verb]string{
 	garden.VerbWither: "withered", garden.VerbReplant: "replanted",
 }
 
+const gardenRingUnblocked = "unblocked"
+
+// Read after the close: the ripple is the seeds the closed one alone was
+// holding back. The wire copy rides back to whoever closed it.
+func (d *Daemon) seedUnblocked(seedID string) ([]garden.Seed, []protocol.Seed) {
+	if d.store == nil {
+		return nil, nil
+	}
+	read, err := d.readGarden()
+	if err != nil {
+		d.logf("garden bell: reading the graph to see what %s unblocked: %v", seedID, err)
+		return nil, nil
+	}
+	unblocked := garden.Unblocks(read.seeds, seedID)
+	return unblocked, read.wire(unblocked)
+}
+
+// Whoever holds a freed seed is the one waiting on it; the plot above already
+// hears the close through ringSeedActivity.
+func (d *Daemon) ringSeedUnblocked(unblocked []garden.Seed, excludedSessionIDs ...string) {
+	if d.store == nil {
+		return
+	}
+	excluded := make(map[string]bool, len(excludedSessionIDs))
+	for _, sessionID := range excludedSessionIDs {
+		excluded[strings.TrimSpace(sessionID)] = true
+	}
+	delete(excluded, "")
+	for _, seed := range unblocked {
+		sessionID := d.tenderSession(seed.Tender())
+		if sessionID == "" || excluded[sessionID] {
+			continue
+		}
+		d.claimAndDeliverSeedBell(sessionID, seed.ID, gardenRingUnblocked)
+	}
+}
+
+// The live session a tender is reachable at: its own, or the one its crew
+// binding currently holds.
+func (d *Daemon) tenderSession(tender garden.Tender) string {
+	if session := strings.TrimSpace(tender.Session); session != "" {
+		if d.sessionExists(session) {
+			return session
+		}
+		return ""
+	}
+	if member := strings.TrimSpace(tender.Member); member != "" {
+		return d.crewSessionBoundTo(member)
+	}
+	return ""
+}
+
 func (d *Daemon) handleSeedWatch(conn net.Conn, msg *protocol.SeedWatchMessage) {
 	verb := "watch"
 	watching := !protocol.Deref(msg.Unwatch)

@@ -59,8 +59,9 @@ tender.
 
 ## Rings and watches
 
-Lifecycle moves ring the sessions with a stake in the seed. Notes stay quiet
-unless you add `--ring`. `attn seed watch <id>` gives this session a stake;
+Lifecycle moves ring the sessions with a stake in the seed. Harvesting or
+withering a blocker also rings whoever holds each seed it set free. Notes stay
+quiet unless you add `--ring`. `attn seed watch <id>` gives this session a stake;
 watching a plot covers every seed in it. `attn seed unwatch <id>` is the way
 out.
 

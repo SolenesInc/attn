@@ -24,7 +24,8 @@ unrelated output retain the captured baseline.
 
 The `launch.json`, `seed-guide.json` and `agent-delivery.json` Garden expectations also carry the
 `attn seed harvest --when-merged` lines, edited at the source-text boundary when
-harvest-on-merge landed.
+harvest-on-merge landed, and the sentence saying that harvest and wither print
+what the close set free.
 
 The frontend's `src/prompts/testdata` and Pi's `test/testdata/prompts.json` were
 captured from the original TypeScript builders at

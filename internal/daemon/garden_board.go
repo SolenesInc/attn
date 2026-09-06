@@ -60,6 +60,10 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 	wire := d.seedTransitionWire(seed, doc)
 	d.mirrorSeedMoveOntoTicket("", seed.ID, verb, protocol.Deref(msg.Reason))
 	d.ringSeedActivity(seed.ID, gardenRingEvents[verb], "")
+	if garden.Closed(seed.Status) {
+		unblocked, _ := d.seedUnblocked(seed.ID)
+		d.ringSeedUnblocked(unblocked)
+	}
 	result.Seed = &wire
 	result.Success = true
 	d.sendToClient(client, result)

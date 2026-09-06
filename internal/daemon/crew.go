@@ -424,6 +424,26 @@ func (d *Daemon) crewMemberBoundTo(sessionID string) string {
 	return ""
 }
 
+// The inverse of crewMemberBoundTo: a member is reachable only at the session
+// its live binding holds.
+func (d *Daemon) crewSessionBoundTo(memberID string) string {
+	if d.store == nil || strings.TrimSpace(memberID) == "" {
+		return ""
+	}
+	members, _, err := d.readCrewMembers()
+	if err != nil {
+		if !docstore.IsUndeclaredCollection(err) {
+			d.logf("crew: reading roster to reach %q: %v", memberID, err)
+		}
+		return ""
+	}
+	member, ok := crew.Resolve(memberID, members)
+	if !ok || !d.crewBindingLive(member) {
+		return ""
+	}
+	return member.BindingSession
+}
+
 // Cleared otherwise so it round-trips as an omitted field.
 func (d *Daemon) decorateCrewMember(session *protocol.Session, membersBySession map[string]string) {
 	if session == nil {

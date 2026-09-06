@@ -34,6 +34,113 @@ func equal(got, want []string) bool {
 
 func noSession(string) bool { return false }
 
+func TestUnblocks(t *testing.T) {
+	closed := func(seed Seed) Seed { seed.Status = StatusHarvested; return seed }
+	held := func(seed Seed, session, member string) Seed {
+		seed.Status = StatusGrowing
+		seed.TenderSession = session
+		seed.TenderMember = member
+		return seed
+	}
+
+	tests := []struct {
+		name   string
+		seeds  []Seed
+		closed string
+		want   []string
+	}{
+		{
+			name:   "the one seed it was holding back",
+			seeds:  []Seed{closed(seedWith("s-a", blocks("s-b"))), seedWith("s-b")},
+			closed: "s-a",
+			want:   []string{"s-b"},
+		},
+		{
+			name: "every seed it was holding back",
+			seeds: []Seed{
+				closed(seedWith("s-a", blocks("s-b"), blocks("s-c"))), seedWith("s-b"), seedWith("s-c"),
+			},
+			closed: "s-a",
+			want:   []string{"s-b", "s-c"},
+		},
+		{
+			name:   "a seed a second blocker still holds is not free",
+			seeds:  []Seed{closed(seedWith("s-a", blocks("s-c"))), seedWith("s-b", blocks("s-c")), seedWith("s-c")},
+			closed: "s-a",
+			want:   []string{},
+		},
+		{
+			name:   "withering frees what harvesting would",
+			seeds:  []Seed{func() Seed { s := seedWith("s-a", blocks("s-b")); s.Status = StatusWithered; return s }(), seedWith("s-b")},
+			closed: "s-a",
+			want:   []string{"s-b"},
+		},
+		{
+			name:   "a close that blocked nothing is quiet",
+			seeds:  []Seed{closed(seedWith("s-a")), seedWith("s-b")},
+			closed: "s-a",
+			want:   []string{},
+		},
+		{
+			name:   "a held seed is announced: its tender is the one waiting on the blocker",
+			seeds:  []Seed{closed(seedWith("s-a", blocks("s-b"))), held(seedWith("s-b"), "sess-1", "")},
+			closed: "s-a",
+			want:   []string{"s-b"},
+		},
+		{
+			name:   "a parked dependent stays put — parking is a pause, not a wait",
+			seeds:  []Seed{closed(seedWith("s-a", blocks("s-b"))), func() Seed { s := seedWith("s-b"); s.Status = StatusDormant; return s }()},
+			closed: "s-a",
+			want:   []string{},
+		},
+		{
+			name:   "a dependent closed on its own is not news",
+			seeds:  []Seed{closed(seedWith("s-a", blocks("s-b"))), closed(seedWith("s-b"))},
+			closed: "s-a",
+			want:   []string{},
+		},
+		{
+			name:   "a gated dependent still wants a person",
+			seeds:  []Seed{closed(seedWith("s-a", blocks("s-b"))), func() Seed { s := seedWith("s-b"); s.Gate = true; return s }()},
+			closed: "s-a",
+			want:   []string{},
+		},
+		{
+			name:   "a plot the close freed is not work to pick up",
+			seeds:  []Seed{closed(seedWith("s-a", blocks("s-crown"))), seedWith("s-crown"), seedWith("s-child", partOf("s-crown"))},
+			closed: "s-a",
+			want:   []string{},
+		},
+		{
+			name:   "the other kinds of edge free nobody",
+			seeds:  []Seed{closed(seedWith("s-a", partOf("s-crown"), discoveredFrom("s-b"))), seedWith("s-b"), seedWith("s-crown")},
+			closed: "s-a",
+			want:   []string{},
+		},
+		{
+			name:   "an open seed frees nothing: the ripple is read after the close",
+			seeds:  []Seed{seedWith("s-a", blocks("s-b")), seedWith("s-b")},
+			closed: "s-a",
+			want:   []string{},
+		},
+		{
+			name:   "a seed nobody planted frees nothing",
+			seeds:  []Seed{seedWith("s-b")},
+			closed: "s-gone",
+			want:   []string{},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := ids(Unblocks(test.seeds, test.closed))
+			if !equal(got, test.want) {
+				t.Fatalf("Unblocks(%s) = %v, want %v", test.closed, got, test.want)
+			}
+		})
+	}
+}
+
 func TestReady(t *testing.T) {
 	held := func(seed Seed, session, member string) Seed {
 		seed.Status = StatusGrowing

@@ -135,27 +135,63 @@ func reaches(seeds []Seed, start, kind, target string) []string {
 }
 
 // sessionLive feeds Tender.Holds, the same rule `tend` claims under, so a seed offered here is one `tend` accepts.
-// `tend` claims under, so a seed offered here is one `tend` accepts.
 func Ready(seeds []Seed, sessionLive func(sessionID string) bool) []Seed {
-	index := byID(seeds)
-	blocked := blockedIDs(seeds)
-	parents := parentIDs(seeds)
+	graph := readiness(seeds)
 	ready := make([]Seed, 0, len(seeds))
 	for _, seed := range seeds {
-		switch {
-		case Closed(seed.Status), seed.Status == StatusDormant:
-			continue
-		case parents[seed.ID], blocked[seed.ID], seed.Gate:
-			continue
-		case underTemplate(index, seed):
-			continue
-		}
-		if seed.Tender().Holds(sessionLive) {
+		if !graph.open(seed) || seed.Tender().Holds(sessionLive) {
 			continue
 		}
 		ready = append(ready, seed)
 	}
 	return ready
+}
+
+// Unblocks names what a close set free, and wants the graph as it stands after
+// the close: the seeds this one alone was holding back.
+func Unblocks(seeds []Seed, closedID string) []Seed {
+	closed, ok := find(seeds, closedID)
+	if !ok || !Closed(closed.Status) {
+		return nil
+	}
+	freed := map[string]bool{}
+	for _, edge := range closed.Edges {
+		if edge.Kind == EdgeBlocks {
+			freed[edge.To] = true
+		}
+	}
+	graph := readiness(seeds)
+	out := []Seed{}
+	for _, seed := range seeds {
+		if freed[seed.ID] && graph.open(seed) {
+			out = append(out, seed)
+		}
+	}
+	return out
+}
+
+type readinessGraph struct {
+	index   map[string]Seed
+	blocked map[string]bool
+	parents map[string]bool
+}
+
+func readiness(seeds []Seed) readinessGraph {
+	return readinessGraph{index: byID(seeds), blocked: blockedIDs(seeds), parents: parentIDs(seeds)}
+}
+
+// Every rule of readiness but the tender's hold, which is the holder's business
+// and not the graph's.
+func (g readinessGraph) open(seed Seed) bool {
+	switch {
+	case Closed(seed.Status), seed.Status == StatusDormant:
+		return false
+	case g.parents[seed.ID], g.blocked[seed.ID], seed.Gate:
+		return false
+	case underTemplate(g.index, seed):
+		return false
+	}
+	return true
 }
 
 func Blockers(seeds []Seed, id string) []string {
