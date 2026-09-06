@@ -33,15 +33,57 @@ function trimEnd(value: string, character: string): string {
 }
 
 function normalizeIpLiteral(host: string): string | undefined {
-  if (parseIp(host) !== undefined) return host;
+  const direct = canonicalIpLiteral(host);
+  if (direct !== undefined) return direct;
   for (const delimiter of ["%25", "%"]) {
     const at = host.indexOf(delimiter);
     if (at < 0) continue;
-    const ip = host.slice(0, at);
-    const scope = host.slice(at + delimiter.length);
-    if (parseIp(ip) !== undefined) return `${ip}%${scope}`;
+    const ip = canonicalIpLiteral(host.slice(0, at));
+    if (ip !== undefined) return `${ip}%${host.slice(at + delimiter.length)}`;
   }
   return undefined;
+}
+
+/** RFC 5952 rendering, so one address has one spelling in rules and in requests. */
+export function canonicalIpLiteral(value: string): string | undefined {
+  const ip = parseIp(value);
+  if (ip === undefined) return undefined;
+  return ip.kind === "v4" ? renderIpv4(ip.value) : renderIpv6(ip.groups);
+}
+
+function renderIpv4(value: number): string {
+  return [value >>> 24, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff].join(".");
+}
+
+function renderIpv6(groups: number[]): string {
+  // An IPv4-mapped address keeps its dotted tail; every other form is hex groups with
+  // the longest run of two or more zeros collapsed to "::".
+  if (groups.length === 8 && groups.slice(0, 5).every((group) => group === 0) && groups[5] === 0xff_ff) {
+    return `::ffff:${renderIpv4(((groups[6] ?? 0) << 16) + (groups[7] ?? 0))}`;
+  }
+  const run = longestZeroRun(groups);
+  const text = groups.map((group) => group.toString(16));
+  if (run === undefined) return text.join(":");
+  const head = text.slice(0, run.at).join(":");
+  const tail = text.slice(run.at + run.length).join(":");
+  return `${head}::${tail}`;
+}
+
+function longestZeroRun(groups: number[]): { at: number; length: number } | undefined {
+  let best: { at: number; length: number } | undefined;
+  let at = 0;
+  while (at < groups.length) {
+    if (groups[at] !== 0) {
+      at += 1;
+      continue;
+    }
+    let end = at;
+    while (end < groups.length && groups[end] === 0) end += 1;
+    const length = end - at;
+    if (length >= 2 && (best === undefined || length > best.length)) best = { at, length };
+    at = end;
+  }
+  return best;
 }
 
 /** The address part of a scoped IPv6 literal (`fe80::1%lo0`), when there is one. */

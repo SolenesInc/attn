@@ -290,16 +290,22 @@ export class RelaySuiteClient {
   }
 
   private async respond(request: JSONRPCRequest): Promise<void> {
+    // A network decision can outlive the socket that asked for it. Answering on
+    // whatever socket is current would hand the reply to a different conversation.
+    const asked = this.socket;
+    const reply = (outcome: { result: unknown } | { error: { code: number; message: string } }): void => {
+      if (this.socket !== asked || asked === undefined || asked.destroyed) return;
+      this.send_(request.id, outcome);
+    };
     const handler = this.handlerFor(request.method);
     if (!handler) {
-      this.send_(request.id, { error: { code: -32601, message: `unknown method ${request.method}` } });
+      reply({ error: { code: -32601, message: `unknown method ${request.method}` } });
       return;
     }
     try {
-      const result = await handler(request.params);
-      this.send_(request.id, { result });
+      reply({ result: await handler(request.params) });
     } catch (error) {
-      this.send_(request.id, { error: { code: -32603, message: error instanceof Error ? error.message : String(error) } });
+      reply({ error: { code: -32603, message: error instanceof Error ? error.message : String(error) } });
     }
   }
 

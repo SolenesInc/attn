@@ -4,6 +4,7 @@ import { createConnection, createServer, type Server, type Socket } from "node:n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NetworkProxy } from "../netproxy";
+import { SocketReader } from "../netproxy/stream";
 import type { Decider, NetworkDecision, NetworkPolicy, NetworkRequest } from "../netproxy";
 
 const token = "run-token-1";
@@ -107,6 +108,11 @@ class Wire {
 
   get buffered(): number {
     return this.buffer.length;
+  }
+
+  /** Bytes this client has handed the kernel, and bytes still queued in Node. */
+  get progress(): { sent: number; queued: number } {
+    return { sent: this.socket.bytesWritten, queued: this.socket.writableLength };
   }
 
   write(data: string | Buffer): void {
@@ -430,7 +436,10 @@ describe("network proxy over the wire", () => {
     wire.write(connectRequest("api.example.com", 443, "not-a-run-token"));
 
     expect(await wire.readToClose()).toContain("407 Proxy Authentication Required");
-    expect(proxy.denials("not-a-run-token")[0]?.reason).toBe("no_credentials");
+    // Unknown credentials share one bucket, so a client cannot grow the ledger by
+    // guessing; the string it offered is still on the entry for diagnostics.
+    expect(proxy.denials("")[0]).toMatchObject({ credentials: "not-a-run-token", reason: "no_credentials" });
+    expect(proxy.denials("not-a-run-token")).toEqual([]);
   });
 
   test("a SOCKS5 client offering no authentication is refused", async () => {
@@ -508,6 +517,23 @@ describe("network proxy over the wire", () => {
     expect(again).toEqual({ host: "127.0.0.1", port });
   });
 
+  test("a SOCKS5 IPv6 target is canonicalized, so a short-form deny rule still matches", async () => {
+    const { port, decider, proxy } = await startProxy({
+      allowed_domains: ["*"],
+      denied_domains: ["2001:db8::1"],
+    });
+    const wire = await Wire.open(port);
+    await socks5Handshake(wire, token);
+    expect(await wire.read(2)).toEqual([0x01, 0x00]);
+
+    const expanded = Buffer.from([0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01]);
+    wire.write(Buffer.concat([Buffer.from([0x05, 0x01, 0x00, 0x04]), expanded, portBytes(443)]));
+
+    expect((await wire.read(10))[1]).toBe(0x02);
+    expect(decider.calls).toEqual([]);
+    expect(proxy.denials(token)[0]).toMatchObject({ host: "2001:db8::1", reason: "denied" });
+  });
+
   test("a keep-alive request is rewritten to Connection: close so the next one is checked again", async () => {
     const upstream = await startUpstream();
     const { port } = await startProxy({ allowed_domains: ["127.0.0.1"] });
@@ -527,6 +553,147 @@ describe("network proxy over the wire", () => {
     expect(await wire.readToClose()).toContain("UPSTREAM");
     expect(upstream.received[0]).toContain("Connection: close");
     expect(upstream.received[0]?.toLowerCase()).not.toContain("keep-alive");
+  });
+});
+
+describe("the HTTP head is checked before anything is forwarded", () => {
+  test("a Host header naming a different origin than the target is refused", async () => {
+    const { port, decider } = await startProxy({ allowed_domains: ["*"] });
+    const wire = await Wire.open(port);
+
+    wire.write(
+      [
+        "GET http://allowed.example.com/ HTTP/1.1",
+        "Host: denied.example.com",
+        `Proxy-Authorization: Basic ${basic(token)}`,
+        "",
+        "",
+      ].join("\r\n"),
+    );
+
+    expect(await wire.readToClose()).toContain("400 Bad Request");
+    expect(decider.calls).toEqual([]);
+  });
+
+  test("a bare LF inside the head is refused rather than forwarded", async () => {
+    const upstream = await startUpstream();
+    const { port, decider } = await startProxy({ allowed_domains: ["*"] });
+    const wire = await Wire.open(port);
+
+    wire.write(
+      `GET http://127.0.0.1:${upstream.port}/ HTTP/1.1\r\nHost: 127.0.0.1:${upstream.port}\r\n` +
+        `Proxy-Authorization: Basic ${basic(token)}\r\n` +
+        "X-Smuggled: a\nGET /admin HTTP/1.1\r\n\r\n",
+    );
+
+    expect(await wire.readToClose()).toContain("400 Bad Request");
+    expect(decider.calls).toEqual([]);
+    expect(upstream.received).toEqual([]);
+  });
+
+  test("an absolute-form target with no path reaches the upstream as origin form", async () => {
+    const upstream = await startUpstream();
+    const { port } = await startProxy({ allowed_domains: ["127.0.0.1"] });
+    const wire = await Wire.open(port);
+
+    wire.write(
+      [
+        `GET http://127.0.0.1:${upstream.port}?q=1 HTTP/1.1`,
+        `Host: 127.0.0.1:${upstream.port}`,
+        `Proxy-Authorization: Basic ${basic(token)}`,
+        "",
+        "",
+      ].join("\r\n"),
+    );
+
+    expect(await wire.readToClose()).toContain("UPSTREAM");
+    expect(upstream.received[0]).toContain("GET /?q=1 HTTP/1.1");
+  });
+
+  test("headers the request's own Connection names never reach the upstream", async () => {
+    const upstream = await startUpstream();
+    const { port } = await startProxy({ allowed_domains: ["127.0.0.1"] });
+    const wire = await Wire.open(port);
+
+    wire.write(
+      [
+        `GET http://127.0.0.1:${upstream.port}/ HTTP/1.1`,
+        `Host: 127.0.0.1:${upstream.port}`,
+        `Proxy-Authorization: Basic ${basic(token)}`,
+        "Connection: x-hop",
+        "X-Hop: secret",
+        "Transfer-Encoding: chunked",
+        "",
+        "",
+      ].join("\r\n"),
+    );
+
+    expect(await wire.readToClose()).toContain("UPSTREAM");
+    expect(upstream.received[0]).not.toContain("X-Hop");
+    expect(upstream.received[0]).not.toContain("Transfer-Encoding");
+  });
+});
+
+describe("the reader reads by demand", () => {
+  test("a reader nobody is asking stops reading, so bytes stay in the client's socket", async () => {
+    const heads: SocketReader[] = [];
+    const server = createServer((socket) => {
+      cleanups.push(() => {
+        socket.destroy();
+      });
+      const reader = new SocketReader(socket);
+      heads.push(reader);
+      // Read one head, then hold the connection exactly as a held decision does.
+      void reader.until("\r\n\r\n", 65_536).catch(() => {});
+    });
+    await new Promise<void>((resolve) => server.listen({ host: "127.0.0.1", port: 0 }, () => resolve()));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("no TCP address");
+    cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+
+    const wire = await Wire.open(address.port);
+    wire.write("GET / HTTP/1.1\r\nHost: x\r\n\r\n");
+    wire.write(Buffer.alloc(8 * 1024 * 1024, 0x61));
+    for (let round = 0; round < 50; round++) await drainEventLoop();
+
+    const reader = heads[0];
+    expect(reader).toBeDefined();
+    const { sent } = wire.progress;
+    // The kernel took real traffic, and almost none of it reached this process: the
+    // reader is at most one chunk past the head it was asked for.
+    expect(sent).toBeGreaterThan(1_000_000);
+    expect(reader?.buffered ?? 0).toBeLessThan(sent - 1_000_000);
+  });
+
+  test("a held connection still delivers every byte once the decider allows", async () => {
+    const payload = Buffer.alloc(2 * 1024 * 1024, 0x62);
+    let counted: (total: number) => void = () => {};
+    const drained = new Promise<number>((resolve) => (counted = resolve));
+    const server = createServer((socket) => {
+      let total = 0;
+      socket.on("data", (chunk: Buffer) => {
+        total += chunk.length;
+        if (total >= payload.length) counted(total);
+      });
+    });
+    await new Promise<void>((resolve) => server.listen({ host: "127.0.0.1", port: 0 }, () => resolve()));
+    const address = server.address();
+    if (address === null || typeof address === "string") throw new Error("no TCP address");
+    cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+
+    const { port, decider } = await startProxy({ allowed_domains: [] });
+    const wire = await Wire.open(port);
+    let release: (decision: NetworkDecision) => void = () => {};
+    decider.answer = () => new Promise<NetworkDecision>((resolve) => (release = resolve));
+    const asked = new Promise<void>((resolve) => (decider.onCall = resolve));
+
+    wire.write(connectRequest("127.0.0.1", address.port, token));
+    await asked;
+    wire.write(payload);
+    release({ decision: "allow" });
+
+    expect(await wire.readUntil("\r\n\r\n")).toContain("200 Connection established");
+    expect(await drained).toBe(payload.length);
   });
 });
 
@@ -614,6 +781,22 @@ describe("the local network guard", () => {
     expect(await wire.read(2)).toEqual([0x01, 0x00]);
 
     expect(await socks5Connect(wire, "rebind.example.com", 443)).toBe(0x02);
+  });
+
+  test("an address the resolver offers first but nothing listens on is skipped", async () => {
+    const upstream = await startUpstream();
+    // 127.0.0.2 is loopback here and refuses on every port; the upstream is on .1.
+    const { port } = await startProxy({ allowed_domains: ["many.example.com"] }, [token], async () => [
+      "127.0.0.2",
+      "127.0.0.1",
+    ]);
+    const wire = await Wire.open(port);
+
+    wire.write(connectRequest("many.example.com", upstream.port, token));
+    expect(await wire.readUntil("\r\n\r\n")).toContain("200 Connection established");
+    wire.write("ping\n");
+
+    expect(await wire.readToClose()).toContain("UPSTREAM");
   });
 
   test("an exactly allowlisted localhost still reaches a loopback upstream", async () => {
