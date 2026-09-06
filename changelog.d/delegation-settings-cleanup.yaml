@@ -1,0 +1,3 @@
+kind: changed
+area: settings
+change: Delegation settings now open directly to per-role configuration with a cleaner, more compact layout.

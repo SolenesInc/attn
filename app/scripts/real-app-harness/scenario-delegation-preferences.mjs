@@ -7,9 +7,11 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, profileCliEnv, socketPathForProfile } from './harnessProfile.mjs';
-import { appDaemonInTree, delay } from './platform.mjs';
-import { captureFrontWindowScreenshot, captureScreenshotData } from './nativeWindowCapture.mjs';
+import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
+import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
 import { captureWebKitPids, readLiveDaemonPid, readProcessTable, snapshot, readAppFootprint } from './perfMeasure.mjs';
+
+process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
 
 const options = parseCommonArgs(process.argv.slice(2));
 const profile = currentHarnessProfile();
@@ -17,6 +19,7 @@ if (!profile) throw new Error('Delegation preferences verification requires a na
 const runner = createScenarioRunner(options, { scenarioId: 'DelegationPreferences', tier: 'local', prefix: 'delegation-preferences', allowRealAgents: false });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
+const driver = createWindowDriver({ appPath: options.appPath });
 const root = '[data-testid="delegation-settings"]';
 const runAttn = args => execFileSync(appDaemonInTree(options.appPath), args, { encoding: 'utf8', env: profileCliEnv(profile, { ATTN_SOCKET_PATH: socketPathForProfile(profile) }) });
 const roles = () => JSON.parse(runAttn(['delegate', 'roles', '--json']));
@@ -41,20 +44,17 @@ async function closeSessions(sessionIds, ignoreErrors = false) {
   await closeSessions(rest, ignoreErrors);
 }
 async function screenshot(name) {
+  await driver.activateApp();
   const outputPath = path.join(runner.runDir, name);
-  try {
-    await captureScreenshotData(outputPath, { client });
-  } catch (domError) {
-    try {
-      await captureFrontWindowScreenshot(outputPath, { client, appPath: options.appPath });
-    } catch (nativeError) {
-      runner.writeText(`${name}.skipped.txt`, [
-        `DOM screenshot unavailable: ${domError.message}`,
-        `Native screenshot unavailable: ${nativeError.message}`,
-      ].join('\n'));
-    }
+  if (process.platform === 'darwin') {
+    const windowId = await driver.mainWindowId();
+    if (!windowId) throw new Error(`Cannot capture ${name}: no native window found for ${profile}`);
+    execFileSync('/usr/sbin/screencapture', ['-x', '-l', String(windowId), outputPath]);
+  } else {
+    await captureFrontWindowScreenshot(outputPath, { client, appPath: options.appPath });
   }
 }
+
 function preferencesRequest(cmd, preferences) {
   const request_id = crypto.randomUUID();
   return new Promise((resolve, reject) => {
@@ -83,25 +83,39 @@ try {
   await runner.step('disabled_by_default', async () => {
     await client.request('dismiss_whats_new');
     await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
+    await client.request('settings_select_section', { sectionId: 'general' });
+    const appearanceStatus = (await client.request('dom_text', { selector: '.settings-status-pair' })).text;
+    runner.assert(appearanceStatus.trim() === '', 'appearance header has no decorative status pills');
+    await screenshot('00-appearance.png'); await hold();
     await client.request('settings_select_section', { sectionId: 'delegation' });
-    await until(async () => (await text()).includes('Your existing setup stays yours.'), 'disabled preferences');
+    await until(async () => (await text()).includes('Enable to configure roles and models for delegated work.'), 'disabled preferences');
     runner.assert(roles().roles.length === 0, 'roles lookup is empty before opt-in');
     await screenshot('01-disabled.png'); await hold();
   });
-  await runner.step('configure_starter_roles', async () => {
+  await runner.step('configure_role_directly', async () => {
     await click(`${root} .delegation-switch input`);
-    await until(async () => (await text()).includes('Start with one model'), 'starter setup');
-    await select('.delegation-starter .delegation-fields > label:nth-child(1) select', 'codex');
-    await click('[data-testid="delegation-apply-starter"]');
+    await until(async () => (await text()).includes('Edit'), 'role list');
+    runner.assert(!(await text()).includes('Start with one model'), 'roles open without bulk setup');
+    const header = (await client.request('dom_text', { selector: '.settings-content-head' })).text;
+    runner.assert(!header.includes('% text') && !header.includes('dark'), 'header has no appearance badges');
+    await client.request('dom_focus', { selector: '[aria-label="Edit Build"]' });
+    await driver.pressEnter();
+    await select('.delegation-choice-body .delegation-fields > label:first-child select', 'codex');
     await save();
     const found = roles();
-    runner.assert(found.roles.length === initial.templates.length && found.roles.every(r => r.choices[0].selection.harness === 'codex'), 'one starter selection fills every preset');
-    for (const id of ['verify', 'orchestrator']) {
-      runner.assert(found.roles.some(role => role.id === id), `${id} is available as a starter role`);
+    runner.assert(found.roles.length === 1 && found.roles[0].id === 'build', 'only the configured role is available');
+    await click('.delegation-tabs button:first-child');
+    for (const name of ['Verify', 'Orchestrator']) {
+      runner.assert((await text()).includes(name), `${name} is available as a starter role`);
     }
-    await screenshot('02-roles.png'); await hold();
     await client.request('dom_scroll_into_view', { selector: '[aria-label="Edit Orchestrator"]' });
-    await screenshot('02-new-roles.png'); await hold();
+    await screenshot('02-roles.png'); await hold();
+    await click('.delegation-tabs button:last-child');
+    await select('.delegation-fields > label:first-child select', 'codex');
+    await save();
+    runner.assert(roles().fallback?.selection.harness === 'codex', 'fallback configures independently');
+    await screenshot('02-fallback.png'); await hold();
+    await click('.delegation-tabs button:first-child');
   });
   await runner.step('edit_role_and_add_effort_alternative', async () => {
     await click('[aria-label="Edit Build"]');

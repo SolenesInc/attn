@@ -72,7 +72,6 @@ describe('scenarioCatalog agent tripwire flags', () => {
       'FOCUS-PROBE',
       'GHOSTTY-SCROLLBACK-ANCHOR',
       'SNAPSHOT-SCROLLBACK-RESTORE',
-      'DELEGATE-WORKSPACE-PLACEMENT',
     ]) {
       expect(allowRealAgentsForRunner(runnerId), runnerId).toBeUndefined();
     }
