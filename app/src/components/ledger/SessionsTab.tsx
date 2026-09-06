@@ -270,7 +270,12 @@ export function SessionsTab({
 
   return (
     <>
-      <div className="ledger-toolbar">
+      <div
+        className="ledger-toolbar"
+        data-range={filters.range}
+        data-repository={filters.repository}
+        data-workspace={filters.workspaceId}
+      >
         <Segmented
           value={filters.scope}
           options={SCOPES}

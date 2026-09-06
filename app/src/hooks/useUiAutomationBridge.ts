@@ -1716,19 +1716,14 @@ function queryTokens(root: HTMLElement): string[] {
   return input instanceof HTMLInputElement ? input.value.trim().split(/\s+/).filter(Boolean) : [];
 }
 
-function tokenValue(tokens: string[], key: string): string {
-  const token = tokens.find((entry) => entry.toLowerCase().startsWith(`${key}:`));
-  return token ? token.slice(key.length + 1) : '';
-}
-
 function collectSessionsPanelUiState() {
   const root = ledgerRoot('Sessions');
   if (!root) {
     return { open: false, scope: '', range: '', workspace: '', repository: '', rows: [], footer: '', canLoadMore: false, state: '' };
   }
-  const tokens = queryTokens(root);
-  const rangeWord = tokens.find((token) => RANGE_TOKENS.has(token.toLowerCase()));
-  const range = rangeWord ? rangeWord.toLowerCase() : (tokenValue(tokens, 'from') || tokenValue(tokens, 'to')) ? 'custom' : 'any';
+  // Typed tokens apply after a debounce; the toolbar carries the filters the list is actually queried with.
+  const toolbar = root.querySelector('.ledger-toolbar');
+  const applied = (name: string) => toolbar?.getAttribute(`data-${name}`) || '';
   const rows = Array.from(root.querySelectorAll('.ledger-row')).map((row) => {
     const state = row.getAttribute('data-state') || '';
     const verbs = ledgerRowVerbs(row);
@@ -1755,9 +1750,9 @@ function collectSessionsPanelUiState() {
   return {
     open: true,
     scope: root.querySelector('.ledger-segmented button[aria-pressed="true"]')?.textContent?.trim() || '',
-    range,
-    workspace: tokenValue(tokens, 'ws'),
-    repository: tokenValue(tokens, 'repo'),
+    range: applied('range') || 'any',
+    workspace: applied('workspace'),
+    repository: applied('repository'),
     rows,
     footer: root.querySelector('.ledger-status-left')?.textContent?.trim() || '',
     canLoadMore: Array.from(root.querySelectorAll('.ledger-status-left .ledger-status-link'))

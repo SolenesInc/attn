@@ -170,10 +170,9 @@ function LedgerRow({ row, selected, menuOpen, onSelect, onKeyDown, onVerb, onTog
       <div className="ledger-row-body">
         <div className="ledger-row-title" title={row.titleHint}>{row.title}</div>
         <div className="ledger-row-meta">
-          {row.meta.filter((segment) => segment !== null && segment !== undefined && segment !== '')
-            .map((segment, index) => (
-              <span className="ledger-meta-seg" key={index}>{segment}</span>
-            ))}
+          {row.meta.map((segment, index) => (segment === null || segment === undefined || segment === '')
+            ? null
+            : <span className="ledger-meta-seg" key={`${row.key}:${index}`}>{segment}</span>)}
         </div>
         {row.note && row.note.kind !== 'busy' && (
           <div className={`ledger-row-note is-${row.note.kind}`} role="status" title={row.note.text}>

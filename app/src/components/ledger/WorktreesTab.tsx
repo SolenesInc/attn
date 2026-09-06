@@ -156,16 +156,13 @@ export function WorktreesTab({
       .catch((failure: Error) => setError(failure.message));
   }, [refreshWorktrees, now]);
 
-  const activeRows = useMemo(() => worktrees
-    .filter((worktree) => repoMatches(worktree.main_repo))
-    .filter((worktree) => matchesWords(
-      [worktree.path, worktree.branch, worktree.sweep_status ?? '', worktree.merged_signal ?? '', worktree.pinned ? 'kept pinned' : ''],
-      parsed.words,
-    )), [worktrees, repoMatches, parsed.words]);
+  const activeRows = useMemo(() => worktrees.filter((worktree) => repoMatches(worktree.main_repo) && matchesWords(
+    [worktree.path, worktree.branch, worktree.sweep_status ?? '', worktree.merged_signal ?? '', worktree.pinned ? 'kept pinned' : ''],
+    parsed.words,
+  )), [worktrees, repoMatches, parsed.words]);
 
-  const removedRows = useMemo(() => sweepLog
-    .filter((entry) => repoMatches(entry.main_repo))
-    .filter((entry) => matchesWords([entry.path, entry.branch ?? '', entry.action, entry.reason ?? ''], parsed.words)),
+  const removedRows = useMemo(() => sweepLog.filter((entry) => repoMatches(entry.main_repo)
+    && matchesWords([entry.path, entry.branch ?? '', entry.action, entry.reason ?? ''], parsed.words)),
   [sweepLog, repoMatches, parsed.words]);
 
   const items = useMemo<ListItem[]>(() => {
@@ -358,7 +355,7 @@ function stateWords(worktree: Worktree): ReactNode[] {
   const out: ReactNode[] = [];
   if (worktree.prunable) out.push(<span className="is-no" key="stale">stale</span>);
   if (worktree.dirty) out.push(<span className="is-warn" key="dirty">dirty {worktree.dirty_files ?? 0}</span>);
-  if (worktree.stashes) out.push(`${worktree.stashes} stashed`);
+  if (worktree.stashes) out.push(<span key="stash">{worktree.stashes} stashed</span>);
   if (worktree.unpushed) out.push(<span className="is-warn" key="ahead">{worktree.unpushed} ahead</span>);
   if (worktree.merged_signal) out.push(<span className="is-ok" key="merged">merged · {worktree.merged_signal}</span>);
   if (worktree.refresh_error) out.push(<span className="is-no" key="err" title={worktree.refresh_error}>{worktree.refresh_error}</span>);
@@ -478,7 +475,7 @@ function WorktreeInspector({
       </Field>
       <Field label="State">
         {stateWords(worktree).length === 0 ? <span className="is-ok">clean</span> : (
-          <div className="ledger-words">{stateWords(worktree).map((word, index) => <span key={index}>{word}</span>)}</div>
+          <div className="ledger-words">{stateWords(worktree)}</div>
         )}
         {worktree.observed_at
           ? <div className="ledger-muted">observed {relativeStamp(worktree.observed_at, now)}</div>
