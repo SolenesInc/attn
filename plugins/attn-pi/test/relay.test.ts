@@ -4,7 +4,8 @@ import { createConnection, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PiDriver, type CommandResult, type RunCommand } from "../src/driver";
-import { RelayServer, type RelayConnection } from "../src/relay";
+import { RelayServer, suiteReports, type RelayConnection } from "../src/relay";
+import { relayMethods } from "../src/relay-protocol";
 import type { DriverSpawnParams } from "../src/types";
 
 class FakeRPC {
@@ -111,15 +112,7 @@ class FakeSuiteClient {
 async function buildHarness(rpc: FakeRPC): Promise<{ driver: PiDriver; relay: RelayServer; socketPath: string }> {
   const socketPath = nextSocketPath();
   let driver: PiDriver;
-  const relay = new RelayServer({
-    socketPath,
-    delegate: {
-      suiteHello: (connection: RelayConnection, params: unknown) => driver.suiteHello(connection, params),
-      suiteReportState: (params: unknown) => driver.suiteReportState(params),
-      suiteReportStop: (params: unknown) => driver.suiteReportStop(params),
-      suiteReportDenial: (params: unknown) => driver.suiteReportDenial(params),
-    },
-  });
+  const relay = new RelayServer({ socketPath, delegate: () => driver });
   driver = new PiDriver({ rpc: rpc as any, relay, suitePath, runCommand: fakeRunCommand() });
   await relay.listen();
   return { driver, relay, socketPath };
@@ -210,6 +203,33 @@ describe("RelayServer wire behavior", () => {
 });
 
 describe("suite <-> driver relay integration", () => {
+  // The relay used to be handed a hand-written object naming one driver method per
+  // line, and a report left off that list died as "is not a function", unanswered.
+  test("the driver itself answers every suite-to-driver method the relay dispatches", async () => {
+    const { driver } = await buildHarness(new FakeRPC());
+    const suiteToDriver = Object.values(relayMethods).filter(
+      (method) => method !== relayMethods.deliverMessage && method !== relayMethods.networkDecide,
+    );
+    const dispatched = [relayMethods.hello, ...Object.keys(suiteReports)];
+
+    expect([...dispatched].sort()).toEqual([...suiteToDriver].sort());
+    const backing = driver as unknown as Record<string, unknown>;
+    for (const member of ["suiteHello", ...Object.values(suiteReports)]) {
+      expect(typeof backing[member]).toBe("function");
+    }
+  });
+
+  test("a report for an unknown run is refused by the driver, not lost to a missing delegate", async () => {
+    const { socketPath } = await buildHarness(new FakeRPC());
+    const suite = await FakeSuiteClient.connect(socketPath);
+
+    await expect(
+      suite.request(relayMethods.reportNetworkAmendment, { token: "does-not-exist", host: "crates.io", decision: "allow" }),
+    ).rejects.toThrow("unknown pi suite token");
+
+    suite.close();
+  });
+
   test("suite.hello with a valid token binds the connection, refreshes metadata, and reports seq 2", async () => {
     const rpc = new FakeRPC();
     const { driver, socketPath } = await buildHarness(rpc);
