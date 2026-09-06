@@ -89,6 +89,9 @@ async function main() {
     scenarioId: 'TR-402',
     tier: 'tier3-remote-real-agent',
     prefix: 'scenario-tr402-remote-close-redraw',
+    // Uncatalogued: this remote probe used to inherit its arming from the two
+    // local TR-402 entries, which the geometry merge absorbed.
+    allowRealAgents: false,
     metadata: {
       sshTarget: options.sshTarget,
       agent: options.remoteAgent,

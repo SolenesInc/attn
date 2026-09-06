@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  createSessionAndWaitForInitialPane,
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
@@ -12,7 +13,6 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
 import {
   waitForPaneAttached,
-  waitForPaneShellReady,
   waitForPaneVisible,
   waitForSessionWorkspace,
 } from './scenarioAssertions.mjs';
@@ -44,6 +44,19 @@ async function waitForPicker(client, title, timeoutMs = 10_000) {
   throw new Error(`Timed out waiting for ${title}. Last picker state:\n${JSON.stringify(lastState, null, 2)}`);
 }
 
+async function dismissPicker(client, description, timeoutMs = 10_000) {
+  let lastState = await client.request('location_picker_close');
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (!lastState?.open) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    lastState = await client.request('location_picker_get_state');
+  }
+  throw new Error(`Timed out waiting for ${description}. Last picker state:\n${JSON.stringify(lastState, null, 2)}`);
+}
+
 async function selectTerminalAgent(driver, client) {
   await driver.activateApp();
   await driver.pressKey('t', { option: true });
@@ -59,49 +72,37 @@ async function selectTerminalAgent(driver, client) {
   throw new Error(`Alt+T did not select Terminal. Last picker state:\n${JSON.stringify(lastState, null, 2)}`);
 }
 
-async function submitTerminalLocation({ client, driver, cwd, expectedTitle }) {
-  fs.mkdirSync(cwd, { recursive: true });
-  await waitForPicker(client, expectedTitle);
-  await selectTerminalAgent(driver, client);
-  await client.request('location_picker_set_path', { value: cwd });
-  await client.request('location_picker_submit_path');
-}
-
-async function waitForShellSession({ client, observer, cwd, description }) {
-  const session = await observer.waitForSession({ directory: cwd, timeoutMs: 30_000 });
-  if (session.agent !== 'shell') {
-    throw new Error(`Expected ${description} to create a terminal session, got agent=${session.agent}`);
-  }
-  const workspace = await waitForSessionWorkspace(
-    client,
-    session.id,
-    (entry) => (entry?.panes || []).some((pane) => pane.sessionId === session.id && pane.runtimeId),
-    `${description} workspace pane`,
-    30_000,
-  );
-  const pane = (workspace.panes || []).find((entry) => entry.sessionId === session.id);
-  if (!pane) {
-    throw new Error(`No pane for ${description}: ${JSON.stringify(workspace, null, 2)}`);
-  }
-  await waitForPaneVisible(client, session.id, pane.paneId, 20_000);
-  await waitForPaneAttached(client, session.id, pane.paneId, 20_000);
-  await waitForPaneShellReady(client, session.id, pane.paneId, {
-    timeoutMs: 20_000,
-    description: `${description} shell prompt`,
-  });
-  return { session, pane };
-}
-
-async function waitForWorkspaceSessionCount(client, workspaceId, count, description, timeoutMs = 20_000) {
+async function waitForStateSession(client, sessionId, description, timeoutMs = 20_000) {
   const startedAt = Date.now();
   let lastState = null;
   while (Date.now() - startedAt < timeoutMs) {
     lastState = await client.request('get_state');
-    const sessions = (lastState.sessions || []).filter((entry) => entry.workspaceId === workspaceId);
-    if (sessions.length === count) {
-      return sessions;
+    const session = (lastState.sessions || []).find((entry) => entry.id === sessionId);
+    if (session?.workspaceId) {
+      return session;
     }
     await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  throw new Error(`Timed out waiting for ${description}. Last state:\n${JSON.stringify(lastState, null, 2)}`);
+}
+
+async function summonPicker(client, driver, shortcutId, title) {
+  await driver.activateApp();
+  await pressShortcutKeys(client, driver, shortcutId);
+  const picker = await waitForPicker(client, title);
+  await dismissPicker(client, `${shortcutId} picker to close`);
+  return picker;
+}
+
+async function waitForActiveSession(client, sessionId, description, timeoutMs = 15_000) {
+  const startedAt = Date.now();
+  let lastState = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    lastState = await client.request('get_state');
+    if (lastState.activeSessionId === sessionId) {
+      return lastState;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
   }
   throw new Error(`Timed out waiting for ${description}. Last state:\n${JSON.stringify(lastState, null, 2)}`);
 }
@@ -145,7 +146,7 @@ async function main() {
     prefix: 'workspace-creation-shortcuts',
     metadata: {
       agent: 'shell',
-      focus: 'Cmd+T new workspace, Cmd+N and Cmd+Shift+N session splits join the selected workspace',
+      focus: 'Cmd+T, Cmd+N and Cmd+Shift+N survive the real OS keyboard path and summon the right location picker',
     },
   });
 
@@ -155,6 +156,8 @@ async function main() {
     appPath: options.appPath,
   });
   const createdSessionIds = [];
+  let seedSessionId = null;
+  let seedWorkspaceId = null;
   const note = (m, extra) => runner.log(m, extra);
 
   // Runner cleanups run in REVERSE registration order: observer/app first so
@@ -175,91 +178,75 @@ async function main() {
       await launchFreshAppAndConnect(client, observer);
     });
 
-    let workspaceId;
-    await runner.step('create_workspace_via_cmd_t', async () => {
-      const workspaceDir = path.join(runner.sessionDir, 'workspace-a');
-      await driver.activateApp();
-      await pressShortcutKeys(client, driver, 'session.newWorkspace');
-      await submitTerminalLocation({
-        client,
-        driver,
-        cwd: workspaceDir,
-        expectedTitle: 'New Workspace Location',
-      });
-      const first = await waitForShellSession({
+    // Without a selected local session Cmd+N falls back to the new-workspace
+    // picker (App.tsx handleNewSession), so the session chords need one session.
+    await runner.step('select_a_workspace_for_the_session_chords', async () => {
+      const cwd = path.join(runner.sessionDir, 'selected-workspace');
+      fs.mkdirSync(cwd, { recursive: true });
+      const sessionId = await createSessionAndWaitForInitialPane({
         client,
         observer,
-        cwd: workspaceDir,
-        description: 'Cmd+T workspace',
+        cwd,
+        label: `ws-create-${runner.runId}`,
+        agent: 'shell',
+        waitForInitialPaneVisible: false,
+        sessionWaitMs: 30_000,
       });
-      createdSessionIds.push(first.session.id);
-      workspaceId = first.session.workspace_id;
-      if (!workspaceId) {
-        throw new Error(`Created session has no workspace_id: ${JSON.stringify(first.session, null, 2)}`);
-      }
-      note(`workspace created via Cmd+T`, { workspaceId, sessionId: first.session.id });
-    });
-
-    await runner.step('split_vertical_via_cmd_n', async () => {
-      const verticalDir = path.join(runner.sessionDir, 'session-vertical');
-      await driver.activateApp();
-      await pressShortcutKeys(client, driver, 'session.new');
-      await submitTerminalLocation({
+      createdSessionIds.push(sessionId);
+      seedSessionId = sessionId;
+      const workspace = await waitForSessionWorkspace(
         client,
-        driver,
-        cwd: verticalDir,
-        expectedTitle: 'New Session Location',
-      });
-      const vertical = await waitForShellSession({
-        client,
-        observer,
-        cwd: verticalDir,
-        description: 'Cmd+N session split',
-      });
-      createdSessionIds.push(vertical.session.id);
-      if (vertical.session.workspace_id !== workspaceId) {
-        throw new Error(`Cmd+N created session in wrong workspace: ${vertical.session.workspace_id} !== ${workspaceId}`);
-      }
-      await waitForWorkspaceSessionCount(client, workspaceId, 2, 'Cmd+N session to join selected workspace');
-      note(`vertical split created via Cmd+N`, { sessionId: vertical.session.id });
-    });
-
-    let workspace;
-    await runner.step('split_horizontal_via_cmd_shift_n', async () => {
-      const horizontalDir = path.join(runner.sessionDir, 'session-horizontal');
-      await driver.activateApp();
-      await pressShortcutKeys(client, driver, 'session.newHorizontal');
-      await submitTerminalLocation({
-        client,
-        driver,
-        cwd: horizontalDir,
-        expectedTitle: 'New Session Location',
-      });
-      const horizontal = await waitForShellSession({
-        client,
-        observer,
-        cwd: horizontalDir,
-        description: 'Cmd+Shift+N horizontal session split',
-      });
-      createdSessionIds.push(horizontal.session.id);
-      if (horizontal.session.workspace_id !== workspaceId) {
-        throw new Error(`Cmd+Shift+N created session in wrong workspace: ${horizontal.session.workspace_id} !== ${workspaceId}`);
-      }
-      workspace = await waitForSessionWorkspace(
-        client,
-        createdSessionIds[0],
-        (entry) => (entry?.panes || []).length === 3 && (entry?.workspace?.layout?.splits || []).some((split) => split.direction === 'horizontal'),
-        'Cmd+Shift+N horizontal split in selected workspace',
+        sessionId,
+        (entry) => (entry?.panes || []).length === 1 && (entry?.panes || []).every((pane) => pane.runtimeId),
+        'initial pane for the selected workspace',
         30_000,
       );
-      note(`horizontal split created via Cmd+Shift+N`, { sessionId: horizontal.session.id });
+      await client.request('select_session', { sessionId });
+      await waitForPaneVisible(client, sessionId, workspace.panes[0].paneId, 20_000);
+      await waitForPaneAttached(client, sessionId, workspace.panes[0].paneId, 20_000);
+      await waitForActiveSession(client, sessionId, 'the created session to be the selected one');
+      const seed = await waitForStateSession(client, sessionId, 'the seed session in app state');
+      seedWorkspaceId = seed.workspaceId;
+      note(`workspace selected for the session chords`, { sessionId, seedWorkspaceId });
     });
 
-    const summary = await runner.finishSuccess({
-      workspaceId,
-      sessionIds: createdSessionIds,
-      paneIds: workspace.panes.map((pane) => pane.paneId),
+    await runner.step('cmd_t_creates_a_workspace_of_its_own', async () => {
+      const cwd = path.join(runner.sessionDir, 'cmd-t-workspace');
+      fs.mkdirSync(cwd, { recursive: true });
+      await driver.activateApp();
+      await pressShortcutKeys(client, driver, 'session.newWorkspace');
+      await waitForPicker(client, 'New Workspace Location');
+      await selectTerminalAgent(driver, client);
+      await client.request('location_picker_set_path', { value: cwd });
+      await client.request('location_picker_submit_path');
+
+      const observed = await observer.waitForSession({ directory: cwd, timeoutMs: 30_000 });
+      createdSessionIds.push(observed.id);
+      const created = await waitForStateSession(client, observed.id, 'the Cmd+T session in app state');
+      runner.assert(
+        created.workspaceId !== seedWorkspaceId,
+        `Cmd+T joined the selected workspace instead of creating its own: ${created.workspaceId} === ${seedWorkspaceId}`,
+        { created, seedWorkspaceId },
+      );
+      runner.assert(
+        created.agent === 'shell',
+        `Alt+T did not carry Terminal through the submit: agent=${created.agent}`,
+        created,
+      );
+      note(`Cmd+T created a new workspace`, { sessionId: created.id, workspaceId: created.workspaceId });
     });
+
+    await runner.step('cmd_n_summons_the_new_session_picker', async () => {
+      await summonPicker(client, driver, 'session.new', 'New Session Location');
+      note(`Cmd+N summoned the new-session picker`);
+    });
+
+    await runner.step('cmd_shift_n_summons_the_new_session_picker', async () => {
+      await summonPicker(client, driver, 'session.newHorizontal', 'New Session Location');
+      note(`Cmd+Shift+N summoned the new-session picker`);
+    });
+
+    const summary = await runner.finishSuccess({ seedSessionId, seedWorkspaceId, sessionIds: createdSessionIds });
     console.log('[RealAppHarness] Workspace creation shortcuts passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {

@@ -13,6 +13,7 @@ import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, profileCliEnv, socketPathForProfile } from './harnessProfile.mjs';
 
 const SLOT = 'domains';
+const MODEL = 'opencode-go/glm-5.3';
 const TYPED = 'grafana.harness.corp';
 const FROM_THE_CLI = 'written-from-the-command-line.corp';
 
@@ -80,12 +81,29 @@ async function main() {
     scenarioId: 'AutoModeEnvironment',
     tier: 'local',
     prefix: 'automode-environment',
-    metadata: { focus: 'slot writes from the pane and from the CLI, and what an unfilled slot says' },
+    metadata: { focus: 'slot writes from the pane and from the CLI, what an unfilled slot says, and that a named model is what makes auto mode run' },
   });
   const note = (message, extra) => runner.log(message, extra);
 
   const slotValues = (env, id) => env?.slots?.find((slot) => slot.id === id)?.values ?? [];
   const readEnv = () => runAttn(['automode', 'env', '--json']).json?.environment ?? { slots: [], notes: [] };
+  const pillText = async () =>
+    (await client.request('dom_text', { selector: '[data-testid="automode-new-sessions"]' })).text;
+  const promote = async (proposalId) => {
+    const selector = `[data-testid="automode-promote-${proposalId}"]`;
+    await pollFor(
+      () => client.request('dom_click', { selector }).then(() => true, () => null),
+      `proposal ${proposalId} to reach the pane`,
+    );
+  };
+  const modelsOnThePane = async (want) =>
+    pollFor(
+      async () => {
+        const pane = await client.request('automode_get_state');
+        return want(pane.models) ? pane : null;
+      },
+      'the promoted model list to reach the pane',
+    );
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
 
@@ -194,11 +212,53 @@ async function main() {
       await hold();
     });
 
-    const summary = await runner.finishSuccess({ slot: SLOT });
+    await runner.step('a_model_is_what_makes_auto_mode_run', async () => {
+      let pane = await client.request('automode_get_state');
+      if (pane.models.length === 0) {
+        const proposed = runAttn(['automode', 'model', MODEL, '--json']).json;
+        await promote(proposed.proposal.id);
+        pane = await modelsOnThePane((models) => models.length > 0);
+      }
+      runner.assert(pane.enabledDefault === true, 'new sessions are configured to start with auto mode', { pane });
+      runner.assert(await pillText() === 'Auto mode on', 'a named model reads as on', { models: pane.models });
+      note(`auto mode runs on ${pane.models.join(', ')}`);
+      await hold();
+    });
+
+    await runner.step('naming_no_model_turns_it_off', async () => {
+      const proposed = runAttn(['automode', 'model', '--none', '--json']).json;
+      runner.assert(proposed.proposal.value === '', 'the CLI proposed no model at all', { proposed });
+      runner.assert(await pillText() === 'Auto mode on', 'a proposal changes nothing on its own', {});
+      note('the CLI proposed dropping every model, and nothing changed yet');
+      await hold();
+
+      await promote(proposed.proposal.id);
+      const cleared = await modelsOnThePane((models) => models.length === 0);
+      runner.assert(cleared.enabledDefault === true,
+        'the configured default is untouched, so the pill is answering the missing model', { cleared });
+      runner.assert(await pillText() === 'Auto mode off',
+        'no model means auto mode is off, whatever the default says', { cleared });
+      const models = await client.request('dom_text', { selector: '[data-testid="automode-models"]' });
+      runner.assert(models.text.includes('No model, so auto mode stays off'), 'the pane says why', { models });
+      note('promoting it left auto mode off, with the reason on screen');
+      await hold();
+    });
+
+    await runner.step('naming_one_again_turns_it_back_on', async () => {
+      const proposed = runAttn(['automode', 'model', MODEL, '--json']).json;
+      await promote(proposed.proposal.id);
+      const back = await modelsOnThePane((models) => models.length > 0);
+      runner.assert(back.models[0] === MODEL, 'the model the CLI named is in force', { back });
+      runner.assert(await pillText() === 'Auto mode on', 'the way out has a way back', { back });
+      note('naming a model again turned auto mode back on');
+      await hold();
+    });
+
+    const summary = await runner.finishSuccess({ slot: SLOT, model: MODEL });
     console.log('[RealAppHarness] Auto mode environment passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = await runner.finishFailure(error, { slot: SLOT });
+    const summary = await runner.finishFailure(error, { slot: SLOT, model: MODEL });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

@@ -2,6 +2,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import {
   createSessionAndWaitForInitialPane,
   launchFreshAppAndConnect,
@@ -26,7 +28,10 @@ import {
   ensureCodexInitialPanePromptReady,
 } from './scenarioAgents.mjs';
 import { agentHomeRoots, writeMockAgentFixture } from './mockAgent.mjs';
-import { currentHarnessProfile, dataDirForProfile } from './harnessProfile.mjs';
+import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
+import { appDaemonInTree } from './platform.mjs';
+
+const execFileAsync = promisify(execFile);
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -41,6 +46,23 @@ function readPersistedResumeId(dataDir, sessionId) {
     dbPath,
     `select coalesce(resume_session_id, '') from sessions where id = '${sessionId}';`,
   );
+}
+
+function readPersistedTranscriptPath(dataDir, sessionId) {
+  const dbPath = path.join(dataDir, 'attn.db');
+  return queryDaemonDb(
+    dbPath,
+    `select coalesce(transcript_path, '') from sessions where id = '${sessionId}';`,
+  );
+}
+
+function normalizeExistingPath(value) {
+  const resolved = path.resolve(String(value || ''));
+  try {
+    return fs.realpathSync.native(resolved);
+  } catch {
+    return resolved;
+  }
 }
 
 // A rollout's first line carries the session_meta naming its id, which is how
@@ -131,6 +153,26 @@ function daemonLogTail(dataDir, lines = 200) {
   return fs.readFileSync(logPath, 'utf8').split('\n').slice(-lines).join('\n');
 }
 
+// The whole file, not a tail: a reboot writes enough lines to push the previous
+// run's summary out of any window, and the count is what says a new pass ran.
+function reconciliationSummaries(dataDir) {
+  const logPath = path.join(dataDir, 'daemon.log');
+  if (!fs.existsSync(logPath)) return [];
+  return fs.readFileSync(logPath, 'utf8')
+    .split('\n')
+    .filter((line) => line.includes('worker session reconciliation summary'));
+}
+
+function processAlive(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function submitCodexPrompt(client, sessionId, paneId, text) {
   await client.request('type_pane_via_ui', { sessionId, paneId, text });
   // Codex reads a fast character stream as a paste and makes the next Enter a
@@ -152,16 +194,26 @@ async function main() {
     scenarioId: 'CRASH-REC',
     tier: 'tier2-local-mock-agent',
     prefix: 'scenario-crash-recovery-resumability',
-    metadata: { agents: 'codex+claude+shell', focus: 'crash keeps what it can bring back' },
+    metadata: {
+      agents: 'codex+claude+shell',
+      focus: 'a crash keeps what it can bring back, with its codex binding and its pane intact',
+    },
   });
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
+  // Daemon lifecycle and CLI reads must run through the exact build under test,
+  // not an unrelated ./attn on PATH.
+  const attnBin = appDaemonInTree(options.appPath);
+  const daemonEnv = profileCliEnv(profile);
 
   const token = `CRASHREC${Date.now()}`;
   const claudeDir = path.join(runner.sessionDir, 'never-prompted');
   let codexSessionId = null;
   let codexResumeId = null;
+  let codexTranscriptPath = null;
   let claudeSessionId = null;
+  let summariesBeforeCrash = 0;
+  let reconciliationAfterReboot = null;
 
   try {
     await runner.step('launch_app', async () => {
@@ -200,7 +252,24 @@ async function main() {
         },
         120_000,
       );
-      runner.writeJson('codex-conversation.json', { resumeId: codexResumeId, rollout });
+      // The binding assertions after the crash compare against what the daemon
+      // persisted, so wait for that write instead of assuming it landed.
+      codexTranscriptPath = await waitFor(
+        `the daemon to persist ${rollout} as the codex transcript path`,
+        () => {
+          const stored = readPersistedTranscriptPath(dataDir, sessionId);
+          return stored && normalizeExistingPath(stored) === normalizeExistingPath(rollout) ? stored : null;
+        },
+        30_000,
+      );
+      runner.writeJson('codex-conversation.json', {
+        resumeId: codexResumeId,
+        rollout,
+        transcriptPath: codexTranscriptPath,
+      });
+      if (codexResumeId === sessionId) {
+        throw new Error(`the stored resume id is the attn session id (${sessionId}); it must be codex's own native id`);
+      }
       return sessionId;
     });
 
@@ -226,9 +295,15 @@ async function main() {
       if (claudeHasTranscript) {
         throw new Error('the claude session already has a transcript; it cannot stand in for the unresumable case');
       }
+      summariesBeforeCrash = reconciliationSummaries(dataDir).length;
       runner.writeJson('before-crash.json', {
-        codex: { session: observer.getSession(codexSessionId), resumeId: codexResumeId },
+        codex: {
+          session: observer.getSession(codexSessionId),
+          resumeId: codexResumeId,
+          transcriptPath: codexTranscriptPath,
+        },
         claude: { session: observer.getSession(claudeSessionId), resumeId: claudeResumeId, hasTranscript: false },
+        reconciliationSummaries: summariesBeforeCrash,
       });
     });
 
@@ -238,8 +313,12 @@ async function main() {
       if (result.workers.length === 0) {
         throw new Error('no pty workers were killed; the crash was not reproduced');
       }
-      // Let the OS reap them before anything tries to adopt them.
-      await sleep(1_000);
+      const pids = [...result.workers.map((worker) => worker.pid), result.daemon].filter(Boolean);
+      await waitFor(
+        `the killed pids ${pids.join(',')} to leave the process table`,
+        () => (pids.every((pid) => !processAlive(pid)) ? pids : null),
+        15_000,
+      );
       return result;
     });
     runner.log(`crashed: ${killed.workers.length} workers, daemon pid ${killed.daemon}`);
@@ -247,8 +326,16 @@ async function main() {
     await runner.step('reboot_into_the_app', async () => {
       await relaunchAppAndConnect(client, observer);
       // Startup recovery runs before clients cross the barrier, but the observer's
-      // first snapshot can beat the deferred pass; give it a beat.
-      await sleep(2_000);
+      // first snapshot can beat the deferred pass; the summary line is the receipt.
+      reconciliationAfterReboot = await waitFor(
+        'the rebooted daemon to log a worker session reconciliation summary',
+        () => {
+          const summaries = reconciliationSummaries(dataDir);
+          return summaries.length > summariesBeforeCrash ? summaries.at(-1) : null;
+        },
+        60_000,
+      );
+      runner.log('reconciliation after reboot', { summary: reconciliationAfterReboot });
       runner.writeText('daemon-after-reboot.log', daemonLogTail(dataDir));
     });
 
@@ -267,10 +354,7 @@ async function main() {
       if (session.state !== 'recoverable') {
         throw new Error(`codex session state = ${session.state}, want recoverable`);
       }
-      const recovery = daemonLogTail(dataDir, 400)
-        .split('\n')
-        .filter((line) => line.includes('worker session reconciliation summary'))
-        .pop();
+      const recovery = reconciliationAfterReboot;
       runner.writeJson('after-crash-codex.json', { session, recovery });
       if (!recovery || !/marked_recoverable=[1-9]/.test(recovery)) {
         throw new Error(`reconciliation summary did not mark anything recoverable: ${recovery}`);
@@ -301,7 +385,11 @@ async function main() {
         120_000,
       );
       const revived = await client.request('read_pane_text', { sessionId: codexSessionId, paneId: pane.paneId }, { timeoutMs: 20_000 });
-      runner.writeText('revived-pane.txt', revived?.text || '');
+      const revivedText = revived?.text || '';
+      runner.writeText('revived-pane.txt', revivedText);
+      if (/Failed to attach PTY/.test(revivedText)) {
+        throw new Error('the revived pane repainted the conversation behind an attach-failure banner');
+      }
       await captureSessionArtifacts(client, runner.runDir, 'revived-codex', codexSessionId);
       const session = observer.getSession(codexSessionId);
       if (!session || session.state === 'recoverable') {
@@ -309,8 +397,37 @@ async function main() {
       }
     });
 
+    await runner.step('assert_the_codex_binding_outlived_the_crash', async () => {
+      const resumeId = await waitFor(
+        `the codex resume id to still be ${codexResumeId} after the crash`,
+        () => (readPersistedResumeId(dataDir, codexSessionId) === codexResumeId ? codexResumeId : null),
+        30_000,
+      );
+      const transcriptPath = await waitFor(
+        `the codex transcript path to still be ${codexTranscriptPath} after the crash`,
+        () => {
+          const stored = readPersistedTranscriptPath(dataDir, codexSessionId);
+          return stored && normalizeExistingPath(stored) === normalizeExistingPath(codexTranscriptPath)
+            ? stored
+            : null;
+        },
+        30_000,
+      );
+      const { stdout } = await execFileAsync(attnBin, ['session', 'transcript', codexSessionId, '--json'], {
+        env: daemonEnv,
+        timeout: 20_000,
+      });
+      runner.writeText('transcript-after-crash.json', stdout);
+      if (!stdout.includes(token)) {
+        throw new Error(`the rebooted daemon's public CLI did not read the pre-crash reply back from ${transcriptPath}`);
+      }
+      runner.writeJson('binding-after-crash.json', { resumeId, transcriptPath });
+    });
+
     const summary = await runner.finishSuccess({
       codexSessionId,
+      codexResumeId,
+      codexTranscriptPath,
       claudeSessionId,
       token,
       artifacts: { runDir: runner.runDir, trace: runner.tracePath },

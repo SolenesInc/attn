@@ -1,0 +1,10 @@
+kind: internal
+area: harness
+change: >
+  Twenty real-app scenarios that each rebuilt the same world to assert one more
+  thing now share a launch with the scenario they belong to: workspace,
+  notebook, present, garden, receipts, countdown, automode, tr* geometry,
+  relaunch, recovery and terminal links. Every unique assertion moved onto the
+  surviving id; the ones that did not move have a named Go or vitest twin. The
+  harness AGENTS.md maps each retired id to the one that now asserts it, and
+  names the ordering traps the merged scenarios depend on.

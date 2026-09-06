@@ -39,7 +39,7 @@ describe('scenarioCatalog agent tripwire flags', () => {
   });
 
   it('keeps the model-free scenarios armed', () => {
-    expect(allowRealAgentsForRunner('NUDGE-TRIGGER')).toBeUndefined();
+    expect(allowRealAgentsForRunner('COUNTDOWN-CANCEL')).toBeUndefined();
     expect(allowRealAgentsForRunner('TERMINAL-ANNOTATIONS')).toBeUndefined();
   });
 
@@ -50,7 +50,7 @@ describe('scenarioCatalog agent tripwire flags', () => {
   });
 
   it('keeps the resume family armed on the mock agent', () => {
-    for (const runnerId of ['CRASH-REC', 'RECOVERABLE-AUTO-REVIVE', 'TR-CODEX-RESUME']) {
+    for (const runnerId of ['CRASH-REC']) {
       expect(allowRealAgentsForRunner(runnerId), runnerId).toBeUndefined();
     }
   });
@@ -62,7 +62,7 @@ describe('scenarioCatalog agent tripwire flags', () => {
   });
 
   it('keeps the turn-accounting family armed on the mock agent', () => {
-    for (const runnerId of ['TR-201', 'TR-204', 'TR-301', 'TR-401', 'TR-401-CODEX-MAIN', 'TR-402']) {
+    for (const runnerId of ['TR-201', 'TR-301', 'TR-401']) {
       expect(allowRealAgentsForRunner(runnerId), runnerId).toBeUndefined();
     }
   });
@@ -71,14 +71,13 @@ describe('scenarioCatalog agent tripwire flags', () => {
     for (const runnerId of [
       'FOCUS-PROBE',
       'GHOSTTY-SCROLLBACK-ANCHOR',
-      'SNAPSHOT-SCROLLBACK-RESTORE',
     ]) {
       expect(allowRealAgentsForRunner(runnerId), runnerId).toBeUndefined();
     }
   });
 
   it('keeps the queue family armed on the mock agent', () => {
-    for (const runnerId of ['AGENT-QUEUE', 'COUNTDOWN-CANCEL', 'SETTLE-TYPING-HOLD']) {
+    for (const runnerId of ['AGENT-QUEUE', 'COUNTDOWN-CANCEL']) {
       expect(allowRealAgentsForRunner(runnerId), runnerId).toBeUndefined();
     }
   });
@@ -147,6 +146,42 @@ describe('scenarioCatalog daemon isolation', () => {
 
 // A hand-rolled main() that never builds a runner arms no tripwire at all and
 // is out of this net; every createScenarioRunner caller is in it.
+describe('every catalog command', () => {
+  const harnessDir = path.dirname(url.fileURLToPath(import.meta.url));
+  const appDir = path.resolve(harnessDir, '../..');
+  const scripts = JSON.parse(fs.readFileSync(path.join(appDir, 'package.json'), 'utf8')).scripts;
+
+  // A catalog entry pointing at a deleted file used to fail only when the matrix
+  // reached it, ~18 minutes into a Linux run.
+  it('resolves to a scenario file that exists', () => {
+    const broken = [];
+    for (const scenario of scenarioCatalog) {
+      const command = scenario.command || [];
+      let script = null;
+      if (command[0] === 'pnpm') {
+        const name = command[2];
+        script = scripts[name];
+        if (!script) {
+          broken.push(`${scenario.id}: no package.json script "${name}"`);
+          continue;
+        }
+      } else {
+        script = command.join(' ');
+      }
+      const file = /(scripts\/real-app-harness\/[\w.-]+\.mjs)/.exec(script)?.[1];
+      if (!file) {
+        broken.push(`${scenario.id}: no scenario file in "${script}"`);
+        continue;
+      }
+      if (!fs.existsSync(path.join(appDir, file))) {
+        broken.push(`${scenario.id}: ${file} does not exist`);
+      }
+    }
+
+    expect(broken, 'a catalog entry points at a scenario file that is not on disk').toEqual([]);
+  });
+});
+
 describe('every scenario built on the scenario runner', () => {
   const harnessDir = path.dirname(url.fileURLToPath(import.meta.url));
   const runnerIds = new Set(scenarioCatalog.map((scenario) => scenario.runnerId).filter(Boolean));

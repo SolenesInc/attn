@@ -145,7 +145,7 @@ async function main() {
     prefix: 'notebook-editor-undo',
     metadata: {
       agent: 'shell',
-      focus: 'native Cmd+Z / Shift+Cmd+Z inside a notebook tile editor',
+      focus: 'native Cmd+Opt+N dock, finder Esc dismiss and Cmd+P re-summon, native Cmd+Z / Shift+Cmd+Z inside a notebook tile editor',
     },
   });
 
@@ -238,8 +238,25 @@ async function main() {
       return result;
     });
 
-    await runner.step('open_probe_note_via_finder', async () => {
+    await runner.step('fresh_tile_auto_opens_its_finder', async () => {
       await waitForDomSelector(client, FINDER_SELECTOR, true, 'fresh notebook tile auto-opens its finder');
+    });
+
+    await runner.step('esc_dismisses_the_finder', async () => {
+      await driver.activateApp();
+      await driver.pressKeyCode(53);
+      await waitForDomSelector(client, FINDER_SELECTOR, false, 'Esc dismisses the finder');
+    });
+
+    // Esc must leave focus inside the tile: on <body> the tile-scoped keydown
+    // never fires and Cmd+P cannot re-summon.
+    await runner.step('cmdp_resummons_the_finder_after_esc', async () => {
+      await driver.activateApp();
+      await pressShortcutKeys(client, driver, 'file.open');
+      await waitForDomSelector(client, FINDER_SELECTOR, true, 'native Cmd+P re-summons the finder after Esc');
+    });
+
+    await runner.step('finder_opens_the_probe_note_in_the_editor', async () => {
       await driver.activateApp();
       await driver.typeText(probeBasename);
       // Pressing Enter before the probe row renders is a no-op (pick(undefined)).
@@ -335,7 +352,7 @@ async function main() {
       tileId: docked.tileIds[0],
       probeFilePath,
     });
-    console.log('[RealAppHarness] Notebook editor native Cmd+Z undo / Shift+Cmd+Z redo passed.');
+    console.log('[RealAppHarness] Notebook tile finder (Esc / Cmd+P) and native Cmd+Z undo / Shift+Cmd+Z redo passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
     const summary = await runner.finishFailure(error, { sessionId, probeFilePath });
