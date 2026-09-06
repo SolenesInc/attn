@@ -232,6 +232,19 @@ func InstallPathWithOptions(sourceDir, pluginDir string, opts InstallOptions) (M
 	return installed, nil
 }
 
+// SourceName reads the plugin name a local source directory would install as.
+func SourceName(sourceDir string) (string, error) {
+	sourceDir, err := filepath.Abs(strings.TrimSpace(sourceDir))
+	if err != nil {
+		return "", fmt.Errorf("resolve source directory: %w", err)
+	}
+	manifest, err := LoadManifest(filepath.Join(sourceDir, ManifestName))
+	if err != nil {
+		return "", fmt.Errorf("load source manifest: %w", err)
+	}
+	return manifest.Name, nil
+}
+
 // LinkPath installs a plugin as a symlink to sourceDir so edits in the checkout
 // are live for new plugin processes. Dependencies are installed in the checkout.
 func LinkPath(sourceDir, pluginDir string, opts InstallOptions) (Manifest, error) {

@@ -45,6 +45,16 @@ func (d *Daemon) handleInstallPluginWS(client *wsClient, msg *protocol.InstallPl
 	var manifest plugins.Manifest
 	var err error
 	if link {
+		// Refuse before LinkPath touches the checkout: it runs bun install there.
+		name, err := plugins.SourceName(source)
+		if err != nil {
+			d.sendPluginActionResult(client, action, "", false, err.Error())
+			return
+		}
+		if _, bundledInstalled := d.installedBundledPlugins()[name]; bundledInstalled {
+			d.sendPluginActionResult(client, action, name, false, fmt.Sprintf("uninstall bundled plugin %q before installing a user override", name))
+			return
+		}
 		manifest, err = plugins.LinkPath(source, d.pluginDir, options)
 	} else {
 		manifest, err = plugins.InstallSourceWithOptions(source, d.pluginDir, options)

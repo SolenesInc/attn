@@ -269,7 +269,8 @@ func TestDaemon_HandleInstallPluginWS_LinkRefusesInstalledBundledName(t *testing
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(binDir, "bun"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+	bunMarker := filepath.Join(binDir, "bun-ran")
+	if err := os.WriteFile(filepath.Join(binDir, "bun"), []byte("#!/bin/sh\n: > "+bunMarker+"\n"), 0o755); err != nil {
 		t.Fatalf("write fake bun: %v", err)
 	}
 	d.loginShellEnv = []string{"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")}
@@ -289,6 +290,9 @@ func TestDaemon_HandleInstallPluginWS_LinkRefusesInstalledBundledName(t *testing
 	}
 	if _, err := os.Lstat(filepath.Join(d.pluginDir, "attn-pi")); !os.IsNotExist(err) {
 		t.Fatalf("refused link left an entry: %v", err)
+	}
+	if _, err := os.Stat(bunMarker); !os.IsNotExist(err) {
+		t.Fatalf("refused link ran bun install in the checkout: %v", err)
 	}
 }
 
