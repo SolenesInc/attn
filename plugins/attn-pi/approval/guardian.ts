@@ -1,8 +1,8 @@
 // The Guardian reviewer: a model that answers the approval card instead of the
 // user. Port of codex-rs/core/src/guardian (review.rs, prompt.rs, review_session.rs).
 import { credentials } from "../security/filter";
-import type { ModelLike, ModelRegistryLike, ProviderLike } from "../automode/model-classifier";
-import { mergeUsage, type UsageLike } from "../automode/usage";
+import type { ModelLike, ModelRegistryLike, ProviderLike } from "./provider";
+import { mergeUsage, type UsageLike } from "./usage";
 import { buildGuardianPrompt, GuardianPromptError } from "./guardian-prompt";
 import { guardianRejectionInstructions } from "./instructions";
 import type { TranscriptEntry } from "./transcript";

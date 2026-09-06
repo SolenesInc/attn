@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { availableModels, type AvailableModels, type ModelQuery } from "../automode/models";
 import { NetworkProxy, networkPolicyFrom, type NetworkDecision, type NetworkPolicy, type NetworkRequest } from "../netproxy";
 import type { AttnRPCClient } from "./attn-rpc";
 import type { RelayConnection, RelayServer } from "./relay";
@@ -80,8 +79,6 @@ export class PiDriver {
   private readonly rpc: AttnRPCClient;
   private readonly runCommand: RunCommand;
   private readonly env: Record<string, string | undefined>;
-  private readonly queryModels: ModelQuery;
-  private modelQuery?: Promise<AvailableModels>;
   private readonly executable: string;
   private readonly relay: RelayServer;
   private readonly suitePath: string;
@@ -103,7 +100,6 @@ export class PiDriver {
     suitePath: string;
     runCommand?: RunCommand;
     env?: Record<string, string | undefined>;
-    queryModels?: ModelQuery;
     executable?: string;
     unbackedGraceMs?: number;
     proxyStateDir?: string;
@@ -113,7 +109,6 @@ export class PiDriver {
     this.suitePath = options.suitePath;
     this.runCommand = options.runCommand ?? defaultRunCommand;
     this.env = options.env ?? process.env;
-    this.queryModels = options.queryModels ?? availableModels;
     this.executable = options.executable?.trim() || process.env.ATTN_PI_EXECUTABLE?.trim() || "pi";
     this.unbackedGraceMs = options.unbackedGraceMs ?? unbackedRunGraceMs;
     this.proxyStateDir = options.proxyStateDir?.trim() || this.env.ATTN_PLUGIN_DATA_ROOT?.trim() || undefined;
@@ -143,12 +138,6 @@ export class PiDriver {
     // inherited session's next network call is held for a decision, not refused.
     await this.ensureProxy(result.auto_mode);
     await this.relay.listen();
-  }
-
-  models(): Promise<AvailableModels> {
-    return this.modelQuery ??= this.queryModels(this.executable, this.env).finally(() => {
-      this.modelQuery = undefined;
-    });
   }
 
   health(): { ok: boolean; message: string } {

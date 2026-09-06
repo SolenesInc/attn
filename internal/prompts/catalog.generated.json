@@ -1978,99 +1978,172 @@
       ]
     },
     {
-      "id": "pi-permission",
-      "description": "Separate permission classifier. Both passes receive the same system rulebook; the intent pass runs when harm exceeds the threshold or tool history contains omissions.",
+      "id": "pi-environment",
+      "description": "Environment the user configured for a workspace, rendered into the Guardian's security policy.",
       "events": [
         {
-          "id": "unreadable",
+          "id": "unset-trusted_repo",
           "delivery": "message_fragment",
-          "description": "Diagnostic supplied as a denial reason.",
+          "description": "Default meaning when the user has not configured this slot.",
           "body": {
             "kind": "text",
-            "id": "pi.unreadable",
-            "source": "content/pi/unreadable.md",
-            "bindings": [
-              {
-                "name": "excerpt",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "excerpt",
-                    "kind": "text",
-                    "description": "Bounded classifier output."
-                  }
-                }
-              }
-            ]
+            "id": "pi-environment.unset-trusted_repo",
+            "source": "content/pi/environment/trusted_repo.md"
           }
         },
         {
-          "id": "nothing",
+          "id": "unset-repo_visibility",
           "delivery": "message_fragment",
-          "description": "An empty classifier response.",
+          "description": "Default meaning when the user has not configured this slot.",
           "body": {
             "kind": "text",
-            "id": "pi.nothing",
-            "source": "content/pi/nothing.md"
+            "id": "pi-environment.unset-repo_visibility",
+            "source": "content/pi/environment/repo_visibility.md"
           }
         },
         {
-          "id": "system",
-          "delivery": "system_prompt",
-          "description": "Shared by both permission passes.",
+          "id": "unset-domains",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
           "body": {
             "kind": "text",
-            "id": "pi.rulebook",
-            "source": "content/pi/rulebook.md",
-            "keep_final_newline": true,
-            "bindings": [
-              {
-                "name": "environment",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "environment",
-                    "kind": "text",
-                    "description": "Environment rendered from configured slots and notes by Pi.",
-                    "from": "pi-environment/render"
-                  }
-                }
-              }
-            ]
+            "id": "pi-environment.unset-domains",
+            "source": "content/pi/environment/domains.md"
           }
         },
         {
-          "id": "system-with-cache-grants",
-          "delivery": "system_prompt",
-          "description": "Both classifier passes receive the rulebook and current executor cache grants.",
+          "id": "unset-buckets",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-buckets",
+            "source": "content/pi/environment/buckets.md"
+          }
+        },
+        {
+          "id": "unset-services",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-services",
+            "source": "content/pi/environment/services.md"
+          }
+        },
+        {
+          "id": "unset-source_control",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-source_control",
+            "source": "content/pi/environment/source_control.md"
+          }
+        },
+        {
+          "id": "unset-registry",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-registry",
+            "source": "content/pi/environment/registry.md"
+          }
+        },
+        {
+          "id": "unset-sensitive_data",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-sensitive_data",
+            "source": "content/pi/environment/sensitive_data.md"
+          }
+        },
+        {
+          "id": "unset-audiences",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-audiences",
+            "source": "content/pi/environment/audiences.md"
+          }
+        },
+        {
+          "id": "unset-remote_targets",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-remote_targets",
+            "source": "content/pi/environment/remote_targets.md"
+          }
+        },
+        {
+          "id": "unset-iac_scopes",
+          "delivery": "message_fragment",
+          "description": "Default meaning when the user has not configured this slot.",
+          "body": {
+            "kind": "text",
+            "id": "pi-environment.unset-iac_scopes",
+            "source": "content/pi/environment/iac_scopes.md"
+          }
+        },
+        {
+          "id": "render",
+          "delivery": "message_fragment",
+          "description": "Ordered environment slots and optional user notes.",
           "body": {
             "kind": "join",
-            "separator": "\n\n",
             "children": [
               {
                 "kind": "input",
                 "field": {
-                  "name": "rulebook",
+                  "name": "slots",
                   "kind": "text",
-                  "description": "Rulebook with the rendered environment.",
-                  "from": "pi-permission/system"
+                  "description": "Rendered slots joined with newlines.",
+                  "from": "pi-environment/slot"
                 }
               },
               {
-                "kind": "text",
-                "id": "pi-security.cache-grants",
-                "source": "content/pi/security/cache-grants.md",
-                "bindings": [
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "has_notes",
+                    "kind": "flag",
+                    "description": "At least one nonblank note."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
                   {
-                    "name": "paths",
-                    "node": {
-                      "kind": "input",
-                      "field": {
-                        "name": "paths",
+                    "kind": "join",
+                    "separator": "\n\n",
+                    "children": [
+                      {
+                        "kind": "compose"
+                      },
+                      {
                         "kind": "text",
-                        "description": "JSON array of current executor build-cache grants."
+                        "id": "pi-environment.notes",
+                        "source": "content/pi/environment/notes.md",
+                        "bindings": [
+                          {
+                            "name": "notes",
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "notes",
+                                "kind": "text",
+                                "description": "Quoted note lines."
+                              }
+                            }
+                          }
+                        ]
                       }
-                    }
+                    ]
                   }
                 ]
               }
@@ -2078,22 +2151,33 @@
           }
         },
         {
-          "id": "grant",
-          "delivery": "user_message",
-          "description": "Opening-message authorization context, when supplied.",
+          "id": "slot",
+          "delivery": "message_fragment",
+          "description": "One configured environment slot, or its default meaning.",
           "body": {
             "kind": "text",
-            "id": "pi.grant",
-            "source": "content/pi/grant.md",
+            "id": "pi-environment.slot",
+            "source": "content/pi/environment/slot.md",
             "bindings": [
               {
-                "name": "opening_message",
+                "name": "label",
                 "node": {
                   "kind": "input",
                   "field": {
-                    "name": "opening_message",
+                    "name": "label",
                     "kind": "text",
-                    "description": "The session's opening message."
+                    "description": "Schema label."
+                  }
+                }
+              },
+              {
+                "name": "value",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "value",
+                    "kind": "text",
+                    "description": "Configured values or the slot's rendered default."
                   }
                 }
               }
@@ -2101,164 +2185,23 @@
           }
         },
         {
-          "id": "harm",
-          "delivery": "user_message",
-          "description": "First pass: classify harm without user intent.",
+          "id": "notes",
+          "delivery": "message_fragment",
+          "description": "Nonempty notes supplied by the user.",
           "body": {
             "kind": "text",
-            "id": "pi.action",
-            "source": "content/pi/action.md",
+            "id": "pi-environment.notes",
+            "source": "content/pi/environment/notes.md",
             "bindings": [
               {
-                "name": "cwd",
+                "name": "notes",
                 "node": {
                   "kind": "input",
                   "field": {
-                    "name": "cwd",
+                    "name": "notes",
                     "kind": "text",
-                    "description": "Working directory."
+                    "description": "Quoted note lines."
                   }
-                }
-              },
-              {
-                "name": "conversation",
-                "node": {
-                  "kind": "choose",
-                  "condition": {
-                    "field": {
-                      "name": "has_conversation",
-                      "kind": "flag",
-                      "description": "The transcript contains at least one entry."
-                    },
-                    "test": "enabled"
-                  },
-                  "children": [
-                    {
-                      "kind": "input",
-                      "field": {
-                        "name": "conversation",
-                        "kind": "text",
-                        "description": "Rendered transcript."
-                      }
-                    },
-                    {
-                      "kind": "text",
-                      "id": "pi.empty-transcript",
-                      "source": "content/pi/empty-transcript.md"
-                    }
-                  ]
-                }
-              },
-              {
-                "name": "action",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "action",
-                    "kind": "text",
-                    "description": "JSON object containing tool name and action."
-                  }
-                }
-              },
-              {
-                "name": "reason",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "reason",
-                    "kind": "text",
-                    "description": "Why the deterministic path could not decide."
-                  }
-                }
-              },
-              {
-                "name": "stage",
-                "node": {
-                  "kind": "text",
-                  "id": "pi.harm",
-                  "source": "content/pi/harm.md"
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "intent",
-          "delivery": "user_message",
-          "description": "Second pass: apply authorization and exceptions.",
-          "body": {
-            "kind": "text",
-            "id": "pi.action",
-            "source": "content/pi/action.md",
-            "bindings": [
-              {
-                "name": "cwd",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "cwd",
-                    "kind": "text",
-                    "description": "Working directory."
-                  }
-                }
-              },
-              {
-                "name": "conversation",
-                "node": {
-                  "kind": "choose",
-                  "condition": {
-                    "field": {
-                      "name": "has_conversation",
-                      "kind": "flag",
-                      "description": "The transcript contains at least one entry."
-                    },
-                    "test": "enabled"
-                  },
-                  "children": [
-                    {
-                      "kind": "input",
-                      "field": {
-                        "name": "conversation",
-                        "kind": "text",
-                        "description": "Rendered transcript."
-                      }
-                    },
-                    {
-                      "kind": "text",
-                      "id": "pi.empty-transcript",
-                      "source": "content/pi/empty-transcript.md"
-                    }
-                  ]
-                }
-              },
-              {
-                "name": "action",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "action",
-                    "kind": "text",
-                    "description": "JSON object containing tool name and action."
-                  }
-                }
-              },
-              {
-                "name": "reason",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "reason",
-                    "kind": "text",
-                    "description": "Why the deterministic path could not decide."
-                  }
-                }
-              },
-              {
-                "name": "stage",
-                "node": {
-                  "kind": "text",
-                  "id": "pi.intent",
-                  "source": "content/pi/intent.md"
                 }
               }
             ]
@@ -2267,47 +2210,262 @@
       ]
     },
     {
-      "id": "pi-session",
-      "description": "The working Pi agent, receiving tool permission results.",
+      "id": "pi-security",
+      "description": "Execution permissions supplied to the working Pi agent and sandbox tool guidance.",
       "events": [
         {
-          "id": "execution-changed",
-          "delivery": "message_fragment",
-          "description": "Final execution arguments did not match a one-call approval.",
+          "id": "instructions",
+          "delivery": "system_prompt",
+          "description": "Appended before each agent start; values come from the executor's current policy.",
           "body": {
             "kind": "text",
-            "id": "pi.execution-changed",
-            "source": "content/pi/execution-changed.md"
-          }
-        },
-        {
-          "id": "incomplete-review",
-          "delivery": "tool_result",
-          "description": "Missing evidence or an oversized request prevented review.",
-          "body": {
-            "kind": "text",
-            "id": "pi.incomplete-review",
-            "source": "content/pi/incomplete-review.md",
+            "id": "pi-security.instructions",
+            "source": "content/pi/security/instructions.md",
             "bindings": [
               {
-                "name": "action",
+                "name": "sandbox",
                 "node": {
                   "kind": "input",
                   "field": {
-                    "name": "action",
+                    "name": "sandbox",
                     "kind": "text",
-                    "description": "Action collapsed to one line."
+                    "description": "Enabled or disabled, derived from policy."
                   }
                 }
               },
               {
-                "name": "reason",
+                "name": "network",
                 "node": {
                   "kind": "input",
                   "field": {
-                    "name": "reason",
+                    "name": "network",
                     "kind": "text",
-                    "description": "Reason collapsed to one line."
+                    "description": "Effective tool networking policy."
+                  }
+                }
+              },
+              {
+                "name": "guidance",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "enabled",
+                      "kind": "flag",
+                      "description": "The OS sandbox is enabled."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "pi-security.enabled",
+                      "source": "content/pi/security/enabled.md",
+                      "bindings": [
+                        {
+                          "name": "paths",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "write_paths",
+                              "kind": "text",
+                              "description": "JSON array of writable paths."
+                            }
+                          }
+                        },
+                        {
+                          "name": "caches",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "cache_paths",
+                              "kind": "text",
+                              "description": "JSON array of cache grants, or disabled."
+                            }
+                          }
+                        },
+                        {
+                          "name": "unavailable",
+                          "node": {
+                            "kind": "when",
+                            "condition": {
+                              "field": {
+                                "name": "has_unavailable_caches",
+                                "kind": "flag",
+                                "description": "Some cache grants are unavailable."
+                              },
+                              "test": "enabled"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "pi-security.unavailable-caches",
+                                "source": "content/pi/security/unavailable-caches.md",
+                                "keep_final_newline": true,
+                                "bindings": [
+                                  {
+                                    "name": "paths",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "unavailable_caches",
+                                        "kind": "text",
+                                        "description": "JSON array of unavailable cache grants."
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "name": "request",
+                          "node": {
+                            "kind": "text",
+                            "id": "pi-security.sandbox-limits",
+                            "source": "content/pi/security/sandbox-limits.md"
+                          }
+                        },
+                        {
+                          "name": "local_cache",
+                          "node": {
+                            "kind": "text",
+                            "id": "pi-security.local-cache",
+                            "source": "content/pi/security/local-cache.md"
+                          }
+                        },
+                        {
+                          "name": "refusal",
+                          "node": {
+                            "kind": "text",
+                            "id": "pi-security.refusal",
+                            "source": "content/pi/security/refusal.md"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "text",
+                      "id": "pi-security.disabled",
+                      "source": "content/pi/security/disabled.md"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "credentials",
+                "node": {
+                  "kind": "text",
+                  "id": "pi-security.credentials",
+                  "source": "content/pi/security/credentials.md"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "write-recovery",
+          "delivery": "tool_result",
+          "description": "Guidance after a sandbox write failure.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.write-recovery",
+            "source": "content/pi/security/write-recovery.md",
+            "bindings": [
+              {
+                "name": "paths",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "write_paths",
+                    "kind": "text",
+                    "description": "Writable paths joined with commas."
+                  }
+                }
+              },
+              {
+                "name": "guidance",
+                "node": {
+                  "kind": "text",
+                  "id": "pi-security.sandbox-limits",
+                  "source": "content/pi/security/sandbox-limits.md"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "recovery",
+          "delivery": "tool_result",
+          "description": "Appended to failed commands; distinguishes OS errors from approval rejections.",
+          "body": {
+            "kind": "join",
+            "separator": "\n",
+            "children": [
+              {
+                "kind": "choose",
+                "condition": {
+                  "field": {
+                    "name": "network_failure",
+                    "kind": "flag",
+                    "description": "The command reported a network failure."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "pi-security.network-failure",
+                    "source": "content/pi/security/network-failure.md"
+                  },
+                  {
+                    "kind": "text",
+                    "id": "pi-security.permission-failure",
+                    "source": "content/pi/security/permission-failure.md"
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "id": "pi-security.sandbox-limits",
+                "source": "content/pi/security/sandbox-limits.md"
+              },
+              {
+                "kind": "text",
+                "id": "pi-security.execution-scope",
+                "source": "content/pi/security/execution-scope.md"
+              }
+            ]
+          }
+        },
+        {
+          "id": "startup-failure",
+          "delivery": "tool_result",
+          "description": "The OS sandbox could not start.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.startup-failure",
+            "source": "content/pi/security/startup-failure.md"
+          }
+        },
+        {
+          "id": "configuration-error",
+          "delivery": "system_prompt",
+          "description": "Security configuration prevents tool execution.",
+          "body": {
+            "kind": "text",
+            "id": "pi-security.configuration-error",
+            "source": "content/pi/security/configuration-error.md",
+            "bindings": [
+              {
+                "name": "problem",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "problem",
+                    "kind": "text",
+                    "description": "Security configuration error."
                   }
                 }
               }
@@ -2315,100 +2473,73 @@
           }
         },
         {
-          "id": "not-stated",
-          "delivery": "message_fragment",
-          "description": "An empty action or reason in a denial.",
+          "id": "not-initialized",
+          "delivery": "system_prompt",
+          "description": "Security has not initialized.",
           "body": {
             "kind": "text",
-            "id": "pi.not-stated",
-            "source": "content/pi/not-stated.md"
+            "id": "pi-security.not-initialized",
+            "source": "content/pi/security/not-initialized.md"
           }
         },
         {
-          "id": "denial",
-          "delivery": "tool_result",
-          "description": "Auto-mode denial, with distinct outage and hard-block guidance.",
+          "id": "bash-credentials",
+          "delivery": "tool_guideline",
+          "description": "Credential restrictions for bash.",
           "body": {
             "kind": "text",
-            "id": "pi.denial",
-            "source": "content/pi/denial.md",
-            "bindings": [
+            "id": "pi-security.bash-credentials",
+            "source": "content/pi/security/bash-credentials.md"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pi-guardian",
+      "description": "Guardian reviewer for auto mode. It judges one planned action against the security policy and answers allow or deny.",
+      "events": [
+        {
+          "id": "system",
+          "delivery": "system_prompt",
+          "description": "The guardian's whole system prompt; the security policy carries the configured environment.",
+          "body": {
+            "kind": "join",
+            "separator": "\n\n",
+            "children": [
               {
-                "name": "action",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "action",
-                    "kind": "text",
-                    "description": "Action collapsed to one line."
-                  }
-                }
-              },
-              {
-                "name": "reason",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "reason",
-                    "kind": "text",
-                    "description": "Reason collapsed to one line."
-                  }
-                }
-              },
-              {
-                "name": "outage",
-                "node": {
-                  "kind": "when",
-                  "condition": {
-                    "field": {
-                      "name": "outage",
-                      "kind": "flag",
-                      "description": "No classifier answered."
-                    },
-                    "test": "enabled"
-                  },
-                  "children": [
-                    {
+                "kind": "text",
+                "id": "pi-guardian.policy-template",
+                "source": "content/pi/guardian/policy-template.md",
+                "bindings": [
+                  {
+                    "name": "policy",
+                    "node": {
                       "kind": "text",
-                      "id": "pi.denial-outage",
-                      "source": "content/pi/denial-outage.md"
+                      "id": "pi-guardian.policy",
+                      "source": "content/pi/guardian/policy.md",
+                      "bindings": [
+                        {
+                          "name": "environment",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "environment",
+                              "kind": "text",
+                              "description": "Environment rendered from configured slots and notes by Pi.",
+                              "from": "pi-environment/render"
+                            }
+                          }
+                        }
+                      ]
                     }
-                  ]
-                }
+                  }
+                ]
               },
               {
-                "name": "guidance",
-                "node": {
-                  "kind": "text",
-                  "id": "pi.denial-guidance",
-                  "source": "content/pi/denial-guidance.md"
-                }
-              },
-              {
-                "name": "settings",
-                "node": {
-                  "kind": "choose",
-                  "condition": {
-                    "field": {
-                      "name": "hard_block",
-                      "kind": "flag",
-                      "description": "User approval cannot clear this rejection."
-                    },
-                    "test": "enabled"
-                  },
-                  "children": [
-                    {
-                      "kind": "text",
-                      "id": "pi.denial-hard-block",
-                      "source": "content/pi/denial-hard-block.md"
-                    },
-                    {
-                      "kind": "text",
-                      "id": "pi.denial-settings",
-                      "source": "content/pi/denial-settings.md"
-                    }
-                  ]
-                }
+                "kind": "text",
+                "id": "pi-guardian.output-contract",
+                "source": "content/pi/guardian/output-contract.md",
+                "keep_final_newline": true
               }
             ]
           }
@@ -3164,878 +3295,6 @@
                     "description": "Bounded seed and evidence serialized as JSON by the daemon."
                   }
                 }
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "id": "pi-environment",
-      "description": "Environment supplied to both permission passes, including the rulebook's defaults.",
-      "events": [
-        {
-          "id": "unset-trusted_repo",
-          "delivery": "message_fragment",
-          "description": "Default meaning when the user has not configured this slot.",
-          "body": {
-            "kind": "text",
-            "id": "pi-environment.unset-trusted_repo",
-            "source": "content/pi/environment/trusted_repo.md"
-          }
-        },
-        {
-          "id": "unset-repo_visibility",
-          "delivery": "message_fragment",
-          "description": "Default meaning when the user has not configured this slot.",
-          "body": {
-            "kind": "text",
-            "id": "pi-environment.unset-repo_visibility",
-            "source": "content/pi/environment/repo_visibility.md"
-          }
-        },
-        {
-          "id": "unset-domains",
-          "delivery": "message_fragment",
-          "description": "Default meaning when the user has not configured this slot.",
-          "body": {
-            "kind": "text",
-            "id": "pi-environment.unset-domains",
-            "source": "content/pi/environment/domains.md"
-          }
-        },
-        {
-          "id": "unset-buckets",
-          "delivery": "message_fragment",
-          "description": "Default meaning when the user has not configured this slot.",
-          "body": {
-            "kind": "text",
-            "id": "pi-environment.unset-buckets",
-            "source": "content/pi/environment/buckets.md"
-          }
-        },
-        {
-          "id": "unset-services",
-          "delivery": "message_fragment",
-          "description": "Default meaning when the user has not configured this slot.",
-          "body": {
-            "kind": "text",
-            "id": "pi-environment.unset-services",
-            "source": "content/pi/environment/services.md"
-          }
-        },
-        {
-          "id": "unset-source_control",
-          "delivery": "message_fragment",
-          "description": "Default meaning when the user has not configured this slot.",
-          "body": {
-            "kind": "text",
-            "id": "pi-environment.unset-source_control",
-            "source": "content/pi/environment/source_control.md"
-          }
-        },
-        {
-          "id": "unset-registry",
-          "delivery": "message_fragment",
-          "description": "Default meaning when the user has not configured this slot.",
-          "body": {
-            "kind": "text",
-            "id": "pi-environment.unset-registry",
-            "source": "content/pi/environment/registry.md"
-          }
-        },
-        {
-          "id": "unset-sensitive_data",
-          "delivery": "message_fragment",
-          "description": "Default meaning when the user has not configured this slot.",
-          "body": {
-            "kind": "text",
-            "id": "pi-environment.unset-sensitive_data",
-            "source": "content/pi/environment/sensitive_data.md"
-          }
-        },
-        {
-          "id": "unset-audiences",
-          "delivery": "message_fragment",
-          "description": "Default meaning when the user has not configured this slot.",
-          "body": {
-            "kind": "text",
-            "id": "pi-environment.unset-audiences",
-            "source": "content/pi/environment/audiences.md"
-          }
-        },
-        {
-          "id": "unset-remote_targets",
-          "delivery": "message_fragment",
-          "description": "Default meaning when the user has not configured this slot.",
-          "body": {
-            "kind": "text",
-            "id": "pi-environment.unset-remote_targets",
-            "source": "content/pi/environment/remote_targets.md"
-          }
-        },
-        {
-          "id": "unset-iac_scopes",
-          "delivery": "message_fragment",
-          "description": "Default meaning when the user has not configured this slot.",
-          "body": {
-            "kind": "text",
-            "id": "pi-environment.unset-iac_scopes",
-            "source": "content/pi/environment/iac_scopes.md"
-          }
-        },
-        {
-          "id": "render",
-          "delivery": "message_fragment",
-          "description": "Ordered environment slots and optional user notes.",
-          "body": {
-            "kind": "join",
-            "children": [
-              {
-                "kind": "input",
-                "field": {
-                  "name": "slots",
-                  "kind": "text",
-                  "description": "Rendered slots joined with newlines.",
-                  "from": "pi-environment/slot"
-                }
-              },
-              {
-                "kind": "when",
-                "condition": {
-                  "field": {
-                    "name": "has_notes",
-                    "kind": "flag",
-                    "description": "At least one nonblank note."
-                  },
-                  "test": "enabled"
-                },
-                "children": [
-                  {
-                    "kind": "join",
-                    "separator": "\n\n",
-                    "children": [
-                      {
-                        "kind": "compose"
-                      },
-                      {
-                        "kind": "text",
-                        "id": "pi-environment.notes",
-                        "source": "content/pi/environment/notes.md",
-                        "bindings": [
-                          {
-                            "name": "notes",
-                            "node": {
-                              "kind": "input",
-                              "field": {
-                                "name": "notes",
-                                "kind": "text",
-                                "description": "Quoted note lines."
-                              }
-                            }
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "slot",
-          "delivery": "message_fragment",
-          "description": "One configured environment slot, or its default meaning.",
-          "body": {
-            "kind": "text",
-            "id": "pi-environment.slot",
-            "source": "content/pi/environment/slot.md",
-            "bindings": [
-              {
-                "name": "label",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "label",
-                    "kind": "text",
-                    "description": "Schema label."
-                  }
-                }
-              },
-              {
-                "name": "value",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "value",
-                    "kind": "text",
-                    "description": "Configured values or the slot's rendered default."
-                  }
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "notes",
-          "delivery": "message_fragment",
-          "description": "Nonempty notes supplied by the user.",
-          "body": {
-            "kind": "text",
-            "id": "pi-environment.notes",
-            "source": "content/pi/environment/notes.md",
-            "bindings": [
-              {
-                "name": "notes",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "notes",
-                    "kind": "text",
-                    "description": "Quoted note lines."
-                  }
-                }
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "id": "pi-security",
-      "description": "Execution permissions supplied to the working Pi agent and sandbox tool guidance.",
-      "events": [
-        {
-          "id": "instructions",
-          "delivery": "system_prompt",
-          "description": "Appended before each agent start; values come from the executor's current policy.",
-          "body": {
-            "kind": "text",
-            "id": "pi-security.instructions",
-            "source": "content/pi/security/instructions.md",
-            "bindings": [
-              {
-                "name": "sandbox",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "sandbox",
-                    "kind": "text",
-                    "description": "Enabled or disabled, derived from policy."
-                  }
-                }
-              },
-              {
-                "name": "network",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "network",
-                    "kind": "text",
-                    "description": "Effective tool networking policy."
-                  }
-                }
-              },
-              {
-                "name": "guidance",
-                "node": {
-                  "kind": "choose",
-                  "condition": {
-                    "field": {
-                      "name": "enabled",
-                      "kind": "flag",
-                      "description": "The OS sandbox is enabled."
-                    },
-                    "test": "enabled"
-                  },
-                  "children": [
-                    {
-                      "kind": "text",
-                      "id": "pi-security.enabled",
-                      "source": "content/pi/security/enabled.md",
-                      "bindings": [
-                        {
-                          "name": "paths",
-                          "node": {
-                            "kind": "input",
-                            "field": {
-                              "name": "write_paths",
-                              "kind": "text",
-                              "description": "JSON array of writable paths."
-                            }
-                          }
-                        },
-                        {
-                          "name": "caches",
-                          "node": {
-                            "kind": "input",
-                            "field": {
-                              "name": "cache_paths",
-                              "kind": "text",
-                              "description": "JSON array of cache grants, or disabled."
-                            }
-                          }
-                        },
-                        {
-                          "name": "unavailable",
-                          "node": {
-                            "kind": "when",
-                            "condition": {
-                              "field": {
-                                "name": "has_unavailable_caches",
-                                "kind": "flag",
-                                "description": "Some cache grants are unavailable."
-                              },
-                              "test": "enabled"
-                            },
-                            "children": [
-                              {
-                                "kind": "text",
-                                "id": "pi-security.unavailable-caches",
-                                "source": "content/pi/security/unavailable-caches.md",
-                                "keep_final_newline": true,
-                                "bindings": [
-                                  {
-                                    "name": "paths",
-                                    "node": {
-                                      "kind": "input",
-                                      "field": {
-                                        "name": "unavailable_caches",
-                                        "kind": "text",
-                                        "description": "JSON array of unavailable cache grants."
-                                      }
-                                    }
-                                  }
-                                ]
-                              }
-                            ]
-                          }
-                        },
-                        {
-                          "name": "review",
-                          "node": {
-                            "kind": "input",
-                            "field": {
-                              "name": "review",
-                              "kind": "text",
-                              "description": "Available or unavailable, derived from reviewer configuration."
-                            }
-                          }
-                        },
-                        {
-                          "name": "request",
-                          "node": {
-                            "kind": "choose",
-                            "condition": {
-                              "field": {
-                                "name": "review_available",
-                                "kind": "flag",
-                                "description": "Auto-mode access review is available."
-                              },
-                              "test": "enabled"
-                            },
-                            "children": [
-                              {
-                                "kind": "text",
-                                "id": "pi-security.access-request",
-                                "source": "content/pi/security/access-request.md"
-                              },
-                              {
-                                "kind": "text",
-                                "id": "pi-security.review-unavailable",
-                                "source": "content/pi/security/review-unavailable.md"
-                              }
-                            ]
-                          }
-                        },
-                        {
-                          "name": "local_cache",
-                          "node": {
-                            "kind": "text",
-                            "id": "pi-security.local-cache",
-                            "source": "content/pi/security/local-cache.md"
-                          }
-                        },
-                        {
-                          "name": "refusal",
-                          "node": {
-                            "kind": "text",
-                            "id": "pi-security.refusal",
-                            "source": "content/pi/security/refusal.md"
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "kind": "text",
-                      "id": "pi-security.disabled",
-                      "source": "content/pi/security/disabled.md"
-                    }
-                  ]
-                }
-              },
-              {
-                "name": "credentials",
-                "node": {
-                  "kind": "text",
-                  "id": "pi-security.credentials",
-                  "source": "content/pi/security/credentials.md"
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "write-recovery",
-          "delivery": "tool_result",
-          "description": "Guidance after a sandbox write failure.",
-          "body": {
-            "kind": "text",
-            "id": "pi-security.write-recovery",
-            "source": "content/pi/security/write-recovery.md",
-            "bindings": [
-              {
-                "name": "paths",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "write_paths",
-                    "kind": "text",
-                    "description": "Writable paths joined with commas."
-                  }
-                }
-              },
-              {
-                "name": "guidance",
-                "node": {
-                  "kind": "choose",
-                  "condition": {
-                    "field": {
-                      "name": "review_available",
-                      "kind": "flag",
-                      "description": "Auto-mode access review is available."
-                    },
-                    "test": "enabled"
-                  },
-                  "children": [
-                    {
-                      "kind": "text",
-                      "id": "pi-security.write-request",
-                      "source": "content/pi/security/write-request.md"
-                    },
-                    {
-                      "kind": "text",
-                      "id": "pi-security.review-unavailable",
-                      "source": "content/pi/security/review-unavailable.md"
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "recovery",
-          "delivery": "tool_result",
-          "description": "Appended to failed commands; distinguishes OS errors from review refusals.",
-          "body": {
-            "kind": "join",
-            "separator": "\n",
-            "children": [
-              {
-                "kind": "choose",
-                "condition": {
-                  "field": {
-                    "name": "network_failure",
-                    "kind": "flag",
-                    "description": "The command reported a network failure."
-                  },
-                  "test": "enabled"
-                },
-                "children": [
-                  {
-                    "kind": "text",
-                    "id": "pi-security.network-failure",
-                    "source": "content/pi/security/network-failure.md"
-                  },
-                  {
-                    "kind": "text",
-                    "id": "pi-security.permission-failure",
-                    "source": "content/pi/security/permission-failure.md"
-                  }
-                ]
-              },
-              {
-                "kind": "join",
-                "children": [
-                  {
-                    "kind": "choose",
-                    "condition": {
-                      "field": {
-                        "name": "network_failure",
-                        "kind": "flag",
-                        "description": "The command reported a network failure."
-                      },
-                      "test": "enabled"
-                    },
-                    "children": [
-                      {
-                        "kind": "choose",
-                        "condition": {
-                          "field": {
-                            "name": "review_available",
-                            "kind": "flag",
-                            "description": "Auto-mode access review is available."
-                          },
-                          "test": "enabled"
-                        },
-                        "children": [
-                          {
-                            "kind": "text",
-                            "id": "pi-security.network-request",
-                            "source": "content/pi/security/network-request.md"
-                          },
-                          {
-                            "kind": "text",
-                            "id": "pi-security.review-unavailable",
-                            "source": "content/pi/security/review-unavailable.md"
-                          }
-                        ]
-                      },
-                      {
-                        "kind": "text",
-                        "id": "pi-security.write-recovery",
-                        "source": "content/pi/security/write-recovery.md",
-                        "bindings": [
-                          {
-                            "name": "paths",
-                            "node": {
-                              "kind": "input",
-                              "field": {
-                                "name": "write_paths",
-                                "kind": "text",
-                                "description": "Writable paths joined with commas."
-                              }
-                            }
-                          },
-                          {
-                            "name": "guidance",
-                            "node": {
-                              "kind": "choose",
-                              "condition": {
-                                "field": {
-                                  "name": "review_available",
-                                  "kind": "flag",
-                                  "description": "Auto-mode access review is available."
-                                },
-                                "test": "enabled"
-                              },
-                              "children": [
-                                {
-                                  "kind": "text",
-                                  "id": "pi-security.write-request",
-                                  "source": "content/pi/security/write-request.md"
-                                },
-                                {
-                                  "kind": "text",
-                                  "id": "pi-security.review-unavailable",
-                                  "source": "content/pi/security/review-unavailable.md"
-                                }
-                              ]
-                            }
-                          }
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "kind": "choose",
-                    "condition": {
-                      "field": {
-                        "name": "network_failure",
-                        "kind": "flag",
-                        "description": "The command reported a network failure."
-                      },
-                      "test": "enabled"
-                    },
-                    "children": [
-                      {
-                        "kind": "compose"
-                      },
-                      {
-                        "kind": "when",
-                        "condition": {
-                          "field": {
-                            "name": "network_denied",
-                            "kind": "flag",
-                            "description": "Tool networking is denied."
-                          },
-                          "test": "enabled"
-                        },
-                        "children": [
-                          {
-                            "kind": "when",
-                            "condition": {
-                              "field": {
-                                "name": "review_available",
-                                "kind": "flag",
-                                "description": "Auto-mode access review is available."
-                              },
-                              "test": "enabled"
-                            },
-                            "children": [
-                              {
-                                "kind": "join",
-                                "separator": "\n",
-                                "children": [
-                                  {
-                                    "kind": "compose"
-                                  },
-                                  {
-                                    "kind": "text",
-                                    "id": "pi-security.network-request",
-                                    "source": "content/pi/security/network-request.md"
-                                  }
-                                ]
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "kind": "text",
-                "id": "pi-security.execution-scope",
-                "source": "content/pi/security/execution-scope.md"
-              }
-            ]
-          }
-        },
-        {
-          "id": "denial",
-          "delivery": "tool_result",
-          "description": "An access request refused by auto mode.",
-          "body": {
-            "kind": "text",
-            "id": "pi-security.denial",
-            "source": "content/pi/security/denial.md",
-            "bindings": [
-              {
-                "name": "action",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "action",
-                    "kind": "text",
-                    "description": "Action collapsed to one line."
-                  }
-                }
-              },
-              {
-                "name": "reason",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "reason",
-                    "kind": "text",
-                    "description": "Reason collapsed to one line."
-                  }
-                }
-              },
-              {
-                "name": "outage",
-                "node": {
-                  "kind": "when",
-                  "condition": {
-                    "field": {
-                      "name": "outage",
-                      "kind": "flag",
-                      "description": "No classifier answered."
-                    },
-                    "test": "enabled"
-                  },
-                  "children": [
-                    {
-                      "kind": "text",
-                      "id": "pi-security.denial-outage",
-                      "source": "content/pi/security/denial-outage.md",
-                      "keep_final_newline": true
-                    }
-                  ]
-                }
-              },
-              {
-                "name": "guidance",
-                "node": {
-                  "kind": "choose",
-                  "condition": {
-                    "field": {
-                      "name": "hard_block",
-                      "kind": "flag",
-                      "description": "User approval cannot clear this rejection."
-                    },
-                    "test": "enabled"
-                  },
-                  "children": [
-                    {
-                      "kind": "text",
-                      "id": "pi-security.denial-hard-block",
-                      "source": "content/pi/security/denial-hard-block.md"
-                    },
-                    {
-                      "kind": "text",
-                      "id": "pi-security.denial-retry",
-                      "source": "content/pi/security/denial-retry.md"
-                    }
-                  ]
-                }
-              },
-              {
-                "name": "boundary",
-                "node": {
-                  "kind": "text",
-                  "id": "pi-security.denial-boundary",
-                  "source": "content/pi/security/denial-boundary.md"
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "review-unavailable",
-          "delivery": "tool_result",
-          "description": "No access reviewer is available.",
-          "body": {
-            "kind": "text",
-            "id": "pi-security.review-unavailable",
-            "source": "content/pi/security/review-unavailable.md"
-          }
-        },
-        {
-          "id": "startup-failure",
-          "delivery": "tool_result",
-          "description": "The OS sandbox could not start.",
-          "body": {
-            "kind": "text",
-            "id": "pi-security.startup-failure",
-            "source": "content/pi/security/startup-failure.md"
-          }
-        },
-        {
-          "id": "configuration-error",
-          "delivery": "system_prompt",
-          "description": "Security configuration prevents tool execution.",
-          "body": {
-            "kind": "text",
-            "id": "pi-security.configuration-error",
-            "source": "content/pi/security/configuration-error.md",
-            "bindings": [
-              {
-                "name": "problem",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "problem",
-                    "kind": "text",
-                    "description": "Security configuration error."
-                  }
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "not-initialized",
-          "delivery": "system_prompt",
-          "description": "Security has not initialized.",
-          "body": {
-            "kind": "text",
-            "id": "pi-security.not-initialized",
-            "source": "content/pi/security/not-initialized.md"
-          }
-        },
-        {
-          "id": "bash-description",
-          "delivery": "tool_description",
-          "description": "Appended to the harness's bash description.",
-          "body": {
-            "kind": "text",
-            "id": "pi-security.bash-description",
-            "source": "content/pi/security/bash-description.md"
-          }
-        },
-        {
-          "id": "bash-guidance",
-          "delivery": "tool_guideline",
-          "description": "Sandbox access guidance for bash.",
-          "body": {
-            "kind": "text",
-            "id": "pi-security.bash-guidance",
-            "source": "content/pi/security/bash-guidance.md"
-          }
-        },
-        {
-          "id": "bash-credentials",
-          "delivery": "tool_guideline",
-          "description": "Credential restrictions for bash.",
-          "body": {
-            "kind": "text",
-            "id": "pi-security.bash-credentials",
-            "source": "content/pi/security/bash-credentials.md"
-          }
-        }
-      ]
-    },
-    {
-      "id": "pi-guardian",
-      "description": "Guardian reviewer for auto mode. It judges one planned action against the security policy and answers allow or deny.",
-      "events": [
-        {
-          "id": "system",
-          "delivery": "system_prompt",
-          "description": "The guardian's whole system prompt; the security policy carries the configured environment.",
-          "body": {
-            "kind": "join",
-            "separator": "\n\n",
-            "children": [
-              {
-                "kind": "text",
-                "id": "pi-guardian.policy-template",
-                "source": "content/pi/guardian/policy-template.md",
-                "bindings": [
-                  {
-                    "name": "policy",
-                    "node": {
-                      "kind": "text",
-                      "id": "pi-guardian.policy",
-                      "source": "content/pi/guardian/policy.md",
-                      "bindings": [
-                        {
-                          "name": "environment",
-                          "node": {
-                            "kind": "input",
-                            "field": {
-                              "name": "environment",
-                              "kind": "text",
-                              "description": "Environment rendered from configured slots and notes by Pi.",
-                              "from": "pi-environment/render"
-                            }
-                          }
-                        }
-                      ]
-                    }
-                  }
-                ]
-              },
-              {
-                "kind": "text",
-                "id": "pi-guardian.output-contract",
-                "source": "content/pi/guardian/output-contract.md",
-                "keep_final_newline": true
               }
             ]
           }
@@ -5027,5 +4286,5 @@
       ]
     }
   ],
-  "definitions_hash": "ce9c238e862950cb10e79a945b931b284677b3d29af3792f688ce705d5fba7b0"
+  "definitions_hash": "e7033f41f73f00b0d1921c29f9aa06c8c5cce7f6a6475c3f32bdff52306dc04d"
 }

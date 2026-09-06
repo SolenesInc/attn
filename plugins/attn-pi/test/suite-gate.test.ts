@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { autoModeConfigEnvVar } from "../automode/source";
+import { approvalConfigEnvVar } from "../approval/index";
 
-const probe = join(import.meta.dir, "automode-suite-probe.ts");
+const probe = join(import.meta.dir, "suite-gate-probe.ts");
 const suiteEntry = join(import.meta.dir, "..", "suite", "index.ts");
-const standaloneEntry = join(import.meta.dir, "..", "automode", "standalone.ts");
 
 type Registered = { events: string[]; commands: string[]; flags: string[] };
 
@@ -26,29 +25,20 @@ async function load(entrypoint: string, env: Record<string, string>): Promise<Re
 }
 
 describe("suite composition", () => {
-  test("a bare pi loading the suite is untouched by auto mode", async () => {
+  test("a bare pi loading the suite is untouched by approvals", async () => {
     const registered = await load(suiteEntry, {});
     expect(registered.commands).toEqual([]);
     expect(registered.flags).toEqual([]);
     expect(registered.events).toEqual([]);
   });
 
-  test("attn's config composes auto mode into the suite", async () => {
+  test("attn's config composes the approval orchestrator into the suite", async () => {
     const registered = await load(suiteEntry, {
-      [autoModeConfigEnvVar]: JSON.stringify({ enabled_default: true }),
+      [approvalConfigEnvVar]: JSON.stringify({ enabled_default: true }),
     });
     expect(registered.commands).toEqual(["security", "auto"]);
     expect(registered.flags).toEqual(["auto", "no-auto"]);
     expect(registered.events).toContain("session_start");
     expect(registered.events).toContain("agent_start");
-  });
-});
-
-describe("the standalone extension", () => {
-  test("`pi -e automode.js` registers auto mode with no attn anywhere", async () => {
-    const registered = await load(standaloneEntry, { PI_CODING_AGENT_DIR: "/nonexistent" });
-    expect(registered.commands).toEqual(["auto"]);
-    expect(registered.flags).toEqual(["auto", "no-auto"]);
-    expect(registered.events).toContain("tool_call");
   });
 });

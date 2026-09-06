@@ -14,7 +14,6 @@ import type { BashApproval } from "../approval/index";
 import { changeSecurityConfig } from "./settings";
 import { SecurityPanel, type SecuritySnapshot } from "./ui";
 import { securityInstructions, securityPrompt } from "./guidance";
-import type { ToolExecutionCheck } from "../automode/index";
 
 export class PiSecurity {
   private fs: SandboxedFilesystem | undefined;
@@ -27,8 +26,6 @@ export class PiSecurity {
     /** Called with the policy every time security reconfigures, so the approval
      * orchestrator wraps commands with the paths this session actually has. */
     private readonly onPolicy?: (policy: SecurityPolicy | undefined) => void,
-    private readonly reviewAvailable = () => false,
-    private readonly checkExecution?: ToolExecutionCheck,
   ) {}
 
   cacheWritePaths(): readonly string[] { return this.problem ? [] : this.policy?.cacheWritePaths ?? []; }
@@ -39,7 +36,7 @@ export class PiSecurity {
     pi.on("session_shutdown", () => this.close());
     pi.on("before_agent_start", (event) => ({ systemPrompt: event.systemPrompt + "\n\n" + credentials.text(
       this.problem ? securityPrompt("configuration-error", { problem: this.problem })
-        : this.policy ? securityInstructions(this.policy, this.reviewAvailable()) : securityPrompt("not-initialized"),
+        : this.policy ? securityInstructions(this.policy) : securityPrompt("not-initialized"),
     ) }));
     pi.on("tool_result", (event) => {
       try { return credentials.value({ content: event.content, details: event.details }); }
@@ -49,7 +46,7 @@ export class PiSecurity {
     pi.on("before_provider_request", (event) => credentials.request(event.payload));
     pi.on("user_bash", () => {
       if (!this.policy || this.problem) return { result: { output: this.problem ?? "Security is not initialized", exitCode: 1, cancelled: false, truncated: false } };
-      return { operations: protectedBash(this.policy, credentials, this.reviewAvailable) };
+      return { operations: protectedBash(this.policy, credentials) };
     });
     pi.registerCommand("security", {
       description: "Open security settings; status, on, off, caches, allow-write, revoke-write, network",
@@ -58,7 +55,7 @@ export class PiSecurity {
           const command = args.trim();
           const snapshot = (): SecuritySnapshot => ({
             config: loadSecurityConfig(this.configPath), policy: this.policy, problem: this.problem,
-            configPath: this.configPath, cwd: ctx.cwd, reviewAvailable: this.reviewAvailable(),
+            configPath: this.configPath, cwd: ctx.cwd,
           });
           const apply = async (commands: string[]) => {
             const config = loadSecurityConfig(this.configPath);
@@ -89,11 +86,11 @@ export class PiSecurity {
       const config = loadSecurityConfig(this.configPath);
       this.temp = mkdtempSync(join(tmpdir(), "attn-pi-tools-"));
       this.policy = resolveSecurityPolicy(config, ctx.cwd, this.configPath, this.temp);
-      this.fs = new SandboxedFilesystem(this.policy, credentials, this.reviewAvailable);
+      this.fs = new SandboxedFilesystem(this.policy, credentials);
       this.problem = undefined;
       const policy = this.policy;
       this.onPolicy?.(policy);
-      for (const tool of protectedTools(policy, credentials, this.fs, this.approval, this.reviewAvailable, this.checkExecution)) pi.registerTool(tool);
+      for (const tool of protectedTools(policy, credentials, this.fs, this.approval)) pi.registerTool(tool);
     } catch (error) {
       this.problem = credentials.text(error instanceof Error ? error.message : String(error));
       for (const make of [createBashToolDefinition, createReadToolDefinition, createWriteToolDefinition, createEditToolDefinition, createLsToolDefinition, createFindToolDefinition, createGrepToolDefinition]) {
@@ -118,7 +115,6 @@ export class PiSecurity {
       `Build caches: ${policy.buildCaches.enabled ? "on" : "off"}. Configured paths: ${policy.buildCaches.paths.join(", ")}`,
       `Active cache grants: ${policy.cacheWritePaths.join(", ") || "none"}`,
       ...policy.unavailableCaches.map((problem) => `Unavailable cache: ${problem}`),
-      `Extra access review: ${policy.enabled && this.reviewAvailable() ? "available" : "unavailable"}`,
       `Write grants: ${policy.allowWrite.join(", ")}`, `Read denies: ${policy.denyRead.join(", ")}`,
       `Write denies: ${policy.denyWrite.join(", ")}`, `Settings: ${this.configPath}`,
       "Applies to built-in tools and !/!! commands. Extensions and MCP servers remain trusted.",

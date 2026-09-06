@@ -129,11 +129,6 @@ stage_plugin() {
     # Keep them external so extensions use the running Pi instance.
     bun build "${source_dir}/suite/index.ts" --target=node --format=esm --minify \
       --external "@earendil-works/pi-coding-agent" --external "@earendil-works/pi-tui" --outfile "${stage_dir}/suite.js"
-    # Auto mode ships inside suite.js by import; this second bundle is the same
-    # extension for a pi that knows nothing about attn (`pi -e automode.js`),
-    # under the same external rule.
-    bun build "${source_dir}/automode/standalone.ts" --target=node --format=esm --minify \
-      --external "@earendil-works/pi-coding-agent" --external "@earendil-works/pi-tui" --outfile "${stage_dir}/automode.js"
     bun build "${source_dir}/security/standalone.ts" --target=node --format=esm --minify \
       --external "@earendil-works/pi-coding-agent" --external "@earendil-works/pi-tui" --outfile "${stage_dir}/security.js"
     cp -R "${source_dir}/security/notices" "${stage_dir}/notices"
