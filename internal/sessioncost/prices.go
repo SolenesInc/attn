@@ -1,7 +1,7 @@
 package sessioncost
 
 // Built-in prices are standard global API list prices in USD per million
-// tokens. Receipts were checked 2026-08-15 unless noted below.
+// tokens.
 var builtInRateCards = map[string]RateCard{
 	// Source: https://platform.claude.com/docs/en/about-claude/pricing
 	// Claude's table distinguishes 5-minute and 1-hour cache writes.
@@ -27,7 +27,6 @@ var builtInRateCards = map[string]RateCard{
 	"gpt-5.6-terra": openAIRates(2, 12, 0.2, 2.5),
 	"gpt-5.6-luna":  openAIRates(0.2, 1.2, 0.02, 0.25),
 
-	// Source checked 2026-09-06: https://developers.openai.com/api/docs/models/gpt-6-astra
 	"gpt-6-astra": openAIRates(10, 50, 1, 12.5),
 }
 
