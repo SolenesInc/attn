@@ -1,6 +1,8 @@
 import { type MouseEvent as ReactMouseEvent } from 'react';
 import { StateIndicator } from './StateIndicator';
 import { SessionLabel } from './SessionLabel';
+import { HarnessIcon } from './HarnessIcon';
+import { harnessLabel } from './harnessLabel';
 import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
 import { SidebarSettlingBar } from './SettlingIndicator';
 import { CrewWakeSun, useWakeConfirm } from './CrewWake';
@@ -15,6 +17,7 @@ import { SessionProvenance } from './SessionProvenance';
 
 export interface QueueBandSessionView {
   id: string;
+  agent?: string;
   label: string;
   state: UISessionState;
   state_reason?: string;
@@ -98,12 +101,16 @@ function QueueRowView({
         className="queue-row-select"
         data-testid={`queue-select-${session.id}`}
         aria-label={`Open ${session.label}`}
+        title={harnessLabel(session.agent)}
         onClick={onSelect}
       />
       <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
       {/* No workspace name in a band row: the label needs every column, and the pin button's tooltip names the workspace. */}
       <span className="sidebar-session-identity">
-        <SessionLabel label={session.label} />
+        <span className="sidebar-session-headline">
+          <HarnessIcon agent={session.agent} />
+          <SessionLabel label={session.label} />
+        </span>
         <SessionProvenance automation={session.automation} density="compact" />
       </span>
       {session.chiefOfStaff && <ChiefOfStaffBadge />}
@@ -388,6 +395,7 @@ function CrewRowView({
         className="queue-row-select"
         data-testid={`queue-crew-select-${member}`}
         aria-label={awake ? `Open ${label}` : wakeLabel}
+        title={awake ? harnessLabel(row!.session.agent) : undefined}
         onClick={awake ? onSelect : trigger}
       />
       {awake ? (
@@ -396,6 +404,7 @@ function CrewRowView({
         // The hollow ring is the same size as an indicator, so every crew row's label starts on the same column.
         <span className="crew-asleep-dot" aria-hidden="true" />
       )}
+      {awake && <HarnessIcon agent={row!.session.agent} />}
       <SessionLabel label={label} />
       <span className="crew-row-mark" title={awake ? `${name} is awake` : `${name} is asleep`}>
         {awake ? 'crew' : 'asleep'}
