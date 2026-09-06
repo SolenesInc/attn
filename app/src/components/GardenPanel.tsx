@@ -17,6 +17,8 @@ import {
   type SearchEntry,
   type SeedMatch,
 } from './gardenSearch';
+import { asking, questionOf, type SeedQuestion } from './seedQuestions';
+import { NeedsYouBanner, NeedsYouChip, SeedQuestionCard } from './GardenQuestions';
 import { HarvestWhenLine } from './HarvestWhenLine';
 import { Markdown } from './Markdown';
 import { MarkdownReader } from './MarkdownReader';
@@ -50,6 +52,12 @@ interface GardenPanelProps {
   reviewError?: string;
   onOpenReview?: () => void;
   tenderSessionLabels?: ReadonlyMap<string, string>;
+  /** PROTOTYPE (s-j3j5bk): 'banner' puts the queue at the top of the panel;
+      'none' means it stands elsewhere, in the rail beside this panel. */
+  questionPlacement?: 'banner' | 'none';
+  onAnswerQuestion?: (questionId: string, text: string) => void;
+  onDismissQuestion?: (questionId: string) => void;
+  onClearQuestion?: (questionId: string) => void;
 }
 
 const COLUMNS_MIN = 1160;
@@ -256,6 +264,8 @@ function SeedRow({
   const signal = signalOf(seed, blockers);
   const armed = harvestWhenDisplay(seed.harvest_when);
   const tender = tenderOf(seed, tenderSessionLabels);
+  const question = questionOf(seed);
+  const askingNow = question?.status === 'open';
   return (
     <li
       className={`garden-row ${statusClass(seed.status)}${isClosed(seed) ? ' is-closed' : ''}${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}`}
@@ -274,7 +284,8 @@ function SeedRow({
             <span className="garden-row__title">
               <Marked text={seed.title} ranges={match?.titleRanges ?? []} />
             </span>
-            {signal && !(armed && signal.text === 'parked') && (
+            {askingNow && <NeedsYouChip />}
+            {signal && !askingNow && !(armed && signal.text === 'parked') && (
               <span className={`garden-row__signal is-${signal.tone}`}>{signal.text}</span>
             )}
             {armed && (
@@ -290,6 +301,7 @@ function SeedRow({
             )}
             {home && <span className="garden-row__home">in {home.title}</span>}
           </span>
+          {askingNow && question && <span className="garden-row__ask">{question.text}</span>}
         </span>
         {progress && (
           <span className="garden-row__plot">
@@ -479,6 +491,10 @@ export function GardenPanel({
   reviewError = '',
   onOpenReview,
   tenderSessionLabels,
+  questionPlacement = 'banner',
+  onAnswerQuestion,
+  onDismissQuestion,
+  onClearQuestion,
 }: GardenPanelProps) {
   const trail = useGardenWalk((walk) => walk.trail);
   const setTrail = useGardenWalk((walk) => walk.setTrail);
@@ -851,6 +867,7 @@ export function GardenPanel({
   const spoken = notes.filter(isSpoken);
   const bookkeeping = notes.length - spoken.length;
   const relations = here ? relationsOf(index, here.id) : [];
+  const hereQuestion: SeedQuestion | null = questionOf(here);
   const levels: { key: string; seeds: Seed[]; selectedId: string }[] = [
     { key: 'root', seeds: lens(index.roots), selectedId: livingTrail[0] ?? '' },
   ];
@@ -1179,6 +1196,14 @@ export function GardenPanel({
         )}
       </div>
 
+      {hereQuestion && onAnswerQuestion && onDismissQuestion && (
+        <SeedQuestionCard
+          question={hereQuestion}
+          onAnswer={onAnswerQuestion}
+          onDismiss={onDismissQuestion}
+        />
+      )}
+
       {here.body.trim() ? (
         <div className="garden-body">
           <MarkdownReader
@@ -1280,6 +1305,16 @@ export function GardenPanel({
     </p>
   );
 
+  const needsYou = questionPlacement === 'banner' && onAnswerQuestion && onDismissQuestion ? (
+    <NeedsYouBanner
+      rows={asking(seeds, ['open', 'withdrawn'])}
+      onAnswer={onAnswerQuestion}
+      onDismiss={onDismissQuestion}
+      onClear={onClearQuestion}
+      onOpenSeed={openResult}
+    />
+  ) : null;
+
   const reviewPrompt = livingTrail.length === 0 && !searching && onOpenReview && reviewCandidateCount > 0 ? (
     <div className="garden-review-prompt" data-testid="garden-review-prompt">
       <div>
@@ -1306,6 +1341,7 @@ export function GardenPanel({
       <div ref={measurePanel} className="garden-panel is-columns" role="region" aria-label="The garden" onKeyDown={onPanelKeyDown}>
         {trailNav}
         {searchLine}
+        {needsYou}
         {reviewPrompt}
         {reviewProblem}
         <div
@@ -1352,6 +1388,7 @@ export function GardenPanel({
     <div ref={measurePanel} className="garden-panel" role="region" aria-label="The garden" onKeyDown={onPanelKeyDown}>
       {trailNav}
       {searchLine}
+      {needsYou}
       {reviewPrompt}
       {reviewProblem}
       <div

@@ -13,6 +13,8 @@ import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import type { Seed } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { harvestWhenDisplay, type HarvestWhenDisplay } from '../utils/harvestWhen';
+import { NeedsYouChip } from './GardenQuestions';
+import { questionOf } from './seedQuestions';
 import {
   columnOf,
   heldByOther,
@@ -618,6 +620,8 @@ function Card({
   onSelect, onPrimary, onDrill, onMenu, onVerb, onDragPointerDown, wasDragged,
 }: CardProps) {
   const verbs = verbsFor(seed);
+  const question = questionOf(seed);
+  const askingNow = question?.status === 'open';
   const plot = seed.plot_progress ? plotCounts(seed) : '';
   const armed = harvestWhenDisplay(seed.harvest_when);
   const menu = useRef<HTMLDivElement | null>(null);
@@ -632,6 +636,7 @@ function Card({
         selected ? 'is-selected' : '',
         seed.plot_progress ? 'is-crown' : '',
         seed.ready ? 'is-ready' : 'is-not-ready',
+        askingNow ? 'is-asking' : '',
         column === 'closed' ? `is-${seed.status}` : '',
       ].filter(Boolean).join(' ')}
       data-seed={seed.id}
@@ -648,8 +653,13 @@ function Card({
         }}
       >
         <span className="garden-card__title">{seed.title}</span>
+        {askingNow && question && <span className="garden-card__ask">{question.text}</span>}
         <span className="garden-card__meta">
-          <CardMeta seed={seed} column={column} blockers={blockers} tenderLive={tenderLive} plot={plot} armed={armed} />
+          {askingNow ? (
+            <NeedsYouChip />
+          ) : (
+            <CardMeta seed={seed} column={column} blockers={blockers} tenderLive={tenderLive} plot={plot} armed={armed} />
+          )}
           <span className="garden-card__id">{seed.id}</span>
           <span className="garden-card__age">{ageOf(seed.updated_at || seed.created_at)}</span>
         </span>

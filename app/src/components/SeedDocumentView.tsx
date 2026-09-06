@@ -3,6 +3,8 @@ import type {
   Seed,
   SeedDocument as GeneratedSeedDocument,
 } from '../types/generated';
+import { SeedQuestionCard } from './GardenQuestions';
+import { questionOf } from './seedQuestions';
 import { HarvestWhenLine } from './HarvestWhenLine';
 import { Markdown } from './Markdown';
 import { MarkdownReader, type MarkdownAnnotationsSendHandle } from './MarkdownReader';
@@ -24,6 +26,9 @@ export interface SeedDocumentViewProps {
   onOpenSeed?: (seedId: string) => void;
   arrival?: 'in' | 'out';
   ledgerInitiallyOpen?: boolean;
+  /** PROTOTYPE (s-j3j5bk): answering from the tile, where an agent is running. */
+  onAnswerQuestion?: (questionId: string, text: string) => void;
+  onDismissQuestion?: (questionId: string) => void;
 }
 
 function formatTimestamp(iso: string): string {
@@ -116,11 +121,14 @@ export function SeedDocumentView({
   onOpenSeed,
   arrival = 'in',
   ledgerInitiallyOpen = false,
+  onAnswerQuestion,
+  onDismissQuestion,
 }: SeedDocumentViewProps) {
   const { seed, children, notes, notes_total: notesTotal, artifacts, references } = document;
   const isPlot = Boolean(seed.plot_progress);
   const tender = holder(seed);
   const progress = progressWords(seed);
+  const question = questionOf(seed);
   const plotHeadingId = useId();
   const artifactsHeadingId = useId();
 
@@ -146,6 +154,15 @@ export function SeedDocumentView({
         {progress && <span>{progress}</span>}
         <span className="seed-document__id">{seed.id}</span>
       </div>
+
+      {question && (
+        <SeedQuestionCard
+          question={question}
+          compact
+          onAnswer={onAnswerQuestion}
+          onDismiss={onDismissQuestion}
+        />
+      )}
 
       {isPlot && (
         <section className="seed-document__plot" aria-labelledby={plotHeadingId}>

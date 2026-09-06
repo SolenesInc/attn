@@ -1,0 +1,81 @@
+.proto {
+  background: var(--color-bg-app);
+  color: var(--color-text-primary);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.proto__controls {
+  align-items: center;
+  background: #000;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  flex: none;
+  font-size: 11px;
+  gap: 10px;
+  padding: 7px 12px;
+}
+
+.proto__label { color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; }
+.proto__spacer { flex: 1; }
+.proto__count { color: var(--color-text-tertiary); }
+
+.proto__group { display: flex; gap: 2px; }
+
+.proto__controls button {
+  background: var(--color-bg-button);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  padding: 3px 8px;
+}
+
+.proto__controls button[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.proto__stage {
+  background: var(--color-bg-panel);
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.proto__stage > .garden-panel,
+.proto__stage > .garden-board { flex: 1; min-width: 0; }
+
+.proto__tile-stage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+}
+
+.proto__tile-picker { display: flex; gap: 6px; }
+
+.proto__tile-picker button {
+  background: var(--color-bg-button);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.proto__tile-picker button[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); }
+
+.proto__tile {
+  background: var(--color-bg-tile);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  max-width: 560px;
+  overflow-y: auto;
+  padding: 14px;
+}

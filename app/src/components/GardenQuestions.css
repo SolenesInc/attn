@@ -1,0 +1,402 @@
+/* PROTOTYPE (seed s-j3j5bk). Same two type tiers as the rest of the garden:
+   13px is what you read, 11px is what the surface says about itself. */
+
+.garden-ask__mark {
+  align-items: center;
+  background: var(--accent);
+  border-radius: 50%;
+  color: #17110d;
+  display: inline-flex;
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  height: 14px;
+  justify-content: center;
+  width: 14px;
+}
+
+/* ---- the chip a row, a card or a tile wears --------------------------- */
+
+.garden-needs-chip {
+  align-items: center;
+  color: var(--accent);
+  display: inline-flex;
+  flex: none;
+  font-size: var(--font-size-sm);
+  gap: 4px;
+}
+
+/* ---- the question, where the seed is being read ----------------------- */
+
+.garden-ask {
+  background: color-mix(in srgb, var(--color-bg-panel) 88%, var(--accent));
+  border: 1px solid color-mix(in srgb, var(--color-border) 55%, var(--accent));
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 11px 13px;
+}
+
+.garden-ask.is-compact {
+  gap: 6px;
+  margin: 8px 0;
+  padding: 9px 11px;
+}
+
+.garden-ask.is-closed {
+  background: none;
+  border-color: var(--color-border-subtle);
+}
+
+.garden-ask__head {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+}
+
+.garden-ask__head strong {
+  font-weight: 560;
+}
+
+.garden-ask.is-closed .garden-ask__head strong {
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.garden-ask.is-closed .garden-ask__mark {
+  background: var(--color-text-dimmed);
+  color: var(--color-bg-panel);
+}
+
+.garden-ask__by {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.garden-ask__text > :last-child { margin-bottom: 0; }
+.garden-ask__text > :first-child { margin-top: 0; }
+
+.garden-ask__text.is-quoted {
+  border-left: 2px solid var(--color-border);
+  color: var(--color-text-tertiary);
+  padding-left: 9px;
+}
+
+.garden-ask__resolution {
+  border-left: 2px solid var(--accent);
+  padding-left: 9px;
+}
+
+.garden-ask__resolution > :last-child { margin-bottom: 0; }
+.garden-ask__resolution > :first-child { margin-top: 0; }
+
+.garden-ask__form {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.garden-ask__input {
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text-primary);
+  font: inherit;
+  min-height: 56px;
+  padding: 7px 9px;
+  resize: vertical;
+  width: 100%;
+}
+
+.garden-ask__input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.garden-ask__actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.garden-ask__quiet {
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  font: inherit;
+  padding: 5px 2px;
+}
+
+.garden-ask__quiet:hover { color: var(--color-text-secondary); }
+
+.garden-ask__go {
+  align-items: center;
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--accent);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  gap: 6px;
+  padding: 5px 9px;
+}
+
+.garden-ask__go:disabled {
+  border-color: var(--color-border);
+  color: var(--color-text-dimmed);
+  cursor: default;
+}
+
+.garden-ask__go kbd {
+  color: var(--color-text-tertiary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+}
+
+/* ---- placement A: the band at the top of the panel -------------------- */
+
+.garden-needs-banner {
+  background: color-mix(in srgb, var(--color-bg-panel) 86%, var(--accent));
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 50%, var(--accent));
+  flex: none;
+}
+
+.garden-needs-banner.is-expanded {
+  max-height: 52vh;
+  overflow-y: auto;
+}
+
+.garden-needs-banner__bar {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  padding: 9px 16px;
+}
+
+.garden-needs-banner__words {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.garden-needs-banner__words strong { font-weight: 560; }
+
+.garden-needs-banner__words span {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.garden-needs-banner__bar button {
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--accent);
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  padding: 5px 9px;
+}
+
+/* A band as wide as the panel would set 150-character lines; the queue keeps
+   its own measure and lets the band be wide. */
+.garden-needs-banner .garden-queue__head,
+.garden-needs-banner .garden-queue__body {
+  max-width: 860px;
+}
+
+/* ---- placement B: the standing column beside the board ---------------- */
+
+.garden-needs-rail {
+  border-left: 1px solid var(--color-border-subtle);
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  width: 330px;
+}
+
+.garden-needs-rail__head {
+  align-items: center;
+  background: var(--color-bg-panel);
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  flex: none;
+  gap: 7px;
+  padding: 10px 14px 9px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.garden-needs-rail__head h2 {
+  flex: 1;
+  font-size: var(--font-size-md);
+  font-weight: 560;
+  margin: 0;
+}
+
+.garden-needs-rail__count {
+  background: var(--accent);
+  border-radius: 9px;
+  color: #17110d;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  min-width: 18px;
+  padding: 1px 6px;
+  text-align: center;
+}
+
+.garden-needs-rail__empty {
+  color: var(--color-text-tertiary);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: var(--font-size-sm);
+  padding: 16px 14px;
+}
+
+.garden-needs-rail__empty p:first-child { color: var(--color-text-secondary); }
+
+.garden-needs-rail__empty code {
+  background: var(--color-bg-elevated);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+/* ---- the queue itself, shared by both placements ---------------------- */
+
+.garden-queue {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.garden-queue__row {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.garden-queue__row:first-child { border-top: none; }
+
+.garden-queue__head {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  gap: 3px;
+  padding: 9px 14px;
+  text-align: left;
+  width: 100%;
+}
+
+.garden-queue__head:hover { background: var(--color-bg-elevated); }
+
+.garden-queue__line {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+  min-width: 0;
+}
+
+.garden-queue__seed {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.garden-queue__who,
+.garden-queue__age {
+  color: var(--color-text-tertiary);
+  flex: none;
+  font-size: var(--font-size-sm);
+}
+
+.garden-queue__ask {
+  color: var(--color-text-secondary);
+  display: -webkit-box;
+  font-size: var(--font-size-sm);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  padding-left: 21px;
+}
+
+.garden-queue__row.is-open > .garden-queue__head .garden-queue__ask { display: none; }
+
+.garden-queue__body {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 0 14px 12px 14px;
+}
+
+.garden-queue__jump {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  padding: 0;
+}
+
+.garden-queue__jump:hover { color: var(--accent); }
+
+.garden-queue__row.is-withdrawn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 14px 11px;
+}
+
+.garden-queue__row.is-withdrawn .garden-queue__seed { color: var(--color-text-tertiary); }
+
+.garden-queue__gone {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+  margin: 0;
+}
+
+.garden-queue__row.is-withdrawn .garden-ask__quiet { align-self: flex-start; }
+
+/* ---- what the listing row and the board card wear -------------------- */
+
+.garden-row__ask {
+  color: var(--color-text-secondary);
+  display: -webkit-box;
+  font-size: var(--font-size-sm);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.garden-card.is-asking {
+  border-color: color-mix(in srgb, var(--color-border) 40%, var(--accent));
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.garden-card__ask {
+  color: var(--color-text-secondary);
+  display: -webkit-box;
+  font-size: var(--font-size-sm);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
