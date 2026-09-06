@@ -365,10 +365,24 @@ async function main() {
     });
     await runner.step('assert_visible_provenance', async () => {
       await client.request('select_session', { sessionId: sessionID });
+      const groupHeader = `[data-testid="sidebar-automation-header-${definitionID}"]`;
+      const header = await poll(
+        () => client.request('dom_text', { selector: groupHeader }).catch(() => null),
+        'the automation group header in the sidebar',
+      );
+      runner.assert(
+        header.text.includes('Slice 4 packaged continuity proof') && header.text.includes('1 agent'),
+        'the sidebar groups the reviewer under its automation, named and counted',
+        header,
+      );
+      await client.request('dom_click', { selector: groupHeader });
+      let lastUi = null;
       const sessionUi = await poll(async () => {
-        const state = await client.request('get_session_ui_state', { sessionId: sessionID });
-        return state.sidebarItem?.automation && state.paneAutomation ? state : null;
-      }, 'session provenance in sidebar and pane header');
+        lastUi = await client.request('get_session_ui_state', { sessionId: sessionID });
+        return lastUi.sidebarItem?.automation && lastUi.paneAutomation ? lastUi : null;
+      }, 'session provenance in sidebar and pane header').catch((error) => {
+        throw new Error(`${error.message}; sidebarItem=${JSON.stringify(lastUi?.sidebarItem)} paneAutomation=${JSON.stringify(lastUi?.paneAutomation)} exists=${JSON.stringify(lastUi?.exists)} selected=${JSON.stringify(lastUi?.selected)}`);
+      });
       runner.assert(
         sessionUi.sidebarItem.automation.includes('Slice 4 packaged continuity proof')
           && sessionUi.sidebarItem.automation.includes('#42'),
@@ -476,7 +490,12 @@ async function main() {
   } finally {
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
-    if (daemonEnv) { try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {} }
+    if (daemonEnv) {
+      for (const id of [definitionID, secondaryDefinitionID]) {
+        try { run(binary, ['automation', 'disable', id], daemonEnv); } catch {}
+      }
+      try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}
+    }
     if (mock?.child) mock.child.kill('SIGTERM');
     try { run(binary, ['daemon', 'ensure'], profileEnv(profile)); } catch {}
     await runner.close();

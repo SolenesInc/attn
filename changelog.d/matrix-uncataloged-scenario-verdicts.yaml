@@ -1,0 +1,3 @@
+kind: internal
+area: harness
+change: The four real-app scenario files outside the acceptance catalog carry a written verdict, and the UI automation bridge reads the session provenance the app renders today.

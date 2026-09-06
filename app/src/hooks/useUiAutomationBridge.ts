@@ -518,6 +518,19 @@ function collectVisualSnapshot(
   };
 }
 
+// SessionProvenance renders the definition name and the PR target as separate
+// spans; only its title carries the whole description at every density.
+export function readProvenance(scope: Element | null | undefined): string {
+  const node = scope?.querySelector('.session-provenance');
+  if (!node) return '';
+  return (
+    node.getAttribute('title')
+    || node.getAttribute('aria-label')
+    || node.textContent?.trim()
+    || ''
+  );
+}
+
 function collectSessionUiState(
   sessions: Session[],
   activeSessionId: string | null,
@@ -566,7 +579,7 @@ function collectSessionUiState(
       ? {
           text: sidebarItem.textContent || '',
           bounds: rectSnapshot(sidebarItem),
-          automation: sidebarItem.querySelector('.automation-provenance')?.textContent?.trim() || '',
+          automation: readProvenance(sidebarItem),
           pullRequest: sidebarItem.querySelector('.sidebar-session-pr')?.textContent?.trim() || '',
         }
       : null,
@@ -578,7 +591,7 @@ function collectSessionUiState(
       splits: collectSplitDomMetrics(workspaceId),
     },
     agentPaneBounds: rectSnapshot(firstAgentPane),
-    paneAutomation: firstAgentPane?.querySelector('.automation-provenance')?.textContent?.trim() || '',
+    paneAutomation: readProvenance(firstAgentPane),
     settling: settlingChip instanceof HTMLElement
       ? {
           text: settlingChip.textContent?.trim() || '',
@@ -1571,7 +1584,7 @@ function collectAutomationsUiState() {
         id: row.getAttribute('data-run-id') ?? '',
         state: row.getAttribute('data-state') ?? '',
         navigable: Boolean(row.querySelector('button.automations-panel__run-row-main')),
-        automation: row.querySelector('.automation-provenance')?.textContent?.trim() ?? '',
+        automation: readProvenance(row),
         lastError: row.querySelector('.automations-panel__run-error')?.textContent?.trim() ?? '',
       }))
     : [];
