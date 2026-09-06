@@ -100,10 +100,14 @@ func (d *Daemon) handleSetSettingWS(client *wsClient, msg *protocol.SetSettingMe
 	if err == nil && msg.Key == SettingSharedPTYHostEnabled {
 		err = d.setSharedPTYHostEnabled(parseBooleanSetting(msg.Value))
 	}
+	if err == nil && msg.Key != SettingSharedPTYHostEnabled {
+		err = d.store.SetSettingChecked(msg.Key, msg.Value)
+	}
 	if err != nil {
 		d.logf("Setting validation failed: %v", err)
 		d.sendToClient(client, &protocol.SettingsUpdatedMessage{
 			Event:      protocol.EventSettingsUpdated,
+			RequestID:  msg.RequestID,
 			Settings:   d.settingsWithAgentAvailability(),
 			ChangedKey: protocol.Ptr(msg.Key),
 			Error:      protocol.Ptr(err.Error()),
@@ -112,9 +116,6 @@ func (d *Daemon) handleSetSettingWS(client *wsClient, msg *protocol.SetSettingMe
 		return
 	}
 
-	if msg.Key != SettingSharedPTYHostEnabled {
-		d.store.SetSetting(msg.Key, msg.Value)
-	}
 	if isSessionCostPriceSetting(msg.Key) {
 		d.publishSessionCostReprices()
 	}
@@ -138,6 +139,14 @@ func (d *Daemon) handleSetSettingWS(client *wsClient, msg *protocol.SetSettingMe
 		d.clearAllSessionActivity()
 	}
 	d.publishSettingsFact(FactSettingChanged, msg.Key)
+	if msg.RequestID != nil {
+		d.sendToClient(client, &protocol.SettingsUpdatedMessage{
+			Event:      protocol.EventSettingsUpdated,
+			RequestID:  msg.RequestID,
+			ChangedKey: protocol.Ptr(msg.Key),
+			Success:    protocol.Ptr(true),
+		})
+	}
 }
 
 func (d *Daemon) publishSettingsFact(name, subject string) {

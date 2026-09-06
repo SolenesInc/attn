@@ -283,7 +283,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '299';
+export const PROTOCOL_VERSION = '300';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -2377,6 +2377,7 @@ export function useDaemonSocket({
             break;
 
           case 'settings_updated':
+            settlePendingRequest(pendingActionsRef.current, 'set_setting', data, () => true, 'Could not save setting');
             if (data.settings) {
               settingsRef.current = data.settings;
               callbacksRef.current.onSettingsUpdate?.(data.settings);
@@ -4323,6 +4324,10 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'set_setting', key, value }));
   }, []);
 
+  const sendSaveSetting = useCallback(async (key: string, value: string): Promise<void> => {
+    await sendRequest<boolean>('set_setting', { key, value }, 'Saving the setting timed out');
+  }, [sendRequest]);
+
   const sendGetSettings = useCallback(() => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -5334,6 +5339,7 @@ export function useDaemonSocket({
     sendCreateWorktree,
     sendDeleteWorktree,
     sendSetSetting,
+    sendSaveSetting,
     sendGetSettings,
     sendListPlugins,
     sendInstallPlugin,

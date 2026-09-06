@@ -936,3 +936,29 @@
     flex: 1 1 auto;
   }
 }
+
+.settings-agent-list { display: grid; gap: 12px; }
+.settings-agent { border: 1px solid var(--color-border); border-radius: 6px; }
+.settings-agent > summary {
+  display: flex; align-items: center; gap: 16px; padding: 18px 20px;
+  cursor: pointer; font-weight: 600; color: var(--color-text-primary);
+}
+.settings-agent > summary::before { content: '›'; color: var(--color-text-tertiary); }
+.settings-agent[open] > summary::before { transform: rotate(90deg); }
+.settings-agent-summary { margin-left: auto; font-weight: 400; font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+.settings-agent-content { padding: 0 20px 20px; }
+.settings-agent-advanced > summary { cursor: pointer; color: var(--color-text-secondary); padding: 16px 0; }
+.settings-agent-capabilities { margin: 20px 0 0; font-size: var(--font-size-sm); }
+.settings-agent-capabilities > div { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0; border-bottom: 1px solid var(--color-border); }
+.settings-agent-capabilities dd { color: var(--color-text-tertiary); }
+.settings-agent summary:focus-visible, .settings-agent-advanced summary:focus-visible { outline: 2px solid var(--color-text-secondary); outline-offset: 2px; }
+.settings-autosave-status { color: var(--color-text-secondary); font-size: var(--font-size-sm); }
+.settings-autosave-status:empty { display: none; }
+.settings-autosave-status .settings-warning { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.settings-pricing { margin-top: 24px; }
+.settings-autosave-status:not(:empty) { position: sticky; top: 0; z-index: 2; padding: 8px 0; background: var(--color-bg-panel); }
+.settings-default-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 8px 0; }
+.settings-default-row > div:first-child { min-width: 0; }
+.settings-default-row .settings-segmented, .settings-default-row > button { flex-shrink: 0; }
+@media (max-width: 800px) { .settings-default-row { align-items: flex-start; flex-wrap: wrap; gap: 12px; } }
+fieldset.settings-price-card { min-width: 0; margin: 0; }

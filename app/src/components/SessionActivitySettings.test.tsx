@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { SessionActivitySettings } from './SessionActivitySettings';
 import { activityStaleMs } from '../utils/activitySettings';
@@ -22,7 +22,7 @@ describe('SessionActivitySettings', () => {
     expect(screen.getByTestId('settings-activity-toggle')).toBeDisabled();
   });
 
-  it('enables once an agent is saved', () => {
+  it('enables once an agent is saved', async () => {
     const onSetSetting = renderPane({ 'activity.config': '{"agent":"codex"}' });
 
     fireEvent.click(screen.getByTestId('settings-activity-toggle'));
@@ -30,7 +30,7 @@ describe('SessionActivitySettings', () => {
     expect(onSetSetting).toHaveBeenCalledWith('activity.enabled', 'true');
   });
 
-  it('saves the agent, model, effort and both intervals together', () => {
+  it('saves the agent, model, effort and both intervals together', async () => {
     const onSetSetting = renderPane();
 
     fireEvent.change(screen.getByTestId('settings-activity-agent'), { target: { value: 'codex' } });
@@ -38,7 +38,10 @@ describe('SessionActivitySettings', () => {
     fireEvent.change(screen.getByTestId('settings-activity-effort'), { target: { value: 'low' } });
     fireEvent.change(screen.getByTestId('settings-activity-watching'), { target: { value: '90' } });
     fireEvent.change(screen.getByTestId('settings-activity-present'), { target: { value: '600' } });
-    fireEvent.click(screen.getByTestId('settings-activity-save'));
+    await act(async () => {
+      fireEvent.blur(screen.getByTestId('settings-activity-present'));
+      if (screen.queryByTestId('settings-activity-model-custom')) fireEvent.blur(screen.getByTestId('settings-activity-model-custom'));
+    });
 
     expect(onSetSetting).toHaveBeenCalledWith(
       'activity.config',
@@ -60,18 +63,21 @@ describe('SessionActivitySettings', () => {
     expect(screen.getByTestId('settings-activity-effort')).toBeInTheDocument();
   });
 
-  it('drops the model when the agent changes', () => {
+  it('drops the model when the agent changes', async () => {
     const onSetSetting = renderPane();
 
     fireEvent.change(screen.getByTestId('settings-activity-agent'), { target: { value: 'claude' } });
     fireEvent.change(screen.getByTestId('settings-activity-model'), { target: { value: 'sonnet' } });
     fireEvent.change(screen.getByTestId('settings-activity-agent'), { target: { value: 'codex' } });
-    fireEvent.click(screen.getByTestId('settings-activity-save'));
+    await act(async () => {
+      fireEvent.blur(screen.getByTestId('settings-activity-present'));
+      if (screen.queryByTestId('settings-activity-model-custom')) fireEvent.blur(screen.getByTestId('settings-activity-model-custom'));
+    });
 
     expect(onSetSetting).toHaveBeenCalledWith('activity.config', JSON.stringify({ agent: 'codex' }));
   });
 
-  it('takes a custom model', () => {
+  it('takes a custom model', async () => {
     const onSetSetting = renderPane();
 
     fireEvent.change(screen.getByTestId('settings-activity-agent'), { target: { value: 'claude' } });
@@ -79,7 +85,10 @@ describe('SessionActivitySettings', () => {
     fireEvent.change(screen.getByTestId('settings-activity-model-custom'), {
       target: { value: 'claude-opus-5' },
     });
-    fireEvent.click(screen.getByTestId('settings-activity-save'));
+    await act(async () => {
+      fireEvent.blur(screen.getByTestId('settings-activity-present'));
+      if (screen.queryByTestId('settings-activity-model-custom')) fireEvent.blur(screen.getByTestId('settings-activity-model-custom'));
+    });
 
     expect(onSetSetting).toHaveBeenCalledWith(
       'activity.config',

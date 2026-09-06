@@ -100,6 +100,37 @@ describe('useDaemonSocket keyed command errors', () => {
     vi.clearAllMocks();
   });
 
+  it('matches setting acknowledgements by request id and propagates save failures', async () => {
+    const { result, unmount } = renderSocket();
+    const ws = await waitForOpenSocket();
+    emitInitialState(ws);
+    let first!: Promise<void>, second!: Promise<void>;
+    act(() => {
+      first = result.current.sendSaveSetting('default_model_claude', 'sonnet');
+      second = result.current.sendSaveSetting('default_model_codex', 'test-model');
+    });
+    const requests = ws.sent.map((value) => JSON.parse(value)).filter((value) => value.cmd === 'set_setting');
+    const settled: string[] = [];
+    const firstResult = first.then(() => settled.push('first'));
+    const secondResult = second.catch((error: Error) => { settled.push(error.message); });
+    await act(async () => {
+      ws.emit({ event: 'settings_updated', changed_key: 'default_model_claude', settings: { default_model_claude: 'sonnet' } });
+      ws.emit({ event: 'settings_updated', request_id: 'another-client', success: true });
+    });
+    expect(settled).toEqual([]);
+    await act(async () => {
+      ws.emit({ event: 'settings_updated', request_id: requests[1].request_id, success: false, error: 'Storage unavailable' });
+      await secondResult;
+    });
+    expect(settled).toEqual(['Storage unavailable']);
+    await act(async () => {
+      ws.emit({ event: 'settings_updated', request_id: requests[0].request_id, success: true });
+      await firstResult;
+    });
+    expect(settled).toEqual(['Storage unavailable', 'first']);
+    unmount();
+  });
+
   it('rejects a pending session rename with the parked endpoint reason instead of timing out', async () => {
     const { result, unmount } = renderSocket();
     const ws = await waitForOpenSocket();

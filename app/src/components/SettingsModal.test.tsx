@@ -521,7 +521,7 @@ describe('SettingsModal', () => {
       />
     );
 
-    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    fireEvent.click(screen.getByTestId('settings-nav-delegation'));
     const toggle = await screen.findByTestId('settings-workflows-toggle');
     expect(toggle).toHaveTextContent('Enable');
     fireEvent.click(toggle);
@@ -554,7 +554,7 @@ describe('SettingsModal', () => {
       />
     );
 
-    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    fireEvent.click(screen.getByTestId('settings-nav-delegation'));
     const toggleOn = await screen.findByTestId('settings-workflows-toggle');
     expect(toggleOn).toHaveTextContent('Disable');
     fireEvent.click(toggleOn);
@@ -688,7 +688,7 @@ describe('SettingsModal', () => {
     fireEvent.click(screen.getByTestId('settings-nav-agents'));
 
     expect(await screen.findByRole('button', { name: 'Snipe' })).toBeInTheDocument();
-    expect(screen.getByText('Resume: on')).toBeInTheDocument();
+    expect(screen.getByText('Resume')).toBeInTheDocument();
     expect(document.getElementById('settings-snipe-exec')).toBeNull();
   });
 });
@@ -877,7 +877,7 @@ describe('SettingsModal notebook folder', () => {
 
     fireEvent.change(input, { target: { value: '' } });
     fireEvent.blur(input);
-    expect(onSetSetting).toHaveBeenCalledWith('notebook.root', '');
+    await waitFor(() => expect(onSetSetting).toHaveBeenCalledWith('notebook.root', ''));
   });
 });
 
@@ -941,7 +941,7 @@ describe('SettingsModal chief settings', () => {
 
   it('renders a chief-model input per supported agent and commits a typed model on blur', async () => {
     const onSetSetting = renderModal({});
-    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    fireEvent.click(screen.getByTestId('settings-nav-backgroundAgents'));
 
     const claudeInput = await screen.findByTestId('settings-chief-model-claude');
     expect(screen.getByTestId('settings-chief-model-codex')).toBeInTheDocument();
@@ -954,7 +954,7 @@ describe('SettingsModal chief settings', () => {
 
   it('does not write when a chief-model input blurs unchanged', async () => {
     const onSetSetting = renderModal({ chief_model_claude: 'opus' });
-    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    fireEvent.click(screen.getByTestId('settings-nav-backgroundAgents'));
 
     const claudeInput = await screen.findByTestId('settings-chief-model-claude');
     expect(claudeInput).toHaveValue('opus');
@@ -964,7 +964,7 @@ describe('SettingsModal chief settings', () => {
 
   it('clears a chief-model override back to the agent default', async () => {
     const onSetSetting = renderModal({ chief_model_codex: 'gpt-5.4' });
-    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    fireEvent.click(screen.getByTestId('settings-nav-backgroundAgents'));
 
     const codexInput = await screen.findByTestId('settings-chief-model-codex');
     expect(codexInput).toHaveValue('gpt-5.4');
@@ -975,7 +975,7 @@ describe('SettingsModal chief settings', () => {
 
   it('renders a chief-effort select per supported agent and commits on change', async () => {
     const onSetSetting = renderModal({});
-    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    fireEvent.click(screen.getByTestId('settings-nav-backgroundAgents'));
 
     const claudeEffort = await screen.findByTestId('settings-chief-effort-claude');
     expect(screen.getByTestId('settings-chief-effort-codex')).toBeInTheDocument();
@@ -987,7 +987,7 @@ describe('SettingsModal chief settings', () => {
 
   it('shows a saved chief-effort override', async () => {
     renderModal({ chief_effort_codex: 'xhigh' });
-    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    fireEvent.click(screen.getByTestId('settings-nav-backgroundAgents'));
 
     const codexEffort = await screen.findByTestId('settings-chief-effort-codex');
     expect(codexEffort).toHaveValue('xhigh');
@@ -995,7 +995,7 @@ describe('SettingsModal chief settings', () => {
 
   it('keeps an agent visible when only its chief-effort override is saved', async () => {
     renderModal({ codex_available: 'false', chief_effort_codex: 'low' });
-    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    fireEvent.click(screen.getByTestId('settings-nav-backgroundAgents'));
 
     expect(await screen.findByTestId('settings-chief-effort-codex')).toHaveValue('low');
   });
@@ -1063,7 +1063,7 @@ describe('SettingsModal chief settings', () => {
 
   it('shows the effective context-window caps and defaults to 128000 when unset', async () => {
     renderModal({ chief_context_window_cap: '120000', headless_context_window_cap: '90000' });
-    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    fireEvent.click(screen.getByTestId('settings-nav-backgroundAgents'));
 
     expect(await screen.findByTestId('settings-chief-context-cap')).toHaveValue(120000);
     expect(screen.getByTestId('settings-headless-context-cap')).toHaveValue(90000);
@@ -1071,7 +1071,7 @@ describe('SettingsModal chief settings', () => {
 
   it('defaults both context-window caps to 128000 when unset', async () => {
     renderModal({});
-    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    fireEvent.click(screen.getByTestId('settings-nav-backgroundAgents'));
 
     expect(await screen.findByTestId('settings-chief-context-cap')).toHaveValue(128000);
     expect(screen.getByTestId('settings-headless-context-cap')).toHaveValue(128000);
@@ -1079,7 +1079,7 @@ describe('SettingsModal chief settings', () => {
 
   it('commits a changed chief context-window cap on blur', async () => {
     const onSetSetting = renderModal({ chief_context_window_cap: '128000' });
-    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    fireEvent.click(screen.getByTestId('settings-nav-backgroundAgents'));
 
     const input = await screen.findByTestId('settings-chief-context-cap');
     fireEvent.change(input, { target: { value: '100000' } });
@@ -1089,7 +1089,7 @@ describe('SettingsModal chief settings', () => {
 
   it('commits a changed headless context-window cap on blur', async () => {
     const onSetSetting = renderModal({ headless_context_window_cap: '128000' });
-    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    fireEvent.click(screen.getByTestId('settings-nav-backgroundAgents'));
 
     const input = await screen.findByTestId('settings-headless-context-cap');
     fireEvent.change(input, { target: { value: '200000' } });
@@ -1099,7 +1099,7 @@ describe('SettingsModal chief settings', () => {
 
   it('does not re-commit an unchanged context-window cap on blur', async () => {
     const onSetSetting = renderModal({ chief_context_window_cap: '128000' });
-    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    fireEvent.click(screen.getByTestId('settings-nav-backgroundAgents'));
 
     const input = await screen.findByTestId('settings-chief-context-cap');
     fireEvent.blur(input);

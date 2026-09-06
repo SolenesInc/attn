@@ -1,0 +1,3 @@
+kind: changed
+area: settings
+change: Simplify Agents and models, give Background agents its own page, and save settings automatically with visible validation and retry.
