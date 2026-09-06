@@ -9384,8 +9384,10 @@ export enum UninstallPluginMessageCmd {
 }
 
 export interface UnregisterMessage {
-    cmd: UnregisterMessageCmd;
-    id:  string;
+    close_reason?: string;
+    closed_by?:    string;
+    cmd:           UnregisterMessageCmd;
+    id:            string;
     [property: string]: any;
 }
 
@@ -21123,6 +21125,8 @@ const typeMap: any = {
         { json: "name", js: "name", typ: "" },
     ], "any"),
     "UnregisterMessage": o([
+        { json: "close_reason", js: "close_reason", typ: u(undefined, "") },
+        { json: "closed_by", js: "closed_by", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("UnregisterMessageCmd") },
         { json: "id", js: "id", typ: "" },
     ], "any"),

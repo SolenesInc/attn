@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"syscall"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -10,22 +11,23 @@ import (
 )
 
 type sessionCloseInFlight struct {
-	teardown   *sessionTeardown
-	endpointID string
+	teardown *sessionTeardown
 }
 
 func (d *Daemon) beginSessionClose(
 	sessionID string, closed store.SessionClose, client *wsClient,
 ) (sessionCloseInFlight, error) {
-	endpointID := ""
-	if d.hubManager != nil {
-		if resolved, ok := d.hubManager.EndpointIDForSession(sessionID); ok {
-			endpointID = resolved
-		}
-	}
 	teardown, err := d.prepareSessionTeardown(sessionID)
 	if err != nil {
 		return sessionCloseInFlight{}, err
+	}
+	// The owning daemon writes the ledger row for a session it owns, so the close
+	// is not this daemon's to record until that one has taken it.
+	if endpointID, remote := d.sessionOwningEndpoint(sessionID); remote {
+		if err := d.forwardSessionClose(endpointID, sessionID, closed); err != nil {
+			d.cancelSessionTeardown(sessionID)
+			return sessionCloseInFlight{}, err
+		}
 	}
 	d.commitSessionUnregister(sessionID, closed)
 	if client != nil {
@@ -37,24 +39,39 @@ func (d *Daemon) beginSessionClose(
 		d.removeWorkspaceLayoutPaneForSession(teardown.session.ID)
 		d.publishFact(FactSessionTerminated, teardown.session.ID, nil)
 	}
-	return sessionCloseInFlight{teardown: teardown, endpointID: endpointID}, nil
+	return sessionCloseInFlight{teardown: teardown}, nil
 }
 
 // finishSessionClose kills the runtime. Split from beginSessionClose so a caller
 // can answer its requester before the session it is closing dies.
 func (d *Daemon) finishSessionClose(sessionID string, closing sessionCloseInFlight) {
-	if closing.endpointID != "" {
-		payload, err := json.Marshal(protocol.UnregisterMessage{
-			Cmd: protocol.CmdUnregister,
-			ID:  sessionID,
-		})
-		if err != nil {
-			d.logf("marshal remote unregister failed for %s: %v", sessionID, err)
-		} else if err := d.hubManager.ForwardEndpointCommand(context.Background(), closing.endpointID, payload); err != nil {
-			d.logf("remote unregister forward failed for %s on endpoint %s: %v", sessionID, closing.endpointID, err)
-		}
-	}
 	if closing.teardown != nil {
 		d.terminateSessionAsync(sessionID, syscall.SIGTERM, closing.teardown)
 	}
+}
+
+func (d *Daemon) sessionOwningEndpoint(sessionID string) (string, bool) {
+	if d.hubManager == nil {
+		return "", false
+	}
+	return d.hubManager.EndpointIDForSession(sessionID)
+}
+
+func (d *Daemon) forwardSessionClose(endpointID, sessionID string, closed store.SessionClose) error {
+	msg := protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: sessionID}
+	if closed.By != "" && closed.By != store.SessionClosedByUser {
+		msg.ClosedBy = protocol.Ptr(closed.By)
+	}
+	if closed.Reason != "" {
+		msg.CloseReason = protocol.Ptr(closed.Reason)
+	}
+	payload, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("marshal the close of session %s for endpoint %s: %w", sessionID, endpointID, err)
+	}
+	if err := d.hubManager.ForwardSessionClose(context.Background(), endpointID, sessionID, payload); err != nil {
+		d.logf("close forward failed for %s on endpoint %s: %v", sessionID, endpointID, err)
+		return err
+	}
+	return nil
 }

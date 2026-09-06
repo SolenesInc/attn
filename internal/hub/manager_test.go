@@ -1065,3 +1065,40 @@ func TestParkedRefusalFallsBackToTheStatusWhenThereIsNoMessage(t *testing.T) {
 		t.Fatalf("ForwardEndpointCommand() error = %v, want the id and the status", err)
 	}
 }
+
+func TestForwardSessionCloseWaitsForTheEndpointToConfirm(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	server, frames := forwardTestServer(t)
+	conn := dialForwardTestServer(t, ctx, server)
+
+	manager := NewManager(store.New(), nil, nil, nil, nil, nil)
+	manager.runtimes["endpoint-1"] = &endpointRuntime{
+		record: store.EndpointRecord{ID: "endpoint-1", Name: "gpu-box"},
+		conn:   conn,
+		info:   protocol.EndpointInfo{Status: "connected", StatusMessage: protocol.Ptr("Connected")},
+	}
+
+	silent, cancelSilent := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer cancelSilent()
+	err := manager.ForwardSessionClose(silent, "endpoint-1", "sess-a", []byte(`{"cmd":"unregister","id":"sess-a"}`))
+	if err == nil {
+		t.Fatal("ForwardSessionClose() = nil, want an error when the endpoint never confirms")
+	}
+	if !strings.Contains(err.Error(), "sess-a") {
+		t.Errorf("error %q does not name the session that is still running", err)
+	}
+	select {
+	case frame := <-frames:
+		if string(frame) != `{"cmd":"unregister","id":"sess-a"}` {
+			t.Fatalf("remote received %s", frame)
+		}
+	case <-ctx.Done():
+		t.Fatal("the close never reached the endpoint")
+	}
+
+	manager.confirmSessionClose("sess-a")
+	if _, waiting := manager.sessionCloses["sess-a"]; waiting {
+		t.Error("a finished close left its waiter behind")
+	}
+}

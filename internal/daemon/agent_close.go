@@ -60,7 +60,8 @@ func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage
 	d.logf("agent close: session %s closes %s as %s: %s", caller.ID, target.ID, rule, reason)
 	closing, err := d.beginSessionClose(target.ID, store.SessionClose{By: caller.ID, Reason: reason}, nil)
 	if err != nil {
-		d.sendError(conn, err.Error())
+		d.replyAgentMsgError(conn, "close_failed", fmt.Sprintf(
+			"session %s is still running: %v", shortSessionID(target.ID), err))
 		return
 	}
 

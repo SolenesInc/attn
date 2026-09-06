@@ -100,6 +100,7 @@ type Manager struct {
 	runtimes        map[string]*endpointRuntime
 	pending         map[string]pendingSessionRoute
 	browserControls map[string]pendingBrowserControl
+	sessionCloses   map[string][]chan struct{}
 	ctx             context.Context
 	cancel          context.CancelFunc
 	started         bool
@@ -130,6 +131,7 @@ func NewManager(
 		runtimes:        make(map[string]*endpointRuntime),
 		pending:         make(map[string]pendingSessionRoute),
 		browserControls: make(map[string]pendingBrowserControl),
+		sessionCloses:   make(map[string][]chan struct{}),
 	}
 	for _, record := range endpointStore.ListEndpoints() {
 		m.runtimes[record.ID] = &endpointRuntime{
@@ -659,6 +661,7 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 			if err := json.Unmarshal(data, &msg); err != nil || msg.Session == nil {
 				continue
 			}
+			m.confirmSessionClose(msg.Session.ID)
 			changed, sessionCount := m.removeRemoteSession(id, msg.Session.ID)
 			countValue := int32(sessionCount)
 			m.updateStatus(id, activeStatus, activeMsg, nil, &countValue)
@@ -1139,6 +1142,62 @@ func (m *Manager) resolveBrowserControl(endpointID string, payload []byte) {
 	select {
 	case pending.done <- result:
 	default:
+	}
+}
+
+// Receipt: an outpost publishes session_unregistered on the same connection as
+// soon as it commits the teardown, so this is a tripwire, not a budget.
+const sessionCloseAckTimeout = 15 * time.Second
+
+// ForwardSessionClose asks the endpoint that owns a session to close it and
+// waits for the session_unregistered it publishes when it has.
+func (m *Manager) ForwardSessionClose(ctx context.Context, endpointID, sessionID string, payload []byte) error {
+	accepted := make(chan struct{}, 1)
+	m.mu.Lock()
+	m.sessionCloses[sessionID] = append(m.sessionCloses[sessionID], accepted)
+	m.mu.Unlock()
+	defer m.forgetSessionCloseWaiter(sessionID, accepted)
+
+	if err := m.ForwardEndpointCommand(ctx, endpointID, payload); err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, sessionCloseAckTimeout)
+	defer cancel()
+	select {
+	case <-accepted:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("endpoint %s did not confirm the close of session %s: %w", endpointID, sessionID, ctx.Err())
+	}
+}
+
+func (m *Manager) forgetSessionCloseWaiter(sessionID string, accepted chan struct{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	remaining := m.sessionCloses[sessionID][:0]
+	for _, waiter := range m.sessionCloses[sessionID] {
+		if waiter != accepted {
+			remaining = append(remaining, waiter)
+		}
+	}
+	if len(remaining) == 0 {
+		delete(m.sessionCloses, sessionID)
+		return
+	}
+	m.sessionCloses[sessionID] = remaining
+}
+
+func (m *Manager) confirmSessionClose(sessionID string) {
+	m.mu.Lock()
+	waiters := m.sessionCloses[sessionID]
+	delete(m.sessionCloses, sessionID)
+	m.mu.Unlock()
+	for _, waiter := range waiters {
+		select {
+		case waiter <- struct{}{}:
+		default:
+		}
 	}
 }
 
@@ -1711,6 +1770,20 @@ func (m *Manager) publishConnectionAndSendHello(ctx context.Context, id string, 
 	defer runtime.writeMu.Unlock()
 
 	return sendClientHello(ctx, conn, clientToken)
+}
+
+// AttachEndpointConnection runs an endpoint over a connection the caller opened,
+// and returns when it drops. runEndpointLoop does the same after connectViaSSH.
+func (m *Manager) AttachEndpointConnection(ctx context.Context, id string, conn *websocket.Conn, clientToken string) error {
+	err := m.publishConnectionAndSendHello(ctx, id, conn, nil, clientToken)
+	if err == nil {
+		_, err = m.consumeRemote(ctx, id, conn)
+	}
+	m.clearConnection(id)
+	if m.clearRemoteSessions(id) {
+		m.publishSessionsChanged(id)
+	}
+	return err
 }
 
 func (m *Manager) clearConnection(id string) {

@@ -732,6 +732,10 @@ model RegisterMessage {
 model UnregisterMessage {
   cmd: "unregister";
   id: string;
+  // A hub forwards an authorized agent close as an unregister, and the owning
+  // daemon writes the ledger row. Absent, the close is the user's.
+  closed_by?: string;
+  close_reason?: string;
 }
 
 model StateMessage {

@@ -20,6 +20,19 @@ func (d *Daemon) handleClearWarningsWS() {
 	d.clearWarnings()
 }
 
+// A hub relays an authorized agent close as an unregister and names the closer;
+// the app sends neither field, and its closes are the user's.
+func unregisterSessionClose(msg *protocol.UnregisterMessage) store.SessionClose {
+	closed := store.SessionClose{
+		By:     strings.TrimSpace(protocol.Deref(msg.ClosedBy)),
+		Reason: strings.TrimSpace(protocol.Deref(msg.CloseReason)),
+	}
+	if closed.By == "" {
+		closed.By = store.SessionClosedByUser
+	}
+	return closed
+}
+
 func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMessage) {
 	if closeErr := d.sessionCloseError(msg.ID); closeErr != nil {
 		d.logf("refusing to unregister protected session %s: %v", msg.ID, closeErr)
@@ -27,7 +40,7 @@ func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMe
 		return
 	}
 	d.logf("Unregistering session %s via WebSocket", msg.ID)
-	closing, err := d.beginSessionClose(msg.ID, store.SessionClose{By: store.SessionClosedByUser}, client)
+	closing, err := d.beginSessionClose(msg.ID, unregisterSessionClose(msg), client)
 	if err != nil {
 		d.sendCommandError(client, protocol.CmdUnregister, err.Error())
 		return

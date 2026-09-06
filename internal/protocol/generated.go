@@ -9781,6 +9781,12 @@ type UninstallPluginMessage struct {
 }
 
 type UnregisterMessage struct {
+	// CloseReason corresponds to the JSON schema field "close_reason".
+	CloseReason *string `json:"close_reason,omitempty,omitzero"`
+
+	// ClosedBy corresponds to the JSON schema field "closed_by".
+	ClosedBy *string `json:"closed_by,omitempty,omitzero"`
+
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
