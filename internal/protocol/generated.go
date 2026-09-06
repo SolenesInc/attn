@@ -8452,6 +8452,9 @@ type SessionListMessage struct {
 	// Limit corresponds to the JSON schema field "limit".
 	Limit *int `json:"limit,omitempty,omitzero"`
 
+	// Reopen corresponds to the JSON schema field "reopen".
+	Reopen *bool `json:"reopen,omitempty,omitzero"`
+
 	// Repository corresponds to the JSON schema field "repository".
 	Repository *string `json:"repository,omitempty,omitzero"`
 
@@ -8480,6 +8483,9 @@ type SessionListResult struct {
 
 	// Omitted corresponds to the JSON schema field "omitted".
 	Omitted int `json:"omitted"`
+
+	// Reopen corresponds to the JSON schema field "reopen".
+	Reopen []SessionReopenEntry `json:"reopen,omitempty,omitzero"`
 }
 
 type SessionListResultMessage struct {
@@ -8641,6 +8647,14 @@ const SessionReopenActionReopen SessionReopenAction = "reopen"
 const SessionReopenActionStartFreshDefaultBranch SessionReopenAction = "start_fresh_default_branch"
 const SessionReopenActionStartFreshElsewhere SessionReopenAction = "start_fresh_elsewhere"
 const SessionReopenActionStartFreshSamePlace SessionReopenAction = "start_fresh_same_place"
+
+type SessionReopenEntry struct {
+	// Reopen corresponds to the JSON schema field "reopen".
+	Reopen SessionReopen `json:"reopen"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+}
 
 type SessionReopenMessage struct {
 	// Action corresponds to the JSON schema field "action".

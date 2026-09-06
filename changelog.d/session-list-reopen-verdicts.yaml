@@ -1,0 +1,3 @@
+kind: added
+area: sessions
+change: "`attn session list --reopen` judges every closed row of a page and prints what would bring each one back, so a whole page can be read in one call instead of one `attn session show` per row. The judgement stays free of the repository, exactly as `show` is: rows answer from what the daemon already knows and sharpen once the branch check behind them lands."

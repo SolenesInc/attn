@@ -843,6 +843,8 @@ model SessionListMessage {
   // sighting for a live one: since inclusive, until exclusive, RFC3339.
   since?: string;
   until?: string;
+  // Also judge every closed row of this page, so a surface renders it in one call.
+  reopen?: boolean;
 }
 
 // Reads one ledger row, live or closed, by exact session id.
@@ -6675,6 +6677,14 @@ model SessionListResult {
   next_before?: string;
   // Absent on a page fetched with `before`: the choices belong to the query.
   facets?: SessionLedgerFacets;
+  // Present when the request asked for it. Closed rows only; a live row is
+  // never reopenable and the surface renders it without a verdict.
+  reopen?: SessionReopenEntry[];
+}
+
+model SessionReopenEntry {
+  session_id: string;
+  reopen: SessionReopen;
 }
 
 model SessionShowResult {
