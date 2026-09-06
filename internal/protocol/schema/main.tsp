@@ -6574,6 +6574,9 @@ model CrewRestartMessage {
   request_id: string;
   // The binding shown when the action was requested. Empty means asleep.
   expected_session_id?: string;
+  // The member revision shown with that binding. Required at runtime; optional
+  // on the schema so the daemon can name a missing precondition explicitly.
+  expected_revision?: safeint;
 }
 
 model CrewRestartResult {
@@ -6585,6 +6588,7 @@ model CrewRestartResultMessage {
   event: "crew_restart_result";
   request_id: string;
   success: boolean;
+  conflict: boolean;
   error?: string;
   member?: CrewMember;
   restart?: CrewRestart;

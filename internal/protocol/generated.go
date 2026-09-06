@@ -2493,6 +2493,9 @@ type CrewRestartMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision *int `json:"expected_revision,omitempty,omitzero"`
+
 	// ExpectedSessionID corresponds to the JSON schema field "expected_session_id".
 	ExpectedSessionID *string `json:"expected_session_id,omitempty,omitzero"`
 
@@ -2512,6 +2515,9 @@ type CrewRestartResult struct {
 }
 
 type CrewRestartResultMessage struct {
+	// Conflict corresponds to the JSON schema field "conflict".
+	Conflict bool `json:"conflict"`
+
 	// Error corresponds to the JSON schema field "error".
 	Error *string `json:"error,omitempty,omitzero"`
 

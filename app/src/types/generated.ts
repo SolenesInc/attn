@@ -2924,6 +2924,7 @@ export interface CrewRestart {
 
 export interface CrewRestartMessage {
     cmd:                  CrewRestartMessageCmd;
+    expected_revision?:   number;
     expected_session_id?: string;
     member:               string;
     request_id:           string;
@@ -2941,6 +2942,7 @@ export interface CrewRestartResult {
 }
 
 export interface CrewRestartResultMessage {
+    conflict:   boolean;
     error?:     string;
     event:      CrewRestartResultMessageEvent;
     member?:    Member;
@@ -17734,6 +17736,7 @@ const typeMap: any = {
     ], "any"),
     "CrewRestartMessage": o([
         { json: "cmd", js: "cmd", typ: r("CrewRestartMessageCmd") },
+        { json: "expected_revision", js: "expected_revision", typ: u(undefined, 0) },
         { json: "expected_session_id", js: "expected_session_id", typ: u(undefined, "") },
         { json: "member", js: "member", typ: "" },
         { json: "request_id", js: "request_id", typ: "" },
@@ -17743,6 +17746,7 @@ const typeMap: any = {
         { json: "restart", js: "restart", typ: r("Restart") },
     ], "any"),
     "CrewRestartResultMessage": o([
+        { json: "conflict", js: "conflict", typ: true },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("CrewRestartResultMessageEvent") },
         { json: "member", js: "member", typ: u(undefined, r("Member")) },

@@ -14,17 +14,23 @@ import (
 
 func crewRestartCall(t *testing.T, d *Daemon, member, requestID string) protocol.Response {
 	t.Helper()
-	current, _, err := d.crewMember(member)
+	current, doc, err := d.crewMember(member)
+	expectedRevision := 0
 	if err != nil {
 		if strings.Contains(err.Error(), "outpost") {
 			current.BindingSession = ""
 		} else {
 			t.Fatalf("read current crew day: %v", err)
 		}
+	} else {
+		expectedRevision = int(doc.Rev)
+		if !d.crewBindingLive(current) {
+			current.BindingSession = ""
+		}
 	}
 	msg := protocol.CrewRestartMessage{
 		Cmd: protocol.CmdCrewRestart, Member: member, RequestID: requestID,
-		ExpectedSessionID: protocol.Ptr(current.BindingSession),
+		ExpectedSessionID: protocol.Ptr(current.BindingSession), ExpectedRevision: protocol.Ptr(expectedRevision),
 	}
 	return gardenCall(t, func(c net.Conn) { d.handleCrewRestart(c, &msg) })
 }
@@ -142,8 +148,10 @@ func TestCrewRestart_FailedSuccessorLaunchRetriesTheFiledLetterOnce(t *testing.T
 func TestCrewRestart_AnAsleepMemberWakesDirectlyAndWebSocketCorrelatesIt(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	client := newInternalWSClient()
+	initial := memberByID(t, crewList(t, d), "alder")
 	d.handleCrewRestartWS(client, &protocol.CrewRestartMessage{
 		Cmd: protocol.CmdCrewRestart, Member: "alder", RequestID: "wake-alder", ExpectedSessionID: protocol.Ptr(""),
+		ExpectedRevision: protocol.Ptr(initial.Revision),
 	})
 	result := readCrewRestartResult(t, client)
 	if !result.Success || result.RequestID != "wake-alder" || result.Restart == nil || result.Restart.State != protocol.CrewRestartStateCompleted {
@@ -163,6 +171,13 @@ func TestCrewRestart_AnAsleepMemberWakesDirectlyAndWebSocketCorrelatesIt(t *test
 	if missingDay.Success || !strings.Contains(protocol.Deref(missingDay.Error), "expected session id") {
 		t.Fatalf("missing expected session result = %+v", missingDay)
 	}
+	d.handleCrewRestartWS(client, &protocol.CrewRestartMessage{
+		Cmd: protocol.CmdCrewRestart, Member: "keel", RequestID: "missing-revision", ExpectedSessionID: protocol.Ptr(""),
+	})
+	missingRevision := readCrewRestartResult(t, client)
+	if missingRevision.Success || !strings.Contains(protocol.Deref(missingRevision.Error), "expected revision") {
+		t.Fatalf("missing expected revision result = %+v", missingRevision)
+	}
 }
 
 func TestCrewRestart_RequiresTheDayTheUserActedOn(t *testing.T) {
@@ -171,6 +186,7 @@ func TestCrewRestart_RequiresTheDayTheUserActedOn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("wake: %v", err)
 	}
+	actedOn := memberByID(t, crewList(t, d), "alder")
 	if result := crewRestartCall(t, d, "alder", "newer-request"); !result.Ok {
 		t.Fatalf("restart: %v", protocol.Deref(result.Error))
 	}
@@ -180,7 +196,7 @@ func TestCrewRestart_RequiresTheDayTheUserActedOn(t *testing.T) {
 
 	stale := protocol.CrewRestartMessage{
 		Cmd: protocol.CmdCrewRestart, Member: "alder", RequestID: "delayed-request",
-		ExpectedSessionID: protocol.Ptr(firstDay.SessionID),
+		ExpectedSessionID: protocol.Ptr(firstDay.SessionID), ExpectedRevision: protocol.Ptr(actedOn.Revision),
 	}
 	response := gardenCall(t, func(c net.Conn) { d.handleCrewRestart(c, &stale) })
 	if response.Ok || !strings.Contains(protocol.Deref(response.Error), "day changed") {
@@ -188,6 +204,140 @@ func TestCrewRestart_RequiresTheDayTheUserActedOn(t *testing.T) {
 	}
 	if len(spawnedSessions(t, backend)) != 2 {
 		t.Fatalf("delayed request started another day: %d spawns", len(spawnedSessions(t, backend)))
+	}
+}
+
+func TestCrewRestart_RevisionRejectsADelayedAsleepRequestAfterAnotherDay(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	initial := memberByID(t, crewList(t, d), "alder")
+	requestA := protocol.CrewRestartMessage{
+		Cmd: protocol.CmdCrewRestart, Member: "alder", RequestID: "asleep-a",
+		ExpectedSessionID: protocol.Ptr(""), ExpectedRevision: protocol.Ptr(initial.Revision),
+	}
+	if response := gardenCall(t, func(c net.Conn) { d.handleCrewRestart(c, &requestA) }); !response.Ok {
+		t.Fatalf("first asleep request: %v", protocol.Deref(response.Error))
+	}
+	firstDay := protocol.Deref(memberByID(t, crewList(t, d), "alder").BindingSession)
+	if response := crewRestartCall(t, d, "alder", "awake-b"); !response.Ok {
+		t.Fatalf("second restart: %v", protocol.Deref(response.Error))
+	}
+	handoff := crewHandoffCall(t, d, firstDay, "Start the second day.")
+	if !handoff.Ok || handoff.CrewHandoffResult.NapError != nil {
+		t.Fatalf("second-day handoff: %+v", handoff)
+	}
+	secondDay := protocol.Deref(handoff.CrewHandoffResult.SessionID)
+	teardown, err := d.prepareSessionTeardown(secondDay)
+	if err != nil {
+		t.Fatalf("prepare second day to sleep: %v", err)
+	}
+	d.closeNappedSession(secondDay, teardown)
+
+	client := newInternalWSClient()
+	d.handleCrewRestartWS(client, &requestA)
+	stale := readCrewRestartResult(t, client)
+	if stale.Success || !stale.Conflict || stale.Member == nil || stale.Member.Revision == initial.Revision {
+		t.Fatalf("delayed asleep request = %+v", stale)
+	}
+	if len(spawnedSessions(t, backend)) != 2 {
+		t.Fatalf("delayed asleep request started another day: %d spawns", len(spawnedSessions(t, backend)))
+	}
+}
+
+func TestCrewRestart_UsesTheWireAsleepBindingWhenRawBindingIsDangling(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	if _, err := d.updateCrewMember("alder", func(member *crew.Member) (bool, error) {
+		member.BindingSession = "missing-session"
+		return true, nil
+	}); err != nil {
+		t.Fatalf("seed dangling binding: %v", err)
+	}
+	shown := memberByID(t, crewList(t, d), "alder")
+	if shown.BindingSession != nil {
+		t.Fatalf("dangling raw binding reached the roster: %q", *shown.BindingSession)
+	}
+	msg := protocol.CrewRestartMessage{
+		Cmd: protocol.CmdCrewRestart, Member: "alder", RequestID: "wire-asleep",
+		ExpectedSessionID: protocol.Ptr(""), ExpectedRevision: protocol.Ptr(shown.Revision),
+	}
+	response := gardenCall(t, func(c net.Conn) { d.handleCrewRestart(c, &msg) })
+	if !response.Ok || response.CrewRestartResult.Restart.State != protocol.CrewRestartStateCompleted {
+		t.Fatalf("restart from wire-asleep roster = %+v", response)
+	}
+	if got := protocol.Deref(response.CrewRestartResult.Member.BindingSession); got == "" || got == "missing-session" {
+		t.Fatalf("restart retained dangling binding %q", got)
+	}
+	if len(spawnedSessions(t, backend)) != 1 {
+		t.Fatalf("wire-asleep restart spawned %d days, want 1", len(spawnedSessions(t, backend)))
+	}
+}
+
+func TestCrewRestart_OperationRecordCASRejectsASettingsRace(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	member, doc, err := d.crewMember("alder")
+	if err != nil {
+		t.Fatalf("read member: %v", err)
+	}
+	candidate := member
+	candidate.Restart = &crew.Restart{RequestID: "raced", State: crew.RestartQueued}
+	if _, err := d.updateCrewMember("alder", func(current *crew.Member) (bool, error) {
+		current.Effort = "high"
+		return true, nil
+	}); err != nil {
+		t.Fatalf("race a settings write: %v", err)
+	}
+
+	err = d.recordCrewRestart(candidate, doc.Rev)
+	var conflict *crewRestartConflictError
+	if !errors.As(err, &conflict) || conflict.member.Revision <= int(doc.Rev) {
+		t.Fatalf("operation record error = %v, conflict = %+v", err, conflict)
+	}
+	current := memberByID(t, crewList(t, d), "alder")
+	if current.Restart != nil || protocol.Deref(current.Effort) != "high" || len(spawnedSessions(t, backend)) != 0 {
+		t.Fatalf("raced operation changed member/spawned: %+v / %d", current, len(spawnedSessions(t, backend)))
+	}
+}
+
+func TestCrewRestart_ReconcileCompletesAfterSuccessorSpawnWithoutLaunchingAgain(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	woken, err := d.crewWake("alder", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	if response := crewRestartCall(t, d, "alder", "post-spawn"); !response.Ok {
+		t.Fatalf("queue restart: %v", protocol.Deref(response.Error))
+	}
+	member, _, err := d.crewMember("alder")
+	if err != nil {
+		t.Fatalf("read member: %v", err)
+	}
+	if _, err := d.crewLetterForHandoff(member, woken.SessionID, "A real filed handoff.", false); err != nil {
+		t.Fatalf("file handoff: %v", err)
+	}
+	member, _, err = d.crewMember("alder")
+	if err != nil {
+		t.Fatalf("read filed member: %v", err)
+	}
+	teardown, err := d.prepareSessionTeardown(woken.SessionID)
+	if err != nil {
+		t.Fatalf("prepare old day: %v", err)
+	}
+	successor, err := d.crewNap(member, woken.SessionID, teardown)
+	if err != nil {
+		t.Fatalf("spawn successor: %v", err)
+	}
+	before := memberByID(t, crewList(t, d), "alder")
+	if before.Restart == nil || before.Restart.State != protocol.CrewRestartStateQueued || protocol.Deref(before.BindingSession) != successor {
+		t.Fatalf("simulated crash state = %+v", before)
+	}
+
+	d.reconcileCrewRestarts()
+	after := memberByID(t, crewList(t, d), "alder")
+	if after.Restart == nil || after.Restart.State != protocol.CrewRestartStateCompleted ||
+		protocol.Deref(after.Restart.SuccessorSessionID) != successor {
+		t.Fatalf("recovered restart = %+v", after.Restart)
+	}
+	if len(spawnedSessions(t, backend)) != 2 {
+		t.Fatalf("recovery launched another successor: %d spawns", len(spawnedSessions(t, backend)))
 	}
 }
 

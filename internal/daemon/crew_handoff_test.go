@@ -603,6 +603,48 @@ func TestCrewHandoff_SettingsChangeClearsAnExactLaunchContractButKeepsItsApprova
 	}
 }
 
+func TestCrewHandoff_OneDayHarnessOverrideReturnsToSavedPinsWithoutExecutableLeakage(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	d.store.SetSetting(SettingDefaultEffortPrefix+"claude", "medium")
+	if response := crewSet(t, d, protocol.CrewSetMessage{
+		Member: "keel", Agent: protocol.Ptr("claude"), Model: protocol.Ptr("claude-haiku-4-5"), Effort: protocol.Ptr(""),
+	}); !response.Ok {
+		t.Fatalf("save member launch pins: %v", protocol.Deref(response.Error))
+	}
+	woken, err := d.crewWake("keel", "codex")
+	if err != nil {
+		t.Fatalf("wake one day on codex: %v", err)
+	}
+	intent, ok := d.store.LaunchIntent(woken.SessionID)
+	if !ok {
+		t.Fatal("the overridden day recorded no launch intent")
+	}
+	intent.Executable = "/tmp/codex-one-day"
+	intent.ApprovalRoute = launchcontract.ApprovalRouteReviewer
+	intent.UnattendedLaunch = launchcontract.UnattendedLaunchSpec{
+		Agent: "codex", Model: "gpt-one-day", Effort: "high", Executable: "/tmp/codex-one-day",
+		ApprovalProductMode: launchcontract.ApprovalAuto, ApprovalDriverMode: launchcontract.ApprovalAutoReview,
+		DirectoryTrust: launchcontract.TrustConfiguredDirectory, Recovery: launchcontract.RecoveryAdoptOrRestartFresh,
+	}
+	d.store.SetLaunchIntent(woken.SessionID, intent)
+
+	response := crewHandoffCall(t, d, woken.SessionID, "Return to the saved launch contract.")
+	if !response.Ok || response.CrewHandoffResult.NapError != nil {
+		t.Fatalf("handoff: %+v", response)
+	}
+	spawns := spawnedSessions(t, backend)
+	successor := spawns[len(spawns)-1]
+	if successor.Agent != "claude" || successor.Model != "claude-haiku-4-5" || successor.Effort != "medium" {
+		t.Fatalf("successor agent/model/effort = %q/%q/%q", successor.Agent, successor.Model, successor.Effort)
+	}
+	if successor.Executable != "" || !successor.UnattendedLaunch.IsZero() {
+		t.Fatalf("successor leaked executable/contract = %q/%#v", successor.Executable, successor.UnattendedLaunch)
+	}
+	if successor.ApprovalRoute != launchcontract.ApprovalRouteReviewer || !successor.AutoApprove {
+		t.Fatalf("successor approval route/auto = %q/%t", successor.ApprovalRoute, successor.AutoApprove)
+	}
+}
+
 func TestCrewHandoff_TheSuccessorIsPrimedByTheLetterJustFiled(t *testing.T) {
 	d, _, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("trellis", "")
