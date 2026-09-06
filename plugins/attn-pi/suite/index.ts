@@ -2,9 +2,8 @@
 // process-wide slot — module scope is NOT one, see ./singleton.
 import { VERSION, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { PiSecurity } from "../security/index";
-import { AutoMode, type AutoModePiLike } from "../automode/mode";
 import { denialLedgerFor } from "../automode/ledger";
-import { attnAutoModeSource } from "../automode/source";
+import { attnApprovalSource, PiApproval, proxyFromEnvironment } from "../approval/index";
 import { AttnPiSuite, type ExtensionAPILike } from "./core";
 import { processSingleton } from "./singleton";
 
@@ -19,26 +18,40 @@ const suite = processSingleton(
     }),
 );
 
-const autoMode = processSingleton("attn:pi-automode", () => {
-  const source = attnAutoModeSource(process.env);
-  return source
-    ? new AutoMode({
-        config: source.config,
-        sandboxReviewInExecutor: true,
-        cacheWritePaths: () => security.cacheWritePaths(),
-        notice: source.problem,
-        ...(process.env.ATTN_SESSION_ID ? { sessionKey: process.env.ATTN_SESSION_ID } : {}),
-        ledger: denialLedgerFor(process.env),
-        onDenial: (denial) => suite.reportDenial(denial),
-        onWaitingForUser: (waiting) => suite.reportApprovalWindow(waiting),
-      })
-    : undefined;
+const approval = processSingleton("attn:pi-approval", () => {
+  const source = attnApprovalSource(process.env);
+  if (!source) return undefined;
+  const proxy = proxyFromEnvironment(process.env);
+  return new PiApproval({
+    config: source.config,
+    suite,
+    ledger: denialLedgerFor(process.env),
+    ...(proxy ? { proxy } : {}),
+    ...(source.problem ? { notice: source.problem } : {}),
+  });
 });
 
-const security = processSingleton("attn:pi-security", () => new PiSecurity(undefined, autoMode?.reviewSandbox, autoMode?.canReviewSandbox, autoMode?.checkExecution));
+const security = processSingleton(
+  "attn:pi-security",
+  () =>
+    new PiSecurity(undefined, approval?.runBash, (policy, temp) =>
+      approval?.useSandbox(policy && temp ? {
+        config: {
+          mode: policy.enabled ? "workspace-write" : "danger-full-access",
+          network: policy.network === "allow",
+          allowWrite: policy.allowWrite,
+          denyRead: policy.denyRead,
+          denyWrite: policy.denyWrite,
+          cacheWritePaths: policy.cacheWritePaths,
+        },
+        cwd: policy.cwd,
+        temp,
+      } : undefined),
+    ),
+);
 
-export default function attnPiSuite(pi: ExtensionAPILike & AutoModePiLike & ExtensionAPI): void {
-  if (autoMode) security.register(pi);
+export default function attnPiSuite(pi: ExtensionAPILike & ExtensionAPI): void {
+  if (approval) security.register(pi);
   suite.register(pi);
-  autoMode?.register(pi);
+  approval?.register(pi);
 }

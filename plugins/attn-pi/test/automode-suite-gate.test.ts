@@ -39,8 +39,8 @@ describe("suite composition", () => {
     });
     expect(registered.commands).toEqual(["security", "auto"]);
     expect(registered.flags).toEqual(["auto", "no-auto"]);
-    expect(registered.events).toContain("tool_call");
     expect(registered.events).toContain("session_start");
+    expect(registered.events).toContain("agent_start");
   });
 });
 
