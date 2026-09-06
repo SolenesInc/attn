@@ -786,6 +786,11 @@ jobs:
           name: app-acceptance-tree-${{ github.run_attempt }}
           path: ${{ runner.temp }}
 
+      # attn preflight reads `go env` and fails a cache directory that does not
+      # exist; no shard builds Go, and pi-security runs preflight (run 34065208073).
+      - name: Create the Go caches preflight requires
+        run: mkdir -p "$(go env GOCACHE)" "$(go env GOMODCACHE)"
+
       - name: Install the packaged app and bundled plugin
         run: |
           tar -xzf "$RUNNER_TEMP/app-tree.tar.gz"
