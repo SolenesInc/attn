@@ -860,6 +860,7 @@ model SessionShowMessage {
 // the plain reopen, and refuses naming what is offered instead.
 model SessionReopenMessage {
   cmd: "session_reopen";
+  request_id?: string; // set by the WS frontend to correlate the result event
   session_id: string;
   action?: SessionReopenAction;
   // Where to start, for `start_fresh_elsewhere`.
@@ -6917,6 +6918,20 @@ model SessionShowResultMessage {
   entry?: SessionLedgerEntry;
 }
 
+model SessionReopenResultMessage {
+  event: "session_reopen_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  result?: SessionReopenResult;
+}
+
+model SessionReopenRefreshedMessage {
+  event: "session_reopen_refreshed";
+  session_id: string;
+  reopen: SessionReopen;
+}
+
 // session_unregistered says the live session left; this says where it went, so
 // an open ledger surface updates in place instead of re-listing.
 model SessionClosedMessage {
@@ -7328,6 +7343,8 @@ alias DaemonEvent =
   | TasksChangedMessage
   | SessionListResultMessage
   | SessionShowResultMessage
+  | SessionReopenResultMessage
+  | SessionReopenRefreshedMessage
   | SessionClosedMessage
   | NotificationListResultMessage
   | NotificationMarkReadResultMessage

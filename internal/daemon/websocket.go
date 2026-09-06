@@ -1010,6 +1010,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		go d.sendSessionListWSResult(client, msg.(*protocol.SessionListMessage))
 	case protocol.CmdSessionShow: // wire: session_show
 		go d.sendSessionShowWSResult(client, msg.(*protocol.SessionShowMessage))
+	case protocol.CmdSessionReopen: // wire: session_reopen
+		go d.sendSessionReopenWSResult(client, msg.(*protocol.SessionReopenMessage))
 	case protocol.CmdNotificationList: // wire: notification_list
 		notifList := msg.(*protocol.NotificationListMessage)
 		go d.sendNotificationListWSResult(client, protocol.Deref(notifList.RequestID))

@@ -191,3 +191,54 @@ func TestTheSessionClosedFactReachesTheAppAsALedgerRow(t *testing.T) {
 		t.Errorf("session_closed carried %+v, want the closed session's ledger row", pushed[0].SessionLedgerEntry)
 	}
 }
+
+func onlySessionReopenResult(t *testing.T, client *wsClient) protocol.SessionReopenResultMessage {
+	t.Helper()
+	payloads := drainClientPayloads(t, client)
+	if len(payloads) != 1 {
+		t.Fatalf("client received %d messages, want one session_reopen_result", len(payloads))
+	}
+	var reply protocol.SessionReopenResultMessage
+	if err := json.Unmarshal(payloads[0], &reply); err != nil {
+		t.Fatalf("unmarshal reply: %v", err)
+	}
+	if reply.Event != protocol.EventSessionReopenResult {
+		t.Fatalf("event = %q, want %q", reply.Event, protocol.EventSessionReopenResult)
+	}
+	return reply
+}
+
+func TestTheWebSocketAnswersSessionReopenWithTheRefusalAndItsOffers(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	client := newWorkspaceProtocolTestClient()
+	writeCodexRolloutFixture(t, "conv-plain")
+	closeReopenSession(t, d, reopenSession{
+		ID: "plain-gone", Directory: filepath.Join(t.TempDir(), "deleted"), Agent: "codex", Resume: "conv-plain",
+	})
+
+	d.sendSessionReopenWSResult(client, &protocol.SessionReopenMessage{
+		Cmd: protocol.CmdSessionReopen, RequestID: protocol.Ptr("req-1"), SessionID: "plain-gone",
+	})
+
+	reply := onlySessionReopenResult(t, client)
+	if reply.Success || reply.RequestID != "req-1" || reply.Error == nil {
+		t.Fatalf("reply = %+v, want a refusal correlated to req-1", reply)
+	}
+	if !strings.Contains(*reply.Error, "Offered instead: start_fresh_elsewhere") {
+		t.Errorf("error = %q, want it to name the action offered instead", *reply.Error)
+	}
+}
+
+func TestTheWebSocketAnswersSessionReopenForAnUnknownSession(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	client := newWorkspaceProtocolTestClient()
+
+	d.sendSessionReopenWSResult(client, &protocol.SessionReopenMessage{
+		Cmd: protocol.CmdSessionReopen, RequestID: protocol.Ptr("req-2"), SessionID: "never-ran",
+	})
+
+	reply := onlySessionReopenResult(t, client)
+	if reply.Success || reply.Error == nil || !strings.Contains(*reply.Error, "no ledger row") {
+		t.Fatalf("reply = %+v, want the no-ledger-row refusal", reply)
+	}
+}

@@ -355,6 +355,10 @@ func buildWireProjections() []projection {
 			apply:  projectSessionClosed,
 		},
 		{
+			filter: bus.Filter{FactSessionReopenRefreshed},
+			apply:  projectSessionReopenRefreshed,
+		},
+		{
 			filter: bus.Filter{FactGitOperationStarted, FactGitOperationFinished},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectGitOperation(ev) },
 		},

@@ -94,6 +94,13 @@ var wireFixtures = map[string]wireFixture{
 		subject: (*wireWorld).session,
 		payload: func(w *wireWorld) any { return w.d.store.SessionLedgerEntry(w.sessionID) },
 	},
+	FactSessionReopenRefreshed: {
+		events:  []string{protocol.EventSessionReopenRefreshed},
+		subject: (*wireWorld).session,
+		payload: func(*wireWorld) any {
+			return &protocol.SessionReopen{Reopenable: true, Actions: []protocol.SessionReopenAction{protocol.SessionReopenActionReopen}}
+		},
+	},
 	FactSessionUnregistered: {
 		events:  []string{protocol.EventSessionUnregistered, protocol.EventGardenSeedsUpdated},
 		subject: (*wireWorld).session,
@@ -328,7 +335,6 @@ var factsWithoutWire = map[string]string{
 	FactTicketAssigned:               ticketFactsHaveNoClient,
 	FactTicketAttached:               ticketFactsHaveNoClient,
 	FactTicketChanged:                ticketFactsHaveNoClient,
-	FactSessionReopenRefreshed:       "the Sessions panel fills its verdict column from the page it read and from the close event; a row still checking a branch sharpens on the next page read, and a live projection lands with reopening from the surface",
 }
 
 const ticketFactsHaveNoClient = "no WebSocket client renders a ticket; the read verbs and subscribing apps read these off the durable log"
