@@ -210,6 +210,7 @@ describe("suite <-> driver relay integration", () => {
         model: "gpt-5.5",
         thinking: "low",
       },
+      resume_session_id: "native-session-2",
     });
 
     suite.close();

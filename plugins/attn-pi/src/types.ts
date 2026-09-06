@@ -77,6 +77,9 @@ export type DriverSpawnParams = {
   effort?: string;
   initial_prompt?: string;
   metadata?: unknown;
+  /** The pi session to pick up on driver.resume, when attn asks for one by id
+   * rather than through this session's stored metadata. */
+  resume_session_id?: string;
   auto_mode?: unknown;
 };
 

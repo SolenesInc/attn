@@ -332,9 +332,20 @@ func (d *Daemon) branchMerged(sessionID, branch string) bool {
 
 func (d *Daemon) reopenConversation(execution garden.Dispatch) (bool, string) {
 	resumeID := strings.TrimSpace(execution.Resume)
-	agentName := strings.TrimSpace(execution.Agent)
 	if resumeID == "" {
 		return false, "no conversation id was saved for this session, so there is nothing to resume"
+	}
+	return d.conversationResumable(strings.TrimSpace(execution.Agent), resumeID)
+}
+
+// A plugin driver answers by capability: the daemon cannot see its storage, and
+// the pi driver opens the id or recreates it rather than failing.
+func (d *Daemon) conversationResumable(agentName, resumeID string) (bool, string) {
+	if plugin, ok := d.ensurePluginRegistry().driver(agentName); ok {
+		if !plugin.Capabilities["resume"] {
+			return false, fmt.Sprintf("agent %q does not resume conversations, so conversation %s cannot be picked up", agentName, resumeID)
+		}
+		return true, ""
 	}
 	driver := agentdriver.Get(agentName)
 	if driver == nil {

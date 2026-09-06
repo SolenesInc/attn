@@ -514,3 +514,39 @@ func TestReopenVerdictMakesAWorkspaceNamedAfterTheSessionWhenItsOwnIsGone(t *tes
 		t.Errorf("pane plan = %s, want a pane added", verdict.PanePlan)
 	}
 }
+
+func TestReopenVerdictReopensAPluginConversationByCapability(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	client, done := startPluginPipe(t, d, "snipe-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, client, "snipe", map[string]bool{"resume": true})
+	closeReopenSession(t, d, reopenSession{
+		ID: "plugin-conv", Directory: t.TempDir(), Agent: "snipe", Resume: "snipe-conv-1",
+	})
+
+	verdict := decidedReopenVerdict(t, d, "plugin-conv")
+	wantReopenVerdict(t, verdict, true, []protocol.SessionReopenAction{protocol.SessionReopenActionReopen})
+}
+
+func TestReopenVerdictNamesAPluginThatDoesNotResume(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	client, done := startPluginPipe(t, d, "spawn-only-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, client, "spawn-only", map[string]bool{})
+	closeReopenSession(t, d, reopenSession{
+		ID: "plugin-fresh", Directory: t.TempDir(), Agent: "spawn-only", Resume: "conv-1",
+	})
+
+	verdict := decidedReopenVerdict(t, d, "plugin-fresh")
+	wantReopenVerdict(t, verdict, false,
+		[]protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshSamePlace})
+	if !strings.Contains(verdict.Reason, "spawn-only") || !strings.Contains(verdict.Reason, "resume") {
+		t.Errorf("reason = %q, want the plugin named and the missing capability", verdict.Reason)
+	}
+}

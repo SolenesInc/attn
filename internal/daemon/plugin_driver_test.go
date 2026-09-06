@@ -1131,3 +1131,138 @@ func TestHandleSpawnSession_PullRequestReportingSuppressesSelfReportGuidance(t *
 		})
 	}
 }
+
+func TestHandleSpawnSession_PluginDriverResumesAnExplicitConversation(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d.ptyBackend = &fakeSpawnBackend{}
+	client, done := startPluginPipe(t, d, "snipe-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, client, "snipe", map[string]bool{"resume": true})
+
+	requestDone := make(chan struct{})
+	go func() {
+		defer close(requestDone)
+		request := decodeJSONRPCMessage(t, client)
+		if request.Method != "driver.resume" {
+			t.Errorf("method=%q, want driver.resume for an explicit conversation id", request.Method)
+			return
+		}
+		var params pluginDriverSpawnParams
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			t.Errorf("decode resume params: %v", err)
+			return
+		}
+		if params.ResumeSessionID != "snipe-conv-7" || len(params.Metadata) != 0 {
+			t.Errorf("resume params=%+v, want resume_session_id=snipe-conv-7 and no metadata for a new session", params)
+			return
+		}
+		respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"snipe", "--session", "snipe-conv-7"}})
+	}()
+
+	addTestWorkspace(d, "workspace-snipe", t.TempDir())
+	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
+	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
+		ID:              "snipe-resumed",
+		Cwd:             t.TempDir(),
+		WorkspaceID:     "workspace-snipe",
+		Agent:           "snipe",
+		Cols:            80,
+		Rows:            24,
+		ResumeSessionID: protocol.Ptr("snipe-conv-7"),
+	})
+	<-requestDone
+	if session := d.store.Get("snipe-resumed"); session == nil {
+		t.Fatal("resumed session was not persisted")
+	}
+}
+
+func TestHandleSpawnSession_PluginDriverRelaunchCarriesTheStoredConversation(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d.ptyBackend = &fakeSpawnBackend{}
+	client, done := startPluginPipe(t, d, "snipe-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, client, "snipe", map[string]bool{"resume": true})
+
+	now := protocol.TimestampNow().String()
+	d.store.Add(&protocol.Session{
+		ID: "snipe-relaunch", Label: "existing", Agent: "snipe", Directory: t.TempDir(),
+		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	d.persistResumeSessionID("snipe-relaunch", "snipe-conv-9")
+
+	requestDone := make(chan struct{})
+	go func() {
+		defer close(requestDone)
+		request := decodeJSONRPCMessage(t, client)
+		var params pluginDriverSpawnParams
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			t.Errorf("decode params: %v", err)
+			return
+		}
+		if request.Method != "driver.resume" || params.ResumeSessionID != "snipe-conv-9" {
+			t.Errorf("method=%q params=%+v, want driver.resume carrying the stored conversation", request.Method, params)
+			return
+		}
+		respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"snipe"}})
+	}()
+
+	addTestWorkspace(d, "workspace-snipe", t.TempDir())
+	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
+	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
+		ID: "snipe-relaunch", Cwd: t.TempDir(), WorkspaceID: "workspace-snipe", Agent: "snipe", Cols: 80, Rows: 24,
+	})
+	<-requestDone
+}
+
+func TestResolvePluginDriverLaunch_RefusesAnExplicitConversationWithoutResume(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	reg := pluginDriverRegistration{PluginName: "spawn-only-plugin", Agent: "spawn-only", Capabilities: map[string]bool{}}
+	_, err := d.resolvePluginDriverLaunch(reg, pluginDriverSpawnParams{ResumeSessionID: "conv-1"}, false)
+	if err == nil || !strings.Contains(err.Error(), "conv-1") || !strings.Contains(err.Error(), "resume") {
+		t.Fatalf("err=%v, want a refusal naming the conversation and the missing capability", err)
+	}
+}
+
+func TestPluginDriverReports_MetadataResumeIDBecomesTheSessionConversation(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	client, done := startPluginPipe(t, d, "snipe-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, client, "snipe", map[string]bool{"resume": true})
+
+	now := protocol.TimestampNow().String()
+	d.store.Add(&protocol.Session{
+		ID: "snipe-conv", Label: "snipe", Agent: "snipe", Directory: t.TempDir(),
+		State: protocol.SessionStateLaunching, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	if !d.store.BeginAgentDriverRun("snipe-conv", "snipe-plugin", "run-conv") {
+		t.Fatal("failed to begin test plugin run")
+	}
+
+	sendPluginMethod(t, client, 3, "session.report_metadata", pluginReportMetadataParams{
+		SessionID: "snipe-conv", RunID: "run-conv", Seq: 1,
+		Metadata:        json.RawMessage(`{"snipe_session_id":"native-id"}`),
+		ResumeSessionID: "native-id",
+	})
+	if got := d.store.GetResumeSessionID("snipe-conv"); got != "native-id" {
+		t.Fatalf("resume id=%q, want the reported native-id", got)
+	}
+
+	// A stale report must not move the conversation either.
+	sendPluginMethod(t, client, 4, "session.report_metadata", pluginReportMetadataParams{
+		SessionID: "snipe-conv", RunID: "run-conv", Seq: 1,
+		Metadata:        json.RawMessage(`{"snipe_session_id":"older"}`),
+		ResumeSessionID: "older",
+	})
+	if got := d.store.GetResumeSessionID("snipe-conv"); got != "native-id" {
+		t.Fatalf("resume id=%q after a stale report, want native-id", got)
+	}
+}
