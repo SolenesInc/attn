@@ -182,13 +182,14 @@ interface SessionTerminalWorkspaceProps {
 
 const EMPTY_SEED_TARGET_SESSIONS: WorkspaceTileSessionOption[] = [];
 const EMPTY_GARDEN_SEEDS: Seed[] = [];
+const EMPTY_DELEGATION_SESSIONS: NonNullable<SessionTerminalWorkspaceProps['delegationSessions']> = [];
 
 export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandle, SessionTerminalWorkspaceProps>(
   function SessionTerminalWorkspace({
     workspaceId,
     workspaceDirectory,
     workspaceSessions = [],
-    delegationSessions = [],
+    delegationSessions = EMPTY_DELEGATION_SESSIONS,
     seedTargetSessions = EMPTY_SEED_TARGET_SESSIONS,
     gardenSeeds = EMPTY_GARDEN_SEEDS,
     onOpenSeed,

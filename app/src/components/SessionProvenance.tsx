@@ -23,6 +23,7 @@ type ProvenanceEntry =
   | { kind: 'pull-request'; pullRequest: SessionPullRequest; all: SessionPullRequest[] };
 
 const HOVER_CLOSE_DELAY_MS = 120;
+const EMPTY_DELEGATES: readonly SessionDelegateLink[] = [];
 
 function shortDefinitionName(name: string): string {
   return name.replace(/^requested pr review\s*[-—:]\s*/i, '').trim() || name;
@@ -58,11 +59,28 @@ function provenanceEntries(
   return entries;
 }
 
+function provenanceDescription(
+  entries: readonly ProvenanceEntry[],
+  dispatcher: DispatcherLink<DelegationSession> | null | undefined,
+  delegates: readonly SessionDelegateLink[],
+): string {
+  const parts = entries.map((entry) => (entry.kind === 'automation'
+    ? automationProvenanceDescription(entry.automation)
+    : sessionPullRequestDescription(entry.pullRequest)));
+  if (dispatcher) {
+    parts.push(`Delegated by ${dispatcher.name}${dispatcher.session ? '' : ' · earlier session'}`);
+  }
+  if (delegates.length > 0) {
+    parts.push(`${delegates.length} ${delegates.length === 1 ? 'delegate' : 'delegates'}`);
+  }
+  return parts.join(' · ');
+}
+
 export function SessionProvenance({
   automation,
   pullRequests,
   dispatcher,
-  delegates = [],
+  delegates = EMPTY_DELEGATES,
   onSelectSession,
   density = 'line',
   interactive = false,
@@ -133,75 +151,16 @@ export function SessionProvenance({
     setDelegatesPopover((open) => (open ? null : anchorFrom(event.currentTarget)));
   };
 
-  const description = entries
-    .map((entry) => (entry.kind === 'automation'
-      ? automationProvenanceDescription(entry.automation)
-      : sessionPullRequestDescription(entry.pullRequest)))
-    .concat(
-      dispatcher
-        ? [`Delegated by ${dispatcher.name}${dispatcher.session ? '' : ' · earlier session'}`]
-        : [],
-      delegates.length > 0
-        ? [`${delegates.length} ${delegates.length === 1 ? 'delegate' : 'delegates'}`]
-        : [],
-    )
-    .join(' · ');
+  const description = provenanceDescription(entries, dispatcher, delegates);
 
   if (entries.length === 0 && !dispatcher && delegates.length === 0) return null;
 
   if (density === 'badge') {
-    return (
-      <span className="session-provenance session-provenance--badge" title={description} aria-label={description}>
-        {entries.map((entry) => (entry.kind === 'automation' ? (
-          <span key="automation" className="session-provenance__badge-mark" aria-hidden="true">⚡</span>
-        ) : (
-          <span
-            key="pull-request"
-            className="session-provenance__badge-mark session-provenance__badge-mark--pr"
-            data-tone={describeSessionPullRequest(entry.pullRequest).tone}
-            aria-hidden="true"
-          >
-            #{entry.pullRequest.number}
-          </span>
-        )))}
-        {dispatcher && <span className="session-provenance__badge-mark" aria-hidden="true">↑</span>}
-        {delegates.length > 0 && (
-          <span className="session-provenance__badge-mark" aria-hidden="true">↓{delegates.length}</span>
-        )}
-      </span>
-    );
+    return <BadgeProvenance entries={entries} dispatcher={dispatcher} delegates={delegates} description={description} />;
   }
 
   if (density === 'compact') {
-    return (
-      <span className="session-provenance session-provenance--compact" title={description} aria-label={description}>
-        {entries.map((entry) => (entry.kind === 'automation' ? (
-          <span key="automation" className="session-provenance__part">
-            <span className="session-provenance__kind" aria-hidden="true">⚡</span>
-            <span className="session-provenance__definition">
-              {shortDefinitionName(entry.automation.definition_name)}
-            </span>
-            {entry.automation.pull_request && (
-              <span className="session-provenance__target">#{entry.automation.pull_request.number}</span>
-            )}
-          </span>
-        ) : (
-          <span key="pull-request" className="session-provenance__part">
-            <CompactPullRequest pullRequest={entry.pullRequest} />
-          </span>
-        )))}
-        {dispatcher && (
-          <span className="session-provenance__part">
-            ↑ {dispatcher.name}{dispatcher.session ? '' : ' · earlier session'}
-          </span>
-        )}
-        {delegates.length > 0 && (
-          <span className="session-provenance__part">
-            ↓ {delegates.length} {delegates.length === 1 ? 'delegate' : 'delegates'}
-          </span>
-        )}
-      </span>
-    );
+    return <CompactProvenance entries={entries} dispatcher={dispatcher} delegates={delegates} description={description} />;
   }
 
   return (
@@ -232,6 +191,81 @@ export function SessionProvenance({
         />
       )}
     </>
+  );
+}
+
+function BadgeProvenance({
+  entries,
+  dispatcher,
+  delegates,
+  description,
+}: {
+  entries: readonly ProvenanceEntry[];
+  dispatcher: DispatcherLink<DelegationSession> | null | undefined;
+  delegates: readonly SessionDelegateLink[];
+  description: string;
+}) {
+  return (
+    <span className="session-provenance session-provenance--badge" title={description} aria-label={description}>
+      {entries.map((entry) => (entry.kind === 'automation' ? (
+        <span key="automation" className="session-provenance__badge-mark" aria-hidden="true">⚡</span>
+      ) : (
+        <span
+          key="pull-request"
+          className="session-provenance__badge-mark session-provenance__badge-mark--pr"
+          data-tone={describeSessionPullRequest(entry.pullRequest).tone}
+          aria-hidden="true"
+        >
+          #{entry.pullRequest.number}
+        </span>
+      )))}
+      {dispatcher && <span className="session-provenance__badge-mark" aria-hidden="true">↑</span>}
+      {delegates.length > 0 && (
+        <span className="session-provenance__badge-mark" aria-hidden="true">↓{delegates.length}</span>
+      )}
+    </span>
+  );
+}
+
+function CompactProvenance({
+  entries,
+  dispatcher,
+  delegates,
+  description,
+}: {
+  entries: readonly ProvenanceEntry[];
+  dispatcher: DispatcherLink<DelegationSession> | null | undefined;
+  delegates: readonly SessionDelegateLink[];
+  description: string;
+}) {
+  return (
+    <span className="session-provenance session-provenance--compact" title={description} aria-label={description}>
+      {entries.map((entry) => (entry.kind === 'automation' ? (
+        <span key="automation" className="session-provenance__part">
+          <span className="session-provenance__kind" aria-hidden="true">⚡</span>
+          <span className="session-provenance__definition">
+            {shortDefinitionName(entry.automation.definition_name)}
+          </span>
+          {entry.automation.pull_request && (
+            <span className="session-provenance__target">#{entry.automation.pull_request.number}</span>
+          )}
+        </span>
+      ) : (
+        <span key="pull-request" className="session-provenance__part">
+          <CompactPullRequest pullRequest={entry.pullRequest} />
+        </span>
+      )))}
+      {dispatcher && (
+        <span className="session-provenance__part">
+          ↑ {dispatcher.name}{dispatcher.session ? '' : ' · earlier session'}
+        </span>
+      )}
+      {delegates.length > 0 && (
+        <span className="session-provenance__part">
+          ↓ {delegates.length} {delegates.length === 1 ? 'delegate' : 'delegates'}
+        </span>
+      )}
+    </span>
   );
 }
 

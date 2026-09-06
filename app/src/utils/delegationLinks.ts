@@ -1,4 +1,5 @@
 import { crewDisplayName } from './crewName';
+
 export interface DelegationSession {
   id: string;
   label: string;
