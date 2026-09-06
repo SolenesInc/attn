@@ -257,6 +257,12 @@
   text-align: center;
 }
 
+.garden-needs-rail__count.is-quiet {
+  background: none;
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
 .garden-needs-rail__empty {
   color: var(--color-text-tertiary);
   display: flex;

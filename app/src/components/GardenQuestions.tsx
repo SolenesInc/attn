@@ -228,7 +228,9 @@ export function NeedsYouRail({ rows, ...handlers }: { rows: Asking[] } & AnswerH
       <header className="garden-needs-rail__head">
         <AskMark />
         <h2>Needs you</h2>
-        <span className="garden-needs-rail__count">{live.length}</span>
+        <span className={`garden-needs-rail__count${live.length === 0 ? ' is-quiet' : ''}`}>
+          {live.length}
+        </span>
       </header>
       {rows.length === 0 ? (
         <div className="garden-needs-rail__empty">
