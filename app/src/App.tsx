@@ -160,7 +160,7 @@ function sessionCloseProtectionHint(sessions: DaemonSession[], id: string): stri
 
 const TERMINAL_AGENT: SessionAgent = 'shell';
 
-type LocationPickerPurpose = 'workspace' | 'session';
+type LocationPickerPurpose = 'workspace' | 'session' | 'reopen';
 
 function handleAppPointerDownCapture(event: { target: EventTarget | null }): void {
   if (!isBrowserHostOwnedTarget(event.target)) {
@@ -473,6 +473,8 @@ function App() {
   const [presentationNotices, setPresentationNotices] = useState<Presentation[]>([]);
   const [sessionCloseNotice, setSessionCloseNotice] =
     useState<{ entry: SessionLedgerEntry; reopen?: SessionReopen; nonce: number }>();
+  const [sessionVerdictNotice, setSessionVerdictNotice] =
+    useState<{ verdicts: Record<string, SessionReopen>; nonce: number }>();
 
   const {
     daemonSessions,
@@ -633,6 +635,9 @@ function App() {
     onGitStatusUpdate: setGitStatus,
     onSessionExited: handleSessionExited,
     onSessionClosed: (entry, reopen) => setSessionCloseNotice((prev) => ({ entry, reopen, nonce: (prev?.nonce ?? 0) + 1 })),
+    // Checks finish in bursts; one slot per session keeps every verdict of a burst.
+    onSessionReopenRefreshed: (sessionId, reopen) =>
+      setSessionVerdictNotice((prev) => ({ verdicts: { ...prev?.verdicts, [sessionId]: reopen }, nonce: (prev?.nonce ?? 0) + 1 })),
   });
 
   const {
@@ -718,6 +723,7 @@ function App() {
           notebookTaskChangeSignal={notebookTaskChangeSignal}
           clearGitStatus={clearGitStatus}
           sessionCloseNotice={sessionCloseNotice}
+          sessionVerdictNotice={sessionVerdictNotice}
           registerSessionExitHandler={registerSessionExitHandler}
         />
       </DaemonApiProvider>
@@ -748,6 +754,7 @@ interface AppContentProps {
   notebookTaskChangeSignal: number;
   clearGitStatus: () => void;
   sessionCloseNotice?: { entry: SessionLedgerEntry; reopen?: SessionReopen; nonce: number };
+  sessionVerdictNotice?: { verdicts: Record<string, SessionReopen>; nonce: number };
   registerSessionExitHandler: (handler: ((info: SessionExitInfo) => void) | null) => void;
 }
 
@@ -773,6 +780,7 @@ function AppContent({
   notebookTaskChangeSignal,
   clearGitStatus,
   sessionCloseNotice,
+  sessionVerdictNotice,
   registerSessionExitHandler,
 }: AppContentProps) {
   const hasCriticalNotification = criticalNotifications.count > 0;
@@ -902,6 +910,7 @@ function AppContent({
     sendCrewWake,
     sendCrewSleep,
     sendSessionList,
+    sendSessionReopen,
   } = useDaemonApi();
 
   const presentationBySessionId = useMemo(
@@ -1474,6 +1483,7 @@ function AppContent({
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [locationPickerPurpose, setLocationPickerPurpose] = useState<LocationPickerPurpose>('workspace');
   const [locationPickerSessionDirection, setLocationPickerSessionDirection] = useState<TerminalSplitDirection>('vertical');
+  const reopenPickRef = useRef<{ settle: (path?: string) => void } | null>(null);
 
   const [zoomModeBySessionId, setZoomModeBySessionId] = useState<Record<string, boolean>>({});
   const { message: errorMessage, durationMs: errorDurationMs, showError, clearError } = useErrorToast();
@@ -2060,6 +2070,11 @@ function AppContent({
       chiefOfStaff = false,
       autoMode?: boolean,
     ) => {
+      if (locationPickerPurpose === 'reopen') {
+        reopenPickRef.current?.settle(path);
+        reopenPickRef.current = null;
+        return;
+      }
       const jobId = sessionCreationJobIdRef.current + 1;
       sessionCreationJobIdRef.current = jobId;
       let selectedAgent: SessionAgent;
@@ -2202,6 +2217,8 @@ function AppContent({
 
   const closeLocationPicker = useCallback(() => {
     setLocationPickerOpen(false);
+    reopenPickRef.current?.settle(undefined);
+    reopenPickRef.current = null;
   }, []);
 
   const hasChiefOfStaff = useMemo(
@@ -3128,6 +3145,32 @@ function AppContent({
     });
   }, [getPaneSize, reloadSession, sessions, showError]);
 
+  const [reopenedSessionId, setReopenedSessionId] = useState<string | null>(null);
+  const handleReopenSession = useCallback(async (sessionId: string, actionId: string): Promise<boolean> => {
+    let directory: string | undefined;
+    if (actionId === 'start_fresh_elsewhere') {
+      const chosen = await new Promise<string | undefined>((settle) => {
+        reopenPickRef.current?.settle(undefined);
+        reopenPickRef.current = { settle };
+        setLocationPickerPurpose('reopen');
+        setLocationPickerOpen(true);
+      });
+      if (!chosen) return false;
+      directory = chosen;
+    }
+    const result = await sendSessionReopen(sessionId, actionId, directory);
+    setReopenedSessionId(result.session_id);
+    setSessionsOpen(false);
+    return true;
+  }, [sendSessionReopen]);
+
+  useEffect(() => {
+    if (!reopenedSessionId) return;
+    if (!sessions.some((entry) => entry.id === reopenedSessionId)) return;
+    handleSelectSession(reopenedSessionId);
+    setReopenedSessionId(null);
+  }, [reopenedSessionId, sessions, handleSelectSession]);
+
   const handleOpenSeedTile = useCallback((seedId: string) => {
     void sendOpenSeed(seedId, activeSessionId || '')
       .then(({ workspaceId, tileId }) => {
@@ -3943,7 +3986,10 @@ function AppContent({
         seedForSession={seedForSession}
         onFocusSession={handleSelectSession}
         onOpenSeed={handleOpenSeedTile}
+        onReopen={handleReopenSession}
         closeNotice={sessionCloseNotice}
+        verdictNotice={sessionVerdictNotice}
+        yieldsFocus={locationPickerOpen && locationPickerPurpose === 'reopen'}
       />
       <NotebookBrowser
         isOpen={notebookOpen}

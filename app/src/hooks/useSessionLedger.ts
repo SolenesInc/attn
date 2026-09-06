@@ -59,6 +59,7 @@ export interface SessionLedgerView {
   reload: () => void;
   loadMore: () => void;
   recordClose: (entry: SessionLedgerEntry, reopen?: SessionReopen) => void;
+  recordVerdict: (sessionId: string, reopen: SessionReopen) => void;
 }
 
 export function sameFilters(a: SessionLedgerFilters, b: SessionLedgerFilters): boolean {
@@ -127,6 +128,20 @@ export function useSessionLedger({
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const readSeq = useRef(0);
+  // A branch check can land before the page that asked for it; the page then
+  // still says checking, so the sharper verdict waits here for it.
+  const sharpened = useRef<Record<string, SessionReopen>>({});
+  useEffect(() => {
+    if (!enabled) sharpened.current = {};
+  }, [enabled]);
+  const pageVerdicts = useCallback((reopen: SessionLedgerPage['reopen']) => {
+    const byId = reopenVerdictsById(reopen);
+    for (const id of Object.keys(byId)) {
+      const early = sharpened.current[id];
+      if (byId[id].refreshing && early) byId[id] = reopenVerdictView(early);
+    }
+    return byId;
+  }, []);
   // Written after commit: a render React discards must not steer the committed surface.
   const filtersRef = useRef(filters);
   useEffect(() => {
@@ -152,7 +167,7 @@ export function useSessionLedger({
       .then((page) => {
         if (seq !== readSeq.current) return;
         setEntries(page.entries ?? []);
-        setVerdicts(reopenVerdictsById(page.reopen));
+        setVerdicts(pageVerdicts(page.reopen));
         setFacets(page.facets ?? null);
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
@@ -171,7 +186,7 @@ export function useSessionLedger({
       });
     // `query` holds a fresh `now`, so depending on it would refetch every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, filters, filterError, list, pageSize, reloadNonce]);
+  }, [enabled, filters, filterError, list, pageSize, pageVerdicts, reloadNonce]);
 
   const reload = useCallback(() => setReloadNonce((n) => n + 1), []);
 
@@ -183,7 +198,7 @@ export function useSessionLedger({
       .then((page) => {
         if (seq !== readSeq.current) return;
         setEntries((current) => [...current, ...(page.entries ?? [])]);
-        setVerdicts((current) => ({ ...current, ...reopenVerdictsById(page.reopen) }));
+        setVerdicts((current) => ({ ...current, ...pageVerdicts(page.reopen) }));
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
       })
@@ -193,7 +208,7 @@ export function useSessionLedger({
       .finally(() => {
         if (seq === readSeq.current) setLoadingMore(false);
       });
-  }, [nextBefore, loadingMore, filterError, list, pageSize, now]);
+  }, [nextBefore, loadingMore, filterError, list, pageSize, pageVerdicts, now]);
 
   const recordClose = useCallback((entry: SessionLedgerEntry, reopen?: SessionReopen) => {
     // Read outside the updater: React may replay one, and the clock would move under it.
@@ -212,6 +227,14 @@ export function useSessionLedger({
     if (reopen) setVerdicts((current) => ({ ...current, [entry.id]: reopenVerdictView(reopen) }));
   }, [now]);
 
+  const recordVerdict = useCallback((sessionId: string, reopen: SessionReopen) => {
+    sharpened.current[sessionId] = reopen;
+    setVerdicts((current) => {
+      if (!(sessionId in current)) return current;
+      return { ...current, [sessionId]: reopenVerdictView(reopen) };
+    });
+  }, []);
+
   return {
     filters,
     setFilters,
@@ -226,5 +249,6 @@ export function useSessionLedger({
     reload,
     loadMore,
     recordClose,
+    recordVerdict,
   };
 }

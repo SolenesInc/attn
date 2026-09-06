@@ -94,6 +94,21 @@ export function shortPath(path: string, segments = 2): string {
   return `…/${parts.slice(-segments).join('/')}`;
 }
 
+const ABSOLUTE_PATH = /\/(?:[^\s/,;:]+\/)+[^\s,;:]+/g;
+const REFUSAL = /^[0-9a-f-]{36} cannot be reopened with (\S+): (.*?)(?:\. Offered instead: (\S+))?$/;
+
+export function compactVerdictText(text: string): string {
+  return text.replace(ABSOLUTE_PATH, (match) => shortPath(match));
+}
+
+export function compactRefusalText(text: string): string {
+  const match = REFUSAL.exec(text);
+  if (!match) return compactVerdictText(text);
+  const [, action, reason, offered] = match;
+  const verb = `${action.split('_').join(' ')} was refused`;
+  return offered ? `${verb}; it offers ${reopenActionLabel(offered)} instead` : `${verb}: ${compactVerdictText(reason)}`;
+}
+
 const REOPEN_ACTION_LABELS: Record<string, string> = {
   reopen: 'Reopen',
   recreate_worktree_and_reopen: 'Recreate the worktree',
@@ -117,6 +132,13 @@ export interface ReopenVerdictView {
   summary: string;
   reopenable: boolean;
   actions: ReopenActionView[];
+  reason?: string;
+  warning?: string;
+  directoryState: string;
+  branchState?: string;
+  workspacePlan: string;
+  workspaceId: string;
+  panePlan: string;
 }
 
 export function reopenVerdictView(reopen: SessionReopen): ReopenVerdictView {
@@ -125,7 +147,50 @@ export function reopenVerdictView(reopen: SessionReopen): ReopenVerdictView {
     summary: reopen.reason || reopen.warning || 'it can be reopened where it ran',
     reopenable: reopen.reopenable,
     actions: reopen.actions.map((id) => ({ id, label: reopenActionLabel(id) })),
+    reason: reopen.reason,
+    warning: reopen.warning,
+    directoryState: reopen.directory_state,
+    branchState: reopen.branch_state,
+    workspacePlan: reopen.workspace_plan,
+    workspaceId: reopen.workspace_id,
+    panePlan: reopen.pane_plan,
   };
+}
+
+export function reopenPlacement(
+  verdict: ReopenVerdictView,
+  workspaceLabel: (workspaceId: string) => string,
+): string {
+  const workspace = verdict.workspacePlan === 'reuse'
+    ? `lands in ${workspaceLabel(verdict.workspaceId)}`
+    : 'opens a workspace named after the session';
+  const pane = verdict.panePlan === 'reuse' ? 'in its old pane' : 'in a new pane';
+  return `${workspace}, ${pane}`;
+}
+
+const BRANCH_STATE_LABELS: Record<string, string> = {
+  local: 'branch is local',
+  remote_only: 'branch is only on the remote',
+  gone: 'branch is gone everywhere',
+  merged: 'branch was merged and is gone',
+  unknown: 'branch is being checked',
+};
+
+export function branchStateLabel(state: string | undefined): string | null {
+  if (!state) return null;
+  return BRANCH_STATE_LABELS[state] ?? state;
+}
+
+const DIRECTORY_STATE_LABELS: Record<string, string> = {
+  present: 'directory is there',
+  missing: 'directory is gone',
+  unavailable: 'directory cannot be opened',
+  unknown: 'no directory saved',
+  remote: 'directory is on another host',
+};
+
+export function directoryStateLabel(state: string): string {
+  return DIRECTORY_STATE_LABELS[state] ?? state;
 }
 
 export function reopenVerdictsById(

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SessionsPanel } from './SessionsPanel';
+import { SettingsProvider } from '../contexts/SettingsContext';
 import type { SessionLedgerPage, SessionLedgerQuery } from '../hooks/daemonSessionLedgerEvents';
 import type { SessionLedgerEntry, SessionReopen, SessionReopenEntry } from '../types/generated';
 import { SessionReopenAction, SessionState } from '../types/generated';
@@ -57,7 +58,11 @@ function panel(pages: SessionLedgerPage[], props: Record<string, unknown> = {}) 
     calls.push(query);
     return pages[Math.min(calls.length - 1, pages.length - 1)];
   });
-  render(<SessionsPanel isOpen onClose={() => {}} listSessions={list} now={now} {...props} />);
+  render(
+    <SettingsProvider settings={{}} setSetting={vi.fn()}>
+      <SessionsPanel isOpen onClose={() => {}} listSessions={list} now={now} {...props} />
+    </SettingsProvider>,
+  );
   return { list, calls };
 }
 
@@ -94,10 +99,10 @@ describe('SessionsPanel reopen verdicts', () => {
       },
     ]);
 
-    await waitFor(() => expect(screen.getByText('refreshing…')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('checking…')).toBeTruthy());
     nextPage();
 
-    await waitFor(() => expect(screen.queryByText('refreshing…')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('checking…')).toBeNull());
     expect(screen.getByText('the worktree is gone; its branch is still here')).toBeTruthy();
   });
 
@@ -200,20 +205,15 @@ describe('SessionsPanel live closes', () => {
   it('replaces a live row in place when the daemon says it closed', async () => {
     const page = { entries: [liveEntry('s1')], omitted: 0 };
     const list = vi.fn(async () => page);
-    const view = render(
-      <SessionsPanel isOpen onClose={() => {}} listSessions={list} now={now} />,
+    const wrap = (closeNotice?: { entry: ReturnType<typeof closedEntry>; nonce: number }) => (
+      <SettingsProvider settings={{}} setSetting={vi.fn()}>
+        <SessionsPanel isOpen onClose={() => {}} listSessions={list} now={now} closeNotice={closeNotice} />
+      </SettingsProvider>
     );
+    const view = render(wrap());
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Focus' })).toBeTruthy());
-    view.rerender(
-      <SessionsPanel
-        isOpen
-        onClose={() => {}}
-        listSessions={list}
-        now={now}
-        closeNotice={{ entry: closedEntry('s1'), nonce: 1 }}
-      />,
-    );
+    view.rerender(wrap({ entry: closedEntry('s1'), nonce: 1 }));
 
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Focus' })).toBeNull());
     expect(screen.getByText('closed')).toBeTruthy();

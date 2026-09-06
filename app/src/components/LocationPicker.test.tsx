@@ -1654,3 +1654,56 @@ describe('LocationPicker', () => {
     });
   });
 });
+
+describe('LocationPicker reopen purpose', () => {
+  beforeEach(() => {
+    useFilesystemSuggestionsMock.mockReset();
+    useFilesystemSuggestionsMock.mockReturnValue({ suggestions: [], loading: false, error: null, currentDir: '' });
+  });
+
+  it('asks only for a path, starting where every picker starts', async () => {
+    const onInspectPath = vi.fn(async (path: string) => ({
+      success: true,
+      inspection: { input_path: path, exists: true, is_directory: true, resolved_path: path, home_path: '/home/u' },
+    }));
+    const { onSelect, onClose } = renderPicker({ purpose: 'reopen', projectsDirectory: '/home/u/projects', onInspectPath });
+
+    expect(screen.getByTestId('location-picker-title').textContent).toBe('Start fresh where?');
+    expect(screen.queryByRole('radiogroup', { name: 'Session agent' })).toBeNull();
+    expect(screen.queryByRole('radiogroup', { name: 'Session target' })).toBeNull();
+    const input = screen.getByRole('textbox') as HTMLInputElement;
+    expect(input.value).toBe('/home/u/projects/');
+    expect(document.activeElement).toBe(input);
+    expect(input.selectionStart).toBe(input.value.length);
+
+    fireEvent.change(input, { target: { value: '/home/u/wt/fresh' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(1));
+    expect(onSelect.mock.calls[0][0]).toBe('/home/u/wt/fresh');
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates the worktree itself instead of handing off to a session launch', async () => {
+    const onInspectPath = vi.fn(async (path: string) => ({
+      success: true,
+      inspection: { input_path: path, exists: true, is_directory: true, resolved_path: path, repo_root: '/home/u/repo', home_path: '/home/u' },
+    }));
+    const onGetRepoInfo = vi.fn(async () => ({ success: true, info: buildRepoInfo({ repo: '/home/u/repo', worktrees: [] }) }));
+    const onCreateWorktree = vi.fn(async () => ({ success: true, path: '/home/u/repo--fresh' }));
+    const onCreateWorktreeSession = vi.fn();
+    const { onSelect } = renderPicker({ purpose: 'reopen', onInspectPath, onGetRepoInfo, onCreateWorktree, onCreateWorktreeSession });
+
+    const input = screen.getByRole('textbox') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '/home/u/repo' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(screen.getByTestId('repo-options')).toBeTruthy());
+    fireEvent.keyDown(screen.getByTestId('repo-options'), { key: 'ArrowUp' });
+    fireEvent.change(screen.getByTestId('repo-new-worktree-input'), { target: { value: 'fresh' } });
+    fireEvent.keyDown(screen.getByTestId('repo-options'), { key: 'Enter' });
+
+    await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(1));
+    expect(onCreateWorktree).toHaveBeenCalledWith('/home/u/repo', 'fresh', undefined, 'origin/main', undefined);
+    expect(onCreateWorktreeSession).not.toHaveBeenCalled();
+    expect(onSelect.mock.calls[0][0]).toBe('/home/u/repo--fresh');
+  });
+});
