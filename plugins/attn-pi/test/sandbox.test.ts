@@ -50,8 +50,9 @@ describe("sandboxSpecFor", () => {
     try {
       const spec = sandboxSpecFor(config({ allowWrite: [outside], cacheWritePaths: [join(outside, "cache")] }), cwd, temp, { permissions: "use_default" });
       expect(spec).not.toBe("unsandboxed");
-      // The cache path is inside `outside`, so only the outermost root survives.
-      expect((spec as SandboxSpec).writableRoots.slice().sort()).toEqual([cwd, temp, outside, canonical("/tmp")].sort());
+      // The nested cache path stays a root of its own: each one carries an anchor deny.
+      expect((spec as SandboxSpec).writableRoots.slice().sort())
+        .toEqual([cwd, temp, outside, join(outside, "cache"), canonical("/tmp")].sort());
     } finally { cleanup(); }
   });
 
@@ -166,6 +167,38 @@ describe.skipIf(process.platform !== "darwin")("seatbelt enforcement", () => {
     } finally { cleanup(); }
   });
 
+  test("a protected path cannot be moved out from under its carveout", () => {
+    const { cwd, temp, cleanup } = workspace();
+    const guarded = join(cwd, "config", "secrets");
+    mkdirSync(guarded, { recursive: true });
+    writeFileSync(join(guarded, "prod.env"), "TOKEN=s3cret\n");
+    try {
+      const spec = sandboxSpecFor(config({ denyRead: [guarded], denyWrite: [guarded] }), cwd, temp, { permissions: "use_default" });
+      expect(sandboxed(spec, `mv ${JSON.stringify(join(cwd, "config"))} ${JSON.stringify(join(cwd, "cfg2"))}`).code).not.toBe(0);
+      expect(existsSync(join(cwd, "cfg2"))).toBe(false);
+      expect(sandboxed(spec, `cat ${JSON.stringify(join(guarded, "prod.env"))}`).output).not.toContain("s3cret");
+      expect(sandboxed(spec, `echo more >> ${JSON.stringify(join(guarded, "prod.env"))}`).code).not.toBe(0);
+      expect(readFileSync(join(guarded, "prod.env"), "utf8")).toBe("TOKEN=s3cret\n");
+    } finally { cleanup(); }
+  });
+
+  test("a writable root cannot be renamed away and replaced", () => {
+    const { cwd, temp, cleanup } = workspace();
+    const under = mkdtempSync("/tmp/attn-pi-sandbox-anchor-");
+    try {
+      for (const root of [cwd, canonical(under)]) {
+        const spec = sandboxSpecFor(config(), root, temp, { permissions: "use_default" });
+        expect(sandboxed(spec, `rmdir ${JSON.stringify(root)}`).code).not.toBe(0);
+        expect(existsSync(root)).toBe(true);
+        expect(sandboxed(spec, `mv ${JSON.stringify(root)} ${JSON.stringify(`${root}.bak`)}`).code).not.toBe(0);
+        expect(existsSync(`${root}.bak`)).toBe(false);
+      }
+    } finally {
+      rmSync(under, { recursive: true, force: true });
+      cleanup();
+    }
+  });
+
   test("a proxied profile reaches the proxy port and nothing else", async () => {
     const { cwd, temp, cleanup } = workspace();
     const proxy = await listener();
@@ -247,6 +280,18 @@ describe.skipIf(process.platform !== "darwin")("spawned children", () => {
 });
 
 describe("bwrap arguments", () => {
+  test("read-only mounts nothing beyond a read-only root and a private /dev", () => {
+    const { cwd, temp, cleanup } = workspace();
+    try {
+      const spec = sandboxSpecFor(config({ mode: "read-only" }), cwd, temp, { permissions: "use_default" }) as SandboxSpec;
+      expect(bwrapArgs(spec, ["/bin/true"])).toEqual([
+        "--new-session", "--die-with-parent", "--ro-bind", "/", "/", "--dev", "/dev",
+        "--unshare-user", "--unshare-pid", "--unshare-ipc", "--unshare-net",
+        "--proc", "/proc", "--chdir", cwd, "--cap-drop", "ALL", "--", "/bin/true",
+      ]);
+    } finally { cleanup(); }
+  });
+
   test("the workspace is bound writable, the protected path read-only, and the network namespace follows the profile", () => {
     const { cwd, temp, secret, cleanup } = workspace();
     const guarded = join(cwd, ".pi");

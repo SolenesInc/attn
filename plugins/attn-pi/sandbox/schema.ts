@@ -1,8 +1,7 @@
 import { Type, type Static } from "typebox";
 
-// Descriptions from codex-rs/core/src/tools/handlers/shell_spec.rs:232-274, with
-// Codex's `cmd` renamed to pi's `command`. with_additional_permissions is behind
-// Codex's off-by-default exec_permission_approvals feature and is not offered.
+// Descriptions from shell_spec.rs:232-274, with Codex's `cmd` renamed to pi's
+// `command`. with_additional_permissions sits behind an off-by-default feature.
 export const bashParameterSchema = Type.Object({
   command: Type.String({ description: "Bash command to execute" }),
   timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (optional, no default timeout)" })),

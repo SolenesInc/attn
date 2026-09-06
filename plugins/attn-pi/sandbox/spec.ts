@@ -3,6 +3,7 @@ import { canonical, within } from "../security/policy";
 
 export type SandboxMode = "read-only" | "workspace-write" | "danger-full-access";
 export type SandboxPermissions = "use_default" | "require_escalated";
+/** credentials = the run's proxy credentials (ATTN_PI_PROXY_CREDENTIALS), never the run token. */
 export type ProxyAddress = { host: "127.0.0.1"; port: number; credentials: string };
 
 export type SandboxSpec = {
@@ -30,11 +31,13 @@ export function outermostRoots(paths: string[]): string[] {
   return ordered.filter((path, index) => !ordered.slice(0, index).some((parent) => within(path, parent)));
 }
 
-// protocol.rs:1275-1286: workspace-write always grants /tmp on unix when it is
-// a directory. The session temp directory stands in for Codex's TMPDIR root.
-function slashTmp(): string[] {
+// protocol.rs:1275-1286 grants /tmp on unix when it is a directory; /dev/shm is
+// how a workspace gets POSIX semaphores (exec/tests/suite/sandbox.rs:166-171).
+function platformWritableRoots(): string[] {
   if (process.platform === "win32") return [];
-  try { return statSync("/tmp").isDirectory() ? ["/tmp"] : []; } catch { return []; }
+  return ["/tmp", "/dev/shm"].filter((path) => {
+    try { return statSync(path).isDirectory(); } catch { return false; }
+  });
 }
 
 export function sandboxSpecFor(
@@ -50,8 +53,10 @@ export function sandboxSpecFor(
   if (opts.permissions === "require_escalated") return "unsandboxed";
   const resolvedCwd = canonical(cwd);
   const resolvedTemp = canonical(temp);
+  // Every configured root stays its own root, nested or not: each one carries an
+  // anchor deny, and collapsing a nested root would drop that boundary.
   const writableRoots = config.mode === "workspace-write"
-    ? outermostRoots([resolvedCwd, resolvedTemp, ...slashTmp(), ...config.allowWrite, ...config.cacheWritePaths])
+    ? [...new Set([resolvedCwd, resolvedTemp, ...platformWritableRoots(), ...config.allowWrite, ...config.cacheWritePaths].map(canonical))]
     : [];
   const proxy = config.network ? opts.proxy : undefined;
   return {

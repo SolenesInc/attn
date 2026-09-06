@@ -13,7 +13,8 @@ function existingParent(path: string): string {
 }
 
 function mounts(spec: SandboxSpec): Mount[] {
-  const writable = spec.writableRoots;
+  // Nested roots matter to the Seatbelt anchors, not to a bind mount.
+  const writable = outermostRoots(spec.writableRoots);
   for (const path of writable) {
     if (!existsSync(path)) throw new Error(`Sandbox write grant does not exist: ${path}`);
   }
@@ -27,10 +28,10 @@ function mounts(spec: SandboxSpec): Mount[] {
   ];
 }
 
-// Mount and namespace flags follow bwrap(1) and linux-sandbox/src/bwrap.rs:268-352.
-// Restrictive mounts come last so a writable parent cannot reopen a protected path.
+// Flags follow the restricted builder, linux-sandbox/src/bwrap.rs:454-466 and
+// :329-352. `--dev` gives a private /dev/shm; a writable root rebinds the host's.
 export function bwrapArgs(spec: SandboxSpec, command: string[]): string[] {
-  const args = ["--new-session", "--die-with-parent", "--ro-bind", "/", "/", "--dev", "/dev", "--bind-try", "/dev/shm", "/dev/shm"];
+  const args = ["--new-session", "--die-with-parent", "--ro-bind", "/", "/", "--dev", "/dev"];
   for (const mount of mounts(spec)) {
     switch (mount.access) {
       case "write": args.push("--bind", mount.path, mount.path); break;

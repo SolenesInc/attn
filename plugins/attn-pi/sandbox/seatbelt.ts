@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import { within } from "../security/policy";
 import { seatbeltBase, seatbeltNetwork, seatbeltPreferences } from "./policies";
 import type { SandboxSpec } from "./spec";
@@ -38,16 +39,40 @@ function networkPolicy(spec: SandboxSpec): string[] {
   return ["(allow network*)", seatbeltNetwork];
 }
 
+/** A writable root's read-only subpaths: nothing denied for reads may be written either. */
+function protectedIn(spec: SandboxSpec, root: string): string[] {
+  return [...new Set([...spec.denyWrite, ...spec.denyRead])]
+    .filter((path) => within(path, root) || within(root, path));
+}
+
+// seatbelt.rs:899-921. Renaming an allowed ancestor relocates its protected
+// descendants past their pathname carveouts, so every ancestor is pinned.
+function protectedAncestors(spec: SandboxSpec): string[] {
+  const ancestors = new Set<string>();
+  for (const root of spec.writableRoots) {
+    for (const path of protectedIn(spec, root)) {
+      for (let current = dirname(path); within(current, root); current = dirname(current)) {
+        ancestors.add(current);
+        if (dirname(current) === current) break;
+      }
+    }
+  }
+  return [...ancestors].sort();
+}
+
 export function seatbeltInvocation(spec: SandboxSpec): { profile: string; params: Param[] } {
   const params: Param[] = [];
   const read = accessPolicy("file-read*", "READABLE_ROOT", ["/"], () => spec.denyRead, params);
-  const write = accessPolicy(
-    "file-write*", "WRITABLE_ROOT", spec.writableRoots,
-    (root) => spec.denyWrite.filter((path) => within(path, root) || within(root, path)), params,
-  );
+  const write = accessPolicy("file-write*", "WRITABLE_ROOT", spec.writableRoots, (root) => protectedIn(spec, root), params);
   // A sandboxed process must not replace a boundary the next policy reuses.
-  const anchors = spec.writableRoots.map((_root, index) =>
-    `(deny file-write-unlink (require-all (literal (param "WRITABLE_ROOT_${index}")) (vnode-type DIRECTORY)))`);
+  const anchors = [
+    ...spec.writableRoots.map((_root, index) =>
+      `(deny file-write-unlink (require-all (literal (param "WRITABLE_ROOT_${index}")) (vnode-type DIRECTORY)))`),
+    ...protectedAncestors(spec).map((path, index) => {
+      params.push({ key: `PROTECTED_ANCESTOR_${index}`, value: path });
+      return `(deny file-write-unlink (require-all (vnode-type DIRECTORY) (literal (param "PROTECTED_ANCESTOR_${index}"))))`;
+    }),
+  ];
   const denies = [
     ...spec.denyRead.map((path, index) => {
       params.push({ key: `DENY_READ_${index}`, value: path });
