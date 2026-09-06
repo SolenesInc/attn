@@ -1,6 +1,5 @@
-// OpenAI Codex policies; see notices/NOTICE.codex and notices/LICENSE.codex.
-
-// Comments removed; policies are composed with the filesystem grants in sandbox.ts.
+// OpenAI Codex Seatbelt policies, sandboxing/src/seatbelt_*.sbpl at e01f38c.
+// See ../security/notices/NOTICE.codex and ../security/notices/LICENSE.codex.
 
 export const seatbeltBase = String.raw`(version 1)
 
@@ -122,3 +121,12 @@ export const seatbeltNetwork = String.raw`(allow system-socket
 (allow sysctl-read
   (sysctl-name-regex #"^net.routetable")
 )`;
+
+// Preferences IPC reaches data outside the read roots, so seatbelt.rs:1028-1030
+// includes it only with full disk read access, which every attn profile grants.
+export const seatbeltPreferences = String.raw`(allow ipc-posix-shm-read* (ipc-posix-name-prefix "apple.cfprefs."))
+(allow mach-lookup
+  (global-name "com.apple.cfprefsd.daemon")
+  (global-name "com.apple.cfprefsd.agent")
+  (local-name "com.apple.cfprefsd.agent"))
+(allow user-preference-read)`;
