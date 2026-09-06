@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { availableModels, type AvailableModels, type ModelQuery } from "../automode/models";
+import { NetworkProxy, networkPolicyFrom, type NetworkDecision, type NetworkPolicy, type NetworkRequest } from "../netproxy";
 import type { AttnRPCClient } from "./attn-rpc";
 import type { RelayConnection, RelayServer } from "./relay";
 import type {
@@ -9,6 +10,8 @@ import type {
   RelayHelloParams,
   RelayHelloState,
   RelayHelloResult,
+  RelayNetworkDecideParams,
+  RelayNetworkDecideResult,
   RelayReportDenialParams,
   RelayReportInputTakenParams,
   RelayReportPullRequestParams,
@@ -37,6 +40,9 @@ type Availability =
 
 type RunState = {
   token: string;
+  /** Proxy credentials, distinct from `token`: these reach the sandboxed command in its
+   * environment, and the relay token must never be reachable from inside the sandbox. */
+  proxyCredentials?: string;
   sessionID: string;
   runID: string;
   seq: number;
@@ -47,6 +53,10 @@ type RunState = {
 };
 
 const deliverMessageTimeoutMs = 10_000;
+
+// Every pi session in this profile shares one proxy; each run's proxy credentials are
+// how a held connection finds the session that made it.
+type ProxyState = { proxy: NetworkProxy; address: { host: string; port: number } };
 
 // A tripwire, not a deadline: a live pi re-dials within a second of the socket
 // appearing and the suite's reconnect backoff caps at 30s (suite/core.ts).
@@ -74,9 +84,14 @@ export class PiDriver {
   private availability: Availability = { ok: false, message: "pi availability has not been checked" };
   private readonly runsByToken = new Map<string, RunState>();
   private readonly runsBySessionID = new Map<string, RunState>();
+  private readonly runsByProxyCredentials = new Map<string, RunState>();
 
   /** The shipped tripwire, shortened by tests that would otherwise wait it out. */
   private readonly unbackedGraceMs: number;
+
+  private readonly proxyStateDir: string | undefined;
+  private proxyStart: Promise<ProxyState | undefined> | undefined;
+  private proxyState: ProxyState | undefined;
 
   constructor(options: {
     rpc: AttnRPCClient;
@@ -87,6 +102,7 @@ export class PiDriver {
     queryModels?: ModelQuery;
     executable?: string;
     unbackedGraceMs?: number;
+    proxyStateDir?: string;
   }) {
     this.rpc = options.rpc;
     this.relay = options.relay;
@@ -96,6 +112,7 @@ export class PiDriver {
     this.queryModels = options.queryModels ?? availableModels;
     this.executable = options.executable?.trim() || process.env.ATTN_PI_EXECUTABLE?.trim() || "pi";
     this.unbackedGraceMs = options.unbackedGraceMs ?? unbackedRunGraceMs;
+    this.proxyStateDir = options.proxyStateDir?.trim() || this.env.ATTN_PLUGIN_DATA_ROOT?.trim() || undefined;
   }
 
   async initialize(): Promise<void> {
@@ -118,6 +135,9 @@ export class PiDriver {
     // Adopt before listen(): the socket opens only once every inherited token is
     // known, so a suite re-dialing the instant the path appears is never refused.
     this.adoptActiveRuns(result.active_runs ?? []);
+    // The proxy comes back on its persisted port before any suite re-dials, so an
+    // inherited session's next network call is held for a decision, not refused.
+    await this.ensureProxy(result.auto_mode);
     await this.relay.listen();
   }
 
@@ -148,7 +168,7 @@ export class PiDriver {
     return {
       argv: this.argvFor(availability.executable, metadata, params.initial_prompt, suitePath),
       cwd: params.cwd,
-      env: this.envFor(run.token, params.auto_mode, run.sessionID),
+      env: await this.envFor(run, params.auto_mode),
     };
   }
 
@@ -183,7 +203,7 @@ export class PiDriver {
     return {
       argv: this.argvFor(availability.executable, metadata, undefined, suitePath),
       cwd: params.cwd,
-      env: this.envFor(run.token, params.auto_mode, run.sessionID),
+      env: await this.envFor(run, params.auto_mode),
     };
   }
 
@@ -193,14 +213,32 @@ export class PiDriver {
       this.markBacked(run);
       this.runsBySessionID.delete(params.session_id);
       this.runsByToken.delete(run.token);
+      if (run.proxyCredentials) {
+        this.runsByProxyCredentials.delete(run.proxyCredentials);
+        this.proxyState?.proxy.revokeCredentials(run.proxyCredentials);
+      }
     }
     return { ok: true };
+  }
+
+  /** Shuts the profile's proxy down; the driver process owns it for as long as it runs. */
+  async close(): Promise<void> {
+    const running = this.proxyStart === undefined ? undefined : await this.proxyStart;
+    this.proxyStart = undefined;
+    this.proxyState = undefined;
+    await running?.proxy.close();
+  }
+
+  /** The listening proxy, for tests and diagnostics; undefined until a spawn asks for one. */
+  networkProxy(): NetworkProxy | undefined {
+    return this.proxyState?.proxy;
   }
 
 
   async suiteHello(connection: RelayConnection, rawParams: unknown): Promise<RelayHelloResult> {
     const params = parseRelayHello(rawParams);
     const run = this.requireRunByToken(params.token);
+    this.adoptProxyCredentials(run, params.proxy_credentials);
     run.connection = connection;
     this.markBacked(run);
     if (params.dropped_reports !== undefined) {
@@ -220,6 +258,23 @@ export class PiDriver {
     await this.reportMetadata(run);
     if (params.pi_state !== undefined) await this.restateAfterUnknown(run, params.pi_state);
     return { ok: true };
+  }
+
+  /** An adopted run learns its proxy credentials from the suite that still holds them.
+   * A spawn-minted value always wins: only the driver may hand out new credentials. */
+  private adoptProxyCredentials(run: RunState, offered: string | undefined): void {
+    if (offered === undefined || offered === "") return;
+    if (run.proxyCredentials !== undefined) {
+      if (run.proxyCredentials !== offered) {
+        console.error(
+          `attn-pi: session ${run.sessionID} said hello with proxy credentials this driver did not mint; keeping the ones it did`,
+        );
+      }
+      return;
+    }
+    run.proxyCredentials = offered;
+    this.runsByProxyCredentials.set(offered, run);
+    this.proxyState?.proxy.registerCredentials(offered);
   }
 
   /** Hands attn what pi says it is, to use only while attn says `unknown`: a hello
@@ -327,9 +382,13 @@ export class PiDriver {
 
   private createRun(sessionID: string, runID: string, metadata: PiMetadata): RunState {
     const previous = this.runsBySessionID.get(sessionID);
-    if (previous) this.runsByToken.delete(previous.token);
-    const run: RunState = { token: runID, sessionID, runID, seq: 0, metadata };
+    if (previous) {
+      this.runsByToken.delete(previous.token);
+      if (previous.proxyCredentials) this.runsByProxyCredentials.delete(previous.proxyCredentials);
+    }
+    const run: RunState = { token: runID, proxyCredentials: randomUUID(), sessionID, runID, seq: 0, metadata };
     this.runsByToken.set(run.token, run);
+    if (run.proxyCredentials) this.runsByProxyCredentials.set(run.proxyCredentials, run);
     this.runsBySessionID.set(sessionID, run);
     this.markUnbacked(run, "the pi suite has not connected since this run was launched");
     return run;
@@ -420,15 +479,75 @@ export class PiDriver {
 
   // The auto-mode config travels in the environment, not argv: argv is
   // world-readable and prose entries are multi-line.
-  private envFor(token: string, autoMode: unknown, sessionID: string): Record<string, string> {
-    const env: Record<string, string> = { ATTN_PI_SUITE_SOCKET: this.relay.socketPath, ATTN_PI_TOKEN: token };
+  private async envFor(run: RunState, autoMode: unknown): Promise<Record<string, string>> {
+    const env: Record<string, string> = { ATTN_PI_SUITE_SOCKET: this.relay.socketPath, ATTN_PI_TOKEN: run.token };
     if (autoMode !== undefined && autoMode !== null) {
       env.ATTN_PI_AUTOMODE_CONFIG = JSON.stringify(autoMode);
       const ledger = process.env.ATTN_AUTOMODE_DENIAL_LOG?.trim();
       if (ledger) env.ATTN_PI_AUTOMODE_DENIAL_LOG = ledger;
-      env.ATTN_PI_SESSION_ID = sessionID;
+      env.ATTN_PI_SESSION_ID = run.sessionID;
+    }
+    const proxy = await this.ensureProxy(autoMode);
+    if (proxy && run.proxyCredentials) {
+      proxy.proxy.registerCredentials(run.proxyCredentials);
+      env.ATTN_PI_PROXY_ADDR = `${proxy.address.host}:${proxy.address.port}`;
+      env.ATTN_PI_PROXY_CREDENTIALS = run.proxyCredentials;
     }
     return env;
+  }
+
+  /** Starts the profile's proxy on the first spawn that asks for network policy, and
+   * pushes every later spawn's policy onto the one already listening. */
+  private async ensureProxy(autoMode: unknown): Promise<ProxyState | undefined> {
+    const policy = networkPolicyFrom(autoMode);
+    if (this.proxyStart) {
+      const running = await this.proxyStart;
+      if (running && policy) running.proxy.setPolicy(policy);
+      return running;
+    }
+    if (!policy?.enabled) return undefined;
+    this.proxyStart = this.startProxy(policy);
+    this.proxyState = await this.proxyStart;
+    return this.proxyState;
+  }
+
+  private async startProxy(policy: NetworkPolicy): Promise<ProxyState | undefined> {
+    const stateDir = this.proxyStateDir;
+    if (!stateDir) {
+      console.error(
+        "attn-pi: auto mode asked for network policy but ATTN_PLUGIN_DATA_ROOT is unset, so no proxy was started and sessions get no ATTN_PI_PROXY_ADDR",
+      );
+      return undefined;
+    }
+    const proxy = new NetworkProxy({ policy, stateDir, decide: (request) => this.decideNetwork(request) });
+    try {
+      return { proxy, address: await proxy.listen() };
+    } catch (error) {
+      console.error(`attn-pi: could not start the network proxy in ${stateDir}: ${String(error)}`);
+      return undefined;
+    }
+  }
+
+  // A held connection is decided by the session that made it: the proxy credentials name
+  // that run, and the answer comes back over that run's own relay connection.
+  private async decideNetwork(request: NetworkRequest): Promise<NetworkDecision> {
+    const run = this.runsByProxyCredentials.get(request.credentials);
+    const connection = run?.connection;
+    if (!connection) {
+      throw new Error(`no live pi suite for these proxy credentials; nothing can decide ${request.host}`);
+    }
+    const params: RelayNetworkDecideParams = { host: request.host, port: request.port, protocol: request.protocol };
+    return this.relay.networkDecide<RelayNetworkDecideParams, RelayNetworkDecideResult>(connection, params);
+  }
+
+  /** attn pushes a network policy change here so the running proxy picks it up without
+   * waiting for the next spawn. Sessions with no proxy yet read it from their config. */
+  async policyChanged(rawParams: unknown): Promise<{ ok: true }> {
+    const policy = networkPolicyFrom(rawParams);
+    if (!policy) throw new Error("automode.policy_changed params must carry a network object");
+    const running = this.proxyStart === undefined ? undefined : await this.proxyStart;
+    running?.proxy.setPolicy(policy);
+    return { ok: true };
   }
 
   private argvFor(
@@ -523,6 +642,7 @@ function parseRelayHello(value: unknown): RelayHelloParams {
     // Only a positive count is reported.
     dropped_reports: typeof dropped === "number" && Number.isFinite(dropped) && dropped > 0 ? dropped : undefined,
     pi_state: piState,
+    proxy_credentials: typeof record.proxy_credentials === "string" ? record.proxy_credentials.trim() : undefined,
   };
 }
 

@@ -1,4 +1,6 @@
 
+import type { NetworkDecision, NetworkProtocol } from "../netproxy";
+
 // `dropped_reports` counts reports the suite could not hand over since its last hello; it
 // cannot log. `pi_state` is taken only when attn has nothing, or reconnects reopen turns.
 export type RelayHelloParams = {
@@ -8,6 +10,9 @@ export type RelayHelloParams = {
   reason: string;
   dropped_reports?: number;
   pi_state?: RelayHelloState;
+  /** How an adopted run recovers its proxy credentials: the suite still holds the value
+   * a past spawn minted, and a restarted driver has no other way to learn it. */
+  proxy_credentials?: string;
 };
 export type RelayHelloState = "idle" | "working" | "pending_approval";
 export type RelayHelloResult = { ok: true };
@@ -28,6 +33,11 @@ export type RelayReportDenialParams = {
 export type RelayDeliverMessageParams = { input_id: string; text: string };
 export type RelayDeliverMessageResult = { delivered: boolean };
 
+// The proxy holds the client connection while this is outstanding, so the reviewer owns
+// the deadline: the driver sends it with no timeout of its own.
+export type RelayNetworkDecideParams = { host: string; port: number; protocol: NetworkProtocol };
+export type RelayNetworkDecideResult = NetworkDecision;
+
 export const relayMethods = {
   hello: "suite.hello",
   reportState: "suite.report_state",
@@ -36,4 +46,5 @@ export const relayMethods = {
   reportInputTaken: "suite.report_input_taken",
   reportPullRequest: "suite.report_pull_request",
   deliverMessage: "driver.deliver_message",
+  networkDecide: "driver.network_decide",
 } as const;

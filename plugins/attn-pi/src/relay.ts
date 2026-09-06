@@ -57,20 +57,25 @@ export class RelayConnection {
     this.closeHandlers.push(handler);
   }
 
-  request<TResult = unknown>(method: string, params: unknown, timeoutMs: number): Promise<TResult> {
+  /** Without `timeoutMs` the request stands until the suite answers or the socket
+   * closes: a request whose answer is a human decision has no deadline of ours. */
+  request<TResult = unknown>(method: string, params: unknown, timeoutMs?: number): Promise<TResult> {
     const id = this.nextID++;
     const result = new Promise<TResult>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(String(id));
-        reject(new Error(`suite did not respond to ${method} within ${timeoutMs}ms`));
-      }, timeoutMs);
+      const timer =
+        timeoutMs === undefined
+          ? undefined
+          : setTimeout(() => {
+              this.pending.delete(String(id));
+              reject(new Error(`suite did not respond to ${method} within ${timeoutMs}ms`));
+            }, timeoutMs);
       this.pending.set(String(id), {
         resolve: (value) => {
-          clearTimeout(timer);
+          if (timer !== undefined) clearTimeout(timer);
           resolve(value as TResult);
         },
         reject: (error) => {
-          clearTimeout(timer);
+          if (timer !== undefined) clearTimeout(timer);
           reject(error);
         },
       });
@@ -206,6 +211,12 @@ export class RelayServer {
 
   deliverMessage<TParams, TResult>(connection: RelayConnection, params: TParams, timeoutMs: number): Promise<TResult> {
     return connection.request<TResult>(relayMethods.deliverMessage, params, timeoutMs);
+  }
+
+  /** Asks the session to decide a held network connection. No timeout: the proxy holds
+   * the client until the session's reviewer answers, as Codex does. */
+  networkDecide<TParams, TResult>(connection: RelayConnection, params: TParams): Promise<TResult> {
+    return connection.request<TResult>(relayMethods.networkDecide, params);
   }
 
   close(): void {
