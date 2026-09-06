@@ -1266,3 +1266,47 @@ func TestPluginDriverReports_MetadataResumeIDBecomesTheSessionConversation(t *te
 		t.Fatalf("resume id=%q after a stale report, want native-id", got)
 	}
 }
+
+func TestHandleSpawnSession_PluginDriverWithoutResumeRelaunchesFreshDespiteStoredConversation(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d.ptyBackend = &fakeSpawnBackend{}
+	client, done := startPluginPipe(t, d, "spawn-only-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, client, "spawn-only", map[string]bool{})
+
+	now := protocol.TimestampNow().String()
+	d.store.Add(&protocol.Session{
+		ID: "spawn-only-stored", Label: "existing", Agent: "spawn-only", Directory: t.TempDir(),
+		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	d.persistResumeSessionID("spawn-only-stored", "conv-from-an-earlier-run")
+
+	requestDone := make(chan struct{})
+	go func() {
+		defer close(requestDone)
+		request := decodeJSONRPCMessage(t, client)
+		var params pluginDriverSpawnParams
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			t.Errorf("decode params: %v", err)
+			return
+		}
+		if request.Method != "driver.spawn" || params.ResumeSessionID != "" {
+			t.Errorf("method=%q params=%+v, want a fresh driver.spawn without the stored conversation", request.Method, params)
+			return
+		}
+		respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"spawn-only"}})
+	}()
+
+	addTestWorkspace(d, "workspace-spawn-only", t.TempDir())
+	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
+	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
+		ID: "spawn-only-stored", Cwd: t.TempDir(), WorkspaceID: "workspace-spawn-only", Agent: "spawn-only", Cols: 80, Rows: 24,
+	})
+	<-requestDone
+	if session := d.store.Get("spawn-only-stored"); session == nil {
+		t.Fatal("relaunched session was not persisted")
+	}
+}

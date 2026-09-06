@@ -168,7 +168,9 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 		d.logf("spawn: explicit resume target %s for session %s is not resumable; using resume picker", req.resumeSessionID, msg.ID)
 		req.resumeSessionID = ""
 	}
-	if req.existingSession != nil && req.hasPluginDriver && req.resumeSessionID == "" {
+	// Only a driver that can resume is handed the stored id: a spawn-only driver
+	// relaunches fresh, and would otherwise be refused for an id nobody asked for.
+	if req.existingSession != nil && req.hasPluginDriver && req.resumeSessionID == "" && req.pluginDriver.Capabilities["resume"] {
 		req.resumeSessionID = d.store.GetResumeSessionID(msg.ID)
 	}
 	if req.existingSession != nil && !req.hasPluginDriver {
