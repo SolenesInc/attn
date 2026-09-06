@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/hub"
+
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -419,5 +421,97 @@ func TestAgentCloseRefusesAnUnknownCaller(t *testing.T) {
 	}
 	if d.store.Get("worker") == nil {
 		t.Fatal("a caller that is not a session closed one")
+	}
+}
+
+func addAgentCloseEndpoint(t *testing.T, d *Daemon, sessions ...protocol.Session) string {
+	t.Helper()
+	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
+	endpoint, err := d.hubManager.AddEndpoint("gpu-box", "gpu", "")
+	if err != nil {
+		t.Fatalf("AddEndpoint: %v", err)
+	}
+	if !d.hubManager.ReplaceRemoteSessions(endpoint.ID, sessions) {
+		t.Fatalf("ReplaceRemoteSessions(%s) mirrored nothing", endpoint.ID)
+	}
+	return endpoint.ID
+}
+
+func remoteAgentCloseSession(id, label string) protocol.Session {
+	now := string(protocol.TimestampNow())
+	return protocol.Session{
+		ID: id, Label: label, Agent: protocol.SessionAgentClaude,
+		Directory: "/srv/" + id, WorkspaceID: "ws-" + id,
+		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	}
+}
+
+func TestAgentCloseReachesADelegateAnEndpointOwns(t *testing.T) {
+	d := newAgentCloseDaemon(t)
+	addAgentCloseSession(t, d, "orchestrator", "Orchestrator")
+	addAgentCloseEndpoint(t, d, remoteAgentCloseSession("remote-delegate", "Remote delegate"))
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Bench the kernel", Body: protocol.Ptr("run the sweep on the gpu box")})
+	move(t, d, "remote-delegate", seed.ID, garden.VerbTend, "", "")
+	if err := d.recordGardenDispatch("remote-delegate", seed.ID, "orchestrator", "/srv/remote-delegate", "claude", false); err != nil {
+		t.Fatalf("recordGardenDispatch: %v", err)
+	}
+
+	resp := callAgentClose(t, d, "remote-delegate", "orchestrator", "the sweep finished and its numbers are on the seed")
+
+	if !resp.Ok || resp.AgentCloseResult == nil {
+		t.Fatalf("response = %+v, want the hub to close the session its outpost owns", resp)
+	}
+	if rule := resp.AgentCloseResult.Rule; rule != protocol.AgentCloseRuleDispatcher {
+		t.Errorf("rule = %q, want dispatcher", rule)
+	}
+	if got := resp.AgentCloseResult.SeedIds; len(got) != 1 || got[0] != seed.ID {
+		t.Errorf("seed_ids = %v, want the seed the remote delegate tended", got)
+	}
+}
+
+func TestAgentCloseLetsTheChiefCloseASessionOnAnotherEndpoint(t *testing.T) {
+	d := newAgentCloseDaemon(t)
+	addAgentCloseSession(t, d, "chief", "Chief")
+	addAgentCloseEndpoint(t, d, remoteAgentCloseSession("remote-worker", "Remote worker"))
+	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := callAgentClose(t, d, "remote-worker", "chief", "it went quiet three hours ago")
+
+	if !resp.Ok || resp.AgentCloseResult == nil {
+		t.Fatalf("response = %+v, want the chief's authority to cross the endpoint", resp)
+	}
+	if rule := resp.AgentCloseResult.Rule; rule != protocol.AgentCloseRuleChiefOfStaff {
+		t.Errorf("rule = %q, want chief_of_staff", rule)
+	}
+}
+
+func TestAgentCloseRoutesARemoteCloseToItsOwningEndpoint(t *testing.T) {
+	d := newAgentCloseDaemon(t)
+	endpointID := addAgentCloseEndpoint(t, d, remoteAgentCloseSession("remote-worker", "Remote worker"))
+
+	closing, err := d.beginSessionClose("remote-worker",
+		store.SessionClose{By: "remote-worker", Reason: "done"}, nil)
+	if err != nil {
+		t.Fatalf("beginSessionClose: %v", err)
+	}
+	if closing.endpointID != endpointID {
+		t.Fatalf("endpoint = %q, want %q so finishSessionClose forwards the unregister", closing.endpointID, endpointID)
+	}
+}
+
+func TestAgentCloseRefusesAPrefixTwoEndpointsBothAnswer(t *testing.T) {
+	d := newAgentCloseDaemon(t)
+	addAgentCloseSession(t, d, "shared-local", "Local")
+	addAgentCloseEndpoint(t, d, remoteAgentCloseSession("shared-remote", "Remote"))
+
+	code, message := refusal(t, callAgentClose(t, d, "shared-", "shared-local", "either one, apparently"))
+
+	if code != "ambiguous_session" {
+		t.Fatalf("code = %q, want ambiguous_session", code)
+	}
+	if !strings.Contains(message, "more than one session") {
+		t.Errorf("refusal %q does not say the prefix matched twice", message)
 	}
 }

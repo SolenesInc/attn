@@ -606,7 +606,7 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 			if remoteProtocol := strings.TrimSpace(protocol.Deref(msg.ProtocolVersion)); remoteProtocol != "" && remoteProtocol != protocol.ProtocolVersion {
 				return false, &VersionMismatchError{RemoteVersion: remoteProtocol, LocalVersion: protocol.ProtocolVersion}
 			}
-			changed := m.replaceRemoteSessions(id, msg.Sessions)
+			changed := m.ReplaceRemoteSessions(id, msg.Sessions)
 			m.replaceRemoteWorkspaces(id, msg.Workspaces)
 			caps := capabilitiesFromInitialState(&msg)
 			sessionCount := int32(len(msg.Sessions))
@@ -633,7 +633,7 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 			if err := json.Unmarshal(data, &msg); err != nil {
 				continue
 			}
-			changed := m.replaceRemoteSessions(id, msg.Sessions)
+			changed := m.ReplaceRemoteSessions(id, msg.Sessions)
 			sessionCount := int32(len(msg.Sessions))
 			m.updateStatus(id, activeStatus, activeMsg, nil, &sessionCount)
 			if changed {
@@ -1142,7 +1142,7 @@ func (m *Manager) resolveBrowserControl(endpointID string, payload []byte) {
 	}
 }
 
-func (m *Manager) replaceRemoteSessions(id string, sessions []protocol.Session) bool {
+func (m *Manager) ReplaceRemoteSessions(id string, sessions []protocol.Session) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	runtime, ok := m.runtimes[id]

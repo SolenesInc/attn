@@ -93,7 +93,7 @@ func (d *Daemon) resolveAgentCloseTarget(msg *protocol.AgentCloseMessage) (*prot
 		}
 		reference = tender
 	}
-	target, errCode := d.resolveSessionByIDOrPrefix(reference)
+	target, errCode := d.resolveAgentCloseSession(reference)
 	switch {
 	case target != nil:
 		return target, nil
@@ -102,8 +102,50 @@ func (d *Daemon) resolveAgentCloseTarget(msg *protocol.AgentCloseMessage) (*prot
 			"%q matches more than one session; give more of the id (`attn agent list --json` carries full ids)", reference)}
 	default:
 		return nil, &agentCloseRefusal{errCode, fmt.Sprintf(
-			"no session matches %q; `attn agent list` names the sessions on this daemon", reference)}
+			"no session matches %q; `attn agent list` names the sessions this daemon can reach", reference)}
 	}
+}
+
+func (d *Daemon) resolveAgentCloseSession(reference string) (*protocol.Session, string) {
+	reference = strings.TrimSpace(reference)
+	if reference == "" {
+		return nil, "session_not_found"
+	}
+	if session := d.store.Get(reference); session != nil {
+		return session, ""
+	}
+	if d.hubManager != nil {
+		if session := d.hubManager.RemoteSession(reference); session != nil {
+			return session, ""
+		}
+	}
+	var match *protocol.Session
+	for _, session := range d.agentCloseCandidates() {
+		if !strings.HasPrefix(session.ID, reference) {
+			continue
+		}
+		if match != nil && match.ID != session.ID {
+			return nil, "ambiguous_session"
+		}
+		match = session
+	}
+	if match == nil {
+		return nil, "session_not_found"
+	}
+	return match, ""
+}
+
+// beginSessionClose already forwards to the owning endpoint, so a session an
+// outpost owns is as closeable from its hub as a local one.
+func (d *Daemon) agentCloseCandidates() []*protocol.Session {
+	candidates := append([]*protocol.Session(nil), d.store.List("")...)
+	if d.hubManager == nil {
+		return candidates
+	}
+	for _, remote := range d.hubManager.RemoteSessions() {
+		candidates = append(candidates, &remote)
+	}
+	return candidates
 }
 
 // One hop: walking the dispatch chain makes a mistaken close unbounded.

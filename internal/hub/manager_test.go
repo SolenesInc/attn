@@ -29,23 +29,23 @@ func TestManagerRemoteSessionsTagAndSeparateEndpoints(t *testing.T) {
 
 	manager := NewManager(endpointStore, nil, nil, nil, nil, nil)
 
-	if changed := manager.replaceRemoteSessions(first.ID, []protocol.Session{{
+	if changed := manager.ReplaceRemoteSessions(first.ID, []protocol.Session{{
 		ID:        "sess-a",
 		Label:     "GPU review",
 		Directory: "/srv/repo",
 		State:     protocol.SessionStateWorking,
 		LastSeen:  "2026-04-03T10:00:00Z",
 	}}); !changed {
-		t.Fatal("replaceRemoteSessions(first) reported no change")
+		t.Fatal("ReplaceRemoteSessions(first) reported no change")
 	}
-	if changed := manager.replaceRemoteSessions(second.ID, []protocol.Session{{
+	if changed := manager.ReplaceRemoteSessions(second.ID, []protocol.Session{{
 		ID:        "sess-b",
 		Label:     "DEV fix",
 		Directory: "/srv/repo",
 		State:     protocol.SessionStateIdle,
 		LastSeen:  "2026-04-03T10:01:00Z",
 	}}); !changed {
-		t.Fatal("replaceRemoteSessions(second) reported no change")
+		t.Fatal("ReplaceRemoteSessions(second) reported no change")
 	}
 
 	got := manager.RemoteSessions()
