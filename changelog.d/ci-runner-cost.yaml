@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: CI runs on free GitHub-hosted runners, arm64 for the slow jobs, and spends Blacksmith minutes only on the Daemon job.

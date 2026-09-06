@@ -19,7 +19,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     outputs:
       force_all: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next')) || (github.event_name == 'pull_request' && github.base_ref == 'main') }}
       daemon: ${{ steps.filter.outputs.daemon }}
@@ -151,7 +151,7 @@ jobs:
       checks: read
       contents: read
       pull-requests: read
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -176,7 +176,7 @@ jobs:
 
   main-route:
     name: Main route
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -196,7 +196,7 @@ jobs:
     name: Generated types
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.generated == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -305,7 +305,7 @@ jobs:
           - os: macos-14
             runs_on: macos-14
           - os: ubuntu-24.04
-            runs_on: blacksmith-8vcpu-ubuntu-2404
+            runs_on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -331,7 +331,7 @@ jobs:
     name: Frontend
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.frontend == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-arm
     defaults:
       run:
         working-directory: app
@@ -389,7 +389,7 @@ jobs:
     name: Frontend E2E (${{ matrix.shard }}/3)
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.frontend == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: false
       matrix:
@@ -438,7 +438,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
+          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}
 
       # The suite only runs chromium (no projects configured), so skip the
       # firefox/webkit downloads. On a cache hit only the OS packages are needed.
@@ -468,7 +468,7 @@ jobs:
     name: Frontend E2E
     needs: frontend-e2e
     if: always()
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - name: Check shard results
         run: |
@@ -488,7 +488,7 @@ jobs:
           - os: macos-14
             runs_on: macos-14
           - os: ubuntu-24.04
-            runs_on: blacksmith-8vcpu-ubuntu-2404
+            runs_on: ubuntu-24.04
     defaults:
       run:
         working-directory: app/src-tauri
@@ -553,7 +553,7 @@ jobs:
     name: Tauri
     needs: rust
     if: always()
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - name: Check matrix results
         run: |
@@ -569,7 +569,7 @@ jobs:
     name: Plugins
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.plugins == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -615,7 +615,7 @@ jobs:
       pull-requests: read
     # Each hosted job owns its VM and display; only scenarios within it run serially.
     # A shared concurrency group would cancel unrelated waiting PR and branch checks.
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     # ubuntu-24.04 run 33657368804 took 35m42s end to end; its matrix took 24m07.635s.
     # 60m leaves 24m18s of runner variance before timing out the job.
     timeout-minutes: 60
@@ -789,7 +789,7 @@ jobs:
       - release-preflight
     permissions:
       contents: read
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -821,7 +821,7 @@ jobs:
       - release-preflight
     permissions:
       contents: read
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -843,7 +843,7 @@ jobs:
     concurrency:
       group: branch-health-${{ github.ref_name }}
       cancel-in-progress: false
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 

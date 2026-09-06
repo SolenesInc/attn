@@ -29,7 +29,7 @@ if grep -Eq '^    concurrency:' <<<"$app_acceptance_job"; then
   exit 1
 fi
 for contract in \
-  'runs-on: blacksmith-8vcpu-ubuntu-2404' \
+  'runs-on: ubuntu-24.04' \
   "run: xvfb-run -a -s '-screen 0 1600x1000x24' pnpm --dir app run real-app:serial-matrix"; do
   if ! grep -Fq "$contract" <<<"$app_acceptance_job"; then
     echo "App acceptance must keep its isolated display and serial matrix: $contract" >&2
