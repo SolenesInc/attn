@@ -3484,7 +3484,8 @@ function AppContent({
     onOpenFile: handleOpenMarkdownFile,
     onOpenNotebookTile: handleOpenNotebookTile,
     onOpenNotebookFullscreen: openNotebookBrowser,
-    onOpenSessions: () => setSessionsOpen((prev) => !prev),
+    // The key toggles: it closes whatever list is up, and opens on Sessions, as its name says.
+    onOpenSessions: () => (sessionsOpen ? setSessionsOpen(false) : openLedger('sessions')),
     onOpenGarden: toggleGardenFrame,
     onQuit: handleQuitApp,
     enabled: appShortcutsEnabled && !gardenHoldsWindow,

@@ -57,7 +57,8 @@ vi.mock('./components/ErrorToast', () => ({
   ErrorToast: () => null,
   useErrorToast: () => ({ message: null, showError: vi.fn(), clearError: vi.fn() }),
 }));
-vi.mock('./hooks/useKeyboardShortcuts', () => ({ useKeyboardShortcuts: vi.fn() }));
+const useKeyboardShortcuts = vi.fn();
+vi.mock('./hooks/useKeyboardShortcuts', () => ({ useKeyboardShortcuts: (options: unknown) => useKeyboardShortcuts(options) }));
 vi.mock('./hooks/useUIScale', () => ({
   useUIScale: () => ({ scale: 1, increaseScale: vi.fn(), decreaseScale: vi.fn(), resetScale: vi.fn() }),
 }));
@@ -181,5 +182,25 @@ describe('sessions dock button', () => {
     expect(screen.getByTestId('sessions-panel')).toHaveAttribute('data-tab', 'worktrees');
     expect(screen.getByRole('button', { name: 'Open Worktrees' })).toHaveAttribute('data-active', 'true');
     expect(sessionsButton()).toHaveAttribute('data-active', 'false');
+  });
+
+  it('the sessions key closes whichever list is up and opens on Sessions', async () => {
+    const user = userEvent.setup();
+    await act(async () => {
+      render(<App />);
+    });
+    const pressKey = () => act(async () => {
+      const options = useKeyboardShortcuts.mock.lastCall?.[0] as { onOpenSessions: () => void };
+      options.onOpenSessions();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Open Worktrees' }));
+    expect(screen.getByTestId('sessions-panel')).toHaveAttribute('data-tab', 'worktrees');
+
+    await pressKey();
+    expect(screen.queryByTestId('sessions-panel')).not.toBeInTheDocument();
+
+    await pressKey();
+    expect(screen.getByTestId('sessions-panel')).toHaveAttribute('data-tab', 'sessions');
   });
 });
