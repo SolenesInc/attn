@@ -1,4 +1,4 @@
-import { type MouseEvent as ReactMouseEvent } from 'react';
+import { useMemo, type MouseEvent as ReactMouseEvent } from 'react';
 import { StateIndicator } from './StateIndicator';
 import { SessionLabel } from './SessionLabel';
 import { HarnessIcon } from './HarnessIcon';
@@ -14,6 +14,12 @@ import { crewDisplayName } from '../utils/crewName';
 import { useNow, TURN_AGE_TICK_MS } from '../hooks/useNow';
 import type { AutomationProvenance as AutomationProvenanceValue } from '../types/generated';
 import { SessionProvenance } from './SessionProvenance';
+import { SidebarDelegateCount, SidebarDispatcherLine } from './SidebarDelegation';
+import {
+  delegatesByDispatcher,
+  dispatcherOf,
+  type DispatcherLink,
+} from '../utils/delegationLinks';
 
 export interface QueueBandSessionView {
   id: string;
@@ -28,6 +34,8 @@ export interface QueueBandSessionView {
   autoSettleFiresAt?: string;
   autoSettleHeld?: boolean;
   crewMember?: string;
+  dispatcher_session_id?: string;
+  dispatcher_member?: string;
   automation?: AutomationProvenanceValue;
 }
 
@@ -55,6 +63,123 @@ interface QueueBandsProps {
   onOpenActions?: (session: { id: string; label: string; chiefOfStaff?: boolean }, event: ReactMouseEvent) => void;
   /** Open the duration menu for a row. Offered on settled rows too: deferring a run before it finishes is why snooze exists. */
   onOpenSnooze?: (session: { id: string; label: string }, event: ReactMouseEvent) => void;
+  allSessions: readonly QueueBandSessionView[];
+  hoveredSessionId: string | null;
+  onHoverSession: (id: string | null) => void;
+}
+
+function QueueRowControls({
+  session,
+  onSettle,
+  onSnooze,
+  onWake,
+  onPin,
+  onUnpin,
+  onOpenActions,
+}: {
+  session: Pick<QueueBandSessionView, 'id' | 'label'>;
+  onSettle?: () => void;
+  onSnooze?: (event: ReactMouseEvent) => void;
+  onWake?: () => void;
+  onPin?: () => void;
+  onUnpin?: () => void;
+  onOpenActions?: (event: ReactMouseEvent) => void;
+}) {
+  if (!onOpenActions && !onPin && !onUnpin && !onSettle && !onSnooze && !onWake) return null;
+
+  return (
+    <div className="queue-row-controls">
+      {onWake && (
+        <button
+          type="button"
+          className="queue-row-wake"
+          data-testid={`queue-wake-${session.id}`}
+          title="Wake now — bring it back to the queue"
+          aria-label={`Wake ${session.label}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onWake();
+          }}
+        >
+          ↩
+        </button>
+      )}
+      {onSnooze && (
+        <button
+          type="button"
+          className="queue-row-snooze"
+          data-testid={`queue-snooze-${session.id}`}
+          title={`Snooze this agent (${formatShortcut('session.snooze')})`}
+          aria-label={`Snooze ${session.label}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSnooze(event);
+          }}
+        >
+          ☾
+        </button>
+      )}
+      {onOpenActions && (
+        <div className="session-actions">
+          <button
+            type="button"
+            className="session-action-btn session-more-btn"
+            data-testid={`session-actions-${session.id}`}
+            onClick={onOpenActions}
+            title="Session actions"
+            aria-label={`Actions for ${session.label}`}
+          >
+            •••
+          </button>
+        </div>
+      )}
+      {onPin && (
+        <button
+          type="button"
+          className="queue-row-pin"
+          data-testid={`queue-pin-${session.id}`}
+          title="Pin this agent — keep it in view, out of the queue"
+          aria-label={`Pin ${session.label}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onPin();
+          }}
+        >
+          📍
+        </button>
+      )}
+      {onUnpin && (
+        <button
+          type="button"
+          className="queue-row-pin"
+          data-testid={`queue-unpin-${session.id}`}
+          title="Unpin — put this agent back in the queue"
+          aria-label={`Unpin ${session.label}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onUnpin();
+          }}
+        >
+          📌
+        </button>
+      )}
+      {onSettle && (
+        <button
+          type="button"
+          className="queue-row-settle"
+          data-testid={`queue-settle-${session.id}`}
+          title={`Settle this turn (${formatShortcut('session.settle')})`}
+          aria-label={`Settle ${session.label}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSettle();
+          }}
+        >
+          ✓
+        </button>
+      )}
+    </div>
+  );
 }
 
 function QueueRowView({
@@ -70,6 +195,11 @@ function QueueRowView({
   onUnpin,
   onOpenActions,
   showSettling,
+  dispatcher,
+  delegates,
+  kinClass,
+  onHoverSession,
+  onSelectSession,
   testIdPrefix,
 }: {
   row: QueueRow<QueueBandSessionView>;
@@ -85,15 +215,22 @@ function QueueRowView({
   onUnpin?: () => void;
   onOpenActions?: (event: ReactMouseEvent) => void;
   showSettling?: boolean;
+  dispatcher: DispatcherLink<QueueBandSessionView> | null;
+  delegates: readonly QueueBandSessionView[];
+  kinClass: string;
+  onHoverSession: (id: string | null) => void;
+  onSelectSession: (id: string) => void;
   testIdPrefix: string;
 }) {
   const { session } = row;
   return (
     <div
-      className={`session-item queue-row ${selected ? 'selected' : ''}`.trim()}
+      className={`session-item queue-row ${selected ? 'selected' : ''} ${kinClass}`.trim()}
       data-testid={`${testIdPrefix}-${session.id}`}
       data-state={session.state}
       data-workspace-id={row.workspaceId}
+      onPointerEnter={() => onHoverSession(session.id)}
+      onPointerLeave={() => onHoverSession(null)}
     >
       {/* A real button, so the row is reachable by Tab and pressed by Enter or Space; the settle, pin and actions controls sit above it so they stay independently clickable. */}
       <button
@@ -111,104 +248,22 @@ function QueueRowView({
           <HarnessIcon agent={session.agent} />
           <SessionLabel label={session.label} />
         </span>
+        <SidebarDispatcherLine dispatcher={dispatcher} onSelectSession={onSelectSession} />
         <SessionProvenance automation={session.automation} density="compact" />
       </span>
       {session.chiefOfStaff && <ChiefOfStaffBadge />}
+      <SidebarDelegateCount delegates={delegates} />
       {age && <span className="queue-row-age">{age}</span>}
       {wake && <span className="queue-row-wake-at">{wake}</span>}
-      {(onOpenActions || onPin || onUnpin || onSettle || onSnooze || onWake) && (
-        <div className="queue-row-controls">
-          {onWake && (
-            <button
-              type="button"
-              className="queue-row-wake"
-              data-testid={`queue-wake-${session.id}`}
-              title="Wake now — bring it back to the queue"
-              aria-label={`Wake ${session.label}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onWake();
-              }}
-            >
-              ↩
-            </button>
-          )}
-          {onSnooze && (
-            <button
-              type="button"
-              className="queue-row-snooze"
-              data-testid={`queue-snooze-${session.id}`}
-              title={`Snooze this agent (${formatShortcut('session.snooze')})`}
-              aria-label={`Snooze ${session.label}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onSnooze(event);
-              }}
-            >
-              ☾
-            </button>
-          )}
-          {onOpenActions && (
-            <div className="session-actions">
-              <button
-                type="button"
-                className="session-action-btn session-more-btn"
-                data-testid={`session-actions-${session.id}`}
-                onClick={onOpenActions}
-                title="Session actions"
-                aria-label={`Actions for ${session.label}`}
-              >
-                •••
-              </button>
-            </div>
-          )}
-          {onPin && (
-            <button
-              type="button"
-              className="queue-row-pin"
-              data-testid={`queue-pin-${session.id}`}
-              title="Pin this agent — keep it in view, out of the queue"
-              aria-label={`Pin ${session.label}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onPin();
-              }}
-            >
-              📍
-            </button>
-          )}
-          {onUnpin && (
-            <button
-              type="button"
-              className="queue-row-pin"
-              data-testid={`queue-unpin-${session.id}`}
-              title="Unpin — put this agent back in the queue"
-              aria-label={`Unpin ${session.label}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onUnpin();
-              }}
-            >
-              📌
-            </button>
-          )}
-          {onSettle && (
-            <button
-              type="button"
-              className="queue-row-settle"
-              data-testid={`queue-settle-${session.id}`}
-              title={`Settle this turn (${formatShortcut('session.settle')})`}
-              aria-label={`Settle ${session.label}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onSettle();
-              }}
-            >
-              ✓
-            </button>
-          )}
-        </div>
-      )}
+      <QueueRowControls
+        session={session}
+        onSettle={onSettle}
+        onSnooze={onSnooze}
+        onWake={onWake}
+        onPin={onPin}
+        onUnpin={onUnpin}
+        onOpenActions={onOpenActions}
+      />
       {showSettling && (session.autoSettleFiresAt || session.autoSettleHeld) && (
         <SidebarSettlingBar firesAt={session.autoSettleFiresAt} held={session.autoSettleHeld} />
       )}
@@ -230,6 +285,9 @@ export function QueueBands({
   onPinSession,
   onOpenActions,
   onOpenSnooze,
+  allSessions,
+  hoveredSessionId,
+  onHoverSession,
 }: QueueBandsProps) {
   const now = useNow(TURN_AGE_TICK_MS);
   const offScreen = (id: string) => !onScreenSessionIds?.has(id);
@@ -240,6 +298,24 @@ export function QueueBands({
       .flatMap((row) => row.session.crewMember ? [row.session.crewMember] : []),
   );
   const crewRows = buildCrewRows(crew, bands.crew, crewInOtherBands);
+  const delegates = useMemo(() => delegatesByDispatcher(allSessions), [allSessions]);
+  const hovered = hoveredSessionId
+    ? allSessions.find((session) => session.id === hoveredSessionId)
+    : undefined;
+  const kinUpId = hovered ? dispatcherOf(hovered, allSessions)?.session?.id : undefined;
+  const kinDownIds = new Set(
+    hoveredSessionId ? (delegates.get(hoveredSessionId) ?? []).map((session) => session.id) : [],
+  );
+  const kinClass = (id: string) => (
+    id === kinUpId ? 'kin-up' : kinDownIds.has(id) ? 'kin-down' : ''
+  );
+  const rowDelegation = (session: QueueBandSessionView) => ({
+    dispatcher: dispatcherOf(session, allSessions),
+    delegates: delegates.get(session.id) ?? [],
+    kinClass: kinClass(session.id),
+    onHoverSession,
+    onSelectSession,
+  });
 
   return (
     <div className="queue-bands" data-testid="sidebar-queue">
@@ -249,6 +325,7 @@ export function QueueBands({
           selected={selectedId === bands.chief.session.id}
           onSelect={() => onSelectSession(bands.chief!.session.id)}
           onOpenActions={onOpenActions && ((event) => onOpenActions(bands.chief!.session, event))}
+          {...rowDelegation(bands.chief.session)}
           testIdPrefix="queue-chief"
         />
       )}
@@ -271,6 +348,7 @@ export function QueueBands({
             onPin={onPinSession && (() => onPinSession(row.session.id, true))}
             onOpenActions={onOpenActions && ((event) => onOpenActions(row.session, event))}
             showSettling={offScreen(row.session.id)}
+            {...rowDelegation(row.session)}
             testIdPrefix="queue-turn"
           />
         ))
@@ -289,6 +367,7 @@ export function QueueBands({
               onSnooze={snoozeHandler(row.session)}
               onPin={onPinSession && (() => onPinSession(row.session.id, true))}
               onOpenActions={onOpenActions && ((event) => onOpenActions(row.session, event))}
+              {...rowDelegation(row.session)}
               testIdPrefix="queue-settled"
             />
           ))}
@@ -315,6 +394,11 @@ export function QueueBands({
                   ? (event) => onOpenActions(crewRow.row!.session, event)
                   : undefined
               }
+              dispatcher={crewRow.row ? dispatcherOf(crewRow.row.session, allSessions) : null}
+              delegates={crewRow.row ? delegates.get(crewRow.row.session.id) ?? [] : []}
+              kinClass={crewRow.row ? kinClass(crewRow.row.session.id) : ''}
+              onHoverSession={onHoverSession}
+              onSelectSession={onSelectSession}
             />
           ))}
           {bands.pinned.map((row) => (
@@ -325,6 +409,7 @@ export function QueueBands({
               onSelect={() => onSelectSession(row.session.id)}
               onUnpin={onPinSession && (() => onPinSession(row.session.id, false))}
               onOpenActions={onOpenActions && ((event) => onOpenActions(row.session, event))}
+              {...rowDelegation(row.session)}
               testIdPrefix="queue-pinned"
             />
           ))}
@@ -363,6 +448,11 @@ function CrewRowView({
   onWake,
   onSleep,
   onOpenActions,
+  dispatcher,
+  delegates,
+  kinClass,
+  onHoverSession,
+  onSelectSession,
 }: {
   member: string;
   row?: QueueRow<QueueBandSessionView>;
@@ -371,6 +461,11 @@ function CrewRowView({
   onWake?: () => void;
   onSleep?: () => void;
   onOpenActions?: (event: ReactMouseEvent) => void;
+  dispatcher: DispatcherLink<QueueBandSessionView> | null;
+  delegates: readonly QueueBandSessionView[];
+  kinClass: string;
+  onHoverSession: (id: string | null) => void;
+  onSelectSession: (id: string) => void;
 }) {
   const awake = Boolean(row);
   const { phase, trigger, rowRef } = useWakeConfirm(onWake);
@@ -382,13 +477,15 @@ function CrewRowView({
   return (
     <div
       ref={rowRef}
-      className={`session-item queue-row queue-row--crew ${selected ? 'selected' : ''}`.trim()}
+      className={`session-item queue-row queue-row--crew ${selected ? 'selected' : ''} ${kinClass}`.trim()}
       data-testid={`queue-crew-${member}`}
       data-crew-member={member}
       data-crew-state={awake ? 'awake' : 'asleep'}
       data-crew-wake={awake || phase === 'rest' ? undefined : phase}
       data-state={row?.session.state}
       data-workspace-id={row?.workspaceId}
+      onPointerEnter={row ? () => onHoverSession(row.session.id) : undefined}
+      onPointerLeave={row ? () => onHoverSession(null) : undefined}
     >
       <button
         type="button"
@@ -404,11 +501,24 @@ function CrewRowView({
         // The hollow ring is the same size as an indicator, so every crew row's label starts on the same column.
         <span className="crew-asleep-dot" aria-hidden="true" />
       )}
-      {awake && <HarnessIcon agent={row!.session.agent} />}
-      <SessionLabel label={label} />
+      {awake && dispatcher ? (
+        <span className="sidebar-session-identity">
+          <span className="sidebar-session-headline">
+            <HarnessIcon agent={row!.session.agent} />
+            <SessionLabel label={label} />
+          </span>
+          <SidebarDispatcherLine dispatcher={dispatcher} onSelectSession={onSelectSession} />
+        </span>
+      ) : (
+        <>
+          {awake && <HarnessIcon agent={row!.session.agent} />}
+          <SessionLabel label={label} />
+        </>
+      )}
       <span className="crew-row-mark" title={awake ? `${name} is awake` : `${name} is asleep`}>
         {awake ? 'crew' : 'asleep'}
       </span>
+      <SidebarDelegateCount delegates={delegates} />
       {!awake && onWake && (
         <div className="queue-row-controls">
           {armed && <span className="crew-wake-confirm">confirm</span>}
@@ -472,6 +582,9 @@ interface QueueSnoozedSectionProps {
   onToggleExpanded: () => void;
   onSelectSession: (id: string) => void;
   onWakeTurn: (id: string) => void;
+  allSessions: readonly QueueBandSessionView[];
+  hoveredSessionId: string | null;
+  onHoverSession: (id: string | null) => void;
 }
 
 // Deferred agents, collapsed at the foot of the sidebar. Not a band: the bands answer
@@ -483,9 +596,20 @@ export function QueueSnoozedSection({
   onToggleExpanded,
   onSelectSession,
   onWakeTurn,
+  allSessions,
+  hoveredSessionId,
+  onHoverSession,
 }: QueueSnoozedSectionProps) {
   const now = useNow(TURN_AGE_TICK_MS);
   if (rows.length === 0) return null;
+  const delegates = delegatesByDispatcher(allSessions);
+  const hovered = hoveredSessionId
+    ? allSessions.find((session) => session.id === hoveredSessionId)
+    : undefined;
+  const kinUpId = hovered ? dispatcherOf(hovered, allSessions)?.session?.id : undefined;
+  const kinDownIds = new Set(
+    hoveredSessionId ? (delegates.get(hoveredSessionId) ?? []).map((session) => session.id) : [],
+  );
 
   return (
     <div className="muted-sessions-section" data-testid="sidebar-snoozed">
@@ -510,6 +634,11 @@ export function QueueSnoozedSection({
               wake={formatWakeTime(row.session.turnSnoozedUntil, now)}
               onSelect={() => onSelectSession(row.session.id)}
               onWake={() => onWakeTurn(row.session.id)}
+              dispatcher={dispatcherOf(row.session, allSessions)}
+              delegates={delegates.get(row.session.id) ?? []}
+              kinClass={row.session.id === kinUpId ? 'kin-up' : kinDownIds.has(row.session.id) ? 'kin-down' : ''}
+              onHoverSession={onHoverSession}
+              onSelectSession={onSelectSession}
               testIdPrefix="queue-snoozed"
             />
           ))}

@@ -1,0 +1,3 @@
+kind: added
+area: queue
+change: Sidebar rows show who delegated an agent, link back to that orchestrator, and count its live delegates.
