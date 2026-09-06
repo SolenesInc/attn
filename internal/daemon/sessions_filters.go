@@ -39,8 +39,8 @@ func validateSessionsFilters(value string) error {
 	if err := decoder.Decode(&filters); err != nil {
 		return fmt.Errorf("%s must be a session filter object: %v", SettingSessionsFilters, err)
 	}
-	if decoder.More() {
-		return fmt.Errorf("%s must be a single session filter object: %s", SettingSessionsFilters, trimmed)
+	if err := ensureJSONEOF(decoder); err != nil {
+		return fmt.Errorf("%s must be a single session filter object: %v", SettingSessionsFilters, err)
 	}
 	if !slices.Contains(sessionsFilterScopes, filters.Scope) {
 		return fmt.Errorf("%s: scope must be one of %s, got %q", SettingSessionsFilters, strings.Join(sessionsFilterScopes, ", "), filters.Scope)
