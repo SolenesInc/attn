@@ -271,6 +271,56 @@ func TestCrewRestart_UsesTheWireAsleepBindingWhenRawBindingIsDangling(t *testing
 	}
 }
 
+func TestCrewRestart_PersistsAnAsleepWakeLaunchFailure(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	backend.mu.Lock()
+	backend.spawnErr = errors.New("launcher is unavailable")
+	backend.mu.Unlock()
+
+	response := crewRestartCall(t, d, "alder", "failed-wake")
+	if response.Ok || !strings.Contains(protocol.Deref(response.Error), "launcher is unavailable") {
+		t.Fatalf("failed wake response = %+v", response)
+	}
+	member := memberByID(t, crewList(t, d), "alder")
+	if member.Restart == nil || member.Restart.State != protocol.CrewRestartStateFailed ||
+		!strings.Contains(protocol.Deref(member.Restart.Error), "launcher is unavailable") {
+		t.Fatalf("persisted failed wake = %+v", member.Restart)
+	}
+	if member.BindingSession != nil {
+		t.Fatalf("failed wake retained binding %q", *member.BindingSession)
+	}
+}
+
+func TestCrewRestart_AsleepRecoveryReplacesANonrunningBoundSession(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	runtime := &crewRuntimeBackend{fakeSpawnBackend: backend, running: make(map[string]bool)}
+	d.ptyBackend = runtime
+	if _, err := d.setCrewRestart("alder", &crew.Restart{
+		RequestID: "asleep-crash", State: crew.RestartQueued,
+	}); err != nil {
+		t.Fatalf("seed asleep restart intent: %v", err)
+	}
+	dead, err := d.crewWake("alder", "")
+	if err != nil {
+		t.Fatalf("simulate wake before completion: %v", err)
+	}
+	runtime.running[dead.SessionID] = false
+
+	d.reconcileCrewRestarts()
+	member := memberByID(t, crewList(t, d), "alder")
+	if member.Restart == nil {
+		t.Fatal("recovered asleep wake has no restart state")
+	}
+	successor := protocol.Deref(member.Restart.SuccessorSessionID)
+	if member.Restart.State != protocol.CrewRestartStateCompleted ||
+		successor == "" || successor == dead.SessionID || protocol.Deref(member.BindingSession) != successor {
+		t.Fatalf("recovered asleep wake = %+v", member)
+	}
+	if !runtime.running[successor] || len(spawnedSessions(t, backend)) != 2 {
+		t.Fatalf("recovery successor running=%t spawns=%d", runtime.running[successor], len(spawnedSessions(t, backend)))
+	}
+}
+
 func TestCrewRestart_OperationRecordCASRejectsASettingsRace(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	member, doc, err := d.crewMember("alder")
