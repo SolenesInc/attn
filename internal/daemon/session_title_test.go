@@ -874,3 +874,56 @@ func TestSpawnPipeline_AlreadyLiveSpawnPreservesInitialPromptMarker(t *testing.T
 		t.Fatalf("session label = %+v, want %q", got, "One-shot investigation")
 	}
 }
+
+func TestTitleProviderAgent_PrefersSessionAgentThenFallsBack(t *testing.T) {
+	cases := []struct{ agent, want string }{
+		{"claude", "claude"},
+		{"codex", "codex"},
+		{"copilot", "copilot"},
+		{"pi", "claude"},
+		{"shell", "claude"},
+		{"unknown-agent", "claude"},
+		{"", "claude"},
+	}
+	for _, tc := range cases {
+		if got := titleProviderAgent(tc.agent); got != tc.want {
+			t.Errorf("titleProviderAgent(%q) = %q, want %q", tc.agent, got, tc.want)
+		}
+	}
+}
+
+func TestSpawnPipeline_InitialPromptTitlesAtSpawn(t *testing.T) {
+	d := newSessionTitleDaemon(t)
+	addTestWorkspace(d, "workspace-title", t.TempDir())
+	d.ptyBackend = &fakeSpawnBackend{}
+
+	calls := 0
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
+		calls++
+		return "One-shot investigation", nil
+	}
+	client := &wsClient{send: make(chan outboundMessage, 8), attachedStreams: make(map[string]ptybackend.Stream)}
+	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
+		ID:            "sess-spawn-title",
+		Cwd:           t.TempDir(),
+		WorkspaceID:   "workspace-title",
+		Agent:         "claude",
+		Cols:          80,
+		Rows:          24,
+		InitialPrompt: protocol.Ptr("investigate the retry queue"),
+	})
+
+	runSessionTitleJobs(t, d)
+	if calls != 1 {
+		t.Fatalf("exec calls after spawn = %d, want 1 (no UserPromptSubmit hook needed)", calls)
+	}
+	if got := d.store.Get("sess-spawn-title"); got == nil || got.Label != "One-shot investigation" {
+		t.Fatalf("session label = %+v, want %q", got, "One-shot investigation")
+	}
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-spawn-title", "investigate the retry queue", userConversationInput())
+	runSessionTitleJobs(t, d)
+	if calls != 1 {
+		t.Fatalf("exec calls after the hook echo = %d, want still 1", calls)
+	}
+}

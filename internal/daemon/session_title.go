@@ -219,16 +219,37 @@ func sessionLabelIsPlaceholder(label, cwd, sessionID string) bool {
 
 // Wired onto d.sessionTitleExec in New(); test daemons leave it nil.
 func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
-	agent := string(session.Agent)
-	switch agent {
-	case "claude", "codex", "copilot":
-		return d.execSessionTitleHeadless(ctx, agent, conversation)
-	default:
-		return "", fmt.Errorf("unsupported agent for title generation: %s", agent)
+	providerAgent := titleProviderAgent(string(session.Agent))
+	if providerAgent == "" {
+		return "", fmt.Errorf("no title provider available for agent %q", session.Agent)
 	}
+	return d.execSessionTitleHeadless(ctx, providerAgent, sessionTitleModel(providerAgent), conversation)
 }
 
-func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent string, conversation string) (string, error) {
+func titleProviderAgent(sessionAgent string) string {
+	candidates := []string{sessionAgent, "claude", "codex", "copilot"}
+	seen := make(map[string]struct{}, len(candidates))
+	for _, name := range candidates {
+		if name == "" {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		driver := agentdriver.Get(name)
+		if _, ok := driver.(agentdriver.HeadlessTaskProvider); !ok {
+			continue
+		}
+		if available, _ := agentdriver.HeadlessTaskAvailability(driver); !available {
+			continue
+		}
+		return name
+	}
+	return ""
+}
+
+func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent, model, conversation string) (string, error) {
 	driver := agentdriver.Get(agent)
 	if driver == nil {
 		return "", fmt.Errorf("%s driver unavailable", agent)
@@ -249,7 +270,7 @@ func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent string, con
 
 	request := agentdriver.HeadlessTaskRequest{
 		Executable:   executable,
-		Model:        sessionTitleModel(agent),
+		Model:        model,
 		SystemPrompt: sessionTitleInstructions,
 		Prompt:       prompts.RenderText("session-title", "generate", prompts.Values{"conversation": conversation}),
 		WorkDir:      workDir,
