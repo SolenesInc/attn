@@ -6,9 +6,10 @@ import {
   customSessionRange,
   isRangeError,
   ledgerInstant,
+  reopenVerdictsById,
   sessionRangeWindow,
 } from '../components/sessionsLedger';
-import type { SessionRangeId, SessionScope } from '../components/sessionsLedger';
+import type { ReopenVerdictView, SessionRangeId, SessionScope } from '../components/sessionsLedger';
 
 export interface SessionLedgerFilters {
   scope: SessionScope;
@@ -32,6 +33,8 @@ export const SESSION_PAGE_SIZE = 50;
 
 const systemNow = () => new Date();
 
+const NO_VERDICTS: Record<string, ReopenVerdictView> = {};
+
 export interface UseSessionLedgerOptions {
   enabled: boolean;
   list: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
@@ -43,6 +46,7 @@ export interface SessionLedgerView {
   filters: SessionLedgerFilters;
   setFilters: Dispatch<SetStateAction<SessionLedgerFilters>>;
   entries: SessionLedgerEntry[];
+  verdicts: Record<string, ReopenVerdictView>;
   facets: SessionLedgerFacets | null;
   omitted: number;
   loading: boolean;
@@ -100,6 +104,7 @@ export function useSessionLedger({
 }: UseSessionLedgerOptions): SessionLedgerView {
   const [filters, setFilters] = useState<SessionLedgerFilters>(EMPTY_SESSION_FILTERS);
   const [entries, setEntries] = useState<SessionLedgerEntry[]>([]);
+  const [verdicts, setVerdicts] = useState<Record<string, ReopenVerdictView>>(NO_VERDICTS);
   const [facets, setFacets] = useState<SessionLedgerFacets | null>(null);
   const [omitted, setOmitted] = useState(0);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
@@ -122,10 +127,11 @@ export function useSessionLedger({
     const seq = ++readSeq.current;
     setLoading(true);
     setError(null);
-    list({ ...(query as SessionLedgerQuery), limit: pageSize })
+    list({ ...(query as SessionLedgerQuery), limit: pageSize, reopen: true })
       .then((page) => {
         if (seq !== readSeq.current) return;
         setEntries(page.entries ?? []);
+        setVerdicts(reopenVerdictsById(page.reopen));
         setFacets(page.facets ?? null);
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
@@ -133,6 +139,7 @@ export function useSessionLedger({
       .catch((failure: Error) => {
         if (seq !== readSeq.current) return;
         setEntries([]);
+        setVerdicts(NO_VERDICTS);
         setFacets(null);
         setOmitted(0);
         setNextBefore(null);
@@ -151,10 +158,11 @@ export function useSessionLedger({
     if (!nextBefore || loadingMore || filterError) return;
     const seq = readSeq.current;
     setLoadingMore(true);
-    list({ ...(sessionLedgerQuery(filtersRef.current, now()) as SessionLedgerQuery), limit: pageSize, before: nextBefore })
+    list({ ...(sessionLedgerQuery(filtersRef.current, now()) as SessionLedgerQuery), limit: pageSize, before: nextBefore, reopen: true })
       .then((page) => {
         if (seq !== readSeq.current) return;
         setEntries((current) => [...current, ...(page.entries ?? [])]);
+        setVerdicts((current) => ({ ...current, ...reopenVerdictsById(page.reopen) }));
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
       })
@@ -186,6 +194,7 @@ export function useSessionLedger({
     filters,
     setFilters,
     entries,
+    verdicts,
     facets,
     omitted,
     loading,

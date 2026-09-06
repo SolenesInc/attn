@@ -53,7 +53,7 @@ describe('SessionsPanel filters', () => {
     const { list, calls } = listing([page({ entries: [entry({ id: 's1' })] })]);
     await open(list);
 
-    expect(calls).toEqual([{ all: true, limit: 50 }]);
+    expect(calls).toEqual([{ all: true, limit: 50, reopen: true }]);
     expect(screen.getByText('run s1')).toBeTruthy();
   });
 
@@ -63,7 +63,7 @@ describe('SessionsPanel filters', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Closed' }));
 
     await waitFor(() => expect(calls).toHaveLength(2));
-    expect(calls[1]).toEqual({ closed: true, limit: 50 });
+    expect(calls[1]).toEqual({ closed: true, limit: 50, reopen: true });
     // A re-read loop would keep adding calls after the render settled.
     await act(async () => { await Promise.resolve(); });
     expect(calls).toHaveLength(2);
@@ -76,13 +76,13 @@ describe('SessionsPanel filters', () => {
     when('today');
     await waitFor(() => expect(calls).toHaveLength(2));
     const today = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()).toISOString();
-    expect(calls[1]).toEqual({ all: true, limit: 50, since: today });
+    expect(calls[1]).toEqual({ all: true, limit: 50, since: today, reopen: true });
 
     when('yesterday');
     await waitFor(() => expect(calls).toHaveLength(3));
     const yesterday = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate() - 1).toISOString();
     // Half-open: yesterday runs up to, but not into, today.
-    expect(calls[2]).toEqual({ all: true, limit: 50, since: yesterday, until: today });
+    expect(calls[2]).toEqual({ all: true, limit: 50, since: yesterday, until: today, reopen: true });
 
     when('7d');
     await waitFor(() => expect(calls).toHaveLength(4));
@@ -104,6 +104,7 @@ describe('SessionsPanel filters', () => {
       limit: 50,
       since: new Date(2026, 8, 1).toISOString(),
       until: new Date(2026, 8, 4).toISOString(),
+      reopen: true,
     });
 
     fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-08-01' } });
@@ -142,7 +143,7 @@ describe('SessionsPanel filters', () => {
     fireEvent.change(screen.getByLabelText('Repository'), { target: { value: '/Users/victor/projects/attn' } });
 
     await waitFor(() => expect(calls).toHaveLength(2));
-    expect(calls[1]).toEqual({ all: true, limit: 50, repository: '/Users/victor/projects/attn' });
+    expect(calls[1]).toEqual({ all: true, limit: 50, repository: '/Users/victor/projects/attn', reopen: true });
   });
 });
 
@@ -158,7 +159,7 @@ describe('SessionsPanel pagination', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
 
     await waitFor(() => expect(screen.getByText('run s2')).toBeTruthy());
-    expect(calls[1]).toEqual({ all: true, limit: 50, before: 's1' });
+    expect(calls[1]).toEqual({ all: true, limit: 50, before: 's1', reopen: true });
     expect(screen.getByText('run s1')).toBeTruthy();
     expect(screen.getByText('showing 2')).toBeTruthy();
     // Nothing left behind the cursor, so the button goes away.

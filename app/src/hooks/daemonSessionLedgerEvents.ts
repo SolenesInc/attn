@@ -1,4 +1,4 @@
-import type { SessionLedgerEntry, SessionLedgerFacets } from '../types/generated';
+import type { SessionLedgerEntry, SessionLedgerFacets, SessionReopenEntry } from '../types/generated';
 import type { PendingRequests } from './daemonPendingRequests';
 import { settlePendingRequest } from './daemonPendingRequests';
 
@@ -9,6 +9,7 @@ export interface SessionLedgerPage {
   facets?: SessionLedgerFacets;
   next_before?: string;
   omitted: number;
+  reopen?: SessionReopenEntry[];
 }
 
 export interface SessionLedgerQuery {
@@ -20,6 +21,7 @@ export interface SessionLedgerQuery {
   repository?: string;
   since?: string;
   until?: string;
+  reopen?: boolean;
 }
 
 export interface SessionLedgerEventContext {

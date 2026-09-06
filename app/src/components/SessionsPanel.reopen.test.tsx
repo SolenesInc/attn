@@ -1,10 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SessionsPanel } from './SessionsPanel';
-import type { ReopenVerdictView } from './SessionsPanel';
-import type { SessionLedgerPage } from '../hooks/daemonSessionLedgerEvents';
-import type { SessionLedgerEntry } from '../types/generated';
-import { SessionState } from '../types/generated';
+import type { SessionLedgerPage, SessionLedgerQuery } from '../hooks/daemonSessionLedgerEvents';
+import type { SessionLedgerEntry, SessionReopen, SessionReopenEntry } from '../types/generated';
+import { SessionReopenAction, SessionState } from '../types/generated';
 
 function closedEntry(id: string, overrides: Partial<SessionLedgerEntry> = {}): SessionLedgerEntry {
   return {
@@ -34,65 +33,90 @@ function liveEntry(id: string): SessionLedgerEntry {
   };
 }
 
-const REOPEN: ReopenVerdictView['actions'] = [{ id: 'reopen', label: 'Reopen' }];
-const RECREATE: ReopenVerdictView['actions'] = [
-  { id: 'recreate_worktree_and_reopen', label: 'Recreate the worktree' },
-];
+function judged(sessionId: string, overrides: Partial<SessionReopen> = {}): SessionReopenEntry {
+  return {
+    session_id: sessionId,
+    reopen: {
+      reopenable: true,
+      actions: [SessionReopenAction.Reopen],
+      checking: false,
+      directory_state: 'present',
+      workspace_id: 'ws-1',
+      workspace_plan: 'reuse',
+      pane_plan: 'add',
+      ...overrides,
+    },
+  };
+}
 
 const now = () => new Date('2026-09-05T14:30:00Z');
 
-function panel(page: SessionLedgerPage, props: Record<string, unknown> = {}) {
-  const list = vi.fn(async () => page);
-  const view = render(
-    <SessionsPanel isOpen onClose={() => {}} listSessions={list} now={now} {...props} />,
-  );
-  const rerender = (next: Record<string, unknown>) => view.rerender(
-    <SessionsPanel isOpen onClose={() => {}} listSessions={list} now={now} {...props} {...next} />,
-  );
-  return { rerender };
+function panel(pages: SessionLedgerPage[], props: Record<string, unknown> = {}) {
+  const calls: SessionLedgerQuery[] = [];
+  const list = vi.fn(async (query: SessionLedgerQuery) => {
+    calls.push(query);
+    return pages[Math.min(calls.length - 1, pages.length - 1)];
+  });
+  render(<SessionsPanel isOpen onClose={() => {}} listSessions={list} now={now} {...props} />);
+  return { list, calls };
 }
 
-describe('SessionsPanel reopen verdicts', () => {
-  it('asks for a verdict only for the closed rows on screen', async () => {
-    const onRequestVerdict = vi.fn();
-    panel(
-      { entries: [closedEntry('s1'), liveEntry('s2')], omitted: 0 },
-      { onRequestVerdict },
-    );
+const nextPage = () => fireEvent.click(screen.getByRole('button', { name: 'Closed' }));
 
-    await waitFor(() => expect(onRequestVerdict).toHaveBeenCalled());
-    expect(onRequestVerdict.mock.calls).toEqual([['s1']]);
+describe('SessionsPanel reopen verdicts', () => {
+  it('judges every closed row on screen with the one read that fetched them', async () => {
+    const { list, calls } = panel([{
+      entries: [closedEntry('s1'), closedEntry('s2'), liveEntry('s3')],
+      omitted: 0,
+      reopen: [
+        judged('s1', { reason: 'the worktree is still there' }),
+        judged('s2', { reopenable: false, reason: 'the worktree is gone', actions: [] }),
+      ],
+    }]);
+
+    await waitFor(() => expect(screen.getByText('the worktree is still there')).toBeTruthy());
+    expect(screen.getByText('the worktree is gone')).toBeTruthy();
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(calls[0].reopen).toBe(true);
   });
 
   it('shows a verdict as refreshing while a git check refines it, then in place', async () => {
-    const verdict: ReopenVerdictView = {
-      refreshing: true,
-      summary: 'the worktree was there when it closed',
-      reopenable: true,
-      actions: REOPEN,
-    };
-    const { rerender } = panel(
-      { entries: [closedEntry('s1')], omitted: 0 },
-      { verdicts: { s1: verdict }, onRequestVerdict: vi.fn() },
-    );
+    panel([
+      {
+        entries: [closedEntry('s1')],
+        omitted: 0,
+        reopen: [judged('s1', { checking: true, reason: 'the worktree is gone; checking its branch' })],
+      },
+      {
+        entries: [closedEntry('s1')],
+        omitted: 0,
+        reopen: [judged('s1', { reason: 'the worktree is gone; its branch is still here' })],
+      },
+    ]);
 
     await waitFor(() => expect(screen.getByText('refreshing…')).toBeTruthy());
-    // The action is offered while the check runs; waiting for git would be the delay.
-    expect(screen.getByRole('button', { name: 'Reopen' })).toBeTruthy();
+    nextPage();
 
-    rerender({ verdicts: { s1: { ...verdict, refreshing: false, summary: 'the worktree is still there' } } });
-    expect(screen.queryByText('refreshing…')).toBeNull();
-    expect(screen.getByText('the worktree is still there')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText('refreshing…')).toBeNull());
+    expect(screen.getByText('the worktree is gone; its branch is still here')).toBeTruthy();
   });
 
   it('holds an action taken mid-check and runs it against the verdict that lands', async () => {
     const onReopen = vi.fn();
-    const refreshing: ReopenVerdictView = {
-      refreshing: true, summary: 'checking the worktree', reopenable: true, actions: REOPEN,
-    };
-    const { rerender } = panel(
-      { entries: [closedEntry('s1')], omitted: 0 },
-      { verdicts: { s1: refreshing }, onRequestVerdict: vi.fn(), onReopen },
+    panel(
+      [
+        {
+          entries: [closedEntry('s1')],
+          omitted: 0,
+          reopen: [judged('s1', { checking: true, reason: 'checking the worktree' })],
+        },
+        {
+          entries: [closedEntry('s1')],
+          omitted: 0,
+          reopen: [judged('s1', { reason: 'the worktree is still there' })],
+        },
+      ],
+      { onReopen },
     );
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Reopen' })).toBeTruthy());
@@ -100,28 +124,35 @@ describe('SessionsPanel reopen verdicts', () => {
     expect(onReopen).not.toHaveBeenCalled();
     expect(screen.getByText('waiting for the check…')).toBeTruthy();
 
-    rerender({ verdicts: { s1: { ...refreshing, refreshing: false, summary: 'the worktree is still there' } } });
+    nextPage();
     await waitFor(() => expect(onReopen.mock.calls).toEqual([['s1', 'reopen']]));
   });
 
   it('refuses an action the fresh verdict no longer offers, and says why', async () => {
     const onReopen = vi.fn();
-    const refreshing: ReopenVerdictView = {
-      refreshing: true, summary: 'checking the worktree', reopenable: true, actions: REOPEN,
-    };
-    const { rerender } = panel(
-      { entries: [closedEntry('s1')], omitted: 0 },
-      { verdicts: { s1: refreshing }, onRequestVerdict: vi.fn(), onReopen },
+    panel(
+      [
+        {
+          entries: [closedEntry('s1')],
+          omitted: 0,
+          reopen: [judged('s1', { checking: true, reason: 'checking the worktree' })],
+        },
+        {
+          entries: [closedEntry('s1')],
+          omitted: 0,
+          reopen: [judged('s1', {
+            reopenable: false,
+            reason: 'the worktree is gone',
+            actions: [SessionReopenAction.RecreateWorktreeAndReopen],
+          })],
+        },
+      ],
+      { onReopen },
     );
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Reopen' })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: 'Reopen' }));
-
-    rerender({
-      verdicts: {
-        s1: { refreshing: false, summary: 'the worktree is gone', reopenable: false, actions: RECREATE },
-      },
-    });
+    nextPage();
 
     await waitFor(() => expect(
       screen.getByText('The check finished and that is no longer possible: the worktree is gone'),
@@ -133,14 +164,12 @@ describe('SessionsPanel reopen verdicts', () => {
   it('runs an action straight away once the verdict has settled', async () => {
     const onReopen = vi.fn();
     panel(
-      { entries: [closedEntry('s1')], omitted: 0 },
-      {
-        verdicts: {
-          s1: { refreshing: false, summary: 'the worktree is still there', reopenable: true, actions: REOPEN },
-        },
-        onRequestVerdict: vi.fn(),
-        onReopen,
-      },
+      [{
+        entries: [closedEntry('s1')],
+        omitted: 0,
+        reopen: [judged('s1', { reason: 'the worktree is still there' })],
+      }],
+      { onReopen },
     );
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Reopen' })).toBeTruthy());
@@ -148,8 +177,19 @@ describe('SessionsPanel reopen verdicts', () => {
     expect(onReopen.mock.calls).toEqual([['s1', 'reopen']]);
   });
 
-  it('leaves the reopen column blank when nothing is checking', async () => {
-    panel({ entries: [closedEntry('s1')], omitted: 0 });
+  it('offers no action while nothing can carry one out', async () => {
+    panel([{
+      entries: [closedEntry('s1')],
+      omitted: 0,
+      reopen: [judged('s1', { reason: 'the worktree is still there' })],
+    }]);
+
+    await waitFor(() => expect(screen.getByText('the worktree is still there')).toBeTruthy());
+    expect(screen.queryByRole('button', { name: 'Reopen' })).toBeNull();
+  });
+
+  it('leaves the reopen column blank for a live row', async () => {
+    panel([{ entries: [liveEntry('s1')], omitted: 0 }]);
 
     await waitFor(() => expect(screen.getByText('run s1')).toBeTruthy());
     expect(screen.queryByText('checking…')).toBeNull();
@@ -158,10 +198,22 @@ describe('SessionsPanel reopen verdicts', () => {
 
 describe('SessionsPanel live closes', () => {
   it('replaces a live row in place when the daemon says it closed', async () => {
-    const { rerender } = panel({ entries: [liveEntry('s1')], omitted: 0 });
+    const page = { entries: [liveEntry('s1')], omitted: 0 };
+    const list = vi.fn(async () => page);
+    const view = render(
+      <SessionsPanel isOpen onClose={() => {}} listSessions={list} now={now} />,
+    );
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Focus' })).toBeTruthy());
-    rerender({ closeNotice: { entry: closedEntry('s1'), nonce: 1 } });
+    view.rerender(
+      <SessionsPanel
+        isOpen
+        onClose={() => {}}
+        listSessions={list}
+        now={now}
+        closeNotice={{ entry: closedEntry('s1'), nonce: 1 }}
+      />,
+    );
 
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Focus' })).toBeNull());
     expect(screen.getByText('closed')).toBeTruthy();

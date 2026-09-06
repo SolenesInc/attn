@@ -1,4 +1,4 @@
-import type { SessionLedgerEntry } from '../types/generated';
+import type { SessionLedgerEntry, SessionReopen, SessionReopenEntry } from '../types/generated';
 
 export type SessionScope = 'live' | 'closed' | 'all';
 
@@ -105,4 +105,35 @@ const REOPEN_ACTION_LABELS: Record<string, string> = {
 
 export function reopenActionLabel(id: string): string {
   return REOPEN_ACTION_LABELS[id] ?? id;
+}
+
+export interface ReopenActionView {
+  id: string;
+  label: string;
+}
+
+export interface ReopenVerdictView {
+  refreshing: boolean;
+  summary: string;
+  reopenable: boolean;
+  actions: ReopenActionView[];
+}
+
+export function reopenVerdictView(reopen: SessionReopen): ReopenVerdictView {
+  return {
+    refreshing: reopen.checking,
+    summary: reopen.reason || reopen.warning || 'it can be reopened where it ran',
+    reopenable: reopen.reopenable,
+    actions: reopen.actions.map((id) => ({ id, label: reopenActionLabel(id) })),
+  };
+}
+
+export function reopenVerdictsById(
+  verdicts: SessionReopenEntry[] | undefined,
+): Record<string, ReopenVerdictView> {
+  const byId: Record<string, ReopenVerdictView> = {};
+  for (const entry of verdicts ?? []) {
+    byId[entry.session_id] = reopenVerdictView(entry.reopen);
+  }
+  return byId;
 }
