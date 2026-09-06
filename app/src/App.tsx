@@ -1216,6 +1216,8 @@ function AppContent({
       isWorktree: daemonSession?.is_worktree ?? s.isWorktree,
       chiefOfStaff: daemonSession?.chief_of_staff ?? false,
       delegatedFromChief: daemonSession?.delegated_from_chief ?? false,
+      dispatcher_session_id: daemonSession?.dispatcher_session_id,
+      dispatcher_member: daemonSession?.dispatcher_member,
       ticketUnread: daemonSession?.ticket_unread ?? false,
       seedId: daemonSession?.seed_id,
       nudgeFiresAt: daemonSession?.nudge_fires_at,

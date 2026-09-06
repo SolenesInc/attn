@@ -49,6 +49,8 @@ export interface QueueBandSession extends WorkspaceViewSession {
   /** Set on a shell: the agent session it was split from. */
   parentSessionId?: string;
   crewMember?: string;
+  dispatcher_session_id?: string;
+  dispatcher_member?: string;
   automation?: { definition_id: string };
 }
 
