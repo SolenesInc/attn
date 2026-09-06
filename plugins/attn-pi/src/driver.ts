@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { NetworkProxy, networkPolicyFrom, type NetworkDecision, type NetworkPolicy, type NetworkRequest } from "../netproxy";
 import type { AttnRPCClient } from "./attn-rpc";
-import type { RelayConnection, RelayServer } from "./relay";
+import type { RelayConnection, RelayDelegate, RelayServer } from "./relay";
 import type {
   RelayDeliverMessageParams,
   RelayDeliverMessageResult,
@@ -75,7 +75,7 @@ const defaultRunCommand: RunCommand = async (argv) => {
   return { exitCode, stdout, stderr };
 };
 
-export class PiDriver {
+export class PiDriver implements RelayDelegate {
   private readonly rpc: AttnRPCClient;
   private readonly runCommand: RunCommand;
   private readonly env: Record<string, string | undefined>;

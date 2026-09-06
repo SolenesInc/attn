@@ -555,6 +555,40 @@ func TestReportedAmendmentsFromAnUnownedRunAreRefused(t *testing.T) {
 	}
 }
 
+// The plugin swallows the JSON-RPC error it gets back, so the daemon log is the one
+// place a human can read why an answered approval card never became a rule.
+func TestARefusedPluginRequestNamesItselfInTheDaemonLog(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	logPath := attachPluginTestLogger(t, d)
+	client, done := startPluginPipe(t, d, "pi-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, client, "pi", map[string]bool{"auto_mode": true})
+
+	now := protocol.TimestampNow().String()
+	d.store.Add(&protocol.Session{
+		ID: "pi-amend", Label: "pi", Agent: "pi", Directory: t.TempDir(),
+		State: protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	if !d.store.BeginAgentDriverRun("pi-amend", "pi-plugin", "run-1") {
+		t.Fatal("failed to begin the test plugin run")
+	}
+
+	response := sendPluginMethodResponse(t, client, 3, "session.report_network_amendment",
+		pluginReportNetworkAmendmentParams{
+			SessionID: "pi-amend", RunID: "run-other", Host: "crates.io", Decision: automode.HostAllow,
+		})
+	if response.Error == nil {
+		t.Fatal("an amendment for a run the plugin does not own was accepted")
+	}
+
+	assertLogContains(t, logPath,
+		"plugin request session.report_network_amendment from plugin pi-plugin failed:",
+		`does not own active run "run-other"`)
+}
+
 func autoModeTestRuleLine(rule protocol.AutoModeRuleInfo) string {
 	tokens := make([]string, 0, len(rule.Pattern))
 	for _, alternatives := range rule.Pattern {

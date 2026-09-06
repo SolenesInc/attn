@@ -35,6 +35,27 @@ export type RelayDelegate = {
   suiteReportNetworkAmendment(params: unknown): Promise<void>;
 };
 
+/** A thunk lets the delegate be named before it exists: the driver holds the relay,
+ * so it can only be built after it. */
+export type RelayDelegateSource = RelayDelegate | (() => RelayDelegate);
+
+/** Every suite-to-driver report answers `{ ok: true }`, so the table is the whole
+ * dispatch: a method listed here cannot reach the wire without a delegate method. */
+export const suiteReports: Record<string, Exclude<keyof RelayDelegate, "suiteHello">> = {
+  [relayMethods.reportState]: "suiteReportState",
+  [relayMethods.reportStop]: "suiteReportStop",
+  [relayMethods.reportDenial]: "suiteReportDenial",
+  [relayMethods.reportInputTaken]: "suiteReportInputTaken",
+  [relayMethods.reportPullRequest]: "suiteReportPullRequest",
+  [relayMethods.reportSessionFile]: "suiteReportSessionFile",
+  [relayMethods.reportExecPolicyAmendment]: "suiteReportExecPolicyAmendment",
+  [relayMethods.reportNetworkAmendment]: "suiteReportNetworkAmendment",
+};
+
+function resolveDelegate(source: RelayDelegateSource): RelayDelegate {
+  return typeof source === "function" ? source() : source;
+}
+
 // One RelayConnection per suite that dials in. A request here is driver -> suite (its
 // own id space); inbound requests are suite -> driver, dispatched to the delegate.
 export class RelayConnection {
@@ -45,7 +66,8 @@ export class RelayConnection {
 
   constructor(
     private readonly socket: Socket,
-    private readonly delegate: RelayDelegate,
+    private readonly delegateSource: RelayDelegateSource,
+    private readonly log?: (line: string) => void,
   ) {
     this.socket.setEncoding("utf8");
     this.socket.on("data", (chunk) => this.consume(chunk));
@@ -132,57 +154,26 @@ export class RelayConnection {
     try {
       this.send({ jsonrpc: "2.0", id: request.id, result: await handler(request.params) });
     } catch (error) {
-      this.sendError(request.id, -32603, error instanceof Error ? error.message : String(error));
+      // The suite has no channel to speak on, so this log is the only account of a
+      // report the driver refused to carry.
+      const message = error instanceof Error ? error.message : String(error);
+      this.log?.(`relay ${request.method} failed: ${message}`);
+      this.sendError(request.id, -32603, message);
     }
   }
 
-  private handlerFor(method: string): ((params: unknown) => Promise<unknown>) | undefined {
-    switch (method) {
-      case relayMethods.hello:
-        return (params) => this.delegate.suiteHello(this, params);
-      case relayMethods.reportState:
-        return async (params) => {
-          await this.delegate.suiteReportState(params);
-          return { ok: true };
-        };
-      case relayMethods.reportStop:
-        return async (params) => {
-          await this.delegate.suiteReportStop(params);
-          return { ok: true };
-        };
-      case relayMethods.reportDenial:
-        return async (params) => {
-          await this.delegate.suiteReportDenial(params);
-          return { ok: true };
-        };
-      case relayMethods.reportInputTaken:
-        return async (params) => {
-          await this.delegate.suiteReportInputTaken(params);
-          return { ok: true };
-        };
-      case relayMethods.reportPullRequest:
-        return async (params) => {
-          await this.delegate.suiteReportPullRequest(params);
-          return { ok: true };
-        };
-      case relayMethods.reportSessionFile:
-        return async (params) => {
-          await this.delegate.suiteReportSessionFile(params);
-}
+  private get delegate(): RelayDelegate {
+    return resolveDelegate(this.delegateSource);
+  }
 
-      case relayMethods.reportExecPolicyAmendment:
-        return async (params) => {
-          await this.delegate.suiteReportExecPolicyAmendment(params);
-          return { ok: true };
-        };
-      case relayMethods.reportNetworkAmendment:
-        return async (params) => {
-          await this.delegate.suiteReportNetworkAmendment(params);
-          return { ok: true };
-        };
-      default:
-        return undefined;
-    }
+  private handlerFor(method: string): ((params: unknown) => Promise<unknown>) | undefined {
+    if (method === relayMethods.hello) return (params) => this.delegate.suiteHello(this, params);
+    const report = suiteReports[method];
+    if (report === undefined) return undefined;
+    return async (params) => {
+      await this.delegate[report](params);
+      return { ok: true };
+    };
   }
 
   private send(message: JSONRPCRequest | JSONRPCResponse): void {
@@ -201,19 +192,21 @@ export class RelayConnection {
 
 export class RelayServer {
   readonly socketPath: string;
-  private readonly delegate: RelayDelegate;
+  private readonly delegate: RelayDelegateSource;
+  private readonly log: ((line: string) => void) | undefined;
   private server?: Server;
   private readonly connections = new Set<RelayConnection>();
 
-  constructor(options: { socketPath: string; delegate: RelayDelegate }) {
+  constructor(options: { socketPath: string; delegate: RelayDelegateSource; log?: (line: string) => void }) {
     this.socketPath = options.socketPath;
     this.delegate = options.delegate;
+    this.log = options.log;
   }
 
   async listen(): Promise<void> {
     if (existsSync(this.socketPath)) unlinkSync(this.socketPath);
     const server = createServer((socket) => {
-      const connection = new RelayConnection(socket, this.delegate);
+      const connection = new RelayConnection(socket, this.delegate, this.log);
       this.connections.add(connection);
       connection.onClose(() => this.connections.delete(connection));
     });
