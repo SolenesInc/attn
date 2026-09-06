@@ -24,15 +24,17 @@ func piUsageFixtureLines(t *testing.T) [][]byte {
 func TestPiTranscriptPathPricesTheGuardianBesideTheAgent(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	now := protocol.TimestampNow().String()
-	session := &protocol.Session{
+	d.store.Add(&protocol.Session{
 		ID: "pi-usage", Label: "pi work", Agent: "pi", Directory: t.TempDir(),
 		State: protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
-	}
-	d.store.Add(session)
+	})
 
+	// pi reports the path at session_start and creates the file at its first
+	// assistant flush, so the first bytes the tracker sees already hold turn one.
 	lines := piUsageFixtureLines(t)
 	path := filepath.Join(t.TempDir(), "pi-session.jsonl")
-	if err := os.WriteFile(path, lines[0], 0o600); err != nil {
+	d.seedPluginUsageBaseline("pi-usage", path)
+	if err := os.WriteFile(path, bytes.Join(lines[:5], nil), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	tracker := newSessionUsageTrackerAt(d, "pi-usage", "pi", path, transcript.NewReportedUsageSourceResolver(path))
@@ -42,7 +44,7 @@ func TestPiTranscriptPathPricesTheGuardianBesideTheAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := file.Write(bytes.Join(lines[1:], nil)); err != nil {
+	if _, err := file.Write(bytes.Join(lines[5:], nil)); err != nil {
 		t.Fatal(err)
 	}
 	if err := file.Close(); err != nil {
@@ -68,6 +70,7 @@ func TestPiTranscriptPathPricesTheGuardianBesideTheAgent(t *testing.T) {
 	if agent == nil || guardian == nil {
 		t.Fatalf("models = %+v, want an agent row and a guardian row", decorated.Usage.Models)
 	}
+	// 17386 covers all six assistant turns: the first flush must not be baselined away.
 	if agent.Model != "deepseek-v4-flash" || agent.InputTokens != 17386 || agent.OutputTokens != 1292 {
 		t.Fatalf("agent row = %+v", agent)
 	}
@@ -81,6 +84,52 @@ func TestPiTranscriptPathPricesTheGuardianBesideTheAgent(t *testing.T) {
 	// attn has no rate card for this model, so pi's own price is what the row costs.
 	if decorated.Usage.CostUsd == nil || decorated.Usage.HasUnpricedUsage {
 		t.Fatalf("usage = %+v, want pi's reported cost to price every row", decorated.Usage)
+	}
+}
+
+func TestPiTranscriptThatAlreadyExistsKeepsItsHeadBaseline(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	now := protocol.TimestampNow().String()
+	d.store.Add(&protocol.Session{
+		ID: "pi-resume", Label: "pi work", Agent: "pi", Directory: t.TempDir(),
+		State: protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+
+	lines := piUsageFixtureLines(t)
+	path := filepath.Join(t.TempDir(), "pi-session.jsonl")
+	if err := os.WriteFile(path, bytes.Join(lines[:5], nil), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d.seedPluginUsageBaseline("pi-resume", path)
+	tracker := newSessionUsageTrackerAt(d, "pi-resume", "pi", path, transcript.NewReportedUsageSourceResolver(path))
+	tracker.Reconcile()
+
+	decorated := &protocol.Session{ID: "pi-resume"}
+	d.decorateSessionWithCost(decorated)
+	if decorated.Usage != nil {
+		t.Fatalf("usage = %+v, want a resumed session to bill nothing it inherited", decorated.Usage)
+	}
+}
+
+func TestPiSessionThatStoppedBeforeItsFirstReplyIsNotMarkedIncomplete(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	now := protocol.TimestampNow().String()
+	d.store.Add(&protocol.Session{
+		ID: "pi-quiet", Label: "pi work", Agent: "pi", Directory: t.TempDir(),
+		State: protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+
+	path := filepath.Join(t.TempDir(), "never-written.jsonl")
+	d.seedPluginUsageBaseline("pi-quiet", path)
+	tracker := newSessionUsageTrackerAt(d, "pi-quiet", "pi", path, transcript.NewReportedUsageSourceResolver(path))
+	d.reconcilePluginUsageOnStop(path, false, tracker)
+
+	state, err := d.store.SessionCost("pi-quiet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.MeasurementIncomplete {
+		t.Fatal("a session whose transcript never appeared was marked measurement-incomplete")
 	}
 }
 

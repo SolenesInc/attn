@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -39,9 +40,24 @@ func (d *Daemon) ensurePluginUsageWatcher(sessionID, agent, path string) {
 		close(previous.stopCh)
 	}
 
+	d.seedPluginUsageBaseline(sessionID, path)
 	tracker := newSessionUsageTrackerAt(d, sessionID, agent, path, transcript.NewReportedUsageSourceResolver(path))
 	d.logf("plugin usage watcher: started session=%s agent=%s path=%s", sessionID, agent, path)
 	go d.runPluginUsageWatcher(watcher, tracker)
+}
+
+// pi writes its session file only at the first assistant flush, header and turn
+// one together, so a path reported before it exists is counted from byte zero.
+func (d *Daemon) seedPluginUsageBaseline(sessionID, path string) {
+	if d.store == nil {
+		return
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		return
+	}
+	if err := d.store.InitializeSessionCostSources(sessionID, map[string]string{filepath.Clean(path): ""}); err != nil {
+		d.logf("plugin usage watcher: usage baseline seed failed session=%s path=%s err=%v", sessionID, path, err)
+	}
 }
 
 func (d *Daemon) runPluginUsageWatcher(w *pluginUsageWatcher, tracker *sessionUsageTracker) {
@@ -52,7 +68,7 @@ func (d *Daemon) runPluginUsageWatcher(w *pluginUsageWatcher, tracker *sessionUs
 	for {
 		select {
 		case <-w.stopCh:
-			tracker.Reconcile()
+			d.reconcilePluginUsageOnStop(w.path, read != nil, tracker)
 			d.logf("plugin usage watcher: stopped session=%s", w.sessionID)
 			return
 		case <-ticker.C:
@@ -71,6 +87,17 @@ func (d *Daemon) runPluginUsageWatcher(w *pluginUsageWatcher, tracker *sessionUs
 		read = info
 		tracker.Reconcile()
 	}
+}
+
+// A transcript that never appeared has nothing to reconcile, and asking would mark
+// a session that stopped before its first reply measurement-incomplete forever.
+func (d *Daemon) reconcilePluginUsageOnStop(path string, seen bool, tracker *sessionUsageTracker) {
+	if !seen {
+		if _, err := os.Stat(path); err != nil {
+			return
+		}
+	}
+	tracker.Reconcile()
 }
 
 func (d *Daemon) stopPluginUsageWatcher(sessionID string) {

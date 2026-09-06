@@ -234,13 +234,13 @@ func Summarize(ledger Ledger, settings map[string]string) Summary {
 		summary.TotalTokens += total
 
 		card, cardKnown, invalidOverride := rateCardForModel(model, settings)
-		// A broken override still counts as an opinion about the price: surface it
-		// instead of quietly billing the harness's number in its place.
-		if reported, ok := reportedCost(usage, cardKnown || invalidOverride); ok {
-			row.CostUSD = floatPtr(reported)
-		} else if invalidOverride {
+		// A broken override is an opinion about the price, so it is reported rather
+		// than quietly billed at the harness's number.
+		if invalidOverride {
 			row.HasUnpricedUsage = true
 			row.UnpricedReason = "Price override is invalid."
+		} else if reported, ok := reportedCost(usage, cardKnown); ok {
+			row.CostUSD = floatPtr(reported)
 		} else if !cardKnown {
 			row.HasUnpricedUsage = true
 			row.UnpricedReason = "No price is configured for this model."

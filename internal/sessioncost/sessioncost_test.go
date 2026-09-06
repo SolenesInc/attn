@@ -371,3 +371,20 @@ func TestRateCardWinsOverTheHarnessReportedCost(t *testing.T) {
 		t.Fatalf("priced row reported unpriced usage: %+v", summary.Models[0])
 	}
 }
+func TestInvalidPriceOverrideIsReportedRatherThanBilledAtTheHarnessPrice(t *testing.T) {
+	ledger := Ledger{AgentKey("priced-model"): {
+		InputTokens: 1_000, UnclassifiedCacheWriteTokens: 400, ReportedCostUSD: 99,
+	}}
+	settings := map[string]string{SessionCostPricePrefix + "priced-model": `{"input_usd_per_mtok":`}
+	summary := Summarize(ledger, settings)
+	if len(summary.Models) != 1 {
+		t.Fatalf("summary = %+v", summary)
+	}
+	row := summary.Models[0]
+	if row.CostUSD != nil {
+		t.Fatalf("row = %+v, want no price while the override is broken", row)
+	}
+	if !row.HasUnpricedUsage || row.UnpricedReason != "Price override is invalid." {
+		t.Fatalf("row = %+v, want the broken override surfaced", row)
+	}
+}

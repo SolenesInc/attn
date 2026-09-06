@@ -29,6 +29,8 @@ const SHAPES = [
   ['CrewMember', 'CrewMember'],
   ['AppViewInfo', 'AppViewInfo'],
   ['AppRegistryEntry', 'AppRegistryEntry'],
+  ['SessionUsageModel', 'SessionUsageModel'],
+  ['SessionUsage', 'SessionUsage'],
 ];
 
 function fieldsOf(source, name) {

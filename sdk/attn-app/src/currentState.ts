@@ -32,6 +32,7 @@ export interface SessionPullRequest {
 
 export interface SessionUsageModel {
   readonly model: string
+  readonly purpose: string
   readonly input_tokens: number
   readonly output_tokens: number
   readonly cache_read_tokens: number
