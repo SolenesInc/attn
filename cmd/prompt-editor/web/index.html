@@ -95,8 +95,16 @@
               <label for="review-version">Full text</label>
               <select id="review-version"><option value="current">Current</option><option value="base">Base</option></select>
               <span id="review-full-label"></span>
+              <button id="review-save" class="primary" hidden>Save file</button>
             </header>
-            <pre id="review-full-text" tabindex="0" aria-label="Full source text"></pre>
+            <textarea readonly
+              id="review-full-text"
+              aria-label="Full source text"
+              spellcheck="false"
+              autocapitalize="off"
+              autocomplete="off"
+              wrap="soft"
+            ></textarea>
           </section>
           <section class="review-diff-pane" aria-label="Changes">
             <header class="full-text-toolbar"><strong>Changes</strong></header>

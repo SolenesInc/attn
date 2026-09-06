@@ -1,3 +1,5 @@
+import { DelegationSettings } from './DelegationSettings';
+import { useDelegationPreferences } from '../hooks/useDelegationPreferences';
 import { Fragment, useState, useCallback, useEffect, useMemo } from 'react';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -122,6 +124,7 @@ type SettingsSectionID =
   | 'hygiene'
   | 'agents'
   | 'autoMode'
+  | 'delegation'
   | 'connectivity'
   | 'plugins'
   | 'backgroundTasks'
@@ -201,6 +204,9 @@ export function SettingsModal({
   taskChangeSignal,
 }: SettingsModalProps) {
   const {
+    sendDelegationPreferencesGet,
+    sendDelegationPreferencesSave,
+    sendDelegationModels,
     sendGetSettings,
     sendBusStatusGet,
     sendBusSetConsumerEnabled,
@@ -227,6 +233,7 @@ export function SettingsModal({
   const savedFlash = useSavedFlash();
   const [defaultAgent, setDefaultAgent] = useState<SessionAgent>('claude');
   const [selectedSection, setSelectedSection] = useState<SettingsSectionID>('connectivity');
+  const delegationPolicy = useDelegationPreferences(isOpen && selectedSection === 'delegation', sendDelegationPreferencesGet, sendDelegationPreferencesSave);
   const [settingsSearch, setSettingsSearch] = useState('');
   const endpointPanel = useEndpointPanel();
   const pluginPanel = usePluginPanel(onListPlugins);
@@ -709,6 +716,14 @@ export function SettingsModal({
           description: 'Which binary each agent runs, which model and effort it launches with, its context caps, and how its terminal is hosted.',
           count: orderedAgentList.length + 8,
           keywords: 'agents executables claude codex copilot default capabilities pty backend editor model effort chief reviewer review garden advisor sdk context window cap tokens compaction headless workflows auto-approve unattended',
+        },
+        {
+          id: 'delegation',
+          label: 'Delegation',
+          title: 'Delegation',
+          description: 'Choose harnesses, models, and effort for the work you delegate.',
+          count: 1,
+          keywords: 'delegate roles scout design build ship review fallback harness models effort preferences',
         },
         {
           id: 'autoMode',
@@ -2461,6 +2476,8 @@ export function SettingsModal({
         return renderBackgroundTasksSettings();
       case 'eventBus':
         return renderEventBusSettings();
+      case 'delegation':
+        return <DelegationSettings policy={delegationPolicy} loadModels={sendDelegationModels} />;
       case 'autoMode':
         return <AutoModeSettings policy={autoModePolicy} />;
       case 'connectivity':

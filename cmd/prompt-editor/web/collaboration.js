@@ -330,17 +330,19 @@ export function collaborate({ state, $, api, selectEvent, selectSource, renderNa
     }
     function rememberSelection() {
         const source = $("source");
+        const fullText = $("review-full-text");
         if (document.activeElement === source && source.selectionEnd > source.selectionStart) {
             sourceSelection = { target: "source", path: state.path, selection: source.value.slice(source.selectionStart, source.selectionEnd) };
+        }
+        else if (document.activeElement === fullText && fullText.selectionEnd > fullText.selectionStart) {
+            sourceSelection = $("review-version").value === "current"
+                ? { target: state.reviewTarget, ...(state.reviewTarget === "source" ? { path: state.path } : {}), selection: fullText.value.slice(fullText.selectionStart, fullText.selectionEnd) }
+                : null;
         }
         else {
             const selection = window.getSelection();
             if (selection && !selection.isCollapsed && $("output").contains(selection.anchorNode) && $("output").contains(selection.focusNode))
                 sourceSelection = { target: "prompt", selection: selection.toString() };
-            if (state.reviewTarget && selection && !selection.isCollapsed && $("review-full-text").contains(selection.anchorNode) && $("review-full-text").contains(selection.focusNode))
-                sourceSelection = $("review-version").value === "current"
-                    ? { target: state.reviewTarget, ...(state.reviewTarget === "source" ? { path: state.path } : {}), selection: selection.toString() }
-                    : null;
         }
         $("selection-context").textContent = sourceSelection ? `Selected ${sourceSelection.target}: ${sourceSelection.selection.slice(0, 100)}` : "Feedback includes this scenario and its exact prompt revision.";
     }

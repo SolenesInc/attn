@@ -6,6 +6,7 @@ const SETTINGS_SECTION_IDS = [
   'hygiene',
   'agents',
   'autoMode',
+  'delegation',
   'connectivity',
   'plugins',
   'backgroundTasks',
