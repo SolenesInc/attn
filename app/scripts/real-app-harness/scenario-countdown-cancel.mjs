@@ -626,12 +626,22 @@ async function main() {
       const id = created.ticket_create_result?.ticket_id;
       runner.assert(typeof id === 'string' && id.length > 0, `ticket_create returned an id (got ${JSON.stringify(created)})`, created);
 
+      // The codex target holds the selection here, so this switch is a real one:
+      // focus_pane lands on the old workspace unless the select has settled first.
       await client.request('select_session', { sessionId: agentId });
-      await client.request('focus_pane', { sessionId: agentId, paneId: authorPaneId });
       await pollFor(async () => {
         const state = await client.request('get_state');
+        return state.activeSessionId === agentId ? state : null;
+      }, 'the agent to take the selection back from the codex target', 20_000);
+      await client.request('focus_pane', { sessionId: agentId, paneId: authorPaneId });
+      let sawActive = null;
+      await pollFor(async () => {
+        const state = await client.request('get_state');
+        sawActive = state.activeSessionId;
         return state.activeSessionId === authorId ? state : null;
-      }, 'the split pane to take the selection off the agent', 20_000);
+      }, 'the split pane to take the selection off the agent', 20_000).catch((error) => {
+        throw new Error(`${error.message} activeSessionId=${sawActive}, wanted author=${authorId} (agent=${agentId})`);
+      });
       note('split pane holds the selection; the agent tile is still on screen', { authorId });
 
       await legacyTicketRequest(socketPath, {

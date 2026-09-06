@@ -476,6 +476,9 @@ async function main() {
       // Octal escapes produce the same OSC bytes in bash, zsh, and fish.
       const esc = '\\033';
       const st = `${esc}\\134`; // string terminator: ESC + a single literal backslash
+      // Both markdown tiles are still docked, and they fold the terminal into a
+      // sliver whose released surface reads empty; clicking expands it first.
+      await client.request('click_pane', { sessionId, paneId: pane.paneId });
       await client.request('write_pane', {
         sessionId,
         paneId: pane.paneId,
