@@ -160,6 +160,10 @@ A new scenario file lands with a catalog entry, or with its verdict added here.
   and `launchFreshAppAndConnect` writes the matching `<agent>_executable` setting,
   restoring what it found. Sessions need both halves — the env reaches the daemon,
   the setting reaches each spawn.
+- `focus_pane` selects the session id you hand it and then focuses a pane inside
+  that view. To move the selection onto a pane owned by a *different* session,
+  select that session; asking `focus_pane` for it selects the wrong one and any
+  poll on `activeSessionId` waits out its timeout.
 - A scenario needing a real provider says so with `allowRealAgents` and states why.
   That list shrinks; adding to it needs a reason in the catalog entry.
 - Give the mock a turn with `writeMockAgentFixture` in the session cwd before the
