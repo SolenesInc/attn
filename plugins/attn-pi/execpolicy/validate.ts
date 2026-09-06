@@ -1,9 +1,7 @@
 // Rule self-tests. Port of codex-rs/execpolicy/src/parser.rs prefix_rule and
 // rule.rs validate_match_examples / validate_not_match_examples.
-import { CompiledPolicy, shlexJoin } from "./policy";
+import { CompiledPolicy, isDecision, shlexJoin } from "./policy";
 import type { PatternToken, PrefixRule, RuleError } from "./types";
-
-const decisions = new Set(["allow", "prompt", "forbidden"]);
 
 export function renderPattern(pattern: readonly PatternToken[]): string {
   return pattern
@@ -18,7 +16,10 @@ export function validateRules(rules: readonly PrefixRule[]): RuleError[] {
   rules.forEach((rule, index) => {
     const shape = shapeError(rule);
     if (shape !== undefined) {
-      errors.push({ index, message: shape });
+      // A broken rule is reported by index and by pattern: the index addresses
+      // it in settings, the pattern names it in a log line.
+      const named = Array.isArray(rule.pattern) && rule.pattern.length > 0 ? renderPattern(rule.pattern) : undefined;
+      errors.push({ index, message: named === undefined ? shape : `${shape} (rule \`${named}\`)` });
       return;
     }
 
@@ -54,7 +55,7 @@ function shapeError(rule: PrefixRule): string | undefined {
       return "invalid pattern element: pattern alternative must be a string";
     }
   }
-  if (rule.decision !== undefined && !decisions.has(rule.decision)) {
+  if (rule.decision !== undefined && !isDecision(rule.decision)) {
     return `invalid decision: ${rule.decision}`;
   }
   if (rule.justification !== undefined && rule.justification.trim() === "") {

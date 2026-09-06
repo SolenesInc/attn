@@ -1,6 +1,5 @@
-// Command evaluation. Port of codex-rs/core/src/exec_policy.rs
-// create_exec_approval_requirement_for_parsed_commands (337-460) and
-// render_decision_for_unmatched_command_for_platform (770-855).
+// Command evaluation. Port of codex-rs/core/src/exec_policy.rs:337-460 and
+// its render_decision_for_unmatched_command_for_platform (770-855).
 import { dangerousCommandMatch, parseBashCommands, shellApprovalCommand, type DangerousCommandMatch } from "../shell/index";
 import { CompiledPolicy, shlexJoin, strictestDecision, type PrefixMatch } from "./policy";
 import type {
@@ -73,9 +72,8 @@ export function evaluateCommand(command: string, input: EvaluationInput): Comman
   }
 
   if (decision === "prompt") {
-    // Never has no reviewer to ask, so a prompt becomes a rejection
-    // (exec_policy.rs:407-425). Under Never only a rule can ask for approval:
-    // an unmatched dangerous command is already forbidden above.
+    // Never has no reviewer, so a prompt is a rejection (exec_policy.rs:407-425);
+    // only a rule reaches here, an unmatched danger is forbidden above.
     if (input.approvalPolicy === "never") {
       return { ...evaluation, decision: "forbidden", bypassSandbox: false, reason: promptConflictReason };
     }

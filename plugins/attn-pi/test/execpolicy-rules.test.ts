@@ -1,18 +1,19 @@
-// The corpus of codex-rs/execpolicy/tests/basic.rs and the inline tests of
-// parser.rs and amend.rs. Rules reach attn as JSON rather than Starlark, so a
-// policy is a rule array here; network_rule and host_executable are not ported
-// (hosts belong to the proxy, and attn ships no host executable allowlist).
+// The corpus of codex-rs/execpolicy/tests/basic.rs plus the inline tests of
+// parser.rs and amend.rs, against rule arrays rather than Starlark policies.
+
+// network_rule and host_executable are not ported: hosts belong to the proxy,
+// and attn ships no host executable allowlist.
 import { beforeAll, describe, expect, test } from "bun:test";
 import { amendRules, convertLegacyGlob, evaluateCommand, validateRules, type EvaluationInput, type PrefixRule } from "../execpolicy/index";
+import { CompiledPolicy, shlexJoin } from "../execpolicy/policy";
 import { initShellParsing } from "../shell/index";
 
 beforeAll(async () => {
   await initShellParsing();
 });
 
-// Codex's `allow_all` heuristics fallback: an unmatched command is allowed and a
-// prompt rule still prompts. Approval policy Never turns prompts into
-// rejections, which the decision corpus covers separately.
+// Codex's `allow_all` fallback: an unmatched command is allowed and a prompt
+// rule still prompts (Never rejects prompts; the decision corpus covers that).
 function allowUnmatched(rules: readonly PrefixRule[]): EvaluationInput {
   return { rules, approvalPolicy: "on-request", sandboxMode: "workspace-write", sandboxPermissions: "use_default" };
 }
@@ -154,7 +155,7 @@ describe("rule validation", () => {
 
   test("justification cannot be empty", () => {
     expect(validateRules([{ pattern: ["ls"], decision: "prompt", justification: "   " }])).toEqual([
-      { index: 0, message: "invalid rule: justification cannot be empty" },
+      { index: 0, message: "invalid rule: justification cannot be empty (rule `ls`)" },
     ]);
   });
 
@@ -168,10 +169,81 @@ describe("rule validation", () => {
     ] as unknown as PrefixRule[];
     expect(validateRules(rules)).toEqual([
       { index: 1, message: "invalid pattern element: pattern cannot be empty" },
-      { index: 2, message: "invalid decision: maybe" },
-      { index: 3, message: "invalid pattern element: pattern alternatives cannot be empty" },
-      { index: 4, message: "invalid example: example cannot be an empty list" },
+      { index: 2, message: "invalid decision: maybe (rule `ls`)" },
+      { index: 3, message: "invalid pattern element: pattern alternatives cannot be empty (rule `ls []`)" },
+      { index: 4, message: "invalid example: example cannot be an empty list (rule `ls`)" },
     ]);
+  });
+
+  test("a rule with an unknown decision never matches a command", () => {
+    // A rule that cannot be compiled must not count as a match either: a
+    // matched segment skips the heuristics, so a typo would allow the command.
+    const rules = [{ pattern: ["rm"], decision: "deny" }] as unknown as PrefixRule[];
+    expect(validateRules(rules)).toEqual([{ index: 0, message: "invalid decision: deny (rule `rm`)" }]);
+
+    const evaluation = evaluateCommand("rm -rf /tmp/zz", {
+      rules,
+      approvalPolicy: "never",
+      sandboxMode: "workspace-write",
+      sandboxPermissions: "use_default",
+    });
+    expect(evaluation.matches).toEqual([]);
+    expect(evaluation.decision).toBe("forbidden");
+    expect(evaluation.reason).toBe(
+      "`bash -lc 'rm -rf /tmp/zz'` rejected: rm -f style commands are not permitted. Use a safer approach",
+    );
+  });
+});
+
+describe("program paths", () => {
+  test("a relative program path resolves to the rule written for its name", () => {
+    const forbidPython: PrefixRule[] = [{ pattern: ["python"], decision: "forbidden" }];
+    expect(evaluateCommand("venv/bin/python evil.py", allowUnmatched(forbidPython)).decision).toBe("forbidden");
+
+    const promptGit: PrefixRule[] = [{ pattern: ["git"], decision: "prompt" }];
+    expect(evaluateCommand("./git push", allowUnmatched(promptGit)).decision).toBe("prompt");
+
+    const forbidRm: PrefixRule[] = [{ pattern: ["rm"], decision: "forbidden" }];
+    const evaluation = evaluateCommand("bin/rm -rf x", allowUnmatched(forbidRm));
+    expect(evaluation.decision).toBe("forbidden");
+    expect(evaluation.matches.map((match) => match.command)).toEqual([["rm"]]);
+  });
+
+  test("a path is normalized before its name is read", () => {
+    // `~` and `..` never reach evaluateCommand: a word carrying either is not
+    // a grammar-provable literal, so the script parses as one opaque command.
+    const rules: PrefixRule[] = [{ pattern: ["rm"], decision: "forbidden" }];
+    const policy = new CompiledPolicy(rules);
+    for (const program of ["~/bin/rm", "/usr/bin/../bin/rm", "../rm", "bin/./rm"]) {
+      expect(policy.matchesForCommand([program, "-rf", "x"]).map((match) => match.decision)).toEqual(["forbidden"]);
+    }
+    for (const program of ["/..", "/usr/bin/rmdir"]) {
+      expect(policy.matchesForCommand([program, "-rf", "x"])).toEqual([]);
+    }
+  });
+});
+
+// shlex 1.3 splits a word no single strategy can quote into chunks
+// (bytes.rs:344-441); these strings come from shlex 1.3.0 over the same words.
+describe("command rendering", () => {
+  test("a word needing two quoting strategies is split into chunks", () => {
+    expect(shlexJoin(["'hello$world"])).toBe(`"'hello"'$world'`);
+    expect(shlexJoin(["'hello!world"])).toBe(`"'hello"'!world'`);
+    expect(shlexJoin(["a\\b"])).toBe('"a\\\\b"');
+    expect(shlexJoin(["café"])).toBe("'café'");
+  });
+
+  test("a caret is only quotable right after an opening single quote", () => {
+    expect(shlexJoin(["^foo"])).toBe("'^foo'");
+    expect(shlexJoin(["foo^bar"])).toBe("foo'^bar'");
+    expect(shlexJoin(["a'b^c"])).toBe(`"a'b"'^c'`);
+  });
+
+  test("a chunked script word reaches the reason", () => {
+    const rules: PrefixRule[] = [{ pattern: ["echo"], decision: "forbidden" }];
+    expect(evaluateCommand("echo 'a'!b", allowUnmatched(rules)).reason).toBe(
+      "`bash -lc \"echo 'a'\"'!b'` rejected: policy forbids commands starting with `echo`",
+    );
   });
 });
 

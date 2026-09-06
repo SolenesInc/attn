@@ -1,6 +1,5 @@
-// Port of codex-rs/shell-command/src/bash.rs and
-// src/command_safety/is_dangerous_command.rs, plus the executable identity
-// check in codex-rs/core/src/exec_policy/executable_identity.rs:56-103.
+// Port of codex-rs/shell-command/src/{bash.rs,command_safety/is_dangerous_command.rs}
+// and core/src/exec_policy/executable_identity.rs:56-103.
 import { basename, dirname } from "node:path";
 import type { Node, Tree } from "web-tree-sitter";
 import { tryParseShell } from "./grammar";
@@ -80,7 +79,13 @@ export function extractBashCommand(command: readonly string[]): { shell: string;
 export function parseShellScriptIntoCommands(script: string): string[][] | undefined {
   const tree = tryParseShell(script);
   if (tree === undefined) return undefined;
-  return tryParseWordOnlyCommandsSequence(tree);
+  // web-tree-sitter 0.25.10 registers no finalizer, so a tree nobody deletes
+  // holds its wasm allocation for the life of the process.
+  try {
+    return tryParseWordOnlyCommandsSequence(tree);
+  } finally {
+    tree.delete();
+  }
 }
 
 // Returns one argv per plain command in a `bash -lc` style invocation, or
@@ -201,20 +206,26 @@ export function parseShellLcLiteralCommands(command: readonly string[]): string[
   if (extracted === undefined) return undefined;
   const tree = tryParseShell(extracted.script);
   if (tree === undefined) return undefined;
-  const root = tree.rootNode;
-  if (root.hasError) return undefined;
+  // Every exit frees the tree: an undeleted one leaks its wasm allocation,
+  // which nothing in web-tree-sitter 0.25.10 reclaims later.
+  try {
+    const root = tree.rootNode;
+    if (root.hasError) return undefined;
 
-  const commands: string[][] = [];
-  const stack: Node[] = [root];
-  while (stack.length > 0) {
-    const node = stack.pop() as Node;
-    if (node.type === "command") {
-      const literal = parseLiteralCommandFromNode(node);
-      if (literal !== undefined) commands.push(literal);
+    const commands: string[][] = [];
+    const stack: Node[] = [root];
+    while (stack.length > 0) {
+      const node = stack.pop() as Node;
+      if (node.type === "command") {
+        const literal = parseLiteralCommandFromNode(node);
+        if (literal !== undefined) commands.push(literal);
+      }
+      for (const child of node.namedChildren) if (child !== null) stack.push(child);
     }
-    for (const child of node.namedChildren) if (child !== null) stack.push(child);
+    return commands;
+  } finally {
+    tree.delete();
   }
-  return commands;
 }
 
 function parseLiteralCommandFromNode(command: Node): string[] | undefined {

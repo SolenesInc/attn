@@ -1,10 +1,11 @@
-// The decision corpus of codex-rs/core/src/exec_policy_tests.rs. Windows,
-// PowerShell and with_additional_permissions cases are not ported: attn runs a
-// posix shell and has no escalated-permission request in the bash tool.
-//
-// attn always runs a script through `bash -lc`, so a Codex case whose command
-// was a bare argv reaches evaluateCommand as that script; the decision is the
-// same and the reason names the argv attn will actually run.
+// The decision corpus of codex-rs/core/src/exec_policy_tests.rs. Windows and
+// PowerShell cases are not ported: attn runs a posix shell.
+
+// with_additional_permissions is not ported either: it carries a per-command
+// payload the contract has no field for, and what it escalates is below.
+
+// attn runs every script through `bash -lc`, so a Codex case whose command was
+// a bare argv arrives as that script; only the reason's rendering differs.
 import { beforeAll, describe, expect, test } from "bun:test";
 import { evaluateCommand, type ApprovalPolicy, type EvaluationInput, type PrefixRule } from "../execpolicy/index";
 import { initShellParsing } from "../shell/index";
@@ -17,8 +18,9 @@ function scenario(
   rules: readonly PrefixRule[],
   approvalPolicy: ApprovalPolicy,
   sandboxMode: EvaluationInput["sandboxMode"],
+  sandboxPermissions: EvaluationInput["sandboxPermissions"] = "use_default",
 ): EvaluationInput {
-  return { rules, approvalPolicy, sandboxMode, sandboxPermissions: "use_default" };
+  return { rules, approvalPolicy, sandboxMode, sandboxPermissions };
 }
 
 describe("policy decisions", () => {
@@ -96,6 +98,34 @@ describe("policy decisions", () => {
     const evaluation = evaluateCommand(script, scenario(full, "on-request", "read-only"));
     expect(evaluation.decision).toBe("allow");
     expect(evaluation.bypassSandbox).toBe(true);
+  });
+});
+
+describe("sandbox escalation", () => {
+  // A restricted sandbox enforces its own boundary, so an unmatched command
+  // runs unprompted; asking to leave the sandbox is what needs a reviewer.
+  test("an unmatched command prompts only when it asks to leave a restricted sandbox", () => {
+    for (const script of ["madeup-cmd", "echo hello"]) {
+      for (const sandboxMode of ["read-only", "workspace-write"] as const) {
+        expect(evaluateCommand(script, scenario([], "on-request", sandboxMode, "require_escalated")).decision).toBe(
+          "prompt",
+        );
+        expect(evaluateCommand(script, scenario([], "on-request", sandboxMode)).decision).toBe("allow");
+      }
+      // Nothing to escalate out of without a sandbox.
+      expect(
+        evaluateCommand(script, scenario([], "on-request", "danger-full-access", "require_escalated")).decision,
+      ).toBe("allow");
+    }
+  });
+
+  test("an escalated heredoc needs approval where the sandboxed twin does not", () => {
+    const script = "cat <<'EOF' > /some/important/folder/test.txt\nhello world\nEOF";
+    const rules: PrefixRule[] = [{ pattern: ["cat"], decision: "allow" }];
+    expect(evaluateCommand(script, scenario(rules, "on-request", "workspace-write", "require_escalated")).decision).toBe(
+      "prompt",
+    );
+    expect(evaluateCommand(script, scenario(rules, "on-request", "workspace-write")).decision).toBe("allow");
   });
 });
 

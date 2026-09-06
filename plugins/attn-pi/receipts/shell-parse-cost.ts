@@ -1,5 +1,5 @@
-// The receipt behind the shell parsing tripwires: how long the tree-sitter-bash
-// wasm takes to load once, and what one parseBashCommands call costs after that.
+// The receipt behind the shell parsing tripwires: what the wasm costs to load
+// once, what a parse costs after that, and whether a long run gives memory back.
 import { initShellParsing, parseBashCommands } from "../shell/index";
 
 const scripts = [
@@ -31,4 +31,23 @@ for (const script of scripts) {
   const worst = samples.at(-1) ?? 0;
   const label = script.length > 48 ? `${script.slice(0, 45).replaceAll("\n", " ")}…` : script;
   console.log(`parse (${script.length} bytes) p50 ${median.toFixed(3)}ms max ${worst.toFixed(3)}ms  ${label}`);
+}
+
+// A tree nobody deletes leaks wasm heap no GC reclaims. The first round only
+// climbs to the allocator's high-water mark; a leak shows in the rounds after.
+const memoryRuns = 10_000;
+const megabytes = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
+for (let round = 0; round < 3; round += 1) {
+  Bun.gc(true);
+  const before = process.memoryUsage();
+  for (let index = 0; index < memoryRuns; index += 1) {
+    parseBashCommands(["bash", "-lc", scripts[index % scripts.length] as string]);
+  }
+  Bun.gc(true);
+  const after = process.memoryUsage();
+  console.log(
+    `memory round ${round} (${memoryRuns} parses): rss ${megabytes(before.rss)} -> ${megabytes(after.rss)} MB ` +
+      `(${((after.rss - before.rss) / memoryRuns).toFixed(0)} bytes per call), ` +
+      `heap ${megabytes(before.heapUsed)} -> ${megabytes(after.heapUsed)} MB`,
+  );
 }

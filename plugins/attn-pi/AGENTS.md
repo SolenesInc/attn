@@ -40,5 +40,10 @@ Call `initShellParsing()` once at startup; every parse entry point is
 synchronous after that. That grammar and web-tree-sitter's own runtime wasm both
 resolve next to the module, which is why `scripts/build-bundled-plugins.sh`
 copies them beside `suite.js`. `receipts/shell-parse-cost.ts` is the receipt:
-about 25ms to load the wasm once, then 0.02-0.10ms per parse. A load past 250ms
-or a parse past 1ms means something regressed.
+about 25ms to load the wasm once, then 0.02-0.10ms per parse, and no memory
+growth once the allocator has reached its high-water mark. A load past 250ms, a
+parse past 1ms, or any steady-state growth means something regressed.
+
+Every tree-sitter tree must be deleted after its walk: web-tree-sitter 0.25.10
+registers no finalizer, so a tree nobody frees leaks about 2KB of wasm heap that
+no later GC reclaims.

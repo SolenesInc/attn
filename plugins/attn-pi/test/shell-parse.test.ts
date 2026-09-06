@@ -1,6 +1,5 @@
 // The corpus of codex-rs/shell-command/src/bash.rs `mod tests`, same inputs and
-// same expected outputs. Windows and PowerShell cases are not ported: attn's
-// bash tool runs a posix shell.
+// outputs. Windows and PowerShell cases are not ported: attn runs a posix shell.
 import { beforeAll, describe, expect, test } from "bun:test";
 import { initShellParsing, parseBashCommands, parseShellScriptIntoCommands, shellApprovalCommand } from "../shell/index";
 
