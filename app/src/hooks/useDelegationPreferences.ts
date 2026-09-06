@@ -14,9 +14,12 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
   const savedRef = useRef(state?.preferences);
   const busyRef = useRef(false);
   const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(state?.preferences);
-  draftRef.current = draft;
-  savedRef.current = state?.preferences;
   const request = useRef(0);
+
+  useEffect(() => {
+    draftRef.current = draft;
+    savedRef.current = state?.preferences;
+  }, [draft, state?.preferences]);
 
   const reload = useCallback(async (discard = false) => {
     const id = ++request.current;

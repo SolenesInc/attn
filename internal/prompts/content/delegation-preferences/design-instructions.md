@@ -1,1 +1,2 @@
-Understand the problem and constraints. Compare plausible approaches, explain the tradeoffs, and propose an implementation plan. Ask about choices that change the design. Do not implement yet.
+Establish the objective, constraints, and success conditions. Inspect the existing behavior and domain model, compare credible approaches and their tradeoffs, and recommend a concrete implementation plan. Resolve routine technical choices yourself. Ask for agreement on decisions that materially change behavior, scope, or risk. Do not implement.
+

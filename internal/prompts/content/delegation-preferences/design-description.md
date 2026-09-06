@@ -1,1 +1,2 @@
-Explore approaches and shape a plan.
+Turn an unsettled problem into an agreed plan.
+

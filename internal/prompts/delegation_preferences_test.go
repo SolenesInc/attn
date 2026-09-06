@@ -28,15 +28,22 @@ func TestDelegationDiscoveryIsOnDemand(t *testing.T) {
 	}
 }
 
-func TestDelegationRolesIncludesAllChoicesAndLiteralUserGuidance(t *testing.T) {
+func TestDelegationRolesIncludesAllChoicesAndRevision(t *testing.T) {
 	roles := DelegationRoleTemplates()
 	roles[2].Instructions = "Verify {{literal}} without expanding it"
 	roles[2].Choices = append(roles[2].Choices, protocol.DelegationChoice{ID: "hard", Name: "Demanding", When: "Hard verification", Selection: protocol.DelegationSelection{Harness: "pi", Provider: "example", Model: "custom", Effort: "high"}})
 	output := DelegationRolesText(protocol.DelegationRolesResult{Revision: 7, Roles: roles, Guidance: DelegationRoutingGuidance(7)})
-	for _, expected := range []string{"Scout", "Design", "Build", "Ship", "Review", "Hard verification", "example", "custom", "{{literal}}", "--preferences-revision 7", "both systems are active"} {
+	for _, expected := range []string{"Scout", "Design", "Build", "Ship", "Review", "Hard verification", "example", "custom", "{{literal}}", "--preferences-revision 7"} {
 		if !strings.Contains(output, expected) {
 			t.Errorf("missing %q", expected)
 		}
+	}
+	if strings.Contains(output, "both systems are active") {
+		t.Fatal("roles output repeats stable routing guidance")
+	}
+	reference := RenderText("attn-skill", "delegation", nil)
+	if !strings.Contains(reference, "lists one or more roles or an unmatched-work fallback") || !strings.Contains(reference, "both systems are active") || !strings.Contains(reference, "attn delegate roles") {
+		t.Fatal("delegation reference is missing stable routing guidance")
 	}
 	guidance := DelegationExecutionGuidance("Build", roles[2].Instructions, roles[2].StoppingPoint)
 	opening := DelegationOpeningWithGuidance("Task {{task_literal}}", guidance)

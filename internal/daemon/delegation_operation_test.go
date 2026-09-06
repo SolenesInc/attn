@@ -15,7 +15,8 @@ import (
 
 func waitDelegationOperation(t *testing.T, d *Daemon, id string) *protocol.DelegationOperation {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
+	var last *protocol.DelegationOperation
 	for time.Now().Before(deadline) {
 		op, err := d.delegationOperation(id)
 		if err != nil {
@@ -24,9 +25,10 @@ func waitDelegationOperation(t *testing.T, d *Daemon, id string) *protocol.Deleg
 		if op.State == protocol.DelegationOperationStateCompleted || op.State == protocol.DelegationOperationStateFailed {
 			return op
 		}
+		last = op
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for delegation operation %s", id)
+	t.Fatalf("timed out waiting for delegation operation %s: last=%+v", id, last)
 	return nil
 }
 

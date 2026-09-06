@@ -1,1 +1,2 @@
-Present an approach and wait for agreement.
+Present the recommended plan, open decisions, and verification strategy. Wait for agreement before implementation.
+

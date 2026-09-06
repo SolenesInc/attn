@@ -1,1 +1,2 @@
-Implement the agreed change, run the required verification, and carry the work to completion. Follow the current repository and user rules for approvals, publishing, merging, and deployment.
+Take responsibility for the agreed outcome from the current state through completion. Inspect what already exists, implement or fix what remains, run the required verification, keep the change current, and address actionable review or CI feedback. Follow the current user and repository rules for commits, publishing, merging, releases, and deployments. Do not declare completion while a required gate is pending.
+

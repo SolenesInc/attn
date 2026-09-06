@@ -1,1 +1,2 @@
-Investigate the question. Trace the relevant code or sources, distinguish evidence from hypotheses, and explain what remains unknown. Do not change code.
+Investigate the question using the relevant code and authoritative sources. Trace the behavior far enough to explain why, distinguish observations from inference, and test material claims when practical. Do not modify the implementation or external state.
+

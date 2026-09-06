@@ -10,7 +10,6 @@ Native subagents report to the calling agent. Attn delegation creates a visible,
 full interactive agent session for the user: an agent they can inspect, converse
 with, and steer directly. Use it when the user requests it or your assigned
 task or role authorizes it. Use native subagents for internal subtasks.
-Configured preferences never grant delegation authority.
 
 Interpret the requested object first:
 
@@ -94,17 +93,23 @@ all model choices and their conditions, and the unmatched-work fallback. It
 includes the configuration revision. `--json` provides the same data as JSON.
 There is no separate role-detail lookup.
 
-If the response is nonempty and other instructions define another delegation
-router, role catalog, or model-selection policy, both systems are active. Stop
-before delegating and tell the user about the conflict. Recommend disabling attn
-preferences in Settings > Delegation or removing the other instructions.
+If the response lists one or more roles or an unmatched-work fallback and other
+instructions define another delegation router, role catalog, or model-selection
+policy, both systems are active. Stop before delegating and tell the user about
+the conflict. Recommend disabling attn preferences in Settings > Delegation or
+removing the other instructions.
 
-Choose the role that fits the task and an alternative whose condition fits,
-or its default choice. Roles describe the work; choices set the harness,
-provider, model, and effort. Keep the task's scope and approval boundaries.
-If no role fits, use the configured fallback. If the request needs missing
-configuration, direct the user to Settings > Delegation. An empty response
-leaves existing custom routing and direct delegation available.
+Keep related work together when one agent can own it coherently; do not create a
+separate session for every small task. Roles are alternative routes for delegated
+work, not a pipeline. Choose the role that fits each delegated unit of work. Split
+work across several sessions only when the user asks for that split or the assigned
+scope authorizes it and the split is independently useful. Choose an alternative
+whose condition fits, or use the role's default choice. Roles describe the work;
+choices set the harness, provider, model, and effort. Keep the task's scope and
+approval boundaries. If no role fits, use the configured fallback. If the request
+needs missing configuration, direct the user to Settings > Delegation. A response
+with no roles or fallback leaves existing custom routing and direct delegation
+available.
 
     attn delegate --brief-file "$brief_file" --role <role-id> --preferences-revision <revision>
     attn delegate --brief-file "$brief_file" --role <role-id> --choice <choice-id> --preferences-revision <revision>

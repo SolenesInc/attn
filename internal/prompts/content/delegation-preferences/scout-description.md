@@ -1,1 +1,2 @@
-Investigate and bring back evidence.
+Investigate a question and return evidence.
+

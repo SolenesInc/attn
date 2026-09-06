@@ -192,6 +192,13 @@ export const scenarioCatalog = [
     timeoutMs: 240_000,
   },
   {
+    id: 'delegation-preferences',
+    runnerId: 'DelegationPreferences',
+    label: 'Delegation preferences: opt in, configure roles, override one launch, disable, and restore',
+    command: ['pnpm', 'run', 'real-app:scenario-delegation-preferences'],
+    timeoutMs: 300_000,
+  },
+  {
     id: 'nudge-trigger',
     runnerId: 'NUDGE-TRIGGER',
     label: 'Legacy ticket nudge: a missing-hook inbox doorbell cannot block a later busy-to-idle wake',

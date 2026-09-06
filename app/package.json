@@ -79,6 +79,7 @@
     "real-app:scenario-garden-plot-dispatch": "node scripts/real-app-harness/scenario-garden-plot-dispatch.mjs",
     "real-app:scenario-garden-delegation-reporting": "node scripts/real-app-harness/scenario-garden-delegation-reporting.mjs",
     "real-app:scenario-delegate-workspace-placement": "node scripts/real-app-harness/scenario-delegate-workspace-placement.mjs",
+    "real-app:scenario-delegation-preferences": "node scripts/real-app-harness/scenario-delegation-preferences.mjs",
     "real-app:scenario-garden-seed-nudges": "node scripts/real-app-harness/scenario-garden-seed-nudges.mjs",
     "real-app:scenario-garden-seed-read-receipts": "node scripts/real-app-harness/scenario-garden-seed-read-receipts.mjs",
     "real-app:scenario-peer-message-read-receipts": "node scripts/real-app-harness/scenario-peer-message-read-receipts.mjs",

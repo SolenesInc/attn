@@ -1,1 +1,2 @@
-Carry agreed work through to completion.
+Carry agreed work through its delivery gates.
+

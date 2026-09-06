@@ -53,3 +53,7 @@ reference. The launch hint also stops agents when attn preferences overlap with
 another configured delegation system. The always-present Garden command primer
 was removed. These edits replace only the corresponding source text in the
 captured expectations.
+
+Delegated-seed expectations carry the adaptive update and result-reporting
+contract. The corresponding daemon expectations were edited only at that source
+text boundary.

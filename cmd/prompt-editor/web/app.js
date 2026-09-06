@@ -418,10 +418,15 @@ function renderFullText(baseLabel, currentLabel) {
   if (!state.reviewTarget) return;
   const source = state.reviewTarget === "source";
   const base = $("review-version").value === "base";
+  const editable = source && !base && Object.hasOwn(state.catalog.sources, state.path) && !collaboration?.readonly();
   $("review-title").textContent = source ? state.path || "No source selected" : state.key;
   $("review-context").textContent = source ? state.key : $("saved-scenario").selectedOptions[0]?.textContent || "Custom inputs";
   $("review-full-label").textContent = base ? baseLabel : currentLabel;
   $("review-full-text").setAttribute("aria-label", source ? "Full source text" : "Full composed prompt");
+  $("review-full-text").readOnly = !editable;
+  $("review-save").hidden = !editable;
+  $("review-save").disabled = !state.drafts.has(state.path) || state.saving;
+  $("review-save").textContent = collaboration?.active() ? "Apply draft" : "Save file";
   let text;
   if (base && !state.base) text = "Choose a base above to read its full text.";
   else if (source) {
@@ -434,7 +439,7 @@ function renderFullText(baseLabel, currentLabel) {
       ? "This event does not exist in this revision." : side.result?.text ?? "Preview unavailable.");
   } else text = $("copy").disabled ? "Updating preview…" : state.result?.text ?? "Preview unavailable.";
   const content = text || "(No content for these inputs.)";
-  if ($("review-full-text").textContent !== content) $("review-full-text").textContent = content;
+  if ($("review-full-text").value !== content) $("review-full-text").value = content;
 }
 function openComparison(target) {
   state.reviewTarget = target;
@@ -555,7 +560,7 @@ async function loadRefs() {
       option.label = ref;
       $("base-refs").append(option);
     }
-    if (data.default && !collaboration.active()) {
+    if (data.default && !collaboration.active() && !$("base-ref").value.trim()) {
       $("base-ref").value = data.default.replace(/^refs\/(heads|remotes)\//, "");
       await selectBase();
     }
@@ -591,18 +596,26 @@ async function save() {
     status();
   }
 }
-$("source").addEventListener("input", () => {
+function editSource(text) {
   const path = state.path;
-  if ($("source").value === state.catalog.sources[path].text)
+  $("source").value = text;
+  if (text === state.catalog.sources[path].text)
     state.drafts.delete(path);
-  else state.drafts.set(path, $("source").value);
+  else state.drafts.set(path, text);
   state.errors.delete(path);
-  collaboration?.edited(path, $("source").value);
+  collaboration?.edited(path, text);
   status();
   renderNavigation();
   schedulePreview();
+}
+$("source").addEventListener("input", () => {
+  editSource($("source").value);
+});
+$("review-full-text").addEventListener("input", () => {
+  editSource($("review-full-text").value);
 });
 $("save").addEventListener("click", save);
+$("review-save").addEventListener("click", save);
 $("reset").addEventListener("click", async () => {
   try { if (await collaboration?.reset()) return; }
   catch (error) { state.errors.set(state.path, error.message); status(); return; }

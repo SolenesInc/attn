@@ -1,1 +1,2 @@
-Implement, verify, and present for review.
+Implement an agreed change and make it ready for review.
+

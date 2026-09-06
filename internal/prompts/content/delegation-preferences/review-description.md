@@ -1,1 +1,2 @@
-Understand a change and assess its risks.
+Assess a change for correctness, regressions, and risk.
+
