@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
@@ -476,9 +475,8 @@ func (d *Daemon) continuationForSeed(seed garden.Seed) *seedContinuation {
 		continuation.HandoverPlacement = handoverReuseCwd
 		return continuation
 	}
-	driver := agentdriver.Get(agentName)
-	if !agentdriver.ResumeAvailable(driver, resumeID) {
-		continuation.ResumeReason = "the original conversation is unavailable"
+	if ok, reason := d.conversationResumable(agentName, resumeID); !ok {
+		continuation.ResumeReason = "the original conversation is unavailable: " + reason
 		continuation.HandoverPlacement = handoverReuseCwd
 		return continuation
 	}

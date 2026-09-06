@@ -44,18 +44,20 @@ type activePluginRun struct {
 }
 
 type pluginDriverSpawnParams struct {
-	Agent         string                    `json:"agent"`
-	SessionID     string                    `json:"session_id"`
-	RunID         string                    `json:"run_id"`
-	CWD           string                    `json:"cwd"`
-	Label         string                    `json:"label,omitempty"`
-	Yolo          bool                      `json:"yolo,omitempty"`
-	Model         string                    `json:"model,omitempty"`
-	Effort        string                    `json:"effort,omitempty"`
-	InitialPrompt string                    `json:"initial_prompt,omitempty"`
-	Metadata      json.RawMessage           `json:"metadata,omitempty"`
-	Instructions  *pluginLaunchInstructions `json:"instructions,omitempty"`
-	AutoMode      *automode.Config          `json:"auto_mode,omitempty"`
+	Agent         string          `json:"agent"`
+	SessionID     string          `json:"session_id"`
+	RunID         string          `json:"run_id"`
+	CWD           string          `json:"cwd"`
+	Label         string          `json:"label,omitempty"`
+	Yolo          bool            `json:"yolo,omitempty"`
+	Model         string          `json:"model,omitempty"`
+	Effort        string          `json:"effort,omitempty"`
+	InitialPrompt string          `json:"initial_prompt,omitempty"`
+	Metadata      json.RawMessage `json:"metadata,omitempty"`
+	// The agent-native conversation to pick up; set on driver.resume only.
+	ResumeSessionID string                    `json:"resume_session_id,omitempty"`
+	Instructions    *pluginLaunchInstructions `json:"instructions,omitempty"`
+	AutoMode        *automode.Config          `json:"auto_mode,omitempty"`
 }
 
 type pluginDriverSpawnResult struct {
@@ -86,6 +88,8 @@ type pluginReportMetadataParams struct {
 	RunID     string          `json:"run_id"`
 	Seq       uint64          `json:"seq"`
 	Metadata  json.RawMessage `json:"metadata"`
+	// The agent-native conversation id the daemon keeps as the session's resume identity.
+	ResumeSessionID string `json:"resume_session_id,omitempty"`
 }
 
 type pluginDriverSessionClosedParams struct {
@@ -484,6 +488,9 @@ func (d *Daemon) applyPluginReportedMetadata(params pluginReportMetadataParams) 
 		d.logf("plugin metadata report discarded: session=%s run=%s seq=%d", params.SessionID, params.RunID, params.Seq)
 		return false
 	}
+	if resumeID := strings.TrimSpace(params.ResumeSessionID); resumeID != "" {
+		d.persistResumeSessionID(params.SessionID, resumeID)
+	}
 	return true
 }
 
@@ -665,9 +672,15 @@ func (d *Daemon) resolvePluginDriverLaunch(reg pluginDriverRegistration, params 
 	if resume && !reg.Capabilities["resume"] {
 		return pluginDriverSpawnResult{}, fmt.Errorf("agent %q does not support resume", reg.Agent)
 	}
+	if params.ResumeSessionID != "" && !reg.Capabilities["resume"] {
+		return pluginDriverSpawnResult{}, fmt.Errorf("agent %q cannot pick up conversation %s: its driver does not support resume", reg.Agent, params.ResumeSessionID)
+	}
 	method := "driver.spawn"
 	if resume {
 		method = "driver.resume"
+		params.ResumeSessionID = strings.TrimSpace(params.ResumeSessionID)
+	} else {
+		params.ResumeSessionID = ""
 	}
 	var result pluginDriverSpawnResult
 	ctx, cancel := context.WithTimeout(context.Background(), pluginDriverCallTimeout)

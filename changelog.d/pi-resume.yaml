@@ -1,0 +1,11 @@
+kind: added
+area: agents
+change: A closed pi session reopens into the same pi conversation, and a seed tended by pi resumes it.
+symptom: >
+  Reopening a closed pi session, or resuming a seed whose tender ran on pi,
+  said there was nothing to resume and started a fresh conversation.
+notes: >
+  The pi driver now reports its pi session id as the session's resume identity,
+  and a spawn with an explicit resume id reaches the driver, so `attn seed
+  set-resume` works for pi too. Plugin drivers that advertise resume count as
+  resumable; the daemon cannot see their storage.

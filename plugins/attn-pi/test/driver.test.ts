@@ -195,6 +195,7 @@ describe("PiDriver", () => {
         pi_session_id: sessionID,
         pi_version: "0.80.10",
       },
+      resume_session_id: sessionID,
     });
   });
 
@@ -344,6 +345,50 @@ describe("PiDriver", () => {
     await expect(driver.resume(params({ metadata: { schema: 1, pi_version: "0.80.10" } }))).rejects.toThrow();
   });
 
+  test("spawn reports the new pi session id as the session's resume identity", async () => {
+    const rpc = new FakeRPC();
+    const driver = newDriver({ rpc, runCommand: fakeRunCommand(), executable: "pi" });
+
+    await driver.spawn(params());
+
+    const report = rpc.requests.find((call) => call.method === "session.report_metadata");
+    expect(report?.params.resume_session_id).toMatch(uuidPattern);
+    expect(report?.params.resume_session_id).toBe(report?.params.metadata.pi_session_id);
+  });
+
+  test("resume with only a resume_session_id opens that pi session on the installed pi", async () => {
+    const rpc = new FakeRPC();
+    const driver = newDriver({ rpc, runCommand: fakeRunCommand({ stdout: "0.83.0\n" }), executable: "pi" });
+
+    const result = await driver.resume(params({ resume_session_id: "conv-from-seed", model: "m1" }));
+
+    expect(result.argv).toEqual(["pi", "--session-id", "conv-from-seed", "--model", "m1", "-e", suitePath]);
+    const report = rpc.requests.find((call) => call.method === "session.report_metadata");
+    expect(report?.params.metadata).toEqual({ schema: 1, pi_session_id: "conv-from-seed", pi_version: "0.83.0", model: "m1" });
+    expect(report?.params.resume_session_id).toBe("conv-from-seed");
+  });
+
+  test("resume prefers an explicit resume_session_id over the metadata's pi session, keeping the pins", async () => {
+    const rpc = new FakeRPC();
+    const driver = newDriver({ rpc, runCommand: fakeRunCommand(), executable: "pi" });
+
+    const result = await driver.resume(
+      params({
+        resume_session_id: "other-conv",
+        metadata: { schema: 1, pi_session_id: "abc-123", pi_version: "0.80.10", model: "m1", thinking: "low" },
+      }),
+    );
+
+    expect(result.argv).toEqual(["pi", "--session-id", "other-conv", "--model", "m1", "--thinking", "low", "-e", suitePath]);
+  });
+
+  test("resume with neither metadata nor a resume_session_id says what it needs", async () => {
+    const rpc = new FakeRPC();
+    const driver = newDriver({ rpc, runCommand: fakeRunCommand(), executable: "pi" });
+
+    await expect(driver.resume(params())).rejects.toThrow(/resume_session_id/);
+  });
+
   test("resume never includes an initial prompt in argv", async () => {
     const rpc = new FakeRPC();
     const driver = newDriver({ rpc, runCommand: fakeRunCommand(), executable: "pi" });
@@ -469,6 +514,7 @@ describe("PiDriver", () => {
         run_id: "run-1",
         seq: 3,
         metadata: { schema: 1, pi_session_id: "native-2", pi_version: "0.84.2", model: "glm-5.3" },
+        resume_session_id: "native-2",
       });
     });
 

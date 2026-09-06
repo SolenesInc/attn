@@ -168,6 +168,11 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 		d.logf("spawn: explicit resume target %s for session %s is not resumable; using resume picker", req.resumeSessionID, msg.ID)
 		req.resumeSessionID = ""
 	}
+	// Only a driver that can resume is handed the stored id: a spawn-only driver
+	// relaunches fresh, and would otherwise be refused for an id nobody asked for.
+	if req.existingSession != nil && req.hasPluginDriver && req.resumeSessionID == "" && req.pluginDriver.Capabilities["resume"] {
+		req.resumeSessionID = d.store.GetResumeSessionID(msg.ID)
+	}
 	if req.existingSession != nil && !req.hasPluginDriver {
 		req.resumeSessionID = agentdriver.ResolveSpawnResumeSessionID(req.driver, req.existingSession.ID, req.resumeSessionID, d.store.GetResumeSessionID(msg.ID))
 		// Claude writes its transcript lazily, so a session that booted but was never
@@ -279,15 +284,16 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.spawnOpts.LifecycleID = plan.pluginRunID
 		d.beginPluginSessionLaunch(msg.ID, req.pluginDriver.PluginName, plan.pluginRunID)
 		params := pluginDriverSpawnParams{
-			Agent:         req.agent,
-			SessionID:     msg.ID,
-			RunID:         plan.pluginRunID,
-			CWD:           req.cwd,
-			Label:         req.label,
-			Yolo:          protocol.Deref(msg.YoloMode),
-			Model:         plan.spawnOpts.Model,
-			Effort:        plan.spawnOpts.Effort,
-			InitialPrompt: req.initialPrompt,
+			Agent:           req.agent,
+			SessionID:       msg.ID,
+			RunID:           plan.pluginRunID,
+			CWD:             req.cwd,
+			Label:           req.label,
+			Yolo:            protocol.Deref(msg.YoloMode),
+			Model:           plan.spawnOpts.Model,
+			Effort:          plan.spawnOpts.Effort,
+			InitialPrompt:   req.initialPrompt,
+			ResumeSessionID: strings.TrimSpace(req.resumeSessionID),
 		}
 		if metadata := strings.TrimSpace(d.store.GetAgentMetadata(msg.ID)); metadata != "" && json.Valid([]byte(metadata)) {
 			params.Metadata = json.RawMessage(metadata)
@@ -315,7 +321,10 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			cfg = d.autoModeConfigForSession(cfg, params.CWD)
 			params.AutoMode = &cfg
 		}
-		result, err := d.resolvePluginDriverLaunch(req.pluginDriver, params, req.existingSession != nil && req.pluginDriver.Capabilities["resume"])
+		// A relaunch of a known session or an explicit conversation id resumes; a
+		// driver without the capability relaunches fresh and refuses the explicit ask.
+		resume := req.pluginDriver.Capabilities["resume"] && (req.existingSession != nil || params.ResumeSessionID != "")
+		result, err := d.resolvePluginDriverLaunch(req.pluginDriver, params, resume)
 		if err != nil {
 			d.finishPluginSessionLaunch(msg.ID, false)
 			plan.rollback(d, msg.ID)

@@ -155,20 +155,28 @@ export class PiDriver {
   async resume(params: DriverSpawnParams): Promise<DriverSpawnResult> {
     const availability = await this.requireAvailability();
     const suitePath = this.requireSuitePath();
-    const previous = parsePiMetadata(params.metadata);
-    const installed = parseStableVersion(availability.version);
-    const recorded = parseStableVersion(previous.pi_version);
-    if (compareVersion(installed, recorded) < 0) {
-      throw new Error(
-        `installed pi ${installed.raw} is older than the ${recorded.raw} this session last ran on; upgrade pi or point ATTN_PI_EXECUTABLE at a matching build`,
-      );
+    const requested = cleanOptional(params.resume_session_id);
+    const previous = params.metadata === undefined ? undefined : parsePiMetadata(params.metadata);
+    if (previous === undefined && requested === undefined) {
+      throw new Error("resume needs the session's pi metadata or a resume_session_id naming the pi session to pick up");
     }
+    if (previous !== undefined) {
+      const installed = parseStableVersion(availability.version);
+      const recorded = parseStableVersion(previous.pi_version);
+      if (compareVersion(installed, recorded) < 0) {
+        throw new Error(
+          `installed pi ${installed.raw} is older than the ${recorded.raw} this session last ran on; upgrade pi or point ATTN_PI_EXECUTABLE at a matching build`,
+        );
+      }
+    }
+    // An explicit id is attn pointing this session at a conversation (a seed's
+    // saved resume, a reopened session); it outranks what the row last held.
     const metadata: PiMetadata = {
       schema: 1,
-      pi_session_id: previous.pi_session_id,
+      pi_session_id: requested ?? previous!.pi_session_id,
       pi_version: availability.version,
-      model: cleanOptional(params.model) ?? previous.model,
-      thinking: thinkingFor(params.effort) ?? previous.thinking,
+      model: cleanOptional(params.model) ?? previous?.model,
+      thinking: thinkingFor(params.effort) ?? previous?.thinking,
     };
     const run = this.createRun(requireText(params.session_id, "session_id"), requireText(params.run_id, "run_id"), metadata);
     await this.reportMetadata(run);
@@ -437,12 +445,15 @@ export class PiDriver {
     return argv;
   }
 
+  /** The pi session id doubles as attn's resume identity for the session, so a
+   * closed session or a seed can find its way back to this conversation. */
   private async reportMetadata(run: RunState): Promise<void> {
     await this.rpc.request("session.report_metadata", {
       session_id: run.sessionID,
       run_id: run.runID,
       seq: this.nextSeq(run),
       metadata: run.metadata,
+      resume_session_id: run.metadata.pi_session_id,
     });
   }
 
