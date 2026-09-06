@@ -1,7 +1,7 @@
 kind: fixed
 area: sessions
 change: >
-  Pi and nisse sessions get an automatic title like the native agents do.
+  Pi sessions get an automatic title like the native agents do.
   Their initial prompt and steered turns now reach the title path, and the
   title is generated through the first available native CLI (Claude, then
   Codex, then Copilot) since plugin agents have no headless mode of their own.

@@ -836,7 +836,6 @@ func TestTitleProviderAgent_PrefersSessionAgentThenFallsBack(t *testing.T) {
 		{"codex", "codex"},
 		{"copilot", "copilot"},
 		{"pi", "claude"},
-		{"nisse", "claude"},
 		{"shell", "claude"},
 		{"unknown-agent", "claude"},
 		{"", "claude"},

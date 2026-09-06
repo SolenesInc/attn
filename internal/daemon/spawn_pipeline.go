@@ -389,7 +389,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	// Codex reports no permission mode to the daemon at any point, so without this
 	// its guardian would be invisible — the arrangement the dwell exists for.
 	d.recordReviewerEvidence(msg.ID, plan.spawnOpts.ApprovalRoute.ReviewerInLoop())
-	// Hook-less suites (pi/nisse) never emit UserPromptSubmit, so without this
+	// Plugin suites such as pi never emit UserPromptSubmit, so without this
 	// their initial prompt would never reach the title path. Hook agents dedupe.
 	if strings.TrimSpace(req.initialPrompt) != "" {
 		d.maybeGenerateSessionTitleFromPrompt(msg.ID, req.initialPrompt, sessionInputOrigin{})
