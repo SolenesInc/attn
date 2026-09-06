@@ -73,7 +73,21 @@ func newKittySpawnCmd(t *testing.T, id, payload, script string) *kittySpawn {
 			return true
 		},
 		nil,
-		OnPlacements(func(update PlacementUpdate) { spawn.updates <- update }),
+		// The read loop must never wait on a test that stopped draining: a full
+		// buffer sheds its oldest update and keeps the newest for a waiting reader.
+		OnPlacements(func(update PlacementUpdate) {
+			for {
+				select {
+				case spawn.updates <- update:
+					return
+				default:
+					select {
+					case <-spawn.updates:
+					default:
+					}
+				}
+			}
+		}),
 	); err != nil {
 		t.Fatalf("Attach() error: %v", err)
 	}
