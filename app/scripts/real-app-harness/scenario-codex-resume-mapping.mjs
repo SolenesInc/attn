@@ -466,11 +466,11 @@ async function main() {
       });
       const hookContext = JSON.parse(hookOutput)?.hookSpecificOutput?.additionalContext || '';
       runner.assert(
-        hookContext.includes('`attn delegate` creates a visible agent session') &&
+        hookContext.includes('Attn delegation starts a separate agent session') &&
           hookContext.includes('ready now'),
         'a pathless root hook still emits agent and Garden guidance',
         {
-          hasAgentGuidance: hookContext.includes('`attn delegate` creates a visible agent session'),
+          hasAgentGuidance: hookContext.includes('Attn delegation starts a separate agent session'),
           hasGardenPrime: hookContext.includes('ready now'),
         }
       );

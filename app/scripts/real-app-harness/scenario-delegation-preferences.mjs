@@ -8,7 +8,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, profileCliEnv, socketPathForProfile } from './harnessProfile.mjs';
 import { appDaemonInTree, delay } from './platform.mjs';
-import { captureScreenshotData } from './nativeWindowCapture.mjs';
+import { captureFrontWindowScreenshot, captureScreenshotData } from './nativeWindowCapture.mjs';
 import { captureWebKitPids, readLiveDaemonPid, readProcessTable, snapshot, readAppFootprint } from './perfMeasure.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
@@ -33,7 +33,21 @@ async function save() {
   await click('[data-testid="delegation-save"]');
   await until(async () => !(await text()).includes('Unsaved changes') && !(await text()).includes('Saving…'), 'preferences saved');
 }
-async function screenshot(name) { await captureScreenshotData(path.join(runner.runDir, name), { client }); }
+async function screenshot(name) {
+  const outputPath = path.join(runner.runDir, name);
+  try {
+    await captureScreenshotData(outputPath, { client });
+  } catch (domError) {
+    try {
+      await captureFrontWindowScreenshot(outputPath, { client, appPath: options.appPath });
+    } catch (nativeError) {
+      runner.writeText(`${name}.skipped.txt`, [
+        `DOM screenshot unavailable: ${domError.message}`,
+        `Native screenshot unavailable: ${nativeError.message}`,
+      ].join('\n'));
+    }
+  }
+}
 function preferencesRequest(cmd, preferences) {
   const request_id = crypto.randomUUID();
   return new Promise((resolve, reject) => {
