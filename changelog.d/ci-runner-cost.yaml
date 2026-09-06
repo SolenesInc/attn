@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: CI runs on free GitHub-hosted runners by default and spends Blacksmith minutes only on jobs where a faster runner shortens a PR's wait.
