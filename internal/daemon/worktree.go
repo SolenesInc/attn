@@ -185,7 +185,9 @@ func (d *Daemon) discoverWorktree(path string) *store.Worktree {
 }
 
 type deleteWorktreeOptions struct {
-	Force bool
+	Force         bool
+	RemovalAction string
+	RemovalReason string
 }
 
 type deleteWorktreeFailureKind string
@@ -239,6 +241,9 @@ func (d *Daemon) doDeleteWorktree(path string, endpointID *string, opts deleteWo
 	// worktree still exists. Preserve it before a provider or Git removes the path.
 	d.captureGardenExecutionsInDirectory(path)
 
+	// Read before the row goes: nothing afterwards can say which seeds worked here.
+	seeds := d.seedsForWorktree(wt)
+
 	branch := wt.Branch
 	mainRepo := wt.MainRepo
 
@@ -253,6 +258,7 @@ func (d *Daemon) doDeleteWorktree(path string, endpointID *string, opts deleteWo
 	}
 
 	d.finalizeDeletedWorktree(path, mainRepo, branch)
+	d.recordWorktreeRemoval(wt, seeds, opts, time.Now())
 	return nil
 }
 

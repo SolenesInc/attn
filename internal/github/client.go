@@ -680,3 +680,54 @@ func (c *Client) MergePR(repo string, number int, method string) error {
 func (c *Client) Host() string {
 	return c.host
 }
+
+type MergedPullRequest struct {
+	Number   int
+	URL      string
+	HeadRef  string
+	HeadSHA  string
+	BaseRef  string
+	MergedAt string
+}
+
+// Past what the measured repositories carry. Receipt in docs/worktree-sweep.md.
+const mergedPullRequestPageLimit = 3
+
+func (c *Client) ListMergedPullRequests(repo string) ([]MergedPullRequest, error) {
+	var merged []MergedPullRequest
+	for page := 1; page <= mergedPullRequestPageLimit; page++ {
+		path := fmt.Sprintf("/repos/%s/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=%d", repo, page)
+		body, err := c.doRequest("GET", path, nil)
+		if err != nil {
+			return nil, fmt.Errorf("list merged pull requests: %w", err)
+		}
+		var response []struct {
+			Number   int    `json:"number"`
+			HTMLURL  string `json:"html_url"`
+			MergedAt string `json:"merged_at"`
+			Head     struct {
+				Ref string `json:"ref"`
+				SHA string `json:"sha"`
+			} `json:"head"`
+			Base struct {
+				Ref string `json:"ref"`
+			} `json:"base"`
+		}
+		if err := json.Unmarshal(body, &response); err != nil {
+			return nil, fmt.Errorf("parse merged pull requests: %w", err)
+		}
+		for _, pr := range response {
+			if pr.MergedAt == "" {
+				continue
+			}
+			merged = append(merged, MergedPullRequest{
+				Number: pr.Number, URL: pr.HTMLURL, HeadRef: pr.Head.Ref, HeadSHA: pr.Head.SHA,
+				BaseRef: pr.Base.Ref, MergedAt: pr.MergedAt,
+			})
+		}
+		if len(response) < 100 {
+			break
+		}
+	}
+	return merged, nil
+}
