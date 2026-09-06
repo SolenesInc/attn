@@ -279,6 +279,20 @@ func autoModeRuleTokens(pattern []string) []automode.PatternToken {
 	return tokens
 }
 
+// A removal names a rule that is already stored, so it carries every alternative:
+// "git {push|pull}" and "git push" are two rules and only one is meant.
+func autoModeFullPatternTokens(pattern [][]string) []automode.PatternToken {
+	tokens := make([]automode.PatternToken, 0, len(pattern))
+	for _, alternatives := range pattern {
+		trimmed := make([]string, 0, len(alternatives))
+		for _, alternative := range alternatives {
+			trimmed = append(trimmed, strings.TrimSpace(alternative))
+		}
+		tokens = append(tokens, automode.Token(trimmed...))
+	}
+	return tokens
+}
+
 func nonNilCommands(commands [][]string) [][]string {
 	if commands == nil {
 		return [][]string{}

@@ -7,7 +7,7 @@ import type {
 } from './daemonAutoModeEvents';
 import { useAutoModePushStore } from '../store/autoMode';
 
-export type AutoModeEditKind = 'rule' | 'host' | 'policy';
+export type AutoModeEditKind = 'rule' | 'host' | 'policy' | 'legacy';
 
 export interface AutoModeRuleDraft {
   pattern: string[];
@@ -26,10 +26,11 @@ export interface AutoModePolicy {
   discard: (id: number) => Promise<void>;
 
   addRule: (draft: AutoModeRuleDraft) => Promise<void>;
-  removeRule: (pattern: string[]) => Promise<void>;
+  removeRule: (pattern: string[][]) => Promise<void>;
   addHost: (host: string, decision: string) => Promise<void>;
   removeHost: (host: string, decision: string) => Promise<void>;
   setPolicy: (edit: AutoModePolicyEdit) => Promise<void>;
+  dismissLegacy: (pattern: string) => Promise<void>;
   editing: AutoModeEditKind | null;
 
   setEnvironmentSlot: (id: string, values: string[]) => Promise<void>;
@@ -43,10 +44,11 @@ interface AutoModePolicyOptions {
   promoteProposal: (id: number) => Promise<AutoModePromotion>;
   discardProposal: (id: number) => Promise<AutoModePromotion>;
   addRule: (pattern: string[], decision: string, justification: string) => Promise<AutoModeConfigEdit>;
-  removeRule: (pattern: string[]) => Promise<AutoModeConfigEdit>;
+  removeRule: (pattern: string[][]) => Promise<AutoModeConfigEdit>;
   addHost: (host: string, decision: string) => Promise<AutoModeConfigEdit>;
   removeHost: (host: string, decision: string) => Promise<AutoModeConfigEdit>;
   setPolicy: (edit: AutoModePolicyEdit) => Promise<AutoModeConfigEdit>;
+  dismissLegacy: (pattern: string) => Promise<AutoModeConfigEdit>;
   setEnvironmentSlot: (slot: string, values: string[]) => Promise<AutoModeConfigEdit>;
 }
 
@@ -58,6 +60,7 @@ export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolic
     enabled, getState, promoteProposal, discardProposal,
     addRule: writeRule, removeRule: dropRule,
     addHost: writeHost, removeHost: dropHost, setPolicy: writePolicy,
+    dismissLegacy: dropLegacy,
     setEnvironmentSlot: writeEnvironmentSlot,
   } = options;
   const [state, setState] = useState<AutoModeState | null>(null);
@@ -130,8 +133,12 @@ export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolic
     [edit, writeRule],
   );
   const removeRule = useCallback(
-    (pattern: string[]) => edit('rule', () => dropRule(pattern)),
+    (pattern: string[][]) => edit('rule', () => dropRule(pattern)),
     [edit, dropRule],
+  );
+  const dismissLegacy = useCallback(
+    (pattern: string) => edit('legacy', () => dropLegacy(pattern)),
+    [edit, dropLegacy],
   );
   const addHost = useCallback(
     (host: string, decision: string) => edit('host', () => writeHost(host, decision)),
@@ -194,6 +201,7 @@ export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolic
     addHost,
     removeHost,
     setPolicy,
+    dismissLegacy,
     editing,
     setEnvironmentSlot,
     savingEnvironment,

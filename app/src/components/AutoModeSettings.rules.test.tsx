@@ -51,10 +51,11 @@ const edited = (): AutoModeConfigEdit => ({ config: config() });
 
 type Writers = {
   addRule: (pattern: string[], decision: string, justification: string) => Promise<AutoModeConfigEdit>;
-  removeRule: (pattern: string[]) => Promise<AutoModeConfigEdit>;
+  removeRule: (pattern: string[][]) => Promise<AutoModeConfigEdit>;
   addHost: (host: string, decision: string) => Promise<AutoModeConfigEdit>;
   removeHost: (host: string, decision: string) => Promise<AutoModeConfigEdit>;
   setPolicy: (edit: AutoModePolicyEdit) => Promise<AutoModeConfigEdit>;
+  dismissLegacy: (pattern: string) => Promise<AutoModeConfigEdit>;
 };
 
 function Harness(props: { getState: () => Promise<AutoModeState> } & Partial<Writers>) {
@@ -67,6 +68,7 @@ function Harness(props: { getState: () => Promise<AutoModeState> } & Partial<Wri
     addHost: vi.fn().mockResolvedValue(edited()),
     removeHost: vi.fn().mockResolvedValue(edited()),
     setPolicy: vi.fn().mockResolvedValue(edited()),
+    dismissLegacy: vi.fn().mockResolvedValue(edited()),
     setEnvironmentSlot: vi.fn().mockResolvedValue(edited()),
     ...props,
   });
@@ -81,6 +83,7 @@ function renderPane(value: AutoModeState, over: Partial<Writers> = {}) {
     addHost: over.addHost ?? vi.fn().mockResolvedValue(edited()),
     removeHost: over.removeHost ?? vi.fn().mockResolvedValue(edited()),
     setPolicy: over.setPolicy ?? vi.fn().mockResolvedValue(edited()),
+    dismissLegacy: over.dismissLegacy ?? vi.fn().mockResolvedValue(edited()),
   };
   render(<Harness getState={getState} {...writers} />);
   return { getState, ...writers };
@@ -145,8 +148,43 @@ describe('AutoModeSettings rules', () => {
     await screen.findByTestId('automode-rules-remove');
 
     fireEvent.click(screen.getByTestId('automode-rules-remove'));
-    await waitFor(() => expect(removeRule).toHaveBeenCalledWith(['git', 'status']));
+    await waitFor(() => expect(removeRule).toHaveBeenCalledWith([['git'], ['status']]));
     await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
+  });
+
+  // "git push" and "git {push|pull}" are two rules: sending the first alternative
+  // of each token would name the wrong one.
+  it('removes a rule with alternatives by its whole pattern', async () => {
+    const alternatives = rule({ pattern: [['git'], ['push', 'pull']], decision: 'prompt' });
+    const { removeRule } = renderPane(state({
+      config: config({ rules: [rule({ pattern: [['git'], ['push']] }), alternatives] }),
+    }));
+    await screen.findByTestId('automode-rules');
+
+    fireEvent.click(screen.getByLabelText('Remove git {push|pull}'));
+    await waitFor(() => expect(removeRule).toHaveBeenCalledWith([['git'], ['push', 'pull']]));
+  });
+
+  it('dismisses a pattern nothing converted', async () => {
+    const { dismissLegacy, getState } = renderPane(state({
+      config: config({ legacy_patterns: ['git status*', '*curl*'] }),
+    }));
+    await screen.findByTestId('automode-legacy');
+
+    expect(screen.getAllByTestId('automode-legacy-entry')).toHaveLength(2);
+    fireEvent.click(screen.getByLabelText('Dismiss *curl*'));
+    await waitFor(() => expect(dismissLegacy).toHaveBeenCalledWith('*curl*'));
+    await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
+  });
+
+  it('shows a refused dismissal beside the list', async () => {
+    const dismissLegacy = vi.fn().mockRejectedValue(new Error('"*curl*" is not on the list'));
+    renderPane(state({ config: config({ legacy_patterns: ['*curl*'] }) }), { dismissLegacy });
+    await screen.findByTestId('automode-legacy');
+
+    fireEvent.click(screen.getByTestId('automode-legacy-dismiss'));
+    await waitFor(() => expect(screen.getByTestId('automode-legacy'))
+      .toHaveTextContent('is not on the list'));
   });
 
   // A shipped rule resolves in at read and is never stored, so it must not offer a Remove.

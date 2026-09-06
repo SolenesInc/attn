@@ -55,6 +55,7 @@ function Harness({ getState }: { getState: () => Promise<AutoModeState> }) {
     addHost: vi.fn().mockResolvedValue({ config: config() } as AutoModeConfigEdit),
     removeHost: vi.fn().mockResolvedValue({ config: config() } as AutoModeConfigEdit),
     setPolicy: vi.fn().mockResolvedValue({ config: config() } as AutoModeConfigEdit),
+    dismissLegacy: vi.fn().mockResolvedValue({ config: config() } as AutoModeConfigEdit),
     setEnvironmentSlot: vi.fn().mockResolvedValue({ config: config() } as AutoModeConfigEdit),
   });
   return <AutoModeSettings policy={policy} />;

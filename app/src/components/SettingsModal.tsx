@@ -209,6 +209,7 @@ export function SettingsModal({
     sendAutoModeDiscard,
     sendAutoModeRuleAdd,
     sendAutoModeRuleRemove,
+    sendAutoModeLegacyDismiss,
     sendAutoModeHostAdd,
     sendAutoModeHostRemove,
     sendAutoModePolicySet,
@@ -225,6 +226,7 @@ export function SettingsModal({
     removeHost: sendAutoModeHostRemove,
     setPolicy: sendAutoModePolicySet,
     setEnvironmentSlot: sendAutoModeEnvSlot,
+    dismissLegacy: sendAutoModeLegacyDismiss,
   });
   const savedFlash = useSavedFlash();
   const [defaultAgent, setDefaultAgent] = useState<SessionAgent>('claude');

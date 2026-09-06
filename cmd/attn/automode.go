@@ -72,11 +72,11 @@ rule, host and policy RECORD A PROPOSAL. Nothing they write changes what a sessi
 runs under until a human promotes it in the app. The environment is the exception:
 it is a direct edit, and a shipped forbidden rule keeps a session out of it.
 
-A rule is a command prefix, one token per argument: ` + "`rule add git push`" + ` matches
-every command starting ` + "`git push`" + `. There are no wildcards.
+A rule is a command prefix, one token per argument: `+"`rule add git push`"+` matches
+every command starting `+"`git push`"+`. There are no wildcards.
 
-approval policy: ` + strings.Join(automode.Policies(), ", ") + `
-sandbox mode:    ` + strings.Join(automode.SandboxModes(), ", ") + `
+approval policy: `+strings.Join(automode.Policies(), ", ")+`
+sandbox mode:    `+strings.Join(automode.SandboxModes(), ", ")+`
 
 The environment is a direct edit, and it is what the reviewer looks up about this
 machine: whether a destination is trusted, whether a registry is yours, what counts

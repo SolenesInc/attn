@@ -309,6 +309,7 @@ const (
 	CmdAutoModeHostAdd       = "automode_host_add"
 	CmdAutoModeHostRemove    = "automode_host_remove"
 	CmdAutoModePolicySet     = "automode_policy_set"
+	CmdAutoModeLegacyDismiss = "automode_legacy_dismiss"
 )
 
 const EventAutoModeEnvSetResult = "automode_env_set_result"
@@ -2020,6 +2021,13 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 		var msg AutoModePolicySetMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, fmt.Errorf("unmarshal automode_policy_set: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdAutoModeLegacyDismiss:
+		var msg AutoModeLegacyDismissMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal automode_legacy_dismiss: %w", err)
 		}
 		return peek.Cmd, &msg, nil
 

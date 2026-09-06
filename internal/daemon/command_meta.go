@@ -227,6 +227,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdAutoModeRuleRemove:       commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdAutoModeHostRemove:       commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdAutoModePolicySet:        commandMetadata(ScopeHubLocal, false, true),
+	protocol.CmdAutoModeLegacyDismiss:    commandMetadata(ScopeHubLocal, false, true),
 }
 
 func shouldLogWSCommand(cmd string) bool {
