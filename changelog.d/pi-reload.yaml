@@ -1,0 +1,9 @@
+kind: fixed
+area: agents
+change: Reloading a live pi session resumes the same pi conversation.
+symptom: >
+  Reloading a pi session failed with "agent pi requires launch_instructions
+  and resume capabilities" and left the session untouched.
+notes: >
+  Reload now asks the same of a plugin driver as spawn does: resume is
+  required, and launch_instructions only when the session is chief of staff.
