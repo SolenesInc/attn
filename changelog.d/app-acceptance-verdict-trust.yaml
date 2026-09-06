@@ -3,8 +3,9 @@ area: ci
 change: >-
   Make the App acceptance verdict mean what it says: the worktree-surface
   scenario reads a recorded refresh instead of racing one, a Launchpad or apt
-  hiccup retries instead of failing the job, and the flake ledger reports the
-  failures it can no longer read rather than an empty Active list.
+  hiccup retries instead of failing the job, a scenario that passed no longer
+  fails on its way out, and the flake ledger reports the failures it can no
+  longer read rather than an empty Active list.
 notes: >-
   The worktrees panel now records what it showed while a refresh ran, so a pass
   that finishes between two reads is still on the record; the scenario no longer
@@ -15,3 +16,8 @@ notes: >-
   sequences, and reported no flakes rather than saying so; it now passes the
   flag, counts unreadable logs, refuses to publish a verdict when it read none,
   and names failing serial-matrix scenarios.
+  Restoring the settings a scenario pinned waited for one `settings_updated` per
+  key, which the daemon does not promise: it coalesces snapshots, so two writes
+  can arrive as one event naming one key. session-close-ledger passed, then took
+  the matrix red from its own teardown 10 s later, leaving a summary that said it
+  had succeeded. The restore now reads the settings the snapshot carries.
