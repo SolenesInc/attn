@@ -2625,6 +2625,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSeedPlot(conn, msg.(*protocol.SeedPlotMessage))
 	case protocol.CmdSeedList: // wire: seed_list
 		d.handleSeedList(conn, msg.(*protocol.SeedListMessage))
+	case protocol.CmdSeedSearch: // wire: seed_search
+		d.handleSeedSearch(conn, msg.(*protocol.SeedSearchMessage))
 	case protocol.CmdSeedShow: // wire: seed_show
 		d.handleSeedShow(conn, msg.(*protocol.SeedShowMessage))
 	case protocol.CmdSeedArtifactTransfer: // wire: seed_artifact_transfer

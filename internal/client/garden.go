@@ -57,6 +57,24 @@ func (c *Client) SeedSetResume(seedID, resumeID, cwd, agent string, clear bool) 
 	return resp.SeedSetResumeResult, nil
 }
 
+func (c *Client) SeedSearch(sessionID, query string, limit int) (*protocol.SeedSearchResult, error) {
+	msg := protocol.SeedSearchMessage{Cmd: protocol.CmdSeedSearch, Query: query}
+	if sessionID != "" {
+		msg.SourceSessionID = protocol.Ptr(sessionID)
+	}
+	if limit != 0 {
+		msg.Limit = protocol.Ptr(limit)
+	}
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	if resp.SeedSearchResult == nil {
+		return nil, fmt.Errorf("the daemon answered without search results")
+	}
+	return resp.SeedSearchResult, nil
+}
+
 func (c *Client) SeedList(sessionID string, stale bool, staleWindowSeconds int) (*protocol.SeedListResult, error) {
 	msg := protocol.SeedListMessage{Cmd: protocol.CmdSeedList}
 	if sessionID != "" {

@@ -6887,6 +6887,9 @@ type Response struct {
 	// SeedReviewResult corresponds to the JSON schema field "seed_review_result".
 	SeedReviewResult *SeedReviewResult `json:"seed_review_result,omitempty,omitzero"`
 
+	// SeedSearchResult corresponds to the JSON schema field "seed_search_result".
+	SeedSearchResult *SeedSearchResult `json:"seed_search_result,omitempty,omitzero"`
+
 	// SeedSendToChiefResult corresponds to the JSON schema field
 	// "seed_send_to_chief_result".
 	SeedSendToChiefResult *SeedSendToChiefResult `json:"seed_send_to_chief_result,omitempty,omitzero"`
@@ -7887,6 +7890,45 @@ type SeedReviewStartMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type SeedSearchHit struct {
+	// Seed corresponds to the JSON schema field "seed".
+	Seed Seed `json:"seed"`
+
+	// Snippet corresponds to the JSON schema field "snippet".
+	Snippet string `json:"snippet"`
+
+	// Where corresponds to the JSON schema field "where".
+	Where string `json:"where"`
+}
+
+type SeedSearchMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Limit corresponds to the JSON schema field "limit".
+	Limit *int `json:"limit,omitempty,omitzero"`
+
+	// Query corresponds to the JSON schema field "query".
+	Query string `json:"query"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+}
+
+type SeedSearchResult struct {
+	// Hits corresponds to the JSON schema field "hits".
+	Hits []SeedSearchHit `json:"hits"`
+
+	// Limit corresponds to the JSON schema field "limit".
+	Limit int `json:"limit"`
+
+	// Matched corresponds to the JSON schema field "matched".
+	Matched int `json:"matched"`
+
+	// Searched corresponds to the JSON schema field "searched".
+	Searched int `json:"searched"`
 }
 
 type SeedSendToChiefMessage struct {

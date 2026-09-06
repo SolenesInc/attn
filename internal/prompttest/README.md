@@ -26,6 +26,10 @@ The `launch.json`, `seed-guide.json` and `agent-delivery.json` Garden expectatio
 `attn seed harvest --when-merged` lines, edited at the source-text boundary when
 harvest-on-merge landed.
 
+Those same three Garden expectations carry the search-before-you-plant sentence and
+the `attn seed search` loop entry, edited at the source-text boundaries when the
+search verb landed.
+
 The frontend's `src/prompts/testdata` and Pi's `test/testdata/prompts.json` were
 captured from the original TypeScript builders at
 `f68ab3f02f329f46d3b9b3d1e7603f545c27dd50`; those builders are unchanged at the Go
