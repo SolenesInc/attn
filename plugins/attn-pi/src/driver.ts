@@ -13,11 +13,14 @@ import type {
   RelayNetworkDecideParams,
   RelayNetworkDecideResult,
   RelayReportDenialParams,
+  RelayReportExecPolicyAmendmentParams,
   RelayReportInputTakenParams,
+  RelayReportNetworkAmendmentParams,
   RelayReportPullRequestParams,
   RelayReportStateParams,
   RelayReportStopParams,
 } from "./relay-protocol";
+import { relayMethods } from "./relay-protocol";
 import {
   compareVersion,
   evaluatePiVersion,
@@ -331,6 +334,29 @@ export class PiDriver {
       reason: params.reason,
       rule: params.rule,
       at: params.at,
+    });
+  }
+
+  async suiteReportExecPolicyAmendment(rawParams: unknown): Promise<void> {
+    const params = parseRelayReportExecPolicyAmendment(rawParams);
+    const run = this.requireRunByToken(params.token);
+    await this.rpc.request("session.report_execpolicy_amendment", {
+      session_id: run.sessionID,
+      run_id: run.runID,
+      pattern: params.pattern,
+      decision: params.decision,
+      justification: params.justification ?? "",
+    });
+  }
+
+  async suiteReportNetworkAmendment(rawParams: unknown): Promise<void> {
+    const params = parseRelayReportNetworkAmendment(rawParams);
+    const run = this.requireRunByToken(params.token);
+    await this.rpc.request("session.report_network_amendment", {
+      session_id: run.sessionID,
+      run_id: run.runID,
+      host: params.host,
+      decision: params.decision,
     });
   }
 
@@ -696,6 +722,44 @@ function parseRelayReportPullRequest(value: unknown): RelayReportPullRequestPara
   if (typeof token !== "string" || token.trim() === "") throw new Error("suite.report_pull_request is missing token");
   if (typeof url !== "string" || url.trim() === "") throw new Error("suite.report_pull_request is missing url");
   return { token: token.trim(), url: url.trim() };
+}
+
+function parseRelayReportExecPolicyAmendment(value: unknown): RelayReportExecPolicyAmendmentParams {
+  const record = objectParams(value, relayMethods.reportExecPolicyAmendment);
+  const token = tokenField(record.token, relayMethods.reportExecPolicyAmendment);
+  const pattern = record.pattern;
+  if (!Array.isArray(pattern) || pattern.length === 0) {
+    throw new Error(`${relayMethods.reportExecPolicyAmendment} pattern must be a non-empty list of command tokens`);
+  }
+  const tokens = pattern.map((entry, index) => {
+    if (typeof entry !== "string" || entry.trim() === "") {
+      throw new Error(`${relayMethods.reportExecPolicyAmendment} pattern[${index}] must be a non-empty string`);
+    }
+    return entry.trim();
+  });
+  const decision = textField(record.decision);
+  if (decision === "") throw new Error(`${relayMethods.reportExecPolicyAmendment} is missing decision`);
+  return { token, pattern: tokens, decision, justification: textField(record.justification) };
+}
+
+function parseRelayReportNetworkAmendment(value: unknown): RelayReportNetworkAmendmentParams {
+  const record = objectParams(value, relayMethods.reportNetworkAmendment);
+  const token = tokenField(record.token, relayMethods.reportNetworkAmendment);
+  const host = textField(record.host);
+  if (host === "") throw new Error(`${relayMethods.reportNetworkAmendment} is missing host`);
+  const decision = textField(record.decision);
+  if (decision === "") throw new Error(`${relayMethods.reportNetworkAmendment} is missing decision`);
+  return { token, host, decision };
+}
+
+function objectParams(value: unknown, method: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null) throw new Error(`${method} params must be an object`);
+  return value as Record<string, unknown>;
+}
+
+function tokenField(value: unknown, method: string): string {
+  if (typeof value !== "string" || value.trim() === "") throw new Error(`${method} is missing token`);
+  return value.trim();
 }
 
 function textField(value: unknown): string {

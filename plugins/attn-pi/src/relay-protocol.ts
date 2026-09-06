@@ -30,6 +30,16 @@ export type RelayReportDenialParams = {
   at: string;
 };
 
+// A "don't ask again" answer inside a session is a human promoting, so the daemon
+// records the proposal and applies it in one move.
+export type RelayReportExecPolicyAmendmentParams = {
+  token: string;
+  pattern: string[];
+  decision: string;
+  justification?: string;
+};
+export type RelayReportNetworkAmendmentParams = { token: string; host: string; decision: string };
+
 export type RelayDeliverMessageParams = { input_id: string; text: string };
 export type RelayDeliverMessageResult = { delivered: boolean };
 
@@ -45,6 +55,8 @@ export const relayMethods = {
   reportDenial: "suite.report_denial",
   reportInputTaken: "suite.report_input_taken",
   reportPullRequest: "suite.report_pull_request",
+  reportExecPolicyAmendment: "suite.report_execpolicy_amendment",
+  reportNetworkAmendment: "suite.report_network_amendment",
   deliverMessage: "driver.deliver_message",
   networkDecide: "driver.network_decide",
 } as const;

@@ -30,6 +30,8 @@ export type RelayDelegate = {
   suiteReportDenial(params: unknown): Promise<void>;
   suiteReportInputTaken(params: unknown): Promise<void>;
   suiteReportPullRequest(params: unknown): Promise<void>;
+  suiteReportExecPolicyAmendment(params: unknown): Promise<void>;
+  suiteReportNetworkAmendment(params: unknown): Promise<void>;
 };
 
 // One RelayConnection per suite that dials in. A request here is driver -> suite (its
@@ -160,6 +162,16 @@ export class RelayConnection {
       case relayMethods.reportPullRequest:
         return async (params) => {
           await this.delegate.suiteReportPullRequest(params);
+          return { ok: true };
+        };
+      case relayMethods.reportExecPolicyAmendment:
+        return async (params) => {
+          await this.delegate.suiteReportExecPolicyAmendment(params);
+          return { ok: true };
+        };
+      case relayMethods.reportNetworkAmendment:
+        return async (params) => {
+          await this.delegate.suiteReportNetworkAmendment(params);
           return { ok: true };
         };
       default:

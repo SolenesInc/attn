@@ -472,6 +472,29 @@ export class AttnPiSuite {
     });
   }
 
+  /** A user's "don't ask again" answer. The daemon records the proposal and promotes
+   * it in one move, so nothing else has to ask a human. */
+  reportExecPolicyAmendment(amendment: { pattern: string[]; decision: string; justification?: string }): void {
+    const relay = this.relay;
+    if (!relay) return;
+    void relay.client.send(relayMethods.reportExecPolicyAmendment, {
+      token: relay.token,
+      pattern: amendment.pattern,
+      decision: amendment.decision,
+      ...(amendment.justification ? { justification: amendment.justification } : {}),
+    });
+  }
+
+  reportNetworkAmendment(amendment: { host: string; decision: string }): void {
+    const relay = this.relay;
+    if (!relay) return;
+    void relay.client.send(relayMethods.reportNetworkAmendment, {
+      token: relay.token,
+      host: amendment.host,
+      decision: amendment.decision,
+    });
+  }
+
   close(): void {
     this.relay?.client.close();
   }
