@@ -245,6 +245,30 @@ func TestSeedNudges_UnwatchCleanupFailureRemainsRetryable(t *testing.T) {
 	}
 }
 
+func TestSeedNudges_UnwatchRetryRefreshesAnAlreadyClearedQueue(t *testing.T) {
+	d, _ := persistentSubscriptionGarden(t)
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "retry unread refresh"})
+	watchSeed(t, d, "planner", seed.ID, false)
+	if _, err := d.store.ClaimGardenSeedMailboxItem("planner", seed.ID, "note", "pending", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	d.noteQueuedAgentMailboxItem("planner")
+	// A prior attempt committed deletion and cleanup, then failed to refresh unread state.
+	if _, err := d.store.SetGardenSeedWatch("planner", seed.ID, false, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.store.DiscardGardenSeedMailboxItems("planner", []string{seed.ID}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	result, err := d.setSeedWatch("planner", seed.ID, false)
+	if err != nil || result.Changed || result.Watching {
+		t.Fatalf("retry = %+v, %v", result, err)
+	}
+	if d.hasQueuedAgentMailboxItems("planner") {
+		t.Fatal("retry left an empty doorbell armed")
+	}
+}
+
 func TestGardenDispatchSubscriptionFailureSurfacesAndLeavesNoBinding(t *testing.T) {
 	d, db := persistentSubscriptionGarden(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "atomic delegation"})

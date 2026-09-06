@@ -142,7 +142,7 @@ func (d *Daemon) discardUncoveredSeedBells(sessionID string) error {
 		return err
 	}
 	if len(seeds) == 0 {
-		return nil
+		return d.refreshAgentMailboxUnread(sessionID)
 	}
 	subscriptions, err := d.readGardenSubscriptions()
 	if err != nil {
