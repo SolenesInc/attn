@@ -563,6 +563,73 @@
   max-width: 100%;
 }
 
+.sidebar-dispatcher {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: 1.25;
+}
+
+.sidebar-dispatcher__link,
+.sidebar-dispatcher__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-dispatcher__link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.sidebar-dispatcher__link:hover,
+.sidebar-dispatcher__link:focus-visible {
+  color: var(--color-text-secondary);
+  text-decoration: underline;
+}
+
+.sidebar-delegate-count {
+  display: inline-flex;
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  margin-left: auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.session-item.kin-up {
+  background: rgba(88, 166, 255, 0.08);
+}
+
+.session-item.kin-up .sidebar-session-headline > .session-label {
+  color: #79b8ff;
+}
+
+.session-item.kin-down {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.session-item.kin-down .sidebar-dispatcher {
+  color: var(--accent);
+}
+
 .sidebar-session-pr {
   display: inline-flex;
   flex: none;
@@ -1412,6 +1479,10 @@
   color: var(--color-text-muted);
 }
 
+.crew-row-mark + .sidebar-delegate-count {
+  margin-left: 0;
+}
+
 /* Fills the row from behind, so a click lands on it wherever it falls. Absolute
    rather than a wrapper: the row's other children stay direct children of
    .session-item and keep their layout. */
@@ -1479,6 +1550,10 @@
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
   font-variant-numeric: tabular-nums;
+}
+
+.sidebar-delegate-count + .queue-row-age {
+  margin-left: 0;
 }
 
 .queue-row-settle,

@@ -28,8 +28,14 @@ import type {
   SessionPullRequest,
 } from '../types/generated';
 import { SessionProvenance } from './SessionProvenance';
+import { SidebarDelegateCount, SidebarDispatcherLine } from './SidebarDelegation';
 import { describeSessionPullRequest, pickSessionPullRequest } from '../utils/sessionPullRequest';
 import type { ShortcutId } from '../shortcuts/registry';
+import {
+  delegatesByDispatcher,
+  dispatcherOf,
+  type DispatcherLink,
+} from '../utils/delegationLinks';
 
 interface LocalSession {
   id: string;
@@ -52,6 +58,8 @@ interface LocalSession {
   turnOwed?: boolean;
   turnOpenedAt?: string;
   crewMember?: string;
+  dispatcher_session_id?: string;
+  dispatcher_member?: string;
   automation?: AutomationProvenanceValue;
   pullRequests?: SessionPullRequest[];
 }
@@ -90,7 +98,15 @@ function SidebarSessionPullRequest({ pullRequests }: { pullRequests?: SessionPul
   );
 }
 
-function SidebarSessionIdentity({ session }: { session: LocalSession }) {
+function SidebarSessionIdentity({
+  session,
+  dispatcher,
+  onSelectSession,
+}: {
+  session: LocalSession;
+  dispatcher: DispatcherLink<LocalSession> | null;
+  onSelectSession: (id: string) => void;
+}) {
   return (
     <span className="sidebar-session-identity">
       <span className="sidebar-session-headline">
@@ -98,6 +114,7 @@ function SidebarSessionIdentity({ session }: { session: LocalSession }) {
         <SessionLabel label={session.label} />
         <SidebarSessionPullRequest pullRequests={session.pullRequests} />
       </span>
+      <SidebarDispatcherLine dispatcher={dispatcher} onSelectSession={onSelectSession} />
       <SessionProvenance automation={session.automation} density="compact" />
     </span>
   );
@@ -207,6 +224,11 @@ function SidebarSessionRow({
   onOpenActions,
   onTriggerNudge,
   showSettling,
+  dispatcher,
+  delegates,
+  kinClass,
+  onHoverSession,
+  onSelectSession,
 }: {
   session: LocalSession;
   selected: boolean;
@@ -218,6 +240,11 @@ function SidebarSessionRow({
   onOpenActions: (event: ReactMouseEvent) => void;
   onTriggerNudge?: () => void;
   showSettling: boolean;
+  dispatcher: DispatcherLink<LocalSession> | null;
+  delegates: readonly LocalSession[];
+  kinClass: string;
+  onHoverSession: (id: string | null) => void;
+  onSelectSession: (id: string) => void;
 }) {
   const nudgeMode = deriveNudgeMode({
     ticketUnread: session.ticketUnread,
@@ -227,16 +254,19 @@ function SidebarSessionRow({
   });
   return (
     <div
-      className={`session-item grouped ${selected ? 'selected' : ''} ${session.state === 'recoverable' ? 'recoverable' : ''} ${draggable ? 'session-item--draggable' : ''} ${dragging ? 'session-item--dragging' : ''}`.trim().replace(/\s+/g, ' ')}
+      className={`session-item grouped ${selected ? 'selected' : ''} ${session.state === 'recoverable' ? 'recoverable' : ''} ${draggable ? 'session-item--draggable' : ''} ${dragging ? 'session-item--dragging' : ''} ${kinClass}`.trim().replace(/\s+/g, ' ')}
       data-testid={`sidebar-session-${session.id}`}
       data-state={session.state}
       onClick={onSelect}
       onClickCapture={onClickCapture}
       onPointerDown={onPointerDown}
+      onPointerEnter={() => onHoverSession(session.id)}
+      onPointerLeave={() => onHoverSession(null)}
       title={session.state === 'recoverable' ? 'Session will be recovered when opened' : undefined}
     >
       <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
-      <SidebarSessionIdentity session={session} />
+      <SidebarSessionIdentity session={session} dispatcher={dispatcher} onSelectSession={onSelectSession} />
+      <SidebarDelegateCount delegates={delegates} />
       {session.endpointName && (
         <span className={`session-endpoint-badge status-${session.endpointStatus || 'connected'}`}>
           {session.endpointName}
@@ -543,6 +573,7 @@ export function Sidebar({
   const [expandedAutomationGroups, setExpandedAutomationGroups] = useState<Set<string>>(() => new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [displayMode, setDisplayMode] = useState<'open' | 'tight' | 'boxed'>('boxed');
+  const [hoveredSessionId, setHoveredSessionId] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<{
     kind: 'session' | 'workspace';
     id: string;
@@ -589,6 +620,31 @@ export function Sidebar({
     () => groupAutomationSessions([...workspaces, ...mutedWorkspaces]),
     [workspaces, mutedWorkspaces],
   );
+  const allSessions = useMemo(() => {
+    const byId = new Map<string, LocalSession>();
+    for (const workspace of [...workspaces, ...mutedWorkspaces]) {
+      for (const session of workspace.sessions) byId.set(session.id, session);
+    }
+    return [...byId.values()];
+  }, [workspaces, mutedWorkspaces]);
+  const delegates = useMemo(() => delegatesByDispatcher(allSessions), [allSessions]);
+  const hoveredSession = hoveredSessionId
+    ? allSessions.find((session) => session.id === hoveredSessionId)
+    : undefined;
+  const kinUpId = hoveredSession ? dispatcherOf(hoveredSession, allSessions)?.session?.id : undefined;
+  const kinDownIds = new Set(
+    hoveredSessionId ? (delegates.get(hoveredSessionId) ?? []).map((session) => session.id) : [],
+  );
+  const kinClass = (id: string) => (
+    id === kinUpId ? 'kin-up' : kinDownIds.has(id) ? 'kin-down' : ''
+  );
+  const rowDelegation = (session: LocalSession) => ({
+    dispatcher: dispatcherOf(session, allSessions),
+    delegates: delegates.get(session.id) ?? [],
+    kinClass: kinClass(session.id),
+    onHoverSession: setHoveredSessionId,
+    onSelectSession,
+  });
   const toggleAutomationGroup = (definitionId: string) => {
     setExpandedAutomationGroups((current) => {
       const next = new Set(current);
@@ -1155,6 +1211,9 @@ export function Sidebar({
           onPinSession={onPinSession}
           onOpenActions={openSessionActions}
           onOpenSnooze={onOpenSnooze}
+          allSessions={allSessions}
+          hoveredSessionId={hoveredSessionId}
+          onHoverSession={setHoveredSessionId}
         />
       )}
 
@@ -1297,6 +1356,7 @@ export function Sidebar({
                     onOpenActions={(event) => openSessionActions(session, event)}
                     onTriggerNudge={() => onTriggerNudge?.(session.id)}
                     showSettling={!onScreenSessionIds?.has(session.id)}
+                    {...rowDelegation(session)}
                   />
                 );
               })}
@@ -1338,6 +1398,7 @@ export function Sidebar({
                       onOpenActions={(event) => openSessionActions(session, event)}
                       onTriggerNudge={() => onTriggerNudge?.(session.id)}
                       showSettling={!onScreenSessionIds?.has(session.id)}
+                      {...rowDelegation(session)}
                     />
                   ))}
                 </div>
@@ -1380,6 +1441,9 @@ export function Sidebar({
           onToggleExpanded={() => setSnoozedExpanded(!snoozedExpanded)}
           onSelectSession={onSelectSession}
           onWakeTurn={onWakeTurn}
+          allSessions={allSessions}
+          hoveredSessionId={hoveredSessionId}
+          onHoverSession={setHoveredSessionId}
         />
       )}
 
@@ -1469,13 +1533,20 @@ export function Sidebar({
                       return (
                         <div
                           key={session.id}
-                          className={`session-item grouped muted-session ${selectedId === session.id ? 'selected' : ''}`}
+                          className={`session-item grouped muted-session ${selectedId === session.id ? 'selected' : ''} ${kinClass(session.id)}`.trim()}
                           data-testid={`sidebar-session-${session.id}`}
                           data-state={session.state}
                           onClick={() => onSelectSession(session.id)}
+                          onPointerEnter={() => setHoveredSessionId(session.id)}
+                          onPointerLeave={() => setHoveredSessionId(null)}
                         >
                           <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
-                          <SidebarSessionIdentity session={session} />
+                          <SidebarSessionIdentity
+                            session={session}
+                            dispatcher={dispatcherOf(session, allSessions)}
+                            onSelectSession={onSelectSession}
+                          />
+                          <SidebarDelegateCount delegates={delegates.get(session.id) ?? []} />
                           {session.chiefOfStaff && <ChiefOfStaffBadge />}
                           {session.delegatedFromChief && <DelegatedFromChiefBadge />}
                           {session.endpointName && (

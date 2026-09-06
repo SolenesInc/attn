@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { Sidebar, type DockItem } from './Sidebar';
 import { formatShortcut } from '../shortcuts/formatShortcut';
@@ -29,6 +29,8 @@ interface TestSession {
   endpointStatus?: string;
   chiefOfStaff?: boolean;
   delegatedFromChief?: boolean;
+  dispatcher_session_id?: string;
+  dispatcher_member?: string;
   automation?: import('../types/generated').AutomationProvenance;
   pullRequests?: import('../types/generated').SessionPullRequest[];
 }
@@ -107,6 +109,34 @@ const baseProps = {
 };
 
 describe('Sidebar', () => {
+  it('renders and navigates delegation links in workspace tree rows', () => {
+    const onSelectSession = vi.fn();
+    const sessions: TestSession[] = [
+      { id: 'root', label: 'root', state: 'working' },
+      {
+        id: 'child',
+        label: 'child',
+        state: 'working',
+        dispatcher_session_id: 'root',
+        dispatcher_member: 'alder',
+      },
+    ];
+    render(<Sidebar {...baseProps} {...buildSidebarData(sessions)} onSelectSession={onSelectSession} />);
+
+    const root = screen.getByTestId('sidebar-session-root');
+    const child = screen.getByTestId('sidebar-session-child');
+    expect(within(root).getByLabelText('1 live delegate: child')).toHaveTextContent('1');
+    expect(within(child).getByTestId('sidebar-dispatcher')).toHaveTextContent('↳Alder');
+    fireEvent.click(within(child).getByRole('button', { name: 'Open dispatcher Alder' }));
+    expect(onSelectSession).toHaveBeenCalledTimes(1);
+    expect(onSelectSession).toHaveBeenCalledWith('root');
+
+    fireEvent.pointerEnter(child);
+    expect(root).toHaveClass('kin-up');
+    fireEvent.pointerLeave(child);
+    expect(root).not.toHaveClass('kin-up');
+  });
+
   it('shows only a non-default profile marker', () => {
     const data = buildSidebarData([]);
     const { rerender } = render(<Sidebar {...baseProps} {...data} />);

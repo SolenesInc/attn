@@ -33,3 +33,28 @@ describe('sidebar pull request reveal', () => {
     expect(hovered).toMatch(/max-width:/);
   });
 });
+
+describe('sidebar delegation links', () => {
+  it('keeps the dispatcher line visible at rest', () => {
+    const line = ruleBody('.sidebar-dispatcher');
+    expect(line).toBeTruthy();
+    expect(line).not.toMatch(/opacity:\s*0\s*;/);
+    expect(line).not.toMatch(/max-width:\s*0\s*;/);
+  });
+
+  it('uses the chief blue going up and the accent going down', () => {
+    expect(ruleBody('.session-item.kin-up')).toMatch(/rgba\(88,\s*166,\s*255,\s*0\.08\)/);
+    expect(ruleBody('.session-item.kin-up .sidebar-session-headline > .session-label'))
+      .toMatch(/color:\s*#79b8ff\s*;/);
+    expect(ruleBody('.session-item.kin-down')).toMatch(/var\(--accent\)/);
+    expect(ruleBody('.session-item.kin-down .sidebar-dispatcher'))
+      .toMatch(/color:\s*var\(--accent\)\s*;/);
+  });
+
+  it('keeps the count chip compact', () => {
+    const chip = ruleBody('.sidebar-delegate-count');
+    expect(chip).toMatch(/min-width:\s*18px\s*;/);
+    expect(chip).toMatch(/height:\s*18px\s*;/);
+    expect(chip).toMatch(/border-radius:\s*999px\s*;/);
+  });
+});
