@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -1228,6 +1227,7 @@ func TestManagerForwardSessionRenameCarriesTheOwnerVerdictBack(t *testing.T) {
 
 func TestManagerRefusesASecondRenameWhileOneWaitsOnTheOwner(t *testing.T) {
 	answered := make(chan struct{})
+	received := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, nil)
 		if err != nil {
@@ -1241,6 +1241,7 @@ func TestManagerRefusesASecondRenameWhileOneWaitsOnTheOwner(t *testing.T) {
 		}
 		var request protocol.RenameSessionMessage
 		_ = json.Unmarshal(payload, &request)
+		close(received)
 		// Hold the verdict until the second rename has been refused.
 		<-answered
 		response, _ := json.Marshal(protocol.RenameResultMessage{Event: protocol.EventRenameResult, Cmd: protocol.CmdRenameSession, ID: request.SessionID, Success: true})
@@ -1263,15 +1264,7 @@ func TestManagerRefusesASecondRenameWhileOneWaitsOnTheOwner(t *testing.T) {
 	first := make(chan error, 1)
 	valid, _ := json.Marshal(protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: "s-remote", Label: "valid name"})
 	go func() { first <- manager.ForwardSessionRename(ctx, "endpoint-1", "s-remote", valid) }()
-	for {
-		manager.mu.RLock()
-		_, waiting := manager.sessionRenames["s-remote"]
-		manager.mu.RUnlock()
-		if waiting {
-			break
-		}
-		runtime.Gosched()
-	}
+	<-received
 
 	overCap, _ := json.Marshal(protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: "s-remote", Label: strings.Repeat("x", 49)})
 	err = manager.ForwardSessionRename(ctx, "endpoint-1", "s-remote", overCap)
