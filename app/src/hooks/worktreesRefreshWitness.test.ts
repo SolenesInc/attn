@@ -27,8 +27,6 @@ function hideRefreshing(panel: HTMLElement): void {
   panel.querySelectorAll(INDICATOR).forEach((chip) => chip.remove());
 }
 
-// MutationObserver callbacks are microtasks, so a turn of the event loop is
-// what makes them run.
 const flush = () => new Promise((resolve) => { setTimeout(resolve, 0); });
 
 afterEach(() => {

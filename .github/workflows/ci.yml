@@ -631,9 +631,8 @@ jobs:
         uses: ./.github/actions/setup-linux-sandbox
 
       - name: Install Linux desktop dependencies
-        # The PPA is not optional: terminal-block-copy and terminal-context-menu
-        # need fish >= 4 for its native OSC 133 markers, and 24.04 ships 3.7.
-        # Launchpad answering 504 once cost run 33980833240 the whole job.
+        # Do not drop the PPA: terminal-block-copy and terminal-context-menu
+        # need fish >= 4 for its OSC 133 markers, and 24.04 ships 3.7.
         run: |
           ./scripts/ci-retry.sh -- sudo add-apt-repository -y ppa:fish-shell/release-4
           ./scripts/ci-retry.sh -- sudo apt-get update
@@ -785,8 +784,6 @@ jobs:
             echo "app acceptance: candidate receipt covers main $HEAD_SHA"
             exit 0
           fi
-          # An empty outcome means the matrix step never ran. The job has tested
-          # nothing, so it must not read as a verdict on any scenario.
           if [ -z "$MATRIX_OUTCOME" ]; then
             echo "app acceptance: the job failed before the serial matrix ran for $HEAD_SHA;" \
               "this is setup or build, not a scenario verdict" >&2

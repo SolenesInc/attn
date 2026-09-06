@@ -1,6 +1,3 @@
-// Measured over six green App acceptance runs, the worktrees panel showed a
-// refresh 197-344 ms after the click and finished in 323-2932 ms: a 49 ms window.
-
 export interface RefreshWitnessReading {
   mutations: number;
   sawRefreshing: boolean;
@@ -34,8 +31,6 @@ function countInRecords(records: MutationRecord[], selector: string): number {
   return count;
 }
 
-// Armed before the click, so a pass that ends before anyone reads the surface is
-// still on the record rather than lost between two samples.
 export function armRefreshWitness(panel: HTMLElement, selector: string): RefreshWitnessReading {
   disarmRefreshWitness();
 
@@ -58,7 +53,6 @@ export function armRefreshWitness(panel: HTMLElement, selector: string): Refresh
     lastSeenMs: null,
   };
 
-  // A refresh already on screen when the witness is armed still counts.
   const present = countIn(panel, selector);
   if (present > 0) {
     witness.sawRefreshing = true;

@@ -32,9 +32,8 @@ jobs:
 
       # Job logs and finished attempts are immutable, so the report's on-disk
       # cache carries across days and only new runs cost API calls.
-      # The path must be literal on both sides: a ~ in an env: value reaches the
-      # script unexpanded, which wrote the cache to a directory named '~' and
-      # left actions/cache warning that the real path did not exist.
+      # Literal on both sides: a ~ in an env: value reaches the script
+      # unexpanded and the cache lands in a directory named '~'.
       - name: Restore flake-report cache
         uses: actions/cache@v4
         with:

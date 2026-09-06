@@ -1563,8 +1563,6 @@ function collectWorktreesUiState() {
       refreshing: Boolean(header.querySelector('.worktrees-panel__refreshing')),
     })),
     error: panel.querySelector('[data-testid="worktrees-panel-error"]')?.textContent?.trim() ?? '',
-    // What the surface showed since the last refresh was asked for, which a
-    // reader arriving after the pass can no longer see for itself.
     refreshWitness: readRefreshWitness(),
   };
 }

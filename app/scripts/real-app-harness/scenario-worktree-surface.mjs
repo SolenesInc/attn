@@ -70,8 +70,6 @@ function gitOut(dir, args) {
   return execFileSync('git', args, { cwd: dir, encoding: 'utf8', env: { ...process.env, ...GIT_ENV } });
 }
 
-// `diagnose` answers what the surface looked like when the wait ran out; without
-// it the message can only say the predicate was false, which names no cause.
 async function poll(fn, description, timeoutMs, everyMs = 250, diagnose = null) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
@@ -271,8 +269,6 @@ async function main() {
 
     await runner.step('leg2_a_slow_refresh_stays_visible_and_answering', async () => {
       const started = Date.now();
-      // The app arms a witness before the click: a warm repository is walked in
-      // less time than one read of the surface costs.
       await client.request('worktrees_refresh');
       const settled = await poll(async () => {
         const current = await client.request('worktrees_get_state');

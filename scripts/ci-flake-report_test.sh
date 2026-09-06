@@ -8,8 +8,6 @@ trap 'rm -rf "$work"' EXIT
 
 mkdir -p "$work/bin" "$work/logs"
 
-# Two runs on the same commit: the first red, the second green. That is the
-# shape the report calls a flake, so whatever the log says is a flake.
 cat >"$work/runs.json" <<'EOF'
 [
   {"databaseId":901,"headSha":"aaaa1111","headBranch":"next","conclusion":"failure",
@@ -26,15 +24,13 @@ cat >"$work/jobs-902.json" <<'EOF'
 {"jobs":[]}
 EOF
 
-# A serial-matrix digest as the job actually prints it, timestamps included, so
-# the extractor is exercised on the real shape.
 printf '%s\n' \
   '2026-09-06T03:16:57.9648747Z PASS  garden-plot-dispatch                          61.2s' \
   '2026-09-06T03:16:57.9648747Z FAIL  worktree-surface                              97.8s' \
   '2026-09-06T03:16:57.9648747Z SKIP  terminal-block-copy                           needs macOS' \
   >"$work/logs/5001.log"
 
-# gh 2.98 refuses to write a job log — ANSI throughout — without being asked to.
+# gh 2.98 refuses to write a job log without --allow-escape-sequences;
 # `advertises` is whether `gh api --help` offers the flag at all.
 fake_gh() {
   local advertises="$1"
@@ -78,8 +74,6 @@ run_report() {
   ATTN_FLAKE_CACHE="$work/cache" "$report" --repo example/attn "$@"
 }
 
-# The log is readable, and the App acceptance scenario is named rather than
-# only the job that ran it.
 fake_gh yes
 out="$(run_report --limit 10 --format summary)" || fail "the report should succeed when logs are readable"
 grep -q 'serial-matrix › worktree-surface' <<<"$out" \
@@ -90,9 +84,6 @@ if grep -q 'terminal-block-copy' <<<"$out"; then fail "a skipped scenario was co
 out="$(run_report --limit 10 --format table)" || fail "the table format should succeed"
 grep -q '1 logs read, 0 unreadable' <<<"$out" || fail "the table never says how many logs it read: $out"
 
-# The regression this guard exists for: every log fetch refused, so the report
-# sees no failure at all. Publishing a clean ledger from that is worse than
-# publishing nothing.
 fake_gh no
 status=0
 out="$(run_report --limit 10 --format markdown 2>"$work/err.txt")" || status=$?

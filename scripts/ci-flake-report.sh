@@ -108,9 +108,8 @@ fetch_jobs() {
   fi
 }
 
-# Job logs are raw runner output: ANSI colour throughout, which newer gh refuses
-# to write without being told to. Without the flag every fetch below fails and
-# the report goes blind, so ask gh once whether it has it.
+# Job logs are ANSI throughout, which newer gh refuses to write unless asked.
+# Without the flag every fetch below fails and the report silently sees nothing.
 gh_api_help="$(gh api --help 2>/dev/null || true)"
 allow_escapes=false
 case "$gh_api_help" in
@@ -140,8 +139,6 @@ fetch_log() {
     logs_read=$((logs_read + 1))
     cat "$dest"
   else
-    # Never silent: a log this report cannot read is a failure it cannot see,
-    # and an empty ledger is indistinguishable from a healthy one.
     logs_unreadable=$((logs_unreadable + 1))
     [ -z "$first_log_error" ] && first_log_error="job $job_id: $(head -c 200 "$tmp.err" | tr '\n' ' ')"
     rm -f "$tmp" "$tmp.err"
@@ -149,8 +146,6 @@ fetch_log() {
   fi
 }
 
-# Reading nothing at all while jobs failed means the report is blind, not that
-# CI is clean. Refuse to publish that verdict.
 assert_logs_were_read() {
   [ "$scanned_jobs" -eq 0 ] && return 0
   [ "$logs_read" -gt 0 ] && return 0
@@ -193,8 +188,6 @@ extract_failures() {
         if (line != "") print "playwright\t-\t" line
         next
       }
-      # The real-app harness digest, one line per scenario of the App acceptance
-      # serial matrix: "FAIL  worktree-surface   97.8s".
       /^FAIL  [a-z0-9][a-z0-9-]* +[0-9.]+s$/ {
         line = $0
         sub(/^FAIL +/, "", line)
