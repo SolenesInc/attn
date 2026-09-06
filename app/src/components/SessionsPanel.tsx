@@ -284,74 +284,24 @@ function OpenSessionsPanel({
                   </tr>
                 </thead>
                 <tbody ref={rowsRef}>
-                  {entries.map((entry) => {
-                    const seed = seedForSession?.(entry.id) ?? null;
-                    const verdict = isClosed(entry) ? verdicts[entry.id] : undefined;
-                    const waiting = awaiting?.sessionId === entry.id;
-                    return (
-                      <tr
-                        key={entry.id}
-                        tabIndex={0}
-                        aria-selected={entry.id === selected?.id}
-                        className={entry.id === selected?.id ? 'is-selected' : undefined}
-                        onFocus={() => setSelectedId(entry.id)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'ArrowDown') {
-                            event.preventDefault();
-                            moveSelection(1);
-                          } else if (event.key === 'ArrowUp') {
-                            event.preventDefault();
-                            moveSelection(-1);
-                          } else if (event.key === 'Enter') {
-                            event.preventDefault();
-                            if (isLive(entry)) onFocusSession?.(entry.id);
-                            else if (verdict?.actions[0]) runAction(entry, verdict.actions[0].id);
-                          }
-                        }}
-                      >
-                        <td>
-                          <span className="sessions-label">{entry.label || entry.id}</span>
-                          <span className="sessions-id">{entry.id}</span>
-                        </td>
-                        <td>{entry.agent}</td>
-                        <td><span className={`sessions-state-chip is-${ledgerState(entry)}`}>{ledgerState(entry)}</span></td>
-                        <td>{workspaceLabel(entry.workspace_id) || '—'}</td>
-                        <td>
-                          <span title={entry.directory}>{shortPath(entry.directory)}</span>
-                          {entry.branch && <span className="sessions-branch">{entry.branch}</span>}
-                        </td>
-                        <td>
-                          {seed
-                            ? <button type="button" className="sessions-link" onClick={() => onOpenSeed?.(seed.id)}>{seed.title}</button>
-                            : '—'}
-                        </td>
-                        <td>
-                          <span title={ledgerInstant(entry)}>{shortStamp(ledgerInstant(entry))}</span>
-                          {isClosed(entry) && (
-                            <span className="sessions-closed-by">
-                              closed by {closedBySomeone(entry)}
-                              {entry.close_reason ? `: ${entry.close_reason}` : ''}
-                            </span>
-                          )}
-                        </td>
-                        <td>{renderVerdict(verdict, isClosed(entry), waiting, !!onRequestVerdict)}</td>
-                        <td className="sessions-actions">
-                          {isLive(entry) && (
-                            <button type="button" onClick={() => onFocusSession?.(entry.id)}>Focus</button>
-                          )}
-                          {isClosed(entry) && verdict?.actions.map((action) => (
-                            <button
-                              key={action.id}
-                              type="button"
-                              onClick={() => runAction(entry, action.id)}
-                            >
-                              {action.label}
-                            </button>
-                          ))}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {entries.map((entry) => (
+                    <SessionRow
+                      key={entry.id}
+                      entry={entry}
+                      seed={seedForSession?.(entry.id) ?? null}
+                      verdict={isClosed(entry) ? verdicts[entry.id] : undefined}
+                      waiting={awaiting?.sessionId === entry.id}
+                      live={isLive(entry)}
+                      selected={entry.id === selected?.id}
+                      workspaceLabel={workspaceLabel}
+                      checksAvailable={!!onRequestVerdict}
+                      onSelect={setSelectedId}
+                      onMoveSelection={moveSelection}
+                      onFocusSession={onFocusSession}
+                      onOpenSeed={onOpenSeed}
+                      onRunAction={runAction}
+                    />
+                  ))}
                 </tbody>
               </table>
             )}
@@ -372,6 +322,101 @@ function OpenSessionsPanel({
         </div>
       </FocusTrap>
     </div>
+  );
+}
+
+interface SessionRowProps {
+  entry: SessionLedgerEntry;
+  seed: SessionSeedLink | null;
+  verdict: ReopenVerdictView | undefined;
+  waiting: boolean;
+  live: boolean;
+  selected: boolean;
+  workspaceLabel: (workspaceId: string) => string;
+  checksAvailable: boolean;
+  onSelect: (sessionId: string) => void;
+  onMoveSelection: (offset: number) => void;
+  onFocusSession?: (sessionId: string) => void;
+  onOpenSeed?: (seedId: string) => void;
+  onRunAction: (entry: SessionLedgerEntry, actionId: string) => void;
+}
+
+function SessionRow({
+  entry,
+  seed,
+  verdict,
+  waiting,
+  live,
+  selected,
+  workspaceLabel,
+  checksAvailable,
+  onSelect,
+  onMoveSelection,
+  onFocusSession,
+  onOpenSeed,
+  onRunAction,
+}: SessionRowProps) {
+  return (
+    <tr
+      tabIndex={0}
+      aria-selected={selected}
+      className={selected ? 'is-selected' : undefined}
+      onFocus={() => onSelect(entry.id)}
+      onKeyDown={(event) => {
+        if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          onMoveSelection(1);
+        } else if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          onMoveSelection(-1);
+        } else if (event.key === 'Enter') {
+          event.preventDefault();
+          if (live) onFocusSession?.(entry.id);
+          else if (verdict?.actions[0]) onRunAction(entry, verdict.actions[0].id);
+        }
+      }}
+    >
+      <td>
+        <span className="sessions-label">{entry.label || entry.id}</span>
+        <span className="sessions-id">{entry.id}</span>
+      </td>
+      <td>{entry.agent}</td>
+      <td><span className={`sessions-state-chip is-${ledgerState(entry)}`}>{ledgerState(entry)}</span></td>
+      <td>{workspaceLabel(entry.workspace_id) || '—'}</td>
+      <td>
+        <span title={entry.directory}>{shortPath(entry.directory)}</span>
+        {entry.branch && <span className="sessions-branch">{entry.branch}</span>}
+      </td>
+      <td>
+        {seed
+          ? <button type="button" className="sessions-link" onClick={() => onOpenSeed?.(seed.id)}>{seed.title}</button>
+          : '—'}
+      </td>
+      <td>
+        <span title={ledgerInstant(entry)}>{shortStamp(ledgerInstant(entry))}</span>
+        {isClosed(entry) && (
+          <span className="sessions-closed-by">
+            closed by {closedBySomeone(entry)}
+            {entry.close_reason ? `: ${entry.close_reason}` : ''}
+          </span>
+        )}
+      </td>
+      <td>{renderVerdict(verdict, isClosed(entry), waiting, checksAvailable)}</td>
+      <td className="sessions-actions">
+        {live && (
+          <button type="button" onClick={() => onFocusSession?.(entry.id)}>Focus</button>
+        )}
+        {isClosed(entry) && verdict?.actions.map((action) => (
+          <button
+            key={action.id}
+            type="button"
+            onClick={() => onRunAction(entry, action.id)}
+          >
+            {action.label}
+          </button>
+        ))}
+      </td>
+    </tr>
   );
 }
 
