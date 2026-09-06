@@ -68,7 +68,7 @@ interface PathSelectableItem {
 
 interface LocationPickerProps {
   isOpen: boolean;
-  purpose?: 'workspace' | 'session';
+  purpose?: 'workspace' | 'session' | 'reopen';
   onClose: () => void;
   onSelect: (
     path: string,
@@ -236,11 +236,18 @@ export function LocationPicker({
   const { settings, setSetting } = useSettings();
   const localAgentAvailability = agentAvailability || DEFAULT_AGENT_AVAILABILITY;
   const noAgentsMessage = 'No supported agent CLI found in PATH.';
+  const pathOnly = purpose === 'reopen';
   const copy = purpose === 'workspace'
     ? {
         agentAria: 'Initial workspace session agent',
         targetAria: 'Workspace target',
         title: 'New Workspace Location',
+      }
+    : pathOnly
+    ? {
+        agentAria: 'Session agent',
+        targetAria: 'Session target',
+        title: 'Start fresh where?',
       }
     : {
         agentAria: 'Session agent',
@@ -403,7 +410,7 @@ export function LocationPicker({
   const autoModeSupported = Boolean(agentCapabilities[agent]?.[AUTOMODE_CAPABILITY]);
   const autoModeDefault = parseBooleanSetting(settings[AUTOMODE_DEFAULT_KEY]) ?? true;
   // The agent gate matches the daemon's agentSupportsChiefReload.
-  const chiefToggleEligible = !chiefExists && purpose !== 'session' && (agent === 'claude' || agent === 'codex');
+  const chiefToggleEligible = !chiefExists && purpose === 'workspace' && (agent === 'claude' || agent === 'codex');
 
   const invalidateRequestGeneration = useCallback(() => {
     requestGenerationRef.current += 1;
@@ -818,7 +825,7 @@ export function LocationPicker({
     }
     rememberRepoDestination('new_worktree');
 
-    if (onCreateWorktreeSession) {
+    if (onCreateWorktreeSession && !pathOnly) {
       const selectedAgent = resolvePickerAgent(agent, effectiveAgentAvailability, 'codex');
       onCreateWorktreeSession(
         repoRootPath,
@@ -861,6 +868,7 @@ export function LocationPicker({
     onCreateWorktree,
     onCreateWorktreeSession,
     onError,
+    pathOnly,
     rememberRepoDestination,
     repoRootPath,
     agent,
@@ -989,7 +997,7 @@ export function LocationPicker({
   }
 
   return (
-    <div className="location-picker-overlay" data-testid="location-picker-overlay" onClick={handleClosePicker}>
+    <div className="location-picker-overlay" data-testid="location-picker-overlay" data-purpose={purpose} onClick={handleClosePicker}>
       <div
         className="location-picker"
         data-testid="location-picker"
@@ -997,6 +1005,7 @@ export function LocationPicker({
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleDialogKeyDown}
       >
+        {!pathOnly && (
         <div className="picker-agent-bar">
           <div className="picker-agent-label">SESSION AGENT</div>
           <div className="picker-agent-controls">
@@ -1028,7 +1037,8 @@ export function LocationPicker({
             </div>
           </div>
         </div>
-        {autoModeSupported && (
+        )}
+        {autoModeSupported && !pathOnly && (
           <div className="picker-chief-bar">
             <div className="picker-agent-label">AUTO MODE</div>
             <div className="picker-chief-controls">
@@ -1073,6 +1083,7 @@ export function LocationPicker({
             </div>
           </div>
         )}
+        {!pathOnly && (
         <div className="picker-endpoint-bar">
           <div className="picker-endpoint-leading">
             <div className="picker-endpoint-label">SESSION TARGET</div>
@@ -1108,7 +1119,8 @@ export function LocationPicker({
             })}
           </div>
         </div>
-        {!hasAvailableAgents && (
+        )}
+        {!hasAvailableAgents && !pathOnly && (
           <div className="picker-agent-warning">{noAgentsMessage}</div>
         )}
         {mode === 'path-input' ? (
@@ -1118,12 +1130,14 @@ export function LocationPicker({
                 <div className="picker-title" data-testid="location-picker-title">
                   {copy.title}
                 </div>
+                {!pathOnly && (
                 <div
                   className={`picker-endpoint-hint ${!yoloSupported ? 'disabled' : ''}`}
                   title={!yoloSupported ? `${agentLabel(agent)} does not support yolo mode` : undefined}
                 >
                   {yoloSupported ? 'select the same target again for YOLO' : 'YOLO unavailable'}
                 </div>
+                )}
               </div>
               <PathInput
                 value={inputValue}

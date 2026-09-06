@@ -230,13 +230,13 @@ func (d *Daemon) decideReopenPlace(verdict *sessionReopenVerdict) {
 		verdict.Actions = []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshElsewhere}
 		return
 	default:
-		verdict.Reason = fmt.Sprintf("the directory %s cannot be opened", verdict.Execution.Cwd)
+		verdict.Reason = "its directory cannot be opened"
 		return
 	}
 }
 
 func (d *Daemon) decideMissingDirectory(verdict *sessionReopenVerdict, conversation bool, conversationReason string) {
-	gone := fmt.Sprintf("the directory %s no longer exists", verdict.Execution.Cwd)
+	gone := "its directory no longer exists"
 	repo := strings.TrimSpace(verdict.Execution.RepositoryRoot)
 	branch := strings.TrimSpace(verdict.Execution.Branch)
 	target, targetOK := savedWorktreeRoot(verdict.Execution)
@@ -252,12 +252,12 @@ func (d *Daemon) decideMissingDirectory(verdict *sessionReopenVerdict, conversat
 	if !known {
 		verdict.Checking = true
 		verdict.BranchState = branchStateUnknown
-		verdict.Reason = gone + "; checking whether its branch can be put back"
+		verdict.Reason = gone
 		verdict.Actions = []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshElsewhere}
 		return
 	}
 	if inspection.RepoMissing {
-		verdict.Reason = fmt.Sprintf("%s, and its repository %s is gone too", gone, repo)
+		verdict.Reason = gone + ", and its repository is gone too"
 		return
 	}
 	verdict.BranchState = inspection.State
@@ -367,7 +367,7 @@ func (d *Daemon) reopenBranchWarning(execution garden.Dispatch) string {
 		return ""
 	}
 	if current := strings.TrimSpace(info.Branch); current != "" && current != saved {
-		return fmt.Sprintf("%s is on branch %s now; the session ran on %s", execution.Cwd, current, saved)
+		return fmt.Sprintf("it is on branch %s now; the session ran on %s", current, saved)
 	}
 	return ""
 }
@@ -833,6 +833,10 @@ func (d *Daemon) handleSessionReopen(conn net.Conn, msg *protocol.SessionReopenM
 		d.sendError(conn, err.Error())
 		return
 	}
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SessionReopenResult: sessionReopenResult(outcome)})
+}
+
+func sessionReopenResult(outcome *sessionReopenOutcome) *protocol.SessionReopenResult {
 	result := &protocol.SessionReopenResult{
 		SessionID:   outcome.SessionID,
 		WorkspaceID: outcome.WorkspaceID,
@@ -845,5 +849,5 @@ func (d *Daemon) handleSessionReopen(conn net.Conn, msg *protocol.SessionReopenM
 	if outcome.WorktreeCreated != "" {
 		result.WorktreeCreated = protocol.Ptr(outcome.WorktreeCreated)
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SessionReopenResult: result})
+	return result
 }

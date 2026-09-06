@@ -2119,6 +2119,18 @@ export function useUiAutomationBridge({
         }
         return { focused: true, tag: element.tagName };
       }
+      case 'dom_active_element': {
+        const active = document.activeElement;
+        if (!(active instanceof HTMLElement)) return { tag: null };
+        const field = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : null;
+        return {
+          tag: active.tagName,
+          className: active.className,
+          testId: active.getAttribute('data-testid'),
+          selectionStart: field?.selectionStart ?? null,
+          valueLength: field ? field.value.length : null,
+        };
+      }
       case 'dom_terminal_key': {
         const selector = typeof payload.selector === 'string' ? payload.selector : null;
         const key = typeof payload.key === 'string' ? payload.key : null;

@@ -8789,6 +8789,20 @@ type SessionReopenMessage struct {
 	// Directory corresponds to the JSON schema field "directory".
 	Directory *string `json:"directory,omitempty,omitzero"`
 
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+}
+
+type SessionReopenRefreshedMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Reopen corresponds to the JSON schema field "reopen".
+	Reopen SessionReopen `json:"reopen"`
+
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID string `json:"session_id"`
 }
@@ -8811,6 +8825,23 @@ type SessionReopenResult struct {
 
 	// WorktreeCreated corresponds to the JSON schema field "worktree_created".
 	WorktreeCreated *string `json:"worktree_created,omitempty,omitzero"`
+}
+
+type SessionReopenResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Result corresponds to the JSON schema field "result".
+	Result *SessionReopenResult `json:"result,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type SessionSelectedMessage struct {

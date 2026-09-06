@@ -3,6 +3,7 @@ import type {
   SessionLedgerFacets,
   SessionReopen,
   SessionReopenEntry,
+  SessionReopenResult,
 } from '../types/generated';
 import type { PendingRequests } from './daemonPendingRequests';
 import { settlePendingRequest } from './daemonPendingRequests';
@@ -32,6 +33,7 @@ export interface SessionLedgerQuery {
 export interface SessionLedgerEventContext {
   pending: PendingRequests;
   onSessionClosed?: (entry: SessionLedgerEntry, reopen?: SessionReopen) => void;
+  onSessionReopenRefreshed?: (sessionId: string, reopen: SessionReopen) => void;
 }
 
 type SessionLedgerEvent = {
@@ -42,6 +44,7 @@ type SessionLedgerEvent = {
   result?: unknown;
   entry?: unknown;
   session_ledger_entry?: unknown;
+  session_id?: unknown;
   reopen?: unknown;
 };
 
@@ -68,6 +71,21 @@ export function handleSessionLedgerDaemonEvent(
         'Reading that session failed',
       );
       return true;
+    case 'session_reopen_result':
+      settlePendingRequest(
+        context.pending,
+        'session_reopen',
+        event,
+        (value) => value.result as SessionReopenResult | undefined,
+        'Reopening that session failed',
+      );
+      return true;
+    case 'session_reopen_refreshed': {
+      const sessionId = typeof event.session_id === 'string' ? event.session_id : '';
+      const reopen = event.reopen as SessionReopen | undefined;
+      if (sessionId && reopen) context.onSessionReopenRefreshed?.(sessionId, reopen);
+      return true;
+    }
     case 'session_closed': {
       const entry = event.session_ledger_entry as SessionLedgerEntry | undefined;
       if (entry) context.onSessionClosed?.(entry, event.reopen as SessionReopen | undefined);

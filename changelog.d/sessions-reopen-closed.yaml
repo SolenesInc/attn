@@ -1,0 +1,11 @@
+kind: added
+area: sessions
+change: The Sessions surface reopens a closed session, recreating or fetching its worktree when needed, or starting fresh on the default branch or in a directory picked with the location picker.
+symptom: A closed session's verdict was visible but nothing on the row could act on it; the reopen command existed only on the Unix socket.
+notes: >
+  Each closed row shows one primary action with the alternatives behind an
+  arrow, and Space opens a detail block that reads the directory, branch and
+  landing place. A verdict that arrives still checking its branch settles in
+  place when the daemon's check finishes, a refusal reads on the row, and a
+  busy row says so until the daemon answers. Protocol 298 adds
+  session_reopen over the WebSocket and the session_reopen_refreshed event.

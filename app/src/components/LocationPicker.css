@@ -15,6 +15,11 @@
   animation: overlay-fade 0.15s ease-out;
 }
 
+/* Asked from the Sessions surface (z-index 400), which stays behind it. */
+.location-picker-overlay[data-purpose='reopen'] {
+  z-index: 420;
+}
+
 @keyframes overlay-fade {
   from { opacity: 0; }
   to { opacity: 1; }

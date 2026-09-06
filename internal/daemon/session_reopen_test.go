@@ -320,8 +320,8 @@ func TestReopenVerdictShowsADirectoryItCannotOpen(t *testing.T) {
 
 	verdict := decidedReopenVerdict(t, d, "unreadable")
 	wantReopenVerdict(t, verdict, false, nil)
-	if !strings.Contains(verdict.Reason, notADirectory) {
-		t.Errorf("reason = %q, want the directory that cannot be opened", verdict.Reason)
+	if !strings.Contains(verdict.Reason, "cannot be opened") {
+		t.Errorf("reason = %q, want it to say the directory cannot be opened", verdict.Reason)
 	}
 }
 
