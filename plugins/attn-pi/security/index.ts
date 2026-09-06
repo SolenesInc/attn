@@ -25,8 +25,8 @@ export class PiSecurity {
     private readonly configPath = join(getAgentDir(), "attn-security.json"),
     private readonly approval?: BashApproval,
     /** Called with the policy every time security reconfigures, so the approval
-     * orchestrator wraps commands with the sandbox this session actually has. */
-    private readonly onPolicy?: (policy: SecurityPolicy | undefined, temp: string | undefined) => void,
+     * orchestrator wraps commands with the paths this session actually has. */
+    private readonly onPolicy?: (policy: SecurityPolicy | undefined) => void,
     private readonly reviewAvailable = () => false,
     private readonly checkExecution?: ToolExecutionCheck,
   ) {}
@@ -92,7 +92,7 @@ export class PiSecurity {
       this.fs = new SandboxedFilesystem(this.policy, credentials, this.reviewAvailable);
       this.problem = undefined;
       const policy = this.policy;
-      this.onPolicy?.(policy, this.temp);
+      this.onPolicy?.(policy);
       for (const tool of protectedTools(policy, credentials, this.fs, this.approval, this.reviewAvailable, this.checkExecution)) pi.registerTool(tool);
     } catch (error) {
       this.problem = credentials.text(error instanceof Error ? error.message : String(error));
@@ -126,7 +126,7 @@ export class PiSecurity {
   }
 
   private async close(): Promise<void> {
-    this.onPolicy?.(undefined, undefined);
+    this.onPolicy?.(undefined);
     const fs = this.fs;
     const temp = this.temp;
     this.fs = undefined;

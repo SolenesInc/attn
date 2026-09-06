@@ -36,6 +36,17 @@ export type ApprovalSetup = {
 
 export type ApprovalSource = { config: ApprovalConfig; problem?: string };
 
+/** What the session's security policy contributes to the sandbox: the paths the
+ * daemon's approval config does not carry. */
+export type SandboxPaths = {
+  cwd: string;
+  temp: string;
+  allowWrite: string[];
+  denyRead: string[];
+  denyWrite: string[];
+  cacheWritePaths: string[];
+};
+
 export function attnApprovalSource(env: Record<string, string | undefined>): ApprovalSource | undefined {
   const raw = env[approvalConfigEnvVar]?.trim();
   if (!raw) return undefined;
@@ -63,7 +74,7 @@ export class PiApproval {
   private readonly orchestrator: ApprovalOrchestrator;
   private readonly user: UserReviewer;
   private guardian: GuardianReviewer | undefined;
-  private sandbox: SandboxSource | undefined;
+  private paths: SandboxPaths | undefined;
   private choice: boolean | undefined;
   private flag: boolean | undefined;
   private context: ExtensionContext | undefined;
@@ -94,10 +105,10 @@ export class PiApproval {
     });
   }
 
-  /** PiSecurity owns the policy and the session's temp directory, so it hands
-   * the orchestrator the sandbox to wrap commands with. */
-  useSandbox(source: SandboxSource | undefined): void {
-    this.sandbox = source;
+  /** PiSecurity owns the workspace paths and the session's temp directory; the
+   * daemon's config owns what a command may do with them. */
+  useSandbox(paths: SandboxPaths | undefined): void {
+    this.paths = paths;
   }
 
   readonly runBash = (...args: Parameters<ApprovalOrchestrator["runBash"]>) => this.orchestrator.runBash(...args);
@@ -168,10 +179,25 @@ export class PiApproval {
     return { output: truncateForGuardian(output, maxToolEntryTokens), isError: result.exitCode !== 0 };
   }
 
-  private sandboxSource(): SandboxSource {
-    const source = this.sandbox;
-    if (!source) throw new Error("security has not configured a sandbox for this session yet");
-    return source;
+  /** The sandbox every command is wrapped with: the daemon's mode and network
+   * over the security policy's paths. */
+  sandboxSource(): SandboxSource {
+    const paths = this.paths;
+    if (!paths) throw new Error("security has not configured a sandbox for this session yet");
+    // The daemon's sandbox_mode and network switch decide what a command may do:
+    // the same values evaluateCommand already judged the command against.
+    return {
+      config: {
+        mode: this.setup.config.sandboxMode,
+        network: this.setup.config.network.enabled,
+        allowWrite: paths.allowWrite,
+        denyRead: paths.denyRead,
+        denyWrite: paths.denyWrite,
+        cacheWritePaths: paths.cacheWritePaths,
+      },
+      cwd: paths.cwd,
+      temp: paths.temp,
+    };
   }
 
   private record(denial: OrchestratorDenial): void {

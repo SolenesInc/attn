@@ -34,20 +34,9 @@ const approval = processSingleton("attn:pi-approval", () => {
 const security = processSingleton(
   "attn:pi-security",
   () =>
-    new PiSecurity(undefined, approval?.runBash, (policy, temp) =>
-      approval?.useSandbox(policy && temp ? {
-        config: {
-          mode: policy.enabled ? "workspace-write" : "danger-full-access",
-          network: policy.network === "allow",
-          allowWrite: policy.allowWrite,
-          denyRead: policy.denyRead,
-          denyWrite: policy.denyWrite,
-          cacheWritePaths: policy.cacheWritePaths,
-        },
-        cwd: policy.cwd,
-        temp,
-      } : undefined),
-    ),
+    // The security policy contributes only paths; the daemon's approval config
+    // owns the sandbox mode and the network switch.
+    new PiSecurity(undefined, approval?.runBash, (policy) => approval?.useSandbox(policy)),
 );
 
 export default function attnPiSuite(pi: ExtensionAPILike & ExtensionAPI): void {

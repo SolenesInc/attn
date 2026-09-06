@@ -1,14 +1,17 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createLocalBashOperations } from "@earendil-works/pi-coding-agent";
 import { ApprovalOrchestrator, retryWithoutSandboxReason, turnAbortedMessage } from "../approval/orchestrator";
 import { userRejection } from "../approval/reviewers";
+import { PiApproval } from "../approval/session";
+import { defaultApprovalConfig, type ApprovalConfig } from "../approval/config";
 import type { ApprovalRequest, ReviewDecision, Reviewer } from "../approval/types";
 import type { ApprovalPolicy, PrefixRule, SandboxMode } from "../execpolicy/index";
 import type { NetworkRequest } from "../netproxy/index";
-import { canonical } from "../security/policy";
+import { sandboxSpecFor } from "../sandbox/index";
+import { canonical, loadSecurityConfig, resolveSecurityPolicy } from "../security/policy";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -218,4 +221,59 @@ test.skipIf(process.platform !== "darwin")(
 function request(host: string): NetworkRequest {
   return { host, port: 443, protocol: "https_connect" };
 }
+
+/** The session as the suite builds it: a real security policy for the paths, and
+ * the daemon's approval config for everything else. */
+function session(overrides: Partial<ApprovalConfig>) {
+  const root = canonical(mkdtempSync(join(tmpdir(), "pi-approval-session-")));
+  roots.push(root);
+  for (const name of ["project", "temp"]) mkdirSync(join(root, name));
+  const configPath = join(root, "attn-security.json");
+  writeFileSync(configPath, JSON.stringify({ enabled: true, network: "allow" }));
+  const policy = resolveSecurityPolicy(loadSecurityConfig(configPath), join(root, "project"), configPath, join(root, "temp"));
+  const approval = new PiApproval({
+    config: { ...defaultApprovalConfig, ...overrides },
+    suite: {
+      networkDecider: undefined,
+      reportDenial: () => {},
+      reportApprovalWindow: () => {},
+      reportExecPolicyAmendment: () => {},
+      reportNetworkAmendment: () => {},
+    },
+    ledger: { record: () => {} },
+  });
+  approval.useSandbox(policy);
+  const source = approval.sandboxSource();
+  return { root, policy, spec: sandboxSpecFor(source.config, source.cwd, source.temp, { permissions: "use_default" }) };
+}
+
+test("the daemon's read-only mode wins over an enabled security policy", () => {
+  const it = session({ sandboxMode: "read-only" });
+  expect(it.policy.enabled).toBe(true);
+  expect(it.spec).not.toBe("unsandboxed");
+  if (it.spec === "unsandboxed") return;
+  expect(it.spec.mode).toBe("read-only");
+  expect(it.spec.writableRoots).toEqual([]);
+  expect(it.spec.cwd).toBe(join(it.root, "project"));
+});
+
+test("workspace-write takes its writable roots from the security policy", () => {
+  const it = session({ sandboxMode: "workspace-write" });
+  expect(it.spec).not.toBe("unsandboxed");
+  if (it.spec === "unsandboxed") return;
+  expect(it.spec.writableRoots).toContain(join(it.root, "project"));
+  expect(it.spec.writableRoots).toContain(join(it.root, "temp"));
+});
+
+test("the daemon's network switch decides the sandbox's network, not the security policy", () => {
+  const off = session({ sandboxMode: "workspace-write", network: { ...defaultApprovalConfig.network, enabled: false } });
+  expect(off.policy.network).toBe("allow");
+  expect(off.spec === "unsandboxed" ? undefined : off.spec.network.enabled).toBe(false);
+  const on = session({ sandboxMode: "workspace-write" });
+  expect(on.spec === "unsandboxed" ? undefined : on.spec.network.enabled).toBe(true);
+});
+
+test("danger-full-access from the daemon runs unsandboxed however the policy is set", () => {
+  expect(session({ sandboxMode: "danger-full-access" }).spec).toBe("unsandboxed");
+});
 
