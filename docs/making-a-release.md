@@ -88,8 +88,7 @@ every shard's `last-matrix.json`, so it reds when a scenario failed, when a
 scenario ran in no shard or in two, or when a shard reported nothing at all. It
 also accepts the candidate receipt on `main` and the protected-`main` override.
 
-The run costs around 9 minutes of wall time and about 22 minutes of runner time,
-so it runs only where its receipt is needed:
+The run still costs real minutes, so it runs only where its receipt is needed:
 pushes to `next` and `main`, PRs onto `main` (`release/v*` and `hotfix/*`, the
 only branches `main-route.sh` admits), and PRs that touch the harness, the Tauri
 shell, the app runtime host, or the job's own definition — the `harness` filter
