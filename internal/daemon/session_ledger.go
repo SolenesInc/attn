@@ -84,6 +84,9 @@ func (d *Daemon) sessionLedgerPage(msg *protocol.SessionListMessage, wantFacets 
 	if page.NextBefore != "" {
 		result.NextBefore = protocol.Ptr(page.NextBefore)
 	}
+	if protocol.Deref(msg.Reopen) {
+		result.Reopen = d.reopenVerdictsForPage(result.Entries)
+	}
 	return result, nil
 }
 
@@ -94,6 +97,21 @@ func (d *Daemon) handleSessionList(conn net.Conn, msg *protocol.SessionListMessa
 		return
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SessionListResult: result})
+}
+
+func (d *Daemon) reopenVerdictsForPage(entries []protocol.SessionLedgerEntry) []protocol.SessionReopenEntry {
+	verdicts := make([]protocol.SessionReopenEntry, 0, len(entries))
+	for i := range entries {
+		if protocol.Deref(entries[i].ClosedAt) == "" {
+			continue
+		}
+		verdict := d.reopenVerdictForEntry(&entries[i])
+		verdicts = append(verdicts, protocol.SessionReopenEntry{
+			SessionID: entries[i].ID,
+			Reopen:    *verdict.toProtocol(),
+		})
+	}
+	return verdicts
 }
 
 func (d *Daemon) handleSessionShow(conn net.Conn, msg *protocol.SessionShowMessage) {
@@ -146,5 +164,6 @@ func projectSessionClosed(d *Daemon, event bus.Event) {
 	d.wsHub.Broadcast(&protocol.WebSocketEvent{
 		Event:              protocol.EventSessionClosed,
 		SessionLedgerEntry: &entry,
+		Reopen:             d.reopenVerdictForEntry(&entry).toProtocol(),
 	})
 }

@@ -324,6 +324,7 @@ type SessionListOptions struct {
 	Repository  string
 	Since       string
 	Until       string
+	Reopen      bool
 }
 
 func (c *Client) SessionList(opts SessionListOptions) (*protocol.SessionListResult, error) {
@@ -351,6 +352,9 @@ func (c *Client) SessionList(opts SessionListOptions) (*protocol.SessionListResu
 	}
 	if until := strings.TrimSpace(opts.Until); until != "" {
 		msg.Until = protocol.Ptr(until)
+	}
+	if opts.Reopen {
+		msg.Reopen = protocol.Ptr(true)
 	}
 	resp, err := c.send(msg)
 	if err != nil {

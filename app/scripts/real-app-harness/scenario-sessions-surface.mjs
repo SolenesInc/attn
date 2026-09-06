@@ -206,6 +206,18 @@ async function main() {
       await hold();
     });
 
+    await runner.step('the_closed_row_carries_the_verdict_its_page_was_read_with', async () => {
+      const judged = await waitForSessions(client, (s) => (rowFor(s, sessions.two)?.verdict ?? '') !== '—',
+        'the closed row to carry a reopen verdict');
+      const row = rowFor(judged, sessions.two);
+      runner.assert(row.verdict.length > 0 && row.verdict !== '—',
+        'a closed row must say what it would take to bring it back', { row });
+      const live = rowFor(judged, sessions.one);
+      runner.assert(live.verdict === '—', 'a live row is never judged', { live });
+      runner.writeJson('row-verdicts.json', judged);
+      await hold();
+    });
+
     await runner.step('the_live_scope_drops_the_closed_row', async () => {
       const live = await client.request('sessions_set_filter', { scope: 'Live' });
       const settled = await waitForSessions(client, (s) => !rowFor(s, sessions.two),

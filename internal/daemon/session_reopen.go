@@ -112,14 +112,16 @@ func (d *Daemon) reopenExecution(entry *protocol.SessionLedgerEntry) garden.Disp
 }
 
 func (d *Daemon) reopenVerdict(sessionID string) (*sessionReopenVerdict, bool) {
-	sessionID = strings.TrimSpace(sessionID)
-	entry := d.store.SessionLedgerEntry(sessionID)
+	entry := d.store.SessionLedgerEntry(strings.TrimSpace(sessionID))
 	if entry == nil {
 		return nil, false
 	}
+	return d.reopenVerdictForEntry(entry), true
+}
 
+func (d *Daemon) reopenVerdictForEntry(entry *protocol.SessionLedgerEntry) *sessionReopenVerdict {
 	verdict := &sessionReopenVerdict{
-		SessionID: sessionID,
+		SessionID: entry.ID,
 		Entry:     entry,
 		Execution: d.reopenExecution(entry),
 		Live:      protocol.Deref(entry.ClosedAt) == "",
@@ -128,14 +130,14 @@ func (d *Daemon) reopenVerdict(sessionID string) (*sessionReopenVerdict, bool) {
 	d.planReopenPlacement(verdict)
 
 	if verdict.Live {
-		verdict.Reason = fmt.Sprintf("session %s is running; focus it instead of reopening it", sessionID)
-		return verdict, true
+		verdict.Reason = fmt.Sprintf("session %s is running; focus it instead of reopening it", entry.ID)
+		return verdict
 	}
 	if !decideReopenHost(verdict, d.endpointInfos()) {
-		return verdict, true
+		return verdict
 	}
 	d.decideReopenPlace(verdict)
-	return verdict, true
+	return verdict
 }
 
 func (d *Daemon) planReopenPlacement(verdict *sessionReopenVerdict) {

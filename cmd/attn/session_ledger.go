@@ -24,6 +24,7 @@ type sessionListArgs struct {
 	repository string
 	since      string
 	until      string
+	reopen     bool
 	json       bool
 }
 
@@ -80,6 +81,7 @@ func parseSessionListArgs(args []string) (sessionListArgs, error) {
 	last := fs.String("last", "", "a date preset: "+sessionListPresetNames())
 	since := fs.String("since", "", "only sessions from this date or RFC3339 instant onwards")
 	until := fs.String("until", "", "only sessions before this date or RFC3339 instant")
+	reopen := fs.Bool("reopen", false, "judge every closed row and print what would bring it back")
 	jsonOut := fs.Bool("json", false, "print the page as JSON")
 	if err := fs.Parse(args); err != nil {
 		return sessionListArgs{}, err
@@ -101,6 +103,7 @@ func parseSessionListArgs(args []string) (sessionListArgs, error) {
 		before:     strings.TrimSpace(*before),
 		workspace:  strings.TrimSpace(*workspace),
 		repository: strings.TrimSpace(*repository),
+		reopen:     *reopen,
 		json:       *jsonOut,
 	}
 
@@ -136,15 +139,15 @@ func runSessionList(args []string) {
 	}
 
 	result, err := client.New("").SessionList(client.SessionListOptions{
-		Closed: parsed.closed,
-		All:    parsed.all,
-		Limit:  parsed.limit,
-		Before: parsed.before,
-
+		Closed:      parsed.closed,
+		All:         parsed.all,
+		Limit:       parsed.limit,
+		Before:      parsed.before,
 		WorkspaceID: parsed.workspace,
 		Repository:  parsed.repository,
 		Since:       parsed.since,
 		Until:       parsed.until,
+		Reopen:      parsed.reopen,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session list: %v\n", err)
@@ -163,18 +166,31 @@ func fprintSessionList(w io.Writer, result *protocol.SessionListResult, args ses
 		return
 	}
 
+	verdicts := sessionReopenVerdictsByID(result.Reopen)
 	table := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(table, "ID\tAGENT\tSTATE\tWHEN\tCLOSED BY\tLABEL")
+	header := "ID\tAGENT\tSTATE\tWHEN\tCLOSED BY\tLABEL"
+	if args.reopen {
+		header = "ID\tAGENT\tSTATE\tWHEN\tCLOSED BY\tREOPEN\tLABEL"
+	}
+	fmt.Fprintln(table, header)
 	for _, entry := range result.Entries {
-		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t",
 			entry.ID,
 			entry.Agent,
 			sessionLedgerState(entry),
 			shortStamp(sessionLedgerWhen(entry)),
-			orDash(protocol.Deref(entry.ClosedBy)),
-			entry.Label)
+			orDash(protocol.Deref(entry.ClosedBy)))
+		if args.reopen {
+			fmt.Fprintf(table, "%s\t", sessionReopenColumn(verdicts[entry.ID]))
+		}
+		fmt.Fprintf(table, "%s\n", entry.Label)
 	}
 	table.Flush()
+
+	if checking := countCheckingVerdicts(result.Reopen); checking > 0 {
+		fmt.Fprintf(w, "\n%s still checking a branch; ask again for a sharper verdict\n",
+			pluralRows(checking))
+	}
 
 	for _, entry := range result.Entries {
 		if reason := strings.TrimSpace(protocol.Deref(entry.CloseReason)); reason != "" {
@@ -201,6 +217,42 @@ func emptySessionListMessage(args sessionListArgs) string {
 	default:
 		return "no live sessions — `attn session list --closed` reads the ones that ended"
 	}
+}
+
+func sessionReopenVerdictsByID(entries []protocol.SessionReopenEntry) map[string]*protocol.SessionReopen {
+	verdicts := make(map[string]*protocol.SessionReopen, len(entries))
+	for i := range entries {
+		verdicts[entries[i].SessionID] = &entries[i].Reopen
+	}
+	return verdicts
+}
+
+func sessionReopenColumn(verdict *protocol.SessionReopen) string {
+	switch {
+	case verdict == nil:
+		return "-"
+	case len(verdict.Actions) == 0:
+		return "no"
+	default:
+		return string(verdict.Actions[0])
+	}
+}
+
+func countCheckingVerdicts(entries []protocol.SessionReopenEntry) int {
+	checking := 0
+	for _, entry := range entries {
+		if entry.Reopen.Checking {
+			checking++
+		}
+	}
+	return checking
+}
+
+func pluralRows(n int) string {
+	if n == 1 {
+		return "1 row is"
+	}
+	return fmt.Sprintf("%d rows are", n)
 }
 
 // A closed row keeps the state it held when it closed, which would read as live.

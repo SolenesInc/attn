@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
-import type { SessionLedgerEntry } from '../types/generated';
+import type { SessionLedgerEntry, SessionReopen } from '../types/generated';
 import type { SessionLedgerPage, SessionLedgerQuery } from '../hooks/daemonSessionLedgerEvents';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { useSessionLedger } from '../hooks/useSessionLedger';
@@ -13,20 +13,8 @@ import {
   ledgerState,
   shortPath,
 } from './sessionsLedger';
-import type { SessionRangeId, SessionScope } from './sessionsLedger';
+import type { ReopenVerdictView, SessionRangeId, SessionScope } from './sessionsLedger';
 import './SessionsPanel.css';
-
-export interface ReopenActionView {
-  id: string;
-  label: string;
-}
-
-export interface ReopenVerdictView {
-  refreshing: boolean;
-  summary: string;
-  reopenable: boolean;
-  actions: ReopenActionView[];
-}
 
 export interface SessionSeedLink {
   id: string;
@@ -42,18 +30,15 @@ export interface SessionsPanelProps {
   seedForSession?: (sessionId: string) => SessionSeedLink | null;
   onFocusSession?: (sessionId: string) => void;
   onOpenSeed?: (seedId: string) => void;
-  verdicts?: Record<string, ReopenVerdictView>;
-  onRequestVerdict?: (sessionId: string) => void;
   onReopen?: (sessionId: string, actionId: string) => void;
   /** The nonce makes a repeat close of the same session a new notice. */
-  closeNotice?: { entry: SessionLedgerEntry; nonce: number };
+  closeNotice?: { entry: SessionLedgerEntry; reopen?: SessionReopen; nonce: number };
   now?: () => Date;
 }
 
 const systemNow = () => new Date();
 
 const NO_WORKSPACE_NAMES: Record<string, string> = {};
-const NO_VERDICTS: Record<string, ReopenVerdictView> = {};
 
 const SCOPES: { id: SessionScope; label: string }[] = [
   { id: 'live', label: 'Live' },
@@ -74,14 +59,12 @@ function OpenSessionsPanel({
   seedForSession,
   onFocusSession,
   onOpenSeed,
-  verdicts = NO_VERDICTS,
-  onRequestVerdict,
   onReopen,
   closeNotice,
   now = systemNow,
 }: SessionsPanelProps) {
   const ledger = useSessionLedger({ enabled: true, list: listSessions, now });
-  const { filters, setFilters, entries } = ledger;
+  const { filters, setFilters, entries, verdicts } = ledger;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Fires against the verdict that lands, never the stale one that was on screen.
   const [awaiting, setAwaiting] = useState<{ sessionId: string; actionId: string } | null>(null);
@@ -93,17 +76,10 @@ function OpenSessionsPanel({
   const { recordClose } = ledger;
   useEffect(() => {
     if (!closeNotice) return;
-    recordClose(closeNotice.entry);
+    recordClose(closeNotice.entry, closeNotice.reopen);
   }, [closeNotice, recordClose]);
 
   const selected = entries.find((entry) => entry.id === selectedId) ?? entries[0] ?? null;
-
-  useEffect(() => {
-    if (!onRequestVerdict) return;
-    for (const entry of entries) {
-      if (isClosed(entry) && !verdicts[entry.id]) onRequestVerdict(entry.id);
-    }
-  }, [entries, verdicts, onRequestVerdict]);
 
   useEffect(() => {
     if (!awaiting) return;
@@ -304,7 +280,7 @@ function OpenSessionsPanel({
                       selected={entry.id === selected?.id}
                       workspaceLabel={workspaceLabel}
                       sessionLabel={sessionLabel}
-                      checksAvailable={!!onRequestVerdict}
+                      actionsAvailable={!!onReopen}
                       onSelect={setSelectedId}
                       onMoveSelection={moveSelection}
                       onFocusSession={onFocusSession}
@@ -344,7 +320,7 @@ interface SessionRowProps {
   selected: boolean;
   workspaceLabel: (workspaceId: string) => string;
   sessionLabel: (sessionId: string) => string;
-  checksAvailable: boolean;
+  actionsAvailable: boolean;
   onSelect: (sessionId: string) => void;
   onMoveSelection: (offset: number) => void;
   onFocusSession?: (sessionId: string) => void;
@@ -361,7 +337,7 @@ function SessionRow({
   selected,
   workspaceLabel,
   sessionLabel,
-  checksAvailable,
+  actionsAvailable,
   onSelect,
   onMoveSelection,
   onFocusSession,
@@ -384,7 +360,7 @@ function SessionRow({
         } else if (event.key === 'Enter') {
           event.preventDefault();
           if (live) onFocusSession?.(entry.id);
-          else if (verdict?.actions[0]) onRunAction(entry, verdict.actions[0].id);
+          else if (actionsAvailable && verdict?.actions[0]) onRunAction(entry, verdict.actions[0].id);
         }
       }}
     >
@@ -413,12 +389,12 @@ function SessionRow({
           </span>
         )}
       </td>
-      <td>{renderVerdict(verdict, isClosed(entry), waiting, checksAvailable)}</td>
+      <td>{renderVerdict(verdict, isClosed(entry), waiting)}</td>
       <td className="sessions-actions">
         {live && (
           <button type="button" onClick={() => onFocusSession?.(entry.id)}>Focus</button>
         )}
-        {isClosed(entry) && verdict?.actions.map((action) => (
+        {isClosed(entry) && actionsAvailable && verdict?.actions.map((action) => (
           <button
             key={action.id}
             type="button"
@@ -436,12 +412,8 @@ function renderVerdict(
   verdict: ReopenVerdictView | undefined,
   closed: boolean,
   waiting: boolean,
-  checksAvailable: boolean,
 ): React.ReactNode {
-  if (!closed) return <span className="sessions-verdict-none">—</span>;
-  // Nothing is checking, so "checking…" would be a promise the row never keeps.
-  if (!checksAvailable) return <span className="sessions-verdict-none">—</span>;
-  if (!verdict) return <span className="sessions-verdict-refreshing">checking…</span>;
+  if (!closed || !verdict) return <span className="sessions-verdict-none">—</span>;
   if (verdict.refreshing) {
     return (
       <span className="sessions-verdict-refreshing" title={verdict.summary}>

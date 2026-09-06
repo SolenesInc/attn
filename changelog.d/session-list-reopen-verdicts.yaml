@@ -1,0 +1,3 @@
+kind: added
+area: sessions
+change: "The Sessions panel and `attn session list --reopen` judge every closed row of a page in the read that fetched it, and print what would bring each one back. A page costs one call instead of one `attn session show` per closed row, and a session that closes while the panel is open arrives already judged, so its row fills in without a re-list. The judgement stays free of the repository, exactly as `show` is: rows answer from what the daemon already knows and sharpen once the branch check behind them lands."

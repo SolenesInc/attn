@@ -230,6 +230,25 @@ async function main() {
       runner.writeText('reopen-refused.txt', `${refused.stdout}${refused.stderr}`);
     });
 
+    await runner.step('the_page_carries_the_same_verdict', async () => {
+      const page = attn(daemonBinary, profile, 'session', 'list', '--closed', '--reopen');
+      runner.assert(/^ID\s+.*\bREOPEN\b/m.test(page), 'the asked-for page must carry a verdict column', { page });
+      const row = page.split('\n').find((line) => line.startsWith(sessionId));
+      runner.assert(!!row && row.includes('recreate_worktree_and_reopen'),
+        'the page must name the same action session show offered', { page });
+
+      const plain = attn(daemonBinary, profile, 'session', 'list', '--closed');
+      runner.assert(!/\bREOPEN\b/.test(plain), 'a page nobody asked to judge must not carry verdicts', { plain });
+
+      runner.assert(!fs.existsSync(worktree), 'judging a page must not put the worktree back', { worktree });
+      const after = git(repo, 'worktree', 'list', '--porcelain');
+      runner.assert(after === beforeRecreate, 'judging a page must not touch the worktree registrations', {
+        beforeRecreate,
+        after,
+      });
+      runner.writeText('session-list-reopen.txt', page);
+    });
+
     await runner.step('the_recreate_action_brings_it_back', async () => {
       const out = attn(daemonBinary, profile, 'session', 'reopen', sessionId, '--action', 'recreate_worktree_and_reopen');
       runner.assert(out.includes('recreated worktree'), 'the action must report the worktree it recreated', { out });

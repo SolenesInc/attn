@@ -1,4 +1,9 @@
-import type { SessionLedgerEntry, SessionLedgerFacets } from '../types/generated';
+import type {
+  SessionLedgerEntry,
+  SessionLedgerFacets,
+  SessionReopen,
+  SessionReopenEntry,
+} from '../types/generated';
 import type { PendingRequests } from './daemonPendingRequests';
 import { settlePendingRequest } from './daemonPendingRequests';
 
@@ -9,6 +14,7 @@ export interface SessionLedgerPage {
   facets?: SessionLedgerFacets;
   next_before?: string;
   omitted: number;
+  reopen?: SessionReopenEntry[];
 }
 
 export interface SessionLedgerQuery {
@@ -20,11 +26,12 @@ export interface SessionLedgerQuery {
   repository?: string;
   since?: string;
   until?: string;
+  reopen?: boolean;
 }
 
 export interface SessionLedgerEventContext {
   pending: PendingRequests;
-  onSessionClosed?: (entry: SessionLedgerEntry) => void;
+  onSessionClosed?: (entry: SessionLedgerEntry, reopen?: SessionReopen) => void;
 }
 
 type SessionLedgerEvent = {
@@ -35,6 +42,7 @@ type SessionLedgerEvent = {
   result?: unknown;
   entry?: unknown;
   session_ledger_entry?: unknown;
+  reopen?: unknown;
 };
 
 export function handleSessionLedgerDaemonEvent(
@@ -62,7 +70,7 @@ export function handleSessionLedgerDaemonEvent(
       return true;
     case 'session_closed': {
       const entry = event.session_ledger_entry as SessionLedgerEntry | undefined;
-      if (entry) context.onSessionClosed?.(entry);
+      if (entry) context.onSessionClosed?.(entry, event.reopen as SessionReopen | undefined);
       return true;
     }
     default:

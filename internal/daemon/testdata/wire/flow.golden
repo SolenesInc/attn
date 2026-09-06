@@ -155,6 +155,18 @@
 --- 11 session_closed
 {
   "event": "session_closed",
+  "reopen": {
+    "actions": [
+      "start_fresh_same_place"
+    ],
+    "checking": false,
+    "directory_state": "present",
+    "pane_plan": "reuse",
+    "reason": "no conversation id was saved for this session, so there is nothing to resume",
+    "reopenable": false,
+    "workspace_id": "workspace-1",
+    "workspace_plan": "reuse"
+  },
   "session_ledger_entry": {
     "agent": "claude",
     "closed_at": "<timestamp>",

@@ -10,11 +10,11 @@ import (
 )
 
 func TestParseSessionListArgs(t *testing.T) {
-	parsed, err := parseSessionListArgs([]string{"--closed", "--limit", "5", "--before", "sess-9"})
+	parsed, err := parseSessionListArgs([]string{"--closed", "--limit", "5", "--before", "sess-9", "--reopen"})
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if !parsed.closed || parsed.limit != 5 || parsed.before != "sess-9" {
+	if !parsed.closed || parsed.limit != 5 || parsed.before != "sess-9" || !parsed.reopen {
 		t.Fatalf("parsed = %+v", parsed)
 	}
 
@@ -171,5 +171,58 @@ func TestSessionListTakesTheFiltersTheAppOffers(t *testing.T) {
 		if _, err := parseSessionListArgs(args); err == nil {
 			t.Errorf("parseSessionListArgs(%v) accepted arguments it should refuse", args)
 		}
+	}
+}
+
+func TestSessionListPrintsWhatWouldBringEachClosedRowBack(t *testing.T) {
+	result := &protocol.SessionListResult{
+		Entries: []protocol.SessionLedgerEntry{
+			{
+				ID: "gone", Label: "worktree deleted", Agent: "codex", Directory: "/tmp/gone",
+				State: protocol.SessionStateIdle, LastSeen: "2026-09-05T12:00:00Z",
+				ClosedAt: protocol.Ptr("2026-09-05T12:30:00Z"), ClosedBy: protocol.Ptr("user"),
+			},
+			{
+				ID: "stuck", Label: "nothing left", Agent: "codex", Directory: "/tmp/stuck",
+				State: protocol.SessionStateIdle, LastSeen: "2026-09-05T11:00:00Z",
+				ClosedAt: protocol.Ptr("2026-09-05T11:30:00Z"), ClosedBy: protocol.Ptr("user"),
+			},
+			{
+				ID: "live", Label: "still going", Agent: "claude", Directory: "/tmp/live",
+				State: protocol.SessionStateIdle, LastSeen: "2026-09-05T13:00:00Z",
+			},
+		},
+		Reopen: []protocol.SessionReopenEntry{
+			{SessionID: "gone", Reopen: protocol.SessionReopen{
+				Actions: []protocol.SessionReopenAction{
+					protocol.SessionReopenActionRecreateWorktreeAndReopen,
+					protocol.SessionReopenActionStartFreshElsewhere,
+				},
+				Checking: true,
+			}},
+			{SessionID: "stuck", Reopen: protocol.SessionReopen{
+				Reason: protocol.Ptr("its repository is gone too"),
+			}},
+		},
+	}
+
+	var buf bytes.Buffer
+	fprintSessionList(&buf, result, sessionListArgs{all: true, reopen: true})
+	out := buf.String()
+
+	if !strings.Contains(out, "REOPEN") {
+		t.Errorf("the asked-for verdict column is missing:\n%s", out)
+	}
+	if !strings.Contains(out, string(protocol.SessionReopenActionRecreateWorktreeAndReopen)) {
+		t.Errorf("the row does not name the action that would bring it back:\n%s", out)
+	}
+	if !strings.Contains(out, "1 row is still checking a branch") {
+		t.Errorf("a row still checking its branch says so nowhere:\n%s", out)
+	}
+
+	var plain bytes.Buffer
+	fprintSessionList(&plain, result, sessionListArgs{all: true})
+	if strings.Contains(plain.String(), "REOPEN") {
+		t.Errorf("a list nobody asked to judge grew a verdict column:\n%s", plain.String())
 	}
 }
