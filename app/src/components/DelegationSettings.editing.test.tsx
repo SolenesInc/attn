@@ -34,25 +34,26 @@ it('starts off, opts in to starter roles, discovers on request and preserves edi
   expect(daemon.getCalls('models')).toHaveLength(0);
   fireEvent.click(screen.getByRole('checkbox', { name: 'Off' }));
   await screen.findByRole('button', { name: 'Edit Build' });
+  fireEvent.click(screen.getByRole('button', { name: 'Edit Build' }));
+  expect(screen.queryByText('Start with one model')).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText('Harness'), { target: { value: 'codex' } });
   fireEvent.click(screen.getByRole('button', { name: 'Discover models' }));
   await screen.findByText('Reported by Codex');
   expect(daemon.getCalls('models').map(c => c.args)).toEqual([['codex']]);
   fireEvent.change(screen.getByLabelText('Model'), { target: { value: JSON.stringify(['', 'model-a']) } });
   fireEvent.change(screen.getByLabelText('Effort'), { target: { value: 'medium' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Use for unconfigured choices' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Edit Build' }));
   expect(screen.getByText('Instructions and stopping point').closest('details')).toHaveAttribute('open');
-  fireEvent.change(screen.getByLabelText('Instructions for the delegated agent'), { target: { value: 'Verify the migration' } });
+  fireEvent.change(screen.getByLabelText('Instructions'), { target: { value: 'Verify the migration' } });
   fireEvent.click(screen.getByRole('button', { name: '+ Add alternative' }));
   fireEvent.change(screen.getByLabelText('Choice name'), { target: { value: 'Hard verification' } });
   fireEvent.change(screen.getByLabelText('Use when'), { target: { value: 'Verification is difficult' } });
   fireEvent.change(screen.getByLabelText('Effort'), { target: { value: 'high' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save preferences' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(daemon.getCalls('save')).toHaveLength(2));
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Save preferences' })).toBeDisabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
   const saved = getState().preferences;
   expect(saved.roles[0].choices.map(c => c.selection.effort)).toEqual(['medium', 'high']);
+  expect(saved.fallback.selection.harness).toBe('');
   expect(saved.roles[0].instructions).toBe('Verify the migration');
   fireEvent.click(screen.getByRole('checkbox', { name: 'On' }));
   await screen.findByRole('checkbox', { name: 'Off' });
@@ -67,9 +68,33 @@ it('preserves a dirty draft when another client saves and offers an explicit rel
   await act(async () => externalChange());
   await screen.findByRole('alert');
   expect(screen.getByLabelText('Role name')).toHaveValue('My builder');
-  expect(screen.getByRole('button', { name: 'Save preferences' })).toBeDisabled();
-  fireEvent.click(screen.getByRole('button', { name: 'Reload saved settings' }));
+  expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Revert changes' }));
   await waitFor(() => expect(screen.getByLabelText('Role name')).toHaveValue('Build'));
   expect(daemon.getCalls('load')).toHaveLength(3);
   expect(daemon.getCalls('save')).toHaveLength(0);
+});
+
+it('keeps fallback edits separate from role choices and reverts unsaved changes', async () => {
+  const { getState } = setup(true);
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit Build' }));
+  fireEvent.change(screen.getByLabelText('Harness'), { target: { value: 'codex' } });
+  fireEvent.change(screen.getByLabelText('Effort'), { target: { value: 'high' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
+  const savedRole = structuredClone(getState().preferences.roles[0]);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Fallback' }));
+  expect(screen.getByRole('button', { name: 'Fallback' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByLabelText('Harness')).toHaveValue('');
+  fireEvent.change(screen.getByLabelText('Harness'), { target: { value: 'codex' } });
+  fireEvent.change(screen.getByLabelText('Effort'), { target: { value: 'medium' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
+  expect(getState().preferences.roles[0]).toEqual(savedRole);
+  expect(getState().preferences.fallback.selection.effort).toBe('medium');
+
+  fireEvent.change(screen.getByLabelText('Effort'), { target: { value: 'high' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Revert changes' }));
+  await waitFor(() => expect(screen.getByLabelText('Effort')).toHaveValue('medium'));
 });

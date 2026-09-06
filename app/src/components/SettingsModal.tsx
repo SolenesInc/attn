@@ -723,7 +723,7 @@ export function SettingsModal({
           id: 'delegation',
           label: 'Delegation',
           title: 'Delegation',
-          description: 'Choose harnesses, models, and effort for the work you delegate.',
+          description: '',
           count: 1,
           keywords: 'delegate roles scout design build ship review fallback harness models effort preferences',
         },
@@ -906,12 +906,7 @@ export function SettingsModal({
         );
       case 'general':
       default:
-        return (
-          <>
-            <span className="settings-pill">{themePreference}</span>
-            <span className="settings-pill">{Math.round(uiScale * 100)}% text</span>
-          </>
-        );
+        return null;
     }
   };
 
@@ -2547,9 +2542,9 @@ export function SettingsModal({
           <main className="settings-body" data-testid="settings-body">
             <div className="settings-content-head">
               <div>
-                <div className="settings-kicker">{selectedNavItem?.label}</div>
+                {selectedNavItem?.label !== selectedNavItem?.title && <div className="settings-kicker">{selectedNavItem?.label}</div>}
                 <h1>{selectedNavItem?.title}</h1>
-                <p className="settings-lead">{selectedNavItem?.description}</p>
+                {selectedNavItem?.description && <p className="settings-lead">{selectedNavItem.description}</p>}
               </div>
               <div className="settings-status-pair">
                 {renderSectionStatusPills()}

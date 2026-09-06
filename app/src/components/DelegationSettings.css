@@ -9,10 +9,9 @@
 .delegation-switch { display: flex; align-items: center; gap: 8px; font-size: var(--font-size-sm); cursor: pointer; }
 .delegation-off { padding: 32px 0; max-width: 560px; }
 .delegation-content { border: 0; padding: 0; margin: 0; min-width: 0; }
-.delegation-tabs { display: flex; gap: 8px; margin: 20px 0; }
-.delegation-tabs .active { border-color: var(--color-text-secondary); background: var(--color-bg-elevated); color: var(--color-text-primary); }
+.delegation-tabs { margin: 20px 0; }
 .delegation-row.between { justify-content: space-between; }
-.delegation-role-row { display: flex; gap: 16px; align-items: center; padding: 20px 0; border-bottom: 1px solid var(--color-border-subtle); }
+.delegation-role-row { display: flex; gap: 16px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--color-border-subtle); }
 .delegation-role-row:last-of-type { margin-bottom: 20px; }
 .delegation-role-row.disabled .delegation-role-summary { opacity: .55; }
 .delegation-role-summary { flex: 1; min-width: 0; }
@@ -20,12 +19,12 @@
 button.delegation-icon { cursor: pointer; }
 .delegation-icon svg { width: 18px; height: 18px; }
 .delegation-icons { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0; }
-.delegation-route { color: var(--color-text-tertiary); font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+.delegation-route { color: var(--color-text-tertiary); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
 .delegation-role-heading { margin-top: 24px; }
 .delegation-role-heading .delegation-field { flex: 1; }
 .delegation-field, .delegation-fields label { display: flex; flex-direction: column; gap: 8px; font-size: var(--font-size-sm); color: var(--color-text-secondary); }
 .delegation-field { margin: 20px 0; }
-.delegation-settings input:not([type=checkbox]), .delegation-settings select, .delegation-settings textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--color-border-subtle); border-radius: 6px; background: var(--color-bg-panel); color: var(--color-text-primary); font: inherit; }
+.delegation-settings input:not([type=checkbox]), .delegation-settings select, .delegation-settings textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 9px 12px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg-input); color: var(--color-text-primary); font: inherit; }
 .delegation-settings input:not([type=checkbox]), .delegation-settings select { min-height: 38px; line-height: 1.4; }
 .delegation-select { position: relative; display: block; min-width: 0; }
 .delegation-select::after { content: ''; position: absolute; top: 50%; right: 14px; width: 6px; height: 6px; border-right: 1.5px solid var(--color-text-tertiary); border-bottom: 1.5px solid var(--color-text-tertiary); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
@@ -37,15 +36,15 @@ button.delegation-icon { cursor: pointer; }
 .delegation-settings input[type=checkbox] { accent-color: var(--color-accent); }
 .delegation-fields { display: grid; grid-template-columns: 1fr 1.6fr 1fr; gap: 12px; }
 .delegation-picker { margin: 16px 0; }
-.delegation-picker .delegation-row { justify-content: space-between; margin-top: 10px; }
+.delegation-picker .delegation-row { justify-content: flex-end; margin-top: 10px; }
+.delegation-picker .settings-hint { margin-right: auto; }
 .delegation-picker .settings-action { flex-shrink: 0; }
 .delegation-fields.custom-model { grid-template-columns: 1fr 1fr auto; align-items: end; margin-top: 12px; }
 .delegation-behavior { margin: 24px 0; }
 .delegation-behavior summary { cursor: pointer; font-size: var(--font-size-sm); font-weight: 600; }
-.delegation-choice { padding: 16px; margin-top: 12px; border: 1px solid var(--color-border-subtle); border-radius: 8px; }
-.delegation-choice .settings-pill { margin-left: 4px; font-weight: 400; }
+.delegation-choice { padding: 16px 0; border-bottom: 1px solid var(--color-border-subtle); }
+.delegation-choice-default { margin-left: 8px; color: var(--color-text-tertiary); font-size: var(--font-size-xs); font-weight: 400; }
 .delegation-choice-body { border-top: 1px solid var(--color-border-subtle); margin-top: 12px; }
-.delegation-starter { padding: 20px; border: 1px solid var(--color-border-subtle); border-radius: 8px; margin-bottom: 24px; }
 /* Extend the sticky actions through the scroll container's bottom padding. */
 .delegation-save { position: sticky; bottom: calc(-1 * var(--settings-body-padding-bottom, 0px)); z-index: 1; background: var(--color-bg-panel); padding: 16px 0 calc(16px + var(--settings-body-padding-bottom, 0px)); border-top: 1px solid var(--color-border-subtle); margin-top: 24px; margin-bottom: calc(-1 * var(--settings-body-padding-bottom, 0px)); }
 .delegation-save > span { margin-right: auto; color: var(--color-text-tertiary); font-size: var(--font-size-xs); }
