@@ -4579,9 +4579,10 @@ export interface GardenReviewUpdatedMessageReview {
 }
 
 export interface GardenSeedsUpdatedMessage {
-    event: GardenSeedsUpdatedMessageEvent;
-    seeds: SeedElement[];
-    total: number;
+    event:          GardenSeedsUpdatedMessageEvent;
+    question_seeds: SeedElement[];
+    seeds:          SeedElement[];
+    total:          number;
     [property: string]: any;
 }
 
@@ -5128,6 +5129,7 @@ export interface InitialStateMessage {
     home_daemon_id?:     string;
     protocol_version?:   string;
     prs?:                PRElement[];
+    question_seeds?:     SeedElement[];
     repos?:              RepoElement[];
     seeds?:              SeedElement[];
     seeds_total?:        number;
@@ -18924,6 +18926,7 @@ const typeMap: any = {
     ], "any"),
     "GardenSeedsUpdatedMessage": o([
         { json: "event", js: "event", typ: r("GardenSeedsUpdatedMessageEvent") },
+        { json: "question_seeds", js: "question_seeds", typ: a(r("SeedElement")) },
         { json: "seeds", js: "seeds", typ: a(r("SeedElement")) },
         { json: "total", js: "total", typ: 0 },
     ], "any"),
@@ -19278,6 +19281,7 @@ const typeMap: any = {
         { json: "home_daemon_id", js: "home_daemon_id", typ: u(undefined, "") },
         { json: "protocol_version", js: "protocol_version", typ: u(undefined, "") },
         { json: "prs", js: "prs", typ: u(undefined, a(r("PRElement"))) },
+        { json: "question_seeds", js: "question_seeds", typ: u(undefined, a(r("SeedElement"))) },
         { json: "repos", js: "repos", typ: u(undefined, a(r("RepoElement"))) },
         { json: "seeds", js: "seeds", typ: u(undefined, a(r("SeedElement"))) },
         { json: "seeds_total", js: "seeds_total", typ: u(undefined, 0) },

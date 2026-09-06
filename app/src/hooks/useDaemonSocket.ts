@@ -291,7 +291,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '306';
+export const PROTOCOL_VERSION = '307';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -581,7 +581,7 @@ interface UseDaemonSocketOptions {
   onTasksChanged?: () => void;
   onNotificationsUpdated?: (unreadCount: number, critical: CriticalNotificationState) => void;
   onFsChanged?: (origin: string, paths: string[], root: string) => void;
-  onSeedsUpdate?: (seeds: Seed[], total: number) => void;
+  onSeedsUpdate?: (seeds: Seed[], total: number, questionSeeds: Seed[]) => void;
   onAppsUpdate?: (apps: AppRegistryEntry[]) => void;
   onCrewUpdate?: (members: CrewMember[]) => void;
   onPresentationAdded?: (presentation: Presentation) => void;
@@ -1385,6 +1385,7 @@ export function useDaemonSocket({
             callbacksRef.current.onSeedsUpdate?.(
               data.seeds || [],
               data.seeds_total ?? (data.seeds || []).length,
+              data.question_seeds || [],
             );
             callbacksRef.current.onAppsUpdate?.(data.apps || []);
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
@@ -1547,6 +1548,7 @@ export function useDaemonSocket({
             callbacksRef.current.onSeedsUpdate?.(
               data.seeds || [],
               data.total ?? (data.seeds || []).length,
+              data.question_seeds || [],
             );
             break;
 

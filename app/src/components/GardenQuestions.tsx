@@ -238,7 +238,11 @@ function firstOpenQuestion(rows: Asking[]): string {
   return rows.find((row) => row.question.status === 'open')?.seed.id ?? '';
 }
 
-export function NeedsHumanBand({ seeds, ...handlers }: { seeds: Seed[] } & QuestionActionHandlers) {
+export function NeedsHumanBand({
+  seeds,
+  canOpenSeed,
+  ...handlers
+}: { seeds: Seed[]; canOpenSeed?: (seedId: string) => boolean } & QuestionActionHandlers) {
   const rows = asking(seeds);
   const [expanded, setExpanded] = useState(false);
   const [openedSeedId, setOpenedSeedId] = useState('');
@@ -279,6 +283,7 @@ export function NeedsHumanBand({ seeds, ...handlers }: { seeds: Seed[] } & Quest
               open={openId === row.seed.id}
               onToggle={() => setOpenedSeedId((current) => current === row.seed.id ? '' : row.seed.id)}
               {...handlers}
+              onOpenSeed={!canOpenSeed || canOpenSeed(row.seed.id) ? handlers.onOpenSeed : undefined}
             />
           ))}
         </ul>

@@ -4336,6 +4336,9 @@ type GardenSeedsUpdatedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
+	// QuestionSeeds corresponds to the JSON schema field "question_seeds".
+	QuestionSeeds []Seed `json:"question_seeds"`
+
 	// Seeds corresponds to the JSON schema field "seeds".
 	Seeds []Seed `json:"seeds"`
 
@@ -4753,6 +4756,9 @@ type InitialStateMessage struct {
 
 	// Prs corresponds to the JSON schema field "prs".
 	Prs []PR `json:"prs,omitempty,omitzero"`
+
+	// QuestionSeeds corresponds to the JSON schema field "question_seeds".
+	QuestionSeeds []Seed `json:"question_seeds,omitempty,omitzero"`
 
 	// Repos corresponds to the JSON schema field "repos".
 	Repos []RepoState `json:"repos,omitempty,omitzero"`

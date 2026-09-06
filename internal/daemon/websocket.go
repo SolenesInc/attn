@@ -734,6 +734,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Settings:               d.settingsWithAgentAvailability(),
 		Warnings:               d.getWarnings(),
 		Seeds:                  state.Seeds,
+		QuestionSeeds:          state.QuestionSeeds,
 		SeedsTotal:             protocol.Ptr(d.countSeedsForBroadcast()),
 		Apps:                   state.Apps,
 		Crew:                   state.Crew,

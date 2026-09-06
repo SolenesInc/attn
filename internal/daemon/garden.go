@@ -324,6 +324,50 @@ func (d *Daemon) seedsForBroadcast() []protocol.Seed {
 	return read.wire(read.seeds)
 }
 
+func (d *Daemon) questionSeedsForBroadcast() []protocol.Seed {
+	if d.store == nil {
+		return nil
+	}
+	if err := d.requireHome(garden.Surface); err != nil {
+		return nil
+	}
+	if _, err := d.seedsCollection(); err != nil {
+		return nil
+	}
+	var out []protocol.Seed
+	after := ""
+	for {
+		read, _, err := d.runDocQuery(docstore.Query{
+			Namespace: garden.Namespace, Collection: garden.CollectionSeeds,
+			Filters: []docstore.Filter{{Field: "question_present", Op: docstore.OpEq, Value: true}},
+			Sort:    &docstore.Sort{Field: docstore.FieldCreatedAt, Desc: true},
+			Limit:   docstore.MaxLimit,
+			After:   after,
+		})
+		if err != nil {
+			if !docstore.IsUndeclaredCollection(err) {
+				d.logf("garden: reading question seeds for broadcast: %v", err)
+			}
+			return nil
+		}
+		for _, doc := range read.Documents {
+			seed, err := garden.Decode(doc.Body)
+			if err != nil {
+				d.logf("garden: question seed %s has an unreadable body: %v", doc.ID, err)
+				continue
+			}
+			if seed.Question != nil {
+				out = append(out, seedToProtocol(seed, doc, false))
+			}
+		}
+		if len(read.Documents) < docstore.MaxLimit {
+			break
+		}
+		after = read.Documents[len(read.Documents)-1].ID
+	}
+	return out
+}
+
 func (d *Daemon) countSeedsForBroadcast() int {
 	if d.store == nil {
 		return 0
@@ -340,6 +384,7 @@ func (d *Daemon) projectGardenSeeds() {
 	}
 	d.projectSnapshot(snapshotGarden, func() {
 		seeds := d.seedsForBroadcast()
+		questionSeeds := d.questionSeedsForBroadcast()
 		total := d.countSeedsForBroadcast()
 		if total > len(seeds) {
 			d.logf("garden: %d seeds, pushing the newest %d (limit %d); the panel says so",
@@ -352,9 +397,10 @@ func (d *Daemon) projectGardenSeeds() {
 			return
 		}
 		d.broadcastMessage(&protocol.GardenSeedsUpdatedMessage{
-			Event: protocol.EventGardenSeedsUpdated,
-			Seeds: seeds,
-			Total: total,
+			Event:         protocol.EventGardenSeedsUpdated,
+			Seeds:         seeds,
+			QuestionSeeds: questionSeeds,
+			Total:         total,
 		})
 	})
 }

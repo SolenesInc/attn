@@ -101,4 +101,37 @@ describe('GardenPanel pending decisions', () => {
     const body = await screen.findByRole('heading', { name: 'Background' });
     await waitFor(() => expect(question.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy());
   });
+
+  it('keeps an older decision visible after the garden snapshot overflows', () => {
+    const newest = seed({
+      id: 's-new111',
+      title: 'A newer seed',
+      step_slug: 'a-newer-seed',
+      question: undefined,
+    });
+    const olderDecision = seed({
+      id: 's-old111',
+      title: 'An older decision',
+      step_slug: 'an-older-decision',
+      question: {
+        id: 'q-old111',
+        text: 'Which path should the agent take?',
+        asked_at: '2026-09-06T08:30:00Z',
+        asked_by_session: 'session-agent',
+        asked_by_member: '',
+        status: 'open',
+      },
+    });
+
+    renderPanel(true, {
+      seeds: [newest],
+      seedsTotal: 1001,
+      questionSeeds: [olderDecision],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Answer it' }));
+    expect(screen.getAllByText('Which path should the agent take?')).toHaveLength(2);
+    expect(screen.getByText('An older decision')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Open s-old111/ })).not.toBeInTheDocument();
+  });
 });

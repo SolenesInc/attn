@@ -36,6 +36,7 @@ interface GardenPanelProps {
   onClose: () => void;
   seeds: Seed[];
   seedsTotal: number;
+  questionSeeds?: Seed[];
   fetchSeedDocument?: (seedId: string) => Promise<SeedDocument>;
   onOpenAsTile?: (seedId: string) => void;
   onOpenMarkdownArtifact?: (path: string) => void;
@@ -592,6 +593,7 @@ export function GardenPanel({
   onClose,
   seeds,
   seedsTotal,
+  questionSeeds,
   fetchSeedDocument,
   onOpenAsTile,
   onOpenMarkdownArtifact,
@@ -1379,11 +1381,12 @@ export function GardenPanel({
 
   const needsHuman = needsHumanEnabled && onAnswerQuestion && onDismissQuestion ? (
     <NeedsHumanBand
-      seeds={seeds}
+      seeds={questionSeeds ?? seeds}
       onAnswer={onAnswerQuestion}
       onDismiss={onDismissQuestion}
       onClear={onClearQuestion}
       onOpenSeed={drillInto}
+      canOpenSeed={(seedId) => index.byID.has(seedId)}
     />
   ) : null;
 

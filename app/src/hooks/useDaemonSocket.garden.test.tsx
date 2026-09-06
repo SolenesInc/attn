@@ -89,7 +89,7 @@ describe('useDaemonSocket garden', () => {
     vi.clearAllMocks();
   });
 
-  async function renderWithGarden(initialSeeds?: unknown[]) {
+  async function renderWithGarden(initialSeeds?: unknown[], initialQuestionSeeds?: unknown[]) {
     const onSeedsUpdate = vi.fn();
     const hook = renderHook(() =>
       useDaemonSocket({
@@ -114,6 +114,7 @@ describe('useDaemonSocket garden', () => {
         authors: [],
         settings: {},
         ...(initialSeeds ? { seeds: initialSeeds } : {}),
+        ...(initialQuestionSeeds ? { question_seeds: initialQuestionSeeds } : {}),
       });
     });
     return { ws, onSeedsUpdate, hook };
@@ -156,6 +157,7 @@ describe('useDaemonSocket garden', () => {
     expect(onSeedsUpdate).toHaveBeenCalledWith(
       [expect.objectContaining({ id: 's-aaa111', title: 'already planted' })],
       1,
+      [],
     );
   });
 
@@ -173,6 +175,7 @@ describe('useDaemonSocket garden', () => {
     expect(onSeedsUpdate).toHaveBeenLastCalledWith(
       [expect.objectContaining({ id: 's-bbb222' }), expect.objectContaining({ id: 's-aaa111' })],
       2,
+      [],
     );
   });
 
@@ -205,7 +208,7 @@ describe('useDaemonSocket garden', () => {
   it('reads a garden-less daemon as an empty garden', async () => {
     const { onSeedsUpdate } = await renderWithGarden();
 
-    expect(onSeedsUpdate).toHaveBeenCalledWith([], 0);
+    expect(onSeedsUpdate).toHaveBeenCalledWith([], 0, []);
   });
 
   it('carries how many seeds the garden holds, not just the ones it sent', async () => {
@@ -222,6 +225,7 @@ describe('useDaemonSocket garden', () => {
     expect(onSeedsUpdate).toHaveBeenLastCalledWith(
       [expect.objectContaining({ id: 's-bbb222' })],
       1421,
+      [],
     );
   });
 
@@ -235,6 +239,42 @@ describe('useDaemonSocket garden', () => {
     expect(onSeedsUpdate).toHaveBeenLastCalledWith(
       [expect.objectContaining({ id: 's-ccc333' })],
       1,
+      [],
+    );
+  });
+
+  it('delivers decision seeds independently of the bounded garden snapshot', async () => {
+    const questionSeed = {
+      ...seed('s-old111', 'an older decision'),
+      question: {
+        id: 'q-old111', text: 'Which path?', asked_at: '2026-08-12T10:00:00Z',
+        asked_by_session: 'session-agent', asked_by_member: '', status: 'open',
+      },
+    };
+    const { ws, onSeedsUpdate } = await renderWithGarden(
+      [seed('s-new111', 'the newest seed')],
+      [questionSeed],
+    );
+
+    expect(onSeedsUpdate).toHaveBeenLastCalledWith(
+      [expect.objectContaining({ id: 's-new111' })],
+      1,
+      [expect.objectContaining({ id: 's-old111' })],
+    );
+
+    act(() => {
+      ws.emit({
+        event: 'garden_seeds_updated',
+        seeds: [seed('s-new222', 'newer still')],
+        question_seeds: [questionSeed],
+        total: 1421,
+      });
+    });
+
+    expect(onSeedsUpdate).toHaveBeenLastCalledWith(
+      [expect.objectContaining({ id: 's-new222' })],
+      1421,
+      [expect.objectContaining({ id: 's-old111' })],
     );
   });
 

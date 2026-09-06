@@ -1,10 +1,13 @@
 package daemon
 
 import (
+	"fmt"
 	"net"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -119,5 +122,51 @@ func TestGardenQuestionAskRefusesWhenFeatureIsOff(t *testing.T) {
 	}
 	if show(t, d, seed.ID).Seed.Question != nil {
 		t.Fatal("flag-off ask persisted a question")
+	}
+}
+
+func TestGardenQuestionProjectionPagesPastTheGardenSnapshotLimit(t *testing.T) {
+	d := newGardenDaemon(t)
+	schema, err := d.seedsCollection()
+	if err != nil {
+		t.Fatalf("seedsCollection: %v", err)
+	}
+	base := time.Date(2026, 9, 7, 8, 0, 0, 0, time.UTC)
+	oldestID := "s-000000"
+	for i := 0; i < docstore.MaxLimit+1; i++ {
+		id := fmt.Sprintf("s-%06x", i)
+		seed := garden.Seed{
+			ID: id, Title: id, Status: garden.StatusGrowing, StepSlug: id,
+			Question: &garden.Question{
+				ID: fmt.Sprintf("q-%06x", i), Text: "Which path?",
+				AskedAt: formatGardenTime(base.Add(time.Duration(i) * time.Second)),
+				Status:  garden.QuestionOpen,
+			},
+		}
+		body, encodeErr := seed.Encode()
+		if encodeErr != nil {
+			t.Fatalf("encode seed %s: %v", id, encodeErr)
+		}
+		if _, err := d.store.PutDocument(*schema, id, body, base.Add(time.Duration(i)*time.Second), nil); err != nil {
+			t.Fatalf("put seed %s: %v", id, err)
+		}
+	}
+
+	snapshot := d.seedsForBroadcast()
+	if len(snapshot) != docstore.MaxLimit {
+		t.Fatalf("bounded snapshot = %d seeds, want %d", len(snapshot), docstore.MaxLimit)
+	}
+	for _, seed := range snapshot {
+		if seed.ID == oldestID {
+			t.Fatalf("bounded snapshot unexpectedly includes oldest seed %s", oldestID)
+		}
+	}
+
+	questions := d.questionSeedsForBroadcast()
+	if len(questions) != docstore.MaxLimit+1 {
+		t.Fatalf("question projection = %d seeds, want %d", len(questions), docstore.MaxLimit+1)
+	}
+	if questions[len(questions)-1].ID != oldestID {
+		t.Fatalf("oldest projected question = %s, want %s", questions[len(questions)-1].ID, oldestID)
 	}
 }

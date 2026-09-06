@@ -66,6 +66,9 @@ type Seed struct {
 	ResumeCwd       string    `json:"resume_cwd,omitempty"`
 	ResumeAgent     string    `json:"resume_agent,omitempty"`
 	Question        *Question `json:"question,omitempty"`
+	// Flattened out of Question by Encode so the daemon can project every
+	// pending decision without scanning or bounding the whole garden.
+	QuestionPresent bool `json:"question_present"`
 
 	HarvestWhen *HarvestCondition `json:"harvest_when,omitempty"`
 	// Flattened out of HarvestWhen by Encode: a docstore field is a top-level JSON
@@ -100,6 +103,7 @@ func SeedsSchema() docstore.CollectionSchema {
 			{Name: "step_slug", Type: docstore.FieldString},
 			{Name: "tender_session", Type: docstore.FieldString},
 			{Name: "harvest_when_pull_request", Type: docstore.FieldString},
+			{Name: "question_present", Type: docstore.FieldBool},
 			{Name: "template", Type: docstore.FieldBool},
 			{Name: "gate", Type: docstore.FieldBool},
 		},
@@ -296,6 +300,7 @@ func (s Seed) Encode() ([]byte, error) {
 	if s.Vars == nil {
 		s.Vars = []Var{}
 	}
+	s.QuestionPresent = s.Question != nil
 	s.HarvestWhenPullRequest = ""
 	if s.HarvestWhen != nil {
 		s.HarvestWhenPullRequest = s.HarvestWhen.PullRequest

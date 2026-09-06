@@ -1178,7 +1178,7 @@ function AppContent({
   const [notebookRequestedPath, setNotebookRequestedPath] = useState<string | null>(null);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
   const whatsNew = useWhatsNew();
-  const { repoStates, authorStates, seeds, seedsTotal, apps, crew } = useDaemonStore();
+  const { repoStates, authorStates, seeds, seedsTotal, questionSeeds, apps, crew } = useDaemonStore();
   const mutedRepos = useMemo(() =>
     repoStates.filter(r => r.muted).map(r => r.repo),
     [repoStates],
@@ -4211,6 +4211,7 @@ function AppContent({
         onClose={closeGarden}
         seeds={seeds}
         seedsTotal={seedsTotal}
+        questionSeeds={questionSeeds}
         liveSessions={liveGardenSessions}
         tenderSessionLabels={gardenSessionLabels}
         loaded={hasReceivedInitialState}

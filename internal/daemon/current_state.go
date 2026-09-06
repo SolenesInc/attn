@@ -54,32 +54,34 @@ func (d *Daemon) appTicketRows() []appTicketRow {
 }
 
 type currentStateProjection struct {
-	Sessions    []protocol.Session
-	Endpoints   []protocol.EndpointInfo
-	Workspaces  []protocol.Workspace
-	Prs         []protocol.PR
-	Repos       []protocol.RepoState
-	Authors     []protocol.AuthorState
-	GithubHosts []string
-	Tickets     []appTicketRow
-	Seeds       []protocol.Seed
-	Crew        []protocol.CrewMember
-	Apps        []protocol.AppRegistryEntry
+	Sessions      []protocol.Session
+	Endpoints     []protocol.EndpointInfo
+	Workspaces    []protocol.Workspace
+	Prs           []protocol.PR
+	Repos         []protocol.RepoState
+	Authors       []protocol.AuthorState
+	GithubHosts   []string
+	Tickets       []appTicketRow
+	Seeds         []protocol.Seed
+	QuestionSeeds []protocol.Seed
+	Crew          []protocol.CrewMember
+	Apps          []protocol.AppRegistryEntry
 }
 
 func (d *Daemon) currentStateProjection() currentStateProjection {
 	return currentStateProjection{
-		Sessions:    d.mergedSessionsForBroadcast(),
-		Endpoints:   d.listEndpointInfos(),
-		Workspaces:  d.listWorkspaces(),
-		Prs:         protocol.PRsToValues(d.store.ListPRs("")),
-		Repos:       protocol.RepoStatesToValues(d.store.ListRepoStates()),
-		Authors:     protocol.AuthorStatesToValues(d.store.ListAuthorStates()),
-		GithubHosts: d.gitHubHosts(),
-		Tickets:     d.appTicketRows(),
-		Seeds:       d.seedsForBroadcast(),
-		Crew:        d.crewForBroadcast(),
-		Apps:        d.appRegistryForWire(),
+		Sessions:      d.mergedSessionsForBroadcast(),
+		Endpoints:     d.listEndpointInfos(),
+		Workspaces:    d.listWorkspaces(),
+		Prs:           protocol.PRsToValues(d.store.ListPRs("")),
+		Repos:         protocol.RepoStatesToValues(d.store.ListRepoStates()),
+		Authors:       protocol.AuthorStatesToValues(d.store.ListAuthorStates()),
+		GithubHosts:   d.gitHubHosts(),
+		Tickets:       d.appTicketRows(),
+		Seeds:         d.seedsForBroadcast(),
+		QuestionSeeds: d.questionSeedsForBroadcast(),
+		Crew:          d.crewForBroadcast(),
+		Apps:          d.appRegistryForWire(),
 	}
 }
 

@@ -3257,6 +3257,9 @@ model InitialStateMessage {
   settings?: Record<string>;
   warnings?: DaemonWarning[];
   seeds?: Seed[];
+  // Every seed with an open or withdrawn question. This projection is not
+  // bounded by the newest-seed snapshot, so the decision queue stays complete.
+  question_seeds?: Seed[];
   // How many seeds the garden holds, beside the bounded `seeds`. Carried here
   // as well as on garden_seeds_updated so a client that connects to an
   // over-large garden knows it is short before anything moves.
@@ -5348,6 +5351,8 @@ model SeedSendToChiefResultMessage {
 model GardenSeedsUpdatedMessage {
   event: "garden_seeds_updated";
   seeds: Seed[];
+  // Every seed with an open or withdrawn question, across the whole garden.
+  question_seeds: Seed[];
   // How many seeds the garden holds. Equal to `seeds`'s length until the
   // garden outgrows one push, and then the receipt that says so.
   total: int32;

@@ -68,6 +68,7 @@ export interface GardenFrameProps {
   onClose: () => void;
   seeds: Seed[];
   seedsTotal: number;
+  questionSeeds?: Seed[];
   fetchSeedDocument?: (seedId: string) => Promise<SeedDocument>;
   onOpenAsTile?: (seedId: string) => void;
   onOpenMarkdownArtifact?: (path: string) => void;
@@ -105,6 +106,7 @@ export function GardenFrame({
   onClose,
   seeds,
   seedsTotal,
+  questionSeeds,
   fetchSeedDocument,
   onOpenAsTile,
   onOpenMarkdownArtifact,
@@ -285,6 +287,7 @@ export function GardenFrame({
                 isOpen={open}
                 seeds={seeds}
                 seedsTotal={seedsTotal}
+                questionSeeds={questionSeeds}
                 fetchSeedDocument={fetchSeedDocument}
                 onOpenAsTile={onOpenAsTile}
                 onOpenMarkdownArtifact={onOpenMarkdownArtifact}
