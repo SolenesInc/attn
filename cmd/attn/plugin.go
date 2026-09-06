@@ -21,6 +21,7 @@ type pluginCommandResult struct {
 	OK              bool              `json:"ok"`
 	Plugin          *plugins.Manifest `json:"plugin,omitempty"`
 	PluginDir       string            `json:"plugin_dir,omitempty"`
+	LinkTarget      string            `json:"link_target,omitempty"`
 	RestartRequired bool              `json:"restart_required,omitempty"`
 	Name            string            `json:"name,omitempty"`
 }
@@ -32,13 +33,15 @@ type pluginListResult struct {
 
 func runPluginCommand() {
 	if len(os.Args) < 3 {
-		fmt.Fprintln(os.Stderr, "usage: attn plugin <install|install-bundled|list|uninstall|remove> ...")
+		fmt.Fprintln(os.Stderr, "usage: attn plugin <install|link|install-bundled|list|uninstall|remove> ...")
 		os.Exit(1)
 	}
 
 	switch os.Args[2] {
 	case "install":
 		runPluginInstall()
+	case "link":
+		runPluginLink()
 	case "install-bundled":
 		runPluginInstallBundled()
 	case "list":
@@ -54,22 +57,37 @@ func runPluginCommand() {
 }
 
 func runPluginInstall() {
-	fs := flag.NewFlagSet("plugin install", flag.ExitOnError)
+	runPluginInstallFromPath("install", false)
+}
+
+// link symlinks the checkout into the plugin dir, so edits there are live for
+// new plugin processes without a reinstall.
+func runPluginLink() {
+	runPluginInstallFromPath("link", true)
+}
+
+func runPluginInstallFromPath(verb string, link bool) {
+	fs := flag.NewFlagSet("plugin "+verb, flag.ExitOnError)
 	path := fs.String("path", "", "local plugin directory")
 	_ = fs.Parse(os.Args[3:])
 	sourcePath := strings.TrimSpace(*path)
 	if sourcePath == "" {
-		fmt.Fprintln(os.Stderr, "plugin install: --path is required")
+		fmt.Fprintf(os.Stderr, "plugin %s: --path is required\n", verb)
 		os.Exit(1)
 	}
 	sourcePath, err := resolveCLIPath(sourcePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "plugin install: %v\n", err)
+		fmt.Fprintf(os.Stderr, "plugin %s: %v\n", verb, err)
 		os.Exit(1)
 	}
-	result, err := installPluginViaDaemon(sourcePath)
+	var result pluginCommandResult
+	if link {
+		result, err = linkPluginViaDaemon(sourcePath)
+	} else {
+		result, err = installPluginViaDaemon(sourcePath)
+	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "plugin install: %v\n", err)
+		fmt.Fprintf(os.Stderr, "plugin %s: %v\n", verb, err)
 		os.Exit(1)
 	}
 	printJSON(result)
@@ -131,12 +149,15 @@ func runPluginRemove() {
 }
 
 func installPluginViaDaemon(sourcePath string) (pluginCommandResult, error) {
-	event, err := pluginDaemonRequest(
-		map[string]any{"cmd": protocol.CmdInstallPlugin, "source": sourcePath},
-		protocol.EventPluginActionResult,
-		"install",
-		30*time.Second,
-	)
+	return installedPluginViaDaemon(map[string]any{"cmd": protocol.CmdInstallPlugin, "source": sourcePath}, "install")
+}
+
+func linkPluginViaDaemon(sourcePath string) (pluginCommandResult, error) {
+	return installedPluginViaDaemon(map[string]any{"cmd": protocol.CmdInstallPlugin, "source": sourcePath, "link": true}, "link")
+}
+
+func installedPluginViaDaemon(payload map[string]any, action string) (pluginCommandResult, error) {
+	event, err := pluginDaemonRequest(payload, protocol.EventPluginActionResult, action, 30*time.Second)
 	if err != nil {
 		return pluginCommandResult{}, err
 	}
@@ -149,12 +170,16 @@ func installPluginViaDaemon(sourcePath string) (pluginCommandResult, error) {
 	if err != nil {
 		return pluginCommandResult{}, fmt.Errorf("load installed plugin %q: %w", name, err)
 	}
-	return pluginCommandResult{
+	result := pluginCommandResult{
 		OK:        true,
 		Plugin:    &manifest,
 		PluginDir: config.PluginDir(),
 		Name:      name,
-	}, nil
+	}
+	if target, err := os.Readlink(filepath.Join(config.PluginDir(), name)); err == nil {
+		result.LinkTarget = target
+	}
+	return result, nil
 }
 
 func removePluginViaDaemon(name string) (pluginCommandResult, error) {

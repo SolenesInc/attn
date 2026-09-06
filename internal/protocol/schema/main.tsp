@@ -555,6 +555,8 @@ model PluginInfo {
   runtime_state: string; // "stopped" | "starting" | "connected" | "degraded" | "parked"
   can_install: boolean;
   can_uninstall: boolean;
+  // Source checkout a linked plugin points at; absent for copied and bundled plugins.
+  link_target?: string;
   // "starting" | "connected" | "backoff" | "stopped". Plain string keeps
   // generated Go/TypeScript consumers aligned with other runtime status fields.
   runtime_phase?: string;
@@ -1772,6 +1774,8 @@ model ListPluginsMessage {
 model InstallPluginMessage {
   cmd: "install_plugin";
   source: string;
+  // Symlink a local source directory instead of copying it (attn plugin link).
+  link?: boolean;
 }
 
 model InstallBundledPluginMessage {

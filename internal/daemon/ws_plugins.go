@@ -30,22 +30,43 @@ func (d *Daemon) handleListPluginsWS(client *wsClient) {
 func (d *Daemon) handleInstallPluginWS(client *wsClient, msg *protocol.InstallPluginMessage) {
 	d.pluginActionMu.Lock()
 	defer d.pluginActionMu.Unlock()
+	action := "install"
+	link := msg.Link != nil && *msg.Link
+	if link {
+		action = "link"
+	}
 	source := strings.TrimSpace(msg.Source)
 	if source == "" {
-		d.sendPluginActionResult(client, "install", "", false, "plugin source is required")
+		d.sendPluginActionResult(client, action, "", false, "plugin source is required")
 		return
 	}
 
-	manifest, err := plugins.InstallSourceWithOptions(source, d.pluginDir, plugins.InstallOptions{
-		Env: d.pluginCommandEnv(),
-	})
+	options := plugins.InstallOptions{Env: d.pluginCommandEnv()}
+	var manifest plugins.Manifest
+	var err error
+	if link {
+		// Refuse before LinkPath touches the checkout: it runs bun install there.
+		var name string
+		name, err = plugins.SourceName(source)
+		if err != nil {
+			d.sendPluginActionResult(client, action, "", false, err.Error())
+			return
+		}
+		if _, bundledInstalled := d.installedBundledPlugins()[name]; bundledInstalled {
+			d.sendPluginActionResult(client, action, name, false, fmt.Sprintf("uninstall bundled plugin %q before installing a user override", name))
+			return
+		}
+		manifest, err = plugins.LinkPath(source, d.pluginDir, options)
+	} else {
+		manifest, err = plugins.InstallSourceWithOptions(source, d.pluginDir, options)
+	}
 	if err != nil {
-		d.sendPluginActionResult(client, "install", "", false, err.Error())
+		d.sendPluginActionResult(client, action, "", false, err.Error())
 		return
 	}
 	if _, bundledInstalled := d.installedBundledPlugins()[manifest.Name]; bundledInstalled {
 		_ = plugins.Remove(d.pluginDir, manifest.Name)
-		d.sendPluginActionResult(client, "install", manifest.Name, false, fmt.Sprintf("uninstall bundled plugin %q before installing a user override", manifest.Name))
+		d.sendPluginActionResult(client, action, manifest.Name, false, fmt.Sprintf("uninstall bundled plugin %q before installing a user override", manifest.Name))
 		return
 	}
 	if err := d.startInstalledPlugin(manifest); err != nil {
@@ -53,7 +74,7 @@ func (d *Daemon) handleInstallPluginWS(client *wsClient, msg *protocol.InstallPl
 	}
 
 	d.publishFact(FactPluginInstalled, manifest.Name, nil)
-	d.sendPluginActionResult(client, "install", manifest.Name, true, "")
+	d.sendPluginActionResult(client, action, manifest.Name, true, "")
 }
 
 func (d *Daemon) handleInstallBundledPluginWS(client *wsClient, msg *protocol.InstallBundledPluginMessage) {
@@ -258,6 +279,9 @@ func (d *Daemon) pluginsUpdatedMessage() *protocol.PluginsUpdatedMessage {
 		}
 		if manifest.Description != "" {
 			info.Description = protocol.Ptr(manifest.Description)
+		}
+		if manifest.LinkTarget != "" {
+			info.LinkTarget = protocol.Ptr(manifest.LinkTarget)
 		}
 		if healthMessage != "" {
 			info.HealthMessage = protocol.Ptr(healthMessage)

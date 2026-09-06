@@ -376,3 +376,86 @@ func installFailingBun(t *testing.T) {
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
+
+func TestLinkPathDiscoverAndRemoveKeepsCheckout(t *testing.T) {
+	installMarker := installFakeBun(t)
+	sourceDir := filepath.Join(t.TempDir(), "checkout")
+	writeTestPlugin(t, sourceDir, "linked-provider")
+	pluginDir := filepath.Join(t.TempDir(), "plugins")
+
+	manifest, err := LinkPath(sourceDir, pluginDir, InstallOptions{})
+	if err != nil {
+		t.Fatalf("LinkPath failed: %v", err)
+	}
+	if manifest.Dir != filepath.Join(pluginDir, "linked-provider") || manifest.LinkTarget != sourceDir {
+		t.Fatalf("linked manifest dir=%q target=%q", manifest.Dir, manifest.LinkTarget)
+	}
+	if _, err := os.Stat(filepath.Join(sourceDir, installMarker)); err != nil {
+		t.Fatalf("bun install did not run in the checkout: %v", err)
+	}
+
+	// An edit in the checkout is visible through the link with no reinstall.
+	if err := os.WriteFile(filepath.Join(sourceDir, "src", "index.ts"), []byte("// edited\n"), 0o644); err != nil {
+		t.Fatalf("edit checkout: %v", err)
+	}
+	seen, err := os.ReadFile(filepath.Join(manifest.Dir, "src", "index.ts"))
+	if err != nil || string(seen) != "// edited\n" {
+		t.Fatalf("read through link=%q err=%v, want the edit", seen, err)
+	}
+
+	manifests, issues := Discover(pluginDir)
+	if len(issues) != 0 {
+		t.Fatalf("discover issues=%v, want none", issues)
+	}
+	if len(manifests) != 1 || manifests[0].Name != "linked-provider" || manifests[0].LinkTarget != sourceDir {
+		t.Fatalf("discover manifests=%+v, want linked-provider pointing at the checkout", manifests)
+	}
+
+	if _, err := LinkPath(sourceDir, pluginDir, InstallOptions{}); err == nil || !strings.Contains(err.Error(), "already installed") {
+		t.Fatalf("second LinkPath err=%v, want already installed", err)
+	}
+	if _, err := InstallPath(sourceDir, pluginDir); err == nil || !strings.Contains(err.Error(), "already installed") {
+		t.Fatalf("InstallPath over a link err=%v, want already installed", err)
+	}
+
+	if err := Remove(pluginDir, "linked-provider"); err != nil {
+		t.Fatalf("Remove failed: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(pluginDir, "linked-provider")); !os.IsNotExist(err) {
+		t.Fatalf("link still exists, lstat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sourceDir, ManifestName)); err != nil {
+		t.Fatalf("checkout was touched by Remove: %v", err)
+	}
+}
+
+func TestLinkPathRejectsMissingManifestAndSourceInsidePluginDir(t *testing.T) {
+	installFakeBun(t)
+	pluginDir := filepath.Join(t.TempDir(), "plugins")
+	if _, err := LinkPath(t.TempDir(), pluginDir, InstallOptions{}); err == nil || !strings.Contains(err.Error(), "load source manifest") {
+		t.Fatalf("LinkPath without manifest err=%v, want manifest error", err)
+	}
+	inside := filepath.Join(pluginDir, "staged")
+	writeTestPlugin(t, inside, "staged")
+	if _, err := LinkPath(inside, pluginDir, InstallOptions{}); err == nil || !strings.Contains(err.Error(), "inside the plugin directory") {
+		t.Fatalf("LinkPath from inside plugin dir err=%v, want refusal", err)
+	}
+}
+
+func TestDiscoverReportsDanglingLink(t *testing.T) {
+	pluginDir := filepath.Join(t.TempDir(), "plugins")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gone := filepath.Join(t.TempDir(), "gone")
+	if err := os.Symlink(gone, filepath.Join(pluginDir, "dangling")); err != nil {
+		t.Fatal(err)
+	}
+	manifests, issues := Discover(pluginDir)
+	if len(manifests) != 0 || len(issues) != 1 || !strings.Contains(issues[0].Err.Error(), gone) {
+		t.Fatalf("manifests=%v issues=%v, want one issue naming the missing target", manifests, issues)
+	}
+	if err := Remove(pluginDir, "dangling"); err != nil {
+		t.Fatalf("Remove dangling link: %v", err)
+	}
+}

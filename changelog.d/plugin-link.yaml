@@ -1,0 +1,3 @@
+kind: added
+area: plugins
+change: "`attn plugin link --path <dir>` installs a plugin by symlinking a source checkout, so edits there are live for new sessions without a reinstall; `attn plugin list` shows the link target and uninstall never touches the checkout."

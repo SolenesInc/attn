@@ -4460,6 +4460,9 @@ type InstallPluginMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// Link corresponds to the JSON schema field "link".
+	Link *bool `json:"link,omitempty,omitzero"`
+
 	// Source corresponds to the JSON schema field "source".
 	Source string `json:"source"`
 }
@@ -5650,6 +5653,9 @@ type PluginInfo struct {
 
 	// LastHealthAt corresponds to the JSON schema field "last_health_at".
 	LastHealthAt *string `json:"last_health_at,omitempty,omitzero"`
+
+	// LinkTarget corresponds to the JSON schema field "link_target".
+	LinkTarget *string `json:"link_target,omitempty,omitzero"`
 
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`

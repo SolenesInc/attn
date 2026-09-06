@@ -215,6 +215,87 @@ EOF
 	}
 }
 
+func TestDaemon_HandleInstallPluginWS_LinksCheckoutAndListsTarget(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
+	d.pluginDir = filepath.Join(t.TempDir(), "plugins")
+	binDir := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "bun"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write fake bun: %v", err)
+	}
+	d.loginShellEnv = []string{"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")}
+	checkout := filepath.Join(t.TempDir(), "checkout")
+	writeTestPluginManifest(t, filepath.Dir(checkout), "checkout")
+
+	client := &wsClient{send: make(chan outboundMessage, 1)}
+	d.handleInstallPluginWS(client, &protocol.InstallPluginMessage{Source: checkout, Link: protocol.Ptr(true)})
+	event := readOutboundEvent(t, client)
+	if event["action"] != "link" || event["success"] != true || event["name"] != "checkout" {
+		t.Fatalf("link result=%v, want successful link of checkout", event)
+	}
+	target, err := os.Readlink(filepath.Join(d.pluginDir, "checkout"))
+	if err != nil || target != checkout {
+		t.Fatalf("plugin dir entry target=%q err=%v, want symlink to checkout", target, err)
+	}
+
+	var listed *protocol.PluginInfo
+	for _, info := range d.pluginsUpdatedMessage().Plugins {
+		if info.Name == "checkout" {
+			listed = &info
+		}
+	}
+	if listed == nil || listed.LinkTarget == nil || *listed.LinkTarget != checkout || listed.Availability != "user" {
+		t.Fatalf("listed=%+v, want user plugin linked to checkout", listed)
+	}
+
+	d.handleUninstallPluginWS(client, &protocol.UninstallPluginMessage{Name: "checkout"})
+	if event := readOutboundEvent(t, client); event["success"] != true {
+		t.Fatalf("uninstall event=%v", event)
+	}
+	if _, err := os.Lstat(filepath.Join(d.pluginDir, "checkout")); !os.IsNotExist(err) {
+		t.Fatalf("link still present: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(checkout, pluginManifestName)); err != nil {
+		t.Fatalf("uninstall touched the checkout: %v", err)
+	}
+}
+
+func TestDaemon_HandleInstallPluginWS_LinkRefusesInstalledBundledName(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
+	d.pluginDir = filepath.Join(t.TempDir(), "plugins")
+	binDir := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bunMarker := filepath.Join(binDir, "bun-ran")
+	if err := os.WriteFile(filepath.Join(binDir, "bun"), []byte("#!/bin/sh\n: > "+bunMarker+"\n"), 0o755); err != nil {
+		t.Fatalf("write fake bun: %v", err)
+	}
+	d.loginShellEnv = []string{"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH")}
+	d.bundledPluginDir = filepath.Join(t.TempDir(), "bundled")
+	writeTestPluginManifest(t, d.bundledPluginDir, "attn-pi")
+	if err := d.setBundledPluginInstalled("attn-pi", true); err != nil {
+		t.Fatal(err)
+	}
+	checkoutRoot := t.TempDir()
+	writeTestPluginManifest(t, checkoutRoot, "attn-pi")
+
+	client := &wsClient{send: make(chan outboundMessage, 1)}
+	d.handleInstallPluginWS(client, &protocol.InstallPluginMessage{Source: filepath.Join(checkoutRoot, "attn-pi"), Link: protocol.Ptr(true)})
+	event := readOutboundEvent(t, client)
+	if event["success"] != false || !strings.Contains(event["error"].(string), "uninstall bundled plugin") {
+		t.Fatalf("link result=%v, want bundled refusal", event)
+	}
+	if _, err := os.Lstat(filepath.Join(d.pluginDir, "attn-pi")); !os.IsNotExist(err) {
+		t.Fatalf("refused link left an entry: %v", err)
+	}
+	if _, err := os.Stat(bunMarker); !os.IsNotExist(err) {
+		t.Fatalf("refused link ran bun install in the checkout: %v", err)
+	}
+}
+
 func TestDaemon_HandleRemovePluginWSStopsSupervisorAfterDeletingFiles(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
 	d.pluginDir = filepath.Join(t.TempDir(), "plugins")

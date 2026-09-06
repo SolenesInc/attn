@@ -66,28 +66,39 @@ instead of opening a second window.
 
 ## Iterate on a bundled plugin
 
-A change under `plugins/attn-pi` does not need `make install`. The driver reads
-an environment variable before falling back to the bundled build:
+A change under `plugins/attn-pi` does not need `make install`. Link the
+checkout into the profile's plugin dir instead of copying it:
+
+```bash
+attn plugin uninstall attn-pi                     # the bundled copy blocks a user plugin of the same name
+attn plugin link --path <checkout>/plugins/attn-pi
+attn plugin list                                  # shows the plugin with its link_target
+```
+
+`link` symlinks the source directory, runs `bun install` there, and starts the
+driver from it. The manifest's `entrypoint` is a source file run with bun, so
+the driver resolves the suite relative to the checkout. Every
+new pi session runs what is on disk; sessions already running keep the code
+they loaded, and a change to the driver itself (`src/`) needs a daemon restart
+or an uninstall and link. `attn plugin uninstall attn-pi` drops the link, never
+the checkout, and `attn plugin install-bundled attn-pi` restores the bundled
+copy.
+
+The driver also reads one environment variable before falling back to the
+bundled build, for pointing a bundled install at a checkout without linking:
 
 | Variable | Points the driver at |
 | --- | --- |
 | `ATTN_PI_SUITE_PATH` | the pi extension, e.g. `<checkout>/plugins/attn-pi/suite/index.ts` |
 
-pi loads TypeScript extensions directly, and auto mode and the security
-extension are imported by the suite, so one variable covers all three.
-
 The daemon builds the driver's environment from its own environment plus the
 login-shell environment it captured at start, so export the variable, then
-restart the non-production daemon once. From then on every new pi session runs
-what is on disk; sessions already running keep the code they loaded.
+restart the non-production daemon once.
 
 `scripts/build-bundled-plugins.sh` stages fresh bundles in seconds, and a daemon
 started by hand with `ATTN_BUNDLED_PLUGIN_DIR` pointed at that stage dir serves
 them. The app scrubs that variable as a routing override, so it does not reach
 an app-launched daemon.
-
-`attn plugin install --path` copies the tree, so it is a remove and reinstall
-per change; use the variables instead.
 
 ## Verification requirements
 
