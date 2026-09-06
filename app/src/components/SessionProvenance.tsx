@@ -4,6 +4,8 @@ import type {
   AutomationProvenance as AutomationProvenanceValue,
   SessionPullRequest,
 } from '../types/generated';
+import { formatShortcut } from '../shortcuts/formatShortcut';
+import type { DelegationSession, DispatcherLink } from '../utils/delegationLinks';
 import {
   describeSessionPullRequest,
   pickSessionPullRequest,
@@ -11,6 +13,7 @@ import {
   sortSessionPullRequests,
 } from '../utils/sessionPullRequest';
 import { SessionPullRequestPopover, type PopoverAnchor } from './SessionPullRequestPopover';
+import { SessionDelegatesPopover, type SessionDelegateLink } from './SessionDelegatesPopover';
 import './SessionProvenance.css';
 
 export type SessionProvenanceDensity = 'badge' | 'compact' | 'line' | 'detail';
@@ -58,15 +61,22 @@ function provenanceEntries(
 export function SessionProvenance({
   automation,
   pullRequests,
+  dispatcher,
+  delegates = [],
+  onSelectSession,
   density = 'line',
   interactive = false,
 }: {
   automation?: AutomationProvenanceValue;
   pullRequests?: readonly SessionPullRequest[];
+  dispatcher?: DispatcherLink<DelegationSession> | null;
+  delegates?: readonly SessionDelegateLink[];
+  onSelectSession?: (sessionId: string) => void;
   density?: SessionProvenanceDensity;
   interactive?: boolean;
 }) {
   const [popover, setPopover] = useState<{ anchor: PopoverAnchor; focused: boolean } | null>(null);
+  const [delegatesPopover, setDelegatesPopover] = useState<PopoverAnchor | null>(null);
   const closeTimer = useRef<number | null>(null);
 
   useEffect(() => () => {
@@ -93,7 +103,6 @@ export function SessionProvenance({
   }, [cancelClose]);
 
   const entries = provenanceEntries(automation, pullRequests);
-  if (entries.length === 0) return null;
   const pullRequestEntry = entries.find((entry) => entry.kind === 'pull-request');
 
   const anchorFrom = (element: HTMLElement): PopoverAnchor => {
@@ -104,6 +113,7 @@ export function SessionProvenance({
   const openOnHover = (event: PointerEvent<HTMLElement>) => {
     if (!interactive) return;
     cancelClose();
+    setDelegatesPopover(null);
     const anchor = anchorFrom(event.currentTarget);
     setPopover((open) => (open ? open : { anchor, focused: false }));
   };
@@ -112,14 +122,32 @@ export function SessionProvenance({
     event.stopPropagation();
     if (!interactive) return;
     cancelClose();
+    setDelegatesPopover(null);
     setPopover({ anchor: anchorFrom(event.currentTarget), focused: true });
+  };
+
+  const openDelegates = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!interactive || !onSelectSession) return;
+    closePopover();
+    setDelegatesPopover((open) => (open ? null : anchorFrom(event.currentTarget)));
   };
 
   const description = entries
     .map((entry) => (entry.kind === 'automation'
       ? automationProvenanceDescription(entry.automation)
       : sessionPullRequestDescription(entry.pullRequest)))
+    .concat(
+      dispatcher
+        ? [`Delegated by ${dispatcher.name}${dispatcher.session ? '' : ' · earlier session'}`]
+        : [],
+      delegates.length > 0
+        ? [`${delegates.length} ${delegates.length === 1 ? 'delegate' : 'delegates'}`]
+        : [],
+    )
     .join(' · ');
+
+  if (entries.length === 0 && !dispatcher && delegates.length === 0) return null;
 
   if (density === 'badge') {
     return (
@@ -136,6 +164,10 @@ export function SessionProvenance({
             #{entry.pullRequest.number}
           </span>
         )))}
+        {dispatcher && <span className="session-provenance__badge-mark" aria-hidden="true">↑</span>}
+        {delegates.length > 0 && (
+          <span className="session-provenance__badge-mark" aria-hidden="true">↓{delegates.length}</span>
+        )}
       </span>
     );
   }
@@ -158,6 +190,16 @@ export function SessionProvenance({
             <CompactPullRequest pullRequest={entry.pullRequest} />
           </span>
         )))}
+        {dispatcher && (
+          <span className="session-provenance__part">
+            ↑ {dispatcher.name}{dispatcher.session ? '' : ' · earlier session'}
+          </span>
+        )}
+        {delegates.length > 0 && (
+          <span className="session-provenance__part">
+            ↓ {delegates.length} {delegates.length === 1 ? 'delegate' : 'delegates'}
+          </span>
+        )}
       </span>
     );
   }
@@ -168,6 +210,8 @@ export function SessionProvenance({
         {entries.flatMap((entry) => (entry.kind === 'automation'
           ? automationLineParts(entry.automation, interactive)
           : pullRequestLineParts(entry.pullRequest, interactive, openOnHover, scheduleClose, openOnClick)))}
+        {dispatcherLinePart(dispatcher, interactive, onSelectSession)}
+        {delegatesLinePart(delegates, interactive, Boolean(delegatesPopover), onSelectSession, openDelegates)}
       </span>
       {popover && (
         <SessionPullRequestPopover
@@ -179,8 +223,80 @@ export function SessionProvenance({
           onPointerLeave={scheduleClose}
         />
       )}
+      {delegatesPopover && onSelectSession && (
+        <SessionDelegatesPopover
+          delegates={delegates}
+          anchor={delegatesPopover}
+          onSelectSession={onSelectSession}
+          onClose={() => setDelegatesPopover(null)}
+        />
+      )}
     </>
   );
+}
+
+function dispatcherLinePart(
+  dispatcher: DispatcherLink<DelegationSession> | null | undefined,
+  interactive: boolean,
+  onSelectSession: ((sessionId: string) => void) | undefined,
+): ReactElement[] {
+  if (!dispatcher) return [];
+  const earlier = !dispatcher.session;
+  const content = (
+    <>
+      <span aria-hidden="true">↑</span>
+      <span>delegated by {dispatcher.name}</span>
+      {earlier && <span className="session-provenance__earlier">earlier session</span>}
+      {!earlier && <kbd>{formatShortcut('session.orchestrator')}</kbd>}
+    </>
+  );
+  if (!interactive) {
+    return [<span key="dispatcher" className="session-provenance__delegation session-provenance__delegation--up">{content}</span>];
+  }
+  return [(
+    <button
+      key="dispatcher"
+      type="button"
+      className="session-provenance__delegation session-provenance__delegation--up"
+      disabled={earlier || !onSelectSession}
+      title={earlier ? `${dispatcher.name}, earlier session` : `Open ${dispatcher.name}`}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (dispatcher.session) onSelectSession?.(dispatcher.session.id);
+      }}
+    >
+      {content}
+    </button>
+  )];
+}
+
+function delegatesLinePart(
+  delegates: readonly SessionDelegateLink[],
+  interactive: boolean,
+  open: boolean,
+  onSelectSession: ((sessionId: string) => void) | undefined,
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void,
+): ReactElement[] {
+  if (delegates.length === 0) return [];
+  const label = `${delegates.length} ${delegates.length === 1 ? 'delegate' : 'delegates'}`;
+  const content = <><span aria-hidden="true">↓</span><span>{label}</span></>;
+  if (!interactive) {
+    return [<span key="delegates" className="session-provenance__delegation session-provenance__delegation--down">{content}</span>];
+  }
+  return [(
+    <button
+      key="delegates"
+      type="button"
+      className="session-provenance__delegation session-provenance__delegation--down"
+      aria-expanded={open}
+      disabled={!onSelectSession}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={onClick}
+    >
+      {content}
+    </button>
+  )];
 }
 
 function CompactPullRequest({ pullRequest }: { pullRequest: SessionPullRequest }) {
