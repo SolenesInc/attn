@@ -22,6 +22,8 @@ const SECTION_IDS = [
   'workspace',
   'hygiene',
   'agents',
+  'backgroundAgents',
+  'terminal',
   'autoMode',
   'connectivity',
   'plugins',
@@ -65,7 +67,7 @@ function renderModal(overrides: Record<string, unknown> = {}) {
 describe('SettingsModal sections', () => {
   it('keeps the shared PTY experiment off until the daemon confirms opt-in', async () => {
     const onSetSetting = renderModal({ settings: { pty_backend_mode: 'migrating' } });
-    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    fireEvent.click(screen.getByTestId('settings-nav-terminal'));
     const toggle = await screen.findByRole('switch', { name: 'Shared PTY host (experimental)' });
     expect(toggle).toHaveAttribute('aria-checked', 'false');
     expect(screen.getByTestId('settings-shared-pty-host-status')).toHaveTextContent('New sessions use dedicated Go workers.');
@@ -78,7 +80,7 @@ describe('SettingsModal sections', () => {
     const onSetSetting = renderModal({ settings: {
       pty_backend_mode: 'migrating', pty_shared_host_enabled: 'true', pty_shared_host_active: 'true',
     } });
-    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    fireEvent.click(screen.getByTestId('settings-nav-terminal'));
     const toggle = await screen.findByRole('switch', { name: 'Shared PTY host (experimental)' });
     expect(toggle).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByTestId('settings-shared-pty-host-status')).toHaveTextContent('New sessions use the shared Rust host.');
@@ -89,14 +91,14 @@ describe('SettingsModal sections', () => {
 
   it('shows when a saved opt-in fell back to dedicated workers', async () => {
     renderModal({ settings: { pty_backend_mode: 'migrating', pty_shared_host_enabled: 'true', pty_shared_host_active: 'false' } });
-    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    fireEvent.click(screen.getByTestId('settings-nav-terminal'));
     expect(await screen.findByTestId('settings-shared-pty-host-status')).toHaveTextContent('Shared host unavailable.');
     expect(screen.getByRole('switch', { name: 'Shared PTY host (experimental)' })).toBeEnabled();
   });
 
   it.each(['worker', 'shared', 'embedded', 'unknown'])('disables the experiment control on the %s backend', async (mode) => {
     const onSetSetting = renderModal({ settings: { pty_backend_mode: mode } });
-    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    fireEvent.click(screen.getByTestId('settings-nav-terminal'));
     const toggle = await screen.findByRole('switch', { name: 'Shared PTY host (experimental)' });
     expect(toggle).toBeDisabled();
     fireEvent.click(toggle);
@@ -121,12 +123,16 @@ describe('SettingsModal sections', () => {
     expect(() => assertValidSettingsSectionID('review')).toThrow(/unknown settings section "review"/);
   });
 
-  it('keeps the reviewer model with the other model overrides, under agents', async () => {
+  it('separates background agents and removes the unused reviewer model', async () => {
     renderModal({ settings: { reviewer_model: 'claude-opus-4-6' } });
     fireEvent.click(screen.getByTestId('settings-nav-agents'));
-
-    expect(await screen.findByLabelText('Reviewer model')).toHaveValue('claude-opus-4-6');
-    expect(screen.getByTestId('settings-chief-model-claude')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Agents and models', level: 1 })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Reviewer model')).toBeNull();
+    expect(screen.queryByTestId('settings-chief-model-claude')).toBeNull();
+    fireEvent.click(screen.getByTestId('settings-nav-backgroundAgents'));
+    expect(await screen.findByTestId('settings-chief-model-claude')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-garden-advisor-agent')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^save$/i })).toBeNull();
   });
 
   it('puts the attention queue timings with the rest of hygiene', async () => {

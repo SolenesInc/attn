@@ -64,7 +64,7 @@ func activityStatus(asJSON bool) {
 		fmt.Println("  nothing is generated while nobody can see it")
 	}
 	if !status.Enabled {
-		fmt.Println("activity: off (Settings › Agents › Session activity)")
+		fmt.Println("activity: off (Settings › Background agents › Session activity)")
 		return
 	}
 	if reason := strings.TrimSpace(protocol.Deref(status.Error)); reason != "" {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { GardenAdvisorSettings } from './GardenAdvisorSettings';
 
@@ -25,7 +25,7 @@ describe('GardenAdvisorSettings', () => {
     expect(screen.getByTestId('settings-garden-advisor-effort')).toHaveValue('xhigh');
   });
 
-  it('uses the selected agent defaults and saves one recipe', () => {
+  it('uses the selected agent defaults and saves one recipe', async () => {
     const onSetSetting = renderSettings();
 
     fireEvent.change(screen.getByTestId('settings-garden-advisor-agent'), {
@@ -33,7 +33,7 @@ describe('GardenAdvisorSettings', () => {
     });
     expect(screen.getByTestId('settings-garden-advisor-model')).toHaveValue('sonnet');
     expect(screen.getByTestId('settings-garden-advisor-effort')).toHaveValue('medium');
-    fireEvent.click(screen.getByTestId('settings-garden-advisor-save'));
+    await act(async () => { if (screen.queryByTestId('settings-garden-advisor-model-custom')) fireEvent.blur(screen.getByTestId('settings-garden-advisor-model-custom')); });
 
     expect(onSetSetting).toHaveBeenCalledWith(
       'garden.advisor',
@@ -41,7 +41,7 @@ describe('GardenAdvisorSettings', () => {
     );
   });
 
-  it('leaves Copilot effort unpinned by default and can save one', () => {
+  it('leaves Copilot effort unpinned by default and can save one', async () => {
     const onSetSetting = renderSettings();
 
     fireEvent.change(screen.getByTestId('settings-garden-advisor-agent'), {
@@ -52,7 +52,7 @@ describe('GardenAdvisorSettings', () => {
     fireEvent.change(screen.getByTestId('settings-garden-advisor-effort'), {
       target: { value: 'max' },
     });
-    fireEvent.click(screen.getByTestId('settings-garden-advisor-save'));
+    await act(async () => { if (screen.queryByTestId('settings-garden-advisor-model-custom')) fireEvent.blur(screen.getByTestId('settings-garden-advisor-model-custom')); });
 
     expect(onSetSetting).toHaveBeenCalledWith(
       'garden.advisor',
@@ -60,7 +60,7 @@ describe('GardenAdvisorSettings', () => {
     );
   });
 
-  it('saves a custom model', () => {
+  it('saves a custom model', async () => {
     const onSetSetting = renderSettings();
 
     fireEvent.change(screen.getByTestId('settings-garden-advisor-model'), {
@@ -69,7 +69,7 @@ describe('GardenAdvisorSettings', () => {
     fireEvent.change(screen.getByTestId('settings-garden-advisor-model-custom'), {
       target: { value: 'gpt-custom' },
     });
-    fireEvent.click(screen.getByTestId('settings-garden-advisor-save'));
+    await act(async () => { if (screen.queryByTestId('settings-garden-advisor-model-custom')) fireEvent.blur(screen.getByTestId('settings-garden-advisor-model-custom')); });
 
     expect(onSetSetting).toHaveBeenCalledWith(
       'garden.advisor',

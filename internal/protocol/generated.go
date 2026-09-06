@@ -9180,6 +9180,9 @@ type SetSettingMessage struct {
 	// Key corresponds to the JSON schema field "key".
 	Key string `json:"key"`
 
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
 	// Value corresponds to the JSON schema field "value".
 	Value string `json:"value"`
 }
@@ -9241,6 +9244,9 @@ type SettingsUpdatedMessage struct {
 
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// Settings corresponds to the JSON schema field "settings".
 	Settings RecordString `json:"settings,omitempty,omitzero"`

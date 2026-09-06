@@ -1888,6 +1888,7 @@ model GetSettingsMessage {
 
 model SetSettingMessage {
   cmd: "set_setting";
+  request_id?: string;
   key: string;
   value: string;
 }
@@ -3551,6 +3552,7 @@ model GitOperationFinishedMessage {
 
 model SettingsUpdatedMessage {
   event: "settings_updated";
+  request_id?: string;
   settings?: Record<string>;
   changed_key?: string;
   success?: boolean;

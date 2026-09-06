@@ -9045,9 +9045,10 @@ export enum SetSessionResumeIDMessageCmd {
 }
 
 export interface SetSettingMessage {
-    cmd:   SetSettingMessageCmd;
-    key:   string;
-    value: string;
+    cmd:         SetSettingMessageCmd;
+    key:         string;
+    request_id?: string;
+    value:       string;
     [property: string]: any;
 }
 
@@ -9105,6 +9106,7 @@ export interface SettingsUpdatedMessage {
     changed_key?: string;
     error?:       string;
     event:        SettingsUpdatedMessageEvent;
+    request_id?:  string;
     settings?:    { [key: string]: string };
     success?:     boolean;
     [property: string]: any;
@@ -21356,6 +21358,7 @@ const typeMap: any = {
     "SetSettingMessage": o([
         { json: "cmd", js: "cmd", typ: r("SetSettingMessageCmd") },
         { json: "key", js: "key", typ: "" },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "value", js: "value", typ: "" },
     ], "any"),
     "SetTerminalThemeMessage": o([
@@ -21382,6 +21385,7 @@ const typeMap: any = {
         { json: "changed_key", js: "changed_key", typ: u(undefined, "") },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("SettingsUpdatedMessageEvent") },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "settings", js: "settings", typ: u(undefined, m("")) },
         { json: "success", js: "success", typ: u(undefined, true) },
     ], "any"),

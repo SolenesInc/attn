@@ -1,7 +1,7 @@
 # Shared PTY host verification
 
 The shared Rust PTY host is experimental and off by default. Enable it under
-Settings → Agents → PTY Backend. New and explicitly reloaded sessions use the
+Settings → Terminal → PTY Backend. New and explicitly reloaded sessions use the
 selected backend; changing the setting never moves or stops a running session.
 Turning it off returns future launches to dedicated Go workers.
 
