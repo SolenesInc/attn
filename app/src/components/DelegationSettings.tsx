@@ -2,14 +2,15 @@ import { useEffect, useRef, useState, useId } from 'react';
 import type { DelegationChoice, DelegationPreferences, DelegationRole, DelegationSelection, DelegationHarness } from '../types/generated';
 import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
 import type { DelegationPreferencesPolicy } from '../hooks/useDelegationPreferences';
-import { DELEGATION_ICONS, DelegationRoleIcon } from './DelegationRoleIcon';
+import { DelegationRoleIcon } from './DelegationRoleIcon';
 import './DelegationSettings.css';
 
 const emptySelection = (): DelegationSelection => ({ harness: '', provider: '', model: '', effort: '' });
 const id = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
 const route = (s: DelegationSelection) => !s.harness ? 'Choose a harness and model' : [s.harness, s.provider, s.model || 'Harness default', s.effort].filter(Boolean).join(' / ');
+const DELEGATION_ICONS = ['search', 'diamond', 'code', 'arrow', 'list', 'bug', 'spark', 'circle'] as const;
 
-function SelectionPicker({ value, onChange, harnesses, catalog, loading, error, discover }: {
+type SelectionPickerProps = {
   value: DelegationSelection;
   onChange: (s: DelegationSelection) => void;
   harnesses: DelegationHarness[];
@@ -17,13 +18,63 @@ function SelectionPicker({ value, onChange, harnesses, catalog, loading, error, 
   loading: boolean;
   error?: string;
   discover: (harness: string) => void;
+};
+
+const modelKey = (provider: string, model: string) => JSON.stringify([provider, model]);
+
+function ModelField({ value, onChange, catalog, disabled, manual, setManual }: {
+  value: DelegationSelection;
+  onChange: (s: DelegationSelection) => void;
+  catalog?: DelegationModelCatalog;
+  disabled: boolean;
+  manual: boolean;
+  setManual: (manual: boolean) => void;
 }) {
+  const selected = catalog?.models.find(model => model.id === value.model && model.provider === value.provider);
+  const selectedKey = modelKey(value.provider, value.model);
+  const choose = (key: string) => {
+    if (key === '__custom') { setManual(true); return; }
+    if (key === modelKey('', '')) { onChange({ ...value, provider: '', model: '', effort: '' }); return; }
+    const model = catalog?.models.find(candidate => modelKey(candidate.provider, candidate.id) === key);
+    if (model) onChange({ ...value, provider: model.provider, model: model.id, effort: '' });
+  };
+  return <label>Model<span className="delegation-select"><select value={manual ? '__custom' : selectedKey} disabled={disabled} onChange={e => choose(e.target.value)}>
+    <option value={modelKey('', '')}>Harness default</option>
+    {catalog?.models.map(model => <option key={`${model.provider}/${model.id}`} value={modelKey(model.provider, model.id)} disabled={model.access === 'unsupported'}>{model.provider ? `${model.provider} / ` : ''}{model.name || model.id}</option>)}
+    {value.model && !selected && <option value={selectedKey}>{value.provider ? `${value.provider} / ` : ''}{value.model} (custom)</option>}
+    <option value="__custom">Enter a model ID…</option>
+  </select></span></label>;
+}
+
+function SelectionHelp({ harness, model, levels, catalog, loading, error, discover }: {
+  harness?: DelegationHarness;
+  model?: DelegationModelCatalog['models'][number];
+  levels: string[];
+  catalog?: DelegationModelCatalog;
+  loading: boolean;
+  error?: string;
+  discover: (harness: string) => void;
+}) {
+  let hint = 'Leave effort blank for the harness default. Enter a level only if your harness supports it.';
+  if (levels.length) hint = `Supported effort: ${levels.join(', ')}.`;
+  if (model?.effort_support === 'unsupported') hint = 'This model does not support an effort override.';
+  if (harness?.model_pin === false) hint = 'This harness uses its own selected model.';
+  return <>
+    <div className="delegation-row">
+      <p className="settings-hint">{hint}</p>
+      <button className="settings-action" disabled={!harness || loading} onClick={() => harness && discover(harness.id)}>{loading ? 'Discovering…' : catalog ? 'Refresh models' : 'Discover models'}</button>
+    </div>
+    {error && <p className="settings-warning" role="alert">{error}</p>}
+    {catalog?.detail && <p className="settings-hint">{catalog.detail}</p>}
+    {harness && !harness.available && <p className="settings-warning">This harness is unavailable on this daemon. Check Agents and models.</p>}
+  </>;
+}
+
+function SelectionPicker({ value, onChange, harnesses, catalog, loading, error, discover }: SelectionPickerProps) {
   const prefix = useId();
   const [manual, setManual] = useState(false);
   const harness = harnesses.find(h => h.id === value.harness);
   const model = catalog?.models.find(m => m.id === value.model && m.provider === value.provider);
-  const modelKey = JSON.stringify([value.provider, value.model]);
-  const unknown = value.model && !model;
   const levels = model?.effort_levels ?? [];
   return <div className="delegation-picker">
     <div className="delegation-fields">
@@ -32,16 +83,7 @@ function SelectionPicker({ value, onChange, harnesses, catalog, loading, error, 
         {harnesses.map(h => <option value={h.id} key={h.id}>{h.name}{h.available ? '' : ' (unavailable)'}</option>)}
         {value.harness && !harness && <option>{value.harness}</option>}
       </select></span></label>
-      <label>Model<span className="delegation-select"><select value={manual ? '__custom' : modelKey} disabled={!value.harness || harness?.model_pin === false} onChange={e => {
-        if (e.target.value === '__custom') { setManual(true); return; }
-        const [provider, model] = JSON.parse(e.target.value) as [string, string];
-        onChange({ ...value, provider, model, effort: '' });
-      }}>
-        <option value={JSON.stringify(['', ''])}>Harness default</option>
-        {catalog?.models.map(m => <option key={`${m.provider}/${m.id}`} value={JSON.stringify([m.provider, m.id])} disabled={m.access === 'unsupported'}>{m.provider ? `${m.provider} / ` : ''}{m.name || m.id}</option>)}
-        {unknown && <option value={modelKey}>{value.provider ? `${value.provider} / ` : ''}{value.model} (custom)</option>}
-        <option value="__custom">Enter a model ID…</option>
-      </select></span></label>
+      <ModelField value={value} onChange={onChange} catalog={catalog} disabled={!value.harness || harness?.model_pin === false} manual={manual} setManual={setManual} />
       <label>Effort<input list={`${prefix}-efforts`} value={value.effort} placeholder="Harness default" disabled={!value.harness || harness?.effort_pin === false || model?.effort_support === 'unsupported'} onChange={e => onChange({ ...value, effort: e.target.value })} />
         <datalist id={`${prefix}-efforts`}>{levels.map(level => <option key={level} value={level} />)}</datalist>
       </label>
@@ -51,14 +93,31 @@ function SelectionPicker({ value, onChange, harnesses, catalog, loading, error, 
       {!['claude', 'codex', 'copilot'].includes(value.harness) && <label>Provider<input value={value.provider} onChange={e => onChange({ ...value, provider: e.target.value })} /></label>}
       <button className="settings-action" onClick={() => setManual(false)}>Done</button>
     </div>}
-    <div className="delegation-row">
-      <p className="settings-hint">{harness?.model_pin === false ? 'This harness uses its own selected model.' : model?.effort_support === 'unsupported' ? 'This model does not support an effort override.' : levels.length ? `Supported effort: ${levels.join(', ')}.` : 'Leave effort blank for the harness default. Enter a level only if your harness supports it.'}</p>
-      <button className="settings-action" disabled={!value.harness || loading} onClick={() => discover(value.harness)}>{loading ? 'Discovering…' : catalog ? 'Refresh models' : 'Discover models'}</button>
-    </div>
-    {error && <p className="settings-warning" role="alert">{error}</p>}
-    {catalog?.detail && <p className="settings-hint">{catalog.detail}</p>}
-    {harness && !harness.available && <p className="settings-warning">This harness is unavailable on this daemon. Check Agents and models.</p>}
+    <SelectionHelp harness={harness} model={model} levels={levels} catalog={catalog} loading={loading} error={error} discover={discover} />
   </div>;
+}
+
+function useDelegationModelCatalogs(config: DelegationPreferences | null, loadModels: (harness: string) => Promise<DelegationModelCatalog>) {
+  const [catalogs, setCatalogs] = useState<Record<string, DelegationModelCatalog>>({});
+  const [loading, setLoading] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+
+  const discover = async (harness: string) => {
+    if (!config?.enabled || loading[harness]) return;
+    setLoading(current => ({ ...current, [harness]: true }));
+    setErrors(current => ({ ...current, [harness]: '' }));
+    try {
+      const result = await loadModels(harness);
+      if (mounted.current) setCatalogs(current => ({ ...current, [harness]: result }));
+    } catch (error) {
+      if (mounted.current) setErrors(current => ({ ...current, [harness]: error instanceof Error ? error.message : String(error) }));
+    } finally {
+      if (mounted.current) setLoading(current => ({ ...current, [harness]: false }));
+    }
+  };
+  return { catalogs, loading, errors, discover };
 }
 
 export function DelegationSettings({ policy, loadModels }: { policy: DelegationPreferencesPolicy; loadModels: (harness: string) => Promise<DelegationModelCatalog> }) {
@@ -69,19 +128,7 @@ export function DelegationSettings({ policy, loadModels }: { policy: DelegationP
   const [iconsOpen, setIconsOpen] = useState(false);
   const [starter, setStarter] = useState<DelegationSelection>(emptySelection);
   const [undo, setUndo] = useState<DelegationPreferences | null>(null);
-  const [catalogs, setCatalogs] = useState<Record<string, DelegationModelCatalog>>({});
-  const [loading, setLoading] = useState<Record<string, boolean>>({});
-  const [modelErrors, setModelErrors] = useState<Record<string, string>>({});
-  const mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-
-  const discover = async (harness: string) => {
-    if (!config?.enabled || loading[harness]) return;
-    setLoading(s => ({ ...s, [harness]: true })); setModelErrors(s => ({ ...s, [harness]: '' }));
-    try { const result = await loadModels(harness); if (mounted.current) setCatalogs(s => ({ ...s, [harness]: result })); }
-    catch (e) { if (mounted.current) setModelErrors(s => ({ ...s, [harness]: e instanceof Error ? e.message : String(e) })); }
-    finally { if (mounted.current) setLoading(s => ({ ...s, [harness]: false })); }
-  };
+  const { catalogs, loading, errors: modelErrors, discover } = useDelegationModelCatalogs(config, loadModels);
   if (!config || !state) return <div role="status">{error || 'Loading delegation preferences…'}{error && <button className="settings-action" onClick={() => void reload()}>Retry</button>}</div>;
   const update = (next: DelegationPreferences) => setDraft(next);
   const role = config.roles.find(r => r.id === roleID);

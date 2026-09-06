@@ -19,7 +19,7 @@ func TestDelegationPreferencesMigrationUpgradesPreviousSchema(t *testing.T) {
 	if _, err := s.db.Exec(`
 		DROP TABLE delegation_preferences;
 		ALTER TABLE delegation_operations DROP COLUMN resolved_preferences;
-		DELETE FROM schema_migrations WHERE version = 136;
+		DELETE FROM schema_migrations WHERE version = 138;
 	`); err != nil {
 		s.Close()
 		t.Fatal(err)

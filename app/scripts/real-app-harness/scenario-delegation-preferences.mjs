@@ -33,6 +33,13 @@ async function save() {
   await click('[data-testid="delegation-save"]');
   await until(async () => !(await text()).includes('Unsaved changes') && !(await text()).includes('Saving…'), 'preferences saved');
 }
+async function closeSessions(sessionIds, ignoreErrors = false) {
+  const [sessionId, ...rest] = sessionIds;
+  if (!sessionId) return;
+  const close = client.request('close_session', { sessionId });
+  if (ignoreErrors) await close.catch(() => {}); else await close;
+  await closeSessions(rest, ignoreErrors);
+}
 async function screenshot(name) {
   const outputPath = path.join(runner.runDir, name);
   try {
@@ -129,7 +136,8 @@ try {
     const result = JSON.parse(output.slice(output.indexOf('{')));
     worker = result.session_id;
     await observer.waitFor(() => observer.sessionsById.has(worker), 'visible delegated session');
-    runner.assert(roles().roles.find(r => r.id === 'build').choices[0].selection.effort === 'medium', 'request effort does not mutate the role default');
+    const build = roles().roles.find(r => r.id === 'build');
+    runner.assert(build?.choices[0]?.selection.effort === 'medium', 'request effort does not mutate the role default');
     runner.writeText('delegation-result.json', JSON.stringify(result, null, 2));
     await hold();
   });
@@ -145,7 +153,7 @@ try {
     await screenshot('05-restored.png'); await hold();
   });
   await runner.step('idle_preferences_page', async () => {
-    for (const sessionId of [worker, source].filter(Boolean)) await client.request('close_session', { sessionId });
+    await closeSessions([worker, source].filter(Boolean));
     await delay(3000);
     const appPid = client.readManifest().pid;
     const daemonPid = readLiveDaemonPid(profile);
@@ -171,7 +179,7 @@ try {
       await preferencesRequest('delegation_preferences_save', { ...baseline, revision: current.preferences.revision });
     } catch (error) { console.error(`Restore preferences: ${error.message}`); process.exitCode = 1; }
   }
-  for (const sessionId of [worker, source].filter(Boolean)) { await client.request('close_session', { sessionId }).catch(() => {}); }
+  await closeSessions([worker, source].filter(Boolean), true);
   await observer.close().catch(() => {});
   await client.quitApp().catch(() => {});
 }
