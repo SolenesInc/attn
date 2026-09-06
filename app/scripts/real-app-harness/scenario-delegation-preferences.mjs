@@ -100,6 +100,8 @@ try {
       runner.assert(found.roles.some(role => role.id === id), `${id} is available as a starter role`);
     }
     await screenshot('02-roles.png'); await hold();
+    await client.request('dom_scroll_into_view', { selector: '[aria-label="Edit Orchestrator"]' });
+    await screenshot('02-new-roles.png'); await hold();
   });
   await runner.step('edit_role_and_add_effort_alternative', async () => {
     await click('[aria-label="Edit Build"]');
