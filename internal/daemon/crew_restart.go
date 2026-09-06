@@ -204,7 +204,17 @@ func (d *Daemon) resumeCrewRestart(member crew.Member, revision int64) (*protoco
 		return d.crewRestartResultCurrent(member.ID)
 	}
 	if restart.SessionID == "" {
-		if d.crewBindingLive(member) {
+		if member.BindingSession != "" {
+			live, err := d.crewSessionActuallyLive(member.BindingSession)
+			if err != nil {
+				return nil, fmt.Errorf("check %s's possible wake session %s: %w", crew.DisplayName(member.ID), shortSessionID(member.BindingSession), err)
+			}
+			if !live {
+				if _, err := d.releaseCrewBinding(member.ID, member.BindingSession); err != nil {
+					return nil, err
+				}
+				return d.wakeForCrewRestart(member, *restart, member.BindingSession)
+			}
 			d.completeCrewRestartWithDetail(member.ID, restart.RequestID, "", "", member.BindingSession,
 				fmt.Sprintf("%s woke in session %s", crew.DisplayName(member.ID), shortSessionID(member.BindingSession)))
 			return d.crewRestartResultCurrent(member.ID)
@@ -235,6 +245,9 @@ func (d *Daemon) resumeCrewRestart(member crew.Member, revision int64) (*protoco
 func (d *Daemon) wakeForCrewRestart(member crew.Member, restart crew.Restart, exitedSessionID string) (*protocol.CrewRestartResult, error) {
 	woken, err := d.crewWakeWithDeliveryLocked(member.ID, "", false, nil)
 	if err != nil {
+		if recordErr := d.failCrewRestart(member.ID, restart.RequestID, restart.SessionID, "", err); recordErr != nil {
+			return nil, errors.Join(err, recordErr)
+		}
 		return nil, err
 	}
 	detail := fmt.Sprintf("%s was asleep and woke in session %s", crew.DisplayName(member.ID), shortSessionID(woken.SessionID))
