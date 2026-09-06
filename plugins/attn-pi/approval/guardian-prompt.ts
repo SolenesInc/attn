@@ -36,6 +36,11 @@ const headings = {
   },
 } as const;
 
+// context/guardian_followup_review_reminder.rs:26 sends this once per reviewer
+// conversation; pi has no developer role, so it opens the first delta review.
+export const guardianFollowupReminder =
+  'Use prior reviews as context, not binding precedent. Follow the Workspace Policy. If the user explicitly approves a previously rejected action after being informed of the concrete risks, set outcome to "allow" unless the policy explicitly disallows user overwrites in such cases.';
+
 const networkTriggerText =
   "The network access was triggered by the action in the `trigger` entry. When assessing this request, focus primarily on whether the triggering command is authorised by the user and whether it is within the rules. The user does not need to have explicitly authorised this exact network connection, as long as the network access is a reasonable consequence of the triggering command.\n\n";
 
@@ -48,6 +53,8 @@ export type GuardianPromptInput = {
   sessionId: string;
   /** Entries the reviewer has already been shown; the rest is the delta. */
   alreadyReviewed?: number;
+  /** First delta review of this conversation: it opens with the reminder. */
+  followupReminder?: boolean;
 };
 
 export type GuardianPrompt = { items: string[]; reviewedEntryCount: number };
@@ -63,7 +70,8 @@ export function buildGuardianPrompt(input: GuardianPromptInput): GuardianPrompt 
   const rendered = renderTranscript(input.transcript.slice(seen), seen, shape.empty);
   const action = actionJson(input.request);
 
-  const items: string[] = [shape.intro, shape.start];
+  const items: string[] = input.followupReminder ? [`${guardianFollowupReminder}\n\n`] : [];
+  items.push(shape.intro, shape.start);
   rendered.lines.forEach((line, index) => items.push(`${index === 0 ? "" : "\n"}${line}\n`));
   items.push(shape.end, `Reviewed session id: ${input.sessionId}\n`);
   if (rendered.omitted) items.push(`\n${omissionNote}\n`);

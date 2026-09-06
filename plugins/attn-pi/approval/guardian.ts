@@ -135,7 +135,7 @@ export type GuardianOptions = {
   jitter?: () => number;
 };
 
-type Conversation = { messages: unknown[]; reviewedEntryCount: number };
+type Conversation = { messages: unknown[]; reviewedEntryCount: number; reminded: boolean };
 
 export class GuardianReviewer implements Reviewer {
   readonly name = "guardian";
@@ -258,13 +258,15 @@ export class GuardianReviewer implements Reviewer {
     const provider = this.options.registry.getProvider(model.provider);
     if (!provider) throw new GuardianTransportError(`provider ${JSON.stringify(model.provider)} is not configured`);
     const transcript = this.options.transcript();
+    const conversation = this.conversation;
     const prompt = buildGuardianPrompt({
       request,
       transcript,
       sessionId: this.options.sessionId(),
-      ...(this.conversation ? { alreadyReviewed: this.conversation.reviewedEntryCount } : {}),
+      ...(conversation ? { alreadyReviewed: conversation.reviewedEntryCount } : {}),
+      followupReminder: conversation !== undefined && !conversation.reminded,
     });
-    const messages = this.conversation ? [...this.conversation.messages] : [];
+    const messages = conversation ? [...conversation.messages] : [];
     messages.push(userMessage(prompt.items));
 
     const auth = await this.options.registry.getApiKeyAndHeaders(model);
@@ -275,8 +277,17 @@ export class GuardianReviewer implements Reviewer {
 
     for (;;) {
       if (now() >= deadline) throw new GuardianDeadlineError();
-      const result = await complete(provider, target, this.options.systemPrompt(), messages, auth, ctx.signal);
+      const bound = signalFor(ctx, deadline, now);
+      let result: CompletionResultLike;
+      try {
+        result = await complete(provider, target, this.options.systemPrompt(), messages, auth, bound.signal);
+      } finally {
+        bound.release();
+      }
       review.usage = mergeUsage(review.usage, result.usage);
+      // The deadline aborted the stream, so this attempt is out of time; retrying
+      // it as a transport failure would spend the caller's turn on a dead clock.
+      if (result.stopReason === "aborted" && bound.expired()) throw new GuardianDeadlineError();
       if (result.stopReason === "aborted") throw new GuardianTransportError("the review was aborted");
       if (result.stopReason === "error") throw new GuardianTransportError(result.errorMessage ?? "no reason given");
       messages.push(assistantMessage(result));
@@ -284,13 +295,19 @@ export class GuardianReviewer implements Reviewer {
       if (result.stopReason === "toolUse" && calls.length > 0) {
         for (const call of calls) {
           const command = String((call.arguments as { command?: unknown })?.command ?? "");
-          const run = await this.options.runTool(command, signalFor(ctx, deadline, now));
-          messages.push(toolResultMessage(call.id, call.name, run.output, run.isError));
+          const tool = signalFor(ctx, deadline, now);
+          try {
+            const run = await this.options.runTool(command, tool.signal);
+            messages.push(toolResultMessage(call.id, call.name, run.output, run.isError));
+          } finally {
+            tool.release();
+          }
         }
         continue;
       }
       const assessment = parseAssessment(textOf(result));
-      this.conversation = { messages, reviewedEntryCount: prompt.reviewedEntryCount };
+      // The first review opens no delta, so the reminder rides the second one.
+      this.conversation = { messages, reviewedEntryCount: prompt.reviewedEntryCount, reminded: conversation !== undefined };
       return assessment;
     }
   }
@@ -325,13 +342,23 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-function signalFor(ctx: ReviewContext, deadline: number, now: () => number): AbortSignal {
+/** The review's remaining time as a signal. release() drops the timer and the
+ * ctx listener, so a finished call leaves nothing behind. */
+type BoundSignal = { signal: AbortSignal; expired: () => boolean; release: () => void };
+
+function signalFor(ctx: ReviewContext, deadline: number, now: () => number): BoundSignal {
   const controller = new AbortController();
+  let expired = false;
   const remaining = Math.max(deadline - now(), 0);
-  const timer = setTimeout(() => controller.abort(), remaining);
+  const timer = setTimeout(() => { expired = true; controller.abort(); }, remaining);
   timer.unref?.();
-  ctx.signal?.addEventListener("abort", () => controller.abort(), { once: true });
-  return controller.signal;
+  const relay = () => controller.abort();
+  ctx.signal?.addEventListener("abort", relay, { once: true });
+  return {
+    signal: controller.signal,
+    expired: () => expired,
+    release: () => { clearTimeout(timer); ctx.signal?.removeEventListener("abort", relay); },
+  };
 }
 
 type CompletionResultLike = {
