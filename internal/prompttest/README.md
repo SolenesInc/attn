@@ -24,7 +24,9 @@ unrelated output retain the captured baseline.
 
 The `launch.json`, `seed-guide.json` and `agent-delivery.json` Garden expectations also carry the
 `attn seed harvest --when-merged` lines, edited at the source-text boundary when
-harvest-on-merge landed.
+harvest-on-merge landed, and the sentence saying that harvest and wither print
+what the close set free. `agent-delivery.json` carries the matching sentence in
+the attn skill's garden reference, under Rings and watches.
 
 Those same three Garden expectations carry the search-before-you-plant sentence and
 the `attn seed search` loop entry, edited at the source-text boundaries when the

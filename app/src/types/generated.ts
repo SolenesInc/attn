@@ -7370,8 +7370,9 @@ export interface RelationElement {
 }
 
 export interface SeedTransitionResultObject {
-    handoff?: Note;
-    seed:     SeedElement;
+    handoff?:   Note;
+    seed:       SeedElement;
+    unblocked?: SeedElement[];
     [property: string]: any;
 }
 
@@ -8461,8 +8462,9 @@ export interface WhenMerged {
 }
 
 export interface SeedTransitionResult {
-    handoff?: Note;
-    seed:     SeedElement;
+    handoff?:   Note;
+    seed:       SeedElement;
+    unblocked?: SeedElement[];
     [property: string]: any;
 }
 
@@ -20611,6 +20613,7 @@ const typeMap: any = {
     "SeedTransitionResultObject": o([
         { json: "handoff", js: "handoff", typ: u(undefined, r("Note")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
+        { json: "unblocked", js: "unblocked", typ: u(undefined, a(r("SeedElement"))) },
     ], "any"),
     "SeedWatchResultObject": o([
         { json: "changed", js: "changed", typ: true },
@@ -21332,6 +21335,7 @@ const typeMap: any = {
     "SeedTransitionResult": o([
         { json: "handoff", js: "handoff", typ: u(undefined, r("Note")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
+        { json: "unblocked", js: "unblocked", typ: u(undefined, a(r("SeedElement"))) },
     ], "any"),
     "SeedTransitionResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },

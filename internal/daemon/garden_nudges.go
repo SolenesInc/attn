@@ -18,6 +18,54 @@ var gardenRingEvents = map[garden.Verb]string{
 	garden.VerbWither: "withered", garden.VerbReplant: "replanted",
 }
 
+const gardenRingUnblocked = "unblocked"
+
+func (d *Daemon) seedUnblocked(seedID string) ([]garden.Seed, []protocol.Seed) {
+	if d.store == nil {
+		return nil, nil
+	}
+	// The whole graph, never the newest snapshot page: a blocker paged out of
+	// that window would make a seed it still holds back look freed.
+	read, err := d.readGardenTo(0)
+	if err != nil {
+		d.logf("garden bell: reading the graph to see what %s unblocked: %v", seedID, err)
+		return nil, nil
+	}
+	unblocked := garden.Unblocks(read.seeds, seedID)
+	return unblocked, read.wire(unblocked)
+}
+
+func (d *Daemon) ringSeedUnblocked(unblocked []garden.Seed, excludedSessionIDs ...string) {
+	if d.store == nil {
+		return
+	}
+	excluded := make(map[string]bool, len(excludedSessionIDs))
+	for _, sessionID := range excludedSessionIDs {
+		excluded[strings.TrimSpace(sessionID)] = true
+	}
+	delete(excluded, "")
+	for _, seed := range unblocked {
+		sessionID := d.tenderSession(seed.Tender())
+		if sessionID == "" || excluded[sessionID] {
+			continue
+		}
+		d.claimAndDeliverSeedBell(sessionID, seed.ID, gardenRingUnblocked)
+	}
+}
+
+func (d *Daemon) tenderSession(tender garden.Tender) string {
+	if session := strings.TrimSpace(tender.Session); session != "" {
+		if d.sessionExists(session) {
+			return session
+		}
+		return ""
+	}
+	if member := strings.TrimSpace(tender.Member); member != "" {
+		return d.crewSessionBoundTo(member)
+	}
+	return ""
+}
+
 func (d *Daemon) handleSeedWatch(conn net.Conn, msg *protocol.SeedWatchMessage) {
 	verb := "watch"
 	watching := !protocol.Deref(msg.Unwatch)

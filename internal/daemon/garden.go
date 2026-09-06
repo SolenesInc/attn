@@ -1344,10 +1344,12 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 			d.sendGardenError(conn, string(verb), err)
 			return
 		}
-		d.sendGardenResponse(conn, protocol.Response{
-			Ok:                   true,
-			SeedTransitionResult: &protocol.SeedTransitionResult{Seed: d.seedTransitionWire(seed, doc)},
-		})
+		result := &protocol.SeedTransitionResult{Seed: d.seedTransitionWire(seed, doc)}
+		// No ring here: fulfilHarvestWhen already rang the tenders this close freed.
+		if garden.Closed(seed.Status) {
+			_, result.Unblocked = d.seedUnblocked(seed.ID)
+		}
+		d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedTransitionResult: result})
 		return
 	}
 	seed, doc, notes, err := d.applySeedTransitionDetailed(
@@ -1363,10 +1365,15 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 	if verb == garden.VerbTend {
 		result.Handoff = d.gardenHandoff(seed.ID)
 	}
+	var unblocked []garden.Seed
+	if garden.Closed(seed.Status) {
+		unblocked, result.Unblocked = d.seedUnblocked(seed.ID)
+	}
 	// Mirrored before the response: a caller that harvests and then reads the board
 	// must not see the ticket mid-flight.
 	d.mirrorSeedMoveOntoTicket(sessionID, seed.ID, verb, protocol.Deref(msg.Reason))
 	d.ringSeedActivity(seed.ID, gardenRingEvents[verb], sessionID)
+	d.ringSeedUnblocked(unblocked, sessionID)
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedTransitionResult: result})
 }
 
