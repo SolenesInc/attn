@@ -64,6 +64,32 @@ profile). On Linux this launches the profile's own app executable, which, via
 tauri-plugin-single-instance, hands the URL to an already-running instance
 instead of opening a second window.
 
+## Iterate on a bundled plugin
+
+A change under `plugins/attn-pi` does not need `make install`. The driver reads
+two environment variables before falling back to the bundled build:
+
+| Variable | Points the driver at |
+| --- | --- |
+| `ATTN_PI_SUITE_PATH` | the pi extension, e.g. `<checkout>/plugins/attn-pi/suite/index.ts` |
+| `ATTN_NISSE_COMMAND` | the nisse host, e.g. `bun <checkout>/plugins/attn-pi/host/index.ts` |
+
+pi loads TypeScript extensions directly, and auto mode and the security
+extension are imported by the suite, so one variable covers all three.
+
+The daemon builds the driver's environment from its own environment plus the
+login-shell environment it captured at start, so export the variable, then
+restart the non-production daemon once. From then on every new pi session runs
+what is on disk; sessions already running keep the code they loaded.
+
+`scripts/build-bundled-plugins.sh` stages fresh bundles in seconds, and a daemon
+started by hand with `ATTN_BUNDLED_PLUGIN_DIR` pointed at that stage dir serves
+them. The app scrubs that variable as a routing override, so it does not reach
+an app-launched daemon.
+
+`attn plugin install --path` copies the tree, so it is a remove and reinstall
+per change; use the variables instead.
+
 ## Verification requirements
 
 - Non-trivial PRs need live verification from their branch in a non-production profile.
