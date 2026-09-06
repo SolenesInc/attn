@@ -204,7 +204,7 @@ export class PiDriver {
 
   async sessionClosed(params: SessionClosedParams): Promise<{ ok: true }> {
     const run = this.runsBySessionID.get(params.session_id);
-    if (run) {
+    if (run && run.runID === params.run_id) {
       this.markBacked(run);
       this.runsBySessionID.delete(params.session_id);
       this.runsByToken.delete(run.token);

@@ -427,6 +427,27 @@ describe("PiDriver", () => {
     ).rejects.toThrow(/unknown pi suite token/);
   });
 
+  test("sessionClosed for a superseded run keeps the reloaded run's token alive", async () => {
+    const rpc = new FakeRPC();
+    const driver = newDriver({ rpc, runCommand: fakeRunCommand(), executable: "pi" });
+
+    await driver.spawn(params({ session_id: "session-1", run_id: "run-1" }));
+    const resumed = await driver.resume(
+      params({
+        session_id: "session-1",
+        run_id: "run-2",
+        metadata: { schema: 1, pi_session_id: "abc-123", pi_version: "0.80.10" },
+      }),
+    );
+    const token = resumed.env?.ATTN_PI_TOKEN as string;
+
+    await driver.sessionClosed({ session_id: "session-1", run_id: "run-1", reason: "reloaded" });
+
+    await expect(
+      driver.suiteHello(fakeConnection(), { token, pi_session_id: "abc-123", pi_version: "0.80.10", reason: "session_start" }),
+    ).resolves.toBeDefined();
+  });
+
   test("reserves the stop seq before awaiting classification so a newer working report outranks it", async () => {
     let resolveClassify: (result: { verdict: string }) => void = () => {};
     const classifyDeferred = new Promise<{ verdict: string }>((resolve) => {
