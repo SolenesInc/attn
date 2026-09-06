@@ -137,3 +137,31 @@ func writeCLIPluginManifest(t *testing.T, pluginDir, name string) {
 		t.Fatalf("write manifest: %v", err)
 	}
 }
+
+func TestLinkPluginViaDaemonSendsLinkAndReportsTarget(t *testing.T) {
+	pluginDir := t.TempDir()
+	t.Setenv("ATTN_PLUGIN_DIR", pluginDir)
+	checkout := filepath.Join(t.TempDir(), "checkout")
+	writeCLIPluginManifest(t, filepath.Dir(checkout), "checkout")
+	if err := os.Symlink(checkout, filepath.Join(pluginDir, "fixture-plugin")); err != nil {
+		t.Fatal(err)
+	}
+	requests := startPluginCLIDaemon(t, map[string]any{
+		"event":   "plugin_action_result",
+		"action":  "link",
+		"name":    "fixture-plugin",
+		"success": true,
+	})
+
+	result, err := linkPluginViaDaemon(checkout)
+	if err != nil {
+		t.Fatalf("linkPluginViaDaemon: %v", err)
+	}
+	request := <-requests
+	if request["cmd"] != "install_plugin" || request["source"] != checkout || request["link"] != true {
+		t.Fatalf("request=%v, want install_plugin with link=true", request)
+	}
+	if !result.OK || result.Name != "fixture-plugin" || result.LinkTarget != checkout {
+		t.Fatalf("result=%+v, want linked plugin with its target", result)
+	}
+}

@@ -1546,6 +1546,7 @@ export function SettingsModal({
                       <span className="endpoint-name">{plugin.name}</span>
                       <span className="settings-pill">v{plugin.version}</span>
                       {plugin.availability === 'bundled' && <span className="settings-pill">Bundled</span>}
+                      {plugin.link_target && <span className="settings-pill">Linked</span>}
                       <span className="settings-pill">{installed ? 'Installed' : 'Available'}</span>
                       <span className={`plugin-status-badge ${runtimePhase}`}>
                         {runtimePhase}
@@ -1586,6 +1587,12 @@ export function SettingsModal({
                       <span className="settings-meta-label">Path</span>
                       <code>{plugin.dir}</code>
                     </div>
+                    {plugin.link_target && (
+                      <div className="settings-meta-row">
+                        <span className="settings-meta-label">Linked to</span>
+                        <code>{plugin.link_target}</code>
+                      </div>
+                    )}
                     {plugin.restart_attempt !== undefined && (
                       <div className="settings-meta-row">
                         <span className="settings-meta-label">Restart attempt</span>

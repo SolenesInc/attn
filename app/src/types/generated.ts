@@ -4883,6 +4883,7 @@ export enum InstallBundledPluginMessageCmd {
 
 export interface InstallPluginMessage {
     cmd:    InstallPluginMessageCmd;
+    link?:  boolean;
     source: string;
     [property: string]: any;
 }
@@ -5780,6 +5781,7 @@ export interface PluginInfo {
     installation_state: string;
     last_exit?:         string;
     last_health_at?:    string;
+    link_target?:       string;
     name:               string;
     next_restart_at?:   string;
     priority:           number;
@@ -5826,6 +5828,7 @@ export interface PluginElement {
     installation_state: string;
     last_exit?:         string;
     last_health_at?:    string;
+    link_target?:       string;
     name:               string;
     next_restart_at?:   string;
     priority:           number;
@@ -18175,6 +18178,7 @@ const typeMap: any = {
     ], "any"),
     "InstallPluginMessage": o([
         { json: "cmd", js: "cmd", typ: r("InstallPluginMessageCmd") },
+        { json: "link", js: "link", typ: u(undefined, true) },
         { json: "source", js: "source", typ: "" },
     ], "any"),
     "JournalAppendMessage": o([
@@ -18710,6 +18714,7 @@ const typeMap: any = {
         { json: "installation_state", js: "installation_state", typ: "" },
         { json: "last_exit", js: "last_exit", typ: u(undefined, "") },
         { json: "last_health_at", js: "last_health_at", typ: u(undefined, "") },
+        { json: "link_target", js: "link_target", typ: u(undefined, "") },
         { json: "name", js: "name", typ: "" },
         { json: "next_restart_at", js: "next_restart_at", typ: u(undefined, "") },
         { json: "priority", js: "priority", typ: 0 },
@@ -18744,6 +18749,7 @@ const typeMap: any = {
         { json: "installation_state", js: "installation_state", typ: "" },
         { json: "last_exit", js: "last_exit", typ: u(undefined, "") },
         { json: "last_health_at", js: "last_health_at", typ: u(undefined, "") },
+        { json: "link_target", js: "link_target", typ: u(undefined, "") },
         { json: "name", js: "name", typ: "" },
         { json: "next_restart_at", js: "next_restart_at", typ: u(undefined, "") },
         { json: "priority", js: "priority", typ: 0 },

@@ -186,6 +186,28 @@ describe('SettingsModal', () => {
     await waitFor(() => expect(onInstallBundledPlugin).toHaveBeenCalledWith('attn-example'));
   });
 
+  it('shows a linked plugin with its checkout', async () => {
+    const linked = {
+      name: 'attn-pi', version: '0.2.0', dir: '/Users/me/.attn/plugins/attn-pi', link_target: '/Users/me/src/attn/plugins/attn-pi',
+      priority: 0, connected: true, running: true, availability: 'user', installation_state: 'installed',
+      runtime_state: 'connected', can_install: false, can_uninstall: true,
+    };
+    render(
+      <SettingsModal
+        isOpen onClose={vi.fn()} mutedRepos={[]} githubHosts={[]} onUnmuteRepo={vi.fn()}
+        mutedAuthors={[]} onUnmuteAuthor={vi.fn()} settings={{}} endpoints={[]} plugins={[linked]} pluginIssues={[]}
+        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })} onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
+        onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })} onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
+        onListPlugins={vi.fn().mockResolvedValue({ plugins: [linked], issues: [] })} onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
+        onInstallBundledPlugin={vi.fn().mockResolvedValue({ success: true })} onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
+        onSetPluginPriority={vi.fn().mockResolvedValue({ success: true })} onSetSetting={vi.fn()} themePreference="system" onSetTheme={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('settings-nav-plugins'));
+    expect(await screen.findByText('Linked')).toBeInTheDocument();
+    expect(screen.getByText('/Users/me/src/attn/plugins/attn-pi')).toBeInTheDocument();
+  });
+
   it('uninstalls an installed bundled plugin', async () => {
     const onUninstallPlugin = vi.fn().mockResolvedValue({ success: true });
     const bundled = {

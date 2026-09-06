@@ -39,6 +39,8 @@ type Manifest struct {
 	} `toml:"plugin" json:"plugin"`
 
 	Dir string `toml:"-" json:"dir"`
+	// Set when Dir is a symlink into a source checkout (attn plugin link).
+	LinkTarget string `toml:"-" json:"link_target,omitempty"`
 }
 
 type ManifestIssue struct {
@@ -124,10 +126,19 @@ func Discover(pluginDir string) ([]Manifest, []ManifestIssue) {
 	manifests := make([]Manifest, 0, len(entries))
 	var issues []ManifestIssue
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		entryPath := filepath.Join(pluginDir, entry.Name())
+		linkTarget := ""
+		if entry.Type()&os.ModeSymlink != 0 {
+			target, err := linkedPluginTarget(entryPath)
+			if err != nil {
+				issues = append(issues, ManifestIssue{Path: entryPath, Err: err})
+				continue
+			}
+			linkTarget = target
+		} else if !entry.IsDir() {
 			continue
 		}
-		manifestPath := filepath.Join(pluginDir, entry.Name(), ManifestName)
+		manifestPath := filepath.Join(entryPath, ManifestName)
 		manifest, err := LoadManifest(manifestPath)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -136,6 +147,7 @@ func Discover(pluginDir string) ([]Manifest, []ManifestIssue) {
 			issues = append(issues, ManifestIssue{Path: manifestPath, Err: err})
 			continue
 		}
+		manifest.LinkTarget = linkTarget
 		manifests = append(manifests, manifest)
 	}
 
@@ -220,6 +232,63 @@ func InstallPathWithOptions(sourceDir, pluginDir string, opts InstallOptions) (M
 	return installed, nil
 }
 
+// LinkPath installs a plugin as a symlink to sourceDir so edits in the checkout
+// are live for new plugin processes. Dependencies are installed in the checkout.
+func LinkPath(sourceDir, pluginDir string, opts InstallOptions) (Manifest, error) {
+	sourceDir, err := filepath.Abs(strings.TrimSpace(sourceDir))
+	if err != nil {
+		return Manifest{}, fmt.Errorf("resolve source directory: %w", err)
+	}
+	sourceManifest, err := LoadManifest(filepath.Join(sourceDir, ManifestName))
+	if err != nil {
+		return Manifest{}, fmt.Errorf("load source manifest: %w", err)
+	}
+	if !validInstallName(sourceManifest.Name) {
+		return Manifest{}, fmt.Errorf("name %q cannot be used as an install directory", sourceManifest.Name)
+	}
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		return Manifest{}, fmt.Errorf("create plugin directory: %w", err)
+	}
+	if pathWithinDir(pluginDir, sourceDir) {
+		return Manifest{}, fmt.Errorf("source %q is inside the plugin directory; use install instead", sourceDir)
+	}
+	if err := installDependencies(sourceDir, opts.Env); err != nil {
+		return Manifest{}, err
+	}
+	targetDir := filepath.Join(pluginDir, sourceManifest.Name)
+	if err := os.Symlink(sourceDir, targetDir); err != nil {
+		if os.IsExist(err) {
+			return Manifest{}, fmt.Errorf("plugin %q is already installed", sourceManifest.Name)
+		}
+		return Manifest{}, fmt.Errorf("link plugin %q: %w", sourceManifest.Name, err)
+	}
+	linked, err := LoadManifest(filepath.Join(targetDir, ManifestName))
+	if err != nil {
+		_ = os.Remove(targetDir)
+		return Manifest{}, fmt.Errorf("validate linked manifest: %w", err)
+	}
+	linked.LinkTarget = sourceDir
+	return linked, nil
+}
+
+func linkedPluginTarget(linkPath string) (string, error) {
+	target, err := os.Readlink(linkPath)
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(filepath.Dir(linkPath), target)
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return "", fmt.Errorf("linked plugin target %q: %w", target, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("linked plugin target %q is not a directory", target)
+	}
+	return filepath.Clean(target), nil
+}
+
 func isGitSource(source string) bool {
 	if strings.HasPrefix(source, "git@") {
 		return strings.Contains(source, ":")
@@ -273,11 +342,19 @@ func Remove(pluginDir, name string) error {
 		return fmt.Errorf("invalid plugin name %q", name)
 	}
 	path := filepath.Join(pluginDir, name)
-	if _, err := os.Stat(path); err != nil {
+	info, err := os.Lstat(path)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("plugin %q is not installed", name)
 		}
 		return fmt.Errorf("inspect plugin %q: %w", name, err)
+	}
+	// A linked plugin is a symlink into a checkout: drop the link, never its target.
+	if info.Mode()&os.ModeSymlink != 0 {
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("unlink plugin %q: %w", name, err)
+		}
+		return nil
 	}
 	if err := os.RemoveAll(path); err != nil {
 		return fmt.Errorf("remove plugin %q: %w", name, err)
