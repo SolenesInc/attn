@@ -1,0 +1,5 @@
+kind: internal
+area: ci
+change: >
+  Cache the Rust build for the Tauri CI job, which was recompiling the whole
+  dependency tree from cold on every run.

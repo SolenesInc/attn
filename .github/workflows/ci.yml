@@ -513,6 +513,16 @@ jobs:
           toolchain: '1.95.0'
           components: clippy, rustfmt
 
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src-tauri
+            pty-host
+          # Saving on PRs too would copy this cache into every branch scope and
+          # evict the rest of the repo's entries.
+          save-if: ${{ github.ref == 'refs/heads/next' || github.ref == 'refs/heads/main' }}
+
       - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
 
