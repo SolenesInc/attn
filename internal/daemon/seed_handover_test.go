@@ -62,6 +62,7 @@ func TestSeedHandoverReusesTheExactDirectoryAndConvergesOnRetry(t *testing.T) {
 			t.Errorf("remove Handover prompt: %v", removeErr)
 		}
 	}
+	watchSeed(t, d, sourceSessionID, seedID, true)
 	msg := handoverRequest(seed, doc.Rev, "handover-reuse", sourceSessionID, "Continue from the failing test.")
 	op, err := d.startDelegation(msg)
 	if err != nil {
@@ -110,9 +111,16 @@ func TestSeedHandoverReusesTheExactDirectoryAndConvergesOnRetry(t *testing.T) {
 		t.Fatalf("Handover prompt omitted seed context:\n%s", prompt)
 	}
 
+	if watching, err := d.store.GardenSeedWatching(sourceSessionID, seedID); err != nil || !watching {
+		t.Fatalf("new Handover did not subscribe dispatcher: %v %v", watching, err)
+	}
+	watchSeed(t, d, sourceSessionID, seedID, true)
 	retry, err := d.startDelegation(msg)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if watching, err := d.store.GardenSeedWatching(sourceSessionID, seedID); err != nil || watching {
+		t.Fatalf("Handover replay restored removed watch: %v %v", watching, err)
 	}
 	if retry.OperationID != done.OperationID || retry.SessionID != done.SessionID {
 		t.Fatalf("retry diverged: first=%+v retry=%+v", done, retry)

@@ -59,13 +59,21 @@ tender.
 
 ## Rings and watches
 
-Lifecycle moves ring the sessions with a stake in the seed. Notes stay quiet
-unless you add `--ring`. `attn seed watch <id>` gives this session a stake;
-watching a plot covers every seed in it. `attn seed unwatch <id>` is the way
-out.
+Lifecycle moves ring watching sessions. Notes stay quiet unless you add `--ring`.
+`attn seed watch <id>` subscribes this session to the seed and its descendants,
+including children planted later. A new delegation starts the same watch on
+the seed it binds.
 
-A bell carries only the seed and what moved, so read it with `attn seed show`;
-`show` or `notes` resets the bell for the next meaningful move.
+`attn seed unwatch <id>` removes that subscription and drops queued updates
+that no remaining watch covers. Separate child watches remain. An ancestor
+watch can still cover the seed; `attn seed show <id>` and `unwatch` name those
+subscriptions and the commands to remove them. `watch` restores a subscription;
+a new delegation starts it again. Restarting or resuming the same delegation
+does not restore a removed watch.
+
+A bell carries the seed and what moved. Read it with `attn seed show` or
+`notes` to reset the bell for the next meaningful move. Updates already read
+or handed to an agent cannot be recalled.
 
 ## Artifacts
 

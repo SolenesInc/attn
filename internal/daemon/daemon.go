@@ -345,6 +345,7 @@ type Daemon struct {
 	gardenDispatchAfterWrite  func(string)
 	seedHandoverBeforeCommit  func()
 	gitHubPollingOffLogged    bool
+	gardenWatchMu             sync.Mutex
 	gardenReviewMu            sync.Mutex
 	dispatchSeedsMu           sync.Mutex
 	dispatchSeeds             map[string]string

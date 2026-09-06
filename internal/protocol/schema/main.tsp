@@ -4749,17 +4749,17 @@ model SeedSearchResult {
 model SeedShowMessage {
   "cmd": "seed_show";
   // The reading session. When present, showing the seed consumes its pending
-  // bell for this reader and reports whether the reader explicitly watches it.
+  // bell for this reader and reports its effective watch coverage.
   "source_session_id"?: string;
   "seed_id": string;
 }
 
 model SeedShowResult {
   "seed": Seed;
-  // This session explicitly watches this seed. Automatic dispatch watches are
-  // intentionally not rendered: they are part of the dispatch relationship,
-  // not a subscription the session can remove.
+  // At least one subscription covers this seed (directly or through an ancestor).
   "watching": boolean;
+  // Direct subscription seed ids covering this seed; each can be unwatched.
+  "watching_via": string[];
   // The newest entries on the seed's log, and how many it holds. Notes ride
   // the read the tender already runs: a log nobody is told to look at is the
   // unread bulletin board this surface replaces. The list is bounded, so
@@ -5118,7 +5118,7 @@ model SeedNotesResult {
   "total": int32;
 }
 
-// Add or remove one session's explicit watch on a seed. The watch survives
+// Add or remove one session's ordinary watch on a seed. The watch survives
 // daemon restarts and session state changes; unwatch is the exact way out.
 model SeedWatchMessage {
   "cmd": "seed_watch";
@@ -5130,6 +5130,8 @@ model SeedWatchMessage {
 model SeedWatchResult {
   "seed_id": string;
   "watching": boolean;
+  // Direct subscription seed ids covering this seed; each can be unwatched.
+  "watching_via": string[];
   // False when the subscription was already exactly as requested.
   "changed": boolean;
 }
