@@ -1,0 +1,10 @@
+kind: fixed
+area: agents
+change: A reloaded pi session keeps reporting its state.
+symptom: >
+  After reloading a pi session, the session stayed idle in attn while pi was
+  working, and messages sent to it failed with "no active pi run".
+notes: >
+  The daemon closes the old run after the replacement is resumed. The pi
+  driver treated that close as the session's, dropping the new run's token;
+  it now only closes the run the daemon names.
