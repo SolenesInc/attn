@@ -35,12 +35,12 @@ type Store struct {
 	agentDriverRuns map[string]AgentDriverReportCursor
 	// Where a plugin run's harness writes its transcript, as the driver reported it.
 	agentDriverTranscripts map[string]string
-	teardownIntents map[string]SessionTeardownIntent
-	sessionCloses   map[string]sessionCloseMark
-	agentMetadata   map[string]string
-	profileRoles    map[string]string
-	workspaces      map[string]workspacelayout.WorkspaceLayout
-	recentLocations map[string]*protocol.RecentLocation
+	teardownIntents        map[string]SessionTeardownIntent
+	sessionCloses          map[string]sessionCloseMark
+	agentMetadata          map[string]string
+	profileRoles           map[string]string
+	workspaces             map[string]workspacelayout.WorkspaceLayout
+	recentLocations        map[string]*protocol.RecentLocation
 }
 
 type AgentDriverReportCursor struct {
