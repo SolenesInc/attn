@@ -27,14 +27,13 @@ async function fixture(mode = "tui") {
   let panel: SecurityPanel;
   let closed = false;
   let rows = 40;
-  let available = true;
   const ctx = { mode, hasUI: true, cwd: join(root, "project"), ui: {
     setStatus() {}, notify: (text: string) => notices.push(text),
     custom: (make: any) => new Promise<void>((resolve) => {
       panel = make({ terminal: { get rows() { return rows; } }, requestRender() {} }, theme, {}, () => { closed = true; resolve(); });
     }),
   } };
-  const security = new PiSecurity(configPath, undefined, undefined, () => available);
+  const security = new PiSecurity(configPath);
   security.register({ on: (name: string, handler: any) => handlers.set(name, handler), registerCommand: (name: string, command: any) => commands.set(name, command), registerTool: (tool: any) => tools.set(tool.name, tool) } as never);
   cleanups.push(async () => { await handlers.get("session_shutdown")({}, ctx); rmSync(root, { recursive: true, force: true }); });
   await handlers.get("session_start")({}, ctx);
@@ -55,7 +54,7 @@ async function fixture(mode = "tui") {
   const run = (tool: string, args: unknown) => tools.get(tool).execute("ui-test", args, undefined, undefined, ctx);
   return { root, configPath, screen, press, choose, select, notices, command, run, config: () => loadSecurityConfig(configPath),
     closed: () => closed, resize: (height: number) => { rows = height; },
-    reopen: () => { available = false; opening = command(""); },
+    reopen: () => { opening = command(""); },
     close: async () => { await press("\x1b"); await opening; },
     prompt: () => handlers.get("before_agent_start")({ systemPrompt: "base" }).systemPrompt,
   };
@@ -65,7 +64,7 @@ test("bare security opens a native panel without writing; RPC with hasUI gets st
   const ui = await fixture();
   const before = readFileSync(ui.configPath, "utf8");
   expect(ui.screen()).toContain("Credentials filtered");
-  expect(ui.screen()).toContain("auto mode reviews each requested command");
+  expect(ui.screen()).toContain("Bash commands also pass the approval policy");
   await ui.close();
   expect(ui.closed()).toBe(true);
   expect(readFileSync(ui.configPath, "utf8")).toBe(before);
@@ -95,8 +94,8 @@ test("toggles persist and immediately change protected tools and agent guidance"
   await expect(ui.run("write", { path: outside, content: "blocked" })).rejects.toThrow("outside allowed");
   await ui.close();
   ui.reopen();
-  await ui.choose("Extra access review");
-  expect(ui.screen()).toContain("configured reviewer");
+  await ui.choose("Credential filtering");
+  expect(ui.screen()).toContain("Credential filtering is always on");
 });
 
 test("cache paths support add, validated atomic edit, cancel and removal without deleting files", async () => {
@@ -209,7 +208,7 @@ test("resizing preserves selection and keeps navigation visible in a narrow term
 
 test("save failures stay visible without claiming a toggle succeeded", async () => {
   const ui = await fixture();
-  const panel = new SecurityPanel({ config: ui.config(), configPath: ui.configPath, cwd: ui.root, reviewAvailable: true }, theme,
+  const panel = new SecurityPanel({ config: ui.config(), configPath: ui.configPath, cwd: ui.root }, theme,
     () => 40, () => {}, async () => { throw new Error("Settings disk is read-only"); }, () => {});
   await panel.handleInput("\r");
   expect(panel.render(100).join("\n")).toContain("Settings disk is read-only");

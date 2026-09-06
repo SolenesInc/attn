@@ -3,7 +3,6 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PiDriver, type CommandResult, type RunCommand } from "../src/driver";
-import type { AvailableModels, ModelQuery } from "../automode/models";
 import { RelayServer } from "../src/relay";
 import type { DriverSpawnParams } from "../src/types";
 
@@ -79,12 +78,10 @@ function newDriver(options: {
   suitePath?: string;
   unbackedGraceMs?: number;
   env?: Record<string, string | undefined>;
-  queryModels?: ModelQuery;
 }): PiDriver {
   return new PiDriver({
     rpc: options.rpc,
     env: options.env,
-    queryModels: options.queryModels,
     runCommand: options.runCommand ?? fakeRunCommand(),
     executable: options.executable ?? "pi",
     relay: noopRelay(),
@@ -141,10 +138,10 @@ describe("PiDriver", () => {
 
     const config = {
       enabled_default: true,
-      environment: ["never touch prod"],
-      allow: ["git push origin*"],
-      hard_deny: [],
-      models: ["opencode-go/glm-5.3", "opencode-go/qwen3.8-max"],
+      approval_policy: "on-request",
+      sandbox_mode: "workspace-write",
+      rules: [{ pattern: ["git", "push"], decision: "prompt" }],
+      network: { enabled: true, allowed_domains: ["github.com"], denied_domains: [] },
     };
     const withConfig = await driver.spawn(params({ session_id: "session-2", run_id: "run-2", auto_mode: config }));
     expect(JSON.parse(withConfig.env?.ATTN_PI_AUTOMODE_CONFIG ?? "null")).toEqual(config);
@@ -822,47 +819,3 @@ describe("PiDriver: coming back after attn had nothing", () => {
   });
 });
 
-describe("the models pi can reach", () => {
-  const catalog: AvailableModels = {
-    providers: [{ provider: "extension", ready: true, models: [{ id: "judge" }] }],
-  };
-
-  test("queries the configured Pi executable and environment", async () => {
-    const env = { PI_CODING_AGENT_DIR: "/pi-agent" };
-    const asked: unknown[] = [];
-    const driver = newDriver({
-      rpc: new FakeRPC(), executable: "/custom/pi", env,
-      queryModels: async (...args) => { asked.push(args); return catalog; },
-    });
-    expect(await driver.models()).toEqual(catalog);
-    expect(asked).toEqual([["/custom/pi", env]]);
-  });
-
-  test("shares an in-flight query and refreshes on the next request", async () => {
-    let calls = 0;
-    let finish!: (value: AvailableModels) => void;
-    const driver = newDriver({ rpc: new FakeRPC(), queryModels: () => {
-      calls++;
-      return new Promise((resolve) => { finish = resolve; });
-    } });
-    const first = driver.models();
-    expect(driver.models()).toBe(first);
-    expect(calls).toBe(1);
-    finish(catalog);
-    await first;
-    const refresh = driver.models();
-    expect(calls).toBe(2);
-    finish(catalog);
-    expect(await refresh).toEqual(catalog);
-  });
-
-  test("a failed query can be retried", async () => {
-    let calls = 0;
-    const driver = newDriver({ rpc: new FakeRPC(), queryModels: async () => {
-      if (calls++ === 0) throw new Error("Pi unavailable");
-      return catalog;
-    } });
-    await expect(driver.models()).rejects.toThrow("Pi unavailable");
-    expect(await driver.models()).toEqual(catalog);
-  });
-});

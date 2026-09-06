@@ -21,7 +21,7 @@ const pi = {
 };
 
 const entrypoint = process.argv[2];
-if (!entrypoint) throw new Error("usage: automode-suite-probe.ts <entrypoint>");
+if (!entrypoint) throw new Error("usage: suite-gate-probe.ts <entrypoint>");
 const { default: factory } = await import(entrypoint);
 (factory as (pi: unknown) => void)(pi);
 

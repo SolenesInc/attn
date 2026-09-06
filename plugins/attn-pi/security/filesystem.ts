@@ -38,7 +38,7 @@ export class SandboxedFilesystem {
   private nextID = 0;
   private readonly pending = new Map<number, Pending>();
 
-  constructor(readonly policy: SecurityPolicy, private readonly filter: CredentialFilter, private readonly reviewAvailable = () => false) {}
+  constructor(readonly policy: SecurityPolicy, private readonly filter: CredentialFilter) {}
 
   async read(path: string): Promise<Buffer> {
     return Buffer.from(await this.request("read", path) as string, "base64");
@@ -63,7 +63,7 @@ export class SandboxedFilesystem {
 
   private async request(operation: string, path: string, content?: string): Promise<unknown> {
     const mode = operation === "write" || operation === "mkdir" ? "write" : "read";
-    const target = assertPath(this.policy, path, mode, this.reviewAvailable());
+    const target = assertPath(this.policy, path, mode);
     const child = this.child ?? this.start();
     const id = ++this.nextID;
     return new Promise((resolve, reject) => {

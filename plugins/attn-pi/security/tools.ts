@@ -1,4 +1,4 @@
-import { securityPrompt } from "./guidance";
+import { sandboxRecovery, securityPrompt } from "./guidance";
 import {
   createBashToolDefinition, createEditToolDefinition, createFindToolDefinition, createGrepToolDefinition,
   createLocalBashOperations, createLsToolDefinition, createReadToolDefinition, createWriteToolDefinition,
@@ -9,12 +9,10 @@ import { CredentialFilter, FilteredStream } from "./filter";
 import { SandboxedFilesystem } from "./filesystem";
 import { assertPath, type SecurityPolicy } from "./policy";
 import { bashSandbox, sandboxEnvironment, shellQuote } from "./sandbox";
-import { sandboxRecovery } from "./recovery";
 import { bashParameterSchema } from "../sandbox/index";
 import type { BashApproval } from "../approval/index";
-import type { ToolExecutionCheck } from "../automode/index";
 
-export function protectedBash(policy: SecurityPolicy, filter: CredentialFilter, reviewAvailable = () => false): BashOperations {
+export function protectedBash(policy: SecurityPolicy, filter: CredentialFilter): BashOperations {
   const local = createLocalBashOperations({ shellPath: "/bin/bash" });
   return {
     async exec(command, cwd, options) {
@@ -39,7 +37,7 @@ export function protectedBash(policy: SecurityPolicy, filter: CredentialFilter, 
         if (policy.enabled && result.exitCode !== 0 && (permissionError || (policy.network === "deny" && networkError))) {
           const guidance = startupError
             ? securityPrompt("startup-failure")
-            : sandboxRecovery(policy, reviewAvailable(), permissionError ? "permission" : "network");
+            : sandboxRecovery(permissionError ? "permission" : "network");
           options.onData(Buffer.from(`\n${filter.text(guidance)}\n`));
         }
         return result;
@@ -50,8 +48,8 @@ export function protectedBash(policy: SecurityPolicy, filter: CredentialFilter, 
   };
 }
 
-export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter, fs: SandboxedFilesystem, approval?: BashApproval, reviewAvailable = () => false, checkExecution?: ToolExecutionCheck): ToolDefinition[] {
-  const bash = protectedBash(policy, filter, reviewAvailable);
+export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter, fs: SandboxedFilesystem, approval?: BashApproval): ToolDefinition[] {
+  const bash = protectedBash(policy, filter);
   const bashTool = createBashToolDefinition(policy.cwd, { operations: bash, shellPath: "/bin/bash" });
   // The orchestrator owns evaluation, review and the sandbox wrapper, so the tool
   // hands it pi's final command line and pi keeps formatting the result.
@@ -96,7 +94,7 @@ export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter,
     } }),
     createEditToolDefinition(policy.cwd, { operations: {
       readFile: rawRead, writeFile: (path, content) => fs.write(path, content),
-      access: async (path) => { assertPath(policy, path, "write", reviewAvailable()); await fs.access(path); },
+      access: async (path) => { assertPath(policy, path, "write"); await fs.access(path); },
     } }),
     createLsToolDefinition(policy.cwd, { operations: {
       exists: async (path) => { try { await fs.access(path); return true; } catch { return false; } },
@@ -138,7 +136,6 @@ export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter,
     signal?.addEventListener("abort", abort, { once: true });
     try {
       args = structuredClone(args);
-      checkExecution?.({ type: "tool_call", toolCallId: id, toolName: tool.name, input: args }, { ...ctx, cwd: policy.cwd, signal });
       return filter.value(await tool.execute(id, args, signal, onUpdate ? (update) => onUpdate(filter.value(update)) : undefined, ctx));
     } catch (error) {
       throw new Error(filter.text(error instanceof Error ? error.message : String(error)));

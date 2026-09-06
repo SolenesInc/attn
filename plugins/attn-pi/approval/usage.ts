@@ -1,6 +1,4 @@
-// pi sums `usage` on toolResult messages, but a BLOCKED call is answered inline and runs no
-// result hook (pi 0.84.2), so a denial's tokens wait here and join the next one.
-
+// Token and cost totals as pi reports them, summed across the Guardian's attempts.
 export type UsageLike = {
   input?: number;
   output?: number;
@@ -9,21 +7,6 @@ export type UsageLike = {
   totalTokens?: number;
   cost?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number };
 };
-
-export class UsageLedger {
-  private pending: UsageLike | undefined;
-
-  add(usage: UsageLike | undefined): void {
-    if (!usage) return;
-    this.pending = mergeUsage(this.pending, usage);
-  }
-
-  drain(): UsageLike | undefined {
-    const held = this.pending;
-    this.pending = undefined;
-    return held;
-  }
-}
 
 export function mergeUsage(left: UsageLike | undefined, right: UsageLike | undefined): UsageLike | undefined {
   if (!left) return right;

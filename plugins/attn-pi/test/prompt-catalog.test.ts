@@ -17,10 +17,10 @@ describe("Go and Pi prompt rendering", () => {
     });
   }
   test("rejects undeclared and missing inputs", () => {
-    expect(() => renderPrompt("grant", {})).toThrow("Missing prompt input");
+    expect(() => renderPrompt("configuration-error", {}, "pi-security")).toThrow("Missing prompt input");
     expect(() =>
-      renderPrompt("grant", { opening_message: "hello", typo: "ignored?" }),
+      renderPrompt("configuration-error", { problem: "no config", typo: "ignored?" }, "pi-security"),
     ).toThrow("Unknown prompt input");
-    expect(() => renderPrompt("unknown", {})).toThrow("Unknown prompt");
+    expect(() => renderPrompt("unknown", {}, "pi-security")).toThrow("Unknown prompt");
   });
 });

@@ -4,13 +4,23 @@
 version is installed at `node_modules/@earendil-works/pi-coding-agent/docs/`
 (`bun install` here if it is missing).
 
-## Auto mode
+## Approvals, sandbox and auto mode
 
-`automode/` is attn's pi extension for an automated permission system: a
-user-configured static pre-approved or denied list, plus a classifier for
-everything reaching past it, denied conversationally rather than through
-dialogs. To understand it, or modify it, read
-[docs/automode.md](docs/automode.md).
+`approval/` is where a bash command is decided: the orchestrator, the two
+reviewers (your card and the Guardian), the config loader and the rules
+compiler. `sandbox/` builds the Seatbelt or bubblewrap wrapper and owns the bash
+tool's parameter schema; `netproxy/` is the driver-hosted proxy that decides
+hosts in flight. `automode/` is what survived the old model and is shared: the
+denial ledger, the environment slots and the generated prompt catalog.
+
+Auto mode is which reviewer answers, nothing else. `/auto on` is the Guardian,
+`/auto off` is the user's card. To understand or modify any of it, read
+[docs/automode.md](docs/automode.md) and [docs/security.md](docs/security.md).
+
+Rules, hosts, the approval policy and the sandbox mode are daemon-owned. Writes
+go through `PromoteAutoModeProposal` or, for a "don't ask again" answered inside
+a session, the pi relay's `PromoteReportedAmendment`. The CLI proposes; the app
+promotes.
 
 ## Reporting pull requests
 

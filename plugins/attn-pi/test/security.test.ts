@@ -11,10 +11,6 @@ import { PiSecurity } from "../security/index";
 import { createServer } from "node:net";
 import { shellQuote } from "../security/sandbox";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { createAutoMode, type ToolExecutionCheck } from "../automode/index";
-import { defaultAutoModeConfig } from "../automode/config";
-import { StubClassifier } from "../automode/classifier";
-import { FakePi, FakeUI, toolCall } from "./automode-fake-pi";
 
 const directories: string[] = [];
 const workers: SandboxedFilesystem[] = [];
@@ -39,96 +35,6 @@ function fixture(): { root: string; policy: SecurityPolicy; fs: SandboxedFilesys
   workers.push(fs);
   return { root, policy, fs, filter };
 }
-
-function approvalFixture(classifier = new StubClassifier({ verdict: "allow" })) {
-  const base = fixture();
-  const pi = new FakePi();
-  let enabled = true;
-  let checkExecution: ToolExecutionCheck;
-  createAutoMode({
-    config: defaultAutoModeConfig, classifier, isEnabled: () => enabled, sandboxReviewInExecutor: true,
-    onReady: (_review, check) => { checkExecution = check; },
-  })(pi);
-  const tools = protectedTools(base.policy, base.filter, base.fs, undefined, () => enabled, (event, ctx) => checkExecution(event, ctx));
-  return { ...base, pi, classifier, tools, ctx: { cwd: base.policy.cwd }, setEnabled: (value: boolean) => { enabled = value; } };
-}
-
-for (const name of ["write", "edit", "bash"]) {
-  test(`${name} rejects arguments changed by a later tool-call handler before any effect`, async () => {
-    const { root, policy, pi, tools, ctx } = approvalFixture();
-    const file = join(policy.cwd, "target.txt");
-    writeFileSync(file, "original");
-    const input: Record<string, any> = name === "write" ? { path: join(root, "outside.txt"), content: "reviewed" } :
-      name === "edit" ? { path: file, edits: [{ oldText: "original", newText: "reviewed" }] } : { command: "node -e 'console.log(1)'" };
-    const event = toolCall(name, input);
-    expect(await pi.toolCall!(event, ctx)).toBeUndefined();
-    if (name === "write") input.content = "changed after review";
-    else if (name === "edit") input.edits[0].newText = "changed after review";
-    else input.command = `printf changed > ${shellQuote(file)}`;
-    await expect(tools.find((tool) => tool.name === name)!.execute(event.toolCallId, input, undefined, undefined, ctx as never)).rejects.toThrow("no longer match an approval");
-    expect(readFileSync(file, "utf8")).toBe("original");
-    expect(existsSync(join(root, "outside.txt"))).toBe(false);
-  });
-}
-
-test("an unchanged static approval runs once and cannot be replayed", async () => {
-  const { pi, tools, ctx, classifier, policy } = approvalFixture();
-  const event = toolCall("write", { path: "approved.txt", content: "approved" });
-  await pi.toolCall!(event, ctx);
-  const write = tools.find((tool) => tool.name === "write")!;
-  await write.execute(event.toolCallId, event.input, undefined, undefined, ctx as never);
-  expect(readFileSync(join(policy.cwd, "approved.txt"), "utf8")).toBe("approved");
-  expect(classifier.requests).toHaveLength(0);
-  await expect(write.execute(event.toolCallId, event.input, undefined, undefined, ctx as never)).rejects.toThrow("no longer match an approval");
-});
-
-test("execution retains a private nested input after the final check", async () => {
-  const { pi, tools, ctx, fs, policy } = approvalFixture();
-  const file = join(policy.cwd, "edit.txt");
-  writeFileSync(file, "original");
-  const input = { path: file, edits: [{ oldText: "original", newText: "reviewed" }] };
-  const event = toolCall("edit", input);
-  await pi.toolCall!(event, ctx);
-  const read = fs.read.bind(fs);
-  fs.read = (path) => { input.edits[0]!.newText = "changed during execution"; return read(path); };
-  await tools.find((tool) => tool.name === "edit")!.execute(event.toolCallId, input, undefined, undefined, ctx as never);
-  expect(input.edits[0]!.newText).toBe("changed during execution");
-  expect(readFileSync(file, "utf8")).toBe("reviewed");
-});
-
-test("one-call approval after inspection also rejects a later replacement", async () => {
-  const classifier = new StubClassifier({ verdict: "deny", reason: "too large", tooLong: true });
-  const { root, pi, tools, ctx } = approvalFixture(classifier);
-  const ui = new FakeUI();
-  ui.answer = true;
-  const event = toolCall("write", { path: join(root, "outside.txt"), content: "inspected" });
-  expect(await pi.toolCall!(event, { ...ctx, hasUI: true, ui })).toBeUndefined();
-  expect(ui.questions).toHaveLength(1);
-  event.input.content = "never inspected";
-  await expect(tools.find((tool) => tool.name === "write")!.execute(event.toolCallId, event.input, undefined, undefined, ctx as never)).rejects.toThrow("no longer match an approval");
-  expect(existsSync(join(root, "outside.txt"))).toBe(false);
-});
-
-test("removing a deferred sandbox request cannot skip normal approval", async () => {
-  const { pi, tools, ctx } = approvalFixture();
-  const event = toolCall("bash", { command: "printf unchanged", sandbox: { network: "allow", reason: "fixture" } });
-  expect(await pi.toolCall!(event, ctx)).toBeUndefined();
-  delete event.input.sandbox;
-  await expect(tools.find((tool) => tool.name === "bash")!.execute(event.toolCallId, event.input, undefined, undefined, ctx as never)).rejects.toThrow("no longer match an approval");
-});
-
-test("auto-off execution allows later mutations and records the actual input", async () => {
-  const { pi, tools, ctx, policy, classifier, setEnabled } = approvalFixture();
-  setEnabled(false);
-  const event = toolCall("write", { path: "off.txt", content: "initial" });
-  await pi.toolCall!(event, ctx);
-  event.input.content = "final auto-off input";
-  await tools.find((tool) => tool.name === "write")!.execute(event.toolCallId, event.input, undefined, undefined, ctx as never);
-  expect(readFileSync(join(policy.cwd, "off.txt"), "utf8")).toBe("final auto-off input");
-  setEnabled(true);
-  await pi.toolCall!(toolCall("bash", { command: "node off.txt" }, "next-call"), ctx);
-  expect(classifier.requests[0]?.transcript?.[0]?.evidence?.call.input?.content).toBe("final auto-off input");
-});
 
 test("protected edit titles wrap long paths and filter credentials at terminal widths", () => {
   const { policy, filter, fs } = fixture();

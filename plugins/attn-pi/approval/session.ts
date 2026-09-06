@@ -200,9 +200,19 @@ export class PiApproval {
     };
   }
 
+  // The rejection already stands; a ledger or relay that cannot take it says so
+  // out loud rather than turning a clean rejection into a failed tool call.
   private record(denial: OrchestratorDenial): void {
-    this.setup.ledger.record(denial);
-    this.setup.suite.reportDenial(denial);
+    try {
+      this.setup.ledger.record(denial);
+    } catch (error) {
+      this.context?.ui?.notify(`This rejection has no local record: ${message(error)}`, "error");
+    }
+    try {
+      this.setup.suite.reportDenial(denial);
+    } catch (error) {
+      this.context?.ui?.notify(`attn was not told about this rejection: ${message(error)}`, "error");
+    }
   }
 
   private command(args: string, ctx: ExtensionContext): void {
