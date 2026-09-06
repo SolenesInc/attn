@@ -60,6 +60,40 @@ cheaper layer. Look here before re-adding one; the twin is the place to change.
   `app_autodisable_test.go` own the reconcile state machine; the scaffold brief
   is `TestScaffoldAgentsMDTeachesReconcile` in `internal/appbuild`.
 
+## Scenarios that were merged into another id
+
+A family that rebuilt the same world to assert one more thing now shares one
+launch. The id on the left is gone; its assertions run inside the id on the
+right. Change the assertion there, not by re-adding the old scenario.
+
+| gone | now asserted by |
+| --- | --- |
+| `workspace-shell-lifecycle` | `workspace-switching` (three shells, and a split close that leaves the survivors' scrollback) |
+| `workspace-close-last-session-switches-back` | `workspace-close-one-session-keeps-selection` (both branches of the selection-after-close rule) |
+| `notebook-tile-finder` | `notebook-editor-undo` |
+| `present-flow` | `present-submit-closes-window` (one presentation: the waiting CLI opens it, the window's own confirm hides it and settles the round) |
+| `garden-seed-handoff`, `garden-delegation-reporting` | `garden-plot-dispatch` |
+| `garden-seed-nudges`, `peer-message-read-receipts` | `garden-seed-read-receipts` |
+| `nudge-trigger`, `settle-typing-hold` (pointer leg) | `countdown-cancel` |
+| `automode-no-model` | `automode-environment` |
+| `tr401-local-codex`, `tr401-codex-initial-pane`, `tr402-local-codex`, `tr402-local-claude` | `tr401-local-claude` (one window, three phases, both agent vocabularies as two sessions) |
+| `tr204-local-claude`, `terminal-scrollback-colors`, `snapshot-scrollback-restore` | `tr201-local-claude` |
+| `codex-resume` (restart leg), `recoverable-auto-revive` (repaint) | `crash-recovery` |
+| `terminal-osc8-link`, `terminal-seed-preview` (CLI round trip, unknown id) | `terminal-md-link` |
+
+Traps these merges depend on, which a later edit can silently break:
+
+- `tr401-local-claude` holds two sessions, not two agent panes. `split_pane`
+  always makes a shell pane; an agent pane comes only from `create_session`.
+- `tr201-local-claude` seeds colours, then numbered rows, then styled rows, then
+  the typed token. Style and token reads take the viewport, so they must be last;
+  the colours assertion needs top-of-history, so it must be first.
+- `garden-plot-dispatch` runs its frame toggle and its tile drill last: a mounted
+  tile folds the terminal pane, and the full-window frame breaks the dock trail
+  the earlier steps assert on.
+- `terminal-md-link` runs the OSC 8 legs last, because a Cmd+click that reaches
+  the system browser takes the foreground away from attn.
+
 ## Scenario files with no catalog entry
 
 A scenario file with no `scenarioCatalog.mjs` entry is invisible to the Linux
@@ -126,6 +160,10 @@ A new scenario file lands with a catalog entry, or with its verdict added here.
   and `launchFreshAppAndConnect` writes the matching `<agent>_executable` setting,
   restoring what it found. Sessions need both halves — the env reaches the daemon,
   the setting reaches each spawn.
+- `focus_pane` selects the session id you hand it and then focuses a pane inside
+  that view. To move the selection onto a pane owned by a *different* session,
+  select that session; asking `focus_pane` for it selects the wrong one and any
+  poll on `activeSessionId` waits out its timeout.
 - A scenario needing a real provider says so with `allowRealAgents` and states why.
   That list shrinks; adding to it needs a reason in the catalog entry.
 - Give the mock a turn with `writeMockAgentFixture` in the session cwd before the

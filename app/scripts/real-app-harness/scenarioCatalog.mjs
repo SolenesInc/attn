@@ -7,12 +7,6 @@ export const scenarioCatalog = [
     timeoutMs: 240_000,
   },
   {
-    id: 'workspace-shell-lifecycle',
-    runnerId: 'WORKSPACE-SHELL-LIFECYCLE',
-    label: 'Workspace shell lifecycle',
-    command: ['pnpm', 'run', 'real-app:scenario-workspace-shell-lifecycle'],
-  },
-  {
     id: 'workspace-creation-shortcuts',
     runnerId: 'WORKSPACE-CREATION-SHORTCUTS',
     label: 'Workspace creation shortcuts',
@@ -30,12 +24,6 @@ export const scenarioCatalog = [
     runnerId: 'WORKSPACE-SWITCHING',
     label: 'Workspace switching',
     command: ['pnpm', 'run', 'real-app:scenario-workspace-switching'],
-  },
-  {
-    id: 'workspace-close-last-session-switches-back',
-    runnerId: 'WORKSPACE-CLOSE-LAST-SESSION-SWITCHES-BACK',
-    label: 'Workspace close last session switches back',
-    command: ['pnpm', 'run', 'real-app:scenario-workspace-close-last-session-switches-back'],
   },
   {
     id: 'workspace-close-one-session-keeps-selection',
@@ -87,12 +75,6 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-markdown-opener'],
   },
   {
-    id: 'notebook-tile-finder',
-    runnerId: 'NOTEBOOK-TILE-FINDER',
-    label: 'Notebook tile finder (native Cmd+Opt+N dock, Cmd+P re-summon)',
-    command: ['pnpm', 'run', 'real-app:scenario-notebook-tile-finder'],
-  },
-  {
     id: 'notebook-editor-undo',
     runnerId: 'NOTEBOOK-EDITOR-UNDO',
     label: 'Notebook editor undo/redo (native Cmd+Z / Shift+Cmd+Z reach CodeMirror)',
@@ -103,19 +85,6 @@ export const scenarioCatalog = [
     runnerId: 'AUTOCLOSE-ON-EXIT',
     label: 'Auto-close on clean exit, keep failed exits',
     command: ['pnpm', 'run', 'real-app:scenario-autoclose-on-exit'],
-  },
-  {
-    id: 'present-flow',
-    runnerId: 'PRESENT-FLOW',
-    label: 'Present flow: waiting CLI → window → submit round → synchronous feedback',
-    command: ['pnpm', 'run', 'real-app:scenario-present-flow'],
-    timeoutMs: 240_000,
-  },
-  {
-    id: 'garden-seed-handoff',
-    runnerId: 'GardenSeedHandoff',
-    label: 'Garden seed handoff: one session leaves a handoff and ends, the next is primed on tend',
-    command: ['pnpm', 'run', 'real-app:scenario-garden-seed-handoff'],
   },
   {
     id: 'garden-plot-dispatch',
@@ -131,31 +100,10 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-garden-seed-tile-navigation'],
   },
   {
-    id: 'garden-delegation-reporting',
-    runnerId: 'GardenDelegationReporting',
-    label: 'Garden delegation reporting: a delegation reports on its seed — log notes, artifacts, steering',
-    command: ['pnpm', 'run', 'real-app:scenario-garden-delegation-reporting'],
-    timeoutMs: 240_000,
-  },
-  {
-    id: 'garden-seed-nudges',
-    runnerId: 'GardenSeedNudges',
-    label: 'Garden seed nudges: generic inbox doorbells carry a ringing note and harvest through durable reads',
-    command: ['pnpm', 'run', 'real-app:scenario-garden-seed-nudges'],
-    timeoutMs: 240_000,
-  },
-  {
     id: 'garden-seed-read-receipts',
     runnerId: 'GardenSeedReadReceipts',
     label: 'Garden seed read receipts: inbox reads rearm generic doorbells without prompt-submit hooks',
     command: ['pnpm', 'run', 'real-app:scenario-garden-seed-read-receipts'],
-    timeoutMs: 240_000,
-  },
-  {
-    id: 'peer-message-read-receipts',
-    runnerId: 'PeerMessageReadReceipts',
-    label: 'Agent inbox: a mixed burst shares one doorbell and an unread item gets a cooldown reminder',
-    command: ['pnpm', 'run', 'real-app:scenario-peer-message-read-receipts'],
     timeoutMs: 240_000,
   },
   {
@@ -180,24 +128,10 @@ export const scenarioCatalog = [
     timeoutMs: 300_000,
   },
   {
-    id: 'nudge-trigger',
-    runnerId: 'NUDGE-TRIGGER',
-    label: 'Legacy ticket nudge: a missing-hook inbox doorbell cannot block a later busy-to-idle wake',
-    command: ['pnpm', 'run', 'real-app:scenario-nudge-trigger'],
-    timeoutMs: 360_000,
-  },
-  {
     id: 'countdown-cancel',
     runnerId: 'COUNTDOWN-CANCEL',
     label: 'Countdown cancel: a real Cmd+. stops the auto-settle and nudge countdowns on screen',
     command: ['pnpm', 'run', 'real-app:scenario-countdown-cancel'],
-    timeoutMs: 300_000,
-  },
-  {
-    id: 'settle-typing-hold',
-    runnerId: 'SETTLE-TYPING-HOLD',
-    label: 'Settle typing hold: typing to an agent freezes its settling countdown, and going quiet hands back a whole one',
-    command: ['pnpm', 'run', 'real-app:scenario-settle-typing-hold'],
     timeoutMs: 300_000,
   },
   {
@@ -229,12 +163,6 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-terminal-block-copy'],
   },
   {
-    id: 'terminal-scrollback-colors',
-    runnerId: 'TERMINAL-SCROLLBACK-COLORS',
-    label: 'Terminal scrollback keeps indexed and truecolor cell colors',
-    command: ['pnpm', 'run', 'real-app:scenario-terminal-scrollback-colors'],
-  },
-  {
     id: 'terminal-annotations',
     runnerId: 'TERMINAL-ANNOTATIONS',
     label: 'Annotate a live claude turn; it survives the next turn and an app relaunch',
@@ -260,22 +188,10 @@ export const scenarioCatalog = [
     command: ['node', 'scripts/real-app-harness/scenario-pty-host-setting.mjs'],
   },
   {
-    id: 'terminal-osc8-link',
-    runnerId: 'TERMINAL-OSC8-LINK',
-    label: 'OSC 8 hyperlink Cmd+click via native click + local HTTP probe',
-    command: ['pnpm', 'run', 'real-app:scenario-terminal-osc8-link'],
-  },
-  {
     id: 'terminal-md-link',
     runnerId: 'TERMINAL-MD-LINK',
     label: 'Markdown path Cmd+click docks a session-bound markdown tile',
     command: ['pnpm', 'run', 'real-app:scenario-terminal-md-link'],
-  },
-  {
-    id: 'terminal-seed-preview',
-    runnerId: 'TERMINAL-SEED-PREVIEW',
-    label: 'Known terminal seed ID hover preview and icon-only tile action',
-    command: ['pnpm', 'run', 'real-app:scenario-terminal-seed-preview'],
   },
   {
     id: 'session-usage',
@@ -323,28 +239,10 @@ export const scenarioCatalog = [
     freshWorldAfter: true,
   },
   {
-    id: 'tr402-local-codex',
-    runnerId: 'TR-402',
-    label: 'TR-402 local codex',
-    command: ['pnpm', 'run', 'real-app:scenario-tr402-local-codex'],
-  },
-  {
-    id: 'tr402-local-claude',
-    runnerId: 'TR-402',
-    label: 'TR-402 local claude',
-    command: ['pnpm', 'run', 'real-app:scenario-tr402-local-claude'],
-  },
-  {
     id: 'tr201-local-claude',
     runnerId: 'TR-201',
-    label: 'TR-201 local claude existing split relaunch',
+    label: 'TR-201 relaunch restores an existing split with its content, SGR styling and deep colored scrollback',
     command: ['pnpm', 'run', 'real-app:scenario-tr201'],
-  },
-  {
-    id: 'tr204-local-claude',
-    runnerId: 'TR-204',
-    label: 'TR-204 local claude relaunch formatting',
-    command: ['pnpm', 'run', 'real-app:scenario-tr204'],
   },
   {
     id: 'tr301-local-claude',
@@ -355,33 +253,8 @@ export const scenarioCatalog = [
   {
     id: 'tr401-local-claude',
     runnerId: 'TR-401',
-    label: 'TR-401 local claude resize',
+    label: 'TR-401 one window, three phases: Codex header frame, split-close redraw, split resize — codex and claude',
     command: ['pnpm', 'run', 'real-app:scenario-tr401'],
-  },
-  {
-    id: 'tr401-local-codex',
-    runnerId: 'TR-401',
-    label: 'TR-401 local codex resize',
-    command: ['pnpm', 'run', 'real-app:scenario-tr401-local-codex'],
-  },
-  {
-    id: 'tr401-codex-initial-pane',
-    runnerId: 'TR-401-CODEX-MAIN',
-    label: 'TR-401 Codex fresh initial-pane resize',
-    command: ['pnpm', 'run', 'real-app:scenario-tr401-codex-main'],
-  },
-  {
-    id: 'codex-resume',
-    runnerId: 'TR-CODEX-RESUME',
-    label: 'Codex native resume id mapping',
-    command: ['pnpm', 'run', 'real-app:scenario-codex-resume'],
-  },
-  {
-    id: 'recoverable-auto-revive',
-    runnerId: 'RECOVERABLE-AUTO-REVIVE',
-    label: 'Recoverable Claude session auto-revives after daemon restart',
-    command: ['pnpm', 'run', 'real-app:scenario-recoverable-auto-revive'],
-    timeoutMs: 360_000,
   },
   {
     id: 'crash-recovery',
@@ -389,12 +262,6 @@ export const scenarioCatalog = [
     label: 'A machine crash keeps every session it can bring back and reaps the rest',
     command: ['pnpm', 'run', 'real-app:scenario-crash-recovery'],
     timeoutMs: 360_000,
-  },
-  {
-    id: 'snapshot-scrollback-restore',
-    runnerId: 'SNAPSHOT-SCROLLBACK-RESTORE',
-    label: 'Deep scrollback survives an app relaunch restore',
-    command: ['pnpm', 'run', 'real-app:scenario-snapshot-scrollback-restore'],
   },
   {
     id: 'ghostty-scroll',
@@ -405,8 +272,9 @@ export const scenarioCatalog = [
   {
     id: 'present-submit-closes-window',
     runnerId: 'PRESENT-SUBMIT-CLOSES-WINDOW',
-    label: 'Present submit closes the real presentation window',
+    label: 'Present: a waiting CLI opens it, the chip opens the real window, submitting from the window hides it and the CLI returns',
     command: ['pnpm', 'run', 'real-app:scenario-present-submit-closes-window'],
+    timeoutMs: 240_000,
   },
   {
     id: 'pi-security',
@@ -429,15 +297,8 @@ export const scenarioCatalog = [
   {
     id: 'automode-environment',
     runnerId: 'AutoModeEnvironment',
-    label: 'Auto mode environment: a slot written from the pane and from the CLI, and what an unfilled one says',
+    label: 'Auto mode: a slot written from the pane and from the CLI, what an unfilled one says, and that a named model is what turns auto mode on',
     command: ['pnpm', 'run', 'real-app:scenario-automode-environment'],
-    timeoutMs: 300_000,
-  },
-  {
-    id: 'automode-no-model',
-    runnerId: 'AutoModeNoModel',
-    label: 'Auto mode with no model: off until one is named, on when a proposal is promoted',
-    command: ['pnpm', 'run', 'real-app:scenario-automode-no-model'],
     timeoutMs: 300_000,
   },
   {

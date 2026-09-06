@@ -96,21 +96,22 @@ async function createShellWorkspace(client, observer, cwd, label) {
   await waitForShellPaneReady(client, sessionId, workspace.panes[0].paneId, `initial shell pane ready for ${label}`);
   return {
     sessionId,
+    workspace,
     firstPane: workspace.panes[0],
   };
 }
 
-async function addSplit(client, sessionId) {
+async function addSplit(client, sessionId, shortcutId, expectedCount) {
   const before = await client.request('get_workspace', { sessionId });
   const beforeIds = new Set((before.panes || []).map((pane) => pane.paneId));
-  await client.request('dispatch_shortcut', { shortcutId: 'terminal.splitVertical' });
-  const after = await waitForPaneCount(client, sessionId, 2, `split pane for ${sessionId}`);
+  await client.request('dispatch_shortcut', { shortcutId });
+  const after = await waitForPaneCount(client, sessionId, expectedCount, `${shortcutId} pane for ${sessionId}`);
   const created = (after.panes || []).find((pane) => !beforeIds.has(pane.paneId));
   if (!created) {
-    throw new Error(`No split pane appeared for ${sessionId}. Before=${JSON.stringify(before)} After=${JSON.stringify(after)}`);
+    throw new Error(`No split pane appeared after ${shortcutId} for ${sessionId}. Before=${JSON.stringify(before)} After=${JSON.stringify(after)}`);
   }
   await waitForFreshSplitPaneAttached(client, sessionId, created.paneId);
-  return created;
+  return { workspace: after, pane: created };
 }
 
 async function waitForShellPaneReady(client, sessionId, paneId, description) {
@@ -138,6 +139,17 @@ async function assertWorkspaceVisible(client, visibleSessionId, hiddenSessionId,
   }
   if (visible.workspace?.model?.panes?.length !== expectedPaneCount) {
     throw new Error(`Expected ${expectedPaneCount} visible panes for ${visibleSessionId}: ${JSON.stringify(visible.workspace?.model, null, 2)}`);
+  }
+}
+
+async function assertWorkspacePaneSessionsListed(client, workspace, description) {
+  const state = await client.request('get_state');
+  const listedSessionIds = new Set((state.sessions || []).map((session) => session.id));
+  const missing = (workspace.panes || [])
+    .map((pane) => pane.sessionId)
+    .filter((paneSessionId) => paneSessionId && !listedSessionIds.has(paneSessionId));
+  if (missing.length > 0) {
+    throw new Error(`${description}: workspace has pane sessions missing from the app session list: ${missing.join(', ')}`);
   }
 }
 
@@ -206,7 +218,8 @@ async function main() {
     tier: 'tier1-local-shell',
     prefix: 'workspace-switching',
     metadata: {
-      focus: 'session switching keeps each workspace\'s panes and history isolated',
+      agent: 'shell',
+      focus: 'session switching keeps each workspace\'s panes and history isolated, and closing one split leaves the surviving shells and their scrollback intact',
     },
   });
 
@@ -238,18 +251,33 @@ async function main() {
     });
 
     let workspaceA;
-    let splitA;
+    let verticalA;
+    let horizontalA;
     let tokenA1;
     let tokenA2;
-    await runner.step('build_workspace_a', async () => {
+    let tokenA3;
+    await runner.step('build_workspace_a_with_three_shells', async () => {
       workspaceA = await createShellWorkspace(client, observer, path.join(runner.sessionDir, 'alpha'), `ws-switch-alpha-${runner.runId}`);
       createdSessionIds.push(workspaceA.sessionId);
-      splitA = await addSplit(client, workspaceA.sessionId);
-      createdSessionIds.push(splitA.runtimeId);
+      await assertWorkspacePaneSessionsListed(client, workspaceA.workspace, 'initial workspace A shell');
+
+      const vertical = await addSplit(client, workspaceA.sessionId, 'terminal.splitVertical', 2);
+      verticalA = vertical.pane;
+      createdSessionIds.push(verticalA.runtimeId);
+      await assertWorkspacePaneSessionsListed(client, vertical.workspace, 'vertical shell split in workspace A');
+
+      await client.request('focus_pane', { sessionId: workspaceA.sessionId, paneId: verticalA.paneId });
+      const horizontal = await addSplit(client, workspaceA.sessionId, 'terminal.splitHorizontal', 3);
+      horizontalA = horizontal.pane;
+      createdSessionIds.push(horizontalA.runtimeId);
+      await assertWorkspacePaneSessionsListed(client, horizontal.workspace, 'horizontal shell split in workspace A');
+
       tokenA1 = `WSSWITCH_A1_${Date.now()}`;
       tokenA2 = `WSSWITCH_A2_${Date.now()}`;
+      tokenA3 = `WSSWITCH_A3_${Date.now()}`;
       await writeAndAssertToken(client, workspaceA.sessionId, workspaceA.firstPane, tokenA1);
-      await writeAndAssertToken(client, workspaceA.sessionId, splitA, tokenA2);
+      await writeAndAssertToken(client, workspaceA.sessionId, verticalA, tokenA2);
+      await writeAndAssertToken(client, workspaceA.sessionId, horizontalA, tokenA3);
     });
 
     let workspaceB;
@@ -259,7 +287,8 @@ async function main() {
     await runner.step('build_workspace_b', async () => {
       workspaceB = await createShellWorkspace(client, observer, path.join(runner.sessionDir, 'beta'), `ws-switch-beta-${runner.runId}`);
       createdSessionIds.push(workspaceB.sessionId);
-      splitB = await addSplit(client, workspaceB.sessionId);
+      const split = await addSplit(client, workspaceB.sessionId, 'terminal.splitVertical', 2);
+      splitB = split.pane;
       createdSessionIds.push(splitB.runtimeId);
       tokenB1 = `WSSWITCH_B1_${Date.now()}`;
       tokenB2 = `WSSWITCH_B2_${Date.now()}`;
@@ -269,7 +298,7 @@ async function main() {
 
     await runner.step('assert_select_visibility', async () => {
       await client.request('select_session', { sessionId: workspaceA.sessionId });
-      await assertWorkspaceVisible(client, workspaceA.sessionId, workspaceB.sessionId, 2);
+      await assertWorkspaceVisible(client, workspaceA.sessionId, workspaceB.sessionId, 3);
       await client.request('select_session', { sessionId: workspaceB.sessionId });
       await assertWorkspaceVisible(client, workspaceB.sessionId, workspaceA.sessionId, 2);
     });
@@ -278,7 +307,7 @@ async function main() {
       await focusAppForNativeShortcut(driver);
       await pressShortcutKeys(client, driver, 'workspace.select1');
       await waitForActiveSession(client, workspaceA.sessionId, 'Cmd+1 selecting first workspace session');
-      await assertWorkspaceVisible(client, workspaceA.sessionId, workspaceB.sessionId, 2);
+      await assertWorkspaceVisible(client, workspaceA.sessionId, workspaceB.sessionId, 3);
 
       await pressShortcutKeys(client, driver, 'workspace.select2');
       await waitForActiveSession(client, workspaceB.sessionId, 'Cmd+2 selecting second workspace session');
@@ -288,7 +317,27 @@ async function main() {
       await waitForPaneText(client, workspaceB.sessionId, splitB.paneId, (text) => text.includes(tokenB2), 'workspace B split token after switching', 15_000);
     });
 
-    await runner.step('close_split_verify_isolation', async () => {
+    await runner.step('closing_one_split_keeps_the_other_shells_and_their_scrollback', async () => {
+      await client.request('focus_pane', { sessionId: workspaceA.sessionId, paneId: verticalA.paneId });
+      await client.request('dispatch_shortcut', { shortcutId: 'terminal.close' });
+      const remaining = await waitForPaneCount(client, workspaceA.sessionId, 2, 'workspace A remains after closing one of its three panes');
+      runner.assert(
+        !(remaining.panes || []).some((pane) => pane.paneId === verticalA.paneId),
+        `Closed pane ${verticalA.paneId} is still present: ${JSON.stringify(remaining, null, 2)}`,
+        remaining,
+      );
+      await assertWorkspacePaneSessionsListed(client, remaining, 'after closing one shell split in workspace A');
+      try {
+        await waitForPaneText(client, workspaceA.sessionId, workspaceA.firstPane.paneId, (text) => text.includes(tokenA1), 'workspace A first token survived the split close', 15_000);
+        await waitForPaneText(client, workspaceA.sessionId, horizontalA.paneId, (text) => text.includes(tokenA3), 'workspace A horizontal split token survived the split close', 15_000);
+      } catch (error) {
+        await captureSessionArtifacts(client, runner.runDir, 'workspace-a-close-failure', workspaceA.sessionId).catch(() => {});
+        await capturePaneTexts(client, runner.runDir, 'workspace-a-close-failure', workspaceA.sessionId, [workspaceA.firstPane, verticalA, horizontalA]).catch(() => {});
+        throw error;
+      }
+    });
+
+    await runner.step('closing_a_split_in_one_workspace_leaves_the_other_untouched', async () => {
       await client.request('focus_pane', { sessionId: workspaceB.sessionId, paneId: splitB.paneId });
       await client.request('dispatch_shortcut', { shortcutId: 'terminal.close' });
       await waitForPaneCount(client, workspaceB.sessionId, 1, 'workspace B remains after closing one split');
@@ -297,20 +346,24 @@ async function main() {
       await assertWorkspaceVisible(client, workspaceA.sessionId, workspaceB.sessionId, 2);
       try {
         await waitForPaneText(client, workspaceA.sessionId, workspaceA.firstPane.paneId, (text) => text.includes(tokenA1), 'workspace A first token after workspace B close', 15_000);
-        await waitForPaneText(client, workspaceA.sessionId, splitA.paneId, (text) => text.includes(tokenA2), 'workspace A split token after workspace B close', 15_000);
+        await waitForPaneText(client, workspaceA.sessionId, horizontalA.paneId, (text) => text.includes(tokenA3), 'workspace A split token after workspace B close', 15_000);
       } catch (error) {
         await captureSessionArtifacts(client, runner.runDir, 'workspace-a-token-failure', workspaceA.sessionId).catch(() => {});
         await captureSessionArtifacts(client, runner.runDir, 'workspace-b-token-failure', workspaceB.sessionId).catch(() => {});
-        await capturePaneTexts(client, runner.runDir, 'workspace-a-token-failure', workspaceA.sessionId, [workspaceA.firstPane, splitA]).catch(() => {});
+        await capturePaneTexts(client, runner.runDir, 'workspace-a-token-failure', workspaceA.sessionId, [workspaceA.firstPane, horizontalA]).catch(() => {});
         await capturePaneTexts(client, runner.runDir, 'workspace-b-token-failure', workspaceB.sessionId, [workspaceB.firstPane, splitB]).catch(() => {});
         throw error;
       }
     });
 
     const result = await runner.finishSuccess({
-      workspaceA: { firstSessionId: workspaceA.sessionId, splitSessionId: splitA.runtimeId },
+      workspaceA: {
+        firstSessionId: workspaceA.sessionId,
+        closedSplitSessionId: verticalA.runtimeId,
+        remainingSplitSessionId: horizontalA.runtimeId,
+      },
       workspaceB: { firstSessionId: workspaceB.sessionId, closedSplitSessionId: splitB.runtimeId },
-      tokens: [tokenA1, tokenA2, tokenB1, tokenB2],
+      tokens: [tokenA1, tokenA2, tokenA3, tokenB1, tokenB2],
     });
     console.log('[RealAppHarness] Workspace switching passed.');
     console.log(JSON.stringify(result, null, 2));

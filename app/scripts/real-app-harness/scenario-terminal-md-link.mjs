@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -20,6 +21,8 @@ import {
   waitForPaneVisible,
 } from './scenarioAssertions.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+
+const UNKNOWN_SEED_ID = 's-000000';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -42,6 +45,85 @@ function windowRelativePoint(pageX, pageY, windowBounds, innerWidth, innerHeight
     relativeX: (chromeX / 2 + pageX) / width,
     relativeY: (chromeY + pageY) / height,
   };
+}
+
+function startProbeServer() {
+  return new Promise((resolve, reject) => {
+    const hits = [];
+    const server = http.createServer((req, res) => {
+      hits.push(req.url);
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('ok');
+    });
+    server.on('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      resolve({ server, hits, port });
+    });
+  });
+}
+
+function closeServer(server) {
+  return new Promise((resolve) => {
+    server.close(() => resolve());
+    // The default browser that followed the probe link keeps its connection alive
+    // indefinitely; close() alone would wait for it to drain.
+    server.closeAllConnections();
+  });
+}
+
+function occurrences(haystack, needle) {
+  let count = 0;
+  let at = haystack.indexOf(needle);
+  while (at !== -1) {
+    count += 1;
+    at = haystack.indexOf(needle, at + needle.length);
+  }
+  return count;
+}
+
+async function paneText(client, pane) {
+  const payload = await client.request('read_pane_text', pane);
+  return payload.text || '';
+}
+
+async function runInPane(client, pane, command, expected, timeoutMs = 30_000) {
+  const before = occurrences(await paneText(client, pane), expected);
+  await client.request('write_pane', { ...pane, text: command });
+  const deadline = Date.now() + timeoutMs;
+  let text = '';
+  while (Date.now() < deadline) {
+    await delay(250);
+    text = await paneText(client, pane);
+    if (occurrences(text, expected) > before) return text;
+  }
+  throw new Error(`pane never answered ${JSON.stringify(command)} with ${JSON.stringify(expected)}:\n${text}`);
+}
+
+async function waitForSelectorShot(client, selector, description, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    try {
+      const shot = await client.request('capture_screenshot_data', { selector });
+      if (shot?.bounds?.width > 0 && shot?.bounds?.height > 0) return shot;
+      lastError = new Error(`selector has zero-sized bounds: ${JSON.stringify(shot?.bounds)}`);
+    } catch (error) {
+      lastError = error;
+    }
+    await delay(150);
+  }
+  throw new Error(`Timed out waiting for ${description}: ${lastError}`);
+}
+
+async function selectorIsAbsent(client, selector) {
+  try {
+    await client.request('capture_screenshot_data', { selector });
+    return false;
+  } catch (error) {
+    if (String(error).includes('Screenshot selector not found in DOM')) return true;
+    throw error;
+  }
 }
 
 function collectMarkdownTiles(layout) {
@@ -91,7 +173,8 @@ async function main() {
     tier: 'tier1-local-shell',
     prefix: 'terminal-md-link',
     metadata: {
-      focus: 'markdown-path Cmd+click docks/reuses a tile bound to the pane session',
+      focus: 'markdown-path Cmd+click docks/reuses a tile bound to the pane session, '
+        + 'OSC 8 Cmd+click reaches the system browser, real seed-plant ids get marked',
     },
   });
 
@@ -99,14 +182,20 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const driver = createWindowDriver({ appPath: options.appPath });
   let sessionId = null;
+  const { server, hits, port } = await startProbeServer();
 
-  runner.log('run context', { runDir: runner.runDir, sessionDir: runner.sessionDir, wsUrl: options.wsUrl });
+  runner.log('run context', {
+    runDir: runner.runDir,
+    sessionDir: runner.sessionDir,
+    wsUrl: options.wsUrl,
+    probeServerPort: port,
+  });
 
   fs.writeFileSync(path.join(runner.sessionDir, 'alpha.md'), '# Alpha Doc\n\nHello from **alpha**.\n\n- one\n- two\n', 'utf8');
   fs.writeFileSync(path.join(runner.sessionDir, 'beta.md'), '# Beta Doc\n\nHello from *beta*.\n', 'utf8');
 
-  // Runner cleanups run in REVERSE registration order: observer/app first so
-  // they close last, the session-panes sweep last so it closes first.
+  // Runner cleanups run in REVERSE registration order: observer/app are
+  // registered first so they close LAST.
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_session_panes', async () => {
@@ -116,6 +205,7 @@ async function main() {
       await client.request('close_pane', { sessionId, paneId: pane.paneId }).catch(() => {});
     }
   });
+  runner.registerCleanup('close_probe_server', () => closeServer(server));
 
   try {
     await runner.step('launch_app', async () => {
@@ -146,6 +236,47 @@ async function main() {
         timeoutMs: 20_000,
         description: 'shell pane ready',
       });
+    });
+
+    await runner.step('term_program_is_pinned_to_ghostty', async () => {
+      await client.request('write_pane', { sessionId, paneId: pane.paneId, text: 'echo "TP=$TERM_PROGRAM"' });
+      await waitForPaneText(
+        client,
+        sessionId,
+        pane.paneId,
+        (text) => text.split('\n').some((line) => line.trim() === 'TP=ghostty'),
+        'TERM_PROGRAM=ghostty echoed',
+        20_000,
+      );
+    });
+
+    let seedId = null;
+    await runner.step('a_real_planted_seed_id_is_marked_and_an_unknown_one_is_not', async () => {
+      const planted = await runInPane(
+        client,
+        { sessionId, paneId: pane.paneId },
+        `attn seed plant "Terminal seed mark receipt" -m "Planted by the terminal-md-link scenario." --session ${sessionId}`,
+        's-',
+      );
+      const ids = [...planted.matchAll(/^\s*(s-[0-9a-hjkmnp-tv-z]{6})\b/gm)].map((match) => match[1]);
+      seedId = ids[ids.length - 1];
+      runner.assert(Boolean(seedId), 'plant answered with a seed id', { ids });
+
+      await runInPane(
+        client,
+        { sessionId, paneId: pane.paneId },
+        `printf 'unknown ${UNKNOWN_SEED_ID}\\n'`,
+        `unknown ${UNKNOWN_SEED_ID}`,
+      );
+
+      const mark = await waitForSelectorShot(client, `[data-terminal-seed-id="${seedId}"]`, 'known seed mark');
+      runner.assert(Boolean(mark?.pngBase64 && mark?.bounds), 'known seed mark is rendered', { seedId });
+      fs.writeFileSync(path.join(runner.runDir, 'seed-mark.png'), Buffer.from(mark.pngBase64, 'base64'));
+      runner.assert(
+        await selectorIsAbsent(client, `[data-terminal-seed-id="${UNKNOWN_SEED_ID}"]`),
+        'unknown seed id remains plain terminal text',
+        { unknownSeedId: UNKNOWN_SEED_ID },
+      );
     });
 
     const echoPath = async (relPath) => {
@@ -337,6 +468,52 @@ async function main() {
       }).catch(() => {});
     });
 
+    // Last: a followed link hands off to the real system browser, which takes the
+    // foreground away from attn and would break any later native click.
+    const label = 'CLICK_ME_LINK';
+    const url = `http://127.0.0.1:${port}/osc8-hit`;
+    await runner.step('print_an_osc8_link_whose_uri_is_hidden_behind_a_label', async () => {
+      // Octal escapes produce the same OSC bytes in bash, zsh, and fish.
+      const esc = '\\033';
+      const st = `${esc}\\134`; // string terminator: ESC + a single literal backslash
+      // Both markdown tiles are still docked, and they fold the terminal into a
+      // sliver whose released surface reads empty; clicking expands it first.
+      await client.request('click_pane', { sessionId, paneId: pane.paneId });
+      await client.request('write_pane', {
+        sessionId,
+        paneId: pane.paneId,
+        text: `clear; printf '${esc}]8;;${url}${st}${label}${esc}]8;;${st}\\n'`,
+      });
+      await waitForPaneText(
+        client,
+        sessionId,
+        pane.paneId,
+        (text) => text.split('\n').some((line) => line.trim() === label),
+        'OSC 8 link label rendered',
+        20_000,
+      );
+      await driver.activateApp();
+    });
+
+    await runner.step('plain_click_on_the_osc8_label_does_not_navigate', async () => {
+      const target = await pointAtLiveLink(label);
+      await driver.clickWindow(target.relativeX, target.relativeY);
+      // A negative has no signal to wait on. 1s is the window a followed link has
+      // needed to reach the probe server: on a pass the next step resolves under it.
+      await delay(1_000);
+      runner.assert(
+        hits.length === 0,
+        `Plain click on the OSC 8 label must not navigate, but the probe server saw: ${JSON.stringify(hits)}`,
+      );
+    });
+
+    await runner.step('cmd_click_on_the_osc8_label_reaches_the_system_browser', async () => {
+      const target = await pointAtLiveLink(label);
+      await driver.clickWindow(target.relativeX, target.relativeY, { modifiers: { command: true } });
+      await waitFor(() => hits.length > 0, 'the probe server to receive the followed OSC 8 uri', 10_000);
+      runner.assert(hits.includes('/osc8-hit'), `Probe server received unexpected path(s): ${JSON.stringify(hits)}`);
+    });
+
     const result = await runner.finishSuccess({
       sessionId,
       workspaceId,
@@ -346,8 +523,11 @@ async function main() {
       alphaTileParams: alphaNode.tile_params,
       betaTileParams: betaNode.tile_params,
       tileSessionId: alphaNode.tile_session_id,
+      seedId,
+      osc8Url: url,
+      osc8Hits: hits,
     });
-    console.log('[verify] PASS — terminal markdown-link: docked, second tile, and reuse on re-click all matched.');
+    console.log('[verify] PASS — terminal markdown-link: seed mark, docked, second tile, reuse on re-click, and OSC 8 navigation all matched.');
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     if (sessionId) {
@@ -357,6 +537,7 @@ async function main() {
     console.error(result.error);
     process.exitCode = 1;
   } finally {
+    await closeServer(server).catch(() => {});
     if (sessionId) {
       const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
       for (const pane of workspace?.panes || []) {

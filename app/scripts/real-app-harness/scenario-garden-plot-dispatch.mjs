@@ -7,7 +7,13 @@ import {
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
-import { runShellCommandInPane, waitForFirstWorkspacePane, waitForPaneShellReady } from './scenarioAssertions.mjs';
+import {
+  runShellCommandInPane,
+  waitForFirstWorkspacePane,
+  waitForPaneAttached,
+  waitForPaneShellReady,
+  waitForPaneVisible,
+} from './scenarioAssertions.mjs';
 import { delay } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -29,6 +35,12 @@ const PLOT = {
     { title: 'The sequenced step' },
   ],
 };
+
+const STEER = 'STEER4 the seed id is the address';
+
+// The Garden list turns to columns at 1160px and the seed tile needs room
+// beside the terminal; 1440 clears both past the 24px fullscreen inset.
+const WIDE_WINDOW = 1440;
 
 const PACE_MS = recordingEnabled() ? 1_400 : 0;
 
@@ -54,6 +66,52 @@ async function runInPane(client, pane, command, expected, timeoutMs = 30_000) {
   const output = await runShellCommandInPane(client, pane, command, expected, timeoutMs);
   await pace();
   return output;
+}
+
+// A pane folded behind a tile, or belonging to another session, has no live
+// text buffer until it is on screen.
+async function runInRevealedPane(client, pane, command, expected, timeoutMs = 30_000) {
+  await client.request('click_pane', pane);
+  await waitForPaneVisible(client, pane.sessionId, pane.paneId);
+  await waitForPaneAttached(client, pane.sessionId, pane.paneId);
+  return runInPane(client, pane, command, expected, timeoutMs);
+}
+
+async function awaitDockRow(client, seedID, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  let state = { present: false, seeds: [] };
+  while (Date.now() < deadline) {
+    state = await client.request('garden_get_state', {});
+    if (state.present && state.seeds.some((seed) => seed.id === seedID)) return state;
+    await delay(200);
+  }
+  throw new Error(`the garden panel never listed ${seedID}: ${JSON.stringify(state)}`);
+}
+
+// The tile is read by naming the seed: a workspace keeps older seed tiles
+// mounted, and one of those answers too.
+async function awaitTile(client, seedID, ready, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  let state = { present: false, notes: [], artifacts: [] };
+  while (Date.now() < deadline) {
+    state = await client.request('seed_document_get_state', { seedId: seedID });
+    if (state.present && ready(state)) return state;
+    await delay(200);
+  }
+  throw new Error(`the seed tile for ${seedID} never caught up: ${JSON.stringify(state)}`);
+}
+
+// Re-reading the drill collapses and reopens it, because the document is
+// fetched on the way in.
+async function readDrill(client, seedID, ready, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  let state = { present: false, notes: [], artifacts: [] };
+  while (Date.now() < deadline) {
+    state = await client.request('garden_expand_seed', { seedId: seedID, reopen: true, bookkeeping: true });
+    if (state.present && ready(state)) return state;
+    await delay(200);
+  }
+  throw new Error(`the panel drill for ${seedID} never caught up: ${JSON.stringify(state)}`);
 }
 
 async function openPane(client, observer, runner, label) {
@@ -84,6 +142,11 @@ async function main() {
     scenarioId: 'GardenPlotDispatch',
     tier: 'local',
     prefix: 'garden-plot-dispatch',
+    metadata: {
+      focus: 'a plot walked and drained live in the panel, a seed id steering its tender’s own pane, '
+        + 'a dock row naming its tender by label, the wide full window listing in columns, '
+        + 'and an artifact set the drill and the tile agree on',
+    },
   });
 
   let pane = null;
@@ -94,6 +157,10 @@ async function main() {
   let strayID = null;
   try {
     await launchFreshAppAndConnect(client, observer);
+    const initialBounds = await client.request('get_window_bounds');
+    await client.request('set_window_bounds', {
+      logicalBounds: { ...initialBounds.logicalBounds, width: WIDE_WINDOW },
+    });
     pane = await runner.step('open_session', () => openPane(client, observer, runner, 'gardener'));
 
     await runner.step('plant_a_plot_in_one_command', async () => {
@@ -267,7 +334,114 @@ async function main() {
       await client.request('close_session', { sessionId: fresh.sessionId }).catch(() => {});
     });
 
-    const summary = await runner.finishSuccess({ crown, children, delegated, second });
+    await runner.step('a_seed_id_steers_its_tender', async () => {
+      await client.request('select_session', { sessionId: pane.sessionId });
+      await waitForPaneShellReady(client, pane.sessionId, pane.paneId);
+      const sent = await runInPane(client, pane,
+        `attn agent msg ${crown} "${STEER}" --source-session ${pane.sessionId}`, '(id');
+      // `(id <uuid>)` is the one part both the notified and the queued reply
+      // print, so the id is read instead of the status word.
+      const messageID = sent.match(/\(id\s*([0-9a-f-]{36})\)/)?.[1] ?? null;
+      runner.assert(Boolean(messageID), 'the steer returned its mailbox id', { sent });
+
+      const delegatePane = await waitForFirstWorkspacePane(client, delegated, 'the delegate’s pane', 20_000);
+      const tender = { sessionId: delegated, paneId: delegatePane.paneId };
+      const read = await runInRevealedPane(client, tender,
+        `attn agent inbox ${messageID} --session ${delegated}`, STEER);
+      runner.assert(saw(read, STEER),
+        'only the tender the seed id resolved to can read the steer', { read, crown, delegated });
+      const shown = (await client.request('read_pane_text', tender)).text || '';
+      runner.assert(saw(shown, STEER),
+        'a message addressed by seed id is on screen in its tender’s pane', { shown });
+      runner.writeText('steer.txt', sent + '\n' + read + '\n');
+      await pace();
+    });
+
+    await runner.step('the_dock_row_names_its_tender_by_label', async () => {
+      await client.request('select_session', { sessionId: pane.sessionId });
+      await waitForPaneShellReady(client, pane.sessionId, pane.paneId);
+      const claimed = await runInPane(client, pane,
+        `attn seed tend ${strayID} --session ${pane.sessionId}`, 'is growing');
+      runner.assert(saw(claimed, 'is growing'),
+        'the gardener claimed the seed it planted outside the plot', { claimed });
+      await client.request('open_dock_panel', { panelId: 'garden' });
+      const dock = await awaitDockRow(client, strayID);
+      const row = dock.seeds.find((seed) => seed.id === strayID);
+      runner.assert(row?.displayId === strayID,
+        'the dock list always shows the seed id', { row, strayID });
+      runner.assert(row?.tender === 'tended by gardener',
+        'the dock list names the tender session instead of exposing its id',
+        { row, sessionId: pane.sessionId });
+      const shot = await client.request('capture_screenshot_data', { selector: '.garden-panel' });
+      runner.assert(Boolean(shot?.pngBase64), 'the garden panel is on screen', {});
+      fs.writeFileSync(path.join(runner.runDir, 'garden-list-dock.png'), Buffer.from(shot.pngBase64, 'base64'));
+      await pace();
+    });
+
+    await runner.step('the_wide_full_window_lists_in_columns', async () => {
+      let full = await client.request('garden_toggle_frame');
+      const layoutStartedAt = Date.now();
+      // The frame's geometry can settle before ResizeObserver updates the list.
+      // Wait for the rendered columns; keep the last state if they never appear.
+      while (full.frame === 'full' && full.layout !== 'columns' && Date.now() - layoutStartedAt < 5_000) {
+        await delay(100);
+        full = await client.request('garden_get_state', {});
+      }
+      runner.assert(full.frame === 'full', 'the same list expands to the full window', { full });
+      runner.assert(full.layout === 'columns', 'the wide full window uses the column list', {
+        full, layoutWaitMs: Date.now() - layoutStartedAt,
+      });
+      const fullShot = await client.request('capture_screenshot_data', { selector: '.garden-frame' });
+      runner.assert(Boolean(fullShot?.pngBase64), 'the full Garden list is on screen', {});
+      fs.writeFileSync(path.join(runner.runDir, 'garden-list-full.png'), Buffer.from(fullShot.pngBase64, 'base64'));
+      await pace();
+      const docked = await client.request('garden_toggle_frame');
+      runner.assert(docked.frame !== 'full', 'the same control returns the list to the dock', { docked });
+    });
+
+    await runner.step('an_attach_and_a_detach_agree_in_the_drill_and_the_tile', async () => {
+      const artifactPath = path.join(runner.sessionDir, 'evidence.md');
+      fs.writeFileSync(artifactPath, '# Evidence\n\nWhat the tender produced.\n');
+      await runInPane(client, pane,
+        `attn seed attach ${strayID} --path ${artifactPath} --repo harness-fixture -m "the write-up" ` +
+          `--session ${pane.sessionId}`, 'attached');
+      const drill = await readDrill(client, strayID, (state) => state.notes.some((note) => note.kind === 'attach'));
+      runner.assert(drill.present, 'the panel drill shows the seed document', { drill });
+      runner.assert(drill.artifacts.some((artifact) => artifact.primary === 'evidence.md'),
+        'the drill carries the current artifact', { drill });
+      await pace();
+
+      await client.request('write_pane', { ...pane, text: `attn open ${strayID} --session ${pane.sessionId}` });
+      const tile = await awaitTile(client, strayID, (state) => state.notes.some((note) => note.kind === 'attach'));
+      runner.assert(tile.present, 'the seed opened as a tile', { tile });
+      runner.assert(tile.artifacts.some((label) => label.includes('evidence.md')),
+        'the tile carries the same artifact', { tile });
+      runner.assert(tile.notes.some((note) => note.kind === 'attach'),
+        'the attach is on the log as its own kind', { tile });
+      fs.writeFileSync(path.join(runner.runDir, 'tile-attached.png'),
+        Buffer.from((await client.request('capture_screenshot_data',
+          { selector: '.workspace-dock-tile' })).pngBase64, 'base64'));
+      await pace();
+
+      await runInRevealedPane(client, pane,
+        `attn seed detach ${strayID} --path ${artifactPath} --repo harness-fixture -m "superseded" ` +
+          `--session ${pane.sessionId}`, 'detached');
+      const afterTile = await awaitTile(client, strayID, (state) => state.notes.some((note) => note.kind === 'detach'));
+      runner.assert(afterTile.artifacts.length === 0,
+        'detaching takes the artifact out of the set', { afterTile });
+      runner.assert(afterTile.notes.some((note) => note.kind === 'detach'),
+        'the detach stayed on the log', { afterTile });
+      const afterDrill = await readDrill(client, strayID, (state) => state.notes.some((note) => note.kind === 'detach'));
+      runner.assert(afterDrill.artifacts.length === 0,
+        'the drill agrees with the tile', { afterDrill });
+      fs.writeFileSync(path.join(runner.runDir, 'drill-detached.png'),
+        Buffer.from((await client.request('capture_screenshot_data',
+          { selector: '.garden-panel' })).pngBase64, 'base64'));
+      runner.writeText('artifacts.json', JSON.stringify({ drill, tile, afterTile, afterDrill }, null, 2) + '\n');
+      await pace();
+    });
+
+    const summary = await runner.finishSuccess({ crown, children, delegated, second, strayID });
     console.log('[RealAppHarness] Garden plot dispatch passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {

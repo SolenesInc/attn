@@ -89,6 +89,7 @@ async function main() {
     scenarioId: 'TR-402',
     tier: 'tier3-remote-real-agent',
     prefix: 'scenario-tr402-remote-close-redraw',
+    allowRealAgents: false,
     metadata: {
       sshTarget: options.sshTarget,
       agent: options.remoteAgent,

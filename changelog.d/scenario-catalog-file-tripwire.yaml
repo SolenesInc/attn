@@ -1,0 +1,6 @@
+kind: internal
+area: harness
+change: >
+  A scenarioCatalog entry pointing at a scenario file that is not on disk now
+  fails the frontend test job instead of the matrix, which used to surface it
+  about eighteen minutes into a Linux run.

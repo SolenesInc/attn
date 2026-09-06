@@ -23,6 +23,9 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 const FIRST_NOTE = 'FIRST_READ_RECEIPT';
 const SECOND_NOTE = 'SECOND_READ_RECEIPT';
 const READ_MARKER = 'SEED_BELL_READ';
+// Every pane read here squashes whitespace out, so a body with a space in it
+// could never be found again.
+const PEER_BODY = 'PEER_MESSAGE_READ_RECEIPT_BODY';
 const GENERIC_DOORBELL = '📬 You have unread items in your attn inbox. Run attn agent inbox to read them.';
 
 function parseArgs(argv) {
@@ -102,6 +105,23 @@ function writeWatcherFixture(cwd) {
   });
 }
 
+// Pane reads squash whitespace out, so no space survives between `id` and the uuid.
+function peerMessageID(output) {
+  return output.match(/\(id([0-9a-f-]{36})\)/)?.[1] ?? null;
+}
+
+function inboxBatches(transcript) {
+  return transcriptMessages(transcript).flatMap((message) => {
+    if (message.role !== 'assistant') return [];
+    try {
+      const parsed = JSON.parse(message.text);
+      return Array.isArray(parsed?.items) ? [parsed] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
 function readWatcherTranscript(cwd) {
   const dir = path.join(cwd, '.attn-mock-agent');
   const file = fs.readdirSync(dir).find((entry) => entry.endsWith('.jsonl'));
@@ -122,13 +142,19 @@ async function main() {
     scenarioId: 'GardenSeedReadReceipts',
     tier: 'local',
     prefix: 'garden-seed-read-receipts',
-    metadata: { agent: 'mock-codex', receipt: 'agent inbox without a prompt-submit hook' },
+    metadata: {
+      agent: 'mock-codex',
+      receipt: 'agent inbox without a prompt-submit hook',
+      focus: 'a read, not a hook, re-arms the next doorbell through a real PTY — '
+        + 'on the Garden bell and on the peer mailbox, with the bodies only the durable inbox carries',
+    },
   });
 
   let author = null;
   let watcher = null;
   let watcherCwd = null;
   let seed = null;
+  let peerMessage = null;
   try {
     await launchFreshAppAndConnect(client, observer);
 
@@ -199,15 +225,63 @@ async function main() {
         'each read cycle received exactly one generic doorbell', { doorbells });
       runner.assert(doorbells.every((doorbell) => !doorbell.text.includes(seed)),
         'the durable seed id stayed out of the terminal doorbell', { doorbells, seed });
+      const batches = inboxBatches(transcript);
+      runner.assert(batches.length === 2, 'each read cycle read the durable inbox once', { batches });
+      runner.assert(
+        batches.every((batch) => batch.items.length > 0 && batch.items.every((item) =>
+          item.kind === 'garden_seed'
+          && item.source_id === seed
+          && item.content.includes(`${seed} moved: note`)
+          && Boolean(item.notified_at)
+          && Boolean(item.read_at))),
+        'the durable inbox names the seed the doorbell withheld, with its receipts', { batches, seed },
+      );
       runner.writeText('watcher-pane.txt', `${text}\n`);
       runner.writeText('watcher-transcript.json', `${JSON.stringify(transcriptMessages(transcript), null, 2)}\n`);
     });
 
-    const summary = await runner.finishSuccess({ seed, watcherSessionId: watcher.sessionId });
+    await runner.step('a_peer_message_rings_the_same_hook_free_lane', async () => {
+      const sent = await runInShell(
+        client,
+        author,
+        `attn agent msg ${watcher.sessionId} "${PEER_BODY}" --source-session ${author.sessionId}`,
+        '(id',
+      );
+      peerMessage = peerMessageID(sent);
+      runner.assert(Boolean(peerMessage), 'the peer send returned its message id', { sent });
+      const text = await waitForAgentReads(client, watcher, 3, PEER_BODY);
+      const transcript = readWatcherTranscript(watcherCwd);
+      const doorbells = transcriptMessages(transcript)
+        .filter((message) => message.role === 'user' && message.text === GENERIC_DOORBELL);
+      runner.assert(doorbells.length === 3,
+        'the peer mailbox rang the same generic doorbell the Garden bell rings', { doorbells });
+      runner.assert(doorbells.every((doorbell) => !doorbell.text.includes(PEER_BODY)),
+        'the peer body stayed out of the terminal doorbell', { doorbells });
+      const batches = inboxBatches(transcript);
+      runner.assert(batches.length === 3, 'the peer wake read the durable inbox once', { batches });
+      const peerBatch = batches[2];
+      runner.assert(peerBatch.items.length === 1 && peerBatch.remaining === 0,
+        'the peer wake consumed exactly its new item', { peerBatch });
+      const item = peerBatch.items[0];
+      runner.assert(item.kind === 'peer_message' && item.source_id === peerMessage && item.content === PEER_BODY,
+        'the durable inbox carries the peer body the doorbell withheld', { peerBatch, peerMessage });
+      runner.assert(Boolean(item.notified_at) && Boolean(item.read_at),
+        'the peer item carries its notified and read receipts', { peerBatch });
+      await runInShell(client, author,
+        `attn agent msg-status ${peerMessage} --session ${author.sessionId}`, 'read:');
+      runner.writeText('peer-send.txt', `${sent}\n`);
+      runner.writeText('watcher-after-peer.txt', `${text}\n`);
+      runner.writeText('watcher-peer-transcript.json',
+        `${JSON.stringify(transcriptMessages(transcript), null, 2)}\n`);
+    });
+
+    const summary = await runner.finishSuccess({ seed, watcherSessionId: watcher.sessionId, peerMessage });
     console.log('[RealAppHarness] Garden seed read receipts passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = await runner.finishFailure(error, { seed, watcherSessionId: watcher?.sessionId ?? null });
+    const summary = await runner.finishFailure(error, {
+      seed, watcherSessionId: watcher?.sessionId ?? null, peerMessage,
+    });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
