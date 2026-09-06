@@ -1,17 +1,11 @@
 #!/usr/bin/env bash
-# A fresh checkout has no third_party/ghostty-vt and no app/node_modules.
 set -euo pipefail
-# test-scripts runs this from inside make; inherited jobserver flags would make
-# every probe warn.
 unset MAKEFLAGS MFLAGS MAKELEVEL
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# These `?=` values each shell out, and expanding them cost `make -n build`
-# 23.3s of a 28.5s run (2026-09-06).
+# Pinning these `?=` values skips their shell expansions: 23.3s of a 28.5s run.
 export VERSION=probe BUILD_TIME=probe SOURCE_FINGERPRINT=probe GIT_COMMIT=probe SNAPSHOT_FORMAT=probe
 
-# -W dates a prerequisite ahead of its output, so `make -n` prints the fetch for
-# a target that depends on it and nothing for one that does not.
 probe() {
   local witness="$1" newer="$2" target="$3" plan
   # Captured whole: `grep -q` closes the pipe early and SIGPIPEs make, which
@@ -29,14 +23,12 @@ fail() {
   failed=1
 }
 
-# Only these tuples link the real cgo library; the rest compile the pure-Go stub.
 case "$(go env GOOS)_$(go env GOARCH)" in
   darwin_arm64 | linux_amd64 | linux_arm64)
     for target in lint lint-go test test-v test-quick test-watch build; do
       fetches_vt "$target" ||
         fail "make $target does not fetch the native VT archive: a fresh checkout fails on ghostty/vt.h"
     done
-    # Each probe has to be able to say no, or the loops here prove nothing.
     ! fetches_vt lint-frontend ||
       fail "the -W probe claims lint-frontend needs the native VT archive, which it does not"
     ;;
