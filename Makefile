@@ -204,6 +204,7 @@ test-scripts:
 	@bash ./scripts/pr-evidence_test.sh
 	@bash ./scripts/ci-acceptance_test.sh
 	@bash ./scripts/ci-retry_test.sh
+	@bash ./scripts/ci-flake-report_test.sh
 	@bash ./scripts/app-acceptance_test.sh
 	@bash ./scripts/app-acceptance-gate_test.sh
 	@bash ./scripts/candidate-gate_test.sh
