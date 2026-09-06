@@ -21,6 +21,8 @@ export type RelayReportStateParams = { token: string; state: RelaySuiteState };
 export type RelayReportInputTakenParams = { token: string; input_id: string };
 export type RelayReportStopParams = { token: string; assistant_text: string; aborted?: boolean };
 export type RelayReportPullRequestParams = { token: string; url: string };
+// The absolute path of the session file pi is writing; attn follows it for usage.
+export type RelayReportSessionFileParams = { token: string; path: string };
 export type RelayReportDenialParams = {
   token: string;
   tool: string;
@@ -45,6 +47,7 @@ export const relayMethods = {
   reportDenial: "suite.report_denial",
   reportInputTaken: "suite.report_input_taken",
   reportPullRequest: "suite.report_pull_request",
+  reportSessionFile: "suite.report_session_file",
   deliverMessage: "driver.deliver_message",
   networkDecide: "driver.network_decide",
 } as const;

@@ -1238,6 +1238,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	`},
 	{137, "name the repository a session ran in so the ledger can filter by it", ""},
 	{138, "auto mode globs become prefix rules, hosts and an approval policy", ``},
+	{139, "record where a plugin session's harness writes its transcript", ""},
 }
 
 const migration99SQL = `
@@ -1371,7 +1372,12 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			return fmt.Errorf("starting transaction for migration %d: %w", m.version, err)
 		}
 
-		if m.version == 137 {
+		if m.version == 139 {
+			if err := applyMigration139(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 137 {
 			if err := applyMigration137(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
@@ -1802,6 +1808,17 @@ func applyMigration136(tx *sql.Tx, schema string) error {
 		}
 	}
 	_, err := tx.Exec(schema)
+	return err
+}
+
+// Guarded like the other column additions: a database that already carries the
+// column (a replayed migration, a repaired schema) must migrate, not fail.
+func applyMigration139(tx *sql.Tx) error {
+	has, err := columnExists(tx, "sessions", "agent_driver_transcript_path")
+	if err != nil || has {
+		return err
+	}
+	_, err = tx.Exec("ALTER TABLE sessions ADD COLUMN agent_driver_transcript_path TEXT NOT NULL DEFAULT ''")
 	return err
 }
 

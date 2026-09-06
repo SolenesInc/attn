@@ -308,6 +308,7 @@ func (d *Daemon) restoreTranscriptWatchers() {
 		}
 		d.startTranscriptWatcherAtPath(session.ID, session.Agent, session.Directory, time.Now(), binding.TranscriptPath)
 	}
+	d.restorePluginUsageWatchers()
 }
 
 func (d *Daemon) applySessionUsageAvailability(w *transcriptWatcher, batch transcript.FollowBatch) error {
@@ -336,6 +337,7 @@ func (d *Daemon) applySessionUsageAvailability(w *transcriptWatcher, batch trans
 }
 
 func (d *Daemon) stopTranscriptWatcher(sessionID string) {
+	d.stopPluginUsageWatcher(sessionID)
 	d.watchersMu.Lock()
 	watcher, ok := d.transcriptWatch[sessionID]
 	if ok {
@@ -348,6 +350,7 @@ func (d *Daemon) stopTranscriptWatcher(sessionID string) {
 }
 
 func (d *Daemon) stopAllTranscriptWatchers() {
+	d.stopAllPluginUsageWatchers()
 	d.watchersMu.Lock()
 	watchers := make([]*transcriptWatcher, 0, len(d.transcriptWatch))
 	for _, watcher := range d.transcriptWatch {

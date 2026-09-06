@@ -15,6 +15,7 @@ import type {
   RelayReportDenialParams,
   RelayReportInputTakenParams,
   RelayReportPullRequestParams,
+  RelayReportSessionFileParams,
   RelayReportStateParams,
   RelayReportStopParams,
 } from "./relay-protocol";
@@ -357,6 +358,16 @@ export class PiDriver {
       session_id: run.sessionID,
       run_id: run.runID,
       url: params.url,
+    });
+  }
+
+  async suiteReportSessionFile(rawParams: unknown): Promise<void> {
+    const params = parseRelayReportSessionFile(rawParams);
+    const run = this.requireRunByToken(params.token);
+    await this.rpc.request("session.report_transcript_path", {
+      session_id: run.sessionID,
+      run_id: run.runID,
+      path: params.path,
     });
   }
 
@@ -703,6 +714,16 @@ function parseRelayReportPullRequest(value: unknown): RelayReportPullRequestPara
   if (typeof token !== "string" || token.trim() === "") throw new Error("suite.report_pull_request is missing token");
   if (typeof url !== "string" || url.trim() === "") throw new Error("suite.report_pull_request is missing url");
   return { token: token.trim(), url: url.trim() };
+}
+
+function parseRelayReportSessionFile(value: unknown): RelayReportSessionFileParams {
+  if (typeof value !== "object" || value === null) throw new Error("suite.report_session_file params must be an object");
+  const record = value as Record<string, unknown>;
+  const token = record.token;
+  const path = record.path;
+  if (typeof token !== "string" || token.trim() === "") throw new Error("suite.report_session_file is missing token");
+  if (typeof path !== "string" || path.trim() === "") throw new Error("suite.report_session_file is missing path");
+  return { token: token.trim(), path: path.trim() };
 }
 
 function textField(value: unknown): string {

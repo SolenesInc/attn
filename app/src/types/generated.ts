@@ -2366,6 +2366,7 @@ export interface ModelElement {
     input_tokens:                    number;
     model:                           string;
     output_tokens:                   number;
+    purpose:                         string;
     total_tokens:                    number;
     unpriced_reason?:                string;
     [property: string]: any;
@@ -8632,6 +8633,7 @@ export interface SessionUsageModel {
     input_tokens:                    number;
     model:                           string;
     output_tokens:                   number;
+    purpose:                         string;
     total_tokens:                    number;
     unpriced_reason?:                string;
     [property: string]: any;
@@ -16631,6 +16633,7 @@ const typeMap: any = {
         { json: "input_tokens", js: "input_tokens", typ: 0 },
         { json: "model", js: "model", typ: "" },
         { json: "output_tokens", js: "output_tokens", typ: 0 },
+        { json: "purpose", js: "purpose", typ: "" },
         { json: "total_tokens", js: "total_tokens", typ: 0 },
         { json: "unpriced_reason", js: "unpriced_reason", typ: u(undefined, "") },
     ], "any"),
@@ -20617,6 +20620,7 @@ const typeMap: any = {
         { json: "input_tokens", js: "input_tokens", typ: 0 },
         { json: "model", js: "model", typ: "" },
         { json: "output_tokens", js: "output_tokens", typ: 0 },
+        { json: "purpose", js: "purpose", typ: "" },
         { json: "total_tokens", js: "total_tokens", typ: 0 },
         { json: "unpriced_reason", js: "unpriced_reason", typ: u(undefined, "") },
     ], "any"),

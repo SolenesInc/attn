@@ -11,6 +11,7 @@ const mixedUsage: SessionUsage = {
   models: [
     {
       model: 'claude-opus-5',
+      purpose: 'agent',
       input_tokens: 12_345,
       output_tokens: 6_789,
       cache_read_tokens: 150_000,
@@ -21,6 +22,42 @@ const mixedUsage: SessionUsage = {
       cost_usd: 1.234,
       has_unpriced_usage: true,
       unpriced_reason: 'Cache write duration is unavailable.',
+    },
+  ],
+};
+
+const piUsage: SessionUsage = {
+  total_tokens: 7_487,
+  cost_usd: 0.0016,
+  has_unpriced_usage: false,
+  models: [
+    {
+      model: 'deepseek-v4-flash',
+      purpose: 'agent',
+      input_tokens: 5_379,
+      output_tokens: 232,
+      cache_read_tokens: 0,
+      cache_write_5m_tokens: 0,
+      cache_write_1h_tokens: 0,
+      cache_write_unclassified_tokens: 0,
+      total_tokens: 5_611,
+      cost_usd: 0.0013365,
+      has_unpriced_usage: false,
+      unpriced_reason: '',
+    },
+    {
+      model: 'deepseek-v4-flash',
+      purpose: 'guardian',
+      input_tokens: 1_746,
+      output_tokens: 122,
+      cache_read_tokens: 8,
+      cache_write_5m_tokens: 0,
+      cache_write_1h_tokens: 0,
+      cache_write_unclassified_tokens: 0,
+      total_tokens: 1_876,
+      cost_usd: 0.00047,
+      has_unpriced_usage: false,
+      unpriced_reason: '',
     },
   ],
 };
@@ -62,6 +99,17 @@ describe('HeaderSessionUsage', () => {
     expect(screen.getByRole('dialog', { name: 'Session usage breakdown' })).toBeVisible();
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onPopoverClosed).toHaveBeenCalledOnce();
+  });
+
+  it('lists the guardian beside the agent rows for the same model', () => {
+    render(<HeaderSessionUsage usage={piUsage} sessionId="session-5" pinned onPopoverClosed={vi.fn()} />);
+
+    const panel = screen.getByRole('dialog', { name: 'Session usage breakdown' });
+    expect(within(panel).getByText('deepseek-v4-flash')).toBeVisible();
+    expect(within(panel).getByText('Guardian \u00b7 deepseek-v4-flash')).toBeVisible();
+    expect(within(panel).getByText('1,746')).toBeVisible();
+    // The header total is the session's, so it already carries the guardian's spend.
+    expect(screen.getByTestId('session-usage-session-5')).toHaveTextContent('<$0.01');
   });
 
   it('does not start a pane drag and hides incomplete measurements', () => {
