@@ -125,7 +125,8 @@ for user-defined crew members.
   tends it;
   `/orchestrate-with-fable` and ad-hoc
   plan-file choreography retire into it.
-- [ ] **Agents converse and observe** — a crew member messages another agent
+- [x] **Agents converse and observe** — shipped as `attn agent list`, `peek`,
+  `msg` and the durable `inbox`: a crew member messages another agent
   and gets a reply, and inspects what another is doing without interrupting
   it. Conversation grows from ticket comments — proven, but indirect and
   noisy as a long-term shape — straight to directed, daemon-brokered
