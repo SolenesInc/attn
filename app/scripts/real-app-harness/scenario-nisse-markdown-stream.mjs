@@ -150,6 +150,7 @@ async function drive({ options, replay }) {
     let sawPendingDiagram = false;
     let diagramBeforeFence = false;
     let followFromBottom = 0;
+    let previousFromBottom = 0;
     const follow = [];
     let fenceShot = false;
 
@@ -181,7 +182,10 @@ async function drive({ options, replay }) {
             }
             if (message.blocks.diagrams > 0 && !sawPendingDiagram) diagramBeforeFence = true;
             if (state.scroll) {
-              followFromBottom = Math.max(followFromBottom, state.scroll.fromBottom);
+              // A read can land between a commit and the pre-paint ResizeObserver scroll;
+              // only a distance two consecutive samples agree on was ever painted.
+              followFromBottom = Math.max(followFromBottom, Math.min(previousFromBottom, state.scroll.fromBottom));
+              previousFromBottom = state.scroll.fromBottom;
               follow.push({ ms: Date.now() - started, chars: message.text.length, fromBottom: state.scroll.fromBottom, height: state.scroll.scrollHeight });
             }
             previousChars = message.text.length;
