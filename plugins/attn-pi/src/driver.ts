@@ -135,6 +135,9 @@ export class PiDriver {
     // Adopt before listen(): the socket opens only once every inherited token is
     // known, so a suite re-dialing the instant the path appears is never refused.
     this.adoptActiveRuns(result.active_runs ?? []);
+    // The proxy comes back on its persisted port before any suite re-dials, so an
+    // inherited session's next network call is held for a decision, not refused.
+    await this.ensureProxy(result.auto_mode);
     await this.relay.listen();
   }
 
@@ -235,6 +238,7 @@ export class PiDriver {
   async suiteHello(connection: RelayConnection, rawParams: unknown): Promise<RelayHelloResult> {
     const params = parseRelayHello(rawParams);
     const run = this.requireRunByToken(params.token);
+    this.adoptProxyCredentials(run, params.proxy_credentials);
     run.connection = connection;
     this.markBacked(run);
     if (params.dropped_reports !== undefined) {
@@ -254,6 +258,23 @@ export class PiDriver {
     await this.reportMetadata(run);
     if (params.pi_state !== undefined) await this.restateAfterUnknown(run, params.pi_state);
     return { ok: true };
+  }
+
+  /** An adopted run learns its proxy credentials from the suite that still holds them.
+   * A spawn-minted value always wins: only the driver may hand out new credentials. */
+  private adoptProxyCredentials(run: RunState, offered: string | undefined): void {
+    if (offered === undefined || offered === "") return;
+    if (run.proxyCredentials !== undefined) {
+      if (run.proxyCredentials !== offered) {
+        console.error(
+          `attn-pi: session ${run.sessionID} said hello with proxy credentials this driver did not mint; keeping the ones it did`,
+        );
+      }
+      return;
+    }
+    run.proxyCredentials = offered;
+    this.runsByProxyCredentials.set(offered, run);
+    this.proxyState?.proxy.registerCredentials(offered);
   }
 
   /** Hands attn what pi says it is, to use only while attn says `unknown`: a hello
@@ -621,6 +642,7 @@ function parseRelayHello(value: unknown): RelayHelloParams {
     // Only a positive count is reported.
     dropped_reports: typeof dropped === "number" && Number.isFinite(dropped) && dropped > 0 ? dropped : undefined,
     pi_state: piState,
+    proxy_credentials: typeof record.proxy_credentials === "string" ? record.proxy_credentials.trim() : undefined,
   };
 }
 

@@ -385,6 +385,7 @@ export class AttnPiSuite {
       pi_version: this.piVersion,
       reason,
       pi_state: this.currentState(ctx),
+      ...(this.proxyCredentials ? { proxy_credentials: this.proxyCredentials } : {}),
     };
   }
 

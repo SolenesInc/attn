@@ -29,9 +29,11 @@ function nextSocketPath(): string {
 class FakeRPC {
   readonly requests: Array<{ method: string; params: unknown }> = [];
 
+  constructor(private readonly registerResult: unknown = { ok: true, active_runs: [] }) {}
+
   async request(method: string, params: unknown): Promise<unknown> {
     this.requests.push({ method, params });
-    if (method === "driver.register") return { ok: true, active_runs: [] };
+    if (method === "driver.register") return this.registerResult;
     return { ok: true };
   }
 
@@ -51,8 +53,13 @@ async function startUpstream(): Promise<number> {
   return address.port;
 }
 
-async function buildDriver(): Promise<{ driver: PiDriver; socketPath: string }> {
+type DriverOptions = { stateDir?: string; registerResult?: unknown; initialize?: boolean };
+
+type BuiltDriver = { driver: PiDriver; socketPath: string; stateDir: string };
+
+async function buildDriver(options: DriverOptions = {}): Promise<BuiltDriver> {
   const socketPath = nextSocketPath();
+  const stateDir = options.stateDir ?? mkdtempSync(join(tmpdir(), "attn-np-state-"));
   let driver: PiDriver;
   const relay = new RelayServer({
     socketPath,
@@ -66,19 +73,21 @@ async function buildDriver(): Promise<{ driver: PiDriver; socketPath: string }> 
     },
   });
   driver = new PiDriver({
-    rpc: new FakeRPC() as never,
+    rpc: new FakeRPC(options.registerResult) as never,
     relay,
     suitePath,
     runCommand: fakeRunCommand,
     env: {},
-    proxyStateDir: mkdtempSync(join(tmpdir(), "attn-np-state-")),
+    proxyStateDir: stateDir,
   });
-  await relay.listen();
+  // initialize() opens the relay itself, after adopting runs and restoring the proxy.
+  if (options.initialize) await driver.initialize();
+  else await relay.listen();
   cleanups.push(async () => {
     await driver.close();
     relay.close();
   });
-  return { driver, socketPath };
+  return { driver, socketPath, stateDir };
 }
 
 // Loopback is where the test upstream lives, so these spawns opt into local binding.
@@ -99,13 +108,19 @@ class FakeSuite {
   private buffer = "";
   readonly asked: Array<{ method: string; params: unknown }> = [];
   answer: unknown = { decision: "allow" };
+  /** Resolves when the driver answers the hello, so tests act on a handled handshake. */
+  readonly greeted: Promise<void>;
+  private acknowledge: () => void = () => {};
 
   private constructor(private readonly socket: Socket) {
+    this.greeted = new Promise<void>((resolve) => {
+      this.acknowledge = resolve;
+    });
     socket.setEncoding("utf8");
     socket.on("data", (chunk: string) => this.consume(chunk));
   }
 
-  static async connect(socketPath: string, token: string): Promise<FakeSuite> {
+  static async connect(socketPath: string, token: string, proxyCredentials?: string): Promise<FakeSuite> {
     const socket = await new Promise<Socket>((resolve, reject) => {
       const candidate = createConnection({ path: socketPath });
       candidate.once("error", reject);
@@ -123,7 +138,13 @@ class FakeSuite {
         jsonrpc: "2.0",
         id: 1,
         method: relayMethods.hello,
-        params: { token, pi_session_id: "pi-1", pi_version: "0.80.10", reason: "startup" },
+        params: {
+          token,
+          pi_session_id: "pi-1",
+          pi_version: "0.80.10",
+          reason: "startup",
+          ...(proxyCredentials ? { proxy_credentials: proxyCredentials } : {}),
+        },
       })}\n`,
     );
     return suite;
@@ -138,7 +159,10 @@ class FakeSuite {
       this.buffer = this.buffer.slice(end + 1);
       if (line === "") continue;
       const message = JSON.parse(line) as { id?: number; method?: string; params?: unknown };
-      if (message.method === undefined) continue;
+      if (message.method === undefined) {
+        this.acknowledge();
+        continue;
+      }
       this.asked.push({ method: message.method, params: message.params });
       this.socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, result: this.answer })}\n`);
     }
@@ -234,6 +258,51 @@ describe("the driver hosts the proxy and decides through the relay", () => {
 
     expect(response).toContain('Network access to "127.0.0.1" is blocked by policy.');
     expect(suite.asked).toEqual([]);
+  });
+
+  test("a restarted driver restores the proxy and adopts the credentials its suite still holds", async () => {
+    const upstream = await startUpstream();
+    const first = await buildDriver();
+    const spawned = await first.driver.spawn(spawnParams(openNetwork));
+    const token = spawned.env?.ATTN_PI_TOKEN ?? "";
+    const credentials = spawned.env?.ATTN_PI_PROXY_CREDENTIALS ?? "";
+    const address = spawned.env?.ATTN_PI_PROXY_ADDR ?? "";
+    await first.driver.close();
+
+    const second = await buildDriver({
+      stateDir: first.stateDir,
+      initialize: true,
+      registerResult: {
+        ok: true,
+        auto_mode: { enabled_default: true, network: openNetwork },
+        active_runs: [
+          {
+            session_id: "session-1",
+            run_id: "run-1",
+            seq: 0,
+            metadata: { schema: 1, pi_session_id: "pi-1", pi_version: "0.80.10" },
+          },
+        ],
+      },
+    });
+
+    // Same address: the port came back from proxy.json, so the session's environment
+    // is still correct and nothing had to be relaunched.
+    expect(second.driver.networkProxy()).toBeDefined();
+    const suite = await FakeSuite.connect(second.socketPath, token, credentials);
+    await suite.greeted;
+    const response = await proxyConnect(address, credentials, "127.0.0.1", upstream);
+
+    expect(response).toContain("200 Connection established");
+    expect(suite.asked).toEqual([
+      { method: relayMethods.networkDecide, params: { host: "127.0.0.1", port: upstream, protocol: "https_connect" } },
+    ]);
+  });
+
+  test("a register that carries no auto_mode starts no proxy", async () => {
+    const { driver } = await buildDriver({ initialize: true, registerResult: { ok: true, active_runs: [] } });
+
+    expect(driver.networkProxy()).toBeUndefined();
   });
 
   test("closing a session revokes its proxy credentials", async () => {

@@ -10,6 +10,9 @@ export type RelayHelloParams = {
   reason: string;
   dropped_reports?: number;
   pi_state?: RelayHelloState;
+  /** How an adopted run recovers its proxy credentials: the suite still holds the value
+   * a past spawn minted, and a restarted driver has no other way to learn it. */
+  proxy_credentials?: string;
 };
 export type RelayHelloState = "idle" | "working" | "pending_approval";
 export type RelayHelloResult = { ok: true };
