@@ -5,15 +5,18 @@ export const autoModeStatusKey = "attn-auto-mode";
 
 export const classifyingWorkingMessage = "auto mode is checking this call…";
 
-// The report /auto blocked prints. On demand, so it may run longer than a widget could.
 export const denialReportLimit = 5;
 
-// pi's footer dims everything it draws itself but renders extension status lines
-// unstyled, so these surfaces tint their own text: quiet states dim, denials warn.
+// pi dims its own footer lines but renders extension status lines unstyled, so these
+// surfaces tint their own text. RPC relays that text verbatim: only TUI gets a theme.
 export type AutoModeTheme = {
   fg(color: "dim" | "warning" | "muted" | "error", text: string): string;
   bold(text: string): string;
 };
+
+export function statusTheme(ctx: { mode?: string; ui?: AutoModeUILike }): AutoModeTheme | undefined {
+  return ctx.mode === "tui" ? ctx.ui?.theme : undefined;
+}
 
 export type AutoModeUILike = {
   setStatus(key: string, text: string | undefined): void;
@@ -41,7 +44,6 @@ export function problem(theme: AutoModeTheme | undefined, text: string): string 
 export const denialActionCharLimit = 80;
 export const denialReasonCharLimit = 120;
 
-// Two denials with the same action and rule are the agent retrying, not new trouble.
 export function denialKey(denial: AutoModeDenial): string {
   return `${denial.action}\u0000${denial.rule ?? ""}`;
 }
@@ -50,8 +52,6 @@ export function autoModeStatusText(enabled: boolean): string {
   return enabled ? "auto: on" : "auto: off";
 }
 
-// The only standing trace of a denial: the footer gains a count, never a widget —
-// /auto blocked reads the details on demand.
 export function heldStatusText(enabled: boolean, held: number): string {
   if (!enabled || held === 0) return autoModeStatusText(enabled);
   return `${autoModeStatusText(enabled)} · ${held} held`;
@@ -71,7 +71,6 @@ function clampReason(reason: string): string {
 
 type DenialGroup = { denial: AutoModeDenial; count: number };
 
-// Retries arrive as consecutive denials of the same action; they read as one row.
 function groupRetries(shown: readonly AutoModeDenial[]): DenialGroup[] {
   const groups: DenialGroup[] = [];
   for (const denial of shown) {
@@ -89,7 +88,6 @@ export function heldCount(denials: readonly AutoModeDenial[]): number {
 
 export function denialReportLines(denials: readonly AutoModeDenial[], theme?: AutoModeTheme): string[] {
   if (denials.length === 0) return [];
-  // The header counts calls, not denials: a retried call is one blocked call, said once.
   const groups = groupRetries(denials);
   const shown = groups.slice(-denialReportLimit);
   const hidden = groups.length - shown.length;

@@ -12,6 +12,7 @@ import {
   heldCount,
   heldStatusText,
   autoModeStatusKey,
+  statusTheme,
   tooLongQuestion,
   denialNotice,
   type AutoModeUILike,
@@ -152,16 +153,12 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
     };
     const session = new AutoModeSession(options.config, classifier);
     let standing: AutoModeDenial[] = [];
-    // The agent retries blocked calls; a repeat restates the count, not the warning.
     let lastDeniedKey: string | undefined;
     let breakerAsked = false;
     const paintHeld = (ctx: AutoModeContextLike, denials: readonly AutoModeDenial[]): void => {
       const ui = uiOf(ctx);
       if (!ui) return;
-      // Only the TUI draws the footer; RPC relays status text verbatim, so it stays plain.
-      const theme = ctx.mode === "tui" ? ui.theme : undefined;
-      const enabled = options.isEnabled?.() !== false;
-      ui.setStatus(autoModeStatusKey, dimmed(theme, heldStatusText(enabled, heldCount(denials))));
+      ui.setStatus(autoModeStatusKey, dimmed(statusTheme(ctx), heldStatusText(options.isEnabled?.() !== false, heldCount(denials))));
     };
     const approvals = new Map<string, string>();
     const executionFingerprint = (call: ToolCall, cwd: string) => inputFingerprint({ toolName: call.toolName, input: call.input, cwd });
@@ -312,8 +309,6 @@ function uiOf(ctx: AutoModeContextLike | undefined): AutoModeUILike | undefined 
   return ctx?.hasUI === false ? undefined : ctx?.ui;
 }
 
-// The denial speaks once, in full, as a chat warning; the footer only counts what is
-// held — /auto blocked reads the details on demand, so nothing sits above the composer.
 function showDenial(ctx: AutoModeContextLike, denial: AutoModeDenial, repeated: boolean): void {
   const ui = uiOf(ctx);
   if (!ui || repeated) return;

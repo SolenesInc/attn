@@ -18,6 +18,7 @@ import {
   dimmed,
   heldCount,
   heldStatusText,
+  statusTheme,
 } from "./ui";
 import { UsageLedger } from "./usage";
 import { reviewUnavailable } from "../security/recovery";
@@ -168,15 +169,11 @@ export class AutoMode {
       ctx.ui?.notify("auto mode is not holding any calls.", "info");
       return;
     }
-    // Only the TUI draws color; RPC relays notify text verbatim, so it stays plain.
-    const theme = ctx.mode === "tui" ? ctx.ui?.theme : undefined;
-    ctx.ui?.notify(denialReportLines(denials, theme).join("\n"), "warning");
+    ctx.ui?.notify(denialReportLines(denials, statusTheme(ctx)).join("\n"), "warning");
   }
 
   private paint(ctx: AutoModeContextLike): void {
-    // Only the TUI draws the footer; RPC relays status text verbatim, so it stays plain.
-    const theme = ctx.mode === "tui" ? ctx.ui?.theme : undefined;
-    ctx.ui?.setStatus(autoModeStatusKey, dimmed(theme, heldStatusText(this.enabled(), this.held())));
+    ctx.ui?.setStatus(autoModeStatusKey, dimmed(statusTheme(ctx), heldStatusText(this.enabled(), this.held())));
   }
 
   private judge(): Classifier {
