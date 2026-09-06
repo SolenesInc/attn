@@ -178,6 +178,25 @@ func TestScaffoldWritesClaudeMDAsASymlinkToAgentsMD(t *testing.T) {
 	}
 }
 
+func TestScaffoldAgentsMDTeachesReconcile(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "reconcile-app")
+	if _, err := Scaffold(ScaffoldOptions{Dir: dir}); err != nil {
+		t.Fatalf("scaffold: %v", err)
+	}
+	agents, err := os.ReadFile(filepath.Join(dir, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("AGENTS.md: %v", err)
+	}
+	for _, want := range []string{
+		"## Rebuilding what you derive: reconcile",
+		"Re-enabling is **not** a rebuild",
+	} {
+		if !strings.Contains(string(agents), want) {
+			t.Errorf("the scaffold brief an app author reads does not say %q", want)
+		}
+	}
+}
+
 func TestScaffoldRefusesADirectoryThatIsAlreadyAnApp(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "twice-app")
 	if _, err := Scaffold(ScaffoldOptions{Dir: dir}); err != nil {
