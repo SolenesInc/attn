@@ -110,8 +110,6 @@ func (d *Daemon) reopenVerdictsForPage(entries []protocol.SessionLedgerEntry) []
 			SessionID: entries[i].ID,
 			Reopen:    *verdict.toProtocol(),
 		})
-		// Only a gone directory needs git, and rows sharing a repository and branch share one check.
-		d.refreshReopenBranch(verdict)
 	}
 	return verdicts
 }

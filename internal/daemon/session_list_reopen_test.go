@@ -134,6 +134,26 @@ func TestAPageWithoutTheAskCarriesNoVerdicts(t *testing.T) {
 	}
 }
 
+func TestReadingAPageTwiceInspectsNothingTheSecondTime(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	t.Cleanup(d.stopEventBus)
+	repo, _, root := newReopenRepo(t)
+	closeWorktreeRow(t, d, repo, root, "twice", "feat/twice")
+
+	page := protocol.SessionListMessage{Closed: protocol.Ptr(true), Reopen: protocol.Ptr(true)}
+	sessionListResult(t, d, page)
+	waitForBranchInspection(t, d, repo, "feat/twice")
+
+	sessionListResult(t, d, page)
+
+	d.branchInspectionsMu.Lock()
+	running := len(d.branchInspectionsRunning)
+	d.branchInspectionsMu.Unlock()
+	if running != 0 {
+		t.Errorf("reading the page again started %d inspections, want the stored answer reused", running)
+	}
+}
+
 func TestRowsOnTheSameBranchShareOneInspection(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	t.Cleanup(d.stopEventBus)
