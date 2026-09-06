@@ -343,6 +343,7 @@ type Daemon struct {
 	gardenDispatchBeforeWrite func(string)
 	gardenDispatchAfterWrite  func(string)
 	seedHandoverBeforeCommit  func()
+	gitHubPollingOffLogged    bool
 	gardenReviewMu            sync.Mutex
 	dispatchSeedsMu           sync.Mutex
 	dispatchSeeds             map[string]string
@@ -2242,6 +2243,18 @@ func (d *Daemon) refreshGitHubHosts() error {
 		return nil
 	}
 
+	if reason := gitHubPollingOffReason(); reason != "" {
+		if !d.gitHubPollingOffLogged {
+			d.gitHubPollingOffLogged = true
+			d.logf("%s", reason)
+		}
+		for _, host := range d.ghRegistry.Hosts() {
+			d.ghRegistry.Remove(host)
+		}
+		d.broadcastGitHubHosts(hostsBefore)
+		return nil
+	}
+
 	if err := github.RequireGHVersion("2.81.0"); err != nil {
 		code, message := ghVersionWarning(err)
 		d.logf("gh CLI unavailable (need 2.81.0+): %v", err)
@@ -2328,8 +2341,9 @@ func (d *Daemon) projectGitHubHostsUpdated() {
 
 func (d *Daemon) gitHubHostsUpdatedMessage() *protocol.GitHubHostsUpdatedMessage {
 	return &protocol.GitHubHostsUpdatedMessage{
-		Event:       protocol.EventGitHubHostsUpdated,
-		GithubHosts: d.gitHubHosts(),
+		Event:                  protocol.EventGitHubHostsUpdated,
+		GithubHosts:            d.gitHubHosts(),
+		GithubPollingOffReason: gitHubPollingOffReasonField(),
 	}
 }
 
@@ -4081,6 +4095,7 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"prs":                len(prs),
 		"ws_clients":         d.wsHub.ClientCount(),
 		"github_available":   d.githubAvailable(),
+		"github_polling_off": gitHubPollingOffReason(),
 		"profile":            config.ProfileLabel(),
 		"data_dir":           dataDir,
 		"socket_path":        socketPath,

@@ -265,6 +265,7 @@ type WebSocketEvent = GeneratedWebSocketEvent & {
   plugins?: DaemonPlugin[];
   issues?: DaemonPluginIssue[];
   github_hosts?: string[];
+  github_polling_off_reason?: string;
   review_id?: string;
   session_id?: string;
   content?: string;
@@ -581,7 +582,7 @@ interface UseDaemonSocketOptions {
   onPRsUpdate: (prs: DaemonPR[]) => void;
   onEndpointsUpdate?: (endpoints: DaemonEndpoint[]) => void;
   onPluginsUpdate?: (plugins: DaemonPlugin[], issues: DaemonPluginIssue[]) => void;
-  onGitHubHostsUpdate?: (hosts: string[]) => void;
+  onGitHubHostsUpdate?: (hosts: string[], pollingOffReason: string | null) => void;
   onReposUpdate: (repos: RepoState[]) => void;
   onAuthorsUpdate: (authors: AuthorState[]) => void;
   onWorktreesUpdate?: (worktrees: DaemonWorktree[]) => void;
@@ -1400,7 +1401,7 @@ export function useDaemonSocket({
             authorsRef.current = nextAuthors;
             callbacksRef.current.onAuthorsUpdate(nextAuthors);
 
-            callbacksRef.current.onGitHubHostsUpdate?.(data.github_hosts || []);
+            callbacksRef.current.onGitHubHostsUpdate?.(data.github_hosts || [], data.github_polling_off_reason || null);
 
             const nextSettings = data.settings || {};
             settingsRef.current = nextSettings;
@@ -2386,7 +2387,7 @@ export function useDaemonSocket({
             break;
 
           case 'github_hosts_updated':
-            callbacksRef.current.onGitHubHostsUpdate?.(data.github_hosts || []);
+            callbacksRef.current.onGitHubHostsUpdate?.(data.github_hosts || [], data.github_polling_off_reason || null);
             break;
 
           case 'plugins_updated': {

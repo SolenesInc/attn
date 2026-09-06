@@ -3168,6 +3168,8 @@ model InitialStateMessage {
   repos?: RepoState[];
   authors?: AuthorState[];
   github_hosts?: string[];
+  // Set while the daemon refuses to poll GitHub for this profile; empty when polling is on.
+  github_polling_off_reason?: string;
   settings?: Record<string>;
   warnings?: DaemonWarning[];
   seeds?: Seed[];
@@ -3556,6 +3558,7 @@ model SettingsUpdatedMessage {
 model GitHubHostsUpdatedMessage {
   event: "github_hosts_updated";
   github_hosts: string[];
+  github_polling_off_reason?: string;
 }
 
 model PluginsUpdatedMessage {

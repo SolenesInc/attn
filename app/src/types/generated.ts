@@ -4825,8 +4825,9 @@ export interface GitFileChange {
 }
 
 export interface GitHubHostsUpdatedMessage {
-    event:        GitHubHostsUpdatedMessageEvent;
-    github_hosts: string[];
+    event:                      GitHubHostsUpdatedMessageEvent;
+    github_hosts:               string[];
+    github_polling_off_reason?: string;
     [property: string]: any;
 }
 
@@ -4967,13 +4968,14 @@ export enum HookStopFailureMessageCmd {
 }
 
 export interface InitialStateMessage {
-    apps?:               AppElement[];
-    authors?:            AuthorElement[];
-    crew?:               Member[];
-    daemon_instance_id?: string;
-    endpoints?:          Endpoint[];
-    event:               InitialStateMessageEvent;
-    github_hosts?:       string[];
+    apps?:                      AppElement[];
+    authors?:                   AuthorElement[];
+    crew?:                      Member[];
+    daemon_instance_id?:        string;
+    endpoints?:                 Endpoint[];
+    event:                      InitialStateMessageEvent;
+    github_hosts?:              string[];
+    github_polling_off_reason?: string;
     /**
      * The daemon id that owns this daemon's home-level state. Equal to
      * daemon_instance_id on a home daemon; a different id means this daemon is an
@@ -18593,6 +18595,7 @@ const typeMap: any = {
     "GitHubHostsUpdatedMessage": o([
         { json: "event", js: "event", typ: r("GitHubHostsUpdatedMessageEvent") },
         { json: "github_hosts", js: "github_hosts", typ: a("") },
+        { json: "github_polling_off_reason", js: "github_polling_off_reason", typ: u(undefined, "") },
     ], "any"),
     "GitOperation": o([
         { json: "duration_ms", js: "duration_ms", typ: u(undefined, 0) },
@@ -18673,6 +18676,7 @@ const typeMap: any = {
         { json: "endpoints", js: "endpoints", typ: u(undefined, a(r("Endpoint"))) },
         { json: "event", js: "event", typ: r("InitialStateMessageEvent") },
         { json: "github_hosts", js: "github_hosts", typ: u(undefined, a("")) },
+        { json: "github_polling_off_reason", js: "github_polling_off_reason", typ: u(undefined, "") },
         { json: "home_daemon_id", js: "home_daemon_id", typ: u(undefined, "") },
         { json: "protocol_version", js: "protocol_version", typ: u(undefined, "") },
         { json: "prs", js: "prs", typ: u(undefined, a(r("PRElement"))) },

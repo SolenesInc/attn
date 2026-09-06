@@ -48,6 +48,7 @@ import { writeClipboardText } from './utils/clipboardBridge';
 import { readTerminalInputDiagnostics } from './utils/terminalDiagnosticsLog';
 import { ChordLeaderHud } from './components/ChordLeaderHud';
 import { DaemonProvider } from './contexts/DaemonContext';
+import { GitHubPollingProvider } from './contexts/GitHubPollingContext';
 import { DaemonApiProvider, useDaemonApi } from './contexts/DaemonApiContext';
 import { setMarkdownAnnotationsTransport } from './components/MarkdownReader/annotations/transport';
 import { NotebookSurfaceProvider } from './contexts/NotebookSurfaceContext';
@@ -454,6 +455,11 @@ function App() {
   const [daemonPlugins, setDaemonPlugins] = useState<DaemonPlugin[]>([]);
   const [daemonPluginIssues, setDaemonPluginIssues] = useState<DaemonPluginIssue[]>([]);
   const [daemonGitHubHosts, setDaemonGitHubHosts] = useState<string[]>([]);
+  const [githubPollingOffReason, setGithubPollingOffReason] = useState<string | null>(null);
+  const handleGitHubHostsUpdate = useCallback((hosts: string[], pollingOffReason: string | null) => {
+    setDaemonGitHubHosts(hosts);
+    setGithubPollingOffReason(pollingOffReason);
+  }, []);
   const handlePluginsUpdate = useCallback((plugins: DaemonPlugin[], issues: DaemonPluginIssue[]) => {
     setDaemonPlugins(plugins);
     setDaemonPluginIssues(issues);
@@ -626,7 +632,7 @@ function App() {
     onPRsUpdate: setPRs,
     onEndpointsUpdate: setDaemonEndpoints,
     onPluginsUpdate: handlePluginsUpdate,
-    onGitHubHostsUpdate: setDaemonGitHubHosts,
+    onGitHubHostsUpdate: handleGitHubHostsUpdate,
     onReposUpdate: setRepoStates,
     onAuthorsUpdate: setAuthorStates,
     onSettingsUpdate: setSettings,
@@ -709,6 +715,7 @@ function App() {
           daemonPlugins={daemonPlugins}
           daemonPluginIssues={daemonPluginIssues}
           daemonGitHubHosts={daemonGitHubHosts}
+          githubPollingOffReason={githubPollingOffReason}
           settings={settings}
           updateAvailableVersion={updateAvailableVersion}
           onOpenLatestRelease={handleOpenLatestRelease}
@@ -740,6 +747,7 @@ interface AppContentProps {
   daemonPlugins: DaemonPlugin[];
   daemonPluginIssues: DaemonPluginIssue[];
   daemonGitHubHosts: string[];
+  githubPollingOffReason: string | null;
   settings: Record<string, string>;
   updateAvailableVersion: string | null;
   onOpenLatestRelease: () => Promise<void>;
@@ -766,6 +774,7 @@ function AppContent({
   daemonPlugins,
   daemonPluginIssues,
   daemonGitHubHosts,
+  githubPollingOffReason,
   settings,
   updateAvailableVersion,
   onOpenLatestRelease,
@@ -3523,6 +3532,7 @@ function AppContent({
 
   return (
     <DaemonProvider sendPRAction={sendPRAction} sendMutePR={sendMutePR} sendMuteRepo={sendMuteRepo} sendMuteAuthor={sendMuteAuthor} sendPRVisited={sendPRVisited}>
+    <GitHubPollingProvider offReason={githubPollingOffReason}>
     <NotebookSurfaceProvider value={notebookSurfaceContextValue}>
     <div className="app" ref={appShellRef} tabIndex={-1} style={{ outline: 'none' }} onPointerDownCapture={handleAppPointerDownCapture}>
       <BannerStack
@@ -4151,6 +4161,7 @@ function AppContent({
       />
     </div>
     </NotebookSurfaceProvider>
+    </GitHubPollingProvider>
     </DaemonProvider>
   );
 }
