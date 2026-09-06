@@ -18,7 +18,8 @@ func TestSpawnCarriesThePromotedAutoModeConfig(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &fakeSpawnBackend{}
 	now := time.Now().UTC()
-	proposal, err := d.store.CreateAutoModeProposal(automode.KindAllow, "", "git push origin*", "", now)
+	proposal, err := d.store.CreateAutoModeProposal(
+		automode.KindRule, "", `{"pattern":["git","push"],"decision":"allow"}`, "", now)
 	if err != nil {
 		t.Fatalf("propose: %v", err)
 	}
@@ -51,14 +52,17 @@ func TestSpawnCarriesThePromotedAutoModeConfig(t *testing.T) {
 			t.Error("spawn params carry no auto mode config")
 			return
 		}
-		if len(params.AutoMode.Allow) != 1 || params.AutoMode.Allow[0] != "git push origin*" {
-			t.Errorf("auto mode allow = %v, want the promoted pattern", params.AutoMode.Allow)
+		promoted := automode.StripShippedRules(params.AutoMode.Rules)
+		if len(promoted) != 1 || promoted[0].Describe() != "git push" {
+			t.Errorf("auto mode rules = %v, want the promoted one beside the shipped ones", params.AutoMode.Rules)
 		}
 		if got := params.AutoMode.Environment.Slots["remote_targets"]; len(got) != 1 {
 			t.Errorf("auto mode environment = %v", params.AutoMode.Environment)
 		}
-		if len(params.AutoMode.Models) != 0 {
-			t.Errorf("models = %v, want none until the user names one", params.AutoMode.Models)
+		if params.AutoMode.ApprovalPolicy != automode.PolicyOnRequest ||
+			params.AutoMode.SandboxMode != automode.SandboxWorkspaceWrite {
+			t.Errorf("auto mode policy = %q/%q, want the defaults",
+				params.AutoMode.ApprovalPolicy, params.AutoMode.SandboxMode)
 		}
 		var raw struct {
 			AutoMode map[string]json.RawMessage `json:"auto_mode"`
@@ -67,7 +71,10 @@ func TestSpawnCarriesThePromotedAutoModeConfig(t *testing.T) {
 			t.Errorf("decode raw spawn params: %v", err)
 			return
 		}
-		for _, key := range []string{"enabled_default", "environment", "allow", "hard_deny", "models"} {
+		for _, key := range []string{
+			"enabled_default", "approval_policy", "sandbox_mode", "rules",
+			"network", "environment", "legacy_patterns",
+		} {
 			if _, ok := raw.AutoMode[key]; !ok {
 				t.Errorf("auto mode payload is missing %q", key)
 			}
@@ -100,7 +107,8 @@ func TestReloadCarriesThePromotedAutoModeConfig(t *testing.T) {
 	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
 
 	now := time.Now().UTC()
-	proposal, err := d.store.CreateAutoModeProposal(automode.KindDeny, "", "curl *", "", now)
+	proposal, err := d.store.CreateAutoModeProposal(
+		automode.KindHost, "", `{"host":"crates.io","decision":"allow"}`, "", now)
 	if err != nil {
 		t.Fatalf("propose: %v", err)
 	}
@@ -132,9 +140,12 @@ func TestReloadCarriesThePromotedAutoModeConfig(t *testing.T) {
 		}
 		if params.AutoMode == nil {
 			t.Error("resume params carry no auto mode config")
-		} else if promoted := automode.StripShippedHardDeny(config.WSPort(), params.AutoMode.HardDeny); len(promoted) != 1 || promoted[0] != "curl *" {
-			t.Errorf("auto mode hard deny = %v, want the promoted pattern beside the shipped ones",
-				params.AutoMode.HardDeny)
+		} else if allowed := params.AutoMode.Network.AllowedDomains; len(allowed) != 1 ||
+			allowed[0] != "crates.io" {
+			t.Errorf("auto mode allowed domains = %v, want the promoted host", allowed)
+		} else if denied := automode.StripShippedNetwork(config.WSPort(), params.AutoMode.Network); len(denied.DeniedDomains) != 0 {
+			t.Errorf("auto mode denied domains = %v, want only the shipped ones",
+				params.AutoMode.Network.DeniedDomains)
 		}
 		respondPluginRequest(t, plugin, request, pluginDriverSpawnResult{Argv: []string{"snipe"}})
 	}()

@@ -2546,6 +2546,12 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleAutoModeEnvNotes(conn, msg.(*protocol.AutoModeEnvNotesMessage))
 	case protocol.CmdAutoModePropose: // wire: automode_propose
 		d.handleAutoModePropose(conn, msg.(*protocol.AutoModeProposeMessage))
+	case protocol.CmdAutoModeRuleRemove: // wire: automode_rule_remove
+		d.handleAutoModeRuleRemove(conn, msg.(*protocol.AutoModeRuleRemoveMessage))
+	case protocol.CmdAutoModeHostRemove: // wire: automode_host_remove
+		d.handleAutoModeHostRemove(conn, msg.(*protocol.AutoModeHostRemoveMessage))
+	case protocol.CmdAutoModePolicySet: // wire: automode_policy_set
+		d.handleAutoModePolicySet(conn, msg.(*protocol.AutoModePolicySetMessage))
 	case protocol.CmdAutoModeDenials: // wire: automode_denials
 		d.handleAutoModeDenials(conn, msg.(*protocol.AutoModeDenialsMessage))
 	case protocol.CmdTicketCreate: // wire: ticket_create

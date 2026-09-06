@@ -3,9 +3,12 @@ import type { AutoModeEnvironmentSlotValue } from '../types/generated';
 export interface AutoModeAutomationState {
   present: boolean;
   enabledDefault: boolean;
-  models: string[];
-  allow: string[];
-  hardDeny: string[];
+  approvalPolicy: string;
+  sandboxMode: string;
+  rules: string[];
+  allowedHosts: string[];
+  deniedHosts: string[];
+  legacyPatterns: string[];
   proposals: number;
   environment: {
     slots: AutoModeEnvironmentSlotValue[];
@@ -36,9 +39,12 @@ export function getAutoModeAutomationHandle(): AutoModeAutomationHandle | null {
 export const INACTIVE_AUTOMODE_STATE: AutoModeAutomationState = {
   present: false,
   enabledDefault: false,
-  models: [],
-  allow: [],
-  hardDeny: [],
+  approvalPolicy: '',
+  sandboxMode: '',
+  rules: [],
+  allowedHosts: [],
+  deniedHosts: [],
+  legacyPatterns: [],
   proposals: 0,
   environment: {
     slots: [],

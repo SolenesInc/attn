@@ -1,6 +1,6 @@
 // To parse this data:
 //
-//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AddEndpointMessage, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, AppApplyMessage, AppApplyResult, AppCommandInfo, AppCommandMessage, AppCommandResultMessage, AppConsumerInfo, AppInvocationInfo, AppListMessage, AppListResult, AppLogsMessage, AppLogsResult, AppReconcileGapInfo, AppReconcileReasonInfo, AppReconcileStatus, AppRegistryEntry, AppRemoveMessage, AppRemoveResult, AppRollbackMessage, AppRollbackResult, AppRuntimeInfo, AppRuntimeRestartMessage, AppRuntimeRestartResult, AppRuntimeStatusMessage, AppRuntimeStatusResult, AppSetEnabledMessage, AppSetEnabledResult, AppStallInfo, AppStatusMessage, AppStatusResult, AppSummary, AppVersionInfo, AppViewCrashMessage, AppViewInfo, AppWatchMessage, AppWatchResult, ApprovePRMessage, AppsUpdatedMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeCatalogModel, AutoModeConfigInfo, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeModelProvider, AutoModeModelSetMessage, AutoModeModelSetResultMessage, AutoModeModelsMessage, AutoModeModelsResultMessage, AutoModePatternAddMessage, AutoModePatternRemoveMessage, AutoModePatternResultMessage, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BootstrapEndpointMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResponseMessage, BrowserControlResultMessage, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearSessionsMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewDayClose, CrewHandoffMessage, CrewHandoffResult, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewSetMessage, CrewSetResult, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DeleteWorktreeMessage, DeleteWorktreeResultMessage, DetachSessionMessage, DirectoryEntry, DispatchWorkState, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EndpointActionResultMessage, EndpointCapabilities, EndpointInfo, EndpointStatusChangedMessage, EndpointsUpdatedMessage, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FileDiffResultMessage, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetFileDiffMessage, GetKittyImageMessage, GetPresentationRoundMessage, GetPresentationRoundResultMessage, GetPresentationsMessage, GetPresentationsResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitFileChange, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GitStatusUpdateMessage, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, ListBranchesMessage, ListEndpointsMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, MuteWorkspaceMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PinSessionMessage, PinWorkspaceMessage, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, PresentAnnotation, PresentCloseMessage, PresentCloseResultMessage, PresentCommentInput, PresentFeedbackMessage, PresentFeedbackResult, PresentFile, PresentManifestView, PresentOpenMessage, PresentOpenResult, PresentSubmitRoundMessage, PresentSubmitRoundResultMessage, Presentation, PresentationAddedMessage, PresentationComment, PresentationRound, PresentationUpdatedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, RegisterMessage, RegisterWorkspaceMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemoveEndpointMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RenameWorkspaceMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, ReviewComment, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedSetResumeMessage, SeedSetResumeResult, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenResult, SessionSelectedMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTodosUpdatedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetEndpointRemoteWebMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SetTicketStatusMessage, SetWorkspaceRankMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SubscribeGitStatusMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalPointerActivityMessage, Ticket, TicketActivity, TicketActivityKind, TicketArtifact, TicketAttachFile, TicketAttachMessage, TicketAttachResult, TicketAttachResultMessage, TicketCommentMessage, TicketCommentResult, TicketCreateMessage, TicketCreateResult, TicketEvent, TicketEventBundle, TicketEventKind, TicketInboxMessage, TicketInboxMode, TicketInboxResult, TicketListMessage, TicketListResult, TicketShowMessage, TicketShowResult, TicketStatus, TicketStatusResult, TicketSubscribeMessage, TicketSubscribeResult, TicketTakeMessage, TicketTakeResult, TicketUnsubscribeMessage, TicketUnsubscribeResult, TodosMessage, TriggerNudgeMessage, UninstallPluginMessage, UnregisterMessage, UnregisterWorkspaceMessage, UnsubscribeGitStatusMessage, UpdateEndpointMessage, WakeTurnMessage, WebSocketEvent, WorkflowActionResultMessage, WorkflowAgentCall, WorkflowAgentCallStatus, WorkflowCallUpsertMessage, WorkflowRun, WorkflowRunCancelMessage, WorkflowRunGetMessage, WorkflowRunListMessage, WorkflowRunStatus, WorkflowRunUpdatedMessage, WorkflowRunUpsertMessage, Workspace, WorkspaceLayout, WorkspaceLayoutActionResultMessage, WorkspaceLayoutAddSessionPaneMessage, WorkspaceLayoutClosePaneMessage, WorkspaceLayoutDockEdge, WorkspaceLayoutDockTileMessage, WorkspaceLayoutFocusPaneMessage, WorkspaceLayoutGetMessage, WorkspaceLayoutMessage, WorkspaceLayoutMoveLeafMessage, WorkspaceLayoutMoveLeafToNewWorkspaceMessage, WorkspaceLayoutMoveLeafToWorkspaceMessage, WorkspaceLayoutPane, WorkspaceLayoutPaneKind, WorkspaceLayoutPaneStatus, WorkspaceLayoutRenamePaneMessage, WorkspaceLayoutSetSplitRatioMessage, WorkspaceLayoutSplitDirection, WorkspaceLayoutUndockTileMessage, WorkspaceLayoutUpdateTileMessage, WorkspaceLayoutUpdatedMessage, WorkspaceRegisteredMessage, WorkspaceSelectedMessage, WorkspaceStateChangedMessage, WorkspaceStatus, WorkspaceTileContentGetMessage, WorkspaceTileContentMessage, WorkspaceUnregisteredMessage, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
+//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AddEndpointMessage, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, AppApplyMessage, AppApplyResult, AppCommandInfo, AppCommandMessage, AppCommandResultMessage, AppConsumerInfo, AppInvocationInfo, AppListMessage, AppListResult, AppLogsMessage, AppLogsResult, AppReconcileGapInfo, AppReconcileReasonInfo, AppReconcileStatus, AppRegistryEntry, AppRemoveMessage, AppRemoveResult, AppRollbackMessage, AppRollbackResult, AppRuntimeInfo, AppRuntimeRestartMessage, AppRuntimeRestartResult, AppRuntimeStatusMessage, AppRuntimeStatusResult, AppSetEnabledMessage, AppSetEnabledResult, AppStallInfo, AppStatusMessage, AppStatusResult, AppSummary, AppVersionInfo, AppViewCrashMessage, AppViewInfo, AppWatchMessage, AppWatchResult, ApprovePRMessage, AppsUpdatedMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeConfigInfo, AutoModeConfigResult, AutoModeConfigResultMessage, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeHostAddMessage, AutoModeHostRemoveMessage, AutoModeNetworkInfo, AutoModePolicySetMessage, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeRuleAddMessage, AutoModeRuleInfo, AutoModeRuleRemoveMessage, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BootstrapEndpointMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResponseMessage, BrowserControlResultMessage, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearSessionsMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewDayClose, CrewHandoffMessage, CrewHandoffResult, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewSetMessage, CrewSetResult, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DeleteWorktreeMessage, DeleteWorktreeResultMessage, DetachSessionMessage, DirectoryEntry, DispatchWorkState, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EndpointActionResultMessage, EndpointCapabilities, EndpointInfo, EndpointStatusChangedMessage, EndpointsUpdatedMessage, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FileDiffResultMessage, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetFileDiffMessage, GetKittyImageMessage, GetPresentationRoundMessage, GetPresentationRoundResultMessage, GetPresentationsMessage, GetPresentationsResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitFileChange, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GitStatusUpdateMessage, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, ListBranchesMessage, ListEndpointsMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, MuteWorkspaceMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PinSessionMessage, PinWorkspaceMessage, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, PresentAnnotation, PresentCloseMessage, PresentCloseResultMessage, PresentCommentInput, PresentFeedbackMessage, PresentFeedbackResult, PresentFile, PresentManifestView, PresentOpenMessage, PresentOpenResult, PresentSubmitRoundMessage, PresentSubmitRoundResultMessage, Presentation, PresentationAddedMessage, PresentationComment, PresentationRound, PresentationUpdatedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, RegisterMessage, RegisterWorkspaceMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemoveEndpointMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RenameWorkspaceMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, ReviewComment, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedSetResumeMessage, SeedSetResumeResult, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenResult, SessionSelectedMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTodosUpdatedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetEndpointRemoteWebMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SetTicketStatusMessage, SetWorkspaceRankMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SubscribeGitStatusMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalPointerActivityMessage, Ticket, TicketActivity, TicketActivityKind, TicketArtifact, TicketAttachFile, TicketAttachMessage, TicketAttachResult, TicketAttachResultMessage, TicketCommentMessage, TicketCommentResult, TicketCreateMessage, TicketCreateResult, TicketEvent, TicketEventBundle, TicketEventKind, TicketInboxMessage, TicketInboxMode, TicketInboxResult, TicketListMessage, TicketListResult, TicketShowMessage, TicketShowResult, TicketStatus, TicketStatusResult, TicketSubscribeMessage, TicketSubscribeResult, TicketTakeMessage, TicketTakeResult, TicketUnsubscribeMessage, TicketUnsubscribeResult, TodosMessage, TriggerNudgeMessage, UninstallPluginMessage, UnregisterMessage, UnregisterWorkspaceMessage, UnsubscribeGitStatusMessage, UpdateEndpointMessage, WakeTurnMessage, WebSocketEvent, WorkflowActionResultMessage, WorkflowAgentCall, WorkflowAgentCallStatus, WorkflowCallUpsertMessage, WorkflowRun, WorkflowRunCancelMessage, WorkflowRunGetMessage, WorkflowRunListMessage, WorkflowRunStatus, WorkflowRunUpdatedMessage, WorkflowRunUpsertMessage, Workspace, WorkspaceLayout, WorkspaceLayoutActionResultMessage, WorkspaceLayoutAddSessionPaneMessage, WorkspaceLayoutClosePaneMessage, WorkspaceLayoutDockEdge, WorkspaceLayoutDockTileMessage, WorkspaceLayoutFocusPaneMessage, WorkspaceLayoutGetMessage, WorkspaceLayoutMessage, WorkspaceLayoutMoveLeafMessage, WorkspaceLayoutMoveLeafToNewWorkspaceMessage, WorkspaceLayoutMoveLeafToWorkspaceMessage, WorkspaceLayoutPane, WorkspaceLayoutPaneKind, WorkspaceLayoutPaneStatus, WorkspaceLayoutRenamePaneMessage, WorkspaceLayoutSetSplitRatioMessage, WorkspaceLayoutSplitDirection, WorkspaceLayoutUndockTileMessage, WorkspaceLayoutUpdateTileMessage, WorkspaceLayoutUpdatedMessage, WorkspaceRegisteredMessage, WorkspaceSelectedMessage, WorkspaceStateChangedMessage, WorkspaceStatus, WorkspaceTileContentGetMessage, WorkspaceTileContentMessage, WorkspaceUnregisteredMessage, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
 //
 //   const activityStatusMessage = Convert.toActivityStatusMessage(json);
 //   const activityStatusResult = Convert.toActivityStatusResult(json);
@@ -66,8 +66,9 @@
 //   const attachSnapshot = Convert.toAttachSnapshot(json);
 //   const authorState = Convert.toAuthorState(json);
 //   const authorsUpdatedMessage = Convert.toAuthorsUpdatedMessage(json);
-//   const autoModeCatalogModel = Convert.toAutoModeCatalogModel(json);
 //   const autoModeConfigInfo = Convert.toAutoModeConfigInfo(json);
+//   const autoModeConfigResult = Convert.toAutoModeConfigResult(json);
+//   const autoModeConfigResultMessage = Convert.toAutoModeConfigResultMessage(json);
 //   const autoModeDenialInfo = Convert.toAutoModeDenialInfo(json);
 //   const autoModeDenialsMessage = Convert.toAutoModeDenialsMessage(json);
 //   const autoModeDenialsResult = Convert.toAutoModeDenialsResult(json);
@@ -81,19 +82,18 @@
 //   const autoModeEnvironmentSlot = Convert.toAutoModeEnvironmentSlot(json);
 //   const autoModeEnvironmentSlotValue = Convert.toAutoModeEnvironmentSlotValue(json);
 //   const autoModeGetMessage = Convert.toAutoModeGetMessage(json);
-//   const autoModeModelProvider = Convert.toAutoModeModelProvider(json);
-//   const autoModeModelSetMessage = Convert.toAutoModeModelSetMessage(json);
-//   const autoModeModelSetResultMessage = Convert.toAutoModeModelSetResultMessage(json);
-//   const autoModeModelsMessage = Convert.toAutoModeModelsMessage(json);
-//   const autoModeModelsResultMessage = Convert.toAutoModeModelsResultMessage(json);
-//   const autoModePatternAddMessage = Convert.toAutoModePatternAddMessage(json);
-//   const autoModePatternRemoveMessage = Convert.toAutoModePatternRemoveMessage(json);
-//   const autoModePatternResultMessage = Convert.toAutoModePatternResultMessage(json);
+//   const autoModeHostAddMessage = Convert.toAutoModeHostAddMessage(json);
+//   const autoModeHostRemoveMessage = Convert.toAutoModeHostRemoveMessage(json);
+//   const autoModeNetworkInfo = Convert.toAutoModeNetworkInfo(json);
+//   const autoModePolicySetMessage = Convert.toAutoModePolicySetMessage(json);
 //   const autoModePromoteMessage = Convert.toAutoModePromoteMessage(json);
 //   const autoModePromoteResultMessage = Convert.toAutoModePromoteResultMessage(json);
 //   const autoModeProposalInfo = Convert.toAutoModeProposalInfo(json);
 //   const autoModeProposeMessage = Convert.toAutoModeProposeMessage(json);
 //   const autoModeProposeResult = Convert.toAutoModeProposeResult(json);
+//   const autoModeRuleAddMessage = Convert.toAutoModeRuleAddMessage(json);
+//   const autoModeRuleInfo = Convert.toAutoModeRuleInfo(json);
+//   const autoModeRuleRemoveMessage = Convert.toAutoModeRuleRemoveMessage(json);
 //   const autoModeShowMessage = Convert.toAutoModeShowMessage(json);
 //   const autoModeShowResult = Convert.toAutoModeShowResult(json);
 //   const autoModeStateChangedMessage = Convert.toAutoModeStateChangedMessage(json);
@@ -1515,20 +1515,16 @@ export enum AuthorsUpdatedMessageEvent {
     AuthorsUpdated = "authors_updated",
 }
 
-export interface AutoModeCatalogModel {
-    context_window?: number;
-    id:              string;
-    name?:           string;
-    [property: string]: any;
-}
-
 export interface AutoModeConfigInfo {
-    allow:             string[];
-    enabled_default:   boolean;
-    environment:       Environment;
-    hard_deny:         string[];
-    models:            string[];
-    shipped_hard_deny: string[];
+    approval_policy:        string;
+    enabled_default:        boolean;
+    environment:            Environment;
+    legacy_patterns:        string[];
+    network:                Network;
+    rules:                  RuleElement[];
+    sandbox_mode:           string;
+    shipped_denied_domains: string[];
+    shipped_rules:          RuleElement[];
     [property: string]: any;
 }
 
@@ -1542,6 +1538,53 @@ export interface SlotElement {
     id:     string;
     values: string[];
     [property: string]: any;
+}
+
+export interface Network {
+    allowed_domains: string[];
+    denied_domains:  string[];
+    enabled:         boolean;
+    [property: string]: any;
+}
+
+export interface RuleElement {
+    decision:      string;
+    justification: string;
+    match:         Array<string[]>;
+    not_match:     Array<string[]>;
+    pattern:       Array<string[]>;
+    [property: string]: any;
+}
+
+export interface AutoModeConfigResult {
+    config: Config;
+    [property: string]: any;
+}
+
+export interface Config {
+    approval_policy:        string;
+    enabled_default:        boolean;
+    environment:            Environment;
+    legacy_patterns:        string[];
+    network:                Network;
+    rules:                  RuleElement[];
+    sandbox_mode:           string;
+    shipped_denied_domains: string[];
+    shipped_rules:          RuleElement[];
+    [property: string]: any;
+}
+
+export interface AutoModeConfigResultMessage {
+    config?:    Config;
+    error?:     string;
+    event:      AutoModeConfigResultMessageEvent;
+    request_id: string;
+    success:    boolean;
+    [property: string]: any;
+}
+
+export enum AutoModeConfigResultMessageEvent {
+    AutomodeConfigResult = "automode_config_result",
 }
 
 export interface AutoModeDenialInfo {
@@ -1613,6 +1656,7 @@ export interface Proposal {
     proposed_by: string;
     resolved_at: string;
     state:       string;
+    summary:     string;
     target:      string;
     value:       string;
     [property: string]: any;
@@ -1640,16 +1684,6 @@ export interface AutoModeEnvSetResultMessage {
     event:      AutoModeEnvSetResultMessageEvent;
     request_id: string;
     success:    boolean;
-    [property: string]: any;
-}
-
-export interface Config {
-    allow:             string[];
-    enabled_default:   boolean;
-    environment:       Environment;
-    hard_deny:         string[];
-    models:            string[];
-    shipped_hard_deny: string[];
     [property: string]: any;
 }
 
@@ -1703,114 +1737,47 @@ export enum AutoModeGetMessageCmd {
     AutomodeGet = "automode_get",
 }
 
-export interface AutoModeModelProvider {
-    checked_at?: number;
-    detail?:     string;
-    models:      ModelElement[];
-    provider:    string;
-    ready:       boolean;
-    [property: string]: any;
-}
-
-export interface ModelElement {
-    context_window?: number;
-    id:              string;
-    name?:           string;
-    [property: string]: any;
-}
-
-export interface AutoModeModelSetMessage {
-    cmd:        AutoModeModelSetMessageCmd;
-    models:     string[];
+export interface AutoModeHostAddMessage {
+    cmd:        AutoModeHostAddMessageCmd;
+    decision:   string;
+    host:       string;
     request_id: string;
     [property: string]: any;
 }
 
-export enum AutoModeModelSetMessageCmd {
-    AutomodeModelSet = "automode_model_set",
+export enum AutoModeHostAddMessageCmd {
+    AutomodeHostAdd = "automode_host_add",
 }
 
-export interface AutoModeModelSetResultMessage {
-    config?:    Config;
-    error?:     string;
-    event:      AutoModeModelSetResultMessageEvent;
-    request_id: string;
-    success:    boolean;
+export interface AutoModeHostRemoveMessage {
+    cmd:         AutoModeHostRemoveMessageCmd;
+    decision:    string;
+    host:        string;
+    request_id?: string;
     [property: string]: any;
 }
 
-export enum AutoModeModelSetResultMessageEvent {
-    AutomodeModelSetResult = "automode_model_set_result",
+export enum AutoModeHostRemoveMessageCmd {
+    AutomodeHostRemove = "automode_host_remove",
 }
 
-export interface AutoModeModelsMessage {
-    cmd:        AutoModeModelsMessageCmd;
-    request_id: string;
+export interface AutoModeNetworkInfo {
+    allowed_domains: string[];
+    denied_domains:  string[];
+    enabled:         boolean;
     [property: string]: any;
 }
 
-export enum AutoModeModelsMessageCmd {
-    AutomodeModels = "automode_models",
-}
-
-export interface AutoModeModelsResultMessage {
-    error?:     string;
-    event:      AutoModeModelsResultMessageEvent;
-    problem?:   string;
-    providers?: ProviderElement[];
-    request_id: string;
-    success:    boolean;
+export interface AutoModePolicySetMessage {
+    approval_policy?: string;
+    cmd:              AutoModePolicySetMessageCmd;
+    request_id?:      string;
+    sandbox_mode?:    string;
     [property: string]: any;
 }
 
-export enum AutoModeModelsResultMessageEvent {
-    AutomodeModelsResult = "automode_models_result",
-}
-
-export interface ProviderElement {
-    checked_at?: number;
-    detail?:     string;
-    models:      ModelElement[];
-    provider:    string;
-    ready:       boolean;
-    [property: string]: any;
-}
-
-export interface AutoModePatternAddMessage {
-    cmd:        AutoModePatternAddMessageCmd;
-    list:       string;
-    pattern:    string;
-    request_id: string;
-    [property: string]: any;
-}
-
-export enum AutoModePatternAddMessageCmd {
-    AutomodePatternAdd = "automode_pattern_add",
-}
-
-export interface AutoModePatternRemoveMessage {
-    cmd:        AutoModePatternRemoveMessageCmd;
-    list:       string;
-    pattern:    string;
-    request_id: string;
-    [property: string]: any;
-}
-
-export enum AutoModePatternRemoveMessageCmd {
-    AutomodePatternRemove = "automode_pattern_remove",
-}
-
-export interface AutoModePatternResultMessage {
-    config?:    Config;
-    error?:     string;
-    event:      AutoModePatternResultMessageEvent;
-    request_id: string;
-    success:    boolean;
-    [property: string]: any;
-}
-
-export enum AutoModePatternResultMessageEvent {
-    AutomodePatternResult = "automode_pattern_result",
+export enum AutoModePolicySetMessageCmd {
+    AutomodePolicySet = "automode_policy_set",
 }
 
 export interface AutoModePromoteMessage {
@@ -1845,6 +1812,7 @@ export interface AutoModeProposalInfo {
     proposed_by: string;
     resolved_at: string;
     state:       string;
+    summary:     string;
     target:      string;
     value:       string;
     [property: string]: any;
@@ -1866,6 +1834,39 @@ export enum AutoModeProposeMessageCmd {
 export interface AutoModeProposeResult {
     proposal: Proposal;
     [property: string]: any;
+}
+
+export interface AutoModeRuleAddMessage {
+    cmd:            AutoModeRuleAddMessageCmd;
+    decision?:      string;
+    justification?: string;
+    pattern:        string[];
+    request_id:     string;
+    [property: string]: any;
+}
+
+export enum AutoModeRuleAddMessageCmd {
+    AutomodeRuleAdd = "automode_rule_add",
+}
+
+export interface AutoModeRuleInfo {
+    decision:      string;
+    justification: string;
+    match:         Array<string[]>;
+    not_match:     Array<string[]>;
+    pattern:       Array<string[]>;
+    [property: string]: any;
+}
+
+export interface AutoModeRuleRemoveMessage {
+    cmd:         AutoModeRuleRemoveMessageCmd;
+    pattern:     string[];
+    request_id?: string;
+    [property: string]: any;
+}
+
+export enum AutoModeRuleRemoveMessageCmd {
+    AutomodeRuleRemove = "automode_rule_remove",
 }
 
 export interface AutoModeShowMessage {
@@ -2347,12 +2348,12 @@ export interface Usage {
     cost_usd?:               number;
     has_unpriced_usage:      boolean;
     measurement_incomplete?: boolean;
-    models:                  ModelObject[];
+    models:                  ModelElement[];
     total_tokens:            number;
     [property: string]: any;
 }
 
-export interface ModelObject {
+export interface ModelElement {
     cache_read_tokens:               number;
     cache_write_1h_tokens:           number;
     cache_write_5m_tokens:           number;
@@ -6431,6 +6432,7 @@ export interface Response {
     app_status_result?:             AppStatusResultObject;
     app_watch_result?:              AppWatchResultObject;
     authors?:                       AuthorElement[];
+    automode_config_result?:        AutomodeConfigResult;
     automode_denials_result?:       AutomodeDenialsResult;
     automode_env_result?:           AutomodeEnvResult;
     automode_propose_result?:       AutomodeProposeResult;
@@ -6649,6 +6651,11 @@ export interface AppStatusResultObject {
 
 export interface AppWatchResultObject {
     invocation: CurrentAttempt;
+    [property: string]: any;
+}
+
+export interface AutomodeConfigResult {
+    config: Config;
     [property: string]: any;
 }
 
@@ -8607,7 +8614,7 @@ export interface SessionUsage {
     cost_usd?:               number;
     has_unpriced_usage:      boolean;
     measurement_incomplete?: boolean;
-    models:                  ModelObject[];
+    models:                  ModelElement[];
     total_tokens:            number;
     [property: string]: any;
 }
@@ -10662,20 +10669,28 @@ export class Convert {
         return JSON.stringify(uncast(value, r("AuthorsUpdatedMessage")), null, 2);
     }
 
-    public static toAutoModeCatalogModel(json: string): AutoModeCatalogModel {
-        return cast(JSON.parse(json), r("AutoModeCatalogModel"));
-    }
-
-    public static autoModeCatalogModelToJson(value: AutoModeCatalogModel): string {
-        return JSON.stringify(uncast(value, r("AutoModeCatalogModel")), null, 2);
-    }
-
     public static toAutoModeConfigInfo(json: string): AutoModeConfigInfo {
         return cast(JSON.parse(json), r("AutoModeConfigInfo"));
     }
 
     public static autoModeConfigInfoToJson(value: AutoModeConfigInfo): string {
         return JSON.stringify(uncast(value, r("AutoModeConfigInfo")), null, 2);
+    }
+
+    public static toAutoModeConfigResult(json: string): AutoModeConfigResult {
+        return cast(JSON.parse(json), r("AutoModeConfigResult"));
+    }
+
+    public static autoModeConfigResultToJson(value: AutoModeConfigResult): string {
+        return JSON.stringify(uncast(value, r("AutoModeConfigResult")), null, 2);
+    }
+
+    public static toAutoModeConfigResultMessage(json: string): AutoModeConfigResultMessage {
+        return cast(JSON.parse(json), r("AutoModeConfigResultMessage"));
+    }
+
+    public static autoModeConfigResultMessageToJson(value: AutoModeConfigResultMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeConfigResultMessage")), null, 2);
     }
 
     public static toAutoModeDenialInfo(json: string): AutoModeDenialInfo {
@@ -10782,68 +10797,36 @@ export class Convert {
         return JSON.stringify(uncast(value, r("AutoModeGetMessage")), null, 2);
     }
 
-    public static toAutoModeModelProvider(json: string): AutoModeModelProvider {
-        return cast(JSON.parse(json), r("AutoModeModelProvider"));
+    public static toAutoModeHostAddMessage(json: string): AutoModeHostAddMessage {
+        return cast(JSON.parse(json), r("AutoModeHostAddMessage"));
     }
 
-    public static autoModeModelProviderToJson(value: AutoModeModelProvider): string {
-        return JSON.stringify(uncast(value, r("AutoModeModelProvider")), null, 2);
+    public static autoModeHostAddMessageToJson(value: AutoModeHostAddMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeHostAddMessage")), null, 2);
     }
 
-    public static toAutoModeModelSetMessage(json: string): AutoModeModelSetMessage {
-        return cast(JSON.parse(json), r("AutoModeModelSetMessage"));
+    public static toAutoModeHostRemoveMessage(json: string): AutoModeHostRemoveMessage {
+        return cast(JSON.parse(json), r("AutoModeHostRemoveMessage"));
     }
 
-    public static autoModeModelSetMessageToJson(value: AutoModeModelSetMessage): string {
-        return JSON.stringify(uncast(value, r("AutoModeModelSetMessage")), null, 2);
+    public static autoModeHostRemoveMessageToJson(value: AutoModeHostRemoveMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeHostRemoveMessage")), null, 2);
     }
 
-    public static toAutoModeModelSetResultMessage(json: string): AutoModeModelSetResultMessage {
-        return cast(JSON.parse(json), r("AutoModeModelSetResultMessage"));
+    public static toAutoModeNetworkInfo(json: string): AutoModeNetworkInfo {
+        return cast(JSON.parse(json), r("AutoModeNetworkInfo"));
     }
 
-    public static autoModeModelSetResultMessageToJson(value: AutoModeModelSetResultMessage): string {
-        return JSON.stringify(uncast(value, r("AutoModeModelSetResultMessage")), null, 2);
+    public static autoModeNetworkInfoToJson(value: AutoModeNetworkInfo): string {
+        return JSON.stringify(uncast(value, r("AutoModeNetworkInfo")), null, 2);
     }
 
-    public static toAutoModeModelsMessage(json: string): AutoModeModelsMessage {
-        return cast(JSON.parse(json), r("AutoModeModelsMessage"));
+    public static toAutoModePolicySetMessage(json: string): AutoModePolicySetMessage {
+        return cast(JSON.parse(json), r("AutoModePolicySetMessage"));
     }
 
-    public static autoModeModelsMessageToJson(value: AutoModeModelsMessage): string {
-        return JSON.stringify(uncast(value, r("AutoModeModelsMessage")), null, 2);
-    }
-
-    public static toAutoModeModelsResultMessage(json: string): AutoModeModelsResultMessage {
-        return cast(JSON.parse(json), r("AutoModeModelsResultMessage"));
-    }
-
-    public static autoModeModelsResultMessageToJson(value: AutoModeModelsResultMessage): string {
-        return JSON.stringify(uncast(value, r("AutoModeModelsResultMessage")), null, 2);
-    }
-
-    public static toAutoModePatternAddMessage(json: string): AutoModePatternAddMessage {
-        return cast(JSON.parse(json), r("AutoModePatternAddMessage"));
-    }
-
-    public static autoModePatternAddMessageToJson(value: AutoModePatternAddMessage): string {
-        return JSON.stringify(uncast(value, r("AutoModePatternAddMessage")), null, 2);
-    }
-
-    public static toAutoModePatternRemoveMessage(json: string): AutoModePatternRemoveMessage {
-        return cast(JSON.parse(json), r("AutoModePatternRemoveMessage"));
-    }
-
-    public static autoModePatternRemoveMessageToJson(value: AutoModePatternRemoveMessage): string {
-        return JSON.stringify(uncast(value, r("AutoModePatternRemoveMessage")), null, 2);
-    }
-
-    public static toAutoModePatternResultMessage(json: string): AutoModePatternResultMessage {
-        return cast(JSON.parse(json), r("AutoModePatternResultMessage"));
-    }
-
-    public static autoModePatternResultMessageToJson(value: AutoModePatternResultMessage): string {
-        return JSON.stringify(uncast(value, r("AutoModePatternResultMessage")), null, 2);
+    public static autoModePolicySetMessageToJson(value: AutoModePolicySetMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModePolicySetMessage")), null, 2);
     }
 
     public static toAutoModePromoteMessage(json: string): AutoModePromoteMessage {
@@ -10884,6 +10867,30 @@ export class Convert {
 
     public static autoModeProposeResultToJson(value: AutoModeProposeResult): string {
         return JSON.stringify(uncast(value, r("AutoModeProposeResult")), null, 2);
+    }
+
+    public static toAutoModeRuleAddMessage(json: string): AutoModeRuleAddMessage {
+        return cast(JSON.parse(json), r("AutoModeRuleAddMessage"));
+    }
+
+    public static autoModeRuleAddMessageToJson(value: AutoModeRuleAddMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeRuleAddMessage")), null, 2);
+    }
+
+    public static toAutoModeRuleInfo(json: string): AutoModeRuleInfo {
+        return cast(JSON.parse(json), r("AutoModeRuleInfo"));
+    }
+
+    public static autoModeRuleInfoToJson(value: AutoModeRuleInfo): string {
+        return JSON.stringify(uncast(value, r("AutoModeRuleInfo")), null, 2);
+    }
+
+    public static toAutoModeRuleRemoveMessage(json: string): AutoModeRuleRemoveMessage {
+        return cast(JSON.parse(json), r("AutoModeRuleRemoveMessage"));
+    }
+
+    public static autoModeRuleRemoveMessageToJson(value: AutoModeRuleRemoveMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeRuleRemoveMessage")), null, 2);
     }
 
     public static toAutoModeShowMessage(json: string): AutoModeShowMessage {
@@ -16085,18 +16092,16 @@ const typeMap: any = {
         { json: "author", js: "author", typ: "" },
         { json: "muted", js: "muted", typ: true },
     ], "any"),
-    "AutoModeCatalogModel": o([
-        { json: "context_window", js: "context_window", typ: u(undefined, 0) },
-        { json: "id", js: "id", typ: "" },
-        { json: "name", js: "name", typ: u(undefined, "") },
-    ], "any"),
     "AutoModeConfigInfo": o([
-        { json: "allow", js: "allow", typ: a("") },
+        { json: "approval_policy", js: "approval_policy", typ: "" },
         { json: "enabled_default", js: "enabled_default", typ: true },
         { json: "environment", js: "environment", typ: r("Environment") },
-        { json: "hard_deny", js: "hard_deny", typ: a("") },
-        { json: "models", js: "models", typ: a("") },
-        { json: "shipped_hard_deny", js: "shipped_hard_deny", typ: a("") },
+        { json: "legacy_patterns", js: "legacy_patterns", typ: a("") },
+        { json: "network", js: "network", typ: r("Network") },
+        { json: "rules", js: "rules", typ: a(r("RuleElement")) },
+        { json: "sandbox_mode", js: "sandbox_mode", typ: "" },
+        { json: "shipped_denied_domains", js: "shipped_denied_domains", typ: a("") },
+        { json: "shipped_rules", js: "shipped_rules", typ: a(r("RuleElement")) },
     ], "any"),
     "Environment": o([
         { json: "notes", js: "notes", typ: a("") },
@@ -16105,6 +16110,39 @@ const typeMap: any = {
     "SlotElement": o([
         { json: "id", js: "id", typ: "" },
         { json: "values", js: "values", typ: a("") },
+    ], "any"),
+    "Network": o([
+        { json: "allowed_domains", js: "allowed_domains", typ: a("") },
+        { json: "denied_domains", js: "denied_domains", typ: a("") },
+        { json: "enabled", js: "enabled", typ: true },
+    ], "any"),
+    "RuleElement": o([
+        { json: "decision", js: "decision", typ: "" },
+        { json: "justification", js: "justification", typ: "" },
+        { json: "match", js: "match", typ: a(a("")) },
+        { json: "not_match", js: "not_match", typ: a(a("")) },
+        { json: "pattern", js: "pattern", typ: a(a("")) },
+    ], "any"),
+    "AutoModeConfigResult": o([
+        { json: "config", js: "config", typ: r("Config") },
+    ], "any"),
+    "Config": o([
+        { json: "approval_policy", js: "approval_policy", typ: "" },
+        { json: "enabled_default", js: "enabled_default", typ: true },
+        { json: "environment", js: "environment", typ: r("Environment") },
+        { json: "legacy_patterns", js: "legacy_patterns", typ: a("") },
+        { json: "network", js: "network", typ: r("Network") },
+        { json: "rules", js: "rules", typ: a(r("RuleElement")) },
+        { json: "sandbox_mode", js: "sandbox_mode", typ: "" },
+        { json: "shipped_denied_domains", js: "shipped_denied_domains", typ: a("") },
+        { json: "shipped_rules", js: "shipped_rules", typ: a(r("RuleElement")) },
+    ], "any"),
+    "AutoModeConfigResultMessage": o([
+        { json: "config", js: "config", typ: u(undefined, r("Config")) },
+        { json: "error", js: "error", typ: u(undefined, "") },
+        { json: "event", js: "event", typ: r("AutoModeConfigResultMessageEvent") },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "success", js: "success", typ: true },
     ], "any"),
     "AutoModeDenialInfo": o([
         { json: "created_at", js: "created_at", typ: "" },
@@ -16151,6 +16189,7 @@ const typeMap: any = {
         { json: "proposed_by", js: "proposed_by", typ: "" },
         { json: "resolved_at", js: "resolved_at", typ: "" },
         { json: "state", js: "state", typ: "" },
+        { json: "summary", js: "summary", typ: "" },
         { json: "target", js: "target", typ: "" },
         { json: "value", js: "value", typ: "" },
     ], "any"),
@@ -16168,14 +16207,6 @@ const typeMap: any = {
         { json: "event", js: "event", typ: r("AutoModeEnvSetResultMessageEvent") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "success", js: "success", typ: true },
-    ], "any"),
-    "Config": o([
-        { json: "allow", js: "allow", typ: a("") },
-        { json: "enabled_default", js: "enabled_default", typ: true },
-        { json: "environment", js: "environment", typ: r("Environment") },
-        { json: "hard_deny", js: "hard_deny", typ: a("") },
-        { json: "models", js: "models", typ: a("") },
-        { json: "shipped_hard_deny", js: "shipped_hard_deny", typ: a("") },
     ], "any"),
     "AutoModeEnvSlotMessage": o([
         { json: "cmd", js: "cmd", typ: r("AutoModeEnvSlotMessageCmd") },
@@ -16205,67 +16236,28 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("AutoModeGetMessageCmd") },
         { json: "request_id", js: "request_id", typ: "" },
     ], "any"),
-    "AutoModeModelProvider": o([
-        { json: "checked_at", js: "checked_at", typ: u(undefined, 0) },
-        { json: "detail", js: "detail", typ: u(undefined, "") },
-        { json: "models", js: "models", typ: a(r("ModelElement")) },
-        { json: "provider", js: "provider", typ: "" },
-        { json: "ready", js: "ready", typ: true },
-    ], "any"),
-    "ModelElement": o([
-        { json: "context_window", js: "context_window", typ: u(undefined, 0) },
-        { json: "id", js: "id", typ: "" },
-        { json: "name", js: "name", typ: u(undefined, "") },
-    ], "any"),
-    "AutoModeModelSetMessage": o([
-        { json: "cmd", js: "cmd", typ: r("AutoModeModelSetMessageCmd") },
-        { json: "models", js: "models", typ: a("") },
+    "AutoModeHostAddMessage": o([
+        { json: "cmd", js: "cmd", typ: r("AutoModeHostAddMessageCmd") },
+        { json: "decision", js: "decision", typ: "" },
+        { json: "host", js: "host", typ: "" },
         { json: "request_id", js: "request_id", typ: "" },
     ], "any"),
-    "AutoModeModelSetResultMessage": o([
-        { json: "config", js: "config", typ: u(undefined, r("Config")) },
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("AutoModeModelSetResultMessageEvent") },
-        { json: "request_id", js: "request_id", typ: "" },
-        { json: "success", js: "success", typ: true },
+    "AutoModeHostRemoveMessage": o([
+        { json: "cmd", js: "cmd", typ: r("AutoModeHostRemoveMessageCmd") },
+        { json: "decision", js: "decision", typ: "" },
+        { json: "host", js: "host", typ: "" },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
-    "AutoModeModelsMessage": o([
-        { json: "cmd", js: "cmd", typ: r("AutoModeModelsMessageCmd") },
-        { json: "request_id", js: "request_id", typ: "" },
+    "AutoModeNetworkInfo": o([
+        { json: "allowed_domains", js: "allowed_domains", typ: a("") },
+        { json: "denied_domains", js: "denied_domains", typ: a("") },
+        { json: "enabled", js: "enabled", typ: true },
     ], "any"),
-    "AutoModeModelsResultMessage": o([
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("AutoModeModelsResultMessageEvent") },
-        { json: "problem", js: "problem", typ: u(undefined, "") },
-        { json: "providers", js: "providers", typ: u(undefined, a(r("ProviderElement"))) },
-        { json: "request_id", js: "request_id", typ: "" },
-        { json: "success", js: "success", typ: true },
-    ], "any"),
-    "ProviderElement": o([
-        { json: "checked_at", js: "checked_at", typ: u(undefined, 0) },
-        { json: "detail", js: "detail", typ: u(undefined, "") },
-        { json: "models", js: "models", typ: a(r("ModelElement")) },
-        { json: "provider", js: "provider", typ: "" },
-        { json: "ready", js: "ready", typ: true },
-    ], "any"),
-    "AutoModePatternAddMessage": o([
-        { json: "cmd", js: "cmd", typ: r("AutoModePatternAddMessageCmd") },
-        { json: "list", js: "list", typ: "" },
-        { json: "pattern", js: "pattern", typ: "" },
-        { json: "request_id", js: "request_id", typ: "" },
-    ], "any"),
-    "AutoModePatternRemoveMessage": o([
-        { json: "cmd", js: "cmd", typ: r("AutoModePatternRemoveMessageCmd") },
-        { json: "list", js: "list", typ: "" },
-        { json: "pattern", js: "pattern", typ: "" },
-        { json: "request_id", js: "request_id", typ: "" },
-    ], "any"),
-    "AutoModePatternResultMessage": o([
-        { json: "config", js: "config", typ: u(undefined, r("Config")) },
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("AutoModePatternResultMessageEvent") },
-        { json: "request_id", js: "request_id", typ: "" },
-        { json: "success", js: "success", typ: true },
+    "AutoModePolicySetMessage": o([
+        { json: "approval_policy", js: "approval_policy", typ: u(undefined, "") },
+        { json: "cmd", js: "cmd", typ: r("AutoModePolicySetMessageCmd") },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
+        { json: "sandbox_mode", js: "sandbox_mode", typ: u(undefined, "") },
     ], "any"),
     "AutoModePromoteMessage": o([
         { json: "cmd", js: "cmd", typ: r("AutoModePromoteMessageCmd") },
@@ -16287,6 +16279,7 @@ const typeMap: any = {
         { json: "proposed_by", js: "proposed_by", typ: "" },
         { json: "resolved_at", js: "resolved_at", typ: "" },
         { json: "state", js: "state", typ: "" },
+        { json: "summary", js: "summary", typ: "" },
         { json: "target", js: "target", typ: "" },
         { json: "value", js: "value", typ: "" },
     ], "any"),
@@ -16299,6 +16292,25 @@ const typeMap: any = {
     ], "any"),
     "AutoModeProposeResult": o([
         { json: "proposal", js: "proposal", typ: r("Proposal") },
+    ], "any"),
+    "AutoModeRuleAddMessage": o([
+        { json: "cmd", js: "cmd", typ: r("AutoModeRuleAddMessageCmd") },
+        { json: "decision", js: "decision", typ: u(undefined, "") },
+        { json: "justification", js: "justification", typ: u(undefined, "") },
+        { json: "pattern", js: "pattern", typ: a("") },
+        { json: "request_id", js: "request_id", typ: "" },
+    ], "any"),
+    "AutoModeRuleInfo": o([
+        { json: "decision", js: "decision", typ: "" },
+        { json: "justification", js: "justification", typ: "" },
+        { json: "match", js: "match", typ: a(a("")) },
+        { json: "not_match", js: "not_match", typ: a(a("")) },
+        { json: "pattern", js: "pattern", typ: a(a("")) },
+    ], "any"),
+    "AutoModeRuleRemoveMessage": o([
+        { json: "cmd", js: "cmd", typ: r("AutoModeRuleRemoveMessageCmd") },
+        { json: "pattern", js: "pattern", typ: a("") },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
     "AutoModeShowMessage": o([
         { json: "cmd", js: "cmd", typ: r("AutoModeShowMessageCmd") },
@@ -16600,10 +16612,10 @@ const typeMap: any = {
         { json: "cost_usd", js: "cost_usd", typ: u(undefined, 3.14) },
         { json: "has_unpriced_usage", js: "has_unpriced_usage", typ: true },
         { json: "measurement_incomplete", js: "measurement_incomplete", typ: u(undefined, true) },
-        { json: "models", js: "models", typ: a(r("ModelObject")) },
+        { json: "models", js: "models", typ: a(r("ModelElement")) },
         { json: "total_tokens", js: "total_tokens", typ: 0 },
     ], "any"),
-    "ModelObject": o([
+    "ModelElement": o([
         { json: "cache_read_tokens", js: "cache_read_tokens", typ: 0 },
         { json: "cache_write_1h_tokens", js: "cache_write_1h_tokens", typ: 0 },
         { json: "cache_write_5m_tokens", js: "cache_write_5m_tokens", typ: 0 },
@@ -19102,6 +19114,7 @@ const typeMap: any = {
         { json: "app_status_result", js: "app_status_result", typ: u(undefined, r("AppStatusResultObject")) },
         { json: "app_watch_result", js: "app_watch_result", typ: u(undefined, r("AppWatchResultObject")) },
         { json: "authors", js: "authors", typ: u(undefined, a(r("AuthorElement"))) },
+        { json: "automode_config_result", js: "automode_config_result", typ: u(undefined, r("AutomodeConfigResult")) },
         { json: "automode_denials_result", js: "automode_denials_result", typ: u(undefined, r("AutomodeDenialsResult")) },
         { json: "automode_env_result", js: "automode_env_result", typ: u(undefined, r("AutomodeEnvResult")) },
         { json: "automode_propose_result", js: "automode_propose_result", typ: u(undefined, r("AutomodeProposeResult")) },
@@ -19288,6 +19301,9 @@ const typeMap: any = {
     ], "any"),
     "AppWatchResultObject": o([
         { json: "invocation", js: "invocation", typ: r("CurrentAttempt") },
+    ], "any"),
+    "AutomodeConfigResult": o([
+        { json: "config", js: "config", typ: r("Config") },
     ], "any"),
     "AutomodeDenialsResult": o([
         { json: "denials", js: "denials", typ: a(r("DenialElement")) },
@@ -20582,7 +20598,7 @@ const typeMap: any = {
         { json: "cost_usd", js: "cost_usd", typ: u(undefined, 3.14) },
         { json: "has_unpriced_usage", js: "has_unpriced_usage", typ: true },
         { json: "measurement_incomplete", js: "measurement_incomplete", typ: u(undefined, true) },
-        { json: "models", js: "models", typ: a(r("ModelObject")) },
+        { json: "models", js: "models", typ: a(r("ModelElement")) },
         { json: "total_tokens", js: "total_tokens", typ: 0 },
     ], "any"),
     "SessionUsageModel": o([
@@ -21587,6 +21603,9 @@ const typeMap: any = {
     "AuthorsUpdatedMessageEvent": [
         "authors_updated",
     ],
+    "AutoModeConfigResultMessageEvent": [
+        "automode_config_result",
+    ],
     "AutoModeDenialsMessageCmd": [
         "automode_denials",
     ],
@@ -21608,26 +21627,14 @@ const typeMap: any = {
     "AutoModeGetMessageCmd": [
         "automode_get",
     ],
-    "AutoModeModelSetMessageCmd": [
-        "automode_model_set",
+    "AutoModeHostAddMessageCmd": [
+        "automode_host_add",
     ],
-    "AutoModeModelSetResultMessageEvent": [
-        "automode_model_set_result",
+    "AutoModeHostRemoveMessageCmd": [
+        "automode_host_remove",
     ],
-    "AutoModeModelsMessageCmd": [
-        "automode_models",
-    ],
-    "AutoModeModelsResultMessageEvent": [
-        "automode_models_result",
-    ],
-    "AutoModePatternAddMessageCmd": [
-        "automode_pattern_add",
-    ],
-    "AutoModePatternRemoveMessageCmd": [
-        "automode_pattern_remove",
-    ],
-    "AutoModePatternResultMessageEvent": [
-        "automode_pattern_result",
+    "AutoModePolicySetMessageCmd": [
+        "automode_policy_set",
     ],
     "AutoModePromoteMessageCmd": [
         "automode_promote",
@@ -21637,6 +21644,12 @@ const typeMap: any = {
     ],
     "AutoModeProposeMessageCmd": [
         "automode_propose",
+    ],
+    "AutoModeRuleAddMessageCmd": [
+        "automode_rule_add",
+    ],
+    "AutoModeRuleRemoveMessageCmd": [
+        "automode_rule_remove",
     ],
     "AutoModeShowMessageCmd": [
         "automode_show",

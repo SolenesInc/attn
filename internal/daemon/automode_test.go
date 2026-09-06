@@ -37,23 +37,28 @@ func automodePropose(t *testing.T, d *Daemon, kind, target, value string) protoc
 func TestAutoModeShowAnswersDefaultsOnAFreshProfile(t *testing.T) {
 	d := newDaemonForTest(t)
 	result := automodeShow(t, d)
-	if len(result.Config.Models) != 0 {
-		t.Errorf("models = %v on a fresh profile, want none until the user names one", result.Config.Models)
+	cfg := result.Config
+	if cfg.ApprovalPolicy != automode.PolicyOnRequest || cfg.SandboxMode != automode.SandboxWorkspaceWrite {
+		t.Errorf("policy = %q/%q, want the shipped defaults", cfg.ApprovalPolicy, cfg.SandboxMode)
 	}
-	if result.Config.Allow == nil || result.Config.HardDeny == nil {
-		t.Fatalf("a config list came back nil: %+v", result.Config)
+	if cfg.Rules == nil || cfg.ShippedRules == nil || cfg.LegacyPatterns == nil ||
+		cfg.Network.AllowedDomains == nil || cfg.Network.DeniedDomains == nil {
+		t.Fatalf("a config list came back nil: %+v", cfg)
 	}
-	if result.Config.Environment.Slots == nil || result.Config.Environment.Notes == nil {
-		t.Fatalf("the environment came back nil: %+v", result.Config.Environment)
+	if len(cfg.Rules) != len(cfg.ShippedRules) {
+		t.Errorf("rules = %+v on a fresh profile, want only the shipped ones", cfg.Rules)
+	}
+	if cfg.Environment.Slots == nil || cfg.Environment.Notes == nil {
+		t.Fatalf("the environment came back nil: %+v", cfg.Environment)
 	}
 	if len(result.Proposals) != 0 {
 		t.Fatalf("a fresh profile has %d proposals", len(result.Proposals))
 	}
 }
 
-func TestAutoModeAllowOnlyProposes(t *testing.T) {
+func TestAutoModeRuleFromASessionOnlyProposes(t *testing.T) {
 	d := newDaemonForTest(t)
-	resp := automodePropose(t, d, automode.KindAllow, "", "git push origin*")
+	resp := automodePropose(t, d, automode.KindRule, "", `{"pattern":["git","push"],"decision":"allow"}`)
 	if !resp.Ok {
 		t.Fatalf("propose: %v", protocol.Deref(resp.Error))
 	}
@@ -61,25 +66,32 @@ func TestAutoModeAllowOnlyProposes(t *testing.T) {
 		t.Errorf("proposal state = %q", resp.AutomodeProposeResult.Proposal.State)
 	}
 	after := automodeShow(t, d)
-	if len(after.Config.Allow) != 0 {
-		t.Fatalf("effective allow list changed to %v", after.Config.Allow)
+	if len(after.Config.Rules) != len(after.Config.ShippedRules) {
+		t.Fatalf("the effective rules changed to %+v", after.Config.Rules)
 	}
 	if len(after.Proposals) != 1 {
 		t.Fatalf("proposals = %d, want the one just recorded", len(after.Proposals))
 	}
+	if got := after.Proposals[0].Summary; got != "allow git push" {
+		t.Errorf("proposal summary = %q, want the line a reviewer reads", got)
+	}
 }
 
-func TestAutoModeProposeRefusesABroadAllowByName(t *testing.T) {
+func TestAutoModeProposeRefusesWhatCouldNeverBePromoted(t *testing.T) {
 	d := newDaemonForTest(t)
-	resp := automodePropose(t, d, automode.KindAllow, "", "*")
+	resp := automodePropose(t, d, automode.KindRule, "", `{"pattern":["git push"],"decision":"allow"}`)
 	if resp.Ok {
-		t.Fatal("a broad allow proposal was accepted")
+		t.Fatal("a shell line was accepted as a rule pattern")
 	}
-	if !strings.Contains(protocol.Deref(resp.Error), "broad allow pattern") {
-		t.Fatalf("refusal does not name the limit: %q", protocol.Deref(resp.Error))
+	if !strings.Contains(protocol.Deref(resp.Error), "one command token per entry") {
+		t.Fatalf("refusal does not say what a pattern is: %q", protocol.Deref(resp.Error))
+	}
+	resp = automodePropose(t, d, automode.KindHost, "", `{"host":"github.com","decision":"prompt"}`)
+	if resp.Ok {
+		t.Fatal("a host with a decision the network has no room for was accepted")
 	}
 	if len(automodeShow(t, d).Proposals) != 0 {
-		t.Fatal("the refused proposal reached the review list")
+		t.Fatal("a refused proposal reached the review list")
 	}
 }
 
@@ -222,7 +234,7 @@ func TestAutoModeDenialsReadsWhatSessionsReported(t *testing.T) {
 
 func TestAutoModePromoteFromTheAppPutsItInForce(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
-	resp := automodePropose(t, d, automode.KindAllow, "", "git push origin*")
+	resp := automodePropose(t, d, automode.KindRule, "", `{"pattern":["git","push"],"decision":"prompt"}`)
 	if !resp.Ok {
 		t.Fatalf("propose: %v", protocol.Deref(resp.Error))
 	}
@@ -235,17 +247,21 @@ func TestAutoModePromoteFromTheAppPutsItInForce(t *testing.T) {
 	if !promoted.Success {
 		t.Fatalf("promote failed: %q", protocol.Deref(promoted.Error))
 	}
-	if promoted.Config == nil || len(promoted.Config.Allow) != 1 {
+	if promoted.Config == nil || len(promoted.Config.Rules) != len(promoted.Config.ShippedRules)+1 {
 		t.Fatalf("promoted config = %+v", promoted.Config)
 	}
-	if got := automodeShow(t, d); len(got.Config.Allow) != 1 || len(got.Proposals) != 0 {
-		t.Fatalf("show after promote: allow=%v pending=%d", got.Config.Allow, len(got.Proposals))
+	got := automodeShow(t, d)
+	if len(got.Config.Rules) != len(got.Config.ShippedRules)+1 || len(got.Proposals) != 0 {
+		t.Fatalf("show after promote: rules=%+v pending=%d", got.Config.Rules, len(got.Proposals))
+	}
+	if line := autoModeTestRuleLine(got.Config.Rules[len(got.Config.Rules)-1]); line != "git push" {
+		t.Errorf("promoted rule = %q", line)
 	}
 }
 
 func TestAutoModeDiscardFromTheAppClosesWithoutApplying(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
-	resp := automodePropose(t, d, automode.KindModel, automode.TargetModels, "opencode-go/other-model")
+	resp := automodePropose(t, d, automode.KindHost, "", `{"host":"pypi.org","decision":"allow"}`)
 	if !resp.Ok {
 		t.Fatalf("propose: %v", protocol.Deref(resp.Error))
 	}
@@ -259,8 +275,8 @@ func TestAutoModeDiscardFromTheAppClosesWithoutApplying(t *testing.T) {
 		t.Fatalf("discard failed: %q", protocol.Deref(discarded.Error))
 	}
 	got := automodeShow(t, d)
-	if len(got.Config.Models) != 0 {
-		t.Errorf("models = %v after a discard", got.Config.Models)
+	if len(got.Config.Network.AllowedDomains) != 0 {
+		t.Errorf("allowed domains = %v after a discard", got.Config.Network.AllowedDomains)
 	}
 	if len(got.Proposals) != 0 {
 		t.Errorf("discarded proposal is still pending")
@@ -435,24 +451,123 @@ func TestAutoModeDenialFromAnUnownedRunIsRefused(t *testing.T) {
 	}
 }
 
-func automodePatternAdd(t *testing.T, d *Daemon, list, pattern string) protocol.AutoModePatternResultMessage {
-	t.Helper()
-	client := busTestClient()
-	d.handleAutoModePatternAdd(client, &protocol.AutoModePatternAddMessage{
-		Cmd: protocol.CmdAutoModePatternAdd, List: list, Pattern: pattern, RequestID: "r1",
+// A pi session answers an approval once and reports what it was told; the answer is
+// already the user's, so it is recorded and applied in one move rather than queued.
+func TestReportedAmendmentsFromPiLandInTheConfig(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	client, done := startPluginPipe(t, d, "pi-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, client, "pi", map[string]bool{"auto_mode": true})
+
+	now := protocol.TimestampNow().String()
+	d.store.Add(&protocol.Session{
+		ID: "pi-amend", Label: "sunny otter", Agent: "pi", Directory: t.TempDir(),
+		State: protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
-	var result protocol.AutoModePatternResultMessage
-	nextBusMessage(t, client, &result)
-	return result
+	if !d.store.BeginAgentDriverRun("pi-amend", "pi-plugin", "run-1") {
+		t.Fatal("failed to begin the test plugin run")
+	}
+
+	sendPluginMethod(t, client, 3, "session.report_execpolicy_amendment",
+		pluginReportExecPolicyAmendmentParams{
+			SessionID: "pi-amend", RunID: "run-1",
+			Pattern: []string{"cargo", "build"}, Decision: automode.DecisionAllow,
+		})
+	sendPluginMethod(t, client, 4, "session.report_network_amendment",
+		pluginReportNetworkAmendmentParams{
+			SessionID: "pi-amend", RunID: "run-1", Host: "crates.io", Decision: automode.HostAllow,
+		})
+
+	cfg, err := d.store.GetAutoModeConfig()
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	stored := automode.StripShippedRules(cfg.Rules)
+	if len(stored) != 1 || stored[0].Describe() != "cargo build" {
+		t.Fatalf("rules = %v, want the reported one in force", cfg.Rules)
+	}
+	if got := cfg.Network.AllowedDomains; len(got) != 1 || got[0] != "crates.io" {
+		t.Fatalf("allowed domains = %v, want the reported host", got)
+	}
+
+	pending, err := d.store.ListAutoModeProposals(automode.StatePending)
+	if err != nil {
+		t.Fatalf("list proposals: %v", err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("a reported amendment left something for the user to promote: %+v", pending)
+	}
+	promoted, err := d.store.ListAutoModeProposals(automode.StatePromoted)
+	if err != nil {
+		t.Fatalf("list promoted: %v", err)
+	}
+	if len(promoted) != 2 {
+		t.Fatalf("promoted = %d, want a row per report so the user can read them back", len(promoted))
+	}
+	if !strings.Contains(promoted[0].ProposedBy, "sunny otter") {
+		t.Errorf("proposed_by = %q, want the session that answered", promoted[0].ProposedBy)
+	}
 }
 
-func automodePatternRemove(t *testing.T, d *Daemon, list, pattern string) protocol.AutoModePatternResultMessage {
+func TestReportedAmendmentsFromAnUnownedRunAreRefused(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	client, done := startPluginPipe(t, d, "pi-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, client, "pi", map[string]bool{"auto_mode": true})
+
+	now := protocol.TimestampNow().String()
+	d.store.Add(&protocol.Session{
+		ID: "pi-amend", Label: "pi", Agent: "pi", Directory: t.TempDir(),
+		State: protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	if !d.store.BeginAgentDriverRun("pi-amend", "pi-plugin", "run-1") {
+		t.Fatal("failed to begin the test plugin run")
+	}
+
+	response := sendPluginMethodResponse(t, client, 3, "session.report_execpolicy_amendment",
+		pluginReportExecPolicyAmendmentParams{
+			SessionID: "pi-amend", RunID: "run-other",
+			Pattern: []string{"cargo", "build"}, Decision: automode.DecisionAllow,
+		})
+	if response.Error == nil {
+		t.Fatal("an amendment for a run the plugin does not own was accepted")
+	}
+	response = sendPluginMethodResponse(t, client, 4, "session.report_network_amendment",
+		pluginReportNetworkAmendmentParams{
+			SessionID: "pi-amend", RunID: "run-1", Host: "crates.io", Decision: "prompt",
+		})
+	if response.Error == nil {
+		t.Fatal("a host decision the network has no room for was accepted")
+	}
+
+	cfg, err := d.store.GetAutoModeConfig()
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	if len(automode.StripShippedRules(cfg.Rules)) != 0 || len(cfg.Network.AllowedDomains) != 0 {
+		t.Fatalf("a refused amendment reached the config: %+v", cfg)
+	}
+}
+
+func autoModeTestRuleLine(rule protocol.AutoModeRuleInfo) string {
+	tokens := make([]string, 0, len(rule.Pattern))
+	for _, alternatives := range rule.Pattern {
+		tokens = append(tokens, strings.Join(alternatives, "|"))
+	}
+	return strings.Join(tokens, " ")
+}
+
+func autoModeEdit(t *testing.T, d *Daemon, edit func(*wsClient)) protocol.AutoModeConfigResultMessage {
 	t.Helper()
 	client := busTestClient()
-	d.handleAutoModePatternRemove(client, &protocol.AutoModePatternRemoveMessage{
-		Cmd: protocol.CmdAutoModePatternRemove, List: list, Pattern: pattern, RequestID: "r1",
-	})
-	var result protocol.AutoModePatternResultMessage
+	edit(client)
+	var result protocol.AutoModeConfigResultMessage
 	nextBusMessage(t, client, &result)
 	return result
 }
@@ -476,187 +591,205 @@ func TestAutoModeEnvSlotFromTheAppAnswersWithTheStoredConfig(t *testing.T) {
 	}
 }
 
-func TestAutoModePatternEditFromTheAppRoundTrips(t *testing.T) {
+func TestAutoModeRuleEditFromTheAppRoundTrips(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
 
-	added := automodePatternAdd(t, d, automode.ListAllow, "git status*")
+	added := autoModeEdit(t, d, func(c *wsClient) {
+		d.handleAutoModeRuleAdd(c, &protocol.AutoModeRuleAddMessage{
+			Cmd: protocol.CmdAutoModeRuleAdd, Pattern: []string{"git", "status"},
+			Decision: protocol.Ptr(automode.DecisionAllow), RequestID: "r1",
+		})
+	})
 	if !added.Success || added.Config == nil {
 		t.Fatalf("add failed: %q", protocol.Deref(added.Error))
 	}
-	if len(added.Config.Allow) != 1 || added.Config.Allow[0] != "git status*" {
-		t.Fatalf("allow after add = %v", added.Config.Allow)
+	stored := added.Config.Rules[len(added.Config.Rules)-1]
+	if autoModeTestRuleLine(stored) != "git status" || stored.Decision != automode.DecisionAllow {
+		t.Fatalf("rules after add = %+v", added.Config.Rules)
 	}
-	if got := automodeShow(t, d); len(got.Config.Allow) != 1 || got.Config.Allow[0] != "git status*" {
-		t.Fatalf("show after a direct add: %v", got.Config.Allow)
+	if got := automodeShow(t, d).Config.Rules; len(got) != len(added.Config.Rules) {
+		t.Fatalf("show after a direct add: %+v", got)
 	}
 
-	removed := automodePatternRemove(t, d, automode.ListAllow, "git status*")
+	removed := autoModeEdit(t, d, func(c *wsClient) {
+		d.handleAutoModeRuleRemoveWS(c, &protocol.AutoModeRuleRemoveMessage{
+			Cmd: protocol.CmdAutoModeRuleRemove, Pattern: []string{"git", "status"},
+			RequestID: protocol.Ptr("r2"),
+		})
+	})
 	if !removed.Success || removed.Config == nil {
 		t.Fatalf("remove failed: %q", protocol.Deref(removed.Error))
 	}
-	if len(removed.Config.Allow) != 0 {
-		t.Fatalf("allow after remove = %v", removed.Config.Allow)
+	if len(removed.Config.Rules) != len(removed.Config.ShippedRules) {
+		t.Fatalf("rules after remove = %+v", removed.Config.Rules)
 	}
 }
 
-func TestAutoModeStateNamesTheShippedHardDenies(t *testing.T) {
+func TestAutoModeHostEditFromTheAppRoundTrips(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
-	added := automodePatternAdd(t, d, automode.ListHardDeny, "*terraform apply*")
-	if !added.Success {
-		t.Fatalf("add hard deny: %q", protocol.Deref(added.Error))
+
+	added := autoModeEdit(t, d, func(c *wsClient) {
+		d.handleAutoModeHostAdd(c, &protocol.AutoModeHostAddMessage{
+			Cmd: protocol.CmdAutoModeHostAdd, Host: "crates.io",
+			Decision: automode.HostAllow, RequestID: "r1",
+		})
+	})
+	if !added.Success || added.Config == nil {
+		t.Fatalf("add failed: %q", protocol.Deref(added.Error))
 	}
-	shipped := automode.ShippedHardDeny(config.WSPort())
-	if len(added.Config.ShippedHardDeny) != len(shipped) {
-		t.Fatalf("shipped_hard_deny = %v, want %v", added.Config.ShippedHardDeny, shipped)
-	}
-	if len(added.Config.HardDeny) != len(shipped)+1 {
-		t.Fatalf("hard_deny = %v, want the shipped list plus one", added.Config.HardDeny)
+	if got := added.Config.Network.AllowedDomains; len(got) != 1 || got[0] != "crates.io" {
+		t.Fatalf("allowed domains = %v", got)
 	}
 
-	client := busTestClient()
-	d.handleAutoModeGet(client, &protocol.AutoModeGetMessage{
-		Cmd: protocol.CmdAutoModeGet, RequestID: "r2",
+	removed := autoModeEdit(t, d, func(c *wsClient) {
+		d.handleAutoModeHostRemoveWS(c, &protocol.AutoModeHostRemoveMessage{
+			Cmd: protocol.CmdAutoModeHostRemove, Host: "crates.io",
+			Decision: automode.HostAllow, RequestID: protocol.Ptr("r2"),
+		})
 	})
+	if !removed.Success || len(removed.Config.Network.AllowedDomains) != 0 {
+		t.Fatalf("remove failed: %q %+v", protocol.Deref(removed.Error), removed.Config)
+	}
+}
+
+func TestAutoModePolicySetFromTheAppHoldsWhatItIsNotTold(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
+
+	set := autoModeEdit(t, d, func(c *wsClient) {
+		d.handleAutoModePolicySetWS(c, &protocol.AutoModePolicySetMessage{
+			Cmd:            protocol.CmdAutoModePolicySet,
+			ApprovalPolicy: protocol.Ptr(automode.PolicyNever),
+			RequestID:      protocol.Ptr("r1"),
+		})
+	})
+	if !set.Success || set.Config == nil {
+		t.Fatalf("policy set failed: %q", protocol.Deref(set.Error))
+	}
+	if set.Config.ApprovalPolicy != automode.PolicyNever ||
+		set.Config.SandboxMode != automode.SandboxWorkspaceWrite {
+		t.Fatalf("policy = %q/%q, want only the approval policy moved",
+			set.Config.ApprovalPolicy, set.Config.SandboxMode)
+	}
+
+	refused := autoModeEdit(t, d, func(c *wsClient) {
+		d.handleAutoModePolicySetWS(c, &protocol.AutoModePolicySetMessage{
+			Cmd: protocol.CmdAutoModePolicySet, SandboxMode: protocol.Ptr("open"), RequestID: protocol.Ptr("r2"),
+		})
+	})
+	if refused.Success {
+		t.Fatal("an unknown sandbox mode was accepted")
+	}
+	if got := automodeShow(t, d).Config; got.ApprovalPolicy != automode.PolicyNever ||
+		got.SandboxMode != automode.SandboxWorkspaceWrite {
+		t.Fatalf("a refused edit moved the config: %q/%q", got.ApprovalPolicy, got.SandboxMode)
+	}
+}
+
+func TestAutoModeStateNamesWhatShipped(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
+	client := busTestClient()
+	d.handleAutoModeGet(client, &protocol.AutoModeGetMessage{Cmd: protocol.CmdAutoModeGet, RequestID: "r1"})
 	var read protocol.AutoModeStateResultMessage
 	nextBusMessage(t, client, &read)
-	if !read.Success || len(read.Config.ShippedHardDeny) != len(shipped) {
-		t.Fatalf("automode_get shipped_hard_deny = %v", read.Config.ShippedHardDeny)
+	if !read.Success {
+		t.Fatalf("automode_get failed: %q", protocol.Deref(read.Error))
 	}
-}
-
-func TestAutoModePatternEditRefusalsReachTheApp(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
-
-	broad := automodePatternAdd(t, d, automode.ListAllow, "*")
-	if broad.Success {
-		t.Fatal("a broad allow was accepted from the app")
+	if len(read.Config.ShippedRules) != len(automode.ShippedRules()) {
+		t.Fatalf("shipped_rules = %+v, want the built-in set", read.Config.ShippedRules)
 	}
-	if !strings.Contains(protocol.Deref(broad.Error), "must name something") {
-		t.Fatalf("broad allow refusal = %q", protocol.Deref(broad.Error))
+	shippedDomains := automode.ShippedDeniedDomains(config.WSPort())
+	if len(read.Config.ShippedDeniedDomains) != len(shippedDomains) {
+		t.Fatalf("shipped_denied_domains = %v, want %v", read.Config.ShippedDeniedDomains, shippedDomains)
+	}
+	if len(read.Config.Network.DeniedDomains) != len(shippedDomains) {
+		t.Errorf("denied domains = %v, want the shipped ones in force", read.Config.Network.DeniedDomains)
 	}
 
-	shipped := automode.ShippedHardDeny(config.WSPort())[0]
-	refused := automodePatternRemove(t, d, automode.ListHardDeny, shipped)
+	refused := autoModeEdit(t, d, func(c *wsClient) {
+		d.handleAutoModeRuleRemoveWS(c, &protocol.AutoModeRuleRemoveMessage{
+			Cmd:       protocol.CmdAutoModeRuleRemove,
+			Pattern:   patternTokenStrings(automode.ShippedRules()[0]),
+			RequestID: protocol.Ptr("r2"),
+		})
+	})
 	if refused.Success {
-		t.Fatal("a shipped hard deny was removed from the app")
+		t.Fatal("a shipped rule was removed from the app")
 	}
 	if !strings.Contains(protocol.Deref(refused.Error), "built-in") {
 		t.Fatalf("shipped removal refusal = %q", protocol.Deref(refused.Error))
 	}
-	found := false
-	for _, pattern := range automodeShow(t, d).Config.HardDeny {
-		if pattern == shipped {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("%q left the hard deny list after a refused removal", shipped)
-	}
 }
 
-func TestPatternEditingIsNotReachableOverTheUnixSocket(t *testing.T) {
-	d := newDaemonForTest(t)
-	for _, cmd := range []string{protocol.CmdAutoModePatternAdd, protocol.CmdAutoModePatternRemove} {
-		client, server := net.Pipe()
-		go func() {
-			d.handleConnection(server)
-		}()
-		payload := `{"cmd":"` + cmd + `","list":"allow","pattern":"git status*","request_id":"r1"}`
-		if _, err := client.Write([]byte(payload)); err != nil {
-			t.Fatalf("write %s: %v", cmd, err)
-		}
-		var resp protocol.Response
-		if err := json.NewDecoder(client).Decode(&resp); err != nil {
-			t.Fatalf("decode %s response: %v", cmd, err)
-		}
-		client.Close()
-		if resp.Ok {
-			t.Fatalf("%s was answered over the unix socket", cmd)
-		}
-		if got := protocol.Deref(resp.Error); !strings.Contains(got, "unknown command") {
-			t.Fatalf("%s was refused for the wrong reason: %q", cmd, got)
-		}
+func patternTokenStrings(rule automode.Rule) []string {
+	tokens := make([]string, 0, len(rule.Pattern))
+	for _, token := range rule.Pattern {
+		tokens = append(tokens, token.Alternatives[0])
 	}
-	if got := automodeShow(t, d); len(got.Config.Allow) != 0 {
-		t.Fatalf("allow = %v after a socket edit attempt", got.Config.Allow)
-	}
+	return tokens
 }
 
-func automodeModelSet(t *testing.T, d *Daemon, models []string) protocol.AutoModeModelSetResultMessage {
+func unixAutoModeCall(t *testing.T, d *Daemon, payload string) protocol.Response {
 	t.Helper()
-	client := busTestClient()
-	d.handleAutoModeModelSet(client, &protocol.AutoModeModelSetMessage{
-		Cmd: protocol.CmdAutoModeModelSet, Models: models, RequestID: "r1",
-	})
-	var result protocol.AutoModeModelSetResultMessage
-	nextBusMessage(t, client, &result)
-	return result
+	client, server := net.Pipe()
+	go func() { d.handleConnection(server) }()
+	if _, err := client.Write([]byte(payload)); err != nil {
+		t.Fatalf("write %s: %v", payload, err)
+	}
+	var resp protocol.Response
+	if err := json.NewDecoder(client).Decode(&resp); err != nil {
+		t.Fatalf("decode response to %s: %v", payload, err)
+	}
+	client.Close()
+	return resp
 }
 
-func TestAutoModeModelSetFromTheAppRoundTrips(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
-
-	set := automodeModelSet(t, d, []string{"opencode/claude-opus-4-6", "opencode-go/glm-5.3"})
-	if !set.Success || set.Config == nil {
-		t.Fatalf("set failed: %q", protocol.Deref(set.Error))
-	}
-	if len(set.Config.Models) != 2 || set.Config.Models[0] != "opencode/claude-opus-4-6" {
-		t.Fatalf("models after set = %v", set.Config.Models)
-	}
-	if got := automodeShow(t, d).Config.Models; len(got) != 2 || got[1] != "opencode-go/glm-5.3" {
-		t.Fatalf("show after a direct set: %v", got)
-	}
-
-	cleared := automodeModelSet(t, d, nil)
-	if !cleared.Success || len(cleared.Config.Models) != 0 {
-		t.Fatalf("clearing the list is how auto mode is turned off: %+v", cleared)
-	}
-
-	refused := automodeModelSet(t, d, []string{"noprovider"})
-	if refused.Success {
-		t.Fatal("a model with no provider was accepted")
-	}
-	if !strings.Contains(protocol.Deref(refused.Error), "provider/id") {
-		t.Fatalf("refusal did not name the shape it wanted: %q", protocol.Deref(refused.Error))
-	}
-}
-
-func TestAutoModeModelsSaysWhenPiIsNotConnected(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
-	client := busTestClient()
-	d.answerAutoModeModels(client, "r1")
-
-	var result protocol.AutoModeModelsResultMessage
-	nextBusMessage(t, client, &result)
-	if result.Success {
-		t.Fatal("the catalog answered with no pi plugin connected")
-	}
-	if got := protocol.Deref(result.Error); !strings.Contains(got, "attn-pi") || !strings.Contains(got, "not connected") {
-		t.Fatalf("error must name the plugin and what is wrong with it: %q", got)
-	}
-}
-
-func TestModelSettingIsNotReachableOverTheUnixSocket(t *testing.T) {
+func TestAddingARuleOrAHostIsNotReachableOverTheUnixSocket(t *testing.T) {
 	d := newDaemonForTest(t)
 	for _, payload := range []string{
+		`{"cmd":"automode_rule_add","pattern":["git","status"],"request_id":"r1"}`,
+		`{"cmd":"automode_host_add","host":"crates.io","decision":"allow","request_id":"r1"}`,
 		`{"cmd":"automode_model_set","models":["a/one"],"request_id":"r1"}`,
-		`{"cmd":"automode_models","request_id":"r1"}`,
 	} {
-		client, server := net.Pipe()
-		go func() { d.handleConnection(server) }()
-		if _, err := client.Write([]byte(payload)); err != nil {
-			t.Fatalf("write %s: %v", payload, err)
-		}
-		var resp protocol.Response
-		if err := json.NewDecoder(client).Decode(&resp); err != nil {
-			t.Fatalf("decode response to %s: %v", payload, err)
-		}
-		client.Close()
+		resp := unixAutoModeCall(t, d, payload)
 		if resp.Ok {
 			t.Fatalf("%s was answered over the unix socket", payload)
 		}
 		if got := protocol.Deref(resp.Error); !strings.Contains(got, "unknown command") {
 			t.Fatalf("%s was refused for the wrong reason: %q", payload, got)
 		}
+	}
+	if got := automodeShow(t, d); len(got.Config.Rules) != len(got.Config.ShippedRules) {
+		t.Fatalf("rules = %+v after a socket edit attempt", got.Config.Rules)
+	}
+}
+
+// Taking a rule away is the reversal the CLI owes the app; a shipped forbidden rule is
+// what keeps a session under auto mode from reaching it.
+func TestTakingARuleAwayIsReachableOverTheUnixSocket(t *testing.T) {
+	d := newDaemonForTest(t)
+	if _, err := d.store.AddAutoModeRule(automode.Rule{
+		Pattern: automode.Tokens("git", "status"), Decision: automode.DecisionAllow,
+	}, time.Now()); err != nil {
+		t.Fatalf("seed a rule: %v", err)
+	}
+	resp := unixAutoModeCall(t, d, `{"cmd":"automode_rule_remove","pattern":["git","status"]}`)
+	if !resp.Ok {
+		t.Fatalf("rule remove over the socket: %q", protocol.Deref(resp.Error))
+	}
+	if resp.AutomodeConfigResult == nil {
+		t.Fatal("rule remove answered with no config")
+	}
+	cfg := resp.AutomodeConfigResult.Config
+	if len(cfg.Rules) != len(cfg.ShippedRules) {
+		t.Fatalf("rules = %+v after the removal", cfg.Rules)
+	}
+	resp = unixAutoModeCall(t, d,
+		`{"cmd":"automode_policy_set","approval_policy":"never","sandbox_mode":"read-only"}`)
+	if !resp.Ok {
+		t.Fatalf("policy set over the socket: %q", protocol.Deref(resp.Error))
+	}
+	if got := resp.AutomodeConfigResult.Config; got.ApprovalPolicy != automode.PolicyNever ||
+		got.SandboxMode != automode.SandboxReadOnly {
+		t.Fatalf("policy = %q/%q", got.ApprovalPolicy, got.SandboxMode)
 	}
 }

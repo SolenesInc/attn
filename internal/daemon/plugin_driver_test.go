@@ -5,12 +5,14 @@ import (
 	"errors"
 	"net"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
 
+	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -89,6 +91,74 @@ func TestPluginDriverRegister_ReturnsOnlyActiveRunsOwnedByPlugin(t *testing.T) {
 	// cursor: a fresh counter reports under a seq the store has already passed.
 	if run.Seq != 1 {
 		t.Fatalf("active run seq=%d, want the run's report cursor (1)", run.Seq)
+	}
+}
+
+func registerResult(t *testing.T, client net.Conn, params pluginDriverRegisterParams) pluginDriverRegisterResult {
+	t.Helper()
+	response := sendPluginMethodResponse(t, client, 2, "driver.register", params)
+	if response.Error != nil {
+		t.Fatalf("driver.register error=%#v", response.Error)
+	}
+	var result pluginDriverRegisterResult
+	if err := json.Unmarshal(response.Result, &result); err != nil {
+		t.Fatalf("decode register result: %v", err)
+	}
+	return result
+}
+
+// A driver that restarts has to raise the network proxy before a live session re-dials it,
+// so its own registration answers with the policy instead of waiting for the next spawn.
+func TestPluginDriverRegister_AnswersAnAutoModeDriverWithTheStoredConfig(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	host, err := automode.FormatHostValue(automode.HostAmendment{Host: "crates.io", Decision: automode.DecisionAllow})
+	if err != nil {
+		t.Fatalf("FormatHostValue: %v", err)
+	}
+	if _, _, err := d.store.PromoteReportedAmendment("host", host, "pi session snipe", time.Now()); err != nil {
+		t.Fatalf("PromoteReportedAmendment: %v", err)
+	}
+	policy := automode.PolicyNever
+	if _, err := d.store.SetAutoModePolicy(&policy, nil, time.Now()); err != nil {
+		t.Fatalf("SetAutoModePolicy: %v", err)
+	}
+
+	client, done := startPluginPipe(t, d, "snipe-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+	result := registerResult(t, client, pluginDriverRegisterParams{
+		Agent:        "snipe",
+		Capabilities: map[string]bool{"auto_mode": true},
+	})
+
+	if result.AutoMode == nil {
+		t.Fatal("register result carried no auto mode config")
+	}
+	if result.AutoMode.ApprovalPolicy != automode.PolicyNever {
+		t.Fatalf("approval policy=%q, want the stored %q", result.AutoMode.ApprovalPolicy, automode.PolicyNever)
+	}
+	if !slices.Contains(result.AutoMode.Network.AllowedDomains, "crates.io") {
+		t.Fatalf("allowed domains=%v, want the promoted host", result.AutoMode.Network.AllowedDomains)
+	}
+	if len(automode.StripShippedRules(result.AutoMode.Rules)) != 0 {
+		t.Fatalf("rules=%v, want only what shipped", result.AutoMode.Rules)
+	}
+}
+
+func TestPluginDriverRegister_LeavesTheAutoModeConfigOutForADriverWithoutIt(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	client, done := startPluginPipe(t, d, "snipe-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+
+	result := registerResult(t, client, pluginDriverRegisterParams{Agent: "snipe"})
+
+	if result.AutoMode != nil {
+		t.Fatalf("auto mode=%+v, want nothing for a driver that does not run it", result.AutoMode)
 	}
 }
 

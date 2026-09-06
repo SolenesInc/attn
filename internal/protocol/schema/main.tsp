@@ -5704,15 +5704,43 @@ model AppRollbackResult {
 
 model AutoModeConfigInfo {
   "enabled_default": boolean;
+  // "untrusted" | "on-request" | "never".
+  "approval_policy": string;
+  // "read-only" | "workspace-write" | "danger-full-access".
+  "sandbox_mode": string;
   "environment": AutoModeEnvironmentInfo;
-  "allow": string[];
-  "hard_deny": string[];
-  // The subset of "hard_deny" auto mode ships with rather than a human adding:
-  // resolved in at read, never stored, and not removable. It names this
-  // daemon's own WebSocket port, so a client cannot derive it and has to be
-  // told which entries are built-in.
-  "shipped_hard_deny": string[];
-  "models": string[];
+  "rules": AutoModeRuleInfo[];
+  // The subset of "rules" attn ships rather than a human adding: resolved in at
+  // read, never stored, and not removable. They are what stops a session under
+  // auto mode from rewriting its own policy.
+  "shipped_rules": AutoModeRuleInfo[];
+  "network": AutoModeNetworkInfo;
+  // The subset of network.denied_domains attn ships. It names this daemon's own
+  // WebSocket port, so a client cannot derive it and has to be told.
+  "shipped_denied_domains": string[];
+  // Old allow/hard-deny globs the migration could not turn into a prefix rule.
+  // Nothing enforces them; settings shows them so the user can rewrite them.
+  "legacy_patterns": string[];
+}
+
+// One Codex prefix rule. "pattern" is the command's leading tokens, and each
+// token is the list of alternatives that token accepts - a token with one
+// alternative is a literal. "match" and "not_match" are pi's own example
+// commands, carried through untouched; pi checks them when it loads the rules.
+model AutoModeRuleInfo {
+  "pattern": string[][];
+  // "allow" | "prompt" | "forbidden".
+  "decision": string;
+  // Required for a forbidden rule: it is the text the agent is given.
+  "justification": string;
+  "match": string[][];
+  "not_match": string[][];
+}
+
+model AutoModeNetworkInfo {
+  "enabled": boolean;
+  "allowed_domains": string[];
+  "denied_domains": string[];
 }
 
 model AutoModeEnvironmentSlot {
@@ -5736,15 +5764,17 @@ model AutoModeEnvironmentSlotValue {
   "values": string[];
 }
 
-// One proposed change awaiting a human. "value" is a pattern for allow/deny and
-// a comma-separated ordered list of `provider/id` for model, which promotion
+// One proposed change awaiting a human. "value" is the rule's JSON for a rule
+// proposal and {"host":..,"decision":..} for a host one, which promotion applies.
 model AutoModeProposalInfo {
   "id": safeint;
-  // "allow" | "deny" | "model".
+  // "rule" | "host".
   "kind": string;
-  // "classifier" | "escalation" for a model proposal; empty otherwise.
+  // Always empty: neither kind takes a target.
   "target": string;
   "value": string;
+  // "value" read back as one line, for a list a human scans.
+  "summary": string;
   // Who proposed it, when the caller said. Empty when nobody did.
   "proposed_by": string;
   // "pending" | "promoted" | "discarded".
@@ -5762,9 +5792,8 @@ model AutoModeDenialInfo {
   // The blocked call in one line — the same text the model was given.
   "signature": string;
   "reason": string;
-  // Who decided: a static envelope rule, the classifier layer that answered
-  // ("classifier-2a" | "classifier-2b"), "classifier-unavailable" when no
-  // classifier model could be reached, or "circuit-breaker".
+  // Who decided: the prefix rule that matched, the reviewer that answered, or
+  // "circuit-breaker".
   "rule": string;
   "created_at": string;
 }
@@ -5796,8 +5825,8 @@ model AutoModeEnvResult {
   "environment": AutoModeEnvironmentInfo;
 }
 
-// Record a proposal. Refused at submission when it could never be promoted — a
-// broad allow pattern most of all, mirroring the pi-side config loader.
+// Record a proposal. Refused at submission when it could never be promoted: a
+// value that is not the JSON of a rule or of a host amendment.
 model AutoModeProposeMessage {
   "cmd": "automode_propose";
   "kind": string;
@@ -5868,79 +5897,69 @@ model AutoModePromoteResultMessage {
   config?: AutoModeConfigInfo;
 }
 
-// Add one pattern to the allow or hard-deny list, or take one out. App-only,
-// for the same reason promotion is: the lists decide what a session may do
-// without asking, so only a human at the trust boundary edits them. An agent
-// reaching the unix socket still has nothing but `automode_propose`.
+// Write a rule, a host or the policy itself. Adding is app-only, for the same
+// reason promotion is: a rule decides what a session may do without asking, so
+// only a human at the trust boundary writes one. An agent reaching the unix
+// socket still has nothing but `automode_propose`.
 //
-// "list" is "allow" or "hard_deny", naming the field in AutoModeConfigInfo. A
-// removal names the pattern rather than an index, because the hard-deny list a
-// client renders has the shipped entries resolved into it and an index into
-// that list is not an index into what is stored.
-model AutoModePatternAddMessage {
-  cmd: "automode_pattern_add";
-  list: string;
-  pattern: string;
+// "pattern" is the command's leading tokens, one token per entry. A removal
+// names the pattern rather than an index, because the list a client renders has
+// the shipped rules resolved into it and an index into that is not an index
+// into what is stored. Re-adding a pattern that is already there replaces it,
+// so a rule keeps one decision.
+model AutoModeRuleAddMessage {
+  cmd: "automode_rule_add";
+  pattern: string[];
+  // Absent means "allow", Codex's default.
+  decision?: string;
+  justification?: string;
   request_id: string;
 }
 
-model AutoModePatternRemoveMessage {
-  cmd: "automode_pattern_remove";
-  list: string;
-  pattern: string;
+// Removal, unlike adding, also answers on the unix socket, so `attn automode
+// rule remove` can undo what the app wrote. A shipped forbidden rule is what
+// keeps a session from reaching it.
+model AutoModeRuleRemoveMessage {
+  cmd: "automode_rule_remove";
+  pattern: string[];
+  request_id?: string;
+}
+
+model AutoModeHostAddMessage {
+  cmd: "automode_host_add";
+  host: string;
+  // "allow" | "deny". A host holds one decision; this replaces the other.
+  decision: string;
   request_id: string;
 }
 
-// Both edits answer with the config they produced, so the section re-renders
-// from what the daemon stored rather than from what it hoped it stored.
-model AutoModePatternResultMessage {
-  event: "automode_pattern_result";
+model AutoModeHostRemoveMessage {
+  cmd: "automode_host_remove";
+  host: string;
+  decision: string;
+  request_id?: string;
+}
+
+// Naming neither field is refused rather than silently doing nothing.
+model AutoModePolicySetMessage {
+  cmd: "automode_policy_set";
+  approval_policy?: string;
+  sandbox_mode?: string;
+  request_id?: string;
+}
+
+// Every config edit answers with the config it produced, so the section
+// re-renders from what the daemon stored rather than what it hoped it stored.
+model AutoModeConfigResultMessage {
+  event: "automode_config_result";
   request_id: string;
   success: boolean;
   error?: string;
   config?: AutoModeConfigInfo;
 }
 
-model AutoModeModelSetMessage {
-  cmd: "automode_model_set";
-  models: string[];
-  request_id: string;
-}
-
-model AutoModeModelSetResultMessage {
-  event: "automode_model_set_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  config?: AutoModeConfigInfo;
-}
-
-model AutoModeModelsMessage {
-  cmd: "automode_models";
-  request_id: string;
-}
-
-model AutoModeCatalogModel {
-  id: string;
-  name?: string;
-  context_window?: safeint;
-}
-
-model AutoModeModelProvider {
-  provider: string;
-  ready: boolean;
-  detail?: string;
-  checked_at?: safeint;
-  models: AutoModeCatalogModel[];
-}
-
-model AutoModeModelsResultMessage {
-  event: "automode_models_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  providers?: AutoModeModelProvider[];
-  problem?: string;
+model AutoModeConfigResult {
+  "config": AutoModeConfigInfo;
 }
 
 // Close a pending proposal without applying it. App-only for symmetry: the
@@ -6071,6 +6090,7 @@ model Response {
   app_watch_result?: AppWatchResult;
   automode_show_result?: AutoModeShowResult;
   automode_env_result?: AutoModeEnvResult;
+  automode_config_result?: AutoModeConfigResult;
   automode_propose_result?: AutoModeProposeResult;
   automode_denials_result?: AutoModeDenialsResult;
 }
@@ -7240,9 +7260,7 @@ alias DaemonEvent =
   | DocSubscriptionEndedMessage
   | AutoModeStateResultMessage
   | AutoModePromoteResultMessage
-  | AutoModePatternResultMessage
-  | AutoModeModelSetResultMessage
-  | AutoModeModelsResultMessage
+  | AutoModeConfigResultMessage
   | AutoModeDiscardResultMessage
   | AutoModeEnvSetResultMessage
   | AutoModeStateChangedMessage;
