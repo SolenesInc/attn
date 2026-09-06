@@ -730,7 +730,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Repos:                  state.Repos,
 		Authors:                state.Authors,
 		GithubHosts:            state.GithubHosts,
-		GithubPollingOffReason: protocol.Ptr(gitHubPollingOffReason()),
+		GithubPollingOffReason: gitHubPollingOffReasonField(),
 		Settings:               d.settingsWithAgentAvailability(),
 		Warnings:               d.getWarnings(),
 		Seeds:                  state.Seeds,

@@ -2343,7 +2343,7 @@ func (d *Daemon) gitHubHostsUpdatedMessage() *protocol.GitHubHostsUpdatedMessage
 	return &protocol.GitHubHostsUpdatedMessage{
 		Event:                  protocol.EventGitHubHostsUpdated,
 		GithubHosts:            d.gitHubHosts(),
-		GithubPollingOffReason: protocol.Ptr(gitHubPollingOffReason()),
+		GithubPollingOffReason: gitHubPollingOffReasonField(),
 	}
 }
 

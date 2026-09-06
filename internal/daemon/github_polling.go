@@ -21,6 +21,15 @@ func gitHubPollingOffReason() string {
 	return fmt.Sprintf("GitHub polling is off for profile %s. Start its daemon with %s=on to poll with your gh credentials.", profile, GitHubPollingOptInEnv)
 }
 
+// gitHubPollingOffReasonField keeps the wire unchanged while polling is on.
+func gitHubPollingOffReasonField() *string {
+	reason := gitHubPollingOffReason()
+	if reason == "" {
+		return nil
+	}
+	return &reason
+}
+
 func gitHubPollingOptedIn() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(GitHubPollingOptInEnv))) {
 	case "1", "on", "true", "yes":
