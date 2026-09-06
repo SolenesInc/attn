@@ -227,7 +227,6 @@ func sessionReopenVerdictsByID(entries []protocol.SessionReopenEntry) map[string
 	return verdicts
 }
 
-// The best action is what the reader would run next; `attn session show` has the rest.
 func sessionReopenColumn(verdict *protocol.SessionReopen) string {
 	switch {
 	case verdict == nil:

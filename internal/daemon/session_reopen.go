@@ -119,7 +119,6 @@ func (d *Daemon) reopenVerdict(sessionID string) (*sessionReopenVerdict, bool) {
 	return d.reopenVerdictForEntry(entry), true
 }
 
-// A page holds the rows it wants judged; only the lookup separates it from a show.
 func (d *Daemon) reopenVerdictForEntry(entry *protocol.SessionLedgerEntry) *sessionReopenVerdict {
 	verdict := &sessionReopenVerdict{
 		SessionID: entry.ID,

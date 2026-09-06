@@ -42,8 +42,6 @@ func listedVerdict(t *testing.T, result protocol.SessionListResult, sessionID st
 	return protocol.SessionReopen{}
 }
 
-// Closes a session that ran in its own worktree of repo, and deletes the
-// directory, so the row needs a real verdict rather than a plain reopen.
 func closeWorktreeRow(t *testing.T, d *Daemon, repo, root, sessionID, branch string) {
 	t.Helper()
 	writeCodexRolloutFixture(t, "conv-"+sessionID)
@@ -58,8 +56,6 @@ func closeWorktreeRow(t *testing.T, d *Daemon, repo, root, sessionID, branch str
 	}
 }
 
-// A surface renders a page of rows, so it must be able to judge them in one
-// call instead of one session_show per closed row.
 func TestAPageCarriesAVerdictForEveryClosedRowWhenItAsks(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	t.Cleanup(d.stopEventBus)
@@ -88,14 +84,11 @@ func TestAPageCarriesAVerdictForEveryClosedRowWhenItAsks(t *testing.T) {
 	}
 }
 
-// The list and the show must never disagree about a row: one verdict, two doors.
 func TestAListedVerdictIsTheOneAShowWouldGive(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	t.Cleanup(d.stopEventBus)
 	repo, _, root := newReopenRepo(t)
 	closeWorktreeRow(t, d, repo, root, "agreed", "feat/agreed")
-	// The first read of either surface only starts the branch check; both must
-	// be compared once it has landed, or they disagree about the clock, not the row.
 	sessionListResult(t, d, protocol.SessionListMessage{
 		Closed: protocol.Ptr(true), Reopen: protocol.Ptr(true),
 	})
@@ -119,8 +112,6 @@ func TestAListedVerdictIsTheOneAShowWouldGive(t *testing.T) {
 	}
 }
 
-// Nobody pays for a judgement they did not ask for: the plain list stays the
-// cheap read every existing caller makes.
 func TestAPageWithoutTheAskCarriesNoVerdicts(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	t.Cleanup(d.stopEventBus)
@@ -143,8 +134,6 @@ func TestAPageWithoutTheAskCarriesNoVerdicts(t *testing.T) {
 	}
 }
 
-// Rows sharing a repository and branch share one inspection, so a page of
-// sessions closed on the same branch costs one git call rather than one each.
 func TestRowsOnTheSameBranchShareOneInspection(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	t.Cleanup(d.stopEventBus)
@@ -158,7 +147,6 @@ func TestRowsOnTheSameBranchShareOneInspection(t *testing.T) {
 			Agent: "codex", Resume: "conv-" + sessionID,
 		})
 	}
-	// A branch is only inspected for a row whose directory is gone.
 	if err := os.RemoveAll(worktree); err != nil {
 		t.Fatalf("delete the shared worktree directory: %v", err)
 	}
@@ -176,8 +164,6 @@ func TestRowsOnTheSameBranchShareOneInspection(t *testing.T) {
 	}
 }
 
-// The page answers from stored state and sharpens afterwards: the first read
-// says it is checking, the read after the inspection lands names the branch.
 func TestAPageAnswersBeforeTheBranchCheckAndSharpensAfterIt(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	t.Cleanup(d.stopEventBus)

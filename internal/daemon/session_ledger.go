@@ -99,8 +99,6 @@ func (d *Daemon) handleSessionList(conn net.Conn, msg *protocol.SessionListMessa
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SessionListResult: result})
 }
 
-// A live row is never reopenable and the surface renders it without a verdict,
-// so judging one would spend a directory stat to say it is running.
 func (d *Daemon) reopenVerdictsForPage(entries []protocol.SessionLedgerEntry) []protocol.SessionReopenEntry {
 	verdicts := make([]protocol.SessionReopenEntry, 0, len(entries))
 	for i := range entries {
@@ -112,8 +110,7 @@ func (d *Daemon) reopenVerdictsForPage(entries []protocol.SessionLedgerEntry) []
 			SessionID: entries[i].ID,
 			Reopen:    *verdict.toProtocol(),
 		})
-		// Only a row whose directory is gone needs git at all, and rows sharing a
-		// repository and branch share one check.
+		// Only a gone directory needs git, and rows sharing a repository and branch share one check.
 		d.refreshReopenBranch(verdict)
 	}
 	return verdicts
