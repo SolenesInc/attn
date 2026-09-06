@@ -1,0 +1,8 @@
+kind: internal
+area: harness
+change: >
+  Dropped four real-app scenarios whose assertions now live at a cheaper layer:
+  workspace-move-leaf, editor-workspace-root, delegate-workspace-placement and
+  app-reconcile. The workspace-move-leaf render check became a frontend witness
+  over useDaemonSocket, the app-reconcile scaffold check a Go test, and the
+  harness AGENTS.md names where each dropped scenario's coverage lives.
