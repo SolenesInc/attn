@@ -328,6 +328,9 @@ export type SuiteEnv = {
   socketPath: string | undefined;
   token: string | undefined;
   piVersion: string;
+  /** This run's proxy credentials, which the decider sees. Never the relay token: the
+   * sandboxed command holds these, so they must not authenticate the approval channel. */
+  proxyCredentials?: string;
 };
 
 export type SuiteDenial = {
@@ -343,6 +346,7 @@ export class AttnPiSuite {
   networkDecider: Decider | undefined;
 
   private readonly piVersion: string;
+  private readonly proxyCredentials: string;
   private readonly relay: { client: RelaySuiteClient; token: string } | undefined;
 
   private currentPi: ExtensionAPILike | undefined;
@@ -355,6 +359,7 @@ export class AttnPiSuite {
 
   constructor(env: SuiteEnv) {
     this.piVersion = env.piVersion;
+    this.proxyCredentials = env.proxyCredentials?.trim() ?? "";
     const socketPath = env.socketPath?.trim();
     const token = env.token?.trim();
     this.relay =
@@ -475,7 +480,7 @@ export class AttnPiSuite {
   ): Promise<RelayNetworkDecideResult> => {
     const decider = this.networkDecider;
     if (!decider) return { decision: "deny" };
-    return decider({ credentials: this.relay?.token ?? "", ...params });
+    return decider({ credentials: this.proxyCredentials, ...params });
   };
 
   private readonly handleDeliverMessage = async (

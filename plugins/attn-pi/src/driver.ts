@@ -40,6 +40,9 @@ type Availability =
 
 type RunState = {
   token: string;
+  /** Proxy credentials, distinct from `token`: these reach the sandboxed command in its
+   * environment, and the relay token must never be reachable from inside the sandbox. */
+  proxyCredentials?: string;
   sessionID: string;
   runID: string;
   seq: number;
@@ -51,8 +54,8 @@ type RunState = {
 
 const deliverMessageTimeoutMs = 10_000;
 
-// Every pi session in this profile shares one proxy; the run token is its proxy
-// credentials, which is how a held connection finds the session that made it.
+// Every pi session in this profile shares one proxy; each run's proxy credentials are
+// how a held connection finds the session that made it.
 type ProxyState = { proxy: NetworkProxy; address: { host: string; port: number } };
 
 // A tripwire, not a deadline: a live pi re-dials within a second of the socket
@@ -81,6 +84,7 @@ export class PiDriver {
   private availability: Availability = { ok: false, message: "pi availability has not been checked" };
   private readonly runsByToken = new Map<string, RunState>();
   private readonly runsBySessionID = new Map<string, RunState>();
+  private readonly runsByProxyCredentials = new Map<string, RunState>();
 
   /** The shipped tripwire, shortened by tests that would otherwise wait it out. */
   private readonly unbackedGraceMs: number;
@@ -161,7 +165,7 @@ export class PiDriver {
     return {
       argv: this.argvFor(availability.executable, metadata, params.initial_prompt, suitePath),
       cwd: params.cwd,
-      env: await this.envFor(run.token, params.auto_mode, run.sessionID),
+      env: await this.envFor(run, params.auto_mode),
     };
   }
 
@@ -196,7 +200,7 @@ export class PiDriver {
     return {
       argv: this.argvFor(availability.executable, metadata, undefined, suitePath),
       cwd: params.cwd,
-      env: await this.envFor(run.token, params.auto_mode, run.sessionID),
+      env: await this.envFor(run, params.auto_mode),
     };
   }
 
@@ -206,7 +210,10 @@ export class PiDriver {
       this.markBacked(run);
       this.runsBySessionID.delete(params.session_id);
       this.runsByToken.delete(run.token);
-      this.proxyState?.proxy.revokeCredentials(run.token);
+      if (run.proxyCredentials) {
+        this.runsByProxyCredentials.delete(run.proxyCredentials);
+        this.proxyState?.proxy.revokeCredentials(run.proxyCredentials);
+      }
     }
     return { ok: true };
   }
@@ -354,9 +361,13 @@ export class PiDriver {
 
   private createRun(sessionID: string, runID: string, metadata: PiMetadata): RunState {
     const previous = this.runsBySessionID.get(sessionID);
-    if (previous) this.runsByToken.delete(previous.token);
-    const run: RunState = { token: runID, sessionID, runID, seq: 0, metadata };
+    if (previous) {
+      this.runsByToken.delete(previous.token);
+      if (previous.proxyCredentials) this.runsByProxyCredentials.delete(previous.proxyCredentials);
+    }
+    const run: RunState = { token: runID, proxyCredentials: randomUUID(), sessionID, runID, seq: 0, metadata };
     this.runsByToken.set(run.token, run);
+    if (run.proxyCredentials) this.runsByProxyCredentials.set(run.proxyCredentials, run);
     this.runsBySessionID.set(sessionID, run);
     this.markUnbacked(run, "the pi suite has not connected since this run was launched");
     return run;
@@ -447,18 +458,19 @@ export class PiDriver {
 
   // The auto-mode config travels in the environment, not argv: argv is
   // world-readable and prose entries are multi-line.
-  private async envFor(token: string, autoMode: unknown, sessionID: string): Promise<Record<string, string>> {
-    const env: Record<string, string> = { ATTN_PI_SUITE_SOCKET: this.relay.socketPath, ATTN_PI_TOKEN: token };
+  private async envFor(run: RunState, autoMode: unknown): Promise<Record<string, string>> {
+    const env: Record<string, string> = { ATTN_PI_SUITE_SOCKET: this.relay.socketPath, ATTN_PI_TOKEN: run.token };
     if (autoMode !== undefined && autoMode !== null) {
       env.ATTN_PI_AUTOMODE_CONFIG = JSON.stringify(autoMode);
       const ledger = process.env.ATTN_AUTOMODE_DENIAL_LOG?.trim();
       if (ledger) env.ATTN_PI_AUTOMODE_DENIAL_LOG = ledger;
-      env.ATTN_PI_SESSION_ID = sessionID;
+      env.ATTN_PI_SESSION_ID = run.sessionID;
     }
     const proxy = await this.ensureProxy(autoMode);
-    if (proxy) {
-      proxy.proxy.registerCredentials(token);
+    if (proxy && run.proxyCredentials) {
+      proxy.proxy.registerCredentials(run.proxyCredentials);
       env.ATTN_PI_PROXY_ADDR = `${proxy.address.host}:${proxy.address.port}`;
+      env.ATTN_PI_PROXY_CREDENTIALS = run.proxyCredentials;
     }
     return env;
   }
@@ -495,13 +507,13 @@ export class PiDriver {
     }
   }
 
-  // A held connection is decided by the session that made it: the proxy credentials are
-  // that session's run token, and the answer comes back over its own relay connection.
+  // A held connection is decided by the session that made it: the proxy credentials name
+  // that run, and the answer comes back over that run's own relay connection.
   private async decideNetwork(request: NetworkRequest): Promise<NetworkDecision> {
-    const run = this.runsByToken.get(request.credentials);
+    const run = this.runsByProxyCredentials.get(request.credentials);
     const connection = run?.connection;
     if (!connection) {
-      throw new Error(`no live pi suite for run token ${request.credentials}; nothing can decide ${request.host}`);
+      throw new Error(`no live pi suite for these proxy credentials; nothing can decide ${request.host}`);
     }
     const params: RelayNetworkDecideParams = { host: request.host, port: request.port, protocol: request.protocol };
     return this.relay.networkDecide<RelayNetworkDecideParams, RelayNetworkDecideResult>(connection, params);

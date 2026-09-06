@@ -1,13 +1,24 @@
+import { lookup as dnsLookup } from "node:dns/promises";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
 import { serveHttp } from "./http";
-import { DomainMatcher, isExplicitLocalAllowlisted, isLocalLiteral, normalizeHost } from "./policy";
+import {
+  DomainMatcher,
+  isExplicitLocalAllowlisted,
+  isLocalLiteral,
+  isNonPublicIp,
+  normalizeHost,
+  parseIp,
+  targetMatchesNonPublicAddress,
+  unscopedIpLiteral,
+} from "./policy";
 import { serveSocks5 } from "./socks5";
-import { ConnectionClosedError, SocketReader } from "./stream";
+import { ConnectionClosedError, SocketReader, connectTcp } from "./stream";
 import type {
   Decider,
   DenialReason,
+  DialResult,
   GateVerdict,
   HostDecision,
   NetworkDecision,
@@ -20,6 +31,7 @@ import type {
 export type {
   Decider,
   DenialReason,
+  DialResult,
   HostDecision,
   NetworkDecision,
   NetworkPolicy,
@@ -30,18 +42,23 @@ export type {
 
 const socksVersion = 0x05;
 
+// Codex's DNS_LOOKUP_TIMEOUT (runtime.rs:50); the receipt is Codex's. A lookup that
+// does not answer inside it denies the host, exactly as a lookup error does.
+const dnsLookupTimeoutMs = 2_000;
+
 // Codex keeps the last 200 blocked requests per proxy (runtime.rs:49); here the ledger
 // is per credentials so one busy session cannot evict another session's denials.
 const maxDenialsPerCredentials = 200;
 
-/** One proxy per profile, shared by every pi session; the session run token is the
- * proxy credentials, so every connection is attributed to the session that made it. */
+/** One proxy per profile, shared by every pi session; each session gets its own proxy
+ * credentials, so every connection is attributed to the session that made it. */
 export class NetworkProxy implements ProxyGate {
   private policy: NetworkPolicy;
   private allowMatcher: DomainMatcher;
   private denyMatcher: DomainMatcher;
   private readonly stateDir: string;
   private readonly decide: Decider;
+  private readonly lookup: (host: string) => Promise<string[]>;
   private server: Server | undefined;
   private readonly sockets = new Set<Socket>();
   private readonly credentials = new Set<string>();
@@ -49,12 +66,18 @@ export class NetworkProxy implements ProxyGate {
   private readonly onceGrants = new Map<string, Map<string, number>>();
   private readonly denialLedger = new Map<string, ProxyDenial[]>();
 
-  constructor(options: { policy: NetworkPolicy; stateDir: string; decide: Decider }) {
+  constructor(options: {
+    policy: NetworkPolicy;
+    stateDir: string;
+    decide: Decider;
+    lookup?: (host: string) => Promise<string[]>;
+  }) {
     this.policy = normalizePolicy(options.policy);
     this.allowMatcher = new DomainMatcher(this.policy.allowed_domains);
     this.denyMatcher = new DomainMatcher(this.policy.denied_domains);
     this.stateDir = options.stateDir;
     this.decide = options.decide;
+    this.lookup = options.lookup ?? systemLookup;
   }
 
   async listen(): Promise<{ host: "127.0.0.1"; port: number }> {
@@ -121,10 +144,11 @@ export class NetworkProxy implements ProxyGate {
     return since === undefined ? [...entries] : entries.filter((entry) => entry.at > since);
   }
 
-  /** The policy answer alone: no decider, no grant consumed, no I/O. */
+  /** The literal policy answer alone: no decider, no grant consumed, no I/O. The
+   * resolved-address check that can still deny an "allow" runs in `authorize`. */
   evaluateHost(credentials: string, host: string): HostDecision | "ask" {
     const normalized = normalizeHost(host);
-    if (this.hardDenyReason(normalized) !== undefined) return "deny";
+    if (this.literalDenyReason(normalized) !== undefined) return "deny";
     if (this.allowMatcher.matches(normalized)) return "allow";
     return this.hasGrant(credentials, normalized) ? "allow" : "ask";
   }
@@ -135,7 +159,7 @@ export class NetworkProxy implements ProxyGate {
 
   async authorize(request: NetworkRequest): Promise<GateVerdict> {
     const normalized = normalizeHost(request.host);
-    const hardDeny = this.hardDenyReason(normalized);
+    const hardDeny = await this.hardDenyReason(normalized);
     if (hardDeny !== undefined) {
       this.recordDenial(request, hardDeny);
       return { allowed: false, reason: hardDeny };
@@ -173,15 +197,70 @@ export class NetworkProxy implements ProxyGate {
     this.denialLedger.set(request.credentials, entries);
   }
 
+  /** Connects to the vetted host, re-checking the addresses it actually resolves to.
+   * Codex re-checks at connect time because a name can resolve differently twice. */
+  async dial(request: NetworkRequest): Promise<DialResult> {
+    const normalized = normalizeHost(request.host);
+    let addresses: string[];
+    try {
+      addresses = await this.resolve(normalized);
+    } catch (error) {
+      return { outcome: "unreachable", error };
+    }
+    const target = addresses.find((address) => this.allowsTarget(normalized, address));
+    if (target === undefined) {
+      this.recordDenial(request, "not_allowed_local");
+      return { outcome: "denied", reason: "not_allowed_local" };
+    }
+    try {
+      return { outcome: "connected", socket: await connectTcp(target, request.port) };
+    } catch (error) {
+      return { outcome: "unreachable", error };
+    }
+  }
+
   // Decision order is Codex's (runtime.rs:578-632): an explicit deny always wins, then
   // local/private targets, which only an exact allowlist entry opens.
-  private hardDenyReason(normalizedHost: string): DenialReason | undefined {
+  private literalDenyReason(normalizedHost: string): DenialReason | undefined {
     if (!this.policy.enabled) return "denied";
     if (this.denyMatcher.matches(normalizedHost)) return "denied";
+    if (this.policy.allow_local_binding) return undefined;
     if (isLocalLiteral(normalizedHost) && !isExplicitLocalAllowlisted(this.policy.allowed_domains, normalizedHost)) {
       return "not_allowed_local";
     }
     return undefined;
+  }
+
+  // A local literal was already opened (or refused) by the exact allowlist above; a name
+  // is resolved, and one resolving off-public is denied even when allowlisted (runtime.rs:612-625).
+  private async hardDenyReason(normalizedHost: string): Promise<DenialReason | undefined> {
+    const literal = this.literalDenyReason(normalizedHost);
+    if (literal !== undefined || this.policy.allow_local_binding) return literal;
+    if (isLocalLiteral(normalizedHost)) return undefined;
+    return (await this.resolvesToNonPublic(normalizedHost)) ? "not_allowed_local" : undefined;
+  }
+
+  // "Block the request if this DNS lookup fails. We resolve the hostname again when we
+  // connect, so a failed check here does not prove the destination is public." (runtime.rs:978-980)
+  private async resolvesToNonPublic(normalizedHost: string): Promise<boolean> {
+    try {
+      const addresses = await this.resolve(normalizedHost);
+      return addresses.some((address) => isNonPublicIp(address) || parseIp(address) === undefined);
+    } catch {
+      return true;
+    }
+  }
+
+  private async resolve(normalizedHost: string): Promise<string[]> {
+    const literal = unscopedIpLiteral(normalizedHost) ?? normalizedHost;
+    if (parseIp(literal) !== undefined) return [literal];
+    return withTimeout(this.lookup(normalizedHost), dnsLookupTimeoutMs, normalizedHost);
+  }
+
+  private allowsTarget(normalizedHost: string, address: string): boolean {
+    if (!isNonPublicIp(address)) return parseIp(address) !== undefined;
+    if (this.policy.allow_local_binding) return true;
+    return targetMatchesNonPublicAddress(normalizedHost, address) && this.literalDenyReason(normalizedHost) === undefined;
   }
 
   private hasGrant(credentials: string, normalizedHost: string): boolean {
@@ -243,7 +322,20 @@ function normalizePolicy(policy: NetworkPolicy): NetworkPolicy {
     enabled: policy.enabled === true,
     allowed_domains: [...(policy.allowed_domains ?? [])],
     denied_domains: [...(policy.denied_domains ?? [])],
+    allow_local_binding: policy.allow_local_binding === true,
   };
+}
+
+async function systemLookup(host: string): Promise<string[]> {
+  const answers = await dnsLookup(host, { all: true });
+  return answers.map((answer) => answer.address);
+}
+
+function withTimeout<T>(work: Promise<T>, ms: number, host: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`DNS lookup for ${host} exceeded ${ms}ms`)), ms);
+    work.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
 }
 
 function bind(server: Server, port: number): Promise<number> {
@@ -267,11 +359,17 @@ function bind(server: Server, port: number): Promise<number> {
 export function networkPolicyFrom(autoMode: unknown): NetworkPolicy | undefined {
   const network = (autoMode as { network?: unknown } | null | undefined)?.network;
   if (typeof network !== "object" || network === null || Array.isArray(network)) return undefined;
-  const record = network as { enabled?: unknown; allowed_domains?: unknown; denied_domains?: unknown };
+  const record = network as {
+    enabled?: unknown;
+    allowed_domains?: unknown;
+    denied_domains?: unknown;
+    allow_local_binding?: unknown;
+  };
   return {
     enabled: record.enabled === true,
     allowed_domains: stringList(record.allowed_domains),
     denied_domains: stringList(record.denied_domains),
+    allow_local_binding: record.allow_local_binding === true,
   };
 }
 

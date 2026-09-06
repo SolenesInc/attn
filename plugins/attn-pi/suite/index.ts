@@ -15,6 +15,7 @@ const suite = processSingleton(
       socketPath: process.env.ATTN_PI_SUITE_SOCKET,
       token: process.env.ATTN_PI_TOKEN,
       piVersion: VERSION,
+      proxyCredentials: process.env.ATTN_PI_PROXY_CREDENTIALS,
     }),
 );
 

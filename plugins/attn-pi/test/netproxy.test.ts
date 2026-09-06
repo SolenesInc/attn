@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, jest, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { createConnection, createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -47,13 +47,20 @@ class ScriptedDecider {
 
 type Harness = { proxy: NetworkProxy; port: number; decider: ScriptedDecider; stateDir: string };
 
-async function startProxy(policy: Partial<NetworkPolicy>, credentials: string[] = [token]): Promise<Harness> {
+// The upstream these tests dial is on loopback, so the harness opts into local binding
+// the way Codex's own tests do; the cases about the local guard turn it back off.
+async function startProxy(
+  policy: Partial<NetworkPolicy>,
+  credentials: string[] = [token],
+  lookup?: (host: string) => Promise<string[]>,
+): Promise<Harness> {
   const decider = new ScriptedDecider();
   const stateDir = mkdtempSync(join(tmpdir(), "attn-netproxy-"));
   const proxy = new NetworkProxy({
-    policy: { enabled: true, allowed_domains: [], denied_domains: [], ...policy },
+    policy: { enabled: true, allowed_domains: [], denied_domains: [], allow_local_binding: true, ...policy },
     stateDir,
     decide: decider.decide,
+    ...(lookup ? { lookup } : {}),
   });
   const address = await proxy.listen();
   cleanups.push(() => proxy.close());
@@ -270,7 +277,7 @@ describe("network proxy over the wire", () => {
 
   test("local and private addresses are hard denied even under a global allowlist", async () => {
     const upstream = await startUpstream();
-    const { port, decider, proxy } = await startProxy({ allowed_domains: ["*"] });
+    const { port, decider, proxy } = await startProxy({ allowed_domains: ["*"], allow_local_binding: false });
     const wire = await Wire.open(port);
 
     wire.write(connectRequest("127.0.0.1", upstream.port, token));
@@ -285,8 +292,6 @@ describe("network proxy over the wire", () => {
     expect(proxy.evaluateHost(token, "8.8.8.8")).toBe("allow");
   });
 
-  // `127.1` is the ask-path fixture: the literal classifier does not read it as an address,
-  // so it reaches the decider, and the OS still resolves it to the local upstream.
   test("an allowlist miss holds the connection on the decider, then proceeds once it allows", async () => {
     const upstream = await startUpstream();
     const { port, decider } = await startProxy({ allowed_domains: ["nothing.example.com"] });
@@ -295,7 +300,7 @@ describe("network proxy over the wire", () => {
     decider.answer = () => new Promise<NetworkDecision>((resolve) => (release = resolve));
     const asked = new Promise<void>((resolve) => (decider.onCall = resolve));
 
-    wire.write(connectRequest("127.1", upstream.port, token));
+    wire.write(connectRequest("127.0.0.1", upstream.port, token));
     await asked;
     await drainEventLoop();
     expect(wire.buffered).toBe(0);
@@ -305,7 +310,7 @@ describe("network proxy over the wire", () => {
     expect(decider.calls).toHaveLength(1);
     expect(decider.calls[0]).toMatchObject({
       credentials: token,
-      host: "127.1",
+      host: "127.0.0.1",
       port: upstream.port,
       protocol: "https_connect",
     });
@@ -343,11 +348,11 @@ describe("network proxy over the wire", () => {
     decider.answer = async () => ({ decision: "allow", scope: "session" });
 
     const first = await Wire.open(port);
-    first.write(connectRequest("127.1", upstream.port, token));
+    first.write(connectRequest("127.0.0.1", upstream.port, token));
     expect(await first.readUntil("\r\n\r\n")).toContain("200 Connection established");
 
     const second = await Wire.open(port);
-    second.write(connectRequest("127.1", upstream.port, token));
+    second.write(connectRequest("127.0.0.1", upstream.port, token));
     expect(await second.readUntil("\r\n\r\n")).toContain("200 Connection established");
 
     expect(decider.calls).toHaveLength(1);
@@ -357,15 +362,15 @@ describe("network proxy over the wire", () => {
     const upstream = await startUpstream();
     const { port, decider, proxy } = await startProxy({ allowed_domains: [] });
     decider.answer = async () => ({ decision: "deny" });
-    proxy.allowHost(token, "127.1", "once");
+    proxy.allowHost(token, "127.0.0.1", "once");
 
     const first = await Wire.open(port);
-    first.write(connectRequest("127.1", upstream.port, token));
+    first.write(connectRequest("127.0.0.1", upstream.port, token));
     expect(await first.readUntil("\r\n\r\n")).toContain("200 Connection established");
     expect(decider.calls).toEqual([]);
 
     const second = await Wire.open(port);
-    second.write(connectRequest("127.1", upstream.port, token));
+    second.write(connectRequest("127.0.0.1", upstream.port, token));
     expect(await second.readToClose()).toContain("403 Forbidden");
     expect(decider.calls).toHaveLength(1);
   });
@@ -373,25 +378,25 @@ describe("network proxy over the wire", () => {
   test("revoking credentials forgets their grants and refuses their next connection", async () => {
     const upstream = await startUpstream();
     const { port, proxy, decider } = await startProxy({ allowed_domains: [] });
-    proxy.allowHost(token, "127.1", "session");
-    expect(proxy.evaluateHost(token, "127.1")).toBe("allow");
+    proxy.allowHost(token, "127.0.0.1", "session");
+    expect(proxy.evaluateHost(token, "127.0.0.1")).toBe("allow");
 
     proxy.revokeCredentials(token);
     proxy.registerCredentials(token);
-    expect(proxy.evaluateHost(token, "127.1")).toBe("ask");
+    expect(proxy.evaluateHost(token, "127.0.0.1")).toBe("ask");
 
     decider.answer = async () => ({ decision: "deny" });
     const wire = await Wire.open(port);
-    wire.write(connectRequest("127.1", upstream.port, token));
+    wire.write(connectRequest("127.0.0.1", upstream.port, token));
     expect(await wire.readToClose()).toContain("403 Forbidden");
   });
 
   test("a grant belongs to the credentials that earned it", async () => {
     const { proxy } = await startProxy({ allowed_domains: [] }, [token, otherToken]);
-    proxy.allowHost(token, "127.1", "session");
+    proxy.allowHost(token, "127.0.0.1", "session");
 
-    expect(proxy.evaluateHost(token, "127.1")).toBe("allow");
-    expect(proxy.evaluateHost(otherToken, "127.1")).toBe("ask");
+    expect(proxy.evaluateHost(token, "127.0.0.1")).toBe("allow");
+    expect(proxy.evaluateHost(otherToken, "127.0.0.1")).toBe("ask");
   });
 
   test("wildcard rules follow Codex's shapes", async () => {
@@ -482,7 +487,12 @@ describe("network proxy over the wire", () => {
     const { proxy } = await startProxy({ allowed_domains: ["example.com"] });
     expect(proxy.evaluateHost(token, "example.com")).toBe("allow");
 
-    proxy.setPolicy({ enabled: true, allowed_domains: ["other.test"], denied_domains: ["example.com"] });
+    proxy.setPolicy({
+      enabled: true,
+      allowed_domains: ["other.test"],
+      denied_domains: ["example.com"],
+      allow_local_binding: true,
+    });
 
     expect(proxy.evaluateHost(token, "example.com")).toBe("deny");
     expect(proxy.evaluateHost(token, "other.test")).toBe("allow");
@@ -496,5 +506,127 @@ describe("network proxy over the wire", () => {
     const again = await proxy.listen();
 
     expect(again).toEqual({ host: "127.0.0.1", port });
+  });
+
+  test("a keep-alive request is rewritten to Connection: close so the next one is checked again", async () => {
+    const upstream = await startUpstream();
+    const { port } = await startProxy({ allowed_domains: ["127.0.0.1"] });
+    const wire = await Wire.open(port);
+
+    wire.write(
+      [
+        `GET http://127.0.0.1:${upstream.port}/hello HTTP/1.1`,
+        `Host: 127.0.0.1:${upstream.port}`,
+        `Proxy-Authorization: Basic ${basic(token)}`,
+        "Connection: keep-alive",
+        "",
+        "",
+      ].join("\r\n"),
+    );
+
+    expect(await wire.readToClose()).toContain("UPSTREAM");
+    expect(upstream.received[0]).toContain("Connection: close");
+    expect(upstream.received[0]?.toLowerCase()).not.toContain("keep-alive");
+  });
+});
+
+describe("the local network guard", () => {
+  const internal = { credentials: token, host: "internal.example.com", port: 443, protocol: "https_connect" } as const;
+
+  test("a hostname resolving to a private address is denied even when it is allowlisted", async () => {
+    const { port, decider, proxy } = await startProxy(
+      { allowed_domains: ["internal.example.com"], allow_local_binding: false },
+      [token],
+      async () => ["10.0.0.5"],
+    );
+    const wire = await Wire.open(port);
+
+    wire.write(connectRequest("internal.example.com", 443, token));
+    const response = await wire.readToClose();
+
+    expect(response).toContain("403 Forbidden");
+    expect(decider.calls).toEqual([]);
+    expect(proxy.denials(token)[0]?.reason).toBe("not_allowed_local");
+  });
+
+  test("a hostname whose lookup fails is denied, because a failed lookup proves nothing", async () => {
+    const { port, decider, proxy } = await startProxy(
+      { allowed_domains: ["internal.example.com"], allow_local_binding: false },
+      [token],
+      async () => {
+        throw new Error("EAI_AGAIN");
+      },
+    );
+    const wire = await Wire.open(port);
+
+    wire.write(connectRequest("internal.example.com", 443, token));
+
+    expect(await wire.readToClose()).toContain("403 Forbidden");
+    expect(decider.calls).toEqual([]);
+    expect(proxy.denials(token)[0]?.reason).toBe("not_allowed_local");
+  });
+
+  test("a hostname whose lookup never answers is denied once the DNS timeout expires", async () => {
+    const { proxy, decider } = await startProxy(
+      { allowed_domains: ["internal.example.com"], allow_local_binding: false },
+      [token],
+      () => new Promise<string[]>(() => {}),
+    );
+
+    jest.useFakeTimers();
+    try {
+      const verdict = proxy.authorize({ ...internal });
+      jest.advanceTimersByTime(2_000);
+      expect(await verdict).toEqual({ allowed: false, reason: "not_allowed_local" });
+    } finally {
+      jest.useRealTimers();
+    }
+    expect(decider.calls).toEqual([]);
+  });
+
+  test("a name that resolves public, then private, is denied at connect time", async () => {
+    const answers = [["93.184.216.34"], ["127.0.0.1"]];
+    const { port, decider, proxy } = await startProxy(
+      { allowed_domains: ["rebind.example.com"], allow_local_binding: false },
+      [token],
+      async () => answers.shift() ?? ["127.0.0.1"],
+    );
+    const wire = await Wire.open(port);
+
+    wire.write(connectRequest("rebind.example.com", 443, token));
+    const response = await wire.readToClose();
+
+    expect(response).toContain("403 Forbidden");
+    expect(decider.calls).toEqual([]);
+    expect(proxy.denials(token)[0]?.reason).toBe("not_allowed_local");
+  });
+
+  test("SOCKS5 answers the same connect-time rejection with reply 0x02", async () => {
+    const answers = [["93.184.216.34"], ["127.0.0.1"]];
+    const { port } = await startProxy(
+      { allowed_domains: ["rebind.example.com"], allow_local_binding: false },
+      [token],
+      async () => answers.shift() ?? ["127.0.0.1"],
+    );
+    const wire = await Wire.open(port);
+
+    await socks5Handshake(wire, token);
+    expect(await wire.read(2)).toEqual([0x01, 0x00]);
+
+    expect(await socks5Connect(wire, "rebind.example.com", 443)).toBe(0x02);
+  });
+
+  test("an exactly allowlisted localhost still reaches a loopback upstream", async () => {
+    const upstream = await startUpstream();
+    const policy = { allowed_domains: ["localhost"], allow_local_binding: false };
+    const { port, decider } = await startProxy(policy, [token], async () => ["127.0.0.1"]);
+    const wire = await Wire.open(port);
+
+    wire.write(connectRequest("localhost", upstream.port, token));
+    expect(await wire.readUntil("\r\n\r\n")).toContain("200 Connection established");
+    wire.write("ping\n");
+
+    expect(await wire.readToClose()).toContain("UPSTREAM");
+    expect(decider.calls).toEqual([]);
   });
 });

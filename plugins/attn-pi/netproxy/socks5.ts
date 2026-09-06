@@ -1,4 +1,4 @@
-import { connect, isIPv4, type Socket } from "node:net";
+import { isIPv4, type Socket } from "node:net";
 import { SocketReader, pipeBothWays } from "./stream";
 import type { NetworkRequest, ProxyGate } from "./types";
 
@@ -32,14 +32,13 @@ export async function serveSocks5(client: Socket, reader: SocketReader, gate: Pr
     return;
   }
 
-  let upstream: Socket;
-  try {
-    upstream = await dial(request.host, request.port);
-  } catch (error) {
-    writeReply(client, replyForDialError(error));
+  const dialed = await gate.dial(target);
+  if (dialed.outcome !== "connected") {
+    writeReply(client, dialed.outcome === "denied" ? replyNotAllowed : replyForDialError(dialed.error));
     client.end();
     return;
   }
+  const upstream = dialed.socket;
 
   const pending = reader.detach();
   writeReply(client, replySucceeded, upstream.localAddress ?? "0.0.0.0", upstream.localPort ?? 0);
@@ -48,7 +47,7 @@ export async function serveSocks5(client: Socket, reader: SocketReader, gate: Pr
 }
 
 // RFC 1928 greeting then RFC 1929 username/password; "no authentication" is refused
-// because the proxy attributes every connection to a session run token.
+// because the proxy attributes every connection to one session's proxy credentials.
 async function negotiate(client: Socket, reader: SocketReader, gate: ProxyGate): Promise<string | undefined> {
   const greeting = await reader.take(2);
   if (greeting[0] !== version) {
@@ -128,15 +127,4 @@ function replyForDialError(error: unknown): number {
   if (code === "ECONNREFUSED") return replyConnectionRefused;
   if (code === "ENOTFOUND" || code === "EAI_AGAIN" || code === "EHOSTUNREACH") return replyHostUnreachable;
   return replyGeneralFailure;
-}
-
-function dial(host: string, port: number): Promise<Socket> {
-  return new Promise((resolve, reject) => {
-    const socket = connect({ host, port });
-    socket.once("error", reject);
-    socket.once("connect", () => {
-      socket.off("error", reject);
-      resolve(socket);
-    });
-  });
 }

@@ -1,4 +1,4 @@
-import type { Socket } from "node:net";
+import { connect, type Socket } from "node:net";
 
 export class ConnectionClosedError extends Error {
   constructor(message = "the proxy client closed the connection") {
@@ -103,6 +103,18 @@ export class SocketReader {
     this.wake = undefined;
     wake?.();
   }
+}
+
+/** Connects to one already-vetted address; the caller decides which address that is. */
+export function connectTcp(address: string, port: number): Promise<Socket> {
+  return new Promise((resolve, reject) => {
+    const socket = connect({ host: address, port });
+    socket.once("error", reject);
+    socket.once("connect", () => {
+      socket.off("error", reject);
+      resolve(socket);
+    });
+  });
 }
 
 /** Joins two sockets and tears both down when either side finishes or fails. */

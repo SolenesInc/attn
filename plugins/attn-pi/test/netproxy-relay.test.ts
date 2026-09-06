@@ -81,6 +81,9 @@ async function buildDriver(): Promise<{ driver: PiDriver; socketPath: string }> 
   return { driver, socketPath };
 }
 
+// Loopback is where the test upstream lives, so these spawns opt into local binding.
+const openNetwork = { enabled: true, allowed_domains: [], denied_domains: [], allow_local_binding: true };
+
 function spawnParams(network: unknown, overrides?: Partial<DriverSpawnParams>): DriverSpawnParams {
   return {
     session_id: "session-1",
@@ -171,16 +174,20 @@ describe("the driver hosts the proxy and decides through the relay", () => {
   test("a spawn that asks for network policy hands the session the proxy address", async () => {
     const { driver } = await buildDriver();
 
-    const spawned = await driver.spawn(spawnParams({ enabled: true, allowed_domains: [], denied_domains: [] }));
+    const spawned = await driver.spawn(spawnParams(openNetwork));
 
     expect(spawned.env?.ATTN_PI_PROXY_ADDR).toMatch(/^127\.0\.0\.1:\d+$/);
-    expect(driver.networkProxy()?.evaluateHost(spawned.env?.ATTN_PI_TOKEN ?? "", "example.com")).toBe("ask");
+    expect(spawned.env?.ATTN_PI_PROXY_CREDENTIALS).toMatch(/^[0-9a-f-]{36}$/);
+    // The sandboxed command carries the proxy credentials; the relay token must stay
+    // out of its reach, so the two are never the same string.
+    expect(spawned.env?.ATTN_PI_PROXY_CREDENTIALS).not.toBe(spawned.env?.ATTN_PI_TOKEN);
+    expect(driver.networkProxy()?.evaluateHost(spawned.env?.ATTN_PI_PROXY_CREDENTIALS ?? "", "example.com")).toBe("ask");
   });
 
   test("a spawn without network policy starts no proxy", async () => {
     const { driver } = await buildDriver();
 
-    const spawned = await driver.spawn(spawnParams({ enabled: false, allowed_domains: [], denied_domains: [] }));
+    const spawned = await driver.spawn(spawnParams({ ...openNetwork, enabled: false }));
 
     expect(spawned.env?.ATTN_PI_PROXY_ADDR).toBeUndefined();
     expect(driver.networkProxy()).toBeUndefined();
@@ -189,52 +196,54 @@ describe("the driver hosts the proxy and decides through the relay", () => {
   test("an allowlist miss is decided by the session that owns the connection", async () => {
     const upstream = await startUpstream();
     const { driver, socketPath } = await buildDriver();
-    const spawned = await driver.spawn(spawnParams({ enabled: true, allowed_domains: [], denied_domains: [] }));
+    const spawned = await driver.spawn(spawnParams(openNetwork));
     const token = spawned.env?.ATTN_PI_TOKEN ?? "";
+    const credentials = spawned.env?.ATTN_PI_PROXY_CREDENTIALS ?? "";
     const suite = await FakeSuite.connect(socketPath, token);
 
-    const response = await proxyConnect(spawned.env?.ATTN_PI_PROXY_ADDR ?? "", token, "127.1", upstream);
+    const response = await proxyConnect(spawned.env?.ATTN_PI_PROXY_ADDR ?? "", credentials, "127.0.0.1", upstream);
 
     expect(response).toContain("200 Connection established");
     expect(suite.asked).toEqual([
-      { method: relayMethods.networkDecide, params: { host: "127.1", port: upstream, protocol: "https_connect" } },
+      { method: relayMethods.networkDecide, params: { host: "127.0.0.1", port: upstream, protocol: "https_connect" } },
     ]);
   });
 
   test("a session with no live suite cannot decide, so the connection is denied", async () => {
     const upstream = await startUpstream();
     const { driver } = await buildDriver();
-    const spawned = await driver.spawn(spawnParams({ enabled: true, allowed_domains: [], denied_domains: [] }));
-    const token = spawned.env?.ATTN_PI_TOKEN ?? "";
+    const spawned = await driver.spawn(spawnParams(openNetwork));
+    const credentials = spawned.env?.ATTN_PI_PROXY_CREDENTIALS ?? "";
 
-    const response = await proxyConnect(spawned.env?.ATTN_PI_PROXY_ADDR ?? "", token, "127.1", upstream);
+    const response = await proxyConnect(spawned.env?.ATTN_PI_PROXY_ADDR ?? "", credentials, "127.0.0.1", upstream);
 
     expect(response).toContain("403 Forbidden");
-    expect(driver.networkProxy()?.denials(token)[0]?.reason).toBe("decider_unavailable");
+    expect(driver.networkProxy()?.denials(credentials)[0]?.reason).toBe("decider_unavailable");
   });
 
   test("automode.policy_changed reaches the running proxy without a relaunch", async () => {
     const upstream = await startUpstream();
     const { driver, socketPath } = await buildDriver();
-    const spawned = await driver.spawn(spawnParams({ enabled: true, allowed_domains: [], denied_domains: [] }));
+    const spawned = await driver.spawn(spawnParams(openNetwork));
     const token = spawned.env?.ATTN_PI_TOKEN ?? "";
+    const credentials = spawned.env?.ATTN_PI_PROXY_CREDENTIALS ?? "";
     const suite = await FakeSuite.connect(socketPath, token);
 
-    await driver.policyChanged({ network: { enabled: true, allowed_domains: [], denied_domains: ["127.1"] } });
-    const response = await proxyConnect(spawned.env?.ATTN_PI_PROXY_ADDR ?? "", token, "127.1", upstream);
+    await driver.policyChanged({ network: { ...openNetwork, denied_domains: ["127.0.0.1"] } });
+    const response = await proxyConnect(spawned.env?.ATTN_PI_PROXY_ADDR ?? "", credentials, "127.0.0.1", upstream);
 
-    expect(response).toContain('Network access to "127.1" is blocked by policy.');
+    expect(response).toContain('Network access to "127.0.0.1" is blocked by policy.');
     expect(suite.asked).toEqual([]);
   });
 
   test("closing a session revokes its proxy credentials", async () => {
     const upstream = await startUpstream();
     const { driver } = await buildDriver();
-    const spawned = await driver.spawn(spawnParams({ enabled: true, allowed_domains: [], denied_domains: [] }));
-    const token = spawned.env?.ATTN_PI_TOKEN ?? "";
+    const spawned = await driver.spawn(spawnParams(openNetwork));
+    const credentials = spawned.env?.ATTN_PI_PROXY_CREDENTIALS ?? "";
 
     await driver.sessionClosed({ session_id: "session-1", run_id: "run-1", reason: "exit" });
-    const response = await proxyConnect(spawned.env?.ATTN_PI_PROXY_ADDR ?? "", token, "127.1", upstream);
+    const response = await proxyConnect(spawned.env?.ATTN_PI_PROXY_ADDR ?? "", credentials, "127.0.0.1", upstream);
 
     expect(response).toContain("407 Proxy Authentication Required");
   });
@@ -269,9 +278,19 @@ class FakePi {
 
 class CollectingDelegate implements RelayDelegate {
   readonly connections: RelayConnection[] = [];
+  /** Resolves on the first suite.hello, so tests wait on the handshake itself. */
+  readonly firstConnection: Promise<RelayConnection>;
+  private announce: (connection: RelayConnection) => void = () => {};
+
+  constructor() {
+    this.firstConnection = new Promise<RelayConnection>((resolve) => {
+      this.announce = resolve;
+    });
+  }
 
   async suiteHello(connection: RelayConnection): Promise<{ ok: true }> {
     this.connections.push(connection);
+    this.announce(connection);
     return { ok: true };
   }
 
@@ -282,12 +301,15 @@ class CollectingDelegate implements RelayDelegate {
   async suiteReportPullRequest(): Promise<void> {}
 }
 
-async function connectedSuite(token: string): Promise<{ suite: AttnPiSuite; connection: RelayConnection }> {
+async function connectedSuite(
+  token: string,
+  proxyCredentials?: string,
+): Promise<{ suite: AttnPiSuite; connection: RelayConnection }> {
   const socketPath = nextSocketPath();
   const delegate = new CollectingDelegate();
   const relay = new RelayServer({ socketPath, delegate });
   await relay.listen();
-  const suite = new AttnPiSuite({ socketPath, token, piVersion: "0.80.10" });
+  const suite = new AttnPiSuite({ socketPath, token, piVersion: "0.80.10", proxyCredentials });
   cleanups.push(() => {
     suite.close();
     relay.close();
@@ -295,8 +317,7 @@ async function connectedSuite(token: string): Promise<{ suite: AttnPiSuite; conn
   const pi = new FakePi();
   suite.register(pi as never);
   pi.fire("session_start", { type: "session_start", reason: "startup" }, new FakeContext("pi-1"));
-  while (delegate.connections.length === 0) await new Promise<void>((resolve) => setTimeout(resolve, 1));
-  return { suite, connection: delegate.connections[0]! };
+  return { suite, connection: await delegate.firstConnection };
 }
 
 describe("the suite answers driver.network_decide", () => {
@@ -312,8 +333,8 @@ describe("the suite answers driver.network_decide", () => {
     expect(decision).toEqual({ decision: "deny" });
   });
 
-  test("a set decider is called with the session's own credentials", async () => {
-    const { suite, connection } = await connectedSuite("run-token-1");
+  test("a set decider is called with the run's proxy credentials, not its relay token", async () => {
+    const { suite, connection } = await connectedSuite("run-token-1", "proxy-creds-1");
     const seen: NetworkRequest[] = [];
     suite.networkDecider = async (request) => {
       seen.push(request);
@@ -327,6 +348,6 @@ describe("the suite answers driver.network_decide", () => {
     });
 
     expect(decision).toEqual({ decision: "allow", scope: "session" });
-    expect(seen).toEqual([{ credentials: "run-token-1", host: "example.com", port: 443, protocol: "https_connect" }]);
+    expect(seen).toEqual([{ credentials: "proxy-creds-1", host: "example.com", port: 443, protocol: "https_connect" }]);
   });
 });

@@ -1,4 +1,4 @@
-import { connect, type Socket } from "node:net";
+import type { Socket } from "node:net";
 import { SocketReader, pipeBothWays } from "./stream";
 import { denialBody, denialHeaderValue, type NetworkProtocol, type NetworkRequest, type ProxyGate } from "./types";
 
@@ -31,13 +31,17 @@ export async function serveHttp(client: Socket, reader: SocketReader, gate: Prox
     return;
   }
 
-  let upstream: Socket;
-  try {
-    upstream = await dial(target.host, target.port);
-  } catch (error) {
-    writeSimple(client, 502, "Bad Gateway", `The proxy could not reach ${target.host}:${target.port}: ${String(error)}`);
+  const dialed = await gate.dial(request);
+  if (dialed.outcome === "denied") {
+    writeDenied(client, target.host, dialed.reason);
     return;
   }
+  if (dialed.outcome === "unreachable") {
+    const detail = String(dialed.error);
+    writeSimple(client, 502, "Bad Gateway", `The proxy could not reach ${target.host}:${target.port}: ${detail}`);
+    return;
+  }
+  const upstream = dialed.socket;
 
   const pending = reader.detach();
   if (head.method === "CONNECT") {
@@ -103,26 +107,17 @@ function validPort(port: number): boolean {
   return Number.isInteger(port) && port > 0 && port <= 65_535;
 }
 
-// The hop-by-hop credentials never travel upstream, and the rewritten line is
-// origin-form because the upstream is an origin server, not another proxy.
+// Hop-by-hop credentials never travel upstream, and `Connection: close` replaces any
+// keep-alive so a second request cannot ride this tunnel to an unchecked host.
 function rebuildOriginForm(head: RequestHead, path: string): string {
-  const kept = head.headers.filter(([name]) => {
-    const lowered = name.toLowerCase();
-    return lowered !== "proxy-authorization" && lowered !== "proxy-connection";
-  });
-  const lines = [`${head.method} ${path} ${head.version}`, ...kept.map(([name, value]) => `${name}: ${value}`)];
+  const dropped = new Set(["proxy-authorization", "proxy-connection", "connection", "keep-alive"]);
+  const kept = head.headers.filter(([name]) => !dropped.has(name.toLowerCase()));
+  const lines = [
+    `${head.method} ${path} ${head.version}`,
+    ...kept.map(([name, value]) => `${name}: ${value}`),
+    "Connection: close",
+  ];
   return `${lines.join("\r\n")}\r\n\r\n`;
-}
-
-function dial(host: string, port: number): Promise<Socket> {
-  return new Promise((resolve, reject) => {
-    const socket = connect({ host, port });
-    socket.once("error", reject);
-    socket.once("connect", () => {
-      socket.off("error", reject);
-      resolve(socket);
-    });
-  });
 }
 
 function writeSimple(client: Socket, status: number, reason: string, body: string): void {
@@ -132,7 +127,7 @@ function writeSimple(client: Socket, status: number, reason: string, body: strin
 }
 
 function writeUnauthenticated(client: Socket): void {
-  const body = "The proxy requires the session run token as proxy credentials.";
+  const body = "The proxy requires this session's proxy credentials.";
   client.end(
     `HTTP/1.1 407 Proxy Authentication Required\r\nproxy-authenticate: Basic realm="attn"\r\ncontent-type: text/plain\r\ncontent-length: ${Buffer.byteLength(body)}\r\nconnection: close\r\n\r\n${body}`,
   );

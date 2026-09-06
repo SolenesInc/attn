@@ -72,6 +72,23 @@ export function isNonPublicIp(value: string): boolean {
   return ip !== undefined && isNonPublicParsedIp(ip);
 }
 
+// A resolved non-public address is reachable only when the target named that address
+// itself, or is `localhost` and the address is loopback (connect_policy.rs:124-135).
+export function targetMatchesNonPublicAddress(normalizedHost: string, address: string): boolean {
+  const literal = parseIp(unscopedIpLiteral(normalizedHost) ?? normalizedHost);
+  const resolved = parseIp(address);
+  if (resolved === undefined) return false;
+  if (literal !== undefined) return sameIp(literal, resolved);
+  return normalizedHost === "localhost" && isLoopbackParsedIp(resolved);
+}
+
+function sameIp(left: ParsedIp, right: ParsedIp): boolean {
+  if (left.kind === "v4" || right.kind === "v4") {
+    return left.kind === "v4" && right.kind === "v4" && left.value === right.value;
+  }
+  return left.groups.every((group, index) => group === right.groups[index]);
+}
+
 type ParsedIp = { kind: "v4"; value: number } | { kind: "v6"; groups: number[] };
 
 export function parseIp(value: string): ParsedIp | undefined {
