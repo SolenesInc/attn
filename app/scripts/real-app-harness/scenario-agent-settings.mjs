@@ -68,7 +68,6 @@ runner.registerCleanup('quit_app', () => client.quitApp());
 try {
   const webkitBaseline = await captureWebKitPids();
   await launchFreshAppAndConnect(client, observer);
-  // Copied from an existing installation; a caller can supply its own read-only export.
   const fixture = process.env.ATTN_SETTINGS_FIXTURE
     ? JSON.parse(fs.readFileSync(process.env.ATTN_SETTINGS_FIXTURE, 'utf8'))
     : { 'activity.config': '{"agent":"codex","model":"gpt-5.6-luna","effort":"low"}', 'activity.intervals': '{"watching":120,"present":300}' };
