@@ -19,7 +19,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       force_all: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next')) || (github.event_name == 'pull_request' && github.base_ref == 'main') }}
       daemon: ${{ steps.filter.outputs.daemon }}
@@ -151,7 +151,7 @@ jobs:
       checks: read
       contents: read
       pull-requests: read
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
         with:
@@ -176,7 +176,7 @@ jobs:
 
   main-route:
     name: Main route
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
         with:
@@ -196,7 +196,7 @@ jobs:
     name: Generated types
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.generated == 'true'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
 
@@ -227,7 +227,7 @@ jobs:
     name: Daemon
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
 
@@ -292,11 +292,15 @@ jobs:
     name: PTY upgrade (${{ matrix.os }})
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runs_on }}
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, ubuntu-24.04]
+        include:
+          - os: macos-14
+            runs_on: macos-14
+          - os: ubuntu-24.04
+            runs_on: blacksmith-8vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
         with:
@@ -322,7 +326,7 @@ jobs:
     name: Frontend
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.frontend == 'true'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: app
@@ -380,7 +384,7 @@ jobs:
     name: Frontend E2E (${{ matrix.shard }}/3)
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.frontend == 'true'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -459,7 +463,7 @@ jobs:
     name: Frontend E2E
     needs: frontend-e2e
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Check shard results
         run: |
@@ -471,11 +475,15 @@ jobs:
     name: Tauri (${{ matrix.os }})
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runs_on }}
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, ubuntu-24.04]
+        include:
+          - os: macos-14
+            runs_on: macos-14
+          - os: ubuntu-24.04
+            runs_on: blacksmith-8vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: app/src-tauri
@@ -540,7 +548,7 @@ jobs:
     name: Tauri
     needs: rust
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Check matrix results
         run: |
@@ -556,7 +564,7 @@ jobs:
     name: Plugins
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.plugins == 'true'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
 
@@ -602,7 +610,7 @@ jobs:
       pull-requests: read
     # Each hosted job owns its VM and display; only scenarios within it run serially.
     # A shared concurrency group would cancel unrelated waiting PR and branch checks.
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     # ubuntu-24.04 run 33657368804 took 35m42s end to end; its matrix took 24m07.635s.
     # 60m leaves 24m18s of runner variance before timing out the job.
     timeout-minutes: 60
@@ -776,7 +784,7 @@ jobs:
       - release-preflight
     permissions:
       contents: read
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
 
@@ -808,7 +816,7 @@ jobs:
       - release-preflight
     permissions:
       contents: read
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
 
@@ -830,7 +838,7 @@ jobs:
     concurrency:
       group: branch-health-${{ github.ref_name }}
       cancel-in-progress: false
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
 
