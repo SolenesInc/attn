@@ -231,6 +231,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Blacksmith's /etc/profile.d resets HOME for the runner user, which skips the
+      # login-shell overlay the shell integration tests launch bash with.
+      - name: Keep login shells from resetting HOME
+        run: sudo sed -i '/export HOME="\$RUNNER_HOME"/d' /etc/profile.d/blacksmith.sh
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
