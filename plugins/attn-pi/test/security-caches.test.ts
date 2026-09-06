@@ -81,8 +81,7 @@ test("cache controls and permission prompts take effect in the same session", as
   const tools = new Map<string, any>();
   const notices: string[] = [];
   const ctx = { cwd: join(root, "project"), ui: { setStatus() {}, notify: (text: string) => notices.push(text) } };
-  let available = true;
-  const security = new PiSecurity(configPath, async () => undefined, () => available);
+  const security = new PiSecurity(configPath);
   security.register({ on: (name: string, handler: any) => handlers.set(name, handler), registerCommand: (name: string, command: any) => commands.set(name, command), registerTool: (tool: any) => tools.set(tool.name, tool) } as never);
   cleanups.unshift(async () => handlers.get("session_shutdown")({}, ctx));
   await handlers.get("session_start")({}, ctx);
@@ -91,13 +90,10 @@ test("cache controls and permission prompts take effect in the same session", as
   const cache = config.buildCaches.paths[0]!;
   const run = (path: string) => tools.get("write").execute("cache-write", { path, content: "compiled" }, undefined, undefined, ctx);
   await run(join(cache, "first"));
-  expect(prompt()).toContain('Auto-mode access review: available');
   expect(prompt()).toContain(cache);
-  available = false;
-  expect(prompt()).toContain('Auto-mode access review: unavailable');
   await command("caches off");
   expect(security.cacheWritePaths()).toEqual([]);
-  await expect(run(join(cache, "disabled"))).rejects.toThrow("auto mode is off");
+  await expect(run(join(cache, "disabled"))).rejects.toThrow("outside allowed");
   expect(prompt()).toContain("Build-cache grants: disabled");
   expect(existsSync(join(cache, "first"))).toBe(true);
   await command(`allow-write ${cache}`);
@@ -114,20 +110,20 @@ test("cache controls and permission prompts take effect in the same session", as
   await command("status");
   expect(notices.at(-1)).toContain(`Active cache grants: ${custom}`);
   await command("off");
-  expect(prompt()).toContain("Omit bash.sandbox");
+  expect(prompt()).toContain("The OS sandbox is off");
   expect(prompt()).toContain("Tool network: unrestricted (sandbox disabled)");
-  expect(prompt()).not.toContain("retry bash");
+  expect(prompt()).not.toContain("Writable paths:");
 });
 
 test("network failures get policy-aware recovery without mislabeling unrelated failures", async () => {
   const policy = fixture().resolve();
   const failure = "printf 'getaddrinfo ENOTFOUND registry.example.invalid' >&2; exit 1";
-  const run = async (network: "allow" | "deny", available: boolean) => {
+  const run = async (network: "allow" | "deny") => {
     let output = "";
-    await protectedBash({ ...policy, network }, new CredentialFilter(), () => available).exec(failure, policy.cwd, { onData: (part) => { output += part; } });
+    await protectedBash({ ...policy, network }, new CredentialFilter()).exec(failure, policy.cwd, { onData: (part) => { output += part; } });
     return output;
   };
-  expect(await run("deny", true)).toContain('sandbox: {network: "allow"');
-  expect(await run("deny", false)).toContain("auto mode is off");
-  expect(await run("allow", true)).not.toContain("sandbox:");
+  expect(await run("deny")).toContain("The command reported a network error");
+  expect(await run("deny")).toContain("cannot be widened from inside a tool call");
+  expect(await run("allow")).not.toContain("The command reported a network error");
 });

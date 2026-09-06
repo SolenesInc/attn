@@ -234,13 +234,70 @@ func autoModeDenialNotification(label string, denial store.AutoModeDenial) store
 
 func autoModeConfigInfo(cfg automode.Config) protocol.AutoModeConfigInfo {
 	return protocol.AutoModeConfigInfo{
-		EnabledDefault:  cfg.EnabledDefault,
-		Environment:     autoModeEnvironmentInfo(cfg.Environment),
-		Allow:           nonNilStrings(cfg.Allow),
-		HardDeny:        nonNilStrings(cfg.HardDeny),
-		ShippedHardDeny: nonNilStrings(automode.ShippedHardDeny(config.WSPort())),
-		Models:          nonNilStrings(cfg.Models),
+		EnabledDefault: cfg.EnabledDefault,
+		ApprovalPolicy: cfg.ApprovalPolicy,
+		SandboxMode:    cfg.SandboxMode,
+		Environment:    autoModeEnvironmentInfo(cfg.Environment),
+		Rules:          autoModeRuleInfos(cfg.Rules),
+		ShippedRules:   autoModeRuleInfos(automode.ShippedRules()),
+		Network: protocol.AutoModeNetworkInfo{
+			Enabled:           cfg.Network.Enabled,
+			AllowedDomains:    nonNilStrings(cfg.Network.AllowedDomains),
+			DeniedDomains:     nonNilStrings(cfg.Network.DeniedDomains),
+			AllowLocalBinding: cfg.Network.AllowLocalBinding,
+		},
+		ShippedDeniedDomains: nonNilStrings(automode.ShippedDeniedDomains(config.WSPort())),
+		LegacyPatterns:       nonNilStrings(cfg.LegacyPatterns),
 	}
+}
+
+func autoModeRuleInfos(rules []automode.Rule) []protocol.AutoModeRuleInfo {
+	out := make([]protocol.AutoModeRuleInfo, 0, len(rules))
+	for _, rule := range rules {
+		pattern := make([][]string, 0, len(rule.Pattern))
+		for _, token := range rule.Pattern {
+			pattern = append(pattern, nonNilStrings(token.Alternatives))
+		}
+		out = append(out, protocol.AutoModeRuleInfo{
+			Pattern:       pattern,
+			Decision:      rule.Decision,
+			Justification: rule.Justification,
+			Match:         nonNilCommands(rule.Match),
+			NotMatch:      nonNilCommands(rule.NotMatch),
+		})
+	}
+	return out
+}
+
+// The wire carries one token per entry; the app edits literals, so each is its
+// own single-alternative token.
+func autoModeRuleTokens(pattern []string) []automode.PatternToken {
+	tokens := make([]automode.PatternToken, 0, len(pattern))
+	for _, literal := range pattern {
+		tokens = append(tokens, automode.Token(strings.TrimSpace(literal)))
+	}
+	return tokens
+}
+
+// A removal names a rule that is already stored, so it carries every alternative:
+// "git {push|pull}" and "git push" are two rules and only one is meant.
+func autoModeFullPatternTokens(pattern [][]string) []automode.PatternToken {
+	tokens := make([]automode.PatternToken, 0, len(pattern))
+	for _, alternatives := range pattern {
+		trimmed := make([]string, 0, len(alternatives))
+		for _, alternative := range alternatives {
+			trimmed = append(trimmed, strings.TrimSpace(alternative))
+		}
+		tokens = append(tokens, automode.Token(trimmed...))
+	}
+	return tokens
+}
+
+func nonNilCommands(commands [][]string) [][]string {
+	if commands == nil {
+		return [][]string{}
+	}
+	return commands
 }
 
 func autoModeProposalInfo(p store.AutoModeProposal) protocol.AutoModeProposalInfo {
@@ -249,6 +306,7 @@ func autoModeProposalInfo(p store.AutoModeProposal) protocol.AutoModeProposalInf
 		Kind:       p.Kind,
 		Target:     p.Target,
 		Value:      p.Value,
+		Summary:    automode.DescribeProposal(p.Kind, p.Value),
 		ProposedBy: p.ProposedBy,
 		State:      p.State,
 		CreatedAt:  formatAutoModeStamp(p.CreatedAt),

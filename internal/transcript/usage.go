@@ -8,14 +8,19 @@ import (
 )
 
 type TokenUsage struct {
-	Key                          string
-	Model                        string
+	Key   string
+	Model string
+	// Whose work this was: sessioncost.PurposeAgent or PurposeGuardian. Empty
+	// reads as the agent's own.
+	Purpose                      string
 	InputTokens                  int64
 	OutputTokens                 int64
 	CacheWrite5mTokens           int64
 	CacheWrite1hTokens           int64
 	CacheWriteUnclassifiedTokens int64
 	CacheReadTokens              int64
+	// What the harness charged for this traffic, when it says so.
+	ReportedCostUSD float64
 }
 
 func (u TokenUsage) HasTokens() bool {
@@ -40,7 +45,7 @@ func NewUsageExtractor(agent string) *UsageExtractor {
 
 func SupportsUsage(agent string) bool {
 	switch strings.ToLower(strings.TrimSpace(agent)) {
-	case "claude", "codex":
+	case "claude", "codex", "pi":
 		return true
 	default:
 		return false
@@ -55,6 +60,8 @@ func (e *UsageExtractor) Observe(line []byte, sourceKey string) (TokenUsage, boo
 		usage, ok = extractClaudeUsage(line)
 	case "codex":
 		usage, ok = e.extractCodexUsage(line, sourceKey)
+	case "pi":
+		usage, ok = extractPiUsage(line)
 	default:
 		return TokenUsage{}, false
 	}

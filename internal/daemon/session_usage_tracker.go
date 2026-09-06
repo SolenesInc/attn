@@ -12,11 +12,12 @@ import (
 )
 
 type sessionUsageTracker struct {
-	daemon   *Daemon
-	watcher  *transcriptWatcher
-	resolver transcript.UsageSourceResolver
-	rootPath string
-	sources  map[string]*trackedUsageSource
+	daemon    *Daemon
+	sessionID string
+	agent     string
+	resolver  transcript.UsageSourceResolver
+	rootPath  string
+	sources   map[string]*trackedUsageSource
 }
 
 type trackedUsageSource struct {
@@ -35,8 +36,14 @@ func (d *Daemon) newSessionUsageTracker(w *transcriptWatcher, rootPath string) *
 	if resolver == nil {
 		return nil
 	}
+	return newSessionUsageTrackerAt(d, w.sessionID, string(w.agent), rootPath, resolver)
+}
+
+func newSessionUsageTrackerAt(
+	d *Daemon, sessionID, agent, rootPath string, resolver transcript.UsageSourceResolver,
+) *sessionUsageTracker {
 	return &sessionUsageTracker{
-		daemon: d, watcher: w, resolver: resolver, rootPath: rootPath,
+		daemon: d, sessionID: sessionID, agent: agent, resolver: resolver, rootPath: rootPath,
 		sources: make(map[string]*trackedUsageSource),
 	}
 }
@@ -44,13 +51,13 @@ func (d *Daemon) newSessionUsageTracker(w *transcriptWatcher, rootPath string) *
 func (t *sessionUsageTracker) Reconcile() {
 	sources, err := t.resolver.Discover()
 	if err != nil {
-		t.daemon.logf("transcript watcher: usage source discovery failed session=%s err=%v", t.watcher.sessionID, err)
+		t.daemon.logf("transcript watcher: usage source discovery failed session=%s err=%v", t.sessionID, err)
 		t.markIncomplete()
 		return
 	}
-	state, err := t.daemon.store.SessionCost(t.watcher.sessionID)
+	state, err := t.daemon.store.SessionCost(t.sessionID)
 	if err != nil {
-		t.daemon.logf("transcript watcher: usage state read failed session=%s err=%v", t.watcher.sessionID, err)
+		t.daemon.logf("transcript watcher: usage state read failed session=%s err=%v", t.sessionID, err)
 		return
 	}
 
@@ -65,7 +72,7 @@ func (t *sessionUsageTracker) Reconcile() {
 			}
 			cursor, cursorErr := transcript.HeadCursor(source.Path)
 			if cursorErr != nil {
-				t.daemon.logf("transcript watcher: usage baseline failed session=%s path=%s err=%v", t.watcher.sessionID, source.Path, cursorErr)
+				t.daemon.logf("transcript watcher: usage baseline failed session=%s path=%s err=%v", t.sessionID, source.Path, cursorErr)
 				t.markIncomplete()
 				baselineFailed = true
 				continue
@@ -75,11 +82,11 @@ func (t *sessionUsageTracker) Reconcile() {
 		if baselineFailed {
 			return
 		}
-		if err := t.daemon.store.InitializeSessionCostSources(t.watcher.sessionID, cursors); err != nil {
-			t.daemon.logf("transcript watcher: usage baseline persist failed session=%s err=%v", t.watcher.sessionID, err)
+		if err := t.daemon.store.InitializeSessionCostSources(t.sessionID, cursors); err != nil {
+			t.daemon.logf("transcript watcher: usage baseline persist failed session=%s err=%v", t.sessionID, err)
 			return
 		}
-		state, err = t.daemon.store.SessionCost(t.watcher.sessionID)
+		state, err = t.daemon.store.SessionCost(t.sessionID)
 		if err != nil {
 			return
 		}
@@ -91,8 +98,8 @@ func (t *sessionUsageTracker) Reconcile() {
 		sourceState, exists := state.Sources[source.ID]
 		if !exists {
 			cursor := ""
-			if err := t.daemon.store.InitializeSessionCostSources(t.watcher.sessionID, map[string]string{source.ID: cursor}); err != nil {
-				t.daemon.logf("transcript watcher: usage source persist failed session=%s path=%s err=%v", t.watcher.sessionID, source.Path, err)
+			if err := t.daemon.store.InitializeSessionCostSources(t.sessionID, map[string]string{source.ID: cursor}); err != nil {
+				t.daemon.logf("transcript watcher: usage source persist failed session=%s path=%s err=%v", t.sessionID, source.Path, err)
 				continue
 			}
 			sourceState = store.SessionCostSourceState{Cursor: cursor}
@@ -104,10 +111,10 @@ func (t *sessionUsageTracker) Reconcile() {
 		tracked := t.sources[source.ID]
 		if tracked == nil {
 			tracked = &trackedUsageSource{source: source}
-			tracked.follower, err = usageFollowerAt(source.Path, string(t.watcher.agent), sourceState.Cursor)
+			tracked.follower, err = usageFollowerAt(source.Path, t.agent, sourceState.Cursor)
 			if err != nil {
 				if !isUsageCursorError(err) {
-					t.daemon.logf("transcript watcher: usage follower init failed session=%s path=%s err=%v", t.watcher.sessionID, source.Path, err)
+					t.daemon.logf("transcript watcher: usage follower init failed session=%s path=%s err=%v", t.sessionID, source.Path, err)
 					t.markIncomplete()
 					continue
 				}
@@ -138,7 +145,7 @@ func usageFollowerAt(path, agent, cursor string) (*transcript.Follower, error) {
 func (t *sessionUsageTracker) readIfMoved(tracked *trackedUsageSource) {
 	info, err := os.Stat(tracked.source.Path)
 	if err != nil {
-		t.daemon.logf("transcript watcher: usage source unavailable session=%s path=%s err=%v", t.watcher.sessionID, tracked.source.Path, err)
+		t.daemon.logf("transcript watcher: usage source unavailable session=%s path=%s err=%v", t.sessionID, tracked.source.Path, err)
 		t.markIncomplete()
 		return
 	}
@@ -152,7 +159,7 @@ func (t *sessionUsageTracker) readIfMoved(tracked *trackedUsageSource) {
 			t.resetAtHead(tracked)
 			return
 		}
-		t.daemon.logf("transcript watcher: usage source read failed session=%s path=%s err=%v", t.watcher.sessionID, tracked.source.Path, err)
+		t.daemon.logf("transcript watcher: usage source read failed session=%s path=%s err=%v", t.sessionID, tracked.source.Path, err)
 		t.markIncomplete()
 		return
 	}
@@ -170,6 +177,7 @@ func (t *sessionUsageTracker) readIfMoved(tracked *trackedUsageSource) {
 		observations = append(observations, store.SessionCostObservation{
 			ObservationID: observationID,
 			Model:         model,
+			Purpose:       usage.Purpose,
 			Usage: sessioncost.Usage{
 				InputTokens:                  usage.InputTokens,
 				OutputTokens:                 usage.OutputTokens,
@@ -177,19 +185,20 @@ func (t *sessionUsageTracker) readIfMoved(tracked *trackedUsageSource) {
 				CacheWrite5mInputTokens:      usage.CacheWrite5mTokens,
 				CacheWrite1hInputTokens:      usage.CacheWrite1hTokens,
 				UnclassifiedCacheWriteTokens: usage.CacheWriteUnclassifiedTokens,
+				ReportedCostUSD:              usage.ReportedCostUSD,
 			},
 		})
 	}
 	changed, err := t.daemon.store.ApplySessionCostSourceObservations(
-		t.watcher.sessionID, tracked.source.ID, tracked.follower.Cursor(), observations,
+		t.sessionID, tracked.source.ID, tracked.follower.Cursor(), observations,
 	)
 	if err != nil {
-		t.daemon.logf("transcript watcher: usage source persist failed session=%s path=%s err=%v", t.watcher.sessionID, tracked.source.Path, err)
+		t.daemon.logf("transcript watcher: usage source persist failed session=%s path=%s err=%v", t.sessionID, tracked.source.Path, err)
 		t.markIncomplete()
 		return
 	}
 	if changed {
-		t.daemon.publishFact(FactSessionCostChanged, t.watcher.sessionID, nil)
+		t.daemon.publishFact(FactSessionCostChanged, t.sessionID, nil)
 	}
 }
 
@@ -199,22 +208,22 @@ func (t *sessionUsageTracker) resetAtHead(tracked *trackedUsageSource) bool {
 	if err != nil {
 		return false
 	}
-	if err := t.daemon.store.SetSessionCostSourceCursor(t.watcher.sessionID, tracked.source.ID, cursor); err != nil {
+	if err := t.daemon.store.SetSessionCostSourceCursor(t.sessionID, tracked.source.ID, cursor); err != nil {
 		return false
 	}
-	tracked.follower, err = usageFollowerAt(tracked.source.Path, string(t.watcher.agent), cursor)
+	tracked.follower, err = usageFollowerAt(tracked.source.Path, t.agent, cursor)
 	tracked.info = nil
 	return err == nil
 }
 
 func (t *sessionUsageTracker) markIncomplete() {
-	changed, err := t.daemon.store.MarkSessionCostMeasurementIncomplete(t.watcher.sessionID)
+	changed, err := t.daemon.store.MarkSessionCostMeasurementIncomplete(t.sessionID)
 	if err != nil {
-		t.daemon.logf("transcript watcher: usage incomplete persist failed session=%s err=%v", t.watcher.sessionID, err)
+		t.daemon.logf("transcript watcher: usage incomplete persist failed session=%s err=%v", t.sessionID, err)
 		return
 	}
 	if changed {
-		t.daemon.publishFact(FactSessionCostChanged, t.watcher.sessionID, nil)
+		t.daemon.publishFact(FactSessionCostChanged, t.sessionID, nil)
 	}
 }
 

@@ -12,8 +12,38 @@ import (
 	"github.com/victorarias/attn/internal/config"
 )
 
-func userHardDeny(resolved []string) []string {
-	return automode.StripShippedHardDeny(config.WSPort(), resolved)
+func userRules(resolved []automode.Rule) []automode.Rule {
+	return automode.StripShippedRules(resolved)
+}
+
+func ruleValue(t *testing.T, decision, justification string, tokens ...string) string {
+	t.Helper()
+	value, err := automode.FormatRuleValue(automode.Rule{
+		Pattern:       automode.Tokens(tokens...),
+		Decision:      decision,
+		Justification: justification,
+	})
+	if err != nil {
+		t.Fatalf("format rule: %v", err)
+	}
+	return value
+}
+
+func hostValue(t *testing.T, host, decision string) string {
+	t.Helper()
+	value, err := automode.FormatHostValue(automode.HostAmendment{Host: host, Decision: decision})
+	if err != nil {
+		t.Fatalf("format host: %v", err)
+	}
+	return value
+}
+
+func ruleLines(rules []automode.Rule) []string {
+	lines := make([]string, 0, len(rules))
+	for _, rule := range rules {
+		lines = append(lines, rule.Decision+" "+rule.Describe())
+	}
+	return lines
 }
 
 func TestAutoModeConfigDefaultsOnAFreshDatabase(t *testing.T) {
@@ -22,17 +52,24 @@ func TestAutoModeConfigDefaultsOnAFreshDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get config: %v", err)
 	}
-	if len(cfg.Models) != 0 {
-		t.Errorf("models = %v on a fresh database, want none until the user names one", cfg.Models)
-	}
 	if !cfg.EnabledDefault {
 		t.Error("enabled_default = false on a fresh database, want true")
 	}
-	if filled, _ := cfg.Environment.Filled(); len(cfg.Allow) != 0 || filled != 0 {
+	if cfg.ApprovalPolicy != automode.PolicyOnRequest || cfg.SandboxMode != automode.SandboxWorkspaceWrite {
+		t.Errorf("policy = %q/%q, want Codex's defaults", cfg.ApprovalPolicy, cfg.SandboxMode)
+	}
+	if filled, _ := cfg.Environment.Filled(); filled != 0 || len(cfg.LegacyPatterns) != 0 {
 		t.Errorf("fresh config is not empty: %+v", cfg)
 	}
-	if diff := len(cfg.HardDeny) - len(automode.ShippedHardDeny(config.WSPort())); diff != 0 {
-		t.Errorf("hard deny = %v, want exactly the shipped denies", cfg.HardDeny)
+	if got := userRules(cfg.Rules); len(got) != 0 {
+		t.Errorf("rules = %v, want exactly the shipped ones", ruleLines(cfg.Rules))
+	}
+	if !cfg.Network.Enabled || len(cfg.Network.AllowedDomains) != 0 {
+		t.Errorf("network = %+v, want on with nothing allowed yet", cfg.Network)
+	}
+	shipped := automode.ShippedDeniedDomains(config.WSPort())
+	if len(cfg.Network.DeniedDomains) != len(shipped) {
+		t.Errorf("denied domains = %v, want exactly the shipped ones", cfg.Network.DeniedDomains)
 	}
 }
 
@@ -59,33 +96,12 @@ func TestAutoModeEnvironmentRoundTrips(t *testing.T) {
 	if len(read.Environment.Notes) != 1 {
 		t.Errorf("notes = %v, want the line that was written", read.Environment.Notes)
 	}
-	if len(read.Models) != 0 {
-		t.Errorf("models drifted to %v", read.Models)
-	}
 }
 
 func TestAutoModeEnvironmentSlotRefusesWhatTheSchemaDoesNotHave(t *testing.T) {
 	s := New()
-	now := time.Now().UTC()
-	if _, err := s.SetAutoModeEnvironmentSlot("intranet", []string{"acme.corp"}, now); err == nil {
-		t.Fatal("a slot the rules never read was accepted; nothing would ever look it up")
-	}
-	if _, err := s.SetAutoModeEnvironmentSlot("repo_visibility", []string{"secret"}, now); err == nil {
-		t.Fatal("repo_visibility took a value outside its choices")
-	}
-	cfg, err := s.SetAutoModeEnvironmentSlot("repo_visibility", []string{"private"}, now)
-	if err != nil {
-		t.Fatalf("set visibility: %v", err)
-	}
-	if got := cfg.Environment.Slots["repo_visibility"]; len(got) != 1 || got[0] != "private" {
-		t.Errorf("repo_visibility = %v", got)
-	}
-	cleared, err := s.SetAutoModeEnvironmentSlot("repo_visibility", nil, now)
-	if err != nil {
-		t.Fatalf("clear visibility: %v", err)
-	}
-	if _, ok := cleared.Environment.Slots["repo_visibility"]; ok {
-		t.Error("clearing left the slot behind; an unset slot has to read as unset")
+	if _, err := s.SetAutoModeEnvironmentSlot("not_a_slot", []string{"x"}, time.Now()); err == nil {
+		t.Fatal("an unknown slot was accepted")
 	}
 }
 
@@ -96,21 +112,25 @@ func TestAutoModeProposalDoesNotChangeTheConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get config: %v", err)
 	}
-	if _, err := s.CreateAutoModeProposal(automode.KindAllow, "", "git push origin*", "session-1", now); err != nil {
-		t.Fatalf("create proposal: %v", err)
+	if _, err := s.CreateAutoModeProposal(
+		automode.KindRule, "", ruleValue(t, automode.DecisionAllow, "", "git", "push"), "session-1", now,
+	); err != nil {
+		t.Fatalf("create rule proposal: %v", err)
 	}
-	if _, err := s.CreateAutoModeProposal(automode.KindModel, automode.TargetModels, "opencode-go/other-model", "", now); err != nil {
-		t.Fatalf("create model proposal: %v", err)
+	if _, err := s.CreateAutoModeProposal(
+		automode.KindHost, "", hostValue(t, "github.com", automode.HostAllow), "", now,
+	); err != nil {
+		t.Fatalf("create host proposal: %v", err)
 	}
 	after, err := s.GetAutoModeConfig()
 	if err != nil {
 		t.Fatalf("get config: %v", err)
 	}
-	if len(after.Allow) != 0 {
-		t.Errorf("allow list changed to %v", after.Allow)
+	if len(userRules(after.Rules)) != 0 {
+		t.Errorf("rules changed to %v", ruleLines(after.Rules))
 	}
-	if strings.Join(after.Models, ",") != strings.Join(before.Models, ",") {
-		t.Errorf("models changed to %v", after.Models)
+	if len(after.Network.AllowedDomains) != len(before.Network.AllowedDomains) {
+		t.Errorf("allowed domains changed to %v", after.Network.AllowedDomains)
 	}
 	pending, err := s.ListAutoModeProposals(automode.StatePending)
 	if err != nil {
@@ -124,10 +144,16 @@ func TestAutoModeProposalDoesNotChangeTheConfig(t *testing.T) {
 	}
 }
 
-func TestAutoModeCreateProposalRefusesABroadAllow(t *testing.T) {
+func TestAutoModeCreateProposalRefusesWhatCouldNeverBePromoted(t *testing.T) {
 	s := New()
-	if _, err := s.CreateAutoModeProposal(automode.KindAllow, "", "*", "", time.Now()); err == nil {
-		t.Fatal("a broad allow proposal was recorded")
+	for name, tc := range map[string]struct{ kind, value string }{
+		"a shell line":      {automode.KindRule, `{"pattern":["git push"]}`},
+		"no justification":  {automode.KindRule, `{"pattern":["rm"],"decision":"forbidden"}`},
+		"a host with slash": {automode.KindHost, `{"host":"github.com/x","decision":"allow"}`},
+	} {
+		if _, err := s.CreateAutoModeProposal(tc.kind, "", tc.value, "", time.Now()); err == nil {
+			t.Errorf("%s was recorded", name)
+		}
 	}
 	pending, err := s.ListAutoModeProposals("")
 	if err != nil {
@@ -141,37 +167,40 @@ func TestAutoModeCreateProposalRefusesABroadAllow(t *testing.T) {
 func TestAutoModePromoteAppliesAndClosesTheProposal(t *testing.T) {
 	s := New()
 	now := time.Now().UTC()
-	allow, err := s.CreateAutoModeProposal(automode.KindAllow, "", "git push origin*", "", now)
+	rule, err := s.CreateAutoModeProposal(
+		automode.KindRule, "", ruleValue(t, automode.DecisionPrompt, "", "git", "push"), "", now)
 	if err != nil {
-		t.Fatalf("create allow: %v", err)
+		t.Fatalf("create rule: %v", err)
 	}
-	model, err := s.CreateAutoModeProposal(automode.KindModel, automode.TargetModels, "opencode-go/kimi-k3", "", now)
+	host, err := s.CreateAutoModeProposal(
+		automode.KindHost, "", hostValue(t, "github.com", automode.HostAllow), "", now)
 	if err != nil {
-		t.Fatalf("create model: %v", err)
+		t.Fatalf("create host: %v", err)
 	}
 
-	promoted, cfg, err := s.PromoteAutoModeProposal(allow.ID, now)
+	promoted, cfg, err := s.PromoteAutoModeProposal(rule.ID, now)
 	if err != nil {
-		t.Fatalf("promote allow: %v", err)
+		t.Fatalf("promote rule: %v", err)
 	}
 	if promoted.State != automode.StatePromoted || promoted.ResolvedAt.IsZero() {
 		t.Errorf("promoted proposal = %+v", promoted)
 	}
-	if len(cfg.Allow) != 1 || cfg.Allow[0] != "git push origin*" {
-		t.Fatalf("allow list = %v", cfg.Allow)
+	if got := userRules(cfg.Rules); len(got) != 1 || got[0].Describe() != "git push" ||
+		got[0].Decision != automode.DecisionPrompt {
+		t.Fatalf("rules = %v", ruleLines(cfg.Rules))
 	}
-	if _, cfg, err = s.PromoteAutoModeProposal(model.ID, now); err != nil {
-		t.Fatalf("promote model: %v", err)
+	if _, cfg, err = s.PromoteAutoModeProposal(host.ID, now); err != nil {
+		t.Fatalf("promote host: %v", err)
 	}
-	if len(cfg.Models) != 1 || cfg.Models[0] != "opencode-go/kimi-k3" {
-		t.Errorf("models = %v", cfg.Models)
+	if len(cfg.Network.AllowedDomains) != 1 || cfg.Network.AllowedDomains[0] != "github.com" {
+		t.Errorf("allowed domains = %v", cfg.Network.AllowedDomains)
 	}
 
 	read, err := s.GetAutoModeConfig()
 	if err != nil {
 		t.Fatalf("get config: %v", err)
 	}
-	if len(read.Allow) != 1 || len(read.Models) != 1 || read.Models[0] != "opencode-go/kimi-k3" {
+	if len(userRules(read.Rules)) != 1 || len(read.Network.AllowedDomains) != 1 {
 		t.Fatalf("promoted config did not survive the read: %+v", read)
 	}
 	pending, err := s.ListAutoModeProposals(automode.StatePending)
@@ -183,10 +212,51 @@ func TestAutoModePromoteAppliesAndClosesTheProposal(t *testing.T) {
 	}
 }
 
+func TestPromoteReportedAmendmentRecordsAndAppliesInOneMove(t *testing.T) {
+	s := New()
+	now := time.Now().UTC()
+	proposal, cfg, err := s.PromoteReportedAmendment(
+		automode.KindRule, ruleValue(t, automode.DecisionAllow, "", "cargo", "build"),
+		"pi session sunny-otter", now)
+	if err != nil {
+		t.Fatalf("report amendment: %v", err)
+	}
+	if proposal.State != automode.StatePromoted || proposal.ProposedBy != "pi session sunny-otter" {
+		t.Errorf("proposal = %+v", proposal)
+	}
+	if got := userRules(cfg.Rules); len(got) != 1 || got[0].Describe() != "cargo build" {
+		t.Fatalf("rules = %v", ruleLines(cfg.Rules))
+	}
+	if _, _, err := s.PromoteReportedAmendment(
+		automode.KindHost, hostValue(t, "crates.io", automode.HostAllow), "pi session sunny-otter", now,
+	); err != nil {
+		t.Fatalf("report host amendment: %v", err)
+	}
+	read, err := s.GetAutoModeConfig()
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	if len(read.Network.AllowedDomains) != 1 || read.Network.AllowedDomains[0] != "crates.io" {
+		t.Errorf("allowed domains = %v", read.Network.AllowedDomains)
+	}
+	pending, err := s.ListAutoModeProposals(automode.StatePending)
+	if err != nil {
+		t.Fatalf("list proposals: %v", err)
+	}
+	if len(pending) != 0 {
+		t.Errorf("a reported amendment left something pending: %+v", pending)
+	}
+	if _, _, err := s.PromoteReportedAmendment(
+		automode.KindRule, `{"pattern":[]}`, "pi session sunny-otter", now); err == nil {
+		t.Error("an invalid reported amendment was applied")
+	}
+}
+
 func TestAutoModePromoteIsIdempotentlyRefusedTwice(t *testing.T) {
 	s := New()
 	now := time.Now().UTC()
-	p, err := s.CreateAutoModeProposal(automode.KindDeny, "", "rm -rf /*", "", now)
+	p, err := s.CreateAutoModeProposal(
+		automode.KindRule, "", ruleValue(t, automode.DecisionForbidden, "it deletes the tree", "rm", "-rf"), "", now)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -200,15 +270,16 @@ func TestAutoModePromoteIsIdempotentlyRefusedTwice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get config: %v", err)
 	}
-	if got := userHardDeny(cfg.HardDeny); len(got) != 1 {
-		t.Fatalf("promoted hard deny = %v, want one entry after two promotes", got)
+	if got := userRules(cfg.Rules); len(got) != 1 {
+		t.Fatalf("promoted rules = %v, want one entry after two promotes", ruleLines(cfg.Rules))
 	}
 }
 
 func TestAutoModeDiscardLeavesTheConfigAlone(t *testing.T) {
 	s := New()
 	now := time.Now().UTC()
-	p, err := s.CreateAutoModeProposal(automode.KindAllow, "", "curl https://example.com*", "", now)
+	p, err := s.CreateAutoModeProposal(
+		automode.KindRule, "", ruleValue(t, automode.DecisionAllow, "", "curl"), "", now)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -223,8 +294,8 @@ func TestAutoModeDiscardLeavesTheConfigAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get config: %v", err)
 	}
-	if len(cfg.Allow) != 0 {
-		t.Fatalf("allow list = %v after a discard", cfg.Allow)
+	if len(userRules(cfg.Rules)) != 0 {
+		t.Fatalf("rules = %v after a discard", ruleLines(cfg.Rules))
 	}
 	if _, _, err := s.PromoteAutoModeProposal(p.ID, now); err == nil {
 		t.Fatal("a discarded proposal was promoted")
@@ -237,7 +308,7 @@ func TestAutoModeDenialsReadNewestFirst(t *testing.T) {
 	for _, signature := range []string{"bash curl evil.example", "write /etc/hosts", "bash git push --force"} {
 		denial := AutoModeDenial{
 			SessionID: "session-1", Tool: "bash", Signature: signature,
-			Reason: "outside the envelope", Rule: "classifier-2a",
+			Reason: "outside the envelope", Rule: "guardian",
 		}
 		if _, dropped, err := s.RecordAutoModeDenial(denial, now); err != nil {
 			t.Fatalf("record denial: %v", err)
@@ -255,8 +326,8 @@ func TestAutoModeDenialsReadNewestFirst(t *testing.T) {
 	if denials[0].Signature != "bash git push --force" {
 		t.Errorf("newest denial = %q", denials[0].Signature)
 	}
-	if denials[0].Rule != "classifier-2a" {
-		t.Errorf("rule = %q, want the layer that decided", denials[0].Rule)
+	if denials[0].Rule != "guardian" {
+		t.Errorf("rule = %q, want who decided", denials[0].Rule)
 	}
 }
 
@@ -299,7 +370,7 @@ func TestAutoModeDenialConcurrentDeliveryKeepsOneRow(t *testing.T) {
 	now := time.Date(2026, 8, 18, 10, 0, 0, 123_000_000, time.UTC)
 	denial := AutoModeDenial{
 		SessionID: "pi-1", Tool: "bash", Signature: "bash: curl https://one.example",
-		Reason: "outside the envelope", Rule: "classifier-intent",
+		Reason: "outside the envelope", Rule: "guardian",
 	}
 	var wg sync.WaitGroup
 	ids := make(chan int64, 8)
@@ -358,7 +429,42 @@ func TestAutoModeMigrationCreatesItsTables(t *testing.T) {
 	}
 }
 
-func TestMigration124FoldsTheLayerModelsIntoOneChain(t *testing.T) {
+// plantPre139AutoModeConfig puts back the glob-list shape migration 139 replaced, so a
+// re-run of the chain from `from` sees what an installed machine actually holds.
+func plantPre139AutoModeConfig(t *testing.T, s *Store, dbPath, environment, allow, hardDeny string, from int) {
+	t.Helper()
+	for _, stmt := range []string{
+		`ALTER TABLE automode_config DROP COLUMN approval_policy`,
+		`ALTER TABLE automode_config DROP COLUMN sandbox_mode`,
+		`ALTER TABLE automode_config DROP COLUMN rules`,
+		`ALTER TABLE automode_config DROP COLUMN network`,
+		`ALTER TABLE automode_config DROP COLUMN legacy_patterns`,
+		`ALTER TABLE automode_config ADD COLUMN allow_patterns TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE automode_config ADD COLUMN hard_deny TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE automode_config ADD COLUMN models TEXT NOT NULL DEFAULT '[]'`,
+	} {
+		if _, err := s.db.Exec(stmt); err != nil {
+			t.Fatalf("plant the pre-139 schema (%s): %v", stmt, err)
+		}
+	}
+	if _, err := s.db.Exec(`INSERT INTO automode_config
+		(id, enabled_default, environment, allow_patterns, hard_deny, models, updated_at)
+		VALUES (1, 1, ?, ?, ?, '[]', '2026-09-01T09:00:00Z')`,
+		environment, allow, hardDeny); err != nil {
+		t.Fatalf("plant the pre-139 row: %v", err)
+	}
+	if _, err := s.GetAutoModeConfig(); err == nil {
+		t.Fatal("the planted schema already reads; this test would pass without the migration")
+	}
+	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= ?`, from); err != nil {
+		t.Fatalf("unrecord migration %d: %v", from, err)
+	}
+	if err := migrateDB(s.db, dbPath); err != nil {
+		t.Fatalf("migrateDB: %v", err)
+	}
+}
+
+func TestMigration139TurnsGlobsIntoRulesAndKeepsTheRest(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)
 	if err != nil {
@@ -366,40 +472,39 @@ func TestMigration124FoldsTheLayerModelsIntoOneChain(t *testing.T) {
 	}
 	defer s.Close()
 
-	for _, stmt := range []string{
-		`ALTER TABLE automode_config DROP COLUMN models`,
-		`ALTER TABLE automode_config ADD COLUMN classifier_models TEXT NOT NULL DEFAULT '[]'`,
-		`ALTER TABLE automode_config ADD COLUMN escalation_models TEXT NOT NULL DEFAULT '[]'`,
-		`INSERT INTO automode_config (id, enabled_default, environment, allow_patterns, hard_deny,
-		    classifier_models, escalation_models, updated_at)
-		 VALUES (1, 1, '[]', '[]', '[]', '["vendor/small","vendor/shared"]',
-		         '["vendor/shared","vendor/big"]', '2026-08-22T09:00:00Z')`,
-		`INSERT INTO automode_proposals (kind, target, value, proposed_by, state, created_at)
-		 VALUES ('model', 'models', 'vendor/small', 'test', 'promoted', '2026-08-22T08:00:00Z')`,
-	} {
-		if _, err := s.db.Exec(stmt); err != nil {
-			t.Fatalf("plant the pre-122 schema (%s): %v", stmt, err)
-		}
+	if _, err := s.db.Exec(`INSERT INTO automode_proposals
+		(kind, target, value, proposed_by, state, created_at)
+		VALUES ('allow', '', 'git status*', 'session-a', 'pending', '2026-09-01T08:00:00Z')`); err != nil {
+		t.Fatalf("plant an old proposal: %v", err)
 	}
-	if _, err := s.GetAutoModeConfig(); err == nil {
-		t.Fatal("the planted schema already has the folded column; this test would pass without the migration")
-	}
-	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 124`); err != nil {
-		t.Fatalf("unrecord migration 124: %v", err)
-	}
-	if err := migrateDB(s.db, dbPath); err != nil {
-		t.Fatalf("migrateDB: %v", err)
-	}
+	plantPre139AutoModeConfig(t, s, dbPath, `{"slots":{},"notes":[]}`,
+		`["git status*","rm -rf /","gh pr create *"]`,
+		`["*curl*","ssh prod","terraform apply *"]`, 139)
 
 	cfg, err := s.GetAutoModeConfig()
 	if err != nil {
 		t.Fatalf("get config after the migration: %v", err)
 	}
-	want := "vendor/small,vendor/shared,vendor/big"
-	if strings.Join(cfg.Models, ",") != want {
-		t.Errorf("models = %v, want %s", cfg.Models, want)
+	got := ruleLines(userRules(cfg.Rules))
+	want := []string{
+		"allow rm -rf /", "allow gh pr create",
+		"forbidden ssh prod", "forbidden terraform apply",
 	}
-	for _, column := range []string{"classifier_models", "escalation_models"} {
+	if strings.Join(got, "; ") != strings.Join(want, "; ") {
+		t.Errorf("rules = %v, want %v", got, want)
+	}
+	for _, rule := range userRules(cfg.Rules) {
+		if rule.Decision == automode.DecisionForbidden && rule.Justification == "" {
+			t.Errorf("converted forbidden rule %q refuses without saying why", rule.Describe())
+		}
+	}
+	if strings.Join(cfg.LegacyPatterns, "; ") != "git status*; *curl*" {
+		t.Errorf("legacy patterns = %v, want the two globs no prefix rule can express", cfg.LegacyPatterns)
+	}
+	if cfg.ApprovalPolicy != automode.PolicyOnRequest || cfg.SandboxMode != automode.SandboxWorkspaceWrite {
+		t.Errorf("policy = %q/%q, want the defaults", cfg.ApprovalPolicy, cfg.SandboxMode)
+	}
+	for _, column := range []string{"allow_patterns", "hard_deny", "models"} {
 		var rows int
 		if err := s.db.QueryRow(
 			`SELECT COUNT(*) FROM pragma_table_info('automode_config') WHERE name = ?`, column).Scan(&rows); err != nil {
@@ -408,6 +513,13 @@ func TestMigration124FoldsTheLayerModelsIntoOneChain(t *testing.T) {
 		if rows != 0 {
 			t.Errorf("column %s survived the migration; two spellings of one setting is how one goes stale", column)
 		}
+	}
+	pending, err := s.ListAutoModeProposals(automode.StatePending)
+	if err != nil {
+		t.Fatalf("list proposals: %v", err)
+	}
+	if len(pending) != 0 {
+		t.Errorf("pending = %+v, want the old-kind proposal closed: nothing could promote it", pending)
 	}
 }
 
@@ -419,17 +531,7 @@ func TestMigration125KeepsTheOldProseAsNotes(t *testing.T) {
 	}
 	defer s.Close()
 
-	if _, err := s.db.Exec(`INSERT INTO automode_config
-		(id, enabled_default, environment, allow_patterns, hard_deny, models, updated_at)
-		VALUES (1, 1, '["this laptop is mine","nothing here serves traffic"]', '[]', '[]', '[]', '2026-08-23T09:00:00Z')`); err != nil {
-		t.Fatalf("plant the pre-123 row: %v", err)
-	}
-	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 125`); err != nil {
-		t.Fatalf("unrecord migration 125: %v", err)
-	}
-	if err := migrateDB(s.db, dbPath); err != nil {
-		t.Fatalf("migrateDB: %v", err)
-	}
+	plantPre139AutoModeConfig(t, s, dbPath, `["this laptop is mine","nothing here serves traffic"]`, `[]`, `[]`, 125)
 
 	cfg, err := s.GetAutoModeConfig()
 	if err != nil {
@@ -443,103 +545,11 @@ func TestMigration125KeepsTheOldProseAsNotes(t *testing.T) {
 	}
 }
 
-func TestMigration124DropsModelsNobodyPromoted(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
-	if err != nil {
-		t.Fatalf("NewWithDB: %v", err)
-	}
-	defer s.Close()
-
-	for _, stmt := range []string{
-		`ALTER TABLE automode_config DROP COLUMN models`,
-		`ALTER TABLE automode_config ADD COLUMN classifier_models TEXT NOT NULL DEFAULT '[]'`,
-		`ALTER TABLE automode_config ADD COLUMN escalation_models TEXT NOT NULL DEFAULT '[]'`,
-		`INSERT INTO automode_config (id, enabled_default, environment, allow_patterns, hard_deny,
-		    classifier_models, escalation_models, updated_at)
-		 VALUES (1, 1, '[]', '["Bash(ls:*)"]', '[]', '["opencode-go/glm-5.3"]',
-		         '["opencode-go/qwen3.8-max"]', '2026-08-22T09:00:00Z')`,
-	} {
-		if _, err := s.db.Exec(stmt); err != nil {
-			t.Fatalf("plant the pre-122 schema (%s): %v", stmt, err)
-		}
-	}
-	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 124`); err != nil {
-		t.Fatalf("unrecord migration 124: %v", err)
-	}
-	if err := migrateDB(s.db, dbPath); err != nil {
-		t.Fatalf("migrateDB: %v", err)
-	}
-
-	cfg, err := s.GetAutoModeConfig()
-	if err != nil {
-		t.Fatalf("get config after the migration: %v", err)
-	}
-	if len(cfg.Models) != 0 {
-		t.Errorf("models = %v, want none: nobody promoted those", cfg.Models)
-	}
-	if len(cfg.Allow) != 1 || cfg.Allow[0] != "Bash(ls:*)" {
-		t.Errorf("allow = %v, want the pattern the machine actually saved", cfg.Allow)
-	}
-}
-
-func TestMigration114CarriesAPromotedModelIntoItsLayersList(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
-	if err != nil {
-		t.Fatalf("NewWithDB: %v", err)
-	}
-	defer s.Close()
-
-	for _, stmt := range []string{
-		`ALTER TABLE automode_config DROP COLUMN models`,
-		`ALTER TABLE automode_config ADD COLUMN classifier_model TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE automode_config ADD COLUMN escalation_model TEXT NOT NULL DEFAULT ''`,
-		`INSERT INTO automode_config (id, enabled_default, environment, allow_patterns, hard_deny,
-		    classifier_model, escalation_model, updated_at)
-		 VALUES (1, 1, '[]', '[]', '[]', 'vendor/picked', '', '2026-08-17T09:00:00Z')`,
-		`INSERT INTO automode_proposals (kind, target, value, proposed_by, state, created_at)
-		 VALUES ('model', 'models', 'vendor/picked', 'test', 'promoted', '2026-08-17T08:00:00Z')`,
-	} {
-		if _, err := s.db.Exec(stmt); err != nil {
-			t.Fatalf("plant the pre-114 schema (%s): %v", stmt, err)
-		}
-	}
-
-	if _, err := s.GetAutoModeConfig(); err == nil {
-		t.Fatal("the planted schema already has the lists; this test would pass without the migration")
-	}
-
-	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 114`); err != nil {
-		t.Fatalf("unrecord migration 114: %v", err)
-	}
-	if err := migrateDB(s.db, dbPath); err != nil {
-		t.Fatalf("migrateDB: %v", err)
-	}
-
-	cfg, err := s.GetAutoModeConfig()
-	if err != nil {
-		t.Fatalf("get config after the migration: %v", err)
-	}
-	if len(cfg.Models) != 1 || cfg.Models[0] != "vendor/picked" {
-		t.Errorf("models = %v, want the promoted model carried over", cfg.Models)
-	}
-	for _, column := range []string{"classifier_model", "escalation_model"} {
-		var rows int
-		if err := s.db.QueryRow(
-			`SELECT COUNT(*) FROM pragma_table_info('automode_config') WHERE name = ?`, column).Scan(&rows); err != nil {
-			t.Fatalf("read table info: %v", err)
-		}
-		if rows != 0 {
-			t.Errorf("column %s survived the migration; two spellings of one setting is how one goes stale", column)
-		}
-	}
-}
-
-func TestAutoModeShippedHardDeniesSurviveAPromotedRow(t *testing.T) {
+func TestAutoModeShippedRulesSurviveAPromotedRow(t *testing.T) {
 	s := New()
 	now := time.Now().UTC()
-	p, err := s.CreateAutoModeProposal(automode.KindDeny, "", "ssh prod*", "", now)
+	p, err := s.CreateAutoModeProposal(
+		automode.KindRule, "", ruleValue(t, automode.DecisionPrompt, "", "ssh", "prod"), "", now)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -550,31 +560,31 @@ func TestAutoModeShippedHardDeniesSurviveAPromotedRow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get config: %v", err)
 	}
-	for _, want := range automode.ShippedHardDeny(config.WSPort()) {
-		if !containsString(cfg.HardDeny, want) {
-			t.Errorf("hard deny %v is missing the shipped entry %q", cfg.HardDeny, want)
-		}
+	shipped := automode.ShippedRules()
+	if len(cfg.Rules) != len(shipped)+1 {
+		t.Errorf("rules = %v, want the shipped set plus the promoted one", ruleLines(cfg.Rules))
 	}
-	if got := userHardDeny(cfg.HardDeny); len(got) != 1 || got[0] != "ssh prod*" {
-		t.Errorf("stored hard deny = %v, want only the promoted pattern", got)
+	if got := userRules(cfg.Rules); len(got) != 1 || got[0].Describe() != "ssh prod" {
+		t.Errorf("stored rules = %v, want only the promoted one", ruleLines(got))
 	}
 	var stored string
-	if err := s.db.QueryRow(`SELECT hard_deny FROM automode_config WHERE id = 1`).Scan(&stored); err != nil {
+	if err := s.db.QueryRow(`SELECT rules FROM automode_config WHERE id = 1`).Scan(&stored); err != nil {
 		t.Fatalf("read row: %v", err)
 	}
-	if stored != `["ssh prod*"]` {
-		t.Errorf("persisted hard_deny = %s, want only the promoted pattern", stored)
+	if strings.Contains(stored, "automode") {
+		t.Errorf("persisted rules froze a shipped entry into the row: %s", stored)
 	}
 }
 
 func TestAutoModeProposalDedupesAnIdenticalPendingOne(t *testing.T) {
 	s := New()
 	now := time.Now().UTC()
-	first, err := s.CreateAutoModeProposal(automode.KindAllow, "", "git push origin*", "session-a", now)
+	value := ruleValue(t, automode.DecisionAllow, "", "git", "push")
+	first, err := s.CreateAutoModeProposal(automode.KindRule, "", value, "session-a", now)
 	if err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	again, err := s.CreateAutoModeProposal(automode.KindAllow, "", "git push origin*", "session-a", now)
+	again, err := s.CreateAutoModeProposal(automode.KindRule, "", value, "session-a", now)
 	if err != nil {
 		t.Fatalf("second: %v", err)
 	}
@@ -591,7 +601,7 @@ func TestAutoModeProposalDedupesAnIdenticalPendingOne(t *testing.T) {
 	if _, err := s.DiscardAutoModeProposal(first.ID, now); err != nil {
 		t.Fatalf("discard: %v", err)
 	}
-	third, err := s.CreateAutoModeProposal(automode.KindAllow, "", "git push origin*", "session-a", now)
+	third, err := s.CreateAutoModeProposal(automode.KindRule, "", value, "session-a", now)
 	if err != nil {
 		t.Fatalf("third: %v", err)
 	}
@@ -603,11 +613,12 @@ func TestAutoModeProposalDedupesAnIdenticalPendingOne(t *testing.T) {
 func TestAutoModeProposalKeepsEachAskerSeparate(t *testing.T) {
 	s := New()
 	now := time.Now().UTC()
-	first, err := s.CreateAutoModeProposal(automode.KindAllow, "", "git push origin*", "session-a", now)
+	value := ruleValue(t, automode.DecisionAllow, "", "git", "push")
+	first, err := s.CreateAutoModeProposal(automode.KindRule, "", value, "session-a", now)
 	if err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	second, err := s.CreateAutoModeProposal(automode.KindAllow, "", "git push origin*", "session-b", now)
+	second, err := s.CreateAutoModeProposal(automode.KindRule, "", value, "session-b", now)
 	if err != nil {
 		t.Fatalf("second: %v", err)
 	}
@@ -640,6 +651,7 @@ func TestAutoModeProposalKeepsEachAskerSeparate(t *testing.T) {
 func TestAutoModeProposalRaceLandsOneRow(t *testing.T) {
 	s := New()
 	now := time.Now().UTC()
+	value := ruleValue(t, automode.DecisionPrompt, "", "ssh", "prod")
 	var wg sync.WaitGroup
 	ids := make([]int64, 8)
 	errs := make([]error, 8)
@@ -647,7 +659,7 @@ func TestAutoModeProposalRaceLandsOneRow(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			p, err := s.CreateAutoModeProposal(automode.KindDeny, "", "ssh prod*", "session-a", now)
+			p, err := s.CreateAutoModeProposal(automode.KindRule, "", value, "session-a", now)
 			ids[i], errs[i] = p.ID, err
 		}(i)
 	}
@@ -670,7 +682,7 @@ func TestAutoModeProposalRaceLandsOneRow(t *testing.T) {
 	if _, err := s.db.Exec(`
 		INSERT INTO automode_proposals (kind, target, value, proposed_by, state, created_at)
 		VALUES (?, '', ?, ?, ?, ?)`,
-		automode.KindDeny, "ssh prod*", "session-a", automode.StatePending,
+		automode.KindRule, value, "session-a", automode.StatePending,
 		now.UTC().Format(sortableTimeFormat)); err == nil {
 		t.Error("a duplicate pending ask was accepted straight into the table")
 	}
@@ -680,231 +692,365 @@ func TestAutoModeProposalCapNamesTheLimitAndTheAsk(t *testing.T) {
 	s := New()
 	now := time.Now().UTC()
 	for i := 0; i < automode.MaxPendingProposalsPerProposer; i++ {
-		if _, err := s.CreateAutoModeProposal(
-			automode.KindAllow, "", fmt.Sprintf("curl https://example.com/%d*", i), "session-a", now,
+		if _, err := s.CreateAutoModeProposal(automode.KindRule, "",
+			ruleValue(t, automode.DecisionAllow, "", "curl", fmt.Sprintf("https://example.com/%d", i)),
+			"session-a", now,
 		); err != nil {
 			t.Fatalf("proposal %d: %v", i, err)
 		}
 	}
-	_, err := s.CreateAutoModeProposal(automode.KindAllow, "", "curl https://example.com/last*", "session-a", now)
+	last := ruleValue(t, automode.DecisionAllow, "", "curl", "https://example.com/last")
+	_, err := s.CreateAutoModeProposal(automode.KindRule, "", last, "session-a", now)
 	if err == nil {
 		t.Fatal("the proposal past the cap was accepted")
 	}
 	for _, want := range []string{
 		"session-a",
 		fmt.Sprintf("%d", automode.MaxPendingProposalsPerProposer),
-		"curl https://example.com/last*",
+		"curl https://example.com/last",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("cap error %q does not name %q", err, want)
 		}
 	}
-	if _, err := s.CreateAutoModeProposal(automode.KindAllow, "", "curl https://example.com/last*", "session-b", now); err != nil {
+	if _, err := s.CreateAutoModeProposal(automode.KindRule, "", last, "session-b", now); err != nil {
 		t.Errorf("another proposer was capped too: %v", err)
 	}
 	pending, _ := s.ListAutoModeProposals(automode.StatePending)
 	if _, err := s.DiscardAutoModeProposal(pending[0].ID, now); err != nil {
 		t.Fatalf("discard: %v", err)
 	}
-	if _, err := s.CreateAutoModeProposal(automode.KindAllow, "", "curl https://example.com/after*", "session-a", now); err != nil {
+	after := ruleValue(t, automode.DecisionAllow, "", "curl", "https://example.com/after")
+	if _, err := s.CreateAutoModeProposal(automode.KindRule, "", after, "session-a", now); err != nil {
 		t.Errorf("a freed slot was still refused: %v", err)
 	}
 }
 
-func containsString(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
+func TestAutoModeRuleAddAndRemoveRoundTrip(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	rule := automode.Rule{Pattern: automode.Tokens("git", "status"), Decision: automode.DecisionAllow}
+	if _, err := s.AddAutoModeRule(rule, now); err != nil {
+		t.Fatalf("add rule: %v", err)
+	}
+	cfg, err := s.AddAutoModeRule(automode.Rule{
+		Pattern:       automode.Tokens("terraform", "apply"),
+		Decision:      automode.DecisionForbidden,
+		Justification: "it changes real infrastructure",
+	}, now)
+	if err != nil {
+		t.Fatalf("add forbidden rule: %v", err)
+	}
+	if got := ruleLines(userRules(cfg.Rules)); len(got) != 2 {
+		t.Fatalf("rules = %v, want both", got)
+	}
+
+	// Re-adding the same prefix replaces it: a rule holds one decision.
+	cfg, err = s.AddAutoModeRule(automode.Rule{
+		Pattern: automode.Tokens("git", "status"), Decision: automode.DecisionPrompt,
+	}, now)
+	if err != nil {
+		t.Fatalf("re-add rule: %v", err)
+	}
+	if got := userRules(cfg.Rules); len(got) != 2 || got[0].Decision != automode.DecisionPrompt {
+		t.Fatalf("rules = %v, want the first replaced in place", ruleLines(cfg.Rules))
+	}
+
+	cfg, err = s.RemoveAutoModeRule(automode.Tokens("git", "status"), now)
+	if err != nil {
+		t.Fatalf("remove rule: %v", err)
+	}
+	if got := userRules(cfg.Rules); len(got) != 1 || got[0].Describe() != "terraform apply" {
+		t.Fatalf("rules after the removal = %v", ruleLines(cfg.Rules))
+	}
+	if _, err := s.RemoveAutoModeRule(automode.Tokens("git", "status"), now); err == nil {
+		t.Error("removing a rule that is not there was accepted")
+	}
+}
+
+func TestAutoModeRuleEditRefusesAShippedRule(t *testing.T) {
+	s := New()
+	now := time.Now()
+	shipped := automode.ShippedRules()[0]
+	if _, err := s.RemoveAutoModeRule(shipped.Pattern, now); err == nil {
+		t.Error("a shipped rule was removed")
+	}
+	_, err := s.AddAutoModeRule(automode.Rule{Pattern: shipped.Pattern, Decision: automode.DecisionAllow}, now)
+	if err == nil {
+		t.Error("a shipped rule was rewritten to allow")
+	}
+	if err != nil && !strings.Contains(err.Error(), shipped.Describe()) {
+		t.Errorf("error does not name the rule: %v", err)
+	}
+}
+
+func TestAutoModeHostAddAndRemoveRoundTrip(t *testing.T) {
+	s := New()
+	now := time.Now()
+	cfg, err := s.AddAutoModeHost(automode.HostAmendment{Host: "github.com", Decision: automode.HostAllow}, now)
+	if err != nil {
+		t.Fatalf("add allowed host: %v", err)
+	}
+	if len(cfg.Network.AllowedDomains) != 1 {
+		t.Fatalf("allowed = %v", cfg.Network.AllowedDomains)
+	}
+
+	// A host holds one decision: denying it takes it off the allow list.
+	cfg, err = s.AddAutoModeHost(automode.HostAmendment{Host: "github.com", Decision: automode.HostDeny}, now)
+	if err != nil {
+		t.Fatalf("deny the same host: %v", err)
+	}
+	if len(cfg.Network.AllowedDomains) != 0 {
+		t.Errorf("allowed = %v, want the host moved to denied", cfg.Network.AllowedDomains)
+	}
+	if !strings.Contains(strings.Join(cfg.Network.DeniedDomains, " "), "github.com") {
+		t.Errorf("denied = %v, want the host", cfg.Network.DeniedDomains)
+	}
+
+	cfg, err = s.RemoveAutoModeHost(automode.HostAmendment{Host: "github.com", Decision: automode.HostDeny}, now)
+	if err != nil {
+		t.Fatalf("remove denied host: %v", err)
+	}
+	shipped := automode.ShippedDeniedDomains(config.WSPort())
+	if len(cfg.Network.DeniedDomains) != len(shipped) {
+		t.Errorf("denied = %v, want only the shipped entries back", cfg.Network.DeniedDomains)
+	}
+	if _, err := s.RemoveAutoModeHost(
+		automode.HostAmendment{Host: "github.com", Decision: automode.HostDeny}, now); err == nil {
+		t.Error("removing a host that is not there was accepted")
+	}
+	if len(shipped) > 0 {
+		if _, err := s.RemoveAutoModeHost(
+			automode.HostAmendment{Host: shipped[0], Decision: automode.HostDeny}, now); err == nil {
+			t.Error("a shipped denied host was removed")
 		}
 	}
-	return false
 }
 
-func TestAutoModePatternAddAndRemoveRoundTrip(t *testing.T) {
+func TestSetAutoModePolicyNamesWhatItRefuses(t *testing.T) {
 	s := New()
 	now := time.Now()
-
-	if _, err := s.AddAutoModePattern(automode.ListAllow, "git status*", now); err != nil {
-		t.Fatalf("add allow: %v", err)
-	}
-	if _, err := s.AddAutoModePattern(automode.ListHardDeny, "*terraform apply*", now); err != nil {
-		t.Fatalf("add hard deny: %v", err)
-	}
-
-	cfg, err := s.GetAutoModeConfig()
+	cfg, err := s.SetAutoModePolicy(automode.PolicyAmendment{ApprovalPolicy: strPtr(automode.PolicyNever)}, now)
 	if err != nil {
-		t.Fatalf("get config: %v", err)
+		t.Fatalf("set approval policy: %v", err)
 	}
-	if len(cfg.Allow) != 1 || cfg.Allow[0] != "git status*" {
-		t.Fatalf("allow = %v", cfg.Allow)
+	if cfg.ApprovalPolicy != automode.PolicyNever || cfg.SandboxMode != automode.SandboxWorkspaceWrite {
+		t.Fatalf("policy = %q/%q, want only the approval policy changed", cfg.ApprovalPolicy, cfg.SandboxMode)
 	}
-	if got := userHardDeny(cfg.HardDeny); len(got) != 1 || got[0] != "*terraform apply*" {
-		t.Fatalf("stored hard deny = %v", got)
-	}
-
-	if _, err := s.RemoveAutoModePattern(automode.ListAllow, "git status*", now); err != nil {
-		t.Fatalf("remove allow: %v", err)
-	}
-	if _, err := s.RemoveAutoModePattern(automode.ListHardDeny, "*terraform apply*", now); err != nil {
-		t.Fatalf("remove hard deny: %v", err)
-	}
-	cfg, err = s.GetAutoModeConfig()
+	cfg, err = s.SetAutoModePolicy(automode.PolicyAmendment{SandboxMode: strPtr(automode.SandboxReadOnly)}, now)
 	if err != nil {
-		t.Fatalf("re-read config: %v", err)
+		t.Fatalf("set sandbox mode: %v", err)
 	}
-	if len(cfg.Allow) != 0 || len(userHardDeny(cfg.HardDeny)) != 0 {
-		t.Fatalf("removal left something behind: allow=%v hard_deny=%v", cfg.Allow, cfg.HardDeny)
+	if cfg.ApprovalPolicy != automode.PolicyNever || cfg.SandboxMode != automode.SandboxReadOnly {
+		t.Fatalf("policy = %q/%q, want both settings held", cfg.ApprovalPolicy, cfg.SandboxMode)
 	}
-	if len(cfg.HardDeny) != len(automode.ShippedHardDeny(config.WSPort())) {
-		t.Fatalf("resolved hard deny = %v, want exactly the shipped denies", cfg.HardDeny)
+	if _, err := s.SetAutoModePolicy(automode.PolicyAmendment{}, now); err == nil {
+		t.Error("naming neither field was accepted")
 	}
-}
-
-func TestAutoModePatternEditNeverStoresAShippedHardDeny(t *testing.T) {
-	s := New()
-	now := time.Now()
-
-	if _, err := s.AddAutoModePattern(automode.ListHardDeny, "*terraform apply*", now); err != nil {
-		t.Fatalf("add hard deny: %v", err)
+	_, err = s.SetAutoModePolicy(automode.PolicyAmendment{ApprovalPolicy: strPtr("yolo")}, now)
+	if err == nil || !strings.Contains(err.Error(), automode.PolicyOnRequest) {
+		t.Errorf("error does not name the choices: %v", err)
 	}
-	var stored string
-	if err := s.db.QueryRow(`SELECT hard_deny FROM automode_config WHERE id = 1`).Scan(&stored); err != nil {
-		t.Fatalf("read the row: %v", err)
-	}
-	for _, shipped := range automode.ShippedHardDeny(config.WSPort()) {
-		if strings.Contains(stored, shipped) {
-			t.Fatalf("the row persisted the shipped deny %q: %s", shipped, stored)
-		}
-	}
-}
-
-func TestAutoModeRemoveRefusesAShippedHardDeny(t *testing.T) {
-	s := New()
-	shipped := automode.ShippedHardDeny(config.WSPort())[0]
-
-	_, err := s.RemoveAutoModePattern(automode.ListHardDeny, shipped, time.Now())
-	if err == nil {
-		t.Fatal("removing a shipped hard deny succeeded")
-	}
-	if !strings.Contains(err.Error(), "built-in") || !strings.Contains(err.Error(), shipped) {
-		t.Fatalf("refusal does not name what it refused: %v", err)
-	}
-}
-
-func TestAutoModeAddRefusesABroadAllowAndAnEmptyDeny(t *testing.T) {
-	s := New()
-	now := time.Now()
-
-	_, err := s.AddAutoModePattern(automode.ListAllow, "* *", now)
-	if err == nil {
-		t.Fatal("a broad allow was accepted")
-	}
-	if !strings.Contains(err.Error(), "must name something") {
-		t.Fatalf("broad allow refusal = %v", err)
-	}
-	if _, err := s.AddAutoModePattern(automode.ListHardDeny, "*", now); err != nil {
-		t.Fatalf("a broad hard deny was refused: %v", err)
-	}
-	if _, err := s.AddAutoModePattern(automode.ListHardDeny, "   ", now); err == nil {
-		t.Fatal("an empty deny was accepted")
-	}
-}
-
-func TestAutoModePatternEditNamesADuplicateAndAMiss(t *testing.T) {
-	s := New()
-	now := time.Now()
-
-	if _, err := s.AddAutoModePattern(automode.ListAllow, "git status*", now); err != nil {
-		t.Fatalf("add allow: %v", err)
-	}
-	_, err := s.AddAutoModePattern(automode.ListAllow, "git status*", now)
-	if err == nil || !strings.Contains(err.Error(), "already in the allow list") {
-		t.Fatalf("duplicate add = %v", err)
-	}
-	_, err = s.RemoveAutoModePattern(automode.ListAllow, "never added", now)
-	if err == nil || !strings.Contains(err.Error(), "not in the allow list") {
-		t.Fatalf("missing removal = %v", err)
-	}
-	_, err = s.AddAutoModePattern("models", "x", now)
-	if err == nil || !strings.Contains(err.Error(), "unknown pattern list") {
-		t.Fatalf("unknown list = %v", err)
-	}
-}
-
-func TestAutoModeDirectEditAndPromotionShareTheList(t *testing.T) {
-	s := New()
-	now := time.Now()
-
-	if _, err := s.AddAutoModePattern(automode.ListAllow, "git status*", now); err != nil {
-		t.Fatalf("add allow: %v", err)
-	}
-	proposal, err := s.CreateAutoModeProposal(automode.KindAllow, "", "git push origin*", "session-a", now)
-	if err != nil {
-		t.Fatalf("propose: %v", err)
-	}
-	_, cfg, err := s.PromoteAutoModeProposal(proposal.ID, now)
-	if err != nil {
-		t.Fatalf("promote: %v", err)
-	}
-	if len(cfg.Allow) != 2 || cfg.Allow[0] != "git status*" || cfg.Allow[1] != "git push origin*" {
-		t.Fatalf("allow after promotion = %v", cfg.Allow)
-	}
-	cfg, err = s.RemoveAutoModePattern(automode.ListAllow, "git status*", now)
-	if err != nil {
-		t.Fatalf("remove after promotion: %v", err)
-	}
-	if len(cfg.Allow) != 1 || cfg.Allow[0] != "git push origin*" {
-		t.Fatalf("allow after removal = %v", cfg.Allow)
-	}
-}
-
-func TestSetAutoModeModelsReplacesTheWholeListAndKeepsTheOrder(t *testing.T) {
-	s := New()
-	now := time.Now().UTC()
-
-	cfg, err := s.SetAutoModeModels([]string{"opencode/claude-opus-4-6", "opencode-go/glm-5.3"}, now)
-	if err != nil {
-		t.Fatalf("set models: %v", err)
-	}
-	if len(cfg.Models) != 2 || cfg.Models[0] != "opencode/claude-opus-4-6" {
-		t.Fatalf("models = %v", cfg.Models)
-	}
-
-	if cfg, err = s.SetAutoModeModels([]string{"openai-codex/gpt-5.6-luna"}, now); err != nil {
-		t.Fatalf("replace models: %v", err)
-	}
-	if len(cfg.Models) != 1 || cfg.Models[0] != "openai-codex/gpt-5.6-luna" {
-		t.Errorf("replacement did not drop the old list: %v", cfg.Models)
-	}
-
 	read, err := s.GetAutoModeConfig()
 	if err != nil {
 		t.Fatalf("get config: %v", err)
 	}
-	if len(read.Models) != 1 || read.Models[0] != "openai-codex/gpt-5.6-luna" {
-		t.Errorf("stored models = %v", read.Models)
+	if read.ApprovalPolicy != automode.PolicyNever || read.SandboxMode != automode.SandboxReadOnly {
+		t.Errorf("policy did not survive the read: %q/%q", read.ApprovalPolicy, read.SandboxMode)
 	}
 }
 
-func TestSetAutoModeModelsTakesNoneAndRefusesWhatCannotBeReached(t *testing.T) {
+func strPtr(value string) *string { return &value }
+
+func promoteValue(t *testing.T, s *Store, kind, value string, now time.Time) automode.Config {
+	t.Helper()
+	proposal, err := s.CreateAutoModeProposal(kind, "", value, "session-a", now)
+	if err != nil {
+		t.Fatalf("propose %s: %v", kind, err)
+	}
+	_, cfg, err := s.PromoteAutoModeProposal(proposal.ID, now)
+	if err != nil {
+		t.Fatalf("promote %s: %v", kind, err)
+	}
+	return cfg
+}
+
+// One test over every kind: a proposal is the only way the config moves, so each kind
+// has to reach the config the app promotes it into.
+func TestPromotingEveryAmendmentKindMovesTheConfig(t *testing.T) {
 	s := New()
 	now := time.Now().UTC()
-	if _, err := s.SetAutoModeModels([]string{"opencode-go/glm-5.3"}, now); err != nil {
-		t.Fatalf("seed models: %v", err)
+
+	cfg := promoteValue(t, s, automode.KindRule, ruleValue(t, automode.DecisionAllow, "", "git", "push"), now)
+	if got := ruleLines(userRules(cfg.Rules)); len(got) != 1 || got[0] != "allow git push" {
+		t.Fatalf("rules = %v after promoting a rule", got)
+	}
+	cfg = promoteValue(t, s, automode.KindHost, hostValue(t, "crates.io", automode.HostAllow), now)
+	if len(cfg.Network.AllowedDomains) != 1 || cfg.Network.AllowedDomains[0] != "crates.io" {
+		t.Fatalf("allowed = %v after promoting a host", cfg.Network.AllowedDomains)
 	}
 
-	cfg, err := s.SetAutoModeModels(nil, now)
+	pattern, err := automode.FormatPatternValue(automode.Tokens("git", "push"))
 	if err != nil {
-		t.Fatalf("clearing the list is how auto mode is turned off: %v", err)
+		t.Fatalf("format pattern: %v", err)
 	}
-	if len(cfg.Models) != 0 {
-		t.Errorf("models = %v, want none", cfg.Models)
+	cfg = promoteValue(t, s, automode.KindRuleRemove, pattern, now)
+	if got := userRules(cfg.Rules); len(got) != 0 {
+		t.Fatalf("rules = %v after promoting a removal", ruleLines(got))
+	}
+	cfg = promoteValue(t, s, automode.KindHostRemove, hostValue(t, "crates.io", automode.HostAllow), now)
+	if len(cfg.Network.AllowedDomains) != 0 {
+		t.Fatalf("allowed = %v after promoting a host removal", cfg.Network.AllowedDomains)
 	}
 
-	if _, err := s.SetAutoModeModels([]string{"noprovider"}, now); err == nil {
-		t.Error("a model with no provider was accepted")
+	policy, err := automode.FormatPolicyValue(automode.PolicyAmendment{
+		ApprovalPolicy:    strPtr(automode.PolicyNever),
+		AllowLocalBinding: boolPtr(true),
+	})
+	if err != nil {
+		t.Fatalf("format policy: %v", err)
 	}
-	if _, err := s.SetAutoModeModels([]string{"a/one", "a/one"}, now); err == nil {
-		t.Error("the same model twice was accepted; a pass walks each model once")
+	cfg = promoteValue(t, s, automode.KindPolicy, policy, now)
+	if cfg.ApprovalPolicy != automode.PolicyNever || !cfg.Network.AllowLocalBinding {
+		t.Fatalf("policy = %q, local binding = %t", cfg.ApprovalPolicy, cfg.Network.AllowLocalBinding)
+	}
+	if cfg.SandboxMode != automode.SandboxWorkspaceWrite {
+		t.Fatalf("sandbox = %q, want the field the amendment did not name held", cfg.SandboxMode)
+	}
+	read, err := s.GetAutoModeConfig()
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	if read.ApprovalPolicy != automode.PolicyNever || !read.Network.AllowLocalBinding {
+		t.Fatalf("the promoted policy did not survive the read: %+v", read)
 	}
 }
+
+// A row planted straight into the table skips the check CreateAutoModeProposal makes,
+// which is what proves promotion refuses a shipped entry on its own.
+func TestPromotingAPlantedShippedAmendmentIsRefused(t *testing.T) {
+	s := New()
+	now := time.Now().UTC()
+	shipped := automode.ShippedRules()[0]
+	rule := ruleValue(t, automode.DecisionAllow, "",
+		shipped.Pattern[0].Alternatives[0], shipped.Pattern[1].Alternatives[0], shipped.Pattern[2].Alternatives[0])
+	pattern, err := automode.FormatPatternValue(shipped.Pattern)
+	if err != nil {
+		t.Fatalf("format pattern: %v", err)
+	}
+	values := map[string]string{automode.KindRule: rule, automode.KindRuleRemove: pattern}
+	if domains := automode.ShippedDeniedDomains(config.WSPort()); len(domains) > 0 {
+		values[automode.KindHostRemove] = hostValue(t, domains[0], automode.HostDeny)
+	}
+	for kind, value := range values {
+		if _, err := s.CreateAutoModeProposal(kind, "", value, "session-a", now); err == nil {
+			t.Errorf("a %s proposal over a built-in entry was recorded", kind)
+		}
+		res, err := s.db.Exec(`
+			INSERT INTO automode_proposals (kind, target, value, proposed_by, state, created_at)
+			VALUES (?, '', ?, ?, ?, ?)`,
+			kind, value, "session-a", automode.StatePending, now.Format(sortableTimeFormat))
+		if err != nil {
+			t.Fatalf("plant a %s row: %v", kind, err)
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			t.Fatalf("planted id: %v", err)
+		}
+		if _, _, err := s.PromoteAutoModeProposal(id, now); err == nil {
+			t.Errorf("promoting the planted %s row over a built-in entry succeeded", kind)
+		}
+	}
+	cfg, err := s.GetAutoModeConfig()
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	if len(userRules(cfg.Rules)) != 0 {
+		t.Fatalf("rules = %v, want the built-in entries untouched", ruleLines(cfg.Rules))
+	}
+	if len(automode.StripShippedNetwork(config.WSPort(), cfg.Network).DeniedDomains) != 0 {
+		t.Fatalf("denied = %v, want the built-in host untouched", cfg.Network.DeniedDomains)
+	}
+}
+
+// The stored JSON on an installed machine predates allow_local_binding, and reading it
+// must land on the closed half of the switch rather than on nothing at all.
+func TestANetworkRowWrittenBeforeLocalBindingReadsAsOff(t *testing.T) {
+	s := New()
+	now := time.Now().UTC()
+	if _, err := s.SetAutoModeEnabledDefault(true, now); err != nil {
+		t.Fatalf("seed the row: %v", err)
+	}
+	if _, err := s.db.Exec(`UPDATE automode_config SET network = ? WHERE id = 1`,
+		`{"enabled":true,"allowed_domains":["crates.io"],"denied_domains":[]}`); err != nil {
+		t.Fatalf("plant the old network JSON: %v", err)
+	}
+	cfg, err := s.GetAutoModeConfig()
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	if cfg.Network.AllowLocalBinding {
+		t.Error("a row written before allow_local_binding read as allowed")
+	}
+	if len(cfg.Network.AllowedDomains) != 1 || cfg.Network.AllowedDomains[0] != "crates.io" {
+		t.Errorf("allowed = %v, want the old row's hosts", cfg.Network.AllowedDomains)
+	}
+}
+
+// "git push" and "git {push|pull}" are two rules, so a removal that carried only
+// the first alternative of each token would take away the wrong one.
+func TestRemovingARuleWithAlternativesLeavesItsLiteralNamesake(t *testing.T) {
+	s := New()
+	now := time.Now()
+	literal := automode.Rule{Pattern: automode.Tokens("git", "push"), Decision: automode.DecisionAllow}
+	alternatives := automode.Rule{
+		Pattern: []automode.PatternToken{
+			automode.Token("git"), automode.Token("push", "pull"),
+		},
+		Decision: automode.DecisionPrompt,
+	}
+	for _, rule := range []automode.Rule{literal, alternatives} {
+		if _, err := s.AddAutoModeRule(rule, now); err != nil {
+			t.Fatalf("add %s: %v", rule.Describe(), err)
+		}
+	}
+	cfg, err := s.RemoveAutoModeRule(alternatives.Pattern, now)
+	if err != nil {
+		t.Fatalf("remove the alternatives rule: %v", err)
+	}
+	got := ruleLines(userRules(cfg.Rules))
+	if len(got) != 1 || got[0] != "allow git push" {
+		t.Errorf("rules = %v, want only the literal one left", got)
+	}
+}
+
+func TestDismissingALegacyPatternDropsOnlyThatEntry(t *testing.T) {
+	s := New()
+	now := time.Now()
+	if _, err := s.mutateAutoModeConfig(now, func(cfg *automode.Config) error {
+		cfg.LegacyPatterns = []string{"git status*", "*curl*", "ssh prod*"}
+		return nil
+	}); err != nil {
+		t.Fatalf("seed the legacy patterns: %v", err)
+	}
+	cfg, err := s.DismissAutoModeLegacyPattern("*curl*", now)
+	if err != nil {
+		t.Fatalf("dismiss: %v", err)
+	}
+	if strings.Join(cfg.LegacyPatterns, "; ") != "git status*; ssh prod*" {
+		t.Errorf("legacy patterns = %v, want the other two", cfg.LegacyPatterns)
+	}
+	stored, err := s.GetAutoModeConfig()
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	if strings.Join(stored.LegacyPatterns, "; ") != "git status*; ssh prod*" {
+		t.Errorf("stored legacy patterns = %v, want the dismissal persisted", stored.LegacyPatterns)
+	}
+	if _, err := s.DismissAutoModeLegacyPattern("*curl*", now); err == nil {
+		t.Error("dismissing a pattern that is not on the list was accepted")
+	}
+}
+
+func boolPtr(value bool) *bool { return &value }

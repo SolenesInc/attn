@@ -13,8 +13,8 @@ const (
 	SlotChoice = "choice"
 )
 
-// Slot is one question the rulebook asks about this machine.
-// TestEverySlotIsReadByARule fails on a slot no rule in rulebook.md reads.
+// Slot is one question the Guardian's security policy asks about this machine.
+// TestEverySlotIsReadByARuleThatExists fails on a slot no policy rule reads.
 type Slot struct {
 	ID      string   `json:"id"`
 	Label   string   `json:"label"`
@@ -35,7 +35,7 @@ func Slots() []Slot {
 			ID: "trusted_repo", Label: "Trusted repo", Kind: SlotList, Detected: true,
 			Detail: "The repository this session works in, and its remotes.",
 			Unset:  prompts.RenderText("pi-environment", "unset-trusted_repo", prompts.Values{}),
-			ReadBy: []string{"Data Exfiltration", "Confidential data"},
+			ReadBy: []string{"Data Exfiltration", "Destructive Actions"},
 		},
 		{
 			ID: "repo_visibility", Label: "Repository visibility", Kind: SlotChoice, Detected: true,
@@ -48,55 +48,55 @@ func Slots() []Slot {
 			ID: "domains", Label: "Trusted internal domains", Kind: SlotList,
 			Detail: "Hosts the agent may send data to. One per entry.",
 			Unset:  prompts.RenderText("pi-environment", "unset-domains", prompts.Values{}),
-			ReadBy: []string{"Data Exfiltration", "Exfil Scouting", "Trusted Internal Infra"},
+			ReadBy: []string{"Data Exfiltration"},
 		},
 		{
 			ID: "buckets", Label: "Trusted cloud buckets", Kind: SlotList,
 			Detail: "Object storage that belongs to this work, such as s3://acme-artifacts.",
 			Unset:  prompts.RenderText("pi-environment", "unset-buckets", prompts.Values{}),
-			ReadBy: []string{"Trusted Internal Infra"},
+			ReadBy: []string{"Data Exfiltration"},
 		},
 		{
 			ID: "services", Label: "Key internal services", Kind: SlotList,
 			Detail: "Named services the agent may talk to in the normal way.",
 			Unset:  prompts.RenderText("pi-environment", "unset-services", prompts.Values{}),
-			ReadBy: []string{"Trusted Internal Infra"},
+			ReadBy: []string{"Data Exfiltration"},
 		},
 		{
 			ID: "source_control", Label: "Source-control orgs", Kind: SlotList,
 			Detail: "Orgs whose code may be pulled in and run.",
 			Unset:  prompts.RenderText("pi-environment", "unset-source_control", prompts.Values{}),
-			ReadBy: []string{"Untrusted Code Integration"},
+			ReadBy: []string{"Persistent Security Weakening"},
 		},
 		{
 			ID: "registry", Label: "Internal package registry", Kind: SlotList,
 			Detail: "An internal registry or mirror, when you have one.",
 			Unset:  prompts.RenderText("pi-environment", "unset-registry", prompts.Values{}),
-			ReadBy: []string{"Package Registry Bypass"},
+			ReadBy: []string{"Persistent Security Weakening"},
 		},
 		{
 			ID: "sensitive_data", Label: "Sensitive data locations", Kind: SlotList,
 			Detail: "Where personal, customer or regulated data lives.",
 			Unset:  prompts.RenderText("pi-environment", "unset-sensitive_data", prompts.Values{}),
-			ReadBy: []string{"PII Data Handling"},
+			ReadBy: []string{"Data Exfiltration"},
 		},
 		{
 			ID: "audiences", Label: "Cleared audiences", Kind: SlotList,
 			Detail: "Who may see data read from those locations.",
 			Unset:  prompts.RenderText("pi-environment", "unset-audiences", prompts.Values{}),
-			ReadBy: []string{"PII Data Handling"},
+			ReadBy: []string{"Data Exfiltration"},
 		},
 		{
 			ID: "remote_targets", Label: "Sensitive remote targets", Kind: SlotList,
 			Detail: "Namespaces, hosts or workloads that are live.",
 			Unset:  prompts.RenderText("pi-environment", "unset-remote_targets", prompts.Values{}),
-			ReadBy: []string{"Sensitive Remote Exec"},
+			ReadBy: []string{"Destructive Actions"},
 		},
 		{
 			ID: "iac_scopes", Label: "Protected IaC scopes", Kind: SlotList,
 			Detail: "Infrastructure whose apply or destroy needs a person.",
 			Unset:  prompts.RenderText("pi-environment", "unset-iac_scopes", prompts.Values{}),
-			ReadBy: []string{"Protected-Scope IaC Apply"},
+			ReadBy: []string{"Destructive Actions"},
 		},
 	}
 }

@@ -1,23 +1,24 @@
-
 import type {
   AutoModeConfigInfo,
   AutoModeDenialInfo,
   AutoModeEnvironmentInfo,
   AutoModeEnvironmentSlot,
   AutoModeEnvironmentSlotValue,
+  AutoModeNetworkInfo,
   AutoModeProposalInfo,
-  AutoModeModelProvider,
+  AutoModeRuleInfo,
 } from '../types/generated';
 import { type PendingRequests, settlePendingRequest } from './daemonPendingRequests';
 import { useAutoModePushStore } from '../store/autoMode';
 
 export type {
-  AutoModeModelProvider,
   AutoModeConfigInfo,
   AutoModeDenialInfo,
   AutoModeEnvironmentInfo,
   AutoModeEnvironmentSlot,
+  AutoModeNetworkInfo,
   AutoModeProposalInfo,
+  AutoModeRuleInfo,
 };
 
 export interface AutoModeState {
@@ -28,13 +29,15 @@ export interface AutoModeState {
   environmentSlots: AutoModeEnvironmentSlot[];
 }
 
-export interface AutoModePatternEdit {
-  config: AutoModeConfigInfo;
+// A policy edit names only what it moves; a field left out stays as it stands.
+export interface AutoModePolicyEdit {
+  approvalPolicy?: string;
+  sandboxMode?: string;
+  allowLocalBinding?: boolean;
 }
 
-export interface AutoModeModelCatalog {
-  providers: AutoModeModelProvider[];
-  problem: string | null;
+export interface AutoModeConfigEdit {
+  config: AutoModeConfigInfo;
 }
 
 export interface AutoModePromotion {
@@ -51,18 +54,23 @@ interface AutoModeDaemonEvent {
 
 const list = <T,>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
 
-const emptyConfig = (): AutoModeConfigInfo => ({
-  enabled_default: false,
-  environment: { slots: [], notes: [] },
-  allow: [],
-  hard_deny: [],
-  shipped_hard_deny: [],
-  models: [],
+const emptyNetwork = (): AutoModeNetworkInfo => ({
+  enabled: false,
+  allowed_domains: [],
+  denied_domains: [],
+  allow_local_binding: false,
 });
 
-const toModelCatalog = (event: AutoModeDaemonEvent): AutoModeModelCatalog => ({
-  providers: list<AutoModeModelProvider>(event.providers),
-  problem: typeof event.problem === 'string' ? event.problem : null,
+const emptyConfig = (): AutoModeConfigInfo => ({
+  enabled_default: false,
+  approval_policy: '',
+  sandbox_mode: '',
+  environment: { slots: [], notes: [] },
+  rules: [],
+  shipped_rules: [],
+  network: emptyNetwork(),
+  shipped_denied_domains: [],
+  legacy_patterns: [],
 });
 
 const toEnvironment = (value: unknown): AutoModeEnvironmentInfo => {
@@ -74,16 +82,30 @@ const toEnvironment = (value: unknown): AutoModeEnvironmentInfo => {
   };
 };
 
+const toNetwork = (value: unknown): AutoModeNetworkInfo => {
+  if (typeof value !== 'object' || value === null) return emptyNetwork();
+  const raw = value as Record<string, unknown>;
+  return {
+    enabled: raw.enabled === true,
+    allowed_domains: list<string>(raw.allowed_domains),
+    denied_domains: list<string>(raw.denied_domains),
+    allow_local_binding: raw.allow_local_binding === true,
+  };
+};
+
 const toConfig = (value: unknown): AutoModeConfigInfo => {
   if (typeof value !== 'object' || value === null) return emptyConfig();
   const raw = value as Record<string, unknown>;
   return {
     enabled_default: raw.enabled_default === true,
+    approval_policy: typeof raw.approval_policy === 'string' ? raw.approval_policy : '',
+    sandbox_mode: typeof raw.sandbox_mode === 'string' ? raw.sandbox_mode : '',
     environment: toEnvironment(raw.environment),
-    allow: list<string>(raw.allow),
-    hard_deny: list<string>(raw.hard_deny),
-    shipped_hard_deny: list<string>(raw.shipped_hard_deny),
-    models: list<string>(raw.models),
+    rules: list<AutoModeRuleInfo>(raw.rules),
+    shipped_rules: list<AutoModeRuleInfo>(raw.shipped_rules),
+    network: toNetwork(raw.network),
+    shipped_denied_domains: list<string>(raw.shipped_denied_domains),
+    legacy_patterns: list<string>(raw.legacy_patterns),
   };
 };
 
@@ -94,13 +116,23 @@ const toState = (event: AutoModeDaemonEvent): AutoModeState => ({
   environmentSlots: list<AutoModeEnvironmentSlot>(event.environment_slots),
 });
 
-const toPatternEdit = (event: AutoModeDaemonEvent): AutoModePatternEdit | undefined =>
+const toConfigEdit = (event: AutoModeDaemonEvent): AutoModeConfigEdit | undefined =>
   event.config === undefined ? undefined : { config: toConfig(event.config) };
 
 const toPromotion = (event: AutoModeDaemonEvent): AutoModePromotion => ({
   proposal: (event.proposal as AutoModeProposalInfo | undefined) ?? null,
   config: event.config === undefined ? null : toConfig(event.config),
 });
+
+// One event answers every config edit, so the settle is tried under each command's key;
+// only the one actually in flight has a waiter.
+const configEditCommands: [string, string][] = [
+  ['automode_rule_add', 'Adding the rule failed'],
+  ['automode_rule_remove', 'Removing the rule failed'],
+  ['automode_host_add', 'Adding the host failed'],
+  ['automode_host_remove', 'Removing the host failed'],
+  ['automode_policy_set', 'Saving the approval policy failed'],
+];
 
 /** Settles an auto mode result, or returns false for an event this module does not own. */
 export function handleAutoModeDaemonEvent(
@@ -126,24 +158,9 @@ export function handleAutoModeDaemonEvent(
         'Promoting the proposal failed',
       );
       return true;
-    // One event answers both edits, so the settle is tried under each command's key;
-    // only the one actually in flight has a waiter.
-    case 'automode_pattern_result': {
-      const settled = settlePendingRequest(
-        pending,
-        'automode_pattern_add',
-        event,
-        toPatternEdit,
-        'Adding the pattern failed',
-      );
-      if (!settled) {
-        settlePendingRequest(
-          pending,
-          'automode_pattern_remove',
-          event,
-          toPatternEdit,
-          'Removing the pattern failed',
-        );
+    case 'automode_config_result': {
+      for (const [command, whenItFails] of configEditCommands) {
+        if (settlePendingRequest(pending, command, event, toConfigEdit, whenItFails)) break;
       }
       return true;
     }
@@ -152,38 +169,20 @@ export function handleAutoModeDaemonEvent(
         pending,
         'automode_env_slot',
         event,
-        toPatternEdit,
-        'Saving what the classifier knows about this machine failed',
+        toConfigEdit,
+        'Saving what the reviewer knows about this machine failed',
       );
       if (!settledSlot) {
         settlePendingRequest(
           pending,
           'automode_env_notes',
           event,
-          toPatternEdit,
+          toConfigEdit,
           'Saving your notes about this machine failed',
         );
       }
       return true;
     }
-    case 'automode_model_set_result':
-      settlePendingRequest(
-        pending,
-        'automode_model_set',
-        event,
-        toPatternEdit,
-        'Saving the models failed',
-      );
-      return true;
-    case 'automode_models_result':
-      settlePendingRequest(
-        pending,
-        'automode_models',
-        event,
-        toModelCatalog,
-        'Asking pi which models it can reach failed',
-      );
-      return true;
     case 'automode_state_changed':
       useAutoModePushStore.getState().push(toState(event));
       return true;

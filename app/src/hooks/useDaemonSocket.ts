@@ -89,8 +89,8 @@ import { handleAppDaemonEvent, type AppCommandResult } from './daemonAppEvents';
 import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
   handleAutoModeDaemonEvent,
-  type AutoModePatternEdit,
-  type AutoModeModelCatalog,
+  type AutoModeConfigEdit,
+  type AutoModePolicyEdit,
   type AutoModePromotion,
   type AutoModeState,
 } from './daemonAutoModeEvents';
@@ -283,7 +283,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '299';
+export const PROTOCOL_VERSION = '300';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -3155,67 +3155,97 @@ export function useDaemonSocket({
     );
   }, [sendRequest]);
 
-  const sendAutoModePatternAdd = useCallback(
-    (list: string, pattern: string): Promise<AutoModePatternEdit> => {
-      return sendRequest<AutoModePatternEdit>(
-        'automode_pattern_add',
-        { list, pattern },
-        'Adding the pattern timed out',
+  const sendAutoModeRuleAdd = useCallback(
+    (pattern: string[], decision: string, justification: string): Promise<AutoModeConfigEdit> => {
+      return sendRequest<AutoModeConfigEdit>(
+        'automode_rule_add',
+        { pattern, decision, justification },
+        'Adding the rule timed out',
       );
     },
     [sendRequest],
   );
 
-  const sendAutoModeModelSet = useCallback(
-    (models: string[]): Promise<AutoModePatternEdit> => {
-      return sendRequest<AutoModePatternEdit>(
-        'automode_model_set',
-        { models },
-        'Saving the models timed out',
+  // The whole pattern, alternatives and all: "git {push|pull}" and "git push"
+  // are two rules and the daemon takes away the one named here.
+  const sendAutoModeRuleRemove = useCallback(
+    (pattern: string[][]): Promise<AutoModeConfigEdit> => {
+      return sendRequest<AutoModeConfigEdit>(
+        'automode_rule_remove',
+        { pattern },
+        'Removing the rule timed out',
       );
     },
     [sendRequest],
   );
 
-  // pi is asked per provider and each ask spawns a process, so this waits far
-  // longer than a command the daemon answers on its own.
-  const sendAutoModeModels = useCallback((): Promise<AutoModeModelCatalog> => {
-    return sendRequest<AutoModeModelCatalog>(
-      'automode_models',
-      {},
-      'Asking pi which models it can reach timed out',
-      30000,
-    );
-  }, [sendRequest]);
+  const sendAutoModeLegacyDismiss = useCallback(
+    (pattern: string): Promise<AutoModeConfigEdit> => {
+      return sendRequest<AutoModeConfigEdit>(
+        'automode_legacy_dismiss',
+        { pattern },
+        'Dismissing the pattern timed out',
+      );
+    },
+    [sendRequest],
+  );
+
+  const sendAutoModeHostAdd = useCallback(
+    (host: string, decision: string): Promise<AutoModeConfigEdit> => {
+      return sendRequest<AutoModeConfigEdit>(
+        'automode_host_add',
+        { host, decision },
+        'Adding the host timed out',
+      );
+    },
+    [sendRequest],
+  );
+
+  const sendAutoModeHostRemove = useCallback(
+    (host: string, decision: string): Promise<AutoModeConfigEdit> => {
+      return sendRequest<AutoModeConfigEdit>(
+        'automode_host_remove',
+        { host, decision },
+        'Removing the host timed out',
+      );
+    },
+    [sendRequest],
+  );
+
+  const sendAutoModePolicySet = useCallback(
+    (edit: AutoModePolicyEdit): Promise<AutoModeConfigEdit> => {
+      return sendRequest<AutoModeConfigEdit>(
+        'automode_policy_set',
+        {
+          ...(edit.approvalPolicy === undefined ? {} : { approval_policy: edit.approvalPolicy }),
+          ...(edit.sandboxMode === undefined ? {} : { sandbox_mode: edit.sandboxMode }),
+          ...(edit.allowLocalBinding === undefined
+            ? {}
+            : { allow_local_binding: edit.allowLocalBinding }),
+        },
+        'Saving the approval policy timed out',
+      );
+    },
+    [sendRequest],
+  );
 
   const sendAutoModeEnvSlot = useCallback(
-    (slot: string, values: string[]): Promise<AutoModePatternEdit> => {
-      return sendRequest<AutoModePatternEdit>(
+    (slot: string, values: string[]): Promise<AutoModeConfigEdit> => {
+      return sendRequest<AutoModeConfigEdit>(
         'automode_env_slot',
         { slot, values },
-        'Saving what the classifier knows about this machine timed out',
+        'Saving what the reviewer knows about this machine timed out',
       );
     },
     [sendRequest],
   );
 
   const sendAutoModeEnvNotes = useCallback(
-    (notes: string[]): Promise<AutoModePatternEdit> => {
-      return sendRequest<AutoModePatternEdit>(
+    (notes: string[]): Promise<AutoModeConfigEdit> => {
+      return sendRequest<AutoModeConfigEdit>(
         'automode_env_notes',
         { notes },
         'Saving your notes about this machine timed out',
-      );
-    },
-    [sendRequest],
-  );
-
-  const sendAutoModePatternRemove = useCallback(
-    (list: string, pattern: string): Promise<AutoModePatternEdit> => {
-      return sendRequest<AutoModePatternEdit>(
-        'automode_pattern_remove',
-        { list, pattern },
-        'Removing the pattern timed out',
       );
     },
     [sendRequest],
@@ -5403,12 +5433,14 @@ export function useDaemonSocket({
     sendAutoModeGet,
     sendAutoModePromote,
     sendAutoModeDiscard,
-    sendAutoModePatternAdd,
-    sendAutoModeModelSet,
-    sendAutoModeModels,
+    sendAutoModeRuleAdd,
+    sendAutoModeRuleRemove,
+    sendAutoModeLegacyDismiss,
+    sendAutoModeHostAdd,
+    sendAutoModeHostRemove,
+    sendAutoModePolicySet,
     sendAutoModeEnvSlot,
     sendAutoModeEnvNotes,
-    sendAutoModePatternRemove,
     sendBusSetConsumerEnabled,
     sendTriggerNudge,
     sendSettleTurn,

@@ -519,6 +519,7 @@ func (d *Daemon) handlePluginMethod(plugin *pluginConnection, msg jsonRPCMessage
 	result, handled, err := d.handlePluginDriverMethod(plugin, msg)
 	if handled {
 		if err != nil {
+			d.logf("plugin request %s from plugin %s failed: %v", msg.Method, plugin.name, err)
 			_ = plugin.send(jsonRPCFailure(msg.ID, jsonRPCInvalidRequest, err.Error()))
 			return
 		}
@@ -526,7 +527,9 @@ func (d *Daemon) handlePluginMethod(plugin *pluginConnection, msg jsonRPCMessage
 		return
 	}
 
-	_ = plugin.send(jsonRPCFailure(msg.ID, jsonRPCMethodNotFound, fmt.Sprintf("unknown method %q", msg.Method)))
+	unknown := fmt.Errorf("unknown method %q", msg.Method)
+	d.logf("plugin request %s from plugin %s failed: %v", msg.Method, plugin.name, unknown)
+	_ = plugin.send(jsonRPCFailure(msg.ID, jsonRPCMethodNotFound, unknown.Error()))
 }
 
 func (d *Daemon) callPlugin(ctx context.Context, name, method string, params interface{}, result interface{}) error {

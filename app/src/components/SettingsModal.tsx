@@ -214,11 +214,13 @@ export function SettingsModal({
     sendAutoModeGet,
     sendAutoModePromote,
     sendAutoModeDiscard,
-    sendAutoModePatternAdd,
-    sendAutoModePatternRemove,
+    sendAutoModeRuleAdd,
+    sendAutoModeRuleRemove,
+    sendAutoModeLegacyDismiss,
+    sendAutoModeHostAdd,
+    sendAutoModeHostRemove,
+    sendAutoModePolicySet,
     sendAutoModeEnvSlot,
-    sendAutoModeModelSet,
-    sendAutoModeModels,
   } = useDaemonApi();
   const githubPollingOffReason = useGitHubPollingOffReason();
   const autoModePolicy = useAutoModePolicy({
@@ -226,11 +228,13 @@ export function SettingsModal({
     getState: sendAutoModeGet,
     promoteProposal: sendAutoModePromote,
     discardProposal: sendAutoModeDiscard,
-    addPattern: sendAutoModePatternAdd,
-    removePattern: sendAutoModePatternRemove,
+    addRule: sendAutoModeRuleAdd,
+    removeRule: sendAutoModeRuleRemove,
+    addHost: sendAutoModeHostAdd,
+    removeHost: sendAutoModeHostRemove,
+    setPolicy: sendAutoModePolicySet,
     setEnvironmentSlot: sendAutoModeEnvSlot,
-    setModels: sendAutoModeModelSet,
-    loadModels: sendAutoModeModels,
+    dismissLegacy: sendAutoModeLegacyDismiss,
   });
   const savedFlash = useSavedFlash();
   const [defaultAgent, setDefaultAgent] = useState<SessionAgent>('claude');
@@ -733,7 +737,7 @@ export function SettingsModal({
           title: 'Auto mode',
           description: "Manage attn's pi automode plugin",
           count: autoModePolicy.pendingCount,
-          keywords: 'auto mode automode pi safety envelope classifier proposals promote discard allow deny hard deny patterns policy permissions denials',
+          keywords: 'auto mode automode pi safety envelope proposals promote discard allow deny forbidden rules hosts network approval policy sandbox permissions denials',
         },
       ],
     },
@@ -873,13 +877,14 @@ export function SettingsModal({
                 : `${autoModePolicy.pendingCount} proposal${autoModePolicy.pendingCount === 1 ? '' : 's'} waiting`}
             </span>
             {autoModePolicy.state && (
-              <span className="settings-pill">
-                {autoModePolicy.state.config.models.length === 0
-                  ? 'off: no model'
-                  : autoModePolicy.state.config.enabled_default
-                    ? 'on by default'
-                    : 'off by default'}
-              </span>
+              <>
+                <span className="settings-pill">
+                  {autoModePolicy.state.config.enabled_default ? 'on by default' : 'off by default'}
+                </span>
+                <span className="settings-pill">
+                  {autoModePolicy.state.config.approval_policy}
+                </span>
+              </>
             )}
           </>
         );

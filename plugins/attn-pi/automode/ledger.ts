@@ -1,7 +1,6 @@
 import { appendFileSync, mkdirSync, readFileSync, renameSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
-import type { AutoModeDenial } from "./index";
 import { credentials } from "../security/filter";
 
 export const denialLedgerEnvVar = "ATTN_PI_AUTOMODE_DENIAL_LOG";
@@ -13,6 +12,20 @@ export const denialLedgerFileName = "attn-automode-denials.jsonl";
 export const denialLedgerMaxBytes = 64 * 1024 * 1024;
 
 export type EnvironmentLike = Record<string, string | undefined>;
+
+/** What a reviewer rejection carries into the ledger. */
+export type DenialLike = {
+  toolCallId: string;
+  tool: string;
+  action: string;
+  reason: string;
+  rule: string;
+  /** RFC 3339. */
+  at: string;
+  /** Absent when user approval could still clear the rejection. */
+  clearable?: boolean;
+  prompt?: DenialLedgerPrompt;
+};
 
 export function denialLedgerPath(env: EnvironmentLike): string {
   const configured = env[denialLedgerEnvVar]?.trim();
@@ -45,7 +58,7 @@ export type DenialLedgerPrompt = {
   user: string;
 };
 
-export type DenialLedgerLike = { record(denial: AutoModeDenial): void };
+export type DenialLedgerLike = { record(denial: DenialLike): void };
 
 export class DenialLedger implements DenialLedgerLike {
   private ensured = false;
@@ -56,7 +69,7 @@ export class DenialLedger implements DenialLedgerLike {
     private readonly maxBytes: number = denialLedgerMaxBytes,
   ) {}
 
-  record(denial: AutoModeDenial): void {
+  record(denial: DenialLike): void {
     denial = credentials.value(denial);
     const line: DenialLedgerRecord = {
       session_id: this.sessionID,

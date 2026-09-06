@@ -1238,6 +1238,8 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	`},
 	{137, "name the repository a session ran in so the ledger can filter by it", ""},
 	{138, "persist delegation preferences", `CREATE TABLE IF NOT EXISTS delegation_preferences (id INTEGER PRIMARY KEY CHECK (id = 1), config TEXT NOT NULL);`},
+	{139, "auto mode globs become prefix rules, hosts and an approval policy", ``},
+	{140, "record where a plugin session's harness writes its transcript", ""},
 }
 
 const migration99SQL = `
@@ -1371,7 +1373,12 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			return fmt.Errorf("starting transaction for migration %d: %w", m.version, err)
 		}
 
-		if m.version == 137 {
+		if m.version == 140 {
+			if err := applyMigration140(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 137 {
 			if err := applyMigration137(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
@@ -1713,6 +1720,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 139 {
+			if err := applyMigration139(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else {
 			if _, err := tx.Exec(m.sql); err != nil {
 				tx.Rollback()
@@ -1810,6 +1822,17 @@ func applyMigration136(tx *sql.Tx, schema string) error {
 		}
 	}
 	_, err := tx.Exec(schema)
+	return err
+}
+
+// Guarded like the other column additions: a database that already carries the
+// column (a replayed migration, a repaired schema) must migrate, not fail.
+func applyMigration140(tx *sql.Tx) error {
+	has, err := columnExists(tx, "sessions", "agent_driver_transcript_path")
+	if err != nil || has {
+		return err
+	}
+	_, err = tx.Exec("ALTER TABLE sessions ADD COLUMN agent_driver_transcript_path TEXT NOT NULL DEFAULT ''")
 	return err
 }
 
@@ -3036,7 +3059,7 @@ func aModelWasEverPromoted(tx *sql.Tx) (bool, error) {
 	var count int
 	if err := tx.QueryRow(
 		"SELECT COUNT(*) FROM automode_proposals WHERE kind = ? AND state = ?",
-		automode.KindModel, automode.StatePromoted).Scan(&count); err != nil {
+		"model", automode.StatePromoted).Scan(&count); err != nil {
 		return false, err
 	}
 	return count > 0, nil
@@ -3075,6 +3098,118 @@ func applyMigration125(tx *sql.Tx) error {
 		return err
 	}
 	_, err = tx.Exec("UPDATE automode_config SET environment = ? WHERE id = 1", string(encoded))
+	return err
+}
+
+// The old lists were shell globs; a prefix rule is command tokens. What converts
+// becomes a rule, and what cannot stays in legacy_patterns for the user to rewrite.
+func applyMigration139(tx *sql.Tx) error {
+	has, err := tableExists(tx, "automode_config")
+	if err != nil || !has {
+		return err
+	}
+	for _, column := range []struct{ name, ddl string }{
+		{"approval_policy", "TEXT NOT NULL DEFAULT '" + automode.PolicyOnRequest + "'"},
+		{"sandbox_mode", "TEXT NOT NULL DEFAULT '" + automode.SandboxWorkspaceWrite + "'"},
+		{"rules", "TEXT NOT NULL DEFAULT '[]'"},
+		{"network", "TEXT NOT NULL DEFAULT ''"},
+		{"legacy_patterns", "TEXT NOT NULL DEFAULT '[]'"},
+	} {
+		exists, err := columnExists(tx, "automode_config", column.name)
+		if err != nil {
+			return err
+		}
+		if exists {
+			continue
+		}
+		if _, err := tx.Exec(fmt.Sprintf(
+			"ALTER TABLE automode_config ADD COLUMN %s %s", column.name, column.ddl)); err != nil {
+			return err
+		}
+	}
+	if err := convertAutoModeGlobs(tx); err != nil {
+		return err
+	}
+	for _, column := range []string{"allow_patterns", "hard_deny", "models"} {
+		exists, err := columnExists(tx, "automode_config", column)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			continue
+		}
+		if _, err := tx.Exec(fmt.Sprintf(
+			"ALTER TABLE automode_config DROP COLUMN %s", column)); err != nil {
+			return err
+		}
+	}
+	// allow, deny and model proposals name lists that are gone; nothing could promote them.
+	_, err = tx.Exec(`UPDATE automode_proposals SET state = ?, resolved_at = ?
+		WHERE state = ? AND kind NOT IN (?, ?)`,
+		automode.StateDiscarded, time.Now().UTC().Format(sortableTimeFormat),
+		automode.StatePending, automode.KindRule, automode.KindHost)
+	return err
+}
+
+const migratedForbiddenJustification = "carried over from the old hard deny list"
+
+func convertAutoModeGlobs(tx *sql.Tx) error {
+	hasAllow, err := columnExists(tx, "automode_config", "allow_patterns")
+	if err != nil {
+		return err
+	}
+	hasDeny, err := columnExists(tx, "automode_config", "hard_deny")
+	if err != nil || (!hasAllow && !hasDeny) {
+		return err
+	}
+	var allowRaw, denyRaw, rulesRaw string
+	err = tx.QueryRow(
+		"SELECT allow_patterns, hard_deny, rules FROM automode_config WHERE id = 1").
+		Scan(&allowRaw, &denyRaw, &rulesRaw)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(rulesRaw) != "" && strings.TrimSpace(rulesRaw) != "[]" {
+		return nil
+	}
+	rules := []automode.Rule{}
+	legacy := []string{}
+	for _, list := range []struct {
+		raw      string
+		decision string
+	}{
+		{allowRaw, automode.DecisionAllow},
+		{denyRaw, automode.DecisionForbidden},
+	} {
+		globs, err := decodeStringList(list.raw, "patterns")
+		if err != nil {
+			return err
+		}
+		for _, glob := range globs {
+			rule, ok := automode.ConvertGlob(glob, list.decision, migratedForbiddenJustification)
+			if !ok {
+				legacy = append(legacy, glob)
+				continue
+			}
+			rules = append(rules, rule)
+		}
+	}
+	// The shipped denies were resolved in at read, never stored, so nothing carries them here.
+	rules = automode.StripShippedRules(rules)
+	encodedRules, err := json.Marshal(rules)
+	if err != nil {
+		return err
+	}
+	encodedLegacy, err := json.Marshal(legacy)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(
+		"UPDATE automode_config SET rules = ?, legacy_patterns = ? WHERE id = 1",
+		string(encodedRules), string(encodedLegacy))
 	return err
 }
 

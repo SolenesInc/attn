@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
 import type { CredentialFilter } from "./filter";
 import { assertPath, type SecurityPolicy } from "./policy";
-import { sandboxCommand } from "./sandbox";
+import { sandboxCommand, sandboxEnvironment } from "./sandbox";
 
 // Native tools use a small sandboxed worker so symlink races cannot bypass the OS policy.
 const workerSource = `
@@ -38,7 +38,7 @@ export class SandboxedFilesystem {
   private nextID = 0;
   private readonly pending = new Map<number, Pending>();
 
-  constructor(readonly policy: SecurityPolicy, private readonly filter: CredentialFilter, private readonly reviewAvailable = () => false) {}
+  constructor(readonly policy: SecurityPolicy, private readonly filter: CredentialFilter) {}
 
   async read(path: string): Promise<Buffer> {
     return Buffer.from(await this.request("read", path) as string, "base64");
@@ -63,7 +63,7 @@ export class SandboxedFilesystem {
 
   private async request(operation: string, path: string, content?: string): Promise<unknown> {
     const mode = operation === "write" || operation === "mkdir" ? "write" : "read";
-    const target = assertPath(this.policy, path, mode, this.reviewAvailable());
+    const target = assertPath(this.policy, path, mode);
     const child = this.child ?? this.start();
     const id = ++this.nextID;
     return new Promise((resolve, reject) => {
@@ -78,7 +78,7 @@ export class SandboxedFilesystem {
     const command = sandboxCommand(this.policy, process.execPath, ["-e", workerSource]);
     const child = spawn(command.executable, command.args, {
       cwd: this.policy.cwd,
-      env: { ...this.filter.environment(process.env), TMPDIR: this.policy.temp, TMP: this.policy.temp, TEMP: this.policy.temp },
+      env: sandboxEnvironment(this.policy, this.filter.environment(process.env)),
       stdio: ["pipe", "pipe", "pipe"],
     });
     this.child = child;
