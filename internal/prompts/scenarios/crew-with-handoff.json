@@ -17,5 +17,8 @@
     "charter_path": "",
     "handoff_name": "previous.md",
     "handoffs_dir": "/workspace/crew/maintainer/handoffs"
+  },
+  "inputs": {
+    "garden_holdings": "crew-garden-holdings"
   }
 }

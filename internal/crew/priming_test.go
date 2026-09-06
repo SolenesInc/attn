@@ -1,6 +1,7 @@
 package crew
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -151,5 +152,119 @@ func TestPriming_HandoffNamesSortFreshestFirst(t *testing.T) {
 	SortHandoffNames(names)
 	if names[0] != "2026-08-13T22-10Z-keel.md" || names[2] != "2026-08-11T20-00Z-keel.md" {
 		t.Fatalf("sorted to %v, want freshest first", names)
+	}
+}
+
+func holding(seeds int) Priming {
+	p := fullPriming()
+	p.GardenRead = true
+	for i := range seeds {
+		p.Held = append(p.Held, HeldSeed{
+			ID:      fmt.Sprintf("s-held%02d", i),
+			Slug:    fmt.Sprintf("held-seed-%d", i),
+			Title:   fmt.Sprintf("Held seed %d", i),
+			Handoff: fmt.Sprintf("Where seed %d stands.", i),
+		})
+	}
+	p.HeldTotal = seeds
+	p.Plots = []PlotReady{{ID: "s-plot01", Slug: "finish-garden", Title: "Finish the garden", Ready: 4}}
+	return p
+}
+
+func TestPriming_TheGardenSectionCarriesEachHeldSeedAndItsHandoff(t *testing.T) {
+	p := holding(2)
+	p.Held[1].Handoff = ""
+	block := p.Block()
+
+	for _, want := range []string{
+		"## What you hold in the garden",
+		"Your claim on a seed never expires",
+		"`s-held00` held-seed-0 — Held seed 0",
+		"Freshest handoff: Where seed 0 stands.",
+		"`s-held01` held-seed-1 — Held seed 1",
+		"No handoff note yet.",
+		"Ready beside them",
+		"- `s-plot01` finish-garden — 4 ready",
+	} {
+		if !strings.Contains(block, want) {
+			t.Errorf("the garden section does not carry %q", want)
+		}
+	}
+	if strings.Contains(block, "You hold no seeds") {
+		t.Error("a member holding two seeds was told it holds none")
+	}
+}
+
+func TestPriming_AMemberHoldingNothingGetsOneQuietLine(t *testing.T) {
+	p := fullPriming()
+	p.GardenRead = true
+
+	block := p.Block()
+	if !strings.Contains(block, "You hold no seeds in the garden. `attn seed ready --all` shows what is free to pick up.") {
+		t.Error("an empty garden section does not say so or where to look")
+	}
+	if strings.Contains(block, "## What you hold in the garden") {
+		t.Error("an empty garden section still opened a heading")
+	}
+}
+
+func TestPriming_AGardenThatCouldNotBeReadIsNoSectionAtAll(t *testing.T) {
+	block := fullPriming().Block()
+	for _, unwanted := range []string{"## What you hold in the garden", "You hold no seeds in the garden"} {
+		if strings.Contains(block, unwanted) {
+			t.Errorf("an unread garden still told the member %q", unwanted)
+		}
+	}
+}
+
+func TestPriming_PastTheHeldTripwireTheBlockNamesTheLimitAndTheAsk(t *testing.T) {
+	p := holding(MaxHeldSeeds)
+	p.HeldTotal = MaxHeldSeeds + 4
+
+	block := p.Block()
+	want := fmt.Sprintf("You hold %d seeds and this block lists the %d you claimed most recently; `attn seed ls --flat` has them all.", MaxHeldSeeds+4, MaxHeldSeeds)
+	if !strings.Contains(block, want) {
+		t.Errorf("the cut list does not say %q", want)
+	}
+}
+
+func TestPriming_AListThatFitsSaysNothingAboutTheTripwire(t *testing.T) {
+	if block := holding(3).Block(); strings.Contains(block, "attn seed ls --flat") {
+		t.Error("a member holding three seeds was told its list was cut")
+	}
+}
+
+func TestPriming_AnOversizeHandoffNoteIsTrimmedWithTheWayToTheWholeNote(t *testing.T) {
+	p := holding(1)
+	p.Held[0].Handoff = strings.Repeat("日", MaxHeldHandoffBytes)
+
+	block := p.Block()
+	if !utf8.ValidString(block) {
+		t.Fatal("the cut split a rune: the block is not valid UTF-8")
+	}
+	want := fmt.Sprintf("[Trimmed at %d bytes of %d; `attn seed notes s-held00` has the whole note.]", MaxHeldHandoffBytes, MaxHeldHandoffBytes*3)
+	if !strings.Contains(block, want) {
+		t.Errorf("the trimmed note does not say %q", want)
+	}
+}
+
+func TestPriming_AHandoffNoteAtTheBudgetIsCarriedWhole(t *testing.T) {
+	p := holding(1)
+	p.Held[0].Handoff = strings.Repeat("x", MaxHeldHandoffBytes)
+
+	block := p.Block()
+	if !strings.Contains(block, p.Held[0].Handoff) {
+		t.Fatal("a note within the budget was not carried whole")
+	}
+	if strings.Contains(block, "Trimmed at") {
+		t.Fatal("a note within the budget was treated as oversize")
+	}
+}
+
+func TestPriming_AnUnboundSessionIsToldNothingAboutTheGarden(t *testing.T) {
+	p := holding(2)
+	p.Member = ""
+	if got := p.GardenSection(); got != "" {
+		t.Fatalf("an unbound session was primed with %q", got)
 	}
 }
