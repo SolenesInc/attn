@@ -224,6 +224,8 @@ describe('shortcut registry', () => {
       expect(SHORTCUTS['session.newWorkspace']).toEqual({ key: 't', meta: true });
       expect(SHORTCUTS['session.close']).toEqual({ key: 'w', meta: true });
       expect(SHORTCUTS['session.goToDashboard']).toEqual({ key: 'h', meta: true, shift: true });
+      expect(MAC_SHORTCUTS['session.orchestrator']).toEqual({ key: 'ArrowUp', meta: true, shift: true });
+      expect(LINUX_SHORTCUTS['session.orchestrator']).toEqual({ key: 'o', code: 'KeyO', meta: true, alt: true });
       expect(SHORTCUTS['view.toggleGrid']).toEqual({ key: 'g', meta: true });
     });
 

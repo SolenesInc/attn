@@ -25,7 +25,17 @@ function loneAgentWorkspace(): TerminalWorkspaceState {
   };
 }
 
-function renderPane(pullRequests: SessionPullRequest[]) {
+function renderPane(
+  pullRequests: SessionPullRequest[],
+  delegationSessions: Array<{
+    id: string;
+    label: string;
+    agent: 'claude' | 'codex' | 'shell';
+    state: 'working' | 'idle';
+    dispatcher_session_id?: string;
+  }> = [],
+  onSelectSession = vi.fn(),
+) {
   return render(
     <SessionTerminalWorkspace
       workspaceId="workspace-1"
@@ -36,6 +46,7 @@ function renderPane(pullRequests: SessionPullRequest[]) {
         cwd: '/tmp/project',
         pullRequests,
       }]}
+      delegationSessions={delegationSessions}
       workspace={loneAgentWorkspace()}
       activePaneId="pane-1"
       fontSize={13}
@@ -45,12 +56,41 @@ function renderPane(pullRequests: SessionPullRequest[]) {
       onSplitPane={vi.fn()}
       onClosePane={vi.fn()}
       onFocusPane={vi.fn()}
+      onSelectSession={onSelectSession}
       onNavigateOutOfSession={vi.fn()}
     />,
   );
 }
 
 describe('SessionTerminalWorkspace provenance line', () => {
+  it('passes the pane delegation links through the header', () => {
+    const onSelectSession = vi.fn();
+    renderPane([], [
+      { id: 'dispatcher', label: 'docs sweep', agent: 'claude', state: 'idle' },
+      {
+        id: 'sess-1',
+        label: 'ledger sweep',
+        agent: 'shell',
+        state: 'working',
+        dispatcher_session_id: 'dispatcher',
+      },
+      {
+        id: 'delegate',
+        label: 'glossary rework',
+        agent: 'codex',
+        state: 'working',
+        dispatcher_session_id: 'sess-1',
+      },
+    ], onSelectSession);
+
+    fireEvent.click(screen.getByRole('button', { name: /delegated by docs sweep/i }));
+    expect(onSelectSession).toHaveBeenCalledWith('dispatcher');
+
+    fireEvent.click(screen.getByRole('button', { name: '1 delegate' }));
+    fireEvent.click(screen.getByRole('button', { name: 'glossary rework codex' }));
+    expect(onSelectSession).toHaveBeenLastCalledWith('delegate');
+  });
+
   it('carries the session PR on the pane header', () => {
     renderPane([{
       repository: 'github.com/victorarias/attn',

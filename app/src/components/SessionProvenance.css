@@ -106,6 +106,56 @@ button.session-provenance__target:hover {
   text-decoration: underline;
 }
 
+.session-provenance__delegation {
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, var(--color-text-tertiary) 28%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font: inherit;
+  white-space: nowrap;
+}
+
+button.session-provenance__delegation {
+  cursor: pointer;
+}
+
+.session-provenance__delegation--up:not(:disabled):hover {
+  border-color: rgba(88, 166, 255, 0.5);
+  background: rgba(88, 166, 255, 0.12);
+  color: #79b8ff;
+}
+
+.session-provenance__delegation--down:not(:disabled):hover,
+.session-provenance__delegation--down[aria-expanded='true'] {
+  border-color: color-mix(in srgb, var(--accent) 58%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.session-provenance__delegation:disabled {
+  cursor: default;
+}
+
+.session-provenance__delegation kbd {
+  padding: 0 3px;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 3px;
+  color: var(--color-text-muted);
+  font-family: 'SF Mono', 'Monaco', 'Menlo', 'DejaVu Sans Mono', monospace;
+  font-size: 9px;
+}
+
+.session-provenance__earlier {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
 .session-provenance__title {
   min-width: 0;
   overflow: hidden;
