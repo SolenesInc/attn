@@ -45,8 +45,7 @@ type SessionLedgerQuery struct {
 	Repository  string
 	Since       time.Time
 	Until       time.Time
-	// Two extra GROUP BYs; a page fetched with Before skips them.
-	Facets bool
+	Facets      bool
 }
 
 type SessionLedgerPage struct {

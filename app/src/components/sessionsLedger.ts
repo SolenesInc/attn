@@ -29,8 +29,6 @@ function midnight(now: Date, daysBack: number): Date {
   return day;
 }
 
-/** Calendar days in the viewer's timezone: only the client knows what "today"
- * means, so the daemon is only ever told instants. */
 export function sessionRangeWindow(id: SessionRangeId, now: Date): SessionRange {
   switch (id) {
     case 'today':

@@ -50,7 +50,6 @@ export interface SessionsPanelProps {
   now?: () => Date;
 }
 
-// Stable identity: an inline default would rebuild every memo that depends on it.
 const systemNow = () => new Date();
 
 const NO_WORKSPACE_NAMES: Record<string, string> = {};
@@ -63,7 +62,6 @@ const SCOPES: { id: SessionScope; label: string }[] = [
 ];
 
 export function SessionsPanel(props: SessionsPanelProps) {
-  // Unmounted while closed, so every bit of row state resets without an effect.
   if (!props.isOpen) return null;
   return <OpenSessionsPanel {...props} />;
 }
@@ -85,8 +83,7 @@ function OpenSessionsPanel({
   const ledger = useSessionLedger({ enabled: true, list: listSessions, now });
   const { filters, setFilters, entries } = ledger;
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // An action taken while a git check was still running: it fires against the
-  // verdict that lands, never against the stale one that was on screen.
+  // Fires against the verdict that lands, never the stale one that was on screen.
   const [awaiting, setAwaiting] = useState<{ sessionId: string; actionId: string } | null>(null);
   const [awaitingRefusal, setAwaitingRefusal] = useState<string | null>(null);
   const rowsRef = useRef<HTMLTableSectionElement>(null);

@@ -27,8 +27,8 @@ type sessionListArgs struct {
 	json       bool
 }
 
-// Resolved here, never by the daemon: only the client knows its timezone.
-// Calendar days, so "last 7 days" is today and the six before it.
+// Resolved here, never by the daemon: only the client knows its timezone, and
+// these are calendar days, so "last 7 days" is today and the six before it.
 var sessionListPresets = map[string]int{"today": 0, "yesterday": 1, "7d": 6, "30d": 29}
 
 func sessionListPresetNames() string {
@@ -53,8 +53,7 @@ func sessionListPresetWindow(name string, now time.Time) (string, string, error)
 	return since.Format(time.RFC3339), "", nil
 }
 
-// A bare date means that day from its first instant, so --since 2026-09-05 does
-// not silently start at noon.
+// A bare date starts at that day's first instant, never silently at noon.
 func sessionListInstant(flagName, raw string, now time.Time) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

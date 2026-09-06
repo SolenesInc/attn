@@ -252,8 +252,8 @@ func ResolveMainRepoPath(repoPath string) string {
 	return filepath.Clean(expanded)
 }
 
-// RepositoryRoot names a directory's repository: the main repository for a
-// worktree, the checkout itself otherwise. Walks the filesystem, never git.
+// RepositoryRoot names a directory's repository, walking the filesystem rather
+// than git: the main repository for a worktree, the checkout itself otherwise.
 func RepositoryRoot(dir string) string {
 	current := CanonicalizePath(dir)
 	for {

@@ -1951,8 +1951,7 @@ func applyMigration20(tx *sql.Tx) error {
 	return nil
 }
 
-// A plain checkout's repository is unknowable without git, so it is written on
-// the next registration instead.
+// A plain checkout's repository is unknowable here, so registration writes it.
 func applyMigration137(tx *sql.Tx) error {
 	exists, err := columnExists(tx, "sessions", "repository")
 	if err != nil {
@@ -1962,7 +1961,6 @@ func applyMigration137(tx *sql.Tx) error {
 		if _, err := tx.Exec("ALTER TABLE sessions ADD COLUMN repository TEXT NOT NULL DEFAULT ''"); err != nil {
 			return err
 		}
-		// A DB old enough to predate main_repo has nothing to carry over.
 		hasMainRepo, err := columnExists(tx, "sessions", "main_repo")
 		if err != nil {
 			return err

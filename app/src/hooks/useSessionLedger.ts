@@ -28,10 +28,8 @@ export const EMPTY_SESSION_FILTERS: SessionLedgerFilters = {
   repository: '',
 };
 
-// A page the eye can scan; load-more is one keystroke away.
 export const SESSION_PAGE_SIZE = 50;
 
-// Stable identity: an inline default would rebuild every memo that depends on it.
 const systemNow = () => new Date();
 
 export interface UseSessionLedgerOptions {
@@ -109,10 +107,12 @@ export function useSessionLedger({
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
-  // Only the newest read may write: a slow page must not land on filters the user left.
   const readSeq = useRef(0);
+  // Written after commit: a render React discards must not steer the committed surface.
   const filtersRef = useRef(filters);
-  filtersRef.current = filters;
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters]);
 
   const query = useMemo(() => sessionLedgerQuery(filters, now()), [filters, now]);
   const filterError = 'error' in query ? query.error : null;
@@ -141,8 +141,7 @@ export function useSessionLedger({
       .finally(() => {
         if (seq === readSeq.current) setLoading(false);
       });
-    // `query` is derived from filters; depending on it directly would refetch on
-    // every render, since it holds a fresh `now`.
+    // `query` holds a fresh `now`, so depending on it would refetch every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, filters, filterError, list, pageSize, reloadNonce]);
 
