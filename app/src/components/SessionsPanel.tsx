@@ -53,28 +53,36 @@ export interface SessionsPanelProps {
 // Stable identity: an inline default would rebuild every memo that depends on it.
 const systemNow = () => new Date();
 
+const NO_WORKSPACE_NAMES: Record<string, string> = {};
+const NO_VERDICTS: Record<string, ReopenVerdictView> = {};
+
 const SCOPES: { id: SessionScope; label: string }[] = [
   { id: 'live', label: 'Live' },
   { id: 'closed', label: 'Closed' },
   { id: 'all', label: 'All' },
 ];
 
-export function SessionsPanel({
-  isOpen,
+export function SessionsPanel(props: SessionsPanelProps) {
+  // Unmounted while closed, so every bit of row state resets without an effect.
+  if (!props.isOpen) return null;
+  return <OpenSessionsPanel {...props} />;
+}
+
+function OpenSessionsPanel({
   onClose,
   listSessions,
-  workspaceNames = {},
+  workspaceNames = NO_WORKSPACE_NAMES,
   liveSessionIds,
   seedForSession,
   onFocusSession,
   onOpenSeed,
-  verdicts = {},
+  verdicts = NO_VERDICTS,
   onRequestVerdict,
   onReopen,
   closeNotice,
   now = systemNow,
 }: SessionsPanelProps) {
-  const ledger = useSessionLedger({ enabled: isOpen, list: listSessions, now });
+  const ledger = useSessionLedger({ enabled: true, list: listSessions, now });
   const { filters, setFilters, entries } = ledger;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // An action taken while a git check was still running: it fires against the
@@ -83,30 +91,22 @@ export function SessionsPanel({
   const [awaitingRefusal, setAwaitingRefusal] = useState<string | null>(null);
   const rowsRef = useRef<HTMLTableSectionElement>(null);
 
-  useEscapeStack(onClose, isOpen);
+  useEscapeStack(onClose, true);
 
   const { recordClose } = ledger;
   useEffect(() => {
-    if (!isOpen || !closeNotice) return;
+    if (!closeNotice) return;
     recordClose(closeNotice.entry);
-  }, [isOpen, closeNotice, recordClose]);
+  }, [closeNotice, recordClose]);
 
   const selected = entries.find((entry) => entry.id === selectedId) ?? entries[0] ?? null;
 
   useEffect(() => {
-    if (!isOpen) {
-      setSelectedId(null);
-      setAwaiting(null);
-      setAwaitingRefusal(null);
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen || !onRequestVerdict) return;
+    if (!onRequestVerdict) return;
     for (const entry of entries) {
       if (isClosed(entry) && !verdicts[entry.id]) onRequestVerdict(entry.id);
     }
-  }, [isOpen, entries, verdicts, onRequestVerdict]);
+  }, [entries, verdicts, onRequestVerdict]);
 
   useEffect(() => {
     if (!awaiting) return;
@@ -175,8 +175,6 @@ export function SessionsPanel({
     }
     return null;
   }, [ledger, entries.length, filters]);
-
-  if (!isOpen) return null;
 
   return (
     <div className="sessions-shell">
