@@ -8288,6 +8288,14 @@ type SessionAnnotationsSubmitResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type SessionCloseAcceptedMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+}
+
 type SessionClosedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`

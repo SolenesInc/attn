@@ -80,6 +80,10 @@ func seedNotes(t *testing.T, d *Daemon, seedID string) []protocol.SeedNote {
 	return resp.SeedNotesResult.Notes
 }
 
+func agentCloseFailure(resp protocol.Response) string {
+	return fmt.Sprintf("%s: %s", protocol.Deref(resp.ErrorCode), protocol.Deref(resp.Error))
+}
+
 func refusal(t *testing.T, resp protocol.Response) (string, string) {
 	t.Helper()
 	if resp.Ok {
@@ -487,6 +491,8 @@ func startAgentCloseOutpost(t *testing.T, d *Daemon, sessions ...protocol.Sessio
 		}
 		return true
 	})
+	// A recovering daemon refuses an unregister, which is its own test below.
+	waitFor(t, "the outpost to finish recovering", func() bool { return !outpost.isRecovering() })
 	return outpost
 }
 
@@ -507,7 +513,7 @@ func TestAgentCloseReachesADelegateAnEndpointOwns(t *testing.T) {
 	resp := callAgentClose(t, d, "remote-delegate", "orchestrator", "the sweep finished and its numbers are on the seed")
 
 	if !resp.Ok || resp.AgentCloseResult == nil {
-		t.Fatalf("response = %+v, want the hub to close the session its outpost owns", resp)
+		t.Fatalf("close refused with %s, want the hub to close the session its outpost owns", agentCloseFailure(resp))
 	}
 	if rule := resp.AgentCloseResult.Rule; rule != protocol.AgentCloseRuleDispatcher {
 		t.Errorf("rule = %q, want dispatcher", rule)
@@ -528,7 +534,7 @@ func TestAgentCloseLetsTheChiefCloseASessionOnAnotherEndpoint(t *testing.T) {
 	resp := callAgentClose(t, d, "remote-worker", "chief", "it went quiet three hours ago")
 
 	if !resp.Ok || resp.AgentCloseResult == nil {
-		t.Fatalf("response = %+v, want the chief's authority to cross the endpoint", resp)
+		t.Fatalf("close refused with %s, want the chief's authority to cross the endpoint", agentCloseFailure(resp))
 	}
 	if rule := resp.AgentCloseResult.Rule; rule != protocol.AgentCloseRuleChiefOfStaff {
 		t.Errorf("rule = %q, want chief_of_staff", rule)
@@ -548,7 +554,7 @@ func TestAgentCloseWritesItsReceiptInTheOwningDaemonsLedger(t *testing.T) {
 	resp := callAgentClose(t, d, "remote-delegate", "orchestrator", reason)
 
 	if !resp.Ok || resp.AgentCloseResult == nil {
-		t.Fatalf("response = %+v, want the close to cross to the outpost", resp)
+		t.Fatalf("close refused with %s, want the close to cross to the outpost", agentCloseFailure(resp))
 	}
 	entry := closedEntry(t, outpost, "remote-delegate")
 	if by := protocol.Deref(entry.ClosedBy); by != "orchestrator" {
@@ -556,6 +562,48 @@ func TestAgentCloseWritesItsReceiptInTheOwningDaemonsLedger(t *testing.T) {
 	}
 	if got := protocol.Deref(entry.CloseReason); got != reason {
 		t.Errorf("remote close_reason = %q, want %q", got, reason)
+	}
+}
+
+func TestAgentCloseDoesNotWaitOnTheOwningDaemonsEventBus(t *testing.T) {
+	d := newAgentCloseDaemon(t)
+	addAgentCloseSession(t, d, "chief", "Chief")
+	outpost := startAgentCloseOutpost(t, d, remoteAgentCloseSession("remote-worker", "Remote worker"))
+	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+		t.Fatal(err)
+	}
+	outpost.stopEventBus()
+
+	resp := callAgentClose(t, d, "remote-worker", "chief", "it went quiet three hours ago")
+
+	if !resp.Ok || resp.AgentCloseResult == nil {
+		t.Fatalf("close refused with %s, want the acceptance to come from the handler that commits", agentCloseFailure(resp))
+	}
+	closedEntry(t, outpost, "remote-worker")
+}
+
+func TestAgentCloseRepeatsWhyTheOwningDaemonRefused(t *testing.T) {
+	d := newAgentCloseDaemon(t)
+	addAgentCloseSession(t, d, "chief", "Chief")
+	outpost := startAgentCloseOutpost(t, d, remoteAgentCloseSession("remote-worker", "Remote worker"))
+	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+		t.Fatal(err)
+	}
+	outpost.setRecovering(true)
+
+	code, message := refusal(t, callAgentClose(t, d, "remote-worker", "chief", "it went quiet three hours ago"))
+
+	if code != "close_failed" {
+		t.Fatalf("code = %q, want close_failed", code)
+	}
+	if !strings.Contains(message, "daemon_recovering") {
+		t.Errorf("refusal %q does not repeat what the owning daemon said", message)
+	}
+	if strings.Contains(message, "did not confirm") {
+		t.Errorf("refusal %q waited out the tripwire instead of reading the answer", message)
+	}
+	if d.hubManager.RemoteSession("remote-worker") == nil {
+		t.Error("the hub dropped a session the refusal left running")
 	}
 }
 

@@ -43,6 +43,10 @@ func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMe
 		d.sendCommandError(client, protocol.CmdUnregister, err.Error())
 		return
 	}
+	// A forwarding hub waits on this. The broadcast cannot answer it: that rides the bus.
+	d.sendToClient(client, &protocol.SessionCloseAcceptedMessage{
+		Event: protocol.EventSessionCloseAccepted, SessionID: msg.ID,
+	})
 	d.finishSessionClose(msg.ID, closing)
 }
 

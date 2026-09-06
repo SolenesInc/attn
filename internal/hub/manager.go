@@ -100,7 +100,7 @@ type Manager struct {
 	runtimes        map[string]*endpointRuntime
 	pending         map[string]pendingSessionRoute
 	browserControls map[string]pendingBrowserControl
-	sessionCloses   map[string][]chan struct{}
+	sessionCloses   map[string][]*sessionCloseWaiter
 	ctx             context.Context
 	cancel          context.CancelFunc
 	started         bool
@@ -131,7 +131,7 @@ func NewManager(
 		runtimes:        make(map[string]*endpointRuntime),
 		pending:         make(map[string]pendingSessionRoute),
 		browserControls: make(map[string]pendingBrowserControl),
-		sessionCloses:   make(map[string][]chan struct{}),
+		sessionCloses:   make(map[string][]*sessionCloseWaiter),
 	}
 	for _, record := range endpointStore.ListEndpoints() {
 		m.runtimes[record.ID] = &endpointRuntime{
@@ -654,6 +654,14 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 			if changed {
 				m.publishSessionsChanged(id)
 			}
+		case protocol.EventSessionCloseAccepted:
+			var msg struct {
+				SessionID string `json:"session_id"`
+			}
+			if err := json.Unmarshal(data, &msg); err != nil {
+				continue
+			}
+			m.confirmSessionClose(msg.SessionID)
 		case protocol.EventSessionUnregistered:
 			var msg struct {
 				Session *protocol.Session `json:"session"`
@@ -661,7 +669,6 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 			if err := json.Unmarshal(data, &msg); err != nil || msg.Session == nil {
 				continue
 			}
-			m.confirmSessionClose(msg.Session.ID)
 			changed, sessionCount := m.removeRemoteSession(id, msg.Session.ID)
 			countValue := int32(sessionCount)
 			m.updateStatus(id, activeStatus, activeMsg, nil, &countValue)
@@ -697,6 +704,15 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 			m.publishRawEvent(data)
 		case protocol.EventBrowserControlResponse:
 			m.resolveBrowserControl(id, data)
+		case protocol.EventCommandError:
+			var msg struct {
+				Cmd   string `json:"cmd"`
+				Error string `json:"error"`
+			}
+			if err := json.Unmarshal(data, &msg); err == nil && msg.Cmd == protocol.CmdUnregister {
+				m.refuseSessionCloses(id, msg.Error)
+			}
+			m.publishRawEvent(data)
 		default:
 			if forwardsRawEvent(peek.Event) {
 				m.logRemoteRawEvent(id, peek.Event, data)
@@ -1145,15 +1161,20 @@ func (m *Manager) resolveBrowserControl(endpointID string, payload []byte) {
 	}
 }
 
-// Tripwire: the outpost publishes its event on this connection as soon as it commits.
+type sessionCloseWaiter struct {
+	endpointID string
+	answer     chan error
+}
+
+// Tripwire: the outpost answers from the handler that commits, before it kills anything.
 const sessionCloseAckTimeout = 15 * time.Second
 
 func (m *Manager) ForwardSessionClose(ctx context.Context, endpointID, sessionID string, payload []byte) error {
-	accepted := make(chan struct{}, 1)
+	waiter := &sessionCloseWaiter{endpointID: endpointID, answer: make(chan error, 1)}
 	m.mu.Lock()
-	m.sessionCloses[sessionID] = append(m.sessionCloses[sessionID], accepted)
+	m.sessionCloses[sessionID] = append(m.sessionCloses[sessionID], waiter)
 	m.mu.Unlock()
-	defer m.forgetSessionCloseWaiter(sessionID, accepted)
+	defer m.forgetSessionCloseWaiter(sessionID, waiter)
 
 	if err := m.ForwardEndpointCommand(ctx, endpointID, payload); err != nil {
 		return err
@@ -1162,19 +1183,22 @@ func (m *Manager) ForwardSessionClose(ctx context.Context, endpointID, sessionID
 	ctx, cancel := context.WithTimeout(ctx, sessionCloseAckTimeout)
 	defer cancel()
 	select {
-	case <-accepted:
+	case answer := <-waiter.answer:
+		if answer != nil {
+			return fmt.Errorf("endpoint %s refused the close of session %s: %w", endpointID, sessionID, answer)
+		}
 		return nil
 	case <-ctx.Done():
 		return fmt.Errorf("endpoint %s did not confirm the close of session %s: %w", endpointID, sessionID, ctx.Err())
 	}
 }
 
-func (m *Manager) forgetSessionCloseWaiter(sessionID string, accepted chan struct{}) {
+func (m *Manager) forgetSessionCloseWaiter(sessionID string, forget *sessionCloseWaiter) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	remaining := m.sessionCloses[sessionID][:0]
 	for _, waiter := range m.sessionCloses[sessionID] {
-		if waiter != accepted {
+		if waiter != forget {
 			remaining = append(remaining, waiter)
 		}
 	}
@@ -1190,9 +1214,39 @@ func (m *Manager) confirmSessionClose(sessionID string) {
 	waiters := m.sessionCloses[sessionID]
 	delete(m.sessionCloses, sessionID)
 	m.mu.Unlock()
+	answerSessionCloseWaiters(waiters, nil)
+}
+
+// The endpoint refuses without naming a session, so every close it owes answers.
+func (m *Manager) refuseSessionCloses(endpointID, reason string) {
+	if reason = strings.TrimSpace(reason); reason == "" {
+		reason = "the daemon that owns it refused the close"
+	}
+	m.mu.Lock()
+	var refused []*sessionCloseWaiter
+	for sessionID, waiters := range m.sessionCloses {
+		kept := waiters[:0]
+		for _, waiter := range waiters {
+			if waiter.endpointID == endpointID {
+				refused = append(refused, waiter)
+				continue
+			}
+			kept = append(kept, waiter)
+		}
+		if len(kept) == 0 {
+			delete(m.sessionCloses, sessionID)
+			continue
+		}
+		m.sessionCloses[sessionID] = kept
+	}
+	m.mu.Unlock()
+	answerSessionCloseWaiters(refused, errors.New(reason))
+}
+
+func answerSessionCloseWaiters(waiters []*sessionCloseWaiter, answer error) {
 	for _, waiter := range waiters {
 		select {
-		case waiter <- struct{}{}:
+		case waiter.answer <- answer:
 		default:
 		}
 	}
