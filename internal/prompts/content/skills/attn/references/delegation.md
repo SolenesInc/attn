@@ -80,7 +80,23 @@ the body when the agreed task changes so a later handover gets that assignment.
 The delegate becomes the seed's tender. A seed held by a live session refuses
 dispatch before any worktree or agent is created, naming who holds it. When the
 seed is a plot, `attn seed ready` in the delegate lists that plot's ready children.
-`--name`, placement and worktree flags behave as usual.
+Placement and worktree flags behave as usual.
+
+## Naming the session
+
+`--name` is what a person reads in the sidebar and the session ledger: a few
+plain words about the work, up to 48 characters (`review store tripwires`,
+`pi resume support`). Never an id: seed ids go in `--plot`, and a name that is
+a seed id, a hash, or a ticket key is treated as a placeholder and replaced by
+a generated title. Without `--name` the session starts as its directory name
+and attn titles it from the brief.
+
+When the main work drifts from the name, rename it:
+
+    attn session rename "<a few words>" [--session <id>]
+
+The session defaults to the one running the command, so a delegate renames
+itself with one call.
 
 ## Choose a role and model
 

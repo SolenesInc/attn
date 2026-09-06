@@ -67,6 +67,12 @@ func runSession() {
 			return
 		}
 		runSessionReopen(os.Args[3:])
+	case "rename":
+		if hasHelpFlag(os.Args[3:]) {
+			writeSessionHelp(os.Stdout)
+			return
+		}
+		runSessionRename(os.Args[3:])
 	default:
 		fmt.Fprintf(os.Stderr, "session: unknown command %q\n", os.Args[2])
 		writeSessionHelp(os.Stderr)
@@ -305,6 +311,11 @@ commands:
         read one ledger row, live or closed, including who closed it and why.
         A closed row also carries the reopen verdict: whether it comes back,
         why not when it does not, and the actions offered instead.
+  rename <name> [--session <id>]
+        give a session the name a person reads in the sidebar and the ledger:
+        a few plain words about the work, up to 48 characters. Defaults to the
+        session running this command. Rename when the main work drifts from
+        the name it started with.
   reopen <id> [--action <name>] [--cwd <path>] [--json]
         bring a closed session back under its own id. Without --action it
         performs the plain reopen and refuses, naming what is offered, when the

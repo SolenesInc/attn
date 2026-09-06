@@ -17,7 +17,7 @@ import (
 
 func TestSanitizeSessionTitle(t *testing.T) {
 	longMultibyte := strings.Repeat("é", 60) // multibyte rune: a byte-based cut would corrupt/mis-truncate this
-	wantLongMultibyte := strings.Repeat("é", maxSessionTitleRunes)
+	wantLongMultibyte := strings.Repeat("é", maxSessionNameRunes)
 
 	cases := []struct {
 		name string
@@ -361,6 +361,51 @@ func TestMaybeGenerateSessionTitle_CustomLabelSkipped(t *testing.T) {
 	got := d.store.Get("sess-1")
 	if got == nil || got.Label != "user renamed me" {
 		t.Fatalf("session label = %+v, want unchanged", got)
+	}
+}
+
+func TestSessionLabelIsPlaceholder(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "attn--feat-agent-cost-tooling-with-a-long-branch-name-past-the-cap")
+	cases := []struct {
+		label string
+		want  bool
+	}{
+		{filepath.Base(dir), true},
+		{truncateDelegationName(filepath.Base(dir)), true},
+		{"s-7k3f9m", true},
+		{"7k3f9m", true},
+		{"8cbb44", true},
+		{"a7f3c2e9", true},
+		{"ATTN-1234", true},
+		{"eb08c68e-e024-44b5-8a69-5e8b4f487531", true},
+		{"garden", false},
+		{"s-garden", false},
+		{"hw-cli", false},
+		{"review store tripwires", false},
+		{"user renamed me", false},
+	}
+	for _, tc := range cases {
+		if got := sessionLabelIsPlaceholder(tc.label, dir, "sess-1"); got != tc.want {
+			t.Errorf("sessionLabelIsPlaceholder(%q) = %v, want %v", tc.label, got, tc.want)
+		}
+	}
+}
+
+func TestMaybeGenerateSessionTitle_IDShapedLabelIsReplaced(t *testing.T) {
+	d := newSessionTitleDaemon(t)
+	directory := t.TempDir()
+	seedSessionTitleSession(t, d, "sess-1", directory, "s-7k3f9m")
+	transcriptPath := writeSessionTitleTranscript(t)
+
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
+		return "Fix login flow", nil
+	}
+
+	d.maybeGenerateSessionTitle("sess-1", transcriptPath)
+	runSessionTitleJobs(t, d)
+
+	if got := d.store.Get("sess-1"); got == nil || got.Label != "Fix login flow" {
+		t.Fatalf("session label = %+v, want the generated title over a seed id", got)
 	}
 }
 

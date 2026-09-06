@@ -101,6 +101,7 @@ type Manager struct {
 	pending         map[string]pendingSessionRoute
 	browserControls map[string]pendingBrowserControl
 	sessionCloses   map[string][]*sessionCloseWaiter
+	sessionRenames  map[string]*sessionCloseWaiter
 	ctx             context.Context
 	cancel          context.CancelFunc
 	started         bool
@@ -132,6 +133,7 @@ func NewManager(
 		pending:         make(map[string]pendingSessionRoute),
 		browserControls: make(map[string]pendingBrowserControl),
 		sessionCloses:   make(map[string][]*sessionCloseWaiter),
+		sessionRenames:  make(map[string]*sessionCloseWaiter),
 	}
 	for _, record := range endpointStore.ListEndpoints() {
 		m.runtimes[record.ID] = &endpointRuntime{
@@ -706,6 +708,12 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 			m.publishRawEvent(data)
 		case protocol.EventBrowserControlResponse:
 			m.resolveBrowserControl(id, data)
+		case protocol.EventRenameResult:
+			var msg protocol.RenameResultMessage
+			if err := json.Unmarshal(data, &msg); err != nil || msg.Cmd != protocol.CmdRenameSession {
+				continue
+			}
+			m.answerSessionRename(id, msg.ID, msg.Success, protocol.Deref(msg.Error))
 		default:
 			if forwardsRawEvent(peek.Event) {
 				m.logRemoteRawEvent(id, peek.Event, data)
@@ -1228,6 +1236,67 @@ func (m *Manager) answerSessionClose(endpointID, sessionID string, accepted bool
 	}
 	m.mu.Unlock()
 	answerSessionCloseWaiters(answered, answer)
+}
+
+// Tripwire: the owner answers from the handler that writes the label, so a
+// healthy round trip is one websocket hop each way.
+const sessionRenameAckTimeout = 10 * time.Second
+
+// rename_result carries no request id, so one rename per session is in flight
+// at a time; a second is refused rather than handed another label's verdict.
+func (m *Manager) ForwardSessionRename(ctx context.Context, endpointID, sessionID string, payload []byte) error {
+	waiter := &sessionCloseWaiter{endpointID: endpointID, answer: make(chan error, 1)}
+	m.mu.Lock()
+	if _, busy := m.sessionRenames[sessionID]; busy {
+		m.mu.Unlock()
+		return fmt.Errorf("a rename of session %s is already waiting on its owner; retry once it answers", sessionID)
+	}
+	m.sessionRenames[sessionID] = waiter
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		if m.sessionRenames[sessionID] == waiter {
+			delete(m.sessionRenames, sessionID)
+		}
+		m.mu.Unlock()
+	}()
+
+	if err := m.ForwardEndpointCommand(ctx, endpointID, payload); err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, sessionRenameAckTimeout)
+	defer cancel()
+	select {
+	case answer := <-waiter.answer:
+		if answer != nil {
+			return fmt.Errorf("endpoint %s refused the rename of session %s: %w", endpointID, sessionID, answer)
+		}
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("endpoint %s did not confirm the rename of session %s: %w", endpointID, sessionID, ctx.Err())
+	}
+}
+
+func (m *Manager) answerSessionRename(endpointID, sessionID string, accepted bool, reason string) {
+	var answer error
+	if !accepted {
+		if reason = strings.TrimSpace(reason); reason == "" {
+			reason = "the daemon that owns it refused the rename"
+		}
+		answer = errors.New(reason)
+	}
+	m.mu.Lock()
+	waiter := m.sessionRenames[sessionID]
+	if waiter != nil && waiter.endpointID == endpointID {
+		delete(m.sessionRenames, sessionID)
+	} else {
+		waiter = nil
+	}
+	m.mu.Unlock()
+	if waiter != nil {
+		answerSessionCloseWaiters([]*sessionCloseWaiter{waiter}, answer)
+	}
 }
 
 func answerSessionCloseWaiters(waiters []*sessionCloseWaiter, answer error) {

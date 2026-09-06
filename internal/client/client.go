@@ -380,6 +380,16 @@ func (c *Client) SessionShow(sessionID string) (*protocol.SessionShowResult, err
 	return resp.SessionShowResult, nil
 }
 
+// RenameSession sets the name a person reads in the sidebar and the session ledger.
+func (c *Client) RenameSession(sessionID, name string) error {
+	_, err := c.send(protocol.RenameSessionMessage{
+		Cmd:       protocol.CmdRenameSession,
+		SessionID: strings.TrimSpace(sessionID),
+		Label:     strings.TrimSpace(name),
+	})
+	return err
+}
+
 type SessionReopenOptions struct {
 	SessionID string
 	Action    string
