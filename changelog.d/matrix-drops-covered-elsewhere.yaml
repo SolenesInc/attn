@@ -1,8 +1,8 @@
 kind: internal
 area: harness
 change: >
-  Dropped four real-app scenarios whose every assertion already has a twin at a
-  cheaper layer: workspace-move-leaf, editor-workspace-root,
-  delegate-workspace-placement and app-reconcile. The app-reconcile scaffold
-  check moved to a Go test, and the harness AGENTS.md now names where each
-  dropped scenario's coverage lives.
+  Dropped four real-app scenarios whose assertions now live at a cheaper layer:
+  workspace-move-leaf, editor-workspace-root, delegate-workspace-placement and
+  app-reconcile. The workspace-move-leaf render check became a frontend witness
+  over useDaemonSocket, the app-reconcile scaffold check a Go test, and the
+  harness AGENTS.md names where each dropped scenario's coverage lives.

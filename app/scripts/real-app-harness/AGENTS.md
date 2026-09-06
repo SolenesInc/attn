@@ -43,7 +43,11 @@ cheaper layer. Look here before re-adding one; the twin is the place to change.
 - `workspace-move-leaf` — `internal/daemon/workspace_moveleaf_protocol_test.go`
   (8 cases, including `TestWorkspaceLayoutMoveLeafToWorkspaceMovesPaneAndSessionOwnership`),
   `internal/workspacelayout/moveleaf_test.go` (9 cases), and the `rapid` property
-  `TestLayoutStaysAWellFormedTreeUnderRandomOperations`.
+  `TestLayoutStaysAWellFormedTreeUnderRandomOperations`. Those stop at the
+  daemon, so `App.moveLeaf.test.tsx` carries the render half: it feeds
+  `workspace_layout_updated` and `session_state_changed` through
+  `useDaemonSocket` and asserts both panes mount in the target workspace while
+  the emptied source unmounts.
 - `editor-workspace-root` — `NotebookTile.test.tsx:245`/`:273` gate the
   backlinks rail off-root and pass it through on-root, `NotebookSurface.test.tsx:122`/`:132`
   assert the rail's absence and presence, and `internal/notebook/layout_test.go`
@@ -55,6 +59,7 @@ cheaper layer. Look here before re-adding one; the twin is the place to change.
 - `app-reconcile` — `internal/daemon/app_reconcile_test.go` and
   `app_autodisable_test.go` own the reconcile state machine; the scaffold brief
   is `TestScaffoldAgentsMDTeachesReconcile` in `internal/appbuild`.
+
 ## Scenario files with no catalog entry
 
 A scenario file with no `scenarioCatalog.mjs` entry is invisible to the Linux
