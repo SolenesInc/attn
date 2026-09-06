@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -197,6 +198,21 @@ func (d *Daemon) updateCrewMember(memberID string, mutate func(*crew.Member) (bo
 // the daemon still knows.
 func (d *Daemon) crewBindingLive(member crew.Member) bool {
 	return member.BindingSession != "" && d.sessionExists(member.BindingSession)
+}
+
+func (d *Daemon) liveSessionForTender(tender garden.Tender) (string, bool) {
+	if sessionID := strings.TrimSpace(tender.Session); sessionID != "" && d.store.Get(sessionID) != nil {
+		return sessionID, true
+	}
+	memberID := strings.TrimSpace(tender.Member)
+	if memberID == "" {
+		return "", false
+	}
+	member, found, err := d.resolveCrewMember(memberID)
+	if err != nil || !found || !d.crewBindingLive(member) {
+		return "", false
+	}
+	return member.BindingSession, true
 }
 
 func (d *Daemon) migrateCrewTicketIdentity(memberID string, sessionIDs ...string) error {

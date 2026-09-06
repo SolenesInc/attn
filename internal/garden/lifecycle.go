@@ -179,6 +179,10 @@ func (s Seed) Tender() Tender {
 	return Tender{Session: s.TenderSession, Member: s.TenderMember}
 }
 
+func (d Dispatch) Dispatcher() Tender {
+	return Tender{Session: d.DispatcherSession, Member: d.DispatcherMember}
+}
+
 func refuseTakeover(seed Seed, verb Verb, held Tender) error {
 	return fmt.Errorf(
 		"%s is being tended by %s, and `attn seed %s` takes it from them.\n"+

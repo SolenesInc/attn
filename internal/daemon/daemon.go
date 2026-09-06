@@ -31,6 +31,7 @@ import (
 	"github.com/victorarias/attn/internal/diag"
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/fsdoc"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/headless"
@@ -347,6 +348,7 @@ type Daemon struct {
 	gardenReviewMu            sync.Mutex
 	dispatchSeedsMu           sync.Mutex
 	dispatchSeeds             map[string]string
+	dispatchersBySession      map[string]garden.Tender
 	dispatchFromChief         map[string]bool
 	dispatchProjectionRevs    map[string]int64
 	dispatchSeedsLoaded       bool
@@ -3170,6 +3172,7 @@ func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Sessio
 		d.delegatedFromChiefSessionIDs(),
 		d.crewMembersBySession(),
 		d.gardenDispatchSeedsBySession(),
+		d.gardenDispatchersBySession(),
 	)
 	if decorated != nil {
 		decorated.Automation = d.automationProvenanceForSession(decorated.ID)
@@ -3184,6 +3187,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	delegatedFromChief map[string]bool,
 	crewBySession map[string]string,
 	seedBySession map[string]string,
+	dispatcherBySession map[string]garden.Tender,
 ) *protocol.Session {
 	clone := cloneSession(session)
 	if clone == nil {
@@ -3197,6 +3201,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	d.decorateDelegatedFromChief(clone, delegatedFromChief)
 	d.decorateCrewMember(clone, crewBySession)
 	d.decorateSessionSeed(clone, seedBySession)
+	d.decorateSessionDispatcher(clone, dispatcherBySession)
 	d.decorateSessionWithWorkspace(clone)
 	d.decorateSessionWithWorkspaceMute(clone)
 	d.decorateSessionWithCost(clone)
@@ -3213,11 +3218,12 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	delegatedFromChief := d.delegatedFromChiefSessionIDs()
 	crewBySession := d.crewMembersBySession()
 	seedBySession := d.gardenDispatchSeedsBySession()
+	dispatcherBySession := d.gardenDispatchersBySession()
 	bySession, _ := d.latestAutomationProvenance()
 	pullRequestsBySession := d.store.ListSessionPullRequestsBySession()
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
-		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefOfStaffSessionID, delegatedFromChief, crewBySession, seedBySession); decorated != nil {
+		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefOfStaffSessionID, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
 			decorated.Automation = bySession[decorated.ID]
 			decorated.PullRequests = sessionPullRequestsForBroadcast(pullRequestsBySession[decorated.ID])
 			out = append(out, *decorated)

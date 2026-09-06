@@ -124,6 +124,7 @@ type Dispatch struct {
 	SessionID         string `json:"session_id"`
 	Crown             string `json:"crown"`
 	DispatcherSession string `json:"dispatcher_session,omitempty"`
+	DispatcherMember  string `json:"dispatcher_member,omitempty"`
 	Cwd               string `json:"cwd,omitempty"`
 	Agent             string `json:"agent,omitempty"`
 	HostKind          string `json:"host_kind,omitempty"`
