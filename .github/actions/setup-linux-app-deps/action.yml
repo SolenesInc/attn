@@ -1,0 +1,35 @@
+name: Set up Linux app dependencies
+description: Install the apt packages the packaged app is built with, or the ones a real-app scenario runs against.
+inputs:
+  role:
+    description: '"build" for the Tauri build, "run" for a runner that launches the app and drives scenarios'
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Install packages
+      shell: bash
+      env:
+        ROLE: ${{ inputs.role }}
+      run: |
+        case "$ROLE" in
+          build)
+            packages="desktop-file-utils libayatana-appindicator3-dev librsvg2-dev libssl-dev
+              libwebkit2gtk-4.1-dev libxdo-dev"
+            ;;
+          run)
+            # Do not drop the PPA: terminal-block-copy and terminal-context-menu
+            # need fish >= 4 for its OSC 133 markers, and 24.04 ships 3.7.
+            ./scripts/ci-retry.sh -- sudo add-apt-repository -y ppa:fish-shell/release-4
+            packages="bash coreutils curl desktop-file-utils fish imagemagick
+              libayatana-appindicator3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev
+              libxdo-dev sqlite3 xauth xclip xdg-utils xdotool xvfb zsh"
+            ;;
+          *)
+            echo "unknown role '$ROLE': expected build or run" >&2
+            exit 1
+            ;;
+        esac
+        ./scripts/ci-retry.sh -- sudo apt-get update
+        # shellcheck disable=SC2086 # the package list is a word list by construction
+        ./scripts/ci-retry.sh -- sudo apt-get install -y $packages

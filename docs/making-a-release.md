@@ -77,13 +77,19 @@ a ready PR to `main`. If `main` moves, prepare again from current `main`.
 
 ## App acceptance
 
-`ci.yml` installs the packaged Linux app from the exact head and runs the
-real-app serial matrix under Xvfb. `Run serial matrix` is `continue-on-error`,
-so a red matrix does not fail the job by itself: the verdict is the `Gate app
-acceptance` step, which also accepts the candidate receipt on `main` and the
-protected-`main` override.
+`ci.yml` builds the packaged Linux app from the exact head in `App acceptance
+build`, and four `App acceptance shard N/4` jobs each install that one tree and
+run a slice of the real-app serial matrix under Xvfb. The slices are balanced by
+`app/scripts/real-app-harness/scenario-durations.json`, a duration per scenario
+recorded from a green run.
 
-The job costs around 35 minutes, so it runs only where its receipt is needed:
+`App acceptance` is the verdict and the only name the gates read. It aggregates
+every shard's `last-matrix.json`, so it reds when a scenario failed, when a
+scenario ran in no shard or in two, or when a shard reported nothing at all. It
+also accepts the candidate receipt on `main` and the protected-`main` override.
+
+The run costs around 9 minutes of wall time and about 22 minutes of runner time,
+so it runs only where its receipt is needed:
 pushes to `next` and `main`, PRs onto `main` (`release/v*` and `hotfix/*`, the
 only branches `main-route.sh` admits), and PRs that touch the harness, the Tauri
 shell, the app runtime host, or the job's own definition — the `harness` filter

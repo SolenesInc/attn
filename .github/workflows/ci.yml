@@ -118,6 +118,8 @@ jobs:
               - 'app/src-tauri/**'
               - 'apphost/**'
               - 'scripts/build-app-runtime-host.sh'
+              - 'scripts/install-app-tree.sh'
+              - '.github/actions/**'
               - '.github/workflows/app-acceptance.yml'
               - '.github/workflows/ci.yml'
             release_preflight:
@@ -614,42 +616,31 @@ jobs:
             (cd "$plugin" && bun test)
           done
 
-  app-acceptance:
-    name: App acceptance
+  app-acceptance-build:
+    name: App acceptance build
     needs: changes
     # main-route.sh admits only release/hotfix onto main, so force_all covers them.
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.harness == 'true'
     permissions:
-      actions: read
       contents: read
-      pull-requests: read
-    # Each hosted job owns its VM and display; only scenarios within it run serially.
-    # A shared concurrency group would cancel unrelated waiting PR and branch checks.
     runs-on: ubuntu-24.04
-    # ubuntu-24.04 run 33657368804 took 35m42s end to end; its matrix took 24m07.635s.
-    # 60m leaves 24m18s of runner variance before timing out the job.
-    timeout-minutes: 60
+    # 202s on run 34060183460's GitHub-hosted runner, plus the tar and upload.
+    # 30m leaves room for a cold Rust cache on the slower runner class.
+    timeout-minutes: 30
     env:
       ATTN_PROFILE: app-acceptance
-      ATTN_HARNESS_PROFILE: app-acceptance
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - name: Set up Linux sandbox
-        uses: ./.github/actions/setup-linux-sandbox
+      - name: Report runner class
+        run: ./scripts/ci-runner-class.sh
 
       - name: Install Linux desktop dependencies
-        # Do not drop the PPA: terminal-block-copy and terminal-context-menu
-        # need fish >= 4 for its OSC 133 markers, and 24.04 ships 3.7.
-        run: |
-          ./scripts/ci-retry.sh -- sudo add-apt-repository -y ppa:fish-shell/release-4
-          ./scripts/ci-retry.sh -- sudo apt-get update
-          ./scripts/ci-retry.sh -- sudo apt-get install -y bash coreutils curl \
-            desktop-file-utils fish imagemagick \
-            libayatana-appindicator3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev \
-            libxdo-dev sqlite3 xauth xclip xdg-utils xdotool xvfb zsh
+        uses: ./.github/actions/setup-linux-app-deps
+        with:
+          role: build
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -704,22 +695,12 @@ jobs:
           workspaces: |
             app/src-tauri
             pty-host
-          # The gate below fails this job on a red matrix, so the default would never save.
-          cache-on-failure: 'true'
 
-      - name: Install packaged app and bundled plugin
+      - name: Build the packaged app
         env:
           CI: 'true'
-        run: |
-          make install PROFILE="$ATTN_PROFILE"
-          ./attn plugin install-bundled attn-pi
-          mkdir -p "$RUNNER_TEMP/attn-harness-bin"
-          install -m 0755 app/scripts/real-app-harness/ci-xdg-open "$RUNNER_TEMP/attn-harness-bin/xdg-open"
-          echo "$RUNNER_TEMP/attn-harness-bin" >> "$GITHUB_PATH"
-          echo "$PWD/plugins/attn-pi/node_modules/.bin" >> "$GITHUB_PATH"
+        run: make build-app PROFILE="$ATTN_PROFILE"
 
-      # Saved here, not post-job: the gate below fails this job on a red matrix,
-      # and a post-job save would then skip exactly when a fast re-push matters.
       - name: Save Go build cache
         if: steps.go-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
@@ -729,12 +710,100 @@ jobs:
             ~/go/pkg/mod
           key: ${{ steps.go-cache.outputs.cache-primary-key }}
 
-      - name: Run serial matrix
+      # tar, not the artifact zip: upload-artifact drops the executable bit, and
+      # every shard installs and launches these binaries.
+      - name: Pack the app tree
+        run: |
+          app_name="$(./attn profile resolve --profile "$ATTN_PROFILE" --field appName)"
+          tar -czf "$RUNNER_TEMP/app-tree.tar.gz" \
+            attn \
+            "app/src-tauri/target/release/linux-tree/$app_name" \
+            plugins/attn-pi/node_modules
+          ls -l "$RUNNER_TEMP/app-tree.tar.gz"
+
+      - name: Upload the app tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-acceptance-tree-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/app-tree.tar.gz
+          retention-days: 1
+          # Already gzipped; zipping it again buys nothing and costs a minute.
+          compression-level: 0
+
+  app-acceptance-shard:
+    name: App acceptance shard ${{ matrix.shard }}/4
+    needs: [changes, app-acceptance-build]
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.harness == 'true'
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    # Each hosted job owns its VM and display; only scenarios within a shard run
+    # serially. A shared concurrency group would cancel unrelated waiting checks.
+    runs-on: ubuntu-24.04
+    # The heaviest of four balanced shards was 190.5s of the 761.5s matrix in run
+    # 34060183460. 40m leaves room for the slower runner class and a hung scenario.
+    timeout-minutes: 40
+    env:
+      ATTN_PROFILE: app-acceptance
+      ATTN_HARNESS_PROFILE: app-acceptance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Report runner class
+        run: ./scripts/ci-runner-class.sh
+
+      - name: Set up Linux sandbox
+        uses: ./.github/actions/setup-linux-sandbox
+
+      - name: Install Linux desktop dependencies
+        uses: ./.github/actions/setup-linux-app-deps
+        with:
+          role: run
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install harness dependencies
+        run: pnpm --dir app install --frozen-lockfile
+
+      - name: Download the app tree
+        uses: actions/download-artifact@v4
+        with:
+          name: app-acceptance-tree-${{ github.run_attempt }}
+          path: ${{ runner.temp }}
+
+      - name: Install the packaged app and bundled plugin
+        run: |
+          tar -xzf "$RUNNER_TEMP/app-tree.tar.gz"
+          make install-staged PROFILE="$ATTN_PROFILE"
+          ./attn plugin install-bundled attn-pi
+          mkdir -p "$RUNNER_TEMP/attn-harness-bin"
+          install -m 0755 app/scripts/real-app-harness/ci-xdg-open "$RUNNER_TEMP/attn-harness-bin/xdg-open"
+          echo "$RUNNER_TEMP/attn-harness-bin" >> "$GITHUB_PATH"
+          echo "$PWD/plugins/attn-pi/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Run serial matrix shard
         id: matrix
         continue-on-error: true
         env:
           ATTN_REAL_APP_ARTIFACTS_DIR: ${{ runner.temp }}/attn-real-app-harness
-        run: xvfb-run -a -s '-screen 0 1600x1000x24' pnpm --dir app run real-app:serial-matrix
+        run: >-
+          xvfb-run -a -s '-screen 0 1600x1000x24'
+          pnpm --dir app run real-app:serial-matrix -- --shard ${{ matrix.shard }}/4
 
       - name: Collect daemon and worker logs
         if: always()
@@ -758,7 +827,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: app-acceptance-evidence-${{ github.run_attempt }}
+          name: app-acceptance-evidence-${{ github.run_attempt }}-shard-${{ matrix.shard }}
           if-no-files-found: warn
           path: |
             ${{ runner.temp }}/attn-real-app-harness/matrix-digest.txt
@@ -767,20 +836,92 @@ jobs:
             ${{ runner.temp }}/attn-real-app-harness/**/*.json
             ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
 
+      # The aggregate is the gate; it reads this and nothing else, so a shard
+      # that dies before writing one is a missing shard there, not a silent pass.
+      - name: Upload shard result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-acceptance-result-${{ github.run_attempt }}-shard-${{ matrix.shard }}
+          if-no-files-found: error
+          path: ${{ runner.temp }}/attn-real-app-harness/last-matrix.json
+
       - name: Clean profile
         if: always()
         run: ./attn profile clean "$ATTN_PROFILE"
 
+      - name: Report the shard verdict
+        if: always()
+        env:
+          MATRIX_OUTCOME: ${{ steps.matrix.outcome }}
+        run: |
+          if [ "$MATRIX_OUTCOME" = success ]; then
+            exit 0
+          fi
+          echo "shard ${{ matrix.shard }}/4: the serial matrix is $MATRIX_OUTCOME;" \
+            "the App acceptance job aggregates every shard's digest" >&2
+          exit 1
+
+  app-acceptance:
+    name: App acceptance
+    needs: [changes, app-acceptance-build, app-acceptance-shard]
+    # !cancelled() so a red shard still reaches the aggregate: the digest names
+    # which scenario failed, and a missing shard reds this job by name.
+    if: >-
+      !cancelled() &&
+      (needs.changes.outputs.force_all == 'true' || needs.changes.outputs.harness == 'true')
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download shard results
+        if: needs.app-acceptance-build.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: app-acceptance-result-${{ github.run_attempt }}-shard-*
+          path: ${{ runner.temp }}/shard-results
+
+      - name: Aggregate the shard digests
+        id: matrix
+        if: needs.app-acceptance-build.result == 'success'
+        continue-on-error: true
+        run: >-
+          node app/scripts/real-app-harness/aggregate-shards.mjs
+          --results-dir "$RUNNER_TEMP/shard-results" --shard-count 4
+          --out "$RUNNER_TEMP/matrix-digest.txt"
+
+      - name: Upload the aggregated digest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-acceptance-digest-${{ github.run_attempt }}
+          if-no-files-found: warn
+          path: ${{ runner.temp }}/matrix-digest.txt
+
       - name: Gate app acceptance
         if: always()
         env:
+          BUILD_RESULT: ${{ needs.app-acceptance-build.result }}
           EVENT_NAME: ${{ github.event_name }}
           HEAD_BRANCH: ${{ github.head_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           MATRIX_OUTCOME: ${{ steps.matrix.outcome }}
+          SHARD_RESULT: ${{ needs.app-acceptance-shard.result }}
         run: |
-          if [ "$MATRIX_OUTCOME" = success ]; then
-            echo "app acceptance: Linux serial matrix is green for $HEAD_SHA"
+          if [ "$MATRIX_OUTCOME" = success ] && [ "$SHARD_RESULT" = success ]; then
+            echo "app acceptance: every Linux serial matrix shard is green for $HEAD_SHA"
             exit 0
           fi
           if [[ "$EVENT_NAME/$HEAD_BRANCH" =~ ^pull_request/(release/v[0-9]+\.[0-9]+\.[0-9]+|hotfix/.+)$ ]]; then
@@ -794,11 +935,17 @@ jobs:
             echo "app acceptance: candidate receipt covers main $HEAD_SHA"
             exit 0
           fi
-          if [ -z "$MATRIX_OUTCOME" ]; then
-            echo "app acceptance: the job failed before the serial matrix ran for $HEAD_SHA;" \
-              "this is setup or build, not a scenario verdict" >&2
+          if [ "$BUILD_RESULT" != success ]; then
+            echo "app acceptance: the app tree failed to build for $HEAD_SHA ($BUILD_RESULT);" \
+              "no shard ran, so this is setup or build, not a scenario verdict" >&2
+          elif [ -z "$MATRIX_OUTCOME" ]; then
+            echo "app acceptance: the aggregate never ran for $HEAD_SHA;" \
+              "this is setup, not a scenario verdict" >&2
+          elif [ "$MATRIX_OUTCOME" = success ]; then
+            echo "app acceptance: every scenario passed for $HEAD_SHA, but a shard job ended" \
+              "$SHARD_RESULT; open the shard jobs, this is not a scenario verdict" >&2
           else
-            echo "app acceptance: Linux serial matrix is $MATRIX_OUTCOME for $HEAD_SHA" >&2
+            echo "app acceptance: the aggregated Linux serial matrix is $MATRIX_OUTCOME for $HEAD_SHA" >&2
           fi
           exit 1
 
