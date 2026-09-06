@@ -227,8 +227,6 @@ jobs:
     name: Daemon
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
-    # The one paid runner: 254s here vs 408s on free hosted arm64, 8.5 of the
-    # 3000 free units per run (runs 34012237620, 34028993770).
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
