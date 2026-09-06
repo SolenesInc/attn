@@ -8,7 +8,8 @@ import { Text } from "@earendil-works/pi-tui";
 import { CredentialFilter, FilteredStream } from "./filter";
 import { SandboxedFilesystem } from "./filesystem";
 import { assertPath, type SecurityPolicy } from "./policy";
-import { bashSandbox, shellQuote } from "./sandbox";
+import { bashSandbox, shellQuote, specForPolicy } from "./sandbox";
+import { commandEnvironment } from "../sandbox/environment";
 import { Type } from "typebox";
 import { reviewUnavailable, sandboxRecovery, sandboxRequestSchema, scopedPolicy, type SandboxReview } from "./recovery";
 import type { ToolExecutionCheck } from "../automode/index";
@@ -31,7 +32,7 @@ export function protectedBash(policy: SecurityPolicy, filter: CredentialFilter, 
       try {
         const result = await local.exec(bashSandbox(policy, command), cwd, {
           ...options,
-          env: { ...filter.environment(options.env ?? process.env), TMPDIR: policy.temp, TMP: policy.temp, TEMP: policy.temp },
+          env: commandEnvironment(specForPolicy(policy), filter.environment(options.env ?? process.env)),
           onData: (data) => stream.write(data),
         });
         stream.finish();
