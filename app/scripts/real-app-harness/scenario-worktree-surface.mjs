@@ -342,7 +342,9 @@ async function main() {
     });
 
     await runner.step('capture_evidence', async () => {
-      await captureScreenshotData(path.join(runner.runDir, 'worktrees-panel.png'), { client });
+      // Serializing the whole root drags the terminal canvas in and WebKitGTK rejects the capture.
+      await captureScreenshotData(path.join(runner.runDir, 'worktrees-panel.png'),
+        { client, selector: '[data-testid="worktrees-panel"]' });
       runner.writeJson('worktrees-state.json', await client.request('worktrees_get_state'));
       runner.writeJson('worktree-list-cli.json', runJSON(binary, ['worktree', 'list', '--json'], daemonEnv));
       runner.writeJson('worktree-log-cli.json', runJSON(binary, ['worktree', 'log', '--json'], daemonEnv));
