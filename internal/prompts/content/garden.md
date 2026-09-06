@@ -6,7 +6,7 @@ A plot is a seed with children: its body holds the shared plan, and each child h
 
 Garden words have Jira-style equivalents: seed = ticket, ready = todo, plot = epic, harvested = done. Use the Garden word by default. When the user uses one of those Jira words, mirror it for that concept for the rest of the exchange; do not correct them, and do not switch the other concepts unless they do.
 
-Track work in seeds, not in markdown TODO lists or your own todo tool. Plant a seed for any work that outlives this turn: a bug you found, a follow-up you are not doing now, a piece you split off. Plant work before you start it, so the claim and the log exist while you work. Under a plot, plant with `--part-of <plot>` so it stays with its plan. If you discover work while tending another seed, add `--discovered-from <seed>` so its origin is on record. Before your turn ends, plant what is still undone. Harvest a seed when the outcome and required verification in its body are complete.
+Track work in seeds, not in markdown TODO lists or your own todo tool. Plant a seed for any work that outlives this turn: a bug you found, a follow-up you are not doing now, a piece you split off. Search before you plant: `attn seed search <words>` reads every title, body and log in the garden, harvested and withered seeds included, so you find work that already exists instead of planting it twice. Plant work before you start it, so the claim and the log exist while you work. Under a plot, plant with `--part-of <plot>` so it stays with its plan. If you discover work while tending another seed, add `--discovered-from <seed>` so its origin is on record. Before your turn ends, plant what is still undone. Harvest a seed when the outcome and required verification in its body are complete.
 
 A delegated session reports to one seed: either the seed planted for its brief or the seed targeted by `attn delegate --plot`. `attn seed ready` without flags shows that seed's plot. When the session delegates more work, `attn delegate` plants the new seed under its reporting seed; the child delegate reports to the new seed's log. Every other garden verb uses the seed id you provide.
 
@@ -25,6 +25,8 @@ The loop:
     attn seed wither <id> [-m "…"]   abandoned, nobody will pick it up
     attn seed park <id>              put down, claim released; tend it again to resume
     attn seed replant <id>           a harvested or withered seed back to planted
+    attn seed search <words>         find seeds by keyword across the whole garden, closed ones included; the line that
+                                     matched prints under each hit. Run it before you plant
     attn seed plant "<title>" -m "…" [--part-of <plot>] [--discovered-from <seed>]    a new seed; prints the id
 
 `attn seed tend`, `attn seed park`, `attn seed harvest`, `attn seed wither` and `attn seed replant` all check who holds the seed. If a live session or crew member holds it, the command refuses it by naming the holder. `--force` performs the move anyway, and the log records who forced it. A seed whose session ended is not held. `--member <name>` on any of these commands acts as a crew member instead of this session, and a member's claim never expires.

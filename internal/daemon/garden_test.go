@@ -587,6 +587,9 @@ func TestGarden_OutpostRefusesEverySeedCommand(t *testing.T) {
 		"ls": func(c net.Conn) {
 			d.handleSeedList(c, &protocol.SeedListMessage{Cmd: protocol.CmdSeedList})
 		},
+		"search": func(c net.Conn) {
+			d.handleSeedSearch(c, &protocol.SeedSearchMessage{Cmd: protocol.CmdSeedSearch, Query: "anything"})
+		},
 		"show": func(c net.Conn) {
 			d.handleSeedShow(c, &protocol.SeedShowMessage{Cmd: protocol.CmdSeedShow, SeedID: "s-7k3f9m"})
 		},

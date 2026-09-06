@@ -4710,6 +4710,40 @@ model SeedListResult {
   "stale_window_seconds"?: int32;
 }
 
+// Find seeds by keyword. Search reads titles, bodies and every log entry
+// across the whole garden, closed seeds included: "was this already done or
+// abandoned" is as much the question as "is someone on it".
+model SeedSearchMessage {
+  "cmd": "seed_search";
+  "source_session_id"?: string;
+  // Whitespace-separated terms. A seed matches when one field — its title, its
+  // body, or one log entry — carries every term, so a snippet can show why.
+  "query": string;
+  // How many hits to answer with; 0 or absent takes the daemon's default.
+  "limit"?: int32;
+}
+
+// One matching seed and the text that matched.
+model SeedSearchHit {
+  "seed": Seed;
+  // title | body | log — the field that carried every term.
+  "where": string;
+  // The matching line, elided around the match when it runs long.
+  "snippet": string;
+}
+
+model SeedSearchResult {
+  // Title matches first, then body, then log; newest first inside each.
+  "hits": SeedSearchHit[];
+  // How many seeds matched. Equal to hits's length until the cap trims it, and
+  // then the receipt that says the answer ended early.
+  "matched": int32;
+  // The cap that was applied, so the output can name the number it hit.
+  "limit": int32;
+  // How many seeds were read to answer, the denominator of an empty answer.
+  "searched": int32;
+}
+
 model SeedShowMessage {
   "cmd": "seed_show";
   // The reading session. When present, showing the seed consumes its pending
@@ -6165,6 +6199,7 @@ model Response {
   seed_plant_result?: SeedPlantResult;
   seed_plot_result?: SeedPlotResult;
   seed_list_result?: SeedListResult;
+  seed_search_result?: SeedSearchResult;
   seed_show_result?: SeedShowResult;
   seed_edit_result?: SeedEditResult;
   seed_set_resume_result?: SeedSetResumeResult;

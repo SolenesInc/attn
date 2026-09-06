@@ -127,28 +127,40 @@ type gardenRead struct {
 }
 
 func (d *Daemon) readGarden() (gardenRead, error) {
-	read, _, err := d.runDocQuery(docstore.Query{
-		Namespace:  garden.Namespace,
-		Collection: garden.CollectionSeeds,
-		Sort:       &docstore.Sort{Field: docstore.FieldCreatedAt, Desc: true},
-		Limit:      gardenSnapshotLimit,
-	})
-	if err != nil {
-		return gardenRead{}, err
+	return d.readGardenTo(gardenSnapshotLimit)
+}
+
+func (d *Daemon) readGardenTo(limit int) (gardenRead, error) {
+	out := gardenRead{docs: map[string]docstore.Document{}, ready: map[string]bool{}}
+	page := limit
+	if page <= 0 {
+		page = docstore.MaxLimit
 	}
-	out := gardenRead{
-		seeds: make([]garden.Seed, 0, len(read.Documents)),
-		docs:  make(map[string]docstore.Document, len(read.Documents)),
-		ready: map[string]bool{},
-	}
-	for _, doc := range read.Documents {
-		seed, err := garden.Decode(doc.Body)
+	after := ""
+	for {
+		read, _, err := d.runDocQuery(docstore.Query{
+			Namespace:  garden.Namespace,
+			Collection: garden.CollectionSeeds,
+			Sort:       &docstore.Sort{Field: docstore.FieldCreatedAt, Desc: true},
+			Limit:      page,
+			After:      after,
+		})
 		if err != nil {
-			d.logf("garden: seed %s has an unreadable body: %v", doc.ID, err)
-			continue
+			return gardenRead{}, err
 		}
-		out.seeds = append(out.seeds, seed)
-		out.docs[seed.ID] = doc
+		for _, doc := range read.Documents {
+			seed, err := garden.Decode(doc.Body)
+			if err != nil {
+				d.logf("garden: seed %s has an unreadable body: %v", doc.ID, err)
+				continue
+			}
+			out.seeds = append(out.seeds, seed)
+			out.docs[seed.ID] = doc
+		}
+		if limit > 0 || len(read.Documents) < page {
+			break
+		}
+		after = read.Documents[len(read.Documents)-1].ID
 	}
 	for _, seed := range garden.Ready(out.seeds, d.sessionExists) {
 		out.ready[seed.ID] = true

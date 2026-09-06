@@ -1,0 +1,4 @@
+kind: added
+area: garden
+change: '`attn seed search <words>` finds seeds by keyword across the whole garden, harvested and withered included, and prints the line that matched under each hit.'
+notes: Titles, bodies and every log entry are searched. A seed matches when one of those carries every word, so the snippet always shows why. Title matches come first, then body, then log. The answer is capped at 25 hits and says so when it trims; `--limit` raises it. Agents are now told to search before planting.

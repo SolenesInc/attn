@@ -35,6 +35,8 @@ func runSeed() {
 		runSeedPlot(args)
 	case "ls":
 		runSeedList(args)
+	case "search":
+		runSeedSearch(args)
 	case "show":
 		runSeedShow(args)
 	case "review":
@@ -104,6 +106,13 @@ commands:
         --flat prints one list. --stale narrows to open seeds whose log has not moved
         for the window (default %s) — a query for your judgment, never a
         reaper.
+
+  search <words> [--limit <n>] [--json]
+        find seeds by keyword across the whole garden, harvested and withered
+        included: titles, bodies and every log entry. A seed matches when one
+        of those carries every word, and the line that did is printed under it.
+        Title matches come first. Search before you plant, so a duplicate is
+        found instead of created.
 
   ready [--plot <plot> | --all] [--json]
         what you can tend right now, oldest first: nothing open blocks it,
@@ -253,9 +262,10 @@ flags:
   --member <name>    the crew member asking, recorded as planter, tender or
                      note author
   --session <id>     the session asking (defaults to ATTN_SESSION_ID)
-  --limit <n>        how many log entries to read (notes)
+  --limit <n>        how many log entries to read (notes), or how many hits to
+                     answer with (search; default %d, at most %d)
   --json             print the result as JSON
-`, formatWindow(garden.DefaultStaleWindow))
+`, formatWindow(garden.DefaultStaleWindow), garden.DefaultSearchResults, garden.MaxSearchResults)
 }
 
 func seedClient() *client.Client {
@@ -514,6 +524,51 @@ func seedHandle(seed protocol.Seed) string {
 		return seed.ID
 	}
 	return seed.ID + " (" + seed.StepSlug + ")"
+}
+
+func runSeedSearch(args []string) {
+	f := newSeedFlags("search")
+	query := strings.Join(f.parse("search", args), " ")
+	if strings.TrimSpace(query) == "" {
+		seedFail("search", fmt.Errorf("needs something to look for: `attn seed search <words>`"))
+	}
+	result, err := seedClient().SeedSearch(f.sessionID(), query, *f.limit)
+	if err != nil {
+		seedFail("search", err)
+	}
+	if *f.json {
+		writeJSON(result)
+		return
+	}
+	fprintSeedSearch(os.Stdout, query, result)
+}
+
+func fprintSeedSearch(out io.Writer, query string, result *protocol.SeedSearchResult) {
+	if result.Matched == 0 {
+		fmt.Fprintf(out, "no seed matches %q — searched %s: titles, bodies and every log entry\n",
+			query, plural(result.Searched, "seed"))
+		return
+	}
+	verb := "match"
+	if result.Matched == 1 {
+		verb = "matches"
+	}
+	fmt.Fprintf(out, "%s %s %q — title matches first, then body, then log\n\n",
+		plural(result.Matched, "seed"), verb, query)
+	for _, hit := range result.Hits {
+		fmt.Fprintf(out, "%s\n  %s  %s  %s\n", seedLine(hit.Seed), hit.Seed.Status, hit.Where, hit.Snippet)
+	}
+	if result.Matched > len(result.Hits) {
+		fmt.Fprintf(out, "\nshowing %d of %d — max_results=%d, asked for %d. Narrow the query, or `--limit <n>` up to %d.\n",
+			len(result.Hits), result.Matched, result.Limit, result.Matched, garden.MaxSearchResults)
+	}
+}
+
+func plural(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, noun)
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 func runSeedList(args []string) {
