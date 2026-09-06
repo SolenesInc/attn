@@ -1,2 +1,1 @@
-Leave a verified, reviewable change. Report what changed, how it was verified, and any remaining limits. Do not merge.
-
+Deliver a verified, reviewable change with evidence and any remaining limits. Do not merge.

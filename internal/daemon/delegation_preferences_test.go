@@ -30,6 +30,18 @@ func TestDelegationPreferencesSettingsRoundTripAndConflict(t *testing.T) {
 	if !got.Success || got.RequestID != "load" || got.Preferences == nil || got.Preferences.Enabled {
 		t.Fatalf("initial settings: %+v", got)
 	}
+	for _, id := range []string{"verify", "orchestrator"} {
+		found := false
+		for _, role := range got.Templates {
+			found = found || role.ID == id
+		}
+		if !found {
+			t.Fatalf("settings response is missing the %s preset", id)
+		}
+	}
+	if len(got.Preferences.Roles) != 0 {
+		t.Fatal("reading templates installed roles into user preferences")
+	}
 	cfg := *got.Preferences
 	cfg.Enabled = true
 	cfg.Fallback.Selection = delegationprefs.Selection{Harness: "copilot"}

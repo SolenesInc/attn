@@ -95,7 +95,10 @@ try {
     await click('[data-testid="delegation-apply-starter"]');
     await save();
     const found = roles();
-    runner.assert(found.roles.length === 5 && found.roles.every(r => r.choices[0].selection.harness === 'codex'), 'one starter selection fills five roles');
+    runner.assert(found.roles.length === initial.templates.length && found.roles.every(r => r.choices[0].selection.harness === 'codex'), 'one starter selection fills every preset');
+    for (const id of ['verify', 'orchestrator']) {
+      runner.assert(found.roles.some(role => role.id === id), `${id} is available as a starter role`);
+    }
     await screenshot('02-roles.png'); await hold();
   });
   await runner.step('edit_role_and_add_effort_alternative', async () => {
@@ -148,7 +151,7 @@ try {
     await until(() => roles().roles.length === 0, 'roles hidden');
     await hold();
     await click(`${root} .delegation-switch input`);
-    await until(() => roles().roles.length === 6, 'saved roles restored');
+    await until(() => roles().roles.length === before.roles.length, 'saved roles restored');
     runner.writeJson('roles.json', roles());
     await screenshot('05-restored.png'); await hold();
   });
