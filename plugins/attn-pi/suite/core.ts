@@ -6,8 +6,17 @@ import {
   type RelayDeliverMessageParams,
   type RelayDeliverMessageResult,
   type RelayHelloState,
+  type RelayNetworkDecideParams,
+  type RelayNetworkDecideResult,
 } from "../src/relay-protocol";
+import type { Decider } from "../netproxy";
 import { pullRequestsCreated } from "../src/pullrequest";
+
+/** Everything the driver can ask this suite. `respond` dispatches on the method name. */
+export type RelaySuiteHandlers = {
+  deliverMessage(params: RelayDeliverMessageParams): Promise<RelayDeliverMessageResult>;
+  networkDecide(params: RelayNetworkDecideParams): Promise<RelayNetworkDecideResult>;
+};
 
 export type SessionStartReason = "startup" | "reload" | "new" | "resume" | "fork";
 
@@ -80,7 +89,7 @@ export class RelaySuiteClient {
 
   constructor(
     private readonly socketPath: string,
-    private readonly onDeliverMessage: (params: RelayDeliverMessageParams) => Promise<RelayDeliverMessageResult>,
+    private readonly handlers: RelaySuiteHandlers,
     private readonly helloParams: () => unknown | undefined,
   ) {}
 
@@ -281,16 +290,27 @@ export class RelaySuiteClient {
   }
 
   private async respond(request: JSONRPCRequest): Promise<void> {
-    if (request.method !== relayMethods.deliverMessage) {
+    const handler = this.handlerFor(request.method);
+    if (!handler) {
       this.send_(request.id, { error: { code: -32601, message: `unknown method ${request.method}` } });
       return;
     }
     try {
-      const result = await this.onDeliverMessage(request.params as RelayDeliverMessageParams);
+      const result = await handler(request.params);
       this.send_(request.id, { result });
     } catch (error) {
       this.send_(request.id, { error: { code: -32603, message: error instanceof Error ? error.message : String(error) } });
     }
+  }
+
+  private handlerFor(method: string): ((params: unknown) => Promise<unknown>) | undefined {
+    if (method === relayMethods.deliverMessage) {
+      return (params) => this.handlers.deliverMessage(params as RelayDeliverMessageParams);
+    }
+    if (method === relayMethods.networkDecide) {
+      return (params) => this.handlers.networkDecide(params as RelayNetworkDecideParams);
+    }
+    return undefined;
   }
 
   private send_(id: JSONRPCID, outcome: { result: unknown } | { error: { code: number; message: string } }): void {
@@ -319,6 +339,9 @@ export type SuiteDenial = {
 };
 
 export class AttnPiSuite {
+  /** Set by the approval orchestrator; until then every held connection is denied. */
+  networkDecider: Decider | undefined;
+
   private readonly piVersion: string;
   private readonly relay: { client: RelaySuiteClient; token: string } | undefined;
 
@@ -337,7 +360,11 @@ export class AttnPiSuite {
     this.relay =
       socketPath && token
         ? {
-            client: new RelaySuiteClient(socketPath, this.handleDeliverMessage, () => this.helloParams("reconnect")),
+            client: new RelaySuiteClient(
+              socketPath,
+              { deliverMessage: this.handleDeliverMessage, networkDecide: this.handleNetworkDecide },
+              () => this.helloParams("reconnect"),
+            ),
             token,
           }
         : undefined;
@@ -442,6 +469,14 @@ export class AttnPiSuite {
   close(): void {
     this.relay?.client.close();
   }
+
+  private readonly handleNetworkDecide = async (
+    params: RelayNetworkDecideParams,
+  ): Promise<RelayNetworkDecideResult> => {
+    const decider = this.networkDecider;
+    if (!decider) return { decision: "deny" };
+    return decider({ credentials: this.relay?.token ?? "", ...params });
+  };
 
   private readonly handleDeliverMessage = async (
     params: RelayDeliverMessageParams,

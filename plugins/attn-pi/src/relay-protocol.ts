@@ -1,4 +1,6 @@
 
+import type { NetworkDecision, NetworkProtocol } from "../netproxy";
+
 // `dropped_reports` counts reports the suite could not hand over since its last hello; it
 // cannot log. `pi_state` is taken only when attn has nothing, or reconnects reopen turns.
 export type RelayHelloParams = {
@@ -28,6 +30,11 @@ export type RelayReportDenialParams = {
 export type RelayDeliverMessageParams = { input_id: string; text: string };
 export type RelayDeliverMessageResult = { delivered: boolean };
 
+// The proxy holds the client connection while this is outstanding, so the reviewer owns
+// the deadline: the driver sends it with no timeout of its own.
+export type RelayNetworkDecideParams = { host: string; port: number; protocol: NetworkProtocol };
+export type RelayNetworkDecideResult = NetworkDecision;
+
 export const relayMethods = {
   hello: "suite.hello",
   reportState: "suite.report_state",
@@ -36,4 +43,5 @@ export const relayMethods = {
   reportInputTaken: "suite.report_input_taken",
   reportPullRequest: "suite.report_pull_request",
   deliverMessage: "driver.deliver_message",
+  networkDecide: "driver.network_decide",
 } as const;

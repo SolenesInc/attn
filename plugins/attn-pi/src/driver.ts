@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { availableModels, type AvailableModels, type ModelQuery } from "../automode/models";
+import { NetworkProxy, networkPolicyFrom, type NetworkDecision, type NetworkPolicy, type NetworkRequest } from "../netproxy";
 import type { AttnRPCClient } from "./attn-rpc";
 import type { RelayConnection, RelayServer } from "./relay";
 import type {
@@ -9,6 +10,8 @@ import type {
   RelayHelloParams,
   RelayHelloState,
   RelayHelloResult,
+  RelayNetworkDecideParams,
+  RelayNetworkDecideResult,
   RelayReportDenialParams,
   RelayReportInputTakenParams,
   RelayReportPullRequestParams,
@@ -48,6 +51,10 @@ type RunState = {
 
 const deliverMessageTimeoutMs = 10_000;
 
+// Every pi session in this profile shares one proxy; the run token is its proxy
+// credentials, which is how a held connection finds the session that made it.
+type ProxyState = { proxy: NetworkProxy; address: { host: string; port: number } };
+
 // A tripwire, not a deadline: a live pi re-dials within a second of the socket
 // appearing and the suite's reconnect backoff caps at 30s (suite/core.ts).
 const unbackedRunGraceMs = 120_000;
@@ -78,6 +85,10 @@ export class PiDriver {
   /** The shipped tripwire, shortened by tests that would otherwise wait it out. */
   private readonly unbackedGraceMs: number;
 
+  private readonly proxyStateDir: string | undefined;
+  private proxyStart: Promise<ProxyState | undefined> | undefined;
+  private proxyState: ProxyState | undefined;
+
   constructor(options: {
     rpc: AttnRPCClient;
     relay: RelayServer;
@@ -87,6 +98,7 @@ export class PiDriver {
     queryModels?: ModelQuery;
     executable?: string;
     unbackedGraceMs?: number;
+    proxyStateDir?: string;
   }) {
     this.rpc = options.rpc;
     this.relay = options.relay;
@@ -96,6 +108,7 @@ export class PiDriver {
     this.queryModels = options.queryModels ?? availableModels;
     this.executable = options.executable?.trim() || process.env.ATTN_PI_EXECUTABLE?.trim() || "pi";
     this.unbackedGraceMs = options.unbackedGraceMs ?? unbackedRunGraceMs;
+    this.proxyStateDir = options.proxyStateDir?.trim() || this.env.ATTN_PLUGIN_DATA_ROOT?.trim() || undefined;
   }
 
   async initialize(): Promise<void> {
@@ -148,7 +161,7 @@ export class PiDriver {
     return {
       argv: this.argvFor(availability.executable, metadata, params.initial_prompt, suitePath),
       cwd: params.cwd,
-      env: this.envFor(run.token, params.auto_mode, run.sessionID),
+      env: await this.envFor(run.token, params.auto_mode, run.sessionID),
     };
   }
 
@@ -183,7 +196,7 @@ export class PiDriver {
     return {
       argv: this.argvFor(availability.executable, metadata, undefined, suitePath),
       cwd: params.cwd,
-      env: this.envFor(run.token, params.auto_mode, run.sessionID),
+      env: await this.envFor(run.token, params.auto_mode, run.sessionID),
     };
   }
 
@@ -193,8 +206,22 @@ export class PiDriver {
       this.markBacked(run);
       this.runsBySessionID.delete(params.session_id);
       this.runsByToken.delete(run.token);
+      this.proxyState?.proxy.revokeCredentials(run.token);
     }
     return { ok: true };
+  }
+
+  /** Shuts the profile's proxy down; the driver process owns it for as long as it runs. */
+  async close(): Promise<void> {
+    const running = this.proxyStart === undefined ? undefined : await this.proxyStart;
+    this.proxyStart = undefined;
+    this.proxyState = undefined;
+    await running?.proxy.close();
+  }
+
+  /** The listening proxy, for tests and diagnostics; undefined until a spawn asks for one. */
+  networkProxy(): NetworkProxy | undefined {
+    return this.proxyState?.proxy;
   }
 
 
@@ -420,7 +447,7 @@ export class PiDriver {
 
   // The auto-mode config travels in the environment, not argv: argv is
   // world-readable and prose entries are multi-line.
-  private envFor(token: string, autoMode: unknown, sessionID: string): Record<string, string> {
+  private async envFor(token: string, autoMode: unknown, sessionID: string): Promise<Record<string, string>> {
     const env: Record<string, string> = { ATTN_PI_SUITE_SOCKET: this.relay.socketPath, ATTN_PI_TOKEN: token };
     if (autoMode !== undefined && autoMode !== null) {
       env.ATTN_PI_AUTOMODE_CONFIG = JSON.stringify(autoMode);
@@ -428,7 +455,66 @@ export class PiDriver {
       if (ledger) env.ATTN_PI_AUTOMODE_DENIAL_LOG = ledger;
       env.ATTN_PI_SESSION_ID = sessionID;
     }
+    const proxy = await this.ensureProxy(autoMode);
+    if (proxy) {
+      proxy.proxy.registerCredentials(token);
+      env.ATTN_PI_PROXY_ADDR = `${proxy.address.host}:${proxy.address.port}`;
+    }
     return env;
+  }
+
+  /** Starts the profile's proxy on the first spawn that asks for network policy, and
+   * pushes every later spawn's policy onto the one already listening. */
+  private async ensureProxy(autoMode: unknown): Promise<ProxyState | undefined> {
+    const policy = networkPolicyFrom(autoMode);
+    if (this.proxyStart) {
+      const running = await this.proxyStart;
+      if (running && policy) running.proxy.setPolicy(policy);
+      return running;
+    }
+    if (!policy?.enabled) return undefined;
+    this.proxyStart = this.startProxy(policy);
+    this.proxyState = await this.proxyStart;
+    return this.proxyState;
+  }
+
+  private async startProxy(policy: NetworkPolicy): Promise<ProxyState | undefined> {
+    const stateDir = this.proxyStateDir;
+    if (!stateDir) {
+      console.error(
+        "attn-pi: auto mode asked for network policy but ATTN_PLUGIN_DATA_ROOT is unset, so no proxy was started and sessions get no ATTN_PI_PROXY_ADDR",
+      );
+      return undefined;
+    }
+    const proxy = new NetworkProxy({ policy, stateDir, decide: (request) => this.decideNetwork(request) });
+    try {
+      return { proxy, address: await proxy.listen() };
+    } catch (error) {
+      console.error(`attn-pi: could not start the network proxy in ${stateDir}: ${String(error)}`);
+      return undefined;
+    }
+  }
+
+  // A held connection is decided by the session that made it: the proxy credentials are
+  // that session's run token, and the answer comes back over its own relay connection.
+  private async decideNetwork(request: NetworkRequest): Promise<NetworkDecision> {
+    const run = this.runsByToken.get(request.credentials);
+    const connection = run?.connection;
+    if (!connection) {
+      throw new Error(`no live pi suite for run token ${request.credentials}; nothing can decide ${request.host}`);
+    }
+    const params: RelayNetworkDecideParams = { host: request.host, port: request.port, protocol: request.protocol };
+    return this.relay.networkDecide<RelayNetworkDecideParams, RelayNetworkDecideResult>(connection, params);
+  }
+
+  /** attn pushes a network policy change here so the running proxy picks it up without
+   * waiting for the next spawn. Sessions with no proxy yet read it from their config. */
+  async policyChanged(rawParams: unknown): Promise<{ ok: true }> {
+    const policy = networkPolicyFrom(rawParams);
+    if (!policy) throw new Error("automode.policy_changed params must carry a network object");
+    const running = this.proxyStart === undefined ? undefined : await this.proxyStart;
+    running?.proxy.setPolicy(policy);
+    return { ok: true };
   }
 
   private argvFor(
