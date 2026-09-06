@@ -140,7 +140,6 @@ function rowFor(state, worktreePath) {
   return (state?.rows || []).find((row) => row.path === worktreePath) || null;
 }
 
-// The registry outlives a run, so count only what this fixture put there.
 function fixtureRows(state, fixture) {
   const root = path.dirname(fixture.main) + path.sep;
   return (state?.rows || []).filter((row) => row.path.startsWith(root));
@@ -231,7 +230,6 @@ async function main() {
       runner.assert(planted.length === 1, 'the delegation planted exactly one seed', planted);
       seed = planted[0];
 
-      // The CLI returns once the seed is planted, before its session exists.
       await observer.waitFor(() => {
         delegateSession = [...observer.sessionsById.values()]
           .find((session) => !known.has(session.id) && sameDir(session.directory, fixture.worktrees.merged))

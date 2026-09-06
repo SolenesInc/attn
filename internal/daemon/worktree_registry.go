@@ -11,7 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Resolved from where a repository's pull requests actually merge, not origin/HEAD.
 const integrationBranchTTL = 24 * time.Hour
 
 type repositoryFacts struct {
@@ -136,8 +135,7 @@ func (d *Daemon) repositoryFacts(repo string, now time.Time) (*repositoryFacts, 
 	stashes, stashErr := git.StashCountsByBranch(repo)
 	finish(stashErr)
 	if stashErr != nil {
-		// A missing stash map reads as no stash, and that gate is all that keeps
-		// a removal off a stashed worktree.
+		// A missing stash map reads as no stash, and that gate is all that keeps a removal off it.
 		return nil, fmt.Errorf("stash counts for %s: %w", repo, stashErr)
 	}
 	facts.treeHashes = treeHashes
@@ -312,7 +310,13 @@ func observeWorktree(facts *repositoryFacts, state git.WorktreeState, now time.T
 	observation.Dirty = dirtyFiles > 0
 
 	observation.MergedSignal = mergedSignal(facts, state)
-	observation.Unpushed = commitsBeyondTheMerge(facts, state, observation.MergedSignal)
+	unpushed, err := commitsBeyondTheMerge(facts, state, observation.MergedSignal)
+	if err != nil {
+		// An uncounted commit reads as no commit, and this count is what keeps the sweep off it.
+		observation.Error = err.Error()
+		return observation, err
+	}
+	observation.Unpushed = unpushed
 	observation.LastActivityAt = worktreeLastActivity(facts, state, now)
 	return observation, nil
 }
@@ -340,37 +344,39 @@ func mergedSignal(facts *repositoryFacts, state git.WorktreeState) store.MergedS
 	return store.MergedSignalNone
 }
 
-// Not commits ahead: a squash merge accounts for the branch up to the merged tip.
-func commitsBeyondTheMerge(facts *repositoryFacts, state git.WorktreeState, signal store.MergedSignal) int {
+func commitsBeyondTheMerge(facts *repositoryFacts, state git.WorktreeState, signal store.MergedSignal) (int, error) {
 	if facts.integrationBranch == "" || state.Branch == "" {
-		return 0
+		return 0, nil
 	}
 	switch signal {
 	case store.MergedSignalAncestor, store.MergedSignalTree:
-		return 0
+		return 0, nil
 	}
 	ahead, err := git.CommitsAhead(facts.repo, facts.integrationBranch, state.Branch)
-	if err != nil || ahead == 0 {
-		return 0
+	if err != nil {
+		return 0, fmt.Errorf("counting %s past %s: %w", state.Branch, facts.integrationBranch, err)
+	}
+	if ahead == 0 {
+		return 0, nil
 	}
 	if signal != store.MergedSignalPullRequest {
-		return ahead
+		return ahead, nil
 	}
 	record := facts.mergedBranches[state.Branch]
 	if record.HeadSHA != "" && record.HeadSHA == state.HeadSHA {
-		return 0
+		return 0, nil
 	}
 	if record.HeadSHA == "" {
-		return 0
+		return 0, nil
 	}
 	beyond, err := git.CommitsAhead(facts.repo, record.HeadSHA, state.Branch)
 	if err != nil {
-		return ahead
+		// Every commit past the integration branch: more than the merge left.
+		return ahead, nil
 	}
-	return beyond
+	return beyond, nil
 }
 
-// max(newest tree mtime excluding .git and build dirs, last commit, last activity).
 func worktreeLastActivity(facts *repositoryFacts, state git.WorktreeState, now time.Time) time.Time {
 	newest := time.Time{}
 	consider := func(candidate time.Time) {

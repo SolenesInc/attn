@@ -395,7 +395,6 @@ type MergedBranch struct {
 	HeadSHA string `json:"head_sha,omitempty"`
 }
 
-// Repository-scoped: session_pull_requests dies with its session, this must not.
 func (s *Store) RecordRepoMergedBranches(mainRepo string, branches []MergedBranch, now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

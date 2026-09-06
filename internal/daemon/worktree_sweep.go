@@ -180,7 +180,6 @@ func worktreeSweepVerdict(wt *store.Worktree, facts sweepContext, now time.Time,
 	if base == "" {
 		base = "the integration branch"
 	}
-	// Detached worktrees hold commits on no branch: a delete destroys them.
 	if wt.Detached && wt.MergedSignal != store.MergedSignalAncestor {
 		return sweepVerdict{store.WorktreeSweepKeptDetached,
 			fmt.Sprintf("detached HEAD at %s is not on %s, so its commits are on no branch", shortSHA(wt.HeadSHA), base), time.Time{}}

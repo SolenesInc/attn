@@ -18,8 +18,7 @@ type WorktreeState struct {
 	Prunable bool
 }
 
-// Deliberately does NOT prune first, unlike ListWorktrees: a prunable worktree
-// reads as stale instead of vanishing.
+// Deliberately does NOT prune first, unlike ListWorktrees: a prunable worktree reads as stale.
 func ListWorktreeStates(repoDir string) ([]WorktreeState, error) {
 	out, err := runGitOutput(OpWorktree, repoDir, "worktree", "list", "--porcelain")
 	if err != nil {

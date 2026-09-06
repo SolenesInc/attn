@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import type { Worktree, WorktreeRepository, WorktreeSweepEntry } from '../types/generated';
 
-// Pushes land here rather than in App: a refresh pass must not repaint the shell.
 interface WorktreeStore {
   worktrees: Worktree[];
   repositories: WorktreeRepository[];

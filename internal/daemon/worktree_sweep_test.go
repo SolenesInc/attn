@@ -40,7 +40,6 @@ func newSweepRepo(t *testing.T) *sweepRepo {
 	return repo
 }
 
-// Two commits with the same tree, parent, author and second hash identically.
 func (r *sweepRepo) commitIn(dir, file, content, message string) string {
 	r.t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o600); err != nil {
@@ -164,7 +163,6 @@ func TestWorktreeSweepKeepsForEachReason(t *testing.T) {
 	unmerged := repo.worktree("unmerged", "feat/unmerged", base)
 	repo.commitIn(unmerged, "only-here.txt", "only here\n", "unmerged work")
 
-	// One commit past the recorded merged tip.
 	unpushed := repo.worktree("unpushed", "feat/unpushed", base)
 	mergedHead := repo.commitIn(unpushed, "merged.txt", "merged\n", "the merged tip")
 	repo.commitIn(unpushed, "after.txt", "after\n", "after the merge")
@@ -599,6 +597,37 @@ func TestAFailedStashListingStopsTheSweepRatherThanReadingAsNoStash(t *testing.T
 	if row.SweepStatus != store.WorktreeSweepUnknown ||
 		!strings.Contains(row.SweepReason, "could not be refreshed") {
 		t.Errorf("row after a failed stash listing = %q / %q, want it to say nothing is decided",
+			row.SweepStatus, row.SweepReason)
+	}
+}
+
+func TestAnUncountableCommitCountKeepsTheWorktreeRatherThanReadingAsZero(t *testing.T) {
+	t.Setenv("ATTN_WORKTREE_SWEEP_IDLE_DAYS", "0")
+	repo := newSweepRepo(t)
+	d := sweepDaemon(t)
+	now := time.Now()
+	base := strings.TrimSpace(gitOutput(t, repo.main, "rev-parse", "HEAD"))
+
+	reused := repo.worktree("reused", "feat/reused", base)
+	mergedHead := repo.commitIn(reused, "merged.txt", "merged\n", "the merged tip")
+	repo.commitIn(reused, "after.txt", "reused after the merge\n", "work after the merge")
+	d.store.RecordRepoMergedBranches(repo.main, []store.MergedBranch{
+		{Branch: "feat/reused", Number: 11, HeadSHA: mergedHead},
+	}, now)
+
+	// The pull request rung needs no local ref, so this reads merged anyway.
+	d.store.SetRepoIntegrationBranch(repo.main, "origin/gone", "pull_requests", now)
+
+	d.refreshRepositoryWorktrees(repo.main, now)
+	if _, removed, _ := d.worktreeSweepPass(time.Now()); removed != 0 {
+		t.Fatalf("the sweep removed %d worktrees whose commits it could not count, want 0", removed)
+	}
+	if _, err := os.Stat(filepath.Join(reused, "after.txt")); err != nil {
+		t.Fatalf("the work committed after the merge is gone: %v", err)
+	}
+	row := rowFor(t, d, reused)
+	if row.SweepStatus != store.WorktreeSweepUnknown || !strings.Contains(row.SweepReason, "last refresh failed") {
+		t.Errorf("row after an uncountable commit count = %q / %q, want it undecided",
 			row.SweepStatus, row.SweepReason)
 	}
 }
