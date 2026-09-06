@@ -14,7 +14,6 @@ interface CrewPanelProps {
   initialMember?: string;
   members: CrewMember[];
   sessions: DaemonSession[];
-  isConnected: boolean;
   onClose: () => void;
 }
 
@@ -87,8 +86,10 @@ function RestartState({ member, attempt, onRetryTransport, onRetryFailed }: {
   return <div className="crew-restart-state is-pending" role="status">{label}{restart.detail ? ` · ${restart.detail}` : ''}</div>;
 }
 
-export function CrewPanel({ isOpen, initialMember, members, sessions, isConnected, onClose }: CrewPanelProps) {
+export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }: CrewPanelProps) {
   const {
+    isConnected,
+    connectionGeneration,
     sendCrewSet,
     sendCrewRestart,
     sendDelegationPreferencesGet,
@@ -107,7 +108,7 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, isConnecte
   const rosterRef = useRef<HTMLDivElement>(null);
   const wasOpen = useRef(false);
   const lastInitialMember = useRef<string | undefined>(undefined);
-  const autosave = useCrewLaunchAutosave(members, isConnected, sendCrewSet);
+  const autosave = useCrewLaunchAutosave(members, connectionGeneration, sendCrewSet);
   const models = useHarnessModelCatalogs(isOpen, sendDelegationModels);
 
   useEscapeStack(onClose, isOpen && !confirming);

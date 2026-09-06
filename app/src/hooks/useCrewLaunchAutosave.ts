@@ -66,7 +66,7 @@ function newerMember(current: CrewMember, candidate: CrewMember): CrewMember {
 
 export function useCrewLaunchAutosave(
   members: CrewMember[],
-  isConnected: boolean,
+  connectionGeneration: number,
   send: (write: CrewLaunchWrite) => Promise<CrewMutationOutcome>,
 ) {
   const edits = useRef(new Map<string, MemberEdit>());
@@ -202,14 +202,14 @@ export function useCrewLaunchAutosave(
   };
 
   useEffect(() => {
-    if (!isConnected) return;
+    if (connectionGeneration === 0) return;
     for (const [memberId, edit] of edits.current) {
       if (!edit.retryOnReconnect) continue;
       edit.retryOnReconnect = false;
       edit.state = 'saving';
       pumpRef.current(memberId);
     }
-  }, [isConnected]);
+  }, [connectionGeneration]);
 
   const update = useCallback((memberId: string, patch: Partial<CrewLaunchSelection>) => {
     const edit = edits.current.get(memberId);

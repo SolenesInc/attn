@@ -10,7 +10,7 @@ import { currentHarnessProfile, profileCliEnv, resolveHarnessResources } from '.
 import { MOCK_AGENT_EXECUTABLE, writeMockAgentFixture } from './mockAgent.mjs';
 import { crewManagementFixture } from './crewManagementFixture.mjs';
 import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
-import { captureScreenshotData } from './nativeWindowCapture.mjs';
+import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
 import {
   captureWebKitPids,
   readAppFootprint,
@@ -40,6 +40,7 @@ const awake = `alder-${memberSuffix}`;
 const asleep = `keel-${memberSuffix}`;
 const awakeHome = path.join(resources.dataDir, 'crew', awake);
 const asleepHome = path.join(resources.dataDir, 'crew', asleep);
+const wakeReceipt = path.join(awakeHome, 'wake-received');
 let firstSession = '';
 let successor = '';
 
@@ -73,8 +74,25 @@ const waitForCrew = (member, predicate, description, timeoutMs = 30_000) => obse
   timeoutMs,
 );
 
+function waitForFileSignal(file, description, timeoutMs = 30_000) {
+  if (fs.existsSync(file)) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const watcher = fs.watch(path.dirname(file), (_event, name) => {
+      if (name !== path.basename(file) || !fs.existsSync(file)) return;
+      clearTimeout(timer);
+      watcher.close();
+      resolve();
+    });
+    const timer = setTimeout(() => {
+      watcher.close();
+      reject(new Error(`timed out waiting for ${description}: ${file}`));
+    }, timeoutMs);
+  });
+}
+
 async function screenshot(name) {
-  await captureScreenshotData(path.join(runner.runDir, name), { client });
+  await driver.activateApp();
+  await captureFrontWindowScreenshot(path.join(runner.runDir, name), { client, driver });
   await hold();
 }
 
@@ -138,6 +156,7 @@ fs.writeFileSync(wrapper, modelAwareWrapperSource(MOCK_AGENT_EXECUTABLE), { enco
 fs.chmodSync(wrapper, 0o755);
 process.env.ATTN_CODEX_EXECUTABLE = wrapper;
 process.env.ATTN_CLAUDE_EXECUTABLE = wrapper;
+process.env.ATTN_MOCK_AGENT_LAUNCH_RECEIPT = 'wake-received';
 
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
@@ -182,10 +201,13 @@ try {
   const boundMember = await awakeBinding;
   runner.assert(boundMember.binding_session === firstSession, 'the roster binds the requested first day', { boundMember, firstSession });
   await observer.waitForSession({ id: firstSession, timeoutMs: 30_000 });
+  await waitForFileSignal(wakeReceipt, 'the first crew day mock launch');
+  fs.unlinkSync(wakeReceipt);
   await waitForDom('[data-testid="sidebar-queue"]');
   await waitForDom(`[data-testid="queue-crew-${awake}"][data-crew-state="awake"]`);
   await waitForDom(`[data-testid="queue-crew-${asleep}"]`);
   const workspaceIdle = await sampleIdle(webkitBaseline);
+  await driver.activateApp();
 
   await runner.step('manage_entry_retains_the_sidebar_and_returns_keyboard_focus', async () => {
     await click('[data-testid="manage-crew"]');
@@ -265,10 +287,12 @@ try {
       'the successor launch',
       45_000,
     );
+    const successorReceipt = waitForFileSignal(wakeReceipt, 'the successor mock launch');
     fs.writeFileSync(path.join(awakeHome, 'continue-restart'), 'continue\n');
     const completed = await completedEvent;
     successor = completed.binding_session;
     await observer.waitForSession({ id: successor, timeoutMs: 30_000 });
+    await successorReceipt;
     await waitForDom('[data-testid="crew-panel"]', { includes: 'New day started' });
     const bound = [...observer.sessionsById.values()].filter((session) => session.crew_member === awake);
     runner.assert(bound.length === 1 && bound[0].id === successor, 'exactly one live session owns the member binding', { bound, completed });
@@ -299,12 +323,7 @@ try {
       }
     }
     if (successor) {
-      runAttn(['crew', 'sleep', awake, '--json']);
-      const sleeping = crewMember(awake);
-      if (sleeping?.binding_session) {
-        console.error(`Crew cleanup left ${awake} bound to ${sleeping.binding_session}`);
-        process.exitCode = 1;
-      }
+      await client.request('close_session', { sessionId: successor });
     }
   } catch (error) {
     console.error(`Crew cleanup: ${error instanceof Error ? error.message : String(error)}`);

@@ -426,6 +426,12 @@ async function runMockAgent() {
       transcript_path: transcriptPath,
       cwd,
     }));
+    const launchReceipt = process.env.ATTN_MOCK_AGENT_LAUNCH_RECEIPT;
+    if (launchReceipt) {
+      const target = resolveFixturePath(cwd, launchReceipt);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, `${id}\n`, 'utf8');
+    }
   };
   const writeRecords = (records) => {
     fs.mkdirSync(path.dirname(conversation.path), { recursive: true });

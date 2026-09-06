@@ -26,6 +26,8 @@ function deferred<T>() {
 
 function api(overrides: Record<string, unknown> = {}): DaemonApi {
   return {
+    isConnected: true,
+    connectionGeneration: 1,
     sendCrewSet: vi.fn().mockResolvedValue({ success: true, conflict: false }),
     sendCrewRestart: vi.fn().mockResolvedValue({ success: true, conflict: false }),
     sendDelegationPreferencesGet: vi.fn().mockResolvedValue({
@@ -67,7 +69,6 @@ function renderPanel({
         initialMember={initialMember}
         members={members}
         sessions={sessions}
-        isConnected
         onClose={onClose}
       />
     </DaemonApiProvider>,
