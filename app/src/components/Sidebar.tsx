@@ -9,6 +9,7 @@ import { GridLayoutControl } from './grid/GridLayoutControl';
 import type { GridLayout } from './grid/gridLayout';
 import { StateIndicator } from './StateIndicator';
 import { SessionLabel } from './SessionLabel';
+import { HarnessIcon } from './HarnessIcon';
 import { QueueBands, QueueSnoozedSection, type CrewMemberView } from './QueueBands';
 import { SidebarNudgeBar, deriveNudgeMode } from './NudgeIndicator';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
@@ -224,6 +225,7 @@ function SidebarSessionRow({
       <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
       <span className="sidebar-session-identity">
         <span className="sidebar-session-headline">
+          <HarnessIcon agent={session.agent} />
           <SessionLabel label={session.label} />
           <SidebarSessionPullRequest pullRequests={session.pullRequests} />
         </span>
@@ -1469,6 +1471,7 @@ export function Sidebar({
                           <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
                           <span className="sidebar-session-identity">
                             <span className="sidebar-session-headline">
+                              <HarnessIcon agent={session.agent} />
                               <SessionLabel label={session.label} />
                               <SidebarSessionPullRequest pullRequests={session.pullRequests} />
                             </span>
