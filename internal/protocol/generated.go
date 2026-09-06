@@ -1243,6 +1243,17 @@ type AutoModeHostRemoveMessage struct {
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
 
+type AutoModeLegacyDismissMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Pattern corresponds to the JSON schema field "pattern".
+	Pattern string `json:"pattern"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
 type AutoModeNetworkInfo struct {
 	// AllowLocalBinding corresponds to the JSON schema field "allow_local_binding".
 	AllowLocalBinding bool `json:"allow_local_binding"`
@@ -1395,7 +1406,7 @@ type AutoModeRuleRemoveMessage struct {
 	Cmd string `json:"cmd"`
 
 	// Pattern corresponds to the JSON schema field "pattern".
-	Pattern []string `json:"pattern"`
+	Pattern [][]string `json:"pattern"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`

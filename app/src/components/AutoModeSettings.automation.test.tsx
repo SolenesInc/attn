@@ -83,6 +83,7 @@ function Harness({
     addHost: vi.fn().mockResolvedValue(edited()),
     removeHost: vi.fn().mockResolvedValue(edited()),
     setPolicy: vi.fn().mockResolvedValue(edited()),
+    dismissLegacy: vi.fn().mockResolvedValue(edited()),
     setEnvironmentSlot,
   });
   return <AutoModeSettings policy={policy} />;

@@ -235,7 +235,7 @@ func (d *Daemon) addAutoModeRule(msg *protocol.AutoModeRuleAddMessage) autoModeC
 
 func (d *Daemon) removeAutoModeRule(msg *protocol.AutoModeRuleRemoveMessage) autoModeConfigEdit {
 	return func() (automode.Config, error) {
-		return d.store.RemoveAutoModeRule(autoModeRuleTokens(msg.Pattern), time.Now())
+		return d.store.RemoveAutoModeRule(autoModeFullPatternTokens(msg.Pattern), time.Now())
 	}
 }
 
@@ -296,4 +296,19 @@ func (d *Daemon) handleAutoModeHostRemoveWS(client *wsClient, msg *protocol.Auto
 func (d *Daemon) handleAutoModePolicySetWS(client *wsClient, msg *protocol.AutoModePolicySetMessage) {
 	d.editAutoModeConfigWS(client, protocol.CmdAutoModePolicySet,
 		protocol.Deref(msg.RequestID), d.setAutoModePolicy(msg))
+}
+
+func (d *Daemon) handleAutoModeLegacyDismissWS(
+	client *wsClient, msg *protocol.AutoModeLegacyDismissMessage,
+) {
+	d.editAutoModeConfigWS(client, protocol.CmdAutoModeLegacyDismiss,
+		protocol.Deref(msg.RequestID), d.dismissAutoModeLegacyPattern(msg))
+}
+
+func (d *Daemon) dismissAutoModeLegacyPattern(
+	msg *protocol.AutoModeLegacyDismissMessage,
+) autoModeConfigEdit {
+	return func() (automode.Config, error) {
+		return d.store.DismissAutoModeLegacyPattern(msg.Pattern, time.Now())
+	}
 }

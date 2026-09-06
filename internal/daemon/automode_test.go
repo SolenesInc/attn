@@ -613,7 +613,7 @@ func TestAutoModeRuleEditFromTheAppRoundTrips(t *testing.T) {
 
 	removed := autoModeEdit(t, d, func(c *wsClient) {
 		d.handleAutoModeRuleRemoveWS(c, &protocol.AutoModeRuleRemoveMessage{
-			Cmd: protocol.CmdAutoModeRuleRemove, Pattern: []string{"git", "status"},
+			Cmd: protocol.CmdAutoModeRuleRemove, Pattern: [][]string{{"git"}, {"status"}},
 			RequestID: protocol.Ptr("r2"),
 		})
 	})
@@ -720,12 +720,35 @@ func TestAutoModeStateNamesWhatShipped(t *testing.T) {
 	}
 }
 
-func patternTokenStrings(rule automode.Rule) []string {
-	tokens := make([]string, 0, len(rule.Pattern))
+func patternTokenStrings(rule automode.Rule) [][]string {
+	tokens := make([][]string, 0, len(rule.Pattern))
 	for _, token := range rule.Pattern {
-		tokens = append(tokens, token.Alternatives[0])
+		tokens = append(tokens, token.Alternatives)
 	}
 	return tokens
+}
+
+// Legacy patterns only ever arrive from the migration, so what the app needs from
+// the daemon is the route: the command answers a config result, not "unknown".
+func TestDismissingALegacyPatternIsRoutedFromTheApp(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
+	client := busTestClient()
+	client.setIdentity("daemon-test", protocol.ProtocolVersion,
+		[]string{protocol.CapabilityWorkspaceSessions})
+	d.handleClientMessage(client, []byte(
+		`{"cmd":"automode_legacy_dismiss","pattern":"*curl*","request_id":"r1"}`))
+
+	var result protocol.AutoModeConfigResultMessage
+	nextBusMessage(t, client, &result)
+	if result.Event != protocol.EventAutoModeConfigResult {
+		t.Fatalf("answer = %+v (%s), want an automode config result", result, protocol.Deref(result.Error))
+	}
+	if result.Success {
+		t.Fatal("dismissing a pattern that is not on the list was accepted")
+	}
+	if got := protocol.Deref(result.Error); !strings.Contains(got, "*curl*") {
+		t.Fatalf("refusal = %q, want it to name the pattern", got)
+	}
 }
 
 func unixAutoModeCall(t *testing.T, d *Daemon, payload string) protocol.Response {
@@ -752,10 +775,11 @@ func TestNoAutoModeWriteIsReachableOverTheUnixSocket(t *testing.T) {
 	}
 	for _, payload := range []string{
 		`{"cmd":"automode_rule_add","pattern":["git","push"],"request_id":"r1"}`,
-		`{"cmd":"automode_rule_remove","pattern":["git","status"],"request_id":"r1"}`,
+		`{"cmd":"automode_rule_remove","pattern":[["git"],["status"]],"request_id":"r1"}`,
 		`{"cmd":"automode_host_add","host":"crates.io","decision":"allow","request_id":"r1"}`,
 		`{"cmd":"automode_host_remove","host":"crates.io","decision":"allow","request_id":"r1"}`,
 		`{"cmd":"automode_policy_set","approval_policy":"never","request_id":"r1"}`,
+		`{"cmd":"automode_legacy_dismiss","pattern":"*curl*","request_id":"r1"}`,
 		`{"cmd":"automode_model_set","models":["a/one"],"request_id":"r1"}`,
 	} {
 		resp := unixAutoModeCall(t, d, payload)

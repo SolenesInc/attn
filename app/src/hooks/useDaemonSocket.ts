@@ -3129,12 +3129,25 @@ export function useDaemonSocket({
     [sendRequest],
   );
 
+  // The whole pattern, alternatives and all: "git {push|pull}" and "git push"
+  // are two rules and the daemon takes away the one named here.
   const sendAutoModeRuleRemove = useCallback(
-    (pattern: string[]): Promise<AutoModeConfigEdit> => {
+    (pattern: string[][]): Promise<AutoModeConfigEdit> => {
       return sendRequest<AutoModeConfigEdit>(
         'automode_rule_remove',
         { pattern },
         'Removing the rule timed out',
+      );
+    },
+    [sendRequest],
+  );
+
+  const sendAutoModeLegacyDismiss = useCallback(
+    (pattern: string): Promise<AutoModeConfigEdit> => {
+      return sendRequest<AutoModeConfigEdit>(
+        'automode_legacy_dismiss',
+        { pattern },
+        'Dismissing the pattern timed out',
       );
     },
     [sendRequest],
@@ -5381,6 +5394,7 @@ export function useDaemonSocket({
     sendAutoModeDiscard,
     sendAutoModeRuleAdd,
     sendAutoModeRuleRemove,
+    sendAutoModeLegacyDismiss,
     sendAutoModeHostAdd,
     sendAutoModeHostRemove,
     sendAutoModePolicySet,

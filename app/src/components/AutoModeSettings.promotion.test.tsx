@@ -88,6 +88,7 @@ function Harness(props: {
     addHost: vi.fn().mockResolvedValue(edited()),
     removeHost: vi.fn().mockResolvedValue(edited()),
     setPolicy: vi.fn().mockResolvedValue(edited()),
+    dismissLegacy: vi.fn().mockResolvedValue(edited()),
     setEnvironmentSlot: vi.fn().mockResolvedValue(edited()),
     ...props,
   });

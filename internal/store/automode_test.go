@@ -998,4 +998,59 @@ func TestANetworkRowWrittenBeforeLocalBindingReadsAsOff(t *testing.T) {
 	}
 }
 
+// "git push" and "git {push|pull}" are two rules, so a removal that carried only
+// the first alternative of each token would take away the wrong one.
+func TestRemovingARuleWithAlternativesLeavesItsLiteralNamesake(t *testing.T) {
+	s := New()
+	now := time.Now()
+	literal := automode.Rule{Pattern: automode.Tokens("git", "push"), Decision: automode.DecisionAllow}
+	alternatives := automode.Rule{
+		Pattern: []automode.PatternToken{
+			automode.Token("git"), automode.Token("push", "pull"),
+		},
+		Decision: automode.DecisionPrompt,
+	}
+	for _, rule := range []automode.Rule{literal, alternatives} {
+		if _, err := s.AddAutoModeRule(rule, now); err != nil {
+			t.Fatalf("add %s: %v", rule.Describe(), err)
+		}
+	}
+	cfg, err := s.RemoveAutoModeRule(alternatives.Pattern, now)
+	if err != nil {
+		t.Fatalf("remove the alternatives rule: %v", err)
+	}
+	got := ruleLines(userRules(cfg.Rules))
+	if len(got) != 1 || got[0] != "allow git push" {
+		t.Errorf("rules = %v, want only the literal one left", got)
+	}
+}
+
+func TestDismissingALegacyPatternDropsOnlyThatEntry(t *testing.T) {
+	s := New()
+	now := time.Now()
+	if _, err := s.mutateAutoModeConfig(now, func(cfg *automode.Config) error {
+		cfg.LegacyPatterns = []string{"git status*", "*curl*", "ssh prod*"}
+		return nil
+	}); err != nil {
+		t.Fatalf("seed the legacy patterns: %v", err)
+	}
+	cfg, err := s.DismissAutoModeLegacyPattern("*curl*", now)
+	if err != nil {
+		t.Fatalf("dismiss: %v", err)
+	}
+	if strings.Join(cfg.LegacyPatterns, "; ") != "git status*; ssh prod*" {
+		t.Errorf("legacy patterns = %v, want the other two", cfg.LegacyPatterns)
+	}
+	stored, err := s.GetAutoModeConfig()
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	if strings.Join(stored.LegacyPatterns, "; ") != "git status*; ssh prod*" {
+		t.Errorf("stored legacy patterns = %v, want the dismissal persisted", stored.LegacyPatterns)
+	}
+	if _, err := s.DismissAutoModeLegacyPattern("*curl*", now); err == nil {
+		t.Error("dismissing a pattern that is not on the list was accepted")
+	}
+}
+
 func boolPtr(value bool) *bool { return &value }

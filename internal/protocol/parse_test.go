@@ -522,15 +522,31 @@ func TestParseAutoModeSettingsCommands(t *testing.T) {
 			},
 		},
 		{
-			input: `{"cmd":"automode_rule_remove","pattern":["git","push"]}`,
+			input: `{"cmd":"automode_rule_remove","pattern":[["git"],["push","pull"]]}`,
 			cmd:   CmdAutoModeRuleRemove,
 			check: func(t *testing.T, data any) {
 				msg, ok := data.(*AutoModeRuleRemoveMessage)
 				if !ok {
 					t.Fatalf("data type = %T", data)
 				}
-				if strings.Join(msg.Pattern, " ") != "git push" || msg.RequestID != nil {
-					t.Errorf("rule remove = %+v", msg)
+				if len(msg.Pattern) != 2 || strings.Join(msg.Pattern[1], "|") != "push|pull" {
+					t.Errorf("rule remove = %+v, want every alternative carried", msg)
+				}
+				if msg.RequestID != nil {
+					t.Errorf("rule remove request id = %v", msg.RequestID)
+				}
+			},
+		},
+		{
+			input: `{"cmd":"automode_legacy_dismiss","pattern":"*curl*","request_id":"r1"}`,
+			cmd:   CmdAutoModeLegacyDismiss,
+			check: func(t *testing.T, data any) {
+				msg, ok := data.(*AutoModeLegacyDismissMessage)
+				if !ok {
+					t.Fatalf("data type = %T", data)
+				}
+				if msg.Pattern != "*curl*" || Deref(msg.RequestID) != "r1" {
+					t.Errorf("legacy dismiss = %+v", msg)
 				}
 			},
 		},

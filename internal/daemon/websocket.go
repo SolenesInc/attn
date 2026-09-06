@@ -1258,6 +1258,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleAutoModeHostRemoveWS(client, msg.(*protocol.AutoModeHostRemoveMessage))
 	case protocol.CmdAutoModePolicySet: // wire: automode_policy_set
 		d.handleAutoModePolicySetWS(client, msg.(*protocol.AutoModePolicySetMessage))
+	case protocol.CmdAutoModeLegacyDismiss: // wire: automode_legacy_dismiss
+		d.handleAutoModeLegacyDismissWS(client, msg.(*protocol.AutoModeLegacyDismissMessage))
 	case protocol.CmdPtyResize: // wire: pty_resize
 		d.handlePtyResize(client, msg.(*protocol.PtyResizeMessage))
 	case protocol.CmdKillSession: // wire: kill_session

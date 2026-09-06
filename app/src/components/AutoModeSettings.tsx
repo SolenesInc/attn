@@ -106,19 +106,10 @@ export function AutoModeSettings({ policy }: AutoModeSettingsProps) {
               <p className="settings-description">
                 These came from the old glob lists and carried a wildcard no rule
                 can express, so nothing reads them any more. Rewrite each one as
-                a rule above; the entry disappears once its rule is in place.
+                a rule above, then dismiss it to take it off this list.
               </p>
             </div>
-            <div className="automode-editor" data-testid="automode-legacy">
-              <ul className="automode-patterns">
-                {config.legacy_patterns.map((pattern) => (
-                  <li key={pattern} className="automode-pattern-row" data-testid="automode-legacy-entry">
-                    <code className="automode-value">{pattern}</code>
-                    <span className="settings-pill warn">not converted</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <LegacyList patterns={config.legacy_patterns} policy={policy} />
           </>
         )}
 
@@ -306,7 +297,7 @@ function RuleEditor({ config, policy }: RuleEditorProps) {
   const remove = async (rule: AutoModeRuleInfo) => {
     setFailure(null);
     try {
-      await policy.removeRule(rule.pattern.map((alternatives) => alternatives[0]));
+      await policy.removeRule(rule.pattern);
     } catch (err) {
       setFailure(err instanceof Error ? err.message : 'Could not remove the rule');
     }
@@ -476,6 +467,51 @@ function LocalBindingToggle({ config, policy }: HostEditorProps) {
       {failure && (
         <span className="settings-warning" data-testid="automode-network-error">{failure}</span>
       )}
+    </div>
+  );
+}
+
+interface LegacyListProps {
+  patterns: string[];
+  policy: AutoModePolicy;
+}
+
+function LegacyList({ patterns, policy }: LegacyListProps) {
+  const [failure, setFailure] = useState<string | null>(null);
+  const busy = policy.editing !== null;
+
+  const dismiss = async (pattern: string) => {
+    setFailure(null);
+    try {
+      await policy.dismissLegacy(pattern);
+    } catch (err) {
+      setFailure(err instanceof Error ? err.message : 'Could not dismiss the pattern');
+    }
+  };
+
+  return (
+    <div className="automode-editor" data-testid="automode-legacy">
+      <ul className="automode-patterns">
+        {patterns.map((pattern) => (
+          <li key={pattern} className="automode-pattern-row" data-testid="automode-legacy-entry">
+            <span className="automode-rule-subject">
+              <span className="settings-pill warn">not converted</span>
+              <code className="automode-value">{pattern}</code>
+            </span>
+            <button
+              type="button"
+              className="settings-action"
+              data-testid="automode-legacy-dismiss"
+              aria-label={`Dismiss ${pattern}`}
+              disabled={busy}
+              onClick={() => void dismiss(pattern)}
+            >
+              Dismiss
+            </button>
+          </li>
+        ))}
+      </ul>
+      {failure && <span className="settings-warning">{failure}</span>}
     </div>
   );
 }

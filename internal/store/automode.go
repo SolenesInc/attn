@@ -244,6 +244,31 @@ func removeRuleFrom(cfg *automode.Config, pattern []automode.PatternToken) error
 	return nil
 }
 
+// Legacy patterns are a reminder list carried over from the old config: nothing
+// enforces them, so dropping one only takes it off the list.
+func (s *Store) DismissAutoModeLegacyPattern(pattern string, now time.Time) (automode.Config, error) {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return automode.Config{}, fmt.Errorf("dismissing needs the pattern to take off the list")
+	}
+	return s.mutateAutoModeConfig(now, func(cfg *automode.Config) error {
+		kept := make([]string, 0, len(cfg.LegacyPatterns))
+		found := false
+		for _, entry := range cfg.LegacyPatterns {
+			if entry == pattern {
+				found = true
+				continue
+			}
+			kept = append(kept, entry)
+		}
+		if !found {
+			return fmt.Errorf("%q is not in the patterns left to convert", pattern)
+		}
+		cfg.LegacyPatterns = kept
+		return nil
+	})
+}
+
 func (s *Store) AddAutoModeHost(amendment automode.HostAmendment, now time.Time) (automode.Config, error) {
 	amendment.Host = strings.TrimSpace(amendment.Host)
 	if err := automode.ValidateHost(amendment); err != nil {

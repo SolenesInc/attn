@@ -5767,13 +5767,17 @@ model AutoModeEnvironmentSlotValue {
   "values": string[];
 }
 
-// One proposed change awaiting a human. "value" is the rule's JSON for a rule
-// proposal and {"host":..,"decision":..} for a host one, which promotion applies.
+// One proposed change awaiting a human. "kind" says what "value" carries, and
+// promotion applies it as the matching app-only command would:
+//   "rule"        the rule's JSON, {"pattern":..,"decision":..,..}
+//   "rule_remove" {"pattern":..}, the prefix of the rule to take away
+//   "host"        {"host":..,"decision":..}
+//   "host_remove" the same pair, naming the entry to drop
+//   "policy"      {"approval_policy"?,"sandbox_mode"?,"allow_local_binding"?}
 model AutoModeProposalInfo {
   "id": safeint;
-  // "rule" | "host".
   "kind": string;
-  // Always empty: neither kind takes a target.
+  // Always empty: no kind takes a target.
   "target": string;
   "value": string;
   // "value" read back as one line, for a list a human scans.
@@ -5900,10 +5904,11 @@ model AutoModePromoteResultMessage {
   config?: AutoModeConfigInfo;
 }
 
-// Write a rule, a host or the policy itself. Adding is app-only, for the same
-// reason promotion is: a rule decides what a session may do without asking, so
-// only a human at the trust boundary writes one. An agent reaching the unix
-// socket still has nothing but `automode_propose`.
+// Write a rule, a host or the policy itself. Every one of these is app-only,
+// for the same reason promotion is: a rule decides what a session may do
+// without asking, so only a human at the trust boundary writes one. Removal is
+// no different from adding - `attn automode rule remove` on the unix socket
+// records a rule_remove proposal, and a human promotes it here.
 //
 // "pattern" is the command's leading tokens, one token per entry. A removal
 // names the pattern rather than an index, because the list a client renders has
@@ -5919,12 +5924,21 @@ model AutoModeRuleAddMessage {
   request_id: string;
 }
 
-// Removal, unlike adding, also answers on the unix socket, so `attn automode
-// rule remove` can undo what the app wrote. A shipped forbidden rule is what
-// keeps a session from reaching it.
+// App-only, like every other config write: on the unix socket `attn automode
+// rule remove` records a rule_remove proposal instead. "pattern" carries the
+// whole prefix - one entry per token, each the alternatives that token accepts,
+// as AutoModeRuleInfo writes it - because the prefix identifies the rule.
 model AutoModeRuleRemoveMessage {
   cmd: "automode_rule_remove";
-  pattern: string[];
+  pattern: string[][];
+  request_id?: string;
+}
+
+// Drop one entry from legacy_patterns. Nothing enforces those, so this only
+// takes the reminder out of the list once its rule is in place.
+model AutoModeLegacyDismissMessage {
+  cmd: "automode_legacy_dismiss";
+  pattern: string;
   request_id?: string;
 }
 
