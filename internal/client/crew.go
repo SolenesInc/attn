@@ -68,10 +68,12 @@ func (c *Client) CrewRestart(member, requestID string) (*protocol.CrewRestartRes
 		return nil, fmt.Errorf("read the current crew day before restarting it: %w", err)
 	}
 	var expectedSessionID string
+	var expectedRevision int
 	found := false
 	for _, candidate := range roster.Members {
 		if strings.EqualFold(candidate.ID, strings.TrimSpace(member)) {
 			expectedSessionID = protocol.Deref(candidate.BindingSession)
+			expectedRevision = candidate.Revision
 			found = true
 			break
 		}
@@ -79,7 +81,10 @@ func (c *Client) CrewRestart(member, requestID string) (*protocol.CrewRestartRes
 	if !found {
 		return nil, fmt.Errorf("crew member %q is not registered", member)
 	}
-	resp, err := c.send(protocol.CrewRestartMessage{Cmd: protocol.CmdCrewRestart, Member: member, RequestID: requestID, ExpectedSessionID: protocol.Ptr(expectedSessionID)})
+	resp, err := c.send(protocol.CrewRestartMessage{
+		Cmd: protocol.CmdCrewRestart, Member: member, RequestID: requestID,
+		ExpectedSessionID: protocol.Ptr(expectedSessionID), ExpectedRevision: protocol.Ptr(expectedRevision),
+	})
 	if err != nil {
 		return nil, err
 	}
