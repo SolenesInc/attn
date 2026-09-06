@@ -28,6 +28,8 @@ bun smoke.js
 | `classifier-cost.js` | auto-mode classifier latency/cost/quality across candidate models, against an inline prompt |
 | `classifier-verdicts.ts` | what the shipped two-stage classifier decides over the corpus |
 | `stage-one-severities.ts` | what stage 1 grades each case at, which is what a threshold change is measured against |
+| `replay-loop.ts` | replays a denial from the live ledger by timestamp (`bun run replay-loop.ts 2026-09-05T23:08 16 provider/model minimal asis|current`; `current` swaps in the checkout's pass-2 instruction), reporting unreadable answers per run: the receipt behind dropping tagged thinking from pass 2 |
+| `reason-presence.ts` | how often a model returns a native reasoning block, and whether a trailing `<reason>` tag is answered, at a given effort level |
 
 Each scenario writes JSONL to `logs/` and pi session files to `sessions/`, both
 gitignored: the scripts are the gate, what they produce is per-run. Session

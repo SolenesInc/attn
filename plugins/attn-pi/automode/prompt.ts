@@ -64,10 +64,12 @@ export function parseSeverity(text: string): ParsedSeverity | undefined {
   const category = /<category>([a-z0-9 &_-]{1,64})<\/category>/i
     .exec(body)?.[1]
     ?.trim();
+  const reason = /<reason>([\s\S]*?)<\/reason>/.exec(body)?.[1]?.trim();
+  const explanation = reason || thinking;
   return {
     severity,
     ...(category ? { category } : {}),
-    ...(thinking ? { thinking } : {}),
+    ...(explanation ? { thinking: explanation } : {}),
   };
 }
 

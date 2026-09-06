@@ -1,0 +1,3 @@
+kind: fixed
+area: auto mode
+change: Pi auto mode no longer denies harmless calls as "unreadable" when the classifier stops after its thinking block; pass 2 now answers the severity first and a one-sentence reason after, and denial messages keep that reason.
