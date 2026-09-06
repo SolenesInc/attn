@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -112,6 +113,7 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 		CWD:           member.CWD,
 		AwarenessDirs: member.AwarenessDirs,
 	}
+	d.primeCrewGarden(&priming, member.ID)
 	if charter, err := os.ReadFile(member.CharterPath); err == nil {
 		priming.Charter = string(charter)
 	} else if !os.IsNotExist(err) {
@@ -154,6 +156,36 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 		d.logf("crew: reading %s's freshest handoff %s: %v", crew.DisplayName(member.ID), names[0], err)
 	}
 	return priming, nil
+}
+
+// The whole garden, not a page: a claim never expires, so a held seed can outlive any snapshot.
+func (d *Daemon) primeCrewGarden(priming *crew.Priming, memberID string) {
+	read, err := d.readWholeGarden()
+	if err != nil {
+		d.logf("crew: reading the garden to prime %s: %v", crew.DisplayName(memberID), err)
+		return
+	}
+	priming.GardenRead = true
+	held := garden.Held(read.seeds, memberID)
+	priming.HeldTotal = len(held)
+	if len(held) > crew.MaxHeldSeeds {
+		held = held[:crew.MaxHeldSeeds]
+	}
+	for _, seed := range held {
+		entry := crew.HeldSeed{ID: seed.ID, Slug: seed.StepSlug, Title: seed.Title}
+		if handoff := d.gardenHandoff(seed.ID); handoff != nil {
+			entry.Handoff = handoff.Body
+		}
+		priming.Held = append(priming.Held, entry)
+	}
+	for _, plot := range garden.PlotsOf(read.seeds, held) {
+		priming.Plots = append(priming.Plots, crew.PlotReady{
+			ID:    plot.ID,
+			Slug:  plot.StepSlug,
+			Title: plot.Title,
+			Ready: garden.PlotProgress(read.seeds, plot.ID, read.ready).Ready,
+		})
+	}
 }
 
 func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
@@ -391,9 +423,10 @@ func (d *Daemon) crewPrimeForSession(sessionID string) (crew.Member, string, boo
 		if handoff == "" {
 			handoff = "(none)"
 		}
-		d.logf("crew: priming %s for session %s: %d bytes (charter %d, handoff %s %d, older %d)",
+		d.logf("crew: priming %s for session %s: %d bytes (charter %d, handoff %s %d, older %d, garden %d for %d of %d held and %d plots)",
 			crew.DisplayName(member.ID), sessionID, len(block), len(priming.Charter),
-			handoff, len(priming.Handoff), len(priming.OlderHandoffs))
+			handoff, len(priming.Handoff), len(priming.OlderHandoffs),
+			len(priming.GardenSection()), len(priming.Held), priming.HeldTotal, len(priming.Plots))
 		return member, block, true, nil
 	}
 	return crew.Member{}, "", false, nil

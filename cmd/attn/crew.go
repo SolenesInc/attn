@@ -54,9 +54,11 @@ commands:
         start a member's day: a session bound to it, launched in the member's
         own cwd with its awareness dirs, on the harness its record names
         (--agent overrides for this one day), primed with
-        where to read its charter, the freshest letter left for it, and how its
-        home works. A member that is already
-        awake is not woken twice — the answer names the session it is living.
+        where to read its charter, the freshest letter left for it, how its
+        home works, and the seeds it still holds in the garden with their
+        freshest handoff notes and what is ready in their plots. A member that
+        is already awake is not woken twice — the answer names the session it
+        is living.
 
   sleep <member> [--json]
         ask an awake member to write its handoff letter and file it with

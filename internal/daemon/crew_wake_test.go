@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/crew"
+	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -795,5 +797,173 @@ func TestCrewSet_RefusesAnUnknownHarnessAndClearsBackToTheDefault(t *testing.T) 
 	}
 	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").Agent); got != crew.DefaultAgent {
 		t.Errorf("clearing the agent left %q, want %q", got, crew.DefaultAgent)
+	}
+}
+
+func seedGardenForWake(t *testing.T, d *Daemon) map[string]protocol.Seed {
+	t.Helper()
+	d.ensureGardenCollections()
+	addGardenSession(t, d, "sess-planter")
+	planted := map[string]protocol.Seed{}
+	plot := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-planter"), Title: "Finish the garden"})
+	planted["plot"] = plot
+	for _, child := range []struct{ key, title, member string }{
+		{"held-with-note", "Wake priming lists the seeds a member holds", "trellis"},
+		{"held-quiet", "Closing a seed says what it unblocked", "trellis"},
+		{"alders", "Find seeds by keyword from the CLI", "alder"},
+		{"free", "Pending decisions are a visible queue", ""},
+		{"free-two", "Dropping a seed on Growing offers dispatch", ""},
+	} {
+		seed := plant(t, d, protocol.SeedPlantMessage{
+			SourceSessionID: protocol.Ptr("sess-planter"), Title: child.title, PartOf: protocol.Ptr(plot.ID),
+		})
+		if child.member != "" {
+			move(t, d, "", seed.ID, garden.VerbTend, "", child.member)
+		}
+		planted[child.key] = seed
+	}
+	noteHandoff(t, d, planted["held-with-note"].ID, "The tripwires are measured; the daemon adapter is next.", "trellis")
+	return planted
+}
+
+func noteHandoff(t *testing.T, d *Daemon, seedID, body, member string) {
+	t.Helper()
+	msg := protocol.SeedNoteMessage{
+		Cmd: protocol.CmdSeedNote, SeedID: seedID, Body: body,
+		Kind: protocol.Ptr(garden.NoteKindHandoff), Member: protocol.Ptr(member),
+	}
+	resp := gardenCall(t, func(c net.Conn) { d.handleSeedNote(c, &msg) })
+	if !resp.Ok {
+		t.Fatalf("handoff note on %s: %v", seedID, protocol.Deref(resp.Error))
+	}
+}
+
+func TestCrewPrime_AMemberWakesHoldingItsSeedsWithTheirFreshestHandoffs(t *testing.T) {
+	d, _, readLog := newWakeableDaemon(t)
+	planted := seedGardenForWake(t, d)
+
+	result, err := d.crewWake("trellis", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	_, block, _, err := d.crewPrimeForSession(result.SessionID)
+	if err != nil {
+		t.Fatalf("prime: %v", err)
+	}
+
+	for _, want := range []string{
+		"## What you hold in the garden",
+		"`" + planted["held-with-note"].ID + "` wake-priming-lists-seeds-member-holds — Wake priming lists the seeds a member holds",
+		"Freshest handoff: The tripwires are measured; the daemon adapter is next.",
+		"`" + planted["held-quiet"].ID + "` closing-seed-says-what-unblocked — Closing a seed says what it unblocked",
+		"No handoff note yet.",
+		"`" + planted["plot"].ID + "` finish-garden — 2 ready",
+	} {
+		if !strings.Contains(block, want) {
+			t.Errorf("the primed garden section does not carry %q:\n%s", want, block)
+		}
+	}
+	if strings.Contains(block, planted["alders"].ID) {
+		t.Error("Trellis was primed with a seed Alder holds")
+	}
+	if !strings.Contains(readLog(), "held and 1 plots") {
+		t.Errorf("the priming receipt does not size the garden section:\n%s", readLog())
+	}
+}
+
+func TestCrewPrime_AMemberHoldingNothingWakesToOneQuietLine(t *testing.T) {
+	d, _, _ := newWakeableDaemon(t)
+	seedGardenForWake(t, d)
+
+	result, err := d.crewWake("keel", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	_, block, _, err := d.crewPrimeForSession(result.SessionID)
+	if err != nil {
+		t.Fatalf("prime: %v", err)
+	}
+	if !strings.Contains(block, "You hold no seeds in the garden.") {
+		t.Errorf("a member holding nothing was not told so:\n%s", block)
+	}
+}
+
+func TestCrewPrime_PastTheTripwireTheBlockNamesTheLimitAndHowToSeeTheRest(t *testing.T) {
+	d, _, _ := newWakeableDaemon(t)
+	d.ensureGardenCollections()
+	addGardenSession(t, d, "sess-planter")
+	over := crew.MaxHeldSeeds + 3
+	for i := range over {
+		seed := plant(t, d, protocol.SeedPlantMessage{
+			SourceSessionID: protocol.Ptr("sess-planter"), Title: fmt.Sprintf("Held seed number %d", i),
+		})
+		move(t, d, "", seed.ID, garden.VerbTend, "", "trellis")
+	}
+
+	result, err := d.crewWake("trellis", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	_, block, _, err := d.crewPrimeForSession(result.SessionID)
+	if err != nil {
+		t.Fatalf("prime: %v", err)
+	}
+	want := fmt.Sprintf("You hold %d seeds and this block lists the %d you claimed most recently; `attn seed ls --flat` has them all.", over, crew.MaxHeldSeeds)
+	if !strings.Contains(block, want) {
+		t.Errorf("the cut list does not say %q:\n%s", want, block)
+	}
+	if got := strings.Count(block, "Held seed number"); got != crew.MaxHeldSeeds {
+		t.Errorf("the block listed %d held seeds, want the %d the tripwire allows", got, crew.MaxHeldSeeds)
+	}
+}
+
+func TestCrewPrime_AClaimOlderThanAPageOfTheGardenStillWakesWithItsMember(t *testing.T) {
+	d, _, _ := newWakeableDaemon(t)
+	d.ensureGardenCollections()
+	schema, err := d.seedsCollection()
+	if err != nil {
+		t.Fatalf("seedsCollection: %v", err)
+	}
+	planted := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+	oldest := garden.Seed{
+		ID: "s-000000", Title: "The claim nobody released", Status: garden.StatusGrowing,
+		StepSlug: "claim-nobody-released", TenderMember: "trellis",
+		StateChangedAt: planted.Format(time.RFC3339Nano), Edges: []garden.Edge{}, Vars: []garden.Var{},
+	}
+	body, err := oldest.Encode()
+	if err != nil {
+		t.Fatalf("encode seed: %v", err)
+	}
+	if _, err := d.store.PutDocument(*schema, oldest.ID, body, planted, nil); err != nil {
+		t.Fatalf("put seed %s: %v", oldest.ID, err)
+	}
+	for i := 1; i <= docstore.MaxLimit; i++ {
+		id := fmt.Sprintf("s-%06x", i)
+		seed := garden.Seed{
+			ID: id, Title: id, Status: garden.StatusPlanted, StepSlug: id,
+			StateChangedAt: planted.Format(time.RFC3339Nano), Edges: []garden.Edge{}, Vars: []garden.Var{},
+		}
+		newer, err := seed.Encode()
+		if err != nil {
+			t.Fatalf("encode seed %s: %v", id, err)
+		}
+		if _, err := d.store.PutDocument(*schema, id, newer, planted.Add(time.Duration(i)*time.Minute), nil); err != nil {
+			t.Fatalf("put seed %s: %v", id, err)
+		}
+	}
+
+	result, err := d.crewWake("trellis", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	_, block, _, err := d.crewPrimeForSession(result.SessionID)
+	if err != nil {
+		t.Fatalf("prime: %v", err)
+	}
+	if !strings.Contains(block, "`s-000000` claim-nobody-released — The claim nobody released") {
+		t.Errorf("a claim older than one page of the garden was dropped from priming:\n%s", block)
+	}
+	if strings.Contains(block, "You hold no seeds in the garden") {
+		t.Error("a member holding an older claim was told it holds nothing")
 	}
 }

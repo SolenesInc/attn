@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "id": "crew-garden-empty",
+  "description": "A member waking with nothing claimed.",
+  "recipient": "crew",
+  "event": "garden",
+  "values": {
+    "garden_read": "true",
+    "held_seeds": "",
+    "held_total": "",
+    "held_limit": "0",
+    "plot_ready": ""
+  }
+}

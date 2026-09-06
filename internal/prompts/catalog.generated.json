@@ -935,6 +935,194 @@
           }
         },
         {
+          "id": "trimmed-note",
+          "delivery": "message_fragment",
+          "description": "The adapter cuts a seed's handoff note at a UTF-8 boundary; the catalog adds the command for the whole note.",
+          "body": {
+            "kind": "text",
+            "id": "crew.trimmed-note",
+            "source": "content/crew/trimmed-note.md",
+            "bindings": [
+              {
+                "name": "text",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "text",
+                    "kind": "text",
+                    "description": "Bounded note."
+                  }
+                }
+              },
+              {
+                "name": "limit",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "limit",
+                    "kind": "text",
+                    "description": "Priming budget in bytes."
+                  }
+                }
+              },
+              {
+                "name": "total",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "total",
+                    "kind": "text",
+                    "description": "Original bytes."
+                  }
+                }
+              },
+              {
+                "name": "seed",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "seed",
+                    "kind": "text",
+                    "description": "Seed the note belongs to."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "garden",
+          "delivery": "message_fragment",
+          "description": "internal/crew.Priming.GardenSection: the seeds the member holds. The adapter reads the garden, applies the held-seed tripwire and bounds each handoff note.",
+          "body": {
+            "kind": "when",
+            "condition": {
+              "field": {
+                "name": "garden_read",
+                "kind": "flag",
+                "description": "The garden was readable when the member woke."
+              },
+              "test": "enabled"
+            },
+            "children": [
+              {
+                "kind": "choose",
+                "condition": {
+                  "field": {
+                    "name": "held_seeds",
+                    "kind": "text",
+                    "description": "Held seeds with their freshest handoff notes, one entry per blank-line-separated block."
+                  },
+                  "test": "present"
+                },
+                "children": [
+                  {
+                    "kind": "compose",
+                    "children": [
+                      {
+                        "kind": "text",
+                        "id": "crew.garden",
+                        "source": "content/crew/garden.md",
+                        "bindings": [
+                          {
+                            "name": "held_seeds",
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "held_seeds",
+                                "kind": "text",
+                                "description": "Held seeds with their freshest handoff notes, one entry per blank-line-separated block."
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "when",
+                        "condition": {
+                          "field": {
+                            "name": "held_total",
+                            "kind": "text",
+                            "description": "How many seeds the member holds; blank unless the list was cut."
+                          },
+                          "test": "present"
+                        },
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "crew.garden-more",
+                            "source": "content/crew/garden-more.md",
+                            "bindings": [
+                              {
+                                "name": "held_total",
+                                "node": {
+                                  "kind": "input",
+                                  "field": {
+                                    "name": "held_total",
+                                    "kind": "text",
+                                    "description": "How many seeds the member holds; blank unless the list was cut."
+                                  }
+                                }
+                              },
+                              {
+                                "name": "held_limit",
+                                "node": {
+                                  "kind": "input",
+                                  "field": {
+                                    "name": "held_limit",
+                                    "kind": "text",
+                                    "description": "How many held seeds this block lists."
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "when",
+                        "condition": {
+                          "field": {
+                            "name": "plot_ready",
+                            "kind": "text",
+                            "description": "One line per plot with its ready count."
+                          },
+                          "test": "present"
+                        },
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "crew.garden-plots",
+                            "source": "content/crew/garden-plots.md",
+                            "bindings": [
+                              {
+                                "name": "plot_ready",
+                                "node": {
+                                  "kind": "input",
+                                  "field": {
+                                    "name": "plot_ready",
+                                    "kind": "text",
+                                    "description": "One line per plot with its ready count."
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "text",
+                    "id": "crew.garden-empty",
+                    "source": "content/crew/garden-empty.md"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
           "id": "priming",
           "delivery": "launch_instructions",
           "description": "internal/crew.Priming.Block: appended to launch instructions. The adapter prepares paths, display name and bounded handoff text.",
@@ -1192,6 +1380,31 @@
                         }
                       }
                     ]
+                  }
+                ]
+              },
+              {
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "garden_holdings",
+                    "kind": "text",
+                    "description": "Rendered garden holdings, supplied by internal/crew.",
+                    "trim_space": true,
+                    "from": "crew/garden"
+                  },
+                  "test": "present"
+                },
+                "children": [
+                  {
+                    "kind": "input",
+                    "field": {
+                      "name": "garden_holdings",
+                      "kind": "text",
+                      "description": "Rendered garden holdings, supplied by internal/crew.",
+                      "trim_space": true,
+                      "from": "crew/garden"
+                    }
                   }
                 ]
               },
@@ -5505,5 +5718,5 @@
       ]
     }
   ],
-  "definitions_hash": "f11b94dd3f06025911e4ddd0b7029fa0aa1ab09823473cf1413f26cbca8cad99"
+  "definitions_hash": "710a4e7fc998544624747966b886c8757c5df93875978cd465c3a02df7f5bca8"
 }

@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "id": "crew-garden-holdings",
+  "description": "A member waking to more held seeds than the block lists.",
+  "recipient": "crew",
+  "event": "garden",
+  "values": {
+    "garden_read": "true",
+    "held_seeds": "`s-7k3f9m` mermaid-rendered-grid — Mermaid diagrams render in the grid\nFreshest handoff: The renderer is wired; the grid still measures the old height. Start at the layout pass.\n\n`s-2q41xd` seed-search — Find seeds by keyword from the CLI\nNo handoff note yet.",
+    "held_total": "12",
+    "held_limit": "10",
+    "plot_ready": "- `s-dssvxq` finish-garden — 4 ready"
+  }
+}
