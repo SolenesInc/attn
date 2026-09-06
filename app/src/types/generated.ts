@@ -8386,6 +8386,7 @@ export enum SessionCloseResultMessageEvent {
 
 export interface SessionClosedMessage {
     event:                SessionClosedMessageEvent;
+    reopen?:              Reopen;
     session_ledger_entry: Entry;
     [property: string]: any;
 }
@@ -9548,6 +9549,7 @@ export interface WebSocketEvent {
     rate_limit_resource?:       string;
     reason?:                    string;
     recent_locations?:          RecentLocationElement[];
+    reopen?:                    Reopen;
     repos?:                     RepoElement[];
     request_id?:                string;
     rows?:                      number;
@@ -20647,6 +20649,7 @@ const typeMap: any = {
     ], "any"),
     "SessionClosedMessage": o([
         { json: "event", js: "event", typ: r("SessionClosedMessageEvent") },
+        { json: "reopen", js: "reopen", typ: u(undefined, r("Reopen")) },
         { json: "session_ledger_entry", js: "session_ledger_entry", typ: r("Entry") },
     ], "any"),
     "SessionContextWindowCapResultMessage": o([
@@ -21338,6 +21341,7 @@ const typeMap: any = {
         { json: "rate_limit_resource", js: "rate_limit_resource", typ: u(undefined, "") },
         { json: "reason", js: "reason", typ: u(undefined, "") },
         { json: "recent_locations", js: "recent_locations", typ: u(undefined, a(r("RecentLocationElement"))) },
+        { json: "reopen", js: "reopen", typ: u(undefined, r("Reopen")) },
         { json: "repos", js: "repos", typ: u(undefined, a(r("RepoElement"))) },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "rows", js: "rows", typ: u(undefined, 0) },

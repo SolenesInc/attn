@@ -66,7 +66,7 @@ import {
   type WorkspaceSelectionStyle,
 } from './utils/workspaceSelectionStyle';
 import { useDaemonSocket, DaemonWorktree, DaemonSession, DaemonWorkspace, DaemonPR, DaemonEndpoint, DaemonPlugin, DaemonPluginIssue, GitStatusUpdate, SessionExitInfo, CriticalNotificationState, type SeedReviewActionContext } from './hooks/useDaemonSocket';
-import type { Presentation, SessionLedgerEntry } from './types/generated';
+import type { Presentation, SessionLedgerEntry, SessionReopen } from './types/generated';
 import { useSessionWorkspaceController } from './hooks/useSessionWorkspaceController';
 import { useGardenPresentation } from './hooks/useGardenPresentation';
 import { isAttentionSessionState, normalizeSessionState, type UISessionState } from './types/sessionState';
@@ -457,7 +457,7 @@ function App() {
 
   const [presentationNotices, setPresentationNotices] = useState<Presentation[]>([]);
   const [sessionCloseNotice, setSessionCloseNotice] =
-    useState<{ entry: SessionLedgerEntry; nonce: number }>();
+    useState<{ entry: SessionLedgerEntry; reopen?: SessionReopen; nonce: number }>();
 
   const {
     daemonSessions,
@@ -618,7 +618,7 @@ function App() {
     onWorktreesUpdate: setWorktrees,
     onGitStatusUpdate: setGitStatus,
     onSessionExited: handleSessionExited,
-    onSessionClosed: (entry) => setSessionCloseNotice((prev) => ({ entry, nonce: (prev?.nonce ?? 0) + 1 })),
+    onSessionClosed: (entry, reopen) => setSessionCloseNotice((prev) => ({ entry, reopen, nonce: (prev?.nonce ?? 0) + 1 })),
   });
 
   const {
@@ -733,7 +733,7 @@ interface AppContentProps {
   fsChangeSignals: Record<string, number>;
   notebookTaskChangeSignal: number;
   clearGitStatus: () => void;
-  sessionCloseNotice?: { entry: SessionLedgerEntry; nonce: number };
+  sessionCloseNotice?: { entry: SessionLedgerEntry; reopen?: SessionReopen; nonce: number };
   registerSessionExitHandler: (handler: ((info: SessionExitInfo) => void) | null) => void;
 }
 

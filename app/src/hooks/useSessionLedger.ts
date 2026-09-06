@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import type { SessionLedgerEntry, SessionLedgerFacets } from '../types/generated';
+import type { SessionLedgerEntry, SessionLedgerFacets, SessionReopen } from '../types/generated';
 import type { SessionLedgerPage, SessionLedgerQuery } from './daemonSessionLedgerEvents';
 import {
   customSessionRange,
   isRangeError,
   ledgerInstant,
+  reopenVerdictView,
   reopenVerdictsById,
   sessionRangeWindow,
 } from '../components/sessionsLedger';
@@ -55,7 +56,7 @@ export interface SessionLedgerView {
   filterError: string | null;
   reload: () => void;
   loadMore: () => void;
-  recordClose: (entry: SessionLedgerEntry) => void;
+  recordClose: (entry: SessionLedgerEntry, reopen?: SessionReopen) => void;
 }
 
 export function sessionLedgerQuery(
@@ -174,7 +175,7 @@ export function useSessionLedger({
       });
   }, [nextBefore, loadingMore, filterError, list, pageSize, now]);
 
-  const recordClose = useCallback((entry: SessionLedgerEntry) => {
+  const recordClose = useCallback((entry: SessionLedgerEntry, reopen?: SessionReopen) => {
     // Read outside the updater: React may replay one, and the clock would move under it.
     const dropsFromView = filtersRef.current.scope === 'live';
     const belongs = closeBelongsInView(entry, filtersRef.current, now());
@@ -188,6 +189,7 @@ export function useSessionLedger({
       if (!belongs) return current;
       return [entry, ...current];
     });
+    if (reopen) setVerdicts((current) => ({ ...current, [entry.id]: reopenVerdictView(reopen) }));
   }, [now]);
 
   return {

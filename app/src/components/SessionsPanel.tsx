@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
-import type { SessionLedgerEntry } from '../types/generated';
+import type { SessionLedgerEntry, SessionReopen } from '../types/generated';
 import type { SessionLedgerPage, SessionLedgerQuery } from '../hooks/daemonSessionLedgerEvents';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { useSessionLedger } from '../hooks/useSessionLedger';
@@ -32,7 +32,7 @@ export interface SessionsPanelProps {
   onOpenSeed?: (seedId: string) => void;
   onReopen?: (sessionId: string, actionId: string) => void;
   /** The nonce makes a repeat close of the same session a new notice. */
-  closeNotice?: { entry: SessionLedgerEntry; nonce: number };
+  closeNotice?: { entry: SessionLedgerEntry; reopen?: SessionReopen; nonce: number };
   now?: () => Date;
 }
 
@@ -76,7 +76,7 @@ function OpenSessionsPanel({
   const { recordClose } = ledger;
   useEffect(() => {
     if (!closeNotice) return;
-    recordClose(closeNotice.entry);
+    recordClose(closeNotice.entry, closeNotice.reopen);
   }, [closeNotice, recordClose]);
 
   const selected = entries.find((entry) => entry.id === selectedId) ?? entries[0] ?? null;

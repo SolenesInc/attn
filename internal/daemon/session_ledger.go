@@ -164,5 +164,6 @@ func projectSessionClosed(d *Daemon, event bus.Event) {
 	d.wsHub.Broadcast(&protocol.WebSocketEvent{
 		Event:              protocol.EventSessionClosed,
 		SessionLedgerEntry: &entry,
+		Reopen:             d.reopenVerdictForEntry(&entry).toProtocol(),
 	})
 }

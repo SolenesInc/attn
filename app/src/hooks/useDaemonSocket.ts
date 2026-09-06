@@ -43,6 +43,7 @@ import type {
   GardenReview as GeneratedGardenReview,
   SeedSendToChiefResult as GeneratedSeedSendToChiefResult,
   SessionLedgerEntry,
+  SessionReopen,
 } from '../types/generated';
 import type { SessionMessageWindowStatus } from './daemonSessionAnnotationEvents';
 import { noteTerminalInputTransport } from '../utils/terminalInputDiagnostics';
@@ -579,7 +580,7 @@ export interface RecentFile {
 interface UseDaemonSocketOptions {
   onSessionsUpdate: (sessions: DaemonSession[]) => void;
   onNotebookChanged?: (origin: string, paths: string[]) => void;
-  onSessionClosed?: (entry: SessionLedgerEntry) => void;
+  onSessionClosed?: (entry: SessionLedgerEntry, reopen?: SessionReopen) => void;
   onTasksChanged?: () => void;
   onNotificationsUpdated?: (unreadCount: number, critical: CriticalNotificationState) => void;
   onFsChanged?: (origin: string, paths: string[], root: string) => void;

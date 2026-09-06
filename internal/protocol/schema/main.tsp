@@ -6982,6 +6982,8 @@ model SessionShowResultMessage {
 model SessionClosedMessage {
   event: "session_closed";
   session_ledger_entry: SessionLedgerEntry;
+  // So a surface that updates in place judges the new row without a re-list.
+  reopen?: SessionReopen;
 }
 
 // Result of notification_mark_read. unread_count is the post-mark count so the
@@ -7210,6 +7212,7 @@ model WebSocketEvent {
   plugin_issues?: PluginIssue[];
   operation?: GitOperation;
   session_ledger_entry?: SessionLedgerEntry;
+  reopen?: SessionReopen;
   branches?: Branch[];
   recent_locations?: RecentLocation[];
   settings?: Record<string>;

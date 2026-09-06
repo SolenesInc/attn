@@ -327,7 +327,7 @@ var factsWithoutWire = map[string]string{
 	FactTicketAssigned:               ticketFactsHaveNoClient,
 	FactTicketAttached:               ticketFactsHaveNoClient,
 	FactTicketChanged:                ticketFactsHaveNoClient,
-	FactSessionReopenRefreshed:       "the Sessions surface renders the verdict column but nothing feeds it yet; wiring it adds the projection, and until then session_show serves the refreshed verdict on demand",
+	FactSessionReopenRefreshed:       "the Sessions panel fills its verdict column from the page it read and from the close event; a row still checking a branch sharpens on the next page read, and a live projection lands with reopening from the surface",
 }
 
 const ticketFactsHaveNoClient = "no WebSocket client renders a ticket; the read verbs and subscribing apps read these off the durable log"

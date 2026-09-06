@@ -8306,6 +8306,9 @@ type SessionClosedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
+	// Reopen corresponds to the JSON schema field "reopen".
+	Reopen *SessionReopen `json:"reopen,omitempty,omitzero"`
+
 	// SessionLedgerEntry corresponds to the JSON schema field "session_ledger_entry".
 	SessionLedgerEntry SessionLedgerEntry `json:"session_ledger_entry"`
 }
@@ -9980,6 +9983,9 @@ type WebSocketEvent struct {
 
 	// RecentLocations corresponds to the JSON schema field "recent_locations".
 	RecentLocations []RecentLocation `json:"recent_locations,omitempty,omitzero"`
+
+	// Reopen corresponds to the JSON schema field "reopen".
+	Reopen *SessionReopen `json:"reopen,omitempty,omitzero"`
 
 	// Repos corresponds to the JSON schema field "repos".
 	Repos []RepoState `json:"repos,omitempty,omitzero"`

@@ -219,4 +219,30 @@ describe('SessionsPanel live closes', () => {
     expect(screen.getByText('closed')).toBeTruthy();
     expect(screen.getByText(/closed by you: work finished/)).toBeTruthy();
   });
+
+  it('judges a row that closed while the panel was open, without re-listing', async () => {
+    const page: SessionLedgerPage = { entries: [liveEntry('s1')], omitted: 0 };
+    const list = vi.fn(async () => page);
+    const view = render(
+      <SessionsPanel isOpen onClose={() => {}} listSessions={list} now={now} />,
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Focus' })).toBeTruthy());
+    view.rerender(
+      <SessionsPanel
+        isOpen
+        onClose={() => {}}
+        listSessions={list}
+        now={now}
+        closeNotice={{
+          entry: closedEntry('s1'),
+          reopen: judged('s1', { reason: 'the worktree is still there' }).reopen,
+          nonce: 1,
+        }}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('the worktree is still there')).toBeTruthy());
+    expect(list).toHaveBeenCalledTimes(1);
+  });
 });

@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func sessionListResult(t *testing.T, d *Daemon, msg protocol.SessionListMessage) protocol.SessionListResult {
@@ -206,5 +208,38 @@ func TestAPageAnswersBeforeTheBranchCheckAndSharpensAfterIt(t *testing.T) {
 	}
 	if state := protocol.Deref(second.BranchState); state != branchStateLocal {
 		t.Errorf("branch_state = %q, want %q once the check landed", state, branchStateLocal)
+	}
+}
+
+func TestAClosingRowReachesTheAppAlreadyJudged(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	t.Cleanup(d.stopEventBus)
+	var pushed []*protocol.WebSocketEvent
+	d.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) { pushed = append(pushed, event) }
+	directory := t.TempDir()
+	addLedgerTestSession(t, d, "closing", directory)
+	entry := protocol.SessionLedgerEntry{
+		ID: "closing", Label: "closing", Agent: string(protocol.SessionAgentClaude),
+		Directory: directory, WorkspaceID: "ws-closing", State: protocol.SessionStateIdle,
+		LastSeen: protocol.TimestampNow().String(),
+		ClosedAt: protocol.Ptr(protocol.NewTimestamp(time.Now()).String()),
+		ClosedBy: protocol.Ptr(store.SessionClosedByUser),
+	}
+	payload, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("marshal the closed row: %v", err)
+	}
+
+	projectSessionClosed(d, bus.Event{Name: FactSessionClosed, Subject: "closing", Payload: payload})
+
+	if len(pushed) != 1 || pushed[0].Reopen == nil {
+		t.Fatalf("broadcast %d events, want one session_closed carrying a verdict", len(pushed))
+	}
+	if pushed[0].Reopen.DirectoryState != directoryPresent {
+		t.Errorf("the row reached the app judged %s, want %s: its directory is still there",
+			pushed[0].Reopen.DirectoryState, directoryPresent)
+	}
+	if len(pushed[0].Reopen.Actions) == 0 {
+		t.Errorf("the row reached the app with no way back: %+v", pushed[0].Reopen)
 	}
 }
