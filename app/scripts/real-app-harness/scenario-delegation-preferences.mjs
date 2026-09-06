@@ -105,6 +105,10 @@ try {
     const found = roles();
     runner.assert(found.roles.length === 1 && found.roles[0].id === 'build', 'only the configured role is available');
     await click('.delegation-tabs button:first-child');
+    for (const name of ['Verify', 'Orchestrator']) {
+      runner.assert((await text()).includes(name), `${name} is available as a starter role`);
+    }
+    await client.request('dom_scroll_into_view', { selector: '[aria-label="Edit Orchestrator"]' });
     await screenshot('02-roles.png'); await hold();
     await click('.delegation-tabs button:last-child');
     await select('.delegation-fields > label:first-child select', 'codex');
@@ -163,7 +167,7 @@ try {
     await until(() => roles().roles.length === 0, 'roles hidden');
     await hold();
     await click(`${root} .delegation-switch input`);
-    await until(() => roles().roles.length === 2, 'saved roles restored');
+    await until(() => roles().roles.length === before.roles.length, 'saved roles restored');
     runner.writeJson('roles.json', roles());
     await screenshot('05-restored.png'); await hold();
   });

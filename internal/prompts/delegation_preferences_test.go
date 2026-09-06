@@ -33,7 +33,7 @@ func TestDelegationRolesIncludesAllChoicesAndRevision(t *testing.T) {
 	roles[2].Instructions = "Verify {{literal}} without expanding it"
 	roles[2].Choices = append(roles[2].Choices, protocol.DelegationChoice{ID: "hard", Name: "Demanding", When: "Hard verification", Selection: protocol.DelegationSelection{Harness: "pi", Provider: "example", Model: "custom", Effort: "high"}})
 	output := DelegationRolesText(protocol.DelegationRolesResult{Revision: 7, Roles: roles, Guidance: DelegationRoutingGuidance(7)})
-	for _, expected := range []string{"Scout", "Design", "Build", "Ship", "Review", "Hard verification", "example", "custom", "{{literal}}", "--preferences-revision 7"} {
+	for _, expected := range []string{"Scout", "Design", "Build", "Ship", "Review", "Verify", "Orchestrator", "Hard verification", "example", "custom", "{{literal}}", "--preferences-revision 7"} {
 		if !strings.Contains(output, expected) {
 			t.Errorf("missing %q", expected)
 		}
@@ -53,5 +53,26 @@ func TestDelegationRolesIncludesAllChoicesAndRevision(t *testing.T) {
 	empty := DelegationRolesText(protocol.DelegationRolesResult{})
 	if strings.Contains(empty, "enabled") || strings.Contains(empty, "disabled") || !strings.Contains(empty, "Settings > Delegation") {
 		t.Fatal(empty)
+	}
+}
+
+func TestDelegationTemplatesKeepSelectionsUserOwned(t *testing.T) {
+	roles := DelegationRoleTemplates()
+	for _, role := range roles {
+		for _, choice := range role.Choices {
+			if choice.Selection != (protocol.DelegationSelection{}) {
+				t.Fatalf("preset %s selects a harness or model for the user: %+v", role.ID, choice.Selection)
+			}
+		}
+		opening := DelegationOpeningWithGuidance("Exercise the agreed behavior.", DelegationExecutionGuidance(role.Name, role.Instructions, role.StoppingPoint))
+		if !strings.Contains(opening, role.Instructions) || !strings.Contains(opening, role.StoppingPoint) {
+			t.Fatalf("preset %s lost guidance in the delegated opening", role.ID)
+		}
+	}
+	roles[0].Choices[0].Selection.Model = "user-model"
+	roles[0].Instructions = "User instructions"
+	fresh := DelegationRoleTemplates()
+	if fresh[0].Choices[0].Selection.Model != "" || fresh[0].Instructions == "User instructions" {
+		t.Fatal("editing a preset changed later template reads")
 	}
 }

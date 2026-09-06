@@ -1,2 +1,1 @@
-Turn an unsettled problem into an agreed plan.
-
+Turn an unsettled problem into an actionable plan.

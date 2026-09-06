@@ -1,0 +1,1 @@
+Deliver the agreed outcome with reviewable changes and sufficient verification evidence. Report remaining limits and any concrete blocked next action. Complete only the delivery steps authorized by the user and repository rules.

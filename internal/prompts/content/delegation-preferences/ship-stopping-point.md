@@ -1,2 +1,1 @@
-Complete every authorized delivery step. If a remaining step needs authorization, prepare the concrete action and ask for it.
-
+Complete every authorized delivery step. Report the revision, delivery status, verification evidence, and remaining gates. If the next step needs authorization, prepare the concrete action before asking.

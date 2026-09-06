@@ -1,0 +1,4 @@
+kind: added
+area: delegation
+change: Add Verify and Orchestrator starter roles and clarify handoffs across delegation presets.
+notes: Design can pause for discussion of alternative approaches before detailed planning. Verification evidence is reused when it still applies. Existing saved roles and model choices are preserved.

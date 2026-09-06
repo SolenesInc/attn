@@ -8,6 +8,16 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
+var delegationRoleSpecs = []struct{ id, name, icon string }{
+	{"scout", "Scout", "search"},
+	{"design", "Design", "diamond"},
+	{"build", "Build", "code"},
+	{"ship", "Ship", "arrow"},
+	{"review", "Review", "list"},
+	{"verify", "Verify", "circle"},
+	{"orchestrator", "Orchestrator", "spark"},
+}
+
 func delegationPreferencesRecipient() Recipient {
 	fields := func(names ...string) []Field {
 		out := []Field{}
@@ -31,9 +41,9 @@ func delegationPreferencesRecipient() Recipient {
 	} {
 		events = append(events, On(spec.id, "message_fragment", "Delegation preference guidance supplied on demand.", template("delegation-preferences."+spec.id, "content/delegation-preferences/"+spec.id+".md", fields(spec.names...)...)))
 	}
-	for _, role := range []string{"scout", "design", "build", "ship", "review"} {
+	for _, role := range delegationRoleSpecs {
 		for _, field := range []string{"description", "instructions", "stopping-point"} {
-			id := role + "-" + field
+			id := role.id + "-" + field
 			events = append(events, On(id, "message_fragment", "Editable starting guidance for a delegation role.", Use("delegation-preferences."+id, "content/delegation-preferences/"+id+".md")))
 		}
 	}
@@ -50,7 +60,7 @@ func preferenceText(event string, values Values) string {
 
 func DelegationRoleTemplates() []protocol.DelegationRole {
 	result := []protocol.DelegationRole{}
-	for _, item := range []struct{ id, name, icon string }{{"scout", "Scout", "search"}, {"design", "Design", "diamond"}, {"build", "Build", "code"}, {"ship", "Ship", "arrow"}, {"review", "Review", "list"}} {
+	for _, item := range delegationRoleSpecs {
 		result = append(result, protocol.DelegationRole{ID: item.id, Name: item.name, Icon: item.icon, Enabled: true, Description: preferenceText(item.id+"-description", nil), Instructions: preferenceText(item.id+"-instructions", nil), StoppingPoint: preferenceText(item.id+"-stopping-point", nil), DefaultChoiceID: "default", Choices: []protocol.DelegationChoice{{ID: "default", Name: "Default"}}})
 	}
 	return result

@@ -1,2 +1,1 @@
-Carry agreed work through its delivery gates.
-
+Carry agreed work through its authorized delivery gates.

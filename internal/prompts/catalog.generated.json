@@ -3575,6 +3575,66 @@
             "id": "delegation-preferences.review-stopping-point",
             "source": "content/delegation-preferences/review-stopping-point.md"
           }
+        },
+        {
+          "id": "verify-description",
+          "delivery": "message_fragment",
+          "description": "Editable starting guidance for a delegation role.",
+          "body": {
+            "kind": "text",
+            "id": "delegation-preferences.verify-description",
+            "source": "content/delegation-preferences/verify-description.md"
+          }
+        },
+        {
+          "id": "verify-instructions",
+          "delivery": "message_fragment",
+          "description": "Editable starting guidance for a delegation role.",
+          "body": {
+            "kind": "text",
+            "id": "delegation-preferences.verify-instructions",
+            "source": "content/delegation-preferences/verify-instructions.md"
+          }
+        },
+        {
+          "id": "verify-stopping-point",
+          "delivery": "message_fragment",
+          "description": "Editable starting guidance for a delegation role.",
+          "body": {
+            "kind": "text",
+            "id": "delegation-preferences.verify-stopping-point",
+            "source": "content/delegation-preferences/verify-stopping-point.md"
+          }
+        },
+        {
+          "id": "orchestrator-description",
+          "delivery": "message_fragment",
+          "description": "Editable starting guidance for a delegation role.",
+          "body": {
+            "kind": "text",
+            "id": "delegation-preferences.orchestrator-description",
+            "source": "content/delegation-preferences/orchestrator-description.md"
+          }
+        },
+        {
+          "id": "orchestrator-instructions",
+          "delivery": "message_fragment",
+          "description": "Editable starting guidance for a delegation role.",
+          "body": {
+            "kind": "text",
+            "id": "delegation-preferences.orchestrator-instructions",
+            "source": "content/delegation-preferences/orchestrator-instructions.md"
+          }
+        },
+        {
+          "id": "orchestrator-stopping-point",
+          "delivery": "message_fragment",
+          "description": "Editable starting guidance for a delegation role.",
+          "body": {
+            "kind": "text",
+            "id": "delegation-preferences.orchestrator-stopping-point",
+            "source": "content/delegation-preferences/orchestrator-stopping-point.md"
+          }
         }
       ]
     },
@@ -5445,5 +5505,5 @@
       ]
     }
   ],
-  "definitions_hash": "0ab0d16939fae3c83748a21cd79ad84e0e5553761efe81884cb42e8f84e794e6"
+  "definitions_hash": "f11b94dd3f06025911e4ddd0b7029fa0aa1ab09823473cf1413f26cbca8cad99"
 }
