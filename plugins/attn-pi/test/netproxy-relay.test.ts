@@ -398,6 +398,8 @@ class CollectingDelegate implements RelayDelegate {
   async suiteReportDenial(): Promise<void> {}
   async suiteReportInputTaken(): Promise<void> {}
   async suiteReportPullRequest(): Promise<void> {}
+  async suiteReportExecPolicyAmendment(): Promise<void> {}
+  async suiteReportNetworkAmendment(): Promise<void> {}
 }
 
 async function connectedSuite(

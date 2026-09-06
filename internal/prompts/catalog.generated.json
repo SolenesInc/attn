@@ -3991,6 +3991,58 @@
       ]
     },
     {
+      "id": "pi-guardian",
+      "description": "Guardian reviewer for auto mode. It judges one planned action against the security policy and answers allow or deny.",
+      "events": [
+        {
+          "id": "system",
+          "delivery": "system_prompt",
+          "description": "The guardian's whole system prompt; the security policy carries the configured environment.",
+          "body": {
+            "kind": "join",
+            "separator": "\n\n",
+            "children": [
+              {
+                "kind": "text",
+                "id": "pi-guardian.policy-template",
+                "source": "content/pi/guardian/policy-template.md",
+                "bindings": [
+                  {
+                    "name": "policy",
+                    "node": {
+                      "kind": "text",
+                      "id": "pi-guardian.policy",
+                      "source": "content/pi/guardian/policy.md",
+                      "bindings": [
+                        {
+                          "name": "environment",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "environment",
+                              "kind": "text",
+                              "description": "Environment rendered from configured slots and notes by Pi.",
+                              "from": "pi-environment/render"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "id": "pi-guardian.output-contract",
+                "source": "content/pi/guardian/output-contract.md",
+                "keep_final_newline": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": "authoring-agent",
       "description": "Agent-facing guidance loaded from CLI output or a generated project file.",
       "events": [
@@ -4975,5 +5027,5 @@
       ]
     }
   ],
-  "definitions_hash": "8a14b2fac382fd9e70b68bb2570f464e675585603e3ea4ef612aa0340cb372eb"
+  "definitions_hash": "ce9c238e862950cb10e79a945b931b284677b3d29af3792f688ce705d5fba7b0"
 }

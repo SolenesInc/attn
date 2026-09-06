@@ -82,7 +82,7 @@ test("cache controls and permission prompts take effect in the same session", as
   const notices: string[] = [];
   const ctx = { cwd: join(root, "project"), ui: { setStatus() {}, notify: (text: string) => notices.push(text) } };
   let available = true;
-  const security = new PiSecurity(configPath, async () => undefined, () => available);
+  const security = new PiSecurity(configPath, undefined, undefined, () => available);
   security.register({ on: (name: string, handler: any) => handlers.set(name, handler), registerCommand: (name: string, command: any) => commands.set(name, command), registerTool: (tool: any) => tools.set(tool.name, tool) } as never);
   cleanups.unshift(async () => handlers.get("session_shutdown")({}, ctx));
   await handlers.get("session_start")({}, ctx);

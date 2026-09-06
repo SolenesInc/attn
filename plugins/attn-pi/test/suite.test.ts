@@ -119,6 +119,14 @@ class RecordingDelegate implements RelayDelegate {
 
   async suiteReportSessionFile(params: unknown): Promise<void> {
     this.calls.push({ method: relayMethods.reportSessionFile, params });
+}
+
+  async suiteReportExecPolicyAmendment(params: unknown): Promise<void> {
+    this.calls.push({ method: relayMethods.reportExecPolicyAmendment, params });
+  }
+
+  async suiteReportNetworkAmendment(params: unknown): Promise<void> {
+    this.calls.push({ method: relayMethods.reportNetworkAmendment, params });
   }
 }
 

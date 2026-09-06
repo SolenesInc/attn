@@ -34,7 +34,7 @@ async function fixture(mode = "tui") {
       panel = make({ terminal: { get rows() { return rows; } }, requestRender() {} }, theme, {}, () => { closed = true; resolve(); });
     }),
   } };
-  const security = new PiSecurity(configPath, async () => undefined, () => available);
+  const security = new PiSecurity(configPath, undefined, undefined, () => available);
   security.register({ on: (name: string, handler: any) => handlers.set(name, handler), registerCommand: (name: string, command: any) => commands.set(name, command), registerTool: (tool: any) => tools.set(tool.name, tool) } as never);
   cleanups.push(async () => { await handlers.get("session_shutdown")({}, ctx); rmSync(root, { recursive: true, force: true }); });
   await handlers.get("session_start")({}, ctx);

@@ -9,8 +9,9 @@ import { CredentialFilter, FilteredStream } from "./filter";
 import { SandboxedFilesystem } from "./filesystem";
 import { assertPath, type SecurityPolicy } from "./policy";
 import { bashSandbox, sandboxEnvironment, shellQuote } from "./sandbox";
-import { Type } from "typebox";
-import { reviewUnavailable, sandboxRecovery, sandboxRequestSchema, scopedPolicy, type SandboxReview } from "./recovery";
+import { sandboxRecovery } from "./recovery";
+import { bashParameterSchema } from "../sandbox/index";
+import type { BashApproval } from "../approval/index";
 import type { ToolExecutionCheck } from "../automode/index";
 
 export function protectedBash(policy: SecurityPolicy, filter: CredentialFilter, reviewAvailable = () => false): BashOperations {
@@ -49,46 +50,39 @@ export function protectedBash(policy: SecurityPolicy, filter: CredentialFilter, 
   };
 }
 
-export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter, fs: SandboxedFilesystem, review?: SandboxReview, reviewAvailable = () => !!review, checkExecution?: ToolExecutionCheck): ToolDefinition[] {
+export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter, fs: SandboxedFilesystem, approval?: BashApproval, reviewAvailable = () => false, checkExecution?: ToolExecutionCheck): ToolDefinition[] {
   const bash = protectedBash(policy, filter, reviewAvailable);
   const bashTool = createBashToolDefinition(policy.cwd, { operations: bash, shellPath: "/bin/bash" });
-  const parameters = Type.Object({ ...bashTool.parameters.properties, sandbox: Type.Optional(sandboxRequestSchema) });
-  const reviewedBash: ToolDefinition<typeof parameters> = {
+  // The orchestrator owns evaluation, review and the sandbox wrapper, so the tool
+  // hands it pi's final command line and pi keeps formatting the result.
+  const reviewedBash: ToolDefinition<typeof bashParameterSchema> = {
     ...bashTool,
-    parameters,
-    description: `${bashTool.description}\n${securityPrompt("bash-description")}`,
-    promptGuidelines: [
-      securityPrompt("bash-guidance"),
-      securityPrompt("bash-credentials"),
-    ],
+    parameters: bashParameterSchema,
+    promptGuidelines: [securityPrompt("bash-credentials")],
     async execute(id, args, signal, onUpdate, ctx) {
-      if (!Object.hasOwn(args, "sandbox")) return bashTool.execute(id, args, signal, onUpdate, ctx);
-      if (!policy.enabled) throw new Error("The sandbox is disabled. Omit the sandbox request to run the command through normal auto-mode review.");
-      if (!review || !reviewAvailable()) throw new Error(reviewUnavailable);
-      const scoped = scopedPolicy(policy, args.sandbox!);
-      const command = args.command;
-      const timeout = args.timeout;
-      const input = { command, ...(timeout === undefined ? {} : { timeout }), sandbox: scoped.request };
-      const expected = JSON.stringify(input);
-      const decision = await review({ type: "tool_call", toolCallId: id, toolName: "bash", input }, { ...ctx, cwd: policy.cwd, signal });
-      if (signal?.aborted) throw new Error("Sandbox review cancelled; command was not run.");
-      if (decision?.block) throw new Error(decision.reason ?? "Auto mode refused extra sandbox access. Explain the refusal to the user before retrying.");
-      if (expected !== JSON.stringify(input) || JSON.stringify(scopedPolicy(policy, scoped.request).request) !== JSON.stringify(scoped.request)) {
-        throw new Error("Sandbox request changed during review. Submit it again for review; the command was not run.");
-      }
-      const operations = protectedBash(scoped.policy, filter, reviewAvailable);
-      const approved = filter.text(`Auto mode approved temporary sandbox access for this command: ${JSON.stringify(scoped.request)}\n`);
-      return createBashToolDefinition(policy.cwd, { operations: {
-        exec(command, cwd, options) {
-          options.onData(Buffer.from(approved));
-          return operations.exec(command, cwd, options);
+      if (!approval) return bashTool.execute(id, { command: args.command, timeout: args.timeout }, signal, onUpdate, ctx);
+      const operations: BashOperations = {
+        exec: (command, cwd, options) => {
+          const stream = new FilteredStream(filter, (data) => options.onData(data));
+          return approval({ ...args, command }, {
+            toolCallId: id,
+            cwd,
+            ...(signal ? { signal } : {}),
+            ...(ctx.ui ? { ui: ctx.ui } : {}),
+            ...(ctx.abort ? { abort: () => ctx.abort() } : {}),
+            onData: (data) => stream.write(data),
+            ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
+            ...(options.env === undefined ? {} : { env: options.env }),
+          }).finally(() => stream.finish());
         },
-      }, shellPath: "/bin/bash" }).execute(id, { command, timeout }, signal, onUpdate, ctx);
+      };
+      return createBashToolDefinition(policy.cwd, { operations, shellPath: "/bin/bash" })
+        .execute(id, { command: args.command, timeout: args.timeout }, signal, onUpdate, ctx);
     },
   };
   const rawRead = (path: string) => fs.read(path);
   const tools: ToolDefinition[] = [
-    reviewedBash,
+    reviewedBash as ToolDefinition,
     createReadToolDefinition(policy.cwd, { operations: {
       readFile: async (path) => {
         const data = await rawRead(path);

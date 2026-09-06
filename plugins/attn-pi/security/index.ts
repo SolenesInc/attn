@@ -10,7 +10,7 @@ import { credentials } from "./filter";
 import { SandboxedFilesystem } from "./filesystem";
 import { loadSecurityConfig, resolveSecurityPolicy, saveSecurityConfig, type SecurityPolicy } from "./policy";
 import { protectedBash, protectedTools } from "./tools";
-import { reviewUnavailable, type SandboxReview } from "./recovery";
+import type { BashApproval } from "../approval/index";
 import { changeSecurityConfig } from "./settings";
 import { SecurityPanel, type SecuritySnapshot } from "./ui";
 import { securityInstructions, securityPrompt } from "./guidance";
@@ -21,7 +21,15 @@ export class PiSecurity {
   private temp: string | undefined;
   private policy: SecurityPolicy | undefined;
   private problem: string | undefined;
-  constructor(private readonly configPath = join(getAgentDir(), "attn-security.json"), private readonly review?: SandboxReview, private readonly reviewAvailable = () => !!review, private readonly checkExecution?: ToolExecutionCheck) {}
+  constructor(
+    private readonly configPath = join(getAgentDir(), "attn-security.json"),
+    private readonly approval?: BashApproval,
+    /** Called with the policy every time security reconfigures, so the approval
+     * orchestrator wraps commands with the paths this session actually has. */
+    private readonly onPolicy?: (policy: SecurityPolicy | undefined) => void,
+    private readonly reviewAvailable = () => false,
+    private readonly checkExecution?: ToolExecutionCheck,
+  ) {}
 
   cacheWritePaths(): readonly string[] { return this.problem ? [] : this.policy?.cacheWritePaths ?? []; }
 
@@ -84,14 +92,8 @@ export class PiSecurity {
       this.fs = new SandboxedFilesystem(this.policy, credentials, this.reviewAvailable);
       this.problem = undefined;
       const policy = this.policy;
-      const review: SandboxReview = async (event, context) => {
-        if (!this.review) return { block: true, reason: reviewUnavailable };
-        if (this.policy !== policy) throw new Error("Security settings or session changed; submit the request again.");
-        const result = await this.review(event, context);
-        if (this.policy !== policy) throw new Error("Security settings or session changed during review; command was not run. Submit the request again.");
-        return result;
-      };
-      for (const tool of protectedTools(policy, credentials, this.fs, review, this.reviewAvailable, this.checkExecution)) pi.registerTool(tool);
+      this.onPolicy?.(policy);
+      for (const tool of protectedTools(policy, credentials, this.fs, this.approval, this.reviewAvailable, this.checkExecution)) pi.registerTool(tool);
     } catch (error) {
       this.problem = credentials.text(error instanceof Error ? error.message : String(error));
       for (const make of [createBashToolDefinition, createReadToolDefinition, createWriteToolDefinition, createEditToolDefinition, createLsToolDefinition, createFindToolDefinition, createGrepToolDefinition]) {
@@ -124,6 +126,7 @@ export class PiSecurity {
   }
 
   private async close(): Promise<void> {
+    this.onPolicy?.(undefined);
     const fs = this.fs;
     const temp = this.temp;
     this.fs = undefined;
