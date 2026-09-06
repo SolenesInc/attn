@@ -79,9 +79,13 @@ export function ledgerInstant(entry: SessionLedgerEntry): string {
   return entry.closed_at || entry.last_seen;
 }
 
-export function closedBySomeone(entry: SessionLedgerEntry): string {
+export function closedBySomeone(
+  entry: SessionLedgerEntry,
+  sessionLabel?: (sessionId: string) => string,
+): string {
   const by = entry.closed_by ?? '';
-  return by === 'user' ? 'you' : by;
+  if (by === 'user') return 'you';
+  return sessionLabel?.(by) || by;
 }
 
 export function shortPath(path: string, segments = 2): string {

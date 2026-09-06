@@ -147,6 +147,15 @@ function OpenSessionsPanel({
     [workspaceNames],
   );
 
+  const labelsBySession = useMemo(
+    () => new Map(entries.map((entry) => [entry.id, entry.label])),
+    [entries],
+  );
+  const sessionLabel = useCallback(
+    (id: string) => labelsBySession.get(id) || id,
+    [labelsBySession],
+  );
+
   const isLive = useCallback(
     (entry: SessionLedgerEntry) => !isClosed(entry) && (liveSessionIds?.has(entry.id) ?? true),
     [liveSessionIds],
@@ -294,6 +303,7 @@ function OpenSessionsPanel({
                       live={isLive(entry)}
                       selected={entry.id === selected?.id}
                       workspaceLabel={workspaceLabel}
+                      sessionLabel={sessionLabel}
                       checksAvailable={!!onRequestVerdict}
                       onSelect={setSelectedId}
                       onMoveSelection={moveSelection}
@@ -333,6 +343,7 @@ interface SessionRowProps {
   live: boolean;
   selected: boolean;
   workspaceLabel: (workspaceId: string) => string;
+  sessionLabel: (sessionId: string) => string;
   checksAvailable: boolean;
   onSelect: (sessionId: string) => void;
   onMoveSelection: (offset: number) => void;
@@ -349,6 +360,7 @@ function SessionRow({
   live,
   selected,
   workspaceLabel,
+  sessionLabel,
   checksAvailable,
   onSelect,
   onMoveSelection,
@@ -395,8 +407,8 @@ function SessionRow({
       <td>
         <span title={ledgerInstant(entry)}>{shortStamp(ledgerInstant(entry))}</span>
         {isClosed(entry) && (
-          <span className="sessions-closed-by">
-            closed by {closedBySomeone(entry)}
+          <span className="sessions-closed-by" title={entry.closed_by ?? undefined}>
+            closed by {closedBySomeone(entry, sessionLabel)}
             {entry.close_reason ? `: ${entry.close_reason}` : ''}
           </span>
         )}

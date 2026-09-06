@@ -189,6 +189,23 @@ async function main() {
       await hold();
     });
 
+    await runner.step('an_agent_close_names_the_session_that_closed_it', async () => {
+      await execFileAsync(daemonBinary,
+        ['agent', 'close', sessions.elsewhere, '-m', 'the run finished',
+          '--source-session', sessions.elsewhere],
+        { env: profileCliEnv(profile) });
+      const after = await waitForSessions(client, (s) => rowFor(s, sessions.elsewhere)?.state === 'closed',
+        'the agent close to reach the surface', 20_000);
+      const row = rowFor(after, sessions.elsewhere);
+      runner.assert(row.when.includes(`closed by elsewhere-${runner.runId}`),
+        'the row names the session that closed it rather than showing its id', { row });
+      runner.assert(!row.when.includes(`closed by ${sessions.elsewhere}`),
+        'the row does not fall back to the raw session id', { row });
+      runner.assert(row.when.includes('the run finished'), 'the row carries the reason', { row });
+      runner.writeJson('row-after-agent-close.json', after);
+      await hold();
+    });
+
     await runner.step('the_live_scope_drops_the_closed_row', async () => {
       const live = await client.request('sessions_set_filter', { scope: 'Live' });
       const settled = await waitForSessions(client, (s) => !rowFor(s, sessions.two),

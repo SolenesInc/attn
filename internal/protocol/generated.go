@@ -68,6 +68,46 @@ type AgentClearQueueMessage struct {
 	ID string `json:"id"`
 }
 
+type AgentCloseMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Reason corresponds to the JSON schema field "reason".
+	Reason string `json:"reason"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID string `json:"source_session_id"`
+
+	// TargetSeedID corresponds to the JSON schema field "target_seed_id".
+	TargetSeedID *string `json:"target_seed_id,omitempty,omitzero"`
+
+	// TargetSessionID corresponds to the JSON schema field "target_session_id".
+	TargetSessionID string `json:"target_session_id"`
+}
+
+type AgentCloseResult struct {
+	// Label corresponds to the JSON schema field "label".
+	Label string `json:"label"`
+
+	// Reason corresponds to the JSON schema field "reason".
+	Reason string `json:"reason"`
+
+	// Rule corresponds to the JSON schema field "rule".
+	Rule AgentCloseRule `json:"rule"`
+
+	// SeedIds corresponds to the JSON schema field "seed_ids".
+	SeedIds []string `json:"seed_ids"`
+
+	// TargetSessionID corresponds to the JSON schema field "target_session_id".
+	TargetSessionID string `json:"target_session_id"`
+}
+
+type AgentCloseRule string
+
+const AgentCloseRuleChiefOfStaff AgentCloseRule = "chief_of_staff"
+const AgentCloseRuleDispatcher AgentCloseRule = "dispatcher"
+const AgentCloseRuleSelf AgentCloseRule = "self"
+
 type AgentEventMessage struct {
 	// Body corresponds to the JSON schema field "body".
 	Body RecordUnknown `json:"body"`
@@ -6521,6 +6561,9 @@ type Response struct {
 	// "activity_status_result".
 	ActivityStatusResult *ActivityStatusResult `json:"activity_status_result,omitempty,omitzero"`
 
+	// AgentCloseResult corresponds to the JSON schema field "agent_close_result".
+	AgentCloseResult *AgentCloseResult `json:"agent_close_result,omitempty,omitzero"`
+
 	// AgentInboxBatchResult corresponds to the JSON schema field
 	// "agent_inbox_batch_result".
 	AgentInboxBatchResult *AgentInboxBatchResult `json:"agent_inbox_batch_result,omitempty,omitzero"`
@@ -8245,6 +8288,20 @@ type SessionAnnotationsSubmitResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type SessionCloseResultMessage struct {
+	// Accepted corresponds to the JSON schema field "accepted".
+	Accepted bool `json:"accepted"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+}
+
 type SessionClosedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
@@ -9738,6 +9795,12 @@ type UninstallPluginMessage struct {
 }
 
 type UnregisterMessage struct {
+	// CloseReason corresponds to the JSON schema field "close_reason".
+	CloseReason *string `json:"close_reason,omitempty,omitzero"`
+
+	// ClosedBy corresponds to the JSON schema field "closed_by".
+	ClosedBy *string `json:"closed_by,omitempty,omitzero"`
+
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 

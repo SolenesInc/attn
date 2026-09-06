@@ -60,6 +60,7 @@
     "real-app:scenario-workspace-close-last-session-switches-back": "node scripts/real-app-harness/scenario-workspace-close-last-session-switches-back.mjs",
     "real-app:scenario-workspace-close-one-session-keeps-selection": "node scripts/real-app-harness/scenario-workspace-close-one-session-keeps-selection.mjs",
     "real-app:scenario-close-pane-nonblocking": "node scripts/real-app-harness/scenario-close-pane-nonblocking.mjs",
+    "real-app:scenario-agent-close": "node scripts/real-app-harness/scenario-agent-close.mjs",
     "real-app:scenario-session-close-ledger": "node scripts/real-app-harness/scenario-session-close-ledger.mjs",
     "real-app:scenario-session-reopen": "node scripts/real-app-harness/scenario-session-reopen.mjs",
     "real-app:scenario-sessions-surface": "node scripts/real-app-harness/scenario-sessions-surface.mjs",
