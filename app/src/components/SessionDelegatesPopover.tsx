@@ -26,13 +26,14 @@ export function SessionDelegatesPopover({
   onSelectSession: (sessionId: string) => void;
   onClose: () => void;
 }) {
-  const cardRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDialogElement>(null);
 
   useEscapeStack(onClose, true);
 
   useLayoutEffect(() => {
     const card = cardRef.current;
     if (!card) return;
+    if (!card.open) card.show();
     const rect = card.getBoundingClientRect();
     card.style.top = `${Math.max(VIEWPORT_MARGIN, Math.min(anchor.top, window.innerHeight - rect.height - VIEWPORT_MARGIN))}px`;
     card.style.left = `${Math.max(VIEWPORT_MARGIN, Math.min(anchor.left, window.innerWidth - rect.width - VIEWPORT_MARGIN))}px`;
@@ -51,12 +52,11 @@ export function SessionDelegatesPopover({
   }, [onClose]);
 
   return createPortal(
-    <div
+    <dialog
       ref={cardRef}
       className="session-delegates-popover"
       data-testid="session-delegates-popover"
       style={{ top: anchor.top, left: anchor.left }}
-      role="dialog"
       aria-label="Delegates"
       tabIndex={-1}
       onPointerDown={(event) => event.stopPropagation()}
@@ -78,7 +78,7 @@ export function SessionDelegatesPopover({
           </li>
         ))}
       </ul>
-    </div>,
+    </dialog>,
     document.body,
   );
 }
