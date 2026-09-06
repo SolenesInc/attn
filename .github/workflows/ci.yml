@@ -646,7 +646,6 @@ jobs:
           # first one to finish seals it. This job owns its entry below instead.
           cache: false
 
-      # Install step: 25s of it was `go build ./cmd/attn` from an empty cache.
       - name: Restore Go build cache
         id: go-cache
         uses: actions/cache/restore@v4
