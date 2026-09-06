@@ -350,6 +350,10 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, ev bus.Event) { d.projectWorktreeSwept(ev) },
 		},
 		{
+			filter: bus.Filter{FactSessionClosed},
+			apply:  projectSessionClosed,
+		},
+		{
 			filter: bus.Filter{FactGitOperationStarted, FactGitOperationFinished},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectGitOperation(ev) },
 		},

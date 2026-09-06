@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "290"
+const ProtocolVersion = "292"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -374,6 +374,9 @@ const (
 	EventTaskListResult                  = "task_list_result"
 	EventTaskRetryResult                 = "task_retry_result"
 	EventTasksChanged                    = "tasks_changed"
+	EventSessionListResult               = "session_list_result"
+	EventSessionShowResult               = "session_show_result"
+	EventSessionClosed                   = "session_closed"
 	EventNotificationListResult          = "notification_list_result"
 	EventNotificationMarkReadResult      = "notification_mark_read_result"
 	EventNotificationsUpdated            = "notifications_updated"

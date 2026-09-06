@@ -18,6 +18,7 @@ type BranchInfo struct {
 	Branch     string
 	IsWorktree bool
 	MainRepo   string
+	Repository string
 }
 
 func GetBranchInfo(dir string) (*BranchInfo, error) {
@@ -36,6 +37,7 @@ func GetBranchInfo(dir string) (*BranchInfo, error) {
 	mainRepo, isWT := getWorktreeInfo(dir)
 	info.IsWorktree = isWT
 	info.MainRepo = mainRepo
+	info.Repository = RepositoryRoot(dir)
 
 	return info, nil
 }

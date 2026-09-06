@@ -251,3 +251,25 @@ func ResolveMainRepoPath(repoPath string) string {
 
 	return filepath.Clean(expanded)
 }
+
+// RepositoryRoot names a directory's repository, walking the filesystem rather
+// than git: the main repository for a worktree, the checkout itself otherwise.
+func RepositoryRoot(dir string) string {
+	current := CanonicalizePath(dir)
+	for {
+		info, err := os.Lstat(filepath.Join(current, ".git"))
+		if err == nil {
+			if !info.IsDir() {
+				if main := GetMainRepoFromWorktree(current); main != "" {
+					return CanonicalizePath(main)
+				}
+			}
+			return current
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return ""
+		}
+		current = parent
+	}
+}
