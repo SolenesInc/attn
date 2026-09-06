@@ -3,6 +3,7 @@ package daemon
 import (
 	"fmt"
 	"strings"
+	"syscall"
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
@@ -95,10 +96,19 @@ func (d *Daemon) resumeSeedFromReview(
 	d.waitForSessionTeardown(sessionID)
 	d.store.ClearSessionIntentionalClose(sessionID)
 
+	rollback := d.newDelegationRollback()
+	// The store refuses a spawn that would re-register a closed row, so lift the close.
+	lifted, reopened, err := d.store.ReopenSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if reopened {
+		rollback.onSessionReopened(sessionID, lifted)
+	}
+
 	// Unregister on rollback only if this call created the workspace — a re-register is
 	// idempotent and preserves a stored rename (handleRegisterWorkspace's title guard).
 	workspaceID := "workspace-" + sessionID
-	rollback := d.newDelegationRollback()
 	if d.store.GetWorkspace(workspaceID) == nil {
 		d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
 			Cmd:       protocol.CmdRegisterWorkspace,
@@ -145,7 +155,9 @@ func (d *Daemon) resumeSeedFromReview(
 	if session := d.store.Get(sessionID); session == nil {
 		return nil, rollback.fail(fmt.Errorf("resume session was not persisted"))
 	}
-	rollback.onSessionSpawned(sessionID)
+	if !reopened {
+		rollback.onSessionSpawned(sessionID)
+	}
 	if _, err := d.validateGardenReviewAction(review, seedID, "resume"); err != nil {
 		return nil, rollback.fail(err)
 	}
@@ -264,4 +276,12 @@ func (d *Daemon) handleSeedResume(client *wsClient, msg *protocol.SeedResumeMess
 		}
 	}
 	d.sendToClient(client, response)
+}
+
+func (r *delegationRollback) onSessionReopened(sessionID string, closed store.SessionCloseRecord) {
+	r.undo = append(r.undo, func() error {
+		r.d.terminateSession(sessionID, syscall.SIGTERM)
+		r.d.restoreSessionClose(sessionID, closed)
+		return nil
+	})
 }

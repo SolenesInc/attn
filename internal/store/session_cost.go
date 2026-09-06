@@ -3,7 +3,9 @@ package store
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/victorarias/attn/internal/sessioncost"
@@ -15,6 +17,7 @@ type SessionCostObservation struct {
 	Usage         sessioncost.Usage `json:"usage"`
 }
 
+// Finalized observations are counted into Ledger already: correcting one is refused.
 type SessionCostState struct {
 	Initialized           bool                              `json:"initialized,omitempty"`
 	Cursor                string                            `json:"cursor,omitempty"`
@@ -23,6 +26,7 @@ type SessionCostState struct {
 	Sources               map[string]SessionCostSourceState `json:"sources,omitempty"`
 	Ledger                sessioncost.Ledger                `json:"ledger,omitempty"`
 	Observations          map[string]SessionCostObservation `json:"observations,omitempty"`
+	Finalized             []string                          `json:"finalized,omitempty"`
 }
 
 type SessionCostSourceState struct {
@@ -51,6 +55,9 @@ func cloneSessionCostState(state SessionCostState) SessionCostState {
 		for id, observation := range state.Observations {
 			clone.Observations[id] = observation
 		}
+	}
+	if state.Finalized != nil {
+		clone.Finalized = append([]string(nil), state.Finalized...)
 	}
 	return clone
 }
@@ -149,7 +156,7 @@ func (s *Store) MarkSessionCostUsageUnavailable(sessionID, cursor string) (bool,
 func (s *Store) ApplySessionCostObservations(sessionID, cursor string, observations []SessionCostObservation) (bool, error) {
 	changed := false
 	err := s.updateSessionCost(sessionID, func(state *SessionCostState) {
-		changed = applySessionCostObservations(state, observations)
+		changed = applySessionCostObservations(sessionID, state, observations)
 		state.Cursor = strings.TrimSpace(cursor)
 	})
 	return changed, err
@@ -163,12 +170,12 @@ func (s *Store) ApplySessionCostSourceObservations(sessionID, sourceID, cursor s
 			state.Sources = make(map[string]SessionCostSourceState)
 		}
 		state.Sources[strings.TrimSpace(sourceID)] = SessionCostSourceState{Cursor: strings.TrimSpace(cursor)}
-		changed = applySessionCostObservations(state, observations)
+		changed = applySessionCostObservations(sessionID, state, observations)
 	})
 	return changed, err
 }
 
-func applySessionCostObservations(state *SessionCostState, observations []SessionCostObservation) bool {
+func applySessionCostObservations(sessionID string, state *SessionCostState, observations []SessionCostObservation) bool {
 	state.Initialized = true
 	if state.Ledger == nil {
 		state.Ledger = make(sessioncost.Ledger)
@@ -177,10 +184,16 @@ func applySessionCostObservations(state *SessionCostState, observations []Sessio
 		state.Observations = make(map[string]SessionCostObservation)
 	}
 	changed := false
+	finalized := finalizedSet(state.Finalized)
 	for _, observation := range observations {
 		observation.ObservationID = strings.TrimSpace(observation.ObservationID)
 		observation.Model = strings.TrimSpace(observation.Model)
 		if observation.ObservationID == "" || observation.Model == "" || !observation.Usage.HasUsage() {
+			continue
+		}
+		if _, final := finalized[observation.ObservationID]; final {
+			log.Printf("[store] session cost: refused %s for session %s: a close finalized it",
+				observation.ObservationID, sessionID)
 			continue
 		}
 		prior, exists := state.Observations[observation.ObservationID]
@@ -197,10 +210,34 @@ func applySessionCostObservations(state *SessionCostState, observations []Sessio
 	return changed
 }
 
+func finalizedSet(ids []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		set[id] = struct{}{}
+	}
+	return set
+}
+
+func finalizeSessionCost(state *SessionCostState) {
+	if len(state.Observations) == 0 {
+		return
+	}
+	finalized := state.Finalized
+	for id := range state.Observations {
+		finalized = append(finalized, id)
+	}
+	slices.Sort(finalized)
+	state.Finalized = slices.Compact(finalized)
+	state.Observations = nil
+}
+
 func (s *Store) updateSessionCost(sessionID string, mutate func(*SessionCostState)) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
+		if !s.sessionIsLiveLocked(sessionID) {
+			return nil
+		}
 		if s.sessionCosts == nil {
 			s.sessionCosts = make(map[string]SessionCostState)
 		}
@@ -228,7 +265,7 @@ func (s *Store) updateSessionCost(sessionID string, mutate func(*SessionCostStat
 	if err != nil {
 		return fmt.Errorf("encode session cost for %s: %w", sessionID, err)
 	}
-	if _, err := tx.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ?", string(encoded), sessionID); err != nil {
+	if _, err := tx.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ? AND closed_at = ''", string(encoded), sessionID); err != nil {
 		return err
 	}
 	return tx.Commit()

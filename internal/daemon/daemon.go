@@ -1334,6 +1334,13 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 			}
 			continue
 		}
+		// A runtime that outlived its close: the ledger row is the verdict, so stop it.
+		if existing == nil && d.store.SessionClosed(sessionID) {
+			d.logf("worker reconciliation stopped runtime %s: its session is closed", sessionID)
+			d.terminateSession(sessionID, syscall.SIGTERM)
+			continue
+		}
+
 		var info ptybackend.SessionInfo
 		var haveInfo bool
 		if infoProvider != nil {
@@ -1857,7 +1864,7 @@ func (d *Daemon) unregisterSession(sessionID string, sig syscall.Signal) *protoc
 		}
 	}
 	d.terminateSession(sessionID, sig)
-	d.forgetSession(sessionID)
+	d.removeReapedSession(sessionID)
 	return session
 }
 
@@ -1886,8 +1893,8 @@ func (d *Daemon) prepareSessionTeardown(sessionID string) (*sessionTeardown, err
 	return &sessionTeardown{session: session, driverRun: driverRun}, nil
 }
 
-func (d *Daemon) commitSessionUnregister(sessionID string) {
-	d.forgetSession(sessionID)
+func (d *Daemon) commitSessionUnregister(sessionID string, closed store.SessionClose) {
+	d.closeSession(sessionID, closed)
 }
 
 func (d *Daemon) cancelSessionTeardown(sessionID string) {
@@ -1907,7 +1914,7 @@ func (d *Daemon) resumeSessionTeardown(sessionID string) *sessionTeardown {
 		return nil
 	}
 	session := d.store.Get(sessionID)
-	d.forgetSession(sessionID)
+	d.closeSession(sessionID, store.SessionClose{By: store.SessionClosedByUser})
 	return &sessionTeardown{session: session, driverRun: driverRun}
 }
 
@@ -1975,13 +1982,33 @@ func (d *Daemon) terminateSessionAsync(sessionID string, sig syscall.Signal, tea
 	return done
 }
 
-func (d *Daemon) forgetSession(sessionID string) {
+func (d *Daemon) closeSession(sessionID string, closed store.SessionClose) {
+	d.recordSessionClose(sessionID, func() (bool, error) {
+		return d.store.CloseSession(sessionID, closed, time.Now())
+	})
+}
+
+func (d *Daemon) restoreSessionClose(sessionID string, closed store.SessionCloseRecord) {
+	d.recordSessionClose(sessionID, func() (bool, error) {
+		return d.store.RestoreSessionClose(sessionID, closed)
+	})
+}
+
+func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error)) {
 	if session := d.store.Get(sessionID); session != nil {
 		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
-			d.logf("garden: preserving execution %s before dropping its record: %v", sessionID, err)
+			d.logf("garden: preserving execution %s before closing it: %v", sessionID, err)
 		}
 	}
-	d.dropSessionRecord(sessionID)
+	d.forgetSessionRuntime(sessionID)
+	recorded, err := commit()
+	if err != nil {
+		d.logf("close session %s: %v", sessionID, err)
+	}
+	d.forgetSessionTrace(sessionID)
+	if recorded {
+		d.publishFact(FactSessionClosed, sessionID, d.store.SessionLedgerEntry(sessionID))
+	}
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
 	d.crewMemo().forget(sessionID)
@@ -1992,6 +2019,7 @@ func (d *Daemon) forgetSession(sessionID string) {
 	d.clearClassifyingTurn(sessionID)
 }
 
+// Reaping deletes the row; it is for what a close would not record.
 func (d *Daemon) removeReapedSession(sessionID string) {
 	// A crashed session can leave a checkout newer than the branch monitor's cache.
 	if session := d.store.Get(sessionID); session != nil {
@@ -1999,14 +2027,16 @@ func (d *Daemon) removeReapedSession(sessionID string) {
 			d.logf("garden: preserving execution %s before reaping: %v", sessionID, err)
 		}
 	}
-	d.dropSessionRecord(sessionID)
+	d.forgetSessionRuntime(sessionID)
+	d.store.Remove(sessionID)
+	d.forgetSessionTrace(sessionID)
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
 	d.dissociateSessionFromWorkspace(sessionID)
 	d.removeWorkspaceLayoutPaneForSession(sessionID)
 }
 
-func (d *Daemon) dropSessionRecord(sessionID string) {
+func (d *Daemon) forgetSessionRuntime(sessionID string) {
 	d.stopTranscriptWatcher(sessionID)
 	if session := d.store.Get(sessionID); session != nil {
 		d.reconcileTicketsOnSessionEnd(sessionID, string(session.State))
@@ -2019,9 +2049,11 @@ func (d *Daemon) dropSessionRecord(sessionID string) {
 	d.clearSnoozeState(sessionID)
 	d.sessionInputs().forgetSession(sessionID)
 	d.forgetPluginDriverSilenceWatch(sessionID)
-	d.store.Remove(sessionID)
-	// After the row is gone, not before: an observation racing this would
-	// rebuild the ring for an id nothing cleans up again.
+}
+
+// Called after the store stopped answering: an observation racing this rebuilds the
+// ring for an id nothing cleans up again.
+func (d *Daemon) forgetSessionTrace(sessionID string) {
 	d.forgetStateTrace(sessionID)
 	d.evidenceTable().forget(sessionID)
 	d.stateReasons().forget(sessionID)
@@ -2556,6 +2588,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSessionInstructions(conn, msg.(*protocol.SessionInstructionsMessage))
 	case protocol.CmdSessionTranscript: // wire: session_transcript
 		d.handleSessionTranscript(conn, msg.(*protocol.SessionTranscriptMessage))
+	case protocol.CmdSessionList: // wire: session_list
+		d.handleSessionList(conn, msg.(*protocol.SessionListMessage))
+	case protocol.CmdSessionShow: // wire: session_show
+		d.handleSessionShow(conn, msg.(*protocol.SessionShowMessage))
 	case protocol.CmdStateExplain: // wire: state_explain
 		d.handleStateExplain(conn, msg.(*protocol.StateExplainMessage))
 	case protocol.CmdAgentPeek: // wire: agent_peek
@@ -2829,7 +2865,7 @@ func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage
 		d.sendError(conn, fmt.Sprintf("prepare session teardown: %v", err))
 		return
 	}
-	d.commitSessionUnregister(msg.ID)
+	d.commitSessionUnregister(msg.ID, store.SessionClose{By: store.SessionClosedByUser})
 	d.sendOK(conn)
 
 	if teardown != nil && teardown.session != nil {
