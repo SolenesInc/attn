@@ -30,7 +30,7 @@ describe('useCrewLaunchAutosave', () => {
     const send = vi.fn()
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
-    const { result } = renderHook(() => useCrewLaunchAutosave([member('alder', 1)], true, send));
+    const { result } = renderHook(() => useCrewLaunchAutosave([member('alder', 1)], 1, send));
 
     await waitFor(() => expect(result.current.read('alder')?.state).toBe('saved'));
     act(() => result.current.update('alder', { agent: 'codex', model: '', effort: '' }));
@@ -90,7 +90,7 @@ describe('useCrewLaunchAutosave', () => {
       agent: 'codex', model: 'saved-model', effort: 'low',
       resolved_agent: 'codex', resolved_model: 'saved-model', resolved_effort: 'low',
     })];
-    const { result } = renderHook(() => useCrewLaunchAutosave(initial, true, send));
+    const { result } = renderHook(() => useCrewLaunchAutosave(initial, 1, send));
     await waitFor(() => expect(result.current.read('keel')).toBeDefined());
 
     act(() => result.current.update('keel', { model: 'local-model' }));
@@ -116,7 +116,7 @@ describe('useCrewLaunchAutosave', () => {
     const initial = member('alder', 1, {
       agent: 'codex', model: 'model-a', resolved_agent: 'codex', resolved_model: 'model-a',
     });
-    const { result } = renderHook(() => useCrewLaunchAutosave([initial], true, send));
+    const { result } = renderHook(() => useCrewLaunchAutosave([initial], 1, send));
     await waitFor(() => expect(result.current.read('alder')).toBeDefined());
 
     act(() => result.current.update('alder', { model: 'model-b' }));
@@ -162,7 +162,7 @@ describe('useCrewLaunchAutosave', () => {
       });
     const { result } = renderHook(() => useCrewLaunchAutosave([
       member('keel', 1, { agent: 'claude', resolved_agent: 'claude' }),
-    ], true, send));
+    ], 1, send));
     await waitFor(() => expect(result.current.read('keel')).toBeDefined());
 
     act(() => result.current.update('keel', { agent: 'codex', model: '', effort: '' }));
@@ -180,7 +180,7 @@ describe('useCrewLaunchAutosave', () => {
   it('accepts changed daemon-derived state at the same document revision', async () => {
     const initial = member('trellis', 4, { resolved_agent: 'claude' });
     const { result, rerender } = renderHook(
-      ({ members }) => useCrewLaunchAutosave(members, true, vi.fn()),
+      ({ members }) => useCrewLaunchAutosave(members, 1, vi.fn()),
       { initialProps: { members: [initial] } },
     );
     await waitFor(() => expect(result.current.read('trellis')).toBeDefined());
@@ -206,9 +206,9 @@ describe('useCrewLaunchAutosave', () => {
         success: true, conflict: false,
         member: member('trellis', 2, { model: 'private-model', resolved_model: 'private-model' }),
       });
-    const props = { connected: true, members: [member('trellis', 1)] };
+    const props = { connectionGeneration: 1, members: [member('trellis', 1)] };
     const { result, rerender } = renderHook(
-      ({ connected, members }) => useCrewLaunchAutosave(members, connected, send),
+      ({ connectionGeneration, members }) => useCrewLaunchAutosave(members, connectionGeneration, send),
       { initialProps: props },
     );
     await waitFor(() => expect(result.current.read('trellis')).toBeDefined());
@@ -216,8 +216,7 @@ describe('useCrewLaunchAutosave', () => {
     await waitFor(() => expect(result.current.read('trellis')?.state).toBe('error'));
     expect(result.current.read('trellis')?.draft.model).toBe('private-model');
 
-    rerender({ connected: false, members: [member('trellis', 1)] });
-    rerender({ connected: true, members: [member('trellis', 1)] });
+    rerender({ connectionGeneration: 2, members: [member('trellis', 1)] });
 
     await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(result.current.read('trellis')).toMatchObject({ state: 'saved', acknowledged: { revision: 2 } }));
@@ -226,7 +225,7 @@ describe('useCrewLaunchAutosave', () => {
   it('accepts a broadcast proving that a transport-failed edit landed', async () => {
     const send = vi.fn().mockRejectedValue(new Error('WebSocket not connected'));
     const { result, rerender } = renderHook(
-      ({ members }) => useCrewLaunchAutosave(members, false, send),
+      ({ members }) => useCrewLaunchAutosave(members, 0, send),
       { initialProps: { members: [member('trellis', 1)] } },
     );
     await waitFor(() => expect(result.current.read('trellis')).toBeDefined());
@@ -249,7 +248,7 @@ describe('useCrewLaunchAutosave', () => {
         member: member('alder', 7, { model: 'latest', effort: 'high', resolved_model: 'latest', resolved_effort: 'high' }),
       });
     const { result, rerender } = renderHook(
-      ({ members }) => useCrewLaunchAutosave(members, true, send),
+      ({ members }) => useCrewLaunchAutosave(members, 1, send),
       { initialProps: { members: [member('alder', 3)] } },
     );
     await waitFor(() => expect(result.current.read('alder')).toBeDefined());

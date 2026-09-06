@@ -87,6 +87,29 @@ func TestCrewWake_StartsADayBoundInTheMembersOwnDirectory(t *testing.T) {
 	}
 }
 
+func TestCrewWake_BroadcastsTheLiveBindingAfterSessionRegistration(t *testing.T) {
+	d, _, _ := newWakeableDaemon(t)
+	trace := wireRecorder(d)
+
+	result, err := d.crewWake("trellis", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+
+	for _, payload := range trace.Payloads() {
+		var event protocol.CrewUpdatedMessage
+		if err := json.Unmarshal(payload, &event); err != nil || event.Event != protocol.EventCrewUpdated {
+			continue
+		}
+		for _, member := range event.Members {
+			if member.ID == "trellis" && protocol.Deref(member.BindingSession) == result.SessionID {
+				return
+			}
+		}
+	}
+	t.Fatalf("crew_updated never exposed trellis bound to %s; events = %v", result.SessionID, trace.EventNames())
+}
+
 func TestCrewWake_AMemberWakesOnItsConfiguredModel(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	d.store.SetSetting(SettingDefaultModelPrefix+"claude", "claude-sonnet-4-5")
