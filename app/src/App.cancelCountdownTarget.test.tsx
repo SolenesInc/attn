@@ -191,6 +191,7 @@ describe('who ⌘. names', () => {
         turn_opened_at: '2026-08-03T09:00:00Z',
         auto_settle_fires_at: autoSettleFiresAt[id],
       })),
+      crew: [],
       setDaemonSessions: vi.fn(),
       prs: [], setPRs: vi.fn(),
       repoStates: [], setRepoStates: vi.fn(),

@@ -1,4 +1,5 @@
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type DelegationModelCatalog } from './daemonDelegationEvents';
+import { handleCrewDaemonEvent, type CrewMutationOutcome } from './daemonCrewEvents';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
 import type { DelegationPreferences } from '../types/generated';
 import { useEffect, useRef, useCallback, useState } from 'react';
@@ -178,6 +179,19 @@ export interface CrewSleepResult {
   alreadyAsleep: boolean;
   deliveryStatus?: string;
   detail?: string;
+}
+export interface CrewSetOptions {
+  member: string;
+  expectedRevision: number;
+  agent: string;
+  model: string;
+  effort: string;
+}
+export interface CrewRestartOptions {
+  member: string;
+  requestId: string;
+  expectedSessionId: string;
+  expectedRevision: number;
 }
 export type DaemonWorkspace = GeneratedWorkspaceSnapshot;
 export type DaemonPR = GeneratedPR;
@@ -2842,6 +2856,7 @@ export function useDaemonSocket({
             if (handleAppDaemonEvent(data, pending)) break;
             if (docSubscriptions.handleEvent(data)) break;
             if (handleDelegationDaemonEvent(data, pending)) break;
+            if (handleCrewDaemonEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
             if (handleWorktreeDaemonEvent(data, pending, {
               onWorktreeState: (worktree) => useWorktreeStore.getState().observe(worktree),
@@ -4738,6 +4753,34 @@ export function useDaemonSocket({
     [sendRequest],
   );
 
+  const sendCrewSet = useCallback((options: CrewSetOptions): Promise<CrewMutationOutcome> => (
+    sendRequest(
+      'crew_set',
+      {
+        member: options.member,
+        expected_revision: options.expectedRevision,
+        agent: options.agent,
+        model: options.model,
+        effort: options.effort,
+      },
+      `Saving ${crewDisplayName(options.member)}'s launch settings timed out`,
+    )
+  ), [sendRequest]);
+
+  const sendCrewRestart = useCallback((options: CrewRestartOptions): Promise<CrewMutationOutcome> => (
+    sendKeyedRequest(
+      pendingRequestKey('crew_restart', options.requestId),
+      {
+        cmd: 'crew_restart',
+        request_id: options.requestId,
+        member: options.member,
+        expected_session_id: options.expectedSessionId,
+        expected_revision: options.expectedRevision,
+      },
+      `Restarting ${crewDisplayName(options.member)} timed out`,
+    )
+  ), [sendKeyedRequest]);
+
   const sendTaskList = useCallback((): Promise<Task[]> => {
     const requestId = nextRequestID('task_list');
     const key = `task_list:${requestId}`;
@@ -5394,6 +5437,8 @@ export function useDaemonSocket({
     sendSeedReviewDraft,
     sendCrewWake,
     sendCrewSleep,
+    sendCrewSet,
+    sendCrewRestart,
     sendTaskList,
     sendTaskRetry,
     sendNotificationList,
