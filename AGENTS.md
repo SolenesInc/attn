@@ -179,10 +179,14 @@ covering changed behavior, latency, and keyboard flow.
 
 ## Guidance
 
-- Read [prompt-authoring.md](docs/prompt-authoring.md) before changing product
-  prompts. Start with `go run ./cmd/prompt-editor context EVENT_OR_SOURCE --json`
-  and follow its authoring workflow before editing. Assess complete instructions
-  across affected scenarios; `refresh` reloads changed Go definitions.
+- Any change to what an agent is told, in `internal/prompts/content/**`
+  (including the attn skill and its references), the Go definitions beside it,
+  or the CLI help agents read, is a product prompt change. Read
+  [prompt-authoring.md](docs/prompt-authoring.md) first and run its workflow:
+  `go run ./cmd/prompt-editor context EVENT_OR_SOURCE --json`, then read the
+  complete composed prompts for every affected scenario before and after the
+  edit. Editing the markdown and regenerating the catalog is not the workflow.
+  `refresh` reloads changed Go definitions.
 - Read [glossary.md](docs/glossary.md) before naming domain concepts; update
   definitions and implementation together.
 - Read [working-with-next.md](docs/working-with-next.md) before creating
