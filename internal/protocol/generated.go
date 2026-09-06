@@ -4436,6 +4436,10 @@ type GitHubHostsUpdatedMessage struct {
 
 	// GithubHosts corresponds to the JSON schema field "github_hosts".
 	GithubHosts []string `json:"github_hosts"`
+
+	// GithubPollingOffReason corresponds to the JSON schema field
+	// "github_polling_off_reason".
+	GithubPollingOffReason *string `json:"github_polling_off_reason,omitempty,omitzero"`
 }
 
 type GitOperation struct {
@@ -4605,6 +4609,10 @@ type InitialStateMessage struct {
 
 	// GithubHosts corresponds to the JSON schema field "github_hosts".
 	GithubHosts []string `json:"github_hosts,omitempty,omitzero"`
+
+	// GithubPollingOffReason corresponds to the JSON schema field
+	// "github_polling_off_reason".
+	GithubPollingOffReason *string `json:"github_polling_off_reason,omitempty,omitzero"`
 
 	// The daemon id that owns this daemon's home-level state. Equal to
 	// daemon_instance_id on a home daemon; a different id means this daemon is an

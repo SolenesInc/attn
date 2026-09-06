@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Dashboard } from './Dashboard';
+import { GitHubPollingProvider } from '../contexts/GitHubPollingContext';
 import type { DaemonPR } from '../hooks/useDaemonSocket';
 
 vi.mock('../contexts/DaemonContext', () => ({
@@ -612,6 +613,16 @@ describe('Dashboard pull requests', () => {
   it('says nothing needs attention when both sides are empty', () => {
     render(<Dashboard {...props} />);
     expect(screen.getByText('No PRs need attention')).toBeInTheDocument();
+  });
+
+  it('shows the daemon reason when GitHub polling is off for this profile', () => {
+    render(
+      <GitHubPollingProvider offReason="GitHub polling is off for profile dev. Start its daemon with ATTN_GITHUB_POLLING=on.">
+        <Dashboard {...props} />
+      </GitHubPollingProvider>,
+    );
+    expect(screen.getByTestId('github-polling-off')).toHaveTextContent('ATTN_GITHUB_POLLING=on');
+    expect(screen.queryByText('No PRs need attention')).not.toBeInTheDocument();
   });
 });
 

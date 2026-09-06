@@ -18,6 +18,7 @@ import { useAutoModePolicy } from '../hooks/useAutoModePolicy';
 import { SavedMark, useSavedFlash } from './useSavedFlash';
 import { useAgentSettingDrafts, useSettingDraft } from './settingsDrafts';
 import { useEndpointPanel } from './useEndpointPanel';
+import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
 import { usePluginPanel } from './usePluginPanel';
 import {
   assertValidSettingsSectionID,
@@ -219,6 +220,7 @@ export function SettingsModal({
     sendAutoModeModelSet,
     sendAutoModeModels,
   } = useDaemonApi();
+  const githubPollingOffReason = useGitHubPollingOffReason();
   const autoModePolicy = useAutoModePolicy({
     enabled: isOpen,
     getState: sendAutoModeGet,
@@ -1255,7 +1257,9 @@ export function SettingsModal({
           </p>
         </div>
         <div className="settings-block-body">
-          {githubHosts.length === 0 ? (
+          {githubPollingOffReason ? (
+            <p className="settings-empty" data-testid="github-polling-off">{githubPollingOffReason}</p>
+          ) : githubHosts.length === 0 ? (
             <p className="settings-empty">No authenticated hosts detected.</p>
           ) : (
             <div className="settings-token-list">
@@ -1264,7 +1268,9 @@ export function SettingsModal({
               ))}
             </div>
           )}
-          <div className="settings-hint">Add hosts with `gh auth login --hostname &lt;host&gt;`.</div>
+          {!githubPollingOffReason && (
+            <div className="settings-hint">Add hosts with `gh auth login --hostname &lt;host&gt;`.</div>
+          )}
         </div>
       </section>
 
