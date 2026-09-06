@@ -305,11 +305,12 @@ func TestSeedHandoverLosesCleanlyWhenTheSeedMovesDuringLaunch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d.delegationFinalizeHook = func() error {
-		_, _, moveErr := d.applySeedTransition(seedID, garden.VerbTend, garden.Ask{
+	d.seedHandoverBeforeCommit = func() {
+		if _, _, moveErr := d.applySeedTransition(seedID, garden.VerbTend, garden.Ask{
 			Actor: garden.Tender{Session: "racing-session"}, Force: true,
-		})
-		return moveErr
+		}); moveErr != nil {
+			t.Errorf("move the seed during launch: %v", moveErr)
+		}
 	}
 
 	op, err := d.startDelegation(handoverRequest(seed, doc.Rev, "handover-race", sourceSessionID, "This must not land."))
@@ -516,5 +517,65 @@ func TestSeedHandoverRecreatesTheSavedBranchAfterWorktreeDeletion(t *testing.T) 
 	}
 	if branch, err := attngit.GetCurrentBranch(wantRoot); err != nil || branch != "feature/handover" {
 		t.Fatalf("recreated branch = %q, %v", branch, err)
+	}
+}
+
+func TestSeedHandoverSurvivesTheWorkerReportingItsConversationDuringTheBind(t *testing.T) {
+	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
+	consumeDelegatedPrompt(t, backend)
+	oldSessionID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
+	seed, doc, err := d.readSeed(seedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The session-start hook of a fast agent writes the new session's dispatch
+	// between the bind's read and its commit.
+	var spawnedID string
+	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
+		if opts.InitialPromptFile != "" {
+			spawnedID = opts.ID
+		}
+	}
+	commitAttempts := 0
+	d.seedHandoverBeforeCommit = func() {
+		commitAttempts++
+		if commitAttempts > 1 {
+			return
+		}
+		if err := d.rememberDispatchResume(spawnedID, "codex-conv-hook"); err != nil {
+			t.Errorf("session-start hook during the bind: %v", err)
+		}
+	}
+	op, err := d.startDelegation(handoverRequest(seed, doc.Rev, "handover-hook", sourceSessionID, "Pick up where the tests failed."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := waitDelegationOperation(t, d, op.OperationID)
+	if done.State != protocol.DelegationOperationStateCompleted || done.SessionID != spawnedID {
+		t.Fatalf("Handover operation = %+v, spawned %q", done, spawnedID)
+	}
+	if commitAttempts != 2 {
+		t.Fatalf("commit attempts = %d, want the conflicting first try and one retry", commitAttempts)
+	}
+	if d.store.Get(spawnedID) == nil {
+		t.Fatal("the handed-over worker was terminated")
+	}
+	after, _, err := d.readSeed(seedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.TenderSession != spawnedID || after.LastExecutionID != spawnedID {
+		t.Fatalf("handed-over seed = %+v", after)
+	}
+	dispatch, ok := d.gardenDispatch(spawnedID)
+	if !ok || dispatch.Crown != seedID || dispatch.Resume != "codex-conv-hook" || dispatch.OperationID != done.OperationID {
+		t.Fatalf("new dispatch lost the hook's write or the bind: %+v", dispatch)
+	}
+	if oldAfter, _ := d.gardenDispatch(oldSessionID); oldAfter.SupersededBy != spawnedID {
+		t.Fatalf("old dispatch superseded_by = %q, want %q", oldAfter.SupersededBy, spawnedID)
+	}
+	if notes := seedNoteCount(t, d, seedID); notes != 1 {
+		t.Fatalf("handoff notes = %d, want exactly one after the retry", notes)
 	}
 }

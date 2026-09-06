@@ -1,0 +1,11 @@
+kind: fixed
+area: garden
+change: A Handover keeps its new agent when the agent's session-start hook lands during the seed bind.
+symptom: >
+  A fast-starting agent (Codex writes its rollout at launch) reported its
+  conversation while the daemon was still binding the seed; the bind saw a
+  dispatch revision conflict, the launch rolled back, and the freshly spawned
+  agent was killed with an empty pane.
+notes: >
+  The bind now re-reads and re-merges the dispatch documents on a dispatch
+  conflict, up to three times. The seed's own revision moving stays fatal.

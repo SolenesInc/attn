@@ -1,0 +1,10 @@
+kind: fixed
+area: sessions
+change: Closing a bash 5.2 shell pane no longer waits up to 10s for the shell to exit.
+symptom: >
+  readline 8.2 drops a SIGHUP that lands between its signal check and select(),
+  so bash slept until a keypress or the SIGKILL fallback. Under CPU contention on
+  Linux this hit 6 of 300 closes.
+notes: >
+  The daemon repeats SIGHUP every 500ms until the process group exits; a second
+  signal interrupts the select. Contended clean exits measured under 120ms.

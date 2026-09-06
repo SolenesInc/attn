@@ -80,6 +80,35 @@ func TestKill_SIGTERMIgnoringShellExitsViaSIGHUP(t *testing.T) {
 	}
 }
 
+func TestKill_RepeatsSIGHUPForAShellThatLostTheFirst(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping real PTY spawn in short mode")
+	}
+
+	_, s := spawnKillTestSession(t, "kill-hup-repeated",
+		`hups=0; trap 'hups=$((hups+1)); [ "$hups" -ge 2 ] && exit 0' HUP; echo __KILLREADY__; while :; do read -t 5 _ || :; done`)
+
+	start := time.Now()
+	var escalations []syscall.Signal
+	if err := s.killWithEscalation(syscall.SIGHUP, 8*time.Second, func(sig syscall.Signal) {
+		escalations = append(escalations, sig)
+	}); err != nil {
+		t.Fatalf("kill() error: %v", err)
+	}
+	elapsed := time.Since(start)
+
+	if elapsed >= 4*sighupRepeat {
+		t.Fatalf("kill() took %v, want the second SIGHUP to land after %v", elapsed, sighupRepeat)
+	}
+	info := s.info()
+	if info.ExitSignal != nil || info.ExitCode == nil || *info.ExitCode != 0 {
+		t.Fatalf("exit = signal %v code %v, want a clean exit from the second SIGHUP", info.ExitSignal, info.ExitCode)
+	}
+	if len(escalations) != 0 {
+		t.Fatalf("escalations = %v, want none: a repeated SIGHUP is the same rung", escalations)
+	}
+}
+
 func TestKill_TERMAndHUPIgnoringChildFallsBackToSIGKILL(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping real PTY spawn in short mode")
@@ -187,6 +216,8 @@ func TestManagerKill_InteractiveShellExitsBeforeTERMGrace(t *testing.T) {
 				t.Fatalf("getSession() error: %v", err)
 			}
 
+			// The marker must come from the shell itself: the tty echoes the typed
+			// command before the shell has finished starting.
 			const marker = "__INTERACTIVE_SHELL_READY__"
 			ready := make(chan struct{})
 			var once sync.Once
@@ -203,7 +234,7 @@ func TestManagerKill_InteractiveShellExitsBeforeTERMGrace(t *testing.T) {
 			}, nil); err != nil {
 				t.Fatalf("Subscribe() error: %v", err)
 			}
-			if err := m.Input(id, []byte("printf '"+marker+"\\n'\r")); err != nil {
+			if err := m.Input(id, []byte("printf '__INTERACTIVE_SHELL_%s__\\n' READY\r")); err != nil {
 				t.Fatalf("Input() error: %v", err)
 			}
 			select {
