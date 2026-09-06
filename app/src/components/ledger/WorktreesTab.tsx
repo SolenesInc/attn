@@ -34,7 +34,6 @@ export interface WorktreesTabProps {
   gitOperations: Record<string, GitOperation>;
   onSelectSession: (sessionId: string) => void;
   onShowSessions: (path: string) => void;
-  /** A session row asked for its worktree: select that path. */
   requestedPath?: { path: string; nonce: number } | null;
   queryRef: React.RefObject<HTMLInputElement | null>;
   now: () => Date;

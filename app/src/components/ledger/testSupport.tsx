@@ -17,10 +17,8 @@ export const now = () => NOW;
 
 type TabOnly<T> = Omit<T, 'queryRef' | 'now' | 'onStatus'>;
 
-/** Queries scoped to the rows: a title also heads the inspector, so the page as a whole has it twice. */
 export const rows = () => within(screen.getByRole('listbox', { name: 'Rows' }));
 
-/** The shell's contribution to a tab: a query input ref and the status line it paints. */
 function Host({ children }: { children: (host: { queryRef: React.RefObject<HTMLInputElement | null>; onStatus: (status: ReactNode) => void }) => ReactNode }) {
   const queryRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<ReactNode>(null);
@@ -112,7 +110,6 @@ export function judged(sessionId: string, overrides: Partial<SessionReopen> = {}
   return { session_id: sessionId, reopen: verdict(overrides) };
 }
 
-/** The tab's only door to the daemon: every assertion is about the query it puts through here. */
 export function listing(pages: SessionLedgerPage[]) {
   const calls: SessionLedgerQuery[] = [];
   const list = vi.fn(async (query: SessionLedgerQuery) => {

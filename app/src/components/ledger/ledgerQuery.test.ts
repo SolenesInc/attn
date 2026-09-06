@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { baseName, formatQuery, matchesWords, parseQuery, removeToken } from './ledgerQuery';
+import { baseName, formatQuery, matchesDir, matchesWords, parseQuery, removeToken } from './ledgerQuery';
 import { nameIds, relativeStamp, shortPath, tildePath } from './ledgerTime';
 
 const facets = {
@@ -42,6 +42,14 @@ describe('query helpers', () => {
     expect(matchesWords(['Ledger Work', '/x/y'], ['ledger', 'y'])).toBe(true);
     expect(matchesWords(['Ledger Work'], ['ledger', 'zzz'])).toBe(false);
     expect(matchesWords([], [])).toBe(true);
+  });
+
+  it('matches dir: as typed with a tilde, pasted absolute, or with a trailing slash', () => {
+    expect(matchesDir('/Users/victor/projects/attn/app', '~/projects/attn')).toBe(true);
+    expect(matchesDir('/Users/victor/projects/attn/app', '/Users/victor/projects/attn/')).toBe(true);
+    expect(matchesDir('/Users/victor/projects/attn-two', '~/projects/attn')).toBe(false);
+    expect(matchesDir('/srv/work', '~/work')).toBe(false);
+    expect(matchesDir('/anything', '')).toBe(true);
   });
 
   it('takes a base name and removes one token', () => {

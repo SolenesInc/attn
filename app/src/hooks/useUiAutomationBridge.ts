@@ -1522,7 +1522,6 @@ function requireWorktreePath(payload: Record<string, unknown>): string {
 }
 
 const VERB_SEPARATOR = '\u001f';
-// A row or a repository header says it is refreshing; the witness counts both.
 const LEDGER_REFRESHING = '.ledger-glyph.is-refreshing, .ledger-checking';
 
 function ledgerRoot(tab: 'Sessions' | 'Worktrees'): HTMLElement | null {

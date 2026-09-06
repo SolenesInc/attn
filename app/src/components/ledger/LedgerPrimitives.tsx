@@ -22,16 +22,12 @@ export interface RowModel {
   glyph: RowGlyph;
   title: string;
   titleHint?: string;
-  /** Secondary line segments; rendered with a dot between each. */
   meta: ReactNode[];
-  /** A short trailing word on the right of the meta line, e.g. the relative time. */
   stamp?: { text: string; hint?: string };
   note?: RowNote;
   verbs: RowVerb[];
   dim?: boolean;
-  /** Text `y` copies: the row's path. */
   yank?: string;
-  /** Facts the automation bridge reads off the row as `data-*`, so it never parses prose. */
   attrs?: Record<string, string>;
 }
 
@@ -334,7 +330,6 @@ export function Field({ label, children, mono }: { label: string; children: Reac
   );
 }
 
-/** A copy affordance that says "copied" for a beat and then forgets. */
 export function useCopied(): [string | null, (text: string) => void] {
   const [copied, setCopied] = useState<string | null>(null);
   useEffect(() => {

@@ -48,7 +48,6 @@ function OpenLedgerSurface({
   useEscapeStack(onClose, true);
   useEscapeStack(() => setLegendOpen(false), legendOpen);
 
-  // Each tab reports its own status line; the shell only paints it.
   const onStatus = useCallback((next: ReactNode) => setStatus(next), []);
 
   const showSessionsFor = useCallback((path: string) => {
@@ -61,7 +60,6 @@ function OpenLedgerSurface({
     onTabChange('worktrees');
   }, [onTabChange]);
 
-  // Showing an agent is the point of leaving; the surface gets out of the way.
   const focusSession = useCallback((id: string) => { sessions.onFocusSession?.(id); onClose(); }, [sessions.onFocusSession, onClose]);
   const selectSession = useCallback((id: string) => { worktrees.onSelectSession?.(id); onClose(); }, [worktrees.onSelectSession, onClose]);
 

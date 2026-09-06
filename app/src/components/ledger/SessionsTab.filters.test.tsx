@@ -118,7 +118,7 @@ describe('SessionsTab query', () => {
     expect(rows().getByText('ledger work')).toBeTruthy();
     await waitFor(() => expect(status()).toContain('1 hidden by the query'));
 
-    type('dir:/Users/victor/projects/elsewhere');
+    type('dir:~/projects/elsewhere');
     await waitFor(() => expect(rows().queryByText('ledger work')).toBeNull());
     expect(rows().getByText('other thing')).toBeTruthy();
     expect(calls).toHaveLength(1);

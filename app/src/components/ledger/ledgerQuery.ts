@@ -1,13 +1,13 @@
 import type { SessionLedgerFilters } from '../../hooks/useSessionLedger';
 import type { SessionLedgerFacets } from '../../types/generated';
 import type { SessionRangeId } from '../sessionsLedger';
+import { tildePath } from './ledgerTime';
 
 // Grammar: `repo:attn ws:name 7d from:… to:… dir:… words`; `dir:` and words narrow the loaded page only.
 export interface ParsedQuery {
   filters: Omit<SessionLedgerFilters, 'scope'>;
   dir: string;
   words: string[];
-  /** Tokens that named nothing the facets know; shown as chips so the user sees why nothing matched. */
   unresolved: string[];
 }
 
@@ -69,7 +69,6 @@ export function formatQuery(
   return tokens.join(' ');
 }
 
-/** A workspace name as it is typed: one token, no spaces, case-blind. */
 function wsToken(label: string): string {
   return label.trim().replace(/\s+/g, '-').toLowerCase();
 }
@@ -84,6 +83,13 @@ export function matchesWords(haystack: string[], words: string[]): boolean {
   if (words.length === 0) return true;
   const joined = haystack.join(' ').toLowerCase();
   return words.every((word) => joined.includes(word));
+}
+
+// `dir:` is typed the way the row shows it (`~/…`) or pasted absolute; the directory answers to both.
+export function matchesDir(directory: string, dir: string): boolean {
+  const wanted = dir.replace(/\/+$/, '');
+  if (!wanted) return true;
+  return [directory, tildePath(directory)].some((form) => form === wanted || form.startsWith(`${wanted}/`));
 }
 
 export function removeToken(text: string, token: string): string {

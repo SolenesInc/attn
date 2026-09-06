@@ -22,7 +22,7 @@ import {
 } from '../sessionsLedger';
 import type { ReopenVerdictView, SessionScope } from '../sessionsLedger';
 import { fullStamp, nameIds, relativeStamp, shortPath, tildePath } from './ledgerTime';
-import { formatQuery, matchesWords, parseQuery, removeToken } from './ledgerQuery';
+import { formatQuery, matchesDir, matchesWords, parseQuery, removeToken } from './ledgerQuery';
 import { Field, Inspector, LedgerList, QueryBar, Segmented, useCopied } from './LedgerPrimitives';
 import type { Chip, ListItem, RowGlyph, RowModel, RowNote, RowVerb } from './LedgerPrimitives';
 
@@ -42,7 +42,6 @@ export interface SessionsTabProps {
   onShowWorktree?: (path: string) => void;
   closeNotice?: { entry: SessionLedgerEntry; reopen?: SessionReopen; nonce: number };
   verdictNotice?: { verdicts: Record<string, SessionReopen>; nonce: number };
-  /** A worktree row asked to see its sessions: narrows the page to that directory. */
   requestedDir?: { path: string; nonce: number } | null;
   queryRef: React.RefObject<HTMLInputElement | null>;
   now: () => Date;
@@ -94,7 +93,6 @@ export function SessionsTab({
   const [text, setText] = useState(() => formatQuery(restoredFilters, workspaceLabel));
   const parsed = useMemo(() => parseQuery(text, ledger.facets, workspaceLabel), [text, ledger.facets, workspaceLabel]);
 
-  // The typed query is the source of truth for the server filters; scope lives on the segmented control.
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setFilters((current) => {
@@ -124,7 +122,7 @@ export function SessionsTab({
   }, [verdictNotice, recordVerdict]);
 
   const visible = useMemo(() => entries.filter((entry) => {
-    if (parsed.dir && !(entry.directory === parsed.dir || entry.directory.startsWith(`${parsed.dir}/`))) return false;
+    if (!matchesDir(entry.directory, parsed.dir)) return false;
     return matchesWords(
       [entry.label, entry.id, entry.agent, entry.branch ?? '', entry.directory, workspaceLabel(entry.workspace_id)],
       parsed.words,
