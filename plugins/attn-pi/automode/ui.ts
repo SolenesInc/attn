@@ -2,27 +2,59 @@ import type { AutoModeDenial } from "./index";
 import type { BreakerState } from "./session";
 
 export const autoModeStatusKey = "attn-auto-mode";
-export const autoModeDenialWidgetKey = "attn-auto-mode-denials";
 
 export const classifyingWorkingMessage = "auto mode is checking this call…";
 
-export const denialWidgetLimit = 5;
+export const denialReportLimit = 5;
+
+// pi dims its own footer lines but renders extension status lines unstyled, so these
+// surfaces tint their own text. RPC relays that text verbatim: only TUI gets a theme.
+export type AutoModeTheme = {
+  fg(color: "dim" | "warning" | "muted" | "error", text: string): string;
+  bold(text: string): string;
+};
+
+export function statusTheme(ctx: { mode?: string; ui?: AutoModeUILike }): AutoModeTheme | undefined {
+  return ctx.mode === "tui" ? ctx.ui?.theme : undefined;
+}
 
 export type AutoModeUILike = {
   setStatus(key: string, text: string | undefined): void;
   setWorkingMessage(message?: string): void;
   notify(message: string, type?: "info" | "warning" | "error"): void;
-  setWidget(key: string, content: string[] | undefined): void;
   confirm(title: string, message: string): Promise<boolean>;
   editor?(title: string, prefill?: string): Promise<string | undefined>;
+  theme?: AutoModeTheme;
 };
+
+export function dimmed(theme: AutoModeTheme | undefined, text: string): string {
+  return theme?.fg("dim", text) ?? text;
+}
+
+export function mutedText(theme: AutoModeTheme | undefined, text: string): string {
+  return theme?.fg("muted", text) ?? text;
+}
+
+export function problem(theme: AutoModeTheme | undefined, text: string): string {
+  return theme?.fg("error", text) ?? text;
+}
 
 // What the surfaces show; the model still gets the call in full — denialToolResult
 // does not clamp.
 export const denialActionCharLimit = 80;
+export const denialReasonCharLimit = 120;
+
+export function denialKey(denial: AutoModeDenial): string {
+  return `${denial.action}\u0000${denial.rule ?? ""}`;
+}
 
 export function autoModeStatusText(enabled: boolean): string {
   return enabled ? "auto: on" : "auto: off";
+}
+
+export function heldStatusText(enabled: boolean, held: number): string {
+  if (!enabled || held === 0) return autoModeStatusText(enabled);
+  return `${autoModeStatusText(enabled)} · ${held} held`;
 }
 
 export function denialNotice(denial: AutoModeDenial): string {
@@ -33,14 +65,40 @@ function clamp(text: string): string {
   return text.length <= denialActionCharLimit ? text : `${text.slice(0, denialActionCharLimit - 1)}…`;
 }
 
-export function denialWidgetLines(denials: readonly AutoModeDenial[]): string[] {
+function clampReason(reason: string): string {
+  return reason.length <= denialReasonCharLimit ? reason : `${reason.slice(0, denialReasonCharLimit - 1)}…`;
+}
+
+type DenialGroup = { denial: AutoModeDenial; count: number };
+
+function groupRetries(shown: readonly AutoModeDenial[]): DenialGroup[] {
+  const groups: DenialGroup[] = [];
+  for (const denial of shown) {
+    const last = groups.at(-1);
+    if (last && denialKey(last.denial) === denialKey(denial)) last.count += 1;
+    else groups.push({ denial, count: 1 });
+  }
+  return groups;
+}
+
+// Distinct blocked calls, retries merged: the number the footer counts.
+export function heldCount(denials: readonly AutoModeDenial[]): number {
+  return groupRetries(denials).length;
+}
+
+export function denialReportLines(denials: readonly AutoModeDenial[], theme?: AutoModeTheme): string[] {
   if (denials.length === 0) return [];
-  const shown = denials.slice(-denialWidgetLimit);
-  const hidden = denials.length - shown.length;
-  const lines = [`auto mode blocked ${denials.length} call${denials.length === 1 ? "" : "s"}:`];
-  if (hidden > 0) lines.push(`  … ${hidden} earlier`);
-  for (const denial of shown) lines.push(`  ${clamp(denial.action)} — ${denial.reason}`);
-  lines.push(offer(denials));
+  const groups = groupRetries(denials);
+  const shown = groups.slice(-denialReportLimit);
+  const hidden = groups.length - shown.length;
+  const header = groups.length === 1 ? "auto mode is holding this call" : `auto mode is holding ${groups.length} calls`;
+  const lines = [theme ? theme.fg("warning", theme.bold(`⚠ ${header}`)) : `⚠ ${header}`];
+  if (hidden > 0) lines.push(dimmed(theme, `  … ${hidden} earlier`));
+  for (const { denial, count } of shown) {
+    const retries = count > 1 ? dimmed(theme, ` ×${count}`) : "";
+    lines.push(`  ${clamp(denial.action)}${retries} ${mutedText(theme, `— ${clampReason(denial.reason)}`)}`);
+  }
+  lines.push(dimmed(theme, offer(denials)));
   return lines;
 }
 
