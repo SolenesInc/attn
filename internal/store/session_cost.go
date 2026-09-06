@@ -12,9 +12,16 @@ import (
 )
 
 type SessionCostObservation struct {
-	ObservationID string            `json:"observation_id"`
-	Model         string            `json:"model"`
-	Usage         sessioncost.Usage `json:"usage"`
+	ObservationID string `json:"observation_id"`
+	Model         string `json:"model"`
+	// Empty on every observation recorded before purposes existed, which the
+	// ledger key reads as the agent's own traffic.
+	Purpose string            `json:"purpose,omitempty"`
+	Usage   sessioncost.Usage `json:"usage"`
+}
+
+func (o SessionCostObservation) ledgerKey() sessioncost.LedgerKey {
+	return sessioncost.NewLedgerKey(o.Model, o.Purpose)
 }
 
 // Finalized observations are counted into Ledger already: correcting one is refused.
@@ -46,8 +53,8 @@ func cloneSessionCostState(state SessionCostState) SessionCostState {
 	}
 	if state.Ledger != nil {
 		clone.Ledger = make(sessioncost.Ledger, len(state.Ledger))
-		for model, usage := range state.Ledger {
-			clone.Ledger[model] = usage
+		for key, usage := range state.Ledger {
+			clone.Ledger[key] = usage
 		}
 	}
 	if state.Observations != nil {
@@ -188,6 +195,7 @@ func applySessionCostObservations(sessionID string, state *SessionCostState, obs
 	for _, observation := range observations {
 		observation.ObservationID = strings.TrimSpace(observation.ObservationID)
 		observation.Model = strings.TrimSpace(observation.Model)
+		observation.Purpose = sessioncost.NewLedgerKey(observation.Model, observation.Purpose).Purpose
 		if observation.ObservationID == "" || observation.Model == "" || !observation.Usage.HasUsage() {
 			continue
 		}
@@ -201,9 +209,11 @@ func applySessionCostObservations(sessionID string, state *SessionCostState, obs
 			continue
 		}
 		if exists {
-			state.Ledger[prior.Model] = state.Ledger[prior.Model].Subtract(prior.Usage)
+			priorKey := prior.ledgerKey()
+			state.Ledger[priorKey] = state.Ledger[priorKey].Subtract(prior.Usage)
 		}
-		state.Ledger[observation.Model] = state.Ledger[observation.Model].Add(observation.Usage)
+		key := observation.ledgerKey()
+		state.Ledger[key] = state.Ledger[key].Add(observation.Usage)
 		state.Observations[observation.ObservationID] = observation
 		changed = true
 	}

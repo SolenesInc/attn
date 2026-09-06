@@ -146,6 +146,20 @@ piece of work rather than a rediscovery.
   under default-profile packaging, and that a restart re-runs create-only. Run
   it by hand when `LegacyTicketRecoveryVersion` moves or either recovery file
   changes.
+- `scenario-pi-security.mjs` — rewrite, then catalog. It opens by promoting a
+  model through the removed auto mode model list (`attn automode model`,
+  `config.models`) and then drives the removed classifier (a stub judge role
+  found by a classifier marker in the system prompt), so no step past that
+  promotion can pass. The rewrite must still prove credential filtering, the
+  Seatbelt/bubblewrap sandbox, the security panel, and cache/write grants.
+  Garden seed s-f4bna3.
+- `scenario-pi-automode.mjs` — rewrite, then catalog. Same blocker as
+  `scenario-pi-security.mjs`: the removed model list and the removed
+  classifier (`classifier-intent` denials, the circuit breaker, prompt strings
+  such as "Auto-mode access review"), now that auto mode is a Guardian
+  reviewer instead. The rewrite must prove a session under auto mode ending in
+  a Guardian decision, a denial reaching the TUI, `attn automode denials`, and
+  the notification feed. Garden seed s-f4bna3.
 
 A new scenario file lands with a catalog entry, or with its verdict added here.
 
@@ -227,7 +241,7 @@ fails the scenario on a non-empty ledger and prints the lines.
   the runner options, which wins over the catalog. `false` arms everything,
   `true` allows all four, an array names the ones the scenario needs. A runner
   id neither covers fails at construction rather than defaulting to permissive.
-  Every arming logs what it allowed. `pi-automode` carries `['pi']` because the
+  Every arming logs what it allowed. A pi scenario carries `['pi']` because the
   attn-pi plugin execs `pi --version` as its health probe, then runs `pi` against
   the loopback stub. Claude, Codex, and Copilot stay armed.
 - Arming also sets `ATTN_HEADLESS_TASKS=off`, so the daemon refuses

@@ -2,8 +2,8 @@ package client
 
 import "github.com/victorarias/attn/internal/protocol"
 
-// There is no Promote here and there will not be one: promotion is a WebSocket command
-// the app sends, because a human in the app is the trust boundary a CLI caller cannot fake.
+// Nothing here writes the auto mode config. A human in the app is the trust boundary a
+// caller on this socket cannot fake, so every amendment leaves as a proposal.
 
 func (c *Client) AutoModeShow() (*protocol.AutoModeShowResult, error) {
 	resp, err := c.send(protocol.AutoModeShowMessage{Cmd: protocol.CmdAutoModeShow})

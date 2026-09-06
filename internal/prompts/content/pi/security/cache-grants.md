@@ -1,1 +1,0 @@
-Current sandbox build-cache grants (from the executor, not the transcript): {{paths}}. Only these directories qualify for the Configured Build Caches exception. An empty list means the exception is unavailable.

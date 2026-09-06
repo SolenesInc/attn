@@ -121,10 +121,10 @@ func TestSessionUsageTrackerIncludesClaudeSubagentsAndRevisions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := state.Ledger["claude-opus-5"]; got.InputTokens != 10 || got.OutputTokens != 20 {
+	if got := state.Ledger[sessioncost.AgentKey("claude-opus-5")]; got.InputTokens != 10 || got.OutputTokens != 20 {
 		t.Fatalf("root usage = %+v", got)
 	}
-	if got := state.Ledger["claude-sonnet-4-5"]; got.InputTokens != 30 || got.OutputTokens != 40 {
+	if got := state.Ledger[sessioncost.AgentKey("claude-sonnet-4-5")]; got.InputTokens != 30 || got.OutputTokens != 40 {
 		t.Fatalf("child usage = %+v", got)
 	}
 
@@ -132,14 +132,14 @@ func TestSessionUsageTrackerIncludesClaudeSubagentsAndRevisions(t *testing.T) {
 	tracker.Reconcile()
 	tracker.Reconcile()
 	state, _ = d.store.SessionCost("claude")
-	if got := state.Ledger["claude-sonnet-4-5"]; got.InputTokens != 30 || got.OutputTokens != 75 {
+	if got := state.Ledger[sessioncost.AgentKey("claude-sonnet-4-5")]; got.InputTokens != 30 || got.OutputTokens != 75 {
 		t.Fatalf("revised child usage = %+v", got)
 	}
 
 	restarted := d.newSessionUsageTracker(w, root)
 	restarted.Reconcile()
 	state, _ = d.store.SessionCost("claude")
-	if got := state.Ledger["claude-sonnet-4-5"]; got.OutputTokens != 75 {
+	if got := state.Ledger[sessioncost.AgentKey("claude-sonnet-4-5")]; got.OutputTokens != 75 {
 		t.Fatalf("restart double-counted child usage: %+v", got)
 	}
 }
@@ -180,7 +180,7 @@ func testSessionUsageResumeBaseline(t *testing.T, legacy bool) {
 	tracker.Reconcile()
 	state, _ := d.store.SessionCost("resumed")
 	if legacy {
-		if got := state.Ledger["claude-opus-5"]; got.InputTokens != 7 || got.OutputTokens != 8 || len(state.Ledger) != 1 {
+		if got := state.Ledger[sessioncost.AgentKey("claude-opus-5")]; got.InputTokens != 7 || got.OutputTokens != 8 || len(state.Ledger) != 1 {
 			t.Fatalf("migration must retain unread root usage without old child history: %+v", state.Ledger)
 		}
 	} else if len(state.Ledger) != 0 {
@@ -195,10 +195,10 @@ func testSessionUsageResumeBaseline(t *testing.T, legacy bool) {
 	if legacy {
 		wantInput, wantOutput = 10, 12
 	}
-	if got := state.Ledger["claude-opus-5"]; got.InputTokens != wantInput || got.OutputTokens != wantOutput {
+	if got := state.Ledger[sessioncost.AgentKey("claude-opus-5")]; got.InputTokens != wantInput || got.OutputTokens != wantOutput {
 		t.Fatalf("new root usage = %+v", got)
 	}
-	if got := state.Ledger["claude-sonnet-4-5"]; got.InputTokens != 5 || got.OutputTokens != 6 {
+	if got := state.Ledger[sessioncost.AgentKey("claude-sonnet-4-5")]; got.InputTokens != 5 || got.OutputTokens != 6 {
 		t.Fatalf("new child usage = %+v", got)
 	}
 }
@@ -226,7 +226,7 @@ func TestSessionUsageTrackerFollowsCodexLineageRecursively(t *testing.T) {
 	tracker := d.newSessionUsageTracker(w, root)
 	tracker.Reconcile()
 	state, _ := d.store.SessionCost("codex")
-	got := state.Ledger["gpt-5.5"]
+	got := state.Ledger[sessioncost.AgentKey("gpt-5.5")]
 	if got.InputTokens != 45 || got.CacheReadInputTokens != 15 || got.OutputTokens != 9 {
 		t.Fatalf("recursive Codex usage = %+v", got)
 	}

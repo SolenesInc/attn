@@ -1,4 +1,4 @@
-import { securityPrompt } from "./guidance";
+import { sandboxRecovery, securityPrompt } from "./guidance";
 import {
   createBashToolDefinition, createEditToolDefinition, createFindToolDefinition, createGrepToolDefinition,
   createLocalBashOperations, createLsToolDefinition, createReadToolDefinition, createWriteToolDefinition,
@@ -8,12 +8,11 @@ import { Text } from "@earendil-works/pi-tui";
 import { CredentialFilter, FilteredStream } from "./filter";
 import { SandboxedFilesystem } from "./filesystem";
 import { assertPath, type SecurityPolicy } from "./policy";
-import { bashSandbox, shellQuote } from "./sandbox";
-import { Type } from "typebox";
-import { reviewUnavailable, sandboxRecovery, sandboxRequestSchema, scopedPolicy, type SandboxReview } from "./recovery";
-import type { ToolExecutionCheck } from "../automode/index";
+import { bashSandbox, sandboxEnvironment, shellQuote } from "./sandbox";
+import { bashParameterSchema } from "../sandbox/index";
+import type { BashApproval } from "../approval/index";
 
-export function protectedBash(policy: SecurityPolicy, filter: CredentialFilter, reviewAvailable = () => false): BashOperations {
+export function protectedBash(policy: SecurityPolicy, filter: CredentialFilter): BashOperations {
   const local = createLocalBashOperations({ shellPath: "/bin/bash" });
   return {
     async exec(command, cwd, options) {
@@ -31,14 +30,14 @@ export function protectedBash(policy: SecurityPolicy, filter: CredentialFilter, 
       try {
         const result = await local.exec(bashSandbox(policy, command), cwd, {
           ...options,
-          env: { ...filter.environment(options.env ?? process.env), TMPDIR: policy.temp, TMP: policy.temp, TEMP: policy.temp },
+          env: sandboxEnvironment(policy, filter.environment(options.env ?? process.env)),
           onData: (data) => stream.write(data),
         });
         stream.finish();
         if (policy.enabled && result.exitCode !== 0 && (permissionError || (policy.network === "deny" && networkError))) {
           const guidance = startupError
             ? securityPrompt("startup-failure")
-            : sandboxRecovery(policy, reviewAvailable(), permissionError ? "permission" : "network");
+            : sandboxRecovery(permissionError ? "permission" : "network");
           options.onData(Buffer.from(`\n${filter.text(guidance)}\n`));
         }
         return result;
@@ -49,46 +48,39 @@ export function protectedBash(policy: SecurityPolicy, filter: CredentialFilter, 
   };
 }
 
-export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter, fs: SandboxedFilesystem, review?: SandboxReview, reviewAvailable = () => !!review, checkExecution?: ToolExecutionCheck): ToolDefinition[] {
-  const bash = protectedBash(policy, filter, reviewAvailable);
+export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter, fs: SandboxedFilesystem, approval?: BashApproval): ToolDefinition[] {
+  const bash = protectedBash(policy, filter);
   const bashTool = createBashToolDefinition(policy.cwd, { operations: bash, shellPath: "/bin/bash" });
-  const parameters = Type.Object({ ...bashTool.parameters.properties, sandbox: Type.Optional(sandboxRequestSchema) });
-  const reviewedBash: ToolDefinition<typeof parameters> = {
+  // The orchestrator owns evaluation, review and the sandbox wrapper, so the tool
+  // hands it pi's final command line and pi keeps formatting the result.
+  const reviewedBash: ToolDefinition<typeof bashParameterSchema> = {
     ...bashTool,
-    parameters,
-    description: `${bashTool.description}\n${securityPrompt("bash-description")}`,
-    promptGuidelines: [
-      securityPrompt("bash-guidance"),
-      securityPrompt("bash-credentials"),
-    ],
+    parameters: bashParameterSchema,
+    promptGuidelines: [securityPrompt("bash-credentials")],
     async execute(id, args, signal, onUpdate, ctx) {
-      if (!Object.hasOwn(args, "sandbox")) return bashTool.execute(id, args, signal, onUpdate, ctx);
-      if (!policy.enabled) throw new Error("The sandbox is disabled. Omit the sandbox request to run the command through normal auto-mode review.");
-      if (!review || !reviewAvailable()) throw new Error(reviewUnavailable);
-      const scoped = scopedPolicy(policy, args.sandbox!);
-      const command = args.command;
-      const timeout = args.timeout;
-      const input = { command, ...(timeout === undefined ? {} : { timeout }), sandbox: scoped.request };
-      const expected = JSON.stringify(input);
-      const decision = await review({ type: "tool_call", toolCallId: id, toolName: "bash", input }, { ...ctx, cwd: policy.cwd, signal });
-      if (signal?.aborted) throw new Error("Sandbox review cancelled; command was not run.");
-      if (decision?.block) throw new Error(decision.reason ?? "Auto mode refused extra sandbox access. Explain the refusal to the user before retrying.");
-      if (expected !== JSON.stringify(input) || JSON.stringify(scopedPolicy(policy, scoped.request).request) !== JSON.stringify(scoped.request)) {
-        throw new Error("Sandbox request changed during review. Submit it again for review; the command was not run.");
-      }
-      const operations = protectedBash(scoped.policy, filter, reviewAvailable);
-      const approved = filter.text(`Auto mode approved temporary sandbox access for this command: ${JSON.stringify(scoped.request)}\n`);
-      return createBashToolDefinition(policy.cwd, { operations: {
-        exec(command, cwd, options) {
-          options.onData(Buffer.from(approved));
-          return operations.exec(command, cwd, options);
+      if (!approval) return bashTool.execute(id, { command: args.command, timeout: args.timeout }, signal, onUpdate, ctx);
+      const operations: BashOperations = {
+        exec: (command, cwd, options) => {
+          const stream = new FilteredStream(filter, (data) => options.onData(data));
+          return approval({ ...args, command }, {
+            toolCallId: id,
+            cwd,
+            ...(signal ? { signal } : {}),
+            ...(ctx.ui ? { ui: ctx.ui } : {}),
+            ...(ctx.abort ? { abort: () => ctx.abort() } : {}),
+            onData: (data) => stream.write(data),
+            ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
+            ...(options.env === undefined ? {} : { env: options.env }),
+          }).finally(() => stream.finish());
         },
-      }, shellPath: "/bin/bash" }).execute(id, { command, timeout }, signal, onUpdate, ctx);
+      };
+      return createBashToolDefinition(policy.cwd, { operations, shellPath: "/bin/bash" })
+        .execute(id, { command: args.command, timeout: args.timeout }, signal, onUpdate, ctx);
     },
   };
   const rawRead = (path: string) => fs.read(path);
   const tools: ToolDefinition[] = [
-    reviewedBash,
+    reviewedBash as ToolDefinition,
     createReadToolDefinition(policy.cwd, { operations: {
       readFile: async (path) => {
         const data = await rawRead(path);
@@ -102,7 +94,7 @@ export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter,
     } }),
     createEditToolDefinition(policy.cwd, { operations: {
       readFile: rawRead, writeFile: (path, content) => fs.write(path, content),
-      access: async (path) => { assertPath(policy, path, "write", reviewAvailable()); await fs.access(path); },
+      access: async (path) => { assertPath(policy, path, "write"); await fs.access(path); },
     } }),
     createLsToolDefinition(policy.cwd, { operations: {
       exists: async (path) => { try { await fs.access(path); return true; } catch { return false; } },
@@ -144,7 +136,6 @@ export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter,
     signal?.addEventListener("abort", abort, { once: true });
     try {
       args = structuredClone(args);
-      checkExecution?.({ type: "tool_call", toolCallId: id, toolName: tool.name, input: args }, { ...ctx, cwd: policy.cwd, signal });
       return filter.value(await tool.execute(id, args, signal, onUpdate ? (update) => onUpdate(filter.value(update)) : undefined, ctx));
     } catch (error) {
       throw new Error(filter.text(error instanceof Error ? error.message : String(error)));

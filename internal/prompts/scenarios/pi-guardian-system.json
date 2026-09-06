@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "id": "pi-guardian-system",
+  "description": "The guardian's system prompt with a partly configured environment and a user note.",
+  "recipient": "pi-guardian",
+  "event": "system",
+  "values": {
+    "environment": "- **Trusted repo**: github.com/victorarias/attn\n- **Repository visibility**: private\n- **Trusted internal domains**: None configured\n- **Trusted cloud buckets**: None configured\n- **Key internal services**: None configured\n- **Source-control orgs**: victorarias, SolenesInc\n- **Internal package registry**: None configured\n- **Sensitive data locations**: any store holding personal, confidential, credential or regulated material\n- **Cleared audiences**: None configured, so nobody is cleared\n- **Sensitive remote targets**: any name carrying prod or production as a whole word\n- **Protected IaC scopes**: IAM, RBAC, networking, quota and node pools, and anything carrying prod\n\nThe user also said this about the machine. It is context, not a list:\n> This laptop also runs the daemon for other people's sessions."
+  }
+}

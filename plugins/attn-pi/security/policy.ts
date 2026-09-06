@@ -113,14 +113,14 @@ function gitWritePaths(cwd: string): string[] {
   }
 }
 
-export function assertPath(policy: SecurityPolicy, path: string, mode: "read" | "write", reviewAvailable = false): string {
+export function assertPath(policy: SecurityPolicy, path: string, mode: "read" | "write"): string {
   const target = expand(path.replace(/^@/, ""), policy.cwd);
   if (!policy.enabled) return target;
   const denies = mode === "write" ? policy.denyWrite : policy.denyRead;
   const protectedBy = denies.find((root) => within(target, canonical(root)));
   if (protectedBy) throw new Error(`Security blocked ${mode}: ${target}. This path is explicitly protected by ${protectedBy}. Auto mode cannot override this restriction. Explain what you need to the user; do not retry through another tool or change security settings yourself.`);
   if (mode === "write" && !policy.allowWrite.some((root) => within(target, root))) {
-    throw new Error(`Security blocked write outside allowed paths: ${target}. ${writeRecovery(policy, reviewAvailable)}`);
+    throw new Error(`Security blocked write outside allowed paths: ${target}. ${writeRecovery(policy)}`);
   }
   return target;
 }

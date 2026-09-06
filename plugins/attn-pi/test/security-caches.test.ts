@@ -1,19 +1,20 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { PiSecurity } from "../security/index";
-import { canonical, loadSecurityConfig, resolveSecurityPolicy } from "../security/policy";
+import { loadSecurityConfig, resolveSecurityPolicy } from "../security/policy";
 import { defaultBuildCaches } from "../security/caches";
 import { protectedBash } from "../security/tools";
 import { CredentialFilter } from "../security/filter";
 import { shellQuote } from "../security/sandbox";
+import { fixtureRoot } from "./fixture-root";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0)) await close(); });
 
 function fixture() {
-  const root = canonical(mkdtempSync(join(tmpdir(), "pi-cache-test-")));
+  const root = fixtureRoot("pi-cache-test-");
   for (const name of ["project", "agent", "temp", "private"]) mkdirSync(join(root, name));
   const configPath = join(root, "agent", "attn-security.json");
   const config = loadSecurityConfig(configPath);
@@ -81,8 +82,7 @@ test("cache controls and permission prompts take effect in the same session", as
   const tools = new Map<string, any>();
   const notices: string[] = [];
   const ctx = { cwd: join(root, "project"), ui: { setStatus() {}, notify: (text: string) => notices.push(text) } };
-  let available = true;
-  const security = new PiSecurity(configPath, async () => undefined, () => available);
+  const security = new PiSecurity(configPath);
   security.register({ on: (name: string, handler: any) => handlers.set(name, handler), registerCommand: (name: string, command: any) => commands.set(name, command), registerTool: (tool: any) => tools.set(tool.name, tool) } as never);
   cleanups.unshift(async () => handlers.get("session_shutdown")({}, ctx));
   await handlers.get("session_start")({}, ctx);
@@ -91,13 +91,10 @@ test("cache controls and permission prompts take effect in the same session", as
   const cache = config.buildCaches.paths[0]!;
   const run = (path: string) => tools.get("write").execute("cache-write", { path, content: "compiled" }, undefined, undefined, ctx);
   await run(join(cache, "first"));
-  expect(prompt()).toContain('Auto-mode access review: available');
   expect(prompt()).toContain(cache);
-  available = false;
-  expect(prompt()).toContain('Auto-mode access review: unavailable');
   await command("caches off");
   expect(security.cacheWritePaths()).toEqual([]);
-  await expect(run(join(cache, "disabled"))).rejects.toThrow("auto mode is off");
+  await expect(run(join(cache, "disabled"))).rejects.toThrow("outside allowed");
   expect(prompt()).toContain("Build-cache grants: disabled");
   expect(existsSync(join(cache, "first"))).toBe(true);
   await command(`allow-write ${cache}`);
@@ -114,20 +111,20 @@ test("cache controls and permission prompts take effect in the same session", as
   await command("status");
   expect(notices.at(-1)).toContain(`Active cache grants: ${custom}`);
   await command("off");
-  expect(prompt()).toContain("Omit bash.sandbox");
+  expect(prompt()).toContain("The OS sandbox is off");
   expect(prompt()).toContain("Tool network: unrestricted (sandbox disabled)");
-  expect(prompt()).not.toContain("retry bash");
+  expect(prompt()).not.toContain("Writable paths:");
 });
 
 test("network failures get policy-aware recovery without mislabeling unrelated failures", async () => {
   const policy = fixture().resolve();
   const failure = "printf 'getaddrinfo ENOTFOUND registry.example.invalid' >&2; exit 1";
-  const run = async (network: "allow" | "deny", available: boolean) => {
+  const run = async (network: "allow" | "deny") => {
     let output = "";
-    await protectedBash({ ...policy, network }, new CredentialFilter(), () => available).exec(failure, policy.cwd, { onData: (part) => { output += part; } });
+    await protectedBash({ ...policy, network }, new CredentialFilter()).exec(failure, policy.cwd, { onData: (part) => { output += part; } });
     return output;
   };
-  expect(await run("deny", true)).toContain('sandbox: {network: "allow"');
-  expect(await run("deny", false)).toContain("auto mode is off");
-  expect(await run("allow", true)).not.toContain("sandbox:");
+  expect(await run("deny")).toContain("The command reported a network error");
+  expect(await run("deny")).toContain("cannot be widened from inside a tool call");
+  expect(await run("allow")).not.toContain("The command reported a network error");
 });

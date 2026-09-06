@@ -171,9 +171,9 @@ function SessionUsagePopover({ usage, anchor, anchorRef, pinned, onClose, onPoin
       </div>
       <div className="session-usage-models">
         {usage.models.map((model) => (
-          <section key={model.model} className="session-usage-model">
+          <section key={`${model.purpose}|${model.model}`} className="session-usage-model">
             <header>
-              <strong>{model.model}</strong>
+              <strong>{model.purpose === 'guardian' ? `Guardian · ${model.model}` : model.model}</strong>
               <span>
                 {exactTokenFormatter.format(model.total_tokens)} tokens
                 {model.cost_usd !== undefined ? ` · ${formatSessionUsageUSD(model.cost_usd)}${model.has_unpriced_usage ? '*' : ''}` : ''}

@@ -1,1 +1,0 @@
-This is pass 2. Follow the classification process. Apply the BLOCK rules, the ALLOW exceptions and user intent; explicit user confirmation is required to clear a SOFT BLOCK, and clears no HARD BLOCK. Answer with <severity>N</severity>, then <category>Exact Rule Name</category> when a BLOCK rule matched, then <reason>one sentence</reason>. No other text.

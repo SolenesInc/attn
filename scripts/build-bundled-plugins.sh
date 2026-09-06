@@ -129,14 +129,13 @@ stage_plugin() {
     # Keep them external so extensions use the running Pi instance.
     bun build "${source_dir}/suite/index.ts" --target=node --format=esm --minify \
       --external "@earendil-works/pi-coding-agent" --external "@earendil-works/pi-tui" --outfile "${stage_dir}/suite.js"
-    # Auto mode ships inside suite.js by import; this second bundle is the same
-    # extension for a pi that knows nothing about attn (`pi -e automode.js`),
-    # under the same external rule.
-    bun build "${source_dir}/automode/standalone.ts" --target=node --format=esm --minify \
-      --external "@earendil-works/pi-coding-agent" --external "@earendil-works/pi-tui" --outfile "${stage_dir}/automode.js"
     bun build "${source_dir}/security/standalone.ts" --target=node --format=esm --minify \
       --external "@earendil-works/pi-coding-agent" --external "@earendil-works/pi-tui" --outfile "${stage_dir}/security.js"
     cp -R "${source_dir}/security/notices" "${stage_dir}/notices"
+    # Shell parsing loads two wasm files at runtime and both resolve next to the
+    # bundled module: the vendored bash grammar and web-tree-sitter's runtime.
+    cp "${source_dir}/shell/tree-sitter-bash.wasm" "${stage_dir}/tree-sitter-bash.wasm"
+    cp "${source_dir}/node_modules/web-tree-sitter/tree-sitter.wasm" "${stage_dir}/tree-sitter.wasm"
   fi
   cp "${source_dir}/README.md" "${stage_dir}/README.md"
   cat >"${stage_dir}/attn-plugin.toml" <<EOF

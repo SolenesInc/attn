@@ -215,3 +215,17 @@ func codexSessionsRoot(path string) string {
 	}
 	return ""
 }
+
+// A plugin session's harness reports the one file its usage lands in, so there
+// is nothing to discover: the tracker follows exactly that path.
+func NewReportedUsageSourceResolver(rootPath string) UsageSourceResolver {
+	return &reportedUsageSourceResolver{rootPath: filepath.Clean(rootPath)}
+}
+
+type reportedUsageSourceResolver struct {
+	rootPath string
+}
+
+func (r *reportedUsageSourceResolver) Discover() ([]UsageSource, error) {
+	return []UsageSource{{ID: r.rootPath, Path: r.rootPath, Root: true}}, nil
+}

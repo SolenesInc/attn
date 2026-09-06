@@ -26,7 +26,7 @@ import {
 
 const STATUS_ON = 'auto: on';
 const DENIAL_NOTICE = 'auto mode blocked';
-const HELD_FOOTER = 'auto: on · 1 held';
+const WIDGET_FOOTER = 'Approve in your reply to let the agent retry.';
 const BREAKER_TITLE = 'auto mode stopped judging calls';
 
 const DENIAL_REASON = 'the harness scripted a refusal';
@@ -149,6 +149,7 @@ async function drive({ options, profile, runAttn, dbPath, stub, judgeQueue, laun
     scenarioId: 'PI-AUTOMODE',
     tier: 'tier2-local-real-agent',
     prefix: 'pi-automode',
+    allowRealAgents: ['pi'],
     metadata: { agent: 'pi', focus: 'envelope invisibility, denial surfaces, conversational grant, circuit breaker' },
     preflightLaunchEnv: launchEnv,
   });
@@ -259,8 +260,8 @@ async function drive({ options, profile, runAttn, dbPath, stub, judgeQueue, laun
       );
       const pane = await waitForPaneText(
         client, sessionId, paneId,
-        (text) => text.includes(DENIAL_NOTICE) && text.includes(HELD_FOOTER),
-        'the TUI denial notice and held count',
+        (text) => text.includes(DENIAL_NOTICE) && text.includes(WIDGET_FOOTER),
+        'the TUI denial notice and widget',
         20_000,
       );
       fs.writeFileSync(path.join(runner.runDir, 'denial-pane.txt'), pane.text || '', 'utf8');

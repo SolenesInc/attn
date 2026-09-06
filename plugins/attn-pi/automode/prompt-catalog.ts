@@ -3,7 +3,7 @@ import { renderCatalog } from "../../../internal/prompts/renderer";
 export function renderPrompt(
   event: string,
   values: Record<string, string>,
-  recipient = "pi-permission",
+  recipient: string,
 ): string {
   return renderCatalog(catalog, recipient, event, values);
 }

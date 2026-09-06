@@ -100,7 +100,7 @@ Examples:
   pnpm --dir app real-app:linux provision
   pnpm --dir app real-app:linux run -- bun test --cwd plugins/attn-pi
   pnpm --dir app real-app:linux build
-  pnpm --dir app real-app:linux test -- --scenario pi-automode
+  pnpm --dir app real-app:linux test -- --scenario automode-environment
   pnpm --dir app real-app:linux provision --provider ssh --target tester@linux
 `);
     return;

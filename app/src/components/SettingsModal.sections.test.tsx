@@ -10,8 +10,11 @@ const daemonApi = vi.hoisted(() => ({
   sendAutoModeGet: vi.fn(() => new Promise(() => {})),
   sendAutoModePromote: vi.fn(),
   sendAutoModeDiscard: vi.fn(),
-  sendAutoModePatternAdd: vi.fn(),
-  sendAutoModePatternRemove: vi.fn(),
+  sendAutoModeRuleAdd: vi.fn(),
+  sendAutoModeRuleRemove: vi.fn(),
+  sendAutoModeHostAdd: vi.fn(),
+  sendAutoModeHostRemove: vi.fn(),
+  sendAutoModePolicySet: vi.fn(),
 }));
 vi.mock('../contexts/DaemonApiContext', () => ({ useDaemonApi: () => daemonApi }));
 

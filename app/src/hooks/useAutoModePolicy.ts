@@ -1,12 +1,19 @@
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
-  AutoModeModelCatalog,
-  AutoModePatternEdit,
+  AutoModeConfigEdit,
+  AutoModePolicyEdit,
   AutoModePromotion,
   AutoModeState,
 } from './daemonAutoModeEvents';
 import { useAutoModePushStore } from '../store/autoMode';
+
+export type AutoModeEditKind = 'rule' | 'host' | 'policy' | 'legacy';
+
+export interface AutoModeRuleDraft {
+  pattern: string[];
+  decision: string;
+  justification: string;
+}
 
 export interface AutoModePolicy {
   state: AutoModeState | null;
@@ -17,34 +24,32 @@ export interface AutoModePolicy {
   refresh: () => Promise<void>;
   promote: (id: number) => Promise<void>;
   discard: (id: number) => Promise<void>;
-  addPattern: (list: AutoModePatternList, pattern: string) => Promise<void>;
-  removePattern: (list: AutoModePatternList, pattern: string) => Promise<void>;
-  editingList: AutoModePatternList | null;
+
+  addRule: (draft: AutoModeRuleDraft) => Promise<void>;
+  removeRule: (pattern: string[][]) => Promise<void>;
+  addHost: (host: string, decision: string) => Promise<void>;
+  removeHost: (host: string, decision: string) => Promise<void>;
+  setPolicy: (edit: AutoModePolicyEdit) => Promise<void>;
+  dismissLegacy: (pattern: string) => Promise<void>;
+  editing: AutoModeEditKind | null;
 
   setEnvironmentSlot: (id: string, values: string[]) => Promise<void>;
 
   savingEnvironment: boolean;
-
-  setModels: (models: string[]) => Promise<void>;
-  savingModels: boolean;
-  modelCatalog: AutoModeModelCatalog | null;
-  loadModelCatalog: () => Promise<void>;
-  catalogLoading: boolean;
-  catalogError: string | null;
 }
-
-export type AutoModePatternList = 'allow' | 'hard_deny';
 
 interface AutoModePolicyOptions {
   enabled: boolean;
   getState: () => Promise<AutoModeState>;
   promoteProposal: (id: number) => Promise<AutoModePromotion>;
   discardProposal: (id: number) => Promise<AutoModePromotion>;
-  addPattern: (list: string, pattern: string) => Promise<AutoModePatternEdit>;
-  removePattern: (list: string, pattern: string) => Promise<AutoModePatternEdit>;
-  setEnvironmentSlot: (slot: string, values: string[]) => Promise<AutoModePatternEdit>;
-  setModels: (models: string[]) => Promise<AutoModePatternEdit>;
-  loadModels: () => Promise<AutoModeModelCatalog>;
+  addRule: (pattern: string[], decision: string, justification: string) => Promise<AutoModeConfigEdit>;
+  removeRule: (pattern: string[][]) => Promise<AutoModeConfigEdit>;
+  addHost: (host: string, decision: string) => Promise<AutoModeConfigEdit>;
+  removeHost: (host: string, decision: string) => Promise<AutoModeConfigEdit>;
+  setPolicy: (edit: AutoModePolicyEdit) => Promise<AutoModeConfigEdit>;
+  dismissLegacy: (pattern: string) => Promise<AutoModeConfigEdit>;
+  setEnvironmentSlot: (slot: string, values: string[]) => Promise<AutoModeConfigEdit>;
 }
 
 const message = (err: unknown, fallback: string): string =>
@@ -52,20 +57,18 @@ const message = (err: unknown, fallback: string): string =>
 
 export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolicy {
   const {
-    enabled, getState, promoteProposal, discardProposal, addPattern, removePattern,
+    enabled, getState, promoteProposal, discardProposal,
+    addRule: writeRule, removeRule: dropRule,
+    addHost: writeHost, removeHost: dropHost, setPolicy: writePolicy,
+    dismissLegacy: dropLegacy,
     setEnvironmentSlot: writeEnvironmentSlot,
-    setModels: writeModels, loadModels,
   } = options;
   const [state, setState] = useState<AutoModeState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [resolvingID, setResolvingID] = useState<number | null>(null);
-  const [editingList, setEditingList] = useState<AutoModePatternList | null>(null);
+  const [editing, setEditing] = useState<AutoModeEditKind | null>(null);
   const [savingEnvironment, setSavingEnvironment] = useState(false);
-  const [savingModels, setSavingModels] = useState(false);
-  const [modelCatalog, setModelCatalog] = useState<AutoModeModelCatalog | null>(null);
-  const [catalogLoading, setCatalogLoading] = useState(false);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
 
   const seqRef = useRef(0);
   const pushedVersion = useAutoModePushStore((store) => store.version);
@@ -112,27 +115,42 @@ export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolic
     [resolve, discardProposal],
   );
 
-  const edit = useCallback(async (
-    list: AutoModePatternList,
-    pattern: string,
-    action: (list: string, pattern: string) => Promise<AutoModePatternEdit>,
-  ) => {
-    setEditingList(list);
+  // The caller sees the failure so it can show it beside the field it came from;
+  // the flag here is only what disables the other editors while one write is out.
+  const edit = useCallback(async (kind: AutoModeEditKind, write: () => Promise<AutoModeConfigEdit>) => {
+    setEditing(kind);
     try {
-      await action(list, pattern);
+      await write();
       await refresh();
     } finally {
-      setEditingList(null);
+      setEditing(null);
     }
   }, [refresh]);
 
-  const add = useCallback(
-    (list: AutoModePatternList, pattern: string) => edit(list, pattern, addPattern),
-    [edit, addPattern],
+  const addRule = useCallback(
+    (draft: AutoModeRuleDraft) =>
+      edit('rule', () => writeRule(draft.pattern, draft.decision, draft.justification)),
+    [edit, writeRule],
   );
-  const remove = useCallback(
-    (list: AutoModePatternList, pattern: string) => edit(list, pattern, removePattern),
-    [edit, removePattern],
+  const removeRule = useCallback(
+    (pattern: string[][]) => edit('rule', () => dropRule(pattern)),
+    [edit, dropRule],
+  );
+  const dismissLegacy = useCallback(
+    (pattern: string) => edit('legacy', () => dropLegacy(pattern)),
+    [edit, dropLegacy],
+  );
+  const addHost = useCallback(
+    (host: string, decision: string) => edit('host', () => writeHost(host, decision)),
+    [edit, writeHost],
+  );
+  const removeHost = useCallback(
+    (host: string, decision: string) => edit('host', () => dropHost(host, decision)),
+    [edit, dropHost],
+  );
+  const setPolicy = useCallback(
+    (change: AutoModePolicyEdit) => edit('policy', () => writePolicy(change)),
+    [edit, writePolicy],
   );
 
   const setEnvironmentSlot = useCallback(async (id: string, values: string[]) => {
@@ -145,40 +163,14 @@ export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolic
     }
   }, [writeEnvironmentSlot, refresh]);
 
-  const setModels = useCallback(async (models: string[]) => {
-    setSavingModels(true);
-    try {
-      await writeModels(models);
-      await refresh();
-    } finally {
-      setSavingModels(false);
-    }
-  }, [writeModels, refresh]);
-
-  // A catalog nobody could read is the picker's failure, not the config's.
-  const loadModelCatalog = useCallback(async () => {
-    setCatalogLoading(true);
-    setCatalogError(null);
-    try {
-      setModelCatalog(await loadModels());
-    } catch (err) {
-      setModelCatalog(null);
-      setCatalogError(message(err, 'Asking pi which models it can reach failed'));
-    } finally {
-      setCatalogLoading(false);
-    }
-  }, [loadModels]);
-
   useEffect(() => {
     if (!enabled) {
       seqRef.current++;
       setState(null);
       setError(null);
       setLoading(false);
-      setEditingList(null);
+      setEditing(null);
       setSavingEnvironment(false);
-      setModelCatalog(null);
-      setCatalogError(null);
       return;
     }
     void refresh();
@@ -204,15 +196,13 @@ export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolic
     refresh,
     promote,
     discard,
-    addPattern: add,
-    removePattern: remove,
-    editingList,
-    setModels,
-    savingModels,
-    modelCatalog,
-    loadModelCatalog,
-    catalogLoading,
-    catalogError,
+    addRule,
+    removeRule,
+    addHost,
+    removeHost,
+    setPolicy,
+    dismissLegacy,
+    editing,
     setEnvironmentSlot,
     savingEnvironment,
   };
