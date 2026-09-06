@@ -31,6 +31,9 @@ export const EMPTY_SESSION_FILTERS: SessionLedgerFilters = {
 // A page the eye can scan; load-more is one keystroke away.
 export const SESSION_PAGE_SIZE = 50;
 
+// Stable identity: an inline default would rebuild every memo that depends on it.
+const systemNow = () => new Date();
+
 export interface UseSessionLedgerOptions {
   enabled: boolean;
   list: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
@@ -95,7 +98,7 @@ export function useSessionLedger({
   enabled,
   list,
   pageSize = SESSION_PAGE_SIZE,
-  now = () => new Date(),
+  now = systemNow,
 }: UseSessionLedgerOptions): SessionLedgerView {
   const [filters, setFilters] = useState<SessionLedgerFilters>(EMPTY_SESSION_FILTERS);
   const [entries, setEntries] = useState<SessionLedgerEntry[]>([]);
@@ -165,14 +168,17 @@ export function useSessionLedger({
   }, [nextBefore, loadingMore, filterError, list, pageSize, now]);
 
   const recordClose = useCallback((entry: SessionLedgerEntry) => {
+    // Read outside the updater: React may replay one, and the clock would move under it.
+    const dropsFromView = filtersRef.current.scope === 'live';
+    const belongs = closeBelongsInView(entry, filtersRef.current, now());
     setEntries((current) => {
       const at = current.findIndex((row) => row.id === entry.id);
       if (at >= 0) {
         const next = current.slice();
         next[at] = entry;
-            return filtersRef.current.scope === 'live' ? next.filter((row) => row.id !== entry.id) : next;
+        return dropsFromView ? next.filter((row) => row.id !== entry.id) : next;
       }
-      if (!closeBelongsInView(entry, filtersRef.current, now())) return current;
+      if (!belongs) return current;
       return [entry, ...current];
     });
   }, [now]);

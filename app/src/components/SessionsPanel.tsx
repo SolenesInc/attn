@@ -50,6 +50,9 @@ export interface SessionsPanelProps {
   now?: () => Date;
 }
 
+// Stable identity: an inline default would rebuild every memo that depends on it.
+const systemNow = () => new Date();
+
 const SCOPES: { id: SessionScope; label: string }[] = [
   { id: 'live', label: 'Live' },
   { id: 'closed', label: 'Closed' },
@@ -69,7 +72,7 @@ export function SessionsPanel({
   onRequestVerdict,
   onReopen,
   closeNotice,
-  now = () => new Date(),
+  now = systemNow,
 }: SessionsPanelProps) {
   const ledger = useSessionLedger({ enabled: isOpen, list: listSessions, now });
   const { filters, setFilters, entries } = ledger;
