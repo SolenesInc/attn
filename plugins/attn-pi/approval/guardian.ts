@@ -362,10 +362,12 @@ function signalFor(ctx: ReviewContext, deadline: number, now: () => number): Bou
 }
 
 type CompletionResultLike = {
+  role?: string;
   content?: { type: string; text?: string }[];
   usage?: UsageLike;
   stopReason?: string;
   errorMessage?: string;
+  timestamp?: number;
 };
 
 async function complete(
@@ -412,7 +414,8 @@ function userMessage(items: readonly string[]): unknown {
 }
 
 function assistantMessage(result: CompletionResultLike): unknown {
-  return { role: "assistant", content: result.content ?? [], timestamp: Date.now() };
+  // Keep the AssistantMessage whole: pi-ai reads its usage to size the next request.
+  return result;
 }
 
 function toolResultMessage(id: string, name: string, output: string, isError: boolean): unknown {

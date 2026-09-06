@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+// Not exported from the package root; every real provider reaches it the same way
+// (api/simple-options.js clampMaxTokensToContext), so this mirrors production.
+import { estimateContextTokens } from "../node_modules/@earendil-works/pi-ai/dist/utils/estimate.js";
 import {
   backoffMs, circuitBreakerWarning, denialText, GuardianReviewer, maxAttempts, parseAssessment,
   reviewTimeoutMs, type GuardianUsageEntry,
@@ -366,4 +369,56 @@ test("the follow-up reminder opens the first delta review and never repeats", as
   expect(sent[1]!.startsWith(`${guardianFollowupReminder}\n\n`)).toBe(true);
   expect(sent[2]!.startsWith(guardianFollowupReminder)).toBe(false);
   expect(sent[2]!).toContain("TRANSCRIPT DELTA START");
+});
+
+test("assistant replies stay complete so pi-ai can estimate the context", async () => {
+  const notices: { text: string; level: string }[] = [];
+  const answers: Answer[] = [{ toolCall: "ls" }, { text: '{"outcome":"allow"}' }];
+  const provider: FakeProvider = {
+    // Every real provider runs the context through estimateContextTokens first
+    // (clampMaxTokensToContext), so this fake does the same.
+    streamSimple: (_model, context) => ({
+      result: async () => {
+        estimateContextTokens(context as never);
+        const answer = answers.shift()!;
+        const usage = { input: 10, output: 2, totalTokens: 12 };
+        const base = { api: "openai-completions", provider: "test", model: "test", timestamp: Date.now(), usage };
+        if (answer.toolCall !== undefined) {
+          return {
+            ...base,
+            content: [{ type: "toolCall", id: "t1", name: "bash", arguments: { command: answer.toolCall } }],
+            stopReason: "toolUse",
+          };
+        }
+        return { ...base, content: [{ type: "text", text: answer.text }], stopReason: "stop" };
+      },
+    }),
+  };
+  const reviewer = new GuardianReviewer({
+    registry: {
+      find: () => undefined,
+      getProvider: () => provider as never,
+      getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "test-key" }),
+      getProviderAuth: async () => undefined,
+    },
+    model: () => ({ provider: "anthropic", id: "claude-test", reasoning: true } as never),
+    systemPrompt: () => "policy",
+    transcript: () => [entry("user", "do it")],
+    sessionId: () => "session-1",
+    runTool: async () => ({ output: "ok", isError: false }),
+    onUsage: () => {},
+    notify: (text, level) => notices.push({ text, level }),
+    now: () => 0,
+  });
+
+  // A tool call followed by the verdict: the second completion of one review
+  // must estimate a context that already contains the first reply.
+  expect(await reviewer.review(command, { cwd: "/w" })).toEqual({ type: "approved" });
+
+  // A follow-up review reuses the stored conversation, so its first completion
+  // must estimate a context containing the previous review's final reply.
+  answers.push({ text: '{"outcome":"allow"}' });
+  expect(await reviewer.review(command, { cwd: "/w" })).toEqual({ type: "approved" });
+
+  expect(notices.some((notice) => notice.text.includes("failed"))).toBe(false);
 });
