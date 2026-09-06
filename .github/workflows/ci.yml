@@ -642,6 +642,19 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          # setup-go's key is content-only, so every Go job shares it and the
+          # first one to finish seals it. This job owns its entry below instead.
+          cache: false
+
+      # Install step: 25s of it was `go build ./cmd/attn` from an empty cache.
+      - name: Restore Go build cache
+        id: go-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-app-acceptance-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
@@ -692,6 +705,17 @@ jobs:
           install -m 0755 app/scripts/real-app-harness/ci-xdg-open "$RUNNER_TEMP/attn-harness-bin/xdg-open"
           echo "$RUNNER_TEMP/attn-harness-bin" >> "$GITHUB_PATH"
           echo "$PWD/plugins/attn-pi/node_modules/.bin" >> "$GITHUB_PATH"
+
+      # Saved here, not post-job: the gate below fails this job on a red matrix,
+      # and a post-job save would then skip exactly when a fast re-push matters.
+      - name: Save Go build cache
+        if: steps.go-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
 
       - name: Run serial matrix
         id: matrix
