@@ -12,8 +12,8 @@ Everything below was measured on 2026-09-04 against two real repositories,
 A **refresh** runs git and writes observed state onto registry rows. A **sweep**
 reads those rows and decides. They are deliberately separate:
 
-- git never runs on a request path. `attn worktree list` and the Worktrees panel
-  read the registry, so a slow or network-bound repository can never make the
+- git never runs on a request path. `attn worktree list` and the Worktrees list of
+  the ledger surface read the registry, so a slow or network-bound repository can never make the
   surface wait.
 - every decision is explainable from the row the surface is showing. If the panel
   says "kept: 3 uncommitted files", that is the same field the gate read.

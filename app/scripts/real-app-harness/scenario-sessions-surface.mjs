@@ -83,7 +83,7 @@ async function openTheSurface(client, driver) {
 }
 
 async function closeTheSurface(client) {
-  await client.request('dom_key', { selector: '.sessions-panel', key: 'Escape' });
+  await client.request('dom_key', { selector: '.ledger-panel', key: 'Escape' });
   return waitForSessions(client, (s) => !s.open, 'the surface to close');
 }
 

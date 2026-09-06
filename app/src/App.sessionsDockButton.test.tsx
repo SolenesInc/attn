@@ -42,9 +42,9 @@ vi.mock('./components/Sidebar', () => ({
   ),
 }));
 
-vi.mock('./components/SessionsPanel', () => ({
-  SessionsPanel: ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => (
-    isOpen ? <button type="button" data-testid="sessions-panel" onClick={onClose}>close</button> : null
+vi.mock('./components/ledger/LedgerSurface', () => ({
+  LedgerSurface: ({ isOpen, tab, onClose }: { isOpen: boolean; tab: string; onClose: () => void }) => (
+    isOpen ? <button type="button" data-testid="sessions-panel" data-tab={tab} onClick={onClose}>close</button> : null
   ),
 }));
 
@@ -166,15 +166,20 @@ describe('sessions dock button', () => {
     expect(sessionsButton()).toHaveAttribute('data-active', 'false');
   });
 
-  it('sits next to the worktrees button in the dock', async () => {
+  it('sits next to the worktrees button, which opens the same surface on its other list', async () => {
+    const user = userEvent.setup();
     await act(async () => {
       render(<App />);
     });
 
     const ids = Array.from(screen.getByTestId('sidebar').querySelectorAll('button'))
       .map((button) => button.getAttribute('data-dock-id'));
-
     expect(ids).toContain('sessions');
     expect(ids.indexOf('worktrees')).toBe(ids.indexOf('sessions') + 1);
+
+    await user.click(screen.getByRole('button', { name: 'Open Worktrees' }));
+    expect(screen.getByTestId('sessions-panel')).toHaveAttribute('data-tab', 'worktrees');
+    expect(screen.getByRole('button', { name: 'Open Worktrees' })).toHaveAttribute('data-active', 'true');
+    expect(sessionsButton()).toHaveAttribute('data-active', 'false');
   });
 });
