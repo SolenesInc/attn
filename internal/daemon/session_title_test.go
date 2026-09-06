@@ -876,7 +876,6 @@ func TestSpawnPipeline_InitialPromptTitlesAtSpawn(t *testing.T) {
 		t.Fatalf("session label = %+v, want %q", got, "One-shot investigation")
 	}
 
-	// The later hook echo for the same prompt must not spend a second attempt.
 	d.maybeGenerateSessionTitleFromPrompt("sess-spawn-title", "investigate the retry queue", userConversationInput())
 	runSessionTitleJobs(t, d)
 	if calls != 1 {

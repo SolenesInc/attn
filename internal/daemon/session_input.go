@@ -602,8 +602,6 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 			if attempt.stage != sessionInputTaken {
 				attempt.stage = sessionInputPlaced
 			}
-			// Plugin suites report no UserPromptSubmit hook; without this a steered
-			// turn would never reach the title path (other origins drop out there).
 			go m.daemon.maybeGenerateSessionTitleFromPrompt(delivery.sessionID, delivery.text, delivery.origin)
 			return attemptFromState(delivery.id, attempt)
 		}

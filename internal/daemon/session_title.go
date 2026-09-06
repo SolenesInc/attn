@@ -208,8 +208,6 @@ func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session
 	return d.execSessionTitleHeadless(ctx, providerAgent, sessionTitleModel(providerAgent), conversation)
 }
 
-// A title is a cheap summary, so any headless-capable CLI will do: prefer the
-// session's own agent, else fall back to the first available native one.
 func titleProviderAgent(sessionAgent string) string {
 	candidates := []string{sessionAgent, "claude", "codex", "copilot"}
 	seen := make(map[string]struct{}, len(candidates))
