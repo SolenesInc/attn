@@ -46,7 +46,8 @@ func (d *Daemon) handleInstallPluginWS(client *wsClient, msg *protocol.InstallPl
 	var err error
 	if link {
 		// Refuse before LinkPath touches the checkout: it runs bun install there.
-		name, err := plugins.SourceName(source)
+		var name string
+		name, err = plugins.SourceName(source)
 		if err != nil {
 			d.sendPluginActionResult(client, action, "", false, err.Error())
 			return
