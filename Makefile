@@ -215,6 +215,7 @@ test-scripts:
 	@bash ./scripts/release-health_test.sh
 	@bash ./scripts/publish-release_test.sh
 	@bash ./scripts/sync-main-to-next_test.sh
+	@bash ./scripts/make-fresh-checkout_test.sh
 
 # Verbose test output (shows all test names as they run)
 test-v: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
@@ -225,23 +226,33 @@ test-quick: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
 	./scripts/test-go.sh
 
 # Watch mode - re-runs tests on file changes
-test-watch: $(GOTESTSUM)
+test-watch: $(GOTESTSUM) $(NATIVE_VT_DEP)
 	$(GOTESTSUM) --watch --format testdox -- ./...
 
-test-frontend:
+# The frontend's second fresh-checkout wall: no app/node_modules, so lint and
+# the frontend suites died on a missing oxlint. Stamped because pnpm leaves the
+# directory's mtime behind the lockfile's, which would reinstall on every run.
+APP_NODE_MODULES := app/node_modules/.attn-installed
+$(APP_NODE_MODULES): app/package.json app/pnpm-lock.yaml
+	pnpm --dir app install --frozen-lockfile
+	@touch $@
+
+test-frontend: $(APP_NODE_MODULES)
 	cd app && pnpm run test
 
 lint: lint-go lint-frontend
 
-lint-go:
+# commentlint and staticcheck load every package, cgo-linked internal/ghosttyvt
+# included, so a fresh checkout needs the archive or lint dies on ghostty/vt.h.
+lint-go: $(NATIVE_VT_DEP)
 	go run ./cmd/commentlint ./...
 	go tool staticcheck ./...
 
-lint-frontend:
+lint-frontend: $(APP_NODE_MODULES)
 	cd app && pnpm run lint
 	app/node_modules/.bin/oxlint --deny-warnings cmd/prompt-editor/web cmd/prompt-editor/test
 
-test-e2e:
+test-e2e: $(APP_NODE_MODULES)
 	@# Ensure stale Vite test server is not running
 	@if [ "$(UNAME_S)" = "Darwin" ] && command -v lsof >/dev/null 2>&1; then \
 		lsof -ti tcp:1421 | xargs -r kill 2>/dev/null || true; \
