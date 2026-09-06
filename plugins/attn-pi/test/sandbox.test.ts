@@ -14,10 +14,11 @@ import { isSandboxDenial } from "../sandbox/denial";
 import { commandEnvironment } from "../sandbox/environment";
 import { wrapCommand } from "../sandbox/exec";
 import { bashParameterSchema } from "../sandbox/schema";
-import { sandboxSpecFor, type ProxyAddress, type SandboxConfig, type SandboxSpec } from "../sandbox/spec";
+import { platformWritableRoots, sandboxSpecFor, type ProxyAddress, type SandboxConfig, type SandboxSpec } from "../sandbox/spec";
+import { fixtureRoot } from "./fixture-root";
 
 function workspace(): { cwd: string; temp: string; secret: string; outside: string; cleanup: () => void } {
-  const root = canonical(mkdtempSync(join(tmpdir(), "attn-pi-sandbox-")));
+  const root = fixtureRoot("attn-pi-sandbox-");
   const cwd = join(root, "project");
   const temp = join(root, "temp");
   const secret = join(root, "secrets");
@@ -52,7 +53,7 @@ describe("sandboxSpecFor", () => {
       expect(spec).not.toBe("unsandboxed");
       // The nested cache path stays a root of its own: each one carries an anchor deny.
       expect((spec as SandboxSpec).writableRoots.slice().sort())
-        .toEqual([cwd, temp, outside, join(outside, "cache"), canonical("/tmp")].sort());
+        .toEqual([cwd, temp, outside, join(outside, "cache"), ...platformWritableRoots().map(canonical)].sort());
     } finally { cleanup(); }
   });
 

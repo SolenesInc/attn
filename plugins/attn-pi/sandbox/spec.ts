@@ -33,7 +33,7 @@ export function outermostRoots(paths: string[]): string[] {
 
 // protocol.rs:1275-1286 grants /tmp on unix when it is a directory; /dev/shm is
 // how a workspace gets POSIX semaphores (exec/tests/suite/sandbox.rs:166-171).
-function platformWritableRoots(): string[] {
+export function platformWritableRoots(): string[] {
   if (process.platform === "win32") return [];
   return ["/tmp", "/dev/shm"].filter((path) => {
     try { return statSync(path).isDirectory(); } catch { return false; }

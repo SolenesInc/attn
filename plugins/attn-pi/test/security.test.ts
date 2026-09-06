@@ -1,16 +1,16 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CredentialFilter, FilteredStream, filteredLineLimit } from "../security/filter";
 import { SandboxedFilesystem } from "../security/filesystem";
-import { canonical, loadSecurityConfig, resolveSecurityPolicy, type SecurityPolicy } from "../security/policy";
+import { loadSecurityConfig, resolveSecurityPolicy, type SecurityPolicy } from "../security/policy";
 import { protectedBash, protectedTools } from "../security/tools";
 import { PiSecurity } from "../security/index";
 import { createServer } from "node:net";
 import { shellQuote } from "../security/sandbox";
 import { visibleWidth } from "@earendil-works/pi-tui";
+import { fixtureRoot } from "./fixture-root";
 
 const directories: string[] = [];
 const workers: SandboxedFilesystem[] = [];
@@ -20,7 +20,7 @@ afterEach(async () => {
 });
 
 function fixture(): { root: string; policy: SecurityPolicy; fs: SandboxedFilesystem; filter: CredentialFilter } {
-  const root = canonical(mkdtempSync(join(tmpdir(), "pi-security-test-")));
+  const root = fixtureRoot("pi-security-test-");
   directories.push(root);
   for (const folder of ["project", "private", "scratch", "agent"]) mkdirSync(join(root, folder));
   const configPath = join(root, "agent", "attn-security.json");

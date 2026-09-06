@@ -1,19 +1,20 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { PiSecurity } from "../security/index";
-import { canonical, loadSecurityConfig, resolveSecurityPolicy } from "../security/policy";
+import { loadSecurityConfig, resolveSecurityPolicy } from "../security/policy";
 import { defaultBuildCaches } from "../security/caches";
 import { protectedBash } from "../security/tools";
 import { CredentialFilter } from "../security/filter";
 import { shellQuote } from "../security/sandbox";
+import { fixtureRoot } from "./fixture-root";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0)) await close(); });
 
 function fixture() {
-  const root = canonical(mkdtempSync(join(tmpdir(), "pi-cache-test-")));
+  const root = fixtureRoot("pi-cache-test-");
   for (const name of ["project", "agent", "temp", "private"]) mkdirSync(join(root, name));
   const configPath = join(root, "agent", "attn-security.json");
   const config = loadSecurityConfig(configPath);
