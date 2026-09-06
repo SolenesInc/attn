@@ -70,15 +70,19 @@ function gitOut(dir, args) {
   return execFileSync('git', args, { cwd: dir, encoding: 'utf8', env: { ...process.env, ...GIT_ENV } });
 }
 
-async function poll(fn, description, timeoutMs, everyMs = 250) {
+// `diagnose` answers what the surface looked like when the wait ran out; without
+// it the message can only say the predicate was false, which names no cause.
+async function poll(fn, description, timeoutMs, everyMs = 250, diagnose = null) {
   const started = Date.now();
-  let last = null;
   while (Date.now() - started < timeoutMs) {
-    last = await fn();
-    if (last) return last;
+    const current = await fn();
+    if (current) return current;
     await delay(everyMs);
   }
-  throw new Error(`timed out waiting for ${description}; last=${JSON.stringify(last)}`);
+  const last = diagnose ? await diagnose() : null;
+  throw new Error(
+    `timed out after ${timeoutMs}ms waiting for ${description}; last=${JSON.stringify(last)}`,
+  );
 }
 
 async function waitForDaemonReady(binary, daemonEnv) {
@@ -267,23 +271,31 @@ async function main() {
 
     await runner.step('leg2_a_slow_refresh_stays_visible_and_answering', async () => {
       const started = Date.now();
+      // The app arms a witness before the click: a warm repository is walked in
+      // less time than one read of the surface costs.
       await client.request('worktrees_refresh');
-      const seen = await poll(async () => {
-        const current = await client.request('worktrees_get_state');
-        const count = refreshingCount(current);
-        const rows = fixtureRows(current, fixture).length;
-        if (count > 0 && rows >= fixture.count) {
-          return { refreshing: count, rows, afterMs: Date.now() - started };
-        }
-        return null;
-      }, 'a refresh in flight on the surface', REFRESH_VISIBLE_TIMEOUT_MS, 150);
-      runner.assert(true, 'the refresh is visible per row while the slow repository is walked', seen);
-
       const settled = await poll(async () => {
         const current = await client.request('worktrees_get_state');
-        return refreshingCount(current) === 0 ? current : null;
-      }, 'the refresh to finish', REFRESH_VISIBLE_TIMEOUT_MS);
-      runner.log('refresh_pass', { visibleAfterMs: seen.afterMs, totalMs: Date.now() - started });
+        const witness = current?.refreshWitness;
+        return witness?.sawRefreshing && refreshingCount(current) === 0 ? current : null;
+      }, 'the surface to show a refresh in flight and then finish it',
+      REFRESH_VISIBLE_TIMEOUT_MS, 250,
+      async () => {
+        const current = await client.request('worktrees_get_state');
+        return {
+          witness: current?.refreshWitness ?? null,
+          refreshing: refreshingCount(current),
+          rows: fixtureRows(current, fixture).length,
+        };
+      });
+
+      const witness = settled.refreshWitness;
+      runner.assert(witness.sawRefreshing,
+        'the refresh is visible per row while the slow repository is walked', witness);
+      runner.log('refresh_pass', {
+        visibleAfterMs: witness.firstSeenMs, visibleUntilMs: witness.lastSeenMs,
+        peakRefreshing: witness.peakRefreshing, totalMs: Date.now() - started,
+      });
       runner.assert(fixtureRows(settled, fixture).length >= fixture.count,
         'every row survives the pass', { rows: fixtureRows(settled, fixture).length });
     });
