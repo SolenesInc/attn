@@ -1,0 +1,4 @@
+kind: added
+area: app
+change: The dock has a Sessions button that opens the sessions list.
+symptom: The sessions list could only be reached from the command palette or its shortcut.

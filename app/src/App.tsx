@@ -235,6 +235,23 @@ function AutomationsIcon() {
   );
 }
 
+function SessionsIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="1.8" y="3" width="12.4" height="10" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path
+        d="m4.8 6.9 1.9 1.9-1.9 1.9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M8.8 10.7h2.6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function WorktreesIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -3292,6 +3309,13 @@ function AppContent({
       onClick: () => toggleDockPanel('automations'),
     },
     {
+      id: 'sessions',
+      title: `Open Sessions (${formatShortcut('sessions.open')})`,
+      icon: <SessionsIcon />,
+      active: sessionsOpen,
+      onClick: () => setSessionsOpen(true),
+    },
+    {
       id: 'worktrees',
       title: worktreesPanelOpen ? 'Hide Worktrees' : 'Show Worktrees',
       icon: <WorktreesIcon />,
@@ -3322,6 +3346,7 @@ function AppContent({
     notificationsUnread,
     hasCriticalNotification,
     automationsPanelOpen,
+    sessionsOpen,
     worktreesPanelOpen,
     gardenPanelOpen,
     toggleNotificationsPanel,
