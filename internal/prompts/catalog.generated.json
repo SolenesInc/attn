@@ -1471,6 +1471,16 @@
           }
         },
         {
+          "id": "restart-requested",
+          "delivery": "user_message",
+          "description": "crew_restart.go: user requested a handoff and successor.",
+          "body": {
+            "kind": "text",
+            "id": "crew.restart-requested",
+            "source": "content/crew/restart-requested.md"
+          }
+        },
+        {
           "id": "heartbeat",
           "delivery": "user_message",
           "description": "crew_lifecycle.go: keep the context cache warm.",
@@ -5718,5 +5728,5 @@
       ]
     }
   ],
-  "definitions_hash": "710a4e7fc998544624747966b886c8757c5df93875978cd465c3a02df7f5bca8"
+  "definitions_hash": "5ca2feb2e92e53944bbebd653fdf3f6926e2e43d91edbfec032b97dd454e3db3"
 }

@@ -38,6 +38,7 @@ type Member struct {
 	CWD            string   `json:"cwd"`
 	Agent          string   `json:"agent"`
 	Model          string   `json:"model"`
+	Effort         string   `json:"effort"`
 	AwarenessDirs  []string `json:"awareness_dirs"`
 	BindingSession string   `json:"binding_session"`
 	// The letter store is append-only: a letter cannot be written twice, so a
@@ -45,6 +46,29 @@ type Member struct {
 	LetterPath      string   `json:"letter_path"`
 	LetterSession   string   `json:"letter_session"`
 	AutonomousWakes []string `json:"autonomous_wakes"`
+	Restart         *Restart `json:"restart,omitempty"`
+}
+
+type RestartState string
+
+const (
+	RestartQueued    RestartState = "queued"
+	RestartRequested RestartState = "requested"
+	RestartFailed    RestartState = "failed"
+	RestartCompleted RestartState = "completed"
+)
+
+// Restart follows one user request from durable delivery through the member's
+// own filed handoff and the successor launch. The member record owns reconnects.
+type Restart struct {
+	RequestID          string       `json:"request_id"`
+	SessionID          string       `json:"session_id"`
+	State              RestartState `json:"state"`
+	DeliveryStatus     string       `json:"delivery_status,omitempty"`
+	Detail             string       `json:"detail,omitempty"`
+	Error              string       `json:"error,omitempty"`
+	LetterPath         string       `json:"letter_path,omitempty"`
+	SuccessorSessionID string       `json:"successor_session_id,omitempty"`
 }
 
 func (m Member) LaunchAgent() string {
