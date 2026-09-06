@@ -199,6 +199,13 @@ export const scenarioCatalog = [
     timeoutMs: 300_000,
   },
   {
+    id: 'crew-management',
+    runnerId: 'CrewManagement',
+    label: 'Crew management: both panel entries, quiet launch autosave, reconnect recovery, and a changed successor',
+    command: ['pnpm', 'run', 'real-app:scenario-crew-management'],
+    timeoutMs: 300_000,
+  },
+  {
     id: 'nudge-trigger',
     runnerId: 'NUDGE-TRIGGER',
     label: 'Legacy ticket nudge: a missing-hook inbox doorbell cannot block a later busy-to-idle wake',

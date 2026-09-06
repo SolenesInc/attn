@@ -213,6 +213,7 @@ describe('tile-only (sessionless) workspace selection and render', () => {
 
     mockUseDaemonStore.mockReturnValue({
       daemonSessions: [{ id: 's1', label: 'working-session', directory: '/tmp/repo', state: 'working' }],
+      crew: [],
       setDaemonSessions: vi.fn(),
       prs: [], setPRs: vi.fn(),
       repoStates: [], setRepoStates: vi.fn(),
