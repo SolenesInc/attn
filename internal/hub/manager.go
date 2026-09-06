@@ -101,7 +101,7 @@ type Manager struct {
 	pending         map[string]pendingSessionRoute
 	browserControls map[string]pendingBrowserControl
 	sessionCloses   map[string][]*sessionCloseWaiter
-	sessionRenames  map[string][]*sessionCloseWaiter
+	sessionRenames  map[string]*sessionCloseWaiter
 	ctx             context.Context
 	cancel          context.CancelFunc
 	started         bool
@@ -133,7 +133,7 @@ func NewManager(
 		pending:         make(map[string]pendingSessionRoute),
 		browserControls: make(map[string]pendingBrowserControl),
 		sessionCloses:   make(map[string][]*sessionCloseWaiter),
-		sessionRenames:  make(map[string][]*sessionCloseWaiter),
+		sessionRenames:  make(map[string]*sessionCloseWaiter),
 	}
 	for _, record := range endpointStore.ListEndpoints() {
 		m.runtimes[record.ID] = &endpointRuntime{
@@ -1242,16 +1242,22 @@ func (m *Manager) answerSessionClose(endpointID, sessionID string, accepted bool
 // healthy round trip is one websocket hop each way.
 const sessionRenameAckTimeout = 10 * time.Second
 
-// ForwardSessionRename returns only once the owning daemon has applied or
-// refused the rename, so a caller never hears success for a name the owner rejected.
+// rename_result carries no request id, so one rename per session is in flight
+// at a time; a second is refused rather than handed another label's verdict.
 func (m *Manager) ForwardSessionRename(ctx context.Context, endpointID, sessionID string, payload []byte) error {
 	waiter := &sessionCloseWaiter{endpointID: endpointID, answer: make(chan error, 1)}
 	m.mu.Lock()
-	m.sessionRenames[sessionID] = append(m.sessionRenames[sessionID], waiter)
+	if _, busy := m.sessionRenames[sessionID]; busy {
+		m.mu.Unlock()
+		return fmt.Errorf("a rename of session %s is already waiting on its owner; retry once it answers", sessionID)
+	}
+	m.sessionRenames[sessionID] = waiter
 	m.mu.Unlock()
 	defer func() {
 		m.mu.Lock()
-		dropWaiter(m.sessionRenames, sessionID, waiter)
+		if m.sessionRenames[sessionID] == waiter {
+			delete(m.sessionRenames, sessionID)
+		}
 		m.mu.Unlock()
 	}()
 
@@ -1272,20 +1278,6 @@ func (m *Manager) ForwardSessionRename(ctx context.Context, endpointID, sessionI
 	}
 }
 
-func dropWaiter(waiters map[string][]*sessionCloseWaiter, sessionID string, forget *sessionCloseWaiter) {
-	remaining := waiters[sessionID][:0]
-	for _, waiter := range waiters[sessionID] {
-		if waiter != forget {
-			remaining = append(remaining, waiter)
-		}
-	}
-	if len(remaining) == 0 {
-		delete(waiters, sessionID)
-		return
-	}
-	waiters[sessionID] = remaining
-}
-
 func (m *Manager) answerSessionRename(endpointID, sessionID string, accepted bool, reason string) {
 	var answer error
 	if !accepted {
@@ -1295,22 +1287,16 @@ func (m *Manager) answerSessionRename(endpointID, sessionID string, accepted boo
 		answer = errors.New(reason)
 	}
 	m.mu.Lock()
-	var answered []*sessionCloseWaiter
-	kept := m.sessionRenames[sessionID][:0]
-	for _, waiter := range m.sessionRenames[sessionID] {
-		if waiter.endpointID == endpointID {
-			answered = append(answered, waiter)
-			continue
-		}
-		kept = append(kept, waiter)
-	}
-	if len(kept) == 0 {
+	waiter := m.sessionRenames[sessionID]
+	if waiter != nil && waiter.endpointID == endpointID {
 		delete(m.sessionRenames, sessionID)
 	} else {
-		m.sessionRenames[sessionID] = kept
+		waiter = nil
 	}
 	m.mu.Unlock()
-	answerSessionCloseWaiters(answered, answer)
+	if waiter != nil {
+		answerSessionCloseWaiters([]*sessionCloseWaiter{waiter}, answer)
+	}
 }
 
 func answerSessionCloseWaiters(waiters []*sessionCloseWaiter, answer error) {
