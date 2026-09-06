@@ -15,18 +15,15 @@ import (
 // Every other closed_by is the id of the session that closed this one.
 const SessionClosedByUser = "user"
 
-// SessionLedgerDefaultLimit is one terminal page: 20 rows plus a header and the
-// omitted notice fit an 80x24 window without scrolling.
+// One terminal page: 20 rows plus a header and the notice fit 80x24 unscrolled.
 const SessionLedgerDefaultLimit = 20
 
-// A tripwire, not a budget: the busiest measured afternoon closed 10 sessions in
-// 3.5 hours, so a heavy month stays under 3000 and --before reaches the rest.
+// A tripwire, not a budget: the busiest measured afternoon closed 10 sessions in 3.5h.
 const SessionLedgerMaxLimit = 1000
 
-// ErrSessionClosed refuses a write that would run an already closed session.
 var ErrSessionClosed = errors.New("session is closed")
 
-// SessionClose says who closed a session and why. Only agent closes carry a reason.
+// Only agent closes carry a reason.
 type SessionClose struct {
 	By     string
 	Reason string
@@ -40,7 +37,6 @@ const (
 	SessionLedgerAll    SessionLedgerScope = "all"
 )
 
-// Before is the id of the last row of the previous page; this page starts after it.
 type SessionLedgerQuery struct {
 	Scope  SessionLedgerScope
 	Limit  int
@@ -48,13 +44,11 @@ type SessionLedgerQuery struct {
 }
 
 type SessionLedgerPage struct {
-	Entries []protocol.SessionLedgerEntry
-	// Omitted counts the rows this page left out, all older than its last entry.
+	Entries    []protocol.SessionLedgerEntry
 	Omitted    int
 	NextBefore string
 }
 
-// ErrUnknownLedgerCursor names the id a stale --before failed on.
 type ErrUnknownLedgerCursor struct{ ID string }
 
 func (e *ErrUnknownLedgerCursor) Error() string {
@@ -68,7 +62,6 @@ func (e *ErrLedgerLimitTooLarge) Error() string {
 		e.Asked, e.Max, e.Max)
 }
 
-// CloseSession returns false when no live session carries the id.
 func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -126,8 +119,7 @@ func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (boo
 	return true, nil
 }
 
-// The per-observation usage is the row's whole size: a measured 109 KB mean
-// against about 14 KB for the ids alone (receipt on s-rxx9kp).
+// The usage is the row's whole size: a measured 109 KB mean against ~14 KB of ids.
 func finalizeSessionCostTx(tx *sql.Tx, id string) error {
 	var raw string
 	if err := tx.QueryRow("SELECT session_cost_json FROM sessions WHERE id = ?", id).Scan(&raw); err != nil {
@@ -149,16 +141,13 @@ func finalizeSessionCostTx(tx *sql.Tx, id string) error {
 	return err
 }
 
-// SessionCloseRecord is a close as the ledger holds it, timestamp included, so a
-// lifted close can go back exactly as it was.
 type SessionCloseRecord struct {
 	At     string
 	By     string
 	Reason string
 }
 
-// ReopenSession hands back the close it lifted; ok is false when the id names no
-// closed session. Pass the record to RestoreSessionClose to undo the reopen.
+// ReopenSession hands back the close it lifted; pass it to RestoreSessionClose to undo.
 func (s *Store) ReopenSession(id string) (SessionCloseRecord, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -198,8 +187,7 @@ func (s *Store) ReopenSession(id string) (SessionCloseRecord, bool, error) {
 	return lifted, true, nil
 }
 
-// RestoreSessionClose puts back a close ReopenSession lifted. The cost the close
-// finalized stayed finalized through the reopen, so only the mark returns.
+// The cost the close finalized stays finalized through a reopen; only the mark returns.
 func (s *Store) RestoreSessionClose(id string, closed SessionCloseRecord) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -261,7 +249,6 @@ func (s *Store) SessionLedgerEntry(id string) *protocol.SessionLedgerEntry {
 	return &entry
 }
 
-// SessionLedger reads a page newest first, by close or by last sighting.
 func (s *Store) SessionLedger(query SessionLedgerQuery) (SessionLedgerPage, error) {
 	limit := query.Limit
 	if limit <= 0 {
@@ -383,8 +370,6 @@ func (s *Store) sessionLedgerMemory(query SessionLedgerQuery, limit int) (Sessio
 	return finishLedgerPage(SessionLedgerPage{Entries: entries}, matching), nil
 }
 
-// The in-memory mirror of the writers' closed_at predicate: closing takes the row
-// out of s.sessions, so the maps keyed beside it stop taking writes with it.
 func (s *Store) sessionIsLiveLocked(id string) bool {
 	_, live := s.sessions[id]
 	return live
@@ -418,8 +403,7 @@ func ledgerInstant(entry protocol.SessionLedgerEntry) string {
 	return entry.LastSeen
 }
 
-// The closed session leaves s.sessions and lives here instead, so every
-// in-memory reader and writer stops finding it exactly as SQL's predicate does.
+// The map backing's closed_at predicate: a closed session leaves s.sessions for here.
 type sessionCloseMark struct {
 	At      string
 	By      string

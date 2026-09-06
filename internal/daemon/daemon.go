@@ -1334,8 +1334,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 			}
 			continue
 		}
-		// A runtime that outlived its close, its teardown tombstone already swept.
-		// The ledger row is the verdict, so stop it rather than rebuild a session.
+		// A runtime that outlived its close: the ledger row is the verdict, so stop it.
 		if existing == nil && d.store.SessionClosed(sessionID) {
 			d.logf("worker reconciliation stopped runtime %s: its session is closed", sessionID)
 			d.terminateSession(sessionID, syscall.SIGTERM)
@@ -1854,7 +1853,6 @@ func (d *Daemon) terminateSessionRuntimeChecked(sessionID string, sig syscall.Si
 	return nil
 }
 
-// Rolls a spawn back: the delegation never ran, so there is nothing to record.
 func (d *Daemon) unregisterSession(sessionID string, sig syscall.Signal) *protocol.Session {
 	session := d.store.Get(sessionID)
 	if session == nil && d.hubManager != nil {
@@ -1984,16 +1982,12 @@ func (d *Daemon) terminateSessionAsync(sessionID string, sig syscall.Signal, tea
 	return done
 }
 
-// closeSession keeps the row and its session-owned tables; the store stops
-// answering List and Get for it.
 func (d *Daemon) closeSession(sessionID string, closed store.SessionClose) {
 	d.recordSessionClose(sessionID, func() (bool, error) {
 		return d.store.CloseSession(sessionID, closed, time.Now())
 	})
 }
 
-// A rollback puts back the close it lifted, closed_at included: a resume that
-// failed must leave the historical record exactly as it found it.
 func (d *Daemon) restoreSessionClose(sessionID string, closed store.SessionCloseRecord) {
 	d.recordSessionClose(sessionID, func() (bool, error) {
 		return d.store.RestoreSessionClose(sessionID, closed)
@@ -2025,7 +2019,7 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 	d.clearClassifyingTurn(sessionID)
 }
 
-// removeReapedSession deletes the row; reaping is for what a close would not record.
+// Reaping deletes the row; it is for what a close would not record.
 func (d *Daemon) removeReapedSession(sessionID string) {
 	// A crashed session can leave a checkout newer than the branch monitor's cache.
 	if session := d.store.Get(sessionID); session != nil {
@@ -2057,8 +2051,8 @@ func (d *Daemon) forgetSessionRuntime(sessionID string) {
 	d.forgetPluginDriverSilenceWatch(sessionID)
 }
 
-// Called after the store stopped answering for the session, not before: an
-// observation racing this would rebuild the ring for an id nothing cleans up again.
+// Called after the store stopped answering: an observation racing this rebuilds the
+// ring for an id nothing cleans up again.
 func (d *Daemon) forgetSessionTrace(sessionID string) {
 	d.forgetStateTrace(sessionID)
 	d.evidenceTable().forget(sessionID)

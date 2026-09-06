@@ -17,8 +17,7 @@ type SessionCostObservation struct {
 	Usage         sessioncost.Usage `json:"usage"`
 }
 
-// Finalized names the observations already counted into Ledger whose usage the
-// close dropped: they can no longer be corrected, only refused.
+// Finalized observations are counted into Ledger already: correcting one is refused.
 type SessionCostState struct {
 	Initialized           bool                              `json:"initialized,omitempty"`
 	Cursor                string                            `json:"cursor,omitempty"`
@@ -176,8 +175,6 @@ func (s *Store) ApplySessionCostSourceObservations(sessionID, sourceID, cursor s
 	return changed, err
 }
 
-// An observation a close finalized is refused: its usage is already in Ledger and
-// the value that would let a revision replace it is gone.
 func applySessionCostObservations(sessionID string, state *SessionCostState, observations []SessionCostObservation) bool {
 	state.Initialized = true
 	if state.Ledger == nil {
@@ -221,8 +218,6 @@ func finalizedSet(ids []string) map[string]struct{} {
 	return set
 }
 
-// finalizeSessionCost keeps the per-model totals and drops the usage behind them,
-// leaving the observation ids so a later amendment is refused rather than added.
 func finalizeSessionCost(state *SessionCostState) {
 	if len(state.Observations) == 0 {
 		return

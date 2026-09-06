@@ -197,8 +197,7 @@ func (s *Store) AddCheckedUnlessTeardown(session *protocol.Session) error {
 	return s.addCheckedLocked(session, true)
 }
 
-// A closed row is refused rather than overwritten: re-registering a closed id
-// would run a session no live surface can see. Reopening clears the close first.
+// A closed row is refused, not overwritten: reopening clears the close first.
 func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool) error {
 	if s.db == nil {
 		if _, closing := s.teardownIntents[session.ID]; rejectTeardown && closing {
@@ -307,8 +306,7 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	return nil
 }
 
-// Get answers about live sessions only: a closed session is reachable through
-// the ledger and nowhere else, which is what keeps every caller here honest.
+// Get answers about live sessions only: a closed one is reachable through the ledger.
 func (s *Store) Get(id string) *protocol.Session {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -457,7 +455,6 @@ func (s *Store) ClearSessions() {
 	}
 }
 
-// List answers about live sessions only, like Get.
 func (s *Store) List(stateFilter string) []*protocol.Session {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
