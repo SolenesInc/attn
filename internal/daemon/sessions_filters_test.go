@@ -28,13 +28,11 @@ func TestSessionsFiltersSettingRoundTrips(t *testing.T) {
 
 func TestSessionsFiltersSettingRefusesUnknownShape(t *testing.T) {
 	for name, value := range map[string]string{
-		"unknown scope": `{"scope":"archived","range":"any","customFrom":"","customTo":"","workspaceId":"","repository":""}`,
-		"unknown range": `{"scope":"all","range":"last-week","customFrom":"","customTo":"","workspaceId":"","repository":""}`,
-		"unparsed date": `{"scope":"all","range":"custom","customFrom":"yesterday","customTo":"","workspaceId":"","repository":""}`,
-		"unknown field": `{"scope":"all","range":"any","selectedId":"s1"}`,
-		"not an object": `["closed"]`,
-		// decoder.More() reads a trailing "}" as the end of the value it just
-		// decoded, so only a second decode to EOF refuses these.
+		"unknown scope":    `{"scope":"archived","range":"any","customFrom":"","customTo":"","workspaceId":"","repository":""}`,
+		"unknown range":    `{"scope":"all","range":"last-week","customFrom":"","customTo":"","workspaceId":"","repository":""}`,
+		"unparsed date":    `{"scope":"all","range":"custom","customFrom":"yesterday","customTo":"","workspaceId":"","repository":""}`,
+		"unknown field":    `{"scope":"all","range":"any","selectedId":"s1"}`,
+		"not an object":    `["closed"]`,
 		"a second object":  `{"scope":"all","range":"any"} {"scope":"closed","range":"any"}`,
 		"trailing text":    `{"scope":"all","range":"any"} trailing`,
 		"a trailing brace": `{"scope":"all","range":"any"}}`,

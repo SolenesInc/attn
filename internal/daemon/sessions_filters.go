@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-// The Sessions list stores its filters as one JSON object so the panel comes
-// back the way it was left, on every client that talks to this daemon.
 const SettingSessionsFilters = "sessions.filters"
 
 const sessionsFilterDayLayout = "2006-01-02"
@@ -39,6 +37,7 @@ func validateSessionsFilters(value string) error {
 	if err := decoder.Decode(&filters); err != nil {
 		return fmt.Errorf("%s must be a session filter object: %v", SettingSessionsFilters, err)
 	}
+	// decoder.More() reads a trailing "}" as the end of the value just decoded.
 	if err := ensureJSONEOF(decoder); err != nil {
 		return fmt.Errorf("%s must be a single session filter object: %v", SettingSessionsFilters, err)
 	}

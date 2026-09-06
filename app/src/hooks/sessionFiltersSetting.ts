@@ -3,7 +3,6 @@ import type { SessionLedgerFilters } from './useSessionLedger';
 import { SESSION_RANGE_CHOICES } from '../components/sessionsLedger';
 import type { SessionRangeId, SessionScope } from '../components/sessionsLedger';
 
-/** The daemon holds the Sessions filters, so every client opens the list where it was left. */
 export const SESSION_FILTERS_SETTING_KEY = 'sessions.filters';
 
 const SCOPES: SessionScope[] = ['live', 'closed', 'all'];
@@ -20,8 +19,6 @@ export function serializeSessionFilters(filters: SessionLedgerFilters): string {
   });
 }
 
-// A stored shape we cannot read is not something the user can act on, and the
-// daemon refuses to store one: open on the defaults instead of arguing.
 export function parseSessionFilters(raw: string | undefined): SessionLedgerFilters {
   if (!raw || !raw.trim()) return EMPTY_SESSION_FILTERS;
   let value: unknown;

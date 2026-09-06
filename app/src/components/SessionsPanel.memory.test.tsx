@@ -57,7 +57,6 @@ describe('SessionsPanel filter memory', () => {
       limit: 50,
       reopen: true,
     }]);
-    // Restoring is not a change: opening the list must not write the setting back.
     expect(written(setSetting)).toEqual([]);
   });
 
@@ -97,7 +96,6 @@ describe('SessionsPanel filter memory', () => {
     await waitFor(() => expect(written(setSetting)).toHaveLength(2));
     expect(written(setSetting)[1].range).toBe('30d');
 
-    // Picking the scope that is already on is not a change worth a round trip.
     fireEvent.click(screen.getByRole('button', { name: 'Closed' }));
     await act(async () => { await Promise.resolve(); });
     expect(written(setSetting)).toHaveLength(2);

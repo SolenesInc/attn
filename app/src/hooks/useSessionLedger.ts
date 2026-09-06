@@ -41,7 +41,6 @@ export interface UseSessionLedgerOptions {
   list: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
   pageSize?: number;
   now?: () => Date;
-  /** Read once, on the first render, so the first query is already the restored one. */
   initialFilters?: SessionLedgerFilters;
   onFiltersChange?: (filters: SessionLedgerFilters) => void;
 }
@@ -134,8 +133,6 @@ export function useSessionLedger({
     filtersRef.current = filters;
   }, [filters]);
 
-  // What the caller already knows about, so the restored filters are not written
-  // straight back and an unchanged pick costs no round trip.
   const reportedRef = useRef(filters);
   useEffect(() => {
     if (sameFilters(filters, reportedRef.current)) return;

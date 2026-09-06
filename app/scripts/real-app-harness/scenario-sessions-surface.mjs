@@ -138,8 +138,7 @@ async function main() {
       await client.quitApp();
       await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) });
       await launchFreshAppAndConnect(client, observer);
-      // The surface remembers its filters, so a previous run's pick would
-      // decide what this one opens on.
+      // A previous run's filters would decide what this one opens on.
       queueDaemonSettingRestore(observer, SESSIONS_FILTERS_SETTING);
       await client.request('set_setting', { key: SESSIONS_FILTERS_SETTING, value: '' });
     });
