@@ -626,8 +626,6 @@ async function main() {
       const id = created.ticket_create_result?.ticket_id;
       runner.assert(typeof id === 'string' && id.length > 0, `ticket_create returned an id (got ${JSON.stringify(created)})`, created);
 
-      // Back to the agent's workspace first: the codex target holds the selection,
-      // and this leg needs the agent tile on screen but not selected.
       await client.request('select_session', { sessionId: agentId });
       await client.request('focus_pane', { sessionId: agentId, paneId: authorPaneId });
       await pollFor(async () => {

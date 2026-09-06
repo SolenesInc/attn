@@ -77,8 +77,6 @@ async function runInRevealedPane(client, pane, command, expected, timeoutMs = 30
   return runInPane(client, pane, command, expected, timeoutMs);
 }
 
-// The panel repaints off a daemon push, so the row is a signal to wait on
-// rather than a settling time to guess at.
 async function awaitDockRow(client, seedID, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
   let state = { present: false, seeds: [] };
@@ -337,7 +335,6 @@ async function main() {
     });
 
     await runner.step('a_seed_id_steers_its_tender', async () => {
-      // The newcomer session took the workspace with it when it closed.
       await client.request('select_session', { sessionId: pane.sessionId });
       await waitForPaneShellReady(client, pane.sessionId, pane.paneId);
       const sent = await runInPane(client, pane,
@@ -361,7 +358,6 @@ async function main() {
     });
 
     await runner.step('the_dock_row_names_its_tender_by_label', async () => {
-      // Reading the steer left the delegate's workspace on screen.
       await client.request('select_session', { sessionId: pane.sessionId });
       await waitForPaneShellReady(client, pane.sessionId, pane.paneId);
       const claimed = await runInPane(client, pane,
