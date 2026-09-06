@@ -13,8 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// The one query both doors build. A page fetched with `before` carries no
-// facets: the filter choices belong to the query, not to the page.
 func ledgerQuery(msg *protocol.SessionListMessage, wantFacets bool) (store.SessionLedgerQuery, error) {
 	scope := store.SessionLedgerLive
 	switch {
@@ -140,8 +138,6 @@ func (d *Daemon) sendSessionShowWSResult(client *wsClient, msg *protocol.Session
 	d.sendToClient(client, reply)
 }
 
-// A closed session's ledger row, so an open Sessions surface updates the row in
-// place. session_unregistered says the live session left; this says where it went.
 func projectSessionClosed(d *Daemon, event bus.Event) {
 	entry, ok := decodeFact[protocol.SessionLedgerEntry](d, event)
 	if !ok {

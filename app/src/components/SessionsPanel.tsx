@@ -16,15 +16,12 @@ import {
 import type { SessionRangeId, SessionScope } from './sessionsLedger';
 import './SessionsPanel.css';
 
-/** One thing the surface can do to a closed session. The ids are the reopen
- * actions the daemon offers; the surface never invents one. */
 export interface ReopenActionView {
   id: string;
   label: string;
 }
 
 export interface ReopenVerdictView {
-  /** A background git check is still refining this verdict. */
   refreshing: boolean;
   summary: string;
   reopenable: boolean;
@@ -40,18 +37,15 @@ export interface SessionsPanelProps {
   isOpen: boolean;
   onClose: () => void;
   listSessions: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
-  /** Display names for workspace ids; an id with no name shows as itself. */
   workspaceNames?: Record<string, string>;
   liveSessionIds?: Set<string>;
   seedForSession?: (sessionId: string) => SessionSeedLink | null;
   onFocusSession?: (sessionId: string) => void;
   onOpenSeed?: (seedId: string) => void;
-  /** Absent until a verdict has been asked for; refreshing while git runs. */
   verdicts?: Record<string, ReopenVerdictView>;
   onRequestVerdict?: (sessionId: string) => void;
   onReopen?: (sessionId: string, actionId: string) => void;
-  /** The freshest `session_closed` the socket delivered; the nonce makes a
-   * repeat close of the same session a new notice. */
+  /** The nonce makes a repeat close of the same session a new notice. */
   closeNotice?: { entry: SessionLedgerEntry; nonce: number };
   now?: () => Date;
 }
@@ -104,8 +98,6 @@ export function SessionsPanel({
     }
   }, [isOpen]);
 
-  // Verdicts are asked for only for the closed rows actually on screen, so a
-  // ledger of thousands never starts thousands of git checks.
   useEffect(() => {
     if (!isOpen || !onRequestVerdict) return;
     for (const entry of entries) {
@@ -392,7 +384,7 @@ function renderVerdict(
   checksAvailable: boolean,
 ): React.ReactNode {
   if (!closed) return <span className="sessions-verdict-none">—</span>;
-  // Nothing is checking, so saying "checking…" would be a lie the row never resolves.
+  // Nothing is checking, so "checking…" would be a promise the row never keeps.
   if (!checksAvailable) return <span className="sessions-verdict-none">—</span>;
   if (!verdict) return <span className="sessions-verdict-refreshing">checking…</span>;
   if (verdict.refreshing) {

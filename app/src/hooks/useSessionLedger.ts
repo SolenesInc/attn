@@ -13,7 +13,6 @@ import type { SessionRangeId, SessionScope } from '../components/sessionsLedger'
 export interface SessionLedgerFilters {
   scope: SessionScope;
   range: SessionRangeId;
-  /** Only read when range is 'custom'; both days count. */
   customFrom: string;
   customTo: string;
   workspaceId: string;
@@ -29,8 +28,7 @@ export const EMPTY_SESSION_FILTERS: SessionLedgerFilters = {
   repository: '',
 };
 
-// A page the eye can scan and the daemon answers in one query. Load-more is one
-// keystroke away, so a bigger first page would only cost time nobody asked for.
+// A page the eye can scan; load-more is one keystroke away.
 export const SESSION_PAGE_SIZE = 50;
 
 export interface UseSessionLedgerOptions {
@@ -42,7 +40,6 @@ export interface UseSessionLedgerOptions {
 
 export interface SessionLedgerView {
   filters: SessionLedgerFilters;
-  /** Takes an updater, so two changes in one tick do not overwrite each other. */
   setFilters: Dispatch<SetStateAction<SessionLedgerFilters>>;
   entries: SessionLedgerEntry[];
   facets: SessionLedgerFacets | null;
@@ -50,7 +47,6 @@ export interface SessionLedgerView {
   loading: boolean;
   loadingMore: boolean;
   error: string | null;
-  /** Set when the custom range itself is wrong, so nothing is asked of the daemon. */
   filterError: string | null;
   reload: () => void;
   loadMore: () => void;
@@ -77,8 +73,6 @@ export function sessionLedgerQuery(
   return query;
 }
 
-/** Whether a row the daemon just closed belongs in the list as it stands, so the
- * projection can place it without a re-read that would lose the user's scroll. */
 export function closeBelongsInView(
   entry: SessionLedgerEntry,
   filters: SessionLedgerFilters,
@@ -112,8 +106,7 @@ export function useSessionLedger({
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
-  // Only the newest read may write: a slow first page must not land on top of the
-  // filters the user has moved on to.
+  // Only the newest read may write: a slow page must not land on filters the user left.
   const readSeq = useRef(0);
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
@@ -177,8 +170,7 @@ export function useSessionLedger({
       if (at >= 0) {
         const next = current.slice();
         next[at] = entry;
-        // A live row that just closed leaves a Live-only list.
-        return filtersRef.current.scope === 'live' ? next.filter((row) => row.id !== entry.id) : next;
+            return filtersRef.current.scope === 'live' ? next.filter((row) => row.id !== entry.id) : next;
       }
       if (!closeBelongsInView(entry, filtersRef.current, now())) return current;
       return [entry, ...current];

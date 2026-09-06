@@ -832,13 +832,12 @@ model SessionListMessage {
   limit?: int32;
   // The id of the last row of the previous page; this page starts after it.
   before?: string;
-  // Filters, all optional and combined with AND. The daemon applies them before
-  // paging, so a page is the newest rows that match, not the newest rows filtered.
+  // Filters combine with AND and apply before paging, so a page is the newest
+  // rows that match, not the newest rows filtered.
   workspace_id?: string;
-  // A repository as a local path, matched exactly against the row's repository.
   repository?: string;
-  // Half-open window over the row's instant (the close for a closed row, the
-  // last sighting for a live one): since is inclusive, until exclusive. RFC3339.
+  // Half-open over the row's instant, the close for a closed row and the last
+  // sighting for a live one: since inclusive, until exclusive, RFC3339.
   since?: string;
   until?: string;
 }
@@ -6600,8 +6599,7 @@ model SessionLedgerEntry {
   branch?: string;
   is_worktree?: boolean;
   main_repo?: string;
-  // The repository the session ran in, as a local path. Empty on rows written
-  // before the daemon started recording it.
+  // Empty on rows written before the daemon started recording the repository.
   repository?: string;
   // The state the session held when it closed, or its live state.
   state: SessionState;
@@ -6614,15 +6612,13 @@ model SessionLedgerEntry {
   close_reason?: string;
 }
 
-// One value a filter can take and how many rows carry it. Counted over the
-// scope and date window alone, so choosing a repository never empties the
-// workspace choices, or the other way round.
+// Counted over the scope and date window alone, so choosing a repository never
+// empties the workspace choices, or the other way round.
 model SessionLedgerFacet {
   value: string;
   count: int32;
 }
 
-// The values worth offering as filters, from the rows the ledger actually holds.
 model SessionLedgerFacets {
   repositories: SessionLedgerFacet[];
   workspaces: SessionLedgerFacet[];
@@ -6635,8 +6631,7 @@ model SessionListResult {
   omitted: int32;
   // The id to pass back as `before` for the next page. Absent when nothing is omitted.
   next_before?: string;
-  // Absent on a page fetched with `before`: the choices belong to the query, not
-  // to the page, so paging never re-sends them.
+  // Absent on a page fetched with `before`: the choices belong to the query.
   facets?: SessionLedgerFacets;
 }
 
@@ -6913,9 +6908,6 @@ model NotificationListResultMessage {
   critical_title?: string;
 }
 
-// Result of session_list over the WebSocket. The ledger page and its filter
-// choices travel whole, so the surface renders one answer rather than assembling
-// a page from a broadcast it might have missed.
 model SessionListResultMessage {
   event: "session_list_result";
   request_id: string;
@@ -6924,8 +6916,7 @@ model SessionListResultMessage {
   result?: SessionListResult;
 }
 
-// Result of session_show over the WebSocket. Absent entry with success false
-// means the daemon never ran that session.
+// An absent entry with success false means the daemon never ran that session.
 model SessionShowResultMessage {
   event: "session_show_result";
   request_id: string;
@@ -6934,9 +6925,8 @@ model SessionShowResultMessage {
   entry?: SessionLedgerEntry;
 }
 
-// A session just closed, carrying the ledger row it became. Distinct from
-// session_unregistered, which says the live session left: this one says where
-// it went, so an open ledger surface updates in place instead of re-listing.
+// session_unregistered says the live session left; this says where it went, so
+// an open ledger surface updates in place instead of re-listing.
 model SessionClosedMessage {
   event: "session_closed";
   session_ledger_entry: SessionLedgerEntry;

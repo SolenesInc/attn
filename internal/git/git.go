@@ -18,8 +18,6 @@ type BranchInfo struct {
 	Branch     string
 	IsWorktree bool
 	MainRepo   string
-	// The repository the directory belongs to: the main repository for a
-	// worktree, the checkout itself otherwise.
 	Repository string
 }
 

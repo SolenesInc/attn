@@ -37,20 +37,15 @@ const (
 	SessionLedgerAll    SessionLedgerScope = "all"
 )
 
-// Before is the previous page's last row. Filters combine with AND and apply
-// before paging, so a page is the newest matching rows, not a filtered page.
 type SessionLedgerQuery struct {
 	Scope       SessionLedgerScope
 	Limit       int
 	Before      string
 	WorkspaceID string
-	// A repository as a local path, matched exactly.
 	Repository string
-	// Half-open over the row's instant: Since inclusive, Until exclusive.
 	Since time.Time
 	Until time.Time
-	// Facets costs two extra GROUP BYs; a page fetched with Before skips them
-	// because the choices belong to the query, not to the page.
+	// Two extra GROUP BYs; a page fetched with Before skips them.
 	Facets bool
 }
 
@@ -58,7 +53,6 @@ type SessionLedgerPage struct {
 	Entries    []protocol.SessionLedgerEntry
 	Omitted    int
 	NextBefore string
-	// Nil unless the query asked for them.
 	Facets *protocol.SessionLedgerFacets
 }
 
@@ -285,8 +279,6 @@ const ledgerSelect = `SELECT id, label, agent, directory, workspace_id, branch, 
 
 const ledgerAt = `CASE WHEN closed_at <> '' THEN closed_at ELSE last_seen END`
 
-// Filters that belong to the whole query: the facets are counted over these
-// alone, so choosing a repository never empties the workspace choices.
 func (q SessionLedgerQuery) scopeAndWindow() ([]string, []any) {
 	var where []string
 	var args []any

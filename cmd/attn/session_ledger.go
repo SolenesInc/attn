@@ -40,8 +40,6 @@ func sessionListPresetNames() string {
 	return strings.Join(names, ", ")
 }
 
-// Returns the half-open window a preset names: since inclusive, until exclusive
-// and empty when the preset runs up to now.
 func sessionListPresetWindow(name string, now time.Time) (string, string, error) {
 	back, known := sessionListPresets[name]
 	if !known {

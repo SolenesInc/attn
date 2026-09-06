@@ -11,8 +11,6 @@ export interface SessionLedgerPage {
   omitted: number;
 }
 
-/** The wire shape of session_list. Filters combine with AND; the daemon applies
- * them before paging, so `before` continues the same filtered list. */
 export interface SessionLedgerQuery {
   closed?: boolean;
   all?: boolean;
@@ -26,7 +24,6 @@ export interface SessionLedgerQuery {
 
 export interface SessionLedgerEventContext {
   pending: PendingRequests;
-  /** A session just closed: the row it became, so an open list updates in place. */
   onSessionClosed?: (entry: SessionLedgerEntry) => void;
 }
 

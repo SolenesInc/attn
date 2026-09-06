@@ -1951,8 +1951,8 @@ func applyMigration20(tx *sql.Tx) error {
 	return nil
 }
 
-// Rewind-safe, like every other column add here. A plain checkout's repository
-// is unknowable without git, so it is written on the next registration instead.
+// A plain checkout's repository is unknowable without git, so it is written on
+// the next registration instead.
 func applyMigration137(tx *sql.Tx) error {
 	exists, err := columnExists(tx, "sessions", "repository")
 	if err != nil {

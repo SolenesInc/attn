@@ -4,7 +4,6 @@ export type SessionScope = 'live' | 'closed' | 'all';
 
 export type SessionRangeId = 'any' | 'today' | 'yesterday' | '7d' | '30d' | 'custom';
 
-/** Half-open, as the daemon reads it: since inclusive, until exclusive. */
 export interface SessionRange {
   since?: string;
   until?: string;
@@ -30,8 +29,8 @@ function midnight(now: Date, daysBack: number): Date {
   return day;
 }
 
-/** Calendar days in the viewer's own timezone, matching `attn session list --last`:
- * only the client knows what "today" means, so the daemon is only ever told instants. */
+/** Calendar days in the viewer's timezone: only the client knows what "today"
+ * means, so the daemon is only ever told instants. */
 export function sessionRangeWindow(id: SessionRangeId, now: Date): SessionRange {
   switch (id) {
     case 'today':
@@ -47,8 +46,7 @@ export function sessionRangeWindow(id: SessionRangeId, now: Date): SessionRange 
   }
 }
 
-/** A custom range is two days the user picked, and both of them count: the end
- * day runs to its last instant, so the exclusive `until` is the day after it. */
+/** Both picked days count, so the exclusive `until` is the day after the end. */
 export function customSessionRange(from: string, to: string): SessionRange | { error: string } {
   const start = parseDay(from);
   if (!start) return { error: `${from || 'The start date'} is not a date like 2026-09-05` };
@@ -75,7 +73,6 @@ export function isClosed(entry: SessionLedgerEntry): boolean {
   return !!entry.closed_at;
 }
 
-/** A closed row keeps the state it held when it closed, which would read as live. */
 export function ledgerState(entry: SessionLedgerEntry): string {
   return isClosed(entry) ? 'closed' : entry.state;
 }
@@ -89,16 +86,12 @@ export function closedBySomeone(entry: SessionLedgerEntry): string {
   return by === 'user' ? 'you' : by;
 }
 
-/** Paths are long and their tail is what identifies them, so a narrow column
- * keeps the end rather than the root every repository shares. */
 export function shortPath(path: string, segments = 2): string {
   const parts = path.split('/').filter(Boolean);
   if (parts.length <= segments) return path;
   return `…/${parts.slice(-segments).join('/')}`;
 }
 
-/** The reopen actions `session_show` offers, in the words a button can wear.
- * The ids are the daemon's; an id it adds later shows as itself. */
 const REOPEN_ACTION_LABELS: Record<string, string> = {
   reopen: 'Reopen',
   recreate_worktree_and_reopen: 'Recreate the worktree',
