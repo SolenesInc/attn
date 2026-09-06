@@ -42,9 +42,9 @@ type SessionLedgerQuery struct {
 	Limit       int
 	Before      string
 	WorkspaceID string
-	Repository string
-	Since time.Time
-	Until time.Time
+	Repository  string
+	Since       time.Time
+	Until       time.Time
 	// Two extra GROUP BYs; a page fetched with Before skips them.
 	Facets bool
 }
@@ -53,7 +53,7 @@ type SessionLedgerPage struct {
 	Entries    []protocol.SessionLedgerEntry
 	Omitted    int
 	NextBefore string
-	Facets *protocol.SessionLedgerFacets
+	Facets     *protocol.SessionLedgerFacets
 }
 
 type ErrUnknownLedgerCursor struct{ ID string }
