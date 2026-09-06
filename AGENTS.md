@@ -87,6 +87,9 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 | Frontend dev server | `pnpm --dir app run dev` |
 | Lint | `make lint` |
 
+A fresh checkout needs no manual setup: these targets fetch the native VT
+library and install `app/node_modules` themselves.
+
 ## Test safety
 
 - Never resolve test config paths to production `~/.attn`; never redirect `HOME`.
@@ -158,6 +161,8 @@ Views import React through `@victorarias/attn-app` to share attn's instance.
 
 - Keep `internal/ghosttyvt` build tags, cgo tuples, `scripts/lib/libghostty-vt.sh`,
   and Makefile platforms aligned: darwin/arm64, linux/amd64+arm64.
+- A fresh checkout carries no archive. `make lint`, `make test`, and `make build`
+  fetch it; outside make, run `./scripts/build-libghostty-vt.sh` yourself.
 - `ghostty-vt.pin` must match upstream's rolling `tip` build (the wasm source).
   Run `make publish-ghostty-vt-wasm`, then `make publish-native-vt`; commit both locks.
 - On a pin bump, verify `abi.layout.test.ts`, rerun
