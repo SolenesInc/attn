@@ -62,7 +62,7 @@ Delegated-seed expectations carry the adaptive update and result-reporting
 contract. The corresponding daemon expectations were edited only at that source
 text boundary.
 
-Garden subscription expectations replace only the Garden source text in captured
-launch and seed-guide output. They describe delegation and watch
+Garden subscription expectations replace only the Garden and delegation source
+text in captured launch, seed-guide and agent-delivery output. They describe delegation and watch
 as the same subscription, surviving child/ancestor coverage, and removal that
 persists through recovery. All other captured output stays unchanged.
