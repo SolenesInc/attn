@@ -14,7 +14,7 @@ describe('delegation links', () => {
       id: 'delegate',
       label: 'delegate',
       dispatcher_session_id: 'root',
-      dispatcher_member: 'Alder',
+      dispatcher_member: 'alder',
     }, sessions)).toEqual({ session: sessions[0], name: 'Alder' });
   });
 
@@ -29,7 +29,7 @@ describe('delegation links', () => {
     expect(dispatcherOf({
       id: 'delegate',
       label: 'delegate',
-      dispatcher_member: 'Alder',
+      dispatcher_member: 'alder',
     }, sessions)).toEqual({ session: null, name: 'Alder' });
   });
 

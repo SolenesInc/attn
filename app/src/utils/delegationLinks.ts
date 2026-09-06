@@ -1,3 +1,5 @@
+import { crewDisplayName } from './crewName';
+
 export interface DelegationSession {
   id: string;
   label: string;
@@ -17,7 +19,9 @@ export function dispatcherOf<T extends DelegationSession>(
   const dispatcher = session.dispatcher_session_id
     ? sessions.find((candidate) => candidate.id === session.dispatcher_session_id) ?? null
     : null;
-  const name = session.dispatcher_member || dispatcher?.label;
+  const name = session.dispatcher_member
+    ? crewDisplayName(session.dispatcher_member)
+    : dispatcher?.label;
   return name ? { session: dispatcher, name } : null;
 }
 
