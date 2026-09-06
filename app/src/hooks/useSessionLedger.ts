@@ -41,6 +41,9 @@ export interface UseSessionLedgerOptions {
   list: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
   pageSize?: number;
   now?: () => Date;
+  /** Read once, on the first render, so the first query is already the restored one. */
+  initialFilters?: SessionLedgerFilters;
+  onFiltersChange?: (filters: SessionLedgerFilters) => void;
 }
 
 export interface SessionLedgerView {
@@ -57,6 +60,15 @@ export interface SessionLedgerView {
   reload: () => void;
   loadMore: () => void;
   recordClose: (entry: SessionLedgerEntry, reopen?: SessionReopen) => void;
+}
+
+export function sameFilters(a: SessionLedgerFilters, b: SessionLedgerFilters): boolean {
+  return a.scope === b.scope
+    && a.range === b.range
+    && a.customFrom === b.customFrom
+    && a.customTo === b.customTo
+    && a.workspaceId === b.workspaceId
+    && a.repository === b.repository;
 }
 
 export function sessionLedgerQuery(
@@ -102,8 +114,10 @@ export function useSessionLedger({
   list,
   pageSize = SESSION_PAGE_SIZE,
   now = systemNow,
+  initialFilters = EMPTY_SESSION_FILTERS,
+  onFiltersChange,
 }: UseSessionLedgerOptions): SessionLedgerView {
-  const [filters, setFilters] = useState<SessionLedgerFilters>(EMPTY_SESSION_FILTERS);
+  const [filters, setFilters] = useState<SessionLedgerFilters>(initialFilters);
   const [entries, setEntries] = useState<SessionLedgerEntry[]>([]);
   const [verdicts, setVerdicts] = useState<Record<string, ReopenVerdictView>>(NO_VERDICTS);
   const [facets, setFacets] = useState<SessionLedgerFacets | null>(null);
@@ -119,6 +133,15 @@ export function useSessionLedger({
   useEffect(() => {
     filtersRef.current = filters;
   }, [filters]);
+
+  // What the caller already knows about, so the restored filters are not written
+  // straight back and an unchanged pick costs no round trip.
+  const reportedRef = useRef(filters);
+  useEffect(() => {
+    if (sameFilters(filters, reportedRef.current)) return;
+    reportedRef.current = filters;
+    onFiltersChange?.(filters);
+  }, [filters, onFiltersChange]);
 
   const query = useMemo(() => sessionLedgerQuery(filters, now()), [filters, now]);
   const filterError = 'error' in query ? query.error : null;
