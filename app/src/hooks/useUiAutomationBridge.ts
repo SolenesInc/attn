@@ -2110,7 +2110,7 @@ export function useUiAutomationBridge({
         if (!sectionId) throw new Error('settings_select_section requires sectionId');
         const handle = getSettingsAutomationHandle();
         if (!handle || !handle.getState().open) throw new Error('settings modal is not open');
-        handle.selectSection(sectionId);
+        await handle.selectSection(sectionId);
         await settleUi(2);
         // Re-read through the module getter: SettingsModal re-registers a fresh handle on each
         // render, so a captured handle still closes over the pre-selection section.

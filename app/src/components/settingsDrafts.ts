@@ -1,13 +1,11 @@
-
-import { useCallback, useState } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import type { SavedFlash } from './useSavedFlash';
 import type { SessionAgent } from '../types/sessionAgent';
-
-type SetSetting = (key: string, value: string) => void;
+import { useAutosaveSetting, useSettingsAutosave, type SaveSetting } from './SettingsAutosave';
 
 interface DraftDeps {
   active: boolean;
-  onSetSetting: SetSetting;
+  onSetSetting: SaveSetting;
   savedFlash: SavedFlash;
 }
 
@@ -17,109 +15,41 @@ export interface SettingDraftOptions extends DraftDeps {
   trim?: boolean;
 }
 
-export interface SettingDraft {
-  value: string;
-  set: (next: string) => void;
-  commit: () => void;
-  onChange: (event: { target: { value: string } }) => void;
-  onKeyDown: (event: { key: string }) => void;
-}
-
-export function useSettingDraft({
-  actual,
-  settingKey,
-  trim = false,
-  active,
-  onSetSetting,
-  savedFlash,
-}: SettingDraftOptions): SettingDraft {
-  const [value, setValue] = useState(actual);
-  const [seededFrom, setSeededFrom] = useState<string | null>(active ? actual : null);
-
-  if (active && seededFrom !== actual) {
-    setSeededFrom(actual);
-    setValue(actual);
-  } else if (!active && seededFrom !== null) {
-    setSeededFrom(null);
-  }
-
-  const commit = useCallback(() => {
-    const next = trim ? value.trim() : value;
-    const current = trim ? actual.trim() : actual;
-    if (next === current) return;
-    onSetSetting(settingKey, next);
-    savedFlash.flash(settingKey);
-  }, [actual, onSetSetting, savedFlash, settingKey, trim, value]);
-
-  const onChange = useCallback(
-    (event: { target: { value: string } }) => setValue(event.target.value),
-    [],
-  );
-
-  const onKeyDown = useCallback((event: { key: string }) => {
-    if (event.key === 'Enter') commit();
-  }, [commit]);
-
-  return { value, set: setValue, commit, onChange, onKeyDown };
+export function useSettingDraft({ actual, settingKey, trim = false, onSetSetting, savedFlash }: SettingDraftOptions) {
+  const draft = useAutosaveSetting(settingKey, actual, onSetSetting, (value) => trim ? value.trim() : value);
+  const commit = async () => {
+    if (!draft.dirty) return;
+    if (await draft.commit()) savedFlash.flash(settingKey);
+  };
+  return { ...draft, commit, onKeyDown: (event: { key: string }) => { if (event.key === 'Enter') void commit(); } };
 }
 
 type AgentValues = Partial<Record<SessionAgent, string>>;
-
 export interface AgentSettingDraftOptions extends DraftDeps {
-  /** Must be a stable object: the reseed guard compares it by reference, so a
-   *  fresh literal per render reseeds forever. */
   actual: AgentValues;
   settingKey: (agent: SessionAgent) => string;
   flashKey?: (agent: SessionAgent) => string;
   trim?: boolean;
 }
 
-export interface AgentSettingDraft {
-  value: (agent: SessionAgent) => string;
-  set: (agent: SessionAgent, next: string) => void;
-  commit: (agent: SessionAgent) => void;
-  apply: (agent: SessionAgent, next: string) => void;
-}
-
-export function useAgentSettingDrafts({
-  actual,
-  settingKey,
-  flashKey = settingKey,
-  trim = false,
-  active,
-  onSetSetting,
-  savedFlash,
-}: AgentSettingDraftOptions): AgentSettingDraft {
-  const [values, setValues] = useState<AgentValues>(actual);
-  const [seededFrom, setSeededFrom] = useState<AgentValues | null>(active ? actual : null);
-
-  if (active && seededFrom !== actual) {
-    setSeededFrom(actual);
-    setValues(actual);
-  } else if (!active && seededFrom !== null) {
-    setSeededFrom(null);
+export function useAgentSettingDrafts({ actual, settingKey, flashKey = settingKey, trim = false, savedFlash }: AgentSettingDraftOptions) {
+  const store = useSettingsAutosave()!;
+  useSyncExternalStore(store.subscribe, store.snapshot);
+  for (const [agent, value] of Object.entries(actual)) {
+    store.ensure(settingKey(agent), value ?? '').serialize = (next) => trim ? next.trim() : next;
   }
-
-  const value = useCallback((agent: SessionAgent) => values[agent] || '', [values]);
-
-  const set = useCallback((agent: SessionAgent, next: string) => {
-    setValues((prev) => ({ ...prev, [agent]: next }));
-  }, []);
-
-  const commit = useCallback((agent: SessionAgent) => {
-    const raw = values[agent] || '';
-    const current = actual[agent] || '';
-    const next = trim ? raw.trim() : raw;
-    if (next === (trim ? current.trim() : current)) return;
-    onSetSetting(settingKey(agent), next);
-    savedFlash.flash(flashKey(agent));
-  }, [actual, flashKey, onSetSetting, savedFlash, settingKey, trim, values]);
-
-  const apply = useCallback((agent: SessionAgent, next: string) => {
-    setValues((prev) => ({ ...prev, [agent]: next }));
-    onSetSetting(settingKey(agent), next);
-    savedFlash.flash(flashKey(agent));
-  }, [flashKey, onSetSetting, savedFlash, settingKey]);
-
-  return { value, set, commit, apply };
+  useEffect(() => {
+    for (const [agent, value] of Object.entries(actual)) store.sync(settingKey(agent), value ?? '');
+  }, [actual, settingKey, store]);
+  const commit = async (agent: SessionAgent) => {
+    const field = store.ensure(settingKey(agent), actual[agent] ?? '');
+    if (field.value === field.saved && !field.pending) return;
+    if (await store.commit(settingKey(agent))) savedFlash.flash(flashKey(agent));
+  };
+  return {
+    value: (agent: SessionAgent) => store.ensure(settingKey(agent), actual[agent] ?? '').value,
+    set: (agent: SessionAgent, next: string) => store.set(settingKey(agent), next),
+    commit,
+    apply: (agent: SessionAgent, next: string) => { store.set(settingKey(agent), next); void commit(agent); },
+  };
 }

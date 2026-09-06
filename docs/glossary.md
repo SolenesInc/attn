@@ -99,6 +99,8 @@
 - Client token: profile protocol credential. Browser host token: trusted WebView identity.
 - HTTP bearer: operator credential for exposed WebSockets.
 - Headless task: model run the daemon starts on its own, with no session and no PTY.
+- Background agents (Settings): configuration for Session activity, Garden advisor, and Chief launches. Chief launches are sessions; the other two run as headless tasks.
+- Settings autosave: selections commit immediately; text commits on blur, Enter, navigation, or close. The daemon acknowledges persistence by request id. Failed drafts remain editable and retryable.
 - Headless tasks switch: `ATTN_HEADLESS_TASKS` / `headless_tasks.enabled`; off refuses every headless task before it spawns. The environment wins.
 - Settings snapshot for that switch: `headless_tasks.enabled` is the effective value, `.stored` the setting alone, `.override` the raw environment value when it decides.
 - State marker: `<!-- attn:state=waiting_input|idle -->` in an agent's last assistant message. With the switch off it is the stop verdict, so no model runs; without one the stop settles on hook evidence. Transcript readers strip it from messages; a marker-only message is never shown.

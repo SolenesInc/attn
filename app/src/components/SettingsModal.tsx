@@ -1,6 +1,7 @@
+import { SettingsAutosaveProvider, SettingsAutosaveStatus, useAutosaveSetting, useSettingsAutosave, type SaveSetting } from './SettingsAutosave';
 import { DelegationSettings } from './DelegationSettings';
 import { useDelegationPreferences } from '../hooks/useDelegationPreferences';
-import { Fragment, useState, useCallback, useEffect, useMemo } from 'react';
+import { Fragment, forwardRef, useImperativeHandle, useState, useCallback, useEffect, useMemo, type ForwardedRef } from 'react';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { open } from '@tauri-apps/plugin-dialog';
 import {
@@ -46,6 +47,7 @@ import {
   orderedAgents,
   resolvePreferredAgent,
 } from '../utils/agentAvailability';
+import { parseActivityConfigSetting } from '../utils/activitySettings';
 import { SessionActivitySettings } from './SessionActivitySettings';
 import { GardenAdvisorSettings } from './GardenAdvisorSettings';
 import { parseGardenAdvisorSetting } from '../utils/gardenAdvisorSettings';
@@ -100,7 +102,7 @@ interface SettingsModalProps {
   onUninstallPlugin?: (name: string) => Promise<{ success: boolean; name?: string }>;
   onRemovePlugin: (name: string) => Promise<{ success: boolean; name?: string }>;
   onSetPluginPriority: (name: string, priority: number) => Promise<{ success: boolean; name?: string }>;
-  onSetSetting: (key: string, value: string) => void;
+  onSetSetting: SaveSetting;
   themePreference: ThemePreference;
   onSetTheme: (theme: ThemePreference) => void;
   uiScale?: number;
@@ -124,6 +126,8 @@ type SettingsSectionID =
   | 'workspace'
   | 'hygiene'
   | 'agents'
+  | 'backgroundAgents'
+  | 'terminal'
   | 'autoMode'
   | 'delegation'
   | 'connectivity'
@@ -166,7 +170,16 @@ interface SettingsNavGroup {
   items: SettingsNavItem[];
 }
 
-export function SettingsModal({
+export interface SettingsModalHandle {
+  close(): Promise<void>;
+}
+
+export const SettingsModal = forwardRef<SettingsModalHandle, SettingsModalProps>((props, ref) => (
+  <SettingsAutosaveProvider save={props.onSetSetting}><SettingsModalContent {...props} closeRef={ref} /></SettingsAutosaveProvider>
+));
+
+function SettingsModalContent({
+  closeRef,
   isOpen,
   onClose,
   mutedRepos,
@@ -188,7 +201,6 @@ export function SettingsModal({
   onUninstallPlugin,
   onRemovePlugin,
   onSetPluginPriority,
-  onSetSetting,
   themePreference,
   onSetTheme,
   uiScale = 1,
@@ -203,7 +215,7 @@ export function SettingsModal({
   listTasks,
   retryTask,
   taskChangeSignal,
-}: SettingsModalProps) {
+}: SettingsModalProps & { closeRef: ForwardedRef<SettingsModalHandle> }) {
   const {
     sendDelegationPreferencesGet,
     sendDelegationPreferencesSave,
@@ -233,7 +245,23 @@ export function SettingsModal({
     loadModels: sendAutoModeModels,
   });
   const savedFlash = useSavedFlash();
-  const [defaultAgent, setDefaultAgent] = useState<SessionAgent>('claude');
+  const autosave = useSettingsAutosave()!;
+  const onSetSetting = useCallback((key: string, value: string) => {
+    autosave.ensure(key, settings[key] ?? '');
+    autosave.set(key, value);
+    void autosave.commit(key);
+  }, [autosave, settings]);
+  const closeSettings = useCallback(async () => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    if (!autosave.needsFlush()) { onClose(); return; }
+    if (await autosave.flush()) onClose();
+  }, [autosave, onClose]);
+  useImperativeHandle(closeRef, () => ({ close: closeSettings }), [closeSettings]);
+  const selectSection = useCallback(async (section: SettingsSectionID) => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    if (!autosave.needsFlush()) { setSelectedSection(section); return; }
+    if (await autosave.flush()) setSelectedSection(section);
+  }, [autosave]);
   const [selectedSection, setSelectedSection] = useState<SettingsSectionID>('connectivity');
   const delegationPolicy = useDelegationPreferences(isOpen && selectedSection === 'delegation', sendDelegationPreferencesGet, sendDelegationPreferencesSave);
   const [settingsSearch, setSettingsSearch] = useState('');
@@ -271,13 +299,14 @@ export function SettingsModal({
   );
   const actualEditorExecutable = settings.editor_executable || '';
   const actualDefaultAgent = normalizeSessionAgent(settings.new_session_agent, 'claude');
-  const actualReviewerModel = settings.reviewer_model || '';
   const actualChiefContextCap = settings.chief_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const actualHeadlessContextCap = settings.headless_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const autoSettleEnabled = isAutoSettleEnabled(settings);
   const actualAutoSettleArm = String(autoSettleSeconds(settings, AUTO_SETTLE_ARM_SETTING));
   const actualAutoSettleCountdown = String(autoSettleSeconds(settings, AUTO_SETTLE_COUNTDOWN_SETTING));
   const resolvedDefaultAgent = resolvePreferredAgent(actualDefaultAgent, agentAvailability, 'codex');
+  const defaultAgentDraft = useAutosaveSetting('new_session_agent', resolvedDefaultAgent, onSetSetting);
+  const defaultAgent = defaultAgentDraft.value;
   const orderedAgentList = useMemo(
     () => orderedAgents(agentAvailability, resolvedDefaultAgent, 'codex'),
     [agentAvailability, resolvedDefaultAgent],
@@ -322,6 +351,7 @@ export function SettingsModal({
       if (!list.includes(agent) && (
         (settings[`default_model_${agent}`] || '').trim() !== ''
         || (settings[`default_effort_${agent}`] || '').trim() !== ''
+        || (settings[`default_context_window_cap_${agent}`] || '').trim() !== ''
       )) {
         list.push(agent);
       }
@@ -349,11 +379,16 @@ export function SettingsModal({
     }
     return out;
   }, [settings, defaultOverrideAgentList]);
-  const activityAgents = useMemo(() => orderedAgentList.filter((agent) => (
-    ['codex', 'claude'].includes(agent)
-    && isAgentAvailable(agentAvailability, agent)
-    && actualAgentCapabilities[agent]?.headless_task === true
-  )), [actualAgentCapabilities, agentAvailability, orderedAgentList]);
+  const activityAgents = useMemo(() => {
+    const eligible = orderedAgentList.filter((agent) => (
+      ['codex', 'claude'].includes(agent)
+      && isAgentAvailable(agentAvailability, agent)
+      && actualAgentCapabilities[agent]?.headless_task === true
+    ));
+    const configured = parseActivityConfigSetting(settings['activity.config']).agent;
+    if (configured && !eligible.includes(configured)) eligible.push(configured);
+    return eligible;
+  }, [actualAgentCapabilities, agentAvailability, orderedAgentList, settings]);
   const gardenAdvisorAgents = useMemo(() => {
     const eligible = orderedAgentList.filter((agent) => (
       ['codex', 'claude', 'copilot'].includes(agent)
@@ -385,9 +420,6 @@ export function SettingsModal({
   });
   const editorDraft = useSettingDraft({
     ...draftDeps, actual: actualEditorExecutable, settingKey: 'editor_executable',
-  });
-  const reviewerModelDraft = useSettingDraft({
-    ...draftDeps, actual: actualReviewerModel, settingKey: 'reviewer_model',
   });
   const chiefContextCapDraft = useSettingDraft({
     ...draftDeps, actual: actualChiefContextCap, settingKey: 'chief_context_window_cap', trim: true,
@@ -445,12 +477,11 @@ export function SettingsModal({
   const { setSourcePath: setPluginSourcePath } = pluginPanel;
   useEffect(() => {
     if (!isOpen) return;
-    setDefaultAgent(resolvedDefaultAgent);
     reopenEndpointPanel();
     setPluginSourcePath('');
-  }, [isOpen, resolvedDefaultAgent, reopenEndpointPanel, setPluginSourcePath]);
+  }, [isOpen, reopenEndpointPanel, setPluginSourcePath]);
 
-  useEscapeStack(onClose, isOpen);
+  useEscapeStack(closeSettings, isOpen);
 
   useEffect(() => {
     if (!isOpen || selectedSection !== 'data') return;
@@ -476,11 +507,11 @@ export function SettingsModal({
       }),
       selectSection: (sectionId) => {
         assertValidSettingsSectionID(sectionId);
-        setSelectedSection(sectionId);
+        return selectSection(sectionId);
       },
     });
     return () => setSettingsAutomationHandle(null);
-  }, [isOpen, selectedSection, settingsSearch]);
+  }, [isOpen, selectedSection, settingsSearch, selectSection]);
 
   const { set: setProjectsDir } = projectsDirDraft;
   const handleBrowse = useCallback(async () => {
@@ -533,13 +564,9 @@ export function SettingsModal({
     onSetSetting('auto_approve_enabled', autoApproveEnabled ? 'false' : 'true');
   }, [autoApproveEnabled, onSetSetting]);
 
-  const handleDefaultAgentChange = useCallback((agent: SessionAgent) => {
-    if (!isAgentAvailable(agentAvailability, agent)) return;
-    setDefaultAgent(agent);
-    if (agent !== actualDefaultAgent) {
-      onSetSetting('new_session_agent', agent);
-    }
-  }, [actualDefaultAgent, agentAvailability, onSetSetting]);
+  const handleDefaultAgentChange = (agent: SessionAgent) => {
+    if (isAgentAvailable(agentAvailability, agent)) void defaultAgentDraft.apply(agent);
+  };
 
   const worktreeSweepEnabled = settings['worktree_sweep_enabled'] !== 'false';
 
@@ -672,11 +699,9 @@ export function SettingsModal({
 
   const connectedEndpointCount = endpoints.filter((endpoint) => endpoint.status === 'connected').length;
   const activePluginCount = plugins.filter((plugin) => plugin.connected || plugin.running).length;
-  const availableAgentCount = orderedAgentList.filter((agent) => isAgentAvailable(agentAvailability, agent)).length;
   const mutedItemCount = mutedRepos.length + mutedAuthors.length;
   const pluginProblemCount = pluginIssues.length + plugins.filter((plugin) => plugin.health_status === 'unhealthy').length;
   const hasProjectsDirChange = projectsDirDraft.value !== actualProjectsDir;
-  const hasReviewModelChange = reviewerModelDraft.value !== actualReviewerModel;
 
   const settingsNavGroups = useMemo<SettingsNavGroup[]>(() => [
     {
@@ -696,7 +721,7 @@ export function SettingsModal({
           title: 'Files and locations',
           description: 'Where attn opens repositories and worktrees, when merged worktrees are reclaimed, where your Notebook lives, and what it does with a file an agent sends you.',
           count: 4,
-          keywords: 'projects directory worktrees roots notebook folder knowledge base journal location sent files tiles open markdown worktree sweep reclaim merged keep pin',
+          keywords: 'projects directory worktrees roots notebook folder knowledge base journal location editor executable sent files tiles open markdown worktree sweep reclaim merged keep pin',
         },
         {
           id: 'hygiene',
@@ -713,11 +738,19 @@ export function SettingsModal({
       items: [
         {
           id: 'agents',
-          label: 'Executables and models',
+          label: 'Agents and models',
           title: 'Agents and models',
-          description: 'Which binary each agent runs, which model and effort it launches with, its context caps, and how its terminal is hosted.',
+          description: 'Defaults for new sessions, with configuration for each agent.',
           count: orderedAgentList.length + 8,
-          keywords: 'agents executables claude codex copilot default capabilities pty backend editor model effort chief reviewer review garden advisor sdk context window cap tokens compaction headless workflows auto-approve unattended',
+          keywords: 'agents executables claude codex copilot pi default capabilities model effort pricing context window cap tokens compaction auto-approve unattended',
+        },
+        {
+          id: 'backgroundAgents',
+          label: 'Background agents',
+          title: 'Background agents',
+          description: 'The agents that summarize session activity, review the garden, and coordinate work.',
+          count: 3,
+          keywords: 'chief model effort headless context cap session activity summary refresh garden advisor',
         },
         {
           id: 'delegation',
@@ -725,7 +758,7 @@ export function SettingsModal({
           title: 'Delegation',
           description: '',
           count: 1,
-          keywords: 'delegate roles scout design build ship review fallback harness models effort preferences',
+          keywords: 'delegate roles scout design build ship review fallback harness models effort preferences workflows hypercode',
         },
         {
           id: 'autoMode',
@@ -766,6 +799,11 @@ export function SettingsModal({
     {
       label: 'System',
       items: [
+        {
+          id: 'terminal', label: 'Terminal', title: 'Terminal',
+          description: 'How terminal sessions are hosted.', count: 1,
+          keywords: 'pty backend shared rust host workers experimental terminal',
+        },
         {
           id: 'backgroundTasks',
           label: 'Task runner',
@@ -842,17 +880,6 @@ export function SettingsModal({
               {pluginProblemCount === 0 ? 'healthy' : `${pluginProblemCount} issue${pluginProblemCount === 1 ? '' : 's'}`}
             </span>
             <span className="settings-pill">{activePluginCount}/{plugins.length} running</span>
-          </>
-        );
-      case 'agents':
-        return (
-          <>
-            <span className={`settings-pill ${hasAvailableAgents ? 'good' : 'bad'}`}>
-              {availableAgentCount}/{orderedAgentList.length} available
-            </span>
-            <span className={`settings-pill ${hasReviewModelChange ? 'warn' : 'good'}`}>
-              {hasReviewModelChange ? 'reviewer model edited' : 'reviewer model saved'}
-            </span>
           </>
         );
       case 'data':
@@ -1045,6 +1072,29 @@ export function SettingsModal({
 
   const renderWorkspaceSettings = () => (
     <>
+      <section className="settings-block">
+        <div className="settings-block-intro"><h3>Editor</h3><p className="settings-description">The editor used when opening files.</p></div>
+        <div className="settings-block-body">
+            <div className="settings-field">
+              <label className="settings-label" htmlFor="settings-editor-exec">Editor</label>
+              <span className="settings-status">Used when opening files</span>
+              <input
+                id="settings-editor-exec"
+                type="text"
+                value={editorDraft.value}
+                onChange={editorDraft.onChange}
+                onBlur={editorDraft.commit}
+                onKeyDown={editorDraft.onKeyDown}
+                placeholder="$EDITOR"
+                className="settings-input"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+              <SavedMark shown={savedFlash.saved('editor_executable')} testID="settings-editor-saved" />
+            </div>
+        </div>
+      </section>
       <section className="settings-block">
         <div className="settings-block-intro">
           <div className="settings-kicker">Projects</div>
@@ -1653,116 +1703,7 @@ export function SettingsModal({
     </section>
   );
 
-  const renderAgentSettings = () => (
-    <>
-      <section className="settings-block">
-        <div className="settings-block-intro">
-          <div className="settings-kicker">Paths</div>
-          <h3>Executables</h3>
-          <p className="settings-description">
-            Override the CLI used to launch agents. Empty values use the default on PATH.
-          </p>
-        </div>
-        <div className="settings-block-body">
-          <div className="settings-field-grid">
-            {executableAgentList.map((agent) => {
-              const available = isAgentAvailable(agentAvailability, agent);
-              const inputId = `settings-${agent}-exec`;
-              const value = executableDrafts.value(agent);
-              return (
-                <div className="settings-field" key={agent}>
-                  <label className="settings-label" htmlFor={inputId}>{agentLabel(agent)}</label>
-                  <span className={`settings-status ${available ? 'available' : 'missing'}`}>
-                    {available ? 'Found in PATH' : 'Not found in PATH'}
-                  </span>
-                  <input
-                    id={inputId}
-                    type="text"
-                    value={value}
-                    onChange={(e) => executableDrafts.set(agent, e.target.value)}
-                    onBlur={() => executableDrafts.commit(agent)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        executableDrafts.commit(agent);
-                      }
-                    }}
-                    placeholder={agent}
-                    className="settings-input"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                  />
-                  <SavedMark shown={savedFlash.saved(`${agent}_executable`)} testID={`settings-executable-saved-${agent}`} />
-                </div>
-              );
-            })}
-            <div className="settings-field">
-              <label className="settings-label" htmlFor="settings-editor-exec">Editor</label>
-              <span className="settings-status">Used when opening files</span>
-              <input
-                id="settings-editor-exec"
-                type="text"
-                value={editorDraft.value}
-                onChange={editorDraft.onChange}
-                onBlur={editorDraft.commit}
-                onKeyDown={editorDraft.onKeyDown}
-                placeholder="$EDITOR"
-                className="settings-input"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-              />
-              <SavedMark shown={savedFlash.saved('editor_executable')} testID="settings-editor-saved" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="settings-block">
-        <div className="settings-block-intro">
-          <div className="settings-kicker">Default</div>
-          <h3>Default Session Agent</h3>
-          <p className="settings-description">
-            Used for new sessions and opening PRs. Individual sessions can still choose a different agent.
-          </p>
-        </div>
-        <div className="settings-block-body">
-          {!hasAvailableAgents && (
-            <div className="settings-warning">No supported agent CLI found in PATH.</div>
-          )}
-          <div className="settings-segmented" role="radiogroup" aria-label="Default session agent">
-            {orderedAgentList.map((agent) => {
-              const available = isAgentAvailable(agentAvailability, agent);
-              return (
-                <button
-                  key={agent}
-                  type="button"
-                  className={`settings-segmented-option ${defaultAgent === agent ? 'active' : ''}`}
-                  onClick={() => handleDefaultAgentChange(agent)}
-                  aria-checked={defaultAgent === agent}
-                  disabled={!available}
-                  title={!available ? `${agentLabel(agent)} CLI not found in PATH` : undefined}
-                >
-                  {agentLabel(agent)}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      <SessionActivitySettings
-        settings={settings}
-        agents={activityAgents}
-        onSetSetting={onSetSetting}
-      />
-
-      <GardenAdvisorSettings
-        settings={settings}
-        agents={gardenAdvisorAgents}
-        onSetSetting={onSetSetting}
-      />
-
+  const renderWorkflowsSettings = () => (
       <section className="settings-block">
         <div className="settings-block-intro">
           <div className="settings-kicker">Agents</div>
@@ -1793,309 +1734,9 @@ export function SettingsModal({
           </div>
         </div>
       </section>
+  );
 
-      <section className="settings-block">
-        <div className="settings-block-intro">
-          <div className="settings-kicker">Agents</div>
-          <h3>Auto-approve</h3>
-          <p className="settings-description">
-            Launches managed agents in their native auto-approve mode (Claude
-            "--permission-mode auto", Codex auto-review) so they can run unattended
-            without stopping at every permission gate. Off by default.
-          </p>
-        </div>
-        <div className="settings-block-body">
-          <div className="settings-row-card">
-            <div>
-              <p className="settings-row-title">Run agents unattended</p>
-              <p className="settings-row-copy">
-                While off, agents pause for approval on sensitive actions. Yolo sessions
-                already bypass approvals and ignore this setting. Changing it only affects
-                sessions launched afterward.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="settings-action"
-              data-testid="settings-auto-approve-toggle"
-              onClick={handleToggleAutoApprove}
-            >
-              {autoApproveEnabled ? 'Disable' : 'Enable'}
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="settings-block">
-        <div className="settings-block-intro">
-          <div className="settings-kicker">Agents</div>
-          <h3>Chief-of-staff model &amp; effort</h3>
-          <p className="settings-description">
-            Pins the model and reasoning effort a chief-of-staff session launches with,
-            per agent. Leave blank to use the agent's own default. Only applies to chief
-            launches — regular sessions are unaffected.
-          </p>
-        </div>
-        <div className="settings-block-body">
-          {chiefOverrideAgentList.length === 0 ? (
-            <div className="settings-warning">No installed agent supports a model or effort override.</div>
-          ) : (
-            <div className="settings-field-grid two-column">
-              {chiefOverrideAgentList.map((agent) => {
-                const inputId = `settings-chief-model-${agent}`;
-                const effortId = `settings-chief-effort-${agent}`;
-                const value = chiefModelDrafts.value(agent);
-                const effortValue = chiefEffortDrafts.value(agent);
-                const effortLevels = CHIEF_EFFORT_LEVELS[agent] || [];
-                return (
-                  <Fragment key={agent}>
-                    <div className="settings-field">
-                      <label className="settings-label" htmlFor={inputId}>{agentLabel(agent)}</label>
-                      <input
-                        id={inputId}
-                        data-testid={inputId}
-                        type="text"
-                        value={value}
-                        onChange={(e) => chiefModelDrafts.set(agent, e.target.value)}
-                        onBlur={() => chiefModelDrafts.commit(agent)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            chiefModelDrafts.commit(agent);
-                          }
-                        }}
-                        placeholder={agent === 'claude' ? 'opus — blank for default' : 'gpt-5.4 — blank for default'}
-                        className="settings-input"
-                        autoCapitalize="none"
-                        autoCorrect="off"
-                        spellCheck={false}
-                      />
-                      <SavedMark shown={savedFlash.saved(`chief_model_${agent}`)} testID={`settings-chief-model-saved-${agent}`} />
-                    </div>
-                    <div className="settings-field">
-                      <label className="settings-label" htmlFor={effortId}>{agentLabel(agent)} effort</label>
-                      <select
-                        id={effortId}
-                        data-testid={effortId}
-                        className="settings-input"
-                        value={effortValue}
-                        onChange={(e) => chiefEffortDrafts.apply(agent, e.target.value)}
-                      >
-                        <option value="">Agent default</option>
-                        {effortLevels.map((level) => (
-                          <option key={level} value={level}>{level}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </Fragment>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="settings-block">
-        <div className="settings-block-intro">
-          <div className="settings-kicker">Agents</div>
-          <h3>Default model &amp; effort</h3>
-          <p className="settings-description">
-            The model and reasoning effort every session of this agent starts
-            with. Leave blank to use whatever the agent picks on its own. A
-            chief-of-staff override above, or a model pinned when a session is
-            launched, still wins over this.
-          </p>
-        </div>
-        <div className="settings-block-body">
-          {defaultOverrideAgentList.length === 0 ? (
-            <div className="settings-warning">No installed agent supports a model or effort override.</div>
-          ) : (
-            <div className="settings-field-grid two-column">
-              {defaultOverrideAgentList.map((agent) => {
-                const inputId = `settings-default-model-${agent}`;
-                const effortId = `settings-default-effort-${agent}`;
-                const value = defaultModelDrafts.value(agent);
-                const effortValue = defaultEffortDrafts.value(agent);
-                const effortLevels = CHIEF_EFFORT_LEVELS[agent] || [];
-                return (
-                  <Fragment key={agent}>
-                    <div className="settings-field">
-                      <label className="settings-label" htmlFor={inputId}>{agentLabel(agent)}</label>
-                      <input
-                        id={inputId}
-                        data-testid={inputId}
-                        type="text"
-                        value={value}
-                        onChange={(e) => defaultModelDrafts.set(agent, e.target.value)}
-                        onBlur={() => defaultModelDrafts.commit(agent)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            defaultModelDrafts.commit(agent);
-                          }
-                        }}
-                        placeholder={agent === 'claude' ? 'opus — blank for default' : 'gpt-5.4 — blank for default'}
-                        className="settings-input"
-                        autoCapitalize="none"
-                        autoCorrect="off"
-                        spellCheck={false}
-                      />
-                      <SavedMark shown={savedFlash.saved(`default_model_${agent}`)} testID={`settings-default-model-saved-${agent}`} />
-                    </div>
-                    <div className="settings-field">
-                      <label className="settings-label" htmlFor={effortId}>{agentLabel(agent)} effort</label>
-                      <select
-                        id={effortId}
-                        data-testid={effortId}
-                        className="settings-input"
-                        value={effortValue}
-                        onChange={(e) => defaultEffortDrafts.apply(agent, e.target.value)}
-                      >
-                        <option value="">Agent default</option>
-                        {effortLevels.map((level) => (
-                          <option key={level} value={level}>{level}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </Fragment>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </section>
-
-      <SessionCostPriceSettings settings={settings} onSetSetting={onSetSetting} />
-
-      <section className="settings-block">
-        <div className="settings-block-intro">
-          <div className="settings-kicker">Agents</div>
-          <h3>Context window caps</h3>
-          <p className="settings-description">
-            Token thresholds at which auto-compaction fires instead of waiting for the
-            model's full window. Lower caps keep the chief cheaper on each cache-cold
-            wake and keep one-shot headless runs (reconciliation, workflow
-            subagents) from ballooning; leave those at {DEFAULT_CONTEXT_WINDOW_CAP.toLocaleString()} for
-            the default. The per-agent caps apply to every session of that agent —
-            raise one to make long-lived sessions compact later. Blank means the
-            agent's own compaction behavior; a chief launch still takes the chief cap.
-          </p>
-        </div>
-        <div className="settings-block-body">
-          <div className="settings-field-grid">
-            <div className="settings-field">
-              <label className="settings-label" htmlFor="settings-chief-context-cap">Chief of staff</label>
-              <input
-                id="settings-chief-context-cap"
-                data-testid="settings-chief-context-cap"
-                type="number"
-                min={10000}
-                max={2000000}
-                step={1000}
-                value={chiefContextCapDraft.value}
-                onChange={chiefContextCapDraft.onChange}
-                onBlur={chiefContextCapDraft.commit}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    chiefContextCapDraft.commit();
-                  }
-                }}
-                className="settings-input"
-              />
-              <SavedMark shown={savedFlash.saved('chief_context_window_cap')} testID="settings-chief-context-cap-saved" />
-            </div>
-            <div className="settings-field">
-              <label className="settings-label" htmlFor="settings-headless-context-cap">Headless runs</label>
-              <input
-                id="settings-headless-context-cap"
-                data-testid="settings-headless-context-cap"
-                type="number"
-                min={10000}
-                max={2000000}
-                step={1000}
-                value={headlessContextCapDraft.value}
-                onChange={headlessContextCapDraft.onChange}
-                onBlur={headlessContextCapDraft.commit}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    headlessContextCapDraft.commit();
-                  }
-                }}
-                className="settings-input"
-              />
-              <SavedMark shown={savedFlash.saved('headless_context_window_cap')} testID="settings-headless-context-cap-saved" />
-            </div>
-            {defaultOverrideAgentList.map((agent) => {
-              const inputId = `settings-default-context-cap-${agent}`;
-              return (
-                <div className="settings-field" key={agent}>
-                  <label className="settings-label" htmlFor={inputId}>{agentLabel(agent)} sessions</label>
-                  <input
-                    id={inputId}
-                    data-testid={inputId}
-                    type="number"
-                    min={10000}
-                    max={2000000}
-                    step={1000}
-                    value={defaultContextCapDrafts.value(agent)}
-                    onChange={(e) => defaultContextCapDrafts.set(agent, e.target.value)}
-                    onBlur={() => defaultContextCapDrafts.commit(agent)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        defaultContextCapDrafts.commit(agent);
-                      }
-                    }}
-                    placeholder="blank — agent default"
-                    className="settings-input"
-                  />
-                  <SavedMark shown={savedFlash.saved(`default_context_window_cap_${agent}`)} testID={`settings-default-context-cap-saved-${agent}`} />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      <section className="settings-block">
-        <div className="settings-block-intro">
-          <div className="settings-kicker">Capabilities</div>
-          <h3>Agent Capabilities</h3>
-          <p className="settings-description">
-            Optional integration features reported by each agent.
-          </p>
-        </div>
-        <div className="settings-block-body">
-          <div className="agent-capabilities-list">
-            {orderedAgentList.map((agent) => {
-              const caps = actualAgentCapabilities[agent] || {};
-              const knownCaps = agentCapabilityOrder.filter((cap) => cap in caps);
-              const extraCaps = Object.keys(caps)
-                .filter((cap) => !agentCapabilityOrder.includes(cap))
-                .sort((a, b) => a.localeCompare(b));
-              const capKeys = [...knownCaps, ...extraCaps];
-              return (
-                <div key={agent} className="agent-capabilities-item">
-                  <div className="agent-capabilities-agent">{agentLabel(agent)}</div>
-                  {capKeys.length === 0 ? (
-                    <span className="agent-capability-pill">No capability metadata</span>
-                  ) : (
-                    <div className="agent-capabilities-pills">
-                      {capKeys.map((cap) => (
-                        <span
-                          key={`${agent}-${cap}`}
-                          className={`agent-capability-pill ${caps[cap] ? 'enabled' : 'disabled'}`}
-                          title={caps[cap] ? 'Enabled' : 'Disabled'}
-                        >
-                          {agentCapabilityLabel(cap)}: {caps[cap] ? 'on' : 'off'}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
+  const renderTerminalSettings = () => (
       <section className="settings-block">
         <div className="settings-block-intro">
           <div className="settings-kicker">Terminal</div>
@@ -2147,41 +1788,224 @@ export function SettingsModal({
           </div>
         </div>
       </section>
+  );
 
+  const renderBackgroundAgentSettings = () => (
+    <>
+      <SessionActivitySettings settings={settings} agents={activityAgents} onSetSetting={onSetSetting} />
+      <GardenAdvisorSettings settings={settings} agents={gardenAdvisorAgents} onSetSetting={onSetSetting} />
       <section className="settings-block">
         <div className="settings-block-intro">
-          <div className="settings-kicker">Models</div>
-          <h3>Review Models</h3>
+          <div className="settings-kicker">Agents</div>
+          <h3>Chief of staff</h3>
           <p className="settings-description">
-            Override the Claude model used for SDK-based review work. Empty value uses the built-in default.
+            Model and effort for Chief launches. Empty values use the agent's default.
           </p>
         </div>
         <div className="settings-block-body">
-          <div className="settings-field-grid">
-            <div className="settings-field">
-              <label className="settings-label" htmlFor="settings-reviewer-model">Reviewer model</label>
-              <input
-                id="settings-reviewer-model"
-                type="text"
-                value={reviewerModelDraft.value}
-                onChange={reviewerModelDraft.onChange}
-                onBlur={reviewerModelDraft.commit}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    reviewerModelDraft.commit();
-                  }
-                }}
-                placeholder="claude-opus-4-6"
-                className="settings-input"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-              />
-              <SavedMark shown={savedFlash.saved('reviewer_model')} testID="settings-reviewer-model-saved" />
+          {chiefOverrideAgentList.length === 0 ? (
+            <div className="settings-warning">No installed agent supports a model or effort override.</div>
+          ) : (
+            <div className="settings-field-grid two-column">
+              {chiefOverrideAgentList.map((agent) => {
+                const inputId = `settings-chief-model-${agent}`;
+                const effortId = `settings-chief-effort-${agent}`;
+                const value = chiefModelDrafts.value(agent);
+                const effortValue = chiefEffortDrafts.value(agent);
+                const effortLevels = CHIEF_EFFORT_LEVELS[agent] || [];
+                return (
+                  <Fragment key={agent}>
+                    <div className="settings-field">
+                      <label className="settings-label" htmlFor={inputId}>{agentLabel(agent)}</label>
+                      <input
+                        id={inputId}
+                        data-testid={inputId}
+                        type="text"
+                        value={value}
+                        onChange={(e) => chiefModelDrafts.set(agent, e.target.value)}
+                        onBlur={() => chiefModelDrafts.commit(agent)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            chiefModelDrafts.commit(agent);
+                          }
+                        }}
+                        placeholder="Agent default"
+                        className="settings-input"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                      />
+                      <SavedMark shown={savedFlash.saved(`chief_model_${agent}`)} testID={`settings-chief-model-saved-${agent}`} />
+                    </div>
+                    <div className="settings-field">
+                      <label className="settings-label" htmlFor={effortId}>{agentLabel(agent)} effort</label>
+                      <select
+                        id={effortId}
+                        data-testid={effortId}
+                        className="settings-input"
+                        value={effortValue}
+                        onChange={(e) => chiefEffortDrafts.apply(agent, e.target.value)}
+                      >
+                        <option value="">Agent default</option>
+                        {effortLevels.map((level) => (
+                          <option key={level} value={level}>{level}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </Fragment>
+                );
+              })}
             </div>
-          </div>
+          )}
         </div>
       </section>
+      <section className="settings-block">
+        <div className="settings-block-intro"><h3>Compaction</h3>
+          <p className="settings-description">Token thresholds for the Chief and background runs. Empty values use the default of {DEFAULT_CONTEXT_WINDOW_CAP.toLocaleString()} tokens.</p>
+        </div>
+        <div className="settings-block-body settings-field-grid">
+            <div className="settings-field">
+              <label className="settings-label" htmlFor="settings-chief-context-cap">Chief of staff</label>
+              <input
+                id="settings-chief-context-cap"
+                data-testid="settings-chief-context-cap"
+                type="number"
+                min={10000}
+                max={2000000}
+                step={1000}
+                value={chiefContextCapDraft.value}
+                onChange={chiefContextCapDraft.onChange}
+                onBlur={chiefContextCapDraft.commit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    chiefContextCapDraft.commit();
+                  }
+                }}
+                className="settings-input"
+              />
+              <SavedMark shown={savedFlash.saved('chief_context_window_cap')} testID="settings-chief-context-cap-saved" />
+            </div>
+            <div className="settings-field">
+              <label className="settings-label" htmlFor="settings-headless-context-cap">Headless runs</label>
+              <input
+                id="settings-headless-context-cap"
+                data-testid="settings-headless-context-cap"
+                type="number"
+                min={10000}
+                max={2000000}
+                step={1000}
+                value={headlessContextCapDraft.value}
+                onChange={headlessContextCapDraft.onChange}
+                onBlur={headlessContextCapDraft.commit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    headlessContextCapDraft.commit();
+                  }
+                }}
+                className="settings-input"
+              />
+              <SavedMark shown={savedFlash.saved('headless_context_window_cap')} testID="settings-headless-context-cap-saved" />
+            </div>
+
+        </div>
+      </section>
+    </>
+  );
+
+  const renderAgentSettings = () => (
+    <>
+      <section className="settings-block settings-session-defaults">
+        <div className="settings-block-intro"><h3>Session defaults</h3></div>
+        {!hasAvailableAgents && <div className="settings-warning">No supported agent CLI found in PATH.</div>}
+        <div className="settings-default-row">
+          <div><p className="settings-row-title">Default agent</p><p className="settings-row-copy">Used for new sessions and opening PRs.</p></div>
+          <div className="settings-segmented" role="radiogroup" aria-label="Default session agent">
+            {orderedAgentList.map((agent) => {
+              const available = isAgentAvailable(agentAvailability, agent);
+              return (
+                <button
+                  key={agent}
+                  type="button"
+                  className={`settings-segmented-option ${defaultAgent === agent ? 'active' : ''}`}
+                  onClick={() => handleDefaultAgentChange(agent)}
+                  aria-checked={defaultAgent === agent}
+                  disabled={!available}
+                  title={!available ? `${agentLabel(agent)} CLI not found in PATH` : undefined}
+                >
+                  {agentLabel(agent)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="settings-default-row">
+          <div>
+            <p className="settings-row-title">Auto-approve</p>
+            <p className="settings-row-copy">Let agents review approval requests automatically. Applies to new sessions; YOLO sessions already bypass approval.</p>
+          </div>
+          <button type="button" role="switch" aria-label="Auto-approve" aria-checked={autoApproveEnabled}
+            className="settings-action" data-testid="settings-auto-approve-toggle" onClick={handleToggleAutoApprove}>
+            {autoApproveEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+      </section>
+      <div className="settings-agent-list">
+        {orderedAgentList.map((agent) => {
+          const available = isAgentAvailable(agentAvailability, agent);
+          const overrides = defaultOverrideAgentList.includes(agent);
+          const caps = actualAgentCapabilities[agent] || {};
+          const capabilityKeys = [...agentCapabilityOrder.filter((cap) => cap in caps), ...Object.keys(caps).filter((cap) => !agentCapabilityOrder.includes(cap)).sort()];
+          return (
+            <details className="settings-agent" key={agent} open={agent === resolvedDefaultAgent ? true : undefined}>
+              <summary><span>{agentLabel(agent)}</span><span className="settings-agent-summary">{settings[`default_model_${agent}`] || 'Agent default'} · {available ? 'Available' : 'Unavailable'}</span></summary>
+              <div className="settings-agent-content">
+                {overrides && <div className="settings-field-grid two-column">
+                  <div className="settings-field">
+                    <label className="settings-label" htmlFor={`settings-default-model-${agent}`}>Default model</label>
+                    <input id={`settings-default-model-${agent}`} data-testid={`settings-default-model-${agent}`} className="settings-input"
+                      value={defaultModelDrafts.value(agent)} placeholder="Agent default" autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                      onChange={(e) => defaultModelDrafts.set(agent, e.target.value)} onBlur={() => void defaultModelDrafts.commit(agent)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') void defaultModelDrafts.commit(agent); }} />
+                  </div>
+                  <div className="settings-field">
+                    <label className="settings-label" htmlFor={`settings-default-effort-${agent}`}>Reasoning effort</label>
+                    <select id={`settings-default-effort-${agent}`} data-testid={`settings-default-effort-${agent}`} className="settings-input"
+                      value={defaultEffortDrafts.value(agent)} onChange={(e) => defaultEffortDrafts.apply(agent, e.target.value)}>
+                      <option value="">Agent default</option>
+                      {(CHIEF_EFFORT_LEVELS[agent] || []).map((level) => <option key={level} value={level}>{level}</option>)}
+                    </select>
+                  </div>
+                </div>}
+                {!overrides && <p className="settings-description">Model and effort follow this agent's own configuration.</p>}
+                <details className="settings-agent-advanced">
+                  <summary>Advanced</summary>
+                  <div className="settings-field-grid two-column">
+                    {executableAgentList.includes(agent) && <div className="settings-field">
+                      <label className="settings-label" htmlFor={`settings-${agent}-exec`}>Executable</label>
+                      <input id={`settings-${agent}-exec`} className="settings-input" value={executableDrafts.value(agent)} placeholder={agent}
+                        autoCapitalize="none" autoCorrect="off" spellCheck={false} onChange={(e) => executableDrafts.set(agent, e.target.value)}
+                        onBlur={() => void executableDrafts.commit(agent)} onKeyDown={(e) => { if (e.key === 'Enter') void executableDrafts.commit(agent); }} />
+                      <span className="settings-hint">Empty uses the executable on PATH.</span>
+                    </div>}
+                    {overrides && <div className="settings-field">
+                      <label className="settings-label" htmlFor={`settings-default-context-cap-${agent}`}>Context cap (tokens)</label>
+                      <input id={`settings-default-context-cap-${agent}`} data-testid={`settings-default-context-cap-${agent}`} className="settings-input"
+                        type="number" min={10000} max={2000000} step={1000} placeholder="Agent default" value={defaultContextCapDrafts.value(agent)}
+                        onChange={(e) => defaultContextCapDrafts.set(agent, e.target.value)} onBlur={() => void defaultContextCapDrafts.commit(agent)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') void defaultContextCapDrafts.commit(agent); }} />
+                      <span className="settings-hint">Empty uses the agent's own compaction behavior.</span>
+                    </div>}
+                  </div>
+                  <dl className="settings-agent-capabilities">{capabilityKeys.map((cap) => <div key={cap}><dt>{agentCapabilityLabel(cap)}</dt><dd>{caps[cap] ? 'Supported' : 'Unavailable'}</dd></div>)}</dl>
+                </details>
+              </div>
+            </details>
+          );
+        })}
+      </div>
+      <details className="settings-agent-advanced settings-pricing"><summary>Model pricing overrides</summary>
+        <SessionCostPriceSettings settings={settings} onSetSetting={onSetSetting} />
+      </details>
     </>
   );
 
@@ -2469,6 +2293,10 @@ export function SettingsModal({
         return renderPluginSettings();
       case 'agents':
         return renderAgentSettings();
+      case 'backgroundAgents':
+        return renderBackgroundAgentSettings();
+      case 'terminal':
+        return renderTerminalSettings();
       case 'data':
         return renderDataSettings();
       case 'hygiene':
@@ -2478,7 +2306,7 @@ export function SettingsModal({
       case 'eventBus':
         return renderEventBusSettings();
       case 'delegation':
-        return <DelegationSettings policy={delegationPolicy} loadModels={sendDelegationModels} />;
+        return <><DelegationSettings policy={delegationPolicy} loadModels={sendDelegationModels} />{renderWorkflowsSettings()}</>;
       case 'autoMode':
         return <AutoModeSettings policy={autoModePolicy} />;
       case 'connectivity':
@@ -2490,7 +2318,7 @@ export function SettingsModal({
   if (!isOpen) return null;
 
   return (
-    <div className="settings-overlay" data-testid="settings-overlay" onClick={onClose}>
+    <div className="settings-overlay" data-testid="settings-overlay" onClick={() => void closeSettings()}>
       <div className="settings-modal" data-testid="settings-modal" onClick={e => e.stopPropagation()}>
         <div className="settings-header" data-testid="settings-header">
           <div className="settings-title">
@@ -2506,7 +2334,7 @@ export function SettingsModal({
               placeholder="Search settings"
               aria-label="Search settings"
             />
-            <button className="settings-close" data-testid="settings-close" onClick={onClose} aria-label="Close settings">
+            <button className="settings-close" data-testid="settings-close" onClick={() => void closeSettings()} aria-label="Close settings">
               x
             </button>
           </div>
@@ -2526,12 +2354,12 @@ export function SettingsModal({
                       type="button"
                       data-testid={`settings-nav-${item.id}`}
                       className={`settings-nav-item ${selectedSection === item.id ? 'active' : ''}`}
-                      onClick={() => setSelectedSection(item.id)}
+                      onClick={() => void selectSection(item.id)}
                     >
                       <span>{item.label}</span>
-                      <span className={`settings-nav-count${item.id === 'autoMode' && item.count > 0 ? ' waiting' : ''}`}>
+                      {!['agents', 'backgroundAgents', 'terminal'].includes(item.id) && <span className={`settings-nav-count${item.id === 'autoMode' && item.count > 0 ? ' waiting' : ''}`}>
                         {item.count}
-                      </span>
+                      </span>}
                     </button>
                   ))}
                 </div>
@@ -2550,6 +2378,7 @@ export function SettingsModal({
                 {renderSectionStatusPills()}
               </div>
             </div>
+            <SettingsAutosaveStatus />
             <div className="settings-section-content" data-testid={`settings-section-${selectedSection}`}>
               {renderSelectedSection()}
             </div>

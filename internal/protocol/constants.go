@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "299"
+const ProtocolVersion = "300"
 
 const (
 	ErrorCodeConflict             = "conflict"

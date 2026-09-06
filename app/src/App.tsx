@@ -31,7 +31,7 @@ import { SessionCreationProgress, type SessionCreationPhase } from './components
 import { RightDock } from './components/RightDock';
 import { SessionTerminalWorkspace } from './components/SessionTerminalWorkspace';
 import type { DockTarget } from './components/SessionTerminalWorkspace/dockTarget';
-import { SettingsModal } from './components/SettingsModal';
+import { SettingsModal, type SettingsModalHandle } from './components/SettingsModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { ShortcutEditorModal } from './components/ShortcutEditorModal';
 import { WhatsNewModal } from './components/WhatsNewModal';
@@ -821,6 +821,7 @@ function AppContent({
     sendSetSessionContextWindowCap,
     sendUnregisterSession,
     sendSetSetting,
+    sendSaveSetting,
     sendCreateWorktree,
     sendDeleteWorktree,
     sendListPlugins,
@@ -1068,6 +1069,7 @@ function AppContent({
   }, [hasReceivedInitialState, resolvedTheme, sendSetTerminalTheme]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsModalRef = useRef<SettingsModalHandle>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
@@ -3475,7 +3477,10 @@ function AppContent({
     onToggleSidebar: toggleSidebarCollapse,
     onRefreshPRs: handleRefreshPRs,
     onToggleAttentionPanel: () => toggleDockPanel('attention'),
-    onOpenSettings: useCallback(() => setSettingsOpen(prev => !prev), []),
+    onOpenSettings: useCallback(() => {
+      if (settingsOpen) void settingsModalRef.current?.close();
+      else setSettingsOpen(true);
+    }, [settingsOpen]),
     onShowShortcuts: useCallback(() => setShortcutsOpen(prev => !prev), []),
     onIncreaseFontSize: increaseScale,
     onDecreaseFontSize: decreaseScale,
@@ -4122,6 +4127,7 @@ function AppContent({
         }}
       />
       <SettingsModal
+        ref={settingsModalRef}
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         mutedRepos={mutedRepos}
@@ -4143,7 +4149,7 @@ function AppContent({
         onUninstallPlugin={sendUninstallPlugin}
         onRemovePlugin={sendRemovePlugin}
         onSetPluginPriority={sendSetPluginPriority}
-        onSetSetting={sendSetSetting}
+        onSetSetting={sendSaveSetting}
         themePreference={themePreference}
         onSetTheme={setTheme}
         uiScale={scale}
