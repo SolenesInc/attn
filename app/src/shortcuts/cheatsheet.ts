@@ -30,6 +30,7 @@ export function buildCheatsheet(): CheatsheetCategory[] {
           label: 'Previous / next session',
           combos: [fromId('session.prev'), fromId('session.next')],
         },
+        { label: 'Jump to this session\'s dispatcher', combos: [fromId('session.orchestrator')] },
         { label: 'Jump to workspace 1–9', combos: [[...modifierTokens('workspace.select1'), '1–9']] },
         { label: 'Go to dashboard (home)', combos: [fromId('session.goToDashboard')] },
         { label: 'Toggle grid view', combos: [fromId('view.toggleGrid')] },

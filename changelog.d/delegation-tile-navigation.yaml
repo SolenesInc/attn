@@ -1,0 +1,3 @@
+kind: added
+area: sessions
+change: Terminal headers link delegates to the session that dispatched them and back to their direct delegates.
