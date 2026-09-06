@@ -20,8 +20,6 @@ func (d *Daemon) handleClearWarningsWS() {
 	d.clearWarnings()
 }
 
-// A hub relays an authorized agent close as an unregister and names the closer;
-// the app sends neither field, and its closes are the user's.
 func unregisterSessionClose(msg *protocol.UnregisterMessage) store.SessionClose {
 	closed := store.SessionClose{
 		By:     strings.TrimSpace(protocol.Deref(msg.ClosedBy)),

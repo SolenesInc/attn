@@ -432,8 +432,6 @@ func TestAgentCloseRefusesAnUnknownCaller(t *testing.T) {
 	}
 }
 
-// A hub reaches an outpost over SSH; the test hands the same endpoint loop a
-// websocket to a second daemon in this process.
 func startAgentCloseOutpost(t *testing.T, d *Daemon, sessions ...protocol.Session) *Daemon {
 	t.Helper()
 	port, err := freeTCPPort()

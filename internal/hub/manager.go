@@ -1145,12 +1145,9 @@ func (m *Manager) resolveBrowserControl(endpointID string, payload []byte) {
 	}
 }
 
-// Receipt: an outpost publishes session_unregistered on the same connection as
-// soon as it commits the teardown, so this is a tripwire, not a budget.
+// Tripwire: the outpost publishes its event on this connection as soon as it commits.
 const sessionCloseAckTimeout = 15 * time.Second
 
-// ForwardSessionClose asks the endpoint that owns a session to close it and
-// waits for the session_unregistered it publishes when it has.
 func (m *Manager) ForwardSessionClose(ctx context.Context, endpointID, sessionID string, payload []byte) error {
 	accepted := make(chan struct{}, 1)
 	m.mu.Lock()
@@ -1772,8 +1769,6 @@ func (m *Manager) publishConnectionAndSendHello(ctx context.Context, id string, 
 	return sendClientHello(ctx, conn, clientToken)
 }
 
-// AttachEndpointConnection runs an endpoint over a connection the caller opened,
-// and returns when it drops. runEndpointLoop does the same after connectViaSSH.
 func (m *Manager) AttachEndpointConnection(ctx context.Context, id string, conn *websocket.Conn, clientToken string) error {
 	err := m.publishConnectionAndSendHello(ctx, id, conn, nil, clientToken)
 	if err == nil {

@@ -21,8 +21,6 @@ func (d *Daemon) beginSessionClose(
 	if err != nil {
 		return sessionCloseInFlight{}, err
 	}
-	// The owning daemon writes the ledger row for a session it owns, so the close
-	// is not this daemon's to record until that one has taken it.
 	if endpointID, remote := d.sessionOwningEndpoint(sessionID); remote {
 		if err := d.forwardSessionClose(endpointID, sessionID, closed); err != nil {
 			d.cancelSessionTeardown(sessionID)

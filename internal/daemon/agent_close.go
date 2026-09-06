@@ -136,8 +136,6 @@ func (d *Daemon) resolveAgentCloseSession(reference string) (*protocol.Session, 
 	return match, ""
 }
 
-// beginSessionClose already forwards to the owning endpoint, so a session an
-// outpost owns is as closeable from its hub as a local one.
 func (d *Daemon) agentCloseCandidates() []*protocol.Session {
 	candidates := append([]*protocol.Session(nil), d.store.List("")...)
 	if d.hubManager == nil {
