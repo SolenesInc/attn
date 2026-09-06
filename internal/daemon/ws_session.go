@@ -35,19 +35,32 @@ func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMe
 	if closeErr := d.sessionCloseError(msg.ID); closeErr != nil {
 		d.logf("refusing to unregister protected session %s: %v", msg.ID, closeErr)
 		d.sendCommandError(client, protocol.CmdUnregister, closeErr.Error())
+		d.answerSessionClose(client, msg.ID, closeErr)
 		return
 	}
 	d.logf("Unregistering session %s via WebSocket", msg.ID)
 	closing, err := d.beginSessionClose(msg.ID, unregisterSessionClose(msg), client)
 	if err != nil {
 		d.sendCommandError(client, protocol.CmdUnregister, err.Error())
+		d.answerSessionClose(client, msg.ID, err)
 		return
 	}
-	// A forwarding hub waits on this. The broadcast cannot answer it: that rides the bus.
-	d.sendToClient(client, &protocol.SessionCloseAcceptedMessage{
-		Event: protocol.EventSessionCloseAccepted, SessionID: msg.ID,
-	})
+	d.answerSessionClose(client, msg.ID, nil)
 	d.finishSessionClose(msg.ID, closing)
+}
+
+// A forwarding hub waits on this, named by session. The broadcast cannot answer
+// it: that rides the bus, and it says nothing when the close is refused.
+func (d *Daemon) answerSessionClose(client *wsClient, sessionID string, refusal error) {
+	answer := &protocol.SessionCloseResultMessage{
+		Event:     protocol.EventSessionCloseResult,
+		SessionID: sessionID,
+		Accepted:  refusal == nil,
+	}
+	if refusal != nil {
+		answer.Error = protocol.Ptr(refusal.Error())
+	}
+	d.sendToClient(client, answer)
 }
 
 func (d *Daemon) handleGetRecentLocationsWS(client *wsClient, msg *protocol.GetRecentLocationsMessage) {

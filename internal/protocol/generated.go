@@ -8288,7 +8288,13 @@ type SessionAnnotationsSubmitResultMessage struct {
 	Success bool `json:"success"`
 }
 
-type SessionCloseAcceptedMessage struct {
+type SessionCloseResultMessage struct {
+	// Accepted corresponds to the JSON schema field "accepted".
+	Accepted bool `json:"accepted"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 

@@ -654,14 +654,16 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 			if changed {
 				m.publishSessionsChanged(id)
 			}
-		case protocol.EventSessionCloseAccepted:
+		case protocol.EventSessionCloseResult:
 			var msg struct {
 				SessionID string `json:"session_id"`
+				Accepted  bool   `json:"accepted"`
+				Error     string `json:"error"`
 			}
 			if err := json.Unmarshal(data, &msg); err != nil {
 				continue
 			}
-			m.confirmSessionClose(msg.SessionID)
+			m.answerSessionClose(id, msg.SessionID, msg.Accepted, msg.Error)
 		case protocol.EventSessionUnregistered:
 			var msg struct {
 				Session *protocol.Session `json:"session"`
@@ -704,15 +706,6 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 			m.publishRawEvent(data)
 		case protocol.EventBrowserControlResponse:
 			m.resolveBrowserControl(id, data)
-		case protocol.EventCommandError:
-			var msg struct {
-				Cmd   string `json:"cmd"`
-				Error string `json:"error"`
-			}
-			if err := json.Unmarshal(data, &msg); err == nil && msg.Cmd == protocol.CmdUnregister {
-				m.refuseSessionCloses(id, msg.Error)
-			}
-			m.publishRawEvent(data)
 		default:
 			if forwardsRawEvent(peek.Event) {
 				m.logRemoteRawEvent(id, peek.Event, data)
@@ -1209,38 +1202,32 @@ func (m *Manager) forgetSessionCloseWaiter(sessionID string, forget *sessionClos
 	m.sessionCloses[sessionID] = remaining
 }
 
-func (m *Manager) confirmSessionClose(sessionID string) {
-	m.mu.Lock()
-	waiters := m.sessionCloses[sessionID]
-	delete(m.sessionCloses, sessionID)
-	m.mu.Unlock()
-	answerSessionCloseWaiters(waiters, nil)
-}
-
-// The endpoint refuses without naming a session, so every close it owes answers.
-func (m *Manager) refuseSessionCloses(endpointID, reason string) {
-	if reason = strings.TrimSpace(reason); reason == "" {
-		reason = "the daemon that owns it refused the close"
+// The endpoint answers one session at a time, so a refusal ends that close alone.
+func (m *Manager) answerSessionClose(endpointID, sessionID string, accepted bool, reason string) {
+	var answer error
+	if !accepted {
+		if reason = strings.TrimSpace(reason); reason == "" {
+			reason = "the daemon that owns it refused the close"
+		}
+		answer = errors.New(reason)
 	}
 	m.mu.Lock()
-	var refused []*sessionCloseWaiter
-	for sessionID, waiters := range m.sessionCloses {
-		kept := waiters[:0]
-		for _, waiter := range waiters {
-			if waiter.endpointID == endpointID {
-				refused = append(refused, waiter)
-				continue
-			}
-			kept = append(kept, waiter)
-		}
-		if len(kept) == 0 {
-			delete(m.sessionCloses, sessionID)
+	var answered []*sessionCloseWaiter
+	kept := m.sessionCloses[sessionID][:0]
+	for _, waiter := range m.sessionCloses[sessionID] {
+		if waiter.endpointID == endpointID {
+			answered = append(answered, waiter)
 			continue
 		}
+		kept = append(kept, waiter)
+	}
+	if len(kept) == 0 {
+		delete(m.sessionCloses, sessionID)
+	} else {
 		m.sessionCloses[sessionID] = kept
 	}
 	m.mu.Unlock()
-	answerSessionCloseWaiters(refused, errors.New(reason))
+	answerSessionCloseWaiters(answered, answer)
 }
 
 func answerSessionCloseWaiters(waiters []*sessionCloseWaiter, answer error) {

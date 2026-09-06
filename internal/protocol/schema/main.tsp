@@ -3243,10 +3243,12 @@ model SessionUnregisteredMessage {
   session: Session;
 }
 
-// The answer to a forwarded unregister: the owning daemon committed the close.
-model SessionCloseAcceptedMessage {
-  event: "session_close_accepted";
+// The answer to a forwarded unregister, from the daemon that owns the session.
+model SessionCloseResultMessage {
+  event: "session_close_result";
   session_id: string;
+  accepted: boolean;
+  error?: string;
 }
 
 model SessionStateChangedMessage {
@@ -7270,7 +7272,7 @@ alias DaemonEvent =
   InitialStateMessage
   | SessionRegisteredMessage
   | SessionUnregisteredMessage
-  | SessionCloseAcceptedMessage
+  | SessionCloseResultMessage
   | SessionStateChangedMessage
   | WorkspaceRegisteredMessage
   | WorkspaceUnregisteredMessage

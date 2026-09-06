@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -1097,8 +1098,60 @@ func TestForwardSessionCloseWaitsForTheEndpointToConfirm(t *testing.T) {
 		t.Fatal("the close never reached the endpoint")
 	}
 
-	manager.confirmSessionClose("sess-a")
+	manager.answerSessionClose("endpoint-1", "sess-a", true, "")
 	if _, waiting := manager.sessionCloses["sess-a"]; waiting {
 		t.Error("a finished close left its waiter behind")
+	}
+}
+
+func TestForwardSessionCloseRefusalEndsOnlyItsOwnClose(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	server, frames := forwardTestServer(t)
+	conn := dialForwardTestServer(t, ctx, server)
+
+	manager := NewManager(store.New(), nil, nil, nil, nil, nil)
+	manager.runtimes["endpoint-1"] = &endpointRuntime{
+		record: store.EndpointRecord{ID: "endpoint-1", Name: "gpu-box"},
+		conn:   conn,
+		info:   protocol.EndpointInfo{Status: "connected", StatusMessage: protocol.Ptr("Connected")},
+	}
+
+	results := make(chan error, 2)
+	for _, sessionID := range []string{"sess-a", "sess-b"} {
+		go func() {
+			results <- manager.ForwardSessionClose(ctx, "endpoint-1", sessionID,
+				[]byte(fmt.Sprintf(`{"cmd":"unregister","id":%q}`, sessionID)))
+		}()
+	}
+	for range 2 {
+		select {
+		case <-frames:
+		case <-ctx.Done():
+			t.Fatal("both closes never reached the endpoint")
+		}
+	}
+	// Both frames are out, so both waiters are registered: the forward registers first.
+	manager.answerSessionClose("endpoint-1", "sess-a", false, "daemon_recovering")
+
+	select {
+	case err := <-results:
+		if err == nil || !strings.Contains(err.Error(), "sess-a") {
+			t.Fatalf("the refusal answered %v, want the close of sess-a", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("the refused close never came back")
+	}
+	if _, waiting := manager.sessionCloses["sess-b"]; !waiting {
+		t.Fatal("one target's refusal took the other close down with it")
+	}
+	manager.answerSessionClose("endpoint-1", "sess-b", true, "")
+	select {
+	case err := <-results:
+		if err != nil {
+			t.Errorf("the accepted close returned %v, want it to stand on its own answer", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("the accepted close never came back")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -949,6 +950,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	}
 	if d.isRecovering() && blocksDuringRecovery(cmd) {
 		d.sendCommandError(client, cmd, "daemon_recovering")
+		// A hub forwarding a close waits for an answer named by session.
+		if unregister, ok := msg.(*protocol.UnregisterMessage); ok {
+			d.answerSessionClose(client, unregister.ID, errors.New("daemon_recovering"))
+		}
 		return
 	}
 	// Recorded before remote routing: a host-side `attn open` without --session

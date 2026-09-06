@@ -339,7 +339,7 @@ const EventAutomationsChanged = "automations_changed"
 const (
 	EventSessionRegistered               = "session_registered"
 	EventSessionUnregistered             = "session_unregistered"
-	EventSessionCloseAccepted            = "session_close_accepted"
+	EventSessionCloseResult              = "session_close_result"
 	EventSessionStateChanged             = "session_state_changed"
 	EventWorkspaceRegistered             = "workspace_registered"
 	EventWorkspaceUnregistered           = "workspace_unregistered"
