@@ -52,7 +52,7 @@ export type CompletionOptions = {
 };
 
 export type CompletionResult = {
-  content?: { type: string; text?: string }[];
+  content?: { type: string; text?: string; thinking?: string }[];
   usage?: UsageLike;
   stopReason?: string;
   errorMessage?: string;
@@ -215,7 +215,7 @@ export class ModelClassifier implements Classifier {
           continue;
         }
         const text = textOf(result);
-        return { answered: true, text, parsed: parseSeverity(text) };
+        return { answered: true, text, parsed: withNativeReasoning(parseSeverity(text), result) };
       }
     }
     if (everyFailureTooLong) {
@@ -345,6 +345,17 @@ function textOf(result: CompletionResult): string {
     .filter((block) => block.type === "text" && typeof block.text === "string")
     .map((block) => block.text)
     .join("");
+}
+
+/** The model reasons in its native channel; that reasoning is the explanation a denial carries. */
+function withNativeReasoning(parsed: ParsedSeverity | undefined, result: CompletionResult): ParsedSeverity | undefined {
+  if (!parsed || parsed.thinking) return parsed;
+  const thinking = (result.content ?? [])
+    .filter((block) => block.type === "thinking" && typeof block.thinking === "string")
+    .map((block) => block.thinking)
+    .join("\n")
+    .trim();
+  return thinking === "" ? parsed : { ...parsed, thinking };
 }
 
 function message(error: unknown): string {

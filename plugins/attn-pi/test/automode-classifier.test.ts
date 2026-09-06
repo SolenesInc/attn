@@ -357,7 +357,7 @@ describe("the harm stage and the intent stage", () => {
     expect(registry.calls[1]?.context.systemPrompt).toBe(first);
     expect(messagesOf(registry.calls[0]).at(-1)).toContain("This is pass 1");
     expect(messagesOf(registry.calls[1]).at(-1)).toContain("This is pass 2");
-    expect(messagesOf(registry.calls[1]).at(-1)).toContain("<thinking>");
+    expect(messagesOf(registry.calls[1]).at(-1)).not.toContain("<thinking>");
   });
 
   test("the one hard block is the one denial an approval cannot lift", async () => {
@@ -381,6 +381,31 @@ describe("the harm stage and the intent stage", () => {
     ]);
     const verdict = await classifierWith(registry).classify(request());
     expect(verdict.reason).toContain("Irreversible Local Destruction");
+    expect(verdict.reason).toContain("main is shared and nobody asked for this");
+  });
+
+  test("a trailing reason tag becomes the reason the agent is told", async () => {
+    const registry = new FakeRegistry([
+      dangerous(),
+      says("<severity>80</severity><category>Irreversible Local Destruction</category><reason>main is shared and nobody asked for this</reason>"),
+    ]);
+    const verdict = await classifierWith(registry).classify(request());
+    expect(verdict.reason).toContain("Irreversible Local Destruction");
+    expect(verdict.reason).toContain("main is shared and nobody asked for this");
+  });
+
+  test("native reasoning becomes the reason when the text carries none", async () => {
+    const registry = new FakeRegistry([
+      dangerous(),
+      {
+        content: [
+          { type: "thinking", thinking: "main is shared and nobody asked for this" },
+          { type: "text", text: "<severity>80</severity><category>Irreversible Local Destruction</category>" },
+        ],
+        stopReason: "stop",
+      },
+    ]);
+    const verdict = await classifierWith(registry).classify(request());
     expect(verdict.reason).toContain("main is shared and nobody asked for this");
   });
 

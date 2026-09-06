@@ -73,8 +73,10 @@
   (25) the call runs and stage 2 never happens, which is what keeps the
   classifier cheap.
 - **Stage 2 applies intent, the ALLOW exceptions and the user's spoken
-  boundaries**, thinks first, then answers a severity plus the BLOCK rule it
-  matched. Above `blockLine` (35) it denies. Both numbers are severities on
+  boundaries** and answers a severity, the BLOCK rule it matched, then a
+  one-sentence reason. The answer comes first and the rationale after: a model
+  asked to think in tags before answering ends its turn after the tags often
+  enough to matter, and the native reasoning channel is not reliably present. Above `blockLine` (35) it denies. Both numbers are severities on
   the same 0-100 scale, so a call landing between them runs, but only after
   stage 2 has looked at it.
 - **A reply can only clear a stage 2 verdict, and never a HARD BLOCK
