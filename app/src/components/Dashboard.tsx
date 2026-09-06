@@ -5,6 +5,7 @@ import { PRActions } from './PRActions';
 import { StateIndicator } from './StateIndicator';
 import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
 import { useDaemonContext } from '../contexts/DaemonContext';
+import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
 import { getRepoName } from '../utils/repo';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type { UISessionState } from '../types/sessionState';
@@ -232,6 +233,7 @@ export function Dashboard({
   const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(new Set());
   const [fadingPRs, setFadingPRs] = useState<Set<string>>(new Set());
   const { sendMuteRepo, sendPRVisited } = useDaemonContext();
+  const githubPollingOffReason = useGitHubPollingOffReason();
 
   const [hiddenPRs, setHiddenPRs] = useState<Set<string>>(new Set());
 
@@ -614,6 +616,8 @@ export function Dashboard({
                   <div className="pr-skeleton-title" />
                 </div>
               </div>
+            ) : githubPollingOffReason ? (
+              <div className="card-empty" data-testid="github-polling-off">{githubPollingOffReason}</div>
             ) : activePRs.length === 0 ? (
               <div className="card-empty">No PRs need attention</div>
             ) : (

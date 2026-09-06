@@ -32,12 +32,6 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-workspace-switching'],
   },
   {
-    id: 'workspace-move-leaf',
-    runnerId: 'WORKSPACE-MOVE-LEAF',
-    label: 'Workspace move pane between workspaces',
-    command: ['pnpm', 'run', 'real-app:scenario-workspace-move-leaf'],
-  },
-  {
     id: 'workspace-close-last-session-switches-back',
     runnerId: 'WORKSPACE-CLOSE-LAST-SESSION-SWITCHES-BACK',
     label: 'Workspace close last session switches back',
@@ -77,7 +71,7 @@ export const scenarioCatalog = [
   {
     id: 'sessions-surface',
     runnerId: 'SESSIONS-SURFACE',
-    label: 'The Sessions surface lists, filters and updates live and closed sessions',
+    label: 'The Sessions surface lists, filters, remembers its filters, and updates live and closed sessions',
     command: ['pnpm', 'run', 'real-app:scenario-sessions-surface'],
   },
   {
@@ -103,12 +97,6 @@ export const scenarioCatalog = [
     runnerId: 'NOTEBOOK-EDITOR-UNDO',
     label: 'Notebook editor undo/redo (native Cmd+Z / Shift+Cmd+Z reach CodeMirror)',
     command: ['pnpm', 'run', 'real-app:scenario-notebook-editor-undo'],
-  },
-  {
-    id: 'editor-workspace-root',
-    runnerId: 'EDITOR-WORKSPACE-ROOT',
-    label: 'Editor tile over an arbitrary workspace root (off-root gating + positive control)',
-    command: ['pnpm', 'run', 'real-app:scenario-editor-workspace-root'],
   },
   {
     id: 'autoclose-on-exit',
@@ -185,11 +173,11 @@ export const scenarioCatalog = [
     timeoutMs: 180_000,
   },
   {
-    id: 'delegate-workspace-placement',
-    runnerId: 'DELEGATE-WORKSPACE-PLACEMENT',
-    label: 'Delegate placement: --workspace places the pane, --no-worktree keeps the source checkout',
-    command: ['pnpm', 'run', 'real-app:scenario-delegate-workspace-placement'],
-    timeoutMs: 240_000,
+    id: 'delegation-preferences',
+    runnerId: 'DelegationPreferences',
+    label: 'Delegation preferences: opt in, configure roles, override one launch, disable, and restore',
+    command: ['pnpm', 'run', 'real-app:scenario-delegation-preferences'],
+    timeoutMs: 300_000,
   },
   {
     id: 'nudge-trigger',
@@ -419,13 +407,6 @@ export const scenarioCatalog = [
     runnerId: 'PRESENT-SUBMIT-CLOSES-WINDOW',
     label: 'Present submit closes the real presentation window',
     command: ['pnpm', 'run', 'real-app:scenario-present-submit-closes-window'],
-  },
-  {
-    id: 'app-reconcile',
-    runnerId: 'APP-RECONCILE',
-    label: 'App reconcile: version move rebuilds, a real trim gap disables loudly, an interrupted rebuild repairs',
-    command: ['pnpm', 'run', 'real-app:scenario-app-reconcile'],
-    timeoutMs: 600_000,
   },
   {
     id: 'pi-security',

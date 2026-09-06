@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"golang.org/x/sync/singleflight"
 	"io"
 	"net"
 	"net/http"
@@ -30,6 +31,7 @@ import (
 	"github.com/victorarias/attn/internal/diag"
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/fsdoc"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/headless"
@@ -174,6 +176,7 @@ type Daemon struct {
 	sessionTitleInitialPrompt         map[string][sha256.Size]byte
 	ticketArtifactMu                  sync.Mutex
 	seedArtifactMu                    sync.Mutex
+	delegationModelQueries            singleflight.Group
 	delegationMu                      sync.Mutex
 	delegationRunning                 map[string]bool
 	delegationWorktreePrepareHook     func(path string)
@@ -342,9 +345,11 @@ type Daemon struct {
 	gardenDispatchBeforeWrite func(string)
 	gardenDispatchAfterWrite  func(string)
 	seedHandoverBeforeCommit  func()
+	gitHubPollingOffLogged    bool
 	gardenReviewMu            sync.Mutex
 	dispatchSeedsMu           sync.Mutex
 	dispatchSeeds             map[string]string
+	dispatchersBySession      map[string]garden.Tender
 	dispatchFromChief         map[string]bool
 	dispatchProjectionRevs    map[string]int64
 	dispatchSeedsLoaded       bool
@@ -2241,6 +2246,18 @@ func (d *Daemon) refreshGitHubHosts() error {
 		return nil
 	}
 
+	if reason := gitHubPollingOffReason(); reason != "" {
+		if !d.gitHubPollingOffLogged {
+			d.gitHubPollingOffLogged = true
+			d.logf("%s", reason)
+		}
+		for _, host := range d.ghRegistry.Hosts() {
+			d.ghRegistry.Remove(host)
+		}
+		d.broadcastGitHubHosts(hostsBefore)
+		return nil
+	}
+
 	if err := github.RequireGHVersion("2.81.0"); err != nil {
 		code, message := ghVersionWarning(err)
 		d.logf("gh CLI unavailable (need 2.81.0+): %v", err)
@@ -2327,8 +2344,9 @@ func (d *Daemon) projectGitHubHostsUpdated() {
 
 func (d *Daemon) gitHubHostsUpdatedMessage() *protocol.GitHubHostsUpdatedMessage {
 	return &protocol.GitHubHostsUpdatedMessage{
-		Event:       protocol.EventGitHubHostsUpdated,
-		GithubHosts: d.gitHubHosts(),
+		Event:                  protocol.EventGitHubHostsUpdated,
+		GithubHosts:            d.gitHubHosts(),
+		GithubPollingOffReason: gitHubPollingOffReasonField(),
 	}
 }
 
@@ -2481,6 +2499,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	// automation_runs_get, automation_set_enabled, automation_delete, automation_cleanup
 	case protocol.CmdAutomationApply, protocol.CmdAutomationValidate, protocol.CmdAutomationDefinitionsGet, protocol.CmdAutomationDefinitionGet, protocol.CmdAutomationRun, protocol.CmdAutomationRunsGet, protocol.CmdAutomationSetEnabled, protocol.CmdAutomationDelete, protocol.CmdAutomationCleanup:
 		d.handleAutomationCommand(conn, cmd, msg)
+	case protocol.CmdDelegationRoles: // wire: delegation_roles
+		d.handleDelegationRoles(conn)
 	case protocol.CmdDelegateStatus: // wire: delegate_status
 		d.handleDelegateStatus(conn, msg.(*protocol.DelegateStatusMessage))
 	case protocol.CmdSetTicketStatus: // wire: set_ticket_status
@@ -2585,6 +2605,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSessionShow(conn, msg.(*protocol.SessionShowMessage))
 	case protocol.CmdSessionReopen: // wire: session_reopen
 		d.handleSessionReopen(conn, msg.(*protocol.SessionReopenMessage))
+	case protocol.CmdRenameSession: // wire: rename_session
+		d.handleRenameSessionConn(conn, msg.(*protocol.RenameSessionMessage))
 	case protocol.CmdStateExplain: // wire: state_explain
 		d.handleStateExplain(conn, msg.(*protocol.StateExplainMessage))
 	case protocol.CmdAgentPeek: // wire: agent_peek
@@ -3151,6 +3173,7 @@ func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Sessio
 		d.delegatedFromChiefSessionIDs(),
 		d.crewMembersBySession(),
 		d.gardenDispatchSeedsBySession(),
+		d.gardenDispatchersBySession(),
 	)
 	if decorated != nil {
 		decorated.Automation = d.automationProvenanceForSession(decorated.ID)
@@ -3165,6 +3188,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	delegatedFromChief map[string]bool,
 	crewBySession map[string]string,
 	seedBySession map[string]string,
+	dispatcherBySession map[string]garden.Tender,
 ) *protocol.Session {
 	clone := cloneSession(session)
 	if clone == nil {
@@ -3178,6 +3202,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	d.decorateDelegatedFromChief(clone, delegatedFromChief)
 	d.decorateCrewMember(clone, crewBySession)
 	d.decorateSessionSeed(clone, seedBySession)
+	d.decorateSessionDispatcher(clone, dispatcherBySession)
 	d.decorateSessionWithWorkspace(clone)
 	d.decorateSessionWithWorkspaceMute(clone)
 	d.decorateSessionWithCost(clone)
@@ -3194,11 +3219,12 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	delegatedFromChief := d.delegatedFromChiefSessionIDs()
 	crewBySession := d.crewMembersBySession()
 	seedBySession := d.gardenDispatchSeedsBySession()
+	dispatcherBySession := d.gardenDispatchersBySession()
 	bySession, _ := d.latestAutomationProvenance()
 	pullRequestsBySession := d.store.ListSessionPullRequestsBySession()
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
-		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefOfStaffSessionID, delegatedFromChief, crewBySession, seedBySession); decorated != nil {
+		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefOfStaffSessionID, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
 			decorated.Automation = bySession[decorated.ID]
 			decorated.PullRequests = sessionPullRequestsForBroadcast(pullRequestsBySession[decorated.ID])
 			out = append(out, *decorated)
@@ -4076,6 +4102,7 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"prs":                len(prs),
 		"ws_clients":         d.wsHub.ClientCount(),
 		"github_available":   d.githubAvailable(),
+		"github_polling_off": gitHubPollingOffReason(),
 		"profile":            config.ProfileLabel(),
 		"data_dir":           dataDir,
 		"socket_path":        socketPath,

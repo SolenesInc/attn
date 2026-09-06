@@ -22,6 +22,24 @@ attn profile resolve --json
   Reselect with `profile-env`; never bypass the check.
 - Clear selection with `eval "$(attn profile-env --unset)"`.
 
+## GitHub polling
+
+A named profile's daemon does not poll GitHub with your `gh` credentials, so a
+handful of dev profiles cannot spend the production daemon's API budget. The
+daemon logs one line saying polling is off and how to enable it, and the app
+shows the same reason in Settings, the Dashboard PR card, and a session's PR
+popover. `attn pr` commands that call `gh` themselves keep working.
+
+To test GitHub features in a named profile, start its daemon with the opt-in:
+
+```bash
+ATTN_GITHUB_POLLING=on attn daemon ensure
+ATTN_GITHUB_POLLING=on make run PROFILE=<name>
+```
+
+The harness's mock GitHub (`ATTN_MOCK_GH_URL`) is not gated; the default profile
+polls as before.
+
 ## Build and install
 
 Follow [production safety](../AGENTS.md#you-are-probably-running-inside-attn).

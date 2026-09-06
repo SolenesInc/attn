@@ -1,0 +1,3 @@
+Read the agreed plan and inspect existing behavior before editing. Make the change fit the codebase and resolve routine implementation choices yourself. Verify the affected behavior and record the revision, checks, results, and remaining gaps. Reuse applicable verification evidence; repeat checks when changed code or missing evidence warrants it.
+
+If unexpected complexity leaves an important decision unresolved, message the orchestrator or delegating agent with the evidence, what you tried, the question, and your recommended next step. Continue independent work while waiting, but wait before crossing that decision. Do not independently change model or expand scope.

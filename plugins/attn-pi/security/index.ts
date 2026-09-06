@@ -14,6 +14,7 @@ import type { BashApproval } from "../approval/index";
 import { changeSecurityConfig } from "./settings";
 import { SecurityPanel, type SecuritySnapshot } from "./ui";
 import { securityInstructions, securityPrompt } from "./guidance";
+import { dimmed, problem, statusTheme } from "./status";
 
 export class PiSecurity {
   private fs: SandboxedFilesystem | undefined;
@@ -101,7 +102,9 @@ export class PiSecurity {
         });
       }
     }
-    ctx.ui.setStatus("attn-security", this.problem ? "security: blocked" : `sandbox: ${this.policy?.enabled ? "on" : "off"} · secrets: filtered`);
+    ctx.ui.setStatus("attn-security", this.problem
+      ? problem(statusTheme(ctx), "security: blocked")
+      : dimmed(statusTheme(ctx), `sandbox: ${this.policy?.enabled ? "on" : "off"} · credential filtering: on`));
     if (this.problem) ctx.ui.notify(`Pi tools are blocked: ${this.problem}`, "error");
     else if (this.policy?.unavailableCaches.length) ctx.ui.notify(`Some build caches are unavailable. /security status shows the paths and reasons.`, "warning");
   }

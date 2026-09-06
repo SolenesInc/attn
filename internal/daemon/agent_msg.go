@@ -80,8 +80,11 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 	member, memberFound, memberErr := d.resolveCrewMember(msg.TargetSessionID)
 	target, targetErrCode := d.resolveSessionByIDOrPrefix(msg.TargetSessionID)
 	if memberFound {
-		if d.crewBindingLive(member) {
-			target = d.store.Get(member.BindingSession)
+		if sessionID, ok := d.liveSessionForTender(garden.Tender{
+			Session: member.BindingSession,
+			Member:  member.ID,
+		}); ok {
+			target = d.store.Get(sessionID)
 		} else {
 			message := agentmailbox.PeerMessage{
 				ID: uuid.NewString(), SenderSessionID: sender.ID, Body: content,

@@ -142,6 +142,25 @@ func (d *Daemon) sendSessionListWSResult(client *wsClient, msg *protocol.Session
 	d.sendToClient(client, reply)
 }
 
+func (d *Daemon) sendSessionReopenWSResult(client *wsClient, msg *protocol.SessionReopenMessage) {
+	action := protocol.SessionReopenAction("")
+	if msg.Action != nil {
+		action = *msg.Action
+	}
+	reply := protocol.SessionReopenResultMessage{
+		Event:     protocol.EventSessionReopenResult,
+		RequestID: protocol.Deref(msg.RequestID),
+	}
+	outcome, err := d.reopenSession(msg.SessionID, action, protocol.Deref(msg.Directory))
+	if err != nil {
+		reply.Error = protocol.Ptr(err.Error())
+	} else {
+		reply.Success = true
+		reply.Result = sessionReopenResult(outcome)
+	}
+	d.sendToClient(client, reply)
+}
+
 func (d *Daemon) sendSessionShowWSResult(client *wsClient, msg *protocol.SessionShowMessage) {
 	reply := protocol.SessionShowResultMessage{
 		Event:     protocol.EventSessionShowResult,
@@ -154,6 +173,18 @@ func (d *Daemon) sendSessionShowWSResult(client *wsClient, msg *protocol.Session
 		reply.Error = protocol.Ptr(fmt.Sprintf("this daemon never ran session %s", strings.TrimSpace(msg.SessionID)))
 	}
 	d.sendToClient(client, reply)
+}
+
+func projectSessionReopenRefreshed(d *Daemon, event bus.Event) {
+	reopen, ok := decodeFact[protocol.SessionReopen](d, event)
+	if !ok {
+		return
+	}
+	d.wsHub.BroadcastValue(&protocol.SessionReopenRefreshedMessage{
+		Event:     protocol.EventSessionReopenRefreshed,
+		SessionID: event.Subject,
+		Reopen:    reopen,
+	})
 }
 
 func projectSessionClosed(d *Daemon, event bus.Event) {

@@ -508,6 +508,8 @@ func (d *Daemon) validateSetting(key, value string) error {
 		return validateNotebookRoot(value)
 	case SettingKeybindingsConfig:
 		return validateKeybindingsConfig(value)
+	case SettingSessionsFilters:
+		return validateSessionsFilters(value)
 	case SettingReviewerModel:
 		return nil
 	default:

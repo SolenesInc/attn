@@ -1,0 +1,1 @@
+Establish the question and the decision the evidence will inform. Investigate relevant code and authoritative sources, trace the behavior, and test material claims when practical. Distinguish observations from inference and name conflicting evidence. Use isolated experiments where needed; leave the implementation and external state unchanged.

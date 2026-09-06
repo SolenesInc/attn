@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { NetworkProxy, networkPolicyFrom, type NetworkDecision, type NetworkPolicy, type NetworkRequest } from "../netproxy";
+import { availableModels, type AvailableModels, type ModelQuery } from "./models";
 import type { AttnRPCClient } from "./attn-rpc";
 import type { RelayConnection, RelayDelegate, RelayServer } from "./relay";
 import type {
@@ -79,6 +80,8 @@ export class PiDriver implements RelayDelegate {
   private readonly rpc: AttnRPCClient;
   private readonly runCommand: RunCommand;
   private readonly env: Record<string, string | undefined>;
+  private readonly queryModels: ModelQuery;
+  private modelQuery?: Promise<AvailableModels>;
   private readonly executable: string;
   private readonly relay: RelayServer;
   private readonly suitePath: string;
@@ -100,6 +103,7 @@ export class PiDriver implements RelayDelegate {
     suitePath: string;
     runCommand?: RunCommand;
     env?: Record<string, string | undefined>;
+    queryModels?: ModelQuery;
     executable?: string;
     unbackedGraceMs?: number;
     proxyStateDir?: string;
@@ -109,6 +113,7 @@ export class PiDriver implements RelayDelegate {
     this.suitePath = options.suitePath;
     this.runCommand = options.runCommand ?? defaultRunCommand;
     this.env = options.env ?? process.env;
+    this.queryModels = options.queryModels ?? availableModels;
     this.executable = options.executable?.trim() || process.env.ATTN_PI_EXECUTABLE?.trim() || "pi";
     this.unbackedGraceMs = options.unbackedGraceMs ?? unbackedRunGraceMs;
     this.proxyStateDir = options.proxyStateDir?.trim() || this.env.ATTN_PLUGIN_DATA_ROOT?.trim() || undefined;
@@ -123,6 +128,7 @@ export class PiDriver implements RelayDelegate {
         resume: true,
         initial_prompt: true,
         model_pin: true,
+        model_discovery: true,
         effort_pin: true,
         state_reporting: true,
         message_delivery: true,
@@ -138,6 +144,26 @@ export class PiDriver implements RelayDelegate {
     // inherited session's next network call is held for a decision, not refused.
     await this.ensureProxy(result.auto_mode);
     await this.relay.listen();
+  }
+
+  models(): Promise<AvailableModels> {
+    return this.modelQuery ??= this.queryModels(this.executable, this.env).finally(() => {
+      this.modelQuery = undefined;
+    });
+  }
+
+  async delegationModels(): Promise<{ models: unknown[]; detail: string }> {
+    const catalog = await this.models();
+    if (catalog.problem) throw new Error(catalog.problem);
+    return {
+      models: catalog.providers.flatMap(provider => provider.models.map(model => ({
+        harness: "pi", provider: provider.provider, id: model.id,
+        name: model.name ?? model.id, description: "",
+        effort_support: model.effortSupport ?? "unknown", effort_levels: model.effortLevels ?? [],
+        access: provider.ready ? "unknown" : "unsupported", detail: provider.detail ?? "",
+      }))),
+      detail: "Configured Pi models. Account access is checked by the provider when used.",
+    };
   }
 
   health(): { ok: boolean; message: string } {

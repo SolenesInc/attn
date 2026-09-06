@@ -1,3 +1,6 @@
+import { handleDelegationDaemonEvent, type DelegationSettingsState, type DelegationModelCatalog } from './daemonDelegationEvents';
+import { useDelegationPreferencesPush } from '../store/delegationPreferences';
+import type { DelegationPreferences } from '../types/generated';
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '@tauri-apps/api/core';
@@ -44,6 +47,7 @@ import type {
   SeedSendToChiefResult as GeneratedSeedSendToChiefResult,
   SessionLedgerEntry,
   SessionReopen,
+  SessionReopenResult,
 } from '../types/generated';
 import type { SessionMessageWindowStatus } from './daemonSessionAnnotationEvents';
 import { noteTerminalInputTransport } from '../utils/terminalInputDiagnostics';
@@ -261,6 +265,7 @@ type WebSocketEvent = GeneratedWebSocketEvent & {
   plugins?: DaemonPlugin[];
   issues?: DaemonPluginIssue[];
   github_hosts?: string[];
+  github_polling_off_reason?: string;
   review_id?: string;
   session_id?: string;
   content?: string;
@@ -278,7 +283,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '298';
+export const PROTOCOL_VERSION = '300';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -564,6 +569,7 @@ interface UseDaemonSocketOptions {
   onSessionsUpdate: (sessions: DaemonSession[]) => void;
   onNotebookChanged?: (origin: string, paths: string[]) => void;
   onSessionClosed?: (entry: SessionLedgerEntry, reopen?: SessionReopen) => void;
+  onSessionReopenRefreshed?: (sessionId: string, reopen: SessionReopen) => void;
   onTasksChanged?: () => void;
   onNotificationsUpdated?: (unreadCount: number, critical: CriticalNotificationState) => void;
   onFsChanged?: (origin: string, paths: string[], root: string) => void;
@@ -576,7 +582,7 @@ interface UseDaemonSocketOptions {
   onPRsUpdate: (prs: DaemonPR[]) => void;
   onEndpointsUpdate?: (endpoints: DaemonEndpoint[]) => void;
   onPluginsUpdate?: (plugins: DaemonPlugin[], issues: DaemonPluginIssue[]) => void;
-  onGitHubHostsUpdate?: (hosts: string[]) => void;
+  onGitHubHostsUpdate?: (hosts: string[], pollingOffReason: string | null) => void;
   onReposUpdate: (repos: RepoState[]) => void;
   onAuthorsUpdate: (authors: AuthorState[]) => void;
   onWorktreesUpdate?: (worktrees: DaemonWorktree[]) => void;
@@ -741,6 +747,7 @@ function requestTileContentsForWorkspaces(ws: WebSocket, workspaces: DaemonWorks
 const ATTACH_RETRY_TIMEOUT_MS = 3_000;
 const ATTACH_RETRY_DELAY_MS = 150;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const SESSION_REOPEN_TIMEOUT_MS = 120_000;
 // Bus status is one aggregate pass over the whole event log. Measured on a copy of production, 209ms
 // at 945k rows — so 30s is roughly a hundred times the worst real log.
 const BUS_STATUS_TIMEOUT_MS = 30_000;
@@ -816,6 +823,7 @@ export function useDaemonSocket({
   onSessionsUpdate,
   onNotebookChanged,
   onSessionClosed,
+  onSessionReopenRefreshed,
   onTasksChanged,
   onNotificationsUpdated,
   onFsChanged,
@@ -852,6 +860,7 @@ export function useDaemonSocket({
     onSessionsUpdate,
     onNotebookChanged,
     onSessionClosed,
+    onSessionReopenRefreshed,
     onTasksChanged,
     onNotificationsUpdated,
     onFsChanged,
@@ -877,6 +886,7 @@ export function useDaemonSocket({
     onSessionsUpdate,
     onNotebookChanged,
     onSessionClosed,
+    onSessionReopenRefreshed,
     onTasksChanged,
     onNotificationsUpdated,
     onFsChanged,
@@ -1319,6 +1329,7 @@ export function useDaemonSocket({
 
         switch (data.event) {
           case 'initial_state':
+            useDelegationPreferencesPush.getState().clear();
             if (
               data.daemon_instance_id &&
               daemonInstanceIDRef.current &&
@@ -1390,7 +1401,7 @@ export function useDaemonSocket({
             authorsRef.current = nextAuthors;
             callbacksRef.current.onAuthorsUpdate(nextAuthors);
 
-            callbacksRef.current.onGitHubHostsUpdate?.(data.github_hosts || []);
+            callbacksRef.current.onGitHubHostsUpdate?.(data.github_hosts || [], data.github_polling_off_reason || null);
 
             const nextSettings = data.settings || {};
             settingsRef.current = nextSettings;
@@ -2376,7 +2387,7 @@ export function useDaemonSocket({
             break;
 
           case 'github_hosts_updated':
-            callbacksRef.current.onGitHubHostsUpdate?.(data.github_hosts || []);
+            callbacksRef.current.onGitHubHostsUpdate?.(data.github_hosts || [], data.github_polling_off_reason || null);
             break;
 
           case 'plugins_updated': {
@@ -2801,7 +2812,11 @@ export function useDaemonSocket({
           default: {
             const pending = pendingActionsRef.current;
             if (handleSeedArtifactDaemonEvent(data, pending)) break;
-            if (handleSessionLedgerDaemonEvent(data, { pending, onSessionClosed: callbacksRef.current.onSessionClosed })) break;
+            if (handleSessionLedgerDaemonEvent(data, {
+              pending,
+              onSessionClosed: callbacksRef.current.onSessionClosed,
+              onSessionReopenRefreshed: callbacksRef.current.onSessionReopenRefreshed,
+            })) break;
             if (handleFsDaemonEvent(data, { pending, onFsChanged: callbacksRef.current.onFsChanged })) break;
             if (handleNotebookDaemonEvent(data, { pending, onNotebookChanged: callbacksRef.current.onNotebookChanged })) break;
             if (handleMarkdownAnnotationDaemonEvent(data, mdAnnotationsPendingRef.current)) break;
@@ -2813,6 +2828,7 @@ export function useDaemonSocket({
             if (handleBusDaemonEvent(data, pending)) break;
             if (handleAppDaemonEvent(data, pending)) break;
             if (docSubscriptions.handleEvent(data)) break;
+            if (handleDelegationDaemonEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
             if (handleWorktreeDaemonEvent(data, pending, {
               onWorktreeState: (worktree) => useWorktreeStore.getState().observe(worktree),
@@ -2833,6 +2849,7 @@ export function useDaemonSocket({
       docSubscriptions.markDisconnected();
       useAutoModePushStore.getState().clear();
       useWorktreeStore.getState().clear();
+      useDelegationPreferencesPush.getState().clear();
 
       if (circuitOpenRef.current) {
         console.error('[Daemon] Circuit open, not retrying');
@@ -3074,6 +3091,19 @@ export function useDaemonSocket({
     return sendRequest<SessionLedgerEntry>('session_show', { session_id: sessionId }, 'Reading that session timed out');
   }, [sendRequest]);
 
+  // A reopen may fetch a branch and create a worktree first; each git call can
+  // take seconds on a large repository, so the wait is well past the default.
+  const sendSessionReopen = useCallback((
+    sessionId: string,
+    action?: string,
+    directory?: string,
+  ): Promise<SessionReopenResult> => {
+    const body: Record<string, unknown> = { session_id: sessionId };
+    if (action) body.action = action;
+    if (directory) body.directory = directory;
+    return sendRequest<SessionReopenResult>('session_reopen', body, 'Reopening the session timed out', SESSION_REOPEN_TIMEOUT_MS);
+  }, [sendRequest]);
+
   const sendBusStatusGet = useCallback((): Promise<BusStatus> => {
     return sendRequest<BusStatus>(
       'bus_status_get',
@@ -3093,6 +3123,13 @@ export function useDaemonSocket({
       'Changing the consumer timed out',
     );
   }, [sendRequest]);
+
+  const sendDelegationPreferencesGet = useCallback((): Promise<DelegationSettingsState> =>
+    sendRequest('delegation_preferences_get', {}, 'Reading delegation preferences timed out'), [sendRequest]);
+  const sendDelegationPreferencesSave = useCallback((preferences: DelegationPreferences): Promise<DelegationSettingsState> =>
+    sendRequest('delegation_preferences_save', { preferences }, 'Saving delegation preferences timed out'), [sendRequest]);
+  const sendDelegationModels = useCallback((harness: string): Promise<DelegationModelCatalog> =>
+    sendRequest('delegation_models', { harness }, 'Discovering models timed out', 70_000), [sendRequest]);
 
   const sendAutoModeGet = useCallback((): Promise<AutoModeState> => {
     return sendRequest<AutoModeState>(
@@ -5388,7 +5425,11 @@ export function useDaemonSocket({
     sendSessionSelected,
     sendSessionList,
     sendSessionShow,
+    sendSessionReopen,
     sendBusStatusGet,
+    sendDelegationPreferencesGet,
+    sendDelegationPreferencesSave,
+    sendDelegationModels,
     sendAutoModeGet,
     sendAutoModePromote,
     sendAutoModeDiscard,

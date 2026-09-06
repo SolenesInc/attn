@@ -1,0 +1,3 @@
+kind: internal
+area: build
+change: make lint, test and the frontend suites fetch the native VT library and app/node_modules, so a fresh checkout lints instead of failing on a missing ghostty/vt.h or oxlint.

@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/delegationprefs"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
@@ -52,8 +53,6 @@ func readInternalActionResult(client *wsClient) (internalActionResult, error) {
 	}
 }
 
-const maxDelegationNameRunes = 16
-
 func (d *Daemon) validateDelegationName(name string, creatingWorkspace bool, targetWorkspaceID string) error {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -62,8 +61,8 @@ func (d *Daemon) validateDelegationName(name string, creatingWorkspace bool, tar
 	if name == "." || name == string(filepath.Separator) {
 		return fmt.Errorf("%q is not a usable name; pass --name", name)
 	}
-	if len([]rune(name)) > maxDelegationNameRunes {
-		return fmt.Errorf("name %q is too long (max %d characters); pass a shorter --name", name, maxDelegationNameRunes)
+	if len([]rune(name)) > maxSessionNameRunes {
+		return fmt.Errorf("name %q is too long (max %d characters); pass a shorter --name", name, maxSessionNameRunes)
 	}
 	if creatingWorkspace {
 		for _, ws := range d.store.ListWorkspaces() {
@@ -85,10 +84,10 @@ func (d *Daemon) validateDelegationName(name string, creatingWorkspace bool, tar
 
 func truncateDelegationName(name string) string {
 	runes := []rune(name)
-	if len(runes) <= maxDelegationNameRunes {
+	if len(runes) <= maxSessionNameRunes {
 		return name
 	}
-	return strings.TrimRight(string(runes[:maxDelegationNameRunes]), "-_. \t")
+	return strings.TrimRight(string(runes[:maxSessionNameRunes]), "-_. \t")
 }
 
 func (d *Daemon) resolveDelegationAgent(sourceAgent string, requested *string) (string, error) {
@@ -548,10 +547,14 @@ func (d *Daemon) createDelegationWorktree(baseDirectory, inferredRepo string, re
 }
 
 func (d *Daemon) delegate(msg *protocol.DelegateMessage) (*protocol.DelegateResult, error) {
-	return d.delegateOperation(msg, "", "", "", false, "", "")
+	resolved, err := d.resolveDelegationPreferences(msg)
+	if err != nil {
+		return nil, err
+	}
+	return d.delegateOperation(msg, "", "", "", false, "", "", resolved)
 }
 
-func (d *Daemon) spawnDelegatedRuntime(msg *protocol.DelegateMessage, sessionID, workspaceID, directory, name, agent, model, effort, brief string, fromChief bool) error {
+func (d *Daemon) spawnDelegatedRuntime(msg *protocol.DelegateMessage, sessionID, workspaceID, directory, name, agent, model, effort, brief string, fromChief bool, guidance string) error {
 	seedID := ""
 	initialPrompt := ""
 	var err error
@@ -567,6 +570,9 @@ func (d *Daemon) spawnDelegatedRuntime(msg *protocol.DelegateMessage, sessionID,
 			return err
 		}
 		initialPrompt = withLeafIdentity(delegatedBriefPrompt(brief, seedID))
+	}
+	if guidance != "" {
+		initialPrompt = prompts.DelegationOpeningWithGuidance(initialPrompt, guidance)
 	}
 	spawnMsg := &protocol.SpawnSessionMessage{
 		Cmd:           protocol.CmdSpawnSession,
@@ -592,7 +598,21 @@ func (d *Daemon) spawnDelegatedRuntime(msg *protocol.DelegateMessage, sessionID,
 	return err
 }
 
-func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, reservedSessionID, ownedWorktreePath string, worktreeOwned bool, worktreeToken, initiatingChiefSessionID string) (*protocol.DelegateResult, error) {
+func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, reservedSessionID, ownedWorktreePath string, worktreeOwned bool, worktreeToken, initiatingChiefSessionID string, resolved *delegationprefs.Resolved) (*protocol.DelegateResult, error) {
+	guidance := ""
+	if resolved != nil {
+		copy := *msg
+		msg = &copy
+		s := resolved.Selection
+		msg.Agent = &s.Harness
+		msg.Model = &s.Model
+		msg.Effort = &s.Effort
+		if s.Provider != "" {
+			joined := s.Provider + "/" + s.Model
+			msg.Model = &joined
+		}
+		guidance = prompts.DelegationExecutionGuidance(resolved.RoleName, resolved.Instructions, resolved.StoppingPoint)
+	}
 	sessionID := reservedSessionID
 	if sessionID == "" {
 		sessionID = uuid.NewString()
@@ -639,7 +659,9 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 	if err := d.validateDelegationModelEffort(agent, model, effort); err != nil {
 		return nil, err
 	}
-	effort = d.defaultDelegationEffort(agent, effort)
+	if resolved == nil && msg.Effort == nil {
+		effort = d.defaultDelegationEffort(agent, effort)
+	}
 	if handover == nil {
 		if err := d.validateDispatchCrown(strings.TrimSpace(protocol.Deref(msg.Plot)), sourceSessionID); err != nil {
 			return nil, err
@@ -683,7 +705,7 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 					"recovering delegated runtime", existing.WorkspaceID, "", existing.Directory, nil, nil, time.Now())
 			}
 			watch = d.watchLaunch(sessionID)
-			if err := d.spawnDelegatedRuntime(msg, sessionID, existing.WorkspaceID, existing.Directory, existing.Label, agent, model, effort, brief, delegatedByChief); err != nil {
+			if err := d.spawnDelegatedRuntime(msg, sessionID, existing.WorkspaceID, existing.Directory, existing.Label, agent, model, effort, brief, delegatedByChief, guidance); err != nil {
 				d.forgetLaunchWatch(sessionID, watch)
 				return nil, fmt.Errorf("recover delegated session runtime: %w", err)
 			}
@@ -876,7 +898,7 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 	rollback.onPaneCreated(sessionID)
 
 	watch := d.watchLaunch(sessionID)
-	if err := d.spawnDelegatedRuntime(msg, sessionID, workspaceID, directory, name, agent, model, effort, brief, delegatedByChief); err != nil {
+	if err := d.spawnDelegatedRuntime(msg, sessionID, workspaceID, directory, name, agent, model, effort, brief, delegatedByChief, guidance); err != nil {
 		d.forgetLaunchWatch(sessionID, watch)
 		return nil, rollback.fail(fmt.Errorf("spawn delegated session: %w", err))
 	}

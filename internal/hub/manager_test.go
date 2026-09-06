@@ -1155,3 +1155,124 @@ func TestForwardSessionCloseRefusalEndsOnlyItsOwnClose(t *testing.T) {
 		t.Fatal("the accepted close never came back")
 	}
 }
+
+func TestManagerForwardSessionRenameCarriesTheOwnerVerdictBack(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		success bool
+		refusal string
+		wantErr string
+	}{
+		{"applied", true, "", ""},
+		{"refused", false, `name "x" is 49 characters, over the 48-character limit`, "over the 48-character limit"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				conn, err := websocket.Accept(w, r, nil)
+				if err != nil {
+					t.Errorf("Accept() error = %v", err)
+					return
+				}
+				defer conn.Close(websocket.StatusNormalClosure, "")
+				_, payload, err := conn.Read(r.Context())
+				if err != nil {
+					t.Errorf("Read() error = %v", err)
+					return
+				}
+				var request protocol.RenameSessionMessage
+				if err := json.Unmarshal(payload, &request); err != nil || request.Cmd != protocol.CmdRenameSession {
+					t.Errorf("forwarded frame = %s, want rename_session", payload)
+					return
+				}
+				result := protocol.RenameResultMessage{Event: protocol.EventRenameResult, Cmd: protocol.CmdRenameSession, ID: request.SessionID, Success: tc.success}
+				if tc.refusal != "" {
+					result.Error = protocol.Ptr(tc.refusal)
+				}
+				response, _ := json.Marshal(result)
+				if err := conn.Write(r.Context(), websocket.MessageText, response); err != nil {
+					t.Errorf("Write() error = %v", err)
+				}
+			}))
+			defer server.Close()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), nil)
+			if err != nil {
+				t.Fatalf("Dial() error = %v", err)
+			}
+			defer conn.Close(websocket.StatusNormalClosure, "")
+
+			manager := NewManager(store.New(), nil, nil, nil, nil, nil)
+			manager.runtimes["endpoint-1"] = &endpointRuntime{conn: conn}
+			go func() { _, _ = manager.consumeRemote(ctx, "endpoint-1", conn) }()
+
+			payload, _ := json.Marshal(protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: "s-remote", Label: "x"})
+			err = manager.ForwardSessionRename(ctx, "endpoint-1", "s-remote", payload)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("ForwardSessionRename() error = %v, want the owner's acceptance", err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("ForwardSessionRename() error = %v, want the owner's refusal %q", err, tc.wantErr)
+			}
+			manager.mu.RLock()
+			defer manager.mu.RUnlock()
+			if len(manager.sessionRenames) != 0 {
+				t.Fatalf("pending renames = %d after the answer, want none", len(manager.sessionRenames))
+			}
+		})
+	}
+}
+
+func TestManagerRefusesASecondRenameWhileOneWaitsOnTheOwner(t *testing.T) {
+	answered := make(chan struct{})
+	received := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Errorf("Accept() error = %v", err)
+			return
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "")
+		_, payload, err := conn.Read(r.Context())
+		if err != nil {
+			return
+		}
+		var request protocol.RenameSessionMessage
+		_ = json.Unmarshal(payload, &request)
+		close(received)
+		// Hold the verdict until the second rename has been refused.
+		<-answered
+		response, _ := json.Marshal(protocol.RenameResultMessage{Event: protocol.EventRenameResult, Cmd: protocol.CmdRenameSession, ID: request.SessionID, Success: true})
+		_ = conn.Write(r.Context(), websocket.MessageText, response)
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	if err != nil {
+		t.Fatalf("Dial() error = %v", err)
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+
+	manager := NewManager(store.New(), nil, nil, nil, nil, nil)
+	manager.runtimes["endpoint-1"] = &endpointRuntime{conn: conn}
+	go func() { _, _ = manager.consumeRemote(ctx, "endpoint-1", conn) }()
+
+	first := make(chan error, 1)
+	valid, _ := json.Marshal(protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: "s-remote", Label: "valid name"})
+	go func() { first <- manager.ForwardSessionRename(ctx, "endpoint-1", "s-remote", valid) }()
+	<-received
+
+	overCap, _ := json.Marshal(protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: "s-remote", Label: strings.Repeat("x", 49)})
+	err = manager.ForwardSessionRename(ctx, "endpoint-1", "s-remote", overCap)
+	if err == nil || !strings.Contains(err.Error(), "already waiting on its owner") {
+		t.Fatalf("second rename error = %v, want a refusal instead of the first rename's verdict", err)
+	}
+	close(answered)
+	if err := <-first; err != nil {
+		t.Fatalf("first rename error = %v, want the owner's acceptance", err)
+	}
+}

@@ -602,6 +602,7 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 			if attempt.stage != sessionInputTaken {
 				attempt.stage = sessionInputPlaced
 			}
+			go m.daemon.maybeGenerateSessionTitleFromPrompt(delivery.sessionID, delivery.text, delivery.origin)
 			return attemptFromState(delivery.id, attempt)
 		}
 	}

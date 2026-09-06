@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
 import type { SessionLedgerEntry, SessionReopen } from '../types/generated';
 import type { SessionLedgerPage, SessionLedgerQuery } from '../hooks/daemonSessionLedgerEvents';
@@ -6,14 +6,25 @@ import { useEscapeStack } from '../hooks/useEscapeStack';
 import { useSessionLedger } from '../hooks/useSessionLedger';
 import type { SessionLedgerFilters } from '../hooks/useSessionLedger';
 import {
+  SESSION_FILTERS_SETTING_KEY,
+  parseSessionFilters,
+  serializeSessionFilters,
+} from '../hooks/sessionFiltersSetting';
+import { useSettings } from '../contexts/SettingsContext';
+import {
   SESSION_RANGE_CHOICES,
+  branchStateLabel,
   closedBySomeone,
+  directoryStateLabel,
   isClosed,
   ledgerInstant,
   ledgerState,
+  reopenPlacement,
+  compactRefusalText,
+  compactVerdictText,
   shortPath,
 } from './sessionsLedger';
-import type { ReopenVerdictView, SessionRangeId, SessionScope } from './sessionsLedger';
+import type { ReopenActionView, ReopenVerdictView, SessionRangeId, SessionScope } from './sessionsLedger';
 import './SessionsPanel.css';
 
 export interface SessionSeedLink {
@@ -30,9 +41,11 @@ export interface SessionsPanelProps {
   seedForSession?: (sessionId: string) => SessionSeedLink | null;
   onFocusSession?: (sessionId: string) => void;
   onOpenSeed?: (seedId: string) => void;
-  onReopen?: (sessionId: string, actionId: string) => void;
+  onReopen?: (sessionId: string, actionId: string) => Promise<boolean | void> | boolean | void;
   /** The nonce makes a repeat close of the same session a new notice. */
   closeNotice?: { entry: SessionLedgerEntry; reopen?: SessionReopen; nonce: number };
+  verdictNotice?: { verdicts: Record<string, SessionReopen>; nonce: number };
+  yieldsFocus?: boolean;
   now?: () => Date;
 }
 
@@ -45,6 +58,11 @@ const SCOPES: { id: SessionScope; label: string }[] = [
   { id: 'closed', label: 'Closed' },
   { id: 'all', label: 'All' },
 ];
+
+interface RowNotice {
+  kind: 'busy' | 'refused';
+  text: string;
+}
 
 export function SessionsPanel(props: SessionsPanelProps) {
   if (!props.isOpen) return null;
@@ -60,26 +78,78 @@ function OpenSessionsPanel({
   onFocusSession,
   onOpenSeed,
   onReopen,
+  yieldsFocus = false,
   closeNotice,
+  verdictNotice,
   now = systemNow,
 }: SessionsPanelProps) {
-  const ledger = useSessionLedger({ enabled: true, list: listSessions, now });
-  const { filters, setFilters, entries, verdicts } = ledger;
+  const { settings, setSetting } = useSettings();
+  // Read at open, never again: a settings echo must not move filters under the user.
+  const [restoredFilters] = useState(() => parseSessionFilters(settings[SESSION_FILTERS_SETTING_KEY]));
+  const rememberFilters = useCallback((next: SessionLedgerFilters) => {
+    setSetting(SESSION_FILTERS_SETTING_KEY, serializeSessionFilters(next));
+  }, [setSetting]);
+  const ledger = useSessionLedger({
+    enabled: true,
+    list: listSessions,
+    now,
+    initialFilters: restoredFilters,
+    onFiltersChange: rememberFilters,
+  });
+  const { filters, setFilters, entries, verdicts, recordClose, recordVerdict, reload } = ledger;
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   // Fires against the verdict that lands, never the stale one that was on screen.
   const [awaiting, setAwaiting] = useState<{ sessionId: string; actionId: string } | null>(null);
-  const [awaitingRefusal, setAwaitingRefusal] = useState<string | null>(null);
+  const [notices, setNotices] = useState<Record<string, RowNotice>>({});
   const rowsRef = useRef<HTMLTableSectionElement>(null);
 
   useEscapeStack(onClose, true);
+  useEscapeStack(() => setMenuFor(null), menuFor !== null);
 
-  const { recordClose } = ledger;
   useEffect(() => {
     if (!closeNotice) return;
     recordClose(closeNotice.entry, closeNotice.reopen);
   }, [closeNotice, recordClose]);
 
+  useEffect(() => {
+    if (!verdictNotice) return;
+    for (const [sessionId, reopen] of Object.entries(verdictNotice.verdicts)) recordVerdict(sessionId, reopen);
+  }, [verdictNotice, recordVerdict]);
+
   const selected = entries.find((entry) => entry.id === selectedId) ?? entries[0] ?? null;
+
+  const setNotice = useCallback((sessionId: string, notice: RowNotice | null) => {
+    setNotices((current) => {
+      if (!notice) {
+        if (!(sessionId in current)) return current;
+        const next = { ...current };
+        delete next[sessionId];
+        return next;
+      }
+      return { ...current, [sessionId]: notice };
+    });
+  }, []);
+
+  const fire = useCallback((sessionId: string, actionId: string) => {
+    if (!onReopen) return;
+    setMenuFor(null);
+    const refuse = (failure: unknown) => {
+      const text = failure instanceof Error ? failure.message : String(failure);
+      setNotice(sessionId, { kind: 'refused', text });
+      reload();
+    };
+    setNotice(sessionId, { kind: 'busy', text: 'reopening…' });
+    let outcome: ReturnType<typeof onReopen>;
+    try {
+      outcome = onReopen(sessionId, actionId);
+    } catch (failure) {
+      refuse(failure);
+      return;
+    }
+    Promise.resolve(outcome).then(() => setNotice(sessionId, null)).catch(refuse);
+  }, [onReopen, setNotice, reload]);
 
   useEffect(() => {
     if (!awaiting) return;
@@ -87,29 +157,33 @@ function OpenSessionsPanel({
     if (!verdict || verdict.refreshing) return;
     const stillOffered = verdict.actions.some((action) => action.id === awaiting.actionId);
     if (stillOffered) {
-      onReopen?.(awaiting.sessionId, awaiting.actionId);
+      fire(awaiting.sessionId, awaiting.actionId);
     } else {
-      setAwaitingRefusal(`The check finished and that is no longer possible: ${verdict.summary}`);
+      setNotice(awaiting.sessionId, {
+        kind: 'refused',
+        text: `The check finished and that is no longer possible: ${verdict.summary}`,
+      });
     }
     setAwaiting(null);
-  }, [awaiting, verdicts, onReopen]);
+  }, [awaiting, verdicts, fire, setNotice]);
 
   const runAction = useCallback((entry: SessionLedgerEntry, actionId: string) => {
-    setAwaitingRefusal(null);
+    setNotice(entry.id, null);
     const verdict = verdicts[entry.id];
     if (verdict && !verdict.refreshing) {
-      onReopen?.(entry.id, actionId);
+      fire(entry.id, actionId);
       return;
     }
     setAwaiting({ sessionId: entry.id, actionId });
-  }, [verdicts, onReopen]);
+  }, [verdicts, fire, setNotice]);
 
   const moveSelection = useCallback((offset: number) => {
     if (entries.length === 0) return;
     const current = Math.max(0, entries.findIndex((entry) => entry.id === selected?.id));
     const next = Math.min(entries.length - 1, Math.max(0, current + offset));
     setSelectedId(entries[next].id);
-    rowsRef.current?.querySelectorAll<HTMLTableRowElement>('tr')[next]?.focus();
+    setMenuFor(null);
+    rowsRef.current?.querySelectorAll<HTMLTableRowElement>('tr[data-session-id]')[next]?.focus();
   }, [entries, selected]);
 
   const update = useCallback((patch: Partial<SessionLedgerFilters>) => {
@@ -160,7 +234,7 @@ function OpenSessionsPanel({
 
   return (
     <div className="sessions-shell">
-      <FocusTrap focusTrapOptions={{ escapeDeactivates: false }}>
+      <FocusTrap paused={yieldsFocus} focusTrapOptions={{ escapeDeactivates: false }}>
         <div className="sessions-panel" role="dialog" aria-modal="true" aria-labelledby="sessions-title">
           <header className="sessions-header">
             <h1 id="sessions-title">Sessions</h1>
@@ -241,15 +315,12 @@ function OpenSessionsPanel({
                   ))}
                 </select>
               </label>
+
             </div>
             <button type="button" className="sessions-close" onClick={onClose}>
               <span>Close</span><kbd>esc</kbd>
             </button>
           </header>
-
-          {awaitingRefusal && (
-            <p className="sessions-state sessions-state-error" role="status">{awaitingRefusal}</p>
-          )}
 
           <div className="sessions-body">
             {body}
@@ -269,25 +340,47 @@ function OpenSessionsPanel({
                   </tr>
                 </thead>
                 <tbody ref={rowsRef}>
-                  {entries.map((entry) => (
-                    <SessionRow
-                      key={entry.id}
-                      entry={entry}
-                      seed={seedForSession?.(entry.id) ?? null}
-                      verdict={isClosed(entry) ? verdicts[entry.id] : undefined}
-                      waiting={awaiting?.sessionId === entry.id}
-                      live={isLive(entry)}
-                      selected={entry.id === selected?.id}
-                      workspaceLabel={workspaceLabel}
-                      sessionLabel={sessionLabel}
-                      actionsAvailable={!!onReopen}
-                      onSelect={setSelectedId}
-                      onMoveSelection={moveSelection}
-                      onFocusSession={onFocusSession}
-                      onOpenSeed={onOpenSeed}
-                      onRunAction={runAction}
-                    />
-                  ))}
+                  {entries.map((entry) => {
+                    const closed = isClosed(entry);
+                    const verdict = closed ? verdicts[entry.id] : undefined;
+                    const isSelected = entry.id === selected?.id;
+                    // One fragment per entry: a detail that comes and goes must not remount the row.
+                    return (
+                      <Fragment key={entry.id}>
+                      <SessionRow
+                        entry={entry}
+                        seed={seedForSession?.(entry.id) ?? null}
+                        verdict={verdict}
+                        notice={notices[entry.id]}
+                        waiting={awaiting?.sessionId === entry.id}
+                        live={isLive(entry)}
+                        selected={isSelected}
+                        detailOpen={detailOpen && isSelected && closed}
+                        menuOpen={menuFor === entry.id}
+                        workspaceLabel={workspaceLabel}
+                        sessionLabel={sessionLabel}
+                        actionsAvailable={!!onReopen}
+                        onSelect={setSelectedId}
+                        onMoveSelection={moveSelection}
+                        onToggleMenu={(open) => setMenuFor(open ? entry.id : null)}
+                        onToggleDetail={() => setDetailOpen((open) => !open)}
+                        onFocusSession={onFocusSession}
+                        onOpenSeed={onOpenSeed}
+                        onRunAction={runAction}
+                      />
+                      {detailOpen && isSelected && closed && (
+                        <DetailRow
+                          entry={entry}
+                          verdict={verdict}
+                          notice={notices[entry.id]}
+                          workspaceLabel={workspaceLabel}
+                          actionsAvailable={!!onReopen}
+                          onRunAction={runAction}
+                        />
+                      )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -304,6 +397,13 @@ function OpenSessionsPanel({
                 {ledger.loadingMore ? 'Loading…' : 'Load more'}
               </button>
             )}
+            <span className="sessions-keys">
+              <kbd>↑</kbd><kbd>↓</kbd> move
+              <kbd>⏎</kbd> focus or first action
+              <kbd>1</kbd>–<kbd>9</kbd> nth action
+              <kbd>→</kbd> more
+              <kbd>␣</kbd> why
+            </span>
           </footer>
         </div>
       </FocusTrap>
@@ -315,14 +415,19 @@ interface SessionRowProps {
   entry: SessionLedgerEntry;
   seed: SessionSeedLink | null;
   verdict: ReopenVerdictView | undefined;
+  notice: RowNotice | undefined;
   waiting: boolean;
   live: boolean;
   selected: boolean;
+  detailOpen: boolean;
+  menuOpen: boolean;
   workspaceLabel: (workspaceId: string) => string;
   sessionLabel: (sessionId: string) => string;
   actionsAvailable: boolean;
   onSelect: (sessionId: string) => void;
   onMoveSelection: (offset: number) => void;
+  onToggleMenu: (open: boolean) => void;
+  onToggleDetail: () => void;
   onFocusSession?: (sessionId: string) => void;
   onOpenSeed?: (seedId: string) => void;
   onRunAction: (entry: SessionLedgerEntry, actionId: string) => void;
@@ -332,24 +437,37 @@ function SessionRow({
   entry,
   seed,
   verdict,
+  notice,
   waiting,
   live,
   selected,
+  detailOpen,
+  menuOpen,
   workspaceLabel,
   sessionLabel,
   actionsAvailable,
   onSelect,
   onMoveSelection,
+  onToggleMenu,
+  onToggleDetail,
   onFocusSession,
   onOpenSeed,
   onRunAction,
 }: SessionRowProps) {
+  const closed = isClosed(entry);
+  const actions = closed && actionsAvailable ? verdict?.actions ?? [] : [];
+  const busy = notice?.kind === 'busy';
+
   return (
     <tr
       tabIndex={0}
+      data-session-id={entry.id}
       aria-selected={selected}
+      aria-busy={busy || undefined}
+      aria-expanded={closed ? detailOpen : undefined}
       className={selected ? 'is-selected' : undefined}
       onFocus={() => onSelect(entry.id)}
+      onClick={() => onSelect(entry.id)}
       onKeyDown={(event) => {
         if (event.key === 'ArrowDown') {
           event.preventDefault();
@@ -360,7 +478,22 @@ function SessionRow({
         } else if (event.key === 'Enter') {
           event.preventDefault();
           if (live) onFocusSession?.(entry.id);
-          else if (actionsAvailable && verdict?.actions[0]) onRunAction(entry, verdict.actions[0].id);
+          else if (!busy && actions[0]) onRunAction(entry, actions[0].id);
+        } else if (/^[1-9]$/.test(event.key)) {
+          const action = actions[Number(event.key) - 1];
+          if (action && !busy) {
+            event.preventDefault();
+            onRunAction(entry, action.id);
+          }
+        } else if (event.key === ' ' && closed) {
+          event.preventDefault();
+          onToggleDetail();
+        } else if (event.key === 'ArrowRight' && actions.length > 1) {
+          event.preventDefault();
+          onToggleMenu(true);
+        } else if (event.key === 'ArrowLeft' && menuOpen) {
+          event.preventDefault();
+          onToggleMenu(false);
         }
       }}
     >
@@ -382,27 +515,151 @@ function SessionRow({
       </td>
       <td>
         <span title={ledgerInstant(entry)}>{shortStamp(ledgerInstant(entry))}</span>
-        {isClosed(entry) && (
+        {closed && (
           <span className="sessions-closed-by" title={entry.closed_by ?? undefined}>
             closed by {closedBySomeone(entry, sessionLabel)}
             {entry.close_reason ? `: ${entry.close_reason}` : ''}
           </span>
         )}
       </td>
-      <td>{renderVerdict(verdict, isClosed(entry), waiting)}</td>
+      <td className="sessions-verdict-cell" onClick={closed ? onToggleDetail : undefined}>
+        {renderVerdict(verdict, closed, waiting, notice)}
+      </td>
       <td className="sessions-actions">
         {live && (
           <button type="button" onClick={() => onFocusSession?.(entry.id)}>Focus</button>
         )}
-        {isClosed(entry) && actionsAvailable && verdict?.actions.map((action) => (
-          <button
-            key={action.id}
-            type="button"
-            onClick={() => onRunAction(entry, action.id)}
-          >
-            {action.label}
-          </button>
-        ))}
+        {actions[0] && (
+          <ActionButton action={actions[0]} busy={busy} primary onRun={() => onRunAction(entry, actions[0].id)} />
+        )}
+        {actions.length > 1 && (
+          <span className="sessions-menu-anchor">
+            <button
+              type="button"
+              className="sessions-menu-toggle"
+              aria-label={`More ways to bring back ${entry.label || entry.id}`}
+              aria-expanded={menuOpen}
+              disabled={busy}
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggleMenu(!menuOpen);
+              }}
+            >
+              ▾
+            </button>
+            {menuOpen && (
+              <ul className="sessions-menu" role="menu">
+                {actions.slice(1).map((action, index) => (
+                  <li key={action.id} role="none">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => onRunAction(entry, action.id)}
+                    >
+                      <kbd>{index + 2}</kbd> {action.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function ActionButton({
+  action,
+  busy,
+  primary,
+  onRun,
+}: {
+  action: ReopenActionView;
+  busy: boolean;
+  primary?: boolean;
+  onRun: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={primary ? 'sessions-action-primary' : undefined}
+      disabled={busy}
+      onClick={onRun}
+    >
+      {busy && primary && <span className="sessions-pulse" aria-hidden="true" />}
+      {busy && primary ? 'Reopening…' : action.label}
+    </button>
+  );
+}
+
+interface DetailRowProps {
+  entry: SessionLedgerEntry;
+  verdict: ReopenVerdictView | undefined;
+  notice: RowNotice | undefined;
+  workspaceLabel: (workspaceId: string) => string;
+  actionsAvailable: boolean;
+  onRunAction: (entry: SessionLedgerEntry, actionId: string) => void;
+}
+
+function DetailRow({ entry, verdict, notice, workspaceLabel, actionsAvailable, onRunAction }: DetailRowProps) {
+  const busy = notice?.kind === 'busy';
+  const rowRef = useRef<HTMLTableRowElement>(null);
+  useEffect(() => {
+    rowRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [entry.id]);
+  return (
+    <tr ref={rowRef} className="sessions-detail-row" data-detail-for={entry.id}>
+      <td colSpan={9}>
+        {!verdict && <span className="sessions-verdict-none">No verdict yet.</span>}
+        {verdict && (
+          <div className="sessions-detail">
+            <dl>
+              <dt>Verdict</dt>
+              <dd className={verdict.reopenable ? 'sessions-verdict-ok' : 'sessions-verdict-no'} title={verdict.reason}>
+                {compactVerdictText(verdict.reason ?? 'it can be reopened where it ran')}
+                {verdict.refreshing && <em> checking…</em>}
+              </dd>
+              {verdict.warning && (
+                <>
+                  <dt>Warning</dt>
+                  <dd title={verdict.warning}>{compactVerdictText(verdict.warning)}</dd>
+                </>
+              )}
+              <dt>Directory</dt>
+              <dd>
+                {directoryStateLabel(verdict.directoryState)}
+                <span className="sessions-detail-path" title={entry.directory}> {entry.directory}</span>
+              </dd>
+              {branchStateLabel(verdict.branchState) && (
+                <>
+                  <dt>Branch</dt>
+                  <dd>{branchStateLabel(verdict.branchState)}{entry.branch ? `: ${entry.branch}` : ''}</dd>
+                </>
+              )}
+              <dt>Lands</dt>
+              <dd>{reopenPlacement(verdict, workspaceLabel)}</dd>
+            </dl>
+            {actionsAvailable && (
+              <div className="sessions-detail-actions">
+                {verdict.actions.map((action, index) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    className={index === 0 ? 'sessions-action-primary' : undefined}
+                    disabled={busy}
+                    onClick={() => onRunAction(entry, action.id)}
+                  >
+                    <kbd>{index === 0 ? '⏎' : index + 1}</kbd> {action.label}
+                  </button>
+                ))}
+                {verdict.actions.length === 0 && (
+                  <span className="sessions-verdict-no">Nothing here brings it back.</span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </td>
     </tr>
   );
@@ -412,20 +669,29 @@ function renderVerdict(
   verdict: ReopenVerdictView | undefined,
   closed: boolean,
   waiting: boolean,
+  notice: RowNotice | undefined,
 ): React.ReactNode {
   if (!closed || !verdict) return <span className="sessions-verdict-none">—</span>;
+  const tail = (
+    <>
+      {waiting && <em> waiting for the check…</em>}
+      {notice?.kind === 'refused' && (
+        <span className="sessions-row-refusal" role="status" title={notice.text}>{compactRefusalText(notice.text)}</span>
+      )}
+    </>
+  );
   if (verdict.refreshing) {
     return (
       <span className="sessions-verdict-refreshing" title={verdict.summary}>
-        {verdict.summary} <em>refreshing…</em>
-        {waiting && <em>waiting for the check…</em>}
+        {compactVerdictText(verdict.summary)} <em><span className="sessions-pulse" aria-hidden="true" />checking…</em>
+        {tail}
       </span>
     );
   }
   return (
-    <span className={verdict.reopenable ? 'sessions-verdict-ok' : 'sessions-verdict-no'}>
-      {verdict.summary}
-      {waiting && <em> waiting for the check…</em>}
+    <span className={verdict.reopenable ? 'sessions-verdict-ok' : 'sessions-verdict-no'} title={verdict.summary}>
+      {compactVerdictText(verdict.summary)}
+      {tail}
     </span>
   );
 }

@@ -17,7 +17,7 @@ import (
 
 func TestSanitizeSessionTitle(t *testing.T) {
 	longMultibyte := strings.Repeat("é", 60) // multibyte rune: a byte-based cut would corrupt/mis-truncate this
-	wantLongMultibyte := strings.Repeat("é", maxSessionTitleRunes)
+	wantLongMultibyte := strings.Repeat("é", maxSessionNameRunes)
 
 	cases := []struct {
 		name string
@@ -361,6 +361,51 @@ func TestMaybeGenerateSessionTitle_CustomLabelSkipped(t *testing.T) {
 	got := d.store.Get("sess-1")
 	if got == nil || got.Label != "user renamed me" {
 		t.Fatalf("session label = %+v, want unchanged", got)
+	}
+}
+
+func TestSessionLabelIsPlaceholder(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "attn--feat-agent-cost-tooling-with-a-long-branch-name-past-the-cap")
+	cases := []struct {
+		label string
+		want  bool
+	}{
+		{filepath.Base(dir), true},
+		{truncateDelegationName(filepath.Base(dir)), true},
+		{"s-7k3f9m", true},
+		{"7k3f9m", true},
+		{"8cbb44", true},
+		{"a7f3c2e9", true},
+		{"ATTN-1234", true},
+		{"eb08c68e-e024-44b5-8a69-5e8b4f487531", true},
+		{"garden", false},
+		{"s-garden", false},
+		{"hw-cli", false},
+		{"review store tripwires", false},
+		{"user renamed me", false},
+	}
+	for _, tc := range cases {
+		if got := sessionLabelIsPlaceholder(tc.label, dir, "sess-1"); got != tc.want {
+			t.Errorf("sessionLabelIsPlaceholder(%q) = %v, want %v", tc.label, got, tc.want)
+		}
+	}
+}
+
+func TestMaybeGenerateSessionTitle_IDShapedLabelIsReplaced(t *testing.T) {
+	d := newSessionTitleDaemon(t)
+	directory := t.TempDir()
+	seedSessionTitleSession(t, d, "sess-1", directory, "s-7k3f9m")
+	transcriptPath := writeSessionTitleTranscript(t)
+
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
+		return "Fix login flow", nil
+	}
+
+	d.maybeGenerateSessionTitle("sess-1", transcriptPath)
+	runSessionTitleJobs(t, d)
+
+	if got := d.store.Get("sess-1"); got == nil || got.Label != "Fix login flow" {
+		t.Fatalf("session label = %+v, want the generated title over a seed id", got)
 	}
 }
 
@@ -827,5 +872,58 @@ func TestSpawnPipeline_AlreadyLiveSpawnPreservesInitialPromptMarker(t *testing.T
 	}
 	if got := d.store.Get("sess-dup"); got == nil || got.Label != "One-shot investigation" {
 		t.Fatalf("session label = %+v, want %q", got, "One-shot investigation")
+	}
+}
+
+func TestTitleProviderAgent_PrefersSessionAgentThenFallsBack(t *testing.T) {
+	cases := []struct{ agent, want string }{
+		{"claude", "claude"},
+		{"codex", "codex"},
+		{"copilot", "copilot"},
+		{"pi", "claude"},
+		{"shell", "claude"},
+		{"unknown-agent", "claude"},
+		{"", "claude"},
+	}
+	for _, tc := range cases {
+		if got := titleProviderAgent(tc.agent); got != tc.want {
+			t.Errorf("titleProviderAgent(%q) = %q, want %q", tc.agent, got, tc.want)
+		}
+	}
+}
+
+func TestSpawnPipeline_InitialPromptTitlesAtSpawn(t *testing.T) {
+	d := newSessionTitleDaemon(t)
+	addTestWorkspace(d, "workspace-title", t.TempDir())
+	d.ptyBackend = &fakeSpawnBackend{}
+
+	calls := 0
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
+		calls++
+		return "One-shot investigation", nil
+	}
+	client := &wsClient{send: make(chan outboundMessage, 8), attachedStreams: make(map[string]ptybackend.Stream)}
+	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
+		ID:            "sess-spawn-title",
+		Cwd:           t.TempDir(),
+		WorkspaceID:   "workspace-title",
+		Agent:         "claude",
+		Cols:          80,
+		Rows:          24,
+		InitialPrompt: protocol.Ptr("investigate the retry queue"),
+	})
+
+	runSessionTitleJobs(t, d)
+	if calls != 1 {
+		t.Fatalf("exec calls after spawn = %d, want 1 (no UserPromptSubmit hook needed)", calls)
+	}
+	if got := d.store.Get("sess-spawn-title"); got == nil || got.Label != "One-shot investigation" {
+		t.Fatalf("session label = %+v, want %q", got, "One-shot investigation")
+	}
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-spawn-title", "investigate the retry queue", userConversationInput())
+	runSessionTitleJobs(t, d)
+	if calls != 1 {
+		t.Fatalf("exec calls after the hook echo = %d, want still 1", calls)
 	}
 }

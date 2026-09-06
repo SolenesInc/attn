@@ -31,9 +31,10 @@ export function PathInput({
   const [ghostOffset, setGhostOffset] = useState(0);
 
   useEffect(() => {
-    if (autoFocus) {
-      inputRef.current?.focus();
-    }
+    const input = inputRef.current;
+    if (!autoFocus || !input) return;
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
   }, [autoFocus]);
 
   useLayoutEffect(() => {

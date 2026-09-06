@@ -67,6 +67,8 @@ export interface Session {
   readonly crew_member?: string
   readonly delegated_from_chief?: boolean
   readonly directory: string
+  readonly dispatcher_member?: string
+  readonly dispatcher_session_id?: string
   readonly endpoint_id?: string
   readonly id: string
   readonly is_worktree?: boolean

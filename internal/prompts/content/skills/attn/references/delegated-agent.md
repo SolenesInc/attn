@@ -1,9 +1,9 @@
 # Delegated-Agent Guidance
 
-Load this reference when you are a delegated leaf — your initial task opens
+Load this reference when you are a delegated leaf. Your initial task opens
 with a line identifying you as a delegated attn session.
 
-## You Are A Leaf, Not A Coordinator
+## You are a leaf, not a coordinator
 
 Do the assigned work in this session. A subagent is always a native runtime
 subagent, including when the user says to delegate or dispatch subagents. An
@@ -22,30 +22,45 @@ separate reads; you do not inherit the delegator's conversation.
 
 ## Report on your seed
 
-Write to the log for the session that delegated you and anyone watching when you:
-
-- reach a meaningful milestone
-- need input or are blocked
-- finish the requested work
-
-    attn seed note <seed-id> -m \
-      "Implemented the parser and tests pass. Next: review the error wording."
+Report an update when it helps the delegator or a future tender understand the
+current state, steer the work, or continue it later. This includes meaningful
+progress, material findings, changes in direction or scope, blockers, and
+decisions needed. Combine closely related developments into one note, and avoid
+command-by-command or test-by-test narration:
 
     attn seed note <seed-id> -m \
-      "Core implementation is ready locally; which event contract should be used?"
+      "The parser is implemented and its focused tests pass. Error wording remains."
 
-Close it when its outcome and required verification are complete:
+Add `--ring` only when the delegator needs to respond now, such as for a blocker
+or decision:
+
+    attn seed note <seed-id> --ring -m \
+      "Blocked on the event contract: should this emit created or updated?"
+
+Close it when its outcome and required verification are complete. Before your
+final response, record the result on the seed. If the outcome, key evidence or
+verification, artifact locations, and unresolved work fit in the 400-character
+harvest reason, put them there:
 
     attn seed harvest <seed-id> -m "<what got done>"
+
+Otherwise, write one result note with the necessary detail, then harvest with a
+concise summary.
+
+Put long findings in a durable artifact, attach or link it to the seed, and name
+the artifact in the note or harvest reason. `attn seed guide` explains note
+discipline, artifact handover, and when the evidence is strong enough to
+harvest.
+
+If the requested outcome cannot or should not be completed, record why:
+
     attn seed wither <seed-id> -m "The required API was removed; nobody should pick this up"
 
-Harvest timing, note discipline, and artifact handover are craft:
-`attn seed guide` prints it — when the evidence is strong enough to harvest,
-what a concrete note carries, and how to associate a durable document with
-your seed. Run it when one of those calls is yours to make.
+Then tell the user what happened in this session and any next step. Do not make
+them inspect the seed to learn the outcome.
 
-Noting does not stop or transfer your session. Continue working unless the task
-is blocked or complete. Untracked delegation — no seed in your prompt — has
+Writing a note does not stop or transfer your session. Continue unless the task
+is blocked or complete. Untracked delegation, with no seed in the prompt, has
 nowhere to report and needs none of this.
 
 `attn ticket` retired: every write verb prints the garden command that replaced

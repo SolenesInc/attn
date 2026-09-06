@@ -6,8 +6,8 @@
 # A failure is evidence of flakiness when the same commit is known to pass:
 # either a later attempt of the same run succeeded (the strongest signal, since
 # nothing about the code changed), or another run on the same SHA succeeded.
-# A failure on a SHA that never passed is reported as unresolved, which usually
-# means a real break that a follow-up commit fixed.
+# A failure on a SHA that never passed is reported as unresolved: either a real
+# break a follow-up commit fixed, or a flake on a branch nobody re-ran.
 #
 # Job logs and per-attempt job lists are immutable once a run finishes, so both
 # are cached on disk. Re-running the report over the same window is cheap; only
@@ -108,20 +108,50 @@ fetch_jobs() {
   fi
 }
 
+# Job logs are ANSI throughout, which newer gh refuses to write unless asked.
+# Without the flag every fetch below fails and the report silently sees nothing.
+gh_api_help="$(gh api --help 2>/dev/null || true)"
+allow_escapes=false
+case "$gh_api_help" in
+  *--allow-escape-sequences*) allow_escapes=true ;;
+esac
+
+logs_read=0
+logs_unreadable=0
+first_log_error=""
+
 fetch_log() {
   local job_id="$1" dest="$cache/logs/$job_id.log"
   if [ "$use_cache" = true ] && [ -s "$dest" ]; then
+    logs_read=$((logs_read + 1))
     cat "$dest"
     return 0
   fi
-  local tmp="$dest.$$.tmp"
-  if gh api "repos/$repo/actions/jobs/$job_id/logs" >"$tmp" 2>/dev/null; then
+  local tmp="$dest.$$.tmp" fetched=0
+  if [ "$allow_escapes" = true ]; then
+    gh api --allow-escape-sequences "repos/$repo/actions/jobs/$job_id/logs" >"$tmp" 2>"$tmp.err" || fetched=$?
+  else
+    gh api "repos/$repo/actions/jobs/$job_id/logs" >"$tmp" 2>"$tmp.err" || fetched=$?
+  fi
+  if [ "$fetched" -eq 0 ]; then
     mv -f "$tmp" "$dest"
+    rm -f "$tmp.err"
+    logs_read=$((logs_read + 1))
     cat "$dest"
   else
-    rm -f "$tmp"
+    logs_unreadable=$((logs_unreadable + 1))
+    [ -z "$first_log_error" ] && first_log_error="job $job_id: $(head -c 200 "$tmp.err" | tr '\n' ' ')"
+    rm -f "$tmp" "$tmp.err"
     return 0
   fi
+}
+
+assert_logs_were_read() {
+  [ "$scanned_jobs" -eq 0 ] && return 0
+  [ "$logs_read" -gt 0 ] && return 0
+  echo "ci-flake-report: read 0 of $scanned_jobs failed job logs, so no failure can be seen." >&2
+  echo "ci-flake-report: first error — ${first_log_error:-none reported}" >&2
+  exit 1
 }
 
 # ------------------------------------------------------------ log extraction
@@ -156,6 +186,13 @@ extract_failures() {
         sub(/ \([0-9.]+m?s\) *$/, "", line)
         sub(/\.spec\.ts:[0-9]+:[0-9]+ ›/, ".spec.ts ›", line)
         if (line != "") print "playwright\t-\t" line
+        next
+      }
+      /^FAIL  [a-z0-9][a-z0-9-]* +[0-9.]+s$/ {
+        line = $0
+        sub(/^FAIL +/, "", line)
+        sub(/ +[0-9.]+s$/, "", line)
+        if (line != "") print "harness\t-\tserial-matrix › " line
         next
       }
       # Vitest prints a FAIL line per failing test with its full suite path.
@@ -224,13 +261,15 @@ while IFS=$'\t' read -r run_id sha branch_name created attempt conclusion; do
   done
 done < <(jq -r '.[] | [(.databaseId|tostring), .headSha, .headBranch, .createdAt, (.attempt|tostring), .conclusion] | @tsv' "$runs")
 
+assert_logs_were_read
+
 # ------------------------------------------------------------- classification
 
 # A commit is known-good when any completed run on it succeeded. Combined with
 # the per-attempt record above this yields the verdict for each failure:
 #   rerun-green  a later attempt of the SAME run passed — same code, so a flake
 #   sha-green    another run on the same commit passed — flake
-#   unresolved   the commit never passed — treat as real breakage until shown otherwise
+#   unresolved   the commit never passed — real breakage, or a flake never re-run
 jq -r '[.[] | select(.conclusion == "success") | .headSha] | unique' "$runs" >"$work/green.json"
 
 classified="$work/classified.jsonl"
@@ -312,6 +351,8 @@ if [ "$format" = "markdown" ]; then
     "$total_runs" "$workflow" "${md_window_start:0:10}" "${md_window_end:0:10}"
   printf -- '- %s runs completed, %s red on their final attempt, %s re-run at least once.\n' \
     "$total_runs" "$md_failed" "$md_rerun"
+  printf -- '- %s failed job logs read, %s unreadable. An entry can only appear for a log this scan could read.\n' \
+    "$logs_read" "$logs_unreadable"
   printf -- '- A failure counts as a **flake** when the same commit is known to pass: a later attempt of the same run succeeded, or another run on that commit succeeded.\n'
   printf -- '- **Runs since** is how many CI runs have completed since the last occurrence. Past %s with no recurrence, an entry is treated as dormant.\n\n' "$dormant_after"
 
@@ -330,7 +371,7 @@ if [ "$format" = "markdown" ]; then
   fi
 
   if [ "$(jq '[.[] | select(.flakes == 0 and .unresolved > 0)] | length' "$agg")" -gt 0 ]; then
-    printf '## Unresolved\n\nThe commit never passed, so these are most likely real breakage rather than flakes.\n\n'
+    printf '## Unresolved\n\nNo run on the commit passed, so flakiness is unproven: a real break a later commit fixed, or a flake on a push nobody re-ran.\n\n'
     printf '| Failures | Commits | Last seen | Test |\n| ---: | ---: | --- | --- |\n'
     jq -r '.[] | select(.flakes == 0 and .unresolved > 0)
       | [(.unresolved|tostring), (.shas|tostring), (.last_seen[0:10]),
@@ -353,7 +394,8 @@ printf 'CI flake report — %s (%s)\n' "$repo" "$workflow"
 printf 'window   %s .. %s\n' "${window_start:0:10}" "${window_end:0:10}"
 printf 'runs     %s completed, %s red on final attempt, %s re-run at least once\n' \
   "$total_runs" "$failed_runs" "$rerun_runs"
-printf 'scanned  %s failed jobs\n\n' "$scanned_jobs"
+printf 'scanned  %s failed jobs, %s logs read, %s unreadable\n\n' \
+  "$scanned_jobs" "$logs_read" "$logs_unreadable"
 
 flaky_total="$(jq '[.[] | select(.flakes > 0)] | length' "$agg")"
 if [ "$flaky_total" -eq 0 ]; then
@@ -399,7 +441,7 @@ fi
 
 unresolved_total="$(jq '[.[] | select(.flakes == 0 and .unresolved > 0)] | length' "$agg")"
 if [ "$unresolved_total" -gt 0 ]; then
-  printf 'UNRESOLVED — commit never passed; likely real breakage, verify before dismissing\n'
+  printf 'UNRESOLVED — no run on the commit passed: real breakage, or a flake never re-run\n'
   printf '%-6s %-5s  %s\n' 'FAILS' 'SHAS' 'TEST'
   jq -r '.[] | select(.flakes == 0 and .unresolved > 0)
     | [(.unresolved|tostring), (.shas|tostring),

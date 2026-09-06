@@ -4,6 +4,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import type { SessionPullRequest } from '../types/generated';
 import { writeClipboardText } from '../utils/clipboardBridge';
 import { SessionPullRequestPopover } from './SessionPullRequestPopover';
+import { GitHubPollingProvider } from '../contexts/GitHubPollingContext';
 
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn(async () => {}) }));
 vi.mock('../utils/clipboardBridge', () => ({ writeClipboardText: vi.fn(async () => {}) }));
@@ -55,6 +56,24 @@ describe('SessionPullRequestPopover', () => {
 
     expect(screen.getByText('waiting for GitHub')).toBeInTheDocument();
     expect(screen.queryByText('none reported')).not.toBeInTheDocument();
+  });
+
+  it('says polling is off for this profile instead of waiting forever', () => {
+    render(
+      <GitHubPollingProvider offReason="GitHub polling is off for profile dev.">
+        <SessionPullRequestPopover
+          pullRequests={[pr({ status_fetched_at: undefined })]}
+          anchor={{ top: 40, left: 40 }}
+          autoFocus
+          onClose={vi.fn()}
+          onPointerEnter={vi.fn()}
+          onPointerLeave={vi.fn()}
+        />
+      </GitHubPollingProvider>,
+    );
+
+    expect(screen.getByText('GitHub polling is off for this profile')).toBeInTheDocument();
+    expect(screen.queryByText('waiting for GitHub')).not.toBeInTheDocument();
   });
 
   it('opens the PR on GitHub from its title', () => {

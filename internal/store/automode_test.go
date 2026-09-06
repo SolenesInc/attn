@@ -429,9 +429,9 @@ func TestAutoModeMigrationCreatesItsTables(t *testing.T) {
 	}
 }
 
-// plantPre138AutoModeConfig puts back the glob-list shape migration 138 replaced, so a
+// plantPre139AutoModeConfig puts back the glob-list shape migration 139 replaced, so a
 // re-run of the chain from `from` sees what an installed machine actually holds.
-func plantPre138AutoModeConfig(t *testing.T, s *Store, dbPath, environment, allow, hardDeny string, from int) {
+func plantPre139AutoModeConfig(t *testing.T, s *Store, dbPath, environment, allow, hardDeny string, from int) {
 	t.Helper()
 	for _, stmt := range []string{
 		`ALTER TABLE automode_config DROP COLUMN approval_policy`,
@@ -444,14 +444,14 @@ func plantPre138AutoModeConfig(t *testing.T, s *Store, dbPath, environment, allo
 		`ALTER TABLE automode_config ADD COLUMN models TEXT NOT NULL DEFAULT '[]'`,
 	} {
 		if _, err := s.db.Exec(stmt); err != nil {
-			t.Fatalf("plant the pre-138 schema (%s): %v", stmt, err)
+			t.Fatalf("plant the pre-139 schema (%s): %v", stmt, err)
 		}
 	}
 	if _, err := s.db.Exec(`INSERT INTO automode_config
 		(id, enabled_default, environment, allow_patterns, hard_deny, models, updated_at)
 		VALUES (1, 1, ?, ?, ?, '[]', '2026-09-01T09:00:00Z')`,
 		environment, allow, hardDeny); err != nil {
-		t.Fatalf("plant the pre-138 row: %v", err)
+		t.Fatalf("plant the pre-139 row: %v", err)
 	}
 	if _, err := s.GetAutoModeConfig(); err == nil {
 		t.Fatal("the planted schema already reads; this test would pass without the migration")
@@ -464,7 +464,7 @@ func plantPre138AutoModeConfig(t *testing.T, s *Store, dbPath, environment, allo
 	}
 }
 
-func TestMigration138TurnsGlobsIntoRulesAndKeepsTheRest(t *testing.T) {
+func TestMigration139TurnsGlobsIntoRulesAndKeepsTheRest(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)
 	if err != nil {
@@ -477,9 +477,9 @@ func TestMigration138TurnsGlobsIntoRulesAndKeepsTheRest(t *testing.T) {
 		VALUES ('allow', '', 'git status*', 'session-a', 'pending', '2026-09-01T08:00:00Z')`); err != nil {
 		t.Fatalf("plant an old proposal: %v", err)
 	}
-	plantPre138AutoModeConfig(t, s, dbPath, `{"slots":{},"notes":[]}`,
+	plantPre139AutoModeConfig(t, s, dbPath, `{"slots":{},"notes":[]}`,
 		`["git status*","rm -rf /","gh pr create *"]`,
-		`["*curl*","ssh prod","terraform apply *"]`, 138)
+		`["*curl*","ssh prod","terraform apply *"]`, 139)
 
 	cfg, err := s.GetAutoModeConfig()
 	if err != nil {
@@ -531,7 +531,7 @@ func TestMigration125KeepsTheOldProseAsNotes(t *testing.T) {
 	}
 	defer s.Close()
 
-	plantPre138AutoModeConfig(t, s, dbPath, `["this laptop is mine","nothing here serves traffic"]`, `[]`, `[]`, 125)
+	plantPre139AutoModeConfig(t, s, dbPath, `["this laptop is mine","nothing here serves traffic"]`, `[]`, `[]`, 125)
 
 	cfg, err := s.GetAutoModeConfig()
 	if err != nil {

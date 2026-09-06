@@ -35,6 +35,11 @@ import {
   settleBeforeBridgeRequest,
   settleUi,
 } from './uiAutomationSettle';
+import {
+  armRefreshWitness,
+  disarmRefreshWitness,
+  readRefreshWitness,
+} from './worktreesRefreshWitness';
 
 const UI_AUTOMATION_REQUEST_EVENT = 'attn://ui-automation/request';
 const UI_AUTOMATION_RESPONSE_EVENT = 'attn://ui-automation/response';
@@ -518,6 +523,19 @@ function collectVisualSnapshot(
   };
 }
 
+// SessionProvenance renders the definition name and the PR target as separate
+// spans; only its title carries the whole description at every density.
+export function readProvenance(scope: Element | null | undefined): string {
+  const node = scope?.querySelector('.session-provenance');
+  if (!node) return '';
+  return (
+    node.getAttribute('title')
+    || node.getAttribute('aria-label')
+    || node.textContent?.trim()
+    || ''
+  );
+}
+
 function collectSessionUiState(
   sessions: Session[],
   activeSessionId: string | null,
@@ -566,7 +584,7 @@ function collectSessionUiState(
       ? {
           text: sidebarItem.textContent || '',
           bounds: rectSnapshot(sidebarItem),
-          automation: sidebarItem.querySelector('.automation-provenance')?.textContent?.trim() || '',
+          automation: readProvenance(sidebarItem),
           pullRequest: sidebarItem.querySelector('.sidebar-session-pr')?.textContent?.trim() || '',
         }
       : null,
@@ -578,7 +596,7 @@ function collectSessionUiState(
       splits: collectSplitDomMetrics(workspaceId),
     },
     agentPaneBounds: rectSnapshot(firstAgentPane),
-    paneAutomation: firstAgentPane?.querySelector('.automation-provenance')?.textContent?.trim() || '',
+    paneAutomation: readProvenance(firstAgentPane),
     settling: settlingChip instanceof HTMLElement
       ? {
           text: settlingChip.textContent?.trim() || '',
@@ -1503,9 +1521,17 @@ function requireWorktreePath(payload: Record<string, unknown>): string {
   return path;
 }
 
+const WORKTREES_PANEL = '[data-testid="worktrees-panel"]';
+const WORKTREES_REFRESHING = '.worktrees-panel__refreshing';
+
+function worktreesPanel(): HTMLElement | null {
+  const panel = document.querySelector(WORKTREES_PANEL);
+  return panel instanceof HTMLElement ? panel : null;
+}
+
 function collectWorktreesUiState() {
-  const panel = document.querySelector('[data-testid="worktrees-panel"]');
-  if (!(panel instanceof HTMLElement)) {
+  const panel = worktreesPanel();
+  if (!panel) {
     return { present: false };
   }
   const rows = Array.from(panel.querySelectorAll('.worktrees-panel__row')).map((row) => ({
@@ -1537,6 +1563,7 @@ function collectWorktreesUiState() {
       refreshing: Boolean(header.querySelector('.worktrees-panel__refreshing')),
     })),
     error: panel.querySelector('[data-testid="worktrees-panel-error"]')?.textContent?.trim() ?? '',
+    refreshWitness: readRefreshWitness(),
   };
 }
 
@@ -1571,7 +1598,7 @@ function collectAutomationsUiState() {
         id: row.getAttribute('data-run-id') ?? '',
         state: row.getAttribute('data-state') ?? '',
         navigable: Boolean(row.querySelector('button.automations-panel__run-row-main')),
-        automation: row.querySelector('.automation-provenance')?.textContent?.trim() ?? '',
+        automation: readProvenance(row),
         lastError: row.querySelector('.automations-panel__run-error')?.textContent?.trim() ?? '',
       }))
     : [];
@@ -2118,6 +2145,18 @@ export function useUiAutomationBridge({
           throw new Error(`dom_focus target did not take focus: ${selector}`);
         }
         return { focused: true, tag: element.tagName };
+      }
+      case 'dom_active_element': {
+        const active = document.activeElement;
+        if (!(active instanceof HTMLElement)) return { tag: null };
+        const field = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : null;
+        return {
+          tag: active.tagName,
+          className: active.className,
+          testId: active.getAttribute('data-testid'),
+          selectionStart: field?.selectionStart ?? null,
+          valueLength: field ? field.value.length : null,
+        };
       }
       case 'dom_terminal_key': {
         const selector = typeof payload.selector === 'string' ? payload.selector : null;
@@ -3543,6 +3582,9 @@ export function useUiAutomationBridge({
       case 'worktrees_get_state':
         return collectWorktreesUiState();
       case 'worktrees_refresh': {
+        const panel = worktreesPanel();
+        if (!panel) throw new Error('worktrees_refresh needs the worktrees panel on screen');
+        armRefreshWitness(panel, WORKTREES_REFRESHING);
         clickTestId('worktrees-refresh');
         await settleUi(3);
         return collectWorktreesUiState();
@@ -4048,6 +4090,7 @@ export function useUiAutomationBridge({
 
     return () => {
       void unlistenPromise.then((unlisten) => unlisten());
+      disarmRefreshWitness();
     };
   }, []);
 }

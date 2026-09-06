@@ -40,6 +40,7 @@ async function runPlugin(): Promise<void> {
   rpc.handle("driver.session_closed", (params) => driver.sessionClosed(params as SessionClosedParams));
   rpc.handle("driver.deliver_message", (params) => driver.deliverMessage(params));
   rpc.handle("automode.policy_changed", (params) => driver.policyChanged(params));
+  rpc.handle("driver.models", () => driver.delegationModels());
 
   await rpc.connect();
   await driver.initialize();

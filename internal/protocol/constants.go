@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "298"
+const ProtocolVersion = "300"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -51,6 +51,10 @@ const (
 	CmdClientHello                           = "client_hello"
 	CmdRegister                              = "register"
 	CmdDelegate                              = "delegate"
+	CmdDelegationPreferencesGet              = "delegation_preferences_get"
+	CmdDelegationPreferencesSave             = "delegation_preferences_save"
+	CmdDelegationModels                      = "delegation_models"
+	CmdDelegationRoles                       = "delegation_roles"
 	CmdDelegateStatus                        = "delegate_status"
 	CmdSetTicketStatus                       = "set_ticket_status"
 	CmdTicketInbox                           = "ticket_inbox"
@@ -373,6 +377,8 @@ const (
 	EventTasksChanged                    = "tasks_changed"
 	EventSessionListResult               = "session_list_result"
 	EventSessionShowResult               = "session_show_result"
+	EventSessionReopenResult             = "session_reopen_result"
+	EventSessionReopenRefreshed          = "session_reopen_refreshed"
 	EventSessionClosed                   = "session_closed"
 	EventNotificationListResult          = "notification_list_result"
 	EventNotificationMarkReadResult      = "notification_mark_read_result"
@@ -619,6 +625,34 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdAutomationCleanup:
 		var msg AutomationCleanupMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDelegationPreferencesGet:
+		var msg DelegationPreferencesGetMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDelegationPreferencesSave:
+		var msg DelegationPreferencesSaveMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDelegationModels:
+		var msg DelegationModelsMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDelegationRoles:
+		var msg DelegationRolesMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}
@@ -2336,3 +2370,9 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 		return "", nil, errors.New("unknown command: " + peek.Cmd)
 	}
 }
+
+const (
+	EventDelegationPreferencesResult  = "delegation_preferences_result"
+	EventDelegationPreferencesChanged = "delegation_preferences_changed"
+	EventDelegationModelsResult       = "delegation_models_result"
+)

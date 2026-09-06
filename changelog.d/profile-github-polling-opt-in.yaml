@@ -1,0 +1,3 @@
+kind: changed
+area: daemon
+change: Named profiles no longer poll GitHub with your gh credentials unless the daemon starts with ATTN_GITHUB_POLLING=on; the app says so where PRs would appear.

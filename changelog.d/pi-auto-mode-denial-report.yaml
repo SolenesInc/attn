@@ -1,0 +1,4 @@
+kind: changed
+area: pi
+change: Pi footer statuses tint to match the footer instead of floating in white.
+symptom: The security status sat above the composer in plain white text that did not match pi's own footer.

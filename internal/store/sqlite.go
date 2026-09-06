@@ -1237,8 +1237,9 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 		);
 	`},
 	{137, "name the repository a session ran in so the ledger can filter by it", ""},
-	{138, "auto mode globs become prefix rules, hosts and an approval policy", ``},
-	{139, "record where a plugin session's harness writes its transcript", ""},
+	{138, "persist delegation preferences", `CREATE TABLE IF NOT EXISTS delegation_preferences (id INTEGER PRIMARY KEY CHECK (id = 1), config TEXT NOT NULL);`},
+	{139, "auto mode globs become prefix rules, hosts and an approval policy", ``},
+	{140, "record where a plugin session's harness writes its transcript", ""},
 }
 
 const migration99SQL = `
@@ -1372,8 +1373,8 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			return fmt.Errorf("starting transaction for migration %d: %w", m.version, err)
 		}
 
-		if m.version == 139 {
-			if err := applyMigration139(tx); err != nil {
+		if m.version == 140 {
+			if err := applyMigration140(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -1696,6 +1697,19 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 138 {
+			if _, err := tx.Exec(m.sql); err != nil {
+				tx.Rollback()
+				return err
+			}
+			has, err := columnExists(tx, "delegation_operations", "resolved_preferences")
+			if err == nil && !has {
+				_, err = tx.Exec("ALTER TABLE delegation_operations ADD COLUMN resolved_preferences TEXT NOT NULL DEFAULT ''")
+			}
+			if err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else if m.version == 132 {
 			if err := applyMigration132(tx, m.sql); err != nil {
 				tx.Rollback()
@@ -1706,8 +1720,8 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
-		} else if m.version == 138 {
-			if err := applyMigration138(tx); err != nil {
+		} else if m.version == 139 {
+			if err := applyMigration139(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -1813,7 +1827,7 @@ func applyMigration136(tx *sql.Tx, schema string) error {
 
 // Guarded like the other column additions: a database that already carries the
 // column (a replayed migration, a repaired schema) must migrate, not fail.
-func applyMigration139(tx *sql.Tx) error {
+func applyMigration140(tx *sql.Tx) error {
 	has, err := columnExists(tx, "sessions", "agent_driver_transcript_path")
 	if err != nil || has {
 		return err
@@ -3089,7 +3103,7 @@ func applyMigration125(tx *sql.Tx) error {
 
 // The old lists were shell globs; a prefix rule is command tokens. What converts
 // becomes a rule, and what cannot stays in legacy_patterns for the user to rewrite.
-func applyMigration138(tx *sql.Tx) error {
+func applyMigration139(tx *sql.Tx) error {
 	has, err := tableExists(tx, "automode_config")
 	if err != nil || !has {
 		return err

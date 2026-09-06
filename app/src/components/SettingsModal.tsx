@@ -1,3 +1,5 @@
+import { DelegationSettings } from './DelegationSettings';
+import { useDelegationPreferences } from '../hooks/useDelegationPreferences';
 import { Fragment, useState, useCallback, useEffect, useMemo } from 'react';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -16,6 +18,7 @@ import { useAutoModePolicy } from '../hooks/useAutoModePolicy';
 import { SavedMark, useSavedFlash } from './useSavedFlash';
 import { useAgentSettingDrafts, useSettingDraft } from './settingsDrafts';
 import { useEndpointPanel } from './useEndpointPanel';
+import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
 import { usePluginPanel } from './usePluginPanel';
 import {
   assertValidSettingsSectionID,
@@ -122,6 +125,7 @@ type SettingsSectionID =
   | 'hygiene'
   | 'agents'
   | 'autoMode'
+  | 'delegation'
   | 'connectivity'
   | 'plugins'
   | 'backgroundTasks'
@@ -201,6 +205,9 @@ export function SettingsModal({
   taskChangeSignal,
 }: SettingsModalProps) {
   const {
+    sendDelegationPreferencesGet,
+    sendDelegationPreferencesSave,
+    sendDelegationModels,
     sendGetSettings,
     sendBusStatusGet,
     sendBusSetConsumerEnabled,
@@ -215,6 +222,7 @@ export function SettingsModal({
     sendAutoModePolicySet,
     sendAutoModeEnvSlot,
   } = useDaemonApi();
+  const githubPollingOffReason = useGitHubPollingOffReason();
   const autoModePolicy = useAutoModePolicy({
     enabled: isOpen,
     getState: sendAutoModeGet,
@@ -231,6 +239,7 @@ export function SettingsModal({
   const savedFlash = useSavedFlash();
   const [defaultAgent, setDefaultAgent] = useState<SessionAgent>('claude');
   const [selectedSection, setSelectedSection] = useState<SettingsSectionID>('connectivity');
+  const delegationPolicy = useDelegationPreferences(isOpen && selectedSection === 'delegation', sendDelegationPreferencesGet, sendDelegationPreferencesSave);
   const [settingsSearch, setSettingsSearch] = useState('');
   const endpointPanel = useEndpointPanel();
   const pluginPanel = usePluginPanel(onListPlugins);
@@ -715,6 +724,14 @@ export function SettingsModal({
           keywords: 'agents executables claude codex copilot default capabilities pty backend editor model effort chief reviewer review garden advisor sdk context window cap tokens compaction headless workflows auto-approve unattended',
         },
         {
+          id: 'delegation',
+          label: 'Delegation',
+          title: 'Delegation',
+          description: '',
+          count: 1,
+          keywords: 'delegate roles scout design build ship review fallback harness models effort preferences',
+        },
+        {
           id: 'autoMode',
           label: 'Auto mode',
           title: 'Auto mode',
@@ -894,12 +911,7 @@ export function SettingsModal({
         );
       case 'general':
       default:
-        return (
-          <>
-            <span className="settings-pill">{themePreference}</span>
-            <span className="settings-pill">{Math.round(uiScale * 100)}% text</span>
-          </>
-        );
+        return null;
     }
   };
 
@@ -1245,7 +1257,9 @@ export function SettingsModal({
           </p>
         </div>
         <div className="settings-block-body">
-          {githubHosts.length === 0 ? (
+          {githubPollingOffReason ? (
+            <p className="settings-empty" data-testid="github-polling-off">{githubPollingOffReason}</p>
+          ) : githubHosts.length === 0 ? (
             <p className="settings-empty">No authenticated hosts detected.</p>
           ) : (
             <div className="settings-token-list">
@@ -1254,7 +1268,9 @@ export function SettingsModal({
               ))}
             </div>
           )}
-          <div className="settings-hint">Add hosts with `gh auth login --hostname &lt;host&gt;`.</div>
+          {!githubPollingOffReason && (
+            <div className="settings-hint">Add hosts with `gh auth login --hostname &lt;host&gt;`.</div>
+          )}
         </div>
       </section>
 
@@ -2466,6 +2482,8 @@ export function SettingsModal({
         return renderBackgroundTasksSettings();
       case 'eventBus':
         return renderEventBusSettings();
+      case 'delegation':
+        return <DelegationSettings policy={delegationPolicy} loadModels={sendDelegationModels} />;
       case 'autoMode':
         return <AutoModeSettings policy={autoModePolicy} />;
       case 'connectivity':
@@ -2529,9 +2547,9 @@ export function SettingsModal({
           <main className="settings-body" data-testid="settings-body">
             <div className="settings-content-head">
               <div>
-                <div className="settings-kicker">{selectedNavItem?.label}</div>
+                {selectedNavItem?.label !== selectedNavItem?.title && <div className="settings-kicker">{selectedNavItem?.label}</div>}
                 <h1>{selectedNavItem?.title}</h1>
-                <p className="settings-lead">{selectedNavItem?.description}</p>
+                {selectedNavItem?.description && <p className="settings-lead">{selectedNavItem.description}</p>}
               </div>
               <div className="settings-status-pair">
                 {renderSectionStatusPills()}

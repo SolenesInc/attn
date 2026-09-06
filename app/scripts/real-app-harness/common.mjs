@@ -245,19 +245,28 @@ export async function restoreHarnessSettings({ write = writeDaemonSettings } = {
   return restores.length;
 }
 
-async function writeDaemonSettings(entries, { wsUrl = defaultWSURLForProfile(), timeoutMs = 10_000 } = {}) {
+export async function writeDaemonSettings(entries, { wsUrl = defaultWSURLForProfile(), timeoutMs = 10_000 } = {}) {
   const ws = new WebSocket(wsUrl);
-  const pending = new Set(entries.map((entry) => entry.key));
+  const wanted = new Map(entries.map((entry) => [entry.key, entry.value]));
+  // The daemon coalesces snapshots, so several writes can land as one
+  // settings_updated naming one key. Read the snapshot instead of counting events.
+  const unwritten = (settings) => [...wanted]
+    .filter(([key, value]) => (settings?.[key] ?? '') !== value)
+    .map(([key]) => key);
   try {
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`timed out writing settings to ${wsUrl}`)), timeoutMs);
+      let outstanding = [...wanted.keys()];
+      const timer = setTimeout(
+        () => reject(new Error(`timed out writing ${outstanding.join(', ')} to ${wsUrl}`)),
+        timeoutMs,
+      );
       const settle = (error) => {
         clearTimeout(timer);
         if (error) reject(error); else resolve();
       };
       ws.on('error', settle);
-      ws.on('close', (code, reason) => settle(pending.size > 0
-        ? new Error(`daemon closed before writing ${[...pending].join(', ')} (code ${code}${reason?.length ? `: ${reason}` : ''})`)
+      ws.on('close', (code, reason) => settle(outstanding.length > 0
+        ? new Error(`daemon closed before writing ${outstanding.join(', ')} (code ${code}${reason?.length ? `: ${reason}` : ''})`)
         : undefined));
       ws.on('open', () => {
         ws.send(JSON.stringify({
@@ -274,11 +283,11 @@ async function writeDaemonSettings(entries, { wsUrl = defaultWSURLForProfile(), 
         } catch {
           return;
         }
-        if (data.event !== 'settings_updated' || !data.changed_key) {
+        if (data.event !== 'settings_updated') {
           return;
         }
-        pending.delete(data.changed_key);
-        if (pending.size === 0) settle();
+        outstanding = unwritten(data.settings);
+        if (outstanding.length === 0) settle();
       });
     });
   } finally {

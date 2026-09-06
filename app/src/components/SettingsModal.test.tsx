@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '../test/utils';
 import { SettingsModal } from './SettingsModal';
+import { GitHubPollingProvider } from '../contexts/GitHubPollingContext';
 import { getSettingsAutomationHandle } from './settingsAutomation';
 
 const daemonApi = vi.hoisted(() => ({
@@ -48,6 +49,41 @@ describe('SettingsModal', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('replaces the GitHub hosts list with the daemon reason while polling is off', async () => {
+    render(
+      <GitHubPollingProvider offReason="GitHub polling is off for profile dev. Start its daemon with ATTN_GITHUB_POLLING=on.">
+        <SettingsModal
+          isOpen
+          onClose={vi.fn()}
+          mutedRepos={[]}
+          githubHosts={[]}
+          onUnmuteRepo={vi.fn()}
+          mutedAuthors={[]}
+          onUnmuteAuthor={vi.fn()}
+          settings={{}}
+          endpoints={[]}
+          plugins={[]}
+          pluginIssues={[]}
+          onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
+          onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
+          onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
+          onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
+          onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
+          onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
+          onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
+          onSetPluginPriority={vi.fn().mockResolvedValue({ success: true })}
+          onSetSetting={vi.fn()}
+          themePreference="system"
+          onSetTheme={vi.fn()}
+        />
+      </GitHubPollingProvider>
+    );
+
+    expect(await screen.findByTestId('github-polling-off')).toHaveTextContent('ATTN_GITHUB_POLLING=on');
+    expect(screen.queryByText('No authenticated hosts detected.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/gh auth login/)).not.toBeInTheDocument();
   });
 
   it('renders authenticated GitHub hosts provided by the daemon', async () => {

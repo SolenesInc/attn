@@ -19,7 +19,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     outputs:
       force_all: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next')) || (github.event_name == 'pull_request' && github.base_ref == 'main') }}
       daemon: ${{ steps.filter.outputs.daemon }}
@@ -151,7 +151,7 @@ jobs:
       checks: read
       contents: read
       pull-requests: read
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -176,7 +176,7 @@ jobs:
 
   main-route:
     name: Main route
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -196,7 +196,7 @@ jobs:
     name: Generated types
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.generated == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -305,7 +305,7 @@ jobs:
           - os: macos-14
             runs_on: macos-14
           - os: ubuntu-24.04
-            runs_on: blacksmith-8vcpu-ubuntu-2404
+            runs_on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -331,7 +331,7 @@ jobs:
     name: Frontend
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.frontend == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-arm
     defaults:
       run:
         working-directory: app
@@ -389,7 +389,7 @@ jobs:
     name: Frontend E2E (${{ matrix.shard }}/3)
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.frontend == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: false
       matrix:
@@ -438,7 +438,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
+          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}
 
       # The suite only runs chromium (no projects configured), so skip the
       # firefox/webkit downloads. On a cache hit only the OS packages are needed.
@@ -468,7 +468,7 @@ jobs:
     name: Frontend E2E
     needs: frontend-e2e
     if: always()
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - name: Check shard results
         run: |
@@ -488,7 +488,7 @@ jobs:
           - os: macos-14
             runs_on: macos-14
           - os: ubuntu-24.04
-            runs_on: blacksmith-8vcpu-ubuntu-2404
+            runs_on: ubuntu-24.04
     defaults:
       run:
         working-directory: app/src-tauri
@@ -512,6 +512,16 @@ jobs:
         with:
           toolchain: '1.95.0'
           components: clippy, rustfmt
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src-tauri
+            pty-host
+          # Saving on PRs too would copy this cache into every branch scope and
+          # evict the rest of the repo's entries.
+          save-if: ${{ github.ref == 'refs/heads/next' || github.ref == 'refs/heads/main' }}
 
       - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
@@ -553,7 +563,7 @@ jobs:
     name: Tauri
     needs: rust
     if: always()
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - name: Check matrix results
         run: |
@@ -569,7 +579,7 @@ jobs:
     name: Plugins
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.plugins == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -615,7 +625,7 @@ jobs:
       pull-requests: read
     # Each hosted job owns its VM and display; only scenarios within it run serially.
     # A shared concurrency group would cancel unrelated waiting PR and branch checks.
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     # ubuntu-24.04 run 33657368804 took 35m42s end to end; its matrix took 24m07.635s.
     # 60m leaves 24m18s of runner variance before timing out the job.
     timeout-minutes: 60
@@ -631,10 +641,13 @@ jobs:
         uses: ./.github/actions/setup-linux-sandbox
 
       - name: Install Linux desktop dependencies
+        # Do not drop the PPA: terminal-block-copy and terminal-context-menu
+        # need fish >= 4 for its OSC 133 markers, and 24.04 ships 3.7.
         run: |
-          sudo add-apt-repository -y ppa:fish-shell/release-4
-          sudo apt-get update
-          sudo apt-get install -y bash coreutils curl desktop-file-utils fish imagemagick \
+          ./scripts/ci-retry.sh -- sudo add-apt-repository -y ppa:fish-shell/release-4
+          ./scripts/ci-retry.sh -- sudo apt-get update
+          ./scripts/ci-retry.sh -- sudo apt-get install -y bash coreutils curl \
+            desktop-file-utils fish imagemagick \
             libayatana-appindicator3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev \
             libxdo-dev sqlite3 xauth xclip xdg-utils xdotool xvfb zsh
 
@@ -642,6 +655,18 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          # setup-go's key is content-only, so every Go job shares it and the
+          # first one to finish seals it. This job owns its entry below instead.
+          cache: false
+
+      - name: Restore Go build cache
+        id: go-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-app-acceptance-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
@@ -692,6 +717,17 @@ jobs:
           install -m 0755 app/scripts/real-app-harness/ci-xdg-open "$RUNNER_TEMP/attn-harness-bin/xdg-open"
           echo "$RUNNER_TEMP/attn-harness-bin" >> "$GITHUB_PATH"
           echo "$PWD/plugins/attn-pi/node_modules/.bin" >> "$GITHUB_PATH"
+
+      # Saved here, not post-job: the gate below fails this job on a red matrix,
+      # and a post-job save would then skip exactly when a fast re-push matters.
+      - name: Save Go build cache
+        if: steps.go-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
 
       - name: Run serial matrix
         id: matrix
@@ -758,7 +794,12 @@ jobs:
             echo "app acceptance: candidate receipt covers main $HEAD_SHA"
             exit 0
           fi
-          echo "app acceptance: Linux serial matrix is $MATRIX_OUTCOME for $HEAD_SHA" >&2
+          if [ -z "$MATRIX_OUTCOME" ]; then
+            echo "app acceptance: the job failed before the serial matrix ran for $HEAD_SHA;" \
+              "this is setup or build, not a scenario verdict" >&2
+          else
+            echo "app acceptance: Linux serial matrix is $MATRIX_OUTCOME for $HEAD_SHA" >&2
+          fi
           exit 1
 
   release-preflight:
@@ -789,7 +830,7 @@ jobs:
       - release-preflight
     permissions:
       contents: read
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -821,7 +862,7 @@ jobs:
       - release-preflight
     permissions:
       contents: read
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -843,7 +884,7 @@ jobs:
     concurrency:
       group: branch-health-${{ github.ref_name }}
       cancel-in-progress: false
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 

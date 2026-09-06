@@ -48,6 +48,7 @@ import { writeClipboardText } from './utils/clipboardBridge';
 import { readTerminalInputDiagnostics } from './utils/terminalDiagnosticsLog';
 import { ChordLeaderHud } from './components/ChordLeaderHud';
 import { DaemonProvider } from './contexts/DaemonContext';
+import { GitHubPollingProvider } from './contexts/GitHubPollingContext';
 import { DaemonApiProvider, useDaemonApi } from './contexts/DaemonApiContext';
 import { setMarkdownAnnotationsTransport } from './components/MarkdownReader/annotations/transport';
 import { NotebookSurfaceProvider } from './contexts/NotebookSurfaceContext';
@@ -160,7 +161,7 @@ function sessionCloseProtectionHint(sessions: DaemonSession[], id: string): stri
 
 const TERMINAL_AGENT: SessionAgent = 'shell';
 
-type LocationPickerPurpose = 'workspace' | 'session';
+type LocationPickerPurpose = 'workspace' | 'session' | 'reopen';
 
 function handleAppPointerDownCapture(event: { target: EventTarget | null }): void {
   if (!isBrowserHostOwnedTarget(event.target)) {
@@ -454,6 +455,11 @@ function App() {
   const [daemonPlugins, setDaemonPlugins] = useState<DaemonPlugin[]>([]);
   const [daemonPluginIssues, setDaemonPluginIssues] = useState<DaemonPluginIssue[]>([]);
   const [daemonGitHubHosts, setDaemonGitHubHosts] = useState<string[]>([]);
+  const [githubPollingOffReason, setGithubPollingOffReason] = useState<string | null>(null);
+  const handleGitHubHostsUpdate = useCallback((hosts: string[], pollingOffReason: string | null) => {
+    setDaemonGitHubHosts(hosts);
+    setGithubPollingOffReason(pollingOffReason);
+  }, []);
   const handlePluginsUpdate = useCallback((plugins: DaemonPlugin[], issues: DaemonPluginIssue[]) => {
     setDaemonPlugins(plugins);
     setDaemonPluginIssues(issues);
@@ -473,6 +479,8 @@ function App() {
   const [presentationNotices, setPresentationNotices] = useState<Presentation[]>([]);
   const [sessionCloseNotice, setSessionCloseNotice] =
     useState<{ entry: SessionLedgerEntry; reopen?: SessionReopen; nonce: number }>();
+  const [sessionVerdictNotice, setSessionVerdictNotice] =
+    useState<{ verdicts: Record<string, SessionReopen>; nonce: number }>();
 
   const {
     daemonSessions,
@@ -624,7 +632,7 @@ function App() {
     onPRsUpdate: setPRs,
     onEndpointsUpdate: setDaemonEndpoints,
     onPluginsUpdate: handlePluginsUpdate,
-    onGitHubHostsUpdate: setDaemonGitHubHosts,
+    onGitHubHostsUpdate: handleGitHubHostsUpdate,
     onReposUpdate: setRepoStates,
     onAuthorsUpdate: setAuthorStates,
     onSettingsUpdate: setSettings,
@@ -633,6 +641,9 @@ function App() {
     onGitStatusUpdate: setGitStatus,
     onSessionExited: handleSessionExited,
     onSessionClosed: (entry, reopen) => setSessionCloseNotice((prev) => ({ entry, reopen, nonce: (prev?.nonce ?? 0) + 1 })),
+    // Checks finish in bursts; one slot per session keeps every verdict of a burst.
+    onSessionReopenRefreshed: (sessionId, reopen) =>
+      setSessionVerdictNotice((prev) => ({ verdicts: { ...prev?.verdicts, [sessionId]: reopen }, nonce: (prev?.nonce ?? 0) + 1 })),
   });
 
   const {
@@ -704,6 +715,7 @@ function App() {
           daemonPlugins={daemonPlugins}
           daemonPluginIssues={daemonPluginIssues}
           daemonGitHubHosts={daemonGitHubHosts}
+          githubPollingOffReason={githubPollingOffReason}
           settings={settings}
           updateAvailableVersion={updateAvailableVersion}
           onOpenLatestRelease={handleOpenLatestRelease}
@@ -718,6 +730,7 @@ function App() {
           notebookTaskChangeSignal={notebookTaskChangeSignal}
           clearGitStatus={clearGitStatus}
           sessionCloseNotice={sessionCloseNotice}
+          sessionVerdictNotice={sessionVerdictNotice}
           registerSessionExitHandler={registerSessionExitHandler}
         />
       </DaemonApiProvider>
@@ -734,6 +747,7 @@ interface AppContentProps {
   daemonPlugins: DaemonPlugin[];
   daemonPluginIssues: DaemonPluginIssue[];
   daemonGitHubHosts: string[];
+  githubPollingOffReason: string | null;
   settings: Record<string, string>;
   updateAvailableVersion: string | null;
   onOpenLatestRelease: () => Promise<void>;
@@ -748,6 +762,7 @@ interface AppContentProps {
   notebookTaskChangeSignal: number;
   clearGitStatus: () => void;
   sessionCloseNotice?: { entry: SessionLedgerEntry; reopen?: SessionReopen; nonce: number };
+  sessionVerdictNotice?: { verdicts: Record<string, SessionReopen>; nonce: number };
   registerSessionExitHandler: (handler: ((info: SessionExitInfo) => void) | null) => void;
 }
 
@@ -759,6 +774,7 @@ function AppContent({
   daemonPlugins,
   daemonPluginIssues,
   daemonGitHubHosts,
+  githubPollingOffReason,
   settings,
   updateAvailableVersion,
   onOpenLatestRelease,
@@ -773,6 +789,7 @@ function AppContent({
   notebookTaskChangeSignal,
   clearGitStatus,
   sessionCloseNotice,
+  sessionVerdictNotice,
   registerSessionExitHandler,
 }: AppContentProps) {
   const hasCriticalNotification = criticalNotifications.count > 0;
@@ -902,6 +919,7 @@ function AppContent({
     sendCrewWake,
     sendCrewSleep,
     sendSessionList,
+    sendSessionReopen,
   } = useDaemonApi();
 
   const presentationBySessionId = useMemo(
@@ -1474,6 +1492,7 @@ function AppContent({
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [locationPickerPurpose, setLocationPickerPurpose] = useState<LocationPickerPurpose>('workspace');
   const [locationPickerSessionDirection, setLocationPickerSessionDirection] = useState<TerminalSplitDirection>('vertical');
+  const reopenPickRef = useRef<{ settle: (path?: string) => void } | null>(null);
 
   const [zoomModeBySessionId, setZoomModeBySessionId] = useState<Record<string, boolean>>({});
   const { message: errorMessage, durationMs: errorDurationMs, showError, clearError } = useErrorToast();
@@ -2060,6 +2079,11 @@ function AppContent({
       chiefOfStaff = false,
       autoMode?: boolean,
     ) => {
+      if (locationPickerPurpose === 'reopen') {
+        reopenPickRef.current?.settle(path);
+        reopenPickRef.current = null;
+        return;
+      }
       const jobId = sessionCreationJobIdRef.current + 1;
       sessionCreationJobIdRef.current = jobId;
       let selectedAgent: SessionAgent;
@@ -2202,6 +2226,8 @@ function AppContent({
 
   const closeLocationPicker = useCallback(() => {
     setLocationPickerOpen(false);
+    reopenPickRef.current?.settle(undefined);
+    reopenPickRef.current = null;
   }, []);
 
   const hasChiefOfStaff = useMemo(
@@ -3128,6 +3154,32 @@ function AppContent({
     });
   }, [getPaneSize, reloadSession, sessions, showError]);
 
+  const [reopenedSessionId, setReopenedSessionId] = useState<string | null>(null);
+  const handleReopenSession = useCallback(async (sessionId: string, actionId: string): Promise<boolean> => {
+    let directory: string | undefined;
+    if (actionId === 'start_fresh_elsewhere') {
+      const chosen = await new Promise<string | undefined>((settle) => {
+        reopenPickRef.current?.settle(undefined);
+        reopenPickRef.current = { settle };
+        setLocationPickerPurpose('reopen');
+        setLocationPickerOpen(true);
+      });
+      if (!chosen) return false;
+      directory = chosen;
+    }
+    const result = await sendSessionReopen(sessionId, actionId, directory);
+    setReopenedSessionId(result.session_id);
+    setSessionsOpen(false);
+    return true;
+  }, [sendSessionReopen]);
+
+  useEffect(() => {
+    if (!reopenedSessionId) return;
+    if (!sessions.some((entry) => entry.id === reopenedSessionId)) return;
+    handleSelectSession(reopenedSessionId);
+    setReopenedSessionId(null);
+  }, [reopenedSessionId, sessions, handleSelectSession]);
+
   const handleOpenSeedTile = useCallback((seedId: string) => {
     void sendOpenSeed(seedId, activeSessionId || '')
       .then(({ workspaceId, tileId }) => {
@@ -3480,6 +3532,7 @@ function AppContent({
 
   return (
     <DaemonProvider sendPRAction={sendPRAction} sendMutePR={sendMutePR} sendMuteRepo={sendMuteRepo} sendMuteAuthor={sendMuteAuthor} sendPRVisited={sendPRVisited}>
+    <GitHubPollingProvider offReason={githubPollingOffReason}>
     <NotebookSurfaceProvider value={notebookSurfaceContextValue}>
     <div className="app" ref={appShellRef} tabIndex={-1} style={{ outline: 'none' }} onPointerDownCapture={handleAppPointerDownCapture}>
       <BannerStack
@@ -3943,7 +3996,10 @@ function AppContent({
         seedForSession={seedForSession}
         onFocusSession={handleSelectSession}
         onOpenSeed={handleOpenSeedTile}
+        onReopen={handleReopenSession}
         closeNotice={sessionCloseNotice}
+        verdictNotice={sessionVerdictNotice}
+        yieldsFocus={locationPickerOpen && locationPickerPurpose === 'reopen'}
       />
       <NotebookBrowser
         isOpen={notebookOpen}
@@ -4105,6 +4161,7 @@ function AppContent({
       />
     </div>
     </NotebookSurfaceProvider>
+    </GitHubPollingProvider>
     </DaemonProvider>
   );
 }

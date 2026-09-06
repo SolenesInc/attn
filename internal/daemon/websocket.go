@@ -718,24 +718,25 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 	}
 	state := d.currentStateProjection()
 	event := &protocol.InitialStateMessage{
-		Event:             protocol.EventInitialState,
-		ProtocolVersion:   protocol.Ptr(protocol.ProtocolVersion),
-		SourceFingerprint: protocol.Ptr(buildinfo.SourceFingerprint),
-		DaemonInstanceID:  protocol.Ptr(d.daemonInstanceID),
-		HomeDaemonID:      protocol.Ptr(homeDaemonID),
-		Sessions:          state.Sessions,
-		Endpoints:         state.Endpoints,
-		Workspaces:        state.Workspaces,
-		Prs:               state.Prs,
-		Repos:             state.Repos,
-		Authors:           state.Authors,
-		GithubHosts:       state.GithubHosts,
-		Settings:          d.settingsWithAgentAvailability(),
-		Warnings:          d.getWarnings(),
-		Seeds:             state.Seeds,
-		SeedsTotal:        protocol.Ptr(d.countSeedsForBroadcast()),
-		Apps:              state.Apps,
-		Crew:              state.Crew,
+		Event:                  protocol.EventInitialState,
+		ProtocolVersion:        protocol.Ptr(protocol.ProtocolVersion),
+		SourceFingerprint:      protocol.Ptr(buildinfo.SourceFingerprint),
+		DaemonInstanceID:       protocol.Ptr(d.daemonInstanceID),
+		HomeDaemonID:           protocol.Ptr(homeDaemonID),
+		Sessions:               state.Sessions,
+		Endpoints:              state.Endpoints,
+		Workspaces:             state.Workspaces,
+		Prs:                    state.Prs,
+		Repos:                  state.Repos,
+		Authors:                state.Authors,
+		GithubHosts:            state.GithubHosts,
+		GithubPollingOffReason: gitHubPollingOffReasonField(),
+		Settings:               d.settingsWithAgentAvailability(),
+		Warnings:               d.getWarnings(),
+		Seeds:                  state.Seeds,
+		SeedsTotal:             protocol.Ptr(d.countSeedsForBroadcast()),
+		Apps:                   state.Apps,
+		Crew:                   state.Crew,
 	}
 	data, err := json.Marshal(event)
 	if err != nil {
@@ -977,6 +978,12 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleClientHello(client, msg.(*protocol.ClientHelloMessage))
 	case protocol.CmdDelegate: // wire: delegate
 		go d.handleDelegateWS(client, msg.(*protocol.DelegateMessage))
+	case protocol.CmdDelegationModels: // wire: delegation_models
+		go d.handleDelegationModels(client, msg.(*protocol.DelegationModelsMessage))
+	case protocol.CmdDelegationPreferencesGet: // wire: delegation_preferences_get
+		d.handleDelegationPreferencesGet(client, msg.(*protocol.DelegationPreferencesGetMessage))
+	case protocol.CmdDelegationPreferencesSave: // wire: delegation_preferences_save
+		d.handleDelegationPreferencesSave(client, msg.(*protocol.DelegationPreferencesSaveMessage))
 	case protocol.CmdDelegateStatus: // wire: delegate_status
 		go d.handleDelegateStatusWS(client, msg.(*protocol.DelegateStatusMessage))
 	case protocol.CmdNotebookList: // wire: notebook_list
@@ -1004,6 +1011,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		go d.sendSessionListWSResult(client, msg.(*protocol.SessionListMessage))
 	case protocol.CmdSessionShow: // wire: session_show
 		go d.sendSessionShowWSResult(client, msg.(*protocol.SessionShowMessage))
+	case protocol.CmdSessionReopen: // wire: session_reopen
+		go d.sendSessionReopenWSResult(client, msg.(*protocol.SessionReopenMessage))
 	case protocol.CmdNotificationList: // wire: notification_list
 		notifList := msg.(*protocol.NotificationListMessage)
 		go d.sendNotificationListWSResult(client, protocol.Deref(notifList.RequestID))

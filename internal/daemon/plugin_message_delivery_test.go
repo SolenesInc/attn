@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -386,5 +388,69 @@ func TestPluginClassifyStop_ClassifierErrorYieldsUnknownVerdict(t *testing.T) {
 	}
 	if result.Verdict != protocol.StateUnknown {
 		t.Fatalf("verdict=%q, want unknown after classifier error", result.Verdict)
+	}
+}
+
+func TestSessionInput_UserTurnViaPluginTitlesTheSession(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d.ptyBackend = &fakeSpawnBackend{}
+	runner := installSessionTitleRunner(t, d)
+
+	client, done := startPluginPipe(t, d, "pi-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, client, "pi", map[string]bool{"message_delivery": true})
+
+	directory := t.TempDir()
+	now := protocol.TimestampNow().String()
+	d.store.Add(&protocol.Session{
+		ID:             "pi-titled",
+		Label:          defaultSessionLabel(directory, "pi-titled"),
+		Agent:          "pi",
+		Directory:      directory,
+		State:          protocol.SessionStateWorking,
+		StateSince:     now,
+		StateUpdatedAt: now,
+		LastSeen:       now,
+	})
+	if !d.store.BeginAgentDriverRun("pi-titled", "pi-plugin", "run-titled") {
+		t.Fatal("failed to begin plugin run")
+	}
+
+	var conversations []string
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
+		conversations = append(conversations, conversation)
+		return "Retry queue investigation", nil
+	}
+	settled := make(chan jobs.State, 4)
+	runner.OnChange(func(jobID string) {
+		if job, _ := runner.Get(jobID); job != nil && (job.State == jobs.StateDone || job.State == jobs.StateDead) {
+			settled <- job.State
+		}
+	})
+	if err := runner.Start(); err != nil {
+		t.Fatalf("start runner: %v", err)
+	}
+	t.Cleanup(runner.Stop)
+
+	go func() {
+		request := decodeJSONRPCMessage(t, client)
+		respondPluginRequest(t, client, request, pluginDeliverMessageResult{OK: true})
+	}()
+	delivery := userConversationSessionInput("steer", "pi-titled", "investigate the retry queue", sessionInputAtTurnBoundary)
+	if attempt := d.sessionInputs().try(context.Background(), delivery); attempt.err != nil {
+		t.Fatalf("session input error=%v, want nil", attempt.err)
+	}
+
+	if state := <-settled; state != jobs.StateDone {
+		t.Fatalf("title job state = %s, want done", state)
+	}
+	if len(conversations) != 1 || !strings.Contains(conversations[0], "investigate the retry queue") {
+		t.Fatalf("title conversations = %q, want one carrying the steered prompt", conversations)
+	}
+	if got := d.store.Get("pi-titled"); got == nil || got.Label != "Retry queue investigation" {
+		t.Fatalf("session label = %+v, want %q", got, "Retry queue investigation")
 	}
 }

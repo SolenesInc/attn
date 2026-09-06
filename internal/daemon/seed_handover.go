@@ -26,7 +26,7 @@ func handoverSessionName(title, sessionID string) string {
 	if len(suffix) > 4 {
 		suffix = suffix[:4]
 	}
-	baseLimit := maxDelegationNameRunes - len(suffix) - 1
+	baseLimit := maxSessionNameRunes - len(suffix) - 1
 	base := []rune(strings.TrimSpace(title))
 	if len(base) > baseLimit {
 		base = base[:baseLimit]
@@ -342,6 +342,7 @@ func (d *Daemon) handoverDispatchCommits(
 	newDispatch.Crown = seed.ID
 	newDispatch.SupersededBy = ""
 	newDispatch.DispatcherSession = strings.TrimSpace(msg.SourceSessionID)
+	newDispatch.DispatcherMember = d.crewMembersBySession()[newDispatch.DispatcherSession]
 	newDispatch.FromChief = fromChief
 	newDispatch.OperationID = operationID
 	if newDispatch.Cwd == "" {

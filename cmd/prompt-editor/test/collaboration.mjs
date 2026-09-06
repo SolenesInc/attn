@@ -143,12 +143,12 @@ try {
         await page.screenshot({ path: path.join(artifacts, "shared-review.png") });
     await put(draftID, "A later agent edit outside the review.\n");
     await page.locator("#source-compare").click();
-    await expect(page.locator("#review-full-text")).toHaveText("Keep this concurrent agent edit.\n");
+    await expect(page.locator("#review-full-text")).toHaveValue("Keep this concurrent agent edit.\n");
     await page.locator("#review-version").selectOption("base");
-    await expect(page.locator("#review-full-text")).toHaveText("Wake from the base.\n");
+    await expect(page.locator("#review-full-text")).toHaveValue("Wake from the base.\n");
     await page.locator("#review-version").selectOption("current");
     await page.locator("#review-prompt").click();
-    await expect(page.locator("#review-full-text")).toHaveText("Keep this concurrent agent edit.");
+    await expect(page.locator("#review-full-text")).toHaveValue("Keep this concurrent agent edit.");
     await page.locator("#review-close").click();
     await expect(page.locator("#output")).toContainText("Keep this concurrent agent edit.");
     watcher = spawn(binary, ["--repo", fixture, "--json", "watch", "--review", reviewID, "--after", "0", "--timeout", "10s"], { stdio: ["ignore", "pipe", "pipe"] });
@@ -156,7 +156,7 @@ try {
     watcher.stdout.on("data", (data) => { watched += data; });
     const watchDone = once(watcher, "exit");
     await page.locator("#prompt-compare").click();
-    await page.locator("#review-full-text").evaluate((node) => { const range = document.createRange(); range.selectNodeContents(node); const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true })); });
+    await page.locator("#review-full-text").evaluate((node) => { node.focus(); node.setSelectionRange(0, node.value.length); node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true })); });
     await expect(page.locator("#selection-context")).toHaveText("Selected prompt: Keep this concurrent agent edit.");
     await page.locator("#review-close").click();
     await page.locator("#discussion summary").click();
@@ -226,10 +226,10 @@ try {
     await expect(page.locator("#selection-context")).toHaveText("Selected source: this");
     await page.locator("#source-compare").click();
     await page.locator("#review-version").selectOption("base");
-    await page.locator("#review-full-text").evaluate((node) => { const range = document.createRange(); range.selectNodeContents(node); const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true })); });
+    await page.locator("#review-full-text").evaluate((node) => { node.focus(); node.setSelectionRange(0, node.value.length); node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true })); });
     await expect(page.locator("#selection-context")).toHaveText("Feedback includes this scenario and its exact prompt revision.");
     await page.locator("#review-version").selectOption("current");
-    await page.locator("#review-full-text").evaluate((node) => { const range = document.createRange(); range.setStart(node.firstChild, 5); range.setEnd(node.firstChild, 9); const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true })); });
+    await page.locator("#review-full-text").evaluate((node) => { node.focus(); node.setSelectionRange(5, 9); node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true })); });
     await page.locator("#review-close").click();
     await expect(page.locator("#selection-context")).toHaveText("Selected source: this");
     await page.locator("#discussion summary").click();

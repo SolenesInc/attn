@@ -32,17 +32,19 @@ jobs:
 
       # Job logs and finished attempts are immutable, so the report's on-disk
       # cache carries across days and only new runs cost API calls.
+      # Literal on both sides: a ~ in an env: value reaches the script
+      # unexpanded and the cache lands in a directory named '~'.
       - name: Restore flake-report cache
         uses: actions/cache@v4
         with:
-          path: ~/.cache/attn-ci-flakes
+          path: ${{ runner.temp }}/attn-ci-flakes
           key: flake-ledger-${{ github.run_id }}
           restore-keys: flake-ledger-
 
       - name: Generate ledger
         env:
           GH_TOKEN: ${{ github.token }}
-          ATTN_FLAKE_CACHE: ~/.cache/attn-ci-flakes
+          ATTN_FLAKE_CACHE: ${{ runner.temp }}/attn-ci-flakes
         run: |
           ./scripts/ci-flake-report.sh \
             --repo "$GITHUB_REPOSITORY" \

@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: App acceptance keeps its own Go module and build cache instead of sharing setup-go's write-once entry with every other Go job.

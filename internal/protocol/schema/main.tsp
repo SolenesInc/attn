@@ -200,6 +200,8 @@ model Session {
   delegated_from_chief?: boolean; // True when this session was delegated from the chief of staff (assignee of a chief-authored ticket)
   ticket_unread?: boolean;      // True when this session has unread ticket events (drives the incoming-nudge indicator)
   seed_id?: string;             // The seed this session reports to: the crown a delegation was dispatched at, or the seed planted for it. Read from the session's dispatch record at broadcast, never stored on the session — the record is the single answer to what a session reports to. Absent for a session no delegation bound.
+  dispatcher_session_id?: string; // The live session for this session's dispatcher, resolved from its dispatch record at broadcast and never stored on the session. Absent when nothing resolves.
+  dispatcher_member?: string;   // The crew member whose day dispatched this session. Read from the dispatch record and present even when no live session resolves.
   nudge_fires_at?: string;      // ISO timestamp a pending ticket-nudge countdown will fire; absent when paused (active session) or no countdown
   turn_owed?: boolean;          // True when the user owes this session a turn. Derived at broadcast from the turn stamps plus the queue's exclusions (shell, chief, pinned, muted); never stored, and never recomputed by a client.
   turn_opened_at?: string;      // ISO timestamp the outstanding turn opened; the queue's sort key. Absent when nothing is owed.
@@ -861,6 +863,7 @@ model SessionShowMessage {
 // the plain reopen, and refuses naming what is offered instead.
 model SessionReopenMessage {
   cmd: "session_reopen";
+  request_id?: string; // set by the WS frontend to correlate the result event
   session_id: string;
   action?: SessionReopenAction;
   // Where to start, for `start_fresh_elsewhere`.
@@ -1002,6 +1005,123 @@ model PullRequestForgetMessage {
   url: string;
 }
 
+model DelegationSelection {
+  harness: string;
+  provider: string;
+  `model`: string; // Empty selects the harness default; empty harness is unconfigured.
+  effort: string; // Empty preserves the harness default.
+}
+
+model DelegationChoice {
+  id: string;
+  name: string;
+  when: string;
+  selection: DelegationSelection;
+}
+
+model DelegationRole {
+  id: string;
+  name: string;
+  icon: string;
+  enabled: boolean;
+  description: string;
+  instructions: string;
+  stopping_point: string;
+  default_choice_id: string;
+  choices: DelegationChoice[];
+}
+
+model DelegationFallback {
+  selection: DelegationSelection;
+  instructions: string;
+}
+
+model DelegationPreferences {
+  enabled: boolean;
+  revision: safeint;
+  roles: DelegationRole[];
+  fallback: DelegationFallback;
+}
+
+enum ModelCapabilitySupport {
+  supported,
+  unsupported,
+  capability_unknown: "unknown",
+}
+
+model DelegationModel {
+  harness: string;
+  provider: string;
+  id: string;
+  name: string;
+  description: string;
+  effort_support: ModelCapabilitySupport;
+  effort_levels: string[];
+  access: ModelCapabilitySupport;
+  detail: string;
+}
+
+model DelegationHarness {
+  id: string;
+  name: string;
+  available: boolean;
+  model_pin: boolean;
+  effort_pin: boolean;
+  discovery: boolean;
+}
+
+model DelegationPreferencesGetMessage {
+  cmd: "delegation_preferences_get";
+  request_id: string;
+}
+
+model DelegationPreferencesSaveMessage {
+  cmd: "delegation_preferences_save";
+  request_id: string;
+  preferences: DelegationPreferences;
+}
+
+model DelegationPreferencesResultMessage {
+  event: "delegation_preferences_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  preferences?: DelegationPreferences;
+  templates?: DelegationRole[];
+  harnesses?: DelegationHarness[];
+}
+
+model DelegationPreferencesChangedMessage {
+  event: "delegation_preferences_changed";
+  revision: safeint;
+}
+
+model DelegationModelsMessage {
+  cmd: "delegation_models";
+  request_id: string;
+  harness: string;
+}
+
+model DelegationModelsResultMessage {
+  event: "delegation_models_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  models: DelegationModel[];
+  detail: string;
+}
+
+model DelegationRolesMessage {
+  cmd: "delegation_roles";
+}
+
+model DelegationRolesResult {
+  revision: safeint;
+  roles: DelegationRole[];
+  fallback?: DelegationFallback;
+  guidance: string;
+}
+
 model DelegateMessage {
   cmd: "delegate";
   request_id: string; // Stable caller-supplied idempotency key for one logical delegation
@@ -1023,6 +1143,11 @@ model DelegateMessage {
   // A guarded transfer of one existing seed. The expected fields are the
   // caller's read receipt; a changed seed is refreshed, never taken over.
   handover?: SeedHandoverRequest;
+  role?: string;
+  choice?: string;
+  fallback?: boolean;
+  preferences_revision?: safeint;
+  provider?: string;
 }
 
 model SeedHandoverRequest {
@@ -3046,6 +3171,8 @@ model InitialStateMessage {
   repos?: RepoState[];
   authors?: AuthorState[];
   github_hosts?: string[];
+  // Set while the daemon refuses to poll GitHub for this profile; empty when polling is on.
+  github_polling_off_reason?: string;
   settings?: Record<string>;
   warnings?: DaemonWarning[];
   seeds?: Seed[];
@@ -3434,6 +3561,7 @@ model SettingsUpdatedMessage {
 model GitHubHostsUpdatedMessage {
   event: "github_hosts_updated";
   github_hosts: string[];
+  github_polling_off_reason?: string;
 }
 
 model PluginsUpdatedMessage {
@@ -6028,6 +6156,7 @@ model Response {
   data?: string;
   delegate_result?: DelegateResult;
   delegation_operation?: DelegationOperation;
+  delegation_roles?: DelegationRolesResult;
   sessions?: Session[];
   workspaces?: Workspace[];
   prs?: PR[];
@@ -6833,6 +6962,20 @@ model SessionShowResultMessage {
   entry?: SessionLedgerEntry;
 }
 
+model SessionReopenResultMessage {
+  event: "session_reopen_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  result?: SessionReopenResult;
+}
+
+model SessionReopenRefreshedMessage {
+  event: "session_reopen_refreshed";
+  session_id: string;
+  reopen: SessionReopen;
+}
+
 // session_unregistered says the live session left; this says where it went, so
 // an open ledger surface updates in place instead of re-listing.
 model SessionClosedMessage {
@@ -7194,6 +7337,9 @@ alias DaemonEvent =
   | DeleteWorktreeResultMessage
   | GitOperationStartedMessage
   | GitOperationFinishedMessage
+  | DelegationPreferencesResultMessage
+  | DelegationPreferencesChangedMessage
+  | DelegationModelsResultMessage
   | SettingsUpdatedMessage
   | GitHubHostsUpdatedMessage
   | PluginsUpdatedMessage
@@ -7241,6 +7387,8 @@ alias DaemonEvent =
   | TasksChangedMessage
   | SessionListResultMessage
   | SessionShowResultMessage
+  | SessionReopenResultMessage
+  | SessionReopenRefreshedMessage
   | SessionClosedMessage
   | NotificationListResultMessage
   | NotificationMarkReadResultMessage

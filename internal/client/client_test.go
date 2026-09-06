@@ -685,3 +685,38 @@ func TestClient_Heartbeat(t *testing.T) {
 		t.Fatalf("Heartbeat error: %v", err)
 	}
 }
+
+func TestClient_RenameSession(t *testing.T) {
+	sockPath := filepath.Join(t.TempDir(), "test.sock")
+	listener, err := net.Listen("unix", sockPath)
+	if err != nil {
+		t.Fatalf("listen error: %v", err)
+	}
+	defer listener.Close()
+
+	got := make(chan *protocol.RenameSessionMessage, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		buf := make([]byte, 4096)
+		n, _ := conn.Read(buf)
+		cmd, msg, err := protocol.ParseMessage(buf[:n])
+		if err != nil || cmd != protocol.CmdRenameSession {
+			json.NewEncoder(conn).Encode(protocol.Response{Ok: false, Error: protocol.Ptr("wrong command")})
+			return
+		}
+		got <- msg.(*protocol.RenameSessionMessage)
+		json.NewEncoder(conn).Encode(protocol.Response{Ok: true})
+	}()
+
+	if err := New(sockPath).RenameSession(" sess-1 ", " pi resume support "); err != nil {
+		t.Fatalf("RenameSession error: %v", err)
+	}
+	msg := <-got
+	if msg.SessionID != "sess-1" || msg.Label != "pi resume support" {
+		t.Fatalf("rename_session = %+v, want trimmed id and name", msg)
+	}
+}

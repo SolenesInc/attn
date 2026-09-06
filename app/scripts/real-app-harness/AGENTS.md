@@ -35,6 +35,82 @@ Run commands from the repository root.
   scenario whose remote leg is optional runs it only once
   `ATTN_HARNESS_REMOTE_SSH_TARGET` names a target, so it never probes by default.
 
+## Coverage that left the catalog
+
+A scenario is dropped only when every assertion it made has a named twin at a
+cheaper layer. Look here before re-adding one; the twin is the place to change.
+
+- `workspace-move-leaf` — `internal/daemon/workspace_moveleaf_protocol_test.go`
+  (8 cases, including `TestWorkspaceLayoutMoveLeafToWorkspaceMovesPaneAndSessionOwnership`),
+  `internal/workspacelayout/moveleaf_test.go` (9 cases), and the `rapid` property
+  `TestLayoutStaysAWellFormedTreeUnderRandomOperations`. Those stop at the
+  daemon, so `App.moveLeaf.test.tsx` carries the render half: it feeds
+  `workspace_layout_updated` and `session_state_changed` through
+  `useDaemonSocket` and asserts both panes mount in the target workspace while
+  the emptied source unmounts.
+- `editor-workspace-root` — `NotebookTile.test.tsx:245`/`:273` gate the
+  backlinks rail off-root and pass it through on-root, `NotebookSurface.test.tsx:122`/`:132`
+  assert the rail's absence and presence, and `internal/notebook/layout_test.go`
+  `TestDefaultRoot` owns the per-profile root the scenario recomputed by hand.
+- `delegate-workspace-placement` — `internal/daemon/delegate_test.go`
+  `TestDelegateNoWorktreeReusesSourceCheckoutInMixedWorkspace` and
+  `TestDelegateRejectsConflictingRepositoryPlacement` assert the same fields and
+  the same error substrings.
+- `app-reconcile` — `internal/daemon/app_reconcile_test.go` and
+  `app_autodisable_test.go` own the reconcile state machine; the scaffold brief
+  is `TestScaffoldAgentsMDTeachesReconcile` in `internal/appbuild`.
+
+## Scenario files with no catalog entry
+
+A scenario file with no `scenarioCatalog.mjs` entry is invisible to the Linux
+`App acceptance` matrix: nobody runs it, and nobody notices when it rots. Each
+one below carries a verdict naming the blocker, so adding it later is a known
+piece of work rather than a rediscovery.
+
+- `scenario-automation-pr-continuity.mjs` — fix, then catalog; it is the
+  strongest candidate of the four. It is event-triggered through `refresh_prs`
+  rather than scheduled, so it holds no cron wait, and only it proves one
+  reviewer binding surviving a changed head, a resume, a daemon restart and a
+  lost worktree. Two blockers, both found by running it: `seedCodexRollout`
+  copies a rollout out of the developer's own `~/.codex/sessions`, which is
+  empty on a fresh runner and is somebody's real conversation besides — the
+  mock agent's `resumable` fixture places a transcript where the daemon's
+  finders walk and owes nothing to the host. And the daemon now refuses
+  continuity with `cannot resume the stopped session without a recorded
+  transcript`, because closing the session leaves `sessions.resume_session_id`
+  empty, so `set_session_resume_id` before a `close_session` no longer
+  survives. Whether that clearing is intended is the open question; the
+  scenario is the only thing asserting it.
+- `scenario-automation-scheduled-cleanup.mjs` — port, then catalog. Two
+  `DOWNTIME_MS` stops spend 270 s proving a restart fires exactly one catch-up
+  run over several missed instants, and its `* * * * *` cron pins those
+  instants, so shortening the ticker alone recovers nothing. PR #134 removed
+  the same cost from `automation-lifecycle` with `@every 2s` plus
+  `ATTN_AUTOMATION_SCHEDULE_INTERVAL`; the port is that change again. Only the
+  minute-aligned `occurrence_key` assertion cannot survive it, and that format
+  belongs in `automations_schedule_test.go`.
+- `scenario-reload-not-crash.mjs` — port, then catalog. It launches real `codex`
+  and `claude` and asks a model to count to 40, so it is neither free nor
+  deterministic on a runner with no credentials, and its hand-rolled `main()`
+  never builds a `createScenarioRunner`, so no tripwire and no mock-GitHub
+  receipt cover it. The claim is worth keeping and has no cheaper twin:
+  `reload_session` leaves a bound ticket working and mints no reconcile task,
+  while a real worker `SIGKILL` still stamps the ticket crashed and mints one.
+  Driving both legs with the mock agent makes it deterministic and fit for
+  the matrix.
+- `scenario-legacy-ticket-recovery.mjs` — hand-run, on purpose. It needs a
+  second packaged bundle the acceptance job does not build
+  (`make build-default-profile-harness`, profile `legacy-recovery`), and its
+  subject is the one-time v2 legacy-ticket-to-seed recovery, already held by 19
+  Go tests in `internal/daemon/legacy_ticket_recovery_test.go` and
+  `internal/store/legacy_ticket_recovery_test.go`. What only it proves is the
+  recovered seeds and the warning notification rendering in the packaged app
+  under default-profile packaging, and that a restart re-runs create-only. Run
+  it by hand when `LegacyTicketRecoveryVersion` moves or either recovery file
+  changes.
+
+A new scenario file lands with a catalog entry, or with its verdict added here.
+
 ## Writing scenarios
 
 - Exercise actual app actions/order; update scenarios when product flows change.

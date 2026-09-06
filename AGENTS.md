@@ -87,6 +87,9 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 | Frontend dev server | `pnpm --dir app run dev` |
 | Lint | `make lint` |
 
+A fresh checkout needs no manual setup: these targets fetch the native VT
+library and install `app/node_modules` themselves.
+
 ## Test safety
 
 - Never resolve test config paths to production `~/.attn`; never redirect `HOME`.
@@ -159,6 +162,8 @@ Views import React through `@victorarias/attn-app` to share attn's instance.
 
 - Keep `internal/ghosttyvt` build tags, cgo tuples, `scripts/lib/libghostty-vt.sh`,
   and Makefile platforms aligned: darwin/arm64, linux/amd64+arm64.
+- A fresh checkout carries no archive. `make lint`, `make test`, and `make build`
+  fetch it; outside make, run `./scripts/build-libghostty-vt.sh` yourself.
 - `ghostty-vt.pin` must match upstream's rolling `tip` build (the wasm source).
   Run `make publish-ghostty-vt-wasm`, then `make publish-native-vt`; commit both locks.
 - On a pin bump, verify `abi.layout.test.ts`, rerun
@@ -180,10 +185,14 @@ covering changed behavior, latency, and keyboard flow.
 
 ## Guidance
 
-- Read [prompt-authoring.md](docs/prompt-authoring.md) before changing product
-  prompts. Start with `go run ./cmd/prompt-editor context EVENT_OR_SOURCE --json`
-  and follow its authoring workflow before editing. Assess complete instructions
-  across affected scenarios; `refresh` reloads changed Go definitions.
+- Any change to what an agent is told, in `internal/prompts/content/**`
+  (including the attn skill and its references), the Go definitions beside it,
+  or the CLI help agents read, is a product prompt change. Read
+  [prompt-authoring.md](docs/prompt-authoring.md) first and run its workflow:
+  `go run ./cmd/prompt-editor context EVENT_OR_SOURCE --json`, then read the
+  complete composed prompts for every affected scenario before and after the
+  edit. Editing the markdown and regenerating the catalog is not the workflow.
+  `refresh` reloads changed Go definitions.
 - Read [glossary.md](docs/glossary.md) before naming domain concepts; update
   definitions and implementation together.
 - Read [working-with-next.md](docs/working-with-next.md) before creating

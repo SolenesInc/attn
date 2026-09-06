@@ -546,6 +546,19 @@
   flex: 0 1 auto;
 }
 
+.sidebar-harness-icon {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  color: var(--color-text-muted);
+}
+
+.queue-row--crew > .sidebar-harness-icon {
+  margin-right: 0;
+}
+
 .sidebar-session-identity > .session-provenance {
   max-width: 100%;
 }

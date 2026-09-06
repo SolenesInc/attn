@@ -2,6 +2,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useEscapeStack } from '../hooks/useEscapeStack';
+import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
 import type { SessionPullRequest } from '../types/generated';
 import { writeClipboardText } from '../utils/clipboardBridge';
 import {
@@ -63,6 +64,7 @@ export function SessionPullRequestPopover({
   // Escape only belongs to a popover the user clicked into. A hover popover
   // that grabbed it would eat the terminal's Escape, which agents live on.
   useEscapeStack(onClose, autoFocus);
+  const githubPollingOffReason = useGitHubPollingOffReason();
 
   useLayoutEffect(() => {
     const card = cardRef.current;
@@ -160,7 +162,11 @@ export function SessionPullRequestPopover({
         {awaitingStatus ? (
           <>
             <dt>status</dt>
-            <dd><span className="session-pr-popover__value">waiting for GitHub</span></dd>
+            <dd>
+              <span className="session-pr-popover__value">
+                {githubPollingOffReason ? 'GitHub polling is off for this profile' : 'waiting for GitHub'}
+              </span>
+            </dd>
           </>
         ) : (
           <>

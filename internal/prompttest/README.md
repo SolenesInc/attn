@@ -47,3 +47,13 @@ There is no update switch. An intentional prompt change should update the
 relevant expectation in the same review, with its wording change explained.
 Do not regenerate compatibility fixtures from the new renderer to make a failure
 pass. The app scenarios verify delivery and lifecycle behavior separately.
+
+Delegation discovery expectations use the short launch hint and on-demand skill
+reference. The launch hint also stops agents when attn preferences overlap with
+another configured delegation system. The always-present Garden command primer
+was removed. These edits replace only the corresponding source text in the
+captured expectations.
+
+Delegated-seed expectations carry the adaptive update and result-reporting
+contract. The corresponding daemon expectations were edited only at that source
+text boundary.
