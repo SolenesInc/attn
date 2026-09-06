@@ -224,24 +224,14 @@ jobs:
         run: make check-types
 
   backend:
-    name: Daemon (${{ matrix.runner }})
+    name: Daemon
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [ubuntu-24.04-arm, blacksmith-4vcpu-ubuntu-2404-arm]
+    # Hosted arm64 is free and ran this in 408s cold; hosted x64 took 494s
+    # (run 34028993770 vs 34002118695).
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
-
-      # Blacksmith's /etc/profile.d resets HOME for the runner user, which skips the
-      # login-shell overlay the shell integration tests launch bash with.
-      - name: Keep login shells from resetting HOME
-        run: |
-          if [ -f /etc/profile.d/blacksmith.sh ]; then
-            sudo sed -i '/export HOME="\$RUNNER_HOME"/d' /etc/profile.d/blacksmith.sh
-          fi
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -335,14 +325,10 @@ jobs:
         run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./cmd/attn -run '^TestProfileClean.*SharedHost' -count=1
 
   frontend:
-    name: Frontend (${{ matrix.runner }})
+    name: Frontend
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.frontend == 'true'
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [ubuntu-24.04-arm, blacksmith-4vcpu-ubuntu-2404-arm]
+    runs-on: ubuntu-24.04-arm
     defaults:
       run:
         working-directory: app
@@ -397,15 +383,14 @@ jobs:
   # so the shared-daemon constraint that forces workers:1 in playwright.config
   # still holds within a shard.
   frontend-e2e:
-    name: Frontend E2E (${{ matrix.shard }}/3, ${{ matrix.runner }})
+    name: Frontend E2E (${{ matrix.shard }}/3)
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.frontend == 'true'
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2, 3]
-        runner: [ubuntu-24.04-arm, blacksmith-4vcpu-ubuntu-2404-arm]
     defaults:
       run:
         working-directory: app
