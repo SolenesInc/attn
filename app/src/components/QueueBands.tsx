@@ -68,6 +68,120 @@ interface QueueBandsProps {
   onHoverSession: (id: string | null) => void;
 }
 
+function QueueRowControls({
+  session,
+  onSettle,
+  onSnooze,
+  onWake,
+  onPin,
+  onUnpin,
+  onOpenActions,
+}: {
+  session: Pick<QueueBandSessionView, 'id' | 'label'>;
+  onSettle?: () => void;
+  onSnooze?: (event: ReactMouseEvent) => void;
+  onWake?: () => void;
+  onPin?: () => void;
+  onUnpin?: () => void;
+  onOpenActions?: (event: ReactMouseEvent) => void;
+}) {
+  if (!onOpenActions && !onPin && !onUnpin && !onSettle && !onSnooze && !onWake) return null;
+
+  return (
+    <div className="queue-row-controls">
+      {onWake && (
+        <button
+          type="button"
+          className="queue-row-wake"
+          data-testid={`queue-wake-${session.id}`}
+          title="Wake now — bring it back to the queue"
+          aria-label={`Wake ${session.label}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onWake();
+          }}
+        >
+          ↩
+        </button>
+      )}
+      {onSnooze && (
+        <button
+          type="button"
+          className="queue-row-snooze"
+          data-testid={`queue-snooze-${session.id}`}
+          title={`Snooze this agent (${formatShortcut('session.snooze')})`}
+          aria-label={`Snooze ${session.label}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSnooze(event);
+          }}
+        >
+          ☾
+        </button>
+      )}
+      {onOpenActions && (
+        <div className="session-actions">
+          <button
+            type="button"
+            className="session-action-btn session-more-btn"
+            data-testid={`session-actions-${session.id}`}
+            onClick={onOpenActions}
+            title="Session actions"
+            aria-label={`Actions for ${session.label}`}
+          >
+            •••
+          </button>
+        </div>
+      )}
+      {onPin && (
+        <button
+          type="button"
+          className="queue-row-pin"
+          data-testid={`queue-pin-${session.id}`}
+          title="Pin this agent — keep it in view, out of the queue"
+          aria-label={`Pin ${session.label}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onPin();
+          }}
+        >
+          📍
+        </button>
+      )}
+      {onUnpin && (
+        <button
+          type="button"
+          className="queue-row-pin"
+          data-testid={`queue-unpin-${session.id}`}
+          title="Unpin — put this agent back in the queue"
+          aria-label={`Unpin ${session.label}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onUnpin();
+          }}
+        >
+          📌
+        </button>
+      )}
+      {onSettle && (
+        <button
+          type="button"
+          className="queue-row-settle"
+          data-testid={`queue-settle-${session.id}`}
+          title={`Settle this turn (${formatShortcut('session.settle')})`}
+          aria-label={`Settle ${session.label}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSettle();
+          }}
+        >
+          ✓
+        </button>
+      )}
+    </div>
+  );
+}
+
 function QueueRowView({
   row,
   selected,
@@ -141,99 +255,15 @@ function QueueRowView({
       <SidebarDelegateCount delegates={delegates} />
       {age && <span className="queue-row-age">{age}</span>}
       {wake && <span className="queue-row-wake-at">{wake}</span>}
-      {(onOpenActions || onPin || onUnpin || onSettle || onSnooze || onWake) && (
-        <div className="queue-row-controls">
-          {onWake && (
-            <button
-              type="button"
-              className="queue-row-wake"
-              data-testid={`queue-wake-${session.id}`}
-              title="Wake now — bring it back to the queue"
-              aria-label={`Wake ${session.label}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onWake();
-              }}
-            >
-              ↩
-            </button>
-          )}
-          {onSnooze && (
-            <button
-              type="button"
-              className="queue-row-snooze"
-              data-testid={`queue-snooze-${session.id}`}
-              title={`Snooze this agent (${formatShortcut('session.snooze')})`}
-              aria-label={`Snooze ${session.label}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onSnooze(event);
-              }}
-            >
-              ☾
-            </button>
-          )}
-          {onOpenActions && (
-            <div className="session-actions">
-              <button
-                type="button"
-                className="session-action-btn session-more-btn"
-                data-testid={`session-actions-${session.id}`}
-                onClick={onOpenActions}
-                title="Session actions"
-                aria-label={`Actions for ${session.label}`}
-              >
-                •••
-              </button>
-            </div>
-          )}
-          {onPin && (
-            <button
-              type="button"
-              className="queue-row-pin"
-              data-testid={`queue-pin-${session.id}`}
-              title="Pin this agent — keep it in view, out of the queue"
-              aria-label={`Pin ${session.label}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onPin();
-              }}
-            >
-              📍
-            </button>
-          )}
-          {onUnpin && (
-            <button
-              type="button"
-              className="queue-row-pin"
-              data-testid={`queue-unpin-${session.id}`}
-              title="Unpin — put this agent back in the queue"
-              aria-label={`Unpin ${session.label}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onUnpin();
-              }}
-            >
-              📌
-            </button>
-          )}
-          {onSettle && (
-            <button
-              type="button"
-              className="queue-row-settle"
-              data-testid={`queue-settle-${session.id}`}
-              title={`Settle this turn (${formatShortcut('session.settle')})`}
-              aria-label={`Settle ${session.label}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onSettle();
-              }}
-            >
-              ✓
-            </button>
-          )}
-        </div>
-      )}
+      <QueueRowControls
+        session={session}
+        onSettle={onSettle}
+        onSnooze={onSnooze}
+        onWake={onWake}
+        onPin={onPin}
+        onUnpin={onUnpin}
+        onOpenActions={onOpenActions}
+      />
       {showSettling && (session.autoSettleFiresAt || session.autoSettleHeld) && (
         <SidebarSettlingBar firesAt={session.autoSettleFiresAt} held={session.autoSettleHeld} />
       )}

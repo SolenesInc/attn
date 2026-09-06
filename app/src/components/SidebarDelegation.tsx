@@ -1,6 +1,8 @@
 import type { MouseEvent, PointerEvent } from 'react';
 import type { DelegationSession, DispatcherLink } from '../utils/delegationLinks';
 
+const stopPointerPropagation = (event: PointerEvent) => event.stopPropagation();
+
 export function SidebarDispatcherLine<TSession extends DelegationSession>({
   dispatcher,
   onSelectSession,
@@ -10,7 +12,6 @@ export function SidebarDispatcherLine<TSession extends DelegationSession>({
 }) {
   if (!dispatcher) return null;
 
-  const stopPointer = (event: PointerEvent) => event.stopPropagation();
   const openDispatcher = (event: MouseEvent) => {
     event.stopPropagation();
     if (dispatcher.session) onSelectSession(dispatcher.session.id);
@@ -25,7 +26,7 @@ export function SidebarDispatcherLine<TSession extends DelegationSession>({
           className="sidebar-dispatcher__link"
           title={`Open ${dispatcher.name}`}
           aria-label={`Open dispatcher ${dispatcher.name}`}
-          onPointerDown={stopPointer}
+          onPointerDown={stopPointerPropagation}
           onClick={openDispatcher}
         >
           {dispatcher.name}
