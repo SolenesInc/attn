@@ -58,9 +58,9 @@ export function seatbeltInvocation(spec: SandboxSpec): { profile: string; params
       return `(deny file-write* (subpath (param "DENY_WRITE_${index}")))`;
     }),
   ];
-  // Codex also appends its platform defaults, which grant /tmp writes; attn's
-  // profile grants only the temp directory it created for the session.
-  const profile = [seatbeltBase, ...read, ...write, ...networkPolicy(spec), seatbeltPreferences, ...anchors, ...denies].join("\n");
+  // Section order is seatbelt.rs:1022-1046, with the deny sections last. The
+  // platform defaults belong to the split policies attn does not build.
+  const profile = [seatbeltBase, ...read, ...write, ...networkPolicy(spec), seatbeltPreferences, ...denies, ...anchors].join("\n");
   return { profile, params };
 }
 

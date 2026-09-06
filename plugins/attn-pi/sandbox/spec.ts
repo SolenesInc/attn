@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import { canonical, within } from "../security/policy";
 
 export type SandboxMode = "read-only" | "workspace-write" | "danger-full-access";
@@ -29,6 +30,13 @@ export function outermostRoots(paths: string[]): string[] {
   return ordered.filter((path, index) => !ordered.slice(0, index).some((parent) => within(path, parent)));
 }
 
+// protocol.rs:1275-1286: workspace-write always grants /tmp on unix when it is
+// a directory. The session temp directory stands in for Codex's TMPDIR root.
+function slashTmp(): string[] {
+  if (process.platform === "win32") return [];
+  try { return statSync("/tmp").isDirectory() ? ["/tmp"] : []; } catch { return []; }
+}
+
 export function sandboxSpecFor(
   config: SandboxConfig,
   cwd: string,
@@ -37,13 +45,13 @@ export function sandboxSpecFor(
 ): SandboxSpec | "unsandboxed" {
   // config_toml.rs:809 maps danger-full-access to PermissionProfile::Disabled.
   if (config.mode === "danger-full-access") return "unsandboxed";
-  // Codex keeps an escalated command sandboxed when denied reads exist
-  // (core/src/tools/sandboxing.rs:275-283); attn escalates only after approval.
+  // Codex refuses this while denied reads exist (core/src/tools/sandboxing.rs:275-283).
+  // attn asks a reviewer first, and that approval covers escaping the deny list too.
   if (opts.permissions === "require_escalated") return "unsandboxed";
   const resolvedCwd = canonical(cwd);
   const resolvedTemp = canonical(temp);
   const writableRoots = config.mode === "workspace-write"
-    ? outermostRoots([resolvedCwd, resolvedTemp, ...config.allowWrite, ...config.cacheWritePaths])
+    ? outermostRoots([resolvedCwd, resolvedTemp, ...slashTmp(), ...config.allowWrite, ...config.cacheWritePaths])
     : [];
   const proxy = config.network ? opts.proxy : undefined;
   return {

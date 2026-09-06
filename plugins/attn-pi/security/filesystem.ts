@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
 import type { CredentialFilter } from "./filter";
 import { assertPath, type SecurityPolicy } from "./policy";
-import { sandboxCommand } from "./sandbox";
+import { sandboxCommand, sandboxEnvironment } from "./sandbox";
 
 // Native tools use a small sandboxed worker so symlink races cannot bypass the OS policy.
 const workerSource = `
@@ -78,7 +78,7 @@ export class SandboxedFilesystem {
     const command = sandboxCommand(this.policy, process.execPath, ["-e", workerSource]);
     const child = spawn(command.executable, command.args, {
       cwd: this.policy.cwd,
-      env: { ...this.filter.environment(process.env), TMPDIR: this.policy.temp, TMP: this.policy.temp, TEMP: this.policy.temp },
+      env: sandboxEnvironment(this.policy, this.filter.environment(process.env)),
       stdio: ["pipe", "pipe", "pipe"],
     });
     this.child = child;

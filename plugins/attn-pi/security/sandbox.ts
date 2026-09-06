@@ -1,3 +1,4 @@
+import { commandEnvironment } from "../sandbox/environment";
 import { sandboxArgv, shellQuote, type SandboxedCommand } from "../sandbox/exec";
 import { sandboxSpecFor, type SandboxSpec } from "../sandbox/spec";
 import type { SecurityPolicy } from "./policy";
@@ -15,6 +16,11 @@ export function specForPolicy(policy: SecurityPolicy): SandboxSpec | "unsandboxe
     denyWrite: policy.denyWrite,
     cacheWritePaths: policy.cacheWritePaths,
   }, policy.cwd, policy.temp, { permissions: "use_default" });
+}
+
+/** The single place any sandboxed child's environment is built. */
+export function sandboxEnvironment(policy: SecurityPolicy, env: NodeJS.ProcessEnv): Record<string, string> {
+  return commandEnvironment(specForPolicy(policy), env);
 }
 
 export function sandboxCommand(policy: SecurityPolicy, executable: string, args: string[], platform = process.platform): SandboxedCommand {

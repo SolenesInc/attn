@@ -1,10 +1,14 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import * as childProcess from "node:child_process";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { canonical } from "../security/policy";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { CredentialFilter } from "../security/filter";
+import { SandboxedFilesystem } from "../security/filesystem";
+import { canonical, loadSecurityConfig, resolveSecurityPolicy } from "../security/policy";
+import { protectedBash } from "../security/tools";
 import { bwrapArgs } from "../sandbox/bwrap";
 import { isSandboxDenial } from "../sandbox/denial";
 import { commandEnvironment } from "../sandbox/environment";
@@ -41,12 +45,13 @@ function listener(): Promise<Server & { port: number }> {
 }
 
 describe("sandboxSpecFor", () => {
-  test("workspace-write grants the cwd, the temp directory, extra roots and build caches", () => {
+  test("workspace-write grants the cwd, the temp directory, /tmp, extra roots and build caches", () => {
     const { cwd, temp, outside, cleanup } = workspace();
     try {
       const spec = sandboxSpecFor(config({ allowWrite: [outside], cacheWritePaths: [join(outside, "cache")] }), cwd, temp, { permissions: "use_default" });
       expect(spec).not.toBe("unsandboxed");
-      expect((spec as SandboxSpec).writableRoots).toEqual([cwd, temp, outside].sort((a, b) => a.length - b.length));
+      // The cache path is inside `outside`, so only the outermost root survives.
+      expect((spec as SandboxSpec).writableRoots.slice().sort()).toEqual([cwd, temp, outside, canonical("/tmp")].sort());
     } finally { cleanup(); }
   });
 
@@ -108,6 +113,31 @@ describe.skipIf(process.platform !== "darwin")("seatbelt enforcement", () => {
     } finally { cleanup(); }
   });
 
+  test("workspace-write grants /tmp, read-only grants nothing, and neither reaches the home directory", () => {
+    const { cwd, temp, cleanup } = workspace();
+    const scratch = `/tmp/attn-pi-sandbox-${Math.random().toString(36).slice(2)}`;
+    const home = join(homedir(), `attn-pi-sandbox-${Math.random().toString(36).slice(2)}`);
+    try {
+      const workspaceWrite = sandboxSpecFor(config(), cwd, temp, { permissions: "use_default" });
+      expect(sandboxed(workspaceWrite, `echo hi > ${JSON.stringify(scratch)}`)).toEqual({ code: 0, output: "" });
+      expect(readFileSync(scratch, "utf8")).toBe("hi\n");
+      rmSync(scratch, { force: true });
+
+      const readOnly = sandboxSpecFor(config({ mode: "read-only" }), cwd, temp, { permissions: "use_default" });
+      expect(sandboxed(readOnly, `echo hi > ${JSON.stringify(scratch)}`).code).not.toBe(0);
+      expect(existsSync(scratch)).toBe(false);
+
+      for (const spec of [workspaceWrite, readOnly]) {
+        expect(sandboxed(spec, `echo hi > ${JSON.stringify(home)}`).code).not.toBe(0);
+        expect(existsSync(home)).toBe(false);
+      }
+    } finally {
+      rmSync(scratch, { force: true });
+      rmSync(home, { force: true });
+      cleanup();
+    }
+  });
+
   test("read-only denies every write, including inside the cwd", () => {
     const { cwd, temp, cleanup } = workspace();
     try {
@@ -163,6 +193,54 @@ describe.skipIf(process.platform !== "darwin")("seatbelt enforcement", () => {
       expect(sandboxed(spec, `exec 3<>/dev/tcp/127.0.0.1/${target.port}`).code).not.toBe(0);
     } finally {
       target.close();
+      cleanup();
+    }
+  });
+});
+
+describe.skipIf(process.platform !== "darwin")("spawned children", () => {
+  test("the filesystem worker is spawned without the approval channel in its environment", async () => {
+    const { cwd, temp, cleanup } = workspace();
+    const settings = join(mkdtempSync(join(tmpdir(), "attn-pi-sandbox-settings-")), "attn-security.json");
+    const policy = resolveSecurityPolicy(loadSecurityConfig(settings), cwd, settings, temp);
+    writeFileSync(join(cwd, "note"), "worker-read");
+    const fs = new SandboxedFilesystem(policy, new CredentialFilter({}));
+    const saved = { ...process.env };
+    process.env.ATTN_PI_TOKEN = "run-token";
+    process.env.ATTN_PI_SUITE_SOCKET = "/tmp/attn-pi-suite.sock";
+    const spy = spyOn(childProcess, "spawn");
+    try {
+      expect((await fs.read(join(cwd, "note"))).toString()).toBe("worker-read");
+      const env = spy.mock.calls.at(-1)?.[2]?.env as Record<string, string>;
+      expect(env.ATTN_PI_SUITE_SOCKET).toBeUndefined();
+      expect(env.ATTN_PI_TOKEN).toBeUndefined();
+      expect(Object.values(env)).not.toContain("/tmp/attn-pi-suite.sock");
+      expect(env.TMPDIR).toBe(policy.temp);
+    } finally {
+      spy.mockRestore();
+      await fs.close();
+      process.env = saved;
+      rmSync(dirname(settings), { recursive: true, force: true });
+      cleanup();
+    }
+  });
+
+  test("a sandboxed bash command cannot see the approval channel", async () => {
+    const { cwd, temp, cleanup } = workspace();
+    const settings = join(mkdtempSync(join(tmpdir(), "attn-pi-sandbox-settings-")), "attn-security.json");
+    const policy = resolveSecurityPolicy(loadSecurityConfig(settings), cwd, settings, temp);
+    let output = "";
+    try {
+      const result = await protectedBash(policy, new CredentialFilter({})).exec("env", cwd, {
+        env: { ...process.env, ATTN_PI_TOKEN: "run-token", ATTN_PI_SUITE_SOCKET: "/tmp/attn-pi-suite.sock" },
+        onData: (data) => { output += data.toString(); },
+      });
+      expect(result.exitCode).toBe(0);
+      expect(output).toContain(`TMPDIR=${policy.temp}`);
+      expect(output).not.toContain("ATTN_PI_SUITE_SOCKET");
+      expect(output).not.toContain("run-token");
+    } finally {
+      rmSync(dirname(settings), { recursive: true, force: true });
       cleanup();
     }
   });
