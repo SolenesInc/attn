@@ -24,7 +24,10 @@ func TestBroadcastSessionResolvesItsRecordedDispatcher(t *testing.T) {
 			name:         "ended dispatcher with an awake member",
 			recordMember: true,
 			afterRecord: func(t *testing.T, d *Daemon) {
-				d.store.Remove("dispatcher-old")
+				d.releaseExitedCrewBinding("dispatcher-old")
+				if d.store.Get("dispatcher-old") == nil {
+					t.Fatal("crew exit removed the historical dispatcher session")
+				}
 				addSession(t, d, "dispatcher-new")
 				if _, err := d.claimCrewBinding("alder", "dispatcher-new"); err != nil {
 					t.Fatalf("rebind alder: %v", err)
@@ -36,8 +39,11 @@ func TestBroadcastSessionResolvesItsRecordedDispatcher(t *testing.T) {
 		{
 			name:         "ended dispatcher with a sleeping member",
 			recordMember: true,
-			afterRecord: func(_ *testing.T, d *Daemon) {
-				d.store.Remove("dispatcher-old")
+			afterRecord: func(t *testing.T, d *Daemon) {
+				d.releaseExitedCrewBinding("dispatcher-old")
+				if d.store.Get("dispatcher-old") == nil {
+					t.Fatal("crew exit removed the historical dispatcher session")
+				}
 			},
 			wantMember: "alder",
 		},

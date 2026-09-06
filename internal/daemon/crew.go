@@ -201,18 +201,18 @@ func (d *Daemon) crewBindingLive(member crew.Member) bool {
 }
 
 func (d *Daemon) liveSessionForTender(tender garden.Tender) (string, bool) {
+	memberID := strings.TrimSpace(tender.Member)
+	if memberID != "" {
+		member, found, err := d.resolveCrewMember(memberID)
+		if err != nil || !found || !d.crewBindingLive(member) {
+			return "", false
+		}
+		return member.BindingSession, true
+	}
 	if sessionID := strings.TrimSpace(tender.Session); sessionID != "" && d.store.Get(sessionID) != nil {
 		return sessionID, true
 	}
-	memberID := strings.TrimSpace(tender.Member)
-	if memberID == "" {
-		return "", false
-	}
-	member, found, err := d.resolveCrewMember(memberID)
-	if err != nil || !found || !d.crewBindingLive(member) {
-		return "", false
-	}
-	return member.BindingSession, true
+	return "", false
 }
 
 func (d *Daemon) migrateCrewTicketIdentity(memberID string, sessionIDs ...string) error {
