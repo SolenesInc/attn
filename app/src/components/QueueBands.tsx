@@ -1,7 +1,8 @@
 import { type MouseEvent as ReactMouseEvent } from 'react';
 import { StateIndicator } from './StateIndicator';
 import { SessionLabel } from './SessionLabel';
-import { HarnessIcon, harnessLabel } from './HarnessIcon';
+import { HarnessIcon } from './HarnessIcon';
+import { harnessLabel } from './harnessLabel';
 import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
 import { SidebarSettlingBar } from './SettlingIndicator';
 import { CrewWakeSun, useWakeConfirm } from './CrewWake';

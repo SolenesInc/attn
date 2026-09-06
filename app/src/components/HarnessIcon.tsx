@@ -1,13 +1,9 @@
-import { formatSessionAgentLabel, normalizeSessionAgent } from '../types/sessionAgent';
+import { normalizeSessionAgent } from '../types/sessionAgent';
+import { harnessLabel } from './harnessLabel';
 import { ClaudeIcon } from './icons/ClaudeIcon';
 import { CodexIcon } from './icons/CodexIcon';
 import { CopilotIcon } from './icons/CopilotIcon';
 import { PiIcon } from './icons/PiIcon';
-
-export function harnessLabel(agent?: string): string {
-  const name = normalizeSessionAgent(agent, '');
-  return name ? formatSessionAgentLabel(name) : 'Unknown harness';
-}
 
 export function HarnessIcon({ agent }: { agent?: string }) {
   const name = normalizeSessionAgent(agent, '');

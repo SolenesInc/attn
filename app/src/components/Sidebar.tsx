@@ -90,6 +90,19 @@ function SidebarSessionPullRequest({ pullRequests }: { pullRequests?: SessionPul
   );
 }
 
+function SidebarSessionIdentity({ session }: { session: LocalSession }) {
+  return (
+    <span className="sidebar-session-identity">
+      <span className="sidebar-session-headline">
+        <HarnessIcon agent={session.agent} />
+        <SessionLabel label={session.label} />
+        <SidebarSessionPullRequest pullRequests={session.pullRequests} />
+      </span>
+      <SessionProvenance automation={session.automation} density="compact" />
+    </span>
+  );
+}
+
 function TileSidebarRow({
   workspaceId,
   tile,
@@ -223,14 +236,7 @@ function SidebarSessionRow({
       title={session.state === 'recoverable' ? 'Session will be recovered when opened' : undefined}
     >
       <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
-      <span className="sidebar-session-identity">
-        <span className="sidebar-session-headline">
-          <HarnessIcon agent={session.agent} />
-          <SessionLabel label={session.label} />
-          <SidebarSessionPullRequest pullRequests={session.pullRequests} />
-        </span>
-        <SessionProvenance automation={session.automation} density="compact" />
-      </span>
+      <SidebarSessionIdentity session={session} />
       {session.endpointName && (
         <span className={`session-endpoint-badge status-${session.endpointStatus || 'connected'}`}>
           {session.endpointName}
@@ -1469,14 +1475,7 @@ export function Sidebar({
                           onClick={() => onSelectSession(session.id)}
                         >
                           <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
-                          <span className="sidebar-session-identity">
-                            <span className="sidebar-session-headline">
-                              <HarnessIcon agent={session.agent} />
-                              <SessionLabel label={session.label} />
-                              <SidebarSessionPullRequest pullRequests={session.pullRequests} />
-                            </span>
-                            <SessionProvenance automation={session.automation} density="compact" />
-                          </span>
+                          <SidebarSessionIdentity session={session} />
                           {session.chiefOfStaff && <ChiefOfStaffBadge />}
                           {session.delegatedFromChief && <DelegatedFromChiefBadge />}
                           {session.endpointName && (
