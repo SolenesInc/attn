@@ -35,6 +35,11 @@ import {
   settleBeforeBridgeRequest,
   settleUi,
 } from './uiAutomationSettle';
+import {
+  armRefreshWitness,
+  disarmRefreshWitness,
+  readRefreshWitness,
+} from './worktreesRefreshWitness';
 
 const UI_AUTOMATION_REQUEST_EVENT = 'attn://ui-automation/request';
 const UI_AUTOMATION_RESPONSE_EVENT = 'attn://ui-automation/response';
@@ -1516,9 +1521,17 @@ function requireWorktreePath(payload: Record<string, unknown>): string {
   return path;
 }
 
+const WORKTREES_PANEL = '[data-testid="worktrees-panel"]';
+const WORKTREES_REFRESHING = '.worktrees-panel__refreshing';
+
+function worktreesPanel(): HTMLElement | null {
+  const panel = document.querySelector(WORKTREES_PANEL);
+  return panel instanceof HTMLElement ? panel : null;
+}
+
 function collectWorktreesUiState() {
-  const panel = document.querySelector('[data-testid="worktrees-panel"]');
-  if (!(panel instanceof HTMLElement)) {
+  const panel = worktreesPanel();
+  if (!panel) {
     return { present: false };
   }
   const rows = Array.from(panel.querySelectorAll('.worktrees-panel__row')).map((row) => ({
@@ -1550,6 +1563,7 @@ function collectWorktreesUiState() {
       refreshing: Boolean(header.querySelector('.worktrees-panel__refreshing')),
     })),
     error: panel.querySelector('[data-testid="worktrees-panel-error"]')?.textContent?.trim() ?? '',
+    refreshWitness: readRefreshWitness(),
   };
 }
 
@@ -3568,6 +3582,9 @@ export function useUiAutomationBridge({
       case 'worktrees_get_state':
         return collectWorktreesUiState();
       case 'worktrees_refresh': {
+        const panel = worktreesPanel();
+        if (!panel) throw new Error('worktrees_refresh needs the worktrees panel on screen');
+        armRefreshWitness(panel, WORKTREES_REFRESHING);
         clickTestId('worktrees-refresh');
         await settleUi(3);
         return collectWorktreesUiState();
@@ -4073,6 +4090,7 @@ export function useUiAutomationBridge({
 
     return () => {
       void unlistenPromise.then((unlisten) => unlisten());
+      disarmRefreshWitness();
     };
   }, []);
 }
