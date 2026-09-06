@@ -277,6 +277,63 @@ func parseSessionShowArgs(args []string) (string, error) {
 	return strings.TrimSpace(args[0]), nil
 }
 
+type sessionRenameArgs struct {
+	sessionID string
+	name      string
+}
+
+// The session defaults to the caller's own, so an agent renames itself with one
+// word. --session is accepted before or after the name.
+func parseSessionRenameArgs(args []string, ownSessionID string) (sessionRenameArgs, error) {
+	var parsed sessionRenameArgs
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--session" || arg == "-session":
+			if i+1 >= len(args) {
+				return sessionRenameArgs{}, errors.New("--session needs a session id")
+			}
+			i++
+			parsed.sessionID = strings.TrimSpace(args[i])
+		case strings.HasPrefix(arg, "--session="):
+			parsed.sessionID = strings.TrimSpace(strings.TrimPrefix(arg, "--session="))
+		case strings.HasPrefix(arg, "-") && arg != "-":
+			return sessionRenameArgs{}, fmt.Errorf("unknown flag %s", arg)
+		default:
+			positional = append(positional, arg)
+		}
+	}
+	if len(positional) != 1 {
+		return sessionRenameArgs{}, errors.New("exactly one name is required; quote it when it has spaces")
+	}
+	parsed.name = strings.TrimSpace(positional[0])
+	if parsed.name == "" {
+		return sessionRenameArgs{}, errors.New("the name cannot be empty")
+	}
+	if parsed.sessionID == "" {
+		parsed.sessionID = strings.TrimSpace(ownSessionID)
+	}
+	if parsed.sessionID == "" {
+		return sessionRenameArgs{}, errors.New("no session: pass --session <id> or run inside an attn session")
+	}
+	return parsed, nil
+}
+
+func runSessionRename(args []string) {
+	parsed, err := parseSessionRenameArgs(args, os.Getenv("ATTN_SESSION_ID"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "session rename: %v\n", err)
+		writeSessionHelp(os.Stderr)
+		os.Exit(2)
+	}
+	if err := client.New("").RenameSession(parsed.sessionID, parsed.name); err != nil {
+		fmt.Fprintf(os.Stderr, "session rename: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("%s renamed to %q\n", parsed.sessionID, parsed.name)
+}
+
 func runSessionShow(args []string) {
 	target, err := parseSessionShowArgs(args)
 	if err != nil {

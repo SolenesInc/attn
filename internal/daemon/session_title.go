@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -18,8 +19,8 @@ import (
 )
 
 const (
-	// Distinct from maxDelegationNameRunes (delegate.go), the clamp on delegation names.
-	maxSessionTitleRunes     = 48
+	// One cap for every session name: delegation --name, rename, and generated titles.
+	maxSessionNameRunes      = 48
 	sessionTitleTimeout      = 90 * time.Second
 	sessionTitleBriefCharCap = 1500
 	sessionTitleKind         = "session_title"
@@ -193,10 +194,27 @@ func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, e
 // The member check is the backstop for a member session renamed back to the cwd
 // basename the launch gave it.
 func (d *Daemon) sessionMayBeAutoTitled(session *protocol.Session) bool {
-	if session.Label != defaultSessionLabel(session.Directory, session.ID) {
+	if !sessionLabelIsPlaceholder(session.Label, session.Directory, session.ID) {
 		return false
 	}
 	return d.crewMemberBoundTo(session.ID) == ""
+}
+
+// Seed ids with or without their prefix, hex tokens, and ticket keys: the names
+// agents reach for when a name is required and nothing says what one is for.
+var (
+	idShapedLabel = regexp.MustCompile(`^(?:s-)?[a-z0-9]{6}$|^[0-9a-f]{6,}$|^[A-Z][A-Z0-9]*-[0-9]+$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f-]{4,}$`)
+	// A six-letter word like "garden" is not an id; a seed id always mixes in a digit.
+	sixLetterWord = regexp.MustCompile(`^(?:s-)?[a-z]{6}$`)
+)
+
+func sessionLabelIsPlaceholder(label, cwd, sessionID string) bool {
+	label = strings.TrimSpace(label)
+	def := defaultSessionLabel(cwd, sessionID)
+	if label == def || label == truncateDelegationName(def) {
+		return true
+	}
+	return idShapedLabel.MatchString(label) && !sixLetterWord.MatchString(label)
 }
 
 // Wired onto d.sessionTitleExec in New(); test daemons leave it nil.
@@ -286,8 +304,8 @@ func sanitizeSessionTitle(raw string) string {
 	line = strings.Join(strings.Fields(line), " ")
 	line = strings.TrimRight(line, ".,;:! \t")
 
-	if runes := []rune(line); len(runes) > maxSessionTitleRunes {
-		line = strings.TrimRight(string(runes[:maxSessionTitleRunes]), "-_. \t")
+	if runes := []rune(line); len(runes) > maxSessionNameRunes {
+		line = strings.TrimRight(string(runes[:maxSessionNameRunes]), "-_. \t")
 	}
 
 	return line

@@ -53,8 +53,6 @@ func readInternalActionResult(client *wsClient) (internalActionResult, error) {
 	}
 }
 
-const maxDelegationNameRunes = 16
-
 func (d *Daemon) validateDelegationName(name string, creatingWorkspace bool, targetWorkspaceID string) error {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -63,8 +61,8 @@ func (d *Daemon) validateDelegationName(name string, creatingWorkspace bool, tar
 	if name == "." || name == string(filepath.Separator) {
 		return fmt.Errorf("%q is not a usable name; pass --name", name)
 	}
-	if len([]rune(name)) > maxDelegationNameRunes {
-		return fmt.Errorf("name %q is too long (max %d characters); pass a shorter --name", name, maxDelegationNameRunes)
+	if len([]rune(name)) > maxSessionNameRunes {
+		return fmt.Errorf("name %q is too long (max %d characters); pass a shorter --name", name, maxSessionNameRunes)
 	}
 	if creatingWorkspace {
 		for _, ws := range d.store.ListWorkspaces() {
@@ -86,10 +84,10 @@ func (d *Daemon) validateDelegationName(name string, creatingWorkspace bool, tar
 
 func truncateDelegationName(name string) string {
 	runes := []rune(name)
-	if len(runes) <= maxDelegationNameRunes {
+	if len(runes) <= maxSessionNameRunes {
 		return name
 	}
-	return strings.TrimRight(string(runes[:maxDelegationNameRunes]), "-_. \t")
+	return strings.TrimRight(string(runes[:maxSessionNameRunes]), "-_. \t")
 }
 
 func (d *Daemon) resolveDelegationAgent(sourceAgent string, requested *string) (string, error) {

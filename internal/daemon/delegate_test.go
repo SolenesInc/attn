@@ -892,7 +892,7 @@ func TestDelegateRejectsNameTooLong(t *testing.T) {
 		Brief:           "Name is too long.",
 		Placement:       protocol.Ptr(delegationPlacementNew),
 		Cwd:             protocol.Ptr(targetDir),
-		Label:           protocol.Ptr("this-name-is-way-too-long"),
+		Label:           protocol.Ptr(strings.Repeat("long-", 10)),
 	})
 	if err == nil || !strings.Contains(err.Error(), "too long") {
 		t.Fatalf("delegate() error = %v, want a name-too-long error", err)
@@ -972,7 +972,7 @@ func TestDelegateTruncatesLongWorktreeDefaultName(t *testing.T) {
 	backend := &fakeSpawnBackend{}
 	_, sourceSessionID, _ := setupDelegationSourceAt(t, d, backend, mainRepo)
 	consumeDelegatedPrompt(t, backend)
-	worktreePath := filepath.Join(root, "repo--feat-delegated-long")
+	worktreePath := filepath.Join(root, "repo--feat-delegated-with-a-branch-name-past-the-cap")
 
 	result, err := d.delegate(&protocol.DelegateMessage{
 		Cmd:             protocol.CmdDelegate,
@@ -981,15 +981,15 @@ func TestDelegateTruncatesLongWorktreeDefaultName(t *testing.T) {
 		Placement:       protocol.Ptr(delegationPlacementNew),
 		Worktree: &protocol.DelegateWorktreeRequest{
 			Repo:   protocol.Ptr(mainRepo),
-			Branch: "feat/delegated-long",
+			Branch: "feat/delegated-with-a-branch-name-past-the-cap",
 			Path:   protocol.Ptr(worktreePath),
 		},
 	})
 	if err != nil {
 		t.Fatalf("delegate() error = %v", err)
 	}
-	wantName := "repo--feat-deleg"
-	if len([]rune(wantName)) > maxDelegationNameRunes {
+	wantName := "repo--feat-delegated-with-a-branch-name-past-the"
+	if len([]rune(wantName)) > maxSessionNameRunes {
 		t.Fatalf("test setup bug: wantName %q exceeds max", wantName)
 	}
 	workspace := d.store.GetWorkspace(result.WorkspaceID)
@@ -1086,12 +1086,12 @@ func TestTruncateDelegationName(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"within limit is unchanged", "myproj", "myproj"},
-		{"exactly at limit is unchanged", strings.Repeat("a", 16), strings.Repeat("a", 16)},
-		{"cuts to the rune limit", "attn--feat-agent-cost-tooling", "attn--feat-agent"},
-		{"trims a trailing dash after the cut", strings.Repeat("a", 15) + "-more-stuff", strings.Repeat("a", 15)},
-		{"trims trailing punctuation and whitespace", "twelve chars.   more", "twelve chars"},
-		{"multi-byte runes counted as one", strings.Repeat("é", 20), strings.Repeat("é", 16)},
+		{"within limit is unchanged", "attn--feat-agent-cost-tooling", "attn--feat-agent-cost-tooling"},
+		{"exactly at limit is unchanged", strings.Repeat("a", 48), strings.Repeat("a", 48)},
+		{"cuts to the rune limit", strings.Repeat("abcd-", 10) + "tail", strings.Repeat("abcd-", 9) + "abc"},
+		{"trims a trailing dash after the cut", strings.Repeat("a", 47) + "-more-stuff", strings.Repeat("a", 47)},
+		{"trims trailing punctuation and whitespace", strings.Repeat("b", 44) + "   . more", strings.Repeat("b", 44)},
+		{"multi-byte runes counted as one", strings.Repeat("é", 60), strings.Repeat("é", 48)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1099,7 +1099,7 @@ func TestTruncateDelegationName(t *testing.T) {
 			if got != tc.want {
 				t.Fatalf("truncateDelegationName(%q) = %q, want %q", tc.input, got, tc.want)
 			}
-			if len([]rune(got)) > maxDelegationNameRunes {
+			if len([]rune(got)) > maxSessionNameRunes {
 				t.Fatalf("truncateDelegationName(%q) = %q exceeds max runes", tc.input, got)
 			}
 		})
@@ -1123,10 +1123,10 @@ func TestValidateDelegationName(t *testing.T) {
 		targetWorkspaceID string
 		wantErr           string
 	}{
-		{"sixteen ASCII accepted", strings.Repeat("a", 16), false, "", ""},
-		{"seventeen ASCII rejected", strings.Repeat("a", 17), false, "", "too long"},
-		{"sixteen runes accepted", strings.Repeat("é", 16), false, "", ""},
-		{"seventeen runes rejected", strings.Repeat("é", 17), false, "", "too long"},
+		{"forty-eight ASCII accepted", strings.Repeat("a", 48), false, "", ""},
+		{"forty-nine ASCII rejected", strings.Repeat("a", 49), false, "", "too long"},
+		{"forty-eight runes accepted", strings.Repeat("é", 48), false, "", ""},
+		{"forty-nine runes rejected", strings.Repeat("é", 49), false, "", "too long"},
 		{"blank rejected", "   ", false, "", "a name is required"},
 		{"dot rejected", ".", false, "", "not a usable name"},
 		{"separator rejected", string(filepath.Separator), false, "", "not a usable name"},
@@ -1631,7 +1631,7 @@ func TestDelegateTruncatesLongDirectoryDefaultName(t *testing.T) {
 	backend := &fakeSpawnBackend{}
 	_, sourceSessionID, _ := setupDelegationSource(t, d, backend)
 	consumeDelegatedPrompt(t, backend)
-	targetDir := filepath.Join(t.TempDir(), "a-very-long-directory-name-indeed")
+	targetDir := filepath.Join(t.TempDir(), "a-very-long-directory-name-indeed-longer-than-the-cap")
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		t.Fatalf("mkdir target: %v", err)
 	}
@@ -1646,8 +1646,8 @@ func TestDelegateTruncatesLongDirectoryDefaultName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("delegate() error = %v", err)
 	}
-	wantName := "a-very-long-dire"
-	if len([]rune(wantName)) > maxDelegationNameRunes {
+	wantName := "a-very-long-directory-name-indeed-longer-than-th"
+	if len([]rune(wantName)) > maxSessionNameRunes {
 		t.Fatalf("test setup bug: wantName %q exceeds max", wantName)
 	}
 	workspace := d.store.GetWorkspace(result.WorkspaceID)

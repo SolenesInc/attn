@@ -2,31 +2,44 @@ package daemon
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
 
 func (d *Daemon) handleRenameSession(client *wsClient, msg *protocol.RenameSessionMessage) {
+	d.sendRenameResult(client, protocol.CmdRenameSession, strings.TrimSpace(msg.SessionID), d.renameSession(msg))
+}
+
+func (d *Daemon) handleRenameSessionConn(conn net.Conn, msg *protocol.RenameSessionMessage) {
+	if err := d.renameSession(msg); err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	d.sendOK(conn)
+}
+
+func (d *Daemon) renameSession(msg *protocol.RenameSessionMessage) error {
 	sessionID := strings.TrimSpace(msg.SessionID)
 	label := strings.TrimSpace(msg.Label)
 	if sessionID == "" {
-		d.sendRenameResult(client, protocol.CmdRenameSession, sessionID, fmt.Errorf("missing session_id"))
-		return
+		return fmt.Errorf("missing session_id")
 	}
 	if label == "" {
-		d.sendRenameResult(client, protocol.CmdRenameSession, sessionID, fmt.Errorf("name cannot be empty"))
-		return
+		return fmt.Errorf("name cannot be empty")
+	}
+	if n := len([]rune(label)); n > maxSessionNameRunes {
+		return fmt.Errorf("name %q is %d characters, over the %d-character limit", label, n, maxSessionNameRunes)
 	}
 	session := d.store.Get(sessionID)
 	if session == nil {
-		d.sendRenameResult(client, protocol.CmdRenameSession, sessionID, fmt.Errorf("session not found: %s", sessionID))
-		return
+		return fmt.Errorf("session not found: %s", sessionID)
 	}
 	d.store.UpdateSessionLabel(sessionID, label)
 	session.Label = label
 	d.publishFact(FactSessionRenamed, sessionID, nil)
-	d.sendRenameResult(client, protocol.CmdRenameSession, sessionID, nil)
+	return nil
 }
 
 func (d *Daemon) handleRenameWorkspace(client *wsClient, msg *protocol.RenameWorkspaceMessage) {

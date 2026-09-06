@@ -2,7 +2,9 @@ package daemon
 
 import (
 	"encoding/json"
+	"net"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -143,5 +145,42 @@ func TestDaemon_HandleRenameSession_RejectsEmptyName(t *testing.T) {
 	}
 	if got := d.store.Get("s1"); got == nil || got.Label != "original" {
 		t.Fatalf("label after rejected rename = %+v, want original", got)
+	}
+}
+
+func TestRenameSessionOverTheUnixSocketAppliesTheNameCap(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	dir := t.TempDir()
+	addTestWorkspace(d, "workspace-s1", dir)
+	d.store.Add(&protocol.Session{ID: "s1", Label: "original", Agent: protocol.SessionAgentClaude, Directory: dir, WorkspaceID: "workspace-s1"})
+
+	server, client := net.Pipe()
+	t.Cleanup(func() { _ = server.Close(); _ = client.Close() })
+	responses := make(chan protocol.Response, 2)
+	go func() {
+		dec := json.NewDecoder(client)
+		for range 2 {
+			var resp protocol.Response
+			if err := dec.Decode(&resp); err != nil {
+				return
+			}
+			responses <- resp
+		}
+	}()
+
+	d.handleRenameSessionConn(server, &protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: "s1", Label: strings.Repeat("x", 49)})
+	if resp := <-responses; resp.Ok || !strings.Contains(protocol.Deref(resp.Error), "over the 48-character limit") {
+		t.Fatalf("over-cap rename response = %+v, want a refusal naming the limit", resp)
+	}
+	if got := d.store.Get("s1"); got.Label != "original" {
+		t.Fatalf("label after refused rename = %q, want original", got.Label)
+	}
+
+	d.handleRenameSessionConn(server, &protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: "s1", Label: "  review store tripwires  "})
+	if resp := <-responses; !resp.Ok {
+		t.Fatalf("rename response = %+v, want ok", resp)
+	}
+	if got := d.store.Get("s1"); got.Label != "review store tripwires" {
+		t.Fatalf("label after rename = %q, want the trimmed name", got.Label)
 	}
 }

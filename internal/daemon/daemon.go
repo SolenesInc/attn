@@ -2588,6 +2588,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSessionShow(conn, msg.(*protocol.SessionShowMessage))
 	case protocol.CmdSessionReopen: // wire: session_reopen
 		d.handleSessionReopen(conn, msg.(*protocol.SessionReopenMessage))
+	case protocol.CmdRenameSession: // wire: rename_session
+		d.handleRenameSessionConn(conn, msg.(*protocol.RenameSessionMessage))
 	case protocol.CmdStateExplain: // wire: state_explain
 		d.handleStateExplain(conn, msg.(*protocol.StateExplainMessage))
 	case protocol.CmdAgentPeek: // wire: agent_peek

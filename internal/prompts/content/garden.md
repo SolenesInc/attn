@@ -54,4 +54,6 @@ When attn sends an update notification, run the suggested command to read it. Re
 
 Use attn agent msg for attn-managed sessions; keep Claude's SendMessage for follow-ups to the native subagents this session spawned.
 
+`attn session rename "<a few words>" [--session <id>]` renames a session, yours by default, when its main work drifts from the name it started with.
+
 `attn seed --help` has every flag. `attn seed guide` has how to write a body worth handing to somebody else.

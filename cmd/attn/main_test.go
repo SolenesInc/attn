@@ -1086,3 +1086,27 @@ func TestParseJournalAppendArgsSessionDefaultsToEnv(t *testing.T) {
 		t.Fatalf("sessionID = %q, want env-session", parsed.sessionID)
 	}
 }
+
+func TestParseSessionRenameArgs(t *testing.T) {
+	got, err := parseSessionRenameArgs([]string{"pi resume support"}, "sess-own")
+	if err != nil || got.sessionID != "sess-own" || got.name != "pi resume support" {
+		t.Fatalf("own session = %+v, %v; want sess-own and the name", got, err)
+	}
+	got, err = parseSessionRenameArgs([]string{"--session", "sess-2", "  review store tripwires "}, "sess-own")
+	if err != nil || got.sessionID != "sess-2" || got.name != "review store tripwires" {
+		t.Fatalf("explicit session = %+v, %v", got, err)
+	}
+	got, err = parseSessionRenameArgs([]string{"pi resume support", "--session", "sess-3"}, "sess-own")
+	if err != nil || got.sessionID != "sess-3" {
+		t.Fatalf("flag after the name = %+v, %v; want sess-3", got, err)
+	}
+	if _, err := parseSessionRenameArgs([]string{"a", "b"}, "sess-own"); err == nil {
+		t.Fatal("two positional words must be refused, so an unquoted name fails loudly")
+	}
+	if _, err := parseSessionRenameArgs([]string{"name"}, ""); err == nil || !strings.Contains(err.Error(), "--session") {
+		t.Fatalf("no session anywhere = %v, want an error naming --session", err)
+	}
+	if _, err := parseSessionRenameArgs([]string{"   "}, "sess-own"); err == nil {
+		t.Fatal("a blank name must be refused")
+	}
+}
