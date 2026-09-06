@@ -8162,6 +8162,13 @@ type Session struct {
 	// Directory corresponds to the JSON schema field "directory".
 	Directory string `json:"directory"`
 
+	// DispatcherMember corresponds to the JSON schema field "dispatcher_member".
+	DispatcherMember *string `json:"dispatcher_member,omitempty,omitzero"`
+
+	// DispatcherSessionID corresponds to the JSON schema field
+	// "dispatcher_session_id".
+	DispatcherSessionID *string `json:"dispatcher_session_id,omitempty,omitzero"`
+
 	// EndpointID corresponds to the JSON schema field "endpoint_id".
 	EndpointID *string `json:"endpoint_id,omitempty,omitzero"`
 

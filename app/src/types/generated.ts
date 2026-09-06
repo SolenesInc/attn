@@ -2307,6 +2307,8 @@ export interface SessionObject {
     crew_member?:               string;
     delegated_from_chief?:      boolean;
     directory:                  string;
+    dispatcher_member?:         string;
+    dispatcher_session_id?:     string;
     endpoint_id?:               string;
     id:                         string;
     is_worktree?:               boolean;
@@ -8338,6 +8340,8 @@ export interface Session {
     crew_member?:               string;
     delegated_from_chief?:      boolean;
     directory:                  string;
+    dispatcher_member?:         string;
+    dispatcher_session_id?:     string;
     endpoint_id?:               string;
     id:                         string;
     is_worktree?:               boolean;
@@ -16986,6 +16990,8 @@ const typeMap: any = {
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
         { json: "delegated_from_chief", js: "delegated_from_chief", typ: u(undefined, true) },
         { json: "directory", js: "directory", typ: "" },
+        { json: "dispatcher_member", js: "dispatcher_member", typ: u(undefined, "") },
+        { json: "dispatcher_session_id", js: "dispatcher_session_id", typ: u(undefined, "") },
         { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "is_worktree", js: "is_worktree", typ: u(undefined, true) },
@@ -20846,6 +20852,8 @@ const typeMap: any = {
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
         { json: "delegated_from_chief", js: "delegated_from_chief", typ: u(undefined, true) },
         { json: "directory", js: "directory", typ: "" },
+        { json: "dispatcher_member", js: "dispatcher_member", typ: u(undefined, "") },
+        { json: "dispatcher_session_id", js: "dispatcher_session_id", typ: u(undefined, "") },
         { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "is_worktree", js: "is_worktree", typ: u(undefined, true) },

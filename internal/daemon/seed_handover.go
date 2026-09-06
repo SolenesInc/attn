@@ -342,6 +342,7 @@ func (d *Daemon) handoverDispatchCommits(
 	newDispatch.Crown = seed.ID
 	newDispatch.SupersededBy = ""
 	newDispatch.DispatcherSession = strings.TrimSpace(msg.SourceSessionID)
+	newDispatch.DispatcherMember = d.crewMembersBySession()[newDispatch.DispatcherSession]
 	newDispatch.FromChief = fromChief
 	newDispatch.OperationID = operationID
 	if newDispatch.Cwd == "" {

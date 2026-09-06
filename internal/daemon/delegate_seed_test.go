@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"encoding/json"
 	"io"
 	"net"
 	"os"
@@ -631,5 +632,32 @@ func TestDelegationFromADelegateNestsItsSeedUnderTheCallers(t *testing.T) {
 	}
 	if nestedUnder != firstSeedID {
 		t.Fatalf("the delegate's delegation nests under %q, want its caller's seed %q", nestedUnder, firstSeedID)
+	}
+
+	wire, err := json.Marshal([]protocol.Session{
+		*d.sessionForBroadcast(d.store.Get(first.SessionID)),
+		*d.sessionForBroadcast(d.store.Get(second.SessionID)),
+	})
+	if err != nil {
+		t.Fatalf("encode broadcast sessions: %v", err)
+	}
+	var roundTripped []protocol.Session
+	if err := json.Unmarshal(wire, &roundTripped); err != nil {
+		t.Fatalf("decode broadcast sessions: %v", err)
+	}
+	if len(roundTripped) != 2 {
+		t.Fatalf("round-tripped sessions = %d, want 2", len(roundTripped))
+	}
+	if got := protocol.Deref(roundTripped[0].SeedID); got != firstSeedID {
+		t.Fatalf("first delegate seed_id = %q, want %q", got, firstSeedID)
+	}
+	if got := protocol.Deref(roundTripped[0].DispatcherSessionID); got != sourceSessionID {
+		t.Fatalf("first delegate dispatcher_session_id = %q, want %q", got, sourceSessionID)
+	}
+	if got := protocol.Deref(roundTripped[1].SeedID); got != secondSeedID {
+		t.Fatalf("second delegate seed_id = %q, want %q", got, secondSeedID)
+	}
+	if got := protocol.Deref(roundTripped[1].DispatcherSessionID); got != first.SessionID {
+		t.Fatalf("second delegate dispatcher_session_id = %q, want %q", got, first.SessionID)
 	}
 }

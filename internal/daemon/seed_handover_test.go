@@ -26,6 +26,12 @@ func handoverRequest(seed garden.Seed, docRev int64, requestID, sourceSessionID,
 
 func TestSeedHandoverReusesTheExactDirectoryAndConvergesOnRetry(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
+	writeCrewHomes(t, d.dataRoot)
+	d.ensureCrewCollections()
+	d.importCrewHomes()
+	if _, err := d.claimCrewBinding("alder", sourceSessionID); err != nil {
+		t.Fatalf("bind alder: %v", err)
+	}
 	consumeDelegatedPrompt(t, backend)
 	oldSessionID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
 	oldDispatch, ok := d.gardenDispatch(oldSessionID)
@@ -88,6 +94,10 @@ func TestSeedHandoverReusesTheExactDirectoryAndConvergesOnRetry(t *testing.T) {
 	}
 	if _, active := d.gardenDispatchCrown(oldSessionID); active {
 		t.Fatal("the previous conversation still claims the seed as its dispatch crown")
+	}
+	newDispatch, ok := d.gardenDispatch(done.SessionID)
+	if !ok || newDispatch.DispatcherSession != sourceSessionID || newDispatch.DispatcherMember != "alder" {
+		t.Fatalf("new dispatch did not record its dispatcher Tender: %+v, found=%v", newDispatch, ok)
 	}
 	notes, _, err := d.readNotes(seedID, 10)
 	if err != nil {
