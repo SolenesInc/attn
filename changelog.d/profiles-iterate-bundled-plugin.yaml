@@ -1,0 +1,3 @@
+kind: internal
+area: plugins
+change: docs/profiles.md explains iterating on a bundled plugin without a full install.
