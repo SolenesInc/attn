@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Names the machine a job actually landed on. The `ubuntu-24.04` label resolves
-# to Blacksmith or a GitHub-hosted VM per job, and the two differ ~2.4x on
-# compile-bound steps, so a timing receipt is unreadable without this line.
+# `ubuntu-24.04` is Blacksmith or GitHub-hosted per job; they differ ~2.4x on
+# compile-bound steps, so a timing receipt is unreadable without the class.
 
 host=github-hosted
 if [[ -f /etc/profile.d/blacksmith.sh || -n "${BLACKSMITH_ENV:-}" ]]; then

@@ -318,8 +318,6 @@ INSTALL_APP_TREE = PROFILE="$(PROFILE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" WORKTREE=
 install: build-app
 	@$(INSTALL_APP_TREE)
 
-# Install a tree a previous build already staged. The CI acceptance shards
-# download one build's tree instead of each running the toolchain themselves.
 install-staged:
 	@$(INSTALL_APP_TREE)
 

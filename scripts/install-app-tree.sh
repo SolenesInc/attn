@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Copies an already-staged app tree into PROFILE's install location and ensures
-# its daemon. `make install` stages the tree first; `make install-staged` takes
-# one another job built, so a CI shard installs without the toolchain.
-
 profile="${PROFILE:-}"
 attn="${ATTN_BIN:?ATTN_BIN must name the attn binary that resolves profile paths}"
 daemon_unset="${PROFILE_DAEMON_UNSET:?PROFILE_DAEMON_UNSET must carry the env -u flags}"

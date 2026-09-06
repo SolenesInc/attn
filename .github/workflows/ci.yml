@@ -624,8 +624,7 @@ jobs:
     permissions:
       contents: read
     runs-on: ubuntu-24.04
-    # 202s on run 34060183460's GitHub-hosted runner, plus the tar and upload.
-    # 30m leaves room for a cold Rust cache on the slower runner class.
+    # 202s on run 34060183460; 30m leaves room for a cold Rust cache.
     timeout-minutes: 30
     env:
       ATTN_PROFILE: app-acceptance
@@ -688,7 +687,6 @@ jobs:
         with:
           include-wasm: 'true'
 
-      # The build below: 399s cold, 143s warm incl. a 10s restore (run 33975425685).
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
@@ -710,8 +708,7 @@ jobs:
             ~/go/pkg/mod
           key: ${{ steps.go-cache.outputs.cache-primary-key }}
 
-      # tar, not the artifact zip: upload-artifact drops the executable bit, and
-      # every shard installs and launches these binaries.
+      # tar: upload-artifact drops the executable bit these binaries need.
       - name: Pack the app tree
         run: |
           app_name="$(./attn profile resolve --profile "$ATTN_PROFILE" --field appName)"
@@ -727,7 +724,6 @@ jobs:
           name: app-acceptance-tree-${{ github.run_attempt }}
           path: ${{ runner.temp }}/app-tree.tar.gz
           retention-days: 1
-          # Already gzipped; zipping it again buys nothing and costs a minute.
           compression-level: 0
 
   app-acceptance-shard:
@@ -742,11 +738,9 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4]
-    # Each hosted job owns its VM and display; only scenarios within a shard run
-    # serially. A shared concurrency group would cancel unrelated waiting checks.
+    # No concurrency group: a shared one cancels unrelated waiting checks.
     runs-on: ubuntu-24.04
-    # The heaviest of four balanced shards was 190.5s of the 761.5s matrix in run
-    # 34060183460. 40m leaves room for the slower runner class and a hung scenario.
+    # Heaviest shard 190.5s of a 761.5s matrix (run 34060183460); 40m is slack.
     timeout-minutes: 40
     env:
       ATTN_PROFILE: app-acceptance
@@ -786,8 +780,7 @@ jobs:
           name: app-acceptance-tree-${{ github.run_attempt }}
           path: ${{ runner.temp }}
 
-      # attn preflight reads `go env` and fails a cache directory that does not
-      # exist; no shard builds Go, and pi-security runs preflight (run 34065208073).
+      # pi-security runs preflight, which fails a GOCACHE that does not exist yet.
       - name: Create the Go caches preflight requires
         run: mkdir -p "$(go env GOCACHE)" "$(go env GOMODCACHE)"
 
@@ -841,8 +834,6 @@ jobs:
             ${{ runner.temp }}/attn-real-app-harness/**/*.json
             ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
 
-      # The aggregate is the gate; it reads this and nothing else, so a shard
-      # that dies before writing one is a missing shard there, not a silent pass.
       - name: Upload shard result
         if: always()
         uses: actions/upload-artifact@v4
@@ -870,8 +861,7 @@ jobs:
   app-acceptance:
     name: App acceptance
     needs: [changes, app-acceptance-build, app-acceptance-shard]
-    # !cancelled() so a red shard still reaches the aggregate: the digest names
-    # which scenario failed, and a missing shard reds this job by name.
+    # !cancelled() so a red shard still reaches the aggregate instead of skipping.
     if: >-
       !cancelled() &&
       (needs.changes.outputs.force_all == 'true' || needs.changes.outputs.harness == 'true')

@@ -57,8 +57,8 @@ function main() {
       + `${(shard.results || []).length} scenarios, ${seconds.toFixed(1)}s (${shard.source})`);
   }
 
-  // The shard column also keeps ci-flake-report.sh honest: its serial-matrix
-  // rule reads the shard jobs' own tables, and would count this one twice.
+  // The s<N> prefix breaks ci-flake-report.sh's serial-matrix rule on purpose:
+  // it harvests the shard jobs' tables, and would count these failures twice.
   const rows = formatResultTable(aggregate.results.map((result) => ({
     ...result,
     durationMs: result.durationMs ?? 0,

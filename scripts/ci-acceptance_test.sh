@@ -43,8 +43,7 @@ for contract in \
   fi
 done
 
-# Every scenario has to reach exactly one shard. Four numbers say how many
-# shards there are, and a disagreement drops or duplicates scenarios silently.
+# Four places name the shard count; a disagreement silently drops scenarios.
 shard_list_count="$(sed -nE 's/^        shard: \[(.*)\]$/\1/p' <<<"$app_acceptance_shard_job" | tr ',' '\n' | grep -c '[0-9]')"
 shard_name_count="$(sed -nE 's|^    name: App acceptance shard \$\{\{ matrix.shard \}\}/([0-9]+)$|\1|p' <<<"$app_acceptance_shard_job")"
 shard_run_count="$(sed -nE 's|.*--shard \$\{\{ matrix.shard \}\}/([0-9]+).*|\1|p' <<<"$app_acceptance_shard_job")"
@@ -76,8 +75,6 @@ for job in "$app_acceptance_build_job" "$app_acceptance_shard_job"; do
     exit 1
   fi
 done
-# The aggregate carries the same policy plus !cancelled(), so a red shard still
-# reaches it instead of skipping into a gate that accepts skipped.
 for contract in \
   '!cancelled() &&' \
   "(needs.changes.outputs.force_all == 'true' || needs.changes.outputs.harness == 'true')"; do

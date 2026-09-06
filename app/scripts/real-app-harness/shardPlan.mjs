@@ -23,8 +23,8 @@ export function parseShardSelector(raw) {
   return { index, count };
 }
 
-// Longest-processing-time bin packing. Scenarios are indivisible, so the
-// slowest one is the floor on any shard: 91.6s of a 761.5s matrix (run 34060183460).
+// Scenarios are indivisible, so the slowest is the floor on any shard:
+// 91.6s of a 761.5s matrix (run 34060183460), past which more shards stop paying.
 export function planShards(scenarios, durationSeconds, shardCount, platform = process.platform, env = process.env) {
   if (!Number.isInteger(shardCount) || shardCount < 1) {
     throw new Error(`Invalid shard count: ${shardCount} (expected a positive integer)`);
@@ -84,8 +84,6 @@ function describeShardCoverage(shardResults, shardCount) {
   return problems;
 }
 
-// The aggregate is the gate, so it re-derives what should have run instead of
-// trusting the shards: a scenario silently dropped by a bad plan reds it.
 export function aggregateShards({ shardResults, expectedIds, shardCount }) {
   const problems = describeShardCoverage(shardResults, shardCount);
   const byId = new Map();
