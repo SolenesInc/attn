@@ -10,6 +10,8 @@ import {
   parseCommonArgs,
   printCommonHelp,
   pressShortcutKeys,
+  queueDaemonSettingRestore,
+  relaunchAppAndConnect,
   restoreHarnessSettings,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -73,6 +75,26 @@ async function waitForSessions(client, predicate, description, timeoutMs = 15_00
   throw new Error(`Timed out waiting for ${description}. Last state:\n${JSON.stringify(last, null, 2)}`);
 }
 
+const SESSIONS_FILTERS_SETTING = 'sessions.filters';
+
+async function openTheSurface(client, driver) {
+  await pressShortcutKeys(client, driver, 'sessions.open');
+  return waitForSessions(client, (s) => s.open, 'the surface to open');
+}
+
+async function closeTheSurface(client) {
+  await client.request('dom_key', { selector: '.sessions-panel', key: 'Escape' });
+  return waitForSessions(client, (s) => !s.open, 'the surface to close');
+}
+
+function assertRemembered(runner, state, where) {
+  runner.assert(state.scope === 'Closed', `${where} holds the Closed scope`, { state });
+  runner.assert(state.range === '7d', `${where} holds the 7 day range`, { state });
+  runner.assert(state.repository !== '', `${where} holds the repository filter`, { state });
+  runner.assert(state.rows.every((row) => row.state === 'closed'),
+    `${where} is already queried with them, with no live row from the defaults`, { rows: state.rows });
+}
+
 function rowFor(state, sessionId) {
   return state.rows.find((row) => row.id === sessionId) ?? null;
 }
@@ -96,7 +118,7 @@ async function main() {
     prefix: 'sessions-surface',
     metadata: {
       agent: 'claude',
-      focus: 'the Sessions surface lists live and closed sessions, filters them, and updates a row when a session closes',
+      focus: 'the Sessions surface lists live and closed sessions, filters them, reopens on the filters it was left with, and updates a row when a session closes',
       profile,
     },
   });
@@ -116,6 +138,9 @@ async function main() {
       await client.quitApp();
       await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) });
       await launchFreshAppAndConnect(client, observer);
+      // A previous run's filters would decide what this one opens on.
+      queueDaemonSettingRestore(observer, SESSIONS_FILTERS_SETTING);
+      await client.request('set_setting', { key: SESSIONS_FILTERS_SETTING, value: '' });
     });
 
     await runner.step('create_sessions_in_two_repositories', async () => {
@@ -253,6 +278,35 @@ async function main() {
       await client.request('sessions_set_filter', { range: 'any' });
       await waitForSessions(client, (s) => s.rows.length >= 3, 'the range to be lifted');
       await hold();
+    });
+
+    await runner.step('the_surface_reopens_where_it_was_left', async () => {
+      await client.request('sessions_set_filter', { scope: 'Closed', range: '7d', repository: repo });
+      const picked = await waitForSessions(client, (s) => s.scope === 'Closed' && s.range === '7d',
+        'the filters this run wants remembered');
+      runner.writeJson('filters-picked.json', picked);
+      await hold();
+
+      await closeTheSurface(client);
+      const reopened = await openTheSurface(client, driver);
+      assertRemembered(runner, reopened, 'a reopened surface');
+      runner.writeJson('filters-after-reopen.json', reopened);
+      await hold();
+
+      const stored = observer.getSetting(SESSIONS_FILTERS_SETTING) || '';
+      runner.assert(stored.includes('"scope":"closed"') && stored.includes('"range":"7d"'),
+        'the daemon holds the filters, not the browser', { stored });
+      runner.writeText('filters-setting.json', stored);
+
+      await closeTheSurface(client);
+      await relaunchAppAndConnect(client, observer);
+      const afterRestart = await openTheSurface(client, driver);
+      assertRemembered(runner, afterRestart, 'the surface after an app restart');
+      runner.writeJson('filters-after-restart.json', afterRestart);
+      await hold();
+
+      await client.request('sessions_set_filter', { scope: 'All', range: 'any', repository: '' });
+      await waitForSessions(client, (s) => s.rows.length >= 3, 'the filters to be lifted');
     });
 
     await runner.step('the_cli_and_the_surface_agree', async () => {

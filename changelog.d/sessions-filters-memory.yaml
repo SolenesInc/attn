@@ -1,0 +1,4 @@
+kind: added
+area: sessions
+change: The Sessions list reopens with the scope, date range, workspace, and repository it was left on.
+notes: The daemon holds the filters, so every client on that daemon and every app restart sees the same list.

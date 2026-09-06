@@ -6,6 +6,12 @@ import { useEscapeStack } from '../hooks/useEscapeStack';
 import { useSessionLedger } from '../hooks/useSessionLedger';
 import type { SessionLedgerFilters } from '../hooks/useSessionLedger';
 import {
+  SESSION_FILTERS_SETTING_KEY,
+  parseSessionFilters,
+  serializeSessionFilters,
+} from '../hooks/sessionFiltersSetting';
+import { useSettings } from '../contexts/SettingsContext';
+import {
   SESSION_RANGE_CHOICES,
   closedBySomeone,
   isClosed,
@@ -63,7 +69,19 @@ function OpenSessionsPanel({
   closeNotice,
   now = systemNow,
 }: SessionsPanelProps) {
-  const ledger = useSessionLedger({ enabled: true, list: listSessions, now });
+  const { settings, setSetting } = useSettings();
+  // Read at open, never again: a settings echo must not move filters under the user.
+  const [restoredFilters] = useState(() => parseSessionFilters(settings[SESSION_FILTERS_SETTING_KEY]));
+  const rememberFilters = useCallback((next: SessionLedgerFilters) => {
+    setSetting(SESSION_FILTERS_SETTING_KEY, serializeSessionFilters(next));
+  }, [setSetting]);
+  const ledger = useSessionLedger({
+    enabled: true,
+    list: listSessions,
+    now,
+    initialFilters: restoredFilters,
+    onFiltersChange: rememberFilters,
+  });
   const { filters, setFilters, entries, verdicts } = ledger;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Fires against the verdict that lands, never the stale one that was on screen.

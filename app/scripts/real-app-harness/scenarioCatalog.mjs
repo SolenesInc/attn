@@ -77,7 +77,7 @@ export const scenarioCatalog = [
   {
     id: 'sessions-surface',
     runnerId: 'SESSIONS-SURFACE',
-    label: 'The Sessions surface lists, filters and updates live and closed sessions',
+    label: 'The Sessions surface lists, filters, remembers its filters, and updates live and closed sessions',
     command: ['pnpm', 'run', 'real-app:scenario-sessions-surface'],
   },
   {
