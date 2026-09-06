@@ -12,7 +12,12 @@ func (d *Daemon) handleRenameSession(client *wsClient, msg *protocol.RenameSessi
 	d.sendRenameResult(client, protocol.CmdRenameSession, strings.TrimSpace(msg.SessionID), d.renameSession(msg))
 }
 
+// A hub forwards the rename to the daemon that owns the session; the owner's
+// ws dispatch handles rename_session and its snapshot brings the name back.
 func (d *Daemon) handleRenameSessionConn(conn net.Conn, msg *protocol.RenameSessionMessage) {
+	if d.forwardedToSessionOwner(conn, strings.TrimSpace(msg.SessionID), msg) {
+		return
+	}
 	if err := d.renameSession(msg); err != nil {
 		d.sendError(conn, err.Error())
 		return

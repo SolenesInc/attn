@@ -168,7 +168,7 @@ func (d *Daemon) forwardedToSessionOwner(conn net.Conn, sessionID string, msg an
 	}
 	payload, err := json.Marshal(msg)
 	if err != nil {
-		d.sendError(conn, fmt.Sprintf("forward pull request command for session %s: %v", sessionID, err))
+		d.sendError(conn, fmt.Sprintf("forward command for session %s: %v", sessionID, err))
 		return true
 	}
 	if err := d.hubManager.ForwardEndpointCommand(context.Background(), endpointID, payload); err != nil {
