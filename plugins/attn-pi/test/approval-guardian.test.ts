@@ -3,7 +3,9 @@ import {
   backoffMs, circuitBreakerWarning, denialText, GuardianReviewer, maxAttempts, parseAssessment,
   reviewTimeoutMs, type GuardianUsageEntry,
 } from "../approval/guardian";
-import { actionJson, buildGuardianPrompt, GuardianPromptError, maxActionBytes } from "../approval/guardian-prompt";
+import {
+  actionJson, buildGuardianPrompt, guardianFollowupReminder, GuardianPromptError, maxActionBytes,
+} from "../approval/guardian-prompt";
 import { guardianRejectionInstructions } from "../approval/instructions";
 import {
   manualApprovalDeveloperPrefix, maxMessageEntryTokens, maxToolEntryTokens, renderTranscript,
@@ -298,4 +300,70 @@ test("a failed review is not counted by the breaker", async () => {
   await it.review();
   await it.review();
   expect(it.notices.filter((notice) => notice.level === "abort")).toHaveLength(0);
+});
+
+type FakeProvider = {
+  streamSimple: (
+    model: unknown,
+    context: { messages: { content: { text?: string }[] }[] },
+    options: { signal?: AbortSignal },
+  ) => { result: () => Promise<unknown> };
+};
+
+function reviewerWith(provider: FakeProvider, now: () => number, onKey: () => void = () => {}): GuardianReviewer {
+  return new GuardianReviewer({
+    registry: {
+      find: () => undefined,
+      getProvider: () => provider as never,
+      getApiKeyAndHeaders: async () => { onKey(); return { ok: true, apiKey: "test-key" }; },
+      getProviderAuth: async () => undefined,
+    },
+    model: () => ({ provider: "anthropic", id: "claude-test", reasoning: true } as never),
+    systemPrompt: () => "policy",
+    transcript: () => [entry("user", "do it")],
+    sessionId: () => "session-1",
+    runTool: async () => ({ output: "ok", isError: false }),
+    onUsage: () => {},
+    notify: () => {},
+    now,
+  });
+}
+
+test("a model call that never returns is stopped by the review deadline", async () => {
+  let aborted = false;
+  let clock = 0;
+  const provider: FakeProvider = {
+    streamSimple: (_model, _context, options) => ({
+      result: () => new Promise((resolve) => {
+        options.signal?.addEventListener("abort", () => {
+          aborted = true;
+          resolve({ content: [], stopReason: "aborted" });
+        }, { once: true });
+      }),
+    }),
+  };
+  // The credential lookup is the last await before the model call, so the clock
+  // lands one millisecond short of the deadline and the bound signal fires.
+  const reviewer = reviewerWith(provider, () => clock, () => { clock = reviewTimeoutMs - 1; });
+  expect(await reviewer.review(command, { cwd: "/w" })).toEqual({ type: "timed_out" });
+  expect(aborted).toBe(true);
+});
+
+test("the follow-up reminder opens the first delta review and never repeats", async () => {
+  const sent: string[] = [];
+  const provider: FakeProvider = {
+    streamSimple: (_model, context) => ({
+      result: async () => {
+        const last = context.messages.at(-1)!;
+        sent.push(last.content.map((part) => part.text ?? "").join(""));
+        return { content: [{ type: "text", text: '{"outcome":"allow"}' }], stopReason: "stop" };
+      },
+    }),
+  };
+  const reviewer = reviewerWith(provider, () => 0);
+  for (let round = 0; round < 3; round += 1) await reviewer.review(command, { cwd: "/w" });
+  expect(sent[0]!.startsWith(guardianFollowupReminder)).toBe(false);
+  expect(sent[1]!.startsWith(`${guardianFollowupReminder}\n\n`)).toBe(true);
+  expect(sent[2]!.startsWith(guardianFollowupReminder)).toBe(false);
+  expect(sent[2]!).toContain("TRANSCRIPT DELTA START");
 });
