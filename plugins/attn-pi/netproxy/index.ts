@@ -14,7 +14,7 @@ import {
   unscopedIpLiteral,
 } from "./policy";
 import { serveSocks5 } from "./socks5";
-import { ConnectionClosedError, SocketReader, connectTcp } from "./stream";
+import { ConnectionClosedError, SocketReader, connectAny } from "./stream";
 import type {
   Decider,
   DenialReason,
@@ -183,8 +183,11 @@ export class NetworkProxy implements ProxyGate {
     return { allowed: true };
   }
 
+  // Keyed by credentials this proxy issued, never by what the client sent: otherwise a
+  // client mints a new ledger bucket per guess and the map grows without limit.
   recordDenial(request: NetworkRequest, reason: DenialReason): void {
-    const entries = this.denialLedger.get(request.credentials) ?? [];
+    const key = this.credentials.has(request.credentials) ? request.credentials : "";
+    const entries = this.denialLedger.get(key) ?? [];
     entries.push({
       credentials: request.credentials,
       host: request.host,
@@ -194,7 +197,7 @@ export class NetworkProxy implements ProxyGate {
       reason,
     });
     if (entries.length > maxDenialsPerCredentials) entries.splice(0, entries.length - maxDenialsPerCredentials);
-    this.denialLedger.set(request.credentials, entries);
+    this.denialLedger.set(key, entries);
   }
 
   /** Connects to the vetted host, re-checking the addresses it actually resolves to.
@@ -207,13 +210,13 @@ export class NetworkProxy implements ProxyGate {
     } catch (error) {
       return { outcome: "unreachable", error };
     }
-    const target = addresses.find((address) => this.allowsTarget(normalized, address));
-    if (target === undefined) {
+    const targets = addresses.filter((address) => this.allowsTarget(normalized, address));
+    if (targets.length === 0) {
       this.recordDenial(request, "not_allowed_local");
       return { outcome: "denied", reason: "not_allowed_local" };
     }
     try {
-      return { outcome: "connected", socket: await connectTcp(target, request.port) };
+      return { outcome: "connected", socket: await connectAny(targets, request.port) };
     } catch (error) {
       return { outcome: "unreachable", error };
     }

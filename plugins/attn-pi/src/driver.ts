@@ -209,16 +209,21 @@ export class PiDriver {
 
   async sessionClosed(params: SessionClosedParams): Promise<{ ok: true }> {
     const run = this.runsBySessionID.get(params.session_id);
-    if (run) {
+    // A close for a run this session has already replaced is late news; acting on it
+    // would revoke the successor's credentials out from under a live session.
+    if (run && run.runID === params.run_id) {
       this.markBacked(run);
       this.runsBySessionID.delete(params.session_id);
       this.runsByToken.delete(run.token);
-      if (run.proxyCredentials) {
-        this.runsByProxyCredentials.delete(run.proxyCredentials);
-        this.proxyState?.proxy.revokeCredentials(run.proxyCredentials);
-      }
+      this.forgetProxyCredentials(run);
     }
     return { ok: true };
+  }
+
+  private forgetProxyCredentials(run: RunState): void {
+    if (!run.proxyCredentials) return;
+    this.runsByProxyCredentials.delete(run.proxyCredentials);
+    this.proxyState?.proxy.revokeCredentials(run.proxyCredentials);
   }
 
   /** Shuts the profile's proxy down; the driver process owns it for as long as it runs. */
@@ -384,7 +389,9 @@ export class PiDriver {
     const previous = this.runsBySessionID.get(sessionID);
     if (previous) {
       this.runsByToken.delete(previous.token);
-      if (previous.proxyCredentials) this.runsByProxyCredentials.delete(previous.proxyCredentials);
+      // The replaced run's grants and credentials go with it: a relaunched session must
+      // not inherit what a reviewer allowed for the run before it.
+      this.forgetProxyCredentials(previous);
     }
     const run: RunState = { token: runID, proxyCredentials: randomUUID(), sessionID, runID, seq: 0, metadata };
     this.runsByToken.set(run.token, run);

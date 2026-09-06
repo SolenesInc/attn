@@ -299,6 +299,36 @@ describe("the driver hosts the proxy and decides through the relay", () => {
     ]);
   });
 
+  test("relaunching a session revokes the credentials and grants of the run it replaces", async () => {
+    const upstream = await startUpstream();
+    const { driver } = await buildDriver();
+    const first = await driver.spawn(spawnParams(openNetwork));
+    const stale = first.env?.ATTN_PI_PROXY_CREDENTIALS ?? "";
+    const address = first.env?.ATTN_PI_PROXY_ADDR ?? "";
+    driver.networkProxy()?.allowHost(stale, "127.0.0.1", "session");
+
+    const second = await driver.spawn(spawnParams(openNetwork, { run_id: "run-2" }));
+    const fresh = second.env?.ATTN_PI_PROXY_CREDENTIALS ?? "";
+
+    expect(fresh).not.toBe(stale);
+    expect(await proxyConnect(address, stale, "127.0.0.1", upstream)).toContain("407");
+    // The successor starts with no grants of its own, so its first call still asks.
+    expect(driver.networkProxy()?.evaluateHost(fresh, "127.0.0.1")).toBe("ask");
+  });
+
+  test("a late close for a replaced run leaves the successor's credentials alone", async () => {
+    const { driver } = await buildDriver();
+    await driver.spawn(spawnParams(openNetwork));
+    const second = await driver.spawn(spawnParams(openNetwork, { run_id: "run-2" }));
+    const fresh = second.env?.ATTN_PI_PROXY_CREDENTIALS ?? "";
+
+    // attn reports the first run's close after the relaunch already happened.
+    await driver.sessionClosed({ session_id: "session-1", run_id: "run-1", reason: "reloaded" });
+
+    expect(driver.networkProxy()?.evaluateHost(fresh, "example.com")).toBe("ask");
+    expect(driver.networkProxy()?.knowsCredentials(fresh)).toBe(true);
+  });
+
   test("a register that carries no auto_mode starts no proxy", async () => {
     const { driver } = await buildDriver({ initialize: true, registerResult: { ok: true, active_runs: [] } });
 

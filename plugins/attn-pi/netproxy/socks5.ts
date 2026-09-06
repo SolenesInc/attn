@@ -1,4 +1,5 @@
 import { isIPv4, type Socket } from "node:net";
+import { canonicalIpLiteral } from "./policy";
 import { SocketReader, pipeBothWays } from "./stream";
 import type { NetworkRequest, ProxyGate } from "./types";
 
@@ -110,7 +111,9 @@ async function readAddress(reader: SocketReader, type: number): Promise<string |
   const raw = await reader.take(16);
   const groups: string[] = [];
   for (let index = 0; index < 16; index += 2) groups.push(raw.readUInt16BE(index).toString(16));
-  return groups.join(":");
+  // The wire carries all eight groups; canonicalize so a deny rule written the short
+  // way still matches what SOCKS5 hands us.
+  return canonicalIpLiteral(groups.join(":")) ?? groups.join(":");
 }
 
 function writeReply(client: Socket, reply: number, address = "0.0.0.0", port = 0): void {

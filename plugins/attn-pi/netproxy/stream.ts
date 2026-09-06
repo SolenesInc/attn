@@ -16,7 +16,10 @@ export class SocketReader {
   private wake: (() => void) | undefined;
   private detached = false;
 
+  // One chunk per demand: a client can hold an authorized connection open for as long
+  // as a person takes to answer, and unread bytes must not pile up in this process.
   private readonly onData = (chunk: Buffer): void => {
+    this.socket.pause();
     this.buffer = Buffer.concat([this.buffer, chunk]);
     this.notify();
   };
@@ -33,21 +36,31 @@ export class SocketReader {
   };
 
   constructor(private readonly socket: Socket) {
+    socket.pause();
     socket.on("data", this.onData);
     socket.on("end", this.onEnd);
     socket.on("close", this.onEnd);
     socket.on("error", this.onError);
   }
 
+  /** Bytes read but not yet consumed. Bounded by one socket chunk between demands. */
+  get buffered(): number {
+    return this.buffer.length;
+  }
+
   /** Resolves once at least `count` bytes are buffered. */
   async need(count: number): Promise<void> {
-    while (this.buffer.length < count) {
-      if (this.failure) throw this.failure;
-      if (this.ended) throw new ConnectionClosedError();
-      await new Promise<void>((resolve) => {
-        this.wake = resolve;
-      });
-    }
+    while (this.buffer.length < count) await this.readMore();
+  }
+
+  /** Asks the socket for exactly one more chunk, then stops reading again. */
+  private async readMore(): Promise<void> {
+    if (this.failure) throw this.failure;
+    if (this.ended) throw new ConnectionClosedError();
+    this.socket.resume();
+    await new Promise<void>((resolve) => {
+      this.wake = resolve;
+    });
   }
 
   /** Resolves the first `count` buffered bytes without consuming them. */
@@ -76,11 +89,7 @@ export class SocketReader {
       if (this.buffer.length > limit) {
         throw new Error(`proxy request head exceeded ${limit} bytes before ${JSON.stringify(delimiter)}`);
       }
-      if (this.failure) throw this.failure;
-      if (this.ended) throw new ConnectionClosedError();
-      await new Promise<void>((resolve) => {
-        this.wake = resolve;
-      });
+      await this.readMore();
     }
   }
 
@@ -115,6 +124,27 @@ export function connectTcp(address: string, port: number): Promise<Socket> {
       resolve(socket);
     });
   });
+}
+
+/** Races every vetted address and keeps the first to connect, destroying the rest: a
+ * resolver can answer with addresses that are not routable from here. */
+export async function connectAny(addresses: string[], port: number): Promise<Socket> {
+  const attempts = addresses.map((address) => connectTcp(address, port));
+  let winner: Socket;
+  try {
+    winner = await Promise.any(attempts);
+  } catch (error) {
+    throw error instanceof AggregateError ? (error.errors[0] ?? error) : error;
+  }
+  for (const attempt of attempts) {
+    void attempt.then(
+      (socket) => {
+        if (socket !== winner) socket.destroy();
+      },
+      () => {},
+    );
+  }
+  return winner;
 }
 
 /** Joins two sockets and tears both down when either side finishes or fails. */
