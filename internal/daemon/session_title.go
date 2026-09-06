@@ -201,19 +201,11 @@ func (d *Daemon) sessionMayBeAutoTitled(session *protocol.Session) bool {
 
 // Wired onto d.sessionTitleExec in New(); test daemons leave it nil.
 func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
-	var sessionAgent string
-	if session != nil {
-		sessionAgent = string(session.Agent)
-	}
-	providerAgent := titleProviderAgent(sessionAgent)
+	providerAgent := titleProviderAgent(string(session.Agent))
 	if providerAgent == "" {
-		return "", fmt.Errorf("no title provider available for agent %q", sessionAgent)
+		return "", fmt.Errorf("no title provider available for agent %q", session.Agent)
 	}
-	model := sessionTitleModel(sessionAgent)
-	if model == "" {
-		model = sessionTitleModel(providerAgent)
-	}
-	return d.execSessionTitleHeadless(ctx, providerAgent, model, conversation)
+	return d.execSessionTitleHeadless(ctx, providerAgent, sessionTitleModel(providerAgent), conversation)
 }
 
 // A title is a cheap summary, so any headless-capable CLI will do: prefer the
@@ -359,18 +351,6 @@ func sessionTitleModel(agent string) string {
 			return v
 		}
 		return "claude-haiku-4.5"
-	// Plugin agents title through the fallback provider above; an override
-	// travels raw to that provider's CLI, so it must name one of its models.
-	case "pi":
-		if v := strings.TrimSpace(os.Getenv("ATTN_PI_TITLE_MODEL")); v != "" {
-			return v
-		}
-		return ""
-	case "nisse":
-		if v := strings.TrimSpace(os.Getenv("ATTN_NISSE_TITLE_MODEL")); v != "" {
-			return v
-		}
-		return ""
 	default:
 		return ""
 	}

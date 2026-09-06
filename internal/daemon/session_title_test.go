@@ -848,23 +848,6 @@ func TestTitleProviderAgent_PrefersSessionAgentThenFallsBack(t *testing.T) {
 	}
 }
 
-func TestSessionTitleModel_PluginOverrides(t *testing.T) {
-	if got := sessionTitleModel("pi"); got != "" {
-		t.Fatalf("sessionTitleModel(pi) = %q, want empty so the fallback default applies", got)
-	}
-	if got := sessionTitleModel("nisse"); got != "" {
-		t.Fatalf("sessionTitleModel(nisse) = %q, want empty so the fallback default applies", got)
-	}
-	t.Setenv("ATTN_PI_TITLE_MODEL", "pi-cheap")
-	if got := sessionTitleModel("pi"); got != "pi-cheap" {
-		t.Fatalf("sessionTitleModel(pi) = %q, want the override", got)
-	}
-	t.Setenv("ATTN_NISSE_TITLE_MODEL", "nisse-cheap")
-	if got := sessionTitleModel("nisse"); got != "nisse-cheap" {
-		t.Fatalf("sessionTitleModel(nisse) = %q, want the override", got)
-	}
-}
-
 func TestSpawnPipeline_InitialPromptTitlesAtSpawn(t *testing.T) {
 	d := newSessionTitleDaemon(t)
 	addTestWorkspace(d, "workspace-title", t.TempDir())
