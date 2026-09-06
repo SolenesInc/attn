@@ -365,8 +365,6 @@ async function main() {
     });
     await runner.step('assert_visible_provenance', async () => {
       await client.request('select_session', { sessionId: sessionID });
-      // The sidebar files automation sessions under a group keyed by definition
-      // id, collapsed until clicked, so the row is absent until it is expanded.
       const groupHeader = `[data-testid="sidebar-automation-header-${definitionID}"]`;
       const header = await poll(
         () => client.request('dom_text', { selector: groupHeader }).catch(() => null),
@@ -378,8 +376,6 @@ async function main() {
         header,
       );
       await client.request('dom_click', { selector: groupHeader });
-      // Reporting only `last=null` here says nothing about which of the two
-      // surfaces went blank, so the timeout carries the last state read.
       let lastUi = null;
       const sessionUi = await poll(async () => {
         lastUi = await client.request('get_session_ui_state', { sessionId: sessionID });
@@ -494,8 +490,6 @@ async function main() {
   } finally {
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
-    // An enabled review definition left behind answers every later refresh_prs
-    // in this profile, so a failed run would poison the next one.
     if (daemonEnv) {
       for (const id of [definitionID, secondaryDefinitionID]) {
         try { run(binary, ['automation', 'disable', id], daemonEnv); } catch {}

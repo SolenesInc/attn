@@ -19,8 +19,6 @@ const automation = {
   },
 };
 
-// The sidebar renders badge/compact, the pane header and the automations run
-// row render line; a reader that misses one of them reads nothing at all.
 describe('readProvenance', () => {
   it.each(['badge', 'compact', 'line', 'detail'] as const)('reads the whole description at %s density', (density) => {
     const { container } = render(<SessionProvenance automation={automation} density={density} />);
