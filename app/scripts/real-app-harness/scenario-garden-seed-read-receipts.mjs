@@ -105,8 +105,7 @@ function writeWatcherFixture(cwd) {
   });
 }
 
-// The send line is read with its whitespace already squashed out, so a
-// rendering change between `id` and the uuid silently turns this into null.
+// Pane reads squash whitespace out, so no space survives between `id` and the uuid.
 function peerMessageID(output) {
   return output.match(/\(id([0-9a-f-]{36})\)/)?.[1] ?? null;
 }

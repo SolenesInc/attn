@@ -446,16 +446,14 @@ async function main() {
       });
 
       await scrollPaneToTop(client, sessionId, utilityPaneId);
-      // The assertion must read the VISIBLE viewport, not the whole scrollback:
-      // COLOR_001 is only on screen when the top of history is.
+      // Read the VISIBLE viewport, not the whole scrollback: COLOR_001 is on screen
+      // only at the top of history, and COLOR_100 out of view means a completed buffer.
       await waitForPaneState(
         client,
         sessionId,
         utilityPaneId,
         (state) => {
           const visible = (state?.pane?.visibleContent?.lines || []).join('\n');
-          // COLOR_001 alone can be true mid-stream; requiring a deep line OUT
-          // of view pins this to the top of a completed buffer.
           return visible.includes('COLOR_001') && !visible.includes('COLOR_100');
         },
         'top of colored scrollback visible in the viewport after relaunch',

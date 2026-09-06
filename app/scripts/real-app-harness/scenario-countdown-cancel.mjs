@@ -351,8 +351,6 @@ async function main() {
       const until = Date.now() + QUIET_WINDOW_MS * 2.5;
       let moves = 0;
       while (Date.now() < until) {
-        // Visit both targets so the step never depends on where a previous run left
-        // the cursor. Each pair contains real movement.
         for (const point of points) {
           await driver.movePointerInWindow(point.relativeX, point.relativeY);
           moves += 1;
