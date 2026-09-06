@@ -229,7 +229,16 @@ async function main() {
     });
 
     await runner.step('submitting_from_the_window_hides_it', async () => {
-      const result = await client.request('present_window_submit', {}, { timeoutMs: 15_000 });
+      // The window reports visible before its drive bar mounts, and the handler
+      // looks the button up by class; only that miss is a not-ready-yet.
+      const result = await pollFor(
+        () => client.request('present_window_submit', {}, { timeoutMs: 15_000 }).catch((error) => {
+          if (String(error?.message || error).includes('submit button not found')) return null;
+          throw error;
+        }),
+        'the present window drive bar to mount its submit button',
+        30_000,
+      );
       runner.assert(result?.submitted === true, `present_window_submit dispatched the confirm click (got ${JSON.stringify(result)})`, result);
 
       // Only passes if the present window's getCurrentWindow().hide() succeeds,
