@@ -644,7 +644,11 @@ func (d *Daemon) handleSeedShow(conn net.Conn, msg *protocol.SeedShowMessage) {
 		wire.PlotProgress = progress
 	}
 	sessionID := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
-	watching := d.seedWatching(sessionID, seed.ID)
+	coverage, err := d.seedWatchCoverage(sessionID, seed.ID)
+	if err != nil {
+		d.sendGardenError(conn, "show", err)
+		return
+	}
 	artifacts, err := d.seedArtifacts(seed.ID)
 	if err != nil {
 		d.sendGardenError(conn, "show", fmt.Errorf("read seed artifacts: %w", err))
@@ -654,14 +658,15 @@ func (d *Daemon) handleSeedShow(conn net.Conn, msg *protocol.SeedShowMessage) {
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok: true,
 		SeedShowResult: &protocol.SeedShowResult{
-			Seed:       wire,
-			Watching:   watching,
-			Notes:      notes,
-			NotesTotal: total,
-			Relations:  gardenRelations(read, seed.ID),
-			Handoff:    d.gardenHandoff(seed.ID),
-			Artifacts:  artifacts,
-			References: d.seedArtifactReferences(seed.ID),
+			Seed:        wire,
+			Watching:    len(coverage) > 0,
+			WatchingVia: coverage,
+			Notes:       notes,
+			NotesTotal:  total,
+			Relations:   gardenRelations(read, seed.ID),
+			Handoff:     d.gardenHandoff(seed.ID),
+			Artifacts:   artifacts,
+			References:  d.seedArtifactReferences(seed.ID),
 		},
 	})
 }
@@ -926,7 +931,9 @@ func (d *Daemon) handleSeedLink(conn net.Conn, msg *protocol.SeedLinkMessage) {
 		if verb == "unlink" {
 			fact = FactGardenUnlinked
 		}
+		d.gardenWatchMu.Lock()
 		doc, err := d.writeSeed(*schema, next, read.docs[next.ID].Rev, fact)
+		d.gardenWatchMu.Unlock()
 		if err != nil {
 			if docstore.IsConflict(err) {
 				continue

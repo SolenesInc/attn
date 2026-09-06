@@ -290,7 +290,7 @@ type DocumentCommit struct {
 }
 
 func (s *Store) CommitDocumentWrite(w DocumentWrite, fact BusEvent, now time.Time) (DocumentWriteResult, error) {
-	results, err := s.commitDocumentWrites([]DocumentCommit{{Write: w, Fact: fact}}, now, true)
+	results, err := s.commitDocumentWrites([]DocumentCommit{{Write: w, Fact: fact}}, now, true, nil)
 	if err != nil {
 		return DocumentWriteResult{}, err
 	}
@@ -298,10 +298,16 @@ func (s *Store) CommitDocumentWrite(w DocumentWrite, fact BusEvent, now time.Tim
 }
 
 func (s *Store) CommitDocumentWrites(commits []DocumentCommit, now time.Time) ([]DocumentWriteResult, error) {
-	return s.commitDocumentWrites(commits, now, false)
+	return s.commitDocumentWrites(commits, now, false, nil)
 }
 
-func (s *Store) commitDocumentWrites(commits []DocumentCommit, now time.Time, single bool) ([]DocumentWriteResult, error) {
+// CommitGardenDispatchWrites persists a new binding and its ordinary watch together.
+// Callers use the committed binding as the receipt and skip this on replay.
+func (s *Store) CommitGardenDispatchWrites(commits []DocumentCommit, watch GardenSeedWatch, now time.Time) ([]DocumentWriteResult, error) {
+	return s.commitDocumentWrites(commits, now, false, &watch)
+}
+
+func (s *Store) commitDocumentWrites(commits []DocumentCommit, now time.Time, single bool, watch *GardenSeedWatch) ([]DocumentWriteResult, error) {
 	if len(commits) == 0 {
 		return []DocumentWriteResult{}, nil
 	}
@@ -328,6 +334,12 @@ func (s *Store) commitDocumentWrites(commits []DocumentCommit, now time.Time, si
 	results, changed, err := commitDocumentWritesWith(tx, commits, tables, now)
 	if err != nil {
 		return nil, err
+	}
+	if watch != nil && watch.WatcherSessionID != "" && watch.SeedID != "" {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO garden_seed_watches(watcher_session_id, seed_id, created_at) VALUES (?, ?, ?)`, watch.WatcherSessionID, watch.SeedID, now.UTC().Format(sortableTimeFormat)); err != nil {
+			return nil, fmt.Errorf("subscribe delegation dispatcher: %w", err)
+		}
+		changed = true
 	}
 	if !changed {
 		return results, nil

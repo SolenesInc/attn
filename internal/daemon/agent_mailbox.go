@@ -50,8 +50,7 @@ func (d *Daemon) deliverAgentMailboxItem(delivery agentmailbox.Delivery) error {
 		return err
 	}
 	if !unread {
-		d.refreshAgentMailboxUnread(recipient)
-		return nil
+		return d.refreshAgentMailboxUnread(recipient)
 	}
 	d.noteQueuedAgentMailboxItem(recipient)
 	return d.deliverAgentMailboxDoorbell(recipient)
@@ -70,25 +69,41 @@ func (d *Daemon) deliverAgentMailboxDoorbell(sessionID string) error {
 		return fmt.Errorf("%w: %s", errAgentMailboxNoPromptReader, sessionID)
 	}
 
+	d.gardenWatchMu.Lock()
+	if err := d.discardUncoveredSeedBells(sessionID); err != nil {
+		d.agentMailboxMu.Lock()
+		if state := d.agentMailboxDoorbells[sessionID]; state != nil && state.unread && !state.delivering && state.retry == nil {
+			d.armAgentMailboxDoorbellLocked(sessionID, state, d.agentMailboxCooldown())
+		}
+		d.agentMailboxMu.Unlock()
+		d.gardenWatchMu.Unlock()
+		return fmt.Errorf("check Garden inbox coverage: %w", err)
+	}
 	d.agentMailboxMu.Lock()
 	state := d.agentMailboxDoorbells[sessionID]
 	switch {
 	case state == nil || !state.unread:
 		d.agentMailboxMu.Unlock()
+		d.gardenWatchMu.Unlock()
 		return nil
 	case state.outstanding:
 		d.agentMailboxMu.Unlock()
+		d.gardenWatchMu.Unlock()
 		return errAgentMailboxDoorbellOutstanding
 	case state.delivering:
 		d.agentMailboxMu.Unlock()
+		d.gardenWatchMu.Unlock()
 		return errAgentMailboxDoorbellInFlight
 	}
+	// This receipt hands the doorbell to delivery; unwatch can still clear its inbox.
 	state.delivering = true
 	if state.retry != nil {
 		state.retry.Stop()
 		state.retry = nil
 	}
 	d.agentMailboxMu.Unlock()
+
+	d.gardenWatchMu.Unlock()
 
 	attemptKey := uuid.NewString()
 	id := inputAttemptID("agent-mailbox-doorbell", attemptKey)
@@ -324,13 +339,13 @@ func (d *Daemon) noteAgentMailboxRead(sessionID string, remaining int) {
 	d.armAgentMailboxDoorbellLocked(sessionID, state, after)
 }
 
-func (d *Daemon) refreshAgentMailboxUnread(sessionID string) {
+func (d *Daemon) refreshAgentMailboxUnread(sessionID string) error {
 	d.agentMailboxMu.Lock()
 	defer d.agentMailboxMu.Unlock()
 	unread, err := d.store.HasUnreadAgentMailboxItems(sessionID)
 	if err != nil {
 		d.logf("agent inbox unread refresh: session=%s err=%v", sessionID, err)
-		return
+		return err
 	}
 	if unread {
 		state := d.agentMailboxDoorbells[sessionID]
@@ -342,12 +357,13 @@ func (d *Daemon) refreshAgentMailboxUnread(sessionID string) {
 			d.agentMailboxDoorbells[sessionID] = state
 		}
 		state.unread = true
-		return
+		return nil
 	}
 	if state := d.agentMailboxDoorbells[sessionID]; state != nil && state.retry != nil {
 		state.retry.Stop()
 	}
 	delete(d.agentMailboxDoorbells, sessionID)
+	return nil
 }
 
 func (d *Daemon) forgetAgentMailboxDoorbell(sessionID string) {

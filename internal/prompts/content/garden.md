@@ -47,12 +47,14 @@ Keeping up:
 When attn sends an update notification, run the suggested command to read it. Reading acknowledges the update and maintains awareness; it does not authorize or require acting on the update. Only act or interrupt the user when attention is genuinely needed.
 
     attn seed notes <id>             the whole log, newest first
-    attn seed watch <id>             ring this session when the seed or anything in its plot moves; unwatch stops it
+    attn seed watch <id>             watch this seed and its descendants; unwatch removes this subscription
     attn seed attach <id> --path <file> (--move | --copy)    bring a local file into durable seed ownership; Move is recommended
     attn seed detach <id> --path <filename> --to <destination>    move an owned file back out without overwriting
     attn seed attach <id> --path <file> --repo <repo> | --notebook <doc-id> | --url <url>    keep a link to a document elsewhere
     attn seed export <id> [--out <path>]    the seed and its log as one markdown file
     attn seed set-resume <id> --resume-session-id <id> --cwd <path> --agent <name>    make an ended conversation resumable from the seed; --clear forgets it
+
+A new delegation starts an ordinary watch on its seed. `unwatch` removes that subscription; separate child or ancestor watches remain. `show` and `unwatch` name the subscriptions still covering a seed and how to remove them. `watch` restores one; a new delegation starts it again. Restart or recovery does not.
 
 Use attn agent msg for attn-managed sessions; keep Claude's SendMessage for follow-ups to the native subagents this session spawned.
 

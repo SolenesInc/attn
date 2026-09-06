@@ -23,7 +23,10 @@ Attn delegation starts another agent with a focused brief and binds it to a
 seed. A new seed stores the brief as its body; an existing seed keeps its body.
 The session becomes the seed's tender. It reports on the log, and you reach it
 with `attn agent msg <seed-id> "<note>"`. Read its work back with
-`attn seed show <seed-id>`. See [garden.md](garden.md).
+`attn seed show <seed-id>`. Each new delegation subscribes the dispatching
+session to that seed and its descendants. `attn seed unwatch <seed-id>` removes
+that watch; separate child watches remain. See [garden.md](garden.md) for
+coverage, queued updates, and rewatching.
 
 Follow-up: read the seed. Never park a blocking Monitor on attn activity: a
 Monitor-blocked session reads as busy, which suppresses crew heartbeats and

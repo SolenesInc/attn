@@ -100,3 +100,46 @@ func (s *Store) ClaimGardenSeedMailboxItem(watcherSessionID, seedID, eventKind, 
 	}
 	return true, nil
 }
+
+func (s *Store) UnreadGardenSeedMailboxSeeds(sessionID string) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows, err := s.db.Query(`SELECT DISTINCT source_id FROM agent_mailbox_items
+  WHERE recipient_session_id = ? AND kind = ? AND read_at = ''`, sessionID, agentmailbox.KindGardenSeed)
+	if err != nil {
+		return nil, fmt.Errorf("read queued Garden seeds: %w", err)
+	}
+	defer rows.Close()
+	var seeds []string
+	for rows.Next() {
+		var seed string
+		if err := rows.Scan(&seed); err != nil {
+			return nil, err
+		}
+		seeds = append(seeds, seed)
+	}
+	return seeds, rows.Err()
+}
+
+func (s *Store) DiscardGardenSeedMailboxItems(sessionID string, seedIDs []string, now time.Time) error {
+	if len(seedIDs) == 0 {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stamp := now.UTC().Format(sortableTimeFormat)
+	for _, seedID := range seedIDs {
+		if _, err := tx.Exec(`UPDATE agent_mailbox_items
+   SET read_at = ?, notified_at = CASE WHEN notified_at = '' THEN ? ELSE notified_at END
+   WHERE recipient_session_id = ? AND kind = ? AND source_id = ? AND read_at = ''`,
+			stamp, stamp, sessionID, agentmailbox.KindGardenSeed, seedID); err != nil {
+			return fmt.Errorf("discard uncovered Garden update: %w", err)
+		}
+	}
+	return tx.Commit()
+}

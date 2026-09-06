@@ -9,19 +9,16 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 )
 
-// A bind failure is logged, not fatal — except when the delegation named a
-// crown, which must not launch silently unaimed.
+// A home without Garden support may launch locally; a failed binding must surface.
 func (d *Daemon) bindDelegationSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent string, fromChief bool) (string, error) {
 	seedID, err := d.bindDelegatedSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent, fromChief)
 	switch {
 	case err == nil:
 		d.logf("delegate: bound seed %q to session %s", seedID, sessionID)
-	case crown != "" && !delegationSeedUnavailable(err):
-		return "", fmt.Errorf("dispatch %s at %s: %w", sessionID, crown, err)
 	case delegationSeedUnavailable(err):
 		d.logf("delegate: no seed bound to session %s: %v", sessionID, err)
 	default:
-		d.logf("delegate: binding a seed to session %s failed: %v", sessionID, err)
+		return "", fmt.Errorf("bind delegation for session %s: %w", sessionID, err)
 	}
 	return seedID, nil
 }

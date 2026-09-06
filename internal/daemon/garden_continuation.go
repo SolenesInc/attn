@@ -196,9 +196,24 @@ func (d *Daemon) updateGardenDispatch(
 			d.gardenDispatchBeforeWrite(sessionID)
 		}
 		fact := documentChangedFact(garden.Namespace, garden.CollectionDispatches, sessionID, false)
-		written, writeErr := d.store.CommitDocumentWrite(store.DocumentWrite{
+		commit := store.DocumentCommit{Write: store.DocumentWrite{
 			Schema: *schema, ID: sessionID, Body: body, Expected: &expected,
-		}, fact, d.gardenTime())
+		}, Fact: fact}
+		var written store.DocumentWriteResult
+		var writeErr error
+		if current.Crown == "" && next.Crown != "" {
+			var results []store.DocumentWriteResult
+			d.gardenWatchMu.Lock()
+			results, writeErr = d.store.CommitGardenDispatchWrites([]store.DocumentCommit{commit}, store.GardenSeedWatch{
+				WatcherSessionID: next.DispatcherSession, SeedID: next.Crown,
+			}, d.gardenTime())
+			d.gardenWatchMu.Unlock()
+			if writeErr == nil {
+				written = results[0]
+			}
+		} else {
+			written, writeErr = d.store.CommitDocumentWrite(commit.Write, fact, d.gardenTime())
+		}
 		if writeErr != nil {
 			if docstore.IsConflict(writeErr) {
 				lastErr = writeErr

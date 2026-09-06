@@ -58,7 +58,7 @@
 - Keep growing: resolve one review item without changing the seed; seven quiet days must pass before it qualifies again.
 - Artifact: owned file under `<Notebook>/seeds/<seed-id>/`, retained across session/workspace/seed lifecycles.
 - Linked artifact: reference to an external file, Notebook document, or URL.
-- Note: seed log entry. Handoff: note for the next tender. Watch: interest in change notifications.
+- Note: seed log entry. Handoff: note for the next tender. Watch: a session's subscription to a seed and its current descendants. Explicit watch and new delegation create the same subscription; unwatch removes it and discards queued updates with no remaining coverage. Separate child subscriptions remain. Dispatch records retain ownership and history; they do not grant notifications. Existing dispatch subscriptions are converted once on upgrade; recovery never restores removed subscriptions.
 - Delegation preferences: optional, daemon-local choices for already-authorized delegations. A role describes the work, instructions, and stopping point; its choices select a harness, provider, model, and effort. An alternative has a condition, and a separate fallback covers unmatched work. Preferences do not grant delegation authority. Starter roles are editable templates; adding missing presets preserves existing roles and leaves model selections to the user. Verify produces evidence for an assigned revision and environment; Orchestrator judges its sufficiency and repeats checks only when changes or evidence gaps warrant it.
 - Dispatch-at-plot: delegation bound to an existing seed as its tender.
 - Ticket: archived pre-Garden work item; user tickets and their history remain permanently.

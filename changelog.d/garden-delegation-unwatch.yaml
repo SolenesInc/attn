@@ -1,0 +1,5 @@
+kind: fixed
+area: garden
+change: Unwatch stops delegation notifications and clears queued updates that have no remaining watch.
+symptom: Dispatchers kept receiving activity after removing their watch.
+notes: Separate child watches remain. Show and unwatch name any subscriptions that still cover a seed.

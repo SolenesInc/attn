@@ -258,7 +258,9 @@ func (d *Daemon) bindSeedHandover(
 		if d.seedHandoverBeforeCommit != nil {
 			d.seedHandoverBeforeCommit()
 		}
-		written, err = d.store.CommitDocumentWrites(commits, d.gardenTime())
+		d.gardenWatchMu.Lock()
+		written, err = d.store.CommitGardenDispatchWrites(commits, store.GardenSeedWatch{WatcherSessionID: dispatches.newDispatch.DispatcherSession, SeedID: seed.ID}, d.gardenTime())
+		d.gardenWatchMu.Unlock()
 		if err == nil {
 			break
 		}

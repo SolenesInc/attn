@@ -7217,14 +7217,15 @@ export interface SeedSetResumeResultObject {
 }
 
 export interface SeedShowResultObject {
-    artifacts:   SeedArtifactTransferResultArtifact[];
-    handoff?:    Note;
-    notes:       Note[];
-    notes_total: number;
-    references:  LegacyReferenceElement[];
-    relations:   RelationElement[];
-    seed:        SeedElement;
-    watching:    boolean;
+    artifacts:    SeedArtifactTransferResultArtifact[];
+    handoff?:     Note;
+    notes:        Note[];
+    notes_total:  number;
+    references:   LegacyReferenceElement[];
+    relations:    RelationElement[];
+    seed:         SeedElement;
+    watching:     boolean;
+    watching_via: string[];
     [property: string]: any;
 }
 
@@ -7243,9 +7244,10 @@ export interface SeedTransitionResultObject {
 }
 
 export interface SeedWatchResultObject {
-    changed:  boolean;
-    seed_id:  string;
-    watching: boolean;
+    changed:      boolean;
+    seed_id:      string;
+    watching:     boolean;
+    watching_via: string[];
     [property: string]: any;
 }
 
@@ -8288,14 +8290,15 @@ export enum SeedShowMessageCmd {
 }
 
 export interface SeedShowResult {
-    artifacts:   SeedArtifactTransferResultArtifact[];
-    handoff?:    Note;
-    notes:       Note[];
-    notes_total: number;
-    references:  LegacyReferenceElement[];
-    relations:   RelationElement[];
-    seed:        SeedElement;
-    watching:    boolean;
+    artifacts:    SeedArtifactTransferResultArtifact[];
+    handoff?:     Note;
+    notes:        Note[];
+    notes_total:  number;
+    references:   LegacyReferenceElement[];
+    relations:    RelationElement[];
+    seed:         SeedElement;
+    watching:     boolean;
+    watching_via: string[];
     [property: string]: any;
 }
 
@@ -8366,9 +8369,10 @@ export enum SeedWatchMessageCmd {
 }
 
 export interface SeedWatchResult {
-    changed:  boolean;
-    seed_id:  string;
-    watching: boolean;
+    changed:      boolean;
+    seed_id:      string;
+    watching:     boolean;
+    watching_via: string[];
     [property: string]: any;
 }
 
@@ -20182,6 +20186,7 @@ const typeMap: any = {
         { json: "relations", js: "relations", typ: a(r("RelationElement")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
         { json: "watching", js: "watching", typ: true },
+        { json: "watching_via", js: "watching_via", typ: a("") },
     ], "any"),
     "RelationElement": o([
         { json: "label", js: "label", typ: "" },
@@ -20197,6 +20202,7 @@ const typeMap: any = {
         { json: "changed", js: "changed", typ: true },
         { json: "seed_id", js: "seed_id", typ: "" },
         { json: "watching", js: "watching", typ: true },
+        { json: "watching_via", js: "watching_via", typ: a("") },
     ], "any"),
     "SessionInstructionsResultObject": o([
         { json: "answer", js: "answer", typ: "" },
@@ -20889,6 +20895,7 @@ const typeMap: any = {
         { json: "relations", js: "relations", typ: a(r("RelationElement")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
         { json: "watching", js: "watching", typ: true },
+        { json: "watching_via", js: "watching_via", typ: a("") },
     ], "any"),
     "SeedTransitionMessage": o([
         { json: "clear_harvest_when", js: "clear_harvest_when", typ: u(undefined, true) },
@@ -20936,6 +20943,7 @@ const typeMap: any = {
         { json: "changed", js: "changed", typ: true },
         { json: "seed_id", js: "seed_id", typ: "" },
         { json: "watching", js: "watching", typ: true },
+        { json: "watching_via", js: "watching_via", typ: a("") },
     ], "any"),
     "Session": o([
         { json: "activity", js: "activity", typ: u(undefined, "") },
