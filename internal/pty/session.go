@@ -881,6 +881,10 @@ func (s *Session) closePTMX() {
 // Interactive shells ignore SIGTERM by design, but every shell honors hangup.
 const sigtermToHUPGrace = 2 * time.Second
 
+// readline 8.2 (bash 5.2) drops a signal that lands between its signal check and
+// select(); a repeated SIGHUP interrupts that select. Contended exits took <120ms.
+const sighupRepeat = 500 * time.Millisecond
+
 func (s *Session) kill(sig syscall.Signal, waitTimeout time.Duration) error {
 	return s.killWithEscalation(sig, waitTimeout, nil)
 }
@@ -925,17 +929,30 @@ func (s *Session) killWithEscalation(sig syscall.Signal, waitTimeout time.Durati
 		}
 	}
 
-	select {
-	case <-s.exited:
-		return nil
-	case <-time.After(time.Until(deadline)):
-		if onEscalate != nil {
-			onEscalate(syscall.SIGKILL)
-		}
-		_ = syscall.Kill(-pgid, syscall.SIGKILL)
-		<-s.exited
-		return nil
+	sent := sig
+	if sig == syscall.SIGTERM {
+		sent = syscall.SIGHUP
 	}
+	for remaining := time.Until(deadline); remaining > 0; remaining = time.Until(deadline) {
+		wait := remaining
+		if sent == syscall.SIGHUP && wait > sighupRepeat {
+			wait = sighupRepeat
+		}
+		select {
+		case <-s.exited:
+			return nil
+		case <-time.After(wait):
+		}
+		if sent == syscall.SIGHUP {
+			_ = syscall.Kill(-pgid, syscall.SIGHUP)
+		}
+	}
+	if onEscalate != nil {
+		onEscalate(syscall.SIGKILL)
+	}
+	_ = syscall.Kill(-pgid, syscall.SIGKILL)
+	<-s.exited
+	return nil
 }
 
 // Both fields are nil'd under replayMu so an in-flight attach sees absence

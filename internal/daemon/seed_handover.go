@@ -222,36 +222,7 @@ func (d *Daemon) bindSeedHandover(
 	if session == nil {
 		return nil, fmt.Errorf("handed-over session %s is not tracked", sessionID)
 	}
-	newDispatch, newDoc, newFound, err := d.gardenDispatchDocument(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	if newFound {
-		if crown := activeDispatchCrown(newDispatch); crown != "" && crown != seed.ID {
-			return nil, fmt.Errorf("handed-over session %s already reports to %s", sessionID, crown)
-		}
-		if owner := strings.TrimSpace(newDispatch.OperationID); owner != "" && owner != operationID {
-			return nil, fmt.Errorf("handed-over session %s belongs to another operation", sessionID)
-		}
-	}
-	newDispatch = mergeGardenExecution(newDispatch, observedGardenExecution(session, d.store.GetResumeSessionID(sessionID), d.gardenTime()))
-	newDispatch.Crown = seed.ID
-	newDispatch.SupersededBy = ""
-	newDispatch.DispatcherSession = strings.TrimSpace(msg.SourceSessionID)
-	newDispatch.FromChief = fromChief
-	newDispatch.OperationID = operationID
-	if newDispatch.Cwd == "" {
-		newDispatch.Cwd = directory
-	}
-	if newDispatch.Agent == "" {
-		newDispatch.Agent = agent
-	}
-
 	seedSchema, err := d.seedsCollection()
-	if err != nil {
-		return nil, err
-	}
-	dispatchSchema, err := d.dispatchesCollection()
 	if err != nil {
 		return nil, err
 	}
@@ -259,101 +230,66 @@ func (d *Daemon) bindSeedHandover(
 	if err != nil {
 		return nil, err
 	}
-	newBody, err := newDispatch.Encode()
-	if err != nil {
-		return nil, err
-	}
 	seedExpected := doc.Rev
-	newExpected := docstore.ExpectAbsent
-	if newFound {
-		newExpected = newDoc.Rev
+	seedCommit := store.DocumentCommit{
+		Write: store.DocumentWrite{Schema: *seedSchema, ID: seed.ID, Body: seedBody, Expected: &seedExpected},
+		Fact:  documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false),
 	}
-	commits := []store.DocumentCommit{
-		{
-			Write: store.DocumentWrite{Schema: *seedSchema, ID: seed.ID, Body: seedBody, Expected: &seedExpected},
-			Fact:  documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false),
-		},
-		{
-			Write: store.DocumentWrite{Schema: *dispatchSchema, ID: sessionID, Body: newBody, Expected: &newExpected},
-			Fact:  documentChangedFact(garden.Namespace, garden.CollectionDispatches, sessionID, false),
-		},
-	}
-
-	oldExecutionID := strings.TrimSpace(seed.LastExecutionID)
-	oldIndex := -1
-	var oldDispatch garden.Dispatch
-	if oldExecutionID != "" && oldExecutionID != sessionID {
-		var oldDoc docstore.Document
-		oldDispatch, oldDoc, found, readErr := d.gardenDispatchDocument(oldExecutionID)
-		if readErr != nil {
-			return nil, readErr
-		}
-		if found && activeDispatchCrown(oldDispatch) == seed.ID {
-			oldDispatch.SupersededBy = sessionID
-			oldBody, encodeErr := oldDispatch.Encode()
-			if encodeErr != nil {
-				return nil, encodeErr
-			}
-			oldExpected := oldDoc.Rev
-			oldIndex = len(commits)
-			commits = append(commits, store.DocumentCommit{
-				Write: store.DocumentWrite{Schema: *dispatchSchema, ID: oldExecutionID, Body: oldBody, Expected: &oldExpected},
-				Fact:  documentChangedFact(garden.Namespace, garden.CollectionDispatches, oldExecutionID, false),
-			})
-		}
-	}
-
-	noteIndex := -1
-	var note garden.Note
-	if handoff := strings.TrimSpace(protocol.Deref(request.Handoff)); handoff != "" {
-		if err := garden.ValidateNote(handoff); err != nil {
-			return nil, err
-		}
-		noteSchema, err := d.notesCollection()
-		if err != nil {
-			return nil, err
-		}
-		note.ID, err = d.mintNoteID()
-		if err != nil {
-			return nil, err
-		}
-		note.Seed = seed.ID
-		note.Kind = garden.NoteKindHandoff
-		note.Body = handoff
-		note.AuthorSession = strings.TrimSpace(msg.SourceSessionID)
-		noteBody, err := note.Encode()
-		if err != nil {
-			return nil, err
-		}
-		noteExpected := docstore.ExpectAbsent
-		noteIndex = len(commits)
-		commits = append(commits, store.DocumentCommit{
-			Write: store.DocumentWrite{Schema: *noteSchema, ID: note.ID, Body: noteBody, Expected: &noteExpected},
-			Fact:  documentChangedFact(garden.Namespace, garden.CollectionNotes, note.ID, false),
-		})
-	}
-
-	written, err := d.store.CommitDocumentWrites(commits, d.gardenTime())
+	noteCommit, note, err := d.handoffNoteCommit(seed.ID, msg)
 	if err != nil {
 		return nil, err
+	}
+
+	// The new worker's session-start hook and the old worker's metadata refresh
+	// both rewrite dispatches while this runs; the seed itself moving is fatal.
+	const attempts = 3
+	var commits []store.DocumentCommit
+	var written []store.DocumentWriteResult
+	var dispatches handoverDispatchCommits
+	for attempt := 1; ; attempt++ {
+		dispatches, err = d.handoverDispatchCommits(msg, operationID, sessionID, directory, agent, fromChief, seed, session)
+		if err != nil {
+			return nil, err
+		}
+		commits = append([]store.DocumentCommit{seedCommit}, dispatches.commits...)
+		if noteCommit != nil {
+			commits = append(commits, *noteCommit)
+		}
+		if d.seedHandoverBeforeCommit != nil {
+			d.seedHandoverBeforeCommit()
+		}
+		written, err = d.store.CommitDocumentWrites(commits, d.gardenTime())
+		if err == nil {
+			break
+		}
+		var conflict *docstore.ConflictError
+		if !errors.As(err, &conflict) {
+			return nil, err
+		}
+		if conflict.Collection != garden.CollectionDispatches {
+			return nil, fmt.Errorf("%s changed while the new worker was starting; refresh it before handing it over", seed.ID)
+		}
+		if attempt == attempts {
+			return nil, fmt.Errorf("dispatch %s changed under all %d Handover attempts: %w", conflict.ID, attempts, err)
+		}
 	}
 	for i, commit := range commits {
 		d.announceCommittedWrite(commit.Fact, written[i].Seq)
 	}
 	d.publishFact(FactGardenTended, seed.ID, nil)
-	if noteIndex >= 0 {
+	if noteCommit != nil {
 		d.publishFact(FactGardenNoted, seed.ID, nil)
 	}
-	d.rememberDispatchProjection(sessionID, newDispatch, written[1].Rev)
-	if oldIndex >= 0 {
-		d.rememberDispatchProjection(oldExecutionID, oldDispatch, written[oldIndex].Rev)
+	d.rememberDispatchProjection(sessionID, dispatches.newDispatch, written[1].Rev)
+	if dispatches.oldExecutionID != "" {
+		d.rememberDispatchProjection(dispatches.oldExecutionID, dispatches.oldDispatch, written[2].Rev)
 	}
 	d.ringSeedActivity(seed.ID, gardenRingEvents[garden.VerbTend], sessionID, msg.SourceSessionID)
 	if err := d.resolveGardenReviewAction(request.Review, seed.ID, "handover"); err != nil {
 		d.logf("Garden review: settle %s after Handover: %v", seed.ID, err)
 	}
 
-	if noteIndex < 0 {
+	if noteCommit == nil {
 		return nil, nil
 	}
 	noteSchema, err := d.notesCollection()
@@ -370,6 +306,119 @@ func (d *Daemon) bindSeedHandover(
 	wire := noteToProtocol(note, *noteDoc)
 	d.mirrorSeedNoteOntoTicket(msg.SourceSessionID, seed.ID, wire.Body)
 	return &wire, nil
+}
+
+type handoverDispatchCommits struct {
+	commits        []store.DocumentCommit
+	newDispatch    garden.Dispatch
+	oldExecutionID string
+	oldDispatch    garden.Dispatch
+}
+
+// The new dispatch comes first and the superseded old one second, when the
+// seed's last execution still claims it.
+func (d *Daemon) handoverDispatchCommits(
+	msg *protocol.DelegateMessage, operationID, sessionID, directory, agent string, fromChief bool,
+	seed garden.Seed, session *protocol.Session,
+) (handoverDispatchCommits, error) {
+	var out handoverDispatchCommits
+	dispatchSchema, err := d.dispatchesCollection()
+	if err != nil {
+		return out, err
+	}
+	newDispatch, newDoc, newFound, err := d.gardenDispatchDocument(sessionID)
+	if err != nil {
+		return out, err
+	}
+	if newFound {
+		if crown := activeDispatchCrown(newDispatch); crown != "" && crown != seed.ID {
+			return out, fmt.Errorf("handed-over session %s already reports to %s", sessionID, crown)
+		}
+		if owner := strings.TrimSpace(newDispatch.OperationID); owner != "" && owner != operationID {
+			return out, fmt.Errorf("handed-over session %s belongs to another operation", sessionID)
+		}
+	}
+	newDispatch = mergeGardenExecution(newDispatch, observedGardenExecution(session, d.store.GetResumeSessionID(sessionID), d.gardenTime()))
+	newDispatch.Crown = seed.ID
+	newDispatch.SupersededBy = ""
+	newDispatch.DispatcherSession = strings.TrimSpace(msg.SourceSessionID)
+	newDispatch.FromChief = fromChief
+	newDispatch.OperationID = operationID
+	if newDispatch.Cwd == "" {
+		newDispatch.Cwd = directory
+	}
+	if newDispatch.Agent == "" {
+		newDispatch.Agent = agent
+	}
+	newBody, err := newDispatch.Encode()
+	if err != nil {
+		return out, err
+	}
+	newExpected := docstore.ExpectAbsent
+	if newFound {
+		newExpected = newDoc.Rev
+	}
+	out.newDispatch = newDispatch
+	out.commits = []store.DocumentCommit{{
+		Write: store.DocumentWrite{Schema: *dispatchSchema, ID: sessionID, Body: newBody, Expected: &newExpected},
+		Fact:  documentChangedFact(garden.Namespace, garden.CollectionDispatches, sessionID, false),
+	}}
+
+	oldExecutionID := strings.TrimSpace(seed.LastExecutionID)
+	if oldExecutionID == "" || oldExecutionID == sessionID {
+		return out, nil
+	}
+	oldDispatch, oldDoc, found, err := d.gardenDispatchDocument(oldExecutionID)
+	if err != nil {
+		return out, err
+	}
+	if !found || activeDispatchCrown(oldDispatch) != seed.ID {
+		return out, nil
+	}
+	oldDispatch.SupersededBy = sessionID
+	oldBody, err := oldDispatch.Encode()
+	if err != nil {
+		return out, err
+	}
+	oldExpected := oldDoc.Rev
+	out.oldExecutionID, out.oldDispatch = oldExecutionID, oldDispatch
+	out.commits = append(out.commits, store.DocumentCommit{
+		Write: store.DocumentWrite{Schema: *dispatchSchema, ID: oldExecutionID, Body: oldBody, Expected: &oldExpected},
+		Fact:  documentChangedFact(garden.Namespace, garden.CollectionDispatches, oldExecutionID, false),
+	})
+	return out, nil
+}
+
+func (d *Daemon) handoffNoteCommit(seedID string, msg *protocol.DelegateMessage) (*store.DocumentCommit, garden.Note, error) {
+	var note garden.Note
+	handoff := strings.TrimSpace(protocol.Deref(msg.Handover.Handoff))
+	if handoff == "" {
+		return nil, note, nil
+	}
+	if err := garden.ValidateNote(handoff); err != nil {
+		return nil, note, err
+	}
+	noteSchema, err := d.notesCollection()
+	if err != nil {
+		return nil, note, err
+	}
+	note.ID, err = d.mintNoteID()
+	if err != nil {
+		return nil, note, err
+	}
+	note.Seed = seedID
+	note.Kind = garden.NoteKindHandoff
+	note.Body = handoff
+	note.AuthorSession = strings.TrimSpace(msg.SourceSessionID)
+	noteBody, err := note.Encode()
+	if err != nil {
+		return nil, note, err
+	}
+	noteExpected := docstore.ExpectAbsent
+	return &store.DocumentCommit{
+		Write: store.DocumentWrite{Schema: *noteSchema, ID: note.ID, Body: noteBody, Expected: &noteExpected},
+		Fact:  documentChangedFact(garden.Namespace, garden.CollectionNotes, note.ID, false),
+	}, note, nil
 }
 
 func (p *seedHandoverPlan) applyRecreatedSubdir(directory string) (string, error) {
