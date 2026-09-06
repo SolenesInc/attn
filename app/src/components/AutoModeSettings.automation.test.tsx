@@ -4,20 +4,32 @@ import { AutoModeSettings } from './AutoModeSettings';
 import { getAutoModeAutomationHandle } from './autoModeAutomation';
 import type {
   AutoModeConfigInfo,
+  AutoModeConfigEdit,
   AutoModeEnvironmentSlot,
-  AutoModePatternEdit,
   AutoModePromotion,
+  AutoModeRuleInfo,
   AutoModeState,
 } from '../hooks/daemonAutoModeEvents';
 import { useAutoModePolicy } from '../hooks/useAutoModePolicy';
 
+const shippedRule: AutoModeRuleInfo = {
+  pattern: [['attn'], ['automode'], ['env']],
+  decision: 'forbidden',
+  justification: 'the environment is what the reviewer reads',
+  match: [],
+  not_match: [],
+};
+
 const config = (over: Partial<AutoModeConfigInfo> = {}): AutoModeConfigInfo => ({
   enabled_default: true,
+  approval_policy: 'on-request',
+  sandbox_mode: 'workspace-write',
   environment: { slots: [{ id: 'domains', values: ['grafana.acme.corp'] }], notes: [] },
-  allow: ['git status*'],
-  hard_deny: ['*attn automode env*'],
-  shipped_hard_deny: ['*attn automode env*'],
-  models: ['opencode-go/glm-5.3'],
+  rules: [shippedRule],
+  shipped_rules: [shippedRule],
+  network: { enabled: true, allowed_domains: ['crates.io'], denied_domains: ['localhost:29849'], allow_local_binding: false },
+  shipped_denied_domains: ['localhost:29849'],
+  legacy_patterns: ['*curl*'],
   ...over,
 });
 
@@ -52,25 +64,26 @@ const state = (over: Partial<AutoModeState> = {}): AutoModeState => ({
   ...over,
 });
 
-const edited = (over: Partial<AutoModeConfigInfo> = {}): AutoModePatternEdit => ({
+const edited = (over: Partial<AutoModeConfigInfo> = {}): AutoModeConfigEdit => ({
   config: config(over),
 });
 
 function Harness({
   setEnvironmentSlot,
 }: {
-  setEnvironmentSlot: (slot: string, values: string[]) => Promise<AutoModePatternEdit>;
+  setEnvironmentSlot: (slot: string, values: string[]) => Promise<AutoModeConfigEdit>;
 }) {
   const policy = useAutoModePolicy({
     enabled: true,
     getState: vi.fn().mockResolvedValue(state()),
     promoteProposal: vi.fn().mockResolvedValue({} as AutoModePromotion),
     discardProposal: vi.fn().mockResolvedValue({} as AutoModePromotion),
-    addPattern: vi.fn().mockResolvedValue(edited()),
-    removePattern: vi.fn().mockResolvedValue(edited()),
+    addRule: vi.fn().mockResolvedValue(edited()),
+    removeRule: vi.fn().mockResolvedValue(edited()),
+    addHost: vi.fn().mockResolvedValue(edited()),
+    removeHost: vi.fn().mockResolvedValue(edited()),
+    setPolicy: vi.fn().mockResolvedValue(edited()),
     setEnvironmentSlot,
-    setModels: vi.fn().mockResolvedValue(edited()),
-    loadModels: vi.fn().mockResolvedValue({ providers: [], problem: null }),
   });
   return <AutoModeSettings policy={policy} />;
 }
@@ -82,7 +95,12 @@ describe('AutoModeSettings automation handle', () => {
 
     const reported = getAutoModeAutomationHandle()?.getState();
     expect(reported?.present).toBe(true);
-    expect(reported?.models).toEqual(['opencode-go/glm-5.3']);
+    expect(reported?.approvalPolicy).toBe('on-request');
+    expect(reported?.sandboxMode).toBe('workspace-write');
+    expect(reported?.rules).toEqual(['attn automode env']);
+    expect(reported?.allowedHosts).toEqual(['crates.io']);
+    expect(reported?.deniedHosts).toEqual(['localhost:29849']);
+    expect(reported?.legacyPatterns).toEqual(['*curl*']);
     expect(reported?.environment.slots).toEqual([{ id: 'domains', values: ['grafana.acme.corp'] }]);
     expect(reported?.environment.filled).toBe(1);
     expect(reported?.environment.total).toBe(SLOTS.length);

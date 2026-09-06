@@ -146,6 +146,28 @@
   gap: 6px;
 }
 
+/* The pattern is the wide box; the decision, its reason and the button ride
+   beside it so one rule reads as one line. */
+.automode-rule-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.automode-rule-subject {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.automode-rule-why {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The list is one grid and each row contributes its cells, so the pill and the
    buttons line up down the column whether or not a row can be promoted. */
 .automode-models-list {
@@ -320,4 +342,17 @@
 .automode-slot-choices {
   display: flex;
   gap: 6px;
+}
+
+/* The checkbox sits beside its label, and the help line hangs under both. */
+.automode-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.automode-toggle .settings-description {
+  display: block;
+  margin-top: 2px;
 }

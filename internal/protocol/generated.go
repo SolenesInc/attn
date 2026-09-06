@@ -999,20 +999,9 @@ type AuthorsUpdatedMessage struct {
 	Event string `json:"event"`
 }
 
-type AutoModeCatalogModel struct {
-	// ContextWindow corresponds to the JSON schema field "context_window".
-	ContextWindow *int `json:"context_window,omitempty,omitzero"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-
-	// Name corresponds to the JSON schema field "name".
-	Name *string `json:"name,omitempty,omitzero"`
-}
-
 type AutoModeConfigInfo struct {
-	// Allow corresponds to the JSON schema field "allow".
-	Allow []string `json:"allow"`
+	// ApprovalPolicy corresponds to the JSON schema field "approval_policy".
+	ApprovalPolicy string `json:"approval_policy"`
 
 	// EnabledDefault corresponds to the JSON schema field "enabled_default".
 	EnabledDefault bool `json:"enabled_default"`
@@ -1020,14 +1009,46 @@ type AutoModeConfigInfo struct {
 	// Environment corresponds to the JSON schema field "environment".
 	Environment AutoModeEnvironmentInfo `json:"environment"`
 
-	// HardDeny corresponds to the JSON schema field "hard_deny".
-	HardDeny []string `json:"hard_deny"`
+	// LegacyPatterns corresponds to the JSON schema field "legacy_patterns".
+	LegacyPatterns []string `json:"legacy_patterns"`
 
-	// Models corresponds to the JSON schema field "models".
-	Models []string `json:"models"`
+	// Network corresponds to the JSON schema field "network".
+	Network AutoModeNetworkInfo `json:"network"`
 
-	// ShippedHardDeny corresponds to the JSON schema field "shipped_hard_deny".
-	ShippedHardDeny []string `json:"shipped_hard_deny"`
+	// Rules corresponds to the JSON schema field "rules".
+	Rules []AutoModeRuleInfo `json:"rules"`
+
+	// SandboxMode corresponds to the JSON schema field "sandbox_mode".
+	SandboxMode string `json:"sandbox_mode"`
+
+	// ShippedDeniedDomains corresponds to the JSON schema field
+	// "shipped_denied_domains".
+	ShippedDeniedDomains []string `json:"shipped_denied_domains"`
+
+	// ShippedRules corresponds to the JSON schema field "shipped_rules".
+	ShippedRules []AutoModeRuleInfo `json:"shipped_rules"`
+}
+
+type AutoModeConfigResult struct {
+	// Config corresponds to the JSON schema field "config".
+	Config AutoModeConfigInfo `json:"config"`
+}
+
+type AutoModeConfigResultMessage struct {
+	// Config corresponds to the JSON schema field "config".
+	Config *AutoModeConfigInfo `json:"config,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type AutoModeDenialInfo struct {
@@ -1194,122 +1215,63 @@ type AutoModeGetMessage struct {
 	RequestID string `json:"request_id"`
 }
 
-type AutoModeModelProvider struct {
-	// CheckedAt corresponds to the JSON schema field "checked_at".
-	CheckedAt *int `json:"checked_at,omitempty,omitzero"`
-
-	// Detail corresponds to the JSON schema field "detail".
-	Detail *string `json:"detail,omitempty,omitzero"`
-
-	// Models corresponds to the JSON schema field "models".
-	Models []AutoModeCatalogModel `json:"models"`
-
-	// Provider corresponds to the JSON schema field "provider".
-	Provider string `json:"provider"`
-
-	// Ready corresponds to the JSON schema field "ready".
-	Ready bool `json:"ready"`
-}
-
-type AutoModeModelSetMessage struct {
+type AutoModeHostAddMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
-	// Models corresponds to the JSON schema field "models".
-	Models []string `json:"models"`
+	// Decision corresponds to the JSON schema field "decision".
+	Decision string `json:"decision"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host string `json:"host"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
 }
 
-type AutoModeModelSetResultMessage struct {
-	// Config corresponds to the JSON schema field "config".
-	Config *AutoModeConfigInfo `json:"config,omitempty,omitzero"`
+type AutoModeHostRemoveMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
 
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
+	// Decision corresponds to the JSON schema field "decision".
+	Decision string `json:"decision"`
 
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
+	// Host corresponds to the JSON schema field "host".
+	Host string `json:"host"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
 
-type AutoModeModelsMessage struct {
+type AutoModeNetworkInfo struct {
+	// AllowLocalBinding corresponds to the JSON schema field "allow_local_binding".
+	AllowLocalBinding bool `json:"allow_local_binding"`
+
+	// AllowedDomains corresponds to the JSON schema field "allowed_domains".
+	AllowedDomains []string `json:"allowed_domains"`
+
+	// DeniedDomains corresponds to the JSON schema field "denied_domains".
+	DeniedDomains []string `json:"denied_domains"`
+
+	// Enabled corresponds to the JSON schema field "enabled".
+	Enabled bool `json:"enabled"`
+}
+
+type AutoModePolicySetMessage struct {
+	// AllowLocalBinding corresponds to the JSON schema field "allow_local_binding".
+	AllowLocalBinding *bool `json:"allow_local_binding,omitempty,omitzero"`
+
+	// ApprovalPolicy corresponds to the JSON schema field "approval_policy".
+	ApprovalPolicy *string `json:"approval_policy,omitempty,omitzero"`
+
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-}
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 
-type AutoModeModelsResultMessage struct {
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Problem corresponds to the JSON schema field "problem".
-	Problem *string `json:"problem,omitempty,omitzero"`
-
-	// Providers corresponds to the JSON schema field "providers".
-	Providers []AutoModeModelProvider `json:"providers,omitempty,omitzero"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-}
-
-type AutoModePatternAddMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// List corresponds to the JSON schema field "list".
-	List string `json:"list"`
-
-	// Pattern corresponds to the JSON schema field "pattern".
-	Pattern string `json:"pattern"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-}
-
-type AutoModePatternRemoveMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// List corresponds to the JSON schema field "list".
-	List string `json:"list"`
-
-	// Pattern corresponds to the JSON schema field "pattern".
-	Pattern string `json:"pattern"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-}
-
-type AutoModePatternResultMessage struct {
-	// Config corresponds to the JSON schema field "config".
-	Config *AutoModeConfigInfo `json:"config,omitempty,omitzero"`
-
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
+	// SandboxMode corresponds to the JSON schema field "sandbox_mode".
+	SandboxMode *string `json:"sandbox_mode,omitempty,omitzero"`
 }
 
 type AutoModePromoteMessage struct {
@@ -1362,6 +1324,9 @@ type AutoModeProposalInfo struct {
 	// State corresponds to the JSON schema field "state".
 	State string `json:"state"`
 
+	// Summary corresponds to the JSON schema field "summary".
+	Summary string `json:"summary"`
+
 	// Target corresponds to the JSON schema field "target".
 	Target string `json:"target"`
 
@@ -1389,6 +1354,51 @@ type AutoModeProposeMessage struct {
 type AutoModeProposeResult struct {
 	// Proposal corresponds to the JSON schema field "proposal".
 	Proposal AutoModeProposalInfo `json:"proposal"`
+}
+
+type AutoModeRuleAddMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Decision corresponds to the JSON schema field "decision".
+	Decision *string `json:"decision,omitempty,omitzero"`
+
+	// Justification corresponds to the JSON schema field "justification".
+	Justification *string `json:"justification,omitempty,omitzero"`
+
+	// Pattern corresponds to the JSON schema field "pattern".
+	Pattern []string `json:"pattern"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type AutoModeRuleInfo struct {
+	// Decision corresponds to the JSON schema field "decision".
+	Decision string `json:"decision"`
+
+	// Justification corresponds to the JSON schema field "justification".
+	Justification string `json:"justification"`
+
+	// Match corresponds to the JSON schema field "match".
+	Match [][]string `json:"match"`
+
+	// NotMatch corresponds to the JSON schema field "not_match".
+	NotMatch [][]string `json:"not_match"`
+
+	// Pattern corresponds to the JSON schema field "pattern".
+	Pattern [][]string `json:"pattern"`
+}
+
+type AutoModeRuleRemoveMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Pattern corresponds to the JSON schema field "pattern".
+	Pattern []string `json:"pattern"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
 
 type AutoModeShowMessage struct {
@@ -6483,6 +6493,10 @@ type Response struct {
 
 	// Authors corresponds to the JSON schema field "authors".
 	Authors []AuthorState `json:"authors,omitempty,omitzero"`
+
+	// AutomodeConfigResult corresponds to the JSON schema field
+	// "automode_config_result".
+	AutomodeConfigResult *AutoModeConfigResult `json:"automode_config_result,omitempty,omitzero"`
 
 	// AutomodeDenialsResult corresponds to the JSON schema field
 	// "automode_denials_result".

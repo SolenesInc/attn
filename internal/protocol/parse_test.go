@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -494,5 +495,168 @@ func TestParseSetChiefOfStaff(t *testing.T) {
 	msg, ok := data.(*SetChiefOfStaffMessage)
 	if !ok || msg.SessionID != "session-1" || !msg.ChiefOfStaff {
 		t.Fatalf("message = %#v, want chief-of-staff assignment", data)
+	}
+}
+
+func TestParseAutoModeSettingsCommands(t *testing.T) {
+	cases := []struct {
+		input string
+		cmd   string
+		check func(t *testing.T, data any)
+	}{
+		{
+			input: `{"cmd":"automode_rule_add","pattern":["git","push"],"decision":"prompt",` +
+				`"justification":"it leaves the machine","request_id":"r1"}`,
+			cmd: CmdAutoModeRuleAdd,
+			check: func(t *testing.T, data any) {
+				msg, ok := data.(*AutoModeRuleAddMessage)
+				if !ok {
+					t.Fatalf("data type = %T", data)
+				}
+				if strings.Join(msg.Pattern, " ") != "git push" || Deref(msg.Decision) != "prompt" {
+					t.Errorf("rule = %+v", msg)
+				}
+				if Deref(msg.Justification) != "it leaves the machine" || msg.RequestID != "r1" {
+					t.Errorf("rule = %+v", msg)
+				}
+			},
+		},
+		{
+			input: `{"cmd":"automode_rule_remove","pattern":["git","push"]}`,
+			cmd:   CmdAutoModeRuleRemove,
+			check: func(t *testing.T, data any) {
+				msg, ok := data.(*AutoModeRuleRemoveMessage)
+				if !ok {
+					t.Fatalf("data type = %T", data)
+				}
+				if strings.Join(msg.Pattern, " ") != "git push" || msg.RequestID != nil {
+					t.Errorf("rule remove = %+v", msg)
+				}
+			},
+		},
+		{
+			input: `{"cmd":"automode_host_add","host":"crates.io","decision":"allow","request_id":"r1"}`,
+			cmd:   CmdAutoModeHostAdd,
+			check: func(t *testing.T, data any) {
+				msg, ok := data.(*AutoModeHostAddMessage)
+				if !ok {
+					t.Fatalf("data type = %T", data)
+				}
+				if msg.Host != "crates.io" || msg.Decision != "allow" {
+					t.Errorf("host add = %+v", msg)
+				}
+			},
+		},
+		{
+			input: `{"cmd":"automode_host_remove","host":"crates.io","decision":"deny"}`,
+			cmd:   CmdAutoModeHostRemove,
+			check: func(t *testing.T, data any) {
+				msg, ok := data.(*AutoModeHostRemoveMessage)
+				if !ok {
+					t.Fatalf("data type = %T", data)
+				}
+				if msg.Host != "crates.io" || msg.Decision != "deny" {
+					t.Errorf("host remove = %+v", msg)
+				}
+			},
+		},
+		{
+			input: `{"cmd":"automode_policy_set","approval_policy":"never","allow_local_binding":true}`,
+			cmd:   CmdAutoModePolicySet,
+			check: func(t *testing.T, data any) {
+				msg, ok := data.(*AutoModePolicySetMessage)
+				if !ok {
+					t.Fatalf("data type = %T", data)
+				}
+				if Deref(msg.ApprovalPolicy) != "never" || msg.SandboxMode != nil {
+					t.Errorf("policy set = %+v", msg)
+				}
+				if msg.AllowLocalBinding == nil || !*msg.AllowLocalBinding {
+					t.Errorf("allow_local_binding = %v, want the field carried", msg.AllowLocalBinding)
+				}
+			},
+		},
+	}
+	for _, tc := range cases {
+		cmd, data, err := ParseMessage([]byte(tc.input))
+		if err != nil {
+			t.Fatalf("parse %s: %v", tc.input, err)
+		}
+		if cmd != tc.cmd {
+			t.Fatalf("cmd = %q, want %q", cmd, tc.cmd)
+		}
+		tc.check(t, data)
+	}
+}
+
+func TestParseMessageRejectsRetiredAutoModeCommands(t *testing.T) {
+	for _, input := range []string{
+		`{"cmd":"automode_model_set","models":["a/one"],"request_id":"r1"}`,
+		`{"cmd":"automode_models","request_id":"r1"}`,
+		`{"cmd":"automode_pattern_add","list":"allow","pattern":"git status*","request_id":"r1"}`,
+		`{"cmd":"automode_pattern_remove","list":"allow","pattern":"git status*","request_id":"r1"}`,
+	} {
+		if _, _, err := ParseMessage([]byte(input)); err == nil ||
+			!strings.Contains(err.Error(), "unknown command") {
+			t.Errorf("%s error = %v, want unknown command", input, err)
+		}
+	}
+}
+
+// The app reads a rule pattern as a list of alternatives per token, so a plain token
+// arrives as a one-entry list rather than a bare string.
+func TestAutoModeConfigResultRoundTripsARule(t *testing.T) {
+	result := AutoModeConfigResultMessage{
+		Event:     EventAutoModeConfigResult,
+		RequestID: "r1",
+		Success:   true,
+		Config: &AutoModeConfigInfo{
+			ApprovalPolicy: "on-request",
+			SandboxMode:    "workspace-write",
+			Rules: []AutoModeRuleInfo{{
+				Pattern:  [][]string{{"git"}, {"push", "pull"}},
+				Decision: "prompt",
+				Match:    [][]string{{"git", "push", "origin"}},
+				NotMatch: [][]string{},
+			}},
+			ShippedRules:         []AutoModeRuleInfo{},
+			LegacyPatterns:       []string{"git status*"},
+			ShippedDeniedDomains: []string{},
+			Network: AutoModeNetworkInfo{
+				Enabled: true, AllowedDomains: []string{"crates.io"}, DeniedDomains: []string{},
+			},
+		},
+	}
+	raw, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var back AutoModeConfigResultMessage
+	if err := json.Unmarshal(raw, &back); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if back.Config == nil || len(back.Config.Rules) != 1 {
+		t.Fatalf("config = %+v", back.Config)
+	}
+	rule := back.Config.Rules[0]
+	if len(rule.Pattern) != 2 || rule.Pattern[0][0] != "git" || len(rule.Pattern[1]) != 2 {
+		t.Errorf("pattern = %v", rule.Pattern)
+	}
+	if len(rule.Match) != 1 || strings.Join(rule.Match[0], " ") != "git push origin" {
+		t.Errorf("match = %v, want the example carried through untouched", rule.Match)
+	}
+	if back.Config.LegacyPatterns[0] != "git status*" || back.Config.Network.AllowedDomains[0] != "crates.io" {
+		t.Errorf("config = %+v", back.Config)
+	}
+	for _, field := range []string{"approval_policy", "sandbox_mode", "rules", "shipped_rules",
+		"network", "shipped_denied_domains", "legacy_patterns"} {
+		if !strings.Contains(string(raw), `"`+field+`"`) {
+			t.Errorf("wire config is missing %q: %s", field, raw)
+		}
+	}
+	for _, gone := range []string{`"allow"`, `"hard_deny"`, `"models"`} {
+		if strings.Contains(string(raw), gone) {
+			t.Errorf("wire config still carries %s: %s", gone, raw)
+		}
 	}
 }

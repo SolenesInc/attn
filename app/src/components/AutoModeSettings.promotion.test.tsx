@@ -1,30 +1,50 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { AutoModeSettings } from './AutoModeSettings';
 import type {
   AutoModeConfigInfo,
-  AutoModePatternEdit,
+  AutoModeConfigEdit,
   AutoModeProposalInfo,
   AutoModePromotion,
+  AutoModeRuleInfo,
   AutoModeState,
 } from '../hooks/daemonAutoModeEvents';
 import { useAutoModePolicy } from '../hooks/useAutoModePolicy';
 
+const rule = (over: Partial<AutoModeRuleInfo> = {}): AutoModeRuleInfo => ({
+  pattern: [['git'], ['status']],
+  decision: 'allow',
+  justification: '',
+  match: [],
+  not_match: [],
+  ...over,
+});
+
+const shippedRule = rule({
+  pattern: [['attn'], ['automode'], ['env']],
+  decision: 'forbidden',
+  justification: 'the environment is what the reviewer reads',
+});
+
 const config = (over: Partial<AutoModeConfigInfo> = {}): AutoModeConfigInfo => ({
   enabled_default: true,
+  approval_policy: 'on-request',
+  sandbox_mode: 'workspace-write',
   environment: { slots: [], notes: [] },
-  allow: [],
-  hard_deny: ['*attn automode env*'],
-  shipped_hard_deny: ['*attn automode env*'],
-  models: ['opencode-go/glm-5.3', 'opencode-go/qwen3.8-max'],
+  rules: [shippedRule],
+  shipped_rules: [shippedRule],
+  network: { enabled: true, allowed_domains: [], denied_domains: ['localhost:29849'], allow_local_binding: false },
+  shipped_denied_domains: ['localhost:29849'],
+  legacy_patterns: [],
   ...over,
 });
 
 const proposal = (over: Partial<AutoModeProposalInfo> = {}): AutoModeProposalInfo => ({
   id: 7,
-  kind: 'allow',
+  kind: 'rule',
   target: '',
-  value: 'git push origin*',
+  value: '{"pattern":["git","push"],"decision":"allow"}',
+  summary: 'allow git push',
   proposed_by: 'session-a',
   state: 'pending',
   created_at: '2026-08-16T10:00:00Z',
@@ -51,54 +71,47 @@ const state = (over: Partial<AutoModeState> = {}): AutoModeState => ({
   ...over,
 });
 
+const edited = (): AutoModeConfigEdit => ({ config: config() });
+
+const resolved = (): AutoModePromotion => ({ proposal: proposal(), config: config() });
+
 function Harness(props: {
   getState: () => Promise<AutoModeState>;
   promoteProposal: (id: number) => Promise<AutoModePromotion>;
   discardProposal: (id: number) => Promise<AutoModePromotion>;
-  addPattern?: (list: string, pattern: string) => Promise<AutoModePatternEdit>;
-  removePattern?: (list: string, pattern: string) => Promise<AutoModePatternEdit>;
-  setEnvironmentSlot?: (slot: string, values: string[]) => Promise<AutoModePatternEdit>;
+  setEnvironmentSlot?: (slot: string, values: string[]) => Promise<AutoModeConfigEdit>;
 }) {
   const policy = useAutoModePolicy({
     enabled: true,
-    addPattern: vi.fn().mockResolvedValue(edited()),
-    removePattern: vi.fn().mockResolvedValue(edited()),
+    addRule: vi.fn().mockResolvedValue(edited()),
+    removeRule: vi.fn().mockResolvedValue(edited()),
+    addHost: vi.fn().mockResolvedValue(edited()),
+    removeHost: vi.fn().mockResolvedValue(edited()),
+    setPolicy: vi.fn().mockResolvedValue(edited()),
     setEnvironmentSlot: vi.fn().mockResolvedValue(edited()),
-    setModels: vi.fn(async () => ({ config: config() })),
-    loadModels: vi.fn(async () => ({ providers: [], problem: null })),
     ...props,
   });
   return <AutoModeSettings policy={policy} />;
 }
 
-const edited = (): AutoModePatternEdit => ({ config: config() });
-
-const resolved = (): AutoModePromotion => ({ proposal: proposal(), config: config() });
-
 function renderPane(value: AutoModeState, over: Partial<{
   promoteProposal: (id: number) => Promise<AutoModePromotion>;
   discardProposal: (id: number) => Promise<AutoModePromotion>;
-  addPattern: (list: string, pattern: string) => Promise<AutoModePatternEdit>;
-  removePattern: (list: string, pattern: string) => Promise<AutoModePatternEdit>;
-  setEnvironmentSlot: (slot: string, values: string[]) => Promise<AutoModePatternEdit>;
+  setEnvironmentSlot: (slot: string, values: string[]) => Promise<AutoModeConfigEdit>;
 }> = {}) {
   const getState = vi.fn().mockResolvedValue(value);
   const promoteProposal = over.promoteProposal ?? vi.fn().mockResolvedValue(resolved());
   const discardProposal = over.discardProposal ?? vi.fn().mockResolvedValue(resolved());
-  const addPattern = over.addPattern ?? vi.fn().mockResolvedValue(edited());
-  const removePattern = over.removePattern ?? vi.fn().mockResolvedValue(edited());
   const setEnvironmentSlot = over.setEnvironmentSlot ?? vi.fn().mockResolvedValue(edited());
   render(
     <Harness
       getState={getState}
       promoteProposal={promoteProposal}
       discardProposal={discardProposal}
-      addPattern={addPattern}
-      removePattern={removePattern}
       setEnvironmentSlot={setEnvironmentSlot}
     />,
   );
-  return { getState, promoteProposal, discardProposal, addPattern, removePattern, setEnvironmentSlot };
+  return { getState, promoteProposal, discardProposal, setEnvironmentSlot };
 }
 
 describe('AutoModeSettings', () => {
@@ -118,42 +131,30 @@ describe('AutoModeSettings', () => {
     expect(screen.queryByTestId('automode-proposals')).toBeNull();
   });
 
-  it('shows what each proposal asks for and who asked', async () => {
+  it('reads a proposal as the line the daemon summarised, not its JSON', async () => {
     renderPane(state({
       proposals: [
         proposal(),
-        proposal({ id: 8, kind: 'model', target: 'models', value: 'opencode-go/other', proposed_by: '' }),
+        proposal({
+          id: 8,
+          kind: 'host',
+          value: '{"host":"crates.io","decision":"allow"}',
+          summary: 'allow crates.io',
+          proposed_by: '',
+        }),
       ],
     }));
     await screen.findByTestId('automode-proposals');
 
-    const allow = screen.getByTestId('automode-proposal-7');
-    expect(allow).toHaveTextContent('allow');
-    expect(allow).toHaveTextContent('git push origin*');
-    expect(allow).toHaveTextContent('session-a');
+    const first = screen.getByTestId('automode-proposal-7');
+    expect(first).toHaveTextContent('rule');
+    expect(first).toHaveTextContent('allow git push');
+    expect(first).not.toHaveTextContent('{"pattern"');
+    expect(first).toHaveTextContent('session-a');
 
-    const model = screen.getByTestId('automode-proposal-8');
-    expect(model).toHaveTextContent('models');
-    expect(model).toHaveTextContent('unattributed');
-  });
-
-  it('shows the models in order, marking the one that judges', async () => {
-    renderPane(state({
-      config: config({ models: ['opencode-go/glm-5.3', 'vendor/backup'] }),
-    }));
-    const models = await screen.findByTestId('automode-models');
-    const rows = within(models).getAllByTestId('automode-models-entry');
-    expect(rows[0]).toHaveTextContent('opencode-go/glm-5.3');
-    expect(rows[0]).toHaveTextContent('judges');
-    expect(rows[1]).toHaveTextContent('vendor/backup');
-    expect(rows[1]).toHaveTextContent('fallback');
-    expect(within(rows[0]).queryByTestId('automode-models-primary')).toBeNull();
-  });
-
-  it('says auto mode stays off while no model can judge a call', async () => {
-    renderPane(state({ config: config({ models: [], enabled_default: true }) }));
-    expect(await screen.findByTestId('automode-new-sessions')).toHaveTextContent('Auto mode off');
-    expect(screen.getByTestId('automode-models')).toHaveTextContent('No model, so auto mode stays off');
+    const host = screen.getByTestId('automode-proposal-8');
+    expect(host).toHaveTextContent('allow crates.io');
+    expect(host).toHaveTextContent('unattributed');
   });
 
   it('promotes a proposal and re-reads the result', async () => {
@@ -190,21 +191,42 @@ describe('AutoModeSettings', () => {
     renderPane(state({
       config: config({
         enabled_default: false,
-        allow: ['git push origin*'],
-        hard_deny: ['*attn automode env*', 'rm -rf /*'],
+        approval_policy: 'never',
+        sandbox_mode: 'read-only',
+        rules: [shippedRule, rule({ pattern: [['git'], ['push']], decision: 'prompt' })],
+        network: {
+          enabled: true,
+          allowed_domains: ['crates.io'],
+          denied_domains: ['localhost:29849', 'evil.example'],
+          allow_local_binding: false,
+        },
         environment: { slots: [{ id: 'domains', values: ['grafana.acme.corp'] }], notes: [] },
       }),
     }));
     const shown = await screen.findByTestId('automode-config');
 
     expect(shown).toHaveTextContent('Auto mode off');
-    const models = screen.getByTestId('automode-models');
-    expect(models).toHaveTextContent('opencode-go/glm-5.3');
-    expect(models).toHaveTextContent('opencode-go/qwen3.8-max');
-    // The shipped denies are resolved in daemon-side, so they show up without anyone promoting them.
-    expect(screen.getByTestId('automode-hard-deny')).toHaveTextContent('*attn automode env*');
-    expect(screen.getByTestId('automode-allow')).toHaveTextContent('git push origin*');
+    expect(screen.getByTestId('automode-approval-policy')).toHaveValue('never');
+    expect(screen.getByTestId('automode-sandbox-mode')).toHaveValue('read-only');
+    // The shipped entries resolve daemon-side, so they show without anyone promoting them.
+    expect(screen.getByTestId('automode-rules')).toHaveTextContent('attn automode env');
+    expect(screen.getByTestId('automode-rules')).toHaveTextContent('git push');
+    expect(screen.getByTestId('automode-hosts-allow')).toHaveTextContent('crates.io');
+    expect(screen.getByTestId('automode-hosts-deny')).toHaveTextContent('evil.example');
     expect(screen.getByTestId('automode-slot-domains')).toHaveTextContent('grafana.acme.corp');
+  });
+
+  it('names a glob the migration could not convert and says what to do with it', async () => {
+    renderPane(state({ config: config({ legacy_patterns: ['*curl*'] }) }));
+    const legacy = await screen.findByTestId('automode-legacy');
+    expect(legacy).toHaveTextContent('*curl*');
+    expect(screen.getByText(/Rewrite each one as/)).toBeInTheDocument();
+  });
+
+  it('hides the not-converted section when nothing was left behind', async () => {
+    renderPane(state());
+    await screen.findByTestId('automode-config');
+    expect(screen.queryByTestId('automode-legacy')).toBeNull();
   });
 
   it('writes the slot the entry was typed into', async () => {
@@ -224,109 +246,6 @@ describe('AutoModeSettings', () => {
     expect(await screen.findByTestId('automode-slot-domains')).toHaveTextContent('None configured');
   });
 
-  it('says so when a list is empty rather than leaving a blank row', async () => {
-    renderPane(state({ config: config({ hard_deny: [] }) }));
-    await screen.findByTestId('automode-config');
-
-    expect(screen.getByTestId('automode-allow')).toHaveTextContent('Nothing skips the classifier');
-    expect(screen.getByTestId('automode-hard-deny')).toHaveTextContent('Nothing is refused');
-  });
-
-  it('adds an allow pattern and re-reads the list', async () => {
-    const { addPattern, getState } = renderPane(state());
-    await screen.findByTestId('automode-allow-input');
-
-    fireEvent.change(screen.getByTestId('automode-allow-input'), {
-      target: { value: 'git status*' },
-    });
-    fireEvent.click(screen.getByTestId('automode-allow-add'));
-
-    await waitFor(() => expect(addPattern).toHaveBeenCalledWith('allow', 'git status*'));
-    await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.getByTestId('automode-allow-input')).toHaveValue(''));
-  });
-
-  it('adds a hard deny from its own list, naming that list', async () => {
-    const { addPattern } = renderPane(state());
-    await screen.findByTestId('automode-hard-deny-input');
-
-    fireEvent.change(screen.getByTestId('automode-hard-deny-input'), {
-      target: { value: '*terraform apply*' },
-    });
-    fireEvent.click(screen.getByTestId('automode-hard-deny-add'));
-
-    await waitFor(() => expect(addPattern).toHaveBeenCalledWith('hard_deny', '*terraform apply*'));
-  });
-
-  it('removes a hand-added pattern and re-reads the list', async () => {
-    const { removePattern, getState } = renderPane(
-      state({ config: config({ allow: ['git push origin*'] }) }),
-    );
-    await screen.findByTestId('automode-allow-remove');
-
-    fireEvent.click(screen.getByTestId('automode-allow-remove'));
-    await waitFor(() => expect(removePattern).toHaveBeenCalledWith('allow', 'git push origin*'));
-    await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
-  });
-
-  // A shipped hard deny is resolved in at read and never stored, so it must not offer a Remove.
-  it('marks a shipped hard deny as built-in and gives it no remove button', async () => {
-    renderPane(state({
-      config: config({
-        hard_deny: ['*attn automode env*', '*terraform apply*'],
-        shipped_hard_deny: ['*attn automode env*'],
-      }),
-    }));
-    await screen.findByTestId('automode-hard-deny');
-
-    expect(screen.getByTestId('automode-hard-deny-builtin')).toHaveTextContent('built-in');
-    expect(screen.getAllByTestId('automode-hard-deny-remove')).toHaveLength(1);
-    expect(screen.getByLabelText('Remove *terraform apply*')).toBeInTheDocument();
-  });
-
-  it('shows a refused pattern next to its own input and keeps the draft', async () => {
-    const addPattern = vi.fn().mockRejectedValue(new Error(
-      'broad allow pattern "*" is refused: an allow entry must name something',
-    ));
-    renderPane(state(), { addPattern });
-    await screen.findByTestId('automode-allow-input');
-
-    fireEvent.change(screen.getByTestId('automode-allow-input'), { target: { value: '*' } });
-    fireEvent.click(screen.getByTestId('automode-allow-add'));
-
-    const failure = await screen.findByTestId('automode-allow-error');
-    expect(failure).toHaveTextContent('an allow entry must name something');
-    expect(screen.getByTestId('automode-allow-input')).toHaveValue('*');
-    expect(screen.queryByTestId('automode-hard-deny-error')).toBeNull();
-  });
-
-  it('reports a refused removal without dropping the entry from the list', async () => {
-    const removePattern = vi.fn().mockRejectedValue(new Error('"x" is not in the allow list'));
-    renderPane(state({ config: config({ allow: ['x'] }) }), { removePattern });
-    await screen.findByTestId('automode-allow-remove');
-
-    fireEvent.click(screen.getByTestId('automode-allow-remove'));
-    await screen.findByTestId('automode-allow-error');
-    expect(screen.getByTestId('automode-allow')).toHaveTextContent('x');
-  });
-
-  it('promotes a proposal while the same list is directly editable', async () => {
-    const promoteProposal = vi.fn().mockResolvedValue(resolved());
-    const { addPattern } = renderPane(
-      state({ proposals: [proposal()] }),
-      { promoteProposal },
-    );
-    await screen.findByTestId('automode-proposals');
-
-    fireEvent.click(screen.getByTestId('automode-promote-7'));
-    await waitFor(() => expect(promoteProposal).toHaveBeenCalledWith(7));
-    expect(addPattern).not.toHaveBeenCalled();
-
-    fireEvent.change(screen.getByTestId('automode-allow-input'), { target: { value: 'ls*' } });
-    fireEvent.click(screen.getByTestId('automode-allow-add'));
-    await waitFor(() => expect(addPattern).toHaveBeenCalledWith('allow', 'ls*'));
-  });
-
   it('lists recent denials and what decided them', async () => {
     renderPane(state({
       denials: [{
@@ -335,13 +254,13 @@ describe('AutoModeSettings', () => {
         tool: 'bash',
         signature: 'curl https://example.com',
         reason: 'reaches the network',
-        rule: 'classifier-2a',
+        rule: 'guardian',
         created_at: '2026-08-18T09:00:00Z',
       }],
     }));
     const ledger = await screen.findByTestId('automode-denials');
     expect(ledger).toHaveTextContent('curl https://example.com');
-    expect(ledger).toHaveTextContent('classifier-2a');
+    expect(ledger).toHaveTextContent('guardian');
   });
 
   it('says the ledger is empty rather than showing a bare heading', async () => {

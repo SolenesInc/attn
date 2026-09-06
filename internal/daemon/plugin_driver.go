@@ -32,6 +32,9 @@ type pluginDriverRegisterParams struct {
 type pluginDriverRegisterResult struct {
 	OK         bool              `json:"ok"`
 	ActiveRuns []activePluginRun `json:"active_runs,omitempty"`
+	// The object a spawn carries, so a driver that restarted can bring the profile's
+	// network proxy back up before a live session re-dials it.
+	AutoMode *automode.Config `json:"auto_mode,omitempty"`
 }
 
 type activePluginRun struct {
@@ -136,6 +139,23 @@ type pluginReportAutoModeDenialParams struct {
 	Reason    string `json:"reason"`
 	Rule      string `json:"rule"`
 	At        string `json:"at"`
+}
+
+// A "don't ask again" answer inside a session is a human promoting, so the report
+// records the proposal and applies it in one move.
+type pluginReportExecPolicyAmendmentParams struct {
+	SessionID     string   `json:"session_id"`
+	RunID         string   `json:"run_id"`
+	Pattern       []string `json:"pattern"`
+	Decision      string   `json:"decision"`
+	Justification string   `json:"justification"`
+}
+
+type pluginReportNetworkAmendmentParams struct {
+	SessionID string `json:"session_id"`
+	RunID     string `json:"run_id"`
+	Host      string `json:"host"`
+	Decision  string `json:"decision"`
 }
 
 type pluginClassifyStopParams struct {
@@ -267,7 +287,18 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 			}
 			runs = append(runs, item)
 		}
-		return pluginDriverRegisterResult{OK: true, ActiveRuns: runs}, true, nil
+		result := pluginDriverRegisterResult{OK: true, ActiveRuns: runs}
+		driver, registered := d.ensurePluginRegistry().driver(normalizePluginAgent(params.Agent))
+		if registered && driver.Capabilities["auto_mode"] && d.store != nil {
+			// A driver with no policy to read still registers; it learns the config at the
+			// next spawn or policy change.
+			if cfg, err := d.store.GetAutoModeConfig(); err != nil {
+				d.logf("automode: register for %s carried no config: %v", plugin.name, err)
+			} else {
+				result.AutoMode = &cfg
+			}
+		}
+		return result, true, nil
 	case "session.report_state":
 		var params pluginReportStateParams
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
@@ -366,9 +397,65 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 			return nil, true, err
 		}
 		return struct{}{}, true, nil
+	case "session.report_execpolicy_amendment":
+		var params pluginReportExecPolicyAmendmentParams
+		if err := json.Unmarshal(msg.Params, &params); err != nil {
+			return nil, true, fmt.Errorf("decode session.report_execpolicy_amendment params: %w", err)
+		}
+		if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
+			return nil, true, err
+		}
+		d.notePluginDriverReport(params.SessionID)
+		value, err := automode.FormatRuleValue(automode.NormalizeRule(automode.Rule{
+			Pattern:       autoModeRuleTokens(params.Pattern),
+			Decision:      strings.TrimSpace(params.Decision),
+			Justification: strings.TrimSpace(params.Justification),
+		}))
+		if err != nil {
+			return nil, true, err
+		}
+		if err := d.promoteReportedAmendment(automode.KindRule, value, params.SessionID); err != nil {
+			return nil, true, err
+		}
+		return struct{}{}, true, nil
+	case "session.report_network_amendment":
+		var params pluginReportNetworkAmendmentParams
+		if err := json.Unmarshal(msg.Params, &params); err != nil {
+			return nil, true, fmt.Errorf("decode session.report_network_amendment params: %w", err)
+		}
+		if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
+			return nil, true, err
+		}
+		d.notePluginDriverReport(params.SessionID)
+		value, err := automode.FormatHostValue(automode.HostAmendment{
+			Host:     strings.TrimSpace(params.Host),
+			Decision: strings.TrimSpace(params.Decision),
+		})
+		if err != nil {
+			return nil, true, err
+		}
+		if err := d.promoteReportedAmendment(automode.KindHost, value, params.SessionID); err != nil {
+			return nil, true, err
+		}
+		return struct{}{}, true, nil
 	default:
 		return nil, false, nil
 	}
+}
+
+func (d *Daemon) promoteReportedAmendment(kind, value, sessionID string) error {
+	if d.store == nil {
+		return errors.New("no database")
+	}
+	proposedBy := "pi session " + d.sessionLabel(strings.TrimSpace(sessionID))
+	proposal, cfg, err := d.store.PromoteReportedAmendment(kind, value, proposedBy, time.Now())
+	if err != nil {
+		return err
+	}
+	d.logf("automode: %s promoted %s (%s)", proposedBy, kind,
+		automode.DescribeProposal(proposal.Kind, proposal.Value))
+	d.announceAutoModeConfig(cfg)
+	return nil
 }
 
 func (d *Daemon) authorizePluginSessionReport(plugin *pluginConnection, sessionID, runID string) error {

@@ -3,16 +3,25 @@ import type {
   AutoModeConfigInfo,
   AutoModeDenialInfo,
   AutoModeEnvironmentSlot,
-  AutoModeProposalInfo,
+  AutoModePolicyEdit,
+  AutoModeRuleInfo,
 } from '../hooks/daemonAutoModeEvents';
-import type { AutoModeModelProvider } from '../hooks/daemonAutoModeEvents';
-import type { AutoModePatternList, AutoModePolicy } from '../hooks/useAutoModePolicy';
+import type { AutoModePolicy } from '../hooks/useAutoModePolicy';
 import { setAutoModeAutomationHandle } from './autoModeAutomation';
 import './AutoModeSettings.css';
 
 interface AutoModeSettingsProps {
   policy: AutoModePolicy;
 }
+
+const APPROVAL_POLICIES = ['untrusted', 'on-request', 'never'];
+const SANDBOX_MODES = ['read-only', 'workspace-write', 'danger-full-access'];
+const DECISIONS = ['allow', 'prompt', 'forbidden'];
+
+export const ruleLine = (rule: AutoModeRuleInfo): string =>
+  rule.pattern
+    .map((alternatives) => (alternatives.length === 1 ? alternatives[0] : `{${alternatives.join('|')}}`))
+    .join(' ');
 
 export function AutoModeSettings({ policy }: AutoModeSettingsProps) {
   const { state, error, loading, resolvingID, refresh, promote, discard } = policy;
@@ -45,8 +54,6 @@ export function AutoModeSettings({ policy }: AutoModeSettingsProps) {
   }
 
   const { config, proposals, denials, environmentSlots } = state;
-  const shipped = new Set(config.shipped_hard_deny);
-  const runs = config.enabled_default && config.models.length > 0;
 
   return (
     <section className="settings-block" data-testid="settings-automode">
@@ -60,80 +67,65 @@ export function AutoModeSettings({ policy }: AutoModeSettingsProps) {
           </p>
         </div>
 
-        <div className="automode-config" data-testid="automode-config">
-          <div className="automode-field">
-            <span className="automode-field-label">New sessions</span>
-            <span className="automode-field-value">
-              <span
-                className={`settings-pill ${runs ? 'good' : ''}`}
-                data-testid="automode-new-sessions"
-              >
-                {runs ? 'Auto mode on' : 'Auto mode off'}
-              </span>
-            </span>
-          </div>
-        </div>
-
-        <div className="automode-section-head">
-          <h4>Models</h4>
-          <p className="settings-description">
-            The classifier's models, primary first. The one on top judges; the
-            rest are tried only when the one before it cannot be reached. No
-            model at all leaves auto mode off.
-          </p>
-        </div>
-        <ModelEditor policy={policy} models={config.models} />
+        <PolicyEditor config={config} policy={policy} />
 
         <div className="automode-section-head">
           <h4>This machine</h4>
           <p className="settings-description">
-            What the classifier's rules look up about this machine. A slot
-            nobody filled means nothing is trusted for it, so the rules run at
-            their strictest. Grants belong in Allowed, below.
+            What the rules look up about this machine. A slot nobody filled
+            means nothing is trusted for it, so the rules run at their
+            strictest. Grants belong in Rules and Network, below.
           </p>
         </div>
         <EnvironmentEditor config={config} slots={environmentSlots} policy={policy} />
 
         <div className="automode-section-head">
-          <h4>Allowed</h4>
+          <h4>Rules</h4>
           <p className="settings-description">
-            Narrow patterns that skip the classifier and run. A pattern that
-            names nothing is refused — a blanket allow is what the classifier
-            exists to replace.
+            A rule matches a command by its leading words, one word per box:
+            <code> git push</code> answers every command that starts with it.
+            The built-in entries are what stop a session under auto mode from
+            rewriting its own policy; they are not stored and cannot be removed.
           </p>
         </div>
-        <PatternEditor
-          list="allow"
-          testID="automode-allow"
-          values={config.allow}
-          shipped={new Set<string>()}
-          empty="Nothing skips the classifier."
-          placeholder="git status*"
-          policy={policy}
-        />
+        <RuleEditor config={config} policy={policy} />
 
         <div className="automode-section-head">
-          <h4>Hard denied</h4>
+          <h4>Network</h4>
           <p className="settings-description">
-            Refused before anything else looks at the call. The built-in entries
-            are what stop a session under auto mode from rewriting its own
-            policy; they are not stored and cannot be removed.
+            Which hosts a session may reach. The built-in denials cover attn's
+            own port, which is how a session would otherwise reach the app.
           </p>
         </div>
-        <PatternEditor
-          list="hard_deny"
-          testID="automode-hard-deny"
-          values={config.hard_deny}
-          shipped={shipped}
-          empty="Nothing is refused before the classifier sees it."
-          placeholder="*rm -rf /*"
-          policy={policy}
-        />
+        <HostEditor config={config} policy={policy} />
+
+        {config.legacy_patterns.length > 0 && (
+          <>
+            <div className="automode-section-head">
+              <h4>Not converted</h4>
+              <p className="settings-description">
+                These came from the old glob lists and carried a wildcard no rule
+                can express, so nothing reads them any more. Rewrite each one as
+                a rule above; the entry disappears once its rule is in place.
+              </p>
+            </div>
+            <div className="automode-editor" data-testid="automode-legacy">
+              <ul className="automode-patterns">
+                {config.legacy_patterns.map((pattern) => (
+                  <li key={pattern} className="automode-pattern-row" data-testid="automode-legacy-entry">
+                    <code className="automode-value">{pattern}</code>
+                    <span className="settings-pill warn">not converted</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
 
         <div className="automode-section-head">
           <h4>Proposed rules</h4>
           <p className="settings-description">
-            An agent can propose a pattern or a model from <code>attn automode</code>;
+            An agent can propose a rule or a host from <code>attn automode</code>;
             nothing it proposes changes what a session runs under until it is
             promoted here.
           </p>
@@ -152,10 +144,8 @@ export function AutoModeSettings({ policy }: AutoModeSettingsProps) {
                 data-testid={`automode-proposal-${proposal.id}`}
               >
                 <span className="automode-proposal-subject">
-                  <span className={`settings-pill ${proposal.kind === 'allow' ? 'warn' : ''}`}>
-                    {proposalKindLabel(proposal)}
-                  </span>
-                  <code className="automode-value">{proposal.value}</code>
+                  <span className="settings-pill">{proposal.kind}</span>
+                  <code className="automode-value">{proposal.summary || proposal.value}</code>
                 </span>
                 <span className="automode-proposal-origin">
                   {proposal.proposed_by || 'unattributed'}
@@ -214,6 +204,386 @@ export function AutoModeSettings({ policy }: AutoModeSettingsProps) {
   );
 }
 
+interface PolicyEditorProps {
+  config: AutoModeConfigInfo;
+  policy: AutoModePolicy;
+}
+
+function PolicyEditor({ config, policy }: PolicyEditorProps) {
+  const [failure, setFailure] = useState<string | null>(null);
+  const busy = policy.editing === 'policy';
+
+  const write = async (change: AutoModePolicyEdit) => {
+    setFailure(null);
+    try {
+      await policy.setPolicy(change);
+    } catch (err) {
+      setFailure(err instanceof Error ? err.message : 'Could not save the policy');
+    }
+  };
+
+  return (
+    <div className="automode-config" data-testid="automode-config">
+      <div className="automode-field">
+        <span className="automode-field-label">New sessions</span>
+        <span className="automode-field-value">
+          <span
+            className={`settings-pill ${config.enabled_default ? 'good' : ''}`}
+            data-testid="automode-new-sessions"
+          >
+            {config.enabled_default ? 'Auto mode on' : 'Auto mode off'}
+          </span>
+        </span>
+      </div>
+      <div className="automode-field">
+        <span className="automode-field-label">Approval policy</span>
+        <span className="automode-field-value">
+          <select
+            className="settings-input"
+            data-testid="automode-approval-policy"
+            aria-label="Approval policy"
+            value={config.approval_policy}
+            disabled={busy}
+            onChange={(event) => void write({ approvalPolicy: event.target.value })}
+          >
+            {APPROVAL_POLICIES.map((choice) => (
+              <option key={choice} value={choice}>{choice}</option>
+            ))}
+          </select>
+        </span>
+      </div>
+      <div className="automode-field">
+        <span className="automode-field-label">Sandbox</span>
+        <span className="automode-field-value">
+          <select
+            className="settings-input"
+            data-testid="automode-sandbox-mode"
+            aria-label="Sandbox mode"
+            value={config.sandbox_mode}
+            disabled={busy}
+            onChange={(event) => void write({ sandboxMode: event.target.value })}
+          >
+            {SANDBOX_MODES.map((choice) => (
+              <option key={choice} value={choice}>{choice}</option>
+            ))}
+          </select>
+        </span>
+      </div>
+      {failure && (
+        <span className="settings-warning" data-testid="automode-policy-error">{failure}</span>
+      )}
+    </div>
+  );
+}
+
+interface RuleEditorProps {
+  config: AutoModeConfigInfo;
+  policy: AutoModePolicy;
+}
+
+function RuleEditor({ config, policy }: RuleEditorProps) {
+  const [pattern, setPattern] = useState('');
+  const [decision, setDecision] = useState('allow');
+  const [justification, setJustification] = useState('');
+  const [failure, setFailure] = useState<string | null>(null);
+  const busy = policy.editing !== null;
+
+  const shipped = new Set(config.shipped_rules.map(ruleLine));
+
+  const submit = async () => {
+    const tokens = pattern.trim().split(/\s+/).filter((token) => token !== '');
+    if (tokens.length === 0) return;
+    setFailure(null);
+    try {
+      await policy.addRule({ pattern: tokens, decision, justification: justification.trim() });
+      setPattern('');
+      setJustification('');
+    } catch (err) {
+      setFailure(err instanceof Error ? err.message : 'Could not add the rule');
+    }
+  };
+
+  const remove = async (rule: AutoModeRuleInfo) => {
+    setFailure(null);
+    try {
+      await policy.removeRule(rule.pattern.map((alternatives) => alternatives[0]));
+    } catch (err) {
+      setFailure(err instanceof Error ? err.message : 'Could not remove the rule');
+    }
+  };
+
+  return (
+    <div className="automode-editor" data-testid="automode-rules">
+      {config.rules.length === 0 ? (
+        <span className="settings-hint">No rule decides anything yet.</span>
+      ) : (
+        <ul className="automode-patterns">
+          {config.rules.map((rule) => {
+            const line = ruleLine(rule);
+            const builtIn = shipped.has(line);
+            return (
+              <li
+                key={line}
+                className={`automode-pattern-row${builtIn ? ' is-builtin' : ''}`}
+                data-testid="automode-rules-entry"
+              >
+                <span className="automode-rule-subject">
+                  <span className={`settings-pill ${rule.decision === 'allow' ? 'good' : 'warn'}`}>
+                    {rule.decision}
+                  </span>
+                  <code className="automode-value">{line}</code>
+                  {rule.justification && (
+                    <span className="settings-hint automode-rule-why">{rule.justification}</span>
+                  )}
+                </span>
+                {builtIn ? (
+                  <span className="settings-pill" data-testid="automode-rules-builtin">built-in</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="settings-action danger"
+                    data-testid="automode-rules-remove"
+                    aria-label={`Remove ${line}`}
+                    disabled={busy}
+                    onClick={() => void remove(rule)}
+                  >
+                    Remove
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <div className="automode-rule-add">
+        <input
+          type="text"
+          className="settings-input"
+          data-testid="automode-rules-pattern"
+          value={pattern}
+          placeholder="git push"
+          aria-label="Command words the rule matches"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          disabled={busy}
+          onChange={(event) => setPattern(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') void submit();
+          }}
+        />
+        <select
+          className="settings-input"
+          data-testid="automode-rules-decision"
+          aria-label="What the rule decides"
+          value={decision}
+          disabled={busy}
+          onChange={(event) => setDecision(event.target.value)}
+        >
+          {DECISIONS.map((choice) => (
+            <option key={choice} value={choice}>{choice}</option>
+          ))}
+        </select>
+        <input
+          type="text"
+          className="settings-input"
+          data-testid="automode-rules-justification"
+          value={justification}
+          placeholder={decision === 'forbidden' ? 'why it is refused' : 'why (optional)'}
+          aria-label="Why the rule decides that"
+          disabled={busy}
+          onChange={(event) => setJustification(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') void submit();
+          }}
+        />
+        <button
+          type="button"
+          className="settings-action"
+          data-testid="automode-rules-add"
+          disabled={busy || pattern.trim() === ''}
+          onClick={() => void submit()}
+        >
+          Add
+        </button>
+      </div>
+      {failure && (
+        <span className="settings-warning" data-testid="automode-rules-error">{failure}</span>
+      )}
+    </div>
+  );
+}
+
+interface HostEditorProps {
+  config: AutoModeConfigInfo;
+  policy: AutoModePolicy;
+}
+
+function HostEditor({ config, policy }: HostEditorProps) {
+  return (
+    <>
+      <LocalBindingToggle config={config} policy={policy} />
+      <HostList
+        decision="allow"
+        testID="automode-hosts-allow"
+        hosts={config.network.allowed_domains}
+        shipped={new Set<string>()}
+        empty="Nothing is reachable beyond what pi allows on its own."
+        policy={policy}
+      />
+      <HostList
+        decision="deny"
+        testID="automode-hosts-deny"
+        hosts={config.network.denied_domains}
+        shipped={new Set(config.shipped_denied_domains)}
+        empty="Nothing is refused outright."
+        policy={policy}
+      />
+    </>
+  );
+}
+
+function LocalBindingToggle({ config, policy }: HostEditorProps) {
+  const [failure, setFailure] = useState<string | null>(null);
+  const busy = policy.editing === 'policy';
+
+  const write = async (allowLocalBinding: boolean) => {
+    setFailure(null);
+    try {
+      await policy.setPolicy({ allowLocalBinding });
+    } catch (err) {
+      setFailure(err instanceof Error ? err.message : 'Could not save the network policy');
+    }
+  };
+
+  return (
+    <div className="automode-editor">
+      <label className="automode-toggle">
+        <input
+          type="checkbox"
+          data-testid="automode-allow-local-binding"
+          checked={config.network.allow_local_binding}
+          disabled={busy}
+          onChange={(event) => void write(event.target.checked)}
+        />
+        <span>
+          Reach localhost and private networks
+          <span className="settings-description">
+            Let sandboxed commands reach localhost and private networks through the proxy.
+          </span>
+        </span>
+      </label>
+      {failure && (
+        <span className="settings-warning" data-testid="automode-network-error">{failure}</span>
+      )}
+    </div>
+  );
+}
+
+interface HostListProps {
+  decision: string;
+  testID: string;
+  hosts: string[];
+  shipped: Set<string>;
+  empty: string;
+  policy: AutoModePolicy;
+}
+
+function HostList({ decision, testID, hosts, shipped, empty, policy }: HostListProps) {
+  const [draft, setDraft] = useState('');
+  const [failure, setFailure] = useState<string | null>(null);
+  const busy = policy.editing !== null;
+
+  const submit = async () => {
+    const host = draft.trim();
+    if (host === '') return;
+    setFailure(null);
+    try {
+      await policy.addHost(host, decision);
+      setDraft('');
+    } catch (err) {
+      setFailure(err instanceof Error ? err.message : 'Could not add the host');
+    }
+  };
+
+  const remove = async (host: string) => {
+    setFailure(null);
+    try {
+      await policy.removeHost(host, decision);
+    } catch (err) {
+      setFailure(err instanceof Error ? err.message : 'Could not remove the host');
+    }
+  };
+
+  return (
+    <div className="automode-editor" data-testid={testID}>
+      <span className="settings-hint">{decision === 'allow' ? 'Allowed hosts' : 'Denied hosts'}</span>
+      {hosts.length === 0 ? (
+        <span className="settings-hint">{empty}</span>
+      ) : (
+        <ul className="automode-patterns">
+          {hosts.map((host) => {
+            const builtIn = shipped.has(host);
+            return (
+              <li
+                key={host}
+                className={`automode-pattern-row${builtIn ? ' is-builtin' : ''}`}
+                data-testid={`${testID}-entry`}
+              >
+                <code className="automode-value">{host}</code>
+                {builtIn ? (
+                  <span className="settings-pill" data-testid={`${testID}-builtin`}>built-in</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="settings-action danger"
+                    data-testid={`${testID}-remove`}
+                    aria-label={`Remove ${host}`}
+                    disabled={busy}
+                    onClick={() => void remove(host)}
+                  >
+                    Remove
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <div className="automode-pattern-add">
+        <input
+          type="text"
+          className="settings-input"
+          data-testid={`${testID}-input`}
+          value={draft}
+          placeholder="crates.io"
+          aria-label={decision === 'allow' ? 'Allowed host' : 'Denied host'}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          disabled={busy}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') void submit();
+          }}
+        />
+        <button
+          type="button"
+          className="settings-action"
+          data-testid={`${testID}-add`}
+          disabled={busy || draft.trim() === ''}
+          onClick={() => void submit()}
+        >
+          Add
+        </button>
+      </div>
+      {failure && (
+        <span className="settings-warning" data-testid={`${testID}-error`}>{failure}</span>
+      )}
+    </div>
+  );
+}
+
 interface EnvironmentEditorProps {
   config: AutoModeConfigInfo;
   slots: AutoModeEnvironmentSlot[];
@@ -246,9 +616,13 @@ function EnvironmentEditor({ config, slots, policy }: EnvironmentEditorProps) {
         return {
           present: true,
           enabledDefault: now.config.enabled_default,
-          models: now.config.models,
-          allow: now.config.allow,
-          hardDeny: now.config.hard_deny,
+          approvalPolicy: now.config.approval_policy,
+          sandboxMode: now.config.sandbox_mode,
+          rules: now.config.rules.map(ruleLine),
+          allowedHosts: now.config.network.allowed_domains,
+          deniedHosts: now.config.network.denied_domains,
+          allowLocalBinding: now.config.network.allow_local_binding,
+          legacyPatterns: now.config.legacy_patterns,
           proposals: now.policy.state?.proposals.length ?? 0,
           environment: {
             slots: now.config.environment.slots,
@@ -394,117 +768,6 @@ function EnvironmentEditor({ config, slots, policy }: EnvironmentEditorProps) {
   );
 }
 
-interface PatternEditorProps {
-  list: AutoModePatternList;
-  testID: string;
-  values: string[];
-  shipped: Set<string>;
-  empty: string;
-  placeholder: string;
-  policy: AutoModePolicy;
-}
-
-function PatternEditor({
-  list, testID, values, shipped, empty, placeholder, policy,
-}: PatternEditorProps) {
-  const [draft, setDraft] = useState('');
-  const [failure, setFailure] = useState<string | null>(null);
-  const busy = policy.editingList !== null;
-
-  const submit = async () => {
-    const pattern = draft.trim();
-    if (pattern === '') return;
-    setFailure(null);
-    try {
-      await policy.addPattern(list, pattern);
-      setDraft('');
-    } catch (err) {
-      setFailure(err instanceof Error ? err.message : 'Could not add the pattern');
-    }
-  };
-
-  const remove = async (pattern: string) => {
-    setFailure(null);
-    try {
-      await policy.removePattern(list, pattern);
-    } catch (err) {
-      setFailure(err instanceof Error ? err.message : 'Could not remove the pattern');
-    }
-  };
-
-  return (
-    <div className="automode-editor" data-testid={testID}>
-      {values.length === 0 ? (
-        <span className="settings-hint">{empty}</span>
-      ) : (
-        <ul className="automode-patterns">
-          {values.map((value) => {
-            const builtIn = shipped.has(value);
-            return (
-              <li
-                key={value}
-                className={`automode-pattern-row${builtIn ? ' is-builtin' : ''}`}
-                data-testid={`${testID}-entry`}
-              >
-                <code className="automode-value">{value}</code>
-                {builtIn ? (
-                  <span className="settings-pill" data-testid={`${testID}-builtin`}>
-                    built-in
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    className="settings-action danger"
-                    data-testid={`${testID}-remove`}
-                    aria-label={`Remove ${value}`}
-                    disabled={busy}
-                    onClick={() => void remove(value)}
-                  >
-                    Remove
-                  </button>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      <div className="automode-pattern-add">
-        <input
-          type="text"
-          className="settings-input"
-          data-testid={`${testID}-input`}
-          value={draft}
-          placeholder={placeholder}
-          aria-label={list === 'allow' ? 'Allow pattern' : 'Hard deny pattern'}
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          disabled={busy}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') void submit();
-          }}
-        />
-        <button
-          type="button"
-          className="settings-action"
-          data-testid={`${testID}-add`}
-          disabled={busy || draft.trim() === ''}
-          onClick={() => void submit()}
-        >
-          Add
-        </button>
-      </div>
-      {failure && (
-        <span className="settings-warning" data-testid={`${testID}-error`}>
-          {failure}
-        </span>
-      )}
-    </div>
-  );
-}
-
-
 function renderDenials(denials: AutoModeDenialInfo[]) {
   if (denials.length === 0) {
     return (
@@ -530,234 +793,8 @@ function renderDenials(denials: AutoModeDenialInfo[]) {
   );
 }
 
-function proposalKindLabel(proposal: AutoModeProposalInfo): string {
-  return proposal.kind === 'model' ? 'models' : proposal.kind;
-}
-
 function formatStamp(value: string): string {
   const at = new Date(value);
   if (Number.isNaN(at.getTime())) return value;
   return at.toLocaleString();
-}
-
-interface ModelEditorProps {
-  policy: AutoModePolicy;
-  models: string[];
-}
-
-function ModelEditor({ policy, models }: ModelEditorProps) {
-  const [draft, setDraft] = useState('');
-  const [failure, setFailure] = useState<string | null>(null);
-  const [picking, setPicking] = useState(false);
-  const busy = policy.savingModels;
-  const catalog = policy.modelCatalog;
-
-  const write = async (next: string[], whenItFails: string) => {
-    setFailure(null);
-    try {
-      await policy.setModels(next);
-    } catch (err) {
-      setFailure(err instanceof Error ? err.message : whenItFails);
-    }
-  };
-
-  const add = async (model: string) => {
-    const wanted = model.trim();
-    if (wanted === '') return;
-    if (models.includes(wanted)) {
-      setFailure(`${wanted} is already in the list; a pass walks each model once`);
-      return;
-    }
-    await write([...models, wanted], 'Could not add the model');
-    setDraft('');
-  };
-
-  const openPicker = async () => {
-    setPicking(true);
-    if (!catalog) await policy.loadModelCatalog();
-  };
-
-  return (
-    <div className="automode-editor" data-testid="automode-models">
-      {models.length === 0 ? (
-        <span className="settings-hint">No model, so auto mode stays off.</span>
-      ) : (
-        <ul className="automode-models-list">
-          {models.map((model, index) => (
-            <li key={model} className="automode-model-row" data-testid="automode-models-entry">
-              <code className="automode-value automode-mono">{model}</code>
-              <span className={`settings-pill${index === 0 ? ' good' : ''}`}>
-                {index === 0 ? 'judges' : 'fallback'}
-              </span>
-              <span className="automode-model-actions">
-                {index > 0 && (
-                  <button
-                    type="button"
-                    className="settings-action"
-                    data-testid="automode-models-primary"
-                    aria-label={`Make ${model} the model that judges`}
-                    disabled={busy}
-                    onClick={() => void write(
-                      [model, ...models.filter((entry) => entry !== model)],
-                      'Could not reorder the models',
-                    )}
-                  >
-                    Make primary
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="settings-action danger"
-                  data-testid="automode-models-remove"
-                  aria-label={`Remove ${model}`}
-                  disabled={busy}
-                  onClick={() => void write(
-                    models.filter((entry) => entry !== model),
-                    'Could not remove the model',
-                  )}
-                >
-                  Remove
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="automode-model-add">
-        <input
-          type="text"
-          className="settings-input"
-          data-testid="automode-models-input"
-          value={draft}
-          placeholder="provider/id, such as opencode-go/glm-5.3"
-          aria-label="Model"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          disabled={busy}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault();
-              void add(draft);
-            }
-          }}
-        />
-        <button
-          type="button"
-          className="settings-action"
-          data-testid="automode-models-add"
-          disabled={busy || draft.trim() === ''}
-          onClick={() => void add(draft)}
-        >
-          Add
-        </button>
-        {!picking && (
-          <button
-            type="button"
-            className="settings-action"
-            data-testid="automode-models-browse"
-            disabled={busy}
-            onClick={() => void openPicker()}
-          >
-            Models pi can reach
-          </button>
-        )}
-      </div>
-
-      {picking && <ModelCatalog policy={policy} models={models} onPick={(model) => void add(model)} />}
-      {failure && <span className="settings-warning">{failure}</span>}
-    </div>
-  );
-}
-
-interface ModelCatalogProps {
-  policy: AutoModePolicy;
-  models: string[];
-  onPick: (model: string) => void;
-}
-
-function ModelCatalog({ policy, models, onPick }: ModelCatalogProps) {
-  const { modelCatalog: catalog, catalogLoading, catalogError } = policy;
-
-  if (catalogLoading) {
-    return <span className="settings-hint" data-testid="automode-models-catalog-loading">Asking pi…</span>;
-  }
-  if (catalogError) {
-    return (
-      <div className="automode-models-catalog" data-testid="automode-models-catalog-error">
-        <span className="settings-warning">{catalogError}</span>
-        <button type="button" className="settings-action" onClick={() => void policy.loadModelCatalog()}>
-          Try again
-        </button>
-      </div>
-    );
-  }
-  if (!catalog) return null;
-
-  const chosen = new Set(models);
-  const reachable = catalog.providers.filter((provider) => provider.models.length > 0);
-
-  return (
-    <div className="automode-models-catalog" data-testid="automode-models-catalog">
-      {reachable.length === 0 ? (
-        <span className="settings-hint" data-testid="automode-models-catalog-empty">
-          Pi has no available models. Configure a provider in Pi, then refresh.
-        </span>
-      ) : (
-        <select
-          className="settings-input"
-          data-testid="automode-models-select"
-          aria-label="Models pi can reach"
-          value=""
-          onChange={(event) => {
-            if (event.target.value !== '') onPick(event.target.value);
-          }}
-        >
-          <option value="">Pick a model…</option>
-          {reachable.map((provider) => (
-            <optgroup
-              key={provider.provider}
-              label={provider.ready
-                ? provider.provider
-                : `${provider.provider} — ${provider.detail ?? 'pi cannot use this one'}`}
-            >
-              {provider.models.map((model) => {
-                const value = `${provider.provider}/${model.id}`;
-                return (
-                  <option key={value} value={value} disabled={!provider.ready || chosen.has(value)}>
-                    {model.name ?? model.id}
-                  </option>
-                );
-              })}
-            </optgroup>
-          ))}
-        </select>
-      )}
-      <button
-        type="button"
-        className="settings-action"
-        data-testid="automode-models-refresh"
-        onClick={() => void policy.loadModelCatalog()}
-      >
-        Refresh
-      </button>
-      <CatalogFreshness providers={reachable} />
-      {catalog.problem && <span className="settings-warning">{catalog.problem}</span>}
-    </div>
-  );
-}
-
-function CatalogFreshness({ providers }: { providers: AutoModeModelProvider[] }) {
-  const stamps = providers
-    .map((provider) => provider.checked_at)
-    .filter((stamp): stamp is number => typeof stamp === 'number' && stamp > 0);
-  if (stamps.length === 0) return null;
-  const oldest = new Date(Math.min(...stamps));
-  return (
-    <span className="settings-hint" data-testid="automode-models-checked-at">
-      Catalog read {oldest.toLocaleDateString()}.
-    </span>
-  );
 }

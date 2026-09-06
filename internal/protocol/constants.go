@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "296"
+const ProtocolVersion = "297"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -304,10 +304,11 @@ const (
 	CmdAutoModeGet           = "automode_get"
 	CmdAutoModePromote       = "automode_promote"
 	CmdAutoModeDiscard       = "automode_discard"
-	CmdAutoModePatternAdd    = "automode_pattern_add"
-	CmdAutoModePatternRemove = "automode_pattern_remove"
-	CmdAutoModeModelSet      = "automode_model_set"
-	CmdAutoModeModels        = "automode_models"
+	CmdAutoModeRuleAdd       = "automode_rule_add"
+	CmdAutoModeRuleRemove    = "automode_rule_remove"
+	CmdAutoModeHostAdd       = "automode_host_add"
+	CmdAutoModeHostRemove    = "automode_host_remove"
+	CmdAutoModePolicySet     = "automode_policy_set"
 )
 
 const EventAutoModeEnvSetResult = "automode_env_set_result"
@@ -463,9 +464,7 @@ const (
 	EventAutoModeStateResult             = "automode_state_result"
 	EventAutoModePromoteResult           = "automode_promote_result"
 	EventAutoModeDiscardResult           = "automode_discard_result"
-	EventAutoModePatternResult           = "automode_pattern_result"
-	EventAutoModeModelSetResult          = "automode_model_set_result"
-	EventAutoModeModelsResult            = "automode_models_result"
+	EventAutoModeConfigResult            = "automode_config_result"
 	EventSessionAnnotationsGetResult     = "session_annotations_get_result"
 	EventSessionAnnotationsSaveResult    = "session_annotations_save_result"
 	EventSessionAnnotationsClearResult   = "session_annotations_clear_result"
@@ -1989,31 +1988,38 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 		}
 		return peek.Cmd, &msg, nil
 
-	case CmdAutoModePatternAdd:
-		var msg AutoModePatternAddMessage
+	case CmdAutoModeRuleAdd:
+		var msg AutoModeRuleAddMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal automode_pattern_add: %w", err)
+			return "", nil, fmt.Errorf("unmarshal automode_rule_add: %w", err)
 		}
 		return peek.Cmd, &msg, nil
 
-	case CmdAutoModePatternRemove:
-		var msg AutoModePatternRemoveMessage
+	case CmdAutoModeRuleRemove:
+		var msg AutoModeRuleRemoveMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal automode_pattern_remove: %w", err)
+			return "", nil, fmt.Errorf("unmarshal automode_rule_remove: %w", err)
 		}
 		return peek.Cmd, &msg, nil
 
-	case CmdAutoModeModelSet:
-		var msg AutoModeModelSetMessage
+	case CmdAutoModeHostAdd:
+		var msg AutoModeHostAddMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal automode_model_set: %w", err)
+			return "", nil, fmt.Errorf("unmarshal automode_host_add: %w", err)
 		}
 		return peek.Cmd, &msg, nil
 
-	case CmdAutoModeModels:
-		var msg AutoModeModelsMessage
+	case CmdAutoModeHostRemove:
+		var msg AutoModeHostRemoveMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal automode_models: %w", err)
+			return "", nil, fmt.Errorf("unmarshal automode_host_remove: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdAutoModePolicySet:
+		var msg AutoModePolicySetMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal automode_policy_set: %w", err)
 		}
 		return peek.Cmd, &msg, nil
 

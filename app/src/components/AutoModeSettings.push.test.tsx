@@ -5,7 +5,7 @@ import { getAutoModeAutomationHandle } from './autoModeAutomation';
 import { handleAutoModeDaemonEvent } from '../hooks/daemonAutoModeEvents';
 import type {
   AutoModeConfigInfo,
-  AutoModePatternEdit,
+  AutoModeConfigEdit,
   AutoModePromotion,
   AutoModeState,
 } from '../hooks/daemonAutoModeEvents';
@@ -14,11 +14,14 @@ import { useAutoModePushStore } from '../store/autoMode';
 
 const config = (over: Partial<AutoModeConfigInfo> = {}): AutoModeConfigInfo => ({
   enabled_default: true,
+  approval_policy: 'on-request',
+  sandbox_mode: 'workspace-write',
   environment: { slots: [{ id: 'domains', values: ['read-when-it-opened.corp'] }], notes: [] },
-  allow: [],
-  hard_deny: [],
-  shipped_hard_deny: [],
-  models: ['opencode-go/glm-5.3'],
+  rules: [],
+  shipped_rules: [],
+  network: { enabled: true, allowed_domains: [], denied_domains: [], allow_local_binding: false },
+  shipped_denied_domains: [],
+  legacy_patterns: [],
   ...over,
 });
 
@@ -47,11 +50,12 @@ function Harness({ getState }: { getState: () => Promise<AutoModeState> }) {
     getState,
     promoteProposal: vi.fn().mockResolvedValue({} as AutoModePromotion),
     discardProposal: vi.fn().mockResolvedValue({} as AutoModePromotion),
-    addPattern: vi.fn().mockResolvedValue({ config: config() } as AutoModePatternEdit),
-    removePattern: vi.fn().mockResolvedValue({ config: config() } as AutoModePatternEdit),
-    setEnvironmentSlot: vi.fn().mockResolvedValue({ config: config() } as AutoModePatternEdit),
-    setModels: vi.fn(async () => ({ config: config() })),
-    loadModels: vi.fn(async () => ({ providers: [], problem: null })),
+    addRule: vi.fn().mockResolvedValue({ config: config() } as AutoModeConfigEdit),
+    removeRule: vi.fn().mockResolvedValue({ config: config() } as AutoModeConfigEdit),
+    addHost: vi.fn().mockResolvedValue({ config: config() } as AutoModeConfigEdit),
+    removeHost: vi.fn().mockResolvedValue({ config: config() } as AutoModeConfigEdit),
+    setPolicy: vi.fn().mockResolvedValue({ config: config() } as AutoModeConfigEdit),
+    setEnvironmentSlot: vi.fn().mockResolvedValue({ config: config() } as AutoModeConfigEdit),
   });
   return <AutoModeSettings policy={policy} />;
 }
