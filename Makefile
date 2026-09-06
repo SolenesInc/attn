@@ -229,9 +229,8 @@ test-quick: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
 test-watch: $(GOTESTSUM) $(NATIVE_VT_DEP)
 	$(GOTESTSUM) --watch --format testdox -- ./...
 
-# The frontend's second fresh-checkout wall: no app/node_modules, so lint and
-# the frontend suites died on a missing oxlint. Stamped because pnpm leaves the
-# directory's mtime behind the lockfile's, which would reinstall on every run.
+# Stamped because pnpm leaves the directory's mtime behind the lockfile's,
+# which would otherwise reinstall on every run.
 APP_NODE_MODULES := app/node_modules/.attn-installed
 $(APP_NODE_MODULES): app/package.json app/pnpm-lock.yaml
 	pnpm --dir app install --frozen-lockfile
@@ -242,8 +241,6 @@ test-frontend: $(APP_NODE_MODULES)
 
 lint: lint-go lint-frontend
 
-# commentlint and staticcheck load every package, cgo-linked internal/ghosttyvt
-# included, so a fresh checkout needs the archive or lint dies on ghostty/vt.h.
 lint-go: $(NATIVE_VT_DEP)
 	go run ./cmd/commentlint ./...
 	go tool staticcheck ./...
