@@ -115,8 +115,9 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
   SQL identifiers come from integers or validated field names, never caller text.
 - App consumer/namespace names derive from `internal/apps`; enabled state is
   the consumer's enabled bit.
-- Auto-mode pattern/model writes go only through `PromoteAutoModeProposal`
-  in `internal/store/automode.go`. Agents propose; only the user promotes.
+- Auto-mode rule, host and policy writes go through `PromoteAutoModeProposal`
+  in `internal/store/automode.go` or the pi relay's `PromoteReportedAmendment`.
+  The CLI proposes; the app promotes.
 
 ## Protocol
 

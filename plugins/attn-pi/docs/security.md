@@ -1,7 +1,13 @@
 # Pi execution security
 
 Pi sessions launched by attn sandbox built-in tools and filter credentials.
-These protections stay active when `/auto off` disables the permission classifier.
+These protections stay active whichever reviewer `/auto` selects.
+
+`/security` covers the built-in file tools, the read and write deny lists, and
+the guidance each turn carries. A bash command runs under the daemon's
+`sandbox_mode` instead, which the app's Settings owns; the two cover different
+tools and do not overrule each other. [automode.md](automode.md) describes the
+approval path a bash command walks.
 
 `/security` opens a keyboard-driven settings panel in Pi. Use the arrow keys
 and Enter to toggle the sandbox, tool networking and build-cache access. Open
@@ -10,10 +16,10 @@ panel; Escape in a path editor cancels that edit. Changes apply immediately
 and persist for future sessions. Other running sessions keep their current
 policy.
 
-The panel shows why an unavailable cache was skipped, identifies built-in
-protections, and explains when auto mode can review temporary access. Restore
-the standard cache preset from Cache directories. Credential filtering stays
-on independently of the sandbox and cannot be disabled from the panel.
+The panel shows why an unavailable cache was skipped and identifies built-in
+protections. Restore the standard cache preset from Cache directories.
+Credential filtering stays on independently of the sandbox and cannot be
+disabled from the panel.
 
 `/security status` shows the effective paths, network mode, and settings file
 as text. Bare `/security` also returns text outside Pi's terminal UI.
@@ -40,7 +46,7 @@ directory. Project settings cannot override this file.
 
 The sandbox permits writes in the session directory, validated Git worktree metadata, and a
 private temporary directory. Standard build-cache directories are also writable
-by default, so ordinary builds do not need a sandbox escalation for their caches.
+by default, so ordinary builds never need an escalation for their caches.
 Reads are generally allowed, except for SSH, AWS, GPG and Google Cloud credential
 directories, Git credential files, and Pi's agent directory. The settings file
 and project `.pi` and `.agents` directories are protected against tool writes.
@@ -81,54 +87,30 @@ all cache entries. Turning it off or removing a path preserves cached files and
 independent explicit write grants. These controls apply to the current session
 immediately and persist for later sessions.
 
-Auto mode receives the active cache paths from the executor. Routine cache and
-lock writes by build, test and dependency commands need no separate consent for
-those paths. Other effects, cache purges, credential access and deliberate cache
-poisoning remain subject to normal review. A directory named by the agent alone
-does not establish this exception. Writable caches may contain code used by
-later builds; disabling the preset removes those default grants.
+The cache grants are writable roots, so routine cache and lock writes by build,
+test and dependency commands never reach a reviewer for the path itself. What
+the command does still walks the approval path. Writable caches may contain
+code used by later builds; disabling the preset removes those default grants.
 
 ## Agent recovery
 
 Blocked native file operations explain the path and the policy that refused
-access. Each agent turn receives the current writable paths, cache grants,
-network policy and reviewer availability. A shell command that fails with a
-permission error includes the active write roots and an available recovery route.
-Likely DNS, connection and download failures include network-request guidance
-when tool networking is blocked. Shell errors can also
-come from ordinary file permissions, so the message does not claim every
-permission error proves a sandbox denial.
+access. Each agent turn receives the current writable paths, cache grants and
+network policy. A shell command that fails with a permission error includes the
+active write roots. Likely DNS, connection and download failures say so when
+tool networking is blocked. Shell errors can also come from ordinary file
+permissions, so the message does not claim every permission error proves a
+sandbox denial.
 
-When auto-mode review is available, the agent submits a scoped request directly,
-without first asking the user in chat. An OS error has not established a review
-refusal. For an additional directory outside the configured grants:
+The sandbox cannot be widened from inside a file-tool call. The agent is told to
+work within it or to name the exact path and reason so you can decide; you grant
+a directory with `/security allow-write <directory>`. There is no request the
+agent can submit to widen these tools, and the guidance says so rather than
+pointing at one.
 
-```json
-{
-  "command": "go test ./...",
-  "sandbox": {
-    "allowWrite": ["/existing/build-cache"],
-    "reason": "The test build writes compiled packages to this cache."
-  }
-}
-```
-
-Auto mode reviews the command, canonical directory paths, and reason together,
-even when the command matches a normal allow pattern. Approval permits that
-execution and its children to use the requested directories; it does not change
-saved permissions or other calls. The requested directories must already exist.
-For a new cache, use a project-local directory or ask the user to create the
-external directory first. A request can also include `"network": "allow"` to
-review temporary unrestricted networking. Read/write denies and credential
-filtering remain active, including beneath a granted parent directory.
-
-A refusal tells the agent what was refused, why, and whether the user's explicit
-approval can be considered on another attempt. The agent explains the refusal
-to the user and submits the same scoped request after their approval. The
-classifier reviews the reply; it is not an automatic override of policy.
-With auto mode off or no reviewer configured, extra access is refused with
-instructions to ask the user. Ordinary tool execution remains sandboxed.
-Standalone security has no auto-mode reviewer; use user-managed grants there.
+A bash command is the exception, and it has its own route: the agent re-issues
+with `sandbox_permissions: "require_escalated"` and a justification, which goes
+to the reviewer. See [automode.md](automode.md).
 
 ## Execution and filtering
 
@@ -145,7 +127,7 @@ protects its nearest existing parent until that path is created outside Pi.
 Credential filtering removes sensitive environment variables from tool
 subprocesses while keeping provider authentication in Pi. Recognized token
 formats, known credential values, and complete PEM private keys are redacted
-from text results, streamed shell output, saved shell output, classifier
+from text results, streamed shell output, saved shell output, Guardian
 requests, and denial records. Lines longer than 64 KiB are withheld entirely
 so truncation cannot expose part of a token. Images and encoded or otherwise
 unrecognized secrets are not detected by these text filters.
@@ -153,13 +135,20 @@ unrecognized secrets are not detected by these text filters.
 `!` and `!!` commands use the same shell restrictions and filters. Custom
 extensions and MCP servers remain trusted code outside the sandbox; final
 result and model-request filtering does not contain their execution or their
-own logging. Networking is unrestricted unless set to `deny`; there is no
-hostname allowlist or implied protection against arbitrary exfiltration.
-Linux network isolation covers TCP/IP. Reachable filesystem sockets, such as
-an SSH agent or Docker socket, remain trusted services with their own authority.
+own logging. A bash command's network goes through attn's proxy, which enforces
+the host allow and deny lists; `/security network deny` blocks tool networking
+outright, including localhost. Linux network isolation covers TCP/IP. Reachable
+filesystem sockets, such as an SSH agent or Docker socket, remain trusted
+services with their own authority.
+
+The approval channel is deliberately out of reach: `ATTN_PI_TOKEN` and
+`ATTN_PI_SUITE_SOCKET` are stripped from the environment a sandboxed command
+gets, so the agent cannot reach the reviewer it is being reviewed by.
 
 Outside attn, load the packaged extension with `pi -e /path/to/security.js`.
-It can be combined with `automode.js` and works without a classifier model.
+It runs on its own: without attn there is no daemon config, so there is no
+approval policy, no proxy and no reviewer, and the user-managed grants above are
+the whole story.
 
 The macOS base policy comes from OpenAI Codex, and credential-format detection
 uses adapted Gitleaks rules and public token formats. Their source references

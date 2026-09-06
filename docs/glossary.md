@@ -101,9 +101,16 @@
 - Headless tasks switch: `ATTN_HEADLESS_TASKS` / `headless_tasks.enabled`; off refuses every headless task before it spawns. The environment wins.
 - Settings snapshot for that switch: `headless_tasks.enabled` is the effective value, `.stored` the setting alone, `.override` the raw environment value when it decides.
 - State marker: `<!-- attn:state=waiting_input|idle -->` in an agent's last assistant message. With the switch off it is the stop verdict, so no model runs; without one the stop settles on hook evidence. Transcript readers strip it from messages; a marker-only message is never shown.
-- Auto mode: pi permissions. Config: policy/environment snapshot at launch.
-- Proposal: requested policy/model change. Promotion: user applies it. Denial: refused call.
-- Environment template: initial classifier context copied into config.
+- Auto mode: which reviewer answers a pi approval. On = the Guardian, off = the user's card. `/auto` toggles it; it changes nothing else.
+- Reviewer: what answers one approval. Exactly one per session, never both in sequence.
+- Guardian: the model reviewer. Runs on the session's active model, may run read-only sandboxed commands, and its rejection goes back to the agent as text.
+- Approval policy: what an unmatched command does — `untrusted` asks, `on-request` runs it sandboxed and asks only for escalation, `never` never asks.
+- Prefix rule: a command prefix, one token per argument, no wildcards, deciding allow, prompt or forbidden. `match`/`not_match` examples are checked when rules load.
+- Sandbox mode: `read-only`, `workspace-write` or `danger-full-access`; what a bash command runs under. `/security` still governs the file tools and the deny lists.
+- Host approval: a decision about one network host, taken while the proxy holds the connection open.
+- Config: the daemon's policy/environment snapshot, handed to a session at launch.
+- Proposal: a requested config change. Promotion: the user applies it. Denial: a refused call, recorded in the ledger.
+- Environment template: initial environment context copied into config.
 
 ## Worktrees
 
