@@ -157,6 +157,7 @@ model AutomationProvenance {
 
 model SessionUsageModel {
   `model`: string;
+  purpose: string;              // Whose work this row is: "agent" for the session's own turns, "guardian" for the reviewer attn runs beside it. Rows written before purposes existed read as "agent".
   input_tokens: safeint;
   output_tokens: safeint;
   cache_read_tokens: safeint;

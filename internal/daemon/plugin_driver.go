@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -129,6 +130,12 @@ type pluginReportPullRequestParams struct {
 	SessionID string `json:"session_id"`
 	RunID     string `json:"run_id"`
 	URL       string `json:"url"`
+}
+
+type pluginReportTranscriptPathParams struct {
+	SessionID string `json:"session_id"`
+	RunID     string `json:"run_id"`
+	Path      string `json:"path"`
 }
 
 type pluginReportAutoModeDenialParams struct {
@@ -381,6 +388,24 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 			return nil, true, err
 		}
 		return struct{}{}, true, nil
+	case "session.report_transcript_path":
+		var params pluginReportTranscriptPathParams
+		if err := json.Unmarshal(msg.Params, &params); err != nil {
+			return nil, true, fmt.Errorf("decode session.report_transcript_path params: %w", err)
+		}
+		path := strings.TrimSpace(params.Path)
+		if path == "" {
+			return nil, true, errors.New("session.report_transcript_path path is required")
+		}
+		if !filepath.IsAbs(path) {
+			return nil, true, fmt.Errorf("session.report_transcript_path path %q must be absolute", path)
+		}
+		if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
+			return nil, true, err
+		}
+		d.notePluginDriverReport(params.SessionID)
+		d.applyPluginReportedTranscriptPath(params, path)
+		return struct{}{}, true, nil
 	case "session.report_automode_denial":
 		var params pluginReportAutoModeDenialParams
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
@@ -578,6 +603,18 @@ func (d *Daemon) applyPluginReportedMetadata(params pluginReportMetadataParams) 
 		d.persistResumeSessionID(params.SessionID, resumeID)
 	}
 	return true
+}
+
+func (d *Daemon) applyPluginReportedTranscriptPath(params pluginReportTranscriptPathParams, path string) {
+	if !d.store.SetAgentDriverTranscriptPath(params.SessionID, params.RunID, path) {
+		d.logf("plugin transcript path report discarded: session=%s run=%s", params.SessionID, params.RunID)
+		return
+	}
+	session := d.store.Get(params.SessionID)
+	if session == nil {
+		return
+	}
+	d.ensurePluginUsageWatcher(params.SessionID, string(session.Agent), path)
 }
 
 func (d *Daemon) beginPluginSessionLaunch(sessionID, pluginName, runID string) {

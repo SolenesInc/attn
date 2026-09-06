@@ -8753,6 +8753,9 @@ type SessionUsageModel struct {
 	// OutputTokens corresponds to the JSON schema field "output_tokens".
 	OutputTokens int `json:"output_tokens"`
 
+	// Purpose corresponds to the JSON schema field "purpose".
+	Purpose string `json:"purpose"`
+
 	// TotalTokens corresponds to the JSON schema field "total_tokens".
 	TotalTokens int `json:"total_tokens"`
 

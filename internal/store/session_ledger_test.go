@@ -453,9 +453,9 @@ func TestNothingAfterAReopenCanInflateAFinalizedTotal(t *testing.T) {
 				if err != nil {
 					t.Fatalf("SessionCost after %s: %v", late.name, err)
 				}
-				if after.Ledger["opus"] != finalized.Ledger["opus"] {
+				if after.Ledger[sessioncost.AgentKey("opus")] != finalized.Ledger[sessioncost.AgentKey("opus")] {
 					t.Errorf("opus total = %+v after %s, want the finalized %+v",
-						after.Ledger["opus"], late.name, finalized.Ledger["opus"])
+						after.Ledger[sessioncost.AgentKey("opus")], late.name, finalized.Ledger[sessioncost.AgentKey("opus")])
 				}
 			}
 
@@ -470,9 +470,9 @@ func TestNothingAfterAReopenCanInflateAFinalizedTotal(t *testing.T) {
 			if err != nil {
 				t.Fatalf("SessionCost after the resumed work: %v", err)
 			}
-			want := finalized.Ledger["opus"].Add(fresh.Usage)
-			if after.Ledger["opus"] != want {
-				t.Errorf("opus total = %+v after resuming, want %+v", after.Ledger["opus"], want)
+			want := finalized.Ledger[sessioncost.AgentKey("opus")].Add(fresh.Usage)
+			if after.Ledger[sessioncost.AgentKey("opus")] != want {
+				t.Errorf("opus total = %+v after resuming, want %+v", after.Ledger[sessioncost.AgentKey("opus")], want)
 			}
 		})
 	}

@@ -35,7 +35,7 @@ func TestSessionCostObservationsPersistAndReplaceAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.Cursor != "cursor-1" || state.Ledger["claude-opus-4-8"] != first.Usage {
+	if state.Cursor != "cursor-1" || state.Ledger[sessioncost.AgentKey("claude-opus-4-8")] != first.Usage {
 		t.Fatalf("reopened state = %+v", state)
 	}
 
@@ -45,7 +45,7 @@ func TestSessionCostObservationsPersistAndReplaceAcrossRestart(t *testing.T) {
 		t.Fatalf("revision changed=%v err=%v", changed, err)
 	}
 	state, _ = s.SessionCost("cost")
-	if got := state.Ledger["claude-opus-4-8"].OutputTokens; got != 8 {
+	if got := state.Ledger[sessioncost.AgentKey("claude-opus-4-8")].OutputTokens; got != 8 {
 		t.Fatalf("output after absolute revision = %d, want 8 (not 11)", got)
 	}
 	if changed, err := s.ApplySessionCostObservations("cost", "cursor-3", []SessionCostObservation{revised}); err != nil || changed {
@@ -105,7 +105,91 @@ func TestSessionCostSourceCursorsPersistIndependently(t *testing.T) {
 	if state.Sources["root"].Cursor != "root-head" || state.Sources["child"].Cursor != "child-next" {
 		t.Fatalf("source cursors = %+v", state.Sources)
 	}
-	if !state.MeasurementIncomplete || state.Ledger["claude-sonnet-4-5"] != observation.Usage {
+	if !state.MeasurementIncomplete || state.Ledger[sessioncost.AgentKey("claude-sonnet-4-5")] != observation.Usage {
 		t.Fatalf("reopened state = %+v", state)
+	}
+}
+func TestSessionCostSeparatesGuardianTrafficFromTheAgentsOwn(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "attn.db")
+	s, err := NewWithDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	s.Add(&protocol.Session{ID: "pi", Label: "pi"})
+
+	agent := SessionCostObservation{
+		ObservationID: "pi:a4e94c7b", Model: "deepseek-v4-flash", Purpose: sessioncost.PurposeAgent,
+		Usage: sessioncost.Usage{InputTokens: 5379, OutputTokens: 232, ReportedCostUSD: 0.0013365},
+	}
+	guardian := SessionCostObservation{
+		ObservationID: "pi:c1f0a2b7", Model: "deepseek-v4-flash", Purpose: sessioncost.PurposeGuardian,
+		Usage: sessioncost.Usage{InputTokens: 812, OutputTokens: 64, ReportedCostUSD: 0.00022088},
+	}
+	if changed, err := s.ApplySessionCostObservations("pi", "cursor-1", []SessionCostObservation{agent, guardian}); err != nil || !changed {
+		t.Fatalf("apply changed=%v err=%v", changed, err)
+	}
+	state, err := s.SessionCost("pi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Ledger) != 2 {
+		t.Fatalf("ledger = %+v, want the model split by purpose", state.Ledger)
+	}
+	if state.Ledger[sessioncost.AgentKey("deepseek-v4-flash")] != agent.Usage {
+		t.Fatalf("agent row = %+v", state.Ledger[sessioncost.AgentKey("deepseek-v4-flash")])
+	}
+	if state.Ledger[sessioncost.GuardianKey("deepseek-v4-flash")] != guardian.Usage {
+		t.Fatalf("guardian row = %+v", state.Ledger[sessioncost.GuardianKey("deepseek-v4-flash")])
+	}
+
+	revised := guardian
+	revised.Usage.OutputTokens = 91
+	if changed, err := s.ApplySessionCostObservations("pi", "cursor-2", []SessionCostObservation{revised}); err != nil || !changed {
+		t.Fatalf("revision changed=%v err=%v", changed, err)
+	}
+	state, _ = s.SessionCost("pi")
+	if got := state.Ledger[sessioncost.GuardianKey("deepseek-v4-flash")].OutputTokens; got != 91 {
+		t.Fatalf("guardian output after revision = %d, want 91", got)
+	}
+	if state.Ledger[sessioncost.AgentKey("deepseek-v4-flash")] != agent.Usage {
+		t.Fatalf("agent row moved when the guardian row was revised: %+v", state.Ledger)
+	}
+}
+
+func TestSessionCostReadsLedgerKeysWrittenBeforePurposesExisted(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "attn.db")
+	s, err := NewWithDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	s.Add(&protocol.Session{ID: "legacy", Label: "legacy"})
+
+	legacy := `{"initialized":true,"ledger":{"claude-opus-4-8":{"input_tokens":10,"output_tokens":2}}}`
+	if _, err := s.db.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ?", legacy, "legacy"); err != nil {
+		t.Fatal(err)
+	}
+	state, err := s.SessionCost("legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := state.Ledger[sessioncost.AgentKey("claude-opus-4-8")]; got.InputTokens != 10 || got.OutputTokens != 2 {
+		t.Fatalf("legacy ledger key did not decode as the agent's own: %+v", state.Ledger)
+	}
+
+	observation := SessionCostObservation{
+		ObservationID: "claude:msg-2", Model: "claude-opus-4-8",
+		Usage: sessioncost.Usage{InputTokens: 5, OutputTokens: 1},
+	}
+	if changed, err := s.ApplySessionCostObservations("legacy", "cursor-1", []SessionCostObservation{observation}); err != nil || !changed {
+		t.Fatalf("apply changed=%v err=%v", changed, err)
+	}
+	state, _ = s.SessionCost("legacy")
+	if len(state.Ledger) != 1 {
+		t.Fatalf("new observation did not merge into the legacy row: %+v", state.Ledger)
+	}
+	if got := state.Ledger[sessioncost.AgentKey("claude-opus-4-8")]; got.InputTokens != 15 || got.OutputTokens != 3 {
+		t.Fatalf("merged row = %+v", got)
 	}
 }

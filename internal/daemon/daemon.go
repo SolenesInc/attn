@@ -152,6 +152,7 @@ type Daemon struct {
 	upgradingWorkers                  map[string]bool
 	watchersMu                        sync.Mutex
 	transcriptWatch                   map[string]*transcriptWatcher
+	pluginUsageWatch                  map[string]*pluginUsageWatcher
 	transcriptWatcherSessionLookup    func(string) *protocol.Session
 	transcriptResumeLookup            func(protocol.SessionAgent, string) string
 	classifiedMu                      sync.Mutex

@@ -597,6 +597,28 @@ describe("PiDriver", () => {
     });
   });
 
+  test("the reported session file reaches the daemon addressed to the run that wrote it", async () => {
+    const rpc = new FakeRPC();
+    const driver = newDriver({ rpc });
+    const spawned = await driver.spawn(params({ session_id: "session-1", run_id: "run-1" }));
+    const token = spawned.env?.ATTN_PI_TOKEN as string;
+
+    await driver.suiteReportSessionFile({ token, path: " /home/someone/.pi/agent/sessions/proj/s.jsonl " });
+
+    expect(rpc.requests.find((call) => call.method === "session.report_transcript_path")?.params).toEqual({
+      session_id: "session-1",
+      run_id: "run-1",
+      path: "/home/someone/.pi/agent/sessions/proj/s.jsonl",
+    });
+  });
+
+  test("a session file from an unknown token is refused rather than attributed to somebody", async () => {
+    const driver = newDriver({ rpc: new FakeRPC() });
+    await expect(
+      driver.suiteReportSessionFile({ token: "not-a-token", path: "/tmp/s.jsonl" }),
+    ).rejects.toThrow(/unknown pi suite token/);
+  });
+
   test("a pull request from an unknown token is refused rather than attributed to somebody", async () => {
     const driver = newDriver({ rpc: new FakeRPC() });
     await expect(

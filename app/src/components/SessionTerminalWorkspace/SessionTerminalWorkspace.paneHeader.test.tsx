@@ -50,6 +50,7 @@ function usage(costUsd?: number, hasUnpricedUsage = false, totalTokens = 3_550):
     has_unpriced_usage: hasUnpricedUsage,
     models: [{
       model: 'claude-opus-5',
+      purpose: 'agent',
       input_tokens: 4,
       output_tokens: totalTokens - 4,
       cache_read_tokens: 0,

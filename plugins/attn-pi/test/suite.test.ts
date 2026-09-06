@@ -37,7 +37,10 @@ class FakeContext implements ExtensionContextLike {
   private idle = true;
   private poisonMessage: string | undefined;
 
-  constructor(private readonly sessionId: string) {}
+  constructor(
+    private readonly sessionId: string,
+    private readonly sessionFile?: string,
+  ) {}
 
   setIdle(idle: boolean): void {
     this.idle = idle;
@@ -55,7 +58,8 @@ class FakeContext implements ExtensionContextLike {
   get sessionManager(): SessionManagerLike {
     if (this.poisonMessage) throw new Error(this.poisonMessage);
     const sessionId = this.sessionId;
-    return { getSessionId: () => sessionId };
+    const sessionFile = this.sessionFile;
+    return { getSessionId: () => sessionId, getSessionFile: () => sessionFile };
   }
 }
 
@@ -112,6 +116,10 @@ class RecordingDelegate implements RelayDelegate {
   async suiteReportPullRequest(params: unknown): Promise<void> {
     this.calls.push({ method: relayMethods.reportPullRequest, params });
   }
+
+  async suiteReportSessionFile(params: unknown): Promise<void> {
+    this.calls.push({ method: relayMethods.reportSessionFile, params });
+  }
 }
 
 class StallingDelegate extends RecordingDelegate {
@@ -164,6 +172,44 @@ describe("AttnPiSuite: session_start -> suite.hello", () => {
         pi_state: "idle",
       })),
     );
+
+    suite.close();
+    relay.close();
+  });
+});
+
+describe("AttnPiSuite: session_start -> suite.report_session_file", () => {
+  test("reports the file pi writes so attn can follow it", async () => {
+    const { relay, delegate, socketPath } = await buildHarness();
+    const suite = new AttnPiSuite({ socketPath, token: "tok-file", piVersion: "0.83.0" });
+    const pi = new FakePi();
+    suite.register(pi);
+    const path = "/Users/someone/.pi/agent/sessions/proj/2026-09-06T12-53-48-695Z_abc.jsonl";
+    const ctx = new FakeContext("native-file", path);
+
+    pi.fire("session_start", { type: "session_start", reason: "new" }, ctx);
+
+    await waitFor(() => delegate.calls.some((call) => call.method === relayMethods.reportSessionFile));
+    expect(delegate.calls.filter((call) => call.method === relayMethods.reportSessionFile).map((call) => call.params)).toEqual([
+      { token: "tok-file", path },
+    ]);
+
+    suite.close();
+    relay.close();
+  });
+
+  test("says nothing when pi has no session file yet", async () => {
+    const { relay, delegate, socketPath } = await buildHarness();
+    const suite = new AttnPiSuite({ socketPath, token: "tok-nofile", piVersion: "0.83.0" });
+    const pi = new FakePi();
+    suite.register(pi);
+    const ctx = new FakeContext("native-nofile");
+
+    pi.fire("session_start", { type: "session_start", reason: "new" }, ctx);
+    pi.fire("agent_start", { type: "agent_start" }, ctx);
+
+    await waitFor(() => delegate.calls.some((call) => call.method === relayMethods.reportState));
+    expect(delegate.calls.some((call) => call.method === relayMethods.reportSessionFile)).toBe(false);
 
     suite.close();
     relay.close();

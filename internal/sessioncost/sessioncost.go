@@ -12,6 +12,13 @@ import (
 
 const SessionCostPricePrefix = "session_cost.price."
 
+// Purpose says whose work a row of usage is: the agent's own turns, or a
+// reviewer attn runs beside it.
+const (
+	PurposeAgent    = "agent"
+	PurposeGuardian = "guardian"
+)
+
 // Usage is one model's billable token traffic. InputTokens excludes cache reads:
 // an adapter whose provider counts them in must subtract before adding.
 type Usage struct {
@@ -21,6 +28,9 @@ type Usage struct {
 	CacheWrite5mInputTokens      int64 `json:"cache_write_5m_input_tokens"`
 	CacheWrite1hInputTokens      int64 `json:"cache_write_1h_input_tokens"`
 	UnclassifiedCacheWriteTokens int64 `json:"unclassified_cache_write_tokens"`
+	// What the harness itself charged for this traffic. Priced only when attn
+	// has no rate card for the model, which is every model it has never heard of.
+	ReportedCostUSD float64 `json:"reported_cost_usd,omitempty"`
 }
 
 func (u Usage) HasUsage() bool {
@@ -45,7 +55,8 @@ func (u Usage) Subtract(other Usage) Usage {
 		other.CacheReadInputTokens > u.CacheReadInputTokens ||
 		other.CacheWrite5mInputTokens > u.CacheWrite5mInputTokens ||
 		other.CacheWrite1hInputTokens > u.CacheWrite1hInputTokens ||
-		other.UnclassifiedCacheWriteTokens > u.UnclassifiedCacheWriteTokens {
+		other.UnclassifiedCacheWriteTokens > u.UnclassifiedCacheWriteTokens ||
+		other.ReportedCostUSD > u.ReportedCostUSD {
 		return invalidUsage()
 	}
 	return Usage{
@@ -55,17 +66,58 @@ func (u Usage) Subtract(other Usage) Usage {
 		CacheWrite5mInputTokens:      u.CacheWrite5mInputTokens - other.CacheWrite5mInputTokens,
 		CacheWrite1hInputTokens:      u.CacheWrite1hInputTokens - other.CacheWrite1hInputTokens,
 		UnclassifiedCacheWriteTokens: u.UnclassifiedCacheWriteTokens - other.UnclassifiedCacheWriteTokens,
+		ReportedCostUSD:              u.ReportedCostUSD - other.ReportedCostUSD,
 	}
 }
 
-type Ledger map[string]Usage
+// LedgerKey is one priceable row: a model, and whose work it was. Keys written
+// before purposes existed carry no purpose and read back as the agent's own.
+type LedgerKey struct {
+	Model   string
+	Purpose string
+}
 
-func (l Ledger) Add(model string, usage Usage) bool {
+func NewLedgerKey(model, purpose string) LedgerKey {
+	purpose = strings.TrimSpace(purpose)
+	if purpose == "" {
+		purpose = PurposeAgent
+	}
+	return LedgerKey{Model: strings.TrimSpace(model), Purpose: purpose}
+}
+
+// AgentKey names a model's row of the session's own traffic, GuardianKey the
+// same model's row of what the reviewer spent.
+func AgentKey(model string) LedgerKey {
+	return NewLedgerKey(model, PurposeAgent)
+}
+
+func GuardianKey(model string) LedgerKey {
+	return NewLedgerKey(model, PurposeGuardian)
+}
+
+func (k LedgerKey) MarshalText() ([]byte, error) {
+	return []byte(NewLedgerKey(k.Model, k.Purpose).Purpose + "|" + strings.TrimSpace(k.Model)), nil
+}
+
+func (k *LedgerKey) UnmarshalText(text []byte) error {
+	raw := string(text)
+	purpose, model, found := strings.Cut(raw, "|")
+	if !found {
+		*k = NewLedgerKey(raw, PurposeAgent)
+		return nil
+	}
+	*k = NewLedgerKey(model, purpose)
+	return nil
+}
+
+type Ledger map[LedgerKey]Usage
+
+func (l Ledger) Add(key LedgerKey, usage Usage) bool {
 	if l == nil || !usage.hasUsage() || !usage.valid() {
 		return false
 	}
-	model = strings.TrimSpace(model)
-	current := l[model]
+	key = NewLedgerKey(key.Model, key.Purpose)
+	current := l[key]
 	if !current.valid() {
 		return false
 	}
@@ -73,7 +125,7 @@ func (l Ledger) Add(model string, usage Usage) bool {
 	if !ok {
 		return false
 	}
-	l[model] = next
+	l[key] = next
 	return true
 }
 
@@ -87,6 +139,7 @@ type RateCard struct {
 
 type ModelSummary struct {
 	Model            string
+	Purpose          string
 	Usage            Usage
 	TotalTokens      int64
 	CostUSD          *float64
@@ -144,15 +197,29 @@ func Price(ledger Ledger, settings map[string]string) (usd float64, known bool, 
 
 func Summarize(ledger Ledger, settings map[string]string) Summary {
 	summary := Summary{Valid: true}
-	models := make([]string, 0, len(ledger))
-	for model, usage := range ledger {
-		if usage.hasAnyValue() {
-			models = append(models, model)
+	rows := make(Ledger, len(ledger))
+	keys := make([]LedgerKey, 0, len(ledger))
+	for key, usage := range ledger {
+		if !usage.hasAnyValue() {
+			continue
 		}
+		normalized := NewLedgerKey(key.Model, key.Purpose)
+		if _, seen := rows[normalized]; !seen {
+			keys = append(keys, normalized)
+		}
+		rows[normalized] = rows[normalized].Add(usage)
 	}
-	sort.Strings(models)
-	for _, model := range models {
-		usage := ledger[model]
+	// The agent's own rows come first: a reviewer is an aside to the work, and a
+	// stable order keeps the breakdown from reshuffling under the pointer.
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].Purpose != keys[j].Purpose {
+			return keys[i].Purpose == PurposeAgent
+		}
+		return keys[i].Model < keys[j].Model
+	})
+	for _, key := range keys {
+		model := key.Model
+		usage := rows[key]
 		summary.HasUsage = true
 		if !usage.valid() {
 			summary.Valid = false
@@ -163,13 +230,17 @@ func Summarize(ledger Ledger, settings map[string]string) Summary {
 			summary.Valid = false
 			return summary
 		}
-		row := ModelSummary{Model: model, Usage: usage, TotalTokens: total}
+		row := ModelSummary{Model: model, Purpose: key.Purpose, Usage: usage, TotalTokens: total}
 		summary.TotalTokens += total
 
 		card, cardKnown, invalidOverride := rateCardForModel(model, settings)
+		// A broken override is an opinion about the price, so it is reported rather
+		// than quietly billed at the harness's number.
 		if invalidOverride {
 			row.HasUnpricedUsage = true
 			row.UnpricedReason = "Price override is invalid."
+		} else if reported, ok := reportedCost(usage, cardKnown); ok {
+			row.CostUSD = floatPtr(reported)
 		} else if !cardKnown {
 			row.HasUnpricedUsage = true
 			row.UnpricedReason = "No price is configured for this model."
@@ -206,6 +277,19 @@ func Summarize(ledger Ledger, settings map[string]string) Summary {
 	return summary
 }
 
+// The harness's own price is the fallback for traffic attn cannot price: a model
+// it has no card for, or cache writes whose duration the card still needs.
+func reportedCost(usage Usage, priceable bool) (float64, bool) {
+	if priceable && usage.UnclassifiedCacheWriteTokens == 0 {
+		return 0, false
+	}
+	cost := usage.ReportedCostUSD
+	if cost <= 0 || math.IsNaN(cost) || math.IsInf(cost, 0) {
+		return 0, false
+	}
+	return cost, true
+}
+
 func rateCardForModel(model string, settings map[string]string) (RateCard, bool, bool) {
 	if raw, ok := settings[SessionCostPricePrefix+model]; ok && strings.TrimSpace(raw) != "" {
 		card, err := parseRateCard(strings.TrimSpace(raw))
@@ -234,7 +318,8 @@ func (u Usage) hasAnyValue() bool {
 		u.CacheReadInputTokens != 0 ||
 		u.CacheWrite5mInputTokens != 0 ||
 		u.CacheWrite1hInputTokens != 0 ||
-		u.UnclassifiedCacheWriteTokens != 0
+		u.UnclassifiedCacheWriteTokens != 0 ||
+		u.ReportedCostUSD != 0
 }
 
 func (u Usage) valid() bool {
@@ -243,7 +328,10 @@ func (u Usage) valid() bool {
 		u.CacheReadInputTokens >= 0 &&
 		u.CacheWrite5mInputTokens >= 0 &&
 		u.CacheWrite1hInputTokens >= 0 &&
-		u.UnclassifiedCacheWriteTokens >= 0
+		u.UnclassifiedCacheWriteTokens >= 0 &&
+		u.ReportedCostUSD >= 0 &&
+		!math.IsNaN(u.ReportedCostUSD) &&
+		!math.IsInf(u.ReportedCostUSD, 0)
 }
 
 func (u Usage) totalTokens() (int64, bool) {
@@ -278,6 +366,10 @@ func addUsage(a, b Usage) (Usage, bool) {
 			return Usage{}, false
 		}
 	}
+	cost := a.ReportedCostUSD + b.ReportedCostUSD
+	if math.IsNaN(cost) || math.IsInf(cost, 0) {
+		return Usage{}, false
+	}
 	return Usage{
 		InputTokens:                  a.InputTokens + b.InputTokens,
 		OutputTokens:                 a.OutputTokens + b.OutputTokens,
@@ -285,6 +377,7 @@ func addUsage(a, b Usage) (Usage, bool) {
 		CacheWrite5mInputTokens:      a.CacheWrite5mInputTokens + b.CacheWrite5mInputTokens,
 		CacheWrite1hInputTokens:      a.CacheWrite1hInputTokens + b.CacheWrite1hInputTokens,
 		UnclassifiedCacheWriteTokens: a.UnclassifiedCacheWriteTokens + b.UnclassifiedCacheWriteTokens,
+		ReportedCostUSD:              cost,
 	}, true
 }
 

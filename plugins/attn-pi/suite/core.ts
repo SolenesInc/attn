@@ -37,7 +37,9 @@ export type ToolResultEvent = {
 };
 export type MessageStartEvent = { type: "message_start"; message: AgentMessageLike };
 
-export type SessionManagerLike = { getSessionId(): string };
+// getSessionFile is absent on pi builds before 0.83 and empty until the session
+// file exists, so the report is skipped rather than sent as a guess.
+export type SessionManagerLike = { getSessionId(): string; getSessionFile?(): string | undefined };
 
 export type ExtensionContextLike = {
   isIdle(): boolean;
@@ -395,6 +397,13 @@ export class AttnPiSuite {
     };
   }
 
+  private reportSessionFile(ctx: ExtensionContextLike): void {
+    const relay = this.relay;
+    const path = ctx.sessionManager.getSessionFile?.()?.trim();
+    if (!relay || !path) return;
+    relay.client.reportFact("session_file", relayMethods.reportSessionFile, { token: relay.token, path });
+  }
+
   private currentState(ctx: ExtensionContextLike): RelayHelloState {
     if (this.approvalOpen) return "pending_approval";
     return ctx.isIdle() ? "idle" : "working";
@@ -409,6 +418,7 @@ export class AttnPiSuite {
       this.currentContext = ctx;
       const params = this.helloParams(event.reason);
       if (params) relay.client.announce(params);
+      this.reportSessionFile(ctx);
     });
 
     pi.on("agent_start", (_event, ctx) => {

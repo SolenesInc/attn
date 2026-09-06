@@ -33,6 +33,8 @@ type Store struct {
 	activityCursors map[string]string
 	sessionCosts    map[string]SessionCostState
 	agentDriverRuns map[string]AgentDriverReportCursor
+	// Where a plugin run's harness writes its transcript, as the driver reported it.
+	agentDriverTranscripts map[string]string
 	teardownIntents map[string]SessionTeardownIntent
 	sessionCloses   map[string]sessionCloseMark
 	agentMetadata   map[string]string
@@ -54,11 +56,12 @@ type SessionTeardownIntent struct {
 
 // Seq is the run's report cursor: a replacement driver must continue from it, because applyState discards anything that does not advance it.
 type ActiveAgentDriverRun struct {
-	SessionID  string
-	RunID      string
-	Metadata   string
-	Seq        uint64
-	PluginName string
+	TranscriptPath string
+	SessionID      string
+	RunID          string
+	Metadata       string
+	Seq            uint64
+	PluginName     string
 }
 
 type LaunchIntent struct {
@@ -1173,11 +1176,12 @@ func (s *Store) ListActiveAgentDriverRuns() []ActiveAgentDriverRun {
 				continue
 			}
 			runs = append(runs, ActiveAgentDriverRun{
-				SessionID:  sessionID,
-				RunID:      strings.TrimSpace(cursor.RunID),
-				Metadata:   strings.TrimSpace(s.agentMetadata[sessionID]),
-				Seq:        cursor.Seq,
-				PluginName: strings.TrimSpace(cursor.PluginName),
+				SessionID:      sessionID,
+				RunID:          strings.TrimSpace(cursor.RunID),
+				Metadata:       strings.TrimSpace(s.agentMetadata[sessionID]),
+				Seq:            cursor.Seq,
+				PluginName:     strings.TrimSpace(cursor.PluginName),
+				TranscriptPath: strings.TrimSpace(s.agentDriverTranscripts[sessionID]),
 			})
 		}
 		sort.Slice(runs, func(i, j int) bool { return runs[i].SessionID < runs[j].SessionID })
@@ -1185,7 +1189,8 @@ func (s *Store) ListActiveAgentDriverRuns() []ActiveAgentDriverRun {
 	}
 
 	rows, err := s.db.Query(`
-		SELECT id, agent_driver_run_id, agent_metadata, agent_driver_report_seq, agent_driver_plugin_name
+		SELECT id, agent_driver_run_id, agent_metadata, agent_driver_report_seq, agent_driver_plugin_name,
+			agent_driver_transcript_path
 		FROM sessions
 		WHERE agent_driver_run_id <> '' AND closed_at = ''
 		ORDER BY id`)
@@ -1196,15 +1201,70 @@ func (s *Store) ListActiveAgentDriverRuns() []ActiveAgentDriverRun {
 	var runs []ActiveAgentDriverRun
 	for rows.Next() {
 		var run ActiveAgentDriverRun
-		if err := rows.Scan(&run.SessionID, &run.RunID, &run.Metadata, &run.Seq, &run.PluginName); err != nil {
+		if err := rows.Scan(
+			&run.SessionID, &run.RunID, &run.Metadata, &run.Seq, &run.PluginName, &run.TranscriptPath,
+		); err != nil {
 			return nil
 		}
 		run.RunID = strings.TrimSpace(run.RunID)
 		run.Metadata = strings.TrimSpace(run.Metadata)
 		run.PluginName = strings.TrimSpace(run.PluginName)
+		run.TranscriptPath = strings.TrimSpace(run.TranscriptPath)
 		runs = append(runs, run)
 	}
 	return runs
+}
+
+// A run's transcript path is news from the driver, not a launch fact: pi only
+// learns where its harness writes once the session has started.
+func (s *Store) SetAgentDriverTranscriptPath(id, runID, path string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	runID = strings.TrimSpace(runID)
+	path = strings.TrimSpace(path)
+	if runID == "" || path == "" {
+		return false
+	}
+	if s.db == nil {
+		cursor := s.agentDriverRuns[id]
+		if s.sessions[id] == nil || strings.TrimSpace(cursor.RunID) != runID {
+			return false
+		}
+		if s.agentDriverTranscripts == nil {
+			s.agentDriverTranscripts = make(map[string]string)
+		}
+		s.agentDriverTranscripts[id] = path
+		return true
+	}
+	result, err := s.db.Exec(
+		"UPDATE sessions SET agent_driver_transcript_path = ? WHERE id = ? AND closed_at = '' AND agent_driver_run_id = ?",
+		path,
+		id,
+		runID,
+	)
+	if err != nil {
+		log.Printf("[store] SetAgentDriverTranscriptPath: failed for session %s: %v", id, err)
+		return false
+	}
+	updated, _ := result.RowsAffected()
+	return updated == 1
+}
+
+func (s *Store) GetAgentDriverTranscriptPath(id string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.db == nil {
+		return strings.TrimSpace(s.agentDriverTranscripts[id])
+	}
+	var path string
+	if err := s.db.QueryRow(
+		"SELECT agent_driver_transcript_path FROM sessions WHERE id = ?", id,
+	).Scan(&path); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(path)
 }
 
 func (s *Store) BeginAgentDriverRun(id, pluginName, runID string) bool {
@@ -1224,10 +1284,11 @@ func (s *Store) BeginAgentDriverRun(id, pluginName, runID string) bool {
 			s.agentDriverRuns = make(map[string]AgentDriverReportCursor)
 		}
 		s.agentDriverRuns[id] = AgentDriverReportCursor{PluginName: pluginName, RunID: runID}
+		delete(s.agentDriverTranscripts, id)
 		return true
 	}
 	result, err := s.db.Exec(
-		"UPDATE sessions SET agent_driver_plugin_name = ?, agent_driver_run_id = ?, agent_driver_report_seq = 0 WHERE id = ? AND closed_at = ''",
+		"UPDATE sessions SET agent_driver_plugin_name = ?, agent_driver_run_id = ?, agent_driver_report_seq = 0, agent_driver_transcript_path = '' WHERE id = ? AND closed_at = ''",
 		pluginName,
 		runID,
 		id,
@@ -1269,6 +1330,7 @@ func (s *Store) EndAgentDriverRun(id string) AgentDriverReportCursor {
 			return AgentDriverReportCursor{}
 		}
 		delete(s.agentDriverRuns, id)
+		delete(s.agentDriverTranscripts, id)
 		return cursor
 	}
 	var cursor AgentDriverReportCursor
@@ -1284,7 +1346,7 @@ func (s *Store) EndAgentDriverRun(id string) AgentDriverReportCursor {
 		return AgentDriverReportCursor{}
 	}
 	result, err := s.db.Exec(
-		"UPDATE sessions SET agent_driver_plugin_name = '', agent_driver_run_id = '', agent_driver_report_seq = 0 WHERE id = ? AND closed_at = '' AND agent_driver_plugin_name = ? AND agent_driver_run_id = ?",
+		"UPDATE sessions SET agent_driver_plugin_name = '', agent_driver_run_id = '', agent_driver_report_seq = 0, agent_driver_transcript_path = '' WHERE id = ? AND closed_at = '' AND agent_driver_plugin_name = ? AND agent_driver_run_id = ?",
 		id,
 		cursor.PluginName,
 		cursor.RunID,
