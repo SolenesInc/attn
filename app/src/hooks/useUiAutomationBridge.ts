@@ -1521,50 +1521,96 @@ function requireWorktreePath(payload: Record<string, unknown>): string {
   return path;
 }
 
-const WORKTREES_PANEL = '[data-testid="worktrees-panel"]';
-const WORKTREES_REFRESHING = '.worktrees-panel__refreshing';
+const VERB_SEPARATOR = '\u001f';
+const LEDGER_REFRESHING = '.ledger-glyph.is-refreshing, .ledger-checking';
 
-function worktreesPanel(): HTMLElement | null {
-  const panel = document.querySelector(WORKTREES_PANEL);
-  return panel instanceof HTMLElement ? panel : null;
+function ledgerRoot(tab: 'Sessions' | 'Worktrees'): HTMLElement | null {
+  const panel = document.querySelector('.ledger-panel');
+  if (!(panel instanceof HTMLElement)) return null;
+  const selected = panel.querySelector('.ledger-tabs button.is-selected')?.textContent?.trim();
+  return selected === tab ? panel : null;
+}
+
+function ledgerRowVerbs(row: Element): string[] {
+  return (row.getAttribute('data-verbs') || '').split(VERB_SEPARATOR).filter(Boolean);
+}
+
+function ledgerStatusLink(root: HTMLElement, startsWith: string): HTMLElement | null {
+  const link = Array.from(root.querySelectorAll('.ledger-status-left .ledger-status-link'))
+    .find((entry) => (entry.textContent || '').trim().startsWith(startsWith));
+  return link instanceof HTMLElement ? link : null;
+}
+
+async function runLedgerRowVerb(row: HTMLElement, label: string) {
+  const primary = row.querySelector('.ledger-row-trailing .ledger-verb');
+  if (primary instanceof HTMLElement && primary.textContent?.trim() === label) {
+    clickElement(primary);
+    return;
+  }
+  const more = row.querySelector('.ledger-more');
+  if (!(more instanceof HTMLElement)) throw new Error(`row ${row.getAttribute('data-row-key')} offers no ${label}`);
+  clickElement(more);
+  await settleUi(1);
+  const item = Array.from(row.querySelectorAll('.ledger-menu [role="menuitem"]'))
+    .find((entry) => (entry.textContent || '').replace(/^\d/, '').trim() === label);
+  if (!(item instanceof HTMLElement)) throw new Error(`row ${row.getAttribute('data-row-key')} offers no ${label}`);
+  clickElement(item);
 }
 
 function collectWorktreesUiState() {
-  const panel = worktreesPanel();
+  const panel = ledgerRoot('Worktrees');
   if (!panel) {
     return { present: false };
   }
-  const rows = Array.from(panel.querySelectorAll('.worktrees-panel__row')).map((row) => ({
-    path: row.getAttribute('data-testid')?.replace('worktree-row-', '') ?? '',
-    name: row.querySelector('.worktrees-panel__name')?.textContent?.trim() ?? '',
-    branch: row.querySelector('.worktrees-panel__branch')?.textContent?.trim() ?? '',
-    chips: Array.from(row.querySelectorAll('.worktrees-panel__chip')).map(
-      (chip) => chip.textContent?.trim() ?? '',
-    ),
-    sweep: row.querySelector('.worktrees-panel__sweep-status')?.textContent?.trim() ?? '',
-    reason: row.querySelector('.worktrees-panel__sweep-reason')?.textContent?.trim() ?? '',
-    pinned: row.classList.contains('is-pinned'),
-    refreshing: Boolean(row.querySelector('.worktrees-panel__refreshing')),
-  }));
-  const log = Array.from(panel.querySelectorAll('.worktrees-panel__log-row')).map((row) => ({
-    path: row.getAttribute('data-testid')?.replace('worktree-log-', '') ?? '',
-    name: row.querySelector('.worktrees-panel__log-path')?.textContent?.trim() ?? '',
-    branch: row.querySelector('.worktrees-panel__log-branch')?.textContent?.trim() ?? '',
-    action: row.querySelector('.worktrees-panel__log-action')?.textContent?.trim() ?? '',
-    reason: row.querySelector('.worktrees-panel__log-reason')?.textContent?.trim() ?? '',
-  }));
+  const scope = panel.querySelector('.ledger-segmented button[aria-pressed="true"]')?.textContent?.trim() ?? '';
+  const ledgerRows = Array.from(panel.querySelectorAll('.ledger-row'));
+  const rows = scope === 'Active'
+    ? ledgerRows.map((row) => ({
+      path: row.getAttribute('data-row-key') ?? '',
+      name: row.querySelector('.ledger-row-title')?.textContent?.trim() ?? '',
+      branch: row.querySelector('.ledger-row-meta .is-mono')?.textContent?.trim() ?? '',
+      chips: Array.from(row.querySelectorAll('.ledger-meta-seg')).map((chip) => chip.textContent?.trim() ?? ''),
+      sweep: row.getAttribute('data-sweep') ?? '',
+      reason: row.getAttribute('data-reason') ?? '',
+      pinned: row.getAttribute('data-pinned') === 'true',
+      refreshing: Boolean(row.querySelector('.ledger-glyph.is-refreshing')),
+      verbs: ledgerRowVerbs(row),
+    }))
+    : [];
+  const log = scope === 'Removed'
+    ? ledgerRows.map((row) => ({
+      path: row.getAttribute('data-path') ?? '',
+      name: row.querySelector('.ledger-row-title')?.textContent?.trim() ?? '',
+      branch: row.querySelector('.ledger-row-meta .is-mono')?.textContent?.trim() ?? '',
+      action: row.getAttribute('data-action') ?? '',
+      reason: row.getAttribute('data-reason') ?? '',
+    }))
+    : [];
   return {
     present: true,
+    scope,
     rows,
     log,
-    repositories: Array.from(panel.querySelectorAll('.worktrees-panel__repo-header')).map((header) => ({
-      name: header.querySelector('.worktrees-panel__repo-name')?.textContent?.trim() ?? '',
-      integration: header.querySelector('.worktrees-panel__repo-integration')?.textContent?.trim() ?? '',
-      refreshing: Boolean(header.querySelector('.worktrees-panel__refreshing')),
+    repositories: Array.from(panel.querySelectorAll('.ledger-group')).map((header) => ({
+      name: header.querySelector('.ledger-group-title')?.textContent?.trim() ?? '',
+      integration: header.querySelector('.ledger-group-meta')?.textContent?.trim() ?? '',
+      refreshing: Boolean(header.querySelector('.ledger-checking')),
     })),
-    error: panel.querySelector('[data-testid="worktrees-panel-error"]')?.textContent?.trim() ?? '',
+    error: panel.querySelector('.ledger-status-error')?.textContent?.trim() ?? '',
     refreshWitness: readRefreshWitness(),
   };
+}
+
+function worktreesRoot(): HTMLElement {
+  const panel = ledgerRoot('Worktrees');
+  if (!panel) throw new Error('the Worktrees surface is not open');
+  return panel;
+}
+
+function worktreeRow(path: string): HTMLElement {
+  const row = worktreesRoot().querySelector(`.ledger-row[data-row-key="${CSS.escape(path)}"]`);
+  if (!(row instanceof HTMLElement)) throw new Error(`no row for worktree ${path}`);
+  return row;
 }
 
 function collectAutomationsUiState() {
@@ -1663,54 +1709,68 @@ function getLocationPickerOverlay() {
   return overlay instanceof HTMLElement ? overlay : null;
 }
 
+const RANGE_TOKENS = new Set(['today', 'yesterday', '7d', '30d', 'week', 'month']);
+
+function queryTokens(root: HTMLElement): string[] {
+  const input = root.querySelector('.ledger-query input');
+  return input instanceof HTMLInputElement ? input.value.trim().split(/\s+/).filter(Boolean) : [];
+}
+
 function collectSessionsPanelUiState() {
-  const root = document.querySelector('.sessions-panel');
+  const root = ledgerRoot('Sessions');
   if (!root) {
     return { open: false, scope: '', range: '', workspace: '', repository: '', rows: [], footer: '', canLoadMore: false, state: '' };
   }
-  const selectValue = (label: string) => {
-    const select = Array.from(root.querySelectorAll('label.sessions-filter'))
-      .find((entry) => entry.querySelector('span')?.textContent?.trim() === label)
-      ?.querySelector('select');
-    return select instanceof HTMLSelectElement ? select.value : '';
-  };
-  const rows = Array.from(root.querySelectorAll('tbody tr')).map((row) => {
-    const cells = Array.from(row.querySelectorAll('td')).map((cell) => cell.textContent?.trim() || '');
+  // Typed tokens apply after a debounce; the toolbar carries the filters the list is actually queried with.
+  const toolbar = root.querySelector('.ledger-toolbar');
+  const applied = (name: string) => toolbar?.getAttribute(`data-${name}`) || '';
+  const rows = Array.from(root.querySelectorAll('.ledger-row')).map((row) => {
+    const state = row.getAttribute('data-state') || '';
+    const verbs = ledgerRowVerbs(row);
+    const refusal = row.querySelector('.ledger-row-meta .is-no')?.textContent?.trim() || '';
+    const reopenVerbs = verbs.filter((verb) => verb !== 'Focus' && !verb.startsWith('Seed ·') && verb !== 'Show worktree');
+    const verdict = state === 'closed' ? (refusal || reopenVerbs.join(' / ') || '—') : '—';
     return {
-      id: row.querySelector('.sessions-id')?.textContent?.trim() || '',
-      label: row.querySelector('.sessions-label')?.textContent?.trim() || '',
-      agent: cells[1] || '',
-      state: row.querySelector('.sessions-state-chip')?.textContent?.trim() || '',
-      workspace: cells[3] || '',
-      where: row.querySelector('td:nth-child(5) span[title]')?.textContent?.trim() || '',
-      branch: row.querySelector('.sessions-branch')?.textContent?.trim() || '',
-      seed: cells[5] || '',
-      when: cells[6] || '',
-      verdict: cells[7] || '',
-      refreshing: !!row.querySelector('.sessions-verdict-refreshing'),
-      actions: Array.from(row.querySelectorAll('.sessions-actions button')).map((button) => button.textContent?.trim() || ''),
+      id: row.getAttribute('data-row-key') || '',
+      label: row.querySelector('.ledger-row-title')?.textContent?.trim() || '',
+      agent: row.querySelector('.ledger-meta-seg')?.textContent?.trim() || '',
+      state,
+      workspace: '',
+      where: row.querySelector('.ledger-row-meta .is-path')?.getAttribute('title') || '',
+      branch: row.querySelector('.ledger-row-meta .is-mono:not(.is-path)')?.textContent?.trim() || '',
+      seed: verbs.find((verb) => verb.startsWith('Seed ·'))?.slice(7) || '',
+      when: Array.from(row.querySelectorAll('.ledger-meta-seg'))
+        .map((segment) => segment.textContent?.trim() || '')
+        .find((text) => text.startsWith('closed by')) || row.querySelector('.ledger-stamp')?.textContent?.trim() || '',
+      verdict,
+      refreshing: Boolean(row.querySelector('.ledger-glyph.is-refreshing')),
+      actions: verbs,
     };
   });
-  const loadMore = Array.from(root.querySelectorAll('.sessions-footer button'))
-    .find((button) => (button.textContent || '').startsWith('Load'));
   return {
     open: true,
-    scope: Array.from(root.querySelectorAll('.sessions-scope button'))
-      .find((button) => button.getAttribute('aria-pressed') === 'true')?.textContent?.trim() || '',
-    range: selectValue('When'),
-    workspace: selectValue('Workspace'),
-    repository: selectValue('Repository'),
+    scope: root.querySelector('.ledger-segmented button[aria-pressed="true"]')?.textContent?.trim() || '',
+    range: applied('range') || 'any',
+    workspace: applied('workspace'),
+    repository: applied('repository'),
     rows,
-    footer: root.querySelector('.sessions-footer span')?.textContent?.trim() || '',
-    canLoadMore: !!loadMore,
-    state: root.querySelector('.sessions-state')?.textContent?.trim() || '',
+    footer: root.querySelector('.ledger-status-left')?.textContent?.trim() || '',
+    canLoadMore: Array.from(root.querySelectorAll('.ledger-status-left .ledger-status-link'))
+      .some((link) => /older/.test(link.textContent || '')),
+    state: root.querySelector('.ledger-empty')?.textContent?.trim() || '',
   };
 }
 
-function sessionsPanelRoot(): Element {
-  const root = document.querySelector('.sessions-panel');
+function sessionsPanelRoot(): HTMLElement {
+  const root = ledgerRoot('Sessions');
   if (!root) throw new Error('the Sessions surface is not open');
   return root;
+}
+
+function setSessionsQuery(root: HTMLElement, edit: (tokens: string[]) => string[]) {
+  const input = root.querySelector('.ledger-query input');
+  if (!(input instanceof HTMLInputElement)) throw new Error('no query input');
+  setControlValue(input, edit(queryTokens(root)).join(' '));
 }
 
 function collectMarkdownOpenerUiState() {
@@ -2824,50 +2884,51 @@ export function useUiAutomationBridge({
           scope?: string; range?: string; workspace?: string; repository?: string; from?: string; to?: string;
         };
         if (scope) {
-          const button = Array.from(root.querySelectorAll('.sessions-scope button'))
+          const button = Array.from(root.querySelectorAll('.ledger-segmented button'))
             .find((entry) => entry.textContent?.trim() === scope);
           if (!(button instanceof HTMLElement)) throw new Error(`no ${scope} scope button`);
           clickElement(button);
           await settleUi(2);
         }
-        const setSelect = (label: string, value: string) => {
-          const select = Array.from(root.querySelectorAll('label.sessions-filter'))
-            .find((entry) => entry.querySelector('span')?.textContent?.trim() === label)
-            ?.querySelector('select');
-          if (!(select instanceof HTMLSelectElement)) throw new Error(`no ${label} filter`);
-          setControlValue(select, value);
-        };
-        if (range !== undefined) setSelect('When', range);
-        if (workspace !== undefined) setSelect('Workspace', workspace);
-        if (repository !== undefined) setSelect('Repository', repository);
-        for (const [label, value] of [['From', from], ['To', to]] as const) {
-          if (value === undefined) continue;
-          const input = Array.from(root.querySelectorAll('.sessions-custom-range label'))
-            .find((entry) => entry.querySelector('span')?.textContent?.trim() === label)
-            ?.querySelector('input');
-          if (!(input instanceof HTMLInputElement)) throw new Error(`no ${label} date input`);
-          setControlValue(input, value);
-        }
+        // The typed query is the filter: rewrite its tokens rather than drive controls.
+        const baseName = (value: string) => value.replace(/\/+$/, '').split('/').pop() || value;
+        setSessionsQuery(root, (tokens) => {
+          let next = tokens;
+          if (range !== undefined) {
+            next = next.filter((token) => !RANGE_TOKENS.has(token.toLowerCase()) && !/^(from|to):/i.test(token));
+            if (range !== 'any' && range !== 'custom') next.push(range);
+          }
+          if (from !== undefined || to !== undefined) {
+            next = next.filter((token) => !/^(from|to):/i.test(token) && !RANGE_TOKENS.has(token.toLowerCase()));
+            if (from) next.push(`from:${from}`);
+            if (to) next.push(`to:${to}`);
+          }
+          if (workspace !== undefined) {
+            next = next.filter((token) => !/^ws:/i.test(token));
+            if (workspace) next.push(`ws:${workspace}`);
+          }
+          if (repository !== undefined) {
+            next = next.filter((token) => !/^repo:/i.test(token));
+            if (repository) next.push(`repo:${baseName(repository)}`);
+          }
+          return next;
+        });
         await settleUi(3);
         return collectSessionsPanelUiState();
       }
       case 'sessions_load_more': {
-        const button = Array.from(sessionsPanelRoot().querySelectorAll('.sessions-footer button'))
-          .find((entry) => (entry.textContent || '').startsWith('Load'));
-        if (!(button instanceof HTMLElement)) throw new Error('nothing older to load');
-        clickElement(button);
+        const link = Array.from(sessionsPanelRoot().querySelectorAll('.ledger-status-left .ledger-status-link'))
+          .find((entry) => /older/.test(entry.textContent || ''));
+        if (!(link instanceof HTMLElement)) throw new Error('nothing older to load');
+        clickElement(link);
         await settleUi(4);
         return collectSessionsPanelUiState();
       }
       case 'sessions_row_action': {
         const { sessionId, action } = payload as { sessionId: string; action: string };
-        const row = Array.from(sessionsPanelRoot().querySelectorAll('tbody tr'))
-          .find((entry) => entry.querySelector('.sessions-id')?.textContent?.trim() === sessionId);
-        if (!row) throw new Error(`no row for session ${sessionId}`);
-        const button = Array.from(row.querySelectorAll('.sessions-actions button'))
-          .find((entry) => entry.textContent?.trim() === action);
-        if (!(button instanceof HTMLElement)) throw new Error(`row ${sessionId} offers no ${action}`);
-        clickElement(button);
+        const row = sessionsPanelRoot().querySelector(`.ledger-row[data-row-key="${CSS.escape(sessionId)}"]`);
+        if (!(row instanceof HTMLElement)) throw new Error(`no row for session ${sessionId}`);
+        await runLedgerRowVerb(row, action);
         await settleUi(3);
         return collectSessionsPanelUiState();
       }
@@ -3582,28 +3643,38 @@ export function useUiAutomationBridge({
       case 'worktrees_get_state':
         return collectWorktreesUiState();
       case 'worktrees_refresh': {
-        const panel = worktreesPanel();
-        if (!panel) throw new Error('worktrees_refresh needs the worktrees panel on screen');
-        armRefreshWitness(panel, WORKTREES_REFRESHING);
-        clickTestId('worktrees-refresh');
+        const root = worktreesRoot();
+        const link = ledgerStatusLink(root, 'refresh');
+        if (!link) throw new Error('no refresh link');
+        armRefreshWitness(root, LEDGER_REFRESHING);
+        clickElement(link);
         await settleUi(3);
         return collectWorktreesUiState();
       }
       case 'worktrees_toggle_log': {
-        clickTestId('worktrees-toggle-log');
+        const root = worktreesRoot();
+        const current = root.querySelector('.ledger-segmented button[aria-pressed="true"]')?.textContent?.trim();
+        const target = current === 'Removed' ? 'Active' : 'Removed';
+        const button = Array.from(root.querySelectorAll('.ledger-segmented button'))
+          .find((entry) => entry.textContent?.trim() === target);
+        if (!(button instanceof HTMLElement)) throw new Error(`no ${target} scope button`);
+        clickElement(button);
         await settleUi(3);
         return collectWorktreesUiState();
       }
       case 'worktrees_toggle_pin': {
-        clickTestId(`worktree-pin-${requireWorktreePath(payload)}`);
+        const row = worktreeRow(requireWorktreePath(payload));
+        await runLedgerRowVerb(row, row.getAttribute('data-pinned') === 'true' ? 'Unpin' : 'Keep');
         await settleUi(3);
         return collectWorktreesUiState();
       }
       case 'worktrees_delete': {
         const path = requireWorktreePath(payload);
-        clickTestId(`worktree-delete-${path}`);
-        await waitForTestId(`worktree-delete-confirm-${path}`);
-        clickTestId(`worktree-delete-confirm-${path}`);
+        await runLedgerRowVerb(worktreeRow(path), 'Delete…');
+        await settleUi(2);
+        const confirm = worktreeRow(path).querySelector('.ledger-row-trailing .ledger-verb.is-danger');
+        if (!(confirm instanceof HTMLElement)) throw new Error(`row ${path} did not ask to confirm`);
+        clickElement(confirm);
         await settleUi(3);
         return collectWorktreesUiState();
       }

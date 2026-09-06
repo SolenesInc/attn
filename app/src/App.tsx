@@ -6,7 +6,8 @@ import { getVersion } from '@tauri-apps/api/app';
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { Sidebar, type SidebarHeaderAction, type DockItem, WorkflowIcon, EditorIcon, PRsIcon, NotebookIcon } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
-import { SessionsPanel } from './components/SessionsPanel';
+import { LedgerSurface } from './components/ledger/LedgerSurface';
+import type { LedgerTab } from './components/ledger/LedgerSurface';
 import { activityStaleMs } from './utils/activitySettings';
 import { crewDisplayName } from './utils/crewName';
 import { AttentionDrawer } from './components/AttentionDrawer';
@@ -84,7 +85,6 @@ import { normalizeSessionAgent, type SessionAgent } from './types/sessionAgent';
 import { hasPane, workspaceSnapshotFromDaemonWorkspace, resolveEditorTileRoot, localWorkspaceDirectory, soleWorkspaceForId, serializeNotebookTileParams, type TerminalSplitDirection } from './types/workspace';
 import { useDaemonStore } from './store/daemonSessions';
 import { gardenPathToSeed, useGardenWalk } from './store/gardenWalk';
-import { WorktreesPanel } from './components/WorktreesPanel';
 import { usePRsNeedingAttention } from './hooks/usePRsNeedingAttention';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useWhatsNew } from './hooks/useWhatsNew';
@@ -1074,6 +1074,8 @@ function AppContent({
   const [seedPopoverRequest, setSeedPopoverRequest] = useState<{ sessionId: string; nonce: number }>();
   const [usagePopoverRequest, setUsagePopoverRequest] = useState<{ sessionId: string; nonce: number }>();
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [ledgerTab, setLedgerTab] = useState<LedgerTab>('sessions');
+  const openLedger = useCallback((tab: LedgerTab) => { setLedgerTab(tab); setSessionsOpen(true); }, []);
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [notebookRequestedPath, setNotebookRequestedPath] = useState<string | null>(null);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
@@ -1275,7 +1277,7 @@ function AppContent({
     void connect();
   }, [connect]);
 
-  type DockPanelId = 'workflowRun' | 'attention' | 'automations' | 'worktrees' | 'garden';
+  type DockPanelId = 'workflowRun' | 'attention' | 'automations' | 'garden';
 
   const [sidebarMutedExpanded, setSidebarMutedExpanded] = useState(false);
 
@@ -1294,7 +1296,6 @@ function AppContent({
         workflowRun: false,
         attention: false,
         automations: false,
-        worktrees: false,
         garden: false,
     },
     stack: [],
@@ -1619,7 +1620,6 @@ function AppContent({
   const workflowRunPanelOpen = openDockPanels.workflowRun;
   const attentionPanelOpen = openDockPanels.attention;
   const automationsPanelOpen = openDockPanels.automations;
-  const worktreesPanelOpen = openDockPanels.worktrees;
   const gardenPanelOpen = openDockPanels.garden;
   const openGardenDock = useCallback(() => openDockPanel('garden'), [openDockPanel]);
   const closeGardenDock = useCallback(() => closeDockPanel('garden'), [closeDockPanel]);
@@ -1840,7 +1840,7 @@ function AppContent({
       keywords: ['sessions', 'ledger', 'closed', 'history', 'reopen', 'past'],
       icon: <ContextActionIcon />,
       shortcut: [shortcutTokens('sessions.open')],
-      run: () => setSessionsOpen(true),
+      run: () => openLedger('sessions'),
     },
     {
       id: 'attention',
@@ -1857,7 +1857,7 @@ function AppContent({
       description: 'Every worktree, what the sweep decided, and why it kept the rest',
       keywords: ['worktree', 'worktrees', 'sweep', 'branch', 'reclaim', 'pin', 'keep'],
       icon: <ContextActionIcon />,
-      run: () => openDockPanel('worktrees'),
+      run: () => openLedger('worktrees'),
     },
     {
       id: 'garden-frame',
@@ -2383,7 +2383,7 @@ function AppContent({
     sendRuntimeInput,
     isRuntimeAttached,
     openAutomationsPanel: () => openDockPanel('automations'),
-    openWorktreesPanel: () => openDockPanel('worktrees'),
+    openWorktreesPanel: () => openLedger('worktrees'),
     presentationNotices,
     resetSessionPaneTerminal,
     injectSessionPaneBytes,
@@ -3364,15 +3364,15 @@ function AppContent({
       id: 'sessions',
       title: `Open Sessions (${formatShortcut('sessions.open')})`,
       icon: <SessionsIcon />,
-      active: sessionsOpen,
-      onClick: () => setSessionsOpen(true),
+      active: sessionsOpen && ledgerTab === 'sessions',
+      onClick: () => openLedger('sessions'),
     },
     {
       id: 'worktrees',
-      title: worktreesPanelOpen ? 'Hide Worktrees' : 'Show Worktrees',
+      title: 'Open Worktrees',
       icon: <WorktreesIcon />,
-      active: worktreesPanelOpen,
-      onClick: () => toggleDockPanel('worktrees'),
+      active: sessionsOpen && ledgerTab === 'worktrees',
+      onClick: () => openLedger('worktrees'),
     },
     {
       id: 'garden',
@@ -3399,7 +3399,8 @@ function AppContent({
     hasCriticalNotification,
     automationsPanelOpen,
     sessionsOpen,
-    worktreesPanelOpen,
+    ledgerTab,
+    openLedger,
     gardenPanelOpen,
     toggleNotificationsPanel,
   ]);
@@ -3483,7 +3484,8 @@ function AppContent({
     onOpenFile: handleOpenMarkdownFile,
     onOpenNotebookTile: handleOpenNotebookTile,
     onOpenNotebookFullscreen: openNotebookBrowser,
-    onOpenSessions: () => setSessionsOpen((prev) => !prev),
+    // The key toggles: it closes whatever list is up, and opens on Sessions, as its name says.
+    onOpenSessions: () => (sessionsOpen ? setSessionsOpen(false) : openLedger('sessions')),
     onOpenGarden: toggleGardenFrame,
     onQuit: handleQuitApp,
     enabled: appShortcutsEnabled && !gardenHoldsWindow,
@@ -3871,26 +3873,6 @@ function AppContent({
               ),
             },
             {
-              id: 'worktrees',
-              isOpen: worktreesPanelOpen,
-              width: 'clamp(420px, 44vw, 660px)',
-              className: 'dock-panel dock-panel--worktrees',
-              children: (
-                <WorktreesPanel
-                  isOpen={worktreesPanelOpen}
-                  onClose={() => closeDockPanel('worktrees')}
-                  listWorktrees={listWorktrees}
-                  getSweepLog={getWorktreeSweepLog}
-                  setKeep={setWorktreeKeep}
-                  refreshWorktrees={refreshWorktrees}
-                  deleteWorktree={handleDeleteWorktreeFromPanel}
-                  sessions={worktreePanelSessions}
-                  gitOperations={gitOperations}
-                  onSelectSession={handleSelectSession}
-                />
-              ),
-            },
-            {
               id: 'garden',
               width: 'clamp(380px, 34vw, 560px)',
               isOpen: gardenPanelOpen && !gardenHoldsWindow,
@@ -3987,19 +3969,33 @@ function AppContent({
         <div className="input-diagnostics-copied" role="status">Terminal input diagnostics copied</div>
       )}
       <ChordLeaderHud />
-      <SessionsPanel
+      <LedgerSurface
         isOpen={sessionsOpen}
+        tab={ledgerTab}
+        onTabChange={setLedgerTab}
         onClose={() => setSessionsOpen(false)}
-        listSessions={sendSessionList}
-        workspaceNames={workspaceNamesById}
-        liveSessionIds={liveGardenSessions}
-        seedForSession={seedForSession}
-        onFocusSession={handleSelectSession}
-        onOpenSeed={handleOpenSeedTile}
-        onReopen={handleReopenSession}
-        closeNotice={sessionCloseNotice}
-        verdictNotice={sessionVerdictNotice}
         yieldsFocus={locationPickerOpen && locationPickerPurpose === 'reopen'}
+        sessions={{
+          listSessions: sendSessionList,
+          workspaceNames: workspaceNamesById,
+          liveSessionIds: liveGardenSessions,
+          seedForSession,
+          onFocusSession: handleSelectSession,
+          onOpenSeed: handleOpenSeedTile,
+          onReopen: handleReopenSession,
+          closeNotice: sessionCloseNotice,
+          verdictNotice: sessionVerdictNotice,
+        }}
+        worktrees={{
+          listWorktrees,
+          getSweepLog: getWorktreeSweepLog,
+          setKeep: setWorktreeKeep,
+          refreshWorktrees,
+          deleteWorktree: handleDeleteWorktreeFromPanel,
+          sessions: worktreePanelSessions,
+          gitOperations,
+          onSelectSession: handleSelectSession,
+        }}
       />
       <NotebookBrowser
         isOpen={notebookOpen}

@@ -1098,7 +1098,7 @@ export function SettingsModal({
               <p className="settings-row-title">Reclaim merged worktrees in the background</p>
               <p className="settings-row-copy">
                 Turning it off stops removals; the daemon keeps refreshing worktree state so the
-                Worktrees panel stays accurate, and the keep-forever pins you set stay set.
+                Worktrees list in the ledger surface stays accurate, and the keep pins you set stay set.
               </p>
             </div>
             <button

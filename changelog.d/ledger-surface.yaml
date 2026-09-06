@@ -1,0 +1,11 @@
+kind: changed
+area: sessions
+change: Sessions and worktrees share one surface with one row grammar, a typed filter, a side inspector and a status line.
+symptom: The Sessions list and the Worktrees panel each had their own layout, controls and keys, and session rows showed raw ids.
+notes: >
+  One panel, two lists (`[` and `]` switch). Each row reads glyph, title, meta,
+  stamp and a primary verb; `.` opens the rest, 1–9 runs the nth, `y` copies the
+  path, `/` types a filter (`repo:`, `ws:`, `7d`, `from:`/`to:`, `dir:`, words).
+  A session's worktree and a worktree's sessions are one keystroke apart.
+  Focus and Go-to close the surface and show the agent. Sessions are named by
+  their title everywhere; ids never appear on the surface.

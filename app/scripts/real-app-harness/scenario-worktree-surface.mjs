@@ -181,7 +181,7 @@ async function main() {
     allowRealAgents: false,
     tier: 'tier2-local-fake-agent',
     prefix: 'worktree-surface',
-    metadata: { profile, panel: 'Worktrees dock panel', slowRepoFiles: SLOW_REPO_FILES },
+    metadata: { profile, panel: 'the Worktrees list of the ledger surface', slowRepoFiles: SLOW_REPO_FILES },
   });
 
   const client = new UiAutomationClient({ appPath: options.appPath });
@@ -303,8 +303,7 @@ async function main() {
         const row = rowFor(await client.request('worktrees_get_state'), target);
         return row?.pinned ? row : null;
       }, 'the row to read pinned', PANEL_APPEAR_TIMEOUT_MS);
-      runner.assert(/kept forever/.test(pinned.sweep + pinned.reason),
-        'a pinned row says it is kept forever', pinned);
+      runner.assert(pinned.sweep === 'kept', 'a pinned row says it is kept', pinned);
 
       // The CLI pages at 20 rows and the registry carries earlier runs.
       const listed = runJSON(binary, ['worktree', 'list', '--repo', fixture.main, '--json'], daemonEnv);
@@ -316,7 +315,7 @@ async function main() {
         const row = rowFor(await client.request('worktrees_get_state'), target);
         return row && !row.pinned ? row : null;
       }, 'the pin to release', PANEL_APPEAR_TIMEOUT_MS);
-      runner.assert(!/kept forever/.test(released.sweep),
+      runner.assert(released.sweep !== 'kept',
         'unpinning hands the decision back to the sweep', released);
     });
 
@@ -352,7 +351,7 @@ async function main() {
     await runner.step('capture_evidence', async () => {
       // Serializing the whole root drags the terminal canvas in and WebKitGTK rejects the capture.
       await captureScreenshotData(path.join(runner.runDir, 'worktrees-panel.png'),
-        { client, selector: '[data-testid="worktrees-panel"]' });
+        { client, selector: '.ledger-panel' });
       runner.writeJson('worktrees-state.json', await client.request('worktrees_get_state'));
       runner.writeJson('worktree-list-cli.json', runJSON(binary, ['worktree', 'list', '--json'], daemonEnv));
       runner.writeJson('worktree-log-cli.json', runJSON(binary, ['worktree', 'log', '--json'], daemonEnv));
