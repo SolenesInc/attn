@@ -1,4 +1,4 @@
-.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
+.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -276,7 +276,7 @@ test-all: test test-frontend
 # `ATTN_PROFILE=dev make` would silently reinstall the prod bundle.
 # The empty-goal case (bare `make`) is represented by the current
 # DEFAULT_GOAL ("run"); we substitute that in so the check catches it.
-GUARDED_PROD_TARGETS := run install install-daemon
+GUARDED_PROD_TARGETS := run install install-staged install-daemon
 ACTIVE_GOALS := $(if $(MAKECMDGOALS),$(MAKECMDGOALS),$(.DEFAULT_GOAL))
 GUARDED_INVOCATION := $(filter $(GUARDED_PROD_TARGETS),$(ACTIVE_GOALS))
 ifneq (,$(GUARDED_INVOCATION))
@@ -309,42 +309,19 @@ run: install
 	fi; \
 	echo "Launched $$app_path"
 
+INSTALL_APP_TREE = PROFILE="$(PROFILE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" WORKTREE="$(CURDIR)" \
+	PROFILE_DAEMON_UNSET="$(PROFILE_DAEMON_UNSET)" PROFILE_ROUTING_VARS="$(PROFILE_ROUTING_VARS)" \
+	bash ./scripts/install-app-tree.sh
+
 # Install-only (no open). `make install` = prod; `make install PROFILE=agent7`
 # = the isolated agent7 bundle. Resources resolved from `attn profile resolve`.
 install: build-app
-	@set -e; \
-	profile="$(PROFILE)"; \
-	attn="$(CURDIR)/$(OUTPUT)"; \
-	app_name="$$("$$attn" profile resolve --profile "$$profile" --field appName)"; \
-	ws_port="$$("$$attn" profile resolve --profile "$$profile" --field wsPort)"; \
-	label="$$("$$attn" profile resolve --profile "$$profile" --field label)"; \
-	app_bundle="$$("$$attn" profile resolve --profile "$$profile" --field appPath)"; \
-	app_binary="$$("$$attn" profile resolve --profile "$$profile" --field appDaemon)"; \
-	if [ "$(UNAME_S)" = "Darwin" ]; then \
-		staged="app/src-tauri/target/release/bundle/macos/$$app_name.app"; \
-	else \
-		staged="app/src-tauri/target/release/linux-tree/$$app_name"; \
-	fi; \
-	echo ">>> Installing $$label: $$app_bundle (port=$$ws_port)"; \
-	mkdir -p "$$(dirname "$$app_bundle")"; \
-	: "Quit a running instance first. macOS keeps the running image via mmap,"; \
-	: "so rm -rf + cp alone would leave an old process out of a deleted bundle."; \
-	"$$attn" profile stop-app --profile "$$profile" >/dev/null; \
-	rm -rf "$$app_bundle"; \
-	cp -r "$$staged" "$$app_bundle"; \
-	if [ "$(UNAME_S)" != "Darwin" ]; then \
-		"$$attn" profile register-scheme --profile "$$profile"; \
-	fi; \
-	if [ -n "$$profile" ]; then \
-		$(WARN_LEAKED_ROUTING); \
-		env $(PROFILE_DAEMON_UNSET) ATTN_PROFILE="$$profile" "$$app_binary" daemon ensure >/dev/null; \
-		: "Install time is the only moment the worktree behind a profile is known"; \
-		: "for certain, so record it here for cleanup tooling to read back."; \
-		"$$attn" profile set-origin "$$profile" --worktree "$(CURDIR)" >/dev/null || true; \
-	else \
-		"$$app_binary" daemon ensure >/dev/null; \
-	fi; \
-	echo "Installed $$app_bundle (profile=$$label, port=$$ws_port)"
+	@$(INSTALL_APP_TREE)
+
+# Install a tree a previous build already staged. The CI acceptance shards
+# download one build's tree instead of each running the toolchain themselves.
+install-staged:
+	@$(INSTALL_APP_TREE)
 
 # Fast path: swap just the Go daemon sidecar into the already-installed PROFILE
 # bundle, re-sign, and restart its daemon. `make install-daemon PROFILE=agent7`.
