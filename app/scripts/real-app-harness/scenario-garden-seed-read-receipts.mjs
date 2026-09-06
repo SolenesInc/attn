@@ -97,7 +97,7 @@ function writeWatcherFixture(cwd, delegateCwd) {
       {
         includes: DISPATCH_PROMPT,
         actions: [
-          { type: 'attn', args: ['delegate', '--agent', 'codex', '--yolo', '--no-worktree',
+          { type: 'attn', args: ['delegate', '--agent', 'codex', '--model', 'gpt-5.6-sol', '--yolo', '--no-worktree',
             '--cwd', delegateCwd, '--plot', '{{seed}}', '--name', 'subscription-delegate',
             '--brief', 'Wait for the subscription proof.'] },
           { type: 'reply', text: DISPATCHED_MARKER, state: 'idle' },
@@ -349,6 +349,7 @@ async function main() {
     });
 
     await runner.step('unwatch_drops_only_uncovered_updates', async () => {
+      await client.request('focus_pane', author);
       const output = await runInShell(client, author, `attn seed unwatch ${seed} --session ${watcher.sessionId}`, `removed watch on ${seed}`);
       const unread = unreadSeeds();
       runner.assert(unread.length === 1 && unread[0] === keptChild, 'the separate child watch survives plot unwatch', { unread });
