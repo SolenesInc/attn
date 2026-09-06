@@ -111,6 +111,7 @@ import { ptySpawn } from './pty/bridge';
 import { clearBrowserHostFocus, controlBrowserHost, isBrowserHostOwnedTarget } from './browser/host';
 import { probeUiAfterSwitch, UI_DIAGNOSTICS_FILE_DISPLAY } from './utils/uiDiagnosticsLog';
 import { BannerStack } from './components/BannerStack';
+import { dispatcherOf } from './utils/delegationLinks';
 import {
   agentLabel,
   getAgentAvailability,
@@ -1241,6 +1242,18 @@ function AppContent({
     };
   });
 
+  const delegationSessions = useMemo(
+    () => daemonSessions.map((session) => ({
+      id: session.id,
+      label: session.label,
+      agent: normalizeSessionAgent(session.agent),
+      state: normalizeSessionState(session.state),
+      dispatcher_session_id: session.dispatcher_session_id,
+      dispatcher_member: session.dispatcher_member,
+    })),
+    [daemonSessions],
+  );
+
   const visibleEnrichedSessions = filterSessionsRepresentedInWorkspaceLayouts(daemonWorkspaces, enrichedLocalSessions);
 
   const notebookChiefSession = enrichedLocalSessions.find((session) => session.chiefOfStaff);
@@ -2344,6 +2357,13 @@ function AppContent({
     },
     [sessions, setActivePane, setActiveSession]
   );
+
+  const handleSelectOrchestrator = useCallback(() => {
+    const session = daemonSessions.find((entry) => entry.id === activeSessionId);
+    if (!session) return;
+    const dispatcher = dispatcherOf(session, daemonSessions);
+    if (dispatcher?.session) handleSelectSession(dispatcher.session.id);
+  }, [activeSessionId, daemonSessions, handleSelectSession]);
 
   useUiAutomationBridge({
     sessions,
@@ -3473,6 +3493,7 @@ function AppContent({
     onSelectWorkspaceByIndex: handleSelectWorkspaceByIndex,
     onPrevSession: handlePrevWorkspace,
     onNextSession: handleNextWorkspace,
+    onSelectOrchestrator: handleSelectOrchestrator,
     onToggleSidebar: toggleSidebarCollapse,
     onRefreshPRs: handleRefreshPRs,
     onToggleAttentionPanel: () => toggleDockPanel('attention'),
@@ -3714,6 +3735,7 @@ function AppContent({
                       automation: entry.automation,
                       pullRequests: entry.pullRequests,
                     }))}
+                    delegationSessions={delegationSessions}
                     seedTargetSessions={daemonSessions.map((session) => ({
                       sessionId: session.id,
                       label: session.label || session.id,
@@ -3763,6 +3785,7 @@ function AppContent({
                       }
                     }}
                     onRenameSession={sendRenameSession}
+                    onSelectSession={handleSelectSession}
                     onResizeSplit={(splitId, ratio) => {
                       return sendWorkspaceSetSplitRatio(workspace.id, splitId, ratio);
                     }}

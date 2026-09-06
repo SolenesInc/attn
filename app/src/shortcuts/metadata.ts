@@ -43,6 +43,7 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'session.close': { label: 'Close session (or focused pane)', category: 'sessions' },
   'session.prev': { label: 'Previous session', category: 'sessions' },
   'session.next': { label: 'Next session', category: 'sessions' },
+  'session.orchestrator': { label: 'Jump to this session\'s dispatcher', category: 'sessions' },
   'session.goToDashboard': { label: 'Go to dashboard (home)', category: 'sessions' },
   'view.toggleGrid': { label: 'Toggle grid view', category: 'sessions' },
   'session.jumpToWaiting': { label: 'Jump to next waiting session', category: 'sessions' },

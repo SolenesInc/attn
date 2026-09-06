@@ -35,6 +35,54 @@ function pr(overrides: Partial<SessionPullRequest> = {}): SessionPullRequest {
 }
 
 describe('SessionProvenance', () => {
+  it('jumps to a live dispatcher and opens the direct delegates', () => {
+    const onSelectSession = vi.fn();
+    render(
+      <SessionProvenance
+        dispatcher={{
+          session: { id: 'dispatcher', label: 'docs sweep' },
+          name: 'docs sweep',
+        }}
+        delegates={[
+          { id: 'delegate-a', label: 'glossary rework', agent: 'claude', state: 'working' },
+          { id: 'delegate-b', label: 'stale plans', agent: 'codex', state: 'idle' },
+        ]}
+        onSelectSession={onSelectSession}
+        interactive
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /delegated by docs sweep/i }));
+    expect(onSelectSession).toHaveBeenCalledWith('dispatcher');
+
+    fireEvent.click(screen.getByRole('button', { name: '2 delegates' }));
+    const popover = screen.getByTestId('session-delegates-popover');
+    expect(popover).toHaveTextContent('glossary rework');
+    expect(popover).toHaveTextContent('claude');
+    expect(popover.querySelectorAll('[data-testid="state-indicator"]')).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'stale plans codex' }));
+    expect(onSelectSession).toHaveBeenLastCalledWith('delegate-b');
+    expect(screen.queryByTestId('session-delegates-popover')).not.toBeInTheDocument();
+  });
+
+  it('names an earlier dispatcher session without offering a dead link', () => {
+    const onSelectSession = vi.fn();
+    render(
+      <SessionProvenance
+        dispatcher={{ session: null, name: 'Alder' }}
+        onSelectSession={onSelectSession}
+        interactive
+      />,
+    );
+
+    const dispatcher = screen.getByRole('button', { name: /delegated by Alder earlier session/i });
+    expect(dispatcher).toBeDisabled();
+    expect(dispatcher).toHaveTextContent('earlier session');
+    fireEvent.click(dispatcher);
+    expect(onSelectSession).not.toHaveBeenCalled();
+  });
+
   it('renders automation, definition, PR identity, and title as one line', () => {
     render(<SessionProvenance automation={provenance} />);
 
