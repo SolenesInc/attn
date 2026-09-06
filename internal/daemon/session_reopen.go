@@ -726,20 +726,18 @@ func (d *Daemon) reopenSessionRuntime(
 	}
 
 	// The add returns a pane the session already holds without touching the layout,
-	// and a rollback that removed it would take a pane this call never created.
-	reusedPane := d.workspaceLayoutHasSessionPane(workspaceID, plan.SessionID)
-	paneClient := newInternalWSClient()
-	d.handleWorkspaceLayoutAddSessionPane(paneClient, &protocol.WorkspaceLayoutAddSessionPaneMessage{
+	// so the rollback follows its receipt rather than a guess taken before it.
+	_, paneCreated, err := d.addWorkspaceSessionPane(&protocol.WorkspaceLayoutAddSessionPaneMessage{
 		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
 		WorkspaceID: workspaceID,
 		PaneID:      protocol.Ptr("pane-" + plan.SessionID),
 		SessionID:   plan.SessionID,
 		Title:       protocol.Ptr(plan.Title),
 	})
-	if _, err := readInternalActionResult(paneClient); err != nil {
+	if err != nil {
 		return nil, rollback.fail(fmt.Errorf("create reopen pane: %w", err))
 	}
-	if !reusedPane {
+	if paneCreated {
 		rollback.onPaneCreated(plan.SessionID)
 	}
 

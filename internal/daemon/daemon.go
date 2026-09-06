@@ -137,6 +137,7 @@ type Daemon struct {
 	branchInspections                 map[string]branchInspection
 	branchInspectionsRunning          map[string]chan struct{}
 	branchInspectionsMu               sync.Mutex
+	sessionPaneAddMu                  sync.Mutex
 	gitCoordMu                        sync.Mutex
 	gitCoord                          *gitCoordinator
 	warnings                          []protocol.DaemonWarning

@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -289,6 +290,54 @@ func TestAFailedReopenKeepsThePaneThatOutlivedTheClose(t *testing.T) {
 	if !ok || paneID != "pane-survivor" || holder != "workspace-survivor" {
 		t.Errorf("pane after the failed reopen = %q in %q (found %v), want pane-survivor kept in workspace-survivor",
 			paneID, holder, ok)
+	}
+}
+
+// Two callers adding the same session's pane must not both believe they made it:
+// the loser's rollback would remove the winner's pane.
+func TestOnlyOneConcurrentAddReportsCreatingTheSessionPane(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	reopenDaemonWithBackend(t, d)
+	client := newWorkspaceProtocolTestClient()
+	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
+		Cmd: protocol.CmdRegisterWorkspace, ID: "workspace-race", Title: "Race", Directory: t.TempDir(),
+	})
+
+	const callers = 8
+	var start sync.WaitGroup
+	var done sync.WaitGroup
+	start.Add(1)
+	created := make([]bool, callers)
+	errs := make([]error, callers)
+	for i := range callers {
+		done.Add(1)
+		go func() {
+			defer done.Done()
+			start.Wait()
+			_, made, err := d.addWorkspaceSessionPane(&protocol.WorkspaceLayoutAddSessionPaneMessage{
+				Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
+				WorkspaceID: "workspace-race",
+				PaneID:      protocol.Ptr("pane-raced"),
+				SessionID:   "raced",
+				Title:       protocol.Ptr("Raced"),
+			})
+			created[i], errs[i] = made, err
+		}()
+	}
+	start.Done()
+	done.Wait()
+
+	makers := 0
+	for i, made := range created {
+		if errs[i] != nil {
+			t.Fatalf("caller %d failed to add the pane: %v", i, errs[i])
+		}
+		if made {
+			makers++
+		}
+	}
+	if makers != 1 {
+		t.Errorf("%d of %d callers reported creating the pane, want exactly one", makers, callers)
 	}
 }
 

@@ -975,23 +975,35 @@ func (d *Daemon) recomputeAndBroadcastWorkspace(workspaceID string) {
 }
 
 func (d *Daemon) handleWorkspaceLayoutAddSessionPane(client *wsClient, msg *protocol.WorkspaceLayoutAddSessionPaneMessage) {
-	paneID, err := d.addWorkspaceSessionPane(msg)
+	paneID, _, err := d.addWorkspaceSessionPane(msg)
 	d.sendWorkspaceLayoutActionResult(client, protocol.CmdWorkspaceLayoutAddSessionPane, msg.WorkspaceID, paneID, err)
 }
 
-func (d *Daemon) addWorkspaceSessionPane(msg *protocol.WorkspaceLayoutAddSessionPaneMessage) (*string, error) {
+// Reports whether this call created the pane; a caller that rolls back needs the
+// receipt, and the check and the save must not interleave with another add.
+func (d *Daemon) addWorkspaceSessionPane(msg *protocol.WorkspaceLayoutAddSessionPaneMessage) (*string, bool, error) {
+	d.sessionPaneAddMu.Lock()
+	paneID, created, err := d.addWorkspaceSessionPaneLocked(msg)
+	d.sessionPaneAddMu.Unlock()
+	if created && err == nil {
+		d.broadcastWorkspaceLayoutUpdated(msg.WorkspaceID)
+	}
+	return paneID, created, err
+}
+
+func (d *Daemon) addWorkspaceSessionPaneLocked(msg *protocol.WorkspaceLayoutAddSessionPaneMessage) (*string, bool, error) {
 	snapshot, err := d.currentOrEmptyWorkspaceLayout(msg.WorkspaceID)
 	if err != nil {
-		return msg.PaneID, err
+		return msg.PaneID, false, err
 	}
 
 	sessionID := strings.TrimSpace(msg.SessionID)
 	if sessionID == "" {
-		return nil, fmt.Errorf("session_id is required")
+		return nil, false, fmt.Errorf("session_id is required")
 	}
 	for _, pane := range snapshot.Panes {
 		if pane.SessionID == sessionID {
-			return protocol.Ptr(pane.PaneID), nil
+			return protocol.Ptr(pane.PaneID), false, nil
 		}
 	}
 
@@ -1001,14 +1013,14 @@ func (d *Daemon) addWorkspaceSessionPane(msg *protocol.WorkspaceLayoutAddSession
 	}
 	for _, pane := range snapshot.Panes {
 		if pane.PaneID == paneID {
-			return protocol.Ptr(paneID), fmt.Errorf("pane already exists: %s", paneID)
+			return protocol.Ptr(paneID), false, fmt.Errorf("pane already exists: %s", paneID)
 		}
 	}
 	if workspacelayout.HasPane(snapshot.Layout, paneID) {
-		return protocol.Ptr(paneID), fmt.Errorf("pane already exists: %s", paneID)
+		return protocol.Ptr(paneID), false, fmt.Errorf("pane already exists: %s", paneID)
 	}
 	if workspacelayout.HasTile(snapshot.Layout, paneID) {
-		return protocol.Ptr(paneID), fmt.Errorf("tile already exists: %s", paneID)
+		return protocol.Ptr(paneID), false, fmt.Errorf("tile already exists: %s", paneID)
 	}
 	title := strings.TrimSpace(protocol.Deref(msg.Title))
 	if title == "" {
@@ -1026,7 +1038,7 @@ func (d *Daemon) addWorkspaceSessionPane(msg *protocol.WorkspaceLayoutAddSession
 	targetPaneID := strings.TrimSpace(protocol.Deref(msg.TargetPaneID))
 	if len(snapshot.Panes) == 0 || snapshot.Layout.Type == "" {
 		if targetPaneID != "" {
-			return protocol.Ptr(targetPaneID), fmt.Errorf("cannot target pane in empty layout")
+			return protocol.Ptr(targetPaneID), false, fmt.Errorf("cannot target pane in empty layout")
 		}
 		snapshot.Layout = workspacelayout.DefaultLayout(paneID)
 	} else {
@@ -1037,7 +1049,7 @@ func (d *Daemon) addWorkspaceSessionPane(msg *protocol.WorkspaceLayoutAddSession
 			targetPaneID = firstWorkspaceLayoutPaneID(*snapshot)
 		}
 		if targetPaneID == "" {
-			return nil, fmt.Errorf("workspace has no target pane")
+			return nil, false, fmt.Errorf("workspace has no target pane")
 		}
 		layout, changed := workspacelayout.Split(
 			snapshot.Layout,
@@ -1048,7 +1060,7 @@ func (d *Daemon) addWorkspaceSessionPane(msg *protocol.WorkspaceLayoutAddSession
 			workspacelayout.DefaultSplitRatio,
 		)
 		if !changed {
-			return protocol.Ptr(targetPaneID), fmt.Errorf("pane not found: %s", targetPaneID)
+			return protocol.Ptr(targetPaneID), false, fmt.Errorf("pane not found: %s", targetPaneID)
 		}
 		snapshot.Layout = layout
 	}
@@ -1057,10 +1069,9 @@ func (d *Daemon) addWorkspaceSessionPane(msg *protocol.WorkspaceLayoutAddSession
 	snapshot.Panes = append(snapshot.Panes, nextPane)
 	normalized := workspacelayout.NormalizeWorkspaceLayout(*snapshot)
 	if err := d.store.SaveWorkspaceLayout(normalized); err != nil {
-		return protocol.Ptr(paneID), err
+		return protocol.Ptr(paneID), false, err
 	}
-	d.broadcastWorkspaceLayoutUpdated(msg.WorkspaceID)
-	return protocol.Ptr(paneID), nil
+	return protocol.Ptr(paneID), true, nil
 }
 
 func (d *Daemon) ensureWorkspaceSessionPane(workspaceID, sessionID, title string) (string, error) {
@@ -1072,7 +1083,7 @@ func (d *Daemon) ensureWorkspaceSessionPane(workspaceID, sessionID, title string
 	if strings.TrimSpace(title) != "" {
 		msg.Title = protocol.Ptr(title)
 	}
-	paneID, err := d.addWorkspaceSessionPane(msg)
+	paneID, _, err := d.addWorkspaceSessionPane(msg)
 	return protocol.Deref(paneID), err
 }
 
