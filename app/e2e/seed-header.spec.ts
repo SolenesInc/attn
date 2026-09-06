@@ -69,6 +69,7 @@ test('plot counts stay distinct and arrow keys open the selected seed', async ({
   await page.getByTestId('seed-chip-plot').click();
   const list = page.getByRole('listbox');
   await expect(list).toContainText('Useful previews');
+  await expect(list).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   await expect(page.getByTestId('opened')).toHaveText('s-garden');
