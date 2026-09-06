@@ -189,8 +189,6 @@ export class PiDriver {
 
   async sessionClosed(params: SessionClosedParams): Promise<{ ok: true }> {
     const run = this.runsBySessionID.get(params.session_id);
-    // A reload resumes the replacement run before closing the old one, so a close
-    // naming a superseded run must leave the live run and its token alone.
     if (run && run.runID === params.run_id) {
       this.markBacked(run);
       this.runsBySessionID.delete(params.session_id);
