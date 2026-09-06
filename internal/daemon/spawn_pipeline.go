@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -200,15 +200,6 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 	if configuredExecutable == "" {
 		configuredExecutable = legacyExecutableFromSpawnMessage(msg, req.agent)
 	}
-	// A conversation to pick up has to still be there: without this the fork throws,
-	// the revive re-forks the same missing path, and the session flaps silently.
-	if resume := strings.TrimSpace(protocol.Deref(msg.ResumeConversationFile)); resume != "" && !hostSessionStateDirHoldsConversation(msg.ID) {
-		if info, err := os.Stat(resume); err != nil {
-			return nil, &spawnRejection{err: fmt.Errorf("cannot pick up the conversation at %s: %w", resume, err)}
-		} else if info.IsDir() {
-			return nil, &spawnRejection{err: fmt.Errorf("cannot pick up the conversation at %s: it is a directory, not a conversation file", resume)}
-		}
-	}
 	plan := &spawnPlan{cleanupInitialPrompt: func() {}}
 	if !req.hasPluginDriver {
 		initialPromptFile, cleanup, err := d.writeInitialPromptFile(msg.ID, req.initialPrompt)
@@ -219,7 +210,7 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 		plan.cleanupInitialPromptOnReturn = initialPromptFile != ""
 		plan.spawnOpts.InitialPromptFile = initialPromptFile
 	}
-	plan.spawnOpts = ptybackend.SpawnOptions{ID: msg.ID, CWD: req.cwd, Agent: req.agent, Label: req.label, Cols: uint16(msg.Cols), Rows: uint16(msg.Rows), ResumeSessionID: req.resumeSessionID, ResumePicker: protocol.Deref(msg.ResumePicker), YoloMode: protocol.Deref(msg.YoloMode), InitialPromptFile: plan.spawnOpts.InitialPromptFile, Theme: d.currentTerminalTheme(), Executable: strings.TrimSpace(configuredExecutable), ClaudeExecutable: protocol.Deref(msg.ClaudeExecutable), CodexExecutable: protocol.Deref(msg.CodexExecutable), CopilotExecutable: protocol.Deref(msg.CopilotExecutable), LoginShellEnv: d.cachedLoginShellEnv(), WorkflowGuidanceEnabled: parseBooleanSetting(d.store.GetSetting(SettingWorkflowsEnabled)), AutoApprove: parseBooleanSetting(d.store.GetSetting(SettingAutoApproveEnabled)), Model: strings.TrimSpace(protocol.Deref(msg.Model)), Effort: strings.TrimSpace(protocol.Deref(msg.Effort)), ResumeConversationFile: strings.TrimSpace(protocol.Deref(msg.ResumeConversationFile))}
+	plan.spawnOpts = ptybackend.SpawnOptions{ID: msg.ID, CWD: req.cwd, Agent: req.agent, Label: req.label, Cols: uint16(msg.Cols), Rows: uint16(msg.Rows), ResumeSessionID: req.resumeSessionID, ResumePicker: protocol.Deref(msg.ResumePicker), YoloMode: protocol.Deref(msg.YoloMode), InitialPromptFile: plan.spawnOpts.InitialPromptFile, Theme: d.currentTerminalTheme(), Executable: strings.TrimSpace(configuredExecutable), ClaudeExecutable: protocol.Deref(msg.ClaudeExecutable), CodexExecutable: protocol.Deref(msg.CodexExecutable), CopilotExecutable: protocol.Deref(msg.CopilotExecutable), LoginShellEnv: d.cachedLoginShellEnv(), WorkflowGuidanceEnabled: parseBooleanSetting(d.store.GetSetting(SettingWorkflowsEnabled)), AutoApprove: parseBooleanSetting(d.store.GetSetting(SettingAutoApproveEnabled)), Model: strings.TrimSpace(protocol.Deref(msg.Model)), Effort: strings.TrimSpace(protocol.Deref(msg.Effort))}
 	requestedChief := protocol.Deref(msg.ChiefOfStaff)
 	if req.hasPluginDriver && requestedChief && !req.pluginDriver.Capabilities["launch_instructions"] {
 		plan.rollback(d, msg.ID)
@@ -366,9 +357,6 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	plan.priorIntent, plan.hadPriorIntent = d.store.LaunchIntent(session.ID)
 	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
-	if req.hasPluginDriver && req.pluginDriver.Capabilities[pluginDriverConversationCapability] {
-		intent.InitialPrompt = req.initialPrompt
-	}
 	intent.AutoMode = msg.AutoMode
 	d.store.SetLaunchIntent(session.ID, intent)
 	// After the already-live no-op returns, before the runtime whose first
@@ -408,6 +396,23 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		time.AfterFunc(5*time.Minute, plan.cleanupInitialPrompt)
 	}
 	return &spawnOutcome{}
+}
+
+func (d *Daemon) spawnSessionRuntime(_ *spawnRequest, opts ptybackend.SpawnOptions) error {
+	opts.DaemonEnv = d.spawnRoutingEnv()
+	err := d.ptyBackend.Spawn(context.Background(), opts)
+	if err == nil {
+		d.sessionInputs().forgetSession(opts.ID)
+	}
+	return err
+}
+
+func (d *Daemon) killSessionRuntime(sessionID string) error {
+	return d.ptyBackend.Kill(context.Background(), sessionID, syscall.SIGTERM)
+}
+
+func (d *Daemon) removeSessionRuntime(sessionID string) error {
+	return d.ptyBackend.Remove(context.Background(), sessionID)
 }
 
 func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {

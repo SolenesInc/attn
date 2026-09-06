@@ -194,5 +194,5 @@ covering changed behavior, latency, and keyboard flow.
 - Read [app/AGENTS.md](app/AGENTS.md) before changing frontend code or shortcuts.
 - Read [harness guidance](app/scripts/real-app-harness/AGENTS.md) before
   writing/running packaged-app scenarios or recording/publishing evidence.
-- Read [pi guidance](plugins/attn-pi/AGENTS.md) before changing pi/nisse drivers
+- Read [pi guidance](plugins/attn-pi/AGENTS.md) before changing the pi driver
   or auto-mode permissions.

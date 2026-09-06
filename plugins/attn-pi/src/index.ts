@@ -2,7 +2,6 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { AttnRPCClient } from "./attn-rpc";
 import { PiDriver } from "./driver";
-import { nisseAgentName, NisseDriver } from "./nisse-driver";
 import { RelayServer, type RelayConnection } from "./relay";
 import type { DriverSpawnParams, SessionClosedParams } from "./types";
 
@@ -40,13 +39,9 @@ async function runPlugin(): Promise<void> {
     },
   });
   driver = new PiDriver({ rpc, relay, suitePath: suitePath() });
-  const hostDriver = new NisseDriver({ rpc, hostCommand: hostCommand() });
 
-  rpc.handle("attn.health", () => combinedHealth(driver.health(), hostDriver.health()));
-  rpc.handle("driver.spawn", (params) => {
-    const spawnParams = params as DriverSpawnParams;
-    return spawnParams.agent === nisseAgentName ? hostDriver.spawn(spawnParams) : driver.spawn(spawnParams);
-  });
+  rpc.handle("attn.health", () => driver.health());
+  rpc.handle("driver.spawn", (params) => driver.spawn(params as DriverSpawnParams));
   rpc.handle("driver.resume", (params) => driver.resume(params as DriverSpawnParams));
   rpc.handle("driver.session_closed", (params) => driver.sessionClosed(params as SessionClosedParams));
   rpc.handle("driver.deliver_message", (params) => driver.deliverMessage(params));
@@ -54,25 +49,6 @@ async function runPlugin(): Promise<void> {
 
   await rpc.connect();
   await driver.initialize();
-  await hostDriver.initialize();
-}
-
-function combinedHealth(
-  pi: { ok: boolean; message: string },
-  host: { ok: boolean; message: string },
-): { ok: boolean; message: string } {
-  if (pi.ok && host.ok) return { ok: true, message: `${pi.message}; ${host.message}` };
-  if (!pi.ok && !host.ok) return { ok: false, message: `${pi.message}; ${host.message}` };
-  return pi.ok ? host : pi;
-}
-
-function hostCommand(): string[] {
-  const override = process.env.ATTN_NISSE_COMMAND?.trim();
-  if (override) return override.split(" ").filter((part) => part !== "");
-  if (process.env.ATTN_PLUGIN_ENTRYPOINT_KIND?.trim() === "executable") {
-    return [join(requiredEnvironment("ATTN_PLUGIN_ROOT"), "bin", "attn-nisse")];
-  }
-  return [process.execPath, join(import.meta.dir, "..", "host", "index.ts")];
 }
 
 function suitePath(): string {

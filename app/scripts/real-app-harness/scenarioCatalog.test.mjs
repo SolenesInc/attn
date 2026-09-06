@@ -44,10 +44,9 @@ describe('scenarioCatalog agent tripwire flags', () => {
   });
 
   it('lets the pi scenarios run pi and nothing else', () => {
-    // pi is a real binary these scenarios exec against a stub model or a
-    // recording, so only pi is allowed and claude/codex/copilot stay armed.
+    // pi is a real binary this scenario execs against a stub model, so only pi
+    // is allowed and claude/codex/copilot stay armed.
     expect(allowRealAgentsForRunner('PI-AUTOMODE')).toEqual(['pi']);
-    expect(allowRealAgentsForRunner('NISSE-MARKDOWN-STREAM')).toEqual(['pi']);
   });
 
   it('keeps the resume family armed on the mock agent', () => {

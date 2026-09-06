@@ -22,5 +22,4 @@ prompt instruction. `src/pullrequest.ts` is the twin of
 you change both.
 
 The driver declares the `pull_request_reporting` capability, which is what stops
-attn adding the `attn pr record` block to a pi session's launch guidance. `nisse`
-does not report and does not declare it.
+attn adding the `attn pr record` block to a pi session's launch guidance.

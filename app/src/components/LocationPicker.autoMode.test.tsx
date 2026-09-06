@@ -95,7 +95,7 @@ describe('LocationPicker auto mode toggle', () => {
     launch();
 
     await waitFor(() => {
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'snipe', undefined, false, false, undefined, true);
+      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'snipe', undefined, false, false, true);
     });
   });
 
@@ -108,7 +108,7 @@ describe('LocationPicker auto mode toggle', () => {
     launch();
 
     await waitFor(() => {
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'snipe', undefined, false, false, undefined, false);
+      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'snipe', undefined, false, false, false);
     });
   });
 
@@ -133,7 +133,7 @@ describe('LocationPicker auto mode toggle', () => {
     expect(screen.getByTestId('location-picker-automode-toggle')).toHaveAttribute('aria-checked', 'false');
     launch();
     await waitFor(() => {
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'snipe', undefined, false, false, undefined, false);
+      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'snipe', undefined, false, false, false);
     });
   });
 
@@ -142,7 +142,7 @@ describe('LocationPicker auto mode toggle', () => {
     launch();
 
     await waitFor(() => {
-      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'claude', undefined, false, false, undefined, undefined);
+      expect(onSelect).toHaveBeenCalledWith('/home/remote/projects', 'claude', undefined, false, false, undefined);
     });
   });
 });

@@ -18,7 +18,6 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/daemonctl"
 	"github.com/victorarias/attn/internal/desktopentry"
-	"github.com/victorarias/attn/internal/hostsession"
 	"github.com/victorarias/attn/internal/plugins"
 	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/ptyhost"
@@ -394,9 +393,6 @@ func cleanProfile(w io.Writer, r profileResolved) error {
 		}
 	}
 
-	// A daemon that skipped its shutdown leaves these reparented to init, findable
-	// only through these registries: reap before the registries go.
-	reportProcReap(w, "hosts", "session", hostsession.ReapDataDir(r.DataDir))
 	reportProcReap(w, "plugins", "plugin", plugins.ReapRuntimeProcesses(r.DataDir))
 
 	if err := refuseRelaunchedApp(r); err != nil {
@@ -946,7 +942,7 @@ Usage:
   attn profile resolve --profile agent7    resolve a different profile
   attn profile tauri-config    Tauri --config overlay for the profile's build
   attn profile register-scheme Linux only: claim <scheme>:// for this profile's app in the desktop database
-  attn profile clean <name>    reap workers + hosts + plugin drivers, stop daemon, quit app, remove its app, app local data, data dir, and scheme handler
+  attn profile clean <name>    reap workers + plugin drivers, stop daemon, quit app, remove its app, app local data, data dir, and scheme handler
   attn profile stop-app        quit the active profile's app (--profile <name> for another)
   attn profile list            every profile with data and/or an installed app
   attn profile list --json     same, machine-readable, with origin and what is running

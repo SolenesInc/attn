@@ -19,7 +19,6 @@ import {
 } from '../components/MarkdownReader/annotations/annotationsAutomation';
 import { getSettingsAutomationHandle, INACTIVE_SETTINGS_STATE } from '../components/settingsAutomation';
 import { getAutoModeAutomationHandle, INACTIVE_AUTOMODE_STATE } from '../components/autoModeAutomation';
-import { useConversationsStore } from '../store/conversations';
 import { getTerminalPerfSnapshot } from '../utils/terminalPerf';
 import { readWarmWorkspaceLimit } from '../utils/terminalVirtualization';
 import { dumpTerminalGeometry } from '../utils/terminalDiagnosticsLog';
@@ -75,7 +74,7 @@ interface UseUiAutomationBridgeArgs {
   daemonReady?: boolean;
   connectionError?: string | null;
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
-  createSession: (label: string, cwd: string, id?: string, agent?: SessionAgent, endpointId?: string, yoloMode?: boolean, options?: { chiefOfStaff?: boolean; resumeConversationFile?: string }) => Promise<string>;
+  createSession: (label: string, cwd: string, id?: string, agent?: SessionAgent, endpointId?: string, yoloMode?: boolean, options?: { chiefOfStaff?: boolean }) => Promise<string>;
   selectSession: (sessionId: string) => void;
   selectWorkspace: (workspaceId: string) => void;
   moveWorkspaceLeafToWorkspace: (
@@ -2567,16 +2566,11 @@ export function useUiAutomationBridge({
           ? payload.endpoint_id
           : undefined;
         const chiefOfStaff = payload.chief_of_staff === true;
-        const resumeConversationFile = typeof payload.resume_conversation_file === 'string'
-          && payload.resume_conversation_file.length > 0
-          ? payload.resume_conversation_file
-          : undefined;
         if (!cwd) {
           throw new Error('create_session requires cwd');
         }
         const sessionId = await createSession(label, cwd, providedSessionId, agent, endpointId, undefined, {
           chiefOfStaff,
-          resumeConversationFile,
         });
         await settleUi();
         window.setTimeout(() => {
@@ -3379,152 +3373,6 @@ export function useUiAutomationBridge({
             isSessionPaneInputFocused,
             isRuntimeAttached,
           ).sessions[0]?.panes.find((pane) => pane.paneId === paneId) || null,
-        };
-      }
-      // SPIKE-ONLY. Replays a recorded envelope stream into a live pane: a conversation session
-      // cannot reach the harness's stub provider through pi's static catalog (`getModel`).
-      case 'conversation_replay_envelopes': {
-        const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
-        const rows = Array.isArray(payload.envelopes) ? payload.envelopes : [];
-        if (!sessionId || rows.length === 0) {
-          throw new Error('conversation_replay_envelopes requires sessionId and a non-empty envelopes array');
-        }
-        const apply = useConversationsStore.getState().applyEnvelope;
-        void (async () => {
-          for (const entry of rows as Array<Record<string, unknown>>) {
-            const afterMs = typeof entry.afterMs === 'number' ? entry.afterMs : 0;
-            if (afterMs > 0) await new Promise((done) => { window.setTimeout(done, afterMs); });
-            if (typeof entry.kind !== 'string') continue;
-            apply(
-              sessionId,
-              typeof entry.seq === 'number' ? entry.seq : 0,
-              entry.kind,
-              (entry.body ?? {}) as Record<string, unknown>,
-            );
-          }
-        })();
-        return { replaying: rows.length };
-      }
-      case 'conversation_scroll_to': {
-        const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
-        const root = sessionId
-          ? document.querySelector(`[data-testid="conversation-pane-${sessionId}"]`)
-          : document.querySelector('.conversation-pane');
-        const list = root?.querySelector('[data-testid="conversation-messages"]');
-        if (!(list instanceof HTMLElement)) throw new Error('conversation transcript not found');
-        const fromBottom = typeof payload.fromBottom === 'number' ? payload.fromBottom : null;
-        list.scrollTop = fromBottom === null
-          ? Number(payload.scrollTop ?? 0)
-          : list.scrollHeight - list.clientHeight - fromBottom;
-        list.dispatchEvent(new Event('scroll', { bubbles: true }));
-        return {
-          scrollTop: Math.round(list.scrollTop),
-          fromBottom: Math.round(list.scrollHeight - list.scrollTop - list.clientHeight),
-        };
-      }
-      case 'conversation_get_state': {
-        const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
-        const root = sessionId
-          ? document.querySelector(`[data-testid="conversation-pane-${sessionId}"]`)
-          : document.querySelector('.conversation-pane');
-        if (!root) {
-          throw new Error(`conversation pane not found${sessionId ? ` for session ${sessionId}` : ''}`);
-        }
-        const input = root.querySelector('[data-testid="conversation-input"]');
-        const textarea = input instanceof HTMLTextAreaElement ? input : null;
-        const messages = Array.from(root.querySelectorAll('.conversation-message')).map((node) => {
-          const element = node as HTMLElement;
-          const rendered = element.querySelector('.conversation-message-text');
-          return {
-            id: (element.dataset.testid || '').replace('conversation-message-', ''),
-            role: element.dataset.role || '',
-            streaming: element.dataset.streaming === 'true',
-            text: rendered?.textContent || '',
-            html: rendered?.innerHTML || '',
-            blocks: {
-              headings: rendered?.querySelectorAll('h1, h2, h3, h4, h5, h6').length ?? 0,
-              tables: rendered?.querySelectorAll('table').length ?? 0,
-              codeBlocks: rendered?.querySelectorAll('pre').length ?? 0,
-              listItems: rendered?.querySelectorAll('li').length ?? 0,
-              links: rendered?.querySelectorAll('a[href]').length ?? 0,
-              diagrams: rendered?.querySelectorAll('.markdown-mermaid, .markdown-mermaid-loading').length ?? 0,
-              pendingDiagrams: rendered?.querySelectorAll('[data-testid="markdown-diagram-pending"]').length ?? 0,
-            },
-          };
-        });
-        const list = root.querySelector('[data-testid="conversation-messages"]');
-        const scroll = list instanceof HTMLElement
-          ? {
-            scrollTop: Math.round(list.scrollTop),
-            scrollHeight: Math.round(list.scrollHeight),
-            clientHeight: Math.round(list.clientHeight),
-            fromBottom: Math.round(list.scrollHeight - list.scrollTop - list.clientHeight),
-          }
-          : null;
-        const firstMessage = root.querySelector('.conversation-message');
-        const column = list instanceof HTMLElement && firstMessage instanceof HTMLElement
-          ? {
-            available: Math.round(list.clientWidth),
-            message: Math.round(firstMessage.getBoundingClientRect().width),
-          }
-          : null;
-        const queued = Array.from(root.querySelectorAll('[data-testid="conversation-queued"]')).map((node) => ({
-          kind: node.querySelector('.conversation-queued-label')?.textContent || '',
-          text: node.querySelector('.conversation-queued-text')?.textContent || '',
-        }));
-        const tools = Array.from(root.querySelectorAll('.conversation-tool')).map((node) => {
-          const element = node as HTMLElement;
-          const body = element.querySelector('[data-testid="conversation-tool-body"]');
-          return {
-            callId: (element.dataset.testid || '').replace('conversation-tool-', ''),
-            name: element.dataset.toolName || '',
-            status: element.dataset.toolStatus || '',
-            summary: element.querySelector('.conversation-tool-summary')?.textContent || '',
-            error: element.querySelector('[data-testid="conversation-tool-error"]')?.textContent || '',
-            expanded: element.dataset.expanded === 'true',
-            waiting: Boolean(body?.querySelector('[data-testid="conversation-tool-waiting"]')),
-            output: body?.querySelector('[data-testid="conversation-tool-output"]')?.textContent || '',
-            hasPatch: Boolean(body?.querySelector('[data-testid="conversation-tool-patch"]')),
-            fullOutputAvailable: Boolean(body?.querySelector('[data-testid="conversation-tool-full"]')),
-            detailError: body?.querySelector('[data-testid="conversation-tool-detail-error"]')?.textContent || '',
-          };
-        });
-        const notices = Array.from(root.querySelectorAll('.conversation-notice')).map((node) => {
-          const element = node as HTMLElement;
-          return {
-            id: (element.dataset.testid || '').replace('conversation-notice-', ''),
-            level: element.dataset.level || '',
-            done: element.dataset.done === 'true',
-            text: element.textContent || '',
-          };
-        });
-        const modelPicker = root.querySelector('[data-testid="conversation-model"]');
-        const model = modelPicker instanceof HTMLSelectElement ? modelPicker : null;
-        const send = root.querySelector('[data-testid="conversation-send"]');
-        const earlier = root.querySelector('[data-testid="conversation-load-earlier"]');
-        return {
-          sessionId,
-          messages,
-          scroll,
-          column,
-          tools,
-          notices,
-          queued,
-          loadEarlierAvailable: Boolean(earlier),
-          loadingHistory: Boolean(earlier instanceof HTMLButtonElement && earlier.disabled),
-          historyDropped: Number(
-            root.querySelector('[data-testid="conversation-history-dropped"]')?.getAttribute('data-dropped') || 0,
-          ),
-          model: model?.value || '',
-          models: model ? Array.from(model.options).flatMap((option) => (option.value ? [option.value] : [])) : [],
-          queueClearAvailable: Boolean(root.querySelector('[data-testid="conversation-queue-clear"]')),
-          inputDisabled: Boolean(textarea?.disabled),
-          placeholder: textarea?.placeholder || '',
-          draft: textarea?.value || '',
-          sendLabel: send?.textContent || '',
-          followUpAvailable: Boolean(root.querySelector('[data-testid="conversation-follow-up"]')),
-          recoverable: Boolean(root.querySelector('[data-testid="conversation-recoverable"]')),
-          reloadAvailable: Boolean(root.querySelector('[data-testid="conversation-reload"]')),
         };
       }
       case 'garden_get_state':

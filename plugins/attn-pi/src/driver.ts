@@ -335,8 +335,8 @@ export class PiDriver {
     return run;
   }
 
-  /** Rebuilds this driver's run state from the runs attn reports still live. This
-   * plugin registers two agents, so pi metadata is the discriminator. */
+  /** Rebuilds this driver's run state from the runs attn reports still live.
+   * Pi metadata is the discriminator for runs this driver can adopt. */
   private adoptActiveRuns(runs: ActivePluginRun[]): void {
     for (const run of runs) {
       let metadata: PiMetadata;

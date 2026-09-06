@@ -2,14 +2,11 @@
 
 ## Sessions
 
-- Session: attn runtime hosting an agent through a PTY or conversation host.
+- Session: attn runtime hosting an agent through a PTY.
 - Agent conversation: provider history and resume target; can change within one session.
-- Conversation session: headless runtime; its host exchanges envelopes with the daemon.
-- Envelope: sequenced host message. Declaration: daemon-readable session event. Rendering: app display data.
-- Run: one prompt and response, from `run_started` to `run_settled`.
-- Prompt: starts a run. Steer: read at the next agent boundary. Follow-up: read before settlement.
+- Run: one prompt and response.
+- Prompt: starts a run.
 - Parked: a run that ended with the harness's background work still running; held working for at most the parked tripwire, then settled.
-- Input queue: unread messages in a conversation host.
 - Session input: ordered delivery to a live session with evidence of receipt.
 - Input evidence: deferred = untouched; placed = adapter-owned; taken = reading begun; indeterminate = uncertain.
 - Quiet window: automated input waits 30s after the user's last keystroke in a pane; mouse and focus reports are not keystrokes. The session input lane owns the retry: every deferred delivery is re-run there when the window closes, recomputing its prompt, so a deferral is never a drop. A closed lane refuses both, so nothing armed against a stopped daemon or a replaced session runtime can still place.
@@ -35,12 +32,10 @@
 - Session ledger: the durable record of the sessions a daemon ran, live and closed together, newest first. Each daemon keeps its own, so an outpost's sessions are read on the outpost.
 - Sessions surface: the app's fullscreen ledger view (⌘⇧L; Ctrl+Alt+L on Linux), filtered by live/closed, workspace, repository and date, a page at a time. It reads the local daemon's ledger only.
 - Session repository: the repository a session ran in, recorded on the row: the main repository for a worktree, the checkout itself otherwise. Rows written before it was recorded read empty and are invisible under a repository filter until the session runs again.
-- Snapshot: current conversation state. Epoch: host generation. Scroll-back: older paged history.
 - Resume: copies history into a new session. Reload: reopens a recoverable session's own history.
-- Launch prompt: opening message replayed only if a replacement host finds empty history.
+- Launch prompt: opening message sent to a newly started agent.
 - Session pull request: a pull request an agent opened from inside a session, reported by the tool-use hook, by a harness driver, or by `attn pr record`. Distinct from the PR inbox, which tracks pull requests waiting on the user. The daemon refreshes its status on the PR heat cadence and stops once it merges or closes.
 - Provenance line: the small line under a session's name saying where the session came from and what it produced. Carries the automation that launched it and the session pull request it opened, side by side.
-- nisse: attn's conversation agent, powered by pi.
 
 ## Garden and crew
 

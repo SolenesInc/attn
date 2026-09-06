@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "294"
+const ProtocolVersion = "295"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -246,13 +246,6 @@ const (
 	CmdGetKittyImage                         = "get_kitty_image"
 	CmdPtyInput                              = "pty_input"
 	CmdTerminalPointerActivity               = "terminal_pointer_activity"
-	CmdAgentPrompt                           = "agent_prompt"
-	CmdAgentToolDetail                       = "agent_tool_detail"
-	CmdAgentClearQueue                       = "agent_clear_queue"
-	CmdAgentAttach                           = "agent_attach"
-	CmdAgentHistory                          = "agent_history"
-	CmdAgentSetModel                         = "agent_set_model"
-	CmdListPastConversations                 = "list_past_conversations"
 	CmdBusStatusGet                          = "bus_status_get"
 	CmdBusSetConsumerEnabled                 = "bus_set_consumer_enabled"
 	CmdPtyResize                             = "pty_resize"
@@ -438,7 +431,6 @@ const (
 	EventWorkflowActionResult            = "workflow_action_result"
 	EventPtyOutput                       = "pty_output"
 	EventPtyInputProbeResult             = "pty_input_probe_result"
-	EventAgentEvent                      = "agent_event"
 	EventSpawnResult                     = "spawn_result"
 	EventReloadSessionResult             = "reload_session_result"
 	EventAttachResult                    = "attach_result"
@@ -466,7 +458,6 @@ const (
 	EventSeedNoteResult                  = "seed_note_result"
 	EventSessionMessagesGetResult        = "session_messages_get_result"
 	EventSessionMessagesChanged          = "session_messages_changed"
-	EventPastConversationsResult         = "past_conversations_result"
 	EventBusStatusResult                 = "bus_status_result"
 	EventBusSetConsumerEnabledResult     = "bus_set_consumer_enabled_result"
 	EventAutoModeStateResult             = "automode_state_result"
@@ -1967,55 +1958,6 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 		var msg TerminalPointerActivityMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, fmt.Errorf("unmarshal terminal_pointer_activity: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAgentPrompt:
-		var msg AgentPromptMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal agent_prompt: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAgentToolDetail:
-		var msg AgentToolDetailMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal agent_tool_detail: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAgentClearQueue:
-		var msg AgentClearQueueMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal agent_clear_queue: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAgentAttach:
-		var msg AgentAttachMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal agent_attach: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAgentHistory:
-		var msg AgentHistoryMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal agent_history: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdAgentSetModel:
-		var msg AgentSetModelMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal agent_set_model: %w", err)
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdListPastConversations:
-		var msg ListPastConversationsMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, fmt.Errorf("unmarshal list_past_conversations: %w", err)
 		}
 		return peek.Cmd, &msg, nil
 

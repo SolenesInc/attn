@@ -7,8 +7,6 @@ import type {
   BrowseDirectoryResult,
   DaemonEndpoint,
   InspectPathResult,
-  PastConversation,
-  PastConversationsResult,
   RecentLocation,
 } from '../hooks/useDaemonSocket';
 import type { SessionAgent } from '../types/sessionAgent';
@@ -78,7 +76,6 @@ interface LocationPickerProps {
     endpointId?: string,
     yoloMode?: boolean,
     chiefOfStaff?: boolean,
-    resumeConversationFile?: string,
     autoMode?: boolean,
   ) => void;
   onGetRecentLocations?: (endpointId?: string) => Promise<{ locations: RecentLocation[]; home_path?: string }>;
@@ -93,24 +90,6 @@ interface LocationPickerProps {
   agentAvailability?: AgentAvailability;
   endpoints?: DaemonEndpoint[];
   chiefExists?: boolean;
-  conversationAgents?: Set<string>;
-  onListPastConversations?: () => Promise<PastConversationsResult>;
-}
-
-function pastConversationLabel(conversation: PastConversation): string {
-  const folder = conversation.cwd.split('/').filter(Boolean).pop() || conversation.cwd;
-  const preview = conversation.preview.trim();
-  const age = relativeAge(conversation.modified);
-  const head = preview === '' ? '(no messages)' : preview.length > 70 ? `${preview.slice(0, 70)}...` : preview;
-  return `${head} — ${folder}${age === '' ? '' : `, ${age}`}${conversation.live ? ', running' : ''}`;
-}
-
-function relativeAge(epochMs: number): string {
-  const seconds = Math.floor((Date.now() - epochMs) / 1000);
-  if (!Number.isFinite(seconds) || seconds < 0) return '';
-  if (seconds < 3600) return `${Math.max(1, Math.floor(seconds / 60))}m ago`;
-  if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h ago`;
-  return `${Math.floor(seconds / 86_400)}d ago`;
 }
 
 const MAX_RECENT_LOCATIONS = 10;
@@ -253,8 +232,6 @@ export function LocationPicker({
   agentAvailability,
   endpoints = [],
   chiefExists = false,
-  conversationAgents,
-  onListPastConversations,
 }: LocationPickerProps) {
   const { settings, setSetting } = useSettings();
   const localAgentAvailability = agentAvailability || DEFAULT_AGENT_AVAILABILITY;
@@ -283,9 +260,6 @@ export function LocationPicker({
   const [chiefOfStaff, setChiefOfStaff] = useState(false);
   const [autoMode, setAutoMode] = useState(true);
   const autoModeTouchedRef = useRef(false);
-  const [resumeFile, setResumeFile] = useState('');
-  const [pastConversations, setPastConversations] = useState<PastConversation[]>([]);
-  const [pastConversationsError, setPastConversationsError] = useState('');
   const [repoRootPath, setRepoRootPath] = useState<string | null>(null);
   const [repoInfo, setRepoInfo] = useState<RepoInfo | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -431,13 +405,6 @@ export function LocationPicker({
   // The agent gate matches the daemon's agentSupportsChiefReload.
   const chiefToggleEligible = !chiefExists && purpose !== 'session' && (agent === 'claude' || agent === 'codex');
 
-  // The listing reads this daemon's own data dir, so a remote target would be
-  // offered files it cannot open. A split carries no resume either way.
-  const resumeEligible = purpose !== 'session'
-    && selectedEndpointId === undefined
-    && onListPastConversations !== undefined
-    && (conversationAgents?.has(agent) ?? false);
-
   const invalidateRequestGeneration = useCallback(() => {
     requestGenerationRef.current += 1;
   }, []);
@@ -493,28 +460,6 @@ export function LocationPicker({
     if (autoModeTouchedRef.current) return;
     setAutoMode((prev) => (prev === autoModeDefault ? prev : autoModeDefault));
   }, [autoModeDefault]);
-
-  useEffect(() => {
-    if (!resumeEligible || !onListPastConversations) {
-      setResumeFile('');
-      setPastConversations([]);
-      setPastConversationsError('');
-      return;
-    }
-    let cancelled = false;
-    void onListPastConversations()
-      .then((result) => {
-        if (cancelled) return;
-        setPastConversations(result.conversations);
-        setPastConversationsError('');
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        setPastConversations([]);
-        setPastConversationsError(error instanceof Error ? error.message : String(error));
-      });
-    return () => { cancelled = true; };
-  }, [onListPastConversations, resumeEligible]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -648,7 +593,6 @@ export function LocationPicker({
       selectedEndpointId,
       yoloMode && yoloSupported,
       chiefOfStaff && chiefToggleEligible,
-      resumeEligible && resumeFile !== '' ? resumeFile : undefined,
       autoModeSupported ? autoMode : undefined,
     );
     onClose();
@@ -661,8 +605,6 @@ export function LocationPicker({
     effectiveAgentAvailability,
     onClose,
     onSelect,
-    resumeEligible,
-    resumeFile,
     selectedEndpointId,
     yoloMode,
     yoloSupported,
@@ -1128,34 +1070,6 @@ export function LocationPicker({
                   <span className="agent-option-name">{chiefOfStaff ? 'On' : 'Off'}</span>
                 </button>
               </div>
-            </div>
-          </div>
-        )}
-        {resumeEligible && (
-          <div className="picker-resume-bar">
-            <div className="picker-agent-label">CONVERSATION</div>
-            <div className="picker-resume-controls">
-              {/* A fork, not an append: the chosen conversation is copied and
-                  never written to, so the session it came from keeps running. */}
-              <select
-                className="picker-resume-select"
-                data-testid="location-picker-resume"
-                aria-label="Conversation to pick up from"
-                value={resumeFile}
-                onChange={(event) => setResumeFile(event.target.value)}
-              >
-                <option value="">Start a new conversation</option>
-                {pastConversations.map((conversation) => (
-                  <option key={conversation.file} value={conversation.file}>
-                    {pastConversationLabel(conversation)}
-                  </option>
-                ))}
-              </select>
-              {pastConversationsError !== '' && (
-                <span className="picker-resume-error" data-testid="location-picker-resume-error">
-                  {pastConversationsError}
-                </span>
-              )}
             </div>
           </div>
         )}

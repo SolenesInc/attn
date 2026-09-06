@@ -1,27 +1,34 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import { Markdown } from './index';
-import mdLong from '../ConversationPane/__recordings__/md-long.jsonl?raw';
 
-// Never settles on purpose: a resolving mock charges the naive leg ~8,000 highlights
-// across this recording and times the harness, not the parse split being measured.
+// Never settles on purpose: a resolving mock measures highlighting too, while
+// this test isolates the parse split.
 const shikiMock = vi.hoisted(() => ({
   codeToHtml: vi.fn(() => new Promise<string>(() => {})),
 }));
 vi.mock('shiki', () => shikiMock);
 
-/** `streaming` off is the naive full-reparse baseline. The RATIO is the receipt,
- * not the absolute cost: 35x and 17.6x measured on two boxes in 2026-08. */
-
 function prefixes(): string[] {
-  const rows = mdLong.trim().split('\n').map((line: string) => JSON.parse(line));
-  const out: string[] = [];
-  let text = '';
-  for (const row of rows) {
-    if (row.envelope.kind === 'message_start') text = '';
-    if (row.envelope.kind === 'message_delta') { text += row.envelope.body.text; out.push(text); }
-  }
-  return out;
+  const settledPrefix = Array.from({ length: 32 }, (_, index) => `
+## Streaming section ${index + 1}
+
+This paragraph has **bold text**, a [link](https://example.com/${index}), and enough prose to exercise inline parsing while the final section changes.
+
+| item | value |
+| --- | --- |
+| alpha | ${index} |
+| beta | \`value-${index}\` |
+
+\`\`\`ts
+export const section${index} = ${index};
+\`\`\`
+`).join('\n');
+  const tailDeltas = Array.from({ length: 48 }, (_, index) =>
+    `Live detail ${index + 1} adds ordinary prose to the open response. `);
+
+  return tailDeltas.map((_, index) =>
+    `${settledPrefix}\n## Live tail\n\n${tailDeltas.slice(0, index + 1).join('')}`);
 }
 
 function replay(streaming: boolean, texts: string[]): number[] {
@@ -38,7 +45,6 @@ function replay(streaming: boolean, texts: string[]): number[] {
 describe('streaming markdown cost', () => {
   afterEach(cleanup);
 
-  // Two full replays of a 1,364-delta recording; the naive leg alone is ~12s.
   it('reparses only the open tail', { timeout: 300_000 }, () => {
     const texts = prefixes();
     const quantile = (s: number[], p: number) => s[Math.min(s.length - 1, Math.floor(s.length * p))];
@@ -48,7 +54,7 @@ describe('streaming markdown cost', () => {
     const naive = replay(false, texts);
     cleanup();
     const split = replay(true, texts);
-    console.log(`[md-long ${texts.length} deltas → ${texts[texts.length - 1].length} chars]`);
+    console.log(`[streaming markdown ${texts.length} deltas → ${texts[texts.length - 1].length} chars]`);
     console.log(`  ${report('whole-document reparse:', naive)}`);
     console.log(`  ${report('settled/tail split:    ', split)}`);
     console.log(`  p50 ratio ${(quantile(naive, 0.5) / quantile(split, 0.5)).toFixed(1)}x`);

@@ -109,12 +109,9 @@ fails the scenario on a non-empty ledger and prints the lines.
   the runner options, which wins over the catalog. `false` arms everything,
   `true` allows all four, an array names the ones the scenario needs. A runner
   id neither covers fails at construction rather than defaulting to permissive.
-  Every arming logs what it allowed. The pi and nisse scenarios carry `['pi']`
-  because the attn-pi plugin execs `pi --version` as its health probe; none of
-  them reaches a real model. `pi-automode` runs `pi` against the loopback stub,
-  `nisse-markdown-stream` replays a recording, and the other nisse scenarios
-  point the `attn-nisse` host at the stub (`startStubWorld` and `scriptedAgent`
-  in `piStubProvider.mjs`).
+  Every arming logs what it allowed. `pi-automode` carries `['pi']` because the
+  attn-pi plugin execs `pi --version` as its health probe, then runs `pi` against
+  the loopback stub. Claude, Codex, and Copilot stay armed.
 - Arming also sets `ATTN_HEADLESS_TASKS=off`, so the daemon refuses
   classification, titling and every other headless LLM task (`internal/headless`)
   instead of enqueueing one. Without it the ledger check races the daemon: a

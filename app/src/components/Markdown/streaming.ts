@@ -1,5 +1,5 @@
-// Receipt (2026-08-19, two recorded nisse streams replayed delta by delta): a 7,845-char
-// reply leaked a bare backtick in 21 prefixes; everything above the open tail was stable.
+// Recorded streaming replies showed that incomplete inline markers only occur
+// in the open tail; everything above it stays stable.
 
 export const PENDING_DIAGRAM_LANGUAGE = 'attn-pending-diagram';
 

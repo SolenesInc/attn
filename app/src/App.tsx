@@ -84,7 +84,6 @@ import { hasPane, workspaceSnapshotFromDaemonWorkspace, resolveEditorTileRoot, l
 import { useDaemonStore } from './store/daemonSessions';
 import { gardenPathToSeed, useGardenWalk } from './store/gardenWalk';
 import { WorktreesPanel } from './components/WorktreesPanel';
-import { useConversationsStore } from './store/conversations';
 import { usePRsNeedingAttention } from './hooks/usePRsNeedingAttention';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useWhatsNew } from './hooks/useWhatsNew';
@@ -113,7 +112,6 @@ import { probeUiAfterSwitch, UI_DIAGNOSTICS_FILE_DISPLAY } from './utils/uiDiagn
 import { BannerStack } from './components/BannerStack';
 import {
   agentLabel,
-  conversationAgents,
   getAgentAvailability,
   getAgentExecutableSettings,
   hasAnyAvailableAgents,
@@ -590,7 +588,6 @@ function App() {
   const daemon = useDaemonSocket({
     onSessionsUpdate: (sessions) => {
       setDaemonSessions(sessions);
-      useConversationsStore.getState().retainConversations(sessions.map((session) => session.id));
     },
     onPresentationAdded: (p) => setPresentationNotices((prev) => upsertPresentationNotice(prev, p)),
     onPresentationUpdated: (p) => setPresentationNotices((prev) => upsertPresentationNotice(prev, p)),
@@ -819,7 +816,6 @@ function AppContent({
     sendNotebookBacklinks,
     sendNotebookToChief,
     sendGetRecentLocations,
-    sendListPastConversations,
     sendBrowseDirectory,
     sendInspectPath,
     sendCreateWorktreeFromBranch,
@@ -955,7 +951,7 @@ function AppContent({
     agent?: SessionAgent,
     endpointId?: string,
     yoloMode = false,
-    options?: { chiefOfStaff?: boolean; resumeConversationFile?: string; autoMode?: boolean },
+    options?: { chiefOfStaff?: boolean; autoMode?: boolean },
   ) => {
     const sessionId = providedSessionId || crypto.randomUUID();
     const workspaceId = `workspace-${sessionId}`;
@@ -964,7 +960,7 @@ function AppContent({
     let paneAdded = false;
     try {
       await sendRegisterWorkspace(workspaceId, label, cwd, endpointId);
-      const createdSessionId = await createSession(label, cwd, sessionId, agent, endpointId, yoloMode, workspaceId, options?.chiefOfStaff, options?.resumeConversationFile, options?.autoMode);
+      const createdSessionId = await createSession(label, cwd, sessionId, agent, endpointId, yoloMode, workspaceId, options?.chiefOfStaff, options?.autoMode);
       localCreated = true;
       const spawnArgs = takeSessionSpawnArgs(sessionId, 80, 24);
       if (!spawnArgs) {
@@ -1070,8 +1066,6 @@ function AppContent({
     () => hasAnyAvailableAgents(agentAvailability),
     [agentAvailability],
   );
-
-  const conversationPaneAgents = useMemo(() => conversationAgents(settings), [settings]);
 
   useEffect(() => {
     setLauncherConfig({
@@ -1995,7 +1989,6 @@ function AppContent({
         agent === 'shell' ? false : options.yoloMode ?? activeSession.yoloMode,
         workspaceId,
         undefined,
-        undefined,
         agent === 'shell' ? undefined : options.autoMode,
       );
       const spawnArgs = takeSessionSpawnArgs(sessionId, 80, 24);
@@ -2048,7 +2041,6 @@ function AppContent({
       endpointId?: string,
       yoloMode = false,
       chiefOfStaff = false,
-      resumeConversationFile?: string,
       autoMode?: boolean,
     ) => {
       const jobId = sessionCreationJobIdRef.current + 1;
@@ -2104,7 +2096,7 @@ function AppContent({
           selectedAgent,
           endpointId,
           yoloMode,
-          { chiefOfStaff, resumeConversationFile, autoMode },
+          { chiefOfStaff, autoMode },
         );
         setSessionCreationJob((current) => (
           current?.id === jobId
@@ -3652,7 +3644,6 @@ function AppContent({
                     onRevealSeedInGarden={handleRevealSeedInGarden}
                     seedPopoverRequest={seedPopoverRequest}
                     usagePopoverRequest={usagePopoverRequest}
-                    conversationAgents={conversationPaneAgents}
                     annotationApi={annotationApi}
                     onTriggerNudge={sendTriggerNudge}
                     onCancelCountdown={sendCancelCountdown}
@@ -3867,8 +3858,6 @@ function AppContent({
         agentAvailability={agentAvailability}
         endpoints={daemonEndpoints}
         chiefExists={hasChiefOfStaff}
-        conversationAgents={conversationPaneAgents}
-        onListPastConversations={sendListPastConversations}
       />
       <UndoToast />
       <SessionCreationProgress

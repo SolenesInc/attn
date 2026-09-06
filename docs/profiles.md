@@ -67,12 +67,11 @@ instead of opening a second window.
 ## Iterate on a bundled plugin
 
 A change under `plugins/attn-pi` does not need `make install`. The driver reads
-two environment variables before falling back to the bundled build:
+an environment variable before falling back to the bundled build:
 
 | Variable | Points the driver at |
 | --- | --- |
 | `ATTN_PI_SUITE_PATH` | the pi extension, e.g. `<checkout>/plugins/attn-pi/suite/index.ts` |
-| `ATTN_NISSE_COMMAND` | the nisse host, e.g. `bun <checkout>/plugins/attn-pi/host/index.ts` |
 
 pi loads TypeScript extensions directly, and auto mode and the security
 extension are imported by the suite, so one variable covers all three.
@@ -122,7 +121,7 @@ Go and frontend e2e suites may run concurrently in distinct worktree profiles.
 ## Clean up
 
 Clean temporary profiles when finished with `attn profile clean <name>`.
-It stops workers, conversation hosts, plugins, daemon, and app before removing
+It stops workers, plugins, daemon, and app before removing
 the bundle/data and the app's local data dir (Tauri's `app_local_data_dir`:
 automation manifest, frontend debug logs, WebKit state). Never delete the data
 directory first: the worker registry is needed for cleanup. Inspect any

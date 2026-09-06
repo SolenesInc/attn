@@ -1,8 +1,7 @@
 /* One frame, two kinds of block. A code fence and a diagram are both objects
    in the middle of prose, so they carry the same border, radius, background
    and header rhythm — language or kind on the left, actions on the right.
-   The tokens are defined by the reading surface (see ConversationPane.css);
-   the literals here are the fallback for a surface that has not set them. */
+   Reading surfaces can define the tokens; the literals here are the fallback. */
 .markdown-code-frame,
 .markdown-mermaid-frame {
   margin: 0 0 0.7em 0;

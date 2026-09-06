@@ -122,28 +122,12 @@ import {
 import { BUILD_PROFILE, daemonProfileMatches, fetchDaemonHealthProfile, profileMismatchMessage } from '../utils/buildProfile';
 import { controlBrowserHost, serializeBrowserControlResultMessage } from '../browser/host';
 import { useWorkflowRunsStore } from '../store/workflowRuns';
-import { useConversationsStore, type AgentPromptMode } from '../store/conversations';
 import { useAutoModePushStore } from '../store/autoMode';
 import { useAutomationsStore } from '../store/automations';
 import { useWorktreeStore } from '../store/worktrees';
 import { handleWorktreeDaemonEvent } from './daemonWorktreeEvents';
 
 export type DaemonSession = GeneratedSession;
-
-export interface PastConversation {
-  session_id: string;
-  file: string;
-  cwd: string;
-  preview: string;
-  modified: number;
-  bytes: number;
-  live: boolean;
-}
-
-export interface PastConversationsResult {
-  conversations: PastConversation[];
-  truncated: boolean;
-}
 
 export type Seed = GeneratedSeed;
 export type SeedArtifact = GeneratedSeedArtifact;
@@ -294,8 +278,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-
-export const PROTOCOL_VERSION = '294';
+export const PROTOCOL_VERSION = '295';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -2222,31 +2205,6 @@ export function useDaemonSocket({
             break;
           }
 
-          case 'past_conversations_result':
-            settlePendingRequest(
-              pendingActionsRef.current,
-              'list_past_conversations',
-              data,
-              (event): PastConversationsResult => ({
-                conversations: Array.isArray(event.conversations) ? (event.conversations as PastConversation[]) : [],
-                truncated: event.truncated === true,
-              }),
-              'Listing past conversations failed',
-            );
-            break;
-
-          case 'agent_event': {
-            if (data.id && typeof data.kind === 'string') {
-              useConversationsStore.getState().applyEnvelope(
-                data.id,
-                typeof data.seq === 'number' ? data.seq : 0,
-                data.kind,
-                (data.body ?? {}) as Record<string, unknown>,
-              );
-            }
-            break;
-          }
-
           case 'kitty_placements': {
             if (data.id) {
               emitPtyEvent({
@@ -2283,7 +2241,6 @@ export function useDaemonSocket({
                 pendingKill.resolve({ success: true });
               }
               ptyTransportRef.current.clearRuntime(data.id);
-              useConversationsStore.getState().hostExited(data.id);
               emitPtyEvent({
                 event: 'exit',
                 id: data.id,
@@ -2961,7 +2918,6 @@ export function useDaemonSocket({
       ...(args.label && { label: args.label }),
       ...(args.resume_session_id && { resume_session_id: args.resume_session_id }),
       ...(args.resume_picker && { resume_picker: args.resume_picker }),
-      ...(args.resume_conversation_file && { resume_conversation_file: args.resume_conversation_file }),
       ...(args.yolo_mode && { yolo_mode: args.yolo_mode }),
       ...(args.auto_mode !== undefined && { auto_mode: args.auto_mode }),
       ...(args.chief_of_staff && { chief_of_staff: args.chief_of_staff }),
@@ -3110,50 +3066,12 @@ export function useDaemonSocket({
     }));
   }, []);
 
-  const sendAgentPrompt = useCallback((id: string, text: string, mode?: AgentPromptMode) => {
-    sendOrQueueCommand(
-      { cmd: 'agent_prompt', id, input_id: nextRequestID('agent-input'), text, ...(mode ? { mode } : {}) },
-      { waitForInitialState: true },
-    );
-  }, [nextRequestID, sendOrQueueCommand]);
-
-  const sendAgentToolDetail = useCallback((id: string, callId: string, full?: boolean) => {
-    sendOrQueueCommand(
-      { cmd: 'agent_tool_detail', id, call_id: callId, ...(full ? { full } : {}) },
-      { waitForInitialState: true },
-    );
-  }, [sendOrQueueCommand]);
-
-  const sendAgentClearQueue = useCallback((id: string) => {
-    sendOrQueueCommand({ cmd: 'agent_clear_queue', id }, { waitForInitialState: true });
-  }, [sendOrQueueCommand]);
-
-  const sendAgentAttach = useCallback((id: string) => {
-    sendOrQueueCommand({ cmd: 'agent_attach', id }, { waitForInitialState: true });
-  }, [sendOrQueueCommand]);
-
-  const sendAgentHistory = useCallback((id: string, before: string) => {
-    sendOrQueueCommand({ cmd: 'agent_history', id, before }, { waitForInitialState: true });
-  }, [sendOrQueueCommand]);
-
-  const sendAgentSetModel = useCallback((id: string, model: string) => {
-    sendOrQueueCommand({ cmd: 'agent_set_model', id, model }, { waitForInitialState: true });
-  }, [sendOrQueueCommand]);
-
   const sendSessionList = useCallback((query: SessionLedgerQuery = {}): Promise<SessionLedgerPage> => {
     return sendRequest<SessionLedgerPage>('session_list', { ...query }, 'Reading the session ledger timed out');
   }, [sendRequest]);
 
   const sendSessionShow = useCallback((sessionId: string): Promise<SessionLedgerEntry> => {
     return sendRequest<SessionLedgerEntry>('session_show', { session_id: sessionId }, 'Reading that session timed out');
-  }, [sendRequest]);
-
-  const sendListPastConversations = useCallback((): Promise<PastConversationsResult> => {
-    return sendRequest<PastConversationsResult>(
-      'list_past_conversations',
-      {},
-      'Listing past conversations timed out',
-    );
   }, [sendRequest]);
 
   const sendBusStatusGet = useCallback((): Promise<BusStatus> => {
@@ -5438,15 +5356,8 @@ export function useDaemonSocket({
     sendSubscribeGitStatus,
     sendUnsubscribeGitStatus,
     sendSessionSelected,
-    sendAgentPrompt,
-    sendAgentToolDetail,
-    sendAgentClearQueue,
-    sendAgentAttach,
-    sendAgentHistory,
-    sendAgentSetModel,
     sendSessionList,
     sendSessionShow,
-    sendListPastConversations,
     sendBusStatusGet,
     sendAutoModeGet,
     sendAutoModePromote,

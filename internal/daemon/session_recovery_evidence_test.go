@@ -294,43 +294,6 @@ func TestRecoveryJudgesPluginSessionsOnTheirPersistedHandle(t *testing.T) {
 	}
 }
 
-func TestRecoveryKeepsConversationSessionsFromTheirOwnHistory(t *testing.T) {
-	newRecoveryHome(t)
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-
-	addStaleSession(t, d, "conv-with-history", "nisse", protocol.SessionStateIdle)
-	giveLaunchIntent(t, d, "conv-with-history")
-	stateDir := hostSessionStateDir("conv-with-history")
-	if err := os.MkdirAll(stateDir, 0o755); err != nil {
-		t.Fatalf("mkdir host state dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(stateDir) })
-	if err := os.WriteFile(filepath.Join(stateDir, "session.jsonl"), []byte("{}\n"), 0o644); err != nil {
-		t.Fatalf("write host session file: %v", err)
-	}
-
-	addStaleSession(t, d, "conv-crashed-early", "nisse", protocol.SessionStateWorking)
-	d.store.SetLaunchIntent("conv-crashed-early", store.LaunchIntent{
-		ApprovalRoute: launchcontract.ApprovalRouteUser,
-		InitialPrompt: "review the crash recovery plan",
-	})
-
-	addStaleSession(t, d, "conv-empty", "nisse", protocol.SessionStateWorking)
-	giveLaunchIntent(t, d, "conv-empty")
-
-	d.ptyBackend = deadWorkerBackend()
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
-
-	for _, id := range []string{"conv-with-history", "conv-crashed-early"} {
-		if session := d.store.Get(id); session == nil || session.State != protocol.SessionStateRecoverable {
-			t.Fatalf("%s = %+v, want recoverable", id, session)
-		}
-	}
-	if session := d.store.Get("conv-empty"); session != nil {
-		t.Fatalf("conv-empty = %+v, want reaped: no history and no brief to reopen", session)
-	}
-}
-
 func TestRecoveryKeepsThePaneOfARecoverableSession(t *testing.T) {
 	home := newRecoveryHome(t)
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))

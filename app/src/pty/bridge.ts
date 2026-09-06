@@ -14,9 +14,6 @@ export interface PtySpawnArgs {
   shell?: boolean;
   resume_session_id?: string | null;
   resume_picker?: boolean | null;
-  /** An existing conversation file this session picks up from; PTY-backed agents
-   * use resume_session_id instead. The host forks it, never writing the original. */
-  resume_conversation_file?: string;
   yolo_mode?: boolean | null;
   /** Tri-state: absent follows the promoted auto mode default. */
   auto_mode?: boolean;

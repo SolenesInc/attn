@@ -1233,20 +1233,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handlePtyInput(client, msg.(*protocol.PtyInputMessage))
 	case protocol.CmdTerminalPointerActivity: // wire: terminal_pointer_activity
 		d.handleTerminalPointerActivity(msg.(*protocol.TerminalPointerActivityMessage))
-	case protocol.CmdAgentPrompt: // wire: agent_prompt
-		d.handleAgentPrompt(client, msg.(*protocol.AgentPromptMessage))
-	case protocol.CmdAgentToolDetail: // wire: agent_tool_detail
-		d.handleAgentToolDetail(client, msg.(*protocol.AgentToolDetailMessage))
-	case protocol.CmdAgentClearQueue: // wire: agent_clear_queue
-		d.handleAgentClearQueue(client, msg.(*protocol.AgentClearQueueMessage))
-	case protocol.CmdAgentAttach: // wire: agent_attach
-		d.handleAgentAttach(client, msg.(*protocol.AgentAttachMessage))
-	case protocol.CmdAgentHistory: // wire: agent_history
-		d.handleAgentHistory(client, msg.(*protocol.AgentHistoryMessage))
-	case protocol.CmdAgentSetModel: // wire: agent_set_model
-		d.handleAgentSetModel(client, msg.(*protocol.AgentSetModelMessage))
-	case protocol.CmdListPastConversations: // wire: list_past_conversations
-		d.handleListPastConversations(client, msg.(*protocol.ListPastConversationsMessage))
 	case protocol.CmdBusStatusGet: // wire: bus_status_get
 		d.handleBusStatusGet(client, msg.(*protocol.BusStatusGetMessage))
 	case protocol.CmdBusSetConsumerEnabled: // wire: bus_set_consumer_enabled
@@ -1700,30 +1686,6 @@ func remoteCommandPTYTargetID(cmd string, msg interface{}) string {
 		}
 	case protocol.CmdTerminalPointerActivity: // wire: terminal_pointer_activity
 		if typed, ok := msg.(*protocol.TerminalPointerActivityMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdAgentPrompt: // wire: agent_prompt
-		if typed, ok := msg.(*protocol.AgentPromptMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdAgentToolDetail: // wire: agent_tool_detail
-		if typed, ok := msg.(*protocol.AgentToolDetailMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdAgentClearQueue: // wire: agent_clear_queue
-		if typed, ok := msg.(*protocol.AgentClearQueueMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdAgentAttach: // wire: agent_attach
-		if typed, ok := msg.(*protocol.AgentAttachMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdAgentHistory: // wire: agent_history
-		if typed, ok := msg.(*protocol.AgentHistoryMessage); ok {
-			return typed.ID
-		}
-	case protocol.CmdAgentSetModel: // wire: agent_set_model
-		if typed, ok := msg.(*protocol.AgentSetModelMessage); ok {
 			return typed.ID
 		}
 	case protocol.CmdPtyResize: // wire: pty_resize

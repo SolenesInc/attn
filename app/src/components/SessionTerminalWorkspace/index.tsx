@@ -35,7 +35,6 @@ import { useGhosttyPaneRuntime } from './useGhosttyPaneRuntime';
 import type { PaneRuntimeEventRouter } from './paneRuntimeEventRouter';
 import { isSuspiciousTerminalSize } from '../../utils/terminalDebug';
 import { lockTextSelection } from '../../utils/dragLock';
-import { ConversationPane } from '../ConversationPane';
 import './SessionTerminalWorkspace.css';
 import type { TerminalVisibleContentSnapshot } from '../../utils/terminalVisibleContent';
 import type { TerminalVisibleStyleSnapshot } from '../../utils/terminalStyleSummary';
@@ -128,9 +127,6 @@ interface SessionTerminalWorkspaceProps {
   onRevealSeedInGarden?: (seedId: string) => void;
   seedPopoverRequest?: { sessionId: string; nonce: number };
   usagePopoverRequest?: { sessionId: string; nonce: number };
-  // The daemon decides this from the driver's `conversation` capability; never
-  // recompute it here.
-  conversationAgents?: ReadonlySet<string>;
   annotationApi?: SessionAnnotationApi;
   workspace: TerminalWorkspaceState;
   workspaceSelectionStyle?: WorkspaceSelectionStyle;
@@ -192,7 +188,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     onRevealSeedInGarden,
     seedPopoverRequest,
     usagePopoverRequest,
-    conversationAgents,
     annotationApi,
     workspace,
     workspaceSelectionStyle = 'rail',
@@ -437,14 +432,11 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       }
     }, [activePaneId, agentPaneById]);
 
-    // Conversation panes are deliberately absent: they have no PTY, and attaching
-    // against a session the daemon has none for fails and takes the pane down.
     const runtimePanes = useMemo(() => {
       const panes = [];
       for (const pane of agentPanes) {
         if (pane.status && pane.status !== 'ready') continue;
         const paneSession = sessionById.get(pane.sessionId);
-        if (conversationAgents?.has(paneSession?.agent ?? '')) continue;
         panes.push({
           paneId: pane.id,
           runtimeId: pane.runtimeId,
@@ -456,7 +448,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
         });
       }
       return panes;
-    }, [agentPanes, conversationAgents, sessionById]);
+    }, [agentPanes, sessionById]);
 
     const runtime = useGhosttyPaneRuntime(
       runtimePanes,
@@ -1176,13 +1168,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
                   <span className="workspace-pane-status-spinner" aria-hidden="true" />
                   <span>{isPaneFailed ? (agentPane.error || 'Session failed to start') : `Starting ${paneTitle}...`}</span>
                 </div>
-              ) : conversationAgents?.has(paneSession?.agent ?? '') ? (
-                <ConversationPane
-                  sessionId={agentPane.sessionId}
-                  paneActive={isActiveSession && sessionVisible && activeLeafId === agentPane.id}
-                  sessionState={paneSession?.state}
-                  resolvedTheme={resolvedTheme}
-                />
               ) : !terminalsLive ? (
                 <div className="workspace-pane-virtualized" aria-hidden="true" data-testid={`pane-virtualized-${agentPane.id}`} />
               ) : (
@@ -1342,7 +1327,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       onRevealSeedInGarden,
       pinnedSeedPopover,
       pinnedUsagePopover,
-      conversationAgents,
       annotationApi,
       onCancelCountdown,
     ]);
