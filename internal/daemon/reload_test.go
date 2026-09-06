@@ -908,3 +908,102 @@ func TestReloadFencesTheInputLaneBeforeTheRuntimeIsReplaced(t *testing.T) {
 		t.Fatal("a retry from the old runtime survived the replacement")
 	}
 }
+
+// A pi-style driver declares resume without launch_instructions: a user reload
+// resumes the same conversation and hands the driver no instructions.
+func TestReloadSessionForClientResumesPluginWithoutLaunchInstructions(t *testing.T) {
+	backend := &fakeReloadBackend{
+		liveIDs: []string{"pi-session"},
+		info:    ptybackend.SessionInfo{Cols: 100, Rows: 32},
+		params:  ptybackend.SessionLaunchParams{Recorded: true, Model: "provider/model"},
+	}
+	d := newReloadTestDaemon(t, backend)
+	addTestWorkspace(d, "ws-pi-session", t.TempDir())
+	addReloadSession(d, "pi-session", protocol.SessionAgent("pi"), protocol.SessionStateIdle)
+	if !d.store.BeginAgentDriverRun("pi-session", "pi-plugin", "run-old") {
+		t.Fatal("begin old plugin run")
+	}
+	if !d.store.ApplyAgentDriverMetadata("pi-session", "run-old", 1, `{"pi_session_id":"conv-1"}`) {
+		t.Fatal("seed plugin metadata")
+	}
+	plugin, done := startPluginPipe(t, d, "pi-plugin", nil)
+	defer func() {
+		_ = plugin.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, plugin, "pi", map[string]bool{"resume": true, "model_pin": true})
+	closed := make(chan pluginDriverSessionClosedParams, 1)
+	go func() {
+		request := decodeJSONRPCMessage(t, plugin)
+		if request.Method != "driver.resume" {
+			t.Errorf("method=%q, want driver.resume", request.Method)
+			return
+		}
+		var params pluginDriverSpawnParams
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			t.Errorf("decode resume params: %v", err)
+			return
+		}
+		if params.Instructions != nil || params.Model != "provider/model" || string(params.Metadata) != `{"pi_session_id":"conv-1"}` {
+			t.Errorf("resume params=%+v, want no instructions with preserved model and metadata", params)
+			return
+		}
+		respondPluginRequest(t, plugin, request, pluginDriverSpawnResult{Argv: []string{"pi", "--session-id", "conv-1"}})
+		request = decodeJSONRPCMessage(t, plugin)
+		var closeParams pluginDriverSessionClosedParams
+		if err := json.Unmarshal(request.Params, &closeParams); err != nil {
+			t.Errorf("decode session_closed params: %v", err)
+			return
+		}
+		respondPluginRequest(t, plugin, request, pluginDriverSessionClosedResult{OK: true})
+		closed <- closeParams
+	}()
+
+	if err := d.reloadSessionForClient("pi-session", 0, 0); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+
+	if order := backend.callOrder(); !reflect.DeepEqual(order, []string{"kill:pi-session", "remove:pi-session", "spawn:pi-session"}) {
+		t.Fatalf("orchestration order=%v", order)
+	}
+	spawn, ok := backend.lastSpawn()
+	if !ok || !reflect.DeepEqual(spawn.ExternalCommand, []string{"pi", "--session-id", "conv-1"}) {
+		t.Fatalf("plugin respawn=%+v", spawn)
+	}
+	select {
+	case params := <-closed:
+		if params.RunID != "run-old" || params.Reason != "reloaded" {
+			t.Fatalf("closed old run=%+v", params)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("old plugin run was not closed after replacement")
+	}
+}
+
+func TestReloadSessionForClientRefusesPluginChiefWithoutLaunchInstructions(t *testing.T) {
+	backend := &fakeReloadBackend{
+		liveIDs: []string{"pi-chief"},
+		info:    ptybackend.SessionInfo{Cols: 100, Rows: 32},
+		params:  ptybackend.SessionLaunchParams{Recorded: true},
+	}
+	d := newReloadTestDaemon(t, backend)
+	addTestWorkspace(d, "ws-pi-chief", t.TempDir())
+	addReloadSession(d, "pi-chief", protocol.SessionAgent("pi"), protocol.SessionStateIdle)
+	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "pi-chief"); err != nil {
+		t.Fatalf("assign chief role: %v", err)
+	}
+	plugin, done := startPluginPipe(t, d, "pi-plugin", nil)
+	defer func() {
+		_ = plugin.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, plugin, "pi", map[string]bool{"resume": true})
+
+	err := d.reloadSessionForClient("pi-chief", 0, 0)
+	if err == nil || !strings.Contains(err.Error(), "launch_instructions") {
+		t.Fatalf("err=%v, want launch_instructions refusal", err)
+	}
+	if order := backend.callOrder(); len(order) != 0 {
+		t.Fatalf("refused reload touched live worker: %v", order)
+	}
+}

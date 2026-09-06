@@ -399,6 +399,18 @@ func (p *preparedPluginReload) commit() error {
 	return nil
 }
 
+// pluginReloadCapabilityError mirrors spawn: any resumable driver reloads, and only
+// a chief needs launch_instructions, since that is the guidance a reload refreshes.
+func pluginReloadCapabilityError(reg pluginDriverRegistration, isChief bool) error {
+	if !reg.Capabilities["resume"] {
+		return fmt.Errorf("agent %q requires the resume capability to reload", reg.Agent)
+	}
+	if isChief && !reg.Capabilities["launch_instructions"] {
+		return fmt.Errorf("agent %q cannot reload as chief of staff without the launch_instructions capability", reg.Agent)
+	}
+	return nil
+}
+
 // preparePluginReload resolves the replacement plugin command BEFORE the live worker is
 // killed, so an unavailable plugin or bad metadata leaves the current runtime untouched.
 func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend.SpawnOptions, isChief bool) (*preparedPluginReload, error) {
@@ -406,30 +418,32 @@ func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend
 	if !ok {
 		return nil, nil
 	}
-	if !reg.Capabilities["launch_instructions"] || !reg.Capabilities["resume"] {
-		return nil, fmt.Errorf("agent %q requires launch_instructions and resume capabilities", reg.Agent)
+	if err := pluginReloadCapabilityError(reg, isChief); err != nil {
+		return nil, err
 	}
 	runID := uuid.NewString()
 	d.beginPluginSessionLaunch(session.ID, reg.PluginName, runID)
-	instructions, err := d.preparePluginLaunchInstructions(session.ID, session.WorkspaceID, isChief,
-		!reg.Capabilities["pull_request_reporting"])
-	if err != nil {
-		d.finishPluginSessionLaunch(session.ID, false)
-		return nil, err
-	}
 	prepared := &preparedPluginReload{
 		d: d, sessionID: session.ID, pluginName: reg.PluginName, runID: runID,
 	}
 	params := pluginDriverSpawnParams{
-		Agent:        reg.Agent,
-		SessionID:    session.ID,
-		RunID:        runID,
-		CWD:          session.Directory,
-		Label:        session.Label,
-		Yolo:         opts.YoloMode,
-		Model:        opts.Model,
-		Effort:       opts.Effort,
-		Instructions: instructions,
+		Agent:     reg.Agent,
+		SessionID: session.ID,
+		RunID:     runID,
+		CWD:       session.Directory,
+		Label:     session.Label,
+		Yolo:      opts.YoloMode,
+		Model:     opts.Model,
+		Effort:    opts.Effort,
+	}
+	if reg.Capabilities["launch_instructions"] {
+		instructions, err := d.preparePluginLaunchInstructions(session.ID, session.WorkspaceID, isChief,
+			!reg.Capabilities["pull_request_reporting"])
+		if err != nil {
+			d.finishPluginSessionLaunch(session.ID, false)
+			return nil, err
+		}
+		params.Instructions = instructions
 	}
 	if reg.Capabilities["auto_mode"] {
 		cfg, err := d.store.GetAutoModeConfig()
@@ -519,8 +533,8 @@ func (d *Daemon) preparePluginRoleReload(sessionID string, desiredChief bool) (*
 	if !registered {
 		return nil, true, fmt.Errorf("agent %q plugin driver is unavailable", session.Agent)
 	}
-	if !reg.Capabilities["launch_instructions"] || !reg.Capabilities["resume"] {
-		return nil, true, fmt.Errorf("agent %q requires launch_instructions and resume capabilities", reg.Agent)
+	if err := pluginReloadCapabilityError(reg, desiredChief); err != nil {
+		return nil, true, err
 	}
 
 	lock := d.reloadLockFor(sessionID)
