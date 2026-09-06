@@ -21,8 +21,8 @@ export type ApprovalSuiteLike = {
   networkDecider: Decider | undefined;
   reportDenial(denial: { tool: string; action: string; reason: string; rule: string; at: string }): void;
   reportApprovalWindow(open: boolean): void;
-  reportExecPolicyAmendment(amendment: { pattern: string[]; decision: string; justification?: string }): void;
-  reportNetworkAmendment(amendment: { host: string; decision: string }): void;
+  reportExecPolicyAmendment(amendment: { pattern: string[]; decision: string; justification?: string }): Promise<void>;
+  reportNetworkAmendment(amendment: { host: string; decision: string }): Promise<void>;
 };
 
 export type ApprovalSetup = {
@@ -99,8 +99,9 @@ export class PiApproval {
       run: (command, cwd, options) => local.exec(command, cwd, options),
       onDenial: (denial) => this.record(denial),
       onExecPolicyAmendment: (pattern) =>
-        setup.suite.reportExecPolicyAmendment({ pattern, decision: "allow" }),
-      onNetworkAmendment: (host) => setup.suite.reportNetworkAmendment({ host, decision: "allow" }),
+        this.amended("command", setup.suite.reportExecPolicyAmendment({ pattern, decision: "allow" })),
+      onNetworkAmendment: (host) =>
+        this.amended("host", setup.suite.reportNetworkAmendment({ host, decision: "allow" })),
       notify: (text, level) => this.context?.ui?.notify(text, level),
     });
   }
@@ -198,6 +199,17 @@ export class PiApproval {
       cwd: paths.cwd,
       temp: paths.temp,
     };
+  }
+
+  // The amendment already governs this session, and the command it approved runs
+  // either way; only the "in the future" half is lost, and the user hears which.
+  private amended(kind: string, reported: Promise<void>): void {
+    void reported.catch((error: unknown) => {
+      this.context?.ui?.notify(
+        `attn did not record this ${kind} amendment: ${message(error)}. It holds for this session only.`,
+        "error",
+      );
+    });
   }
 
   // The rejection already stands; a ledger or relay that cannot take it says so

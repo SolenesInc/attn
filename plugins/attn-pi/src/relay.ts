@@ -46,6 +46,7 @@ export class RelayConnection {
   constructor(
     private readonly socket: Socket,
     private readonly delegate: RelayDelegate,
+    private readonly log?: (line: string) => void,
   ) {
     this.socket.setEncoding("utf8");
     this.socket.on("data", (chunk) => this.consume(chunk));
@@ -132,7 +133,11 @@ export class RelayConnection {
     try {
       this.send({ jsonrpc: "2.0", id: request.id, result: await handler(request.params) });
     } catch (error) {
-      this.sendError(request.id, -32603, error instanceof Error ? error.message : String(error));
+      // The suite has no channel to speak on, so this log is the only account of a
+      // report the driver refused to carry.
+      const message = error instanceof Error ? error.message : String(error);
+      this.log?.(`relay ${request.method} failed: ${message}`);
+      this.sendError(request.id, -32603, message);
     }
   }
 
@@ -202,18 +207,20 @@ export class RelayConnection {
 export class RelayServer {
   readonly socketPath: string;
   private readonly delegate: RelayDelegate;
+  private readonly log: ((line: string) => void) | undefined;
   private server?: Server;
   private readonly connections = new Set<RelayConnection>();
 
-  constructor(options: { socketPath: string; delegate: RelayDelegate }) {
+  constructor(options: { socketPath: string; delegate: RelayDelegate; log?: (line: string) => void }) {
     this.socketPath = options.socketPath;
     this.delegate = options.delegate;
+    this.log = options.log;
   }
 
   async listen(): Promise<void> {
     if (existsSync(this.socketPath)) unlinkSync(this.socketPath);
     const server = createServer((socket) => {
-      const connection = new RelayConnection(socket, this.delegate);
+      const connection = new RelayConnection(socket, this.delegate, this.log);
       this.connections.add(connection);
       connection.onClose(() => this.connections.delete(connection));
     });

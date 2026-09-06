@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createLocalBashOperations } from "@earendil-works/pi-coding-agent";
 import { ApprovalOrchestrator, retryWithoutSandboxReason, turnAbortedMessage } from "../approval/orchestrator";
-import { userRejection } from "../approval/reviewers";
+import { commandOptions, userRejection } from "../approval/reviewers";
 import { PiApproval } from "../approval/session";
 import { defaultApprovalConfig, type ApprovalConfig } from "../approval/config";
 import type { ApprovalRequest, ReviewDecision, Reviewer } from "../approval/types";
@@ -237,8 +237,8 @@ function session(overrides: Partial<ApprovalConfig>) {
       networkDecider: undefined,
       reportDenial: () => {},
       reportApprovalWindow: () => {},
-      reportExecPolicyAmendment: () => {},
-      reportNetworkAmendment: () => {},
+      reportExecPolicyAmendment: async () => {},
+      reportNetworkAmendment: async () => {},
     },
     ledger: { record: () => {} },
   });
@@ -277,3 +277,70 @@ test("danger-full-access from the daemon runs unsandboxed however the policy is 
   expect(session({ sandboxMode: "danger-full-access" }).spec).toBe("unsandboxed");
 });
 
+/** A registered session answering its own approval cards, so the amendment travels
+ * the path pi puts it on: user choice, orchestrator, suite report. */
+async function registeredSession(reportExecPolicyAmendment: () => Promise<void>) {
+  const root = canonical(mkdtempSync(join(tmpdir(), "pi-approval-amend-")));
+  roots.push(root);
+  const notices: { text: string; level: string }[] = [];
+  const approval = new PiApproval({
+    config: { ...defaultApprovalConfig, approvalPolicy: "untrusted", sandboxMode: "danger-full-access" },
+    suite: {
+      networkDecider: undefined,
+      reportDenial: () => {},
+      reportApprovalWindow: () => {},
+      reportExecPolicyAmendment,
+      reportNetworkAmendment: async () => {},
+    },
+    ledger: { record: () => {} },
+  });
+  approval.useSandbox({ cwd: root, temp: root, allowWrite: [root], denyRead: [], denyWrite: [], cacheWritePaths: [] });
+  const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+  approval.register({
+    registerFlag: () => {},
+    registerCommand: () => {},
+    getFlag: () => undefined,
+    appendEntry: () => {},
+    on: (name: string, handler: (event: unknown, ctx: unknown) => unknown) => handlers.set(name, handler),
+  } as never);
+  let output = "";
+  const ctx = {
+    cwd: root,
+    toolCallId: "call-1",
+    onData: (data: Buffer) => { output += data.toString(); },
+    ui: {
+      notify: (text: string, level: string) => { notices.push({ text, level }); },
+      setStatus: () => {},
+      select: async () => commandOptions.amendment("echo"),
+    },
+  };
+  await handlers.get("session_start")!({}, ctx);
+  return {
+    notices,
+    output: () => output,
+    run: (command: string, extra: Record<string, unknown> = {}) =>
+      approval.runBash({ command, ...extra } as never, ctx as never),
+  };
+}
+
+test("an amendment attn never recorded is said out loud and still runs the command", async () => {
+  const it = await registeredSession(async () => { throw new Error("suite relay connection closed"); });
+
+  const result = await it.run("echo amended", { prefix_rule: ["echo"] });
+
+  expect(result.exitCode).toBe(0);
+  expect(it.output()).toContain("amended");
+  expect(it.notices).toEqual([
+    {
+      text: "attn did not record this command amendment: suite relay connection closed. It holds for this session only.",
+      level: "error",
+    },
+  ]);
+});
+
+test("an amendment attn recorded says nothing to the user", async () => {
+  const it = await registeredSession(async () => {});
+
+  expect((await it.run("echo amended", { prefix_rule: ["echo"] })).exitCode).toBe(0);
+  expect(it.notices).toEqual([]);
+});

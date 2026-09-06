@@ -38,6 +38,7 @@ async function runPlugin(): Promise<void> {
       suiteReportPullRequest: (params: unknown) => driver.suiteReportPullRequest(params),
       suiteReportSessionFile: (params: unknown) => driver.suiteReportSessionFile(params),
     },
+    log: (line: string) => console.error(`attn-pi: ${line}`),
   });
   driver = new PiDriver({ rpc, relay, suitePath: suitePath() });
 

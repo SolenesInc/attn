@@ -151,6 +151,8 @@ export class RelaySuiteClient {
     }
   }
 
+  /** Rejects on a dropped report: this channel carries answers the user already
+   * gave, and the caller is the only one who can tell them it did not land. */
   async send(method: string, params: unknown): Promise<void> {
     try {
       const socket = await this.ensureConnected();
@@ -158,8 +160,9 @@ export class RelaySuiteClient {
       // token", so the hello goes first.
       this.sayHello(socket);
       await this.request(socket, method, params);
-    } catch {
+    } catch (error) {
       this.dropped += 1;
+      throw error;
     }
   }
 
@@ -475,25 +478,29 @@ export class AttnPiSuite {
     });
   }
 
+  // A denial is attn's own bookkeeping, not an answer the user is waiting on, so a
+  // dropped one stays with the counter that rides the next hello.
   reportDenial(denial: SuiteDenial): void {
     const relay = this.relay;
     if (!relay) return;
-    void relay.client.send(relayMethods.reportDenial, {
-      token: relay.token,
-      tool: denial.tool,
-      action: denial.action,
-      reason: denial.reason,
-      rule: denial.rule,
-      at: denial.at,
-    });
+    void relay.client
+      .send(relayMethods.reportDenial, {
+        token: relay.token,
+        tool: denial.tool,
+        action: denial.action,
+        reason: denial.reason,
+        rule: denial.rule,
+        at: denial.at,
+      })
+      .catch(() => {});
   }
 
   /** A user's "don't ask again" answer. The daemon records the proposal and promotes
    * it in one move, so nothing else has to ask a human. */
-  reportExecPolicyAmendment(amendment: { pattern: string[]; decision: string; justification?: string }): void {
+  async reportExecPolicyAmendment(amendment: { pattern: string[]; decision: string; justification?: string }): Promise<void> {
     const relay = this.relay;
     if (!relay) return;
-    void relay.client.send(relayMethods.reportExecPolicyAmendment, {
+    await relay.client.send(relayMethods.reportExecPolicyAmendment, {
       token: relay.token,
       pattern: amendment.pattern,
       decision: amendment.decision,
@@ -501,10 +508,10 @@ export class AttnPiSuite {
     });
   }
 
-  reportNetworkAmendment(amendment: { host: string; decision: string }): void {
+  async reportNetworkAmendment(amendment: { host: string; decision: string }): Promise<void> {
     const relay = this.relay;
     if (!relay) return;
-    void relay.client.send(relayMethods.reportNetworkAmendment, {
+    await relay.client.send(relayMethods.reportNetworkAmendment, {
       token: relay.token,
       host: amendment.host,
       decision: amendment.decision,

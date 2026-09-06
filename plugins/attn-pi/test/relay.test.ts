@@ -153,6 +153,36 @@ describe("RelayServer wire behavior", () => {
     suite.close();
   });
 
+  test("a handler failure answers the suite and names itself in the driver's log", async () => {
+    const socketPath = nextSocketPath();
+    const lines: string[] = [];
+    const relay = new RelayServer({
+      socketPath,
+      delegate: {
+        async suiteHello() {
+          return { ok: true as const };
+        },
+        async suiteReportState() {},
+        async suiteReportStop() {},
+        async suiteReportDenial() {},
+        async suiteReportNetworkAmendment() {
+          throw new Error("attn refused the amendment");
+        },
+      } as never,
+      log: (line) => lines.push(line),
+    });
+    await relay.listen();
+    const suite = await FakeSuiteClient.connect(socketPath);
+
+    await expect(
+      suite.request("suite.report_network_amendment", { token: "t", host: "example.com", decision: "allow" }),
+    ).rejects.toThrow("attn refused the amendment");
+    expect(lines).toEqual(["relay suite.report_network_amendment failed: attn refused the amendment"]);
+
+    suite.close();
+    relay.close();
+  });
+
   test("deliverMessage rejects on timeout when the suite never answers", async () => {
     const { relay, socketPath, connections } = await buildBareRelay();
     const suite = await FakeSuiteClient.connect(socketPath);
