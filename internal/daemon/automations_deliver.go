@@ -569,7 +569,7 @@ func (d *Daemon) ensureAutomationPane(_ context.Context, req automation.WorkRequ
 	if _, reviewTitle, _, ok := automationReviewNames(req); ok {
 		title = reviewTitle
 	}
-	pane, err := d.addWorkspaceSessionPane(&protocol.WorkspaceLayoutAddSessionPaneMessage{Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: req.IDs.WorkspaceID, PaneID: protocol.Ptr(req.IDs.PaneID), SessionID: req.IDs.SessionID, Title: protocol.Ptr(title)})
+	pane, _, err := d.addWorkspaceSessionPane(&protocol.WorkspaceLayoutAddSessionPaneMessage{Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: req.IDs.WorkspaceID, PaneID: protocol.Ptr(req.IDs.PaneID), SessionID: req.IDs.SessionID, Title: protocol.Ptr(title)})
 	if err != nil {
 		return err
 	}

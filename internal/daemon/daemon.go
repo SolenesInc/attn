@@ -130,9 +130,14 @@ type Daemon struct {
 	classifier                  Classifier
 	// What auto mode's repo_visibility slot knows, keyed "host/owner/name".
 	// A launch reads it and never waits on it; see automode_detect.go.
-	repoVisibilityKnown               map[string]string
-	repoVisibilityPending             map[string]bool
-	repoVisibilityMu                  sync.Mutex
+	repoVisibilityKnown   map[string]string
+	repoVisibilityPending map[string]bool
+	repoVisibilityMu      sync.Mutex
+	// What the last inspect_branch saw, so a verdict is served without waiting on git.
+	branchInspections                 map[string]branchInspection
+	branchInspectionsRunning          map[string]chan struct{}
+	branchInspectionsMu               sync.Mutex
+	sessionPaneAddMu                  sync.Mutex
 	gitCoordMu                        sync.Mutex
 	gitCoord                          *gitCoordinator
 	warnings                          []protocol.DaemonWarning
@@ -2592,6 +2597,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSessionList(conn, msg.(*protocol.SessionListMessage))
 	case protocol.CmdSessionShow: // wire: session_show
 		d.handleSessionShow(conn, msg.(*protocol.SessionShowMessage))
+	case protocol.CmdSessionReopen: // wire: session_reopen
+		d.handleSessionReopen(conn, msg.(*protocol.SessionReopenMessage))
 	case protocol.CmdStateExplain: // wire: state_explain
 		d.handleStateExplain(conn, msg.(*protocol.StateExplainMessage))
 	case protocol.CmdAgentPeek: // wire: agent_peek

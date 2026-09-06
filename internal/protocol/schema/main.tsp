@@ -86,6 +86,7 @@ enum AttachPolicy {
 
 enum GitOperationKind {
   delete_worktree,
+  inspect_branch,
 }
 
 enum GitOperationStatus {
@@ -792,6 +793,16 @@ model SessionListMessage {
 model SessionShowMessage {
   cmd: "session_show";
   session_id: string;
+}
+
+// Brings a closed session back under its own id. Without an action it performs
+// the plain reopen, and refuses naming what is offered instead.
+model SessionReopenMessage {
+  cmd: "session_reopen";
+  session_id: string;
+  action?: SessionReopenAction;
+  // Where to start, for `start_fresh_elsewhere`.
+  directory?: string;
 }
 
 // Replays the daemon's per-session ring of state observations so a wrong color
@@ -5996,6 +6007,7 @@ model Response {
   session_transcript_result?: SessionTranscriptResult;
   session_list_result?: SessionListResult;
   session_show_result?: SessionShowResult;
+  session_reopen_result?: SessionReopenResult;
   state_explain_result?: StateExplainResult;
   agent_peek_result?: AgentPeekResult;
   agent_msg_result?: AgentMsgResult;
@@ -6455,6 +6467,48 @@ model SessionListResult {
 
 model SessionShowResult {
   entry: SessionLedgerEntry;
+  // Absent only when the daemon could not read the session's saved execution.
+  reopen?: SessionReopen;
+}
+
+// `reopen` resumes the saved conversation where it ran; `start_fresh_*` brings
+// the id back with a new one; the worktree actions write to the repository.
+enum SessionReopenAction {
+  reopen,
+  recreate_worktree_and_reopen,
+  fetch_recreate_and_reopen,
+  start_fresh_same_place,
+  start_fresh_elsewhere,
+  start_fresh_default_branch,
+}
+
+// Whether a session in the ledger can be brought back, and what it would take.
+model SessionReopen {
+  reopenable: boolean;
+  // Always present when reopenable is false.
+  reason?: string;
+  // Offered actions, best first. Empty means nothing here brings it back.
+  actions: SessionReopenAction[];
+  warning?: string;
+  // A branch check is running; ask again for a sharper verdict.
+  checking: boolean;
+  // present | missing | unavailable | unknown | remote
+  directory_state: string;
+  // local | remote_only | gone | merged | unknown
+  branch_state?: string;
+  workspace_id: string;
+  workspace_plan: string; // reuse | create
+  pane_plan: string;      // reuse | add
+}
+
+model SessionReopenResult {
+  session_id: string;
+  workspace_id: string;
+  directory: string;
+  action: SessionReopenAction;
+  // The session was already running; nothing was reopened.
+  already_running?: boolean;
+  worktree_created?: string;
 }
 
 model DelegateResult {
