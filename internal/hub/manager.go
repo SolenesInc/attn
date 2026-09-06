@@ -101,6 +101,7 @@ type Manager struct {
 	pending         map[string]pendingSessionRoute
 	browserControls map[string]pendingBrowserControl
 	sessionCloses   map[string][]*sessionCloseWaiter
+	sessionRenames  map[string][]*sessionCloseWaiter
 	ctx             context.Context
 	cancel          context.CancelFunc
 	started         bool
@@ -132,6 +133,7 @@ func NewManager(
 		pending:         make(map[string]pendingSessionRoute),
 		browserControls: make(map[string]pendingBrowserControl),
 		sessionCloses:   make(map[string][]*sessionCloseWaiter),
+		sessionRenames:  make(map[string][]*sessionCloseWaiter),
 	}
 	for _, record := range endpointStore.ListEndpoints() {
 		m.runtimes[record.ID] = &endpointRuntime{
@@ -706,6 +708,12 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 			m.publishRawEvent(data)
 		case protocol.EventBrowserControlResponse:
 			m.resolveBrowserControl(id, data)
+		case protocol.EventRenameResult:
+			var msg protocol.RenameResultMessage
+			if err := json.Unmarshal(data, &msg); err != nil || msg.Cmd != protocol.CmdRenameSession {
+				continue
+			}
+			m.answerSessionRename(id, msg.ID, msg.Success, protocol.Deref(msg.Error))
 		default:
 			if forwardsRawEvent(peek.Event) {
 				m.logRemoteRawEvent(id, peek.Event, data)
@@ -1225,6 +1233,81 @@ func (m *Manager) answerSessionClose(endpointID, sessionID string, accepted bool
 		delete(m.sessionCloses, sessionID)
 	} else {
 		m.sessionCloses[sessionID] = kept
+	}
+	m.mu.Unlock()
+	answerSessionCloseWaiters(answered, answer)
+}
+
+// Tripwire: the owner answers from the handler that writes the label, so a
+// healthy round trip is one websocket hop each way.
+const sessionRenameAckTimeout = 10 * time.Second
+
+// ForwardSessionRename returns only once the owning daemon has applied or
+// refused the rename, so a caller never hears success for a name the owner rejected.
+func (m *Manager) ForwardSessionRename(ctx context.Context, endpointID, sessionID string, payload []byte) error {
+	waiter := &sessionCloseWaiter{endpointID: endpointID, answer: make(chan error, 1)}
+	m.mu.Lock()
+	m.sessionRenames[sessionID] = append(m.sessionRenames[sessionID], waiter)
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		dropWaiter(m.sessionRenames, sessionID, waiter)
+		m.mu.Unlock()
+	}()
+
+	if err := m.ForwardEndpointCommand(ctx, endpointID, payload); err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, sessionRenameAckTimeout)
+	defer cancel()
+	select {
+	case answer := <-waiter.answer:
+		if answer != nil {
+			return fmt.Errorf("endpoint %s refused the rename of session %s: %w", endpointID, sessionID, answer)
+		}
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("endpoint %s did not confirm the rename of session %s: %w", endpointID, sessionID, ctx.Err())
+	}
+}
+
+func dropWaiter(waiters map[string][]*sessionCloseWaiter, sessionID string, forget *sessionCloseWaiter) {
+	remaining := waiters[sessionID][:0]
+	for _, waiter := range waiters[sessionID] {
+		if waiter != forget {
+			remaining = append(remaining, waiter)
+		}
+	}
+	if len(remaining) == 0 {
+		delete(waiters, sessionID)
+		return
+	}
+	waiters[sessionID] = remaining
+}
+
+func (m *Manager) answerSessionRename(endpointID, sessionID string, accepted bool, reason string) {
+	var answer error
+	if !accepted {
+		if reason = strings.TrimSpace(reason); reason == "" {
+			reason = "the daemon that owns it refused the rename"
+		}
+		answer = errors.New(reason)
+	}
+	m.mu.Lock()
+	var answered []*sessionCloseWaiter
+	kept := m.sessionRenames[sessionID][:0]
+	for _, waiter := range m.sessionRenames[sessionID] {
+		if waiter.endpointID == endpointID {
+			answered = append(answered, waiter)
+			continue
+		}
+		kept = append(kept, waiter)
+	}
+	if len(kept) == 0 {
+		delete(m.sessionRenames, sessionID)
+	} else {
+		m.sessionRenames[sessionID] = kept
 	}
 	m.mu.Unlock()
 	answerSessionCloseWaiters(answered, answer)

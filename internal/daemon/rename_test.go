@@ -210,7 +210,7 @@ func TestRenameSessionOverTheUnixSocketTravelsToTheSessionOwner(t *testing.T) {
 	if err := json.NewDecoder(clientConn).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), "endpoint owning session s-remote") {
+	if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), "rename session s-remote on the endpoint owning it") {
 		t.Fatalf("response = %+v, want it routed to the owning endpoint, not session not found", resp)
 	}
 	if got := d.store.Get("s1"); got.Label != "local" {

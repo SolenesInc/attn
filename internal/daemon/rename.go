@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"strings"
@@ -12,10 +14,20 @@ func (d *Daemon) handleRenameSession(client *wsClient, msg *protocol.RenameSessi
 	d.sendRenameResult(client, protocol.CmdRenameSession, strings.TrimSpace(msg.SessionID), d.renameSession(msg))
 }
 
-// A hub forwards the rename to the daemon that owns the session; the owner's
-// ws dispatch handles rename_session and its snapshot brings the name back.
+// A hub forwards the rename to the daemon that owns the session and answers
+// with the owner's verdict, so a refused name is never reported as applied.
 func (d *Daemon) handleRenameSessionConn(conn net.Conn, msg *protocol.RenameSessionMessage) {
-	if d.forwardedToSessionOwner(conn, strings.TrimSpace(msg.SessionID), msg) {
+	sessionID := strings.TrimSpace(msg.SessionID)
+	if endpointID := d.sessionOwnerEndpoint(sessionID); endpointID != "" {
+		payload, err := json.Marshal(msg)
+		if err == nil {
+			err = d.hubManager.ForwardSessionRename(context.Background(), endpointID, sessionID, payload)
+		}
+		if err != nil {
+			d.sendError(conn, fmt.Sprintf("rename session %s on the endpoint owning it: %v", sessionID, err))
+			return
+		}
+		d.sendOK(conn)
 		return
 	}
 	if err := d.renameSession(msg); err != nil {
