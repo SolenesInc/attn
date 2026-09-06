@@ -171,7 +171,8 @@ async function main() {
       const deadline = Date.now() + 15_000;
       while (Date.now() < deadline) {
         read = await client.request('read_pane_text', { sessionId, paneId: pane.paneId });
-        row = read.text.split('\n').findIndex((line) => line.trim() === relPath);
+        // The echo command's own tail can wrap onto a row of its own; the output row is the last match.
+        row = read.text.split('\n').findLastIndex((line) => line.trim() === relPath);
         if (row >= 0) break;
         await delay(250);
       }

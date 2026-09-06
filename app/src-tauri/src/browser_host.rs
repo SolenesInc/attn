@@ -1395,6 +1395,8 @@ mod tests {
     use std::sync::atomic::Ordering;
     use std::time::Duration;
 
+    static FOCUS_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     fn session_cookie() -> StoredCookie {
         StoredCookie {
             name: "session".to_string(),
@@ -1497,6 +1499,7 @@ mod tests {
 
     #[test]
     fn browser_focus_is_owned_by_the_exact_tile() {
+        let _focus = FOCUS_TEST_LOCK.lock().unwrap();
         browser_host_clear_focus(TrustedMainWebview);
         browser_host_claim_focus(
             TrustedMainWebview,
@@ -1516,6 +1519,7 @@ mod tests {
 
     #[test]
     fn browser_focus_claim_rejects_invalid_labels() {
+        let _focus = FOCUS_TEST_LOCK.lock().unwrap();
         browser_host_clear_focus(TrustedMainWebview);
 
         assert!(browser_host_claim_focus(TrustedMainWebview, "main".to_string()).is_err());
