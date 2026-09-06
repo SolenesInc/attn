@@ -68,6 +68,15 @@ function renderModal(overrides: Record<string, unknown> = {}) {
 }
 
 describe('SettingsModal sections', () => {
+  it('keeps Garden questions off by default and exposes the opt-in', async () => {
+    const onSetSetting = renderModal();
+    fireEvent.click(screen.getByTestId('settings-nav-agents'));
+    const toggle = await screen.findByTestId('settings-garden-needs-human-toggle');
+    expect(toggle).toHaveTextContent('Enable');
+    fireEvent.click(toggle);
+    expect(onSetSetting).toHaveBeenCalledWith('garden_needs_human_enabled', 'true');
+  });
+
   it('keeps the shared PTY experiment off until the daemon confirms opt-in', async () => {
     const onSetSetting = renderModal({ settings: { pty_backend_mode: 'migrating' } });
     fireEvent.click(screen.getByTestId('settings-nav-terminal'));

@@ -114,6 +114,7 @@ export type {
   SeedContinuation,
   SeedEdge,
   SeedPlotProgress,
+  SeedQuestion,
   SeedVar,
   Session,
   SessionUsage,

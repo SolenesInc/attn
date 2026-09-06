@@ -235,6 +235,15 @@ export interface SeedHarvestCondition {
     readonly set_by_session?: string;
     readonly url: string;
 }
+export interface SeedQuestion {
+    readonly asked_at: string;
+    readonly asked_by_member: string;
+    readonly asked_by_session: string;
+    readonly id: string;
+    readonly resolved_at?: string;
+    readonly status: string;
+    readonly text: string;
+}
 export interface Seed {
     readonly body: string;
     readonly continuation?: SeedContinuation;
@@ -247,6 +256,7 @@ export interface Seed {
     readonly planter_member: string;
     readonly planter_session: string;
     readonly plot_progress?: SeedPlotProgress;
+    readonly question?: SeedQuestion;
     readonly ready: boolean;
     readonly reason?: string;
     readonly resume_agent?: string;

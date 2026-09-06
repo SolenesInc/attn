@@ -48,6 +48,7 @@
 - Seed outcome: completion and required verification defined by the body. Harvest when both are complete.
 - Harvest condition: a seed armed to harvest when a named session pull request merges. The daemon settles it on the pull request refresh; a pull request closed without merging clears the condition instead of closing the seed.
 - Tender: seed claimant; one at a time.
+- Pending decision: one open question raised from a seed for the user to answer or dismiss. Asking does not change the seed's state or tender.
 - Execution: last observed session, native conversation, agent, directory, host, repository, and branch for a seed.
 - Resume: reopen the exact saved conversation and directory. Handover: start a new agent on the same seed, then transfer its tender.
 - Send to Chief: transfer a seed and its execution receipt to the Chief with optional guidance.

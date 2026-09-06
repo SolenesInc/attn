@@ -53,6 +53,8 @@ func runSeed() {
 		runSeedExport(args)
 	case "tend", "park", "harvest", "wither", "replant":
 		runSeedTransition(os.Args[2], args)
+	case "ask", "answer", "dismiss", "withdraw":
+		runSeedQuestion(os.Args[2], args)
 	case "note":
 		runSeedNote(args)
 	case "watch", "unwatch":
@@ -134,6 +136,12 @@ commands:
         one seed: the freshest handoff left on it, its state, who tends it,
         every edge that touches it in both directions, its body, and the newest
         notes on its log.
+
+  ask <id> -m "<question>" | answer <id> -m "<answer>"
+  dismiss <id> -m "<why this is the wrong ask>" | withdraw <id>
+        raise or settle the seed's one pending human decision. The seed stays
+        tended while it waits. Answer and dismiss write typed log entries and
+        ring the tender; only the raiser can withdraw.
 
   review start | show [<review-id>] | cancel <review-id> | retry <review-id> <seed-id> | keep <review-id> <seed-id> [--json]
         start an advisory Garden review, inspect its progressive results,
@@ -248,8 +256,8 @@ flags:
   --reference        remove an old linked path association (detach)
   --force            act even though somebody else holds the seed; the log
                      records it (tend, park, harvest, wither, replant)
-  --member <name>    the crew member asking, recorded as planter, tender or
-                     note author
+  --member <name>    the crew member asking, recorded as planter, tender,
+                     question raiser or note author
   --session <id>     the session asking (defaults to ATTN_SESSION_ID)
   --limit <n>        how many log entries to read (notes), or how many hits to
                      answer with (search; default %d, at most %d)
@@ -582,7 +590,7 @@ func runSeedList(args []string) {
 	fmt.Fprintln(w, "ID\tSLUG\tSTATUS\tTENDER\tPLANTED\tTITLE")
 	for _, row := range seedRows(result.Seeds, *f.flat) {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s%s%s\n",
-			row.seed.ID, row.seed.StepSlug, row.seed.Status, orDash(crew.HolderName(row.seed.TenderMember, row.seed.TenderSession)),
+			row.seed.ID, row.seed.StepSlug, seedStatusLabel(row.seed), orDash(crew.HolderName(row.seed.TenderMember, row.seed.TenderSession)),
 			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, plotProgressSuffix(row.seed)+harvestWhenSuffix(row.seed))
 	}
 	w.Flush()
@@ -590,6 +598,13 @@ func runSeedList(args []string) {
 		fmt.Printf("\nshowing the newest %d of %d seeds — one read is capped at %d. The %d not shown are the oldest; `attn seed show <id>` still reaches any of them.\n",
 			len(result.Seeds), result.Total, len(result.Seeds), result.Total-len(result.Seeds))
 	}
+}
+
+func seedStatusLabel(seed protocol.Seed) string {
+	if seed.Question != nil && seed.Question.Status == garden.QuestionOpen {
+		return seed.Status + " · waiting on you"
+	}
+	return seed.Status
 }
 
 func runSeedReview(args []string) {
@@ -1144,6 +1159,15 @@ func fprintSeed(out io.Writer, seed protocol.Seed, watching ...bool) {
 	if seed.Gate {
 		fmt.Fprintf(w, "gate\tyes\n")
 	}
+	if question := seed.Question; question != nil {
+		label := "waiting on you"
+		if question.Status == garden.QuestionWithdrawn {
+			label = "question withdrawn"
+		}
+		fmt.Fprintf(w, "%s\t%s\n", label, question.Text)
+		fmt.Fprintf(w, "asked\t%s by %s\n", shortStamp(question.AskedAt),
+			orDash(crew.HolderName(question.AskedByMember, question.AskedBySession)))
+	}
 	if seed.Reason != nil && *seed.Reason != "" {
 		fmt.Fprintf(w, "reason\t%s\n", *seed.Reason)
 	}
@@ -1188,6 +1212,37 @@ func runSeedTransition(verb string, args []string) {
 		return
 	}
 	fprintTransition(os.Stdout, result, opts.ClearHarvestWhen)
+}
+
+func runSeedQuestion(verb string, args []string) {
+	f := newSeedFlags(verb)
+	positionals := f.parse(verb, args)
+	seedID, err := oneSeedID(verb, positionals, "")
+	if err != nil {
+		seedFail(verb, err)
+	}
+	if verb == string(garden.QuestionWithdraw) && f.wasSet("m") {
+		seedFail(verb, fmt.Errorf("withdraw records no message; use `attn seed note %s -m \"…\"` if the log needs context", seedID))
+	}
+	result, err := seedClient().SeedQuestion(
+		f.sessionID(), seedID, verb, f.text(verb), strings.TrimSpace(*f.member))
+	if err != nil {
+		seedFail(verb, err)
+	}
+	if *f.json {
+		writeJSON(result)
+		return
+	}
+	switch verb {
+	case string(garden.QuestionAsk):
+		fmt.Printf("asked on %s; the seed stays %s while it waits\n", seedHandle(result.Seed), result.Seed.Status)
+	case string(garden.QuestionAnswer):
+		fmt.Printf("answered %s; the answer is on its log\n", seedHandle(result.Seed))
+	case string(garden.QuestionDismiss):
+		fmt.Printf("dismissed the question on %s; the reason is on its log\n", seedHandle(result.Seed))
+	case string(garden.QuestionWithdraw):
+		fmt.Printf("withdrew the question on %s\n", seedHandle(result.Seed))
+	}
 }
 
 // --when-merged carries an optional url, which flag cannot express, so the url

@@ -179,6 +179,8 @@ type SpawnOpts struct {
 
 	Garden bool
 
+	GardenNeedsHuman bool
+
 	CrewPriming string
 
 	AwarenessDirs []string
@@ -203,6 +205,7 @@ func (o SpawnOpts) launchSpec() hooks.Launch {
 		NotebookRoot:           o.NotebookRoot,
 		InjectWorkflow:         o.InjectWorkflowGuidance,
 		Garden:                 o.Garden,
+		GardenNeedsHuman:       o.GardenNeedsHuman,
 		Crew:                   o.CrewPriming,
 		SelfReportPullRequests: o.SelfReportPullRequests,
 	}

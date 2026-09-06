@@ -144,7 +144,7 @@ func TestCatalogDoesNotRetainMutableDeclarations(t *testing.T) {
 }
 
 func TestLaunchScenarioSelectsSourcesAndPreservesInput(t *testing.T) {
-	values := Values{"notebook_root": " /tmp/book ", "self_report_pull_requests": "false", "workflow_enabled": "true", "garden_available": "true", "crew_priming": " Crew {{literal}}. "}
+	values := Values{"notebook_root": " /tmp/book ", "self_report_pull_requests": "false", "workflow_enabled": "true", "garden_available": "true", "garden_needs_human": "false", "crew_priming": " Crew {{literal}}. "}
 	result, err := Builtin().Render("session", "launch", values)
 	if err != nil {
 		t.Fatal(err)
@@ -167,7 +167,7 @@ func TestLaunchScenarioSelectsSourcesAndPreservesInput(t *testing.T) {
 	if !reflect.DeepEqual(selected, []string{"session.chief", "delegation.boundary", "session.garden"}) {
 		t.Fatalf("selected sources: %v", selected)
 	}
-	if !reflect.DeepEqual(skipped, []string{"session.agent", "delegation.boundary", "session.workflow", "session.pull-request-guidance"}) {
+	if !reflect.DeepEqual(skipped, []string{"session.agent", "delegation.boundary", "session.workflow", "session.garden-needs-human", "session.pull-request-guidance"}) {
 		t.Fatalf("skipped sources: %v", skipped)
 	}
 	if !strings.HasSuffix(result.Text, "\n\nCrew {{literal}}.") {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { describe, expect, it, vi } from 'vitest';
 import type { Seed } from '../types/generated';
@@ -63,6 +63,36 @@ function document(overrides: Partial<SeedDocument> = {}): SeedDocument {
 }
 
 describe('SeedDocumentView', () => {
+  it('shows a flagged question above the body and answers it inline', async () => {
+    const onAnswerQuestion = vi.fn().mockResolvedValue(undefined);
+    render(
+      <SeedDocumentView
+        needsHumanEnabled
+        document={document({
+          seed: seed({
+            question: {
+              id: 'q-plan11',
+              text: 'Should this stay in the document?',
+              asked_at: '2026-09-07T08:30:00Z',
+              asked_by_session: 'session-agent',
+              asked_by_member: '',
+              status: 'open',
+            },
+          }),
+        })}
+        onAnswerQuestion={onAnswerQuestion}
+        onDismissQuestion={vi.fn()}
+      />,
+    );
+
+    const question = screen.getByLabelText('Question waiting on you');
+    const body = screen.getByRole('heading', { name: 'Rendered plan' });
+    expect(question.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: 'Keep it here.' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Answer/ }));
+    await waitFor(() => expect(onAnswerQuestion).toHaveBeenCalledWith('s-plan11', 'Keep it here.'));
+  });
+
   it('puts navigable plot work after seed status and before the annotatable body', () => {
     const child = seed({ id: 's-step11', title: 'Build the reader', body: '', status: 'harvested' });
     const onOpenSeed = vi.fn();

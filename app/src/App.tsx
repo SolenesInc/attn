@@ -902,6 +902,7 @@ function AppContent({
     sendSeedDocumentGet,
     sendSeedTransition,
     sendSeedNote,
+    sendSeedQuestion,
     sendSessionMessagesGet,
     subscribeSessionMessagesChanged,
     sendSessionAnnotationsGet,
@@ -4215,6 +4216,7 @@ function AppContent({
         loaded={hasReceivedInitialState}
         moveSeed={sendSeedTransition}
         noteSeed={sendSeedNote}
+        updateSeedQuestion={sendSeedQuestion}
         fetchSeedDocument={sendSeedDocumentGet}
         onOpenAsTile={(seedId) => {
           closeGarden();

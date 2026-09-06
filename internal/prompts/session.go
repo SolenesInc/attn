@@ -14,6 +14,7 @@ var (
 	selfReportPullRequests = FlagField("self_report_pull_requests", "Ask the agent to record PRs when the harness cannot report them.")
 	workflowEnabled        = FlagField("workflow_enabled", "Include opt-in workflow guidance for an ordinary session.")
 	gardenAvailable        = FlagField("garden_available", "Include Garden guidance when the session has a home Garden.")
+	gardenNeedsHuman       = FlagField("garden_needs_human", "Teach the agent to raise user decisions when the Garden feature is enabled.")
 	crewPriming            = ProducedBy(Trimmed(TextField("crew_priming", "Rendered crew identity and predecessor letter, supplied by internal/crew.")), "crew/priming")
 )
 
@@ -24,9 +25,10 @@ var (
 		Bind("delegation_boundary", delegationBoundary))
 	agentGuidance = Use("session.agent", "content/agent.md",
 		Bind("delegation_boundary", delegationBoundary))
-	workflowGuidance    = Use("session.workflow", "content/workflow.md")
-	gardenGuidance      = Use("session.garden", "content/garden.md")
-	pullRequestGuidance = Use("session.pull-request-guidance", "content/session/pull-request-guidance.md")
+	workflowGuidance         = Use("session.workflow", "content/workflow.md")
+	gardenGuidance           = Use("session.garden", "content/garden.md")
+	gardenNeedsHumanGuidance = Use("session.garden-needs-human", "content/garden-needs-human.md")
+	pullRequestGuidance      = Use("session.pull-request-guidance", "content/session/pull-request-guidance.md")
 )
 
 var session = Recipient{
@@ -42,12 +44,16 @@ var session = Recipient{
 						agentGuidance,
 						When(Enabled(workflowEnabled), workflowGuidance),
 					)),
-				When(Enabled(gardenAvailable), gardenGuidance),
+				When(Enabled(gardenAvailable), Compose(
+					gardenGuidance,
+					When(Enabled(gardenNeedsHuman), gardenNeedsHumanGuidance),
+				)),
 				When(Enabled(selfReportPullRequests), pullRequestGuidance),
 				When(Present(crewPriming), Input(crewPriming)),
 			)),
 		On("agent-guidance", "message_fragment", "Non-chief trust and delegation guidance.", agentGuidance),
 		On("garden-guidance", "message_fragment", "Garden instructions when a home is available.", gardenGuidance),
+		On("garden-needs-human-guidance", "message_fragment", "How to raise a decision for the user through a seed.", gardenNeedsHumanGuidance),
 		On("workflow-guidance", "message_fragment", "Opt-in workflow instructions.", workflowGuidance),
 		On("pull-request-guidance", "message_fragment", "Self-report instructions for harnesses without automatic PR reporting.", pullRequestGuidance),
 	},
@@ -73,6 +79,7 @@ type Launch struct {
 	SelfReportPullRequests bool
 	InjectWorkflow         bool
 	Garden                 bool
+	GardenNeedsHuman       bool
 	Crew                   string
 }
 
@@ -82,6 +89,7 @@ func (l Launch) Values() Values {
 		selfReportPullRequests.Name: strconv.FormatBool(l.SelfReportPullRequests),
 		workflowEnabled.Name:        strconv.FormatBool(l.InjectWorkflow),
 		gardenAvailable.Name:        strconv.FormatBool(l.Garden),
+		gardenNeedsHuman.Name:       strconv.FormatBool(l.GardenNeedsHuman),
 		crewPriming.Name:            l.Crew,
 	}
 }

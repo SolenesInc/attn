@@ -66,6 +66,29 @@ func TestPreparePluginLaunchInstructionsOutpostOmitsGarden(t *testing.T) {
 	}
 }
 
+func TestPreparePluginLaunchInstructionsGatesNeedsHumanGuidance(t *testing.T) {
+	d := newEnrolledDaemon(t, "")
+	t.Cleanup(func() { _ = d.store.Close() })
+	addTestWorkspace(d, "workspace-a", t.TempDir())
+
+	off, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", false, true)
+	if err != nil {
+		t.Fatalf("prepare disabled plugin instructions: %v", err)
+	}
+	if strings.Contains(off.Content, hooks.GardenNeedsHumanGuidance) {
+		t.Fatalf("disabled plugin launch carried needs-human guidance: %q", off.Content)
+	}
+
+	d.store.SetSetting(SettingGardenNeedsHumanEnabled, "true")
+	on, err := d.preparePluginLaunchInstructions("session-b", "workspace-a", false, true)
+	if err != nil {
+		t.Fatalf("prepare enabled plugin instructions: %v", err)
+	}
+	if !strings.Contains(on.Content, hooks.GardenNeedsHumanGuidance) {
+		t.Fatalf("enabled plugin launch dropped needs-human guidance: %q", on.Content)
+	}
+}
+
 func TestPreparePluginLaunchInstructionsGatePullRequestSelfReporting(t *testing.T) {
 	d := newEnrolledDaemon(t, "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	t.Cleanup(func() { _ = d.store.Close() })

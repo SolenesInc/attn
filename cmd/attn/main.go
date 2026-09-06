@@ -2485,6 +2485,7 @@ func runAgentDirectly(requestedAgent string) {
 		opts.AwarenessDirs = prime.AwarenessDirs
 	}
 	opts.InjectWorkflowGuidance = consumeOneShotBoolEnv("ATTN_WORKFLOW_GUIDANCE_ENABLED")
+	opts.GardenNeedsHuman = consumeOneShotBoolEnv("ATTN_GARDEN_NEEDS_HUMAN_ENABLED")
 	opts.AutoApprove = consumeOneShotBoolEnv("ATTN_AUTO_APPROVE")
 	opts.TrustWorkingDirectory = consumeOneShotBoolEnv("ATTN_TRUST_WORKING_DIRECTORY")
 	opts.Model = consumeOneShotEnv("ATTN_MODEL")

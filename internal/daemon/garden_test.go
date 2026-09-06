@@ -598,6 +598,12 @@ func TestGarden_OutpostRefusesEverySeedCommand(t *testing.T) {
 				Cmd: protocol.CmdSeedTransition, SeedID: "s-7k3f9m", Verb: string(garden.VerbTend),
 			})
 		},
+		"ask": func(c net.Conn) {
+			d.handleSeedQuestion(c, &protocol.SeedQuestionMessage{
+				Cmd: protocol.CmdSeedQuestion, SeedID: "s-7k3f9m", Verb: string(garden.QuestionAsk),
+				Body: protocol.Ptr("anything"),
+			})
+		},
 		"note": func(c net.Conn) {
 			d.handleSeedNote(c, &protocol.SeedNoteMessage{
 				Cmd: protocol.CmdSeedNote, SeedID: "s-7k3f9m", Body: "anything",

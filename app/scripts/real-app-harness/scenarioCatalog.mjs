@@ -100,6 +100,13 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-garden-seed-tile-navigation'],
   },
   {
+    id: 'garden-needs-human',
+    runnerId: 'GardenNeedsHuman',
+    label: 'Garden pending decisions: opt in, ask, answer, withdraw, and clear across every visible surface',
+    command: ['pnpm', 'run', 'real-app:scenario-garden-needs-human'],
+    timeoutMs: 240_000,
+  },
+  {
     id: 'garden-seed-read-receipts',
     runnerId: 'GardenSeedReadReceipts',
     label: 'Garden seed read receipts: inbox reads rearm generic doorbells without prompt-submit hooks',

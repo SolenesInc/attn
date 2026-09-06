@@ -218,9 +218,14 @@ const (
 	NoteKindHandoff = "handoff"
 	NoteKindAttach  = "attach"
 	NoteKindDetach  = "detach"
+	NoteKindAnswer  = "answer"
+	NoteKindDismiss = "dismiss"
 )
 
-var NoteKinds = []string{NoteKindNote, NoteKindHandoff, NoteKindAttach, NoteKindDetach}
+var NoteKinds = []string{
+	NoteKindNote, NoteKindHandoff, NoteKindAttach, NoteKindDetach,
+	NoteKindAnswer, NoteKindDismiss,
+}
 
 func CarriesArtifact(kind string) bool {
 	return kind == NoteKindAttach || kind == NoteKindDetach

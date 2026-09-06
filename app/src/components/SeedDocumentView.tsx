@@ -3,11 +3,14 @@ import type {
   Seed,
   SeedDocument as GeneratedSeedDocument,
 } from '../types/generated';
+import { useSettings } from '../contexts/SettingsContext';
+import { SeedQuestionCard, type QuestionActionHandlers } from './GardenQuestions';
 import { HarvestWhenLine } from './HarvestWhenLine';
 import { Markdown } from './Markdown';
 import { MarkdownReader, type MarkdownAnnotationsSendHandle } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
 import { SeedArtifactRows } from './SeedArtifactRows';
+import { isGardenNeedsHumanEnabled } from './seedQuestions';
 import type { SeedDocumentNote } from './seedArtifacts';
 import './SeedDocumentView.css';
 
@@ -24,6 +27,10 @@ export interface SeedDocumentViewProps {
   onOpenSeed?: (seedId: string) => void;
   arrival?: 'in' | 'out';
   ledgerInitiallyOpen?: boolean;
+  needsHumanEnabled?: boolean;
+  onAnswerQuestion?: QuestionActionHandlers['onAnswer'];
+  onDismissQuestion?: QuestionActionHandlers['onDismiss'];
+  onClearQuestion?: QuestionActionHandlers['onClear'];
 }
 
 function formatTimestamp(iso: string): string {
@@ -116,7 +123,13 @@ export function SeedDocumentView({
   onOpenSeed,
   arrival = 'in',
   ledgerInitiallyOpen = false,
+  needsHumanEnabled: needsHumanEnabledOverride,
+  onAnswerQuestion,
+  onDismissQuestion,
+  onClearQuestion,
 }: SeedDocumentViewProps) {
+  const { settings } = useSettings();
+  const needsHumanEnabled = needsHumanEnabledOverride ?? isGardenNeedsHumanEnabled(settings);
   const { seed, children, notes, notes_total: notesTotal, artifacts, references } = document;
   const isPlot = Boolean(seed.plot_progress);
   const tender = holder(seed);
@@ -146,6 +159,16 @@ export function SeedDocumentView({
         {progress && <span>{progress}</span>}
         <span className="seed-document__id">{seed.id}</span>
       </div>
+
+      {needsHumanEnabled && (
+        <SeedQuestionCard
+          seed={seed}
+          compact={compact}
+          onAnswer={onAnswerQuestion}
+          onDismiss={onDismissQuestion}
+          onClear={onClearQuestion}
+        />
+      )}
 
       {isPlot && (
         <section className="seed-document__plot" aria-labelledby={plotHeadingId}>

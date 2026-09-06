@@ -1040,7 +1040,7 @@ function SeedTileBody({
   onOpenSeed?: (seedId: string) => void;
   arrival: 'in' | 'out';
 }) {
-  const { sendOpenMarkdown } = useDaemonApi();
+  const { sendOpenMarkdown, sendSeedQuestion } = useDaemonApi();
 
   if (!document) {
     return (
@@ -1059,6 +1059,9 @@ function SeedTileBody({
       annotationsSendRef={annotationsSendRef}
       onOpenSeed={onOpenSeed}
       arrival={arrival}
+      onAnswerQuestion={(seedId, answer) => sendSeedQuestion(seedId, 'answer', answer)}
+      onDismissQuestion={(seedId, reason) => sendSeedQuestion(seedId, 'dismiss', reason)}
+      onClearQuestion={(seedId) => sendSeedQuestion(seedId, 'clear')}
       onOpenMarkdownArtifact={(path) => {
         void sendOpenMarkdown(path, '').catch((openError) => {
           console.error('[SeedDocument] Could not open markdown artifact:', openError);

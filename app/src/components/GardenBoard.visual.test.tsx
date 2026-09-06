@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { GardenBoard } from './GardenBoard';
 import type { Seed } from '../hooks/useDaemonSocket';
 import { _resetEscapeStackForTest } from '../hooks/useEscapeStack';
+import { SettingsProvider } from '../contexts/SettingsContext';
 
 function seed(overrides: Partial<Seed> & Pick<Seed, 'id' | 'title'>): Seed {
   return {
@@ -121,5 +122,39 @@ describe('GardenBoard visual language', () => {
     const card = document.querySelector('[data-seed="s-armrdy"]');
     expect(card).toHaveTextContent('ready');
     expect(card).toHaveTextContent('harvests on #43');
+  });
+
+  it('marks a questioned card as waiting on you while it stays in progress', () => {
+    const questioned = seed({
+      id: 's-call11',
+      title: 'choose the storage model',
+      status: 'growing',
+      question: {
+        id: 'q-call11',
+        text: 'Should this be a document?',
+        asked_at: '2026-09-07T08:30:00Z',
+        asked_by_session: 'session-agent',
+        asked_by_member: '',
+        status: 'open',
+      },
+    });
+    render(
+      <SettingsProvider settings={{ garden_needs_human_enabled: 'true' }} setSetting={vi.fn()}>
+        <GardenBoard
+          seeds={[questioned]}
+          seedsTotal={1}
+          liveSessions={new Set()}
+          loaded
+          onTransition={vi.fn()}
+          onNote={vi.fn()}
+          onClose={vi.fn()}
+          onEscapeFloor={vi.fn()}
+        />
+      </SettingsProvider>,
+    );
+
+    expect(document.querySelector('[data-seed="s-call11"]')).toHaveClass('is-waiting-on-you');
+    expect(screen.getByText('waiting on you')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'In progress' })).toBeInTheDocument();
   });
 });

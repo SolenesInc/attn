@@ -26,6 +26,7 @@ func toPTYSpawnOptions(opts SpawnOptions) pty.SpawnOptions {
 		LifecycleID:             opts.LifecycleID,
 		LoginShellEnv:           opts.LoginShellEnv,
 		WorkflowGuidanceEnabled: opts.WorkflowGuidanceEnabled,
+		GardenNeedsHumanEnabled: opts.GardenNeedsHumanEnabled,
 		AutoApprove:             opts.AutoApprove,
 		TrustWorkingDirectory:   opts.TrustWorkingDirectory,
 		Model:                   opts.Model,

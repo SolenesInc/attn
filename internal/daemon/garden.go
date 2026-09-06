@@ -257,6 +257,17 @@ func seedToProtocol(seed garden.Seed, doc docstore.Document, ready bool) protoco
 		out.ResumeCwd = protocol.Ptr(seed.ResumeCwd)
 		out.ResumeAgent = protocol.Ptr(seed.ResumeAgent)
 	}
+	if seed.Question != nil {
+		question := protocol.SeedQuestion{
+			ID: seed.Question.ID, Text: seed.Question.Text, AskedAt: seed.Question.AskedAt,
+			AskedBySession: seed.Question.AskedBySession, AskedByMember: seed.Question.AskedByMember,
+			Status: seed.Question.Status,
+		}
+		if seed.Question.ResolvedAt != "" {
+			question.ResolvedAt = protocol.Ptr(seed.Question.ResolvedAt)
+		}
+		out.Question = &question
+	}
 	if seed.HarvestWhen != nil {
 		condition := protocol.SeedHarvestCondition{
 			PullRequest: seed.HarvestWhen.PullRequest,
@@ -1698,6 +1709,9 @@ func (d *Daemon) appendSeedNote(seedID, body, authorSession, member, kindName st
 	kind, err := garden.ParseNoteKind(kindName)
 	if err != nil {
 		return protocol.SeedNote{}, err
+	}
+	if kind == garden.NoteKindAnswer || kind == garden.NoteKindDismiss {
+		return protocol.SeedNote{}, fmt.Errorf("a %s note settles the open question atomically; use `attn seed %s %s -m \"…\"`", kind, kind, seedID)
 	}
 	artifact, body, err = resolveNoteArtifact(kind, artifact, body)
 	if err != nil {

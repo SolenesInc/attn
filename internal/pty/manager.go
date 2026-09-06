@@ -60,6 +60,7 @@ type SpawnOptions struct {
 	LoginShellEnv []string
 
 	WorkflowGuidanceEnabled bool
+	GardenNeedsHumanEnabled bool
 	AutoApprove             bool
 	TrustWorkingDirectory   bool
 	Model                   string
@@ -629,6 +630,7 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 	launchEnv := []string(nil)
 	launchKeys := []string{
 		"ATTN_WORKFLOW_GUIDANCE_ENABLED",
+		"ATTN_GARDEN_NEEDS_HUMAN_ENABLED",
 		"ATTN_AUTO_APPROVE",
 		"ATTN_TRUST_WORKING_DIRECTORY",
 		"ATTN_MODEL",
@@ -638,7 +640,7 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 	if os.Getenv("ATTN_PTY_WORKER") == "1" {
 		inheritedKeys := launchKeys
 		if !opts.UnattendedLaunch.IsZero() {
-			inheritedKeys = []string{"ATTN_WORKFLOW_GUIDANCE_ENABLED", "ATTN_AUTO_COMPACT_WINDOW"}
+			inheritedKeys = []string{"ATTN_WORKFLOW_GUIDANCE_ENABLED", "ATTN_GARDEN_NEEDS_HUMAN_ENABLED", "ATTN_AUTO_COMPACT_WINDOW"}
 		}
 		for _, key := range inheritedKeys {
 			if value, ok := os.LookupEnv(key); ok {
@@ -648,6 +650,9 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 	}
 	if opts.WorkflowGuidanceEnabled {
 		launchEnv = append(launchEnv, "ATTN_WORKFLOW_GUIDANCE_ENABLED=1")
+	}
+	if opts.GardenNeedsHumanEnabled {
+		launchEnv = append(launchEnv, "ATTN_GARDEN_NEEDS_HUMAN_ENABLED=1")
 	}
 	if opts.AutoApprove {
 		launchEnv = append(launchEnv, "ATTN_AUTO_APPROVE=1")

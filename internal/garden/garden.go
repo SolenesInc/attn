@@ -46,25 +46,26 @@ type Var struct {
 // Every declared field is written unconditionally, empty string and all: a field a query
 // filters on must exist in every body, or `tender_session = ""` matches nothing.
 type Seed struct {
-	ID              string `json:"id"`
-	Title           string `json:"title"`
-	Body            string `json:"body"`
-	Status          string `json:"status"`
-	StepSlug        string `json:"step_slug"`
-	PlanterSession  string `json:"planter_session"`
-	PlanterMember   string `json:"planter_member"`
-	TenderSession   string `json:"tender_session"`
-	TenderMember    string `json:"tender_member"`
-	LastExecutionID string `json:"last_execution_id,omitempty"`
-	StateChangedAt  string `json:"state_changed_at,omitempty"`
-	Edges           []Edge `json:"edges"`
-	Template        bool   `json:"template"`
-	Gate            bool   `json:"gate"`
-	Vars            []Var  `json:"vars"`
-	Reason          string `json:"reason,omitempty"`
-	ResumeSessionID string `json:"resume_session_id,omitempty"`
-	ResumeCwd       string `json:"resume_cwd,omitempty"`
-	ResumeAgent     string `json:"resume_agent,omitempty"`
+	ID              string    `json:"id"`
+	Title           string    `json:"title"`
+	Body            string    `json:"body"`
+	Status          string    `json:"status"`
+	StepSlug        string    `json:"step_slug"`
+	PlanterSession  string    `json:"planter_session"`
+	PlanterMember   string    `json:"planter_member"`
+	TenderSession   string    `json:"tender_session"`
+	TenderMember    string    `json:"tender_member"`
+	LastExecutionID string    `json:"last_execution_id,omitempty"`
+	StateChangedAt  string    `json:"state_changed_at,omitempty"`
+	Edges           []Edge    `json:"edges"`
+	Template        bool      `json:"template"`
+	Gate            bool      `json:"gate"`
+	Vars            []Var     `json:"vars"`
+	Reason          string    `json:"reason,omitempty"`
+	ResumeSessionID string    `json:"resume_session_id,omitempty"`
+	ResumeCwd       string    `json:"resume_cwd,omitempty"`
+	ResumeAgent     string    `json:"resume_agent,omitempty"`
+	Question        *Question `json:"question,omitempty"`
 
 	HarvestWhen *HarvestCondition `json:"harvest_when,omitempty"`
 	// Flattened out of HarvestWhen by Encode: a docstore field is a top-level JSON

@@ -64,6 +64,7 @@
     "real-app:scenario-terminal-build-upgrade": "node scripts/real-app-harness/scenario-terminal-build-upgrade.mjs",
     "real-app:scenario-garden-seed-tile-navigation": "node scripts/real-app-harness/scenario-garden-seed-tile-navigation.mjs",
     "real-app:scenario-garden-plot-dispatch": "node scripts/real-app-harness/scenario-garden-plot-dispatch.mjs",
+    "real-app:scenario-garden-needs-human": "node scripts/real-app-harness/scenario-garden-needs-human.mjs",
     "real-app:scenario-delegation-preferences": "node scripts/real-app-harness/scenario-delegation-preferences.mjs",
     "real-app:scenario-garden-seed-read-receipts": "node scripts/real-app-harness/scenario-garden-seed-read-receipts.mjs",
     "real-app:scenario-garden-seed-reopen": "node scripts/real-app-harness/scenario-garden-seed-reopen.mjs",

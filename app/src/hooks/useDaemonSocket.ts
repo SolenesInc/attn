@@ -45,6 +45,7 @@ import type {
   AttachBlock as GeneratedAttachBlock,
   GardenReview as GeneratedGardenReview,
   SeedSendToChiefResult as GeneratedSeedSendToChiefResult,
+  SeedQuestionResult as GeneratedSeedQuestionResult,
   SessionLedgerEntry,
   SessionReopen,
   SessionReopenResult,
@@ -138,6 +139,7 @@ export type Seed = GeneratedSeed;
 export type SeedArtifact = GeneratedSeedArtifact;
 export type SeedArtifactReference = GeneratedSeedArtifactReference;
 export type SeedDocument = GeneratedSeedDocument;
+export type SeedQuestionVerb = 'answer' | 'dismiss' | 'clear';
 export interface SeedHandoverOptions {
   seedId: string;
   requestId?: string;
@@ -1784,6 +1786,16 @@ export function useDaemonSocket({
             else pending.reject(new Error(data.error || 'The note was refused'));
             break;
           }
+
+          case 'seed_question_result':
+            settlePendingRequest(
+              pendingActionsRef.current,
+              'seed_question',
+              data,
+              (event) => event.result as GeneratedSeedQuestionResult | undefined,
+              'Updating the question failed',
+            );
+            break;
 
           case 'recent_files_result': {
             const requestId = data.request_id;
@@ -3805,6 +3817,18 @@ export function useDaemonSocket({
     });
   }, [nextRequestID]);
 
+  const sendSeedQuestion = useCallback((
+    seedId: string,
+    verb: SeedQuestionVerb,
+    body?: string,
+  ): Promise<GeneratedSeedQuestionResult> => (
+    sendRequest<GeneratedSeedQuestionResult>(
+      'seed_question',
+      { seed_id: seedId, verb, ...(body ? { body } : {}) },
+      'Updating the question timed out',
+    )
+  ), [sendRequest]);
+
   const sendSeedDocumentGet = useCallback((seedId: string): Promise<SeedDocument> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
@@ -5498,6 +5522,7 @@ export function useDaemonSocket({
     sendSeedArtifactReferenceDetach,
     sendSeedTransition,
     sendSeedNote,
+    sendSeedQuestion,
     sendRuntimeInput: sendPtyInput,
     sendTerminalPointerActivity,
     sendSetClientPresence,

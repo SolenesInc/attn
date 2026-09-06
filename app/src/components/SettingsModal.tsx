@@ -51,6 +51,7 @@ import { parseActivityConfigSetting } from '../utils/activitySettings';
 import { SessionActivitySettings } from './SessionActivitySettings';
 import { GardenAdvisorSettings } from './GardenAdvisorSettings';
 import { parseGardenAdvisorSetting } from '../utils/gardenAdvisorSettings';
+import { GARDEN_NEEDS_HUMAN_SETTING } from './seedQuestions';
 import { SessionCostPriceSettings } from './SessionCostPriceSettings';
 import './SettingsModal.css';
 import { formatShortcut } from '../shortcuts/formatShortcut';
@@ -282,6 +283,7 @@ function SettingsModalContent({
   const effectiveNotebookRoot = settings['notebook.root.effective'] || '';
   const tailscaleEnabled = (settings.tailscale_enabled || 'false') === 'true';
   const workflowsEnabled = (settings.workflows_enabled || 'false') === 'true';
+  const gardenNeedsHumanEnabled = (settings[GARDEN_NEEDS_HUMAN_SETTING] || 'false') === 'true';
   const autoApproveEnabled = (settings.auto_approve_enabled || 'false') === 'true';
   const modelCaptureEnabled = (settings['model_capture.enabled'] || 'false') === 'true';
   const modelCaptureInterval = settings['model_capture.interval_seconds'] || '10';
@@ -546,6 +548,10 @@ function SettingsModalContent({
   const handleToggleWorkflows = useCallback(() => {
     onSetSetting('workflows_enabled', workflowsEnabled ? 'false' : 'true');
   }, [onSetSetting, workflowsEnabled]);
+
+  const handleToggleGardenNeedsHuman = useCallback(() => {
+    onSetSetting(GARDEN_NEEDS_HUMAN_SETTING, gardenNeedsHumanEnabled ? 'false' : 'true');
+  }, [gardenNeedsHumanEnabled, onSetSetting]);
 
   const handleToggleModelCapture = useCallback(() => {
     onSetSetting('model_capture.enabled', modelCaptureEnabled ? 'false' : 'true');
@@ -1709,6 +1715,34 @@ function SettingsModalContent({
   );
 
   const renderWorkflowsSettings = () => (
+      <section className="settings-block">
+        <div className="settings-block-intro">
+          <div className="settings-kicker">Garden</div>
+          <h3>Questions for you</h3>
+          <p className="settings-description">
+            Lets agents put a judgment call in the Garden where you can answer it. Off by default.
+          </p>
+        </div>
+        <div className="settings-block-body">
+          <div className="settings-row-card">
+            <div>
+              <p className="settings-row-title">Show pending decisions</p>
+              <p className="settings-row-copy">
+                The Garden shows a queue of questions waiting on you. While off, agents cannot raise new ones.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="settings-action"
+              data-testid="settings-garden-needs-human-toggle"
+              onClick={handleToggleGardenNeedsHuman}
+            >
+              {gardenNeedsHumanEnabled ? 'Disable' : 'Enable'}
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section className="settings-block">
         <div className="settings-block-intro">
           <div className="settings-kicker">Agents</div>

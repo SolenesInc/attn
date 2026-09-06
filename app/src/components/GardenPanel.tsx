@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { gardenPathToSeed, gardenScrollMemory, seedParentID, useGardenWalk } from '../store/gardenWalk';
 import type { Seed, SeedHandoverOptions, SeedSendToChiefOptions } from '../hooks/useDaemonSocket';
+import { useSettings } from '../contexts/SettingsContext';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { isAccelKeyPressed } from '../shortcuts/platform';
 import { crewDisplayName } from '../utils/crewName';
@@ -18,11 +19,13 @@ import {
   type SeedMatch,
 } from './gardenSearch';
 import { HarvestWhenLine } from './HarvestWhenLine';
+import { NeedsHumanBand, SeedQuestionCard, WaitingOnYouMark, type QuestionActionHandlers } from './GardenQuestions';
 import { Markdown } from './Markdown';
 import { MarkdownReader } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
 import { SeedArtifactRows } from './SeedArtifactRows';
 import { DelegationCheckoutFields } from './DelegationCheckoutFields';
+import { isGardenNeedsHumanEnabled, isOpenQuestion, questionOf } from './seedQuestions';
 import type { SeedDocument } from './SeedDocumentView';
 import type { SeedDocumentNote } from './seedArtifacts';
 import './GardenPanel.css';
@@ -51,6 +54,10 @@ interface GardenPanelProps {
   reviewError?: string;
   onOpenReview?: () => void;
   tenderSessionLabels?: ReadonlyMap<string, string>;
+  needsHumanEnabled?: boolean;
+  onAnswerQuestion?: QuestionActionHandlers['onAnswer'];
+  onDismissQuestion?: QuestionActionHandlers['onDismiss'];
+  onClearQuestion?: QuestionActionHandlers['onClear'];
 }
 
 type ContinuationDraft = {
@@ -352,6 +359,7 @@ interface RowProps {
   home?: Seed;
   option?: boolean;
   tenderSessionLabels?: ReadonlyMap<string, string>;
+  showNeedsHuman: boolean;
 }
 
 function SeedRow({
@@ -364,11 +372,13 @@ function SeedRow({
   home,
   option,
   tenderSessionLabels,
+  showNeedsHuman,
 }: RowProps) {
   const progress = seed.plot_progress;
   const signal = signalOf(seed, blockers);
   const armed = harvestWhenDisplay(seed.harvest_when);
   const tender = tenderOf(seed, tenderSessionLabels);
+  const openQuestion = showNeedsHuman && isOpenQuestion(questionOf(seed));
   return (
     <li
       className={`garden-row ${statusClass(seed.status)}${isClosed(seed) ? ' is-closed' : ''}${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}`}
@@ -387,7 +397,8 @@ function SeedRow({
             <span className="garden-row__title">
               <Marked text={seed.title} ranges={match?.titleRanges ?? []} />
             </span>
-            {signal && !(armed && signal.text === 'parked') && (
+            {openQuestion && <WaitingOnYouMark />}
+            {signal && !openQuestion && !(armed && signal.text === 'parked') && (
               <span className={`garden-row__signal is-${signal.tone}`}>{signal.text}</span>
             )}
             {armed && (
@@ -403,6 +414,7 @@ function SeedRow({
             )}
             {home && <span className="garden-row__home">in {home.title}</span>}
           </span>
+          {openQuestion && <span className="garden-row__question">{questionOf(seed)?.text}</span>}
         </span>
         {progress && (
           <span className="garden-row__plot">
@@ -434,6 +446,7 @@ interface ListProps {
   listId?: string;
   options?: boolean;
   tenderSessionLabels?: ReadonlyMap<string, string>;
+  showNeedsHuman: boolean;
 }
 
 function SeedList({
@@ -449,6 +462,7 @@ function SeedList({
   listId,
   options,
   tenderSessionLabels,
+  showNeedsHuman,
 }: ListProps) {
   if (seeds.length === 0) return emptyMessage ? <p className="garden-empty">{emptyMessage}</p> : null;
   return (
@@ -465,6 +479,7 @@ function SeedList({
           home={homes && crownOf(seed) !== hereId ? index.byID.get(crownOf(seed)) : undefined}
           option={options}
           tenderSessionLabels={tenderSessionLabels}
+          showNeedsHuman={showNeedsHuman}
         />
       ))}
     </ul>
@@ -511,6 +526,7 @@ function ColumnList({
   memory,
   onOpen,
   tenderSessionLabels,
+  showNeedsHuman,
 }: {
   levelKey: string;
   seeds: Seed[];
@@ -519,6 +535,7 @@ function ColumnList({
   memory: React.MutableRefObject<Map<string, number>>;
   onOpen: (id: string) => void;
   tenderSessionLabels?: ReadonlyMap<string, string>;
+  showNeedsHuman: boolean;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   useLayoutEffect(() => {
@@ -541,6 +558,7 @@ function ColumnList({
         onOpen={onOpen}
         selectedId={selectedId}
         tenderSessionLabels={tenderSessionLabels}
+        showNeedsHuman={showNeedsHuman}
         emptyMessage={<>Nothing here yet.</>}
       />
     </div>
@@ -592,7 +610,13 @@ export function GardenPanel({
   reviewError = '',
   onOpenReview,
   tenderSessionLabels,
+  needsHumanEnabled: needsHumanEnabledOverride,
+  onAnswerQuestion,
+  onDismissQuestion,
+  onClearQuestion,
 }: GardenPanelProps) {
+  const { settings } = useSettings();
+  const needsHumanEnabled = needsHumanEnabledOverride ?? isGardenNeedsHumanEnabled(settings);
   const trail = useGardenWalk((walk) => walk.trail);
   const setTrail = useGardenWalk((walk) => walk.setTrail);
   const [query, setQuery] = useState('');
@@ -1175,6 +1199,7 @@ export function GardenPanel({
       options
       listId="garden-results"
       tenderSessionLabels={tenderSessionLabels}
+      showNeedsHuman={needsHumanEnabled}
     />
   );
 
@@ -1241,6 +1266,15 @@ export function GardenPanel({
         )}
       </div>
 
+      {needsHumanEnabled && seedDoc && (
+        <SeedQuestionCard
+          seed={seedDoc.seed}
+          onAnswer={onAnswerQuestion}
+          onDismiss={onDismissQuestion}
+          onClear={onClearQuestion}
+        />
+      )}
+
       {here.body.trim() ? (
         <div className="garden-body">
           <MarkdownReader
@@ -1268,6 +1302,7 @@ export function GardenPanel({
               index={index}
               onOpen={drillInto}
               tenderSessionLabels={tenderSessionLabels}
+              showNeedsHuman={needsHumanEnabled}
               emptyMessage={<>Nothing planted in this plot yet. <code>attn seed plant &quot;what this is&quot; --part-of {here.id}</code> puts something in it.</>}
             />
           )}
@@ -1342,6 +1377,16 @@ export function GardenPanel({
     </p>
   );
 
+  const needsHuman = needsHumanEnabled && onAnswerQuestion && onDismissQuestion ? (
+    <NeedsHumanBand
+      seeds={seeds}
+      onAnswer={onAnswerQuestion}
+      onDismiss={onDismissQuestion}
+      onClear={onClearQuestion}
+      onOpenSeed={drillInto}
+    />
+  ) : null;
+
   const reviewPrompt = livingTrail.length === 0 && !searching && onOpenReview && reviewCandidateCount > 0 ? (
     <div className="garden-review-prompt" data-testid="garden-review-prompt">
       <div>
@@ -1368,6 +1413,7 @@ export function GardenPanel({
       <div ref={measurePanel} className="garden-panel is-columns" role="region" aria-label="The garden" onKeyDown={onPanelKeyDown}>
         {trailNav}
         {searchLine}
+        {needsHuman}
         {reviewPrompt}
         {reviewProblem}
         <div
@@ -1389,6 +1435,7 @@ export function GardenPanel({
                 memory={scrollMemory}
                 onOpen={(id) => selectAtLevel(firstVisibleLevel + offset, id)}
                 tenderSessionLabels={tenderSessionLabels}
+                showNeedsHuman={needsHumanEnabled}
               />
             ))
           )}
@@ -1414,6 +1461,7 @@ export function GardenPanel({
     <div ref={measurePanel} className="garden-panel" role="region" aria-label="The garden" onKeyDown={onPanelKeyDown}>
       {trailNav}
       {searchLine}
+      {needsHuman}
       {reviewPrompt}
       {reviewProblem}
       <div
@@ -1447,6 +1495,7 @@ export function GardenPanel({
                   onOpen={drillInto}
                   selectedId={livingTrail[0] ?? ''}
                   tenderSessionLabels={tenderSessionLabels}
+                  showNeedsHuman={needsHumanEnabled}
                   emptyMessage={<>The garden is empty. <code>attn seed plant &quot;what this is&quot;</code> puts something in it.</>}
                 />
               )}

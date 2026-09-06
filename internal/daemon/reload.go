@@ -337,6 +337,7 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		Effort:                  params.Effort,
 		LoginShellEnv:           d.cachedLoginShellEnv(),
 		WorkflowGuidanceEnabled: parseBooleanSetting(d.store.GetSetting(SettingWorkflowsEnabled)),
+		GardenNeedsHumanEnabled: parseBooleanSetting(d.store.GetSetting(SettingGardenNeedsHumanEnabled)),
 		AutoApprove:             false,
 		ContextWindowCap:        d.launchContextWindowCap(sessionID, string(session.Agent), d.isChiefOfStaffSession(sessionID)),
 	}

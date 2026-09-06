@@ -284,6 +284,27 @@ func (c *Client) SeedTransition(sessionID, seedID, verb, reason, member string, 
 	return resp.SeedTransitionResult, nil
 }
 
+func (c *Client) SeedQuestion(sessionID, seedID, verb, body, member string) (*protocol.SeedQuestionResult, error) {
+	msg := protocol.SeedQuestionMessage{Cmd: protocol.CmdSeedQuestion, SeedID: seedID, Verb: verb}
+	if sessionID != "" {
+		msg.SourceSessionID = protocol.Ptr(sessionID)
+	}
+	if body != "" {
+		msg.Body = protocol.Ptr(body)
+	}
+	if member != "" {
+		msg.Member = protocol.Ptr(member)
+	}
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	if resp.SeedQuestionResult == nil {
+		return nil, fmt.Errorf("the daemon accepted the question change but returned no seed")
+	}
+	return resp.SeedQuestionResult, nil
+}
+
 func (c *Client) SeedNote(sessionID, seedID, body, member, kind string, ring bool, artifact *protocol.SeedArtifactReference) (*protocol.SeedNoteResult, error) {
 	msg := protocol.SeedNoteMessage{Cmd: protocol.CmdSeedNote, SeedID: seedID, Body: body, Artifact: artifact}
 	if sessionID != "" {

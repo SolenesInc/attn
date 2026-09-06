@@ -52,6 +52,7 @@ type SpawnOptions struct {
 	LoginShellEnv []string
 
 	WorkflowGuidanceEnabled bool
+	GardenNeedsHumanEnabled bool
 
 	// Yolo overrides AutoApprove.
 	AutoApprove bool

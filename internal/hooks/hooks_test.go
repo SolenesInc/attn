@@ -299,6 +299,26 @@ func TestLaunchInstructionsGateGardenGuidance(t *testing.T) {
 	}
 }
 
+func TestLaunchInstructionsGateGardenNeedsHumanGuidance(t *testing.T) {
+	off := Launch{Garden: true}.Instructions()
+	if strings.Contains(off, GardenNeedsHumanGuidance) {
+		t.Fatalf("disabled launch carried needs-human guidance:\n%s", off)
+	}
+
+	withoutGarden := Launch{GardenNeedsHuman: true}.Instructions()
+	if strings.Contains(withoutGarden, GardenNeedsHumanGuidance) {
+		t.Fatalf("outpost launch carried needs-human guidance:\n%s", withoutGarden)
+	}
+
+	on := Launch{Garden: true, GardenNeedsHuman: true}.Instructions()
+	if !strings.Contains(on, GardenNeedsHumanGuidance) {
+		t.Fatalf("enabled home launch dropped needs-human guidance:\n%s", on)
+	}
+	if strings.Index(on, GardenNeedsHumanGuidance) < strings.Index(on, GardenGuidance) {
+		t.Fatalf("needs-human guidance preceded the Garden instructions:\n%s", on)
+	}
+}
+
 func TestGardenGuidanceRequiresReadingUpdateNotificationsWithoutActing(t *testing.T) {
 	for _, want := range []string{
 		"run the suggested command to read it",

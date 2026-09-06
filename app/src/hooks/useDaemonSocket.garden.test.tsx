@@ -176,6 +176,32 @@ describe('useDaemonSocket garden', () => {
     );
   });
 
+  it('sends and settles a typed seed question action', async () => {
+    const { ws, hook } = await renderWithGarden();
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = hook.result.current.sendSeedQuestion('s-call11', 'dismiss', 'The agent owns this choice.');
+    });
+    const command = ws.sent.map((raw) => JSON.parse(raw))
+      .find((message) => message.cmd === 'seed_question');
+    expect(command).toMatchObject({
+      seed_id: 's-call11',
+      verb: 'dismiss',
+      body: 'The agent owns this choice.',
+    });
+
+    const result = { seed: seed('s-call11', 'Choose the storage model') };
+    act(() => {
+      ws.emit({
+        event: 'seed_question_result',
+        request_id: command.request_id,
+        success: true,
+        result,
+      });
+    });
+    await expect(pending).resolves.toEqual(result);
+  });
+
   it('reads a garden-less daemon as an empty garden', async () => {
     const { onSeedsUpdate } = await renderWithGarden();
 
