@@ -86,6 +86,7 @@ import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
   handleAutoModeDaemonEvent,
   type AutoModeConfigEdit,
+  type AutoModePolicyEdit,
   type AutoModePromotion,
   type AutoModeState,
 } from './daemonAutoModeEvents';
@@ -3162,12 +3163,15 @@ export function useDaemonSocket({
   );
 
   const sendAutoModePolicySet = useCallback(
-    (approvalPolicy: string | null, sandboxMode: string | null): Promise<AutoModeConfigEdit> => {
+    (edit: AutoModePolicyEdit): Promise<AutoModeConfigEdit> => {
       return sendRequest<AutoModeConfigEdit>(
         'automode_policy_set',
         {
-          ...(approvalPolicy === null ? {} : { approval_policy: approvalPolicy }),
-          ...(sandboxMode === null ? {} : { sandbox_mode: sandboxMode }),
+          ...(edit.approvalPolicy === undefined ? {} : { approval_policy: edit.approvalPolicy }),
+          ...(edit.sandboxMode === undefined ? {} : { sandbox_mode: edit.sandboxMode }),
+          ...(edit.allowLocalBinding === undefined
+            ? {}
+            : { allow_local_binding: edit.allowLocalBinding }),
         },
         'Saving the approval policy timed out',
       );

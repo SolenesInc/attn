@@ -19,7 +19,7 @@ const config = (over: Partial<AutoModeConfigInfo> = {}): AutoModeConfigInfo => (
   environment: { slots: [{ id: 'domains', values: ['read-when-it-opened.corp'] }], notes: [] },
   rules: [],
   shipped_rules: [],
-  network: { enabled: true, allowed_domains: [], denied_domains: [] },
+  network: { enabled: true, allowed_domains: [], denied_domains: [], allow_local_binding: false },
   shipped_denied_domains: [],
   legacy_patterns: [],
   ...over,

@@ -33,6 +33,9 @@ export type Network = {
   enabled: boolean;
   allowedDomains: readonly string[];
   deniedDomains: readonly string[];
+  // Off unless the daemon says otherwise: the proxy hard denies a host that
+  // resolves to a loopback or private address while this is false.
+  allowLocalBinding: boolean;
 };
 
 export type ApprovalConfig = {
@@ -65,7 +68,12 @@ export class ApprovalConfigError extends Error {
   }
 }
 
-export const defaultNetwork: Network = { enabled: true, allowedDomains: [], deniedDomains: [] };
+export const defaultNetwork: Network = {
+  enabled: true,
+  allowedDomains: [],
+  deniedDomains: [],
+  allowLocalBinding: false,
+};
 
 export const defaultApprovalConfig: ApprovalConfig = {
   enabledDefault: true,
@@ -181,11 +189,21 @@ function readNetwork(value: unknown): Network {
   if (typeof value !== "object" || Array.isArray(value)) {
     throw new ApprovalConfigError("network", "network must be an object");
   }
-  const raw = value as { enabled?: unknown; allowed_domains?: unknown; denied_domains?: unknown };
+  const raw = value as {
+    enabled?: unknown;
+    allowed_domains?: unknown;
+    denied_domains?: unknown;
+    allow_local_binding?: unknown;
+  };
   return {
     enabled: readBoolean(raw.enabled, "network.enabled", defaultNetwork.enabled),
     allowedDomains: readDomains(raw.allowed_domains, "network.allowed_domains"),
     deniedDomains: readDomains(raw.denied_domains, "network.denied_domains"),
+    allowLocalBinding: readBoolean(
+      raw.allow_local_binding,
+      "network.allow_local_binding",
+      defaultNetwork.allowLocalBinding,
+    ),
   };
 }
 

@@ -1541,9 +1541,10 @@ export interface SlotElement {
 }
 
 export interface Network {
-    allowed_domains: string[];
-    denied_domains:  string[];
-    enabled:         boolean;
+    allow_local_binding: boolean;
+    allowed_domains:     string[];
+    denied_domains:      string[];
+    enabled:             boolean;
     [property: string]: any;
 }
 
@@ -1762,17 +1763,19 @@ export enum AutoModeHostRemoveMessageCmd {
 }
 
 export interface AutoModeNetworkInfo {
-    allowed_domains: string[];
-    denied_domains:  string[];
-    enabled:         boolean;
+    allow_local_binding: boolean;
+    allowed_domains:     string[];
+    denied_domains:      string[];
+    enabled:             boolean;
     [property: string]: any;
 }
 
 export interface AutoModePolicySetMessage {
-    approval_policy?: string;
-    cmd:              AutoModePolicySetMessageCmd;
-    request_id?:      string;
-    sandbox_mode?:    string;
+    allow_local_binding?: boolean;
+    approval_policy?:     string;
+    cmd:                  AutoModePolicySetMessageCmd;
+    request_id?:          string;
+    sandbox_mode?:        string;
     [property: string]: any;
 }
 
@@ -16112,6 +16115,7 @@ const typeMap: any = {
         { json: "values", js: "values", typ: a("") },
     ], "any"),
     "Network": o([
+        { json: "allow_local_binding", js: "allow_local_binding", typ: true },
         { json: "allowed_domains", js: "allowed_domains", typ: a("") },
         { json: "denied_domains", js: "denied_domains", typ: a("") },
         { json: "enabled", js: "enabled", typ: true },
@@ -16249,11 +16253,13 @@ const typeMap: any = {
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
     "AutoModeNetworkInfo": o([
+        { json: "allow_local_binding", js: "allow_local_binding", typ: true },
         { json: "allowed_domains", js: "allowed_domains", typ: a("") },
         { json: "denied_domains", js: "denied_domains", typ: a("") },
         { json: "enabled", js: "enabled", typ: true },
     ], "any"),
     "AutoModePolicySetMessage": o([
+        { json: "allow_local_binding", js: "allow_local_binding", typ: u(undefined, true) },
         { json: "approval_policy", js: "approval_policy", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("AutoModePolicySetMessageCmd") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },

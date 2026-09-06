@@ -2,7 +2,7 @@ package daemon
 
 import (
 	"context"
-	"net"
+
 	"strings"
 	"time"
 
@@ -10,8 +10,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Only a human adds a rule or a host, so adding is the app's alone. Removal and the policy
-// answer on both surfaces so the CLI can undo; a shipped forbidden rule keeps a session out.
+// Every command here is the app's: a human in the app is the trust boundary a caller on
+// the unix socket cannot fake, and that surface only ever records a proposal.
 
 func (d *Daemon) handleAutoModeGet(client *wsClient, msg *protocol.AutoModeGetMessage) {
 	requestID := strings.TrimSpace(msg.RequestID)
@@ -173,7 +173,6 @@ func (d *Daemon) handleAutoModeEnvNotesWS(client *wsClient, msg *protocol.AutoMo
 	d.sendToClient(client, result)
 }
 
-
 const autoModePluginName = "attn-pi"
 
 // The driver hosts the proxy, so a host change has to reach it now rather than at the
@@ -224,25 +223,6 @@ func (d *Daemon) editAutoModeConfigWS(client *wsClient, cmd, requestID string, e
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) editAutoModeConfigUnix(conn net.Conn, cmd string, edit autoModeConfigEdit) {
-	if !d.requireAutoModeStore(conn) {
-		return
-	}
-	cfg, err := edit()
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
-	d.logf("automode: %s", cmd)
-	d.announceAutoModeConfig(cfg)
-	d.sendAutoModeResponse(conn, protocol.Response{
-		Ok: true,
-		AutomodeConfigResult: &protocol.AutoModeConfigResult{
-			Config: autoModeConfigInfo(cfg),
-		},
-	})
-}
-
 func (d *Daemon) addAutoModeRule(msg *protocol.AutoModeRuleAddMessage) autoModeConfigEdit {
 	return func() (automode.Config, error) {
 		return d.store.AddAutoModeRule(automode.Rule{
@@ -279,8 +259,11 @@ func (d *Daemon) removeAutoModeHost(msg *protocol.AutoModeHostRemoveMessage) aut
 
 func (d *Daemon) setAutoModePolicy(msg *protocol.AutoModePolicySetMessage) autoModeConfigEdit {
 	return func() (automode.Config, error) {
-		return d.store.SetAutoModePolicy(
-			trimmedOption(msg.ApprovalPolicy), trimmedOption(msg.SandboxMode), time.Now())
+		return d.store.SetAutoModePolicy(automode.PolicyAmendment{
+			ApprovalPolicy:    trimmedOption(msg.ApprovalPolicy),
+			SandboxMode:       trimmedOption(msg.SandboxMode),
+			AllowLocalBinding: msg.AllowLocalBinding,
+		}, time.Now())
 	}
 }
 
@@ -301,10 +284,6 @@ func (d *Daemon) handleAutoModeRuleRemoveWS(client *wsClient, msg *protocol.Auto
 		protocol.Deref(msg.RequestID), d.removeAutoModeRule(msg))
 }
 
-func (d *Daemon) handleAutoModeRuleRemove(conn net.Conn, msg *protocol.AutoModeRuleRemoveMessage) {
-	d.editAutoModeConfigUnix(conn, protocol.CmdAutoModeRuleRemove, d.removeAutoModeRule(msg))
-}
-
 func (d *Daemon) handleAutoModeHostAdd(client *wsClient, msg *protocol.AutoModeHostAddMessage) {
 	d.editAutoModeConfigWS(client, protocol.CmdAutoModeHostAdd, msg.RequestID, d.addAutoModeHost(msg))
 }
@@ -314,15 +293,7 @@ func (d *Daemon) handleAutoModeHostRemoveWS(client *wsClient, msg *protocol.Auto
 		protocol.Deref(msg.RequestID), d.removeAutoModeHost(msg))
 }
 
-func (d *Daemon) handleAutoModeHostRemove(conn net.Conn, msg *protocol.AutoModeHostRemoveMessage) {
-	d.editAutoModeConfigUnix(conn, protocol.CmdAutoModeHostRemove, d.removeAutoModeHost(msg))
-}
-
 func (d *Daemon) handleAutoModePolicySetWS(client *wsClient, msg *protocol.AutoModePolicySetMessage) {
 	d.editAutoModeConfigWS(client, protocol.CmdAutoModePolicySet,
 		protocol.Deref(msg.RequestID), d.setAutoModePolicy(msg))
-}
-
-func (d *Daemon) handleAutoModePolicySet(conn net.Conn, msg *protocol.AutoModePolicySetMessage) {
-	d.editAutoModeConfigUnix(conn, protocol.CmdAutoModePolicySet, d.setAutoModePolicy(msg))
 }

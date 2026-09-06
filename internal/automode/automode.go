@@ -38,6 +38,9 @@ type Network struct {
 	Enabled        bool     `json:"enabled"`
 	AllowedDomains []string `json:"allowed_domains"`
 	DeniedDomains  []string `json:"denied_domains"`
+	// Off by default: with it unset the proxy hard denies a host that resolves to a
+	// loopback or private address, whoever allowed the name.
+	AllowLocalBinding bool `json:"allow_local_binding"`
 }
 
 const (
@@ -151,8 +154,8 @@ func ShippedDeniedDomains(wsPort string) []string {
 	return domains
 }
 
-// rule add and host add only ever write a proposal, the path an agent is meant to
-// take. These four write the config itself, so they stay forbidden.
+// Every auto-mode write from the CLI is only a proposal, and these keep a session from
+// reaching for another way in. Defense in depth: the daemon refuses them anyway.
 func ShippedRules() []Rule {
 	forbid := func(justification string, literals ...string) Rule {
 		return Rule{
@@ -164,9 +167,9 @@ func ShippedRules() []Rule {
 	return []Rule{
 		forbid("the environment is what the reviewer reads; a session must not edit it",
 			"attn", "automode", "env"),
-		forbid("a session must not take away a rule it runs under",
+		forbid("a session must not take away a rule it runs under; propose it and a human decides",
 			"attn", "automode", "rule", "remove"),
-		forbid("a session must not take away a host rule it runs under",
+		forbid("a session must not take away a host rule it runs under; propose it and a human decides",
 			"attn", "automode", "host", "remove"),
 		forbid("a session must not choose its own approval policy or sandbox",
 			"attn", "automode", "policy"),
@@ -214,9 +217,10 @@ func shippedRuleKeys() map[string]bool {
 
 func ResolveNetwork(wsPort string, stored Network) Network {
 	resolved := Network{
-		Enabled:        stored.Enabled,
-		AllowedDomains: nonNil(stored.AllowedDomains),
-		DeniedDomains:  ShippedDeniedDomains(wsPort),
+		Enabled:           stored.Enabled,
+		AllowedDomains:    nonNil(stored.AllowedDomains),
+		DeniedDomains:     ShippedDeniedDomains(wsPort),
+		AllowLocalBinding: stored.AllowLocalBinding,
 	}
 	for _, domain := range stored.DeniedDomains {
 		resolved.DeniedDomains = appendUnique(resolved.DeniedDomains, domain)
@@ -230,9 +234,10 @@ func StripShippedNetwork(wsPort string, resolved Network) Network {
 		shipped[domain] = true
 	}
 	stored := Network{
-		Enabled:        resolved.Enabled,
-		AllowedDomains: nonNil(resolved.AllowedDomains),
-		DeniedDomains:  []string{},
+		Enabled:           resolved.Enabled,
+		AllowedDomains:    nonNil(resolved.AllowedDomains),
+		DeniedDomains:     []string{},
+		AllowLocalBinding: resolved.AllowLocalBinding,
 	}
 	for _, domain := range resolved.DeniedDomains {
 		if !shipped[domain] {
@@ -270,19 +275,41 @@ func nonNil(values []string) []string {
 // Receipt: pi stops a session for a human question at 20 denials, and a denial is what prompts a proposal.
 const MaxPendingProposalsPerProposer = 20
 
+// The five amendments a proposal can carry. Every one of them is what the CLI records
+// and the app promotes; nothing outside the app writes the config.
 const (
-	KindRule = "rule"
-	KindHost = "host"
+	KindRule       = "rule"
+	KindRuleRemove = "rule_remove"
+	KindHost       = "host"
+	KindHostRemove = "host_remove"
+	KindPolicy     = "policy"
 
 	StatePending   = "pending"
 	StatePromoted  = "promoted"
 	StateDiscarded = "discarded"
 )
 
+func Kinds() []string {
+	return []string{KindRule, KindRuleRemove, KindHost, KindHostRemove, KindPolicy}
+}
+
 // One host amendment, as a proposal value and as the plugin reports it.
 type HostAmendment struct {
 	Host     string `json:"host"`
 	Decision string `json:"decision"`
+}
+
+// A policy amendment names only the fields it moves; a nil field stays as it stands.
+type PolicyAmendment struct {
+	ApprovalPolicy    *string `json:"approval_policy,omitempty"`
+	SandboxMode       *string `json:"sandbox_mode,omitempty"`
+	AllowLocalBinding *bool   `json:"allow_local_binding,omitempty"`
+}
+
+// The pattern of a rule to take away, on its own: the decision it carried is not
+// part of what identifies it.
+type PatternAmendment struct {
+	Pattern []PatternToken `json:"pattern"`
 }
 
 func ValidateRule(rule Rule) error {
@@ -403,20 +430,125 @@ func FormatHostValue(amendment HostAmendment) (string, error) {
 	return string(encoded), nil
 }
 
-func ValidateProposal(kind, target, value string) error {
+func ValidatePolicy(amendment PolicyAmendment) error {
+	if amendment.ApprovalPolicy == nil && amendment.SandboxMode == nil && amendment.AllowLocalBinding == nil {
+		return fmt.Errorf(
+			"a policy amendment names an approval policy, a sandbox mode or local binding; it named none")
+	}
+	if amendment.ApprovalPolicy != nil {
+		if err := ValidateApprovalPolicy(*amendment.ApprovalPolicy); err != nil {
+			return err
+		}
+	}
+	if amendment.SandboxMode != nil {
+		if err := ValidateSandboxMode(*amendment.SandboxMode); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ParsePolicyValue(value string) (PolicyAmendment, error) {
+	var amendment PolicyAmendment
+	if err := json.Unmarshal([]byte(value), &amendment); err != nil {
+		return PolicyAmendment{}, fmt.Errorf(
+			"a policy proposal value must be {\"approval_policy\"?,\"sandbox_mode\"?,"+
+				"\"allow_local_binding\"?} JSON: %w", err)
+	}
+	if err := ValidatePolicy(amendment); err != nil {
+		return PolicyAmendment{}, err
+	}
+	return amendment, nil
+}
+
+func FormatPolicyValue(amendment PolicyAmendment) (string, error) {
+	encoded, err := json.Marshal(amendment)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
+func ParsePatternValue(value string) ([]PatternToken, error) {
+	var amendment PatternAmendment
+	if err := json.Unmarshal([]byte(value), &amendment); err != nil {
+		return nil, fmt.Errorf("a rule_remove proposal value must be {\"pattern\":[…]} JSON: %w", err)
+	}
+	if err := ValidateRule(Rule{Pattern: amendment.Pattern, Decision: DecisionAllow}); err != nil {
+		return nil, err
+	}
+	return amendment.Pattern, nil
+}
+
+func FormatPatternValue(pattern []PatternToken) (string, error) {
+	encoded, err := json.Marshal(PatternAmendment{Pattern: pattern})
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
+func DescribePolicy(amendment PolicyAmendment) string {
+	parts := []string{}
+	if amendment.ApprovalPolicy != nil {
+		parts = append(parts, "approval "+*amendment.ApprovalPolicy)
+	}
+	if amendment.SandboxMode != nil {
+		parts = append(parts, "sandbox "+*amendment.SandboxMode)
+	}
+	if amendment.AllowLocalBinding != nil {
+		parts = append(parts, fmt.Sprintf("local binding %t", *amendment.AllowLocalBinding))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// wsPort is this daemon's own control port; passing "" only skips the shipped-host check.
+func ValidateProposal(kind, target, value, wsPort string) error {
 	if strings.TrimSpace(target) != "" {
 		return fmt.Errorf("a %s proposal takes no target", kind)
 	}
 	switch kind {
 	case KindRule:
-		_, err := ParseRuleValue(value)
-		return err
+		rule, err := ParseRuleValue(value)
+		if err != nil {
+			return err
+		}
+		return refuseShippedRule(rule.Pattern, "rewritten")
+	case KindRuleRemove:
+		pattern, err := ParsePatternValue(value)
+		if err != nil {
+			return err
+		}
+		return refuseShippedRule(pattern, "removed")
 	case KindHost:
 		_, err := ParseHostValue(value)
 		return err
+	case KindHostRemove:
+		amendment, err := ParseHostValue(value)
+		if err != nil {
+			return err
+		}
+		if amendment.Decision == HostDeny && IsShippedDomain(wsPort, amendment.Host) {
+			return fmt.Errorf(
+				"%q is a built-in denied host and cannot be removed: it is this daemon's own "+
+					"control port", amendment.Host)
+		}
+		return nil
+	case KindPolicy:
+		_, err := ParsePolicyValue(value)
+		return err
 	default:
-		return fmt.Errorf("unknown proposal kind %q (want %s or %s)", kind, KindRule, KindHost)
+		return fmt.Errorf("unknown proposal kind %q (want %s)", kind, strings.Join(Kinds(), ", "))
 	}
+}
+
+func refuseShippedRule(pattern []PatternToken, verb string) error {
+	if !IsShippedRule(pattern) {
+		return nil
+	}
+	return fmt.Errorf(
+		"%q is a built-in rule and cannot be %s: it is what stops a session under auto mode "+
+			"from rewriting its own policy", Rule{Pattern: pattern}.Describe(), verb)
 }
 
 // DescribeProposal is what the review list and the CLI print for one proposal.
@@ -426,9 +558,21 @@ func DescribeProposal(kind, value string) string {
 		if rule, err := ParseRuleValue(value); err == nil {
 			return rule.Decision + " " + rule.Describe()
 		}
+	case KindRuleRemove:
+		if pattern, err := ParsePatternValue(value); err == nil {
+			return "remove rule " + Rule{Pattern: pattern}.Describe()
+		}
 	case KindHost:
 		if amendment, err := ParseHostValue(value); err == nil {
 			return amendment.Decision + " " + amendment.Host
+		}
+	case KindHostRemove:
+		if amendment, err := ParseHostValue(value); err == nil {
+			return "remove " + amendment.Decision + " " + amendment.Host
+		}
+	case KindPolicy:
+		if amendment, err := ParsePolicyValue(value); err == nil {
+			return DescribePolicy(amendment)
 		}
 	}
 	return value

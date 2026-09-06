@@ -831,24 +831,24 @@ func TestAutoModeHostAddAndRemoveRoundTrip(t *testing.T) {
 func TestSetAutoModePolicyNamesWhatItRefuses(t *testing.T) {
 	s := New()
 	now := time.Now()
-	cfg, err := s.SetAutoModePolicy(strPtr(automode.PolicyNever), nil, now)
+	cfg, err := s.SetAutoModePolicy(automode.PolicyAmendment{ApprovalPolicy: strPtr(automode.PolicyNever)}, now)
 	if err != nil {
 		t.Fatalf("set approval policy: %v", err)
 	}
 	if cfg.ApprovalPolicy != automode.PolicyNever || cfg.SandboxMode != automode.SandboxWorkspaceWrite {
 		t.Fatalf("policy = %q/%q, want only the approval policy changed", cfg.ApprovalPolicy, cfg.SandboxMode)
 	}
-	cfg, err = s.SetAutoModePolicy(nil, strPtr(automode.SandboxReadOnly), now)
+	cfg, err = s.SetAutoModePolicy(automode.PolicyAmendment{SandboxMode: strPtr(automode.SandboxReadOnly)}, now)
 	if err != nil {
 		t.Fatalf("set sandbox mode: %v", err)
 	}
 	if cfg.ApprovalPolicy != automode.PolicyNever || cfg.SandboxMode != automode.SandboxReadOnly {
 		t.Fatalf("policy = %q/%q, want both settings held", cfg.ApprovalPolicy, cfg.SandboxMode)
 	}
-	if _, err := s.SetAutoModePolicy(nil, nil, now); err == nil {
+	if _, err := s.SetAutoModePolicy(automode.PolicyAmendment{}, now); err == nil {
 		t.Error("naming neither field was accepted")
 	}
-	_, err = s.SetAutoModePolicy(strPtr("yolo"), nil, now)
+	_, err = s.SetAutoModePolicy(automode.PolicyAmendment{ApprovalPolicy: strPtr("yolo")}, now)
 	if err == nil || !strings.Contains(err.Error(), automode.PolicyOnRequest) {
 		t.Errorf("error does not name the choices: %v", err)
 	}
@@ -862,3 +862,140 @@ func TestSetAutoModePolicyNamesWhatItRefuses(t *testing.T) {
 }
 
 func strPtr(value string) *string { return &value }
+
+func promoteValue(t *testing.T, s *Store, kind, value string, now time.Time) automode.Config {
+	t.Helper()
+	proposal, err := s.CreateAutoModeProposal(kind, "", value, "session-a", now)
+	if err != nil {
+		t.Fatalf("propose %s: %v", kind, err)
+	}
+	_, cfg, err := s.PromoteAutoModeProposal(proposal.ID, now)
+	if err != nil {
+		t.Fatalf("promote %s: %v", kind, err)
+	}
+	return cfg
+}
+
+// One test over every kind: a proposal is the only way the config moves, so each kind
+// has to reach the config the app promotes it into.
+func TestPromotingEveryAmendmentKindMovesTheConfig(t *testing.T) {
+	s := New()
+	now := time.Now().UTC()
+
+	cfg := promoteValue(t, s, automode.KindRule, ruleValue(t, automode.DecisionAllow, "", "git", "push"), now)
+	if got := ruleLines(userRules(cfg.Rules)); len(got) != 1 || got[0] != "allow git push" {
+		t.Fatalf("rules = %v after promoting a rule", got)
+	}
+	cfg = promoteValue(t, s, automode.KindHost, hostValue(t, "crates.io", automode.HostAllow), now)
+	if len(cfg.Network.AllowedDomains) != 1 || cfg.Network.AllowedDomains[0] != "crates.io" {
+		t.Fatalf("allowed = %v after promoting a host", cfg.Network.AllowedDomains)
+	}
+
+	pattern, err := automode.FormatPatternValue(automode.Tokens("git", "push"))
+	if err != nil {
+		t.Fatalf("format pattern: %v", err)
+	}
+	cfg = promoteValue(t, s, automode.KindRuleRemove, pattern, now)
+	if got := userRules(cfg.Rules); len(got) != 0 {
+		t.Fatalf("rules = %v after promoting a removal", ruleLines(got))
+	}
+	cfg = promoteValue(t, s, automode.KindHostRemove, hostValue(t, "crates.io", automode.HostAllow), now)
+	if len(cfg.Network.AllowedDomains) != 0 {
+		t.Fatalf("allowed = %v after promoting a host removal", cfg.Network.AllowedDomains)
+	}
+
+	policy, err := automode.FormatPolicyValue(automode.PolicyAmendment{
+		ApprovalPolicy:    strPtr(automode.PolicyNever),
+		AllowLocalBinding: boolPtr(true),
+	})
+	if err != nil {
+		t.Fatalf("format policy: %v", err)
+	}
+	cfg = promoteValue(t, s, automode.KindPolicy, policy, now)
+	if cfg.ApprovalPolicy != automode.PolicyNever || !cfg.Network.AllowLocalBinding {
+		t.Fatalf("policy = %q, local binding = %t", cfg.ApprovalPolicy, cfg.Network.AllowLocalBinding)
+	}
+	if cfg.SandboxMode != automode.SandboxWorkspaceWrite {
+		t.Fatalf("sandbox = %q, want the field the amendment did not name held", cfg.SandboxMode)
+	}
+	read, err := s.GetAutoModeConfig()
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	if read.ApprovalPolicy != automode.PolicyNever || !read.Network.AllowLocalBinding {
+		t.Fatalf("the promoted policy did not survive the read: %+v", read)
+	}
+}
+
+// A row planted straight into the table skips the check CreateAutoModeProposal makes,
+// which is what proves promotion refuses a shipped entry on its own.
+func TestPromotingAPlantedShippedAmendmentIsRefused(t *testing.T) {
+	s := New()
+	now := time.Now().UTC()
+	shipped := automode.ShippedRules()[0]
+	rule := ruleValue(t, automode.DecisionAllow, "",
+		shipped.Pattern[0].Alternatives[0], shipped.Pattern[1].Alternatives[0], shipped.Pattern[2].Alternatives[0])
+	pattern, err := automode.FormatPatternValue(shipped.Pattern)
+	if err != nil {
+		t.Fatalf("format pattern: %v", err)
+	}
+	values := map[string]string{automode.KindRule: rule, automode.KindRuleRemove: pattern}
+	if domains := automode.ShippedDeniedDomains(config.WSPort()); len(domains) > 0 {
+		values[automode.KindHostRemove] = hostValue(t, domains[0], automode.HostDeny)
+	}
+	for kind, value := range values {
+		if _, err := s.CreateAutoModeProposal(kind, "", value, "session-a", now); err == nil {
+			t.Errorf("a %s proposal over a built-in entry was recorded", kind)
+		}
+		res, err := s.db.Exec(`
+			INSERT INTO automode_proposals (kind, target, value, proposed_by, state, created_at)
+			VALUES (?, '', ?, ?, ?, ?)`,
+			kind, value, "session-a", automode.StatePending, now.Format(sortableTimeFormat))
+		if err != nil {
+			t.Fatalf("plant a %s row: %v", kind, err)
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			t.Fatalf("planted id: %v", err)
+		}
+		if _, _, err := s.PromoteAutoModeProposal(id, now); err == nil {
+			t.Errorf("promoting the planted %s row over a built-in entry succeeded", kind)
+		}
+	}
+	cfg, err := s.GetAutoModeConfig()
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	if len(userRules(cfg.Rules)) != 0 {
+		t.Fatalf("rules = %v, want the built-in entries untouched", ruleLines(cfg.Rules))
+	}
+	if len(automode.StripShippedNetwork(config.WSPort(), cfg.Network).DeniedDomains) != 0 {
+		t.Fatalf("denied = %v, want the built-in host untouched", cfg.Network.DeniedDomains)
+	}
+}
+
+// The stored JSON on an installed machine predates allow_local_binding, and reading it
+// must land on the closed half of the switch rather than on nothing at all.
+func TestANetworkRowWrittenBeforeLocalBindingReadsAsOff(t *testing.T) {
+	s := New()
+	now := time.Now().UTC()
+	if _, err := s.SetAutoModeEnabledDefault(true, now); err != nil {
+		t.Fatalf("seed the row: %v", err)
+	}
+	if _, err := s.db.Exec(`UPDATE automode_config SET network = ? WHERE id = 1`,
+		`{"enabled":true,"allowed_domains":["crates.io"],"denied_domains":[]}`); err != nil {
+		t.Fatalf("plant the old network JSON: %v", err)
+	}
+	cfg, err := s.GetAutoModeConfig()
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	if cfg.Network.AllowLocalBinding {
+		t.Error("a row written before allow_local_binding read as allowed")
+	}
+	if len(cfg.Network.AllowedDomains) != 1 || cfg.Network.AllowedDomains[0] != "crates.io" {
+		t.Errorf("allowed = %v, want the old row's hosts", cfg.Network.AllowedDomains)
+	}
+}
+
+func boolPtr(value bool) *bool { return &value }

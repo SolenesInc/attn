@@ -119,7 +119,8 @@ func TestPluginDriverRegister_AnswersAnAutoModeDriverWithTheStoredConfig(t *test
 		t.Fatalf("PromoteReportedAmendment: %v", err)
 	}
 	policy := automode.PolicyNever
-	if _, err := d.store.SetAutoModePolicy(&policy, nil, time.Now()); err != nil {
+	if _, err := d.store.SetAutoModePolicy(
+		automode.PolicyAmendment{ApprovalPolicy: &policy}, time.Now()); err != nil {
 		t.Fatalf("SetAutoModePolicy: %v", err)
 	}
 

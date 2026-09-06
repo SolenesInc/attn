@@ -3,6 +3,7 @@ import type {
   AutoModeConfigInfo,
   AutoModeDenialInfo,
   AutoModeEnvironmentSlot,
+  AutoModePolicyEdit,
   AutoModeRuleInfo,
 } from '../hooks/daemonAutoModeEvents';
 import type { AutoModePolicy } from '../hooks/useAutoModePolicy';
@@ -212,10 +213,10 @@ function PolicyEditor({ config, policy }: PolicyEditorProps) {
   const [failure, setFailure] = useState<string | null>(null);
   const busy = policy.editing === 'policy';
 
-  const write = async (approvalPolicy: string | null, sandboxMode: string | null) => {
+  const write = async (change: AutoModePolicyEdit) => {
     setFailure(null);
     try {
-      await policy.setPolicy(approvalPolicy, sandboxMode);
+      await policy.setPolicy(change);
     } catch (err) {
       setFailure(err instanceof Error ? err.message : 'Could not save the policy');
     }
@@ -243,7 +244,7 @@ function PolicyEditor({ config, policy }: PolicyEditorProps) {
             aria-label="Approval policy"
             value={config.approval_policy}
             disabled={busy}
-            onChange={(event) => void write(event.target.value, null)}
+            onChange={(event) => void write({ approvalPolicy: event.target.value })}
           >
             {APPROVAL_POLICIES.map((choice) => (
               <option key={choice} value={choice}>{choice}</option>
@@ -260,7 +261,7 @@ function PolicyEditor({ config, policy }: PolicyEditorProps) {
             aria-label="Sandbox mode"
             value={config.sandbox_mode}
             disabled={busy}
-            onChange={(event) => void write(null, event.target.value)}
+            onChange={(event) => void write({ sandboxMode: event.target.value })}
           >
             {SANDBOX_MODES.map((choice) => (
               <option key={choice} value={choice}>{choice}</option>
@@ -421,6 +422,7 @@ interface HostEditorProps {
 function HostEditor({ config, policy }: HostEditorProps) {
   return (
     <>
+      <LocalBindingToggle config={config} policy={policy} />
       <HostList
         decision="allow"
         testID="automode-hosts-allow"
@@ -438,6 +440,43 @@ function HostEditor({ config, policy }: HostEditorProps) {
         policy={policy}
       />
     </>
+  );
+}
+
+function LocalBindingToggle({ config, policy }: HostEditorProps) {
+  const [failure, setFailure] = useState<string | null>(null);
+  const busy = policy.editing === 'policy';
+
+  const write = async (allowLocalBinding: boolean) => {
+    setFailure(null);
+    try {
+      await policy.setPolicy({ allowLocalBinding });
+    } catch (err) {
+      setFailure(err instanceof Error ? err.message : 'Could not save the network policy');
+    }
+  };
+
+  return (
+    <div className="automode-editor">
+      <label className="automode-toggle">
+        <input
+          type="checkbox"
+          data-testid="automode-allow-local-binding"
+          checked={config.network.allow_local_binding}
+          disabled={busy}
+          onChange={(event) => void write(event.target.checked)}
+        />
+        <span>
+          Reach localhost and private networks
+          <span className="settings-description">
+            Let sandboxed commands reach localhost and private networks through the proxy.
+          </span>
+        </span>
+      </label>
+      {failure && (
+        <span className="settings-warning" data-testid="automode-network-error">{failure}</span>
+      )}
+    </div>
   );
 }
 
@@ -582,6 +621,7 @@ function EnvironmentEditor({ config, slots, policy }: EnvironmentEditorProps) {
           rules: now.config.rules.map(ruleLine),
           allowedHosts: now.config.network.allowed_domains,
           deniedHosts: now.config.network.denied_domains,
+          allowLocalBinding: now.config.network.allow_local_binding,
           legacyPatterns: now.config.legacy_patterns,
           proposals: now.policy.state?.proposals.length ?? 0,
           environment: {

@@ -147,6 +147,8 @@ func decodeRules(raw string) ([]automode.Rule, error) {
 	return rules, nil
 }
 
+// A row written before allow_local_binding existed has no such key, and DefaultNetwork
+// leaves it off — the safe half of the switch.
 func decodeNetwork(raw string) (automode.Network, error) {
 	network := automode.DefaultNetwork()
 	if strings.TrimSpace(raw) == "" {
@@ -172,30 +174,26 @@ func (s *Store) SetAutoModeEnabledDefault(enabled bool, now time.Time) (automode
 }
 
 // A nil field is one the caller did not name, which leaves it as it stands.
-func (s *Store) SetAutoModePolicy(approvalPolicy, sandboxMode *string, now time.Time) (automode.Config, error) {
-	if approvalPolicy == nil && sandboxMode == nil {
-		return automode.Config{}, fmt.Errorf(
-			"automode policy takes an approval policy, a sandbox mode, or both; it was given neither")
-	}
-	if approvalPolicy != nil {
-		if err := automode.ValidateApprovalPolicy(*approvalPolicy); err != nil {
-			return automode.Config{}, err
-		}
-	}
-	if sandboxMode != nil {
-		if err := automode.ValidateSandboxMode(*sandboxMode); err != nil {
-			return automode.Config{}, err
-		}
+func (s *Store) SetAutoModePolicy(amendment automode.PolicyAmendment, now time.Time) (automode.Config, error) {
+	if err := automode.ValidatePolicy(amendment); err != nil {
+		return automode.Config{}, err
 	}
 	return s.mutateAutoModeConfig(now, func(cfg *automode.Config) error {
-		if approvalPolicy != nil {
-			cfg.ApprovalPolicy = *approvalPolicy
-		}
-		if sandboxMode != nil {
-			cfg.SandboxMode = *sandboxMode
-		}
+		applyPolicyAmendment(cfg, amendment)
 		return nil
 	})
+}
+
+func applyPolicyAmendment(cfg *automode.Config, amendment automode.PolicyAmendment) {
+	if amendment.ApprovalPolicy != nil {
+		cfg.ApprovalPolicy = *amendment.ApprovalPolicy
+	}
+	if amendment.SandboxMode != nil {
+		cfg.SandboxMode = *amendment.SandboxMode
+	}
+	if amendment.AllowLocalBinding != nil {
+		cfg.Network.AllowLocalBinding = *amendment.AllowLocalBinding
+	}
 }
 
 func (s *Store) AddAutoModeRule(rule automode.Rule, now time.Time) (automode.Config, error) {
@@ -224,22 +222,26 @@ func (s *Store) RemoveAutoModeRule(pattern []automode.PatternToken, now time.Tim
 				"mode from rewriting its own policy", automode.Rule{Pattern: pattern}.Describe())
 	}
 	return s.mutateAutoModeConfig(now, func(cfg *automode.Config) error {
-		key := automode.PatternKey(pattern)
-		kept := make([]automode.Rule, 0, len(cfg.Rules))
-		found := false
-		for _, rule := range cfg.Rules {
-			if automode.PatternKey(rule.Pattern) == key {
-				found = true
-				continue
-			}
-			kept = append(kept, rule)
-		}
-		if !found {
-			return fmt.Errorf("no rule matches %q", automode.Rule{Pattern: pattern}.Describe())
-		}
-		cfg.Rules = kept
-		return nil
+		return removeRuleFrom(cfg, pattern)
 	})
+}
+
+func removeRuleFrom(cfg *automode.Config, pattern []automode.PatternToken) error {
+	key := automode.PatternKey(pattern)
+	kept := make([]automode.Rule, 0, len(cfg.Rules))
+	found := false
+	for _, rule := range cfg.Rules {
+		if automode.PatternKey(rule.Pattern) == key {
+			found = true
+			continue
+		}
+		kept = append(kept, rule)
+	}
+	if !found {
+		return fmt.Errorf("no rule matches %q", automode.Rule{Pattern: pattern}.Describe())
+	}
+	cfg.Rules = kept
+	return nil
 }
 
 func (s *Store) AddAutoModeHost(amendment automode.HostAmendment, now time.Time) (automode.Config, error) {
@@ -265,25 +267,29 @@ func (s *Store) RemoveAutoModeHost(amendment automode.HostAmendment, now time.Ti
 				"port", amendment.Host)
 	}
 	return s.mutateAutoModeConfig(now, func(cfg *automode.Config) error {
-		list := &cfg.Network.AllowedDomains
-		if amendment.Decision == automode.HostDeny {
-			list = &cfg.Network.DeniedDomains
-		}
-		kept := make([]string, 0, len(*list))
-		found := false
-		for _, host := range *list {
-			if host == amendment.Host {
-				found = true
-				continue
-			}
-			kept = append(kept, host)
-		}
-		if !found {
-			return fmt.Errorf("%q is not in the %sed hosts", amendment.Host, amendment.Decision)
-		}
-		*list = kept
-		return nil
+		return removeHostFrom(cfg, amendment)
 	})
+}
+
+func removeHostFrom(cfg *automode.Config, amendment automode.HostAmendment) error {
+	list := &cfg.Network.AllowedDomains
+	if amendment.Decision == automode.HostDeny {
+		list = &cfg.Network.DeniedDomains
+	}
+	kept := make([]string, 0, len(*list))
+	found := false
+	for _, host := range *list {
+		if host == amendment.Host {
+			found = true
+			continue
+		}
+		kept = append(kept, host)
+	}
+	if !found {
+		return fmt.Errorf("%q is not in the %sed hosts", amendment.Host, amendment.Decision)
+	}
+	*list = kept
+	return nil
 }
 
 // A host holds one decision: allowing what was denied moves it rather than listing it twice.
@@ -321,18 +327,26 @@ func upsertRule(rules []automode.Rule, rule automode.Rule) []automode.Rule {
 	return append(rules, rule)
 }
 
+// Every amendment lands here, promoted or reported: validation refused the shipped
+// entries once already, and this is where they are refused a second time.
 func applyAutoModeAmendment(cfg *automode.Config, kind, value string) error {
+	if err := automode.ValidateProposal(kind, "", value, config.WSPort()); err != nil {
+		return err
+	}
 	switch kind {
 	case automode.KindRule:
 		rule, err := automode.ParseRuleValue(value)
 		if err != nil {
 			return err
 		}
-		if automode.IsShippedRule(rule.Pattern) {
-			return fmt.Errorf("%q is a built-in rule and cannot be rewritten", rule.Describe())
-		}
 		cfg.Rules = upsertRule(cfg.Rules, rule)
 		return nil
+	case automode.KindRuleRemove:
+		pattern, err := automode.ParsePatternValue(value)
+		if err != nil {
+			return err
+		}
+		return removeRuleFrom(cfg, pattern)
 	case automode.KindHost:
 		amendment, err := automode.ParseHostValue(value)
 		if err != nil {
@@ -340,13 +354,26 @@ func applyAutoModeAmendment(cfg *automode.Config, kind, value string) error {
 		}
 		applyHostAmendment(&cfg.Network, amendment)
 		return nil
+	case automode.KindHostRemove:
+		amendment, err := automode.ParseHostValue(value)
+		if err != nil {
+			return err
+		}
+		return removeHostFrom(cfg, amendment)
+	case automode.KindPolicy:
+		amendment, err := automode.ParsePolicyValue(value)
+		if err != nil {
+			return err
+		}
+		applyPolicyAmendment(cfg, amendment)
+		return nil
 	default:
-		return fmt.Errorf("unknown proposal kind %q (want %s or %s)", kind, automode.KindRule, automode.KindHost)
+		return fmt.Errorf("unknown proposal kind %q (want %s)", kind, strings.Join(automode.Kinds(), ", "))
 	}
 }
 
 func (s *Store) CreateAutoModeProposal(kind, target, value, proposedBy string, now time.Time) (AutoModeProposal, error) {
-	if err := automode.ValidateProposal(kind, target, value); err != nil {
+	if err := automode.ValidateProposal(kind, target, value, config.WSPort()); err != nil {
 		return AutoModeProposal{}, err
 	}
 	s.mu.Lock()
@@ -483,7 +510,7 @@ func (s *Store) PromoteAutoModeProposal(id int64, now time.Time) (AutoModePropos
 // PromoteReportedAmendment is the pi relay's path: a human answered "don't ask again"
 // inside the session, so the record and the promotion are one move.
 func (s *Store) PromoteReportedAmendment(kind, value, proposedBy string, now time.Time) (AutoModeProposal, automode.Config, error) {
-	if err := automode.ValidateProposal(kind, "", value); err != nil {
+	if err := automode.ValidateProposal(kind, "", value, config.WSPort()); err != nil {
 		return AutoModeProposal{}, automode.Config{}, err
 	}
 	s.mu.Lock()

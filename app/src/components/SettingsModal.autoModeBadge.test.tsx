@@ -28,7 +28,7 @@ const autoModeState = (proposals: number): AutoModeState => ({
     environment: { slots: [], notes: [] },
     rules: [],
     shipped_rules: [],
-    network: { enabled: true, allowed_domains: [], denied_domains: [] },
+    network: { enabled: true, allowed_domains: [], denied_domains: [], allow_local_binding: false },
     shipped_denied_domains: [],
     legacy_patterns: [],
   },

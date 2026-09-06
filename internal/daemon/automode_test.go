@@ -743,11 +743,19 @@ func unixAutoModeCall(t *testing.T, d *Daemon, payload string) protocol.Response
 	return resp
 }
 
-func TestAddingARuleOrAHostIsNotReachableOverTheUnixSocket(t *testing.T) {
+func TestNoAutoModeWriteIsReachableOverTheUnixSocket(t *testing.T) {
 	d := newDaemonForTest(t)
+	if _, err := d.store.AddAutoModeRule(automode.Rule{
+		Pattern: automode.Tokens("git", "status"), Decision: automode.DecisionAllow,
+	}, time.Now()); err != nil {
+		t.Fatalf("seed a rule: %v", err)
+	}
 	for _, payload := range []string{
-		`{"cmd":"automode_rule_add","pattern":["git","status"],"request_id":"r1"}`,
+		`{"cmd":"automode_rule_add","pattern":["git","push"],"request_id":"r1"}`,
+		`{"cmd":"automode_rule_remove","pattern":["git","status"],"request_id":"r1"}`,
 		`{"cmd":"automode_host_add","host":"crates.io","decision":"allow","request_id":"r1"}`,
+		`{"cmd":"automode_host_remove","host":"crates.io","decision":"allow","request_id":"r1"}`,
+		`{"cmd":"automode_policy_set","approval_policy":"never","request_id":"r1"}`,
 		`{"cmd":"automode_model_set","models":["a/one"],"request_id":"r1"}`,
 	} {
 		resp := unixAutoModeCall(t, d, payload)
@@ -758,38 +766,118 @@ func TestAddingARuleOrAHostIsNotReachableOverTheUnixSocket(t *testing.T) {
 			t.Fatalf("%s was refused for the wrong reason: %q", payload, got)
 		}
 	}
-	if got := automodeShow(t, d); len(got.Config.Rules) != len(got.Config.ShippedRules) {
-		t.Fatalf("rules = %+v after a socket edit attempt", got.Config.Rules)
+	cfg := automodeShow(t, d).Config
+	if len(cfg.Rules) != len(cfg.ShippedRules)+1 {
+		t.Fatalf("rules = %+v after the socket edit attempts", cfg.Rules)
+	}
+	if cfg.ApprovalPolicy != automode.PolicyOnRequest {
+		t.Fatalf("approval policy = %q after the socket edit attempts", cfg.ApprovalPolicy)
 	}
 }
 
-// Taking a rule away is the reversal the CLI owes the app; a shipped forbidden rule is
-// what keeps a session under auto mode from reaching it.
-func TestTakingARuleAwayIsReachableOverTheUnixSocket(t *testing.T) {
+// The CLI's reversal is a proposal like every other amendment: an agent reaching the
+// socket can ask to drop a rule, and nothing moves until a human promotes it.
+func TestTakingARuleAwayOverTheUnixSocketOnlyProposes(t *testing.T) {
 	d := newDaemonForTest(t)
 	if _, err := d.store.AddAutoModeRule(automode.Rule{
 		Pattern: automode.Tokens("git", "status"), Decision: automode.DecisionAllow,
 	}, time.Now()); err != nil {
 		t.Fatalf("seed a rule: %v", err)
 	}
-	resp := unixAutoModeCall(t, d, `{"cmd":"automode_rule_remove","pattern":["git","status"]}`)
-	if !resp.Ok {
-		t.Fatalf("rule remove over the socket: %q", protocol.Deref(resp.Error))
+	before := automodeShow(t, d).Config
+
+	for _, tc := range []struct {
+		kind, value, summary string
+	}{
+		{automode.KindRuleRemove, `{"pattern":["git","status"]}`, "remove rule git status"},
+		{automode.KindHostRemove, `{"host":"crates.io","decision":"allow"}`, "remove allow crates.io"},
+		{automode.KindPolicy, `{"approval_policy":"never"}`, "approval never"},
+	} {
+		resp := automodePropose(t, d, tc.kind, "", tc.value)
+		if !resp.Ok {
+			t.Fatalf("%s proposal: %q", tc.kind, protocol.Deref(resp.Error))
+		}
+		if got := resp.AutomodeProposeResult.Proposal.Summary; got != tc.summary {
+			t.Errorf("%s summary = %q, want %q", tc.kind, got, tc.summary)
+		}
 	}
-	if resp.AutomodeConfigResult == nil {
-		t.Fatal("rule remove answered with no config")
+
+	after := automodeShow(t, d)
+	if len(after.Proposals) != 3 {
+		t.Fatalf("pending = %d, want the three proposals", len(after.Proposals))
 	}
-	cfg := resp.AutomodeConfigResult.Config
+	if len(after.Config.Rules) != len(before.Rules) ||
+		after.Config.ApprovalPolicy != before.ApprovalPolicy {
+		t.Fatalf("a proposal changed the config: %+v", after.Config)
+	}
+}
+
+func promoteAutoMode(t *testing.T, d *Daemon, id int) {
+	t.Helper()
+	client := busTestClient()
+	d.handleAutoModePromote(client, &protocol.AutoModePromoteMessage{ID: id, RequestID: "r1"})
+	var promoted protocol.AutoModePromoteResultMessage
+	nextBusMessage(t, client, &promoted)
+	if !promoted.Success {
+		t.Fatalf("promote %d: %q", id, protocol.Deref(promoted.Error))
+	}
+}
+
+// The app is where a proposal becomes policy, so promoting each kind is what proves
+// the reversal the CLI proposed can actually be applied.
+func TestPromotingEachAmendmentKindFromTheApp(t *testing.T) {
+	d := newDaemonForTest(t)
+	if _, err := d.store.AddAutoModeRule(automode.Rule{
+		Pattern: automode.Tokens("git", "status"), Decision: automode.DecisionAllow,
+	}, time.Now()); err != nil {
+		t.Fatalf("seed a rule: %v", err)
+	}
+	if _, err := d.store.AddAutoModeHost(automode.HostAmendment{
+		Host: "crates.io", Decision: automode.HostAllow,
+	}, time.Now()); err != nil {
+		t.Fatalf("seed a host: %v", err)
+	}
+	for _, tc := range []struct{ kind, value string }{
+		{automode.KindRuleRemove, `{"pattern":["git","status"]}`},
+		{automode.KindHostRemove, `{"host":"crates.io","decision":"allow"}`},
+		{automode.KindPolicy, `{"approval_policy":"never","allow_local_binding":true}`},
+	} {
+		resp := automodePropose(t, d, tc.kind, "", tc.value)
+		if !resp.Ok {
+			t.Fatalf("%s proposal: %q", tc.kind, protocol.Deref(resp.Error))
+		}
+		promoteAutoMode(t, d, int(resp.AutomodeProposeResult.Proposal.ID))
+	}
+
+	cfg := automodeShow(t, d).Config
 	if len(cfg.Rules) != len(cfg.ShippedRules) {
-		t.Fatalf("rules = %+v after the removal", cfg.Rules)
+		t.Errorf("rules = %+v, want the promoted removal applied", cfg.Rules)
 	}
-	resp = unixAutoModeCall(t, d,
-		`{"cmd":"automode_policy_set","approval_policy":"never","sandbox_mode":"read-only"}`)
-	if !resp.Ok {
-		t.Fatalf("policy set over the socket: %q", protocol.Deref(resp.Error))
+	if len(cfg.Network.AllowedDomains) != 0 {
+		t.Errorf("allowed = %v, want the promoted removal applied", cfg.Network.AllowedDomains)
 	}
-	if got := resp.AutomodeConfigResult.Config; got.ApprovalPolicy != automode.PolicyNever ||
-		got.SandboxMode != automode.SandboxReadOnly {
-		t.Fatalf("policy = %q/%q", got.ApprovalPolicy, got.SandboxMode)
+	if cfg.ApprovalPolicy != automode.PolicyNever || !cfg.Network.AllowLocalBinding {
+		t.Errorf("policy = %q, local binding = %t", cfg.ApprovalPolicy, cfg.Network.AllowLocalBinding)
+	}
+}
+
+func TestPolicySetFromTheAppCarriesLocalBinding(t *testing.T) {
+	d := newDaemonForTest(t)
+	result := autoModeEdit(t, d, func(c *wsClient) {
+		d.handleAutoModePolicySetWS(c, &protocol.AutoModePolicySetMessage{
+			Cmd:               protocol.CmdAutoModePolicySet,
+			AllowLocalBinding: protocol.Ptr(true),
+			RequestID:         protocol.Ptr("r1"),
+		})
+	})
+	if !result.Success {
+		t.Fatalf("policy set: %q", protocol.Deref(result.Error))
+	}
+	if !result.Config.Network.AllowLocalBinding {
+		t.Fatalf("network = %+v, want local binding on", result.Config.Network)
+	}
+	if result.Config.ApprovalPolicy != automode.PolicyOnRequest {
+		t.Errorf("approval policy = %q, want the setting it was not told about held",
+			result.Config.ApprovalPolicy)
 	}
 }

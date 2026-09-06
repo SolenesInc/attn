@@ -5741,6 +5741,9 @@ model AutoModeNetworkInfo {
   "enabled": boolean;
   "allowed_domains": string[];
   "denied_domains": string[];
+  // Off by default. With it off the driver's proxy hard denies a host that
+  // resolves to a loopback or private address, whoever allowed the name.
+  "allow_local_binding": boolean;
 }
 
 model AutoModeEnvironmentSlot {
@@ -5945,6 +5948,7 @@ model AutoModePolicySetMessage {
   cmd: "automode_policy_set";
   approval_policy?: string;
   sandbox_mode?: string;
+  allow_local_binding?: boolean;
   request_id?: string;
 }
 

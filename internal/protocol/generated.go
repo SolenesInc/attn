@@ -1244,6 +1244,9 @@ type AutoModeHostRemoveMessage struct {
 }
 
 type AutoModeNetworkInfo struct {
+	// AllowLocalBinding corresponds to the JSON schema field "allow_local_binding".
+	AllowLocalBinding bool `json:"allow_local_binding"`
+
 	// AllowedDomains corresponds to the JSON schema field "allowed_domains".
 	AllowedDomains []string `json:"allowed_domains"`
 
@@ -1255,6 +1258,9 @@ type AutoModeNetworkInfo struct {
 }
 
 type AutoModePolicySetMessage struct {
+	// AllowLocalBinding corresponds to the JSON schema field "allow_local_binding".
+	AllowLocalBinding *bool `json:"allow_local_binding,omitempty,omitzero"`
+
 	// ApprovalPolicy corresponds to the JSON schema field "approval_policy".
 	ApprovalPolicy *string `json:"approval_policy,omitempty,omitzero"`
 

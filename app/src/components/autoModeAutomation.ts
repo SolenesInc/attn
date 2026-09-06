@@ -8,6 +8,7 @@ export interface AutoModeAutomationState {
   rules: string[];
   allowedHosts: string[];
   deniedHosts: string[];
+  allowLocalBinding: boolean;
   legacyPatterns: string[];
   proposals: number;
   environment: {
@@ -44,6 +45,7 @@ export const INACTIVE_AUTOMODE_STATE: AutoModeAutomationState = {
   rules: [],
   allowedHosts: [],
   deniedHosts: [],
+  allowLocalBinding: false,
   legacyPatterns: [],
   proposals: 0,
   environment: {

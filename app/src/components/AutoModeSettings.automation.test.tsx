@@ -27,7 +27,7 @@ const config = (over: Partial<AutoModeConfigInfo> = {}): AutoModeConfigInfo => (
   environment: { slots: [{ id: 'domains', values: ['grafana.acme.corp'] }], notes: [] },
   rules: [shippedRule],
   shipped_rules: [shippedRule],
-  network: { enabled: true, allowed_domains: ['crates.io'], denied_domains: ['localhost:29849'] },
+  network: { enabled: true, allowed_domains: ['crates.io'], denied_domains: ['localhost:29849'], allow_local_binding: false },
   shipped_denied_domains: ['localhost:29849'],
   legacy_patterns: ['*curl*'],
   ...over,

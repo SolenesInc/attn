@@ -73,32 +73,50 @@ func TestRuleCarriesMatchExamplesUntouched(t *testing.T) {
 }
 
 func TestValidateProposalReadsTheValueAsJSON(t *testing.T) {
-	if err := ValidateProposal(KindRule, "", `{"pattern":["ls"]}`); err != nil {
-		t.Fatalf("a rule proposal was refused: %v", err)
-	}
-	if err := ValidateProposal(KindHost, "", `{"host":"github.com","decision":"allow"}`); err != nil {
-		t.Fatalf("a host proposal was refused: %v", err)
+	for name, value := range map[string]struct{ kind, value string }{
+		"a rule":        {KindRule, `{"pattern":["ls"]}`},
+		"a rule_remove": {KindRuleRemove, `{"pattern":["ls"]}`},
+		"a host":        {KindHost, `{"host":"github.com","decision":"allow"}`},
+		"a host_remove": {KindHostRemove, `{"host":"github.com","decision":"deny"}`},
+		"a policy":      {KindPolicy, `{"approval_policy":"never"}`},
+		"local binding": {KindPolicy, `{"allow_local_binding":true}`},
+	} {
+		if err := ValidateProposal(value.kind, "", value.value, "29849"); err != nil {
+			t.Errorf("%s was refused: %v", name, err)
+		}
 	}
 	for name, tc := range map[string]struct{ kind, target, value string }{
-		"unknown kind":   {"model", "", `{"pattern":["ls"]}`},
-		"a target":       {KindRule, "models", `{"pattern":["ls"]}`},
-		"not JSON":       {KindRule, "", "git push"},
-		"empty pattern":  {KindRule, "", `{"pattern":[]}`},
-		"host with path": {KindHost, "", `{"host":"github.com/x","decision":"allow"}`},
-		"host decision":  {KindHost, "", `{"host":"github.com","decision":"prompt"}`},
+		"unknown kind":    {"model", "", `{"pattern":["ls"]}`},
+		"a target":        {KindRule, "models", `{"pattern":["ls"]}`},
+		"not JSON":        {KindRule, "", "git push"},
+		"empty pattern":   {KindRule, "", `{"pattern":[]}`},
+		"host with path":  {KindHost, "", `{"host":"github.com/x","decision":"allow"}`},
+		"host decision":   {KindHost, "", `{"host":"github.com","decision":"prompt"}`},
+		"empty policy":    {KindPolicy, "", `{}`},
+		"unknown policy":  {KindPolicy, "", `{"approval_policy":"yolo"}`},
+		"unknown sandbox": {KindPolicy, "", `{"sandbox_mode":"anything-goes"}`},
+		"shipped rule":    {KindRule, "", `{"pattern":["attn","automode","policy"],"decision":"allow"}`},
+		"shipped removal": {KindRuleRemove, "", `{"pattern":["attn","automode","env"]}`},
+		"shipped host":    {KindHostRemove, "", `{"host":"localhost:29849","decision":"deny"}`},
 	} {
-		if err := ValidateProposal(tc.kind, tc.target, tc.value); err == nil {
+		if err := ValidateProposal(tc.kind, tc.target, tc.value, "29849"); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
 	}
 }
 
 func TestDescribeProposalReadsAsOneLine(t *testing.T) {
-	if got := DescribeProposal(KindRule, `{"pattern":["git","push"],"decision":"prompt"}`); got != "prompt git push" {
-		t.Errorf("rule summary = %q", got)
-	}
-	if got := DescribeProposal(KindHost, `{"host":"github.com","decision":"deny"}`); got != "deny github.com" {
-		t.Errorf("host summary = %q", got)
+	for _, tc := range []struct{ kind, value, want string }{
+		{KindRule, `{"pattern":["git","push"],"decision":"prompt"}`, "prompt git push"},
+		{KindRuleRemove, `{"pattern":["git","push"]}`, "remove rule git push"},
+		{KindHost, `{"host":"github.com","decision":"deny"}`, "deny github.com"},
+		{KindHostRemove, `{"host":"github.com","decision":"allow"}`, "remove allow github.com"},
+		{KindPolicy, `{"approval_policy":"never","allow_local_binding":true}`,
+			"approval never, local binding true"},
+	} {
+		if got := DescribeProposal(tc.kind, tc.value); got != tc.want {
+			t.Errorf("%s summary = %q, want %q", tc.kind, got, tc.want)
+		}
 	}
 }
 
@@ -129,7 +147,7 @@ func TestConfigMarshalsIntoThePiSideShape(t *testing.T) {
 	if err := json.Unmarshal(fields["network"], &network); err != nil {
 		t.Fatalf("network: %v", err)
 	}
-	for _, name := range []string{"enabled", "allowed_domains", "denied_domains"} {
+	for _, name := range []string{"enabled", "allowed_domains", "denied_domains", "allow_local_binding"} {
 		if _, ok := network[name]; !ok {
 			t.Errorf("network is missing %q: %s", name, fields["network"])
 		}

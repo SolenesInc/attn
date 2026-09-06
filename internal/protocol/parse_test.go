@@ -561,7 +561,7 @@ func TestParseAutoModeSettingsCommands(t *testing.T) {
 			},
 		},
 		{
-			input: `{"cmd":"automode_policy_set","approval_policy":"never"}`,
+			input: `{"cmd":"automode_policy_set","approval_policy":"never","allow_local_binding":true}`,
 			cmd:   CmdAutoModePolicySet,
 			check: func(t *testing.T, data any) {
 				msg, ok := data.(*AutoModePolicySetMessage)
@@ -570,6 +570,9 @@ func TestParseAutoModeSettingsCommands(t *testing.T) {
 				}
 				if Deref(msg.ApprovalPolicy) != "never" || msg.SandboxMode != nil {
 					t.Errorf("policy set = %+v", msg)
+				}
+				if msg.AllowLocalBinding == nil || !*msg.AllowLocalBinding {
+					t.Errorf("allow_local_binding = %v, want the field carried", msg.AllowLocalBinding)
 				}
 			},
 		},

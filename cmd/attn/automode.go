@@ -44,8 +44,8 @@ func writeAutoModeHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn automode <command>
 
 pi's approval policy: prefix rules over the commands a session runs, an allow and
-a deny list of network hosts, an approval policy and a sandbox mode. Adding a rule
-or a host from here PROPOSES it; only the attn app promotes one.
+a deny list of network hosts, an approval policy and a sandbox mode. Every change
+from here RECORDS A PROPOSAL; only the attn app puts one in force.
 
 commands:
   show                              effective config and pending proposals
@@ -54,11 +54,12 @@ commands:
   env clear <slot>                  empty it back to its unset meaning
   env notes                         replace the prose beside the slots, from stdin
   rule add <token>…                 propose a prefix rule over those command tokens
-  rule remove <token>…              take that rule out
+  rule remove <token>…              propose taking that rule out
   host add <host>                   propose a network host rule
-  host remove <host>                take that host rule out
-  policy [--approval-policy P]      set the approval policy and/or the sandbox mode
-         [--sandbox-mode M]
+  host remove <host>                propose taking that host rule out
+  policy [--approval-policy P]      propose an approval policy, a sandbox mode
+         [--sandbox-mode M]         and/or whether the proxy may reach localhost
+         [--allow-local-binding=B]
   denials [--limit <n>]             recent denials, newest first
 
 Every command takes --json.
@@ -67,10 +68,9 @@ Every command takes --json.
                    for a host: allow (the default) or deny.
   --justification  why a forbidden rule refuses; it is the text the agent is given.
 
-rule add and host add RECORD A PROPOSAL. Nothing they write changes what a session
-runs under until a human promotes it in the app. rule remove, host remove, policy
-and env write the config itself, which is why a shipped forbidden rule stops a
-session under auto mode from running them.
+rule, host and policy RECORD A PROPOSAL. Nothing they write changes what a session
+runs under until a human promotes it in the app. The environment is the exception:
+it is a direct edit, and a shipped forbidden rule keeps a session out of it.
 
 A rule is a command prefix, one token per argument: ` + "`rule add git push`" + ` matches
 every command starting ` + "`git push`" + `. There are no wildcards.
@@ -118,6 +118,7 @@ func runAutoModeShow(args []string) {
 	printAutoModeRules(cfg)
 	printAutoModeList("network allowed", cfg.Network.AllowedDomains)
 	printAutoModeList("network denied", cfg.Network.DeniedDomains)
+	fmt.Printf("\nnetwork local binding: %t\n", cfg.Network.AllowLocalBinding)
 	printAutoModeList("not converted (rewrite these as rules)", cfg.LegacyPatterns)
 	if len(result.Proposals) == 0 {
 		fmt.Println("\npending proposals: none")
@@ -366,11 +367,11 @@ func runAutoModeRuleRemove(tokens []string, args []string) {
 		fmt.Fprintln(os.Stderr, "automode rule remove: name the command tokens the rule matches")
 		os.Exit(2)
 	}
-	result, err := autoModeClient().AutoModeRuleRemove(tokens)
+	value, err := automode.FormatPatternValue(automode.Tokens(tokens...))
 	if err != nil {
 		autoModeFail("rule remove", err)
 	}
-	printAutoModeConfigResult("rule remove", result, hasFlag(args, "--json"))
+	proposeAutoModeValue("rule remove", automode.KindRuleRemove, "", value, hasFlag(args, "--json"))
 }
 
 func runAutoModeHost(args []string) {
@@ -400,11 +401,11 @@ func runAutoModeHost(args []string) {
 		}
 		proposeAutoModeValue("host add", automode.KindHost, "", value, hasFlag(args, "--json"))
 	case "remove":
-		result, err := autoModeClient().AutoModeHostRemove(amendment.Host, amendment.Decision)
+		value, err := automode.FormatHostValue(amendment)
 		if err != nil {
 			autoModeFail("host remove", err)
 		}
-		printAutoModeConfigResult("host remove", result, hasFlag(args, "--json"))
+		proposeAutoModeValue("host remove", automode.KindHostRemove, "", value, hasFlag(args, "--json"))
 	default:
 		fmt.Fprintf(os.Stderr, "automode host: unknown command %q (want add or remove)\n", args[0])
 		os.Exit(2)
@@ -412,40 +413,50 @@ func runAutoModeHost(args []string) {
 }
 
 func runAutoModePolicy(args []string) {
-	approval, _ := takeStringFlag(args, "--approval-policy")
-	sandbox, _ := takeStringFlag(args, "--sandbox-mode")
-	approval = strings.TrimSpace(approval)
-	sandbox = strings.TrimSpace(sandbox)
-	if approval == "" && sandbox == "" {
+	amendment := automode.PolicyAmendment{}
+	if approval, ok := takeStringFlag(args, "--approval-policy"); ok {
+		amendment.ApprovalPolicy = strPtr(strings.TrimSpace(approval))
+	}
+	if sandbox, ok := takeStringFlag(args, "--sandbox-mode"); ok {
+		amendment.SandboxMode = strPtr(strings.TrimSpace(sandbox))
+	}
+	amendment.AllowLocalBinding = autoModeLocalBindingFlag(args)
+	if err := automode.ValidatePolicy(amendment); err != nil {
 		fmt.Fprintf(os.Stderr,
-			"automode policy: name --approval-policy (%s) or --sandbox-mode (%s), or both; "+
-				"`automode show` reads what is set today\n",
-			strings.Join(automode.Policies(), ", "), strings.Join(automode.SandboxModes(), ", "))
+			"automode policy: %v; --approval-policy is one of %s, --sandbox-mode one of %s, "+
+				"--allow-local-binding true or false. `automode show` reads what is set today\n",
+			err, strings.Join(automode.Policies(), ", "), strings.Join(automode.SandboxModes(), ", "))
 		os.Exit(2)
 	}
-	result, err := autoModeClient().AutoModePolicySet(approval, sandbox)
+	value, err := automode.FormatPolicyValue(amendment)
 	if err != nil {
 		autoModeFail("policy", err)
 	}
-	printAutoModeConfigResult("policy", result, hasFlag(args, "--json"))
+	proposeAutoModeValue("policy", automode.KindPolicy, "", value, hasFlag(args, "--json"))
 }
 
-func printAutoModeConfigResult(verb string, result *protocol.AutoModeConfigResult, asJSON bool) {
-	if result == nil {
-		autoModeFail(verb, fmt.Errorf("daemon returned no result"))
+func strPtr(value string) *string { return &value }
+
+// The flag is a tri-state: unnamed leaves the setting alone, so a bare --allow-local-binding
+// with nothing after it is a typo rather than "true".
+func autoModeLocalBindingFlag(args []string) *bool {
+	raw, ok := takeStringFlag(args, "--allow-local-binding")
+	if !ok {
+		if hasFlag(args, "--allow-local-binding") {
+			fmt.Fprintln(os.Stderr, "automode policy: --allow-local-binding wants true or false")
+			os.Exit(2)
+		}
+		return nil
 	}
-	if asJSON {
-		writeJSON(result)
-		return
+	switch strings.TrimSpace(raw) {
+	case "true":
+		return protocol.Ptr(true)
+	case "false":
+		return protocol.Ptr(false)
 	}
-	cfg := result.Config
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "approval policy\t%s\n", cfg.ApprovalPolicy)
-	fmt.Fprintf(w, "sandbox mode\t%s\n", cfg.SandboxMode)
-	w.Flush()
-	printAutoModeRules(cfg)
-	printAutoModeList("network allowed", cfg.Network.AllowedDomains)
-	printAutoModeList("network denied", cfg.Network.DeniedDomains)
+	fmt.Fprintf(os.Stderr, "automode policy: --allow-local-binding wants true or false, got %q\n", raw)
+	os.Exit(2)
+	return nil
 }
 
 func proposeAutoModeValue(verb, kind, target, value string, asJSON bool) {
@@ -545,7 +556,8 @@ func takeStringFlag(args []string, flag string) (string, bool) {
 
 func autoModeFlagTakesValue(flag string) bool {
 	switch flag {
-	case "--limit", "--decision", "--justification", "--approval-policy", "--sandbox-mode":
+	case "--limit", "--decision", "--justification", "--approval-policy", "--sandbox-mode",
+		"--allow-local-binding":
 		return true
 	}
 	return false

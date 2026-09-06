@@ -290,11 +290,13 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		result := pluginDriverRegisterResult{OK: true, ActiveRuns: runs}
 		driver, registered := d.ensurePluginRegistry().driver(normalizePluginAgent(params.Agent))
 		if registered && driver.Capabilities["auto_mode"] && d.store != nil {
-			cfg, err := d.store.GetAutoModeConfig()
-			if err != nil {
-				return nil, true, fmt.Errorf("read auto mode config: %w", err)
+			// A driver with no policy to read still registers; it learns the config at the
+			// next spawn or policy change.
+			if cfg, err := d.store.GetAutoModeConfig(); err != nil {
+				d.logf("automode: register for %s carried no config: %v", plugin.name, err)
+			} else {
+				result.AutoMode = &cfg
 			}
-			result.AutoMode = &cfg
 		}
 		return result, true, nil
 	case "session.report_state":

@@ -343,3 +343,16 @@
   display: flex;
   gap: 6px;
 }
+
+/* The checkbox sits beside its label, and the help line hangs under both. */
+.automode-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.automode-toggle .settings-description {
+  display: block;
+  margin-top: 2px;
+}

@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AutoModeConfigEdit, AutoModePromotion, AutoModeState } from './daemonAutoModeEvents';
+import type {
+  AutoModeConfigEdit,
+  AutoModePolicyEdit,
+  AutoModePromotion,
+  AutoModeState,
+} from './daemonAutoModeEvents';
 import { useAutoModePushStore } from '../store/autoMode';
 
 export type AutoModeEditKind = 'rule' | 'host' | 'policy';
@@ -24,7 +29,7 @@ export interface AutoModePolicy {
   removeRule: (pattern: string[]) => Promise<void>;
   addHost: (host: string, decision: string) => Promise<void>;
   removeHost: (host: string, decision: string) => Promise<void>;
-  setPolicy: (approvalPolicy: string | null, sandboxMode: string | null) => Promise<void>;
+  setPolicy: (edit: AutoModePolicyEdit) => Promise<void>;
   editing: AutoModeEditKind | null;
 
   setEnvironmentSlot: (id: string, values: string[]) => Promise<void>;
@@ -41,7 +46,7 @@ interface AutoModePolicyOptions {
   removeRule: (pattern: string[]) => Promise<AutoModeConfigEdit>;
   addHost: (host: string, decision: string) => Promise<AutoModeConfigEdit>;
   removeHost: (host: string, decision: string) => Promise<AutoModeConfigEdit>;
-  setPolicy: (approvalPolicy: string | null, sandboxMode: string | null) => Promise<AutoModeConfigEdit>;
+  setPolicy: (edit: AutoModePolicyEdit) => Promise<AutoModeConfigEdit>;
   setEnvironmentSlot: (slot: string, values: string[]) => Promise<AutoModeConfigEdit>;
 }
 
@@ -137,8 +142,7 @@ export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolic
     [edit, dropHost],
   );
   const setPolicy = useCallback(
-    (approvalPolicy: string | null, sandboxMode: string | null) =>
-      edit('policy', () => writePolicy(approvalPolicy, sandboxMode)),
+    (change: AutoModePolicyEdit) => edit('policy', () => writePolicy(change)),
     [edit, writePolicy],
   );
 

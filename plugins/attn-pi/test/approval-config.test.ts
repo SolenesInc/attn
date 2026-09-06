@@ -31,6 +31,7 @@ const daemonConfig = {
     enabled: true,
     allowed_domains: ["crates.io", " github.com "],
     denied_domains: ["localhost:29849"],
+    allow_local_binding: true,
   },
   environment: { slots: { domains: ["grafana.acme.corp"] }, notes: ["this laptop is mine"] },
   legacy_patterns: ["git status*", "*curl*"],
@@ -50,6 +51,7 @@ describe("loadApprovalConfig", () => {
     expect(config.rules[0].decision).toBe("allow");
     expect(config.network.allowedDomains).toEqual(["crates.io", "github.com"]);
     expect(config.network.deniedDomains).toEqual(["localhost:29849"]);
+    expect(config.network.allowLocalBinding).toBe(true);
     expect(config.environment.slots.domains).toEqual(["grafana.acme.corp"]);
     expect(config.environment.notes).toEqual(["this laptop is mine"]);
     expect(config.legacyPatterns).toEqual(["git status*", "*curl*"]);
@@ -85,6 +87,14 @@ describe("loadApprovalConfig", () => {
     expect(config.network.allowedDomains).toEqual([]);
   });
 
+  test("local binding is off unless the daemon says otherwise", () => {
+    expect(loadApprovalConfig({ network: { enabled: true } }).network.allowLocalBinding).toBe(false);
+    expect(defaultApprovalConfig.network.allowLocalBinding).toBe(false);
+    expect(
+      loadApprovalConfig({ network: { allow_local_binding: true } }).network.allowLocalBinding,
+    ).toBe(true);
+  });
+
   test("names the field it cannot read", () => {
     const cases: [unknown, string][] = [
       [{ rules: [{ pattern: [] }] }, "rules[0].pattern"],
@@ -94,6 +104,7 @@ describe("loadApprovalConfig", () => {
       [{ approval_policy: "yolo" }, "approval_policy"],
       [{ sandbox_mode: "open" }, "sandbox_mode"],
       [{ network: { allowed_domains: "crates.io" } }, "network.allowed_domains"],
+      [{ network: { allow_local_binding: "yes" } }, "network.allow_local_binding"],
       [{ enabled_default: "true" }, "enabled_default"],
       [{ environment: [] }, "environment"],
     ];

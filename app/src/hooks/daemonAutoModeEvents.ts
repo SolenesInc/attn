@@ -29,6 +29,13 @@ export interface AutoModeState {
   environmentSlots: AutoModeEnvironmentSlot[];
 }
 
+// A policy edit names only what it moves; a field left out stays as it stands.
+export interface AutoModePolicyEdit {
+  approvalPolicy?: string;
+  sandboxMode?: string;
+  allowLocalBinding?: boolean;
+}
+
 export interface AutoModeConfigEdit {
   config: AutoModeConfigInfo;
 }
@@ -51,6 +58,7 @@ const emptyNetwork = (): AutoModeNetworkInfo => ({
   enabled: false,
   allowed_domains: [],
   denied_domains: [],
+  allow_local_binding: false,
 });
 
 const emptyConfig = (): AutoModeConfigInfo => ({
@@ -81,6 +89,7 @@ const toNetwork = (value: unknown): AutoModeNetworkInfo => {
     enabled: raw.enabled === true,
     allowed_domains: list<string>(raw.allowed_domains),
     denied_domains: list<string>(raw.denied_domains),
+    allow_local_binding: raw.allow_local_binding === true,
   };
 };
 

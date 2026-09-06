@@ -4,6 +4,7 @@ import { AutoModeSettings } from './AutoModeSettings';
 import type {
   AutoModeConfigInfo,
   AutoModeConfigEdit,
+  AutoModePolicyEdit,
   AutoModePromotion,
   AutoModeRuleInfo,
   AutoModeState,
@@ -32,7 +33,7 @@ const config = (over: Partial<AutoModeConfigInfo> = {}): AutoModeConfigInfo => (
   environment: { slots: [], notes: [] },
   rules: [shippedRule],
   shipped_rules: [shippedRule],
-  network: { enabled: true, allowed_domains: [], denied_domains: ['localhost:29849'] },
+  network: { enabled: true, allowed_domains: [], denied_domains: ['localhost:29849'], allow_local_binding: false },
   shipped_denied_domains: ['localhost:29849'],
   legacy_patterns: [],
   ...over,
@@ -53,7 +54,7 @@ type Writers = {
   removeRule: (pattern: string[]) => Promise<AutoModeConfigEdit>;
   addHost: (host: string, decision: string) => Promise<AutoModeConfigEdit>;
   removeHost: (host: string, decision: string) => Promise<AutoModeConfigEdit>;
-  setPolicy: (approvalPolicy: string | null, sandboxMode: string | null) => Promise<AutoModeConfigEdit>;
+  setPolicy: (edit: AutoModePolicyEdit) => Promise<AutoModeConfigEdit>;
 };
 
 function Harness(props: { getState: () => Promise<AutoModeState> } & Partial<Writers>) {
@@ -206,7 +207,7 @@ describe('AutoModeSettings hosts', () => {
   it('removes a host with the decision it was under', async () => {
     const { removeHost } = renderPane(state({
       config: config({
-        network: { enabled: true, allowed_domains: ['crates.io'], denied_domains: ['localhost:29849'] },
+        network: { enabled: true, allowed_domains: ['crates.io'], denied_domains: ['localhost:29849'], allow_local_binding: false },
       }),
     }));
     await screen.findByTestId('automode-hosts-allow-remove');
@@ -222,6 +223,7 @@ describe('AutoModeSettings hosts', () => {
           enabled: true,
           allowed_domains: [],
           denied_domains: ['localhost:29849', 'evil.example'],
+          allow_local_binding: false,
         },
       }),
     }));
@@ -234,7 +236,7 @@ describe('AutoModeSettings hosts', () => {
 
   it('says an empty list is empty rather than leaving a blank row', async () => {
     renderPane(state({
-      config: config({ network: { enabled: true, allowed_domains: [], denied_domains: [] } }),
+      config: config({ network: { enabled: true, allowed_domains: [], denied_domains: [], allow_local_binding: false } }),
     }));
     await screen.findByTestId('automode-config');
 
@@ -244,16 +246,25 @@ describe('AutoModeSettings hosts', () => {
 });
 
 describe('AutoModeSettings policy', () => {
+  it('sends local binding on its own when the checkbox is ticked', async () => {
+    const { setPolicy } = renderPane(state());
+    const toggle = await screen.findByTestId('automode-allow-local-binding');
+    expect(toggle).not.toBeChecked();
+
+    fireEvent.click(toggle);
+    await waitFor(() => expect(setPolicy).toHaveBeenCalledWith({ allowLocalBinding: true }));
+  });
+
   it('sends only the setting that was changed', async () => {
     const { setPolicy, getState } = renderPane(state());
     await screen.findByTestId('automode-approval-policy');
 
     fireEvent.change(screen.getByTestId('automode-approval-policy'), { target: { value: 'never' } });
-    await waitFor(() => expect(setPolicy).toHaveBeenCalledWith('never', null));
+    await waitFor(() => expect(setPolicy).toHaveBeenCalledWith({ approvalPolicy: 'never' }));
     await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
 
     fireEvent.change(screen.getByTestId('automode-sandbox-mode'), { target: { value: 'read-only' } });
-    await waitFor(() => expect(setPolicy).toHaveBeenCalledWith(null, 'read-only'));
+    await waitFor(() => expect(setPolicy).toHaveBeenCalledWith({ sandboxMode: 'read-only' }));
   });
 
   it('shows a refused policy without moving the picker', async () => {

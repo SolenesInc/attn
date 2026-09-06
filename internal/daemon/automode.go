@@ -241,9 +241,10 @@ func autoModeConfigInfo(cfg automode.Config) protocol.AutoModeConfigInfo {
 		Rules:          autoModeRuleInfos(cfg.Rules),
 		ShippedRules:   autoModeRuleInfos(automode.ShippedRules()),
 		Network: protocol.AutoModeNetworkInfo{
-			Enabled:        cfg.Network.Enabled,
-			AllowedDomains: nonNilStrings(cfg.Network.AllowedDomains),
-			DeniedDomains:  nonNilStrings(cfg.Network.DeniedDomains),
+			Enabled:           cfg.Network.Enabled,
+			AllowedDomains:    nonNilStrings(cfg.Network.AllowedDomains),
+			DeniedDomains:     nonNilStrings(cfg.Network.DeniedDomains),
+			AllowLocalBinding: cfg.Network.AllowLocalBinding,
 		},
 		ShippedDeniedDomains: nonNilStrings(automode.ShippedDeniedDomains(config.WSPort())),
 		LegacyPatterns:       nonNilStrings(cfg.LegacyPatterns),
