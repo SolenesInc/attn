@@ -78,8 +78,6 @@ function startWaitingPresent(attnBin, profile, { cwd, sessionId }) {
       resolve({ stdout, stderr, json: brace >= 0 ? JSON.parse(stdout.slice(brace)) : null });
     });
   });
-  // A rejection observer is attached now so cleanup after an earlier failure
-  // cannot produce an unhandled rejection.
   completion.catch(() => {});
 
   return { completion, kill: () => child.kill('SIGTERM') };

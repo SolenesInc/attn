@@ -204,11 +204,11 @@ async function main() {
   const driver = createWindowDriver({ appPath: options.appPath });
   const note = (message, extra) => runner.log(message, extra);
 
-  let agentId = null;   // the booted claude agent — auto-settle target, then nudge target
+  let agentId = null;
   let agentPaneId = null;
-  let authorId = null;  // the split shell — authors ticket activity, and holds selection
+  let authorId = null;
   let authorPaneId = null;
-  let targetId = null;  // the codex agent that receives ticket doorbells
+  let targetId = null;
   let targetRepoDir = null;
 
   runner.log('run context', { runDir: runner.runDir, sessionDir: runner.sessionDir, profile });

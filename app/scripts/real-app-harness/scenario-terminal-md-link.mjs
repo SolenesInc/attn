@@ -194,8 +194,8 @@ async function main() {
   fs.writeFileSync(path.join(runner.sessionDir, 'alpha.md'), '# Alpha Doc\n\nHello from **alpha**.\n\n- one\n- two\n', 'utf8');
   fs.writeFileSync(path.join(runner.sessionDir, 'beta.md'), '# Beta Doc\n\nHello from *beta*.\n', 'utf8');
 
-  // Runner cleanups run in REVERSE registration order: observer/app first so
-  // they close last, the probe server last so it closes first.
+  // Runner cleanups run in REVERSE registration order: observer/app are
+  // registered first so they close LAST.
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_session_panes', async () => {
