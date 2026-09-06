@@ -8053,6 +8053,9 @@ type SeedShowResult struct {
 
 	// Watching corresponds to the JSON schema field "watching".
 	Watching bool `json:"watching"`
+
+	// WatchingVia corresponds to the JSON schema field "watching_via".
+	WatchingVia []string `json:"watching_via"`
 }
 
 type SeedTransitionMessage struct {
@@ -8161,6 +8164,9 @@ type SeedWatchResult struct {
 
 	// Watching corresponds to the JSON schema field "watching".
 	Watching bool `json:"watching"`
+
+	// WatchingVia corresponds to the JSON schema field "watching_via".
+	WatchingVia []string `json:"watching_via"`
 }
 
 type Session struct {

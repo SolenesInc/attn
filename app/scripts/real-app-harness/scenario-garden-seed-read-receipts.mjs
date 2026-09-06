@@ -2,12 +2,14 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import {
   createSessionAndWaitForInitialPane,
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
   submitPrompt,
+  queryDaemonDb,
 } from './common.mjs';
 import {
   waitForFirstWorkspacePane,
@@ -16,13 +18,20 @@ import {
 import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { transcriptMessages, writeMockAgentFixture } from './mockAgent.mjs';
-import { delay } from './platform.mjs';
+import { delay, appDaemonInTree } from './platform.mjs';
+import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const FIRST_NOTE = 'FIRST_READ_RECEIPT';
 const SECOND_NOTE = 'SECOND_READ_RECEIPT';
 const READ_MARKER = 'SEED_BELL_READ';
+const DISPATCH_PROMPT = 'Delegate the subscription proof';
+const DISPATCHED_MARKER = 'SUBSCRIPTION_DELEGATED';
+const HOLD_PROMPT = 'Hold the subscription proof turn';
+const HOLD_READY = 'watch-proof-held';
+const HOLD_RELEASE = 'watch-proof-release';
+const HOLD_DONE = 'SUBSCRIPTION_HOLD_RELEASED';
 // Every pane read here squashes whitespace out, so a body with a space in it
 // could never be found again.
 const PEER_BODY = 'PEER_MESSAGE_READ_RECEIPT_BODY';
@@ -79,11 +88,29 @@ async function waitForAgentReads(client, pane, count, note, timeoutMs = 60_000) 
   throw new Error(`agent did not complete seed read ${count} for ${note}:\n${text}`);
 }
 
-function writeWatcherFixture(cwd) {
+function writeWatcherFixture(cwd, delegateCwd) {
   writeMockAgentFixture(cwd, {
     name: 'seed-read-receipt',
+    resumable: true,
     minimumWorkingMs: 0,
     turns: [
+      {
+        includes: DISPATCH_PROMPT,
+        actions: [
+          { type: 'attn', args: ['delegate', '--agent', 'codex', '--model', 'gpt-5.6-sol', '--yolo', '--no-worktree',
+            '--cwd', delegateCwd, '--plot', '{{seed}}', '--name', 'subscription-delegate',
+            '--brief', 'Wait for the subscription proof.'] },
+          { type: 'reply', text: DISPATCHED_MARKER, state: 'idle' },
+        ],
+      },
+      {
+        includes: HOLD_PROMPT,
+        actions: [
+          { type: 'touch', path: HOLD_READY },
+          { type: 'wait_for_file', path: HOLD_RELEASE },
+          { type: 'reply', text: HOLD_DONE, state: 'idle' },
+        ],
+      },
       {
         includes: 'Watch seed',
         actions: [
@@ -122,11 +149,19 @@ function inboxBatches(transcript) {
   });
 }
 
-function readWatcherTranscript(cwd) {
-  const dir = path.join(cwd, '.attn-mock-agent');
-  const file = fs.readdirSync(dir).find((entry) => entry.endsWith('.jsonl'));
-  if (!file) throw new Error(`no mock transcript in ${dir}`);
-  return fs.readFileSync(path.join(dir, file), 'utf8');
+function readWatcherTranscript(sessionID) {
+  const file = queryDaemonDb(path.join(dataDirForProfile(currentHarnessProfile()), 'attn.db'),
+    `SELECT transcript_path FROM sessions WHERE id = '${sessionID}'`);
+  if (!file) throw new Error(`no mock transcript for ${sessionID}`);
+  return fs.readFileSync(file, 'utf8');
+}
+
+function mockTranscript(sessionID) {
+  return transcriptMessages(readWatcherTranscript(sessionID));
+}
+
+function saw(text, expected) {
+  return flat(text).includes(flat(expected));
 }
 
 async function main() {
@@ -155,6 +190,14 @@ async function main() {
   let watcherCwd = null;
   let seed = null;
   let peerMessage = null;
+  let delegated = null;
+  const profile = currentHarnessProfile();
+  if (!profile) throw new Error('Garden subscription verification requires a named profile.');
+  const cli = (args) => execFileSync(appDaemonInTree(options.appPath), args,
+    { encoding: 'utf8', env: profileCliEnv(profile) }).trim();
+  const unreadSeeds = () => queryDaemonDb(path.join(dataDirForProfile(profile), 'attn.db'),
+    `SELECT source_id FROM agent_mailbox_items WHERE recipient_session_id = '${watcher.sessionId}' AND kind = 'garden_seed' AND read_at = '' ORDER BY source_id`,
+    { json: true }).map((item) => item.source_id);
   try {
     await launchFreshAppAndConnect(client, observer);
 
@@ -183,7 +226,11 @@ async function main() {
 
     watcher = await runner.step('watch_from_mock_codex', async () => {
       watcherCwd = path.join(runner.sessionDir, 'watcher');
-      writeWatcherFixture(watcherCwd);
+      const delegateCwd = path.join(runner.sessionDir, 'delegate');
+      writeMockAgentFixture(delegateCwd, { name: 'subscription-delegate', turns: [
+        { includes: 'Wait for the subscription proof.', actions: [{ type: 'reply', text: 'DELEGATE_READY', state: 'idle' }] },
+      ] });
+      writeWatcherFixture(watcherCwd, delegateCwd);
       const sessionId = await createSessionAndWaitForInitialPane({
         client,
         observer,
@@ -218,7 +265,7 @@ async function main() {
         `noted on ${seed}`,
       );
       const text = await waitForAgentReads(client, watcher, 2, SECOND_NOTE);
-      const transcript = readWatcherTranscript(watcherCwd);
+      const transcript = readWatcherTranscript(watcher.sessionId);
       const doorbells = transcriptMessages(transcript)
         .filter((message) => message.role === 'user' && message.text === GENERIC_DOORBELL);
       runner.assert(doorbells.length === 2,
@@ -250,7 +297,7 @@ async function main() {
       peerMessage = peerMessageID(sent);
       runner.assert(Boolean(peerMessage), 'the peer send returned its message id', { sent });
       const text = await waitForAgentReads(client, watcher, 3, PEER_BODY);
-      const transcript = readWatcherTranscript(watcherCwd);
+      const transcript = readWatcherTranscript(watcher.sessionId);
       const doorbells = transcriptMessages(transcript)
         .filter((message) => message.role === 'user' && message.text === GENERIC_DOORBELL);
       runner.assert(doorbells.length === 3,
@@ -275,7 +322,73 @@ async function main() {
         `${JSON.stringify(transcriptMessages(transcript), null, 2)}\n`);
     });
 
-    const summary = await runner.finishSuccess({ seed, watcherSessionId: watcher.sessionId, peerMessage });
+    await runner.step('new_delegation_restores_removed_watch', async () => {
+      cli(['seed', 'unwatch', seed, '--session', watcher.sessionId]);
+      const known = new Set(observer.sessionsById.keys());
+      await submitPrompt(client, watcher.sessionId, watcher.paneId, DISPATCH_PROMPT);
+      await observer.waitFor(() => {
+        delegated = [...observer.sessionsById.keys()].find(id => !known.has(id)) ?? null;
+        return Boolean(delegated);
+      }, 'the delegated session exists');
+      await waitForAgentReads(client, watcher, 3, DISPATCHED_MARKER);
+      const shown = JSON.parse(cli(['seed', 'show', seed, '--session', watcher.sessionId, '--json']));
+      runner.assert(shown.watching_via.includes(seed), 'a new delegation restores the ordinary watch', { via: shown.watching_via });
+    });
+
+    let keptChild;
+    let droppedChild;
+    await runner.step('hold_watcher_and_queue_descendant_updates', async () => {
+      await submitPrompt(client, watcher.sessionId, watcher.paneId, HOLD_PROMPT);
+      await observer.waitFor(() => fs.existsSync(path.join(watcherCwd, HOLD_READY)), 'watcher holding its turn');
+      keptChild = JSON.parse(cli(['seed', 'plant', 'Keep child subscription', '--part-of', seed, '--json'])).id;
+      droppedChild = JSON.parse(cli(['seed', 'plant', 'Stop inherited subscription', '--part-of', seed, '--json'])).id;
+      cli(['seed', 'watch', keptChild, '--session', watcher.sessionId]);
+      cli(['seed', 'note', keptChild, '-m', 'Keep this queued child update', '--ring', '--session', author.sessionId]);
+      cli(['seed', 'note', droppedChild, '-m', 'Discard this inherited update', '--ring', '--session', author.sessionId]);
+      runner.assert(unreadSeeds().length === 2, 'both descendant updates are queued while the watcher works', { unread: unreadSeeds() });
+    });
+
+    await runner.step('unwatch_drops_only_uncovered_updates', async () => {
+      await client.request('focus_pane', author);
+      const output = await runInShell(client, author, `attn seed unwatch ${seed} --session ${watcher.sessionId}`, `removed watch on ${seed}`);
+      const unread = unreadSeeds();
+      runner.assert(unread.length === 1 && unread[0] === keptChild, 'the separate child watch survives plot unwatch', { unread });
+      const inherited = JSON.parse(cli(['seed', 'unwatch', droppedChild, '--session', watcher.sessionId, '--json']));
+      runner.assert(!inherited.watching && inherited.watching_via.length === 0, 'the other child has no remaining coverage', { inherited });
+      cli(['seed', 'note', droppedChild, '-m', 'This later activity must stay quiet', '--ring', '--session', author.sessionId]);
+      runner.assert(unreadSeeds().length === 1, 'later uncovered activity adds no notification', { unread: unreadSeeds() });
+      runner.writeText('unwatch-coverage.txt', output);
+      fs.writeFileSync(path.join(watcherCwd, HOLD_RELEASE), 'release\n');
+      await waitForAgentReads(client, watcher, 3, HOLD_DONE);
+      await waitForAgentReads(client, watcher, 4, keptChild);
+      const messages = mockTranscript(watcher.sessionId);
+      runner.assert(messages.some((message) => saw(message.text, `${keptChild} moved: note`)), 'the surviving child update reaches the actual inbox', { keptChild });
+      runner.assert(!messages.some((message) => saw(message.text, `${droppedChild} moved: note`)), 'the removed update never reaches the inbox', { droppedChild });
+    });
+
+    await runner.step('rewatch_restores_descendant_delivery', async () => {
+      await runInShell(client, author, `attn seed watch ${seed} --session ${watcher.sessionId}`, `watching ${seed} and its descendants`);
+      cli(['seed', 'note', droppedChild, '-m', 'Rewatch restores delivery', '--ring', '--session', author.sessionId]);
+      await waitForAgentReads(client, watcher, 5, droppedChild);
+      runner.assert(mockTranscript(watcher.sessionId).some((message) => saw(message.text, `${droppedChild} moved: note`)), 'rewatch delivers the next descendant update', { droppedChild });
+      await runInShell(client, author, `attn seed unwatch ${keptChild} --session ${watcher.sessionId}`, `attn seed unwatch ${seed}`);
+      cli(['seed', 'unwatch', seed, '--session', watcher.sessionId]);
+      runner.writeText('subscription-transcript.txt', await paneText(client, watcher));
+    });
+
+    await runner.step('restart_does_not_restore_dispatch_watches', async () => {
+      await client.quitApp();
+      await observer.close();
+      cli(['daemon', 'stop']);
+      await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false });
+      const shown = JSON.parse(cli(['seed', 'show', seed, '--session', watcher.sessionId, '--json']));
+      runner.assert(!shown.watching && shown.watching_via.length === 0, 'restart preserves the removed dispatch subscription', { seed, watching: shown.watching, via: shown.watching_via });
+      cli(['seed', 'note', droppedChild, '-m', 'Still unwatched after restart', '--ring', '--session', author.sessionId]);
+      runner.assert(unreadSeeds().length === 0, 'post-restart activity stays quiet', { unread: unreadSeeds() });
+      runner.writeText('watch-after-restart.json', JSON.stringify({ seed, watching: shown.watching, watching_via: shown.watching_via }));
+    });
+
+    const summary = await runner.finishSuccess({ seed, watcherSessionId: watcher.sessionId, peerMessage, delegated, keptChild, droppedChild });
     console.log('[RealAppHarness] Garden seed read receipts passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
@@ -285,7 +398,7 @@ async function main() {
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
-    for (const id of [watcher?.sessionId, author?.sessionId]) {
+    for (const id of [delegated, watcher?.sessionId, author?.sessionId]) {
       if (id) await client.request('close_session', { sessionId: id }).catch(() => {});
     }
     await client.quitApp().catch(() => {});

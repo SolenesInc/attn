@@ -142,8 +142,9 @@ commands:
         The review never changes a seed's state.
 
   watch <id> | unwatch <id>
-        ring this session when the seed or anything in its plot moves. A watch
-        survives through the session's day; unwatch is the way out.
+        watch this seed and its descendants. Delegation starts the same watch.
+        unwatch removes this seed's subscription; separate child or ancestor
+        watches remain. show names the subscriptions that still cover a seed.
 
   edit <id> -m <body>
         replace the seed's markdown body without moving its state or claim.
@@ -1037,6 +1038,7 @@ func fprintArtifactReferences(w io.Writer, artifacts []protocol.SeedArtifactRefe
 func fprintSeedShow(w io.Writer, result *protocol.SeedShowResult) {
 	fprintHandoff(w, result.Handoff)
 	fprintSeed(w, result.Seed, result.Watching)
+	fprintSeedWatchCoverage(w, result.WatchingVia)
 	if len(result.Relations) > 0 {
 		fmt.Fprintln(w)
 		fprintRelations(w, result.Relations)
@@ -1376,18 +1378,33 @@ func runSeedWatch(verb string, args []string) {
 		writeJSON(result)
 		return
 	}
-	if result.Watching {
+	fprintSeedWatchResult(os.Stdout, result, verb == "unwatch")
+}
+
+func fprintSeedWatchCoverage(w io.Writer, seedIDs []string) {
+	for _, seedID := range seedIDs {
+		fmt.Fprintf(w, "watching via %s (remove with attn seed unwatch %s)\n", seedID, seedID)
+	}
+}
+
+func fprintSeedWatchResult(w io.Writer, result *protocol.SeedWatchResult, unwatch bool) {
+	if unwatch {
 		if result.Changed {
-			fmt.Printf("watching %s — its activity and anything below it will ring this session\n", result.SeedID)
+			fmt.Fprintf(w, "removed watch on %s\n", result.SeedID)
 		} else {
-			fmt.Printf("already watching %s\n", result.SeedID)
+			fmt.Fprintf(w, "no direct watch on %s\n", result.SeedID)
+		}
+		if result.Watching {
+			fprintSeedWatchCoverage(w, result.WatchingVia)
+		} else {
+			fmt.Fprintf(w, "no remaining watch covers %s\n", result.SeedID)
 		}
 		return
 	}
 	if result.Changed {
-		fmt.Printf("stopped watching %s\n", result.SeedID)
+		fmt.Fprintf(w, "watching %s and its descendants\n", result.SeedID)
 	} else {
-		fmt.Printf("not watching %s\n", result.SeedID)
+		fmt.Fprintf(w, "already watching %s\n", result.SeedID)
 	}
 }
 

@@ -3,13 +3,14 @@ package daemon
 import (
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 var gardenRingEvents = map[garden.Verb]string{
@@ -37,29 +38,127 @@ func (d *Daemon) handleSeedWatch(conn net.Conn, msg *protocol.SeedWatchMessage) 
 		d.sendGardenError(conn, verb, fmt.Errorf("watching is for a live attn session; pass --session or run it inside one"))
 		return
 	}
-	changed, err := d.store.SetGardenSeedWatch(sessionID, seed.ID, watching, time.Now())
+	result, err := d.setSeedWatch(sessionID, seed.ID, watching)
 	if err != nil {
 		d.sendGardenError(conn, verb, err)
 		return
 	}
-	if !watching {
-		d.consumeSeedBell(sessionID, seed.ID)
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedWatchResult: &protocol.SeedWatchResult{
-		SeedID: seed.ID, Watching: watching, Changed: changed,
-	}})
+	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedWatchResult: result})
 }
 
-func (d *Daemon) seedWatching(sessionID, seedID string) bool {
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" || d.store == nil {
-		return false
-	}
-	watching, err := d.store.GardenSeedWatching(sessionID, seedID)
+func (d *Daemon) setSeedWatch(sessionID, seedID string, watching bool) (*protocol.SeedWatchResult, error) {
+	d.gardenWatchMu.Lock()
+	defer d.gardenWatchMu.Unlock()
+	changed, err := d.store.SetGardenSeedWatch(sessionID, seedID, watching, time.Now())
 	if err != nil {
-		d.logf("garden bell: reading watch session=%s seed=%s: %v", sessionID, seedID, err)
+		return nil, err
 	}
-	return watching
+	if !watching {
+		if err := d.discardUncoveredSeedBells(sessionID); err != nil {
+			return nil, fmt.Errorf("subscription removed, but queued updates could not be cleared; retry unwatch: %w", err)
+		}
+	}
+	coverage, err := d.seedWatchCoverage(sessionID, seedID)
+	if err != nil {
+		return nil, err
+	}
+	return &protocol.SeedWatchResult{SeedID: seedID, Watching: len(coverage) > 0, WatchingVia: coverage, Changed: changed}, nil
+}
+
+type gardenSubscriptions struct {
+	parents map[string]string
+	watches map[string][]store.GardenSeedWatch
+}
+
+func newGardenSubscriptions(seeds []garden.Seed, watches []store.GardenSeedWatch) gardenSubscriptions {
+	subscriptions := gardenSubscriptions{parents: make(map[string]string, len(seeds)), watches: map[string][]store.GardenSeedWatch{}}
+	for _, seed := range seeds {
+		subscriptions.parents[seed.ID] = ""
+		for _, edge := range seed.Edges {
+			if edge.Kind == garden.EdgePartOf {
+				subscriptions.parents[seed.ID] = edge.To
+				break
+			}
+		}
+	}
+	for _, watch := range watches {
+		subscriptions.watches[watch.SeedID] = append(subscriptions.watches[watch.SeedID], watch)
+	}
+	return subscriptions
+}
+
+// Coverage names the ordinary subscriptions covering this seed for each session.
+func (s gardenSubscriptions) coverage(seedID string) map[string][]string {
+	covered := map[string][]string{}
+	seen := map[string]bool{}
+	for at := seedID; !seen[at]; {
+		parent, known := s.parents[at]
+		if !known {
+			break
+		}
+		seen[at] = true
+		for _, watch := range s.watches[at] {
+			covered[watch.WatcherSessionID] = append(covered[watch.WatcherSessionID], at)
+		}
+		at = parent
+	}
+	for _, seeds := range covered {
+		sort.Strings(seeds)
+	}
+	return covered
+}
+
+func (d *Daemon) readGardenSubscriptions() (gardenSubscriptions, error) {
+	read, err := d.readGarden()
+	if err != nil {
+		return gardenSubscriptions{}, err
+	}
+	watches, err := d.store.GardenSeedWatches()
+	if err != nil {
+		return gardenSubscriptions{}, err
+	}
+	return newGardenSubscriptions(read.seeds, watches), nil
+}
+
+func (d *Daemon) seedWatchCoverage(sessionID, seedID string) ([]string, error) {
+	if strings.TrimSpace(sessionID) == "" {
+		return []string{}, nil
+	}
+	subscriptions, err := d.readGardenSubscriptions()
+	if err != nil {
+		return nil, err
+	}
+	coverage := subscriptions.coverage(seedID)[sessionID]
+	if coverage == nil {
+		coverage = []string{}
+	}
+	return coverage, nil
+}
+
+// Caller holds gardenWatchMu through the dependent enqueue or inbox read.
+func (d *Daemon) discardUncoveredSeedBells(sessionID string) error {
+	seeds, err := d.store.UnreadGardenSeedMailboxSeeds(sessionID)
+	if err != nil {
+		return err
+	}
+	if len(seeds) == 0 {
+		return nil
+	}
+	subscriptions, err := d.readGardenSubscriptions()
+	if err != nil {
+		return err
+	}
+	var uncovered []string
+	for _, seedID := range seeds {
+		if len(subscriptions.coverage(seedID)[sessionID]) != 0 {
+			continue
+		}
+		uncovered = append(uncovered, seedID)
+	}
+	if err := d.store.DiscardGardenSeedMailboxItems(sessionID, uncovered, time.Now()); err != nil {
+		return err
+	}
+	return d.refreshAgentMailboxUnread(sessionID)
 }
 
 func (d *Daemon) consumeSeedBell(sessionID, seedID string) {
@@ -83,36 +182,14 @@ func (d *Daemon) ringSeedActivity(seedID, eventKind string, excludedSessionIDs .
 	if d.store == nil {
 		return
 	}
-	read, err := d.readGarden()
+	d.gardenWatchMu.Lock()
+	defer d.gardenWatchMu.Unlock()
+	subscriptions, err := d.readGardenSubscriptions()
 	if err != nil {
-		d.logf("garden bell: reading graph for %s: %v", seedID, err)
+		d.logf("garden bell: reading subscriptions for %s: %v", seedID, err)
 		return
 	}
-	ancestors := gardenSeedAncestors(read.seeds, seedID)
-	if len(ancestors) == 0 {
-		return
-	}
-	targets := map[string]bool{}
-	watches, err := d.store.GardenSeedWatches()
-	if err != nil {
-		d.logf("garden bell: reading watches for %s: %v", seedID, err)
-		return
-	}
-	for _, watch := range watches {
-		if ancestors[watch.SeedID] {
-			targets[watch.WatcherSessionID] = true
-		}
-	}
-	dispatches, err := d.readGardenDispatchesAt(ancestors)
-	if err != nil {
-		d.logf("garden bell: reading dispatches for %s: %v", seedID, err)
-		return
-	}
-	for _, dispatch := range dispatches {
-		if ancestors[dispatch.Crown] && dispatch.DispatcherSession != "" {
-			targets[dispatch.DispatcherSession] = true
-		}
-	}
+	targets := subscriptions.coverage(seedID)
 
 	for _, sessionID := range excludedSessionIDs {
 		delete(targets, strings.TrimSpace(sessionID))
@@ -123,54 +200,6 @@ func (d *Daemon) ringSeedActivity(seedID, eventKind string, excludedSessionIDs .
 		}
 		d.claimAndDeliverSeedBell(sessionID, seedID, eventKind)
 	}
-}
-
-func gardenSeedAncestors(seeds []garden.Seed, seedID string) map[string]bool {
-	parents := make(map[string]string, len(seeds))
-	known := make(map[string]bool, len(seeds))
-	for _, seed := range seeds {
-		known[seed.ID] = true
-		for _, edge := range seed.Edges {
-			if edge.Kind == garden.EdgePartOf {
-				parents[seed.ID] = edge.To
-				break
-			}
-		}
-	}
-	ancestors := map[string]bool{}
-	for at := seedID; known[at] && !ancestors[at]; at = parents[at] {
-		ancestors[at] = true
-	}
-	return ancestors
-}
-
-func (d *Daemon) readGardenDispatchesAt(seedIDs map[string]bool) ([]garden.Dispatch, error) {
-	var dispatches []garden.Dispatch
-	for seedID := range seedIDs {
-		after := ""
-		for {
-			read, _, err := d.runDocQuery(docstore.Query{
-				Namespace: garden.Namespace, Collection: garden.CollectionDispatches,
-				Filters: []docstore.Filter{{Field: "crown", Op: docstore.OpEq, Value: seedID}},
-				Limit:   docstore.MaxLimit, After: after,
-			})
-			if err != nil {
-				return nil, err
-			}
-			for _, doc := range read.Documents {
-				dispatch, err := garden.DecodeDispatch(doc.Body)
-				if err != nil {
-					return nil, err
-				}
-				dispatches = append(dispatches, dispatch)
-			}
-			if len(read.Documents) < docstore.MaxLimit {
-				break
-			}
-			after = read.Documents[len(read.Documents)-1].ID
-		}
-	}
-	return dispatches, nil
 }
 
 func (d *Daemon) claimAndDeliverSeedBell(sessionID, seedID, eventKind string) {
