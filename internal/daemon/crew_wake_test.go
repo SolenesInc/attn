@@ -744,8 +744,9 @@ func TestCrewWake_LaunchesTheHarnessTheMemberIsRegisteredOn(t *testing.T) {
 
 func TestCrewWake_AnUnsetAgentIsStillTheDefaultHarness(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
-	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").Agent); got != crew.DefaultAgent {
-		t.Fatalf("roster agent = %q, want the default %q", got, crew.DefaultAgent)
+	member := memberByID(t, crewList(t, d), "trellis")
+	if member.Agent != nil || member.ResolvedAgent != crew.DefaultAgent {
+		t.Fatalf("roster stored/resolved agent = %v/%q, want unset/%q", member.Agent, member.ResolvedAgent, crew.DefaultAgent)
 	}
 	if _, err := d.crewWake("trellis", ""); err != nil {
 		t.Fatalf("wake: %v", err)
@@ -793,7 +794,8 @@ func TestCrewSet_RefusesAnUnknownHarnessAndClearsBackToTheDefault(t *testing.T) 
 	if resp := crewSet(t, d, protocol.CrewSetMessage{Member: "trellis", Agent: protocol.Ptr("")}); !resp.Ok {
 		t.Fatalf("crew set --agent '': %v", protocol.Deref(resp.Error))
 	}
-	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").Agent); got != crew.DefaultAgent {
-		t.Errorf("clearing the agent left %q, want %q", got, crew.DefaultAgent)
+	member := memberByID(t, crewList(t, d), "trellis")
+	if member.Agent != nil || member.ResolvedAgent != crew.DefaultAgent {
+		t.Errorf("clearing the agent left stored/resolved %v/%q, want unset/%q", member.Agent, member.ResolvedAgent, crew.DefaultAgent)
 	}
 }

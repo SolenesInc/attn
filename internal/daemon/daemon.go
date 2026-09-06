@@ -1027,6 +1027,7 @@ func (d *Daemon) Start() error {
 
 	go func() {
 		d.performStartupPTYRecovery(recoveryStartedAt)
+		d.reconcileCrewRestarts()
 		d.seedQueuedAgentMailboxItems()
 		recoverAutomationsAfterGitHubReady(githubHostsReady, d.recoverAutomations)
 		d.setRecovering(false)
@@ -2663,6 +2664,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleCrewSleep(conn, msg.(*protocol.CrewSleepMessage))
 	case protocol.CmdCrewSet: // wire: crew_set
 		d.handleCrewSet(conn, msg.(*protocol.CrewSetMessage))
+	case protocol.CmdCrewRestart: // wire: crew_restart
+		d.handleCrewRestart(conn, msg.(*protocol.CrewRestartMessage))
 	case protocol.CmdCrewPrime: // wire: crew_prime
 		d.handleCrewPrime(conn, msg.(*protocol.CrewPrimeMessage))
 	case protocol.CmdCrewHandoff: // wire: crew_handoff
