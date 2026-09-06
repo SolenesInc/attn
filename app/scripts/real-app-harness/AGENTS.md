@@ -7,6 +7,10 @@ Run commands from the repository root.
 
 - Scenarios share one display; run serially. Batch with
   `pnpm --dir app run real-app:serial-matrix`.
+- `--shard <index>/<count>` runs one balanced slice, which is how CI spreads the
+  matrix across runners. The weights are `scenario-durations.json`, seconds a
+  green run recorded; a scenario with no entry there fails the plan by name.
+  Remeasure from a green `matrix-digest.txt` when a scenario changes shape.
 - A scenario that cannot run on a platform says so in its catalog entry:
   `skipOn: { linux: '<reason>' }`, or `{ reason, unlessEnv }` when an
   environment variable proves the runner has what it needs (the remote `tr*`

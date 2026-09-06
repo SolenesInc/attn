@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: Split the app acceptance serial matrix across four runners that install one build's app tree, and gate on a job that aggregates their digests.
