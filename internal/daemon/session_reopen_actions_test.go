@@ -411,6 +411,10 @@ func TestAskingForAVerdictRefreshesTheBranchItRead(t *testing.T) {
 		t.Fatalf("session_show carried %+v, want the branch reported gone", shown.Reopen)
 	}
 
+	// Inspections coalesce per repository and branch, so the refresh the ask above
+	// started has to land before the branch changes or the next ask joins a stale one.
+	waitForBranchInspection(t, d, repo, "feat/refreshed")
+
 	// Somebody pushes the branch back outside attn. The ask that follows serves the
 	// stale answer and must leave a fresh inspection behind it.
 	runGitDaemon(t, repo, "branch", "feat/refreshed", "main")
