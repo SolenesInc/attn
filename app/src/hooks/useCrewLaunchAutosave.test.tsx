@@ -116,17 +116,39 @@ describe('useCrewLaunchAutosave', () => {
     const initial = member('alder', 1, {
       agent: 'codex', model: 'model-a', resolved_agent: 'codex', resolved_model: 'model-a',
     });
-    const { result } = renderHook(() => useCrewLaunchAutosave([initial], 1, send));
+    const { result, rerender } = renderHook(
+      ({ members }) => useCrewLaunchAutosave(members, 1, send),
+      { initialProps: { members: [initial] } },
+    );
     await waitFor(() => expect(result.current.read('alder')).toBeDefined());
 
     act(() => result.current.update('alder', { model: 'model-b' }));
     act(() => result.current.update('alder', { model: 'model-a' }));
+
+    rerender({ members: [{ ...initial, binding_session: 'derived-before-model-b-landed' }] });
+    await waitFor(() => expect(result.current.read('alder')).toMatchObject({
+      state: 'saving', draft: { model: 'model-a' },
+      acknowledged: { revision: 1, binding_session: 'derived-before-model-b-landed' },
+    }));
+
+    const savedB = member('alder', 2, {
+      agent: 'codex', model: 'model-b', resolved_agent: 'codex', resolved_model: 'model-b',
+    });
+    rerender({ members: [savedB] });
+    await waitFor(() => expect(result.current.read('alder')).toMatchObject({
+      state: 'saving', draft: { model: 'model-a' }, acknowledged: { revision: 2, model: 'model-b' },
+    }));
+
+    rerender({ members: [{ ...savedB, binding_session: 'derived-at-the-same-revision' }] });
+    await waitFor(() => expect(result.current.read('alder')).toMatchObject({
+      state: 'saving', draft: { model: 'model-a' },
+      acknowledged: { revision: 2, binding_session: 'derived-at-the-same-revision' },
+    }));
+
     await act(async () => first.resolve({
       success: true,
       conflict: false,
-      member: member('alder', 2, {
-        agent: 'codex', model: 'model-b', resolved_agent: 'codex', resolved_model: 'model-b',
-      }),
+      member: savedB,
     }));
 
     await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
@@ -222,21 +244,81 @@ describe('useCrewLaunchAutosave', () => {
     await waitFor(() => expect(result.current.read('trellis')).toMatchObject({ state: 'saved', acknowledged: { revision: 2 } }));
   });
 
-  it('accepts a broadcast proving that a transport-failed edit landed', async () => {
-    const send = vi.fn().mockRejectedValue(new Error('WebSocket not connected'));
+  it('retries a transport-uncertain write even after a matching broadcast', async () => {
+    const retry = deferred<CrewMutationOutcome>();
+    const send = vi.fn()
+      .mockRejectedValueOnce(new Error('WebSocket not connected'))
+      .mockReturnValueOnce(retry.promise);
     const { result, rerender } = renderHook(
-      ({ members }) => useCrewLaunchAutosave(members, 0, send),
-      { initialProps: { members: [member('trellis', 1)] } },
+      ({ members, connectionGeneration }) => useCrewLaunchAutosave(members, connectionGeneration, send),
+      { initialProps: { members: [member('trellis', 1)], connectionGeneration: 0 } },
     );
     await waitFor(() => expect(result.current.read('trellis')).toBeDefined());
     act(() => result.current.update('trellis', { model: 'private-model' }));
     await waitFor(() => expect(result.current.read('trellis')?.state).toBe('error'));
 
-    rerender({ members: [member('trellis', 2, { model: 'private-model', resolved_model: 'private-model' })] });
+    const landed = member('trellis', 2, { model: 'private-model', resolved_model: 'private-model' });
+    rerender({ members: [landed], connectionGeneration: 0 });
 
     await waitFor(() => expect(result.current.read('trellis')).toMatchObject({
-      state: 'saved', draft: { model: 'private-model' }, acknowledged: { revision: 2 },
+      state: 'error', draft: { model: 'private-model' }, acknowledged: { revision: 2 },
     }));
+
+    rerender({ members: [landed], connectionGeneration: 1 });
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+    expect(send).toHaveBeenLastCalledWith({
+      member: 'trellis', expectedRevision: 2, agent: '', model: 'private-model', effort: '',
+    });
+    await act(async () => retry.resolve({
+      success: true,
+      conflict: false,
+      member: member('trellis', 3, { model: 'private-model', resolved_model: 'private-model' }),
+    }));
+    expect(result.current.read('trellis')?.state).toBe('saved');
+  });
+
+  it('does not let a rejected retry make an older uncertain write look settled', async () => {
+    const finalRetry = deferred<CrewMutationOutcome>();
+    const send = vi.fn()
+      .mockRejectedValueOnce(new Error('WebSocket not connected'))
+      .mockResolvedValueOnce({ success: false, conflict: false, error: 'invalid model' })
+      .mockReturnValueOnce(finalRetry.promise);
+    const initial = member('trellis', 1, {
+      agent: 'codex', model: 'model-a', resolved_agent: 'codex', resolved_model: 'model-a',
+    });
+    const { result, rerender } = renderHook(
+      ({ members }) => useCrewLaunchAutosave(members, 0, send),
+      { initialProps: { members: [initial] } },
+    );
+    await waitFor(() => expect(result.current.read('trellis')).toBeDefined());
+
+    act(() => result.current.update('trellis', { model: 'model-b' }));
+    await waitFor(() => expect(result.current.read('trellis')?.state).toBe('error'));
+    act(() => result.current.update('trellis', { model: 'model-a' }));
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.read('trellis')).toMatchObject({
+      state: 'error', draft: { model: 'model-a' }, error: 'invalid model',
+    }));
+
+    rerender({ members: [{ ...initial, binding_session: 'derived-at-revision-one' }] });
+    await waitFor(() => expect(result.current.read('trellis')).toMatchObject({
+      state: 'error', draft: { model: 'model-a' },
+      acknowledged: { revision: 1, binding_session: 'derived-at-revision-one' },
+    }));
+
+    act(() => result.current.retry('trellis'));
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(3));
+    expect(send).toHaveBeenLastCalledWith({
+      member: 'trellis', expectedRevision: 1, agent: 'codex', model: 'model-a', effort: '',
+    });
+    await act(async () => finalRetry.resolve({
+      success: true,
+      conflict: false,
+      member: member('trellis', 2, {
+        agent: 'codex', model: 'model-a', resolved_agent: 'codex', resolved_model: 'model-a',
+      }),
+    }));
+    expect(result.current.read('trellis')?.state).toBe('saved');
   });
 
   it('does not let a late result erase a newer local edit or roster revision', async () => {

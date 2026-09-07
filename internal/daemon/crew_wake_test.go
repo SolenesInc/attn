@@ -113,7 +113,8 @@ func TestCrewWake_BroadcastsTheLiveBindingAfterSessionRegistration(t *testing.T)
 func TestCrewWake_AMemberWakesOnItsConfiguredModel(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	d.store.SetSetting(SettingDefaultModelPrefix+"claude", "claude-sonnet-4-5")
-	if resp := crewSet(t, d, protocol.CrewSetMessage{Member: "trellis", Model: protocol.Ptr("claude-haiku-4-5")}); !resp.Ok {
+	const qualifiedModel = "anthropic/claude-haiku-4-5"
+	if resp := crewSet(t, d, protocol.CrewSetMessage{Member: "trellis", Model: protocol.Ptr(qualifiedModel)}); !resp.Ok {
 		t.Fatalf("crew set: %v", protocol.Deref(resp.Error))
 	}
 	if _, err := d.crewWake("trellis", ""); err != nil {
@@ -123,10 +124,10 @@ func TestCrewWake_AMemberWakesOnItsConfiguredModel(t *testing.T) {
 	backend.mu.Lock()
 	model := backend.spawnOpts[0].Model
 	backend.mu.Unlock()
-	if model != "claude-haiku-4-5" {
+	if model != qualifiedModel {
 		t.Fatalf("member woke on model %q, want its configured model", model)
 	}
-	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").Model); got != "claude-haiku-4-5" {
+	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").Model); got != qualifiedModel {
 		t.Fatalf("roster model = %q, want the configured model", got)
 	}
 }

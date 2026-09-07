@@ -213,6 +213,16 @@ try {
     await click('[data-testid="manage-crew"]');
     const text = await panelText();
     runner.assert(text.includes('Manage crew') && text.includes('Awake') && text.includes('Asleep'), 'the roster keeps both member states visible', { text });
+    const sidebarGeometry = await client.request('dom_bounds', { selector: '.sidebar' });
+    const panelGeometry = await client.request('dom_bounds', { selector: '[data-testid="crew-panel"]' });
+    const sidebarBounds = sidebarGeometry.bounds;
+    const panelBounds = panelGeometry.bounds;
+    runner.assert(
+      sidebarBounds.width > 0 && panelBounds.x >= sidebarBounds.x + sidebarBounds.width,
+      'the global sidebar remains visible beside Crew',
+      { sidebarBounds, panelBounds },
+    );
+    runner.writeJson('crew-sidebar-geometry.json', { sidebarBounds, panelBounds });
     await screenshot('01-manage-roster.png');
     await pressEscapeAndWaitFor('manage-crew');
   });
