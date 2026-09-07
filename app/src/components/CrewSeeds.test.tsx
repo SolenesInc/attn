@@ -105,7 +105,8 @@ describe('CrewSeeds', () => {
     expect(row).toHaveAttribute('data-seed-id', child.id);
     expect(row).toHaveAttribute('data-seed-state', 'planted');
     expect(row).toHaveTextContent('Garden follow-up work · 2/5');
-    fireEvent.click(row);
+    fireEvent.keyDown(row, { key: 'Enter' });
+    expect(onOpenSeed).toHaveBeenCalledOnce();
     expect(onOpenSeed).toHaveBeenCalledWith(child.id);
   });
 

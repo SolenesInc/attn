@@ -125,6 +125,11 @@ export function CrewSeeds({
                       data-seed-id={seed.id}
                       data-seed-state={seed.status}
                       onClick={() => onOpenSeed(seed.id)}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Enter') return;
+                        event.preventDefault();
+                        onOpenSeed(seed.id);
+                      }}
                     >
                       {seed.plot_progress ? <SeedPlotIcon /> : <SeedStateIcon status={seed.status} />}
                       <span className="crew-seed-row-content">
