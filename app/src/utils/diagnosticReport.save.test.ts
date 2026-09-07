@@ -22,6 +22,7 @@ describe('saveDiagnosticReport', () => {
     mocks.exists.mockResolvedValue(false);
     mocks.writeTextFile.mockResolvedValue(undefined);
     mocks.save.mockResolvedValue(null);
+    mocks.revealItemInDir.mockResolvedValue(undefined);
   });
 
   it('avoids a filename collision and reveals the created report', async () => {
@@ -46,5 +47,13 @@ describe('saveDiagnosticReport', () => {
     expect(mocks.save).toHaveBeenCalledOnce();
     expect(mocks.writeTextFile).toHaveBeenLastCalledWith('/chosen/report.json', expect.any(String));
     expect(mocks.revealItemInDir).toHaveBeenCalledWith('/chosen/report.json');
+  });
+
+  it('reports success without waiting for the desktop to reveal the file', async () => {
+    mocks.revealItemInDir.mockImplementation(() => new Promise(() => {}));
+
+    await expect(saveDiagnosticReport({ schema: 'attn.support-report.v1' })).resolves.toMatch(
+      /^\/Downloads\/attn-\d{8}-\d{6}Z\.attn-report\.json$/,
+    );
   });
 });

@@ -685,10 +685,8 @@ export async function saveDiagnosticReport(report: Record<string, unknown>): Pro
     await writeTextFile(selectedTarget, contents);
     target = selectedTarget;
   }
-  try {
-    await revealItemInDir(target);
-  } catch {
-    // The report is already saved; Finder reveal is only a convenience.
-  }
+  void revealItemInDir(target).catch(() => {
+    // The report is already saved; revealing it is only a convenience.
+  });
   return target;
 }
