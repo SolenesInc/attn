@@ -983,6 +983,7 @@ function AppContent({
 
   const [selectedSessionlessWorkspaceId, setSelectedSessionlessWorkspaceId] = useState<string | null>(null);
   const [selectedTile, setSelectedTile] = useState<{ workspaceId: string; tileId: string } | null>(null);
+  const [pendingTileSelection, setPendingTileSelection] = useState<{ workspaceId: string; tileId: string } | null>(null);
   const selectWorkspaceRef = useRef<(workspaceId: string) => void>(() => {});
   const [view, setView] = useState<'dashboard' | 'session' | 'grid'>('dashboard');
   const [utilityFocusRequestToken, setUtilityFocusRequestToken] = useState(0);
@@ -3197,12 +3198,46 @@ function AppContent({
   );
   selectWorkspaceRef.current = handleSelectWorkspace;
 
-  const handleSelectTile = useCallback((workspaceId: string, tileId: string) => {
+  const selectTile = useCallback((workspaceId: string, tileId: string) => {
     handleSelectWorkspace(workspaceId);
     setSelectedTile({ workspaceId, tileId });
-  }, [handleSelectWorkspace]);
+    window.requestAnimationFrame(() => focusWorkspaceLeaf(workspaceId, tileId));
+  }, [focusWorkspaceLeaf, handleSelectWorkspace]);
+
+  const handleSelectTile = useCallback((workspaceId: string, tileId: string) => {
+    const tileExists = workspaceViews.some((workspace) => (
+      workspace.id === workspaceId
+      && workspace.children.some((child) => child.kind === 'tile' && child.tile.tileId === tileId)
+    ));
+    if (!tileExists) {
+      setPendingTileSelection({ workspaceId, tileId });
+      return;
+    }
+    setPendingTileSelection(null);
+    selectTile(workspaceId, tileId);
+  }, [selectTile, workspaceViews]);
+
+  useEffect(() => {
+    if (!pendingTileSelection) {
+      return;
+    }
+    const tileExists = workspaceViews.some((workspace) => (
+      workspace.id === pendingTileSelection.workspaceId
+      && workspace.children.some((child) => (
+        child.kind === 'tile' && child.tile.tileId === pendingTileSelection.tileId
+      ))
+    ));
+    if (!tileExists) {
+      return;
+    }
+    setPendingTileSelection(null);
+    selectTile(pendingTileSelection.workspaceId, pendingTileSelection.tileId);
+  }, [pendingTileSelection, selectTile, workspaceViews]);
 
   const handleCloseTile = useCallback((workspaceId: string, tileId: string) => {
+    setPendingTileSelection((current) => (
+      current?.workspaceId === workspaceId && current.tileId === tileId ? null : current
+    ));
     setSelectedTile((current) => (
       current?.workspaceId === workspaceId && current.tileId === tileId ? null : current
     ));
@@ -3403,9 +3438,8 @@ function AppContent({
     const tileId = opened.tileId;
     beforeFocus?.({ workspaceId, tileId });
     handleSelectTile(workspaceId, tileId);
-    window.requestAnimationFrame(() => focusWorkspaceLeaf(workspaceId, tileId));
     return opened;
-  }, [sendOpenSeed, activeSessionId, focusWorkspaceLeaf, handleSelectTile]);
+  }, [sendOpenSeed, activeSessionId, handleSelectTile]);
 
   const handleOpenSeedTile = useCallback((seedId: string) => {
     void openSeedTile(seedId).catch((error) => {
