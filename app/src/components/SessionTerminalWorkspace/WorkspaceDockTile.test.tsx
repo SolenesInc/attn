@@ -1068,6 +1068,32 @@ describe('WorkspaceDockTile seed reader', () => {
     setMarkdownAnnotationsTransport(null);
   });
 
+  it('offers Back to Crew only on the seed tile opened from Crew', async () => {
+    const detail = seedDocumentFixture();
+    const daemonApi = {
+      sendSeedDocumentGet: vi.fn().mockResolvedValue(detail),
+      sendOpenMarkdown: vi.fn(),
+    } as unknown as DaemonApi;
+    const onBackToCrew = vi.fn();
+    render(
+      <WorkspaceDockTile
+        tile={{ type: 'tile', tileId: 'tile-seed-s-plan11', tileKind: 'seed', tileParams: 's-plan11' }}
+        workspaceId="workspace-1"
+        dragging={false}
+        gardenSeeds={[detail.seed]}
+        onBackToCrew={onBackToCrew}
+        onClose={vi.fn()}
+        onHeaderPointerDown={vi.fn()}
+        onRequestContent={vi.fn()}
+      />,
+      { wrapper: ({ children }) => <SeedTileTestWrapper api={daemonApi}>{children}</SeedTileTestWrapper> },
+    );
+
+    const back = await screen.findByRole('button', { name: 'Back to Crew' });
+    fireEvent.click(back);
+    expect(onBackToCrew).toHaveBeenCalledWith(back);
+  });
+
   it('loads the seed document, renders its plot and collapsed log, annotates by seed URI, and refetches on a garden push', async () => {
     const first = seedDocumentFixture();
     const second = {
