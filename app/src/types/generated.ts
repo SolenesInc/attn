@@ -9311,6 +9311,7 @@ export interface SupportSnapshotMessage {
     cmd:          SupportSnapshotMessageCmd;
     endpoint_id?: string;
     request_id:   string;
+    runtime_ids?: string[];
     [property: string]: any;
 }
 
@@ -21645,6 +21646,7 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("SupportSnapshotMessageCmd") },
         { json: "endpoint_id", js: "endpoint_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
+        { json: "runtime_ids", js: "runtime_ids", typ: u(undefined, a("")) },
     ], "any"),
     "SupportSnapshotResultMessage": o([
         { json: "backend", js: "backend", typ: "" },
