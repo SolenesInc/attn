@@ -129,6 +129,36 @@ describe('useCrewCharterAutosave', () => {
     expect(result.current.read('keel')).toMatchObject({ state: 'error', draft: 'B', error: 'connection lost' });
   });
 
+  it('requires a same-content server fence before settling a reverted uncertain write', async () => {
+    const confirmation = deferred<any>();
+    const setCharter = vi.fn()
+      .mockRejectedValueOnce(new Error('save response was lost'))
+      .mockReturnValueOnce(confirmation.promise);
+    const getCharter = vi.fn().mockResolvedValue({ member: 'alder', charter: { content: 'A', token: '1:a' } });
+    const { result } = renderHook(() => useCrewCharterAutosave(1, getCharter, setCharter));
+    await act(async () => { await result.current.load('alder'); });
+
+    act(() => result.current.update('alder', 'B'));
+    await act(async () => { await result.current.flush('alder'); });
+    expect(result.current.read('alder')).toMatchObject({ state: 'error', uncertain: true });
+
+    act(() => result.current.update('alder', 'A'));
+    expect(result.current.read('alder')).toMatchObject({ state: 'dirty', uncertain: true, draft: 'A' });
+    let retry!: Promise<boolean>;
+    act(() => { retry = result.current.flush('alder'); });
+    await act(async () => {});
+    expect(setCharter).toHaveBeenLastCalledWith('alder', 'A', '1:a');
+    expect(result.current.read('alder')?.state).toBe('saving');
+
+    await act(async () => confirmation.resolve({
+      member: 'alder', conflict: false, charter: { content: 'A', token: '2:a' },
+    }));
+    await expect(retry).resolves.toBe(true);
+    expect(result.current.read('alder')).toMatchObject({
+      state: 'saved', uncertain: false, acknowledged: { token: '2:a' },
+    });
+  });
+
   it('keeps local text on conflict and makes both recovery choices explicit', async () => {
     const setCharter = vi.fn()
       .mockResolvedValueOnce({ member: 'keel', conflict: true, charter: { content: 'external', token: 'external-token' } })

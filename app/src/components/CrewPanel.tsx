@@ -27,6 +27,7 @@ type CrewTab = 'launch' | 'charter' | 'handoffs';
 interface HandoffLoad {
   state: 'loading' | 'ready' | 'error';
   handoffs: CrewHandoffDocument[];
+  selected?: string;
   error?: string;
   request: number;
   connectionGeneration: number;
@@ -267,7 +268,6 @@ export function CrewPanel({
   const [attempts, setAttempts] = useState<Record<string, RestartAttempt>>({});
   const [handoffLoads, setHandoffLoads] = useState<Record<string, HandoffLoad>>({});
   const handoffLoadsRef = useRef(handoffLoads);
-  const [selectedHandoffs, setSelectedHandoffs] = useState<Record<string, string>>({});
   const handoffRequest = useRef(0);
   const [navigationPending, setNavigationPending] = useState(false);
   const navigationSequence = useRef(0);
@@ -370,21 +370,30 @@ export function CrewPanel({
     setHandoffLoads((current) => ({
       ...current,
       [memberId]: {
-        state: 'loading', handoffs: current[memberId]?.handoffs ?? [], request, connectionGeneration,
+        state: 'loading',
+        handoffs: current[memberId]?.handoffs ?? [],
+        selected: current[memberId]?.selected,
+        request,
+        connectionGeneration,
       },
     }));
     void sendCrewHandoffsGet(memberId).then((result) => {
       if (result.member !== memberId) {
         throw new Error(`Handoff response named ${result.member}, expected ${memberId}`);
       }
-      setHandoffLoads((current) => current[memberId]?.request !== request ? current : ({
-        ...current,
-        [memberId]: { state: 'ready', handoffs: result.handoffs, request, connectionGeneration },
-      }));
-      setSelectedHandoffs((current) => {
-        const selected = current[memberId];
-        if (selected && result.handoffs.some((handoff) => handoff.filename === selected)) return current;
-        return { ...current, [memberId]: result.handoffs[0]?.filename ?? '' };
+      setHandoffLoads((current) => {
+        const existing = current[memberId];
+        if (existing?.request !== request) return current;
+        const selected = existing.selected
+          && result.handoffs.some((handoff) => handoff.filename === existing.selected)
+          ? existing.selected
+          : result.handoffs[0]?.filename;
+        return {
+          ...current,
+          [memberId]: {
+            state: 'ready', handoffs: result.handoffs, selected, request, connectionGeneration,
+          },
+        };
       });
     }).catch((error) => {
       setHandoffLoads((current) => current[memberId]?.request !== request ? current : ({
@@ -392,6 +401,7 @@ export function CrewPanel({
         [memberId]: {
           state: 'error',
           handoffs: current[memberId]?.handoffs ?? [],
+          selected: current[memberId]?.selected,
           error: error instanceof Error ? error.message : String(error),
           request,
           connectionGeneration,
@@ -723,8 +733,11 @@ export function CrewPanel({
                     <HandoffsTab
                       member={member}
                       load={handoffLoads[member.id]}
-                      selected={selectedHandoffs[member.id]}
-                      onSelect={(filename) => setSelectedHandoffs((current) => ({ ...current, [member.id]: filename }))}
+                      selected={handoffLoads[member.id]?.selected}
+                      onSelect={(filename) => setHandoffLoads((current) => ({
+                        ...current,
+                        [member.id]: { ...current[member.id], selected: filename },
+                      }))}
                       onRefresh={() => loadHandoffs(member.id, true)}
                       onOpenSeed={(seedId) => navigate(() => onOpenSeed(seedId))}
                     />

@@ -202,6 +202,7 @@ type Daemon struct {
 	crewWakeMu                        sync.Mutex
 	crewExitedMu                      sync.Mutex
 	crewDocumentMu                    sync.Mutex
+	crewCharterVersions               map[string]crewCharterVersion
 	crewExitedSessions                map[string]string
 	crewWakeStartHook                 func(memberID string)
 	crewWakeAfterClaimHook            func(memberID, sessionID string)

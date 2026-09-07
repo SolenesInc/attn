@@ -27,12 +27,31 @@ func (d *Daemon) crewDocumentMember(name string) (crew.Member, error) {
 	return member, nil
 }
 
-func readCrewCharter(member crew.Member) (protocol.CrewCharterDocument, error) {
+type crewCharterVersion struct {
+	hash     string
+	revision uint64
+}
+
+func (d *Daemon) readCrewCharterLocked(member crew.Member) (protocol.CrewCharterDocument, string, error) {
 	content, token, err := fsdoc.NewStore(member.HomeDir).Read(crew.CharterFileName)
 	if err != nil {
-		return protocol.CrewCharterDocument{}, fmt.Errorf("reading %s's charter: %w", crew.DisplayName(member.ID), err)
+		return protocol.CrewCharterDocument{}, "", fmt.Errorf("reading %s's charter: %w", crew.DisplayName(member.ID), err)
 	}
-	return protocol.CrewCharterDocument{Content: string(content), Token: token}, nil
+	if d.crewCharterVersions == nil {
+		d.crewCharterVersions = make(map[string]crewCharterVersion)
+	}
+	version, ok := d.crewCharterVersions[member.ID]
+	if !ok {
+		version = crewCharterVersion{hash: token, revision: 1}
+	} else if version.hash != token {
+		version.hash = token
+		version.revision++
+	}
+	d.crewCharterVersions[member.ID] = version
+	return protocol.CrewCharterDocument{
+		Content: string(content),
+		Token:   fmt.Sprintf("%d:%s", version.revision, token),
+	}, token, nil
 }
 
 func (d *Daemon) crewCharterGet(name string) (*protocol.CrewCharterGetResult, error) {
@@ -40,7 +59,9 @@ func (d *Daemon) crewCharterGet(name string) (*protocol.CrewCharterGetResult, er
 	if err != nil {
 		return nil, err
 	}
-	charter, err := readCrewCharter(member)
+	d.crewDocumentMu.Lock()
+	defer d.crewDocumentMu.Unlock()
+	charter, _, err := d.readCrewCharterLocked(member)
 	if err != nil {
 		return nil, err
 	}
@@ -52,29 +73,42 @@ func (d *Daemon) crewCharterSet(name, content, expectedToken string) (*protocol.
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(expectedToken) == "" {
+	expectedToken = strings.TrimSpace(expectedToken)
+	if expectedToken == "" {
 		return nil, fmt.Errorf("saving %s's charter requires the content token that was read", crew.DisplayName(member.ID))
 	}
 
 	d.crewDocumentMu.Lock()
 	defer d.crewDocumentMu.Unlock()
+	current, currentHash, err := d.readCrewCharterLocked(member)
+	if err != nil {
+		return nil, err
+	}
+	if expectedToken != current.Token {
+		return &protocol.CrewCharterSetResult{Member: member.ID, Conflict: true, Charter: current}, nil
+	}
 	store := fsdoc.NewStore(member.HomeDir)
-	token, conflict, err := store.Write(crew.CharterFileName, []byte(content), expectedToken)
+	hash, conflict, err := store.Write(crew.CharterFileName, []byte(content), currentHash)
 	if err != nil {
 		return nil, fmt.Errorf("saving %s's charter: %w", crew.DisplayName(member.ID), err)
 	}
 	if conflict != nil {
-		current, readErr := readCrewCharter(member)
-		if fsdoc.IsNotFound(readErr) {
-			current = protocol.CrewCharterDocument{}
-		} else if readErr != nil {
+		current, _, readErr := d.readCrewCharterLocked(member)
+		if readErr != nil {
 			return nil, readErr
 		}
 		return &protocol.CrewCharterSetResult{Member: member.ID, Conflict: true, Charter: current}, nil
 	}
+	version := d.crewCharterVersions[member.ID]
+	version.hash = hash
+	version.revision++
+	d.crewCharterVersions[member.ID] = version
 	return &protocol.CrewCharterSetResult{
-		Member:  member.ID,
-		Charter: protocol.CrewCharterDocument{Content: content, Token: token},
+		Member: member.ID,
+		Charter: protocol.CrewCharterDocument{
+			Content: content,
+			Token:   fmt.Sprintf("%d:%s", version.revision, hash),
+		},
 	}, nil
 }
 

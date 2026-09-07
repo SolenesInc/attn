@@ -6333,7 +6333,7 @@ model CrewListResult {
 }
 
 // Full canonical charter content, read from the registered member home. The
-// token is a hash of these exact bytes and is the write precondition.
+// opaque token orders daemon writes and binds the write to these exact bytes.
 model CrewCharterDocument {
   content: string;
   token: string;

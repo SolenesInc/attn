@@ -16,6 +16,7 @@ export interface CrewCharterEdit {
   generation: number;
   loadGeneration: number;
   documentGeneration: number;
+  uncertain: boolean;
 }
 
 type CharterGet = (member: string) => Promise<CrewCharterGetOutcome>;
@@ -53,7 +54,7 @@ export function useCrewCharterAutosave(
     const documentGeneration = current?.documentGeneration ?? 0;
     store(member, current
       ? { ...current, state: current.acknowledged ? current.state : 'loading', error: undefined, loadGeneration }
-      : { member, draft: '', state: 'loading', generation: 0, loadGeneration, documentGeneration });
+      : { member, draft: '', state: 'loading', generation: 0, loadGeneration, documentGeneration, uncertain: false });
     try {
       const result = await getCharter(member);
       if (result.member !== member) {
@@ -72,16 +73,19 @@ export function useCrewCharterAutosave(
           external: undefined,
           state: 'saved',
           error: undefined,
+          uncertain: false,
         });
         return;
       }
       if (latest.acknowledged.token !== result.charter.token) {
-        store(member, { ...latest, external: result.charter, state: 'conflict', error: undefined });
+        store(member, {
+          ...latest, external: result.charter, state: 'conflict', error: undefined, uncertain: false,
+        });
         return;
       }
       store(member, {
         ...latest,
-        state: latest.draft === latest.acknowledged.content ? 'saved' : 'dirty',
+        state: !latest.uncertain && latest.draft === latest.acknowledged.content ? 'saved' : 'dirty',
         error: undefined,
       });
     } catch (error) {
@@ -106,7 +110,7 @@ export function useCrewCharterAutosave(
       while (true) {
         const current = editsRef.current.get(member);
         if (!current?.acknowledged || current.state === 'conflict') return false;
-        if (current.draft === current.acknowledged.content) {
+        if (!current.uncertain && current.draft === current.acknowledged.content) {
           store(member, { ...current, state: 'saved', error: undefined });
           return true;
         }
@@ -130,6 +134,7 @@ export function useCrewCharterAutosave(
               state: 'error',
               error: `Charter response named ${result.member}, expected ${member}`,
               documentGeneration: latest.documentGeneration + 1,
+              uncertain: true,
             });
             return false;
           }
@@ -140,6 +145,7 @@ export function useCrewCharterAutosave(
               state: 'conflict',
               error: undefined,
               documentGeneration: latest.documentGeneration + 1,
+              uncertain: false,
             });
             return false;
           }
@@ -151,6 +157,7 @@ export function useCrewCharterAutosave(
             state: settled ? 'saved' : 'dirty',
             error: undefined,
             documentGeneration: latest.documentGeneration + 1,
+            uncertain: false,
           });
           if (settled) return true;
         } catch (error) {
@@ -161,6 +168,7 @@ export function useCrewCharterAutosave(
               state: 'error',
               error: error instanceof Error ? error.message : String(error),
               documentGeneration: latest.documentGeneration + 1,
+              uncertain: true,
             });
           }
           return false;
@@ -192,15 +200,16 @@ export function useCrewCharterAutosave(
     const timer = timersRef.current.get(member);
     if (timer !== undefined) window.clearTimeout(timer);
     const writeActive = activeRef.current.has(member);
+    const needsWrite = current.uncertain || content !== current.acknowledged.content;
     store(member, {
       ...current,
       draft: content,
       external: undefined,
-      state: writeActive ? 'saving' : content === current.acknowledged.content ? 'saved' : 'dirty',
+      state: writeActive ? 'saving' : needsWrite ? 'dirty' : 'saved',
       error: undefined,
       generation: current.generation + 1,
     });
-    if (writeActive || content === current.acknowledged.content) {
+    if (writeActive || !needsWrite) {
       timersRef.current.delete(member);
       return;
     }
@@ -221,6 +230,7 @@ export function useCrewCharterAutosave(
       state: 'saved',
       error: undefined,
       generation: current.generation + 1,
+      uncertain: false,
     });
   }, [store]);
 
@@ -233,6 +243,7 @@ export function useCrewCharterAutosave(
       external: undefined,
       state: 'dirty',
       error: undefined,
+      uncertain: false,
     });
     return pump(member);
   }, [pump, store]);
