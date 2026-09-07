@@ -517,6 +517,19 @@ describe('CrewPanel', () => {
     expect(screen.getByRole('button', { name: 'Handoffs' })).toHaveAttribute('aria-current', 'page');
   });
 
+  it('returns to launch settings on a normal reopen', async () => {
+    const members = [member('alder', 2), member('trellis', 3)];
+    const { rerenderPanel } = renderPanel({ members, initialMember: 'alder' });
+    fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
+    expect(screen.getByRole('button', { name: 'Handoffs' })).toHaveAttribute('aria-current', 'page');
+
+    await act(async () => { rerenderPanel(members, false); });
+    await act(async () => { rerenderPanel(members, true); });
+
+    expect(screen.getByRole('heading', { name: 'Alder' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
+  });
+
   it('flushes a charter before closing the panel', async () => {
     const save = deferred<any>();
     const { onClose } = renderPanel({ daemon: api({
