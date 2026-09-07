@@ -64,7 +64,7 @@
 - Ticket: archived pre-Garden work item; user tickets and their history remain permanently.
 - Crew member: durable named identity with a charter. Day: its current session.
 - `attn`: reserved member name the daemon takes when it moves a seed by itself, such as fulfilling a harvest condition. No crew home may claim it.
-- Member home: charter/handoff directory. Registry: index of member files. Binding: member's active session. Launch settings: optional member harness, model, and effort pins; blanks resolve through daemon and harness defaults. A one-day wake harness override ends with that day.
+- Member home: canonical charter/handoff directory, resolved and served only by the home daemon. Charter replacements require the token for the exact bytes read; handoff history returns each complete filed letter. Registry: index of member files. Binding: member's active session. Launch settings: optional member harness, model, and effort pins; blanks resolve through daemon and harness defaults. A one-day wake harness override ends with that day.
 - Awareness dirs: working context directories. Priming: launch guidance.
 - Wake: start a day. Sleep request: ask it to file a handoff and stop. Restart request: ask the current day to file its own handoff and nap; it completes only after the successor starts, while an asleep member wakes directly.
 - Nap: replace a day using its handoff. Sleep: no live day. Heartbeat: refresh current context.
