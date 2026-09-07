@@ -254,7 +254,8 @@ try {
     const activation = await client.request('dom_key', { selector: `[data-testid="crew-seed-${crewPlot}"]`, key: 'Enter' });
     runner.assert(activation.handled, 'the focused seed row handles Return', activation);
     await waitForDom(`.seed-document[data-seed-id="${crewPlot}"]`);
-    await waitForDom('[data-testid="crew-seed-back"]', { focused: true });
+    await waitForDom('.workspace-dock-tile-body--seed', { focused: true });
+    await waitForDom('[data-testid="crew-seed-back"]');
     await click(`.seed-document[data-seed-id="${crewPlot}"] [data-seed-target="${crewChild}"]`);
     await waitForDom(`.seed-document[data-seed-id="${crewChild}"]`);
     await screenshot('02-crew-seed-tile.png');
