@@ -53,6 +53,21 @@ func TestParseCommand(t *testing.T) {
 			wantCmd: CmdCrewSleep,
 		},
 		{
+			name:    "crew charter get message",
+			input:   `{"cmd":"crew_charter_get","member":"trellis","request_id":"req-1"}`,
+			wantCmd: CmdCrewCharterGet,
+		},
+		{
+			name:    "crew charter set message",
+			input:   `{"cmd":"crew_charter_set","member":"trellis","content":"# Trellis\\n","expected_token":"old","request_id":"req-2"}`,
+			wantCmd: CmdCrewCharterSet,
+		},
+		{
+			name:    "crew handoffs get message",
+			input:   `{"cmd":"crew_handoffs_get","member":"trellis","request_id":"req-3"}`,
+			wantCmd: CmdCrewHandoffsGet,
+		},
+		{
 			name:    "state message",
 			input:   `{"cmd":"state","id":"abc","state":"waiting"}`,
 			wantCmd: CmdState,

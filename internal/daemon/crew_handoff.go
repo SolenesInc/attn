@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -74,7 +75,7 @@ func (d *Daemon) crewMemberForSession(sessionID string) (crew.Member, bool) {
 	return crew.Member{}, false
 }
 
-func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.CrewDayClose) (*protocol.CrewHandoffResult, error) {
+func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.CrewDayClose) (result *protocol.CrewHandoffResult, err error) {
 	if err := d.requireHome(crew.Surface); err != nil {
 		return nil, err
 	}
@@ -85,6 +86,30 @@ func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.
 	if !bound {
 		return nil, fmt.Errorf("this session is not living a crew member's day, so it has no day-line to close. A crew handoff is a member's own letter to its successor; the note you write for whoever tends a piece of work next is `attn seed note <id> -m \"…\" --handoff`")
 	}
+	var restart *crew.Restart
+	if member.Restart != nil && member.Restart.SessionID == sessionID &&
+		(member.Restart.State == crew.RestartQueued || member.Restart.State == crew.RestartRequested || member.Restart.State == crew.RestartFailed) {
+		copy := *member.Restart
+		restart = &copy
+		defer func() {
+			if err != nil {
+				d.failCrewRestart(member.ID, restart.RequestID, sessionID, "", err)
+				return
+			}
+			if result == nil {
+				return
+			}
+			if result.NapError != nil {
+				d.failCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, errors.New(*result.NapError))
+				return
+			}
+			if protocol.Deref(result.Outcome) != protocol.CrewDayCloseNap || result.SessionID == nil {
+				d.failCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, errors.New("the day ended without starting a successor"))
+				return
+			}
+			d.completeCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, *result.SessionID)
+		}()
+	}
 	path, err := d.crewLetterForHandoff(member, sessionID, note, retry)
 	if err != nil {
 		return nil, err
@@ -94,7 +119,7 @@ func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.
 		close = protocol.CrewDayCloseNap
 	}
 
-	result := &protocol.CrewHandoffResult{Member: member.ID, Path: path}
+	result = &protocol.CrewHandoffResult{Member: member.ID, Path: path}
 	teardown, err := d.prepareSessionTeardown(sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("prepare %s's day to close: %w", crew.DisplayName(member.ID), err)
@@ -131,6 +156,9 @@ func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID, note string
 		return "", err
 	}
 	filed, hasFiled := member.FiledLetterFor(sessionID)
+	if !hasFiled && member.Restart != nil && member.Restart.SessionID == sessionID && member.Restart.LetterPath != "" {
+		filed, hasFiled = member.Restart.LetterPath, true
+	}
 	if retry {
 		if !hasFiled {
 			return "", fmt.Errorf("%s's day has filed no letter yet, so there is no turnover to retry — write one with `attn handoff -m \"<your letter>\"`", crew.DisplayName(member.ID))
@@ -269,7 +297,25 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 	spawnMsg.ID = uuid.NewString()
 	spawnMsg.Label = protocol.Ptr(crew.DisplayName(member.ID))
 	spawnMsg.InitialPrompt = protocol.Ptr(crewNapPrompt)
+	// A wake override lasts for its named day. The successor keeps route and
+	// approval controls from that day, then returns to the member's launch pins.
+	previousAgent := spawnMsg.Agent
+	spawnMsg.Agent = member.LaunchAgent()
 	spawnMsg.Model = d.crewWakeModel(member, spawnMsg.Agent)
+	spawnMsg.Effort = d.crewWakeEffort(member, spawnMsg.Agent)
+	if !strings.EqualFold(previousAgent, spawnMsg.Agent) {
+		spawnMsg.Executable = nil
+		spawnMsg.ClaudeExecutable = nil
+		spawnMsg.CodexExecutable = nil
+		spawnMsg.CopilotExecutable = nil
+		policy.unattendedLaunch = launchcontract.UnattendedLaunchSpec{}
+	}
+	if launch := policy.unattendedLaunch; !launch.IsZero() &&
+		(strings.TrimSpace(launch.Model) != strings.TrimSpace(protocol.Deref(spawnMsg.Model)) ||
+			strings.TrimSpace(launch.Effort) != strings.TrimSpace(protocol.Deref(spawnMsg.Effort)) ||
+			strings.TrimSpace(launch.Executable) != strings.TrimSpace(protocol.Deref(spawnMsg.Executable))) {
+		policy.unattendedLaunch = launchcontract.UnattendedLaunchSpec{}
+	}
 	// A resume would carry the closed day's transcript into the new one.
 	spawnMsg.ResumeSessionID = nil
 	if strings.TrimSpace(spawnMsg.WorkspaceID) == "" {

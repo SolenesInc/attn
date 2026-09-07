@@ -169,4 +169,28 @@ describe('bridge dispatch', () => {
 
     expect(frameRan).toBe(false);
   });
+
+  it('returns DOM geometry for layout receipts', async () => {
+    const { dispatch } = mountBridge(null);
+    const element = document.createElement('div');
+    element.dataset.testid = 'measured';
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
+      x: 18,
+      y: 24,
+      top: 24,
+      left: 18,
+      right: 138,
+      bottom: 104,
+      width: 120,
+      height: 80,
+      toJSON: () => ({}),
+    });
+    document.body.appendChild(element);
+
+    await dispatch({ request_id: 'r5', action: 'dom_bounds', payload: { selector: '[data-testid="measured"]' } });
+
+    expect(lastAnswer()).toEqual({
+      bounds: { x: 18, y: 24, width: 120, height: 80 },
+    });
+  });
 });

@@ -52,6 +52,7 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string,
 		return
 	}
 	items := make([]protocol.AgentInboxItem, 0, len(deliveries))
+	d.noteCrewRestartMailboxRead(deliveries)
 	for _, delivery := range deliveries {
 		item := protocol.AgentInboxItem{
 			ItemID: delivery.Item.ID, Kind: string(delivery.Item.Kind),

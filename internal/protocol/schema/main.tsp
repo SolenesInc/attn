@@ -2671,7 +2671,7 @@ model OpenMarkdownResultMessage {
 }
 
 // Open a seed into a docked reader tile. The seed lives in the hub's garden;
-// session_id identifies the local workspace/pane beside which the tile docks.
+// session_id chooses a local placement pane. Omit it for a standalone reader.
 model OpenSeedMessage {
   cmd: "open_seed";
   seed_id: string;
@@ -6157,9 +6157,13 @@ model Response {
   agent_inbox_batch_result?: AgentInboxBatchResult;
   agent_msg_status_result?: AgentPeerMessage;
   crew_list_result?: CrewListResult;
+  crew_charter_get_result?: CrewCharterGetResult;
+  crew_charter_set_result?: CrewCharterSetResult;
+  crew_handoffs_get_result?: CrewHandoffsGetResult;
   crew_wake_result?: CrewWakeResult;
   crew_sleep_result?: CrewSleepResult;
   crew_set_result?: CrewSetResult;
+  crew_restart_result?: CrewRestartResult;
   crew_prime_result?: CrewPrimeResult;
   crew_handoff_result?: CrewHandoffResult;
   seed_plant_result?: SeedPlantResult;
@@ -6291,28 +6295,125 @@ model CrewListMessage {
 // One registered crew member. Paths point at the canonical files.
 model CrewMember {
   id: string;
+  // Optimistic revision of this registry record. A settings writer sends the
+  // revision it edited; a conflict returns the current member and revision.
+  revision: safeint;
   charter_path: string;
   home_dir: string;
   // Where the member's sessions launch; absent until the wake slice records one.
   cwd?: string;
-  // The harness this member's days run on. Absent means the crew default
-  // (claude); a wake's own `agent` still wins for that one day.
+  // The configured harness. Absent means the crew default; a wake's own agent
+  // override still wins for that one day.
   agent?: string;
   // The model this member's days run on with its recorded harness. Absent takes
   // the configured default for the launch harness, then the crew fallback when
   // none is configured. A one-day agent override does not carry this model to
   // another harness.
   `model`?: string;
+  // The configured reasoning effort. Absent preserves the harness default.
+  effort?: string;
+  // Effective launch values after crew and harness defaults. These describe
+  // the next wake, not an already-running day.
+  resolved_agent: string;
+  resolved_model?: string;
+  resolved_effort?: string;
   // The places the member's charter is about.
   awareness_dirs: string[];
   // The session living this member's current day. Present only while that
   // session is live — the daemon judges the binding at read, so presence IS
   // "awake" and a caller never re-derives liveness.
   binding_session?: string;
+  // Latest user-requested handoff/restart operation. It survives reconnects;
+  // completed means the successor launch finished, never merely delivery.
+  restart?: CrewRestart;
 }
 
 model CrewListResult {
   members: CrewMember[];
+}
+
+// Full canonical charter content, read from the registered member home. The
+// opaque token orders daemon writes and binds the write to these exact bytes.
+model CrewCharterDocument {
+  content: string;
+  token: string;
+}
+
+// Read a member's charter on demand. The member id is the only client input;
+// the home daemon resolves and validates the registered charter path.
+model CrewCharterGetMessage {
+  cmd: "crew_charter_get";
+  member: string;
+  request_id?: string;
+}
+
+model CrewCharterGetResult {
+  member: string;
+  charter: CrewCharterDocument;
+}
+
+model CrewCharterGetResultMessage {
+  event: "crew_charter_get_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  member?: string;
+  charter?: CrewCharterDocument;
+}
+
+// Replace the canonical charter only if expected_token still names the bytes
+// on disk. A conflict returns the current full document for explicit recovery.
+model CrewCharterSetMessage {
+  cmd: "crew_charter_set";
+  member: string;
+  content: string;
+  expected_token: string;
+  request_id?: string;
+}
+
+model CrewCharterSetResult {
+  member: string;
+  conflict: boolean;
+  charter: CrewCharterDocument;
+}
+
+model CrewCharterSetResultMessage {
+  event: "crew_charter_set_result";
+  request_id: string;
+  success: boolean;
+  conflict: boolean;
+  error?: string;
+  member?: string;
+  charter?: CrewCharterDocument;
+}
+
+// One complete filed handoff. occurred_at comes from the canonical filename;
+// content is never shortened for this read-only history view.
+model CrewHandoffDocument {
+  filename: string;
+  occurred_at: utcDateTime;
+  content: string;
+  token: string;
+}
+
+model CrewHandoffsGetMessage {
+  cmd: "crew_handoffs_get";
+  member: string;
+  request_id?: string;
+}
+
+model CrewHandoffsGetResult {
+  member: string;
+  handoffs: CrewHandoffDocument[];
+}
+
+model CrewHandoffsGetResultMessage {
+  event: "crew_handoffs_get_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  member?: string;
+  handoffs?: CrewHandoffDocument[];
 }
 
 // Start a member's day: launch a session bound to it, in the member's own cwd,
@@ -6406,6 +6507,12 @@ model CrewSetMessage {
   // The model the member's days run on. An empty string clears it back to the
   // configured harness default, then the crew fallback.
   `model`?: string;
+  // Empty clears to the harness default. When agent changes, omitted model and
+  // effort are cleared so pins from the old harness cannot cross over.
+  effort?: string;
+  // Strict compare-and-swap for autosave. Omit for CLI patch-on-latest writes.
+  expected_revision?: safeint;
+  request_id?: string; // set by the WS frontend to correlate the result event
   awareness_dirs?: string[];
 
   // The way out. An empty awareness_dirs cannot say "clear it": the field is
@@ -6416,6 +6523,64 @@ model CrewSetMessage {
 
 model CrewSetResult {
   member: CrewMember;
+}
+
+// Correlated settings result. A conflict is a normal unsuccessful result whose
+// member is the authoritative current record; retry only after reconciling it.
+model CrewSetResultMessage {
+  event: "crew_set_result";
+  request_id: string;
+  success: boolean;
+  conflict: boolean;
+  error?: string;
+  member?: CrewMember;
+}
+
+enum CrewRestartState {
+  queued,
+  requested,
+  failed,
+  completed,
+}
+
+model CrewRestart {
+  request_id: string;
+  session_id: string;
+  state: CrewRestartState;
+  delivery_status?: AgentMsgStatus;
+  detail?: string;
+  error?: string;
+  letter_path?: string;
+  successor_session_id?: string;
+}
+
+// Ask the current day to file its own handoff and start a successor. If the
+// member is asleep, wake is the whole operation. Home-only and idempotent by
+// request_id; expected_session_id rejects a delayed request after the day moves.
+model CrewRestartMessage {
+  cmd: "crew_restart";
+  member: string;
+  request_id: string;
+  // The binding shown when the action was requested. Empty means asleep.
+  expected_session_id?: string;
+  // The member revision shown with that binding. Required at runtime; optional
+  // on the schema so the daemon can name a missing precondition explicitly.
+  expected_revision?: safeint;
+}
+
+model CrewRestartResult {
+  member: CrewMember;
+  restart: CrewRestart;
+}
+
+model CrewRestartResultMessage {
+  event: "crew_restart_result";
+  request_id: string;
+  success: boolean;
+  conflict: boolean;
+  error?: string;
+  member?: CrewMember;
+  restart?: CrewRestart;
 }
 
 // What a launching session needs to be its member: the composed priming block
@@ -7269,8 +7434,13 @@ alias DaemonEvent =
   | SeedTransitionResultMessage
   | SeedNoteResultMessage
   | CrewUpdatedMessage
+  | CrewCharterGetResultMessage
+  | CrewCharterSetResultMessage
+  | CrewHandoffsGetResultMessage
   | CrewWakeResultMessage
   | CrewSleepResultMessage
+  | CrewSetResultMessage
+  | CrewRestartResultMessage
   | TicketAttachResultMessage
   | WorkspaceTileContentMessage
   | OpenSeedResultMessage

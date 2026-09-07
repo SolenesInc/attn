@@ -5,6 +5,7 @@ import { RenamePopover } from './RenamePopover';
 import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
 import { DelegatedFromChiefBadge } from './DelegatedFromChiefBadge';
 import { SessionActionsPopover } from './SessionActionsPopover';
+import { CrewMemberActionsPopover } from './CrewMemberActionsPopover';
 import { GridLayoutControl } from './grid/GridLayoutControl';
 import type { GridLayout } from './grid/gridLayout';
 import { StateIndicator } from './StateIndicator';
@@ -29,6 +30,7 @@ import type {
 import { SessionProvenance } from './SessionProvenance';
 import { describeSessionPullRequest, pickSessionPullRequest } from '../utils/sessionPullRequest';
 import type { ShortcutId } from '../shortcuts/registry';
+import { crewDisplayName } from '../utils/crewName';
 
 interface LocalSession {
   id: string;
@@ -285,6 +287,8 @@ interface SidebarProps {
   crew?: CrewMemberView[];
   onWakeCrewMember?: (member: string) => void;
   onSleepCrewMember?: (member: string) => void;
+  onManageCrew?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onOpenCrewMemberDetails?: (member: string, returnFocus: HTMLElement) => void;
   onSettleTurn?: (id: string) => void;
   onOpenSnooze?: (session: { id: string; label: string }, event: ReactMouseEvent) => void;
   onWakeTurn?: (id: string) => void;
@@ -481,6 +485,8 @@ export function Sidebar({
   crew,
   onWakeCrewMember,
   onSleepCrewMember,
+  onManageCrew,
+  onOpenCrewMemberDetails,
   onSettleTurn,
   onOpenSnooze,
   onWakeTurn,
@@ -545,6 +551,13 @@ export function Sidebar({
     id: string;
     label: string;
     chiefOfStaff: boolean;
+    crewMember?: string;
+    trigger: HTMLElement;
+    anchor: { top: number; left: number };
+  } | null>(null);
+  const [crewActionsTarget, setCrewActionsTarget] = useState<{
+    member: string;
+    trigger: HTMLElement;
     anchor: { top: number; left: number };
   } | null>(null);
 
@@ -559,7 +572,7 @@ export function Sidebar({
     setRenameTarget({ kind, id, name, anchor: { top: rect.bottom + 4, left: rect.left } });
   };
   const openSessionActions = (
-    session: { id: string; label: string; chiefOfStaff?: boolean },
+    session: { id: string; label: string; chiefOfStaff?: boolean; crewMember?: string },
     event: ReactMouseEvent,
   ) => {
     event.stopPropagation();
@@ -568,6 +581,8 @@ export function Sidebar({
       id: session.id,
       label: session.label,
       chiefOfStaff: Boolean(session.chiefOfStaff),
+      crewMember: session.crewMember,
+      trigger: event.currentTarget as HTMLElement,
       anchor: { top: rect.bottom + 4, left: rect.right - 190 },
     });
   };
@@ -1140,6 +1155,16 @@ export function Sidebar({
           crew={crew}
           onWakeCrewMember={onWakeCrewMember}
           onSleepCrewMember={onSleepCrewMember}
+          onManageCrew={onManageCrew}
+          onOpenCrewMemberActions={(member, event) => {
+            event.stopPropagation();
+            const rect = event.currentTarget.getBoundingClientRect();
+            setCrewActionsTarget({
+              member,
+              trigger: event.currentTarget,
+              anchor: { top: rect.bottom + 4, left: rect.right - 190 },
+            });
+          }}
           selectedId={selectedId}
           onSelectSession={onSelectSession}
           onSettleTurn={(id) => onSettleTurn?.(id)}
@@ -1572,7 +1597,22 @@ export function Sidebar({
           onChangeChiefOfStaff={(enabled) => onChangeChiefOfStaff?.(sessionActionsTarget.id, enabled)}
           onCloseSession={() => onCloseSession(sessionActionsTarget.id)}
           onReloadSession={() => onReloadSession(sessionActionsTarget.id)}
+          onMemberDetails={sessionActionsTarget.crewMember && onOpenCrewMemberDetails
+            ? () => onOpenCrewMemberDetails(sessionActionsTarget.crewMember!, sessionActionsTarget.trigger)
+            : undefined}
           onClose={() => setSessionActionsTarget(null)}
+        />
+      )}
+      {crewActionsTarget && (
+        <CrewMemberActionsPopover
+          memberName={crewDisplayName(crewActionsTarget.member)}
+          anchor={crewActionsTarget.anchor}
+          onOpenDetails={() => {
+            const target = crewActionsTarget;
+            setCrewActionsTarget(null);
+            onOpenCrewMemberDetails?.(target.member, target.trigger);
+          }}
+          onClose={() => setCrewActionsTarget(null)}
         />
       )}
     </div>

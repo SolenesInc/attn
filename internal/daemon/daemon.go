@@ -201,6 +201,9 @@ type Daemon struct {
 	agentMailboxDrainHook             func(sessionID string, delivered int)
 	crewWakeMu                        sync.Mutex
 	crewExitedMu                      sync.Mutex
+	crewDocumentMu                    sync.Mutex
+	crewCharterLifetime               string
+	crewCharterVersions               map[string]crewCharterVersion
 	crewExitedSessions                map[string]string
 	crewWakeStartHook                 func(memberID string)
 	crewWakeAfterClaimHook            func(memberID, sessionID string)
@@ -1027,6 +1030,7 @@ func (d *Daemon) Start() error {
 
 	go func() {
 		d.performStartupPTYRecovery(recoveryStartedAt)
+		d.reconcileCrewRestarts()
 		d.seedQueuedAgentMailboxItems()
 		recoverAutomationsAfterGitHubReady(githubHostsReady, d.recoverAutomations)
 		d.setRecovering(false)
@@ -2657,12 +2661,20 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSeedReviewKeep(conn, msg.(*protocol.SeedReviewKeepMessage))
 	case protocol.CmdCrewList: // wire: crew_list
 		d.handleCrewList(conn, msg.(*protocol.CrewListMessage))
+	case protocol.CmdCrewCharterGet: // wire: crew_charter_get
+		d.handleCrewCharterGet(conn, msg.(*protocol.CrewCharterGetMessage))
+	case protocol.CmdCrewCharterSet: // wire: crew_charter_set
+		d.handleCrewCharterSet(conn, msg.(*protocol.CrewCharterSetMessage))
+	case protocol.CmdCrewHandoffsGet: // wire: crew_handoffs_get
+		d.handleCrewHandoffsGet(conn, msg.(*protocol.CrewHandoffsGetMessage))
 	case protocol.CmdCrewWake: // wire: crew_wake
 		d.handleCrewWake(conn, msg.(*protocol.CrewWakeMessage))
 	case protocol.CmdCrewSleep: // wire: crew_sleep
 		d.handleCrewSleep(conn, msg.(*protocol.CrewSleepMessage))
 	case protocol.CmdCrewSet: // wire: crew_set
 		d.handleCrewSet(conn, msg.(*protocol.CrewSetMessage))
+	case protocol.CmdCrewRestart: // wire: crew_restart
+		d.handleCrewRestart(conn, msg.(*protocol.CrewRestartMessage))
 	case protocol.CmdCrewPrime: // wire: crew_prime
 		d.handleCrewPrime(conn, msg.(*protocol.CrewPrimeMessage))
 	case protocol.CmdCrewHandoff: // wire: crew_handoff

@@ -2239,6 +2239,60 @@ export function useUiAutomationBridge({
         }
         return { text: (element.textContent ?? '').replace(/\s+/g, ' ').trim() };
       }
+      case 'dom_bounds': {
+        const selector = typeof payload.selector === 'string' ? payload.selector : null;
+        if (!selector) throw new Error('dom_bounds requires selector');
+        const element = document.querySelector(selector);
+        if (!(element instanceof HTMLElement)) {
+          throw new Error(`dom_bounds selector not found in DOM: ${selector}`);
+        }
+        return { bounds: rectSnapshot(element) };
+      }
+      case 'dom_wait': {
+        const selector = typeof payload.selector === 'string' ? payload.selector : null;
+        const includes = typeof payload.includes === 'string' ? payload.includes : null;
+        const focused = payload.focused === true;
+        const timeoutMs = typeof payload.timeoutMs === 'number' ? payload.timeoutMs : 0;
+        if (!selector) throw new Error('dom_wait requires selector');
+        if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('dom_wait requires a positive timeoutMs');
+
+        const readMatch = () => {
+          const element = document.querySelector(selector);
+          if (!(element instanceof HTMLElement)) return null;
+          const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim();
+          if (includes !== null && !text.includes(includes)) return null;
+          if (focused && document.activeElement !== element) return null;
+          return { text, focused: document.activeElement === element };
+        };
+        const immediate = readMatch();
+        if (immediate) return immediate;
+
+        return new Promise((resolve, reject) => {
+          const finish = () => {
+            const match = readMatch();
+            if (!match) return;
+            window.clearTimeout(timer);
+            observer.disconnect();
+            document.removeEventListener('focusin', finish);
+            resolve(match);
+          };
+          const observer = new MutationObserver(finish);
+          const timer = window.setTimeout(() => {
+            observer.disconnect();
+            document.removeEventListener('focusin', finish);
+            reject(new Error(
+              `dom_wait timed out after ${timeoutMs}ms: selector=${selector}, includes=${includes ?? '*'}, focused=${focused}`,
+            ));
+          }, timeoutMs);
+          observer.observe(document.documentElement, {
+            attributes: true,
+            childList: true,
+            subtree: true,
+            characterData: true,
+          });
+          document.addEventListener('focusin', finish);
+        });
+      }
       case 'dom_scroll_into_view': {
         const selector = typeof payload.selector === 'string' ? payload.selector : null;
         if (!selector) throw new Error('dom_scroll_into_view requires selector');

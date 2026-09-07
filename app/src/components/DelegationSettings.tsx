@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, useId } from 'react';
+import { useState, useId } from 'react';
 import type { DelegationChoice, DelegationPreferences, DelegationRole, DelegationSelection, DelegationHarness } from '../types/generated';
 import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
 import type { DelegationPreferencesPolicy } from '../hooks/useDelegationPreferences';
+import { useHarnessModelCatalogs } from '../hooks/useHarnessModelCatalogs';
 import { DelegationRoleIcon } from './DelegationRoleIcon';
 import './DelegationSettings.css';
 
@@ -97,29 +98,6 @@ function SelectionPicker({ value, onChange, harnesses, catalog, loading, error, 
   </div>;
 }
 
-function useDelegationModelCatalogs(config: DelegationPreferences | null, loadModels: (harness: string) => Promise<DelegationModelCatalog>) {
-  const [catalogs, setCatalogs] = useState<Record<string, DelegationModelCatalog>>({});
-  const [loading, setLoading] = useState<Record<string, boolean>>({});
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-
-  const discover = async (harness: string) => {
-    if (!config?.enabled || loading[harness]) return;
-    setLoading(current => ({ ...current, [harness]: true }));
-    setErrors(current => ({ ...current, [harness]: '' }));
-    try {
-      const result = await loadModels(harness);
-      if (mounted.current) setCatalogs(current => ({ ...current, [harness]: result }));
-    } catch (error) {
-      if (mounted.current) setErrors(current => ({ ...current, [harness]: error instanceof Error ? error.message : String(error) }));
-    } finally {
-      if (mounted.current) setLoading(current => ({ ...current, [harness]: false }));
-    }
-  };
-  return { catalogs, loading, errors, discover };
-}
-
 export function DelegationSettings({ policy, loadModels }: { policy: DelegationPreferencesPolicy; loadModels: (harness: string) => Promise<DelegationModelCatalog> }) {
   const { state, draft: config, setDraft, busy, dirty, error, changedElsewhere, persist, reload } = policy;
   const [screen, setScreen] = useState<'roles' | 'fallback'>('roles');
@@ -128,7 +106,7 @@ export function DelegationSettings({ policy, loadModels }: { policy: DelegationP
   const [iconsOpen, setIconsOpen] = useState(false);
   const [starter, setStarter] = useState<DelegationSelection>(emptySelection);
   const [undo, setUndo] = useState<DelegationPreferences | null>(null);
-  const { catalogs, loading, errors: modelErrors, discover } = useDelegationModelCatalogs(config, loadModels);
+  const { catalogs, loading, errors: modelErrors, discover } = useHarnessModelCatalogs(Boolean(config?.enabled), loadModels);
   if (!config || !state) return <div role="status">{error || 'Loading delegation preferences…'}{error && <button className="settings-action" onClick={() => void reload()}>Retry</button>}</div>;
   const update = (next: DelegationPreferences) => setDraft(next);
   const role = config.roles.find(r => r.id === roleID);

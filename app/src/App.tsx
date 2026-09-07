@@ -7,6 +7,7 @@ import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { Sidebar, type SidebarHeaderAction, type DockItem, WorkflowIcon, EditorIcon, PRsIcon, NotebookIcon } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { SessionsPanel } from './components/SessionsPanel';
+import { CrewPanel } from './components/CrewPanel';
 import { activityStaleMs } from './utils/activitySettings';
 import { crewDisplayName } from './utils/crewName';
 import { AttentionDrawer } from './components/AttentionDrawer';
@@ -953,6 +954,7 @@ function AppContent({
 
   const [selectedSessionlessWorkspaceId, setSelectedSessionlessWorkspaceId] = useState<string | null>(null);
   const [selectedTile, setSelectedTile] = useState<{ workspaceId: string; tileId: string } | null>(null);
+  const [pendingTileSelection, setPendingTileSelection] = useState<{ workspaceId: string; tileId: string } | null>(null);
   const selectWorkspaceRef = useRef<(workspaceId: string) => void>(() => {});
 
   const rollbackSessionCreation = useCallback(async ({
@@ -1074,6 +1076,13 @@ function AppContent({
   const [seedPopoverRequest, setSeedPopoverRequest] = useState<{ sessionId: string; nonce: number }>();
   const [usagePopoverRequest, setUsagePopoverRequest] = useState<{ sessionId: string; nonce: number }>();
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [crewPanel, setCrewPanel] = useState<{
+    open: boolean;
+    member?: string;
+    returnFocus?: HTMLElement;
+    preserveStateOnOpen?: boolean;
+  }>({ open: false, preserveStateOnOpen: false });
+  const [crewSeedTile, setCrewSeedTile] = useState<{ workspaceId: string; tileId: string } | null>(null);
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [notebookRequestedPath, setNotebookRequestedPath] = useState<string | null>(null);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
@@ -1642,6 +1651,7 @@ function AppContent({
     || shortcutEditorOpen
     || actionMenuOpen
     || sessionsOpen
+    || crewPanel.open
     || notebookOpen
     || gardenHoldsWindow
     || chiefTransferTarget !== null
@@ -1912,7 +1922,7 @@ function AppContent({
       return;
     }
     if (settingsOpen || shortcutsOpen || locationPickerOpen || whatsNew.isOpen
-      || sessionsOpen || notebookOpen || gardenHoldsWindow
+      || sessionsOpen || crewPanel.open || notebookOpen || gardenHoldsWindow
       || chiefTransferTarget !== null || contextCapPromptSession !== null
       || appViewParamsPrompt !== null || pendingSessionClose !== null
       || sessionCreationJob !== null || openPRLauncherJob !== null) {
@@ -1932,6 +1942,7 @@ function AppContent({
     shortcutsOpen,
     whatsNew.isOpen,
     sessionsOpen,
+    crewPanel.open,
     notebookOpen,
     gardenHoldsWindow,
   ]);
@@ -2990,13 +3001,50 @@ function AppContent({
   );
   selectWorkspaceRef.current = handleSelectWorkspace;
 
-  const handleSelectTile = useCallback((workspaceId: string, tileId: string) => {
+  const selectTile = useCallback((workspaceId: string, tileId: string) => {
     handleSelectWorkspace(workspaceId);
     setSelectedTile({ workspaceId, tileId });
-  }, [handleSelectWorkspace]);
+    window.requestAnimationFrame(() => focusWorkspaceLeaf(workspaceId, tileId));
+  }, [focusWorkspaceLeaf, handleSelectWorkspace]);
+
+  const handleSelectTile = useCallback((workspaceId: string, tileId: string) => {
+    const tileExists = workspaceViews.some((workspace) => (
+      workspace.id === workspaceId
+      && workspace.children.some((child) => child.kind === 'tile' && child.tile.tileId === tileId)
+    ));
+    if (!tileExists) {
+      setPendingTileSelection({ workspaceId, tileId });
+      return;
+    }
+    setPendingTileSelection(null);
+    selectTile(workspaceId, tileId);
+  }, [selectTile, workspaceViews]);
+
+  useEffect(() => {
+    if (!pendingTileSelection) {
+      return;
+    }
+    const tileExists = workspaceViews.some((workspace) => (
+      workspace.id === pendingTileSelection.workspaceId
+      && workspace.children.some((child) => (
+        child.kind === 'tile' && child.tile.tileId === pendingTileSelection.tileId
+      ))
+    ));
+    if (!tileExists) {
+      return;
+    }
+    setPendingTileSelection(null);
+    selectTile(pendingTileSelection.workspaceId, pendingTileSelection.tileId);
+  }, [pendingTileSelection, selectTile, workspaceViews]);
 
   const handleCloseTile = useCallback((workspaceId: string, tileId: string) => {
+    setPendingTileSelection((current) => (
+      current?.workspaceId === workspaceId && current.tileId === tileId ? null : current
+    ));
     setSelectedTile((current) => (
+      current?.workspaceId === workspaceId && current.tileId === tileId ? null : current
+    ));
+    setCrewSeedTile((current) => (
       current?.workspaceId === workspaceId && current.tileId === tileId ? null : current
     ));
     void sendWorkspaceUndockTile(workspaceId, tileId).catch(() => {});
@@ -3180,15 +3228,27 @@ function AppContent({
     setReopenedSessionId(null);
   }, [reopenedSessionId, sessions, handleSelectSession]);
 
+  const openSeedTile = useCallback(async (
+    seedId: string,
+    beforeFocus?: (opened: { workspaceId: string; tileId: string }) => void,
+    placementSessionId?: string,
+  ) => {
+    const opened = await sendOpenSeed(seedId, placementSessionId || activeSessionId || '');
+    if (!opened.workspaceId || !opened.tileId) {
+      throw new Error(`The daemon opened ${seedId} without a workspace tile`);
+    }
+    const workspaceId = opened.workspaceId;
+    const tileId = opened.tileId;
+    beforeFocus?.({ workspaceId, tileId });
+    handleSelectTile(workspaceId, tileId);
+    return opened;
+  }, [sendOpenSeed, activeSessionId, handleSelectTile]);
+
   const handleOpenSeedTile = useCallback((seedId: string) => {
-    void sendOpenSeed(seedId, activeSessionId || '')
-      .then(({ workspaceId, tileId }) => {
-        if (workspaceId && tileId) focusWorkspaceLeaf(workspaceId, tileId);
-      })
-      .catch((error) => {
-        showError(error instanceof Error ? error.message : 'Could not open the seed');
-      });
-  }, [sendOpenSeed, activeSessionId, focusWorkspaceLeaf, showError]);
+    void openSeedTile(seedId).catch((error) => {
+      showError(error instanceof Error ? error.message : 'Could not open the seed');
+    });
+  }, [openSeedTile, showError]);
 
   const handleRevealSeedInGarden = useCallback((seedId: string) => {
     const trail = gardenPathToSeed(seeds, seedId);
@@ -3251,6 +3311,31 @@ function AppContent({
     sendCrewSleep(member)
       .catch((error) => showError(error instanceof Error ? error.message : `Failed to ask ${crewDisplayName(member)} to sleep`));
   }, [sendCrewSleep, showError]);
+
+  const handleOpenCrew = useCallback((member: string | undefined, returnFocus: HTMLElement) => {
+    setCrewPanel({ open: true, member, returnFocus, preserveStateOnOpen: false });
+  }, []);
+
+  const handleCloseCrew = useCallback(() => {
+    const returnFocus = crewPanel.returnFocus;
+    setCrewPanel((current) => ({ ...current, open: false }));
+    window.requestAnimationFrame(() => {
+      if (returnFocus?.isConnected) returnFocus.focus();
+    });
+  }, [crewPanel.returnFocus]);
+
+  const handleOpenSeedFromCrew = useCallback((seedId: string, placementSessionId?: string) => {
+    void openSeedTile(seedId, ({ workspaceId, tileId }) => {
+      setCrewSeedTile({ workspaceId, tileId });
+      setCrewPanel((current) => ({ ...current, open: false }));
+    }, placementSessionId).catch((error) => {
+      showError(error instanceof Error ? error.message : 'Could not open the seed');
+    });
+  }, [openSeedTile, showError]);
+
+  const handleBackToCrew = useCallback((returnFocus: HTMLElement) => {
+    setCrewPanel((current) => ({ ...current, open: true, returnFocus, preserveStateOnOpen: true }));
+  }, []);
 
   // One stable object: the surface re-fetches on identity change.
   const annotationApi = useMemo(() => ({
@@ -3589,6 +3674,8 @@ function AppContent({
           crew={crew}
           onWakeCrewMember={handleWakeCrewMember}
           onSleepCrewMember={handleSleepCrewMember}
+          onManageCrew={(event) => handleOpenCrew(undefined, event.currentTarget)}
+          onOpenCrewMemberDetails={(member, returnFocus) => handleOpenCrew(member, returnFocus)}
           queueModeEnabled={queueModeEnabled}
           onToggleQueueMode={handleToggleQueueMode}
           crewQueueEnabled={crewQueueEnabled}
@@ -3720,6 +3807,8 @@ function AppContent({
                     gardenSeeds={seeds}
                     onOpenSeed={handleOpenSeedTile}
                     onRevealSeedInGarden={handleRevealSeedInGarden}
+                    backToCrewTileId={crewSeedTile?.workspaceId === workspace.id ? crewSeedTile.tileId : undefined}
+                    onBackToCrew={handleBackToCrew}
                     seedPopoverRequest={seedPopoverRequest}
                     usagePopoverRequest={usagePopoverRequest}
                     annotationApi={annotationApi}
@@ -3900,6 +3989,15 @@ function AppContent({
           ]}
         />
       </div>
+      <CrewPanel
+        isOpen={crewPanel.open}
+        initialMember={crewPanel.member}
+        members={crew}
+        sessions={daemonSessions}
+        preserveStateOnOpen={crewPanel.preserveStateOnOpen}
+        onClose={handleCloseCrew}
+        onOpenSeed={handleOpenSeedFromCrew}
+      />
         </div>
       </div>
 

@@ -152,6 +152,7 @@ describe('chief and crew sessions are protected from close', () => {
         chief_of_staff: chiefOfStaff,
         crew_member: crewMember,
       }],
+      crew: [],
       setDaemonSessions: vi.fn(),
       prs: [], setPRs: vi.fn(),
       repoStates: [], setRepoStates: vi.fn(),
