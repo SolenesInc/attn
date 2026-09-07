@@ -2,6 +2,8 @@
 
 package protocol
 
+import "time"
+
 type ActivityStatusMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -2348,10 +2350,122 @@ type CreateWorktreeResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type CrewCharterDocument struct {
+	// Content corresponds to the JSON schema field "content".
+	Content string `json:"content"`
+
+	// Token corresponds to the JSON schema field "token".
+	Token string `json:"token"`
+}
+
+type CrewCharterGetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type CrewCharterGetResult struct {
+	// Charter corresponds to the JSON schema field "charter".
+	Charter CrewCharterDocument `json:"charter"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+}
+
+type CrewCharterGetResultMessage struct {
+	// Charter corresponds to the JSON schema field "charter".
+	Charter *CrewCharterDocument `json:"charter,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member *string `json:"member,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type CrewCharterSetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Content corresponds to the JSON schema field "content".
+	Content string `json:"content"`
+
+	// ExpectedToken corresponds to the JSON schema field "expected_token".
+	ExpectedToken string `json:"expected_token"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type CrewCharterSetResult struct {
+	// Charter corresponds to the JSON schema field "charter".
+	Charter CrewCharterDocument `json:"charter"`
+
+	// Conflict corresponds to the JSON schema field "conflict".
+	Conflict bool `json:"conflict"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+}
+
+type CrewCharterSetResultMessage struct {
+	// Charter corresponds to the JSON schema field "charter".
+	Charter *CrewCharterDocument `json:"charter,omitempty,omitzero"`
+
+	// Conflict corresponds to the JSON schema field "conflict".
+	Conflict bool `json:"conflict"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member *string `json:"member,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
 type CrewDayClose string
 
 const CrewDayCloseNap CrewDayClose = "nap"
 const CrewDayCloseSleep CrewDayClose = "sleep"
+
+type CrewHandoffDocument struct {
+	// Content corresponds to the JSON schema field "content".
+	Content string `json:"content"`
+
+	// Filename corresponds to the JSON schema field "filename".
+	Filename string `json:"filename"`
+
+	// OccurredAt corresponds to the JSON schema field "occurred_at".
+	OccurredAt time.Time `json:"occurred_at"`
+
+	// Token corresponds to the JSON schema field "token".
+	Token string `json:"token"`
+}
 
 type CrewHandoffMessage struct {
 	// Close corresponds to the JSON schema field "close".
@@ -2385,6 +2499,45 @@ type CrewHandoffResult struct {
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID *string `json:"session_id,omitempty,omitzero"`
+}
+
+type CrewHandoffsGetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type CrewHandoffsGetResult struct {
+	// Handoffs corresponds to the JSON schema field "handoffs".
+	Handoffs []CrewHandoffDocument `json:"handoffs"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+}
+
+type CrewHandoffsGetResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Handoffs corresponds to the JSON schema field "handoffs".
+	Handoffs []CrewHandoffDocument `json:"handoffs,omitempty,omitzero"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member *string `json:"member,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type CrewListMessage struct {
@@ -6884,8 +7037,20 @@ type Response struct {
 	// AutomodeShowResult corresponds to the JSON schema field "automode_show_result".
 	AutomodeShowResult *AutoModeShowResult `json:"automode_show_result,omitempty,omitzero"`
 
+	// CrewCharterGetResult corresponds to the JSON schema field
+	// "crew_charter_get_result".
+	CrewCharterGetResult *CrewCharterGetResult `json:"crew_charter_get_result,omitempty,omitzero"`
+
+	// CrewCharterSetResult corresponds to the JSON schema field
+	// "crew_charter_set_result".
+	CrewCharterSetResult *CrewCharterSetResult `json:"crew_charter_set_result,omitempty,omitzero"`
+
 	// CrewHandoffResult corresponds to the JSON schema field "crew_handoff_result".
 	CrewHandoffResult *CrewHandoffResult `json:"crew_handoff_result,omitempty,omitzero"`
+
+	// CrewHandoffsGetResult corresponds to the JSON schema field
+	// "crew_handoffs_get_result".
+	CrewHandoffsGetResult *CrewHandoffsGetResult `json:"crew_handoffs_get_result,omitempty,omitzero"`
 
 	// CrewListResult corresponds to the JSON schema field "crew_list_result".
 	CrewListResult *CrewListResult `json:"crew_list_result,omitempty,omitzero"`

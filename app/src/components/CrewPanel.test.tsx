@@ -30,6 +30,9 @@ function api(overrides: Record<string, unknown> = {}): DaemonApi {
     connectionGeneration: 1,
     sendCrewSet: vi.fn().mockResolvedValue({ success: true, conflict: false }),
     sendCrewRestart: vi.fn().mockResolvedValue({ success: true, conflict: false }),
+    sendCrewCharterGet: vi.fn().mockResolvedValue({ member: 'trellis', charter: { content: '# Trellis\n', token: 'charter-1' } }),
+    sendCrewCharterSet: vi.fn().mockResolvedValue({ member: 'trellis', conflict: false, charter: { content: '# Trellis\n', token: 'charter-2' } }),
+    sendCrewHandoffsGet: vi.fn().mockResolvedValue({ member: 'trellis', handoffs: [] }),
     sendDelegationPreferencesGet: vi.fn().mockResolvedValue({
       preferences: { enabled: false, revision: 0, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
       templates: [],
@@ -55,11 +58,13 @@ function renderPanel({
   members = [member('trellis', 4)],
   sessions = [],
   initialMember,
+  onOpenSeed = vi.fn<(seedId: string) => void>(),
 }: {
   daemon?: DaemonApi;
   members?: CrewMember[];
   sessions?: any[];
   initialMember?: string;
+  onOpenSeed?: ReturnType<typeof vi.fn<(seedId: string) => void>>;
 } = {}) {
   const onClose = vi.fn();
   const view = render(
@@ -70,6 +75,7 @@ function renderPanel({
         members={members}
         sessions={sessions}
         onClose={onClose}
+        onOpenSeed={onOpenSeed}
       />
     </DaemonApiProvider>,
   );
@@ -81,10 +87,11 @@ function renderPanel({
         members={nextMembers}
         sessions={sessions}
         onClose={onClose}
+        onOpenSeed={onOpenSeed}
       />
     </DaemonApiProvider>,
   );
-  return { ...view, daemon, onClose, rerenderPanel };
+  return { ...view, daemon, onClose, onOpenSeed, rerenderPanel };
 }
 
 afterEach(() => {
@@ -420,5 +427,164 @@ describe('CrewPanel', () => {
       }),
     }));
     await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
+  });
+
+  it('loads the full charter on demand and flushes it before tab navigation', async () => {
+    const save = deferred<any>();
+    const sendCrewCharterGet = vi.fn().mockResolvedValue({
+      member: 'trellis',
+      charter: { content: '# Trellis\n\nFull **Markdown** charter.\n', token: 'charter-old' },
+    });
+    const sendCrewCharterSet = vi.fn().mockReturnValue(save.promise);
+    const sendCrewHandoffsGet = vi.fn().mockResolvedValue({ member: 'trellis', handoffs: [] });
+    renderPanel({ daemon: api({ sendCrewCharterGet, sendCrewCharterSet, sendCrewHandoffsGet }) });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
+    const editor = await screen.findByTestId('crew-charter-editor');
+    expect(editor).toHaveValue('# Trellis\n\nFull **Markdown** charter.\n');
+    fireEvent.change(editor, { target: { value: '# Trellis\n\nChanged while the idea is hot.\n' } });
+    expect(screen.getByRole('status')).toHaveTextContent('Waiting to save');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
+    expect(screen.getByTestId('crew-charter-editor')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(sendCrewCharterSet).toHaveBeenCalledWith(
+        'trellis', '# Trellis\n\nChanged while the idea is hot.\n', 'charter-old',
+      );
+      expect(screen.getByRole('status')).toHaveTextContent('Saving');
+    });
+
+    await act(async () => save.resolve({
+      member: 'trellis', conflict: false,
+      charter: { content: '# Trellis\n\nChanged while the idea is hot.\n', token: 'charter-new' },
+    }));
+    await screen.findByText('No handoffs recorded.');
+    expect(sendCrewHandoffsGet).toHaveBeenCalledWith('trellis');
+  });
+
+  it('uses only the latest navigation intent while one charter flush is pending', async () => {
+    const save = deferred<any>();
+    const sendCrewCharterSet = vi.fn().mockReturnValue(save.promise);
+    const sendCrewHandoffsGet = vi.fn().mockResolvedValue({ member: 'trellis', handoffs: [] });
+    renderPanel({
+      daemon: api({
+        sendCrewCharterGet: vi.fn().mockResolvedValue({
+          member: 'trellis', charter: { content: 'old', token: 'old-token' },
+        }),
+        sendCrewCharterSet,
+        sendCrewHandoffsGet,
+      }),
+      members: [member('trellis', 4), member('keel', 5)],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
+    const editor = await screen.findByTestId('crew-charter-editor');
+    fireEvent.change(editor, { target: { value: 'new' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Keel/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
+    await waitFor(() => expect(sendCrewCharterSet).toHaveBeenCalledTimes(1));
+    await act(async () => save.resolve({
+      member: 'trellis', conflict: false, charter: { content: 'new', token: 'new-token' },
+    }));
+
+    expect(await screen.findByText('No handoffs recorded.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Trellis' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Handoffs' })).toHaveAttribute('aria-current', 'page');
+    expect(sendCrewHandoffsGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('flushes a charter before closing the panel', async () => {
+    const save = deferred<any>();
+    const { onClose } = renderPanel({ daemon: api({
+      sendCrewCharterGet: vi.fn().mockResolvedValue({
+        member: 'trellis', charter: { content: 'old', token: 'old-token' },
+      }),
+      sendCrewCharterSet: vi.fn().mockReturnValue(save.promise),
+    }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
+    const editor = await screen.findByTestId('crew-charter-editor');
+    fireEvent.change(editor, { target: { value: 'new' } });
+    fireEvent.click(screen.getByTestId('crew-panel-close'));
+    expect(onClose).not.toHaveBeenCalled();
+
+    await act(async () => save.resolve({
+      member: 'trellis', conflict: false, charter: { content: 'new', token: 'new-token' },
+    }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it('keeps a failed navigation flush visible and retries the retained edit', async () => {
+    const sendCrewCharterSet = vi.fn()
+      .mockRejectedValueOnce(new Error('disk is read-only'))
+      .mockResolvedValueOnce({ member: 'trellis', conflict: false, charter: { content: 'local edit', token: 'new' } });
+    renderPanel({ daemon: api({
+      sendCrewCharterGet: vi.fn().mockResolvedValue({ member: 'trellis', charter: { content: 'old', token: 'old' } }),
+      sendCrewCharterSet,
+    }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
+    const editor = await screen.findByTestId('crew-charter-editor');
+    fireEvent.change(editor, { target: { value: 'local edit' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Launch settings' }));
+
+    await screen.findByText('disk is read-only');
+    expect(editor).toHaveValue('local edit');
+    expect(screen.getByRole('button', { name: 'Charter' })).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved'));
+    fireEvent.click(screen.getByRole('button', { name: 'Launch settings' }));
+    expect(screen.getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('returns the authoritative charter on conflict and requires an explicit choice', async () => {
+    const sendCrewCharterSet = vi.fn().mockResolvedValue({
+      member: 'trellis', conflict: true, charter: { content: 'external edit', token: 'external' },
+    });
+    renderPanel({ daemon: api({
+      sendCrewCharterGet: vi.fn().mockResolvedValue({ member: 'trellis', charter: { content: 'old', token: 'old' } }),
+      sendCrewCharterSet,
+    }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
+    const editor = await screen.findByTestId('crew-charter-editor');
+    fireEvent.change(editor, { target: { value: 'my edit' } });
+    fireEvent.blur(editor);
+    await screen.findByText('The file changed outside this editor.');
+    expect(editor).toHaveValue('my edit');
+    fireEvent.click(screen.getByRole('button', { name: 'Use file version' }));
+    expect(editor).toHaveValue('external edit');
+    expect(screen.getByRole('status')).toHaveTextContent('Saved');
+  });
+
+  it('renders complete dated handoffs and opens seed links through the panel callback', async () => {
+    const onOpenSeed = vi.fn();
+    const body = '# Full handoff\n\nA paragraph at the end that must not be truncated.\n\n[Open the seed](s-work11)\n';
+    renderPanel({
+      onOpenSeed,
+      daemon: api({ sendCrewHandoffsGet: vi.fn().mockResolvedValue({
+        member: 'trellis',
+        handoffs: [{ filename: '2026-09-01T21-37Z-trellis.md', occurred_at: '2026-09-01T21:37:00Z', content: body, token: 'letter' }],
+      }) }),
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
+    expect(await screen.findByRole('heading', { name: 'Full handoff' })).toBeInTheDocument();
+    expect(screen.getByText('A paragraph at the end that must not be truncated.')).toBeInTheDocument();
+    expect(screen.getAllByText(/Sep 1, 2026/)).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Open the seed' }));
+    expect(onOpenSeed).toHaveBeenCalledWith('s-work11');
+  });
+
+  it('shows one handoff read failure and retries to an honest empty history', async () => {
+    const sendCrewHandoffsGet = vi.fn()
+      .mockRejectedValueOnce(new Error('handoffs are temporarily unavailable'))
+      .mockResolvedValueOnce({ member: 'keel', handoffs: [] });
+    renderPanel({
+      daemon: api({ sendCrewHandoffsGet }),
+      members: [member('keel', 5)],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
+    expect(await screen.findByText('handoffs are temporarily unavailable')).toBeInTheDocument();
+    expect(sendCrewHandoffsGet).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('No handoffs recorded.')).toBeInTheDocument();
+    expect(sendCrewHandoffsGet).toHaveBeenCalledTimes(2);
   });
 });

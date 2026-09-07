@@ -1,5 +1,11 @@
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type DelegationModelCatalog } from './daemonDelegationEvents';
-import { handleCrewDaemonEvent, type CrewMutationOutcome } from './daemonCrewEvents';
+import {
+  handleCrewDaemonEvent,
+  type CrewCharterGetOutcome,
+  type CrewCharterSetOutcome,
+  type CrewHandoffsGetOutcome,
+  type CrewMutationOutcome,
+} from './daemonCrewEvents';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
 import type { DelegationPreferences } from '../types/generated';
 import { useEffect, useRef, useCallback, useState } from 'react';
@@ -297,7 +303,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '300';
+export const PROTOCOL_VERSION = '301';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -4740,6 +4746,34 @@ export function useDaemonSocket({
     )
   ), [sendRequest]);
 
+  const sendCrewCharterGet = useCallback((member: string): Promise<CrewCharterGetOutcome> => (
+    sendRequest(
+      'crew_charter_get',
+      { member },
+      `Reading ${crewDisplayName(member)}'s charter timed out`,
+    )
+  ), [sendRequest]);
+
+  const sendCrewCharterSet = useCallback((
+    member: string,
+    content: string,
+    expectedToken: string,
+  ): Promise<CrewCharterSetOutcome> => (
+    sendRequest(
+      'crew_charter_set',
+      { member, content, expected_token: expectedToken },
+      `Saving ${crewDisplayName(member)}'s charter timed out`,
+    )
+  ), [sendRequest]);
+
+  const sendCrewHandoffsGet = useCallback((member: string): Promise<CrewHandoffsGetOutcome> => (
+    sendRequest(
+      'crew_handoffs_get',
+      { member },
+      `Reading ${crewDisplayName(member)}'s handoffs timed out`,
+    )
+  ), [sendRequest]);
+
   const sendCrewRestart = useCallback((options: CrewRestartOptions): Promise<CrewMutationOutcome> => (
     sendKeyedRequest(
       pendingRequestKey('crew_restart', options.requestId),
@@ -5410,6 +5444,9 @@ export function useDaemonSocket({
     sendCrewWake,
     sendCrewSleep,
     sendCrewSet,
+    sendCrewCharterGet,
+    sendCrewCharterSet,
+    sendCrewHandoffsGet,
     sendCrewRestart,
     sendTaskList,
     sendTaskRetry,

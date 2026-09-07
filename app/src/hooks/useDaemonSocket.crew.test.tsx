@@ -330,6 +330,66 @@ describe('useDaemonSocket crew', () => {
     });
   });
 
+  it('correlates a full charter read and ignores another request result', async () => {
+    const { ws, result } = await renderWithCrew([member('trellis')]);
+    let read: ReturnType<typeof result.current.sendCrewCharterGet>;
+    act(() => { read = result.current.sendCrewCharterGet('trellis'); });
+    const sent = JSON.parse(ws.sent[ws.sent.length - 1]);
+    expect(sent).toMatchObject({ cmd: 'crew_charter_get', member: 'trellis' });
+
+    act(() => {
+      ws.emit({
+        event: 'crew_charter_get_result', request_id: 'another-request', success: true,
+        member: 'trellis', charter: { content: 'wrong', token: 'wrong' },
+      });
+      ws.emit({
+        event: 'crew_charter_get_result', request_id: sent.request_id, success: true,
+        member: 'trellis', charter: { content: '# Trellis\n', token: 'charter-token' },
+      });
+    });
+
+    await expect(read!).resolves.toEqual({
+      member: 'trellis', charter: { content: '# Trellis\n', token: 'charter-token' },
+    });
+  });
+
+  it('sends charter content with its CAS token and returns conflicts as data', async () => {
+    const { ws, result } = await renderWithCrew([member('alder')]);
+    let saved: ReturnType<typeof result.current.sendCrewCharterSet>;
+    act(() => { saved = result.current.sendCrewCharterSet('alder', '# Mine\n', 'old-token'); });
+    const sent = JSON.parse(ws.sent[ws.sent.length - 1]);
+    expect(sent).toMatchObject({
+      cmd: 'crew_charter_set', member: 'alder', content: '# Mine\n', expected_token: 'old-token',
+    });
+
+    act(() => {
+      ws.emit({
+        event: 'crew_charter_set_result', request_id: sent.request_id, success: true, conflict: true,
+        member: 'alder', charter: { content: '# External\n', token: 'external-token' },
+      });
+    });
+    await expect(saved!).resolves.toEqual({
+      member: 'alder', conflict: true,
+      charter: { content: '# External\n', token: 'external-token' },
+    });
+  });
+
+  it('correlates an honest empty handoff history', async () => {
+    const { ws, result } = await renderWithCrew([member('keel')]);
+    let read: ReturnType<typeof result.current.sendCrewHandoffsGet>;
+    act(() => { read = result.current.sendCrewHandoffsGet('keel'); });
+    const sent = JSON.parse(ws.sent[ws.sent.length - 1]);
+    expect(sent).toMatchObject({ cmd: 'crew_handoffs_get', member: 'keel' });
+
+    act(() => {
+      ws.emit({
+        event: 'crew_handoffs_get_result', request_id: sent.request_id, success: true,
+        member: 'keel', handoffs: [],
+      });
+    });
+    await expect(read!).resolves.toEqual({ member: 'keel', handoffs: [] });
+  });
+
   it('reuses the caller restart identity and ignores another request result', async () => {
     const { ws, result } = await renderWithCrew([member('keel', 'sess-keel')]);
     let restarted: ReturnType<typeof result.current.sendCrewRestart>;

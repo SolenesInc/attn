@@ -6157,6 +6157,9 @@ model Response {
   agent_inbox_batch_result?: AgentInboxBatchResult;
   agent_msg_status_result?: AgentPeerMessage;
   crew_list_result?: CrewListResult;
+  crew_charter_get_result?: CrewCharterGetResult;
+  crew_charter_set_result?: CrewCharterSetResult;
+  crew_handoffs_get_result?: CrewHandoffsGetResult;
   crew_wake_result?: CrewWakeResult;
   crew_sleep_result?: CrewSleepResult;
   crew_set_result?: CrewSetResult;
@@ -6327,6 +6330,90 @@ model CrewMember {
 
 model CrewListResult {
   members: CrewMember[];
+}
+
+// Full canonical charter content, read from the registered member home. The
+// token is a hash of these exact bytes and is the write precondition.
+model CrewCharterDocument {
+  content: string;
+  token: string;
+}
+
+// Read a member's charter on demand. The member id is the only client input;
+// the home daemon resolves and validates the registered charter path.
+model CrewCharterGetMessage {
+  cmd: "crew_charter_get";
+  member: string;
+  request_id?: string;
+}
+
+model CrewCharterGetResult {
+  member: string;
+  charter: CrewCharterDocument;
+}
+
+model CrewCharterGetResultMessage {
+  event: "crew_charter_get_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  member?: string;
+  charter?: CrewCharterDocument;
+}
+
+// Replace the canonical charter only if expected_token still names the bytes
+// on disk. A conflict returns the current full document for explicit recovery.
+model CrewCharterSetMessage {
+  cmd: "crew_charter_set";
+  member: string;
+  content: string;
+  expected_token: string;
+  request_id?: string;
+}
+
+model CrewCharterSetResult {
+  member: string;
+  conflict: boolean;
+  charter: CrewCharterDocument;
+}
+
+model CrewCharterSetResultMessage {
+  event: "crew_charter_set_result";
+  request_id: string;
+  success: boolean;
+  conflict: boolean;
+  error?: string;
+  member?: string;
+  charter?: CrewCharterDocument;
+}
+
+// One complete filed handoff. occurred_at comes from the canonical filename;
+// content is never shortened for this read-only history view.
+model CrewHandoffDocument {
+  filename: string;
+  occurred_at: utcDateTime;
+  content: string;
+  token: string;
+}
+
+model CrewHandoffsGetMessage {
+  cmd: "crew_handoffs_get";
+  member: string;
+  request_id?: string;
+}
+
+model CrewHandoffsGetResult {
+  member: string;
+  handoffs: CrewHandoffDocument[];
+}
+
+model CrewHandoffsGetResultMessage {
+  event: "crew_handoffs_get_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  member?: string;
+  handoffs?: CrewHandoffDocument[];
 }
 
 // Start a member's day: launch a session bound to it, in the member's own cwd,
@@ -7347,6 +7434,9 @@ alias DaemonEvent =
   | SeedTransitionResultMessage
   | SeedNoteResultMessage
   | CrewUpdatedMessage
+  | CrewCharterGetResultMessage
+  | CrewCharterSetResultMessage
+  | CrewHandoffsGetResultMessage
   | CrewWakeResultMessage
   | CrewSleepResultMessage
   | CrewSetResultMessage

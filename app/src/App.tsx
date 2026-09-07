@@ -1080,6 +1080,7 @@ function AppContent({
     member?: string;
     returnFocus?: HTMLElement;
   }>({ open: false });
+  const [crewSeedReturn, setCrewSeedReturn] = useState(false);
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [notebookRequestedPath, setNotebookRequestedPath] = useState<string | null>(null);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
@@ -3188,15 +3189,17 @@ function AppContent({
     setReopenedSessionId(null);
   }, [reopenedSessionId, sessions, handleSelectSession]);
 
+  const openSeedTile = useCallback((seedId: string) => (
+    sendOpenSeed(seedId, activeSessionId || '').then(({ workspaceId, tileId }) => {
+      if (workspaceId && tileId) focusWorkspaceLeaf(workspaceId, tileId);
+    })
+  ), [activeSessionId, focusWorkspaceLeaf, sendOpenSeed]);
+
   const handleOpenSeedTile = useCallback((seedId: string) => {
-    void sendOpenSeed(seedId, activeSessionId || '')
-      .then(({ workspaceId, tileId }) => {
-        if (workspaceId && tileId) focusWorkspaceLeaf(workspaceId, tileId);
-      })
-      .catch((error) => {
-        showError(error instanceof Error ? error.message : 'Could not open the seed');
-      });
-  }, [sendOpenSeed, activeSessionId, focusWorkspaceLeaf, showError]);
+    void openSeedTile(seedId).catch((error) => {
+      showError(error instanceof Error ? error.message : 'Could not open the seed');
+    });
+  }, [openSeedTile, showError]);
 
   const handleRevealSeedInGarden = useCallback((seedId: string) => {
     const trail = gardenPathToSeed(seeds, seedId);
@@ -3261,16 +3264,28 @@ function AppContent({
   }, [sendCrewSleep, showError]);
 
   const handleOpenCrew = useCallback((member: string | undefined, returnFocus: HTMLElement) => {
+    setCrewSeedReturn(false);
     setCrewPanel({ open: true, member, returnFocus });
   }, []);
 
   const handleCloseCrew = useCallback(() => {
     const returnFocus = crewPanel.returnFocus;
+    setCrewSeedReturn(false);
     setCrewPanel((current) => ({ ...current, open: false }));
     window.requestAnimationFrame(() => {
       if (returnFocus?.isConnected) returnFocus.focus();
     });
   }, [crewPanel.returnFocus]);
+
+  const handleOpenSeedFromCrew = useCallback((seedId: string) => {
+    setCrewPanel((current) => ({ ...current, open: false }));
+    setCrewSeedReturn(true);
+    void openSeedTile(seedId).catch((error) => {
+      setCrewSeedReturn(false);
+      setCrewPanel((current) => ({ ...current, open: true }));
+      showError(error instanceof Error ? error.message : 'Could not open the seed');
+    });
+  }, [openSeedTile, showError]);
 
   // One stable object: the surface re-fetches on identity change.
   const annotationApi = useMemo(() => ({
@@ -3648,6 +3663,19 @@ function AppContent({
           onToggleCollapse={toggleSidebarCollapse}
         />
         <div className="view-stack">
+          {crewSeedReturn && !crewPanel.open && (
+            <button
+              type="button"
+              className="crew-return-to-panel"
+              data-testid="crew-return-to-panel"
+              onClick={() => {
+                setCrewSeedReturn(false);
+                setCrewPanel((current) => ({ ...current, open: true }));
+              }}
+            >
+              Back to Crew
+            </button>
+          )}
       {/* Always rendered; shown/hidden via z-index. */}
       <div className={`view-container ${view === 'dashboard' ? 'visible' : 'hidden'}`}>
         <Dashboard
@@ -3928,6 +3956,7 @@ function AppContent({
         members={crew}
         sessions={daemonSessions}
         onClose={handleCloseCrew}
+        onOpenSeed={handleOpenSeedFromCrew}
       />
         </div>
       </div>

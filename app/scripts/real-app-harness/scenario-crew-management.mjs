@@ -38,11 +38,14 @@ const env = profileCliEnv(profile);
 const memberSuffix = runner.runId.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(-6);
 const awake = `alder-${memberSuffix}`;
 const asleep = `keel-${memberSuffix}`;
+const history = `trellis-${memberSuffix}`;
 const awakeHome = path.join(resources.dataDir, 'crew', awake);
 const asleepHome = path.join(resources.dataDir, 'crew', asleep);
+const historyHome = path.join(resources.dataDir, 'crew', history);
 const wakeReceipt = path.join(awakeHome, 'wake-received');
 let firstSession = '';
 let successor = '';
+let linkedSeed = '';
 
 const runAttn = (args) => execFileSync(appDaemonInTree(options.appPath), args, {
   encoding: 'utf8',
@@ -168,11 +171,15 @@ try {
   const webkitBaseline = await captureWebKitPids();
   await client.quitApp();
   runAttn(['daemon', 'stop']);
-  for (const [home, fixture] of [[awakeHome, crewManagementFixture.alder], [asleepHome, crewManagementFixture.keel]]) {
+  for (const [home, fixture, filename] of [
+    [awakeHome, crewManagementFixture.alder, '2026-09-06T04-45Z-alder.md'],
+    [asleepHome, crewManagementFixture.keel, '2026-08-19T00-11Z-keel.md'],
+    [historyHome, crewManagementFixture.trellis, '2026-09-01T21-37Z-trellis.md'],
+  ]) {
     fs.mkdirSync(home, { recursive: true });
     fs.writeFileSync(path.join(home, 'CHARTER.md'), fixture.charter);
     fs.mkdirSync(path.join(home, 'handoffs'), { recursive: true });
-    fs.writeFileSync(path.join(home, 'handoffs', 'approved-prototype-handoff.md'), fixture.letter);
+    fs.writeFileSync(path.join(home, 'handoffs', filename), fixture.letter);
   }
   writeMockAgentFixture(awakeHome, {
     version: 1,
@@ -192,6 +199,12 @@ try {
   await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
   runAttn(['crew', 'set', awake, '--cwd', awakeHome, '--agent', 'codex']);
   runAttn(['crew', 'set', asleep, '--cwd', asleepHome]);
+  runAttn(['crew', 'set', history, '--cwd', historyHome]);
+  linkedSeed = json(['seed', 'plant', 'Crew charter history link receipt', '-m', 'Opened from a full handoff letter.', '--json']).id;
+  fs.writeFileSync(
+    path.join(historyHome, 'handoffs', '2026-08-31T18-05Z-trellis.md'),
+    `# Linked handoff\n\nContinue from [Crew charter history link receipt](${linkedSeed}).\n`,
+  );
   const awakeBinding = waitForCrew(
     awake,
     (member) => Boolean(member.binding_session),
@@ -206,6 +219,7 @@ try {
   await waitForDom('[data-testid="sidebar-queue"]');
   await waitForDom(`[data-testid="queue-crew-${awake}"][data-crew-state="awake"]`);
   await waitForDom(`[data-testid="queue-crew-${asleep}"]`);
+  await waitForDom(`[data-testid="queue-crew-${history}"]`);
   const workspaceIdle = await sampleIdle(webkitBaseline);
   await driver.activateApp();
 
@@ -244,6 +258,80 @@ try {
     await pressEscapeAndWaitFor(`crew-actions-${asleep}`);
   });
 
+  await runner.step('full_charter_saves_recovers_and_detects_an_external_edit', async () => {
+    await click('[data-testid="manage-crew"]');
+    await click(`[data-testid="crew-roster-${history}"]`);
+    await click('[data-testid="crew-tab-charter"]');
+    await waitForDom('[data-testid="crew-charter-editor"]');
+    await client.request('dom_focus', { selector: '[data-testid="crew-charter-editor"]' });
+    const initialEditor = await client.request('dom_active_element');
+    runner.assert(
+      initialEditor.valueLength === crewManagementFixture.trellis.charter.length,
+      'the editor receives the complete copied Trellis charter',
+      { initialEditor, expectedLength: crewManagementFixture.trellis.charter.length },
+    );
+    await screenshot('03-charter-full.png');
+
+    const charterPath = path.join(historyHome, 'CHARTER.md');
+    const failedDraft = `${crewManagementFixture.trellis.charter}\n<!-- retained after write failure -->\n`;
+    fs.chmodSync(historyHome, 0o555);
+    await type('[data-testid="crew-charter-editor"]', failedDraft);
+    await waitForDom('[data-testid="crew-charter-status"]', { includes: 'Not saved' });
+    runner.assert(fs.readFileSync(charterPath, 'utf8') === crewManagementFixture.trellis.charter,
+      'a failed save keeps the canonical charter unchanged');
+    await screenshot('04-charter-save-failed.png');
+    fs.chmodSync(historyHome, 0o755);
+    await click('[data-testid="crew-charter-save-retry"]');
+    await waitForDom('[data-testid="crew-charter-status"]', { includes: 'Saved' });
+    runner.assert(fs.readFileSync(charterPath, 'utf8') === failedDraft,
+      'retry persists the retained full draft');
+
+    const externalDraft = `${failedDraft}\n<!-- external editor won this revision -->\n`;
+    const localDraft = `${failedDraft}\n<!-- panel keeps this local revision -->\n`;
+    fs.writeFileSync(charterPath, externalDraft);
+    await type('[data-testid="crew-charter-editor"]', localDraft);
+    await waitForDom('[data-testid="crew-charter-status"]', { includes: 'Changed elsewhere' });
+    runner.assert(fs.readFileSync(charterPath, 'utf8') === externalDraft,
+      'the expected content token prevents an external edit from being overwritten');
+    await click('[data-testid="crew-charter-keep-mine"]');
+    await waitForDom('[data-testid="crew-charter-status"]', { includes: 'Saved' });
+    runner.assert(fs.readFileSync(charterPath, 'utf8') === localDraft,
+      'Keep my edit retries against the returned authoritative token');
+
+    const navigationDraft = `${localDraft}\n<!-- navigation flush receipt -->\n`;
+    await type('[data-testid="crew-charter-editor"]', navigationDraft);
+    await click('[data-testid="crew-tab-handoffs"]');
+    await waitForDom('[data-testid="crew-handoff-reader"]', { includes: 'day thirty-three' });
+    runner.assert(fs.readFileSync(charterPath, 'utf8') === navigationDraft,
+      'tab navigation waits for the pending charter write');
+  });
+
+  await runner.step('complete_handoff_history_opens_a_native_seed_and_returns_in_place', async () => {
+    const reader = await client.request('dom_text', { selector: '[data-testid="crew-handoff-reader"]' });
+    runner.assert(
+      reader.text.includes('Nothing waits on you except the first-wake design conversation')
+        && (await panelText()).includes('2 letters'),
+      'the full real 2026-09-01 Trellis letter and its dated history are rendered',
+      { reader },
+    );
+    await screenshot('05-handoff-history-full.png');
+    await click('[data-testid="crew-handoff-1"]');
+    await waitForDom('[data-testid="crew-handoff-reader"]', { includes: 'Linked handoff' });
+    await click(`[data-seed-target="${linkedSeed}"]`);
+    await waitForDom(`.seed-document[data-seed-id="${linkedSeed}"]`);
+    const hiddenPanel = await client.request('dom_bounds', { selector: '[data-testid="crew-panel"]' });
+    runner.assert(hiddenPanel.bounds.width === 0 && hiddenPanel.bounds.height === 0,
+      'the crew panel yields to the existing workspace seed tile', hiddenPanel);
+    await screenshot('06-handoff-seed-tile.png');
+    await click('[data-testid="crew-return-to-panel"]');
+    await waitForDom('[data-testid="crew-panel"]', { includes: 'Linked handoff' });
+    const selected = await waitForDom(`[data-testid="crew-roster-${history}"][aria-current="true"]`);
+    const selectedTab = await waitForDom('[data-testid="crew-tab-handoffs"][aria-current="page"]');
+    runner.assert(Boolean(selected.text) && selectedTab.text === 'Handoffs',
+      'returning preserves the selected member, Handoffs tab, and letter', { selected, selectedTab });
+    await pressEscapeAndWaitFor('manage-crew');
+  });
+
   await runner.step('awake_member_entry_saves_a_complete_next_wake_selection', async () => {
     await click(`[data-testid="session-actions-${firstSession}"]`);
     await click('[data-testid="crew-member-details-action"]');
@@ -265,7 +353,7 @@ try {
     const saved = await fullSave;
     await waitForDom('[data-testid="crew-panel"]', { includes: 'Saved' });
     runner.writeJson('saved-next-wake.json', saved);
-    await screenshot('03-next-wake-saved.png');
+    await screenshot('07-next-wake-saved.png');
   });
 
   await runner.step('a_disconnected_save_recovers_after_the_socket_reconnects', async () => {
@@ -276,7 +364,7 @@ try {
     await type('[data-testid="crew-effort"]', 'low');
     await waitForDom('[data-testid="crew-panel"]', { includes: 'Not saved' });
     runner.assert((await panelText()).includes('WebSocket not connected'), 'the panel explains the transport failure');
-    await screenshot('04-save-disconnected.png');
+    await screenshot('08-save-disconnected.png');
     runAttn(['daemon', 'ensure']);
     await observer.connect();
     await waitForDom('[data-testid="crew-panel"]', { includes: 'Saved' }, 45_000);
@@ -287,10 +375,10 @@ try {
 
   await runner.step('restart_reports_lifecycle_and_launches_one_changed_successor', async () => {
     await click('[data-testid="crew-restart"]');
-    await screenshot('05-restart-confirmation.png');
+    await screenshot('09-restart-confirmation.png');
     await click('[data-testid="crew-confirm-restart"]');
     await waitForDom('[data-testid="crew-panel"]', { includes: 'Handoff requested' });
-    await screenshot('06-restart-requested.png');
+    await screenshot('10-restart-requested.png');
     const completedEvent = waitForCrew(
       awake,
       (member) => member.restart?.state === 'completed' && member.binding_session !== firstSession,
@@ -312,20 +400,21 @@ try {
     runner.assert(argv.includes('--model') && argv[argv.indexOf('--model') + 1] === 'crew-claude', 'the saved model reaches the successor argv', { argv });
     runner.assert(argv.includes('--effort') && argv[argv.indexOf('--effort') + 1] === 'low', 'the reconnect-saved effort reaches the successor argv', { argv });
     runner.writeJson('successor-launch.json', { firstSession, successor, argv, completed });
-    await screenshot('07-successor-complete.png');
+    await screenshot('11-successor-complete.png');
   });
 
   await runner.step('open_panel_is_idle_after_the_lifecycle_settles', async () => {
     runner.writeJson('idle.json', { workspace: workspaceIdle, crewPanel: await sampleIdle(webkitBaseline) });
   });
 
-  console.log(JSON.stringify(await runner.finishSuccess({ awake, asleep, firstSession, successor }), null, 2));
+  console.log(JSON.stringify(await runner.finishSuccess({ awake, asleep, history, linkedSeed, firstSession, successor }), null, 2));
 } catch (error) {
   await screenshot('failure.png').catch(() => {});
-  console.error(JSON.stringify(await runner.finishFailure(error, { awake, asleep, firstSession, successor }), null, 2));
+  console.error(JSON.stringify(await runner.finishFailure(error, { awake, asleep, history, linkedSeed, firstSession, successor }), null, 2));
   process.exitCode = 1;
 } finally {
   try {
+    fs.chmodSync(historyHome, 0o755);
     const handoffs = path.join(awakeHome, 'handoffs');
     if (fs.existsSync(handoffs)) {
       for (const name of fs.readdirSync(handoffs)) {

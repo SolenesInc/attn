@@ -174,6 +174,24 @@ function SeedArtifactLink({ target, children }: { target: string; children: Reac
   );
 }
 
+function SeedNavigationLink({ target, children, onOpenSeed }: {
+  target: string;
+  children: ReactNode;
+  onOpenSeed: (seedId: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="md-reader-artifact-link"
+      data-seed-target={decodedSeedTargetName(target)}
+      title={`Open ${decodedSeedTargetName(target)}`}
+      onClick={() => onOpenSeed(decodedSeedTargetName(target))}
+    >
+      {children}
+    </button>
+  );
+}
+
 function SeedArtifactImage({
   target,
   alt,
@@ -237,6 +255,7 @@ function readerComponents(
   seedDocument: boolean,
   rootRef: { current: HTMLDivElement | null },
   onImageClick: (src: string, alt: string) => void,
+  onOpenSeed?: (seedId: string) => void,
 ): Components {
   return {
     code: CodeRenderer,
@@ -307,6 +326,9 @@ function readerComponents(
         );
       }
       if (target.kind === 'seed') {
+        if (onOpenSeed) {
+          return <SeedNavigationLink target={target.value} onOpenSeed={onOpenSeed}>{children}</SeedNavigationLink>;
+        }
         return <SeedArtifactLink target={target.value}>{children}</SeedArtifactLink>;
       }
       return (
@@ -417,6 +439,7 @@ export interface MarkdownReaderProps {
   onAnnotationsCountChange?: (count: number) => void;
   annotationsSendRef?: Ref<MarkdownAnnotationsSendHandle | null>;
   seedArtifacts?: readonly SeedArtifact[];
+  onOpenSeed?: (seedId: string) => void;
 }
 
 interface MarkdownReaderBodyProps {
@@ -426,6 +449,7 @@ interface MarkdownReaderBodyProps {
   seedDocument: boolean;
   rootRef: RefObject<HTMLDivElement | null>;
   onImageClick: (src: string, alt: string) => void;
+  onOpenSeed?: (seedId: string) => void;
 }
 
 // The live-reload poller re-reads the file every 750ms, so an unchanged file must
@@ -437,9 +461,10 @@ const MarkdownReaderBody = memo(function MarkdownReaderBody({
   seedDocument,
   rootRef,
   onImageClick,
+  onOpenSeed,
 }: MarkdownReaderBodyProps) {
   const frontmatter = extractFrontmatter(content);
-  const components = readerComponents(path, allowLocalTargets, seedDocument, rootRef, onImageClick);
+  const components = readerComponents(path, allowLocalTargets, seedDocument, rootRef, onImageClick, onOpenSeed);
 
   return (
     <article className="md-reader-card">
@@ -461,6 +486,7 @@ export const MarkdownReader = memo(function MarkdownReader({
   onAnnotationsCountChange,
   annotationsSendRef,
   seedArtifacts = EMPTY_SEED_ARTIFACTS,
+  onOpenSeed,
 }: MarkdownReaderProps) {
   const daemon = useOptionalDaemonApi();
   const path = markdownDocumentPath(source);
@@ -537,6 +563,7 @@ export const MarkdownReader = memo(function MarkdownReader({
               seedDocument={source.kind === 'seed'}
               rootRef={rootRef}
               onImageClick={handleImageClick}
+              onOpenSeed={onOpenSeed}
             />
           </SeedArtifactReaderContext.Provider>
         </div>

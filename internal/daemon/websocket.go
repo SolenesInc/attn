@@ -1043,6 +1043,12 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		go d.handleSeedReviewDraftWS(client, msg.(*protocol.SeedReviewDraftMessage))
 	case protocol.CmdCrewWake: // wire: crew_wake
 		go d.handleCrewWakeWS(client, msg.(*protocol.CrewWakeMessage))
+	case protocol.CmdCrewCharterGet: // wire: crew_charter_get
+		go d.handleCrewCharterGetWS(client, msg.(*protocol.CrewCharterGetMessage))
+	case protocol.CmdCrewCharterSet: // wire: crew_charter_set
+		go d.handleCrewCharterSetWS(client, msg.(*protocol.CrewCharterSetMessage))
+	case protocol.CmdCrewHandoffsGet: // wire: crew_handoffs_get
+		go d.handleCrewHandoffsGetWS(client, msg.(*protocol.CrewHandoffsGetMessage))
 	case protocol.CmdCrewSleep: // wire: crew_sleep
 		go d.handleCrewSleepWS(client, msg.(*protocol.CrewSleepMessage))
 	case protocol.CmdCrewSet: // wire: crew_set

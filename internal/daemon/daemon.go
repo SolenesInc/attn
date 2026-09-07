@@ -201,6 +201,7 @@ type Daemon struct {
 	agentMailboxDrainHook             func(sessionID string, delivered int)
 	crewWakeMu                        sync.Mutex
 	crewExitedMu                      sync.Mutex
+	crewDocumentMu                    sync.Mutex
 	crewExitedSessions                map[string]string
 	crewWakeStartHook                 func(memberID string)
 	crewWakeAfterClaimHook            func(memberID, sessionID string)
@@ -2658,6 +2659,12 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSeedReviewKeep(conn, msg.(*protocol.SeedReviewKeepMessage))
 	case protocol.CmdCrewList: // wire: crew_list
 		d.handleCrewList(conn, msg.(*protocol.CrewListMessage))
+	case protocol.CmdCrewCharterGet: // wire: crew_charter_get
+		d.handleCrewCharterGet(conn, msg.(*protocol.CrewCharterGetMessage))
+	case protocol.CmdCrewCharterSet: // wire: crew_charter_set
+		d.handleCrewCharterSet(conn, msg.(*protocol.CrewCharterSetMessage))
+	case protocol.CmdCrewHandoffsGet: // wire: crew_handoffs_get
+		d.handleCrewHandoffsGet(conn, msg.(*protocol.CrewHandoffsGetMessage))
 	case protocol.CmdCrewWake: // wire: crew_wake
 		d.handleCrewWake(conn, msg.(*protocol.CrewWakeMessage))
 	case protocol.CmdCrewSleep: // wire: crew_sleep
