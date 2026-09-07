@@ -42,6 +42,13 @@ describe('ShortcutEditorModal', () => {
     const newSession = row('New session in this workspace');
     expect(newSession.textContent).toContain('⌘');
     expect(newSession.textContent).toContain('N');
+
+    expect(row('Previous workspace')).toBeInTheDocument();
+    expect(row('Next workspace')).toBeInTheDocument();
+    expect(row('Back through agent history')).toBeInTheDocument();
+    expect(row('Forward through agent history')).toBeInTheDocument();
+    expect(within(row('Back through agent history')).getByTitle('Unbind')).toBeInTheDocument();
+    expect(within(row('Forward through agent history')).getByTitle('Unbind')).toBeInTheDocument();
   });
 
   it('renders and resets to Linux defaults off macOS', () => {

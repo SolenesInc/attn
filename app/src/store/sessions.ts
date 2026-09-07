@@ -12,6 +12,14 @@ import {
   type TerminalWorkspaceSnapshot,
   type TerminalWorkspaceState,
 } from '../types/workspace';
+import {
+  createAgentHistory,
+  moveAgentHistory,
+  recordAgentVisit,
+  reconcileAgentHistory,
+  type AgentHistoryDirection,
+  type AgentHistoryState,
+} from '../navigation/agentHistory';
 
 export type { TerminalWorkspaceState };
 
@@ -66,6 +74,7 @@ interface SessionStore {
   sessions: Session[];
   activeSessionId: string | null;
   recentSessionIds: string[];
+  agentHistory: AgentHistoryState;
   connected: boolean;
   launcherConfig: LauncherConfig;
   // Current, not last seen: session_unregistered clears a layout on purpose.
@@ -86,6 +95,10 @@ interface SessionStore {
   closeSession: (id: string) => void;
   removeSessionLocalState: (id: string) => void;
   setActiveSession: (id: string | null) => void;
+  navigateAgentHistory: (
+    direction: AgentHistoryDirection,
+    resumeCurrent?: boolean,
+  ) => string | null;
   takeSessionSpawnArgs: (id: string, cols: number, rows: number) => PtySpawnArgs | null;
   reloadSession: (id: string, size?: { cols: number; rows: number }) => Promise<void>;
   setLauncherConfig: (config: LauncherConfig) => void;
@@ -165,6 +178,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   sessions: [],
   activeSessionId: null,
   recentSessionIds: [],
+  agentHistory: createAgentHistory(),
   connected: false,
   launcherConfig: {
     executables: {},
@@ -233,6 +247,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     set((state) => ({
       sessions: [...state.sessions, session],
       activeSessionId: id,
+      agentHistory: recordAgentVisit(state.agentHistory, id),
       recentSessionIds:
         state.activeSessionId && state.activeSessionId !== id
           ? pushRecent(state.recentSessionIds, state.activeSessionId)
@@ -243,20 +258,28 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 
   removeSessionLocalState: (id: string) => {
-    const { sessions, activeSessionId, recentSessionIds } = get();
-    const removedSession = sessions.find((session) => session.id === id) ?? null;
-    const newSessions = sessions.filter((s) => s.id !== id);
-    const newRecent = recentSessionIds.filter((entry) => entry !== id);
-    let newActiveId = activeSessionId;
+    set((state) => {
+      const removedSession = state.sessions.find((session) => session.id === id) ?? null;
+      const sessions = state.sessions.filter((session) => session.id !== id);
+      const liveSessionIds = new Set(sessions.map((session) => session.id));
+      const agentHistory = reconcileAgentHistory(state.agentHistory, liveSessionIds);
+      const recentSessionIds = state.recentSessionIds.filter((entry) => entry !== id);
 
-    if (activeSessionId === id) {
-      newActiveId = pickFallbackActive(id, newSessions, recentSessionIds, removedSession);
-    }
+      if (state.activeSessionId !== id) {
+        return { sessions, agentHistory, recentSessionIds };
+      }
 
-    set({
-      sessions: newSessions,
-      activeSessionId: newActiveId,
-      recentSessionIds: newRecent,
+      const activeSessionId = pickFallbackActive(id, sessions, recentSessionIds, removedSession);
+      return {
+        sessions,
+        activeSessionId,
+        agentHistory: activeSessionId
+          ? recordAgentVisit(agentHistory, activeSessionId)
+          : agentHistory,
+        recentSessionIds: activeSessionId
+          ? recentSessionIds.filter((entry) => entry !== activeSessionId)
+          : recentSessionIds,
+      };
     });
   },
 
@@ -272,9 +295,34 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       const nextRecent = pushRecent(state.recentSessionIds, state.activeSessionId);
       return {
         activeSessionId: id,
+        agentHistory: id ? recordAgentVisit(state.agentHistory, id) : state.agentHistory,
         recentSessionIds: id ? nextRecent.filter((entry) => entry !== id) : nextRecent,
       };
     });
+  },
+
+  navigateAgentHistory: (direction: AgentHistoryDirection, resumeCurrent = false) => {
+    let targetSessionId: string | null = null;
+    set((state) => {
+      const move = moveAgentHistory(
+        state.agentHistory,
+        direction,
+        new Set(state.sessions.map((session) => session.id)),
+        resumeCurrent,
+      );
+      targetSessionId = move.targetSessionId;
+      if (!targetSessionId) {
+        return { agentHistory: move.state };
+      }
+
+      const nextRecent = pushRecent(state.recentSessionIds, state.activeSessionId);
+      return {
+        agentHistory: move.state,
+        activeSessionId: targetSessionId,
+        recentSessionIds: nextRecent.filter((entry) => entry !== targetSessionId),
+      };
+    });
+    return targetSessionId;
   },
 
   takeSessionSpawnArgs: (id: string, cols: number, rows: number) => {
@@ -407,6 +455,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       const allSessions = [...syncedSessions, ...pendingSessions];
       const syncedIds = new Set(allSessions.map((session) => session.id));
       const prunedRecent = state.recentSessionIds.filter((entry) => syncedIds.has(entry));
+      let nextAgentHistory = reconcileAgentHistory(state.agentHistory, syncedIds);
 
       let nextActiveSessionID = state.activeSessionId;
       let nextRecent = prunedRecent;
@@ -417,12 +466,16 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         nextRecent = fallback
           ? prunedRecent.filter((entry) => entry !== fallback)
           : prunedRecent;
+        nextAgentHistory = fallback
+          ? recordAgentVisit(nextAgentHistory, fallback)
+          : nextAgentHistory;
       }
 
       return {
         sessions: allSessions,
         activeSessionId: nextActiveSessionID,
         recentSessionIds: nextRecent,
+        agentHistory: nextAgentHistory,
       };
     });
   },

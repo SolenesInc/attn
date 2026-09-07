@@ -27,8 +27,12 @@ export function buildCheatsheet(): CheatsheetCategory[] {
         { label: 'New workspace', combos: [fromId('session.newWorkspace')] },
         { label: 'Close session (or focused pane)', combos: [fromId('session.close')] },
         {
-          label: 'Previous / next session',
+          label: 'Previous / next workspace',
           combos: [fromId('session.prev'), fromId('session.next')],
+        },
+        {
+          label: 'Back / forward through agent history',
+          combos: [fromId('session.historyBack'), fromId('session.historyForward')],
         },
         { label: 'Jump to this session\'s dispatcher', combos: [fromId('session.orchestrator')] },
         { label: 'Jump to workspace 1–9', combos: [[...modifierTokens('workspace.select1'), '1–9']] },

@@ -70,6 +70,7 @@ import {
 import { useDaemonSocket, DaemonWorktree, DaemonSession, DaemonWorkspace, DaemonPR, DaemonEndpoint, DaemonPlugin, DaemonPluginIssue, GitStatusUpdate, SessionExitInfo, CriticalNotificationState, type SeedReviewActionContext } from './hooks/useDaemonSocket';
 import type { Presentation, SessionLedgerEntry, SessionReopen } from './types/generated';
 import { useSessionWorkspaceController } from './hooks/useSessionWorkspaceController';
+import { useAgentNavigation } from './hooks/useAgentNavigation';
 import { useGardenPresentation } from './hooks/useGardenPresentation';
 import { isAttentionSessionState, normalizeSessionState, type UISessionState } from './types/sessionState';
 import { GridView, type GridSessionTile } from './components/grid/GridView';
@@ -950,6 +951,7 @@ function AppContent({
     createSession,
     closeSession,
     setActiveSession,
+    navigateAgentHistory,
     takeSessionSpawnArgs,
     reloadSession,
     setLauncherConfig,
@@ -960,6 +962,85 @@ function AppContent({
   const [selectedSessionlessWorkspaceId, setSelectedSessionlessWorkspaceId] = useState<string | null>(null);
   const [selectedTile, setSelectedTile] = useState<{ workspaceId: string; tileId: string } | null>(null);
   const selectWorkspaceRef = useRef<(workspaceId: string) => void>(() => {});
+  const [view, setView] = useState<'dashboard' | 'session' | 'grid'>('dashboard');
+  const [utilityFocusRequestToken, setUtilityFocusRequestToken] = useState(0);
+
+  const revealSessionView = useCallback(() => {
+    setSelectedTile(null);
+    setSelectedSessionlessWorkspaceId(null);
+    setView('session');
+  }, []);
+
+  const requestTerminalFocus = useCallback(() => {
+    setUtilityFocusRequestToken((token) => token + 1);
+  }, []);
+
+  const {
+    eventRouter: paneRuntimeEventRouter,
+    getActivePaneIdForSession,
+    setActivePane,
+    prepareClosePaneFocus,
+    clearPreparedClosePaneFocus,
+    setWorkspaceRef,
+    removeWorkspaceRef,
+    getWorkspaceLeafDropSnapshot,
+    focusWorkspaceLeaf,
+    focusSessionPane,
+    typeInSessionPaneViaUI,
+    isSessionPaneInputFocused,
+    scrollSessionPaneToTop,
+    fitSessionActivePane,
+    getPaneText,
+    getPaneSize,
+    getPaneVisibleContent,
+    getPaneVisibleStyleSummary,
+    getPaneBlockState,
+    getPanePlacementState,
+    resetSessionPaneTerminal,
+    injectSessionPaneBytes,
+    injectSessionPaneBase64,
+    drainSessionPaneTerminal,
+  } = useSessionWorkspaceController(sessions, activeSessionId);
+
+  const {
+    selectAgent,
+    selectAgentPane,
+    back: navigateAgentHistoryBack,
+    forward: navigateAgentHistoryForward,
+  } = useAgentNavigation({
+    sessions,
+    setActiveSession,
+    navigateAgentHistory,
+    setActivePane,
+    focusSessionPane,
+    revealSessionView,
+    requestTerminalFocus,
+  });
+
+  const pendingSessionSelectionsRef = useRef(new Set<string>());
+
+  const selectSessionWhenReady = useCallback((sessionId: string) => {
+    if (selectAgent(sessionId)) {
+      return true;
+    }
+    pendingSessionSelectionsRef.current.add(sessionId);
+    return false;
+  }, [selectAgent]);
+
+  const handleSelectSession = selectSessionWhenReady;
+  const selectCreatedSession = selectSessionWhenReady;
+
+  useEffect(() => {
+    for (const sessionId of pendingSessionSelectionsRef.current) {
+      if (!sessions.some((session) => session.id === sessionId)) {
+        pendingSessionSelectionsRef.current.delete(sessionId);
+        continue;
+      }
+      if (selectAgent(sessionId)) {
+        pendingSessionSelectionsRef.current.delete(sessionId);
+      }
+    }
+  }, [selectAgent, sessions]);
 
   const rollbackSessionCreation = useCallback(async ({
     sessionId,
@@ -1033,11 +1114,20 @@ function AppContent({
     takeSessionSpawnArgs,
   ]);
 
+  const createSessionForUiAutomation = useCallback(async (
+    ...args: Parameters<typeof createWorkspaceSession>
+  ) => {
+    const sessionId = await createWorkspaceSession(...args);
+    selectCreatedSession(sessionId);
+    return sessionId;
+  }, [createWorkspaceSession, selectCreatedSession]);
+
   useEffect(() => {
     if (!sessionCreationJob?.sessionId || sessionCreationJob.error) {
       return;
     }
     if (daemonSessions.some((session) => session.id === sessionCreationJob.sessionId)) {
+      selectCreatedSession(sessionCreationJob.sessionId);
       setSessionCreationJob((current) => (
         current?.id === sessionCreationJob.id ? null : current
       ));
@@ -1051,7 +1141,7 @@ function AppContent({
       ));
     }, 35_000);
     return () => window.clearTimeout(timeoutId);
-  }, [daemonSessions, sessionCreationJob]);
+  }, [daemonSessions, selectCreatedSession, sessionCreationJob]);
 
   const { scale, increaseScale, decreaseScale, resetScale } = useUIScale();
   const terminalFontSize = Math.round(14 * scale);
@@ -1163,16 +1253,16 @@ function AppContent({
           const currentSessions = useSessionStore.getState().sessions;
           const existingSession = currentSessions.find((s) => s.cwd === cwd);
           if (existingSession) {
-            setActiveSession(existingSession.id);
+            selectAgent(existingSession.id);
           } else {
-            void createWorkspaceSession(label, cwd);
+            void createWorkspaceSession(label, cwd).then(selectCreatedSession);
           }
         }
       }
     } catch (e) {
       console.error('Failed to parse deep-link URL:', e);
     }
-  }, [createWorkspaceSession, setActiveSession]);
+  }, [createWorkspaceSession, selectAgent, selectCreatedSession]);
 
   useEffect(() => {
     getCurrent().then((urls) => {
@@ -1267,33 +1357,6 @@ function AppContent({
   const notebookChiefSession = enrichedLocalSessions.find((session) => session.chiefOfStaff);
   const notebookChiefActive = notebookChiefSession ? notebookChiefSession.state === 'working' : undefined;
 
-  const {
-    eventRouter: paneRuntimeEventRouter,
-    getActivePaneIdForSession,
-    setActivePane,
-    prepareClosePaneFocus,
-    clearPreparedClosePaneFocus,
-    setWorkspaceRef,
-    removeWorkspaceRef,
-    getWorkspaceLeafDropSnapshot,
-    focusWorkspaceLeaf,
-    focusSessionPane,
-    typeInSessionPaneViaUI,
-    isSessionPaneInputFocused,
-    scrollSessionPaneToTop,
-    fitSessionActivePane,
-    getPaneText,
-    getPaneSize,
-    getPaneVisibleContent,
-    getPaneVisibleStyleSummary,
-    getPaneBlockState,
-    getPanePlacementState,
-    resetSessionPaneTerminal,
-    injectSessionPaneBytes,
-    injectSessionPaneBase64,
-    drainSessionPaneTerminal,
-  } = useSessionWorkspaceController(sessions, activeSessionId);
-
   useEffect(() => {
     void connect();
   }, [connect]);
@@ -1301,8 +1364,6 @@ function AppContent({
   type DockPanelId = 'workflowRun' | 'attention' | 'automations' | 'garden';
 
   const [sidebarMutedExpanded, setSidebarMutedExpanded] = useState(false);
-
-  const [view, setView] = useState<'dashboard' | 'session' | 'grid'>('dashboard');
 
   useClientPresence(sendSetClientPresence, {
     dashboardVisible: view === 'dashboard',
@@ -1332,9 +1393,9 @@ function AppContent({
 
   useEffect(() => {
     if (view === 'session' && !activeSessionId && sessions.length > 0) {
-      setActiveSession(sessions[0].id);
+      selectAgent(sessions[0].id);
     }
-  }, [activeSessionId, sessions, setActiveSession, view]);
+  }, [activeSessionId, selectAgent, sessions, view]);
 
   useEffect(() => {
     if (view === 'session' && activeSessionId) {
@@ -2001,9 +2062,6 @@ function AppContent({
     });
   }, [workflowRunIdToHydrate, getWorkflowRun]);
 
-  const [utilityFocusRequestToken, setUtilityFocusRequestToken] = useState(0);
-
-
   const handleNewWorkspace = useCallback(() => {
     setLocationPickerPurpose('workspace');
     setLocationPickerOpen(true);
@@ -2062,9 +2120,7 @@ function AppContent({
       } else {
         throw new Error('Session spawn arguments were not prepared.');
       }
-      setView('session');
-      setActiveSession(sessionId);
-      setUtilityFocusRequestToken((token) => token + 1);
+      selectCreatedSession(sessionId);
     } catch (error) {
       await rollbackSessionCreation({
         sessionId,
@@ -2082,7 +2138,7 @@ function AppContent({
     rollbackSessionCreation,
     sendWorkspaceAddSessionPane,
     sessions,
-    setActiveSession,
+    selectCreatedSession,
     showError,
     takeSessionSpawnArgs,
   ]);
@@ -2166,6 +2222,7 @@ function AppContent({
           yoloMode,
           { chiefOfStaff, autoMode },
         );
+        selectCreatedSession(sessionId);
         setSessionCreationJob((current) => (
           current?.id === jobId
             ? { ...current, sessionId, phase: 'starting_session' }
@@ -2179,7 +2236,7 @@ function AppContent({
         ));
       }
     },
-    [activeLocalSession?.workspaceId, agentAvailability, createSplitSession, createWorkspaceSession, daemonEndpoints, hasAvailableAgents, locationPickerPurpose, locationPickerSessionDirection, showError]
+    [activeLocalSession?.workspaceId, agentAvailability, createSplitSession, createWorkspaceSession, daemonEndpoints, hasAvailableAgents, locationPickerPurpose, locationPickerSessionDirection, selectCreatedSession, showError]
   );
 
   const handleCreateWorktreeSession = useCallback((
@@ -2234,6 +2291,7 @@ function AppContent({
           return;
         }
         const sessionId = await createWorkspaceSession(folderName, worktreePath, undefined, agent, endpointId, yoloMode, { autoMode });
+        selectCreatedSession(sessionId);
         setSessionCreationJob((current) => (
           current?.id === jobId
             ? { ...current, label: folderName, path: worktreePath, phase: 'starting_session', sessionId }
@@ -2249,7 +2307,7 @@ function AppContent({
         worktreeSessionCreateEndpointsRef.current.delete(endpointKey);
       }
     })();
-  }, [activeLocalSession?.workspaceId, createSplitSession, createWorkspaceSession, locationPickerPurpose, locationPickerSessionDirection, sendCreateWorktree, showError]);
+  }, [activeLocalSession?.workspaceId, createSplitSession, createWorkspaceSession, locationPickerPurpose, locationPickerSessionDirection, selectCreatedSession, sendCreateWorktree, showError]);
 
   const closeLocationPicker = useCallback(() => {
     setLocationPickerOpen(false);
@@ -2303,7 +2361,7 @@ function AppContent({
     return sendWorkspaceClosePane(workspaceId, paneId)
       .then((result) => {
         if (fallbackSessionId) {
-          setActiveSession(fallbackSessionId);
+          selectAgentPane(fallbackSessionId, fallbackPaneId);
         }
         return result;
       })
@@ -2311,7 +2369,7 @@ function AppContent({
         clearPreparedClosePaneFocus(sessionId);
         throw error;
       });
-  }, [clearPreparedClosePaneFocus, daemonSessions, enrichedLocalSessions, prepareClosePaneFocus, sendWorkspaceClosePane, sessions, setActiveSession, showError]);
+  }, [clearPreparedClosePaneFocus, daemonSessions, enrichedLocalSessions, prepareClosePaneFocus, selectAgentPane, sendWorkspaceClosePane, sessions, showError]);
 
   const handleRequestCloseSession = useCallback((id: string) => {
     const session = sessions.find((entry) => entry.id === id);
@@ -2357,21 +2415,6 @@ function AppContent({
     void handleCloseSession(sessionID);
   }, [handleCloseSession, pendingSessionClose]);
 
-  const handleSelectSession = useCallback(
-    (id: string) => {
-      setSelectedTile(null);
-      setSelectedSessionlessWorkspaceId(null);
-      const session = sessions.find((entry) => entry.id === id);
-      const sessionPane = session?.workspace.agents.find((pane) => pane.sessionId === id);
-      if (sessionPane) {
-        setActivePane(id, sessionPane.id);
-      }
-      setActiveSession(id);
-      setUtilityFocusRequestToken((token) => token + 1);
-    },
-    [sessions, setActivePane, setActiveSession]
-  );
-
   const handleSelectOrchestrator = useCallback(() => {
     const session = daemonSessions.find((entry) => entry.id === activeSessionId);
     if (!session) return;
@@ -2385,7 +2428,7 @@ function AppContent({
     daemonReady: hasReceivedInitialState && !connectionError,
     connectionError,
     getActivePaneIdForSession,
-    createSession: createWorkspaceSession,
+    createSession: createSessionForUiAutomation,
     selectSession: handleSelectSession,
     selectWorkspace: (workspaceId: string) => selectWorkspaceRef.current(workspaceId),
     moveWorkspaceLeafToWorkspace: sendWorkspaceMoveLeafToWorkspace,
@@ -2399,10 +2442,10 @@ function AppContent({
     },
     closePane: handleClosePane,
     focusPane: (sessionId: string, paneId: string) => {
-      setActiveSession(sessionId);
-      setUtilityFocusRequestToken((token) => token + 1);
-      setActivePane(sessionId, paneId);
-      focusSessionPane(sessionId, paneId, 40);
+      const ownerSessionId = sessions.find((session) => (
+        session.workspace.agents.some((pane) => pane.id === paneId && pane.sessionId === session.id)
+      ))?.id;
+      selectAgentPane(ownerSessionId ?? sessionId, paneId);
     },
     typeInSessionPaneViaUI,
     isSessionPaneInputFocused,
@@ -2464,6 +2507,7 @@ function AppContent({
         return;
       }
       if (result.success) {
+        selectCreatedSession(result.sessionId);
         console.log(`[App] Worktree created at ${result.worktreePath}`);
         return;
       }
@@ -2494,7 +2538,7 @@ function AppContent({
         }
       }
     },
-    [agentAvailability, hasAvailableAgents, openPR, settings.new_session_agent]
+    [agentAvailability, hasAvailableAgents, openPR, selectCreatedSession, settings.new_session_agent]
   );
 
   const workspaceViews = useMemo(
@@ -3018,9 +3062,9 @@ function AppContent({
       }
       setSelectedSessionlessWorkspaceId(workspace.id);
       setView('session');
-      setUtilityFocusRequestToken((token) => token + 1);
+      requestTerminalFocus();
     },
-    [handleSelectSession, setView, sidebarWorkspaceViews, workspaceViews],
+    [handleSelectSession, requestTerminalFocus, sidebarWorkspaceViews, workspaceViews],
   );
   selectWorkspaceRef.current = handleSelectWorkspace;
 
@@ -3507,6 +3551,8 @@ function AppContent({
     onSelectWorkspaceByIndex: handleSelectWorkspaceByIndex,
     onPrevSession: handlePrevWorkspace,
     onNextSession: handleNextWorkspace,
+    onHistoryBack: () => navigateAgentHistoryBack(view !== 'session'),
+    onHistoryForward: () => navigateAgentHistoryForward(view !== 'session'),
     onSelectOrchestrator: handleSelectOrchestrator,
     onToggleSidebar: toggleSidebarCollapse,
     onRefreshPRs: handleRefreshPRs,
@@ -3814,10 +3860,7 @@ function AppContent({
                       if (!paneSessionId) {
                         return;
                       }
-                      setActivePane(paneSessionId, paneId);
-                      if (paneSessionId !== activeSessionId) {
-                        setActiveSession(paneSessionId);
-                      }
+                      selectAgentPane(paneSessionId, paneId);
                     }}
                     zoomActive={Boolean(zoomModeBySessionId[workspace.id])}
                     onSetZoomActive={(active) => {
@@ -3910,7 +3953,7 @@ function AppContent({
                   applyDefinition={applyAutomationDefinition}
                   deleteDefinition={deleteAutomationDefinition}
                   onSelectSession={handleSelectSession}
-                  onFocusPane={(sessionId, paneId) => focusSessionPane(sessionId, paneId, 40)}
+                  onFocusPane={(sessionId, paneId) => selectAgentPane(sessionId, paneId)}
                 />
               ),
             },

@@ -9,7 +9,8 @@ const mockUseDaemonStore = vi.fn();
 const mockUseDaemonSocket = vi.fn();
 const mockUseKeyboardShortcuts = vi.fn();
 
-const { mockSetActiveSession } = vi.hoisted(() => ({
+const { mockNavigateAgentHistory, mockSetActiveSession } = vi.hoisted(() => ({
+  mockNavigateAgentHistory: vi.fn(() => null as string | null),
   mockSetActiveSession: vi.fn(),
 }));
 
@@ -136,6 +137,7 @@ describe('waiting at home for the next turn', () => {
     activeSessionId = null;
 
     mockSetActiveSession.mockImplementation((id: string | null) => { activeSessionId = id; });
+    mockNavigateAgentHistory.mockReturnValue(null);
 
     mockUseSessionStore.mockImplementation(() => ({
       sessions: ['s1', 's2'].map((id) => ({
@@ -159,6 +161,7 @@ describe('waiting at home for the next turn', () => {
       createSession: vi.fn(async () => 's1'),
       closeSession: vi.fn(),
       setActiveSession: mockSetActiveSession,
+      navigateAgentHistory: mockNavigateAgentHistory,
       takeSessionSpawnArgs: vi.fn(() => null),
       reloadSession: vi.fn(async () => {}),
       setLauncherConfig: vi.fn(),
@@ -272,5 +275,28 @@ describe('waiting at home for the next turn', () => {
     broadcast();
 
     expect(activeSessionId).toBe('s1');
+  });
+
+  it('resumes history from dashboard and grid, then traverses normally in the session view', () => {
+    mockNavigateAgentHistory.mockReturnValue('s2');
+    render(<App />);
+
+    let shortcuts = shortcutHandlers<{
+      onHistoryBack: () => void;
+      onHistoryForward: () => void;
+      onToggleGridMode: () => void;
+    }>();
+    act(() => { shortcuts.onHistoryBack(); });
+    expect(mockNavigateAgentHistory).toHaveBeenLastCalledWith('back', true);
+
+    shortcuts = shortcutHandlers();
+    act(() => { shortcuts.onToggleGridMode(); });
+    shortcuts = shortcutHandlers();
+    act(() => { shortcuts.onHistoryForward(); });
+    expect(mockNavigateAgentHistory).toHaveBeenLastCalledWith('forward', true);
+
+    shortcuts = shortcutHandlers();
+    act(() => { shortcuts.onHistoryBack(); });
+    expect(mockNavigateAgentHistory).toHaveBeenLastCalledWith('back', false);
   });
 });
