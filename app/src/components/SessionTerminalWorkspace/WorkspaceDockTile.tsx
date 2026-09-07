@@ -783,10 +783,13 @@ export function WorkspaceDockTile({
               type="button"
               className="workspace-dock-tile-back-crew"
               data-testid="crew-seed-back"
+              aria-label="Back to Crew"
+              title="Back to Crew"
               onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => onBackToCrew(event.currentTarget)}
             >
-              Back to Crew
+              <span className="workspace-dock-tile-back-crew-icon" aria-hidden="true">←</span>
+              <span className="workspace-dock-tile-back-crew-label">Back to Crew</span>
             </button>
           ) : null}
           {isAnnotatedDocument && onFocusDocument ? (
