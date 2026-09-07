@@ -219,6 +219,8 @@ try {
   await waitForDom(`[data-testid="queue-crew-${awake}"][data-crew-state="awake"]`);
   await waitForDom(`[data-testid="queue-crew-${asleep}"]`);
   await waitForDom(`[data-testid="queue-crew-${history}"]`);
+  await click(`[data-testid="queue-crew-select-${awake}"]`);
+  await waitForDom(`[data-testid="queue-crew-${awake}"].selected`);
   const workspaceIdle = await sampleIdle(webkitBaseline);
   await driver.activateApp();
 
@@ -319,7 +321,7 @@ try {
     await client.request('dom_focus', { selector: `[data-seed-target="${linkedSeed}"]` });
     await driver.pressEnter();
     await waitForDom(`.seed-document[data-seed-id="${linkedSeed}"]`);
-    await waitForDom('.workspace-dock-tile-body--seed', { focused: true });
+    await waitForDom(`[data-pane-id="tile-seed-${linkedSeed}"] .workspace-dock-tile-body--seed`, { focused: true });
     await waitForDom('[data-testid="crew-seed-back"]');
     const hiddenPanel = await client.request('dom_bounds', { selector: '[data-testid="crew-panel"]' });
     runner.assert(hiddenPanel.bounds.width === 0 && hiddenPanel.bounds.height === 0,

@@ -324,6 +324,7 @@ export function CrewPanel({
     }
     const opening = !wasOpen.current;
     wasOpen.current = true;
+    if (opening && !preserveStateOnOpen) setTab('launch');
     if ((opening && !preserveStateOnOpen) || initialMember !== lastInitialMember.current) {
       lastInitialMember.current = initialMember;
       setSelectedId(initialMember && members.some((candidate) => candidate.id === initialMember)
