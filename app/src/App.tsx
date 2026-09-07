@@ -1005,6 +1005,8 @@ function AppContent({
   const {
     selectAgent,
     selectAgentPane,
+    back: navigateAgentHistoryBack,
+    forward: navigateAgentHistoryForward,
   } = useAgentNavigation({
     sessions,
     setActiveSession,
@@ -3549,6 +3551,8 @@ function AppContent({
     onSelectWorkspaceByIndex: handleSelectWorkspaceByIndex,
     onPrevSession: handlePrevWorkspace,
     onNextSession: handleNextWorkspace,
+    onHistoryBack: () => navigateAgentHistoryBack(view !== 'session'),
+    onHistoryForward: () => navigateAgentHistoryForward(view !== 'session'),
     onSelectOrchestrator: handleSelectOrchestrator,
     onToggleSidebar: toggleSidebarCollapse,
     onRefreshPRs: handleRefreshPRs,
