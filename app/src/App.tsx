@@ -3032,14 +3032,6 @@ function AppContent({
       );
       return stillExists ? current : null;
     });
-    setCrewSeedTile((current) => {
-      if (!current) return null;
-      const workspace = workspaceViews.find((entry) => entry.id === current.workspaceId);
-      const stillExists = workspace?.children.some(
-        (child) => child.kind === 'tile' && child.tile.tileId === current.tileId,
-      );
-      return stillExists ? current : null;
-    });
   }, [workspaceViews]);
 
   const canMoveDraggedLeafToWorkspace = useCallback((workspace: { id: string; endpointId?: string }) => {
