@@ -1120,7 +1120,7 @@ function AppContent({
     const sessionId = await createWorkspaceSession(...args);
     selectCreatedSession(sessionId);
     return sessionId;
-  }, [createWorkspaceSession, selectAgent, selectCreatedSession]);
+  }, [createWorkspaceSession, selectCreatedSession]);
 
   useEffect(() => {
     if (!sessionCreationJob?.sessionId || sessionCreationJob.error) {
@@ -1262,7 +1262,7 @@ function AppContent({
     } catch (e) {
       console.error('Failed to parse deep-link URL:', e);
     }
-  }, [createWorkspaceSession, selectCreatedSession]);
+  }, [createWorkspaceSession, selectAgent, selectCreatedSession]);
 
   useEffect(() => {
     getCurrent().then((urls) => {
