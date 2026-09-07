@@ -1,5 +1,6 @@
 mod browser_alerts;
 mod browser_host;
+mod native_input_diagnostics;
 mod profile;
 mod ui_automation;
 
@@ -1355,6 +1356,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             browser_host::browser_host_clear_focus,
             browser_host::browser_host_claim_focus,
             browser_host::browser_host_focus_state,
+            native_input_diagnostics::native_input_diagnostics_snapshot,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
@@ -1363,6 +1365,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             // from under it by a `profile clean` that is already past its last check.
             profile::hold_app_lock()?;
             profile::write_app_pid_file();
+            native_input_diagnostics::install();
             ui_automation::maybe_start(&app.handle().clone());
             // Harness-only: visible so WKWebView does not throttle for occlusion, never
             // active. Accessory policy keeps it off the Dock; set_focusable(false) stops key theft.

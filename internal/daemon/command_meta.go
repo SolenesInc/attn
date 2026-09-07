@@ -158,6 +158,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdDetachSession:                         commandMetadata(ScopeSession, true, true),
 	protocol.CmdGetKittyImage:                         commandMetadata(ScopeSession, false, true),
 	protocol.CmdPtyInput:                              commandMetadata(ScopeSession, true, false),
+	protocol.CmdSupportSnapshot:                       commandMetadata(ScopeEndpoint, false, false),
 	protocol.CmdTerminalPointerActivity:               commandMetadata(ScopeSession, false, false),
 	protocol.CmdBusStatusGet:                          commandMetadata(ScopeHubLocal, false, false),
 	protocol.CmdBusSetConsumerEnabled:                 commandMetadata(ScopeHubLocal, false, true),

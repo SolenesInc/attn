@@ -78,7 +78,7 @@ export interface PtyBackend {
     args: PtyAttachArgs,
     options?: { forceResizeBeforeAttach?: boolean }
   ) => Promise<void>;
-  write: (id: string, data: string, source?: string) => Promise<void>;
+  write: (id: string, data: string, source?: string, traceId?: string) => Promise<void>;
   resize: (
     id: string,
     cols: number,
@@ -168,7 +168,7 @@ export async function ptySpawn(request: { args: PtySpawnArgs }) {
   await backend.spawn(request.args);
 }
 
-export async function ptyWrite(request: { id: string; data: string; source?: string }) {
+export async function ptyWrite(request: { id: string; data: string; source?: string; traceId?: string }) {
   if (mockEnabled()) {
     if (!mockSessions.has(request.id)) {
       return;
@@ -179,7 +179,7 @@ export async function ptyWrite(request: { id: string; data: string; source?: str
   if (!backend) {
     throw new Error('PTY backend is not configured');
   }
-  await backend.write(request.id, request.data, request.source);
+  await backend.write(request.id, request.data, request.source, request.traceId);
 }
 
 export async function ptyAttach(request: {

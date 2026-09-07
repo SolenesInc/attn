@@ -82,7 +82,7 @@ describe('attachTerminalInput', () => {
       utf8: 'A',
       unshiftedCodepoint: 97,
     });
-    expect(input.send).toHaveBeenCalledWith('press');
+    expect(input.send).toHaveBeenCalledWith('press', expect.any(String));
     expect(arrow.defaultPrevented).toBe(true);
     expect(letter.defaultPrevented).toBe(true);
     input.dispose();
@@ -242,7 +242,7 @@ describe('attachTerminalInput', () => {
     expect(input.target!.encodeKey).not.toHaveBeenCalled();
     expect(dead.defaultPrevented).toBe(false);
     expect(input.send).toHaveBeenCalledTimes(1);
-    expect(input.send).toHaveBeenCalledWith('å');
+    expect(input.send).toHaveBeenCalledWith('å', expect.any(String));
     expect(input.element.childNodes).toHaveLength(0);
     input.dispose();
   });
@@ -259,7 +259,7 @@ describe('attachTerminalInput', () => {
     input.element.dispatchEvent(paste);
 
     expect(input.target!.formatPaste).toHaveBeenCalledWith('one\r\ntwo\nthree');
-    expect(input.send).toHaveBeenCalledWith('<one\r\ntwo\nthree>');
+    expect(input.send).toHaveBeenCalledWith('<one\r\ntwo\nthree>', expect.any(String));
     expect(paste.defaultPrevented).toBe(true);
     input.dispose();
   });

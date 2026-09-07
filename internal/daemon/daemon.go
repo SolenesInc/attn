@@ -216,6 +216,8 @@ type Daemon struct {
 	pluginDriverSilenceGraceOverride  time.Duration
 	sessionStateReasonOnce            sync.Once
 	sessionStateReason                *sessionStateReasons
+	supportInputTraceOnce             sync.Once
+	supportInputTrace                 *supportInputTraceRing
 	nudgeMu                           sync.Mutex
 	nudgeCountdowns                   map[string]*nudgeCountdown
 	unreadCache                       map[string]bool

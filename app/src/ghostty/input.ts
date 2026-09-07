@@ -1,5 +1,6 @@
 import type { TerminalKeyEvent } from './keyEncoder';
 import { terminalClipboardChord } from '../shortcuts/platform';
+import { inputTraceId } from '../utils/supportInputTrace';
 
 const MOD_SHIFT = 1 << 0;
 const MOD_CTRL = 1 << 1;
@@ -199,8 +200,8 @@ export interface TerminalInputTarget {
 export interface TerminalInputOptions {
   element: HTMLElement;
   terminal: () => TerminalInputTarget | null;
-  send: (data: string) => void;
-  interceptKey: (event: KeyboardEvent) => boolean;
+  send: (data: string, traceId?: string) => void;
+  interceptKey: (event: KeyboardEvent, traceId?: string) => boolean;
   onError: (operation: 'key' | 'paste', error: unknown) => void;
   onDiagnostic?: (event: TerminalInputDiagnostic) => void;
 }
@@ -214,6 +215,7 @@ export interface TerminalInputDiagnostic {
   keyClass?: 'text' | 'modifier' | 'enter' | 'escape' | 'dead' | 'other';
   repeat?: boolean;
   modifiers?: number;
+  traceId?: string;
 }
 
 function modifierState(event: KeyboardEvent, name: string): boolean {
@@ -315,16 +317,22 @@ function removeCompositionTextNodes(element: HTMLElement): void {
 
 export function attachTerminalInput(options: TerminalInputOptions): () => void {
   const { element, terminal, send, interceptKey, onError } = options;
-  const forwarded = new Map<string, TerminalInputTarget>();
+  const forwarded = new Map<string, { target: TerminalInputTarget; traceId: string }>();
   let composing = false;
   let disposed = false;
   let diagnosticFailed = false;
 
-  const diagnose = (event: TerminalInputDiagnostic['event'], outcome: TerminalInputDiagnostic['outcome'], key?: KeyboardEvent) => {
+  const diagnose = (
+    event: TerminalInputDiagnostic['event'],
+    outcome: TerminalInputDiagnostic['outcome'],
+    key?: KeyboardEvent,
+    traceId?: string,
+  ) => {
     if (!options.onDiagnostic || diagnosticFailed) return;
     try {
       options.onDiagnostic({
         event, outcome, composing,
+        traceId,
         ...(key ? {
           browserComposing: key.isComposing,
           legacyComposition: key.keyCode === 229,
@@ -346,41 +354,42 @@ export function attachTerminalInput(options: TerminalInputOptions): () => void {
 
   const keydown = (event: KeyboardEvent) => {
     if (disposed) return;
+    const traceId = inputTraceId(event);
     if (composing || event.isComposing || event.keyCode === 229) {
-      diagnose('keydown', 'composing', event);
+      diagnose('keydown', 'composing', event, traceId);
       return;
     }
-    if (interceptKey(event)) {
-      diagnose('keydown', 'intercepted', event);
+    if (interceptKey(event, traceId)) {
+      diagnose('keydown', 'intercepted', event, traceId);
       consumeBrowserEvent(event);
       return;
     }
     if (browserOwnsKey(event)) {
-      diagnose('keydown', 'browser', event);
+      diagnose('keydown', 'browser', event, traceId);
       return;
     }
     // Dead keys continue through WebKit's composition events.
     if (event.key === 'Dead') {
-      diagnose('keydown', 'dead', event);
+      diagnose('keydown', 'dead', event, traceId);
       return;
     }
 
     const text = printableText(event);
     const key = KEY_BY_CODE[event.code] ?? (text ? 'UNIDENTIFIED' : null);
     if (!key) {
-      diagnose('keydown', 'unmapped', event);
+      diagnose('keydown', 'unmapped', event, traceId);
       return;
     }
 
     const target = terminal();
     if (!target) {
-      diagnose('keydown', 'no_target', event);
+      diagnose('keydown', 'no_target', event, traceId);
       consumeBrowserEvent(event);
       return;
     }
 
     const id = event.code || event.key;
-    forwarded.set(id, target);
+    forwarded.set(id, { target, traceId });
     let data: string;
     try {
       data = target.encodeKey({
@@ -394,32 +403,34 @@ export function attachTerminalInput(options: TerminalInputOptions): () => void {
       });
     } catch (error) {
       forwarded.delete(id);
-      diagnose('keydown', 'error', event);
+      diagnose('keydown', 'error', event, traceId);
       consumeBrowserEvent(event);
       onError('key', error);
       return;
     }
     if (data) {
       consumeBrowserEvent(event);
-      send(data);
+      diagnose('keydown', 'sent', event, traceId);
+      send(data, traceId);
+      return;
     }
-    diagnose('keydown', data ? 'sent' : 'empty', event);
+    diagnose('keydown', 'empty', event, traceId);
   };
 
   const keyup = (event: KeyboardEvent) => {
     if (disposed) return;
     const id = event.code || event.key;
-    const target = forwarded.get(id);
-    if (!target) return;
+    const forwardedKey = forwarded.get(id);
+    if (!forwardedKey) return;
     forwarded.delete(id);
-    if (terminal() !== target) return;
+    if (terminal() !== forwardedKey.target) return;
 
     const text = printableText(event);
     const key = KEY_BY_CODE[event.code] ?? (text ? 'UNIDENTIFIED' : null);
     if (!key) return;
     let data: string;
     try {
-      data = target.encodeKey({
+      data = forwardedKey.target.encodeKey({
         action: 'release',
         key,
         mods: modifiers(event),
@@ -434,33 +445,34 @@ export function attachTerminalInput(options: TerminalInputOptions): () => void {
     }
     if (data) {
       consumeBrowserEvent(event);
-      send(data);
+      send(data, forwardedKey.traceId);
     }
   };
 
   const paste = (event: ClipboardEvent) => {
     if (disposed || event.defaultPrevented) return;
+    const traceId = inputTraceId(event);
     const text = event.clipboardData?.getData('text/plain') ?? '';
     if (!text) {
-      diagnose('paste', 'empty');
+      diagnose('paste', 'empty', undefined, traceId);
       return;
     }
     consumeBrowserEvent(event);
     const target = terminal();
     if (!target) {
-      diagnose('paste', 'no_target');
+      diagnose('paste', 'no_target', undefined, traceId);
       return;
     }
     let data: string;
     try {
       data = target.formatPaste(text);
     } catch (error) {
-      diagnose('paste', 'error');
+      diagnose('paste', 'error', undefined, traceId);
       onError('paste', error);
       return;
     }
-    send(data);
-    diagnose('paste', 'sent');
+    diagnose('paste', 'sent', undefined, traceId);
+    send(data, traceId);
   };
 
   const compositionstart = () => {
@@ -472,8 +484,9 @@ export function attachTerminalInput(options: TerminalInputOptions): () => void {
   const compositionend = (event: CompositionEvent) => {
     if (disposed) return;
     composing = false;
-    if (event.data) send(event.data);
-    diagnose('compositionend', 'ended');
+    const traceId = inputTraceId(event);
+    diagnose('compositionend', 'ended', undefined, traceId);
+    if (event.data) send(event.data, traceId);
     removeCompositionTextNodes(element);
   };
 

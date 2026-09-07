@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
@@ -10,7 +11,7 @@ import {
   printCommonHelp,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { appDaemonInTree, appPlatform, delay } from './platform.mjs';
+import { appDaemonInTree, delay } from './platform.mjs';
 import { profileCliEnv, profileForAppPath } from './harnessProfile.mjs';
 import {
   captureSessionArtifacts,
@@ -119,6 +120,26 @@ function exactLineCount(text, expected) {
   return text.split('\n').filter((line) => line.trim() === expected).length;
 }
 
+const DIAGNOSTIC_REPORT_NAME = /^attn-\d{8}-\d{6}Z\.attn-report(?:-\d+)?\.json$/;
+
+function diagnosticReports(downloadsDir) {
+  try {
+    return new Set(fs.readdirSync(downloadsDir).filter((name) => DIAGNOSTIC_REPORT_NAME.test(name)));
+  } catch {
+    return new Set();
+  }
+}
+
+async function waitForDiagnosticReport(downloadsDir, before, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const created = [...diagnosticReports(downloadsDir)].find((name) => !before.has(name));
+    if (created) return path.join(downloadsDir, created);
+    await delay(100);
+  }
+  throw new Error(`Diagnostic report was not created in ${downloadsDir}`);
+}
+
 async function readPane(client, sessionId, paneId) {
   return (await client.request('read_pane_text', { sessionId, paneId })).text || '';
 }
@@ -184,7 +205,7 @@ async function main() {
     prefix: 'terminal-input',
     metadata: {
       agent: 'shell',
-      focus: 'background browser keyboard, clipboard, shortcut, IME, Kitty, and zoomed-grid input through libghostty',
+      focus: 'background browser keyboard, diagnostic report, shortcut, IME, Kitty, and zoomed-grid input through libghostty',
     },
   });
   const client = new UiAutomationClient({ appPath: options.appPath, backgroundLaunch: true });
@@ -193,6 +214,8 @@ async function main() {
   const terminalSelector = '.terminal-wrapper.active .terminal-container';
   let sessionId = null;
   let pane = null;
+  let generatedReportPath = null;
+  const downloadsDir = path.join(os.homedir(), 'Downloads');
 
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
@@ -206,8 +229,12 @@ async function main() {
   runner.registerCleanup('restore_keybindings', () => (
     client.request('set_setting', { key: 'keybindings_config', value: '' }).catch(() => {})
   ));
-  const savedClipboard = appPlatform.readClipboard();
-  runner.registerCleanup('restore_clipboard', () => appPlatform.writeClipboard(savedClipboard));
+  runner.registerCleanup('remove_generated_diagnostic_report', () => {
+    if (generatedReportPath && path.dirname(generatedReportPath) === downloadsDir
+      && DIAGNOSTIC_REPORT_NAME.test(path.basename(generatedReportPath))) {
+      fs.unlinkSync(generatedReportPath);
+    }
+  });
   const focusPane = async () => {
     await client.request('focus_pane', { sessionId, paneId: pane.paneId });
   };
@@ -397,7 +424,7 @@ async function main() {
       await finishCapture('composition', Buffer.from(text).toString('hex'));
     });
 
-    await runner.step('interrupted_composition_input_dump', async () => {
+    await runner.step('interrupted_composition_diagnostic_report', async () => {
       const privateText = `DO_NOT_RECORD_${runner.runId}`;
       await beginCapture('composition-interrupted');
       await client.request('dom_compose_text', {
@@ -428,30 +455,44 @@ async function main() {
 
         await pressShortcut('ui.actionMenu');
         await client.request('dom_type', {
-          selector: '.action-menu input', text: 'terminal input diagnostics',
+          selector: '.action-menu input', text: 'diagnostic report',
         });
         const menu = await client.request('dom_text', { selector: '.action-menu' });
-        runner.assert(menu.text.includes('Copy terminal input diagnostics'), 'Input diagnostics action is searchable');
-        if (process.env.ATTN_HARNESS_RECORD === '1') await delay(1_000);
-        appPlatform.writeClipboard('input-diagnostics-copy-pending');
+        runner.assert(menu.text.includes('Create diagnostic report'), 'Diagnostic report action is searchable');
+        const reportsBefore = diagnosticReports(downloadsDir);
+        fs.mkdirSync(downloadsDir, { recursive: true });
         await pressKey(KEY.ENTER, {}, '.action-menu input');
-        const copyDeadline = Date.now() + 5_000;
-        let copied = '';
-        while (Date.now() < copyDeadline) {
+        const prompt = await client.request('dom_text', { selector: '.diagnostic-report-sheet' });
+        runner.assert(prompt.text.includes('Included automatically'), 'Report explains its automatic metadata');
+        runner.assert(prompt.text.includes('Optional. Output may contain private text or secrets.'), 'Report warns before including pane output');
+        runner.assert(prompt.text.includes(pane.paneId) === false, 'Report does not expose internal pane ids in its consent UI');
+        if (process.env.ATTN_HARNESS_RECORD === '1') await delay(1_000);
+        await client.request('dom_click', { selector: '.diagnostic-report-actions .primary' });
+        const saveDeadline = Date.now() + 10_000;
+        let saved = false;
+        while (Date.now() < saveDeadline) {
           const notice = await client.request('dom_text', { selector: '.input-diagnostics-copied' }).catch(() => null);
-          if (notice?.text === 'Terminal input diagnostics copied') {
-            copied = appPlatform.readClipboard();
+          if (notice?.text === 'Diagnostic report saved') {
+            saved = true;
             break;
           }
           await delay(100);
         }
-        if (!copied) throw new Error('Input diagnostics copy did not report success');
-        if (copied.includes(privateText)) throw new Error('Copied diagnostics exposed composition text');
-        const copiedRecords = copied.trim().split('\n').map((line) => JSON.parse(line));
-        runner.assert(copiedRecords.every((record) => record.kind === 'input'), 'Clipboard contains only input diagnostics');
-        runner.assert(copiedRecords.some((record) => record.runtimeId === pane.runtimeId
-          && record.reasons?.includes('composition_mismatch')), 'Clipboard contains the suppressed key incident');
-        fs.writeFileSync(path.join(runner.runDir, 'palette-input-dump.jsonl'), copied);
+        if (!saved) throw new Error('Diagnostic report save did not report success');
+        generatedReportPath = await waitForDiagnosticReport(downloadsDir, reportsBefore);
+        const serialized = fs.readFileSync(generatedReportPath, 'utf8');
+        if (serialized.includes(privateText)) throw new Error('Diagnostic report exposed composition text');
+        const report = JSON.parse(serialized);
+        runner.assert(report.schema === 'attn.support-report.v1', 'Report carries its portable schema');
+        runner.assert(report.consent?.selectedPaneIds?.includes(pane.paneId), 'Affected pane output is preselected');
+        runner.assert(report.paneContent?.some((entry) => entry.paneId === pane.paneId && entry.available), 'Report contains the selected pane output');
+        runner.assert(report.daemons?.some((daemon) => daemon.input_traces?.length > 0), 'Report contains daemon write evidence');
+        runner.assert(report.diagnostics?.input?.journeys?.some((journey) => (
+          journey.runtimeId === pane.runtimeId && journey.conclusion === 'terminal_composing_no_transport'
+        )), 'Report locates the suppressed key before transport');
+        runner.assert(report.limits?.measuredBytes === Buffer.byteLength(serialized), 'Report records its exact serialized size');
+        runner.assert(Buffer.byteLength(serialized) <= report.limits?.reportBytes, 'Report stays within its declared size limit');
+        fs.copyFileSync(generatedReportPath, path.join(runner.runDir, 'diagnostic-report.json'));
         if (process.env.ATTN_HARNESS_RECORD === '1') await delay(1_000);
       } finally {
         await client.request('dom_compose_text', {
@@ -548,7 +589,7 @@ async function main() {
         'kitty-press-repeat-release',
         'unicode-composition',
         'interrupted-composition-input-dump',
-        'command-palette-input-dump',
+        'command-palette-diagnostic-report',
         'bracketed-unicode-paste',
         'image-paste',
         'shortcut-chord-consumption',
@@ -574,7 +615,11 @@ async function main() {
     }
     await client.quitApp().catch(() => {});
     await observer.close();
-    appPlatform.writeClipboard(savedClipboard);
+    if (generatedReportPath && path.dirname(generatedReportPath) === downloadsDir
+      && DIAGNOSTIC_REPORT_NAME.test(path.basename(generatedReportPath))) {
+      fs.unlinkSync(generatedReportPath);
+      generatedReportPath = null;
+    }
   }
 }
 

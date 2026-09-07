@@ -66,7 +66,7 @@ describe('terminal input evidence', () => {
     await Promise.resolve();
 
     expect(first.send).not.toHaveBeenCalled();
-    expect(second.send).toHaveBeenCalledWith('a');
+    expect(second.send).toHaveBeenCalledWith('a', expect.any(String));
     const record = lastRecord('first');
     expect(record).toMatchObject({
       kind: 'input', reasons: expect.arrayContaining(['composition_mismatch']), composing: true,
@@ -107,7 +107,7 @@ describe('terminal input evidence', () => {
     }));
     expect(record.recent).toContainEqual(expect.objectContaining({ event: 'paste', outcome: 'sent' }));
     expect(JSON.stringify(record)).not.toMatch(/PRIVATE_|Ω/);
-    expect(input.send.mock.calls.flat()).toEqual(['Ω', 'PRIVATE_COMMIT', 'PRIVATE_CLIPBOARD']);
+    expect(input.send.mock.calls.map(([data]) => data)).toEqual(['Ω', 'PRIVATE_COMMIT', 'PRIVATE_CLIPBOARD']);
   });
 
   it('bounds a long failed-typing burst and records cumulative counts without polling', async () => {

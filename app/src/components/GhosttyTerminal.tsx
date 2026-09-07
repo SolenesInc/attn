@@ -178,7 +178,7 @@ export interface GhosttyTerminalProps {
     isActiveSession: boolean;
     paneCount: number;
   };
-  onInput: (data: string, source?: string) => void;
+  onInput: (data: string, source?: string, traceId?: string) => void;
   onPointerActivity?: () => void;
   onOpenMarkdown?: (path: string, sessionId: string) => void;
   gardenSeeds?: readonly Seed[];
@@ -2126,13 +2126,15 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         }, () => {
           fitRef.current();
         });
-        const interceptKey = createTerminalKeyInterceptor((data) => onInputRef.current(data, 'user'));
+        let interceptedTraceId: string | undefined;
+        const interceptKey = createTerminalKeyInterceptor((data) => onInputRef.current(data, 'user', interceptedTraceId));
         inputRef.current = attachTerminalInput({
           element: container,
           onDiagnostic: inputDiagnostics.record,
           terminal: () => terminalRef.current,
-          send: (data) => onInputRef.current(data, 'user'),
-          interceptKey: (event) => {
+          send: (data, traceId) => onInputRef.current(data, 'user', traceId),
+          interceptKey: (event, traceId) => {
+            interceptedTraceId = traceId;
             const meta = runtimeMetaRef.current;
             if (event.type === 'keydown' && meta) {
               noteTerminalKeyEvent(event, {
@@ -2141,7 +2143,11 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
                 paneId: meta.paneId,
               });
             }
-            return interceptKey(event);
+            try {
+              return interceptKey(event);
+            } finally {
+              interceptedTraceId = undefined;
+            }
           },
           onError: (operation, reason) => {
             recoverFromModelFault(`input.${operation}`, reason);

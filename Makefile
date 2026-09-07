@@ -41,6 +41,7 @@ BUILD_DIR=./cmd/attn
 VERSION ?= $(shell bash ./scripts/version.sh)
 BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 SOURCE_FINGERPRINT ?= $(shell bash ./scripts/source-fingerprint.sh --field fingerprint)
+SOURCE_DIRTY_PATHS_BASE64 ?= $(shell bash ./scripts/source-fingerprint.sh --field dirty_paths_base64)
 GIT_COMMIT ?= $(shell bash ./scripts/source-fingerprint.sh --field commit)
 # Identity of the terminal-snapshot wire format. The frontend computes it from
 # the same script, so a bundle's worker and app agree by construction.
@@ -515,6 +516,7 @@ build-app: ensure-codesign-identity build build-pty-host
 	@PROFILE="$(PROFILE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" \
 		ATTN_PTY_HOST_BIN="$(CURDIR)/$(PTY_HOST_BINARY)" \
 		VERSION='$(VERSION)' SOURCE_FINGERPRINT='$(SOURCE_FINGERPRINT)' \
+		SOURCE_DIRTY_PATHS_BASE64='$(SOURCE_DIRTY_PATHS_BASE64)' \
 		GIT_COMMIT='$(GIT_COMMIT)' BUILD_TIME='$(BUILD_TIME)' \
 		MACOS_CODESIGN_IDENTITY='$(MACOS_CODESIGN_IDENTITY)' \
 		bash ./scripts/build-app-profile.sh
@@ -552,7 +554,7 @@ sign-app: ensure-codesign-identity
 
 # Create distributable DMG
 dist: build-app
-	cd app && VITE_INSTALL_CHANNEL=source VITE_ATTN_BUILD_VERSION='$(VERSION)' VITE_ATTN_SOURCE_FINGERPRINT='$(SOURCE_FINGERPRINT)' VITE_ATTN_GIT_COMMIT='$(GIT_COMMIT)' VITE_ATTN_BUILD_TIME='$(BUILD_TIME)' pnpm tauri build --bundles dmg
+	cd app && VITE_INSTALL_CHANNEL=source VITE_ATTN_BUILD_VERSION='$(VERSION)' VITE_ATTN_SOURCE_FINGERPRINT='$(SOURCE_FINGERPRINT)' VITE_ATTN_SOURCE_DIRTY_PATHS_BASE64='$(SOURCE_DIRTY_PATHS_BASE64)' VITE_ATTN_GIT_COMMIT='$(GIT_COMMIT)' VITE_ATTN_BUILD_TIME='$(BUILD_TIME)' pnpm tauri build --bundles dmg
 	@echo "DMG created at app/src-tauri/target/release/bundle/dmg/"
 
 release:

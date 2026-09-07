@@ -172,16 +172,25 @@ export function GridView({
         }
       });
 
-      const forward = (data: string) => {
+      const forward = (data: string, traceId?: string) => {
         const id = gridRef.current?.zoomedId();
-        if (id) void ptyWrite({ id, data, source: 'user' });
+        if (id) void ptyWrite({ id, data, source: 'user', ...(traceId ? { traceId } : {}) });
       };
+      let interceptedTraceId: string | undefined;
+      const interceptKey = createTerminalKeyInterceptor((data) => forward(data, interceptedTraceId));
       disposeInput = attachTerminalInput({
         element: stage,
         onDiagnostic: inputDiagnostics.record,
         terminal: () => gridRef.current?.inputTarget() ?? null,
         send: forward,
-        interceptKey: createTerminalKeyInterceptor(forward),
+        interceptKey: (event, traceId) => {
+          interceptedTraceId = traceId;
+          try {
+            return interceptKey(event);
+          } finally {
+            interceptedTraceId = undefined;
+          }
+        },
         onError: (operation, error) => {
           console.error(`[grid] terminal ${operation} input failed`, error);
         },

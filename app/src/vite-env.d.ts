@@ -9,8 +9,10 @@ interface ImportMetaEnv {
   readonly VITE_INSTALL_CHANNEL?: string;
   readonly VITE_ATTN_BUILD_VERSION?: string;
   readonly VITE_ATTN_SOURCE_FINGERPRINT?: string;
+  readonly VITE_ATTN_SOURCE_DIRTY_PATHS_BASE64?: string;
   readonly VITE_ATTN_GIT_COMMIT?: string;
   readonly VITE_ATTN_BUILD_TIME?: string;
+  readonly VITE_ATTN_BUILD_PROFILE?: string;
   // Only for a bundle running outside Tauri; vite.config.ts fills it in from the
   // profile's client-token file.
   readonly VITE_CLIENT_TOKEN?: string;
