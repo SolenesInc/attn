@@ -390,6 +390,10 @@
   color: var(--color-text-primary);
 }
 
+.workspace-dock-tile-back-crew-icon {
+  display: none;
+}
+
 .workspace-dock-tile-focus-action {
   display: inline-flex;
   align-items: center;
@@ -462,6 +466,16 @@
 
 @container (max-width: 480px) {
   .workspace-dock-tile-back-crew {
+    width: 28px;
+    padding: 0;
+  }
+
+  .workspace-dock-tile-back-crew-icon {
+    display: inline;
+    font-size: 15px;
+  }
+
+  .workspace-dock-tile-back-crew-label {
     display: none;
   }
 
