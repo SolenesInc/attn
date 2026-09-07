@@ -96,9 +96,11 @@ export function useCrewLaunchAutosave(
   const active = useRef(new Set<string>());
   const nextGeneration = useRef(0);
   const sendRef = useRef(send);
-  sendRef.current = send;
   const [, redraw] = useReducer((value) => value + 1, 0);
-  const pumpRef = useRef<(memberId: string) => void>(() => {});
+
+  useEffect(() => {
+    sendRef.current = send;
+  }, [send]);
 
   const observe = useCallback((member: CrewMember) => {
     const edit = edits.current.get(member.id);
@@ -125,7 +127,7 @@ export function useCrewLaunchAutosave(
     if (changed) redraw();
   }, [members, observe]);
 
-  pumpRef.current = (memberId: string) => {
+  const pump = useCallback((memberId: string) => {
     const edit = edits.current.get(memberId);
     if (!edit || active.current.has(memberId)) return;
     const pendingKeys = selectionKeys.filter((key) => hasPending(edit, key));
@@ -188,7 +190,7 @@ export function useCrewLaunchAutosave(
         delete current.pending[key];
       }
       redraw();
-      pumpRef.current(memberId);
+      pump(memberId);
     }).catch((error) => {
       active.current.delete(memberId);
       const current = edits.current.get(memberId);
@@ -200,7 +202,7 @@ export function useCrewLaunchAutosave(
       current.retryOnReconnect = /not connected|connection|socket/i.test(message);
       redraw();
     });
-  };
+  }, []);
 
   useEffect(() => {
     if (connectionGeneration === 0) return;
@@ -208,9 +210,9 @@ export function useCrewLaunchAutosave(
       if (!edit.retryOnReconnect) continue;
       edit.retryOnReconnect = false;
       edit.state = 'saving';
-      pumpRef.current(memberId);
+      pump(memberId);
     }
-  }, [connectionGeneration]);
+  }, [connectionGeneration, pump]);
 
   const update = useCallback((memberId: string, patch: Partial<CrewLaunchSelection>) => {
     const edit = edits.current.get(memberId);
@@ -224,8 +226,8 @@ export function useCrewLaunchAutosave(
     edit.error = undefined;
     edit.retryOnReconnect = false;
     redraw();
-    pumpRef.current(memberId);
-  }, []);
+    pump(memberId);
+  }, [pump]);
 
   const retry = useCallback((memberId: string) => {
     const edit = edits.current.get(memberId);
@@ -234,8 +236,8 @@ export function useCrewLaunchAutosave(
     edit.error = undefined;
     edit.retryOnReconnect = false;
     redraw();
-    pumpRef.current(memberId);
-  }, []);
+    pump(memberId);
+  }, [pump]);
 
   const read = useCallback((memberId: string): CrewLaunchEdit | undefined => {
     const edit = edits.current.get(memberId);
