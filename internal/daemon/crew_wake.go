@@ -607,7 +607,11 @@ func (d *Daemon) validateCrewLaunchSelection(member crew.Member, requireAvailabl
 		return fmt.Errorf("validate model %q: %w", member.Model, err)
 	}
 	for _, model := range catalog.Models {
-		if model.ID != member.Model {
+		modelID := model.ID
+		if model.Provider != "" {
+			modelID = model.Provider + "/" + model.ID
+		}
+		if modelID != member.Model {
 			continue
 		}
 		if model.Access == protocol.ModelCapabilitySupportUnsupported {

@@ -73,7 +73,18 @@ function renderPanel({
       />
     </DaemonApiProvider>,
   );
-  return { ...view, daemon, onClose };
+  const rerenderPanel = (nextMembers: CrewMember[]) => view.rerender(
+    <DaemonApiProvider api={daemon}>
+      <CrewPanel
+        isOpen
+        initialMember={initialMember}
+        members={nextMembers}
+        sessions={sessions}
+        onClose={onClose}
+      />
+    </DaemonApiProvider>,
+  );
+  return { ...view, daemon, onClose, rerenderPanel };
 }
 
 afterEach(() => {
@@ -183,6 +194,76 @@ describe('CrewPanel', () => {
     });
   });
 
+  it.each([
+    [CrewRestartState.Completed, 'New day started'],
+    [CrewRestartState.Failed, 'Successor launch failed'],
+  ])('reconciles a lost restart response with authoritative %s state', async (state, copy) => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('22222222-2222-4222-8222-222222222222');
+    const sendCrewRestart = vi.fn().mockRejectedValue(new Error('Restart response was lost'));
+    const daemon = api({ sendCrewRestart });
+    const initial = member('trellis', 9, {
+      binding_session: 'session-trellis', resolved_agent: 'claude',
+    });
+    const { rerenderPanel } = renderPanel({ daemon, members: [initial] });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Handoff and restart' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Request handoff and restart' }));
+    await screen.findByText('Restart response was lost');
+
+    rerenderPanel([member('trellis', 10, {
+      binding_session: state === CrewRestartState.Completed ? 'successor-session' : 'session-trellis',
+      resolved_agent: 'claude',
+      restart: {
+        request_id: '22222222-2222-4222-8222-222222222222',
+        session_id: 'session-trellis',
+        state,
+        ...(state === CrewRestartState.Completed
+          ? { successor_session_id: 'successor-session' }
+          : { error: 'Successor launch failed' }),
+      },
+    })]);
+
+    await screen.findByText(new RegExp(copy));
+    expect(screen.queryByRole('button', { name: 'Retry delivery' })).not.toBeInTheDocument();
+  });
+
+  it('shows a newer authoritative restart after the local attempt completed', async () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('33333333-3333-4333-8333-333333333333');
+    const localCompleted = member('trellis', 10, {
+      binding_session: 'successor-session',
+      resolved_agent: 'claude',
+      restart: {
+        request_id: '33333333-3333-4333-8333-333333333333',
+        session_id: 'session-trellis',
+        state: CrewRestartState.Completed,
+        successor_session_id: 'successor-session',
+      },
+    });
+    const sendCrewRestart = vi.fn().mockResolvedValue({
+      success: true, conflict: false, member: localCompleted,
+    });
+    const { rerenderPanel } = renderPanel({ daemon: api({ sendCrewRestart }), members: [member('trellis', 9, {
+      binding_session: 'session-trellis', resolved_agent: 'claude',
+    })] });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Handoff and restart' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Request handoff and restart' }));
+    await screen.findByText(/New day started/);
+
+    rerenderPanel([member('trellis', 11, {
+      binding_session: 'successor-session',
+      resolved_agent: 'claude',
+      restart: {
+        request_id: '44444444-4444-4444-8444-444444444444',
+        session_id: 'successor-session',
+        state: CrewRestartState.Requested,
+      },
+    })]);
+
+    await screen.findByText('Handoff requested');
+    expect(screen.queryByText(/New day started/)).not.toBeInTheDocument();
+  });
+
   it('closes with Escape and wakes an asleep member through the guarded restart action', async () => {
     const sendCrewRestart = vi.fn().mockResolvedValue({ success: true, conflict: false });
     const { onClose } = renderPanel({ daemon: api({ sendCrewRestart }), members: [member('keel', 5)] });
@@ -222,16 +303,16 @@ describe('CrewPanel', () => {
         success: true,
         conflict: false,
         member: member('keel', 6, {
-          model: 'gpt-6-astra',
-          resolved_agent: 'codex', resolved_model: 'gpt-6-astra',
+          model: 'openai/gpt-6-astra',
+          resolved_agent: 'codex', resolved_model: 'openai/gpt-6-astra',
         }),
       })
       .mockResolvedValueOnce({
         success: true,
         conflict: false,
         member: member('keel', 7, {
-          model: 'gpt-6-astra', effort: 'high',
-          resolved_agent: 'codex', resolved_model: 'gpt-6-astra', resolved_effort: 'high',
+          model: 'openai/gpt-6-astra', effort: 'high',
+          resolved_agent: 'codex', resolved_model: 'openai/gpt-6-astra', resolved_effort: 'high',
         }),
       });
     renderPanel({ daemon: api({ sendCrewSet }), members: [member('keel', 5, { resolved_agent: 'codex' })] });
@@ -239,12 +320,105 @@ describe('CrewPanel', () => {
     const model = await screen.findByLabelText('Model');
     await waitFor(() => expect(model).toBeEnabled());
     await waitFor(() => expect(screen.getByRole('option', { name: 'openai / Astra' })).toBeInTheDocument());
-    fireEvent.change(model, { target: { value: 'gpt-6-astra' } });
+    fireEvent.change(model, { target: { value: 'openai/gpt-6-astra' } });
     await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText('Reasoning effort'), { target: { value: 'high' } });
 
     await waitFor(() => expect(sendCrewSet).toHaveBeenLastCalledWith({
-      member: 'keel', expectedRevision: 6, agent: '', model: 'gpt-6-astra', effort: 'high',
+      member: 'keel', expectedRevision: 6, agent: '', model: 'openai/gpt-6-astra', effort: 'high',
     }));
+  });
+
+  it('keeps dependent controls pending while an explicit harness pin clears', async () => {
+    const pending = deferred<any>();
+    const daemon = api({ sendCrewSet: vi.fn().mockReturnValue(pending.promise) });
+    renderPanel({ daemon, members: [member('keel', 5, {
+      agent: 'codex', resolved_agent: 'codex', model: 'openai/gpt-6-astra', resolved_model: 'openai/gpt-6-astra',
+    })] });
+
+    const model = await screen.findByLabelText('Model');
+    await waitFor(() => expect(model).toBeEnabled());
+    fireEvent.change(screen.getByLabelText('Harness'), { target: { value: '' } });
+
+    expect(model).toBeDisabled();
+    expect(screen.getByLabelText('Reasoning effort')).toBeDisabled();
+
+    await act(async () => pending.resolve({
+      success: true,
+      conflict: false,
+      member: member('keel', 6, { resolved_agent: 'claude' }),
+    }));
+    await waitFor(() => expect(model).toBeEnabled());
+  });
+
+  it('selects provider-qualified model identities when bare ids collide', async () => {
+    const sendCrewSet = vi.fn().mockResolvedValue({
+      success: true,
+      conflict: false,
+      member: member('keel', 6, {
+        agent: 'codex', model: 'second/shared', resolved_agent: 'codex', resolved_model: 'second/shared',
+      }),
+    });
+    const sendDelegationModels = vi.fn().mockResolvedValue({
+      detail: '',
+      models: [
+        { harness: 'codex', provider: 'first', id: 'shared', name: 'Shared one', access: 'supported', effort_support: 'supported', effort_levels: ['low'] },
+        { harness: 'codex', provider: 'second', id: 'shared', name: 'Shared two', access: 'supported', effort_support: 'supported', effort_levels: ['high'] },
+      ],
+    });
+    renderPanel({ daemon: api({ sendCrewSet, sendDelegationModels }), members: [member('keel', 5, {
+      agent: 'codex', resolved_agent: 'codex',
+    })] });
+
+    const model = await screen.findByLabelText('Model');
+    await screen.findByRole('option', { name: 'second / Shared two' });
+    fireEvent.change(model, { target: { value: 'second/shared' } });
+
+    await waitFor(() => expect(sendCrewSet).toHaveBeenCalledWith({
+      member: 'keel', expectedRevision: 5, agent: 'codex', model: 'second/shared', effort: '',
+    }));
+    expect(model).toHaveValue('second/shared');
+  });
+
+  it('keeps an unsupported models explicit effort clear through a concurrent update', async () => {
+    const retry = deferred<any>();
+    const sendCrewSet = vi.fn()
+      .mockResolvedValueOnce({
+        success: false,
+        conflict: true,
+        error: 'revision conflict',
+        member: member('keel', 6, {
+          agent: 'codex', effort: 'high', resolved_agent: 'codex', resolved_effort: 'high',
+        }),
+      })
+      .mockReturnValueOnce(retry.promise);
+    const sendDelegationModels = vi.fn().mockResolvedValue({
+      detail: '',
+      models: [{
+        harness: 'codex', provider: 'local', id: 'fixed', name: 'Fixed', access: 'supported',
+        effort_support: 'unsupported', effort_levels: [],
+      }],
+    });
+    renderPanel({ daemon: api({ sendCrewSet, sendDelegationModels }), members: [member('keel', 5, {
+      agent: 'codex', resolved_agent: 'codex',
+    })] });
+
+    const model = await screen.findByLabelText('Model');
+    await screen.findByRole('option', { name: 'local / Fixed' });
+    fireEvent.change(model, { target: { value: 'local/fixed' } });
+    await screen.findByText('Not saved');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => expect(sendCrewSet).toHaveBeenLastCalledWith({
+      member: 'keel', expectedRevision: 6, agent: 'codex', model: 'local/fixed', effort: '',
+    }));
+    await act(async () => retry.resolve({
+      success: true,
+      conflict: false,
+      member: member('keel', 7, {
+        agent: 'codex', model: 'local/fixed', resolved_agent: 'codex', resolved_model: 'local/fixed',
+      }),
+    }));
+    await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
   });
 });

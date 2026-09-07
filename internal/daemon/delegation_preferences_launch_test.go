@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/delegationprefs"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
@@ -179,6 +180,49 @@ func TestDelegationPluginDiscoveryUsesRegisteredCapability(t *testing.T) {
 	catalog, err := d.discoverDelegationModels(context.Background(), "fixture")
 	if err != nil || len(catalog.Models) != 1 || catalog.Models[0].Provider != "work" || catalog.Models[0].Access != "unknown" {
 		t.Fatalf("%+v %v", catalog, err)
+	}
+	<-returned
+}
+
+func TestCrewLaunchValidationUsesProviderQualifiedModelIdentity(t *testing.T) {
+	d := newDaemonForTest(t)
+	client, done := startPluginPipe(t, d, "crew-catalog-fixture", nil)
+	defer func() { _ = client.Close(); <-done }()
+	registerTestPluginDriver(t, client, "fixture", map[string]bool{
+		"initial_prompt": true, "model_pin": true, "effort_pin": true, "model_discovery": true,
+	})
+	catalog := delegationModelCatalog{Models: []protocol.DelegationModel{
+		{Harness: "fixture", Provider: "first", ID: "shared", Access: protocol.ModelCapabilitySupportSupported, EffortSupport: protocol.ModelCapabilitySupportSupported, EffortLevels: []string{"low"}},
+		{Harness: "fixture", Provider: "second", ID: "shared", Access: protocol.ModelCapabilitySupportUnsupported, Detail: "second provider is unavailable"},
+		{Harness: "fixture", Provider: "third", ID: "fixed", Access: protocol.ModelCapabilitySupportSupported, EffortSupport: protocol.ModelCapabilitySupportUnsupported},
+	}}
+	returned := make(chan struct{})
+	go func() {
+		defer close(returned)
+		models := 0
+		for models < 3 {
+			request := decodeJSONRPCMessage(t, client)
+			if request.Method == pluginHealthMethod {
+				respondPluginRequest(t, client, request, pluginHealthResult{OK: true})
+				continue
+			}
+			if request.Method != "driver.models" {
+				t.Errorf("unexpected method %s", request.Method)
+				return
+			}
+			respondPluginRequest(t, client, request, catalog)
+			models++
+		}
+	}()
+
+	if err := d.validateCrewLaunchSelection(crew.Member{Agent: "fixture", Model: "first/shared", Effort: "low"}, true); err != nil {
+		t.Fatalf("supported qualified model: %v", err)
+	}
+	if err := d.validateCrewLaunchSelection(crew.Member{Agent: "fixture", Model: "second/shared"}, true); err == nil || !strings.Contains(err.Error(), "second provider is unavailable") {
+		t.Fatalf("unsupported provider-qualified model error = %v", err)
+	}
+	if err := d.validateCrewLaunchSelection(crew.Member{Agent: "fixture", Model: "third/fixed", Effort: "high"}, true); err == nil || !strings.Contains(err.Error(), "does not support effort") {
+		t.Fatalf("unsupported qualified effort error = %v", err)
 	}
 	<-returned
 }

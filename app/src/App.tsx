@@ -4108,7 +4108,6 @@ function AppContent({
           ]}
         />
       </div>
-        </div>
       <CrewPanel
         isOpen={crewPanel.open}
         initialMember={crewPanel.member}
@@ -4116,6 +4115,7 @@ function AppContent({
         sessions={daemonSessions}
         onClose={handleCloseCrew}
       />
+        </div>
       </div>
 
       {/* Mounted only while active, so its WebGL context is released on exit. */}

@@ -12,12 +12,12 @@ export type CrewLaunchSaveState = 'saved' | 'saving' | 'error';
 
 interface MemberEdit {
   acknowledged: CrewMember;
-  draft: CrewLaunchSelection;
-  dirty: Set<keyof CrewLaunchSelection>;
+  pending: Partial<CrewLaunchSelection>;
   generation: Record<keyof CrewLaunchSelection, number>;
   state: CrewLaunchSaveState;
   error?: string;
   retryOnReconnect: boolean;
+  uncertainWrite: boolean;
 }
 
 export interface CrewLaunchEdit {
@@ -60,8 +60,31 @@ function sameMemberSnapshot(a: CrewMember, b: CrewMember): boolean {
     && JSON.stringify(a.restart) === JSON.stringify(b.restart);
 }
 
-function newerMember(current: CrewMember, candidate: CrewMember): CrewMember {
-  return candidate.revision >= current.revision ? candidate : current;
+function newerResultMember(current: CrewMember, candidate: CrewMember): CrewMember {
+  return candidate.revision > current.revision ? candidate : current;
+}
+
+function hasPending(edit: MemberEdit, key: keyof CrewLaunchSelection): boolean {
+  return Object.prototype.hasOwnProperty.call(edit.pending, key);
+}
+
+function desiredSelection(edit: MemberEdit): CrewLaunchSelection {
+  const saved = selectionFromMember(edit.acknowledged);
+  return {
+    agent: hasPending(edit, 'agent') ? edit.pending.agent! : saved.agent,
+    model: hasPending(edit, 'model') ? edit.pending.model! : saved.model,
+    effort: hasPending(edit, 'effort') ? edit.pending.effort! : saved.effort,
+  };
+}
+
+function settleObservedSelection(edit: MemberEdit, memberId: string, active: Set<string>): boolean {
+  if (active.has(memberId) || edit.uncertainWrite || Object.keys(edit.pending).length === 0) return false;
+  if (!sameSelection(desiredSelection(edit), selectionFromMember(edit.acknowledged))) return false;
+  edit.pending = {};
+  edit.state = 'saved';
+  edit.error = undefined;
+  edit.retryOnReconnect = false;
+  return true;
 }
 
 export function useCrewLaunchAutosave(
@@ -82,35 +105,17 @@ export function useCrewLaunchAutosave(
     if (!edit) {
       edits.current.set(member.id, {
         acknowledged: member,
-        draft: selectionFromMember(member),
-        dirty: new Set(),
+        pending: {},
         generation: { agent: 0, model: 0, effort: 0 },
         state: 'saved',
         retryOnReconnect: false,
+        uncertainWrite: false,
       });
       return true;
     }
     if (member.revision < edit.acknowledged.revision || sameMemberSnapshot(member, edit.acknowledged)) return false;
-    const idle = !active.current.has(member.id) && edit.state === 'saved';
     edit.acknowledged = member;
-    if (idle) {
-      edit.draft = selectionFromMember(member);
-      edit.dirty.clear();
-    } else {
-      const saved = selectionFromMember(member);
-      for (const key of selectionKeys) {
-        if (!edit.dirty.has(key)) {
-          edit.draft[key] = saved[key];
-        } else if (edit.draft[key] === saved[key]) {
-          edit.dirty.delete(key);
-        }
-      }
-      if (!active.current.has(member.id) && edit.dirty.size === 0) {
-        edit.state = 'saved';
-        edit.error = undefined;
-        edit.retryOnReconnect = false;
-      }
-    }
+    settleObservedSelection(edit, member.id, active.current);
     return true;
   }, []);
 
@@ -123,9 +128,11 @@ export function useCrewLaunchAutosave(
   pumpRef.current = (memberId: string) => {
     const edit = edits.current.get(memberId);
     if (!edit || active.current.has(memberId)) return;
+    const pendingKeys = selectionKeys.filter((key) => hasPending(edit, key));
     const acknowledged = selectionFromMember(edit.acknowledged);
-    if (sameSelection(edit.draft, acknowledged)) {
-      edit.dirty.clear();
+    const desired = desiredSelection(edit);
+    if (pendingKeys.length === 0 || (sameSelection(desired, acknowledged) && !edit.uncertainWrite)) {
+      edit.pending = {};
       edit.state = 'saved';
       edit.error = undefined;
       edit.retryOnReconnect = false;
@@ -133,8 +140,8 @@ export function useCrewLaunchAutosave(
       return;
     }
 
-    const submitted = { ...edit.draft };
-    const submittedDirty = new Set(edit.dirty);
+    const submitted = desired;
+    const submittedPending = new Set(pendingKeys);
     const submittedGeneration = { ...edit.generation };
     const expectedRevision = edit.acknowledged.revision;
     active.current.add(memberId);
@@ -146,22 +153,15 @@ export function useCrewLaunchAutosave(
       active.current.delete(memberId);
       const current = edits.current.get(memberId);
       if (!current) return;
-      if (outcome.member) current.acknowledged = newerMember(current.acknowledged, outcome.member);
+      const fencedUncertainWrite = Boolean(outcome.member && outcome.member.revision > expectedRevision);
+      if (outcome.member) current.acknowledged = newerResultMember(current.acknowledged, outcome.member);
 
       if (!outcome.success) {
+        if (fencedUncertainWrite) current.uncertainWrite = false;
         if (outcome.conflict && outcome.member) {
-          const saved = selectionFromMember(current.acknowledged);
-          for (const key of selectionKeys) {
-            if (!current.dirty.has(key)) {
-              current.draft[key] = saved[key];
-            } else if (current.draft[key] === saved[key]) {
-              current.dirty.delete(key);
-            }
-          }
-          current.state = current.dirty.size === 0 ? 'saved' : 'error';
-          current.error = current.dirty.size === 0
-            ? undefined
-            : outcome.error || 'Launch settings changed elsewhere. Review the saved values and retry.';
+          const settled = settleObservedSelection(current, memberId, active.current);
+          current.state = settled ? 'saved' : 'error';
+          current.error = settled ? undefined : outcome.error || 'Launch settings changed elsewhere. Review the saved values and retry.';
           redraw();
           return;
         }
@@ -173,6 +173,7 @@ export function useCrewLaunchAutosave(
       }
 
       if (!outcome.member) {
+        current.uncertainWrite = true;
         current.state = 'error';
         current.error = 'The daemon did not return the saved launch settings.';
         current.retryOnReconnect = false;
@@ -181,11 +182,10 @@ export function useCrewLaunchAutosave(
       }
 
       current.retryOnReconnect = false;
-      const saved = selectionFromMember(current.acknowledged);
-      for (const key of selectionKeys) {
+      current.uncertainWrite = false;
+      for (const key of submittedPending) {
         if (current.generation[key] !== submittedGeneration[key]) continue;
-        current.draft[key] = saved[key];
-        if (submittedDirty.has(key)) current.dirty.delete(key);
+        delete current.pending[key];
       }
       redraw();
       pumpRef.current(memberId);
@@ -196,6 +196,7 @@ export function useCrewLaunchAutosave(
       const message = error instanceof Error ? error.message : String(error);
       current.state = 'error';
       current.error = message;
+      current.uncertainWrite = true;
       current.retryOnReconnect = /not connected|connection|socket/i.test(message);
       redraw();
     });
@@ -214,10 +215,9 @@ export function useCrewLaunchAutosave(
   const update = useCallback((memberId: string, patch: Partial<CrewLaunchSelection>) => {
     const edit = edits.current.get(memberId);
     if (!edit) return;
-    edit.draft = { ...edit.draft, ...patch };
     for (const key of selectionKeys) {
       if (!(key in patch)) continue;
-      edit.dirty.add(key);
+      edit.pending[key] = patch[key];
       edit.generation[key] = ++nextGeneration.current;
     }
     edit.state = 'saving';
@@ -242,7 +242,7 @@ export function useCrewLaunchAutosave(
     if (!edit) return undefined;
     return {
       acknowledged: edit.acknowledged,
-      draft: edit.draft,
+      draft: desiredSelection(edit),
       state: edit.state,
       ...(edit.error ? { error: edit.error } : {}),
     };

@@ -2313,6 +2313,15 @@ export function useUiAutomationBridge({
         }
         return { text: (element.textContent ?? '').replace(/\s+/g, ' ').trim() };
       }
+      case 'dom_bounds': {
+        const selector = typeof payload.selector === 'string' ? payload.selector : null;
+        if (!selector) throw new Error('dom_bounds requires selector');
+        const element = document.querySelector(selector);
+        if (!(element instanceof HTMLElement)) {
+          throw new Error(`dom_bounds selector not found in DOM: ${selector}`);
+        }
+        return { bounds: rectSnapshot(element) };
+      }
       case 'dom_wait': {
         const selector = typeof payload.selector === 'string' ? payload.selector : null;
         const includes = typeof payload.includes === 'string' ? payload.includes : null;

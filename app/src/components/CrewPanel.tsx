@@ -19,6 +19,7 @@ interface CrewPanelProps {
 
 interface RestartAttempt {
   requestId: string;
+  priorRequestId?: string;
   expectedSessionId: string;
   expectedRevision: number;
   sending: boolean;
@@ -38,8 +39,12 @@ function modelLabel(model: DelegationModel): string {
   return model.provider ? `${model.provider} / ${name}` : name;
 }
 
+function modelIdentity(model: DelegationModel): string {
+  return model.provider ? `${model.provider}/${model.id}` : model.id;
+}
+
 function currentModel(catalog: DelegationModel[] | undefined, id: string): DelegationModel | undefined {
-  return catalog?.find((model) => model.id === id);
+  return catalog?.find((model) => modelIdentity(model) === id);
 }
 
 function runningSessionFor(member: CrewMember, sessions: DaemonSession[]): DaemonSession | undefined {
@@ -59,6 +64,22 @@ function RestartState({ member, attempt, onRetryTransport, onRetryFailed }: {
   onRetryTransport: () => void;
   onRetryFailed: () => void;
 }) {
+  const restart = !attempt || member.restart?.request_id === attempt.requestId ? member.restart : undefined;
+  if (restart?.state === 'completed') {
+    return <div className="crew-restart-state is-complete" role="status">New day started{restart.successor_session_id ? ` · ${restart.successor_session_id.slice(0, 8)}` : ''}</div>;
+  }
+  if (restart?.state === 'failed') {
+    return (
+      <div className="crew-restart-state is-failed" role="status">
+        <span>{restart.error || 'The restart failed.'}</span>
+        <button type="button" onClick={onRetryFailed}>Try again</button>
+      </div>
+    );
+  }
+  if (restart) {
+    const label = restart.state === 'requested' ? 'Handoff requested' : 'Queued for delivery';
+    return <div className="crew-restart-state is-pending" role="status">{label}{restart.detail ? ` · ${restart.detail}` : ''}</div>;
+  }
   if (attempt?.transportError) {
     return (
       <div className="crew-restart-state is-failed" role="status">
@@ -69,21 +90,7 @@ function RestartState({ member, attempt, onRetryTransport, onRetryFailed }: {
       </div>
     );
   }
-  const restart = member.restart;
-  if (!restart) return null;
-  if (restart.state === 'completed') {
-    return <div className="crew-restart-state is-complete" role="status">New day started{restart.successor_session_id ? ` · ${restart.successor_session_id.slice(0, 8)}` : ''}</div>;
-  }
-  if (restart.state === 'failed') {
-    return (
-      <div className="crew-restart-state is-failed" role="status">
-        <span>{restart.error || 'The restart failed.'}</span>
-        <button type="button" onClick={onRetryFailed}>Try again</button>
-      </div>
-    );
-  }
-  const label = restart.state === 'requested' ? 'Handoff requested' : 'Queued for delivery';
-  return <div className="crew-restart-state is-pending" role="status">{label}{restart.detail ? ` · ${restart.detail}` : ''}</div>;
+  return null;
 }
 
 export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }: CrewPanelProps) {
@@ -110,6 +117,22 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
   const lastInitialMember = useRef<string | undefined>(undefined);
   const autosave = useCrewLaunchAutosave(members, connectionGeneration, sendCrewSet);
   const models = useHarnessModelCatalogs(isOpen, sendDelegationModels);
+
+  useEffect(() => {
+    setAttempts((current) => {
+      let next = current;
+      for (const rosterMember of members) {
+        const attempt = current[rosterMember.id];
+        const authoritativeRequestId = rosterMember.restart?.request_id;
+        if (!attempt || !authoritativeRequestId
+          || authoritativeRequestId === attempt.requestId
+          || authoritativeRequestId === attempt.priorRequestId) continue;
+        if (next === current) next = { ...current };
+        delete next[rosterMember.id];
+      }
+      return next;
+    });
+  }, [members]);
 
   useEscapeStack(onClose, isOpen && !confirming);
   useEscapeStack(() => setConfirming(false), isOpen && confirming);
@@ -150,7 +173,8 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
   const edit = selectedRosterMember ? autosave.read(selectedRosterMember.id) : undefined;
   const member = selectedRosterMember ? effectiveMember(selectedRosterMember, edit?.acknowledged) : undefined;
   const selection = edit?.draft;
-  const effectiveAgent = selection?.agent || member?.resolved_agent || '';
+  const clearingAgent = selection?.agent === '' && Boolean(edit?.acknowledged.agent);
+  const effectiveAgent = clearingAgent ? '' : selection?.agent || member?.resolved_agent || '';
   const harness = harnesses.find((candidate) => candidate.id === effectiveAgent);
   const catalog = effectiveAgent ? models.catalogs[effectiveAgent] : undefined;
   const selectedModel = currentModel(catalog?.models, selection?.model || '');
@@ -194,7 +218,7 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
     }).then((outcome) => {
       if (outcome.member) autosave.observe(outcome.member);
       if (!outcome.success) {
-        setAttempts((current) => ({
+        setAttempts((current) => current[memberId]?.requestId !== attempt.requestId ? current : ({
           ...current,
           [memberId]: {
             ...attempt,
@@ -205,9 +229,11 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
         }));
         return;
       }
-      setAttempts((current) => ({ ...current, [memberId]: { ...attempt, sending: false } }));
+      setAttempts((current) => current[memberId]?.requestId !== attempt.requestId
+        ? current
+        : ({ ...current, [memberId]: { ...attempt, sending: false } }));
     }).catch((error) => {
-      setAttempts((current) => ({
+      setAttempts((current) => current[memberId]?.requestId !== attempt.requestId ? current : ({
         ...current,
         [memberId]: {
           ...attempt,
@@ -222,6 +248,7 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
     if (!member || !edit || edit.state !== 'saved') return;
     const attempt: RestartAttempt = {
       requestId: crypto.randomUUID(),
+      priorRequestId: member.restart?.request_id,
       expectedSessionId: member.binding_session ?? '',
       expectedRevision: member.revision,
       sending: false,
@@ -348,19 +375,17 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
                             }
                             setManualModel((current) => ({ ...current, [member.id]: false }));
                             const nextModel = currentModel(catalog?.models, event.target.value);
-                            const effort = nextModel?.effort_support === 'unsupported'
-                              || (nextModel?.effort_levels?.length && selection.effort && !nextModel.effort_levels.includes(selection.effort))
-                              ? ''
-                              : selection.effort;
+                            const clearsEffort = nextModel?.effort_support === 'unsupported'
+                              || Boolean(nextModel?.effort_levels?.length && selection.effort && !nextModel.effort_levels.includes(selection.effort));
                             updateSelection({
                               model: event.target.value,
-                              ...(effort !== selection.effort ? { effort } : {}),
+                              ...(clearsEffort ? { effort: '' } : {}),
                             });
                           }}
                         >
                           <option value={DEFAULT_VALUE}>Harness default</option>
                           {catalog?.models.map((candidate) => (
-                            <option key={`${candidate.provider}/${candidate.id}`} value={candidate.id} disabled={candidate.access === 'unsupported'}>
+                            <option key={`${candidate.provider}/${candidate.id}`} value={modelIdentity(candidate)} disabled={candidate.access === 'unsupported'}>
                               {modelLabel(candidate)}{candidate.access === 'unsupported' ? ' (unsupported)' : ''}
                             </option>
                           ))}
