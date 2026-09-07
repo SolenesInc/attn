@@ -17,6 +17,7 @@ interface CrewPanelProps {
   initialMember?: string;
   members: CrewMember[];
   sessions: DaemonSession[];
+  preserveStateOnOpen?: boolean;
   onClose: () => void;
   onOpenSeed: (seedId: string) => void;
 }
@@ -232,7 +233,15 @@ function RestartState({ member, attempt, onRetryTransport, onRetryFailed }: {
   return null;
 }
 
-export function CrewPanel({ isOpen, initialMember, members, sessions, onClose, onOpenSeed }: CrewPanelProps) {
+export function CrewPanel({
+  isOpen,
+  initialMember,
+  members,
+  sessions,
+  preserveStateOnOpen = false,
+  onClose,
+  onOpenSeed,
+}: CrewPanelProps) {
   const {
     isConnected,
     connectionGeneration,
@@ -313,7 +322,7 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose, o
     }
     const opening = !wasOpen.current;
     wasOpen.current = true;
-    if (opening || initialMember !== lastInitialMember.current) {
+    if ((opening && !preserveStateOnOpen) || initialMember !== lastInitialMember.current) {
       lastInitialMember.current = initialMember;
       setSelectedId(initialMember && members.some((candidate) => candidate.id === initialMember)
         ? initialMember
@@ -321,7 +330,7 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose, o
       return;
     }
     if (!members.some((candidate) => candidate.id === selectedId)) setSelectedId(members[0]?.id || '');
-  }, [initialMember, isOpen, members, selectedId]);
+  }, [initialMember, isOpen, members, preserveStateOnOpen, selectedId]);
 
   useEffect(() => {
     if (!isOpen) return;
