@@ -1714,8 +1714,8 @@ function SettingsModalContent({
     </section>
   );
 
-  const renderWorkflowsSettings = () => (
-      <section className="settings-block">
+  const renderGardenQuestionSettings = () => (
+    <section className="settings-block">
         <div className="settings-block-intro">
           <div className="settings-kicker">Garden</div>
           <h3>Questions for you</h3>
@@ -1741,9 +1741,11 @@ function SettingsModalContent({
             </button>
           </div>
         </div>
-      </section>
+    </section>
+  );
 
-      <section className="settings-block">
+  const renderWorkflowsSettings = () => (
+    <section className="settings-block">
         <div className="settings-block-intro">
           <div className="settings-kicker">Agents</div>
           <h3>Workflows</h3>
@@ -1772,7 +1774,7 @@ function SettingsModalContent({
             </button>
           </div>
         </div>
-      </section>
+    </section>
   );
 
   const renderTerminalSettings = () => (
@@ -1988,6 +1990,7 @@ function SettingsModalContent({
           </button>
         </div>
       </section>
+      {renderGardenQuestionSettings()}
       <div className="settings-agent-list">
         {orderedAgentList.map((agent) => {
           const available = isAgentAvailable(agentAvailability, agent);
