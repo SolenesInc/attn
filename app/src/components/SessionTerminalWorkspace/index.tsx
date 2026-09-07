@@ -252,6 +252,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       if (seedPopoverRequest) setPinnedSeedPopover(seedPopoverRequest.sessionId);
     }, [seedPopoverRequest]);
     const [pinnedUsagePopover, setPinnedUsagePopover] = useState<string | null>(null);
+    const [provenancePopoverOwner, setProvenancePopoverOwner] = useState<string | null>(null);
     useEffect(() => {
       if (usagePopoverRequest) setPinnedUsagePopover(usagePopoverRequest.sessionId);
     }, [usagePopoverRequest]);
@@ -1117,14 +1118,27 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
                     pinned={pinnedUsagePopover === agentPane.sessionId}
                     onPopoverClosed={() => setPinnedUsagePopover(null)}
                   />
+                  <SessionProvenance
+                    dispatcher={dispatcher}
+                    delegates={delegates}
+                    onSelectSession={onSelectSession}
+                    interactive
+                    popoverGroup={{
+                      id: `${agentPane.id}:delegation`,
+                      activeId: provenancePopoverOwner,
+                      onOpen: setProvenancePopoverOwner,
+                    }}
+                  />
                 </span>
                 <SessionProvenance
                   automation={paneSession?.automation}
                   pullRequests={paneSession?.pullRequests}
-                  dispatcher={dispatcher}
-                  delegates={delegates}
-                  onSelectSession={onSelectSession}
                   interactive
+                  popoverGroup={{
+                    id: `${agentPane.id}:details`,
+                    activeId: provenancePopoverOwner,
+                    onOpen: setProvenancePopoverOwner,
+                  }}
                 />
               </span>
               {onRenameSession ? (
@@ -1353,6 +1367,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       onRevealSeedInGarden,
       pinnedSeedPopover,
       pinnedUsagePopover,
+      provenancePopoverOwner,
       annotationApi,
       onCancelCountdown,
     ]);

@@ -1,5 +1,5 @@
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { useCallback, useEffect, useRef, useState, type MouseEvent, type PointerEvent, type ReactElement } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type PointerEvent, type ReactElement } from 'react';
 import type {
   AutomationProvenance as AutomationProvenanceValue,
   SessionPullRequest,
@@ -17,6 +17,12 @@ import { SessionDelegatesPopover, type SessionDelegateLink } from './SessionDele
 import './SessionProvenance.css';
 
 export type SessionProvenanceDensity = 'badge' | 'compact' | 'line' | 'detail';
+
+export interface SessionProvenancePopoverGroup {
+  id: string;
+  activeId: string | null;
+  onOpen: (id: string) => void;
+}
 
 type ProvenanceEntry =
   | { kind: 'automation'; automation: AutomationProvenanceValue }
@@ -84,6 +90,7 @@ export function SessionProvenance({
   onSelectSession,
   density = 'line',
   interactive = false,
+  popoverGroup,
 }: {
   automation?: AutomationProvenanceValue;
   pullRequests?: readonly SessionPullRequest[];
@@ -92,10 +99,14 @@ export function SessionProvenance({
   onSelectSession?: (sessionId: string) => void;
   density?: SessionProvenanceDensity;
   interactive?: boolean;
+  popoverGroup?: SessionProvenancePopoverGroup;
 }) {
   const [popover, setPopover] = useState<{ anchor: PopoverAnchor; focused: boolean } | null>(null);
   const [delegatesPopover, setDelegatesPopover] = useState<PopoverAnchor | null>(null);
   const closeTimer = useRef<number | null>(null);
+  const popoverGroupId = popoverGroup?.id;
+  const activePopoverId = popoverGroup?.activeId;
+  const openGroupPopover = popoverGroup?.onOpen;
 
   useEffect(() => () => {
     if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
@@ -112,6 +123,16 @@ export function SessionProvenance({
     cancelClose();
     setPopover(null);
   }, [cancelClose]);
+
+  useLayoutEffect(() => {
+    if (!popoverGroupId || activePopoverId === popoverGroupId) return;
+    closePopover();
+    setDelegatesPopover(null);
+  }, [activePopoverId, closePopover, popoverGroupId]);
+
+  const claimPopover = () => {
+    if (popoverGroupId) openGroupPopover?.(popoverGroupId);
+  };
 
   const scheduleClose = useCallback(() => {
     cancelClose();
@@ -132,6 +153,7 @@ export function SessionProvenance({
     if (!interactive) return;
     cancelClose();
     setDelegatesPopover(null);
+    claimPopover();
     const anchor = anchorFrom(event.currentTarget);
     setPopover((open) => (open ? open : { anchor, focused: false }));
   };
@@ -141,14 +163,17 @@ export function SessionProvenance({
     if (!interactive) return;
     cancelClose();
     setDelegatesPopover(null);
+    claimPopover();
     setPopover({ anchor: anchorFrom(event.currentTarget), focused: true });
   };
 
   const openDelegates = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (!interactive || !onSelectSession) return;
+    const anchor = anchorFrom(event.currentTarget);
     closePopover();
-    setDelegatesPopover((open) => (open ? null : anchorFrom(event.currentTarget)));
+    claimPopover();
+    setDelegatesPopover((open) => (open ? null : anchor));
   };
 
   const description = provenanceDescription(entries, dispatcher, delegates);
