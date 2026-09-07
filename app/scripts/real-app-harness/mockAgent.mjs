@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
 export const MOCK_AGENT_CONFIG = '.attn-mock-agent.json';
@@ -617,8 +618,33 @@ async function runMockAgent() {
   if (launch.initialPrompt.trim()) take(launch.initialPrompt);
 }
 
+async function runMockModelDiscovery(args) {
+  const codex = args[0] === 'app-server';
+  if (!codex && !(args.includes('--print') && args.includes('--input-format') && args.includes('stream-json'))) return false;
+  const input = readline.createInterface({ input: process.stdin });
+  const send = (response) => process.stdout.write(`${JSON.stringify(response)}\n`);
+  for await (const line of input) {
+    const request = JSON.parse(line);
+    if (codex) {
+      if (request.method === 'initialize') send({ id: request.id, result: {} });
+      else if (request.method === 'model/list') send({ id: request.id, result: {
+        data: [{ id: MOCK_AGENT_MODEL, model: MOCK_AGENT_MODEL, displayName: 'Mock agent',
+          supportedReasoningEfforts: ['low', 'medium', 'high'].map((reasoningEffort) => ({ reasoningEffort })) }],
+        nextCursor: null,
+      } });
+    } else if (request.type === 'control_request' && request.request?.subtype === 'initialize') {
+      send({ type: 'control_response', response: { subtype: 'success', request_id: request.request_id,
+        response: { models: [{ value: MOCK_AGENT_MODEL, displayName: 'Mock agent', supportsEffort: true,
+          supportedEffortLevels: ['low', 'medium', 'high'] }] } } });
+    }
+  }
+  return true;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === executablePath) {
-  runMockAgent().catch((error) => {
+  (async () => {
+    if (!await runMockModelDiscovery(process.argv.slice(2))) await runMockAgent();
+  })().catch((error) => {
     console.error(`mock agent failed: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
   });
