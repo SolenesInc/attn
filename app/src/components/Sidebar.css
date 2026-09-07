@@ -555,6 +555,10 @@
   color: var(--color-text-muted);
 }
 
+.sidebar--hide-harness-logos .sidebar-harness-icon {
+  display: none;
+}
+
 .queue-row--crew > .sidebar-harness-icon {
   margin-right: 0;
 }

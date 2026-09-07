@@ -58,3 +58,10 @@ describe('sidebar delegation links', () => {
     expect(chip).toMatch(/border-radius:\s*999px\s*;/);
   });
 });
+
+describe('sidebar harness logos', () => {
+  it('removes every harness mark when the sidebar preference is off', () => {
+    expect(ruleBody('.sidebar--hide-harness-logos .sidebar-harness-icon'))
+      .toMatch(/display:\s*none\s*;/);
+  });
+});

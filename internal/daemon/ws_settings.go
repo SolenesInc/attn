@@ -46,6 +46,7 @@ const (
 	SettingModelCaptureBytes             = "model_capture.bytes"
 	SettingQueueModeEnabled              = "queue_mode_enabled"
 	SettingQueueCrewEnabled              = "queue_crew_enabled"
+	SettingSidebarHarnessLogosEnabled    = "sidebar_harness_logos_enabled"
 	SettingAutoApproveEnabled            = "auto_approve_enabled"
 	SettingOpenSentFilesEnabled          = "open_sent_files_enabled"
 	SettingAutoSettleEnabled             = "auto_settle_enabled"
@@ -297,6 +298,7 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 	}
 	settings[SettingQueueModeEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingQueueModeEnabled]))
 	settings[SettingQueueCrewEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingQueueCrewEnabled]))
+	settings[SettingSidebarHarnessLogosEnabled] = strconv.FormatBool(defaultOnBooleanSetting(stored[SettingSidebarHarnessLogosEnabled]))
 	settings[SettingAutoApproveEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAutoApproveEnabled]))
 	settings[SettingAutoSettleEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAutoSettleEnabled]))
 	settings[SettingAutoSettleArmSeconds] = strconv.Itoa(int(resolveAutoSettleSeconds(stored[SettingAutoSettleArmSeconds], defaultAutoSettleArmSeconds) / time.Second))
@@ -474,7 +476,7 @@ func (d *Daemon) validateSetting(key, value string) error {
 		return validateTheme(value)
 	case SettingSharedPTYHostEnabled:
 		return validateBooleanSetting(value)
-	case SettingTailscaleEnabled, SettingWorkflowsEnabled, SettingAutoApproveEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled:
+	case SettingTailscaleEnabled, SettingWorkflowsEnabled, SettingAutoApproveEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingSidebarHarnessLogosEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled:
 		return validateBooleanSetting(value)
 	case SettingModelCaptureIntervalSeconds:
 		return validateModelCaptureInterval(value)
@@ -599,6 +601,10 @@ func parseBooleanSetting(value string) bool {
 	default:
 		return false
 	}
+}
+
+func defaultOnBooleanSetting(value string) bool {
+	return strings.TrimSpace(value) == "" || parseBooleanSetting(value)
 }
 
 func validateUIScale(value string) error {

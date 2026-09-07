@@ -225,6 +225,7 @@
     "pty_shared_host_enabled": "false",
     "queue_crew_enabled": "false",
     "queue_mode_enabled": "false",
+    "sidebar_harness_logos_enabled": "true",
     "tailscale_enabled": "false",
     "tailscale_status": "disabled",
     "workflows_enabled": "false"
