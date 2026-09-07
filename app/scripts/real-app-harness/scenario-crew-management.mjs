@@ -34,7 +34,6 @@ const resources = resolveHarnessResources(profile);
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath });
-const env = profileCliEnv(profile);
 const memberSuffix = runner.runId.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(-6);
 const awake = `alder-${memberSuffix}`;
 const asleep = `keel-${memberSuffix}`;
@@ -49,7 +48,7 @@ let linkedSeed = '';
 
 const runAttn = (args) => execFileSync(appDaemonInTree(options.appPath), args, {
   encoding: 'utf8',
-  env,
+  env: profileCliEnv(profile),
   timeout: 30_000,
 });
 const json = (args) => {

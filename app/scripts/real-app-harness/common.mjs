@@ -245,9 +245,9 @@ export async function restoreHarnessSettings({ write = writeDaemonSettings } = {
   return restores.length;
 }
 
-async function writeDaemonSettings(entries, { wsUrl = defaultWSURLForProfile(), timeoutMs = 10_000 } = {}) {
+export async function writeDaemonSettings(entries, { wsUrl = defaultWSURLForProfile(), timeoutMs = 10_000 } = {}) {
   const ws = new WebSocket(wsUrl);
-  const pending = new Set(entries.map((entry) => entry.key));
+  const pending = new Map(entries.map((entry) => [entry.key, entry.value]));
   try {
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(`timed out writing settings to ${wsUrl}`)), timeoutMs);
@@ -257,7 +257,7 @@ async function writeDaemonSettings(entries, { wsUrl = defaultWSURLForProfile(), 
       };
       ws.on('error', settle);
       ws.on('close', (code, reason) => settle(pending.size > 0
-        ? new Error(`daemon closed before writing ${[...pending].join(', ')} (code ${code}${reason?.length ? `: ${reason}` : ''})`)
+        ? new Error(`daemon closed before writing ${[...pending.keys()].join(', ')} (code ${code}${reason?.length ? `: ${reason}` : ''})`)
         : undefined));
       ws.on('open', () => {
         ws.send(JSON.stringify({
@@ -274,10 +274,16 @@ async function writeDaemonSettings(entries, { wsUrl = defaultWSURLForProfile(), 
         } catch {
           return;
         }
-        if (data.event !== 'settings_updated' || !data.changed_key) {
+        if (data.event !== 'settings_updated') {
           return;
         }
-        pending.delete(data.changed_key);
+        if (data.success === false && pending.has(data.changed_key)) {
+          settle(new Error(data.error || `daemon refused setting ${data.changed_key}`));
+          return;
+        }
+        for (const [key, value] of pending) {
+          if (data.settings?.[key] === value) pending.delete(key);
+        }
         if (pending.size === 0) settle();
       });
     });
