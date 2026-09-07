@@ -495,7 +495,14 @@ export function CrewPanel({
 
   return (
     <div className={`crew-panel-layer ${isOpen ? 'is-open' : ''}`} aria-hidden={!isOpen}>
-      <FocusTrap active={isOpen} focusTrapOptions={{ escapeDeactivates: false, initialFocus: () => closeRef.current }}>
+      <FocusTrap
+        active={isOpen}
+        focusTrapOptions={{
+          escapeDeactivates: false,
+          initialFocus: () => closeRef.current,
+          returnFocusOnDeactivate: false,
+        }}
+      >
         <section className="crew-panel" data-testid="crew-panel" role="dialog" aria-modal="true" aria-labelledby="crew-panel-title">
           <header className="crew-panel-bar">
             <div>
