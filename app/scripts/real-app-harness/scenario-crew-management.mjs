@@ -249,8 +249,8 @@ try {
     await type('[data-testid="crew-seed-search"]', `Crew verification plot ${memberSuffix}`);
     await screenshot('01-crew-seeds.png');
 
-    await client.request('dom_focus', { selector: `[data-testid="crew-seed-${crewPlot}"]` });
     await driver.activateApp();
+    await client.request('dom_focus', { selector: `[data-testid="crew-seed-${crewPlot}"]` });
     await driver.pressEnter();
     await waitForDom(`.seed-document[data-seed-id="${crewPlot}"]`);
     await waitForDom('[data-testid="crew-seed-back"]', { focused: true });
