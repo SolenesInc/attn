@@ -3204,9 +3204,10 @@ function AppContent({
     const workspaceId = opened.workspaceId;
     const tileId = opened.tileId;
     beforeFocus?.({ workspaceId, tileId });
+    handleSelectTile(workspaceId, tileId);
     window.requestAnimationFrame(() => focusWorkspaceLeaf(workspaceId, tileId));
     return opened;
-  }, [activeSessionId, focusWorkspaceLeaf, sendOpenSeed]);
+  }, [sendOpenSeed, activeSessionId, focusWorkspaceLeaf, handleSelectTile]);
 
   const handleOpenSeedTile = useCallback((seedId: string) => {
     void openSeedTile(seedId).catch((error) => {
