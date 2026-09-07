@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -473,13 +474,6 @@ func (d *Daemon) openSeedTile(seedID, placementSessionID string) (workspaceID, t
 	if err != nil {
 		return "", "", err
 	}
-	if placementSessionID == "" {
-		return "", "", fmt.Errorf("no session selected; open a session in attn or pass --session")
-	}
-	workspaceID, paneID, ok := d.store.FindWorkspaceLayoutPaneBySessionID(placementSessionID)
-	if !ok {
-		return "", "", fmt.Errorf("no workspace found for session %s", placementSessionID)
-	}
 	bindingSessionID := strings.TrimSpace(seed.TenderSession)
 	if bindingSessionID == "" {
 		bindingSessionID = placementSessionID
@@ -489,6 +483,40 @@ func (d *Daemon) openSeedTile(seedID, placementSessionID string) (workspaceID, t
 	defer d.openTileMu.Unlock()
 
 	tileID = seedTileIDForID(seed.ID)
+	if placementSessionID == "" {
+		for _, candidateID := range d.store.WorkspaceLayoutIDs() {
+			if snapshot := d.store.GetWorkspaceLayout(candidateID); snapshot != nil && workspacelayout.HasTile(snapshot.Layout, tileID) {
+				if err := d.rebindTileSession(candidateID, tileID, bindingSessionID); err != nil {
+					return "", "", err
+				}
+				return candidateID, tileID, nil
+			}
+		}
+
+		workspaceID = uuid.NewString()
+		d.registerWorkspace(workspaceID, seed.Title, d.dataRoot, false)
+		snapshot := workspacelayout.NormalizeWorkspaceLayout(workspacelayout.WorkspaceLayout{
+			WorkspaceID: workspaceID,
+			Layout: workspacelayout.Node{
+				Type:          "tile",
+				TileID:        tileID,
+				TileKind:      string(workspacelayout.TileKindSeed),
+				TileParams:    seed.ID,
+				TileSessionID: bindingSessionID,
+			},
+		})
+		if err := d.store.SaveWorkspaceLayout(snapshot); err != nil {
+			d.unregisterWorkspaceIfEmpty(workspaceID)
+			return "", "", err
+		}
+		d.broadcastWorkspaceLayoutUpdated(workspaceID)
+		return workspaceID, tileID, nil
+	}
+
+	workspaceID, paneID, ok := d.store.FindWorkspaceLayoutPaneBySessionID(placementSessionID)
+	if !ok {
+		return "", "", fmt.Errorf("no workspace found for session %s", placementSessionID)
+	}
 	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil && workspacelayout.HasTile(snapshot.Layout, tileID) {
 		if err := d.rebindTileSession(workspaceID, tileID, bindingSessionID); err != nil {
 			return "", "", err

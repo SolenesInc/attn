@@ -60,7 +60,7 @@ function renderPanel({
   initialMember,
   isOpen = true,
   preserveStateOnOpen = false,
-  onOpenSeed = vi.fn<(seedId: string) => void>(),
+  onOpenSeed = vi.fn<(seedId: string, placementSessionId?: string) => void>(),
 }: {
   daemon?: DaemonApi;
   members?: CrewMember[];
@@ -68,7 +68,7 @@ function renderPanel({
   initialMember?: string;
   isOpen?: boolean;
   preserveStateOnOpen?: boolean;
-  onOpenSeed?: ReturnType<typeof vi.fn<(seedId: string) => void>>;
+  onOpenSeed?: ReturnType<typeof vi.fn<(seedId: string, placementSessionId?: string) => void>>;
 } = {}) {
   const onClose = vi.fn();
   const view = render(
@@ -606,7 +606,27 @@ describe('CrewPanel', () => {
     expect(screen.getByText('A paragraph at the end that must not be truncated.')).toBeInTheDocument();
     expect(screen.getAllByText(/Sep 1, 2026/)).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: 'Open the seed' }));
-    expect(onOpenSeed).toHaveBeenCalledWith('s-work11');
+    expect(onOpenSeed).toHaveBeenCalledWith('s-work11', undefined);
+  });
+
+  it('places a handoff seed beside the selected member current day', async () => {
+    const onOpenSeed = vi.fn();
+    renderPanel({
+      onOpenSeed,
+      members: [member('trellis', 4, { binding_session: 'session-trellis' })],
+      daemon: api({ sendCrewHandoffsGet: vi.fn().mockResolvedValue({
+        member: 'trellis',
+        handoffs: [{
+          filename: '2026-09-01T21-37Z-trellis.md',
+          occurred_at: '2026-09-01T21:37:00Z',
+          content: '[Open the seed](s-work11)',
+          token: 'letter',
+        }],
+      }) }),
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open the seed' }));
+    expect(onOpenSeed).toHaveBeenCalledWith('s-work11', 'session-trellis');
   });
 
   it('shows one handoff read failure and retries to an honest empty history', async () => {

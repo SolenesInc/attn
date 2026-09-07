@@ -3196,8 +3196,9 @@ function AppContent({
   const openSeedTile = useCallback(async (
     seedId: string,
     beforeFocus?: (opened: { workspaceId: string; tileId: string }) => void,
+    placementSessionId?: string,
   ) => {
-    const opened = await sendOpenSeed(seedId, activeSessionId || '');
+    const opened = await sendOpenSeed(seedId, placementSessionId || activeSessionId || '');
     if (!opened.workspaceId || !opened.tileId) {
       throw new Error(`The daemon opened ${seedId} without a workspace tile`);
     }
@@ -3289,11 +3290,11 @@ function AppContent({
     });
   }, [crewPanel.returnFocus]);
 
-  const handleOpenSeedFromCrew = useCallback((seedId: string) => {
+  const handleOpenSeedFromCrew = useCallback((seedId: string, placementSessionId?: string) => {
     void openSeedTile(seedId, ({ workspaceId, tileId }) => {
       setCrewSeedTile({ workspaceId, tileId });
       setCrewPanel((current) => ({ ...current, open: false }));
-    }).catch((error) => {
+    }, placementSessionId).catch((error) => {
       showError(error instanceof Error ? error.message : 'Could not open the seed');
     });
   }, [openSeedTile, showError]);
