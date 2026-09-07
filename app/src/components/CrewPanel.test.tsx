@@ -136,6 +136,20 @@ describe('CrewPanel', () => {
     expect(screen.getByRole('button', { name: /^Planted/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('opens direct member details on launch settings after returning from a seed', async () => {
+    const planted = seed({ id: 's-g9yxwv', title: 'Artifact presence comes from the daemon', planter_member: 'keel' });
+    const members = [member('alder', 2), member('keel', 3)];
+    const { rerenderPanel } = renderPanel({ initialMember: 'keel', members, seeds: [planted] });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Seeds' }));
+    fireEvent.click(screen.getByRole('button', { name: /Planted/ }));
+    await act(async () => rerenderPanel(members, false));
+    await act(async () => rerenderPanel(members, true));
+
+    expect(screen.getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'Wake' })).toBeInTheDocument();
+  });
+
   it('keeps actual running values separate from acknowledged next-wake settings', async () => {
     renderPanel({
       members: [member('trellis', 4, {

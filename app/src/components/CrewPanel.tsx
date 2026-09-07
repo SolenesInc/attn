@@ -164,6 +164,9 @@ export function CrewPanel({
     wasOpen.current = true;
     if ((opening && !preserveStateOnOpen) || initialMember !== lastInitialMember.current) {
       lastInitialMember.current = initialMember;
+      setFilter('');
+      setTab('launch');
+      setSeedFilter('tending');
       setSelectedId(initialMember && members.some((candidate) => candidate.id === initialMember)
         ? initialMember
         : members[0]?.id || '');
