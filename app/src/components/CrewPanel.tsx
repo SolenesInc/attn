@@ -19,7 +19,7 @@ interface CrewPanelProps {
   seeds: Seed[];
   seedsTotal: number;
   preserveStateOnOpen?: boolean;
-  onOpenSeed: (seedId: string) => void;
+  onOpenSeed: (seedId: string, placementSessionId?: string) => void;
   onClose: () => void;
 }
 
@@ -522,7 +522,13 @@ export function CrewPanel({
                       seedsTotal={seedsTotal}
                       filter={seedFilter}
                       onFilterChange={setSeedFilter}
-                      onOpenSeed={onOpenSeed}
+                      onOpenSeed={(seedId) => {
+                        if (member.binding_session) {
+                          onOpenSeed(seedId, member.binding_session);
+                        } else {
+                          onOpenSeed(seedId);
+                        }
+                      }}
                     />
                   )}
                 </>

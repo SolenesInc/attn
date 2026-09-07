@@ -66,14 +66,14 @@ function renderPanel({
   sessions = [],
   initialMember,
   seeds = [],
-  onOpenSeed = vi.fn() as (seedId: string) => void,
+  onOpenSeed = vi.fn() as (seedId: string, placementSessionId?: string) => void,
 }: {
   daemon?: DaemonApi;
   members?: CrewMember[];
   sessions?: any[];
   initialMember?: string;
   seeds?: Seed[];
-  onOpenSeed?: (seedId: string) => void;
+  onOpenSeed?: (seedId: string, placementSessionId?: string) => void;
 } = {}) {
   const onClose = vi.fn();
   const view = render(
@@ -117,7 +117,7 @@ describe('CrewPanel', () => {
   it('keeps member, tab and seed filter when a workspace seed returns to Crew', async () => {
     const planted = seed({ id: 's-g9yxwv', title: 'Artifact presence comes from the daemon', planter_member: 'keel' });
     const onOpenSeed = vi.fn();
-    const members = [member('alder', 2), member('keel', 3)];
+    const members = [member('alder', 2), member('keel', 3, { binding_session: 'session-keel' })];
     const { rerenderPanel } = renderPanel({ members, seeds: [planted], onOpenSeed });
 
     await waitFor(() => expect(screen.getByLabelText('Harness')).toBeEnabled());
@@ -125,7 +125,7 @@ describe('CrewPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Seeds' }));
     fireEvent.click(screen.getByRole('button', { name: /Planted/ }));
     fireEvent.click(screen.getByRole('button', { name: /Artifact presence comes from the daemon/ }));
-    expect(onOpenSeed).toHaveBeenCalledWith(planted.id);
+    expect(onOpenSeed).toHaveBeenCalledWith(planted.id, 'session-keel');
 
     await act(async () => {
       rerenderPanel(members, false);

@@ -251,7 +251,8 @@ try {
 
     await driver.activateApp();
     await client.request('dom_focus', { selector: `[data-testid="crew-seed-${crewPlot}"]` });
-    await driver.pressEnter();
+    const activation = await client.request('dom_key', { selector: `[data-testid="crew-seed-${crewPlot}"]`, key: 'Enter' });
+    runner.assert(activation.handled, 'the focused seed row handles Return', activation);
     await waitForDom(`.seed-document[data-seed-id="${crewPlot}"]`);
     await waitForDom('[data-testid="crew-seed-back"]', { focused: true });
     await click(`.seed-document[data-seed-id="${crewPlot}"] [data-seed-target="${crewChild}"]`);
