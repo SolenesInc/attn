@@ -58,34 +58,44 @@ function renderPanel({
   members = [member('trellis', 4)],
   sessions = [],
   initialMember,
+  isOpen = true,
+  preserveStateOnOpen = false,
   onOpenSeed = vi.fn<(seedId: string) => void>(),
 }: {
   daemon?: DaemonApi;
   members?: CrewMember[];
   sessions?: any[];
   initialMember?: string;
+  isOpen?: boolean;
+  preserveStateOnOpen?: boolean;
   onOpenSeed?: ReturnType<typeof vi.fn<(seedId: string) => void>>;
 } = {}) {
   const onClose = vi.fn();
   const view = render(
     <DaemonApiProvider api={daemon}>
       <CrewPanel
-        isOpen
+        isOpen={isOpen}
         initialMember={initialMember}
         members={members}
         sessions={sessions}
+        preserveStateOnOpen={preserveStateOnOpen}
         onClose={onClose}
         onOpenSeed={onOpenSeed}
       />
     </DaemonApiProvider>,
   );
-  const rerenderPanel = (nextMembers: CrewMember[]) => view.rerender(
+  const rerenderPanel = (
+    nextMembers: CrewMember[],
+    nextOpen = isOpen,
+    preserve = preserveStateOnOpen,
+  ) => view.rerender(
     <DaemonApiProvider api={daemon}>
       <CrewPanel
-        isOpen
+        isOpen={nextOpen}
         initialMember={initialMember}
         members={nextMembers}
         sessions={sessions}
+        preserveStateOnOpen={preserve}
         onClose={onClose}
         onOpenSeed={onOpenSeed}
       />
@@ -491,6 +501,20 @@ describe('CrewPanel', () => {
     expect(screen.getByRole('heading', { name: 'Trellis' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Handoffs' })).toHaveAttribute('aria-current', 'page');
     expect(sendCrewHandoffsGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves the selected member and tab when returning from a workspace seed', async () => {
+    const members = [member('alder', 2), member('trellis', 3)];
+    const { rerenderPanel } = renderPanel({ members });
+    fireEvent.click(screen.getByRole('button', { name: /Trellis/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
+    await screen.findByText('No handoffs recorded.');
+
+    await act(async () => { rerenderPanel(members, false); });
+    await act(async () => { rerenderPanel(members, true, true); });
+
+    expect(screen.getByRole('heading', { name: 'Trellis' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Handoffs' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('flushes a charter before closing the panel', async () => {

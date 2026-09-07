@@ -1079,7 +1079,8 @@ function AppContent({
     open: boolean;
     member?: string;
     returnFocus?: HTMLElement;
-  }>({ open: false });
+    preserveStateOnOpen?: boolean;
+  }>({ open: false, preserveStateOnOpen: false });
   const [crewSeedTile, setCrewSeedTile] = useState<{ workspaceId: string; tileId: string } | null>(null);
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [notebookRequestedPath, setNotebookRequestedPath] = useState<string | null>(null);
@@ -3031,14 +3032,6 @@ function AppContent({
       );
       return stillExists ? current : null;
     });
-    setCrewSeedTile((current) => {
-      if (!current) return null;
-      const workspace = workspaceViews.find((entry) => entry.id === current.workspaceId);
-      const stillExists = workspace?.children.some(
-        (child) => child.kind === 'tile' && child.tile.tileId === current.tileId,
-      );
-      return stillExists ? current : null;
-    });
   }, [workspaceViews]);
 
   const canMoveDraggedLeafToWorkspace = useCallback((workspace: { id: string; endpointId?: string }) => {
@@ -3284,7 +3277,7 @@ function AppContent({
   }, [sendCrewSleep, showError]);
 
   const handleOpenCrew = useCallback((member: string | undefined, returnFocus: HTMLElement) => {
-    setCrewPanel({ open: true, member, returnFocus });
+    setCrewPanel({ open: true, member, returnFocus, preserveStateOnOpen: false });
   }, []);
 
   const handleCloseCrew = useCallback(() => {
@@ -3305,7 +3298,7 @@ function AppContent({
   }, [openSeedTile, showError]);
 
   const handleBackToCrew = useCallback((returnFocus: HTMLElement) => {
-    setCrewPanel((current) => ({ ...current, open: true, returnFocus }));
+    setCrewPanel((current) => ({ ...current, open: true, returnFocus, preserveStateOnOpen: true }));
   }, []);
 
   // One stable object: the surface re-fetches on identity change.
@@ -3965,6 +3958,7 @@ function AppContent({
         initialMember={crewPanel.member}
         members={crew}
         sessions={daemonSessions}
+        preserveStateOnOpen={crewPanel.preserveStateOnOpen}
         onClose={handleCloseCrew}
         onOpenSeed={handleOpenSeedFromCrew}
       />
