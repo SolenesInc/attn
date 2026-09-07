@@ -83,7 +83,9 @@ describe('SessionTerminalWorkspace provenance line', () => {
       },
     ], onSelectSession);
 
-    fireEvent.click(screen.getByRole('button', { name: /delegated by docs sweep/i }));
+    const dispatcher = screen.getByRole('button', { name: /delegated by docs sweep/i });
+    expect(dispatcher.closest('.workspace-pane-identity-main')).not.toBeNull();
+    fireEvent.click(dispatcher);
     expect(onSelectSession).toHaveBeenCalledWith('dispatcher');
 
     fireEvent.click(screen.getByRole('button', { name: '1 delegate' }));
@@ -120,5 +122,35 @@ describe('SessionTerminalWorkspace provenance line', () => {
 
     fireEvent.click(screen.getByTestId('session-provenance-pr'));
     expect(screen.getByTestId('session-pr-popover')).toBeInTheDocument();
+  });
+
+  it('hands the open popover from delegates to PR details', () => {
+    renderPane([{
+      repository: 'github.com/victorarias/attn',
+      number: 71,
+      url: 'https://github.com/victorarias/attn/pull/71',
+      created_at: '2026-08-30T12:00:00Z',
+      state: 'open',
+    }], [
+      { id: 'sess-1', label: 'ledger sweep', agent: 'shell', state: 'working' },
+      {
+        id: 'delegate',
+        label: 'glossary rework',
+        agent: 'codex',
+        state: 'working',
+        dispatcher_session_id: 'sess-1',
+      },
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: '1 delegate' }));
+    expect(screen.getByTestId('session-delegates-popover')).toBeInTheDocument();
+
+    fireEvent.pointerEnter(screen.getByTestId('session-provenance-pr'));
+    expect(screen.queryByTestId('session-delegates-popover')).not.toBeInTheDocument();
+    expect(screen.getByTestId('session-pr-popover')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '1 delegate' }));
+    expect(screen.queryByTestId('session-pr-popover')).not.toBeInTheDocument();
+    expect(screen.getByTestId('session-delegates-popover')).toBeInTheDocument();
   });
 });
