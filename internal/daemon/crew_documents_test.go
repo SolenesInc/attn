@@ -108,6 +108,32 @@ func TestCrewCharter_SameContentConfirmationFencesAnEarlierDelayedWrite(t *testi
 	}
 }
 
+func TestCrewCharter_DaemonRestartRejectsAnOldLifetimeToken(t *testing.T) {
+	d := newCrewDaemon(t)
+	d.crewCharterLifetime = "before-restart"
+	read, err := d.crewCharterGet("alder")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	d.crewDocumentMu.Lock()
+	d.crewCharterLifetime = "after-restart"
+	d.crewCharterVersions = nil
+	d.crewDocumentMu.Unlock()
+
+	result, err := d.crewCharterSet("alder", "stale write from the old daemon", read.Charter.Token)
+	if err != nil {
+		t.Fatalf("deliver old-lifetime write: %v", err)
+	}
+	if !result.Conflict || result.Charter.Content != read.Charter.Content || result.Charter.Token == read.Charter.Token {
+		t.Fatalf("old-lifetime write result = %+v, old read = %+v", result, read)
+	}
+	current, err := d.crewCharterGet("alder")
+	if err != nil || current.Charter.Content != read.Charter.Content {
+		t.Fatalf("canonical charter = %+v, err=%v", current, err)
+	}
+}
+
 func TestCrewHandoffs_ReadsCompleteNewestFirstHistoryAndRealDates(t *testing.T) {
 	d := newCrewDaemon(t)
 	member, _, err := d.resolveCrewMember("trellis")

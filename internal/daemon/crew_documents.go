@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/fsdoc"
 	"github.com/victorarias/attn/internal/protocol"
@@ -40,6 +41,9 @@ func (d *Daemon) readCrewCharterLocked(member crew.Member) (protocol.CrewCharter
 	if d.crewCharterVersions == nil {
 		d.crewCharterVersions = make(map[string]crewCharterVersion)
 	}
+	if d.crewCharterLifetime == "" {
+		d.crewCharterLifetime = uuid.NewString()
+	}
 	version, ok := d.crewCharterVersions[member.ID]
 	if !ok {
 		version = crewCharterVersion{hash: token, revision: 1}
@@ -50,7 +54,7 @@ func (d *Daemon) readCrewCharterLocked(member crew.Member) (protocol.CrewCharter
 	d.crewCharterVersions[member.ID] = version
 	return protocol.CrewCharterDocument{
 		Content: string(content),
-		Token:   fmt.Sprintf("%d:%s", version.revision, token),
+		Token:   fmt.Sprintf("%s:%d:%s", d.crewCharterLifetime, version.revision, token),
 	}, token, nil
 }
 
@@ -107,7 +111,7 @@ func (d *Daemon) crewCharterSet(name, content, expectedToken string) (*protocol.
 		Member: member.ID,
 		Charter: protocol.CrewCharterDocument{
 			Content: content,
-			Token:   fmt.Sprintf("%d:%s", version.revision, hash),
+			Token:   fmt.Sprintf("%s:%d:%s", d.crewCharterLifetime, version.revision, hash),
 		},
 	}, nil
 }
