@@ -9570,6 +9570,9 @@ type SupportSnapshotMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
+
+	// RuntimeIds corresponds to the JSON schema field "runtime_ids".
+	RuntimeIds []string `json:"runtime_ids,omitempty,omitzero"`
 }
 
 type SupportSnapshotResultMessage struct {

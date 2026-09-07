@@ -224,11 +224,22 @@ export function beginDiagnosticCapture(input: {
   sessions: DiagnosticSessionSnapshot[];
   workspaces: DiagnosticWorkspaceSnapshot[];
   settings: DaemonSettings;
-  sendSupportSnapshot: (endpointId?: string) => Promise<DaemonSupportSnapshot>;
+  sendSupportSnapshot: (endpointId?: string, runtimeIds?: string[]) => Promise<DaemonSupportSnapshot>;
 }): PendingDiagnosticCapture {
   const endpointIds = [...new Set(input.sessions.flatMap((session) => session.endpointId ? [session.endpointId] : []))];
   const requestedEndpoints = [undefined, ...endpointIds];
-  const daemonRequests = requestedEndpoints.map((endpointId) => input.sendSupportSnapshot(endpointId));
+  const sessionEndpoint = new Map(input.sessions.map((session) => [session.id, session.endpointId]));
+  const daemonRequests = requestedEndpoints.map((endpointId) => {
+    const runtimeIds = input.panes.flatMap((pane) => sessionEndpoint.get(pane.sessionId) === endpointId ? [pane.runtimeId] : []);
+    const request = input.sendSupportSnapshot(endpointId, [...new Set(runtimeIds)]);
+    return new Promise<DaemonSupportSnapshot>((resolve, reject) => {
+      const timeout = window.setTimeout(
+        () => reject(new Error('Diagnostic snapshot collection exceeded its deadline')),
+        3_000,
+      );
+      void request.then(resolve, reject).finally(() => window.clearTimeout(timeout));
+    });
+  });
   return {
     context: { ...input.context },
     panes: input.panes.map((pane) => ({ ...pane })),

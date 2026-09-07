@@ -122,12 +122,20 @@ func (d *Daemon) recordSupportInputTrace(msg *protocol.PtyInputMessage, received
 func (d *Daemon) handleSupportSnapshot(client *wsClient, msg *protocol.SupportSnapshotMessage) {
 	traces, total := d.supportInputTraceRing().snapshot()
 	runtimeIDs := make(map[string]struct{}, len(traces))
-	for _, trace := range traces {
-		runtimeIDs[trace.RuntimeID] = struct{}{}
+	if msg.RuntimeIds != nil {
+		for _, runtimeID := range msg.RuntimeIds {
+			if runtimeID = strings.TrimSpace(runtimeID); runtimeID != "" {
+				runtimeIDs[runtimeID] = struct{}{}
+			}
+		}
+	} else {
+		for _, trace := range traces {
+			runtimeIDs[trace.RuntimeID] = struct{}{}
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if d.ptyBackend != nil {
+	if msg.RuntimeIds == nil && d.ptyBackend != nil {
 		for _, runtimeID := range d.ptyBackend.SessionIDs(ctx) {
 			runtimeIDs[runtimeID] = struct{}{}
 			if len(runtimeIDs) >= supportInputTraceCapacity {

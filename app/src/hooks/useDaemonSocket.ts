@@ -3128,10 +3128,10 @@ export function useDaemonSocket({
     );
   }, [sendRequest]);
 
-  const sendSupportSnapshot = useCallback((endpointId?: string): Promise<SupportSnapshotResultMessage> => {
+  const sendSupportSnapshot = useCallback((endpointId?: string, runtimeIds?: string[]): Promise<SupportSnapshotResultMessage> => {
     return sendRequest<SupportSnapshotResultMessage>(
       'support_snapshot',
-      endpointId ? { endpoint_id: endpointId } : {},
+      { ...(endpointId ? { endpoint_id: endpointId } : {}), ...(runtimeIds ? { runtime_ids: runtimeIds } : {}) },
       'Reading diagnostic data timed out',
     );
   }, [sendRequest]);

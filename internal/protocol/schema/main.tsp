@@ -2276,6 +2276,9 @@ model SupportSnapshotMessage {
   cmd: "support_snapshot";
   request_id: string;
   endpoint_id?: string;
+  // Restricts the potentially expensive backend inspection to runtimes the
+  // requesting app can actually describe in this report.
+  runtime_ids?: string[];
 }
 
 model SupportInputTrace {

@@ -95,7 +95,7 @@ func TestSupportSnapshotEchoesEndpointAndContainsOnlyAllowlistedTraceEvidence(t 
 	}, time.UnixMilli(20), 50*time.Microsecond, nil)
 	client := &wsClient{send: make(chan outboundMessage, 1)}
 	d.handleSupportSnapshot(client, &protocol.SupportSnapshotMessage{
-		RequestID: "request-1", EndpointID: protocol.Ptr("remote-1"),
+		RequestID: "request-1", EndpointID: protocol.Ptr("remote-1"), RuntimeIds: []string{"runtime-2"},
 	})
 
 	outbound := <-client.send
@@ -108,6 +108,9 @@ func TestSupportSnapshotEchoesEndpointAndContainsOnlyAllowlistedTraceEvidence(t 
 	}
 	if len(result.InputTraces) != 1 || result.InputTraces[0].WriteResult != "accepted" {
 		t.Fatalf("input traces = %+v", result.InputTraces)
+	}
+	if len(result.Runtimes) != 1 || result.Runtimes[0].RuntimeID != "runtime-2" {
+		t.Fatalf("scoped runtimes = %+v", result.Runtimes)
 	}
 	if len(result.WarningCodes) != 1 || result.WarningCodes[0] != "pty_warning" {
 		t.Fatalf("warning codes = %v", result.WarningCodes)

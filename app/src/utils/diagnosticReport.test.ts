@@ -156,7 +156,11 @@ describe('diagnostic report evidence', () => {
         activeElement: 'terminal', documentFocused: true, visibility: 'visible',
         window: { width: 800, height: 600, devicePixelRatio: 2 },
       },
-      panes: [], workspaces: [], settings: {}, sendSupportSnapshot,
+      panes: [
+        { paneId: 'pane-local', runtimeId: 'runtime-local', sessionId: 'local', title: 'Local', sessionLabel: 'Local', workspaceId: 'w', workspaceLabel: 'Workspace', available: true },
+        { paneId: 'pane-remote', runtimeId: 'runtime-remote', sessionId: 'remote-1a', title: 'Remote', sessionLabel: 'Remote', workspaceId: 'w', workspaceLabel: 'Workspace', available: true },
+      ],
+      workspaces: [], settings: {}, sendSupportSnapshot,
       sessions: [
         { id: 'local', label: 'Local', state: 'idle', agent: 'codex', cwd: '~', workspaceId: 'w', endpoint: 'local', active: false },
         { id: 'remote-1a', label: 'Remote', state: 'idle', agent: 'codex', cwd: '~', workspaceId: 'w', endpoint: 'remote', endpointId: 'endpoint-1', active: false },
@@ -166,7 +170,11 @@ describe('diagnostic report evidence', () => {
     });
     await capture.daemons;
 
-    expect(sendSupportSnapshot.mock.calls).toEqual([[undefined], ['endpoint-1'], ['endpoint-2']]);
+    expect(sendSupportSnapshot.mock.calls).toEqual([
+      [undefined, ['runtime-local']],
+      ['endpoint-1', ['runtime-remote']],
+      ['endpoint-2', []],
+    ]);
   });
 });
 
