@@ -24,6 +24,17 @@ import (
 func newWakeableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string) {
 	t.Helper()
 	d := newCrewDaemon(t)
+	binDir := t.TempDir()
+	for _, agent := range []string{"claude", "codex"} {
+		script := "#!/bin/sh\nexit 0\n"
+		if agent == "claude" {
+			script = "#!/bin/sh\nread request\nprintf '%s\\n' '{\"type\":\"control_response\",\"response\":{\"subtype\":\"success\",\"request_id\":\"attn-model-discovery\",\"response\":{\"models\":[{\"value\":\"fixture-model\",\"supportsEffort\":true}]}}}'\ncat >/dev/null\n"
+		}
+		if err := os.WriteFile(filepath.Join(binDir, agent), []byte(script), 0o755); err != nil {
+			t.Fatalf("write fake %s executable: %v", agent, err)
+		}
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	backend := &fakeSpawnBackend{screen: "❯"}
 	d.ptyBackend = backend
 
@@ -367,7 +378,11 @@ func TestCrewWake_ConcurrentWakesShareTheFirstDay(t *testing.T) {
 	if member := <-started; member != "keel" {
 		t.Fatalf("first wake started for %q", member)
 	}
-	<-firstClaimed
+	select {
+	case <-firstClaimed:
+	case result := <-results:
+		t.Fatalf("first wake returned before claiming the day: %+v, %v", result.result, result.err)
+	}
 	go wake()
 	if member := <-started; member != "keel" {
 		t.Fatalf("second wake started for %q", member)
