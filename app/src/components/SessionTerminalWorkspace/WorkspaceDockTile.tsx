@@ -68,6 +68,7 @@ interface WorkspaceDockTileProps {
   onUpdateParams?: (tileParams: string) => Promise<unknown> | void;
   onRetargetTile?: (sessionId: string) => Promise<unknown> | void;
   onRevealSeedInGarden?: (seedId: string) => void;
+  onBackToCrew?: (returnFocus: HTMLElement) => void;
   onHeaderPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onRequestContent: (workspaceId: string, tileId: string) => void;
   bodyRef?: Ref<HTMLDivElement>;
@@ -105,6 +106,7 @@ export function WorkspaceDockTile({
   onUpdateParams,
   onRetargetTile,
   onRevealSeedInGarden,
+  onBackToCrew,
   onHeaderPointerDown,
   onRequestContent,
   bodyRef,
@@ -776,6 +778,17 @@ export function WorkspaceDockTile({
           </div>
         ) : null}
         <div className="workspace-dock-tile-actions">
+          {isSeed && onBackToCrew ? (
+            <button
+              type="button"
+              className="workspace-dock-tile-back-crew"
+              data-testid="crew-seed-back"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => onBackToCrew(event.currentTarget)}
+            >
+              Back to Crew
+            </button>
+          ) : null}
           {isAnnotatedDocument && onFocusDocument ? (
             <button
               type="button"

@@ -225,9 +225,43 @@
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  margin: 0 -28px 20px;
+  margin: 0 -28px;
   padding: 20px 28px 18px;
   background: linear-gradient(110deg, color-mix(in srgb, var(--accent) 5%, var(--color-bg-panel)), var(--color-bg-app) 68%);
+}
+
+.crew-tabs {
+  width: min(720px, 100%);
+  display: flex;
+  gap: 24px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.crew-tabs button {
+  position: relative;
+  padding: 13px 1px 11px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.crew-tabs button:hover,
+.crew-tabs button.is-selected {
+  color: var(--color-text-primary);
+}
+
+.crew-tabs button.is-selected::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+  content: '';
 }
 
 .crew-member-identity {
@@ -474,6 +508,165 @@
 .crew-empty {
   padding: 40px 0;
   color: var(--color-text-muted);
+}
+
+.crew-seeds {
+  width: min(720px, 100%);
+}
+
+.crew-section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  margin: 3px 0 12px;
+}
+
+.crew-section-heading h3 {
+  margin: 3px 0 0;
+  font-size: 16px;
+  font-weight: 620;
+}
+
+.crew-seed-filters {
+  display: flex;
+  gap: 20px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.crew-seed-filters button {
+  position: relative;
+  padding: 8px 1px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.crew-seed-filters button.is-selected {
+  color: var(--color-text-primary);
+}
+
+.crew-seed-filters button.is-selected::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  background: var(--accent);
+  content: '';
+}
+
+.crew-seed-filters button span {
+  margin-left: 4px;
+  color: var(--color-text-dimmed);
+  font-variant-numeric: tabular-nums;
+  font-size: 9px;
+}
+
+.crew-seed-cap {
+  margin: 10px 0 0;
+  color: var(--color-warning);
+  font-size: 10px;
+}
+
+.crew-seed-search {
+  width: 100%;
+  margin: 14px 0 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: var(--color-bg-panel);
+  color: var(--color-text-primary);
+  font-size: 11px;
+}
+
+.crew-seed-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.crew-seed-row {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.crew-seed-row:hover,
+.crew-seed-row:focus-visible {
+  background: color-mix(in srgb, var(--seed-state-color) 7%, transparent);
+  color: var(--color-text-primary);
+}
+
+.crew-seed-row > .seed-state-icon {
+  flex: 0 0 auto;
+}
+
+.crew-seed-row-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.crew-seed-row-title {
+  display: block;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crew-seed-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 5px;
+  color: var(--color-text-muted);
+  font-size: 9px;
+}
+
+.crew-seed-row-meta span:first-child {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+}
+
+.crew-seed-row-state {
+  flex: 0 0 auto;
+  color: var(--seed-state-color, var(--color-text-muted));
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+}
+
+.crew-seed-empty {
+  padding: 40px 12px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.crew-seed-empty p {
+  margin: 0;
+}
+
+.crew-seed-empty button {
+  margin-top: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
 }
 
 .crew-confirm-backdrop {

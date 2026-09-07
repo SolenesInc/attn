@@ -5,8 +5,10 @@ import { useCrewLaunchAutosave, type CrewLaunchSelection } from '../hooks/useCre
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { useHarnessModelCatalogs } from '../hooks/useHarnessModelCatalogs';
 import type { DaemonSession } from '../hooks/useDaemonSocket';
+import type { Seed } from '../hooks/useDaemonSocket';
 import type { CrewMember, DelegationHarness, DelegationModel } from '../types/generated';
 import { crewDisplayName } from '../utils/crewName';
+import { CrewSeeds, type CrewSeedFilter } from './CrewSeeds';
 import './CrewPanel.css';
 
 interface CrewPanelProps {
@@ -14,6 +16,10 @@ interface CrewPanelProps {
   initialMember?: string;
   members: CrewMember[];
   sessions: DaemonSession[];
+  seeds: Seed[];
+  seedsTotal: number;
+  preserveStateOnOpen?: boolean;
+  onOpenSeed: (seedId: string) => void;
   onClose: () => void;
 }
 
@@ -93,7 +99,17 @@ function RestartState({ member, attempt, onRetryTransport, onRetryFailed }: {
   return null;
 }
 
-export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }: CrewPanelProps) {
+export function CrewPanel({
+  isOpen,
+  initialMember,
+  members,
+  sessions,
+  seeds,
+  seedsTotal,
+  preserveStateOnOpen = false,
+  onOpenSeed,
+  onClose,
+}: CrewPanelProps) {
   const {
     isConnected,
     connectionGeneration,
@@ -104,6 +120,8 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
   } = useDaemonApi();
   const [selectedId, setSelectedId] = useState(initialMember || members[0]?.id || '');
   const [filter, setFilter] = useState('');
+  const [tab, setTab] = useState<'launch' | 'seeds'>('launch');
+  const [seedFilter, setSeedFilter] = useState<CrewSeedFilter>('tending');
   const [harnesses, setHarnesses] = useState<DelegationHarness[]>([]);
   const [catalogError, setCatalogError] = useState('');
   const [catalogLoading, setCatalogLoading] = useState(false);
@@ -144,7 +162,7 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
     }
     const opening = !wasOpen.current;
     wasOpen.current = true;
-    if (opening || initialMember !== lastInitialMember.current) {
+    if ((opening && !preserveStateOnOpen) || initialMember !== lastInitialMember.current) {
       lastInitialMember.current = initialMember;
       setSelectedId(initialMember && members.some((candidate) => candidate.id === initialMember)
         ? initialMember
@@ -152,7 +170,7 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
       return;
     }
     if (!members.some((candidate) => candidate.id === selectedId)) setSelectedId(members[0]?.id || '');
-  }, [initialMember, isOpen, members, selectedId]);
+  }, [initialMember, isOpen, members, preserveStateOnOpen, selectedId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -319,19 +337,42 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
                     <span className={`crew-presence ${member.binding_session ? 'is-awake' : ''}`}>{member.binding_session ? 'Current day active' : 'Between days'}</span>
                   </div>
 
-                  {member.binding_session && (
-                    <section className="crew-running" aria-label="Running now">
-                      <span className="crew-kicker">Running now</span>
-                      <div className="crew-runtime-values">
-                        <span><small>Harness</small>{running?.agent || 'Not reported'}</span>
-                        <span><small>Model</small>Not reported</span>
-                        <span><small>Effort</small>Not reported</span>
-                      </div>
-                      <code>{member.binding_session.slice(0, 8)}</code>
-                    </section>
-                  )}
+                  <nav className="crew-tabs" aria-label="Member details">
+                    <button
+                      type="button"
+                      data-testid="crew-tab-launch"
+                      className={tab === 'launch' ? 'is-selected' : ''}
+                      aria-current={tab === 'launch' ? 'page' : undefined}
+                      onClick={() => setTab('launch')}
+                    >
+                      Launch settings
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="crew-tab-seeds"
+                      className={tab === 'seeds' ? 'is-selected' : ''}
+                      aria-current={tab === 'seeds' ? 'page' : undefined}
+                      onClick={() => setTab('seeds')}
+                    >
+                      Seeds
+                    </button>
+                  </nav>
 
-                  <section className="crew-launch-card">
+                  {tab === 'launch' ? (
+                    <>
+                      {member.binding_session && (
+                        <section className="crew-running" aria-label="Running now">
+                          <span className="crew-kicker">Running now</span>
+                          <div className="crew-runtime-values">
+                            <span><small>Harness</small>{running?.agent || 'Not reported'}</span>
+                            <span><small>Model</small>Not reported</span>
+                            <span><small>Effort</small>Not reported</span>
+                          </div>
+                          <code>{member.binding_session.slice(0, 8)}</code>
+                        </section>
+                      )}
+
+                      <section className="crew-launch-card">
                     <div className="crew-launch-title">
                       <div><span className="crew-kicker">Next wake</span><h3>Launch settings</h3></div>
                       <div className={`crew-save-state is-${edit.state}`} role="status" aria-live="polite">
@@ -444,9 +485,9 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
                       <strong>{[edit.acknowledged.resolved_agent, edit.acknowledged.resolved_model || 'default model', edit.acknowledged.resolved_effort || 'default effort'].join(' / ')}</strong>
                     </div>
                     {edit.error && <div className="crew-save-error">{edit.error}</div>}
-                  </section>
+                      </section>
 
-                  <section className="crew-restart">
+                      <section className="crew-restart">
                     <div>
                       <h3>{member.binding_session ? 'Handoff and restart' : 'Wake member'}</h3>
                     </div>
@@ -459,20 +500,31 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
                     >
                       {restartBusy ? 'Restart in progress…' : member.binding_session ? 'Handoff and restart' : 'Wake'}
                     </button>
-                  </section>
-                  <RestartState
-                    member={member}
-                    attempt={restartAttempt}
-                    onRetryTransport={() => restartAttempt && sendAttempt(member.id, restartAttempt)}
-                    onRetryFailed={() => {
-                      setAttempts((current) => {
-                        const next = { ...current };
-                        delete next[member.id];
-                        return next;
-                      });
-                      setConfirming(true);
-                    }}
-                  />
+                      </section>
+                      <RestartState
+                        member={member}
+                        attempt={restartAttempt}
+                        onRetryTransport={() => restartAttempt && sendAttempt(member.id, restartAttempt)}
+                        onRetryFailed={() => {
+                          setAttempts((current) => {
+                            const next = { ...current };
+                            delete next[member.id];
+                            return next;
+                          });
+                          setConfirming(true);
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <CrewSeeds
+                      member={member}
+                      seeds={seeds}
+                      seedsTotal={seedsTotal}
+                      filter={seedFilter}
+                      onFilterChange={setSeedFilter}
+                      onOpenSeed={onOpenSeed}
+                    />
+                  )}
                 </>
               )}
             </main>

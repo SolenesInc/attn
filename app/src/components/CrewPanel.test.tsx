@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DaemonApiProvider, type DaemonApi } from '../contexts/DaemonApiContext';
 import { CrewRestartState, type CrewMember } from '../types/generated';
+import type { Seed } from '../hooks/useDaemonSocket';
 import { _resetEscapeStackForTest } from '../hooks/useEscapeStack';
 import { CrewPanel } from './CrewPanel';
 
@@ -14,6 +15,15 @@ function member(id: string, revision: number, values: Partial<CrewMember> = {}):
     awareness_dirs: [],
     resolved_agent: 'claude',
     ...values,
+  };
+}
+
+function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
+  return {
+    body: '', status: 'planted', state_changed_at: '2026-09-06T16:50:50Z', state_changed_at_exact: true,
+    step_slug: overrides.title, planter_session: '', planter_member: '', tender_session: '', tender_member: '',
+    edges: [], ready: false, template: false, gate: false, vars: [], rev: 1,
+    created_at: '2026-09-06T16:50:50Z', updated_at: '2026-09-06T16:50:50Z', ...overrides,
   };
 }
 
@@ -55,11 +65,15 @@ function renderPanel({
   members = [member('trellis', 4)],
   sessions = [],
   initialMember,
+  seeds = [],
+  onOpenSeed = vi.fn() as (seedId: string) => void,
 }: {
   daemon?: DaemonApi;
   members?: CrewMember[];
   sessions?: any[];
   initialMember?: string;
+  seeds?: Seed[];
+  onOpenSeed?: (seedId: string) => void;
 } = {}) {
   const onClose = vi.fn();
   const view = render(
@@ -69,22 +83,29 @@ function renderPanel({
         initialMember={initialMember}
         members={members}
         sessions={sessions}
+        seeds={seeds}
+        seedsTotal={seeds.length}
+        onOpenSeed={onOpenSeed}
         onClose={onClose}
       />
     </DaemonApiProvider>,
   );
-  const rerenderPanel = (nextMembers: CrewMember[]) => view.rerender(
+  const rerenderPanel = (nextMembers: CrewMember[], isOpen = true, preserveStateOnOpen = false) => view.rerender(
     <DaemonApiProvider api={daemon}>
       <CrewPanel
-        isOpen
+        isOpen={isOpen}
         initialMember={initialMember}
         members={nextMembers}
         sessions={sessions}
+        seeds={seeds}
+        seedsTotal={seeds.length}
+        preserveStateOnOpen={preserveStateOnOpen}
+        onOpenSeed={onOpenSeed}
         onClose={onClose}
       />
     </DaemonApiProvider>,
   );
-  return { ...view, daemon, onClose, rerenderPanel };
+  return { ...view, daemon, onClose, onOpenSeed, rerenderPanel };
 }
 
 afterEach(() => {
@@ -93,6 +114,28 @@ afterEach(() => {
 });
 
 describe('CrewPanel', () => {
+  it('keeps member, tab and seed filter when a workspace seed returns to Crew', async () => {
+    const planted = seed({ id: 's-g9yxwv', title: 'Artifact presence comes from the daemon', planter_member: 'keel' });
+    const onOpenSeed = vi.fn();
+    const members = [member('alder', 2), member('keel', 3)];
+    const { rerenderPanel } = renderPanel({ members, seeds: [planted], onOpenSeed });
+
+    await waitFor(() => expect(screen.getByLabelText('Harness')).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: /Keel/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Seeds' }));
+    fireEvent.click(screen.getByRole('button', { name: /Planted/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Artifact presence comes from the daemon/ }));
+    expect(onOpenSeed).toHaveBeenCalledWith(planted.id);
+
+    await act(async () => {
+      rerenderPanel(members, false);
+      rerenderPanel(members, true, true);
+    });
+    expect(screen.getByRole('heading', { name: 'Keel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Seeds' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: /^Planted/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('keeps actual running values separate from acknowledged next-wake settings', async () => {
     renderPanel({
       members: [member('trellis', 4, {

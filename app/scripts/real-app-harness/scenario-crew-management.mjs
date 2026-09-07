@@ -43,6 +43,9 @@ const asleepHome = path.join(resources.dataDir, 'crew', asleep);
 const wakeReceipt = path.join(awakeHome, 'wake-received');
 let firstSession = '';
 let successor = '';
+let crewPlot = '';
+let crewChild = '';
+let asleepHeld = '';
 
 const runAttn = (args) => execFileSync(appDaemonInTree(options.appPath), args, {
   encoding: 'utf8',
@@ -209,6 +212,68 @@ try {
   const workspaceIdle = await sampleIdle(webkitBaseline);
   await driver.activateApp();
 
+  const plot = json(['seed', 'plant', `Crew verification plot ${memberSuffix}`, '-m', 'The planted list opens this plot in the native workspace tile.', '--member', awake, '--session', firstSession, '--json']);
+  crewPlot = plot.id;
+  const child = json(['seed', 'plant', `Crew planted navigation ${memberSuffix}`, '-m', 'The plot link navigates this same native tile.', '--part-of', crewPlot, '--member', awake, '--session', firstSession, '--json']);
+  crewChild = child.id;
+  json(['seed', 'tend', crewChild, '--session', firstSession, '--json']);
+  const held = json(['seed', 'plant', `Crew asleep claim ${memberSuffix}`, '-m', 'A permanent member claim remains visible between days.', '--member', asleep, '--json']);
+  asleepHeld = held.id;
+  json(['seed', 'tend', asleepHeld, '--member', asleep, '--json']);
+
+  await runner.step('seed_lists_follow_durable_attribution_and_native_tile_navigation', async () => {
+    await click('[data-testid="manage-crew"]');
+    await click(`[data-testid="crew-roster-${asleep}"]`);
+    await click('[data-testid="crew-tab-seeds"]');
+    await waitForDom(`[data-testid="crew-seed-${asleepHeld}"]`);
+    runner.assert((await panelText()).includes('Tending 1'), 'an asleep member keeps its permanent member claim');
+
+    json(['seed', 'park', asleepHeld, '--member', asleep, '--json']);
+    await waitForDom('[data-testid="crew-panel"]', { includes: `${asleep[0].toUpperCase()}${asleep.slice(1)} isn't tending a seed.` });
+    json(['seed', 'tend', asleepHeld, '--member', asleep, '--json']);
+    await waitForDom(`[data-testid="crew-seed-${asleepHeld}"]`);
+
+    await click(`[data-testid="crew-roster-${awake}"]`);
+    await waitForDom(`[data-testid="crew-seed-${crewChild}"]`);
+    runner.assert((await panelText()).includes('Tending 1'), 'the current day session claim appears once even with member attribution');
+    await click('[data-testid="crew-seed-filter-planted"]');
+    await waitForDom(`[data-testid="crew-seed-${crewPlot}"]`);
+    const livePlant = json(['seed', 'plant', `Crew live planting update ${memberSuffix}`, '--member', awake, '--session', firstSession, '--json']);
+    await waitForDom(`[data-testid="crew-seed-${livePlant.id}"]`);
+    const plantedText = await panelText();
+    runner.assert(
+      plantedText.includes('0/1') && plantedText.includes(`Crew verification plot ${memberSuffix} · 0/1`),
+      'the planted list shows plot progress and parent context',
+      { plantedText, crewPlot, crewChild },
+    );
+    await type('[data-testid="crew-seed-search"]', `Crew verification plot ${memberSuffix}`);
+    await screenshot('01-crew-seeds.png');
+
+    await client.request('dom_focus', { selector: `[data-testid="crew-seed-${crewPlot}"]` });
+    await driver.activateApp();
+    await driver.pressEnter();
+    await waitForDom(`.seed-document[data-seed-id="${crewPlot}"]`);
+    await waitForDom('[data-testid="crew-seed-back"]', { focused: true });
+    await click(`.seed-document[data-seed-id="${crewPlot}"] [data-seed-target="${crewChild}"]`);
+    await waitForDom(`.seed-document[data-seed-id="${crewChild}"]`);
+    await screenshot('02-crew-seed-tile.png');
+
+    await click('[data-testid="crew-seed-back"]');
+    await waitForDom(`[data-testid="crew-seed-${crewPlot}"]`);
+    const returnedText = await panelText();
+    runner.assert(
+      returnedText.includes(`Crew verification plot ${memberSuffix}`)
+        && !returnedText.includes(`Crew planted navigation ${memberSuffix}`),
+      'Back to Crew preserves the member, tab, filter and search',
+      { returnedText },
+    );
+    await pressEscapeAndWaitFor('crew-seed-back');
+    await click(`.workspace-dock-tile:has(.seed-document[data-seed-id="${crewChild}"]) [aria-label="Close tile"]`);
+    await waitForDom('.terminal-container', { focused: true });
+    const closed = await client.request('seed_document_get_state', { seedId: crewChild });
+    runner.assert(!closed.present, 'closing the Crew seed tile restores the terminal workspace', closed);
+  });
+
   await runner.step('manage_entry_retains_the_sidebar_and_returns_keyboard_focus', async () => {
     await click('[data-testid="manage-crew"]');
     const text = await panelText();
@@ -283,6 +348,11 @@ try {
     const reconnected = crewMember(awake);
     runner.assert(reconnected?.effort === 'low', 'the reconnect retry persisted the draft', reconnected);
     runner.writeJson('reconnected-next-wake.json', reconnected);
+    await click('[data-testid="crew-tab-seeds"]');
+    await click('[data-testid="crew-seed-filter-planted"]');
+    await waitForDom(`[data-testid="crew-seed-${crewPlot}"]`);
+    runner.assert((await panelText()).includes(`Crew verification plot ${memberSuffix}`), 'the Garden snapshot returns after reconnect');
+    await click('[data-testid="crew-tab-launch"]');
   });
 
   await runner.step('restart_reports_lifecycle_and_launches_one_changed_successor', async () => {
@@ -319,10 +389,10 @@ try {
     runner.writeJson('idle.json', { workspace: workspaceIdle, crewPanel: await sampleIdle(webkitBaseline) });
   });
 
-  console.log(JSON.stringify(await runner.finishSuccess({ awake, asleep, firstSession, successor }), null, 2));
+  console.log(JSON.stringify(await runner.finishSuccess({ awake, asleep, firstSession, successor, crewPlot, crewChild, asleepHeld }), null, 2));
 } catch (error) {
   await screenshot('failure.png').catch(() => {});
-  console.error(JSON.stringify(await runner.finishFailure(error, { awake, asleep, firstSession, successor }), null, 2));
+  console.error(JSON.stringify(await runner.finishFailure(error, { awake, asleep, firstSession, successor, crewPlot, crewChild, asleepHeld }), null, 2));
   process.exitCode = 1;
 } finally {
   try {
