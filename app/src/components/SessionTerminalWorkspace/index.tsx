@@ -125,6 +125,8 @@ interface SessionTerminalWorkspaceProps {
   gardenSeeds?: Seed[];
   onOpenSeed?: (seedId: string) => void;
   onRevealSeedInGarden?: (seedId: string) => void;
+  backToCrewTileId?: string;
+  onBackToCrew?: (returnFocus: HTMLElement) => void;
   seedPopoverRequest?: { sessionId: string; nonce: number };
   usagePopoverRequest?: { sessionId: string; nonce: number };
   annotationApi?: SessionAnnotationApi;
@@ -186,6 +188,8 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     gardenSeeds = EMPTY_GARDEN_SEEDS,
     onOpenSeed,
     onRevealSeedInGarden,
+    backToCrewTileId,
+    onBackToCrew,
     seedPopoverRequest,
     usagePopoverRequest,
     annotationApi,
@@ -1268,6 +1272,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
                 onUpdateTile?.(tileLeaf.tileId, tileLeaf.tileParams ?? '', sessionId)
               )}
               onRevealSeedInGarden={onRevealSeedInGarden}
+              onBackToCrew={tileLeaf.tileId === backToCrewTileId ? onBackToCrew : undefined}
               onHeaderPointerDown={(event) => beginLeafDrag(tileLeaf.tileId, event)}
               onRequestContent={onRequestTileContent ?? noRequestContent}
               bodyRef={tileBodyRefFor(tileLeaf.tileId)}
@@ -1325,6 +1330,8 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       terminalsLive,
       onOpenSeed,
       onRevealSeedInGarden,
+      backToCrewTileId,
+      onBackToCrew,
       pinnedSeedPopover,
       pinnedUsagePopover,
       annotationApi,

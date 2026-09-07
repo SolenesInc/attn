@@ -47,6 +47,7 @@
 - Seed outcome: completion and required verification defined by the body. Harvest when both are complete.
 - Harvest condition: a seed armed to harvest when a named session pull request merges. The daemon settles it on the pull request refresh; a pull request closed without merging clears the condition instead of closing the seed.
 - Tender: seed claimant; one at a time.
+- Member claim: a tender with no `tender_session` and a recorded `tender_member`; it belongs to the permanent crew identity and remains held while the member is asleep. Session claim: a tender recorded as `tender_session`; it belongs to that exact session and counts as a crew member's work only while that session is the member's current day. Its `tender_member` records who that session acted as, but does not turn it into a permanent member claim. One seed still appears once when both identities name the current day.
 - Execution: last observed session, native conversation, agent, directory, host, repository, and branch for a seed.
 - Resume: reopen the exact saved conversation and directory. Handover: start a new agent on the same seed, then transfer its tender.
 - Send to Chief: transfer a seed and its execution receipt to the Chief with optional guidance.
@@ -64,9 +65,9 @@
 - Ticket: archived pre-Garden work item; user tickets and their history remain permanently.
 - Crew member: durable named identity with a charter. Day: its current session.
 - `attn`: reserved member name the daemon takes when it moves a seed by itself, such as fulfilling a harvest condition. No crew home may claim it.
-- Member home: charter/handoff directory. Registry: index of member files. Binding: member's active session.
+- Member home: charter/handoff directory. Registry: index of member files. Binding: member's active session. Launch settings: optional member harness, model, and effort pins; blanks resolve through daemon and harness defaults. A one-day wake harness override ends with that day.
 - Awareness dirs: working context directories. Priming: launch guidance.
-- Wake: start a day. Sleep request: ask it to file a handoff and stop.
+- Wake: start a day. Sleep request: ask it to file a handoff and stop. Restart request: ask the current day to file its own handoff and nap; it completes only after the successor starts, while an asleep member wakes directly.
 - Nap: replace a day using its handoff. Sleep: no live day. Heartbeat: refresh current context.
 - Wake limit: cap on autonomous starts.
 

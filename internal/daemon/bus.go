@@ -179,6 +179,11 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactSessionRegistered},
 			apply: func(d *Daemon, ev bus.Event) {
 				d.projectSessionEvent(protocol.EventSessionRegistered, ev.Subject)
+				// A crew claim precedes session persistence, so its first roster projection
+				// cannot call the binding live. Registration is the signal to publish it again.
+				if d.crewMemberBoundTo(ev.Subject) != "" {
+					d.projectCrewRoster()
+				}
 				d.projectGardenSeeds()
 			},
 		},

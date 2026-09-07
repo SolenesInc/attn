@@ -7,11 +7,11 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
@@ -42,12 +42,26 @@ func (d *Daemon) crewWakeModel(member crew.Member, agent string) *string {
 	return nil
 }
 
-func (d *Daemon) crewAgentAvailable(agent string) bool {
-	if agentdriver.Get(agent) != nil {
-		return true
+func (d *Daemon) crewWakeEffort(member crew.Member, agent string) *string {
+	if strings.EqualFold(strings.TrimSpace(agent), member.LaunchAgent()) {
+		if effort := strings.TrimSpace(member.Effort); effort != "" {
+			return protocol.Ptr(effort)
+		}
 	}
-	_, ok := d.ensurePluginRegistry().driver(agent)
-	return ok
+	if effort := d.defaultLaunchEffort(agent); effort != "" {
+		return protocol.Ptr(effort)
+	}
+	return nil
+}
+
+func (d *Daemon) crewAgentAvailable(agent string) bool {
+	agent = strings.TrimSpace(strings.ToLower(agent))
+	for _, harness := range d.delegationHarnesses() {
+		if harness.ID == agent {
+			return harness.Available
+		}
+	}
+	return false
 }
 
 var crewWakePrompt = prompts.RenderText("crew", "wake", prompts.Values{})
@@ -196,7 +210,10 @@ func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, deliv
 	}
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
+	return d.crewWakeWithDeliveryLocked(name, agent, autonomous, delivery)
+}
 
+func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool, delivery *crewWakeDelivery) (*protocol.CrewWakeResult, error) {
 	member, _, err := d.crewMember(name)
 	if err != nil {
 		return nil, err
@@ -299,6 +316,7 @@ func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, deliv
 		WorkspaceID:   workspaceID,
 		Agent:         agent,
 		Model:         d.crewWakeModel(member, agent),
+		Effort:        d.crewWakeEffort(member, agent),
 		Cols:          80,
 		Rows:          24,
 		Label:         protocol.Ptr(crew.DisplayName(member.ID)),
@@ -400,34 +418,114 @@ func (d *Daemon) crewPrimeForSession(sessionID string) (crew.Member, string, boo
 }
 
 func (d *Daemon) handleCrewSet(conn net.Conn, msg *protocol.CrewSetMessage) {
-	member, doc, err := d.crewMember(strings.TrimSpace(msg.Member))
+	member, conflict, err := d.crewSet(msg)
 	if err != nil {
 		d.sendCrewError(conn, "set", err)
 		return
+	}
+	if conflict {
+		d.sendCrewError(conn, "set", errors.New("the member changed after it was read; reconcile the returned revision and retry"))
+		return
+	}
+	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewSetResult: &protocol.CrewSetResult{Member: *member}})
+}
+
+func (d *Daemon) handleCrewSetWS(client *wsClient, msg *protocol.CrewSetMessage) {
+	if strings.TrimSpace(protocol.Deref(msg.RequestID)) == "" {
+		d.sendToClient(client, protocol.CrewSetResultMessage{
+			Event: protocol.EventCrewSetResult, Success: false, Conflict: false,
+			Error: protocol.Ptr("missing request id"),
+		})
+		return
+	}
+	member, conflict, err := d.crewSet(msg)
+	result := protocol.CrewSetResultMessage{
+		Event: protocol.EventCrewSetResult, RequestID: protocol.Deref(msg.RequestID),
+		Success: err == nil && !conflict, Conflict: conflict, Member: member,
+	}
+	if err != nil {
+		result.Error = protocol.Ptr(err.Error())
+	} else if conflict {
+		result.Error = protocol.Ptr("the member changed after it was read; reconcile the returned revision and retry")
+	}
+	d.sendToClient(client, result)
+}
+
+// crewSet is shared by IPC and WS. expected_revision opts into strict CAS;
+// omission reapplies the patch to the latest record after an ordinary race.
+func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bool, error) {
+	if err := d.requireHome(crew.Surface); err != nil {
+		return nil, false, err
 	}
 	schema, err := d.crewCollection()
 	if err != nil {
-		d.sendCrewError(conn, "set", err)
-		return
+		return nil, false, err
 	}
+	for {
+		member, doc, err := d.crewMember(strings.TrimSpace(msg.Member))
+		if err != nil {
+			return nil, false, err
+		}
+		if msg.ExpectedRevision != nil && int64(*msg.ExpectedRevision) != doc.Rev {
+			wire := d.crewMemberWire(member, doc.Rev)
+			return &wire, true, nil
+		}
+		if err := d.applyCrewSettings(&member, msg); err != nil {
+			return nil, false, err
+		}
+		revision, err := d.writeCrewMember(*schema, member, doc.Rev)
+		if err == nil {
+			d.publishFact(FactCrewUpdated, member.ID, nil)
+			wire := d.crewMemberWire(member, revision)
+			return &wire, false, nil
+		}
+		if !docstore.IsConflict(err) {
+			return nil, false, err
+		}
+		if msg.ExpectedRevision != nil {
+			current, currentDoc, readErr := d.crewMember(strings.TrimSpace(msg.Member))
+			if readErr != nil {
+				return nil, false, readErr
+			}
+			wire := d.crewMemberWire(current, currentDoc.Rev)
+			return &wire, true, nil
+		}
+	}
+}
+
+func (d *Daemon) applyCrewSettings(member *crew.Member, msg *protocol.CrewSetMessage) error {
 	if msg.Cwd != nil {
 		cwd, err := d.resolveCrewRecordedDir(*msg.Cwd)
 		if err != nil {
-			d.sendCrewError(conn, "set", err)
-			return
+			return err
 		}
 		member.CWD = cwd
 	}
+	agentChanged := false
 	if msg.Agent != nil {
-		agent := strings.TrimSpace(strings.ToLower(*msg.Agent))
-		if agent != "" && !d.crewAgentAvailable(agent) {
-			d.sendCrewError(conn, "set", fmt.Errorf("agent %q is not available; `attn agent list` names the harnesses this daemon can launch", agent))
-			return
+		before := member.LaunchAgent()
+		member.Agent = strings.TrimSpace(strings.ToLower(*msg.Agent))
+		agentChanged = !strings.EqualFold(before, member.LaunchAgent())
+		if agentChanged && msg.Model == nil {
+			member.Model = ""
 		}
-		member.Agent = agent
+		if agentChanged && msg.Effort == nil {
+			member.Effort = ""
+		}
 	}
 	if msg.Model != nil {
 		member.Model = strings.TrimSpace(*msg.Model)
+	}
+	if msg.Effort != nil {
+		member.Effort = strings.TrimSpace(strings.ToLower(*msg.Effort))
+	}
+	if msg.Agent != nil || msg.Model != nil || msg.Effort != nil {
+		requireAvailable := (msg.Agent != nil && strings.TrimSpace(*msg.Agent) != "") ||
+			(msg.Model != nil && strings.TrimSpace(*msg.Model) != "") ||
+			(msg.Effort != nil && strings.TrimSpace(*msg.Effort) != "")
+		if err := d.validateCrewLaunchSelection(*member, requireAvailable); err != nil {
+			return err
+		}
 	}
 	// The way out arrives as its own flag: an empty list marshals away, so an
 	// empty AwarenessDirs is indistinguishable from "leave it alone" on the wire.
@@ -438,8 +536,7 @@ func (d *Daemon) handleCrewSet(conn net.Conn, msg *protocol.CrewSetMessage) {
 		for _, dir := range msg.AwarenessDirs {
 			resolved, err := d.resolveCrewRecordedDir(dir)
 			if err != nil {
-				d.sendCrewError(conn, "set", err)
-				return
+				return err
 			}
 			if resolved != "" {
 				dirs = append(dirs, resolved)
@@ -447,15 +544,52 @@ func (d *Daemon) handleCrewSet(conn net.Conn, msg *protocol.CrewSetMessage) {
 		}
 		member.AwarenessDirs = dirs
 	}
-	if err := d.writeCrewMember(*schema, member, doc.Rev); err != nil {
-		d.sendCrewError(conn, "set", err)
-		return
+	return nil
+}
+
+func (d *Daemon) validateCrewLaunchSelection(member crew.Member, requireAvailable bool) error {
+	agent := member.LaunchAgent()
+	var harness *protocol.DelegationHarness
+	for _, candidate := range d.delegationHarnesses() {
+		if candidate.ID == agent {
+			copy := candidate
+			harness = &copy
+			break
+		}
 	}
-	d.publishFact(FactCrewUpdated, member.ID, nil)
-	d.sendGardenResponse(conn, protocol.Response{
-		Ok:            true,
-		CrewSetResult: &protocol.CrewSetResult{Member: d.crewMemberWire(member)},
-	})
+	if harness == nil {
+		return fmt.Errorf("agent %q is not available; the harness catalog names what this daemon can launch", agent)
+	}
+	if requireAvailable && !harness.Available {
+		return fmt.Errorf("agent %q is installed but its executable or driver is unavailable", agent)
+	}
+	if err := d.validateDelegationModelEffort(agent, member.Model, member.Effort); err != nil {
+		return err
+	}
+	if member.Model == "" || !harness.Discovery || !harness.Available {
+		return nil
+	}
+	catalog, err := d.discoverDelegationModels(context.Background(), agent)
+	if err != nil {
+		return fmt.Errorf("validate model %q: %w", member.Model, err)
+	}
+	for _, model := range catalog.Models {
+		modelID := model.ID
+		if model.Provider != "" {
+			modelID = model.Provider + "/" + model.ID
+		}
+		if modelID != member.Model {
+			continue
+		}
+		if model.Access == protocol.ModelCapabilitySupportUnsupported {
+			return fmt.Errorf("model %q is unavailable: %s", member.Model, model.Detail)
+		}
+		if member.Effort != "" && (model.EffortSupport == protocol.ModelCapabilitySupportUnsupported || (len(model.EffortLevels) > 0 && !slices.Contains(model.EffortLevels, member.Effort))) {
+			return fmt.Errorf("model %q does not support effort %q", member.Model, member.Effort)
+		}
+		break
+	}
+	return nil
 }
 
 func absoluteCrewDir(dir string) (string, error) {

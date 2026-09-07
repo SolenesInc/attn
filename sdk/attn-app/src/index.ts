@@ -104,6 +104,8 @@ export type {
   AutomationProvenance,
   AuthorState,
   CrewMember,
+  CrewRestart,
+  CrewRestartState,
   CurrentStateSnapshot,
   EndpointCapabilities,
   EndpointInfo,

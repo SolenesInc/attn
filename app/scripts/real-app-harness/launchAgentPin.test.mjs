@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { launchFreshAppAndConnect, restoreHarnessSettings } from './common.mjs';
+import { once } from 'node:events';
+import { WebSocketServer } from 'ws';
+import { launchFreshAppAndConnect, restoreHarnessSettings, writeDaemonSettings } from './common.mjs';
 import { MOCK_AGENT_EXECUTABLE } from './mockAgent.mjs';
 
 function fakeClient() {
@@ -44,6 +46,49 @@ afterEach(async () => {
 });
 
 describe('mock agent pinning', () => {
+  it.each([false, true])('restores both settings from one coalesced snapshot (key omitted: %s)', async (omitKey) => {
+    const server = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+    await once(server, 'listening');
+    const entries = [{ key: 'claude_executable', value: '' }, { key: 'codex_executable', value: '/mock/codex' }];
+    const received = [];
+    server.on('connection', (socket) => socket.on('message', (raw) => {
+      const message = JSON.parse(raw.toString());
+      if (message.cmd !== 'set_setting') return;
+      received.push({ key: message.key, value: message.value });
+      if (received.length === entries.length) socket.send(JSON.stringify({
+        event: 'settings_updated',
+        ...(!omitKey && { changed_key: 'codex_executable' }),
+        settings: Object.fromEntries(received.map(({ key, value }) => [key, value])),
+      }));
+    }));
+    try {
+      await writeDaemonSettings(entries, { wsUrl: `ws://127.0.0.1:${server.address().port}` });
+      expect(received).toEqual(entries);
+    } finally {
+      for (const socket of server.clients) socket.terminate();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
+  it('reports a refused setting instead of treating its changed key as acknowledgement', async () => {
+    const server = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+    await once(server, 'listening');
+    server.on('connection', (socket) => socket.on('message', (raw) => {
+      const message = JSON.parse(raw.toString());
+      if (message.cmd === 'set_setting') socket.send(JSON.stringify({
+        event: 'settings_updated', changed_key: message.key, success: false, error: 'fixture refusal', settings: {},
+      }));
+    }));
+    try {
+      await expect(writeDaemonSettings([{ key: 'claude_executable', value: '' }], {
+        wsUrl: `ws://127.0.0.1:${server.address().port}`,
+      })).rejects.toThrow('fixture refusal');
+    } finally {
+      for (const socket of server.clients) socket.terminate();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
   it('points every agent the tripwire mocked at the mock without the scenario asking', async () => {
     armTripwireEnv();
     const client = fakeClient();

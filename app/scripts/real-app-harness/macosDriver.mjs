@@ -18,6 +18,7 @@ const INPUT_DRIVER_SOURCE = path.join(SCRIPT_DIR, 'InputDriver.swift');
 const INPUT_DRIVER_BUILD_DIR = path.join(SCRIPT_DIR, '.build');
 const INPUT_DRIVER_BINARY = path.join(INPUT_DRIVER_BUILD_DIR, 'attn-real-input-driver');
 const CODESIGN_IDENTITY_SCRIPT = path.resolve(SCRIPT_DIR, '..', '..', '..', 'scripts', 'macos-codesign-identity.sh');
+let inputDriverReady = null;
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -293,6 +294,16 @@ export class MacOSDriver {
   }
 
   async ensureInputDriver() {
+    if (!inputDriverReady) inputDriverReady = this.prepareInputDriver();
+    try {
+      return await inputDriverReady;
+    } catch (error) {
+      inputDriverReady = null;
+      throw error;
+    }
+  }
+
+  async prepareInputDriver() {
     fs.mkdirSync(INPUT_DRIVER_BUILD_DIR, { recursive: true });
     const sourceHash = createHash('sha256').update(fs.readFileSync(INPUT_DRIVER_SOURCE)).digest('hex');
     const fingerprintPath = `${INPUT_DRIVER_BINARY}.fingerprint`;
