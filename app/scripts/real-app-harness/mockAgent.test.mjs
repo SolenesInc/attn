@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   captureFromPrompt,
@@ -35,6 +36,41 @@ beforeEach(() => {
 
 afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+describe('mock model discovery process', () => {
+  async function discover(args, requests) {
+    const run = promisify(execFile)(process.execPath, [MOCK_AGENT_EXECUTABLE, ...args], { cwd: tmpDir });
+    run.child.stdin.end(requests.map((request) => JSON.stringify(request)).join('\n') + '\n');
+    const { stdout, stderr } = await run;
+    expect(stderr).toBe('');
+    expect(fs.readdirSync(tmpDir)).toEqual([]);
+    return stdout.trim().split('\n').map((line) => JSON.parse(line));
+  }
+
+  it('answers the Claude initialization protocol without starting a conversation', async () => {
+    const responses = await discover(['--print', '--input-format', 'stream-json', '--output-format', 'stream-json'], [
+      { type: 'control_request', request_id: 'catalog-receipt', request: { subtype: 'initialize' } },
+    ]);
+    expect(responses).toHaveLength(1);
+    expect(responses[0].response.request_id).toBe('catalog-receipt');
+    expect(responses[0].response.response.models[0]).toMatchObject({
+      value: 'mock-agent-1', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high'],
+    });
+  });
+
+  it('answers Codex initialization and model listing with correlated ids', async () => {
+    const responses = await discover(['app-server'], [
+      { id: 7, method: 'initialize', params: {} },
+      { method: 'initialized' },
+      { id: 8, method: 'model/list', params: {} },
+    ]);
+    expect(responses.map((response) => response.id)).toEqual([7, 8]);
+    expect(responses[1].result.nextCursor).toBeNull();
+    expect(responses[1].result.data[0]).toMatchObject({ model: 'mock-agent-1',
+      supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'medium' }, { reasoningEffort: 'high' }],
+    });
+  });
 });
 
 describe('mock agent fixture', () => {
