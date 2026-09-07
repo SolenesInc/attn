@@ -253,7 +253,7 @@ try {
     const activation = await client.request('dom_key', { selector: `[data-testid="crew-seed-${crewPlot}"]`, key: 'Enter' });
     runner.assert(activation.handled, 'the focused seed row handles Return', activation);
     await waitForDom(`.seed-document[data-seed-id="${crewPlot}"]`);
-    await waitForDom('.workspace-dock-tile-body--seed', { focused: true });
+    await waitForDom(`[data-pane-id="tile-seed-${crewPlot}"] .workspace-dock-tile-body--seed`, { focused: true });
     await waitForDom('[data-testid="crew-seed-back"]');
     await click(`.seed-document[data-seed-id="${crewPlot}"] [data-seed-target="${crewChild}"]`);
     await waitForDom(`.seed-document[data-seed-id="${crewChild}"]`);
@@ -270,7 +270,7 @@ try {
     );
     await pressEscapeAndWaitFor('crew-seed-back');
     await click(`.workspace-dock-tile:has(.seed-document[data-seed-id="${crewChild}"]) [aria-label="Close tile"]`);
-    await waitForDom('.terminal-container', { focused: true });
+    await waitForDom(`[data-pane-session-id="${firstSession}"] .terminal-container`, { focused: true });
     const closed = await client.request('seed_document_get_state', { seedId: crewChild });
     runner.assert(!closed.present, 'closing the Crew seed tile restores the terminal workspace', closed);
   });
