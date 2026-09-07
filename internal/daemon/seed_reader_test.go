@@ -117,6 +117,59 @@ func TestOpenSeedUsesPlacementPaneAndTenderBinding(t *testing.T) {
 	}
 }
 
+func TestOpenSeedWithoutPlacementCreatesAStandaloneReaderWorkspace(t *testing.T) {
+	d := newGardenDaemon(t)
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Read from Crew"})
+	cap := captureBroadcasts(d)
+
+	workspaceID, tileID, err := d.openSeedTile(seed.ID, "")
+	if err != nil {
+		t.Fatalf("openSeedTile without placement: %v", err)
+	}
+	if workspaceID == "" || tileID != seedTileIDForID(seed.ID) {
+		t.Fatalf("open = (%q, %q), want standalone workspace and tile for %s", workspaceID, tileID, seed.ID)
+	}
+	workspace := d.store.GetWorkspace(workspaceID)
+	if workspace == nil || workspace.Title != seed.Title || workspace.Directory != d.dataRoot {
+		t.Fatalf("standalone workspace = %+v, want seed reader rooted at the home daemon data dir", workspace)
+	}
+	snapshot := d.store.GetWorkspaceLayout(workspaceID)
+	if snapshot == nil || len(snapshot.Panes) != 0 {
+		t.Fatalf("standalone layout = %+v, want no agent panes", snapshot)
+	}
+	leaves := workspacelayout.TileLeaves(snapshot.Layout)
+	if len(leaves) != 1 || leaves[0].TileID != tileID || leaves[0].TileKind != string(workspacelayout.TileKindSeed) || leaves[0].TileParams != seed.ID {
+		t.Fatalf("standalone leaves = %+v, want the requested seed tile", leaves)
+	}
+
+	events := cap.snapshot()
+	registered, laidOut := -1, -1
+	for index, event := range events {
+		if event.Event == protocol.EventWorkspaceRegistered && event.Workspace != nil && event.Workspace.ID == workspaceID {
+			registered = index
+		}
+		if event.Event == protocol.EventWorkspaceLayoutUpdated && event.WorkspaceLayout != nil && event.WorkspaceLayout.WorkspaceID == workspaceID {
+			laidOut = index
+		}
+	}
+	if registered < 0 || laidOut <= registered {
+		t.Fatalf("standalone workspace event order = %+v, want registered before layout", events)
+	}
+
+	reopenedWorkspaceID, reopenedTileID, err := d.openSeedTile(seed.ID, "")
+	if err != nil || reopenedWorkspaceID != workspaceID || reopenedTileID != tileID {
+		t.Fatalf("reopen = (%q, %q, %v), want existing standalone reader", reopenedWorkspaceID, reopenedTileID, err)
+	}
+	client := newWorkspaceProtocolTestClient()
+	d.handleWorkspaceLayoutUndockTile(client, &protocol.WorkspaceLayoutUndockTileMessage{
+		Cmd: protocol.CmdWorkspaceLayoutUndockTile, WorkspaceID: workspaceID, TileID: tileID,
+	})
+	expectWorkspaceLayoutActionResultIDs(t, client, protocol.CmdWorkspaceLayoutUndockTile, workspaceID, "", "", tileID, true)
+	if workspace := d.store.GetWorkspace(workspaceID); workspace != nil {
+		t.Fatalf("standalone workspace survived its reader closing: %+v", workspace)
+	}
+}
+
 func TestOpenSeedNamesUnknownID(t *testing.T) {
 	d := newGardenDaemon(t)
 	setupMarkdownWorkspaceOn(t, d)
@@ -141,6 +194,23 @@ func TestOpenSeedWSReturnsCorrelatedTile(t *testing.T) {
 	}
 	if !result.Success || protocol.Deref(result.RequestID) != "open-1" || protocol.Deref(result.WorkspaceID) != workspaceID || protocol.Deref(result.TileID) != seedTileIDForID(seed.ID) {
 		t.Fatalf("open_seed_result = %+v", result)
+	}
+}
+
+func TestOpenSeedWSWithoutPlacementReturnsAStandaloneTile(t *testing.T) {
+	d := newGardenDaemon(t)
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Open from dashboard"})
+	client := &wsClient{send: make(chan outboundMessage, 1)}
+	d.handleOpenSeedWS(client, &protocol.OpenSeedMessage{
+		Cmd: protocol.CmdOpenSeed, SeedID: seed.ID, RequestID: protocol.Ptr("open-dashboard"),
+	})
+	var result protocol.OpenSeedResultMessage
+	message := <-client.send
+	if err := json.Unmarshal(message.payload, &result); err != nil {
+		t.Fatal(err)
+	}
+	if !result.Success || protocol.Deref(result.RequestID) != "open-dashboard" || protocol.Deref(result.WorkspaceID) == "" || protocol.Deref(result.TileID) != seedTileIDForID(seed.ID) {
+		t.Fatalf("standalone open_seed_result = %+v", result)
 	}
 }
 

@@ -208,6 +208,9 @@ try {
   await waitForDom('[data-testid="sidebar-queue"]');
   await waitForDom(`[data-testid="queue-crew-${awake}"][data-crew-state="awake"]`);
   await waitForDom(`[data-testid="queue-crew-${asleep}"]`);
+  const dashboardSessions = await client.request('list_sessions');
+  runner.assert(dashboardSessions.activeSessionId === null,
+    'Crew opens from the dashboard without a placement session', dashboardSessions);
   const workspaceIdle = await sampleIdle(webkitBaseline);
   await driver.activateApp();
 
@@ -226,6 +229,23 @@ try {
     await click('[data-testid="crew-tab-seeds"]');
     await waitForDom(`[data-testid="crew-seed-${asleepHeld}"]`);
     runner.assert((await panelText()).includes('Tending 1'), 'an asleep member keeps its permanent member claim');
+
+    await click(`[data-testid="crew-seed-${asleepHeld}"]`);
+    await waitForDom(`.seed-document[data-seed-id="${asleepHeld}"]`);
+    await waitForDom(`[data-pane-id="tile-seed-${asleepHeld}"] .workspace-dock-tile-body--seed`, { focused: true });
+    await screenshot('00-asleep-dashboard-seed.png');
+    await click('[data-testid="crew-seed-back"]');
+    await waitForDom(`[data-testid="crew-seed-${asleepHeld}"]`);
+    runner.assert((await panelText()).includes('Tending 1'),
+      'Back to Crew restores the asleep member and Tending filter');
+    await pressEscapeAndWaitFor('crew-seed-back');
+    await click(`[data-pane-id="tile-seed-${asleepHeld}"] [aria-label="Close tile"]`);
+    const closedAsleepReader = await client.request('seed_document_get_state', { seedId: asleepHeld });
+    runner.assert(!closedAsleepReader.present, 'the standalone asleep-member reader closes', closedAsleepReader);
+    await click('[data-testid="manage-crew"]');
+    await click(`[data-testid="crew-roster-${asleep}"]`);
+    await click('[data-testid="crew-tab-seeds"]');
+    await waitForDom(`[data-testid="crew-seed-${asleepHeld}"]`);
 
     json(['seed', 'park', asleepHeld, '--member', asleep, '--json']);
     await waitForDom('[data-testid="crew-panel"]', { includes: `${asleep[0].toUpperCase()}${asleep.slice(1)} isn't tending a seed.` });

@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
@@ -14,6 +14,8 @@ const SHOW_SESSIONLESS_KEY = 'attn.sidebar.showSessionless';
 
 let mockDaemonWorkspaces: Array<Record<string, unknown>>;
 let mockSendWorkspaceSelected: ReturnType<typeof vi.fn>;
+let mockPushWorkspaces: ((workspaces: unknown[]) => void) | undefined;
+const { mockFocusWorkspaceLeaf } = vi.hoisted(() => ({ mockFocusWorkspaceLeaf: vi.fn() }));
 
 function collectTileIds(node: TerminalLayoutNode | null): string[] {
   if (!node) {
@@ -46,15 +48,23 @@ vi.mock('./components/Sidebar', () => ({
   Sidebar: ({
     visualOrder,
     selectedWorkspaceId,
+    selectedTile,
     onSelectWorkspace,
+    onSelectTile,
     onSelectGridLayout,
   }: {
     visualOrder: Array<{ id: string; sessions: unknown[] }>;
     selectedWorkspaceId: string | null;
+    selectedTile?: { workspaceId: string; tileId: string } | null;
     onSelectWorkspace: (id: string) => void;
+    onSelectTile: (workspaceId: string, tileId: string) => void;
     onSelectGridLayout?: (layout: { mode: 'auto' }) => void;
   }) => (
-    <div data-testid="sidebar" data-selected-workspace={selectedWorkspaceId ?? ''}>
+    <div
+      data-testid="sidebar"
+      data-selected-workspace={selectedWorkspaceId ?? ''}
+      data-selected-tile={selectedTile ? `${selectedTile.workspaceId}:${selectedTile.tileId}` : ''}
+    >
       {visualOrder.map((workspace) => (
         <button
           key={workspace.id}
@@ -71,6 +81,13 @@ vi.mock('./components/Sidebar', () => ({
       >
         grid
       </button>
+      <button
+        type="button"
+        data-testid="select-late-tile"
+        onClick={() => onSelectTile('ws-late', 'tile-seed')}
+      >
+        late tile
+      </button>
     </div>
   ),
 }));
@@ -81,8 +98,9 @@ vi.mock('./components/grid/GridView', () => ({
   ),
 }));
 
-vi.mock('./components/SessionTerminalWorkspace', () => ({
-  SessionTerminalWorkspace: ({
+vi.mock('./components/SessionTerminalWorkspace', async () => {
+  const React = await import('react');
+  return { SessionTerminalWorkspace: React.forwardRef(function MockWorkspace({
     workspaceId,
     workspace,
     isActiveSession,
@@ -92,16 +110,19 @@ vi.mock('./components/SessionTerminalWorkspace', () => ({
     workspace: { agents: unknown[]; layoutTree: TerminalLayoutNode | null };
     isActiveSession: boolean;
     terminalsLive?: boolean;
-  }) => (
-    <div
-      data-testid={`workspace-${workspaceId}`}
-      data-active={isActiveSession ? '1' : '0'}
-      data-live={terminalsLive === false ? '0' : '1'}
-      data-agent-count={workspace.agents.length}
-      data-tile-ids={collectTileIds(workspace.layoutTree).join(',')}
-    />
-  ),
-}));
+  }, ref) {
+    React.useImperativeHandle(ref, () => ({ focusLeaf: mockFocusWorkspaceLeaf }));
+    return (
+      <div
+        data-testid={`workspace-${workspaceId}`}
+        data-active={isActiveSession ? '1' : '0'}
+        data-live={terminalsLive === false ? '0' : '1'}
+        data-agent-count={workspace.agents.length}
+        data-tile-ids={collectTileIds(workspace.layoutTree).join(',')}
+      />
+    );
+  }) };
+});
 
 vi.mock('./components/Dashboard', () => ({ Dashboard: () => null }));
 vi.mock('./components/AttentionDrawer', () => ({ AttentionDrawer: () => null }));
@@ -123,6 +144,7 @@ vi.mock('./hooks/useDaemonSocket', async () => {
   const React = await import('react');
   return {
     useDaemonSocket: (args: { onWorkspacesUpdate?: (workspaces: unknown[]) => void }) => {
+      mockPushWorkspaces = args.onWorkspacesUpdate;
       React.useEffect(() => {
         args.onWorkspacesUpdate?.(mockDaemonWorkspaces);
       }, []);
@@ -149,6 +171,7 @@ describe('tile-only (sessionless) workspace selection and render', () => {
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
     localStorage.setItem(SHOW_SESSIONLESS_KEY, '1');
     mockSendWorkspaceSelected = vi.fn();
+    mockPushWorkspaces = undefined;
 
     mockDaemonWorkspaces = [
       {
@@ -281,6 +304,47 @@ describe('tile-only (sessionless) workspace selection and render', () => {
     expect(screen.getByTestId('sidebar').getAttribute('data-selected-workspace')).toBe('ws-tiles');
     expect(mockSendWorkspaceSelected).toHaveBeenLastCalledWith('ws-tiles');
     expect(screen.getByTestId('workspace-ws-tiles').getAttribute('data-tile-ids')).toBe('tile-readme');
+  });
+
+  it('waits for an opened tile to reach workspace state before selecting and focusing it', async () => {
+    mockUseSessionStore.mockReturnValue({
+      ...mockUseSessionStore(),
+      activeSessionId: null,
+    });
+    render(<App />);
+    await screen.findByTestId('workspace-ws-tiles');
+
+    await userEvent.click(screen.getByTestId('select-late-tile'));
+    expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('');
+
+    act(() => {
+      mockPushWorkspaces?.([
+        ...mockDaemonWorkspaces,
+        {
+          id: 'ws-late',
+          title: 'Seed reader',
+          directory: '/tmp/repo',
+          status: 'active',
+          layout: {
+            active_pane_id: '',
+            layout_json: JSON.stringify({
+              type: 'tile',
+              tile_id: 'tile-seed',
+              tile_kind: 'document',
+              tile_params: 'seed:s-work11',
+            }),
+            panes: [],
+          },
+        },
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('workspace-ws-late').getAttribute('data-active')).toBe('1');
+      expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('ws-late:tile-seed');
+      expect(mockFocusWorkspaceLeaf).toHaveBeenCalledWith('tile-seed');
+    });
+    expect(mockSendWorkspaceSelected).toHaveBeenLastCalledWith('ws-late');
   });
 
   it('keeps visible grid workspaces mounted even when they are cold and idle', async () => {
