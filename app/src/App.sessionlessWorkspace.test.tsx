@@ -10,6 +10,7 @@ import { WARM_WORKSPACE_LIMIT_STORAGE_KEY } from './utils/terminalVirtualization
 const mockUseSessionStore = vi.fn();
 const mockUseDaemonStore = vi.fn();
 const mockUseDaemonSocket = vi.fn();
+const mockSetActiveSession = vi.fn();
 const SHOW_SESSIONLESS_KEY = 'attn.sidebar.showSessionless';
 
 let mockDaemonWorkspaces: Array<Record<string, unknown>>;
@@ -87,19 +88,34 @@ vi.mock('./components/SessionTerminalWorkspace', () => ({
     workspace,
     isActiveSession,
     terminalsLive,
+    onFocusPane,
   }: {
     workspaceId: string;
     workspace: { agents: unknown[]; layoutTree: TerminalLayoutNode | null };
     isActiveSession: boolean;
     terminalsLive?: boolean;
+    onFocusPane?: (paneId: string) => void;
   }) => (
-    <div
-      data-testid={`workspace-${workspaceId}`}
-      data-active={isActiveSession ? '1' : '0'}
-      data-live={terminalsLive === false ? '0' : '1'}
-      data-agent-count={workspace.agents.length}
-      data-tile-ids={collectTileIds(workspace.layoutTree).join(',')}
-    />
+    <div>
+      <div
+        data-testid={`workspace-${workspaceId}`}
+        data-active={isActiveSession ? '1' : '0'}
+        data-live={terminalsLive === false ? '0' : '1'}
+        data-agent-count={workspace.agents.length}
+        data-tile-ids={collectTileIds(workspace.layoutTree).join(',')}
+      />
+      {workspace.agents.map((agent) => {
+        const pane = agent as { id: string };
+        return (
+          <button
+            key={pane.id}
+            type="button"
+            data-testid={`focus-${pane.id}`}
+            onClick={() => onFocusPane?.(pane.id)}
+          />
+        );
+      })}
+    </div>
   ),
 }));
 
@@ -203,7 +219,7 @@ describe('tile-only (sessionless) workspace selection and render', () => {
       launcherConfig: { executables: {} },
       createSession: vi.fn(async () => 's1'),
       closeSession: vi.fn(),
-      setActiveSession: vi.fn(),
+      setActiveSession: mockSetActiveSession,
       takeSessionSpawnArgs: vi.fn(() => null),
       reloadSession: vi.fn(async () => {}),
       setLauncherConfig: vi.fn(),
@@ -280,6 +296,14 @@ describe('tile-only (sessionless) workspace selection and render', () => {
     expect(screen.getByTestId('sidebar').getAttribute('data-selected-workspace')).toBe('ws-tiles');
     expect(mockSendWorkspaceSelected).toHaveBeenLastCalledWith('ws-tiles');
     expect(screen.getByTestId('workspace-ws-tiles').getAttribute('data-tile-ids')).toBe('tile-readme');
+  });
+
+  it('routes an already-active pane focus through the shared session selector', async () => {
+    render(<App />);
+
+    await userEvent.click(screen.getByTestId('focus-pane-s1'));
+
+    expect(mockSetActiveSession).toHaveBeenCalledWith('s1');
   });
 
   it('keeps visible grid workspaces mounted even when they are cold and idle', async () => {

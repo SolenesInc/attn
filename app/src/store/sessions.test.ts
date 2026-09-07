@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useSessionStore, isSessionReloading } from './sessions';
 import { WorkspaceLayoutPaneKind, WorkspaceLayoutPaneStatus, WorkspaceStatus } from '../types/generated';
+import { createAgentHistory } from '../navigation/agentHistory';
 
 const { mockPtyReload } = vi.hoisted(() => ({
   mockPtyReload: vi.fn(),
@@ -28,6 +29,8 @@ describe('sessions store', () => {
     useSessionStore.setState({
       sessions: [],
       activeSessionId: null,
+      recentSessionIds: [],
+      agentHistory: createAgentHistory(),
       connected: false,
       launcherConfig: { executables: {} },
       daemonWorkspaceLayouts: {},
@@ -43,6 +46,68 @@ describe('sessions store', () => {
       layoutTree: null,
     });
     expect(session?.daemonActivePaneId).toBe('');
+    expect(useSessionStore.getState().agentHistory).toEqual({
+      entries: [sessionId],
+      cursor: 0,
+    });
+  });
+
+  it('records explicit activations, preserves history when leaving for the dashboard, and traverses without visits', async () => {
+    for (const id of ['sess-a', 'sess-b', 'sess-c']) {
+      await useSessionStore.getState().createSession(
+        id,
+        `/tmp/${id}`,
+        id,
+        'shell',
+        undefined,
+        false,
+        `workspace-${id}`,
+      );
+    }
+
+    useSessionStore.setState({ activeSessionId: null, agentHistory: createAgentHistory() });
+    useSessionStore.getState().setActiveSession('sess-b');
+    useSessionStore.getState().setActiveSession('sess-c');
+    expect(useSessionStore.getState().agentHistory).toEqual({
+      entries: ['sess-b', 'sess-c'],
+      cursor: 1,
+    });
+
+    expect(useSessionStore.getState().navigateAgentHistory('back')).toBe('sess-b');
+    expect(useSessionStore.getState().agentHistory).toEqual({
+      entries: ['sess-b', 'sess-c'],
+      cursor: 0,
+    });
+
+    useSessionStore.getState().setActiveSession(null);
+    expect(useSessionStore.getState().agentHistory).toEqual({
+      entries: ['sess-b', 'sess-c'],
+      cursor: 0,
+    });
+  });
+
+  it('reconciles history before applying an MRU fallback when the active session closes', async () => {
+    for (const id of ['sess-a', 'sess-b', 'sess-c']) {
+      await useSessionStore.getState().createSession(
+        id,
+        `/tmp/${id}`,
+        id,
+        'shell',
+        undefined,
+        false,
+        `workspace-${id}`,
+      );
+    }
+    expect(useSessionStore.getState().navigateAgentHistory('back')).toBe('sess-b');
+
+    useSessionStore.getState().removeSessionLocalState('sess-b');
+
+    const state = useSessionStore.getState();
+    expect(state.activeSessionId).toBe('sess-c');
+    expect(state.agentHistory).toEqual({
+      entries: ['sess-a', 'sess-c'],
+      cursor: 1,
+    });
   });
 
   it('syncFromDaemonSessions hydrates canonical session data and preserves local workspace state', () => {
@@ -109,6 +174,7 @@ describe('sessions store', () => {
     useSessionStore.setState({
       activeSessionId: 'split-session',
       recentSessionIds: ['root-session'],
+      agentHistory: { entries: ['root-session', 'split-session'], cursor: 1 },
       sessions: [
         {
           id: 'root-session',
@@ -180,6 +246,7 @@ describe('sessions store', () => {
     expect(state.sessions.map((session) => session.id)).toEqual(['root-session']);
     expect(state.activeSessionId).toBe('root-session');
     expect(state.recentSessionIds).toEqual([]);
+    expect(state.agentHistory).toEqual({ entries: ['root-session'], cursor: 0 });
   });
 
   it('syncFromDaemonSessions restores the daemon workspace layout for a session that comes back', () => {
