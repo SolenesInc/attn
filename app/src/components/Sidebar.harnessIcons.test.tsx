@@ -85,4 +85,21 @@ describe('sidebar harness identity', () => {
     expect(within(screen.getByTestId('sidebar-session-pi')).getByRole('img', { name: 'Pi' })).toBeInTheDocument();
     expect(within(screen.getByTestId('sidebar-session-codex')).getByRole('img', { name: 'Codex' })).toBeInTheDocument();
   });
+
+  it('hides every harness logo while preserving queue row hover text', () => {
+    const data = sidebarData(false, true);
+    render(
+      <Sidebar
+        {...baseProps}
+        {...data}
+        crew={[{ id: 'fern' }, { id: 'sleeping' }]}
+        queue={buildQueueBands(data.workspaces)}
+        harnessLogosEnabled={false}
+      />,
+    );
+
+    expect(screen.getByTestId('queue-select-codex')).toHaveAttribute('title', 'Codex');
+    expect(document.querySelector('.sidebar')).toHaveClass('sidebar--hide-harness-logos');
+    expect(document.querySelectorAll('.sidebar-harness-icon')).not.toHaveLength(0);
+  });
 });

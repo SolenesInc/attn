@@ -799,6 +799,33 @@ describe('Sidebar', () => {
     expect(screen.getByTestId('toggle-crew-queue')).toHaveAttribute('aria-checked', 'true');
   });
 
+  it('reflects and toggles harness logos from the display popover', () => {
+    const onToggleHarnessLogos = vi.fn();
+    const { rerender } = render(
+      <Sidebar
+        {...baseProps}
+        {...buildSidebarData([])}
+        onToggleHarnessLogos={onToggleHarnessLogos}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sidebar settings' }));
+    const toggle = screen.getByTestId('toggle-harness-logos');
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(toggle);
+    expect(onToggleHarnessLogos).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <Sidebar
+        {...baseProps}
+        {...buildSidebarData([])}
+        harnessLogosEnabled={false}
+        onToggleHarnessLogos={onToggleHarnessLogos}
+      />
+    );
+    expect(screen.getByTestId('toggle-harness-logos')).toHaveAttribute('aria-checked', 'false');
+  });
+
   it('keeps display options visible after selecting a mode', () => {
     render(
       <Sidebar

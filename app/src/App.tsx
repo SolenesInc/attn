@@ -137,6 +137,10 @@ import {
 } from './utils/queueBands';
 import { useWorkspaceSelectionController } from './hooks/useWorkspaceSelectionController';
 import { hideBootSplash } from './utils/bootSplash';
+import {
+  areSidebarHarnessLogosEnabled,
+  SIDEBAR_HARNESS_LOGOS_SETTING,
+} from './utils/sidebarHarnessLogos';
 import { getTerminalAnsiPaletteColors, getTerminalTheme } from './utils/terminalSizing';
 import './App.css';
 
@@ -1750,6 +1754,12 @@ function AppContent({
   }, [sendSetSetting, settings]);
   const handleToggleCrewQueue = useCallback(() => {
     sendSetSetting(QUEUE_CREW_SETTING, isCrewQueueEnabled(settings) ? 'false' : 'true');
+  }, [sendSetSetting, settings]);
+  const handleToggleSidebarHarnessLogos = useCallback(() => {
+    sendSetSetting(
+      SIDEBAR_HARNESS_LOGOS_SETTING,
+      areSidebarHarnessLogosEnabled(settings) ? 'false' : 'true',
+    );
   }, [sendSetSetting, settings]);
   const markdownOpenerTarget = useMemo(
     () => resolveMarkdownOpenerTarget(
@@ -3623,6 +3633,8 @@ function AppContent({
           onToggleQueueMode={handleToggleQueueMode}
           crewQueueEnabled={crewQueueEnabled}
           onToggleCrewQueue={handleToggleCrewQueue}
+          harnessLogosEnabled={areSidebarHarnessLogosEnabled(settings)}
+          onToggleHarnessLogos={handleToggleSidebarHarnessLogos}
           workspaceSelectionStyle={workspaceSelectionStyle}
           onWorkspaceSelectionStyleChange={handleWorkspaceSelectionStyleChange}
           leafDrag={leafWorkspaceDrag ? {

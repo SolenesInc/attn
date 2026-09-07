@@ -3703,6 +3703,8 @@ func TestDaemon_SettingsValidation(t *testing.T) {
 		{"invalid claude_executable", "claude_executable", "not-a-real-binary-123", true},
 		{"invalid new_session_agent", "new_session_agent", "gpt", true},
 		{"invalid tailscale_enabled", "tailscale_enabled", "maybe", true},
+		{"valid sidebar harness logos", "sidebar_harness_logos_enabled", "false", false},
+		{"invalid sidebar harness logos", "sidebar_harness_logos_enabled", "sometimes", true},
 		{"invalid key", "unknown_setting", "value", true},
 		{"empty projects_directory", "projects_directory", "", true},
 		{"relative path", "projects_directory", "relative/path", true},
@@ -3968,6 +3970,13 @@ func TestDaemon_SettingsWithAgentAvailability(t *testing.T) {
 	}
 	if got := settings[SettingQueueCrewEnabled]; got != "false" {
 		t.Fatalf("settings[%s] = %v, want false", SettingQueueCrewEnabled, got)
+	}
+	if got := settings[SettingSidebarHarnessLogosEnabled]; got != "true" {
+		t.Fatalf("settings[%s] = %v, want true", SettingSidebarHarnessLogosEnabled, got)
+	}
+	d.store.SetSetting(SettingSidebarHarnessLogosEnabled, "false")
+	if got := d.settingsWithAgentAvailability()[SettingSidebarHarnessLogosEnabled]; got != "false" {
+		t.Fatalf("stored settings[%s] = %v, want false", SettingSidebarHarnessLogosEnabled, got)
 	}
 	if got := settings["tailscale_status"]; got != tailscaleStatusDisabled {
 		t.Fatalf("settings[tailscale_status] = %v, want %s", got, tailscaleStatusDisabled)

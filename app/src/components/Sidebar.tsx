@@ -344,6 +344,8 @@ interface SidebarProps {
   onToggleQueueMode?: () => void;
   crewQueueEnabled?: boolean;
   onToggleCrewQueue?: () => void;
+  harnessLogosEnabled?: boolean;
+  onToggleHarnessLogos?: () => void;
   workspaceSelectionStyle?: WorkspaceSelectionStyle;
   onWorkspaceSelectionStyleChange?: (style: WorkspaceSelectionStyle) => void;
   leafDrag?: { sourceWorkspaceId: string; endpointId?: string } | null;
@@ -538,6 +540,8 @@ export function Sidebar({
   onToggleQueueMode,
   crewQueueEnabled = false,
   onToggleCrewQueue,
+  harnessLogosEnabled = true,
+  onToggleHarnessLogos,
   workspaceSelectionStyle = 'rail',
   onWorkspaceSelectionStyleChange,
   leafDrag = null,
@@ -1062,7 +1066,7 @@ export function Sidebar({
   }
 
   return (
-    <div className={`sidebar sidebar--display-${displayMode}`}>
+    <div className={`sidebar sidebar--display-${displayMode} ${harnessLogosEnabled ? '' : 'sidebar--hide-harness-logos'}`.trim()}>
       <div className="sidebar-header">
         {profile && (
           <div className="sidebar-profile-marker" data-testid="sidebar-profile-marker">
@@ -1108,7 +1112,6 @@ export function Sidebar({
             </button>
             {settingsOpen && (
               <div className="sidebar-settings-popover" role="dialog" aria-label="Sidebar settings">
-                {/* First, because it is the only choice here that changes what the sidebar contains. */}
                 <button
                   type="button"
                   className="sidebar-settings-switch-row sidebar-settings-switch-row--lead"
@@ -1122,7 +1125,7 @@ export function Sidebar({
                 </button>
                 <button
                   type="button"
-                  className="sidebar-settings-switch-row sidebar-settings-switch-row--adjacent"
+                  className="sidebar-settings-switch-row"
                   role="switch"
                   aria-checked={crewQueueEnabled}
                   data-testid="toggle-crew-queue"
@@ -1130,6 +1133,17 @@ export function Sidebar({
                 >
                   <span className="sidebar-settings-switch-label">Crew in queue</span>
                   <span className={`sidebar-settings-switch ${crewQueueEnabled ? 'on' : ''}`} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="sidebar-settings-switch-row sidebar-settings-switch-row--adjacent"
+                  role="switch"
+                  aria-checked={harnessLogosEnabled}
+                  data-testid="toggle-harness-logos"
+                  onClick={() => onToggleHarnessLogos?.()}
+                >
+                  <span className="sidebar-settings-switch-label">Harness logos</span>
+                  <span className={`sidebar-settings-switch ${harnessLogosEnabled ? 'on' : ''}`} aria-hidden="true" />
                 </button>
                 <span className="sidebar-settings-label">Display</span>
                 <div className="sidebar-display-toggle" role="group" aria-label="Sidebar display">
