@@ -1,4 +1,5 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { Suspense, startTransition, useEffect, useState } from 'react';
+import { act, render, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { CrewMember } from '../types/generated';
 import type { CrewMutationOutcome } from './daemonCrewEvents';
@@ -23,7 +24,56 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+const NEVER = new Promise<never>(() => {});
+
+function SuspendWhen({ when }: { when: boolean }) {
+  if (when) throw NEVER;
+  return null;
+}
+
 describe('useCrewLaunchAutosave', () => {
+  it('keeps the committed sender when React discards a render', async () => {
+    const senderA = vi.fn(() => NEVER);
+    const senderB = vi.fn(() => NEVER);
+    let committed: ReturnType<typeof useCrewLaunchAutosave> | null = null;
+    let renderSenderB: (() => void) | null = null;
+
+    function Harness() {
+      const [send, setSend] = useState(() => senderA);
+      const [suspend, setSuspend] = useState(false);
+      const autosave = useCrewLaunchAutosave([member('alder', 1)], 0, send);
+
+      useEffect(() => {
+        committed = autosave;
+        renderSenderB = () => {
+          startTransition(() => {
+            setSend(() => senderB);
+            setSuspend(true);
+          });
+        };
+      });
+
+      return <SuspendWhen when={suspend} />;
+    }
+
+    render(
+      <Suspense fallback={null}>
+        <Harness />
+      </Suspense>,
+    );
+    await act(async () => {});
+
+    await act(async () => {
+      renderSenderB?.();
+    });
+    await act(async () => {
+      committed?.update('alder', { model: 'model-a' });
+    });
+
+    expect(senderA).toHaveBeenCalledOnce();
+    expect(senderB).not.toHaveBeenCalled();
+  });
+
   it('serializes and coalesces rapid changes without calling them saved early', async () => {
     const first = deferred<CrewMutationOutcome>();
     const second = deferred<CrewMutationOutcome>();
