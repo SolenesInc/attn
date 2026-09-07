@@ -611,4 +611,39 @@ describe('CrewPanel', () => {
     expect(await screen.findByText('No handoffs recorded.')).toBeInTheDocument();
     expect(sendCrewHandoffsGet).toHaveBeenCalledTimes(2);
   });
+
+  it('keeps a newer reconnect handoff result when the older read arrives last', async () => {
+    const older = deferred<any>();
+    const newer = deferred<any>();
+    const sendCrewHandoffsGet = vi.fn()
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+    const daemon = api({ sendCrewHandoffsGet });
+    const members = [member('trellis', 4)];
+    const { rerenderPanel } = renderPanel({ daemon, members });
+    fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
+    await waitFor(() => expect(sendCrewHandoffsGet).toHaveBeenCalledTimes(1));
+
+    (daemon as any).connectionGeneration = 2;
+    await act(async () => { rerenderPanel(members); });
+    await waitFor(() => expect(sendCrewHandoffsGet).toHaveBeenCalledTimes(2));
+    await act(async () => newer.resolve({
+      member: 'trellis',
+      handoffs: [{
+        filename: '2026-09-02T09-00Z-trellis.md', occurred_at: '2026-09-02T09:00:00Z',
+        content: '# Newer reconnect result\n', token: 'newer',
+      }],
+    }));
+    expect(await screen.findByRole('heading', { name: 'Newer reconnect result' })).toBeInTheDocument();
+
+    await act(async () => older.resolve({
+      member: 'trellis',
+      handoffs: [{
+        filename: '2026-09-01T09-00Z-trellis.md', occurred_at: '2026-09-01T09:00:00Z',
+        content: '# Obsolete delayed result\n', token: 'older',
+      }],
+    }));
+    expect(screen.getByRole('heading', { name: 'Newer reconnect result' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Obsolete delayed result' })).not.toBeInTheDocument();
+  });
 });
