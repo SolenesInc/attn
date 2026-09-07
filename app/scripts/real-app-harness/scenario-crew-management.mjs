@@ -219,8 +219,9 @@ try {
   await waitForDom(`[data-testid="queue-crew-${awake}"][data-crew-state="awake"]`);
   await waitForDom(`[data-testid="queue-crew-${asleep}"]`);
   await waitForDom(`[data-testid="queue-crew-${history}"]`);
-  await click(`[data-testid="queue-crew-select-${awake}"]`);
-  await waitForDom(`[data-testid="queue-crew-${awake}"].selected`);
+  const dashboardSessions = await client.request('list_sessions');
+  runner.assert(dashboardSessions.activeSessionId === null,
+    'Crew opens from the dashboard without a placement session', dashboardSessions);
   const workspaceIdle = await sampleIdle(webkitBaseline);
   await driver.activateApp();
 

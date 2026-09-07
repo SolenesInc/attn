@@ -19,7 +19,7 @@ interface CrewPanelProps {
   sessions: DaemonSession[];
   preserveStateOnOpen?: boolean;
   onClose: () => void;
-  onOpenSeed: (seedId: string) => void;
+  onOpenSeed: (seedId: string, placementSessionId?: string) => void;
 }
 
 type CrewTab = 'launch' | 'charter' | 'handoffs';
@@ -740,7 +740,7 @@ export function CrewPanel({
                         [member.id]: { ...current[member.id], selected: filename },
                       }))}
                       onRefresh={() => loadHandoffs(member.id, true)}
-                      onOpenSeed={(seedId) => navigate(() => onOpenSeed(seedId))}
+                      onOpenSeed={(seedId) => navigate(() => onOpenSeed(seedId, member.binding_session))}
                     />
                   )}
                 </>

@@ -376,6 +376,10 @@ func (d *Daemon) handleRegisterWorkspace(client *wsClient, msg *protocol.Registe
 		d.sendCommandError(client, protocol.CmdRegisterWorkspace, "missing directory")
 		return
 	}
+	d.registerWorkspace(id, title, directory, true)
+}
+
+func (d *Daemon) registerWorkspace(id, title, directory string, addRecent bool) {
 	if d.workspaces == nil {
 		d.workspaces = newWorkspaceRegistry()
 	}
@@ -388,7 +392,9 @@ func (d *Daemon) handleRegisterWorkspace(client *wsClient, msg *protocol.Registe
 	rank := d.resolveWorkspaceRank(existing)
 	snapshot, isNew := d.workspaces.register(id, title, directory, rank, muted, pinned)
 	d.store.AddWorkspace(&snapshot)
-	d.store.UpsertRecentLocation(directory)
+	if addRecent {
+		d.store.UpsertRecentLocation(directory)
+	}
 	fact := FactWorkspaceRegistered
 	if !isNew {
 		d.recomputeWorkspaceStatus(id)

@@ -2715,7 +2715,7 @@ model OpenMarkdownResultMessage {
 }
 
 // Open a seed into a docked reader tile. The seed lives in the hub's garden;
-// session_id identifies the local workspace/pane beside which the tile docks.
+// session_id chooses a local placement pane. Omit it for a standalone reader.
 model OpenSeedMessage {
   cmd: "open_seed";
   seed_id: string;
