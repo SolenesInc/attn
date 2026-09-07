@@ -317,19 +317,22 @@ try {
     await screenshot('05-handoff-history-full.png');
     await click('[data-testid="crew-handoff-1"]');
     await waitForDom('[data-testid="crew-handoff-reader"]', { includes: 'Linked handoff' });
-    await click(`[data-seed-target="${linkedSeed}"]`);
+    await client.request('dom_focus', { selector: `[data-seed-target="${linkedSeed}"]` });
+    await driver.pressEnter();
     await waitForDom(`.seed-document[data-seed-id="${linkedSeed}"]`);
+    await waitForDom('.workspace-dock-tile-body--seed', { focused: true });
+    await waitForDom('[data-testid="crew-seed-back"]');
     const hiddenPanel = await client.request('dom_bounds', { selector: '[data-testid="crew-panel"]' });
     runner.assert(hiddenPanel.bounds.width === 0 && hiddenPanel.bounds.height === 0,
       'the crew panel yields to the existing workspace seed tile', hiddenPanel);
     await screenshot('06-handoff-seed-tile.png');
-    await click('[data-testid="crew-return-to-panel"]');
+    await click('[data-testid="crew-seed-back"]');
     await waitForDom('[data-testid="crew-panel"]', { includes: 'Linked handoff' });
     const selected = await waitForDom(`[data-testid="crew-roster-${history}"][aria-current="true"]`);
     const selectedTab = await waitForDom('[data-testid="crew-tab-handoffs"][aria-current="page"]');
     runner.assert(Boolean(selected.text) && selectedTab.text === 'Handoffs',
       'returning preserves the selected member, Handoffs tab, and letter', { selected, selectedTab });
-    await pressEscapeAndWaitFor('manage-crew');
+    await pressEscapeAndWaitFor('crew-seed-back');
   });
 
   await runner.step('awake_member_entry_saves_a_complete_next_wake_selection', async () => {

@@ -7,22 +7,6 @@
   background: var(--color-bg-app);
 }
 
-.crew-return-to-panel {
-  position: absolute;
-  z-index: 7;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 7px 11px;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--color-border));
-  border-radius: 7px;
-  background: var(--color-bg-elevated);
-  color: var(--color-text-primary);
-  box-shadow: 0 5px 24px rgba(0, 0, 0, 0.25);
-  font-size: 11px;
-  cursor: pointer;
-}
-
 .crew-panel-layer.is-open {
   display: block;
   animation: crew-panel-reveal 150ms ease-out;
