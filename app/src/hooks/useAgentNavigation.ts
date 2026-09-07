@@ -37,7 +37,7 @@ export function useAgentNavigation(options: {
 
     focusAgentPane(sessionId, pane.id, true);
     return true;
-  }, [focusAgentPane, options.sessions, options.setActiveSession]);
+  }, [focusAgentPane, options.sessions]);
 
   const selectAgentPane = useCallback((sessionId: string, paneId: string) => {
     const session = options.sessions.find((entry) => entry.id === sessionId);
@@ -48,7 +48,7 @@ export function useAgentNavigation(options: {
 
     focusAgentPane(sessionId, pane.id, true);
     return true;
-  }, [focusAgentPane, options.sessions, options.setActiveSession]);
+  }, [focusAgentPane, options.sessions]);
 
   const move = useCallback((direction: AgentHistoryDirection, resumeCurrent = false) => {
     const targetSessionId = options.navigateAgentHistory(direction, resumeCurrent);

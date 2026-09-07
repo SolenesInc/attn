@@ -1120,7 +1120,7 @@ function AppContent({
     const sessionId = await createWorkspaceSession(...args);
     selectCreatedSession(sessionId);
     return sessionId;
-  }, [createWorkspaceSession, selectCreatedSession]);
+  }, [createWorkspaceSession, selectAgent, selectCreatedSession]);
 
   useEffect(() => {
     if (!sessionCreationJob?.sessionId || sessionCreationJob.error) {
