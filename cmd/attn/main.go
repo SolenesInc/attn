@@ -794,7 +794,7 @@ repository placement (where the agent runs):
   --worktree <branch>        choose the new worktree's branch
   --repo <path>              main repository; required when the target
                              workspace's sessions span several
-  --pr <number-or-url>       check out a pull request's live head from --repo
+  --pr <number-or-url>       check out --repo's live pull request head in a new workspace
   --from <ref>               branch or ref to start from
   --worktree-path <path>     override the generated sibling path
 
@@ -1750,6 +1750,9 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 		if repo == "" {
 			return delegateCLIArgs{}, errors.New("--pr requires --repo")
 		}
+		if explicitWorkspace != "" {
+			return delegateCLIArgs{}, errors.New("--pr cannot be combined with --workspace; it launches in a new workspace")
+		}
 		if branch != "" || startingFrom != "" || *noWorktree {
 			return delegateCLIArgs{}, errors.New("--pr cannot be combined with --worktree, --from, or --no-worktree")
 		}
@@ -1758,7 +1761,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	placement := "current_workspace"
 	if explicitWorkspace != "" {
 		placement = "existing_workspace"
-	} else if *newWorkspace || customCWD != "" {
+	} else if *newWorkspace || customCWD != "" || pr != "" {
 		placement = "new_workspace"
 	}
 
