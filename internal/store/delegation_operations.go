@@ -22,6 +22,7 @@ var (
 type DelegationOperationRecord struct {
 	Operation           protocol.DelegationOperation
 	ResolvedPreferences string
+	ResolvedPR          string
 	RequestJSON         string
 	WorktreeOwned       bool
 	WorktreeToken       string
@@ -103,10 +104,12 @@ func getDelegationOperation(db *sql.DB, id string) (*DelegationOperationRecord, 
 	var worktreeOwned int
 	err := db.QueryRow(`SELECT request_id, operation_id, request_json, state, progress,
 		session_id, workspace_id, ticket_id, worktree_path, worktree_owned, worktree_token, chief_session_id, result_json, error, resolved_preferences, created_at, updated_at
+		, resolved_pr_json
 		FROM delegation_operations WHERE request_id = ? OR operation_id = ?`, id, id).Scan(
 		&rec.Operation.RequestID, &rec.Operation.OperationID, &rec.RequestJSON, &state,
 		&rec.Operation.Progress, &rec.Operation.SessionID, &workspaceID, &ticketID,
-		&worktreePath, &worktreeOwned, &worktreeToken, &chiefSessionID, &resultJSON, &errorText, &rec.ResolvedPreferences, &rec.Operation.CreatedAt, &rec.Operation.UpdatedAt)
+		&worktreePath, &worktreeOwned, &worktreeToken, &chiefSessionID, &resultJSON, &errorText, &rec.ResolvedPreferences, &rec.Operation.CreatedAt, &rec.Operation.UpdatedAt,
+		&rec.ResolvedPR)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +136,56 @@ func getDelegationOperation(db *sql.DB, id string) (*DelegationOperationRecord, 
 		}
 		rec.Operation.Result = &result
 	}
+	if rec.ResolvedPR != "" {
+		var receipt protocol.DelegatePullRequestReceipt
+		if err := json.Unmarshal([]byte(rec.ResolvedPR), &receipt); err != nil {
+			return nil, fmt.Errorf("decode delegation pull request receipt: %w", err)
+		}
+		rec.Operation.PullRequest = &receipt
+	}
 	return &rec, nil
+}
+
+func (s *Store) SaveDelegationPullRequestReceipt(id string, receipt protocol.DelegatePullRequestReceipt, now time.Time) (*protocol.DelegatePullRequestReceipt, error) {
+	encoded, err := json.Marshal(receipt)
+	if err != nil {
+		return nil, fmt.Errorf("encode delegation pull request receipt: %w", err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	stamp := now.UTC().Format(sortableTimeFormat)
+	if _, err := s.db.Exec(`UPDATE delegation_operations SET resolved_pr_json = ?, updated_at = ?
+		WHERE (request_id = ? OR operation_id = ?) AND resolved_pr_json = ''`, string(encoded), stamp, id, id); err != nil {
+		return nil, fmt.Errorf("persist delegation pull request receipt: %w", err)
+	}
+	var raw string
+	if err := s.db.QueryRow(`SELECT resolved_pr_json FROM delegation_operations WHERE request_id = ? OR operation_id = ?`, id, id).Scan(&raw); err != nil {
+		return nil, err
+	}
+	var saved protocol.DelegatePullRequestReceipt
+	if err := json.Unmarshal([]byte(raw), &saved); err != nil {
+		return nil, fmt.Errorf("decode saved delegation pull request receipt: %w", err)
+	}
+	return &saved, nil
+}
+
+func (s *Store) UpdateDelegationPullRequestReceipt(id string, receipt protocol.DelegatePullRequestReceipt, now time.Time) error {
+	encoded, err := json.Marshal(receipt)
+	if err != nil {
+		return fmt.Errorf("encode delegation pull request receipt: %w", err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	stamp := now.UTC().Format(sortableTimeFormat)
+	result, err := s.db.Exec(`UPDATE delegation_operations SET resolved_pr_json = ?, updated_at = ?
+		WHERE (request_id = ? OR operation_id = ?) AND resolved_pr_json != ''`, string(encoded), stamp, id, id)
+	if err != nil {
+		return fmt.Errorf("update delegation pull request receipt: %w", err)
+	}
+	if rows, _ := result.RowsAffected(); rows != 1 {
+		return errors.New("delegation pull request receipt was not persisted")
+	}
+	return nil
 }
 
 func (s *Store) MarkDelegationWorktreeOwned(id, path, token string, now time.Time) error {

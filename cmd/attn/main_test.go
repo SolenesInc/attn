@@ -571,6 +571,34 @@ func TestParseDelegateArgsNoWorktree(t *testing.T) {
 	}
 }
 
+func TestParseDelegateArgsPullRequest(t *testing.T) {
+	parsed, err := parseDelegateArgs([]string{
+		"--source-session", "source-session", "--brief", "Review it", "--model", "opus",
+		"--repo", "/tmp/repo", "--pr", "https://github.com/owner/repo/pull/42",
+		"--worktree-path", "/tmp/repo--feature",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.options.WorktreeRepo != "/tmp/repo" || parsed.options.PullRequest != "https://github.com/owner/repo/pull/42" || parsed.options.WorktreePath != "/tmp/repo--feature" {
+		t.Fatalf("options = %+v", parsed.options)
+	}
+}
+
+func TestParseDelegateArgsRejectsInvalidPullRequestPlacement(t *testing.T) {
+	for _, extra := range [][]string{
+		{"--pr", "42"},
+		{"--repo", "/tmp/repo", "--pr", "42", "--from", "main"},
+		{"--repo", "/tmp/repo", "--pr", "42", "--worktree", "other"},
+		{"--repo", "/tmp/repo", "--pr", "42", "--no-worktree"},
+	} {
+		_, err := parseDelegateArgs(append([]string{"--source-session", "source", "--brief", "x", "--model", "opus"}, extra...))
+		if err == nil {
+			t.Fatalf("parseDelegateArgs(%v) succeeded", extra)
+		}
+	}
+}
+
 func TestParseDelegateArgsWorkspaceNoWorktreeKeepsConceptsSeparate(t *testing.T) {
 	parsed, err := parseDelegateArgs([]string{
 		"--source-session", "source-session",

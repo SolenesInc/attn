@@ -230,6 +230,21 @@ func TestParseDelegatePlacementAndWorktree(t *testing.T) {
 	if Deref(msg.Worktree.Repo) != "/repo" || Deref(msg.Worktree.StartingFrom) != "main" {
 		t.Fatalf("delegate worktree = %+v", msg.Worktree)
 	}
+	if msg.PullRequest != nil {
+		t.Fatalf("delegate pull request = %q, want absent", Deref(msg.PullRequest))
+	}
+}
+
+func TestParseDelegatePullRequestCheckout(t *testing.T) {
+	input := `{"cmd":"delegate","source_session_id":"source-1","brief":"Review this","placement":"new_workspace","pull_request":"42","worktree":{"repo":"/repo","path":"/repo--feature"}}`
+	cmd, data, err := ParseMessage([]byte(input))
+	if err != nil || cmd != CmdDelegate {
+		t.Fatalf("ParseMessage() = %q, %#v, %v", cmd, data, err)
+	}
+	msg := data.(*DelegateMessage)
+	if Deref(msg.PullRequest) != "42" || msg.Worktree == nil || Deref(msg.Worktree.Repo) != "/repo" || Deref(msg.Worktree.Path) != "/repo--feature" || msg.Worktree.Branch != "" || msg.Worktree.StartingFrom != nil {
+		t.Fatalf("delegate PR message = %+v", msg)
+	}
 }
 
 func TestParseMessageRejectsRetiredDispatchCommands(t *testing.T) {

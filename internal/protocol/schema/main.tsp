@@ -1135,6 +1135,7 @@ model DelegateMessage {
   workspace_id?: string;
   cwd?: string;
   worktree?: DelegateWorktreeRequest;
+  pull_request?: string; // Number or URL resolved once while preparing this new launch
   `model`?: string; // Pin the delegated agent's model (alias or full id); empty = agent default
   effort?: string; // Pin the delegated agent's reasoning effort; empty = agent default
   allow_worktree_reuse?: boolean; // Exceptional opt-in to share an existing worktree
@@ -1645,6 +1646,26 @@ model DelegateWorktreeRequest {
   starting_from?: string;
   // Attach the saved branch instead of creating it from starting_from.
   existing_branch?: boolean;
+}
+
+model DelegatePullRequestReceipt {
+  source: string;
+  url: string;
+  number: safeint;
+  state: string;
+  base_repository: string;
+  head_repository: string;
+  head_branch: string;
+  head_sha: string;
+  local_branch: string;
+  worktree_path: string;
+  verified_head: string;
+  disposition: string;
+  backup_branch?: string;
+  backup_head?: string;
+  backup_source_head?: string;
+  backup_fingerprint?: string;
+  checkout_fingerprint?: string;
 }
 
 model QueryMessage {
@@ -6782,6 +6803,7 @@ model DelegateResult {
   branch?: string;
   placement: string;
   worktree_created?: boolean;
+  pull_request?: DelegatePullRequestReceipt;
   // When the harness first reported a turn (hook, transcript or plugin driver).
   // Absent when the delegation completed without that: the first turn is unconfirmed.
   first_turn_at?: string;
@@ -6806,6 +6828,7 @@ model DelegationOperation {
   workspace_id?: string;
   ticket_id?: string;
   worktree_path?: string;
+  pull_request?: DelegatePullRequestReceipt;
   result?: DelegateResult;
   error?: string;
   created_at: string;

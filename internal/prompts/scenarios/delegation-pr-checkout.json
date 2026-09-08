@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "id": "delegation-pr-checkout",
+  "description": "Durable checkout receipt appended to a new PR-aware delegation.",
+  "recipient": "delegation",
+  "event": "pr-checkout",
+  "values": {
+    "url": "https://github.com/example/project/pull/42",
+    "number": "42",
+    "state": "open",
+    "base_repository": "github.com/example/project",
+    "head_repository": "github.com/contributor/project",
+    "head_branch": "repair-checkout",
+    "head_sha": "0123456789abcdef0123456789abcdef01234567",
+    "local_branch": "repair-checkout",
+    "worktree_path": "/work/project--repair-checkout",
+    "verified_head": "0123456789abcdef0123456789abcdef01234567",
+    "disposition": "preserved",
+    "backup": "- Preserved prior state: repair-checkout--attn-backup-20260908T120000Z"
+  }
+}

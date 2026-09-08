@@ -1,0 +1,3 @@
+kind: added
+area: delegation
+change: Delegate directly from a live GitHub pull request with `attn delegate --repo <path> --pr <number-or-url>`.

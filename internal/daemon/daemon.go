@@ -181,6 +181,7 @@ type Daemon struct {
 	delegationWorktreePrepareHook     func(path string)
 	delegationFinalizeHook            func() error
 	delegationWaitsForFirstTurn       bool
+	delegationPRFetch                 func(repo, remote, remoteURL, branch, sha, authorization string) error
 	launchWatchMu                     sync.Mutex
 	launchWatches                     map[string]*launchWatch
 	reloadingMu                       sync.Mutex
