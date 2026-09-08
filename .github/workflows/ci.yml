@@ -740,7 +740,7 @@ jobs:
         shard: [1, 2, 3, 4]
     # No concurrency group: a shared one cancels unrelated waiting checks.
     runs-on: ubuntu-24.04
-    # Heaviest shard 190.5s of a 761.5s matrix (run 34060183460); 40m is slack.
+    # Heaviest shard 199.4s of a 785.7s matrix (run 34067680122); 40m is slack.
     timeout-minutes: 40
     env:
       ATTN_PROFILE: app-acceptance
