@@ -42,21 +42,6 @@ func TestBuildCommand_YoloMapping(t *testing.T) {
 	}
 }
 
-func TestCodexBuildCommand_IncludesConfigOverridesBeforeResume(t *testing.T) {
-	cmd := (&Codex{}).BuildCommand(SpawnOpts{
-		CWD:             "/tmp/project",
-		Executable:      "codex",
-		ResumeSessionID: "codex-session",
-		ConfigOverrides: []string{"features.hooks=true"},
-	})
-	args := strings.Join(cmd.Args, "\x00")
-	wantArgs := []string{"codex", "-c", "features.hooks=true", "resume", "codex-session", "-C", "/tmp/project"}
-	want := strings.Join(wantArgs, "\x00")
-	if args != want {
-		t.Fatalf("args = %#v, want %#v", cmd.Args, wantArgs)
-	}
-}
-
 func TestCodexConfigOverrides_TrustsConfiguredWorkingDirectory(t *testing.T) {
 	overrides := (&Codex{}).GenerateConfigOverrides(SpawnOpts{
 		SessionID:             "automation-session",

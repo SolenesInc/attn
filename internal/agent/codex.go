@@ -60,17 +60,19 @@ func (c *Codex) Capabilities() Capabilities {
 
 func (c *Codex) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	args := []string{}
+	if opts.ResumeSessionID != "" {
+		args = append(args, "resume", opts.ResumeSessionID)
+	} else if opts.ResumePicker {
+		args = append(args, "resume")
+	}
+
+	// Codex 0.153.4 drops earlier -c overrides when they straddle resume.
+	// Keep hook definitions and launch overrides together after the subcommand.
 	for _, override := range opts.ConfigOverrides {
 		if strings.TrimSpace(override) == "" {
 			continue
 		}
 		args = append(args, "-c", override)
-	}
-
-	if opts.ResumeSessionID != "" {
-		args = append(args, "resume", opts.ResumeSessionID)
-	} else if opts.ResumePicker {
-		args = append(args, "resume")
 	}
 
 	args = append(args, "-C", opts.CWD)
