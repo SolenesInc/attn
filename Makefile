@@ -201,6 +201,7 @@ test-hooks:
 
 # Same blind spot for the shell an agent runs by hand.
 test-scripts:
+	@bash ./scripts/test-git_test.sh
 	@bash ./scripts/source-fingerprint_test.sh
 	@bash ./scripts/pr-evidence_test.sh
 	@bash ./scripts/ci-acceptance_test.sh
