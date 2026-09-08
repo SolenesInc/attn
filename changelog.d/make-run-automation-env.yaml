@@ -1,0 +1,3 @@
+kind: fixed
+area: build
+change: ATTN_AUTOMATION=1 make forwards the automation setting when it launches the macOS app.

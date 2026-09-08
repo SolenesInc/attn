@@ -293,6 +293,9 @@ endif
 endif
 endif
 
+# LaunchServices only forwards shell overrides named with `open --env`.
+MACOS_OPEN := open$(if $(filter undefined,$(origin ATTN_AUTOMATION)),, --env "ATTN_AUTOMATION=$(ATTN_AUTOMATION)")
+
 # Build + install + open the PROFILE's app (bare `make` = prod). Every path is
 # derived from the single authority so a named profile opens its own bundle.
 run: install
@@ -300,7 +303,7 @@ run: install
 	attn="$(CURDIR)/$(OUTPUT)"; \
 	app_path="$$("$$attn" profile resolve --profile "$(PROFILE)" --field appPath)"; \
 	if [ "$(UNAME_S)" = "Darwin" ]; then \
-		open "$$app_path"; \
+		$(MACOS_OPEN) "$$app_path"; \
 	else \
 		app_exec="$$("$$attn" profile resolve --profile "$(PROFILE)" --field appExecutable)"; \
 		data_dir="$$("$$attn" profile resolve --profile "$(PROFILE)" --field dataDir)"; \
