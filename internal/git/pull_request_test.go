@@ -218,6 +218,42 @@ func TestFetchPullRequestCommitFromBaseRecoversDeletedHeadBranch(t *testing.T) {
 	}
 }
 
+func TestFetchPullRequestHeadAddsTrackingRefspecToNarrowClone(t *testing.T) {
+	root := t.TempDir()
+	bare := filepath.Join(root, "remote.git")
+	source := filepath.Join(root, "source")
+	clone := filepath.Join(root, "clone")
+	if err := os.MkdirAll(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, root, "init", "--bare", bare)
+	runGit(t, source, "init")
+	runGit(t, source, "commit", "--allow-empty", "-m", "base")
+	runGit(t, source, "branch", "-M", "main")
+	runGit(t, source, "remote", "add", "origin", bare)
+	runGit(t, source, "push", "origin", "main")
+	runGit(t, source, "switch", "-c", "feature")
+	runGit(t, source, "commit", "--allow-empty", "-m", "feature")
+	targetSHA, _ := GetHeadCommit(source)
+	runGit(t, source, "push", "origin", "feature")
+	runGit(t, bare, "symbolic-ref", "HEAD", "refs/heads/main")
+	runGit(t, root, "clone", "--no-local", "--single-branch", "--branch", "main", bare, clone)
+
+	if err := FetchPullRequestHead(clone, "origin", bare, "feature", targetSHA, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := CreateBranchAt(clone, "feature", targetSHA); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetBranchUpstream(clone, "feature", "origin", "feature"); err != nil {
+		t.Fatal(err)
+	}
+	upstream, err := BranchUpstream(clone, "feature")
+	if err != nil || upstream != "origin/feature" {
+		t.Fatalf("upstream = %q, err=%v", upstream, err)
+	}
+}
+
 func TestIgnoredCheckoutCollisionsFindsOnlyTargetPaths(t *testing.T) {
 	repo := t.TempDir()
 	runGit(t, repo, "init")

@@ -64,6 +64,9 @@ func FetchPullRequestHead(repoDir, remote, remoteURL, branch, expectedSHA, autho
 	if err := runGitNoOutput(OpMetadata, repoDir, "check-ref-format", "--branch", branch); err != nil {
 		return fmt.Errorf("invalid pull request head branch %q", branch)
 	}
+	if err := ensureRemoteTracksBranch(repoDir, remote, branch); err != nil {
+		return err
+	}
 	target := "refs/remotes/" + remote + "/" + branch
 	refspec := "+refs/heads/" + branch + ":" + target
 	if out, err := runGitCombinedWithHTTPAuthorization(OpNetwork, repoDir, remoteURL, authorization, "fetch", "--no-tags", remote, refspec); err != nil && !RefExists(repoDir, expectedSHA) {
@@ -76,6 +79,43 @@ func FetchPullRequestHead(repoDir, remote, remoteURL, branch, expectedSHA, autho
 		return err
 	}
 	return nil
+}
+
+func ensureRemoteTracksBranch(repoDir, remote, branch string) error {
+	target := "refs/remotes/" + remote + "/" + branch
+	key := "remote." + remote + ".fetch"
+	out, err := runGitOutput(OpMetadata, repoDir, "config", "--get-all", key)
+	if err == nil {
+		for _, refspec := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			if fetchRefspecTracks(refspec, target) {
+				return nil
+			}
+		}
+	}
+	refspec := "+refs/heads/" + branch + ":" + target
+	if out, err := runGitCombined(OpMetadata, repoDir, "config", "--add", key, refspec); err != nil {
+		return fmt.Errorf("track pull request head %s/%s: %s", remote, branch, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func fetchRefspecTracks(refspec, target string) bool {
+	refspec = strings.TrimPrefix(strings.TrimSpace(refspec), "+")
+	if strings.HasPrefix(refspec, "^") {
+		return false
+	}
+	_, destination, ok := strings.Cut(refspec, ":")
+	if !ok {
+		return false
+	}
+	if destination == target {
+		return true
+	}
+	if strings.Count(destination, "*") != 1 {
+		return false
+	}
+	prefix, suffix, _ := strings.Cut(destination, "*")
+	return strings.HasPrefix(target, prefix) && strings.HasSuffix(target, suffix)
 }
 
 func FetchPullRequestCommitFromBase(repoDir, remote, remoteURL string, number int, expectedSHA, authorization string) error {
