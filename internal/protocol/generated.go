@@ -6275,6 +6275,9 @@ type PtyInputMessage struct {
 
 	// Source corresponds to the JSON schema field "source".
 	Source *string `json:"source,omitempty,omitzero"`
+
+	// TraceID corresponds to the JSON schema field "trace_id".
+	TraceID *string `json:"trace_id,omitempty,omitzero"`
 }
 
 type PtyInputProbeResultMessage struct {
@@ -9489,6 +9492,129 @@ type SubscribeGitStatusMessage struct {
 
 	// Directory corresponds to the JSON schema field "directory".
 	Directory string `json:"directory"`
+}
+
+type SupportInputTrace struct {
+	// ByteCount corresponds to the JSON schema field "byte_count".
+	ByteCount int `json:"byte_count"`
+
+	// ErrorClass corresponds to the JSON schema field "error_class".
+	ErrorClass *string `json:"error_class,omitempty,omitzero"`
+
+	// ReceivedAtUnixMs corresponds to the JSON schema field "received_at_unix_ms".
+	ReceivedAtUnixMs int `json:"received_at_unix_ms"`
+
+	// RuntimeID corresponds to the JSON schema field "runtime_id".
+	RuntimeID string `json:"runtime_id"`
+
+	// Sequence corresponds to the JSON schema field "sequence".
+	Sequence int `json:"sequence"`
+
+	// Source corresponds to the JSON schema field "source".
+	Source string `json:"source"`
+
+	// TraceID corresponds to the JSON schema field "trace_id".
+	TraceID string `json:"trace_id"`
+
+	// WriteDurationUs corresponds to the JSON schema field "write_duration_us".
+	WriteDurationUs int `json:"write_duration_us"`
+
+	// WriteResult corresponds to the JSON schema field "write_result".
+	WriteResult string `json:"write_result"`
+}
+
+type SupportRuntimeEvidence struct {
+	// Attached corresponds to the JSON schema field "attached".
+	Attached bool `json:"attached"`
+
+	// Backend corresponds to the JSON schema field "backend".
+	Backend string `json:"backend"`
+
+	// Cols corresponds to the JSON schema field "cols".
+	Cols *int `json:"cols,omitempty,omitzero"`
+
+	// InfoErrorClass corresponds to the JSON schema field "info_error_class".
+	InfoErrorClass *string `json:"info_error_class,omitempty,omitzero"`
+
+	// LastSeq corresponds to the JSON schema field "last_seq".
+	LastSeq *int `json:"last_seq,omitempty,omitzero"`
+
+	// Pid corresponds to the JSON schema field "pid".
+	Pid *int `json:"pid,omitempty,omitzero"`
+
+	// Rows corresponds to the JSON schema field "rows".
+	Rows *int `json:"rows,omitempty,omitzero"`
+
+	// Running corresponds to the JSON schema field "running".
+	Running *bool `json:"running,omitempty,omitzero"`
+
+	// RuntimeID corresponds to the JSON schema field "runtime_id".
+	RuntimeID string `json:"runtime_id"`
+
+	// State corresponds to the JSON schema field "state".
+	State *string `json:"state,omitempty,omitzero"`
+
+	// TerminalBuild corresponds to the JSON schema field "terminal_build".
+	TerminalBuild *string `json:"terminal_build,omitempty,omitzero"`
+
+	// TerminalBuildKnown corresponds to the JSON schema field "terminal_build_known".
+	TerminalBuildKnown bool `json:"terminal_build_known"`
+}
+
+type SupportSnapshotMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// EndpointID corresponds to the JSON schema field "endpoint_id".
+	EndpointID *string `json:"endpoint_id,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// RuntimeIds corresponds to the JSON schema field "runtime_ids".
+	RuntimeIds []string `json:"runtime_ids,omitempty,omitzero"`
+}
+
+type SupportSnapshotResultMessage struct {
+	// Backend corresponds to the JSON schema field "backend".
+	Backend string `json:"backend"`
+
+	// CapturedAtUnixMs corresponds to the JSON schema field "captured_at_unix_ms".
+	CapturedAtUnixMs int `json:"captured_at_unix_ms"`
+
+	// DaemonInstanceID corresponds to the JSON schema field "daemon_instance_id".
+	DaemonInstanceID string `json:"daemon_instance_id"`
+
+	// DaemonStartedAtUnixMs corresponds to the JSON schema field
+	// "daemon_started_at_unix_ms".
+	DaemonStartedAtUnixMs int `json:"daemon_started_at_unix_ms"`
+
+	// EndpointID corresponds to the JSON schema field "endpoint_id".
+	EndpointID *string `json:"endpoint_id,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// InputTraces corresponds to the JSON schema field "input_traces".
+	InputTraces []SupportInputTrace `json:"input_traces"`
+
+	// ProtocolVersion corresponds to the JSON schema field "protocol_version".
+	ProtocolVersion string `json:"protocol_version"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Runtimes corresponds to the JSON schema field "runtimes".
+	Runtimes []SupportRuntimeEvidence `json:"runtimes"`
+
+	// TraceCapacity corresponds to the JSON schema field "trace_capacity".
+	TraceCapacity int `json:"trace_capacity"`
+
+	// TraceTotal corresponds to the JSON schema field "trace_total".
+	TraceTotal int `json:"trace_total"`
+
+	// WarningCodes corresponds to the JSON schema field "warning_codes".
+	WarningCodes []string `json:"warning_codes"`
 }
 
 type Task struct {

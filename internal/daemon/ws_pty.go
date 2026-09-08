@@ -581,6 +581,7 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, sessionID string, stre
 }
 
 func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage) {
+	receivedAt := time.Now()
 	source := strings.TrimSpace(protocol.Deref(msg.Source))
 	probeID := strings.TrimSpace(protocol.Deref(msg.ProbeID))
 	var probeStartedAt time.Time
@@ -598,6 +599,7 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 		)
 	}
 	writeErr := d.writeSessionPTY(msg.ID, []byte(msg.Data), source)
+	d.recordSupportInputTrace(msg, receivedAt, time.Since(receivedAt), writeErr)
 	if writeErr != nil {
 		if shouldLogPtyCommandError(writeErr) {
 			d.logf("pty_input failed for %s: %v", msg.ID, writeErr)

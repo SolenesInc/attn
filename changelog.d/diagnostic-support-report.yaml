@@ -1,0 +1,6 @@
+kind: added
+area: app
+change: >
+  Create a private diagnostic report from the action menu when terminal input
+  fails, with the app, daemon, and native input evidence needed to troubleshoot
+  the failure later. Terminal output stays opt-in.

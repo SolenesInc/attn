@@ -11,6 +11,7 @@
 #   PROFILE                  profile name ("" = default/prod)
 #   ATTN_BIN                 path to the freshly built attn binary (the authority + sidecar)
 #   VERSION SOURCE_FINGERPRINT GIT_COMMIT BUILD_TIME   build-identity stamp
+#   SOURCE_DIRTY_PATHS_BASE64  NUL-separated relevant dirty paths, base64 encoded
 #   MACOS_CODESIGN_IDENTITY  optional; else discovered, else ad-hoc ("-")
 #
 # Not using `set -u`: macOS ships bash 3.2 where empty-array/var expansion under
@@ -25,6 +26,7 @@ pty_host="${ATTN_PTY_HOST_BIN:?ATTN_PTY_HOST_BIN is required}"
 : "${SOURCE_FINGERPRINT:?SOURCE_FINGERPRINT is required}"
 : "${GIT_COMMIT:?GIT_COMMIT is required}"
 : "${BUILD_TIME:?BUILD_TIME is required}"
+SOURCE_DIRTY_PATHS_BASE64="${SOURCE_DIRTY_PATHS_BASE64:-}"
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
@@ -85,6 +87,7 @@ if [ -n "$profile" ]; then
     VITE_INSTALL_CHANNEL=source \
     VITE_ATTN_BUILD_VERSION="$VERSION" \
     VITE_ATTN_SOURCE_FINGERPRINT="$SOURCE_FINGERPRINT" \
+    VITE_ATTN_SOURCE_DIRTY_PATHS_BASE64="$SOURCE_DIRTY_PATHS_BASE64" \
     VITE_ATTN_GIT_COMMIT="$GIT_COMMIT" \
     VITE_ATTN_BUILD_TIME="$BUILD_TIME" \
     pnpm tauri build $bundle_args --config "$gen_rel"
@@ -97,6 +100,7 @@ if [ -n "$profile" ]; then
     VITE_INSTALL_CHANNEL=source \
     VITE_ATTN_BUILD_VERSION="$VERSION" \
     VITE_ATTN_SOURCE_FINGERPRINT="$SOURCE_FINGERPRINT" \
+    VITE_ATTN_SOURCE_DIRTY_PATHS_BASE64="$SOURCE_DIRTY_PATHS_BASE64" \
     VITE_ATTN_GIT_COMMIT="$GIT_COMMIT" \
     VITE_ATTN_BUILD_TIME="$BUILD_TIME" \
     pnpm tauri build $bundle_args --config "$gen_rel"
@@ -107,6 +111,7 @@ else
   VITE_INSTALL_CHANNEL=source \
   VITE_ATTN_BUILD_VERSION="$VERSION" \
   VITE_ATTN_SOURCE_FINGERPRINT="$SOURCE_FINGERPRINT" \
+  VITE_ATTN_SOURCE_DIRTY_PATHS_BASE64="$SOURCE_DIRTY_PATHS_BASE64" \
   VITE_ATTN_GIT_COMMIT="$GIT_COMMIT" \
   VITE_ATTN_BUILD_TIME="$BUILD_TIME" \
   pnpm tauri build $bundle_args

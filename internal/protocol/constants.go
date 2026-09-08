@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "300"
+const ProtocolVersion = "301"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -250,6 +250,7 @@ const (
 	CmdGetScreenSnapshot                     = "get_screen_snapshot"
 	CmdGetKittyImage                         = "get_kitty_image"
 	CmdPtyInput                              = "pty_input"
+	CmdSupportSnapshot                       = "support_snapshot"
 	CmdTerminalPointerActivity               = "terminal_pointer_activity"
 	CmdBusStatusGet                          = "bus_status_get"
 	CmdBusSetConsumerEnabled                 = "bus_set_consumer_enabled"
@@ -438,6 +439,7 @@ const (
 	EventWorkflowActionResult            = "workflow_action_result"
 	EventPtyOutput                       = "pty_output"
 	EventPtyInputProbeResult             = "pty_input_probe_result"
+	EventSupportSnapshotResult           = "support_snapshot_result"
 	EventSpawnResult                     = "spawn_result"
 	EventReloadSessionResult             = "reload_session_result"
 	EventAttachResult                    = "attach_result"
@@ -1993,6 +1995,13 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 		var msg PtyInputMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, fmt.Errorf("unmarshal pty_input: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdSupportSnapshot:
+		var msg SupportSnapshotMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal support_snapshot: %w", err)
 		}
 		return peek.Cmd, &msg, nil
 

@@ -48,6 +48,7 @@ import type {
   SessionLedgerEntry,
   SessionReopen,
   SessionReopenResult,
+  SupportSnapshotResultMessage,
 } from '../types/generated';
 import type { SessionMessageWindowStatus } from './daemonSessionAnnotationEvents';
 import { noteTerminalInputTransport } from '../utils/terminalInputDiagnostics';
@@ -193,6 +194,7 @@ export type RecentLocation = GeneratedRecentLocation;
 export type WorkflowRunState = GeneratedWorkflowRun;
 export type DaemonSettings = Record<string, string>;
 export type DaemonWarning = GeneratedWarning;
+export type DaemonSupportSnapshot = SupportSnapshotResultMessage;
 export interface SessionMessageWindow {
   messages: DaemonSessionMessage[];
   status: SessionMessageWindowStatus;
@@ -283,7 +285,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '300';
+export const PROTOCOL_VERSION = '301';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -2216,6 +2218,16 @@ export function useDaemonSocket({
             break;
           }
 
+          case 'support_snapshot_result': {
+            if (typeof data.request_id !== 'string') break;
+            const key = pendingRequestKey('support_snapshot', data.request_id);
+            const pending = pendingActionsRef.current.get(key);
+            if (!pending) break;
+            pendingActionsRef.current.delete(key);
+            pending.resolve(data as unknown as SupportSnapshotResultMessage);
+            break;
+          }
+
           case 'kitty_placements': {
             if (data.id) {
               emitPtyEvent({
@@ -3026,7 +3038,7 @@ export function useDaemonSocket({
     return ptyTransportRef.current.hasAttachedRuntime(runtimeId);
   }, []);
 
-  const sendPtyInput = useCallback((id: string, data: string, source?: string) => {
+  const sendPtyInput = useCallback((id: string, data: string, source?: string, traceId?: string) => {
     const ws = wsRef.current;
     const transportReady = Boolean(ws && ws.readyState === WebSocket.OPEN && hasReceivedInitialStateRef.current);
     if (!transportReady && (source === 'user' || source === 'automation')) {
@@ -3044,6 +3056,7 @@ export function useDaemonSocket({
         socketState: ws?.readyState ?? null,
         initialStateReceived: hasReceivedInitialStateRef.current,
         probeId,
+        traceId,
       });
     }
     recordPtyCommand('pty_input', id, data.length, source);
@@ -3054,6 +3067,7 @@ export function useDaemonSocket({
         data,
         ...(source ? { source } : {}),
         ...(probeId ? { probe_id: probeId } : {}),
+        ...(traceId ? { trace_id: traceId } : {}),
       },
       { waitForInitialState: true },
     );
@@ -3111,6 +3125,14 @@ export function useDaemonSocket({
       {},
       'Reading the event bus timed out',
       BUS_STATUS_TIMEOUT_MS,
+    );
+  }, [sendRequest]);
+
+  const sendSupportSnapshot = useCallback((endpointId?: string, runtimeIds?: string[]): Promise<SupportSnapshotResultMessage> => {
+    return sendRequest<SupportSnapshotResultMessage>(
+      'support_snapshot',
+      { ...(endpointId ? { endpoint_id: endpointId } : {}), ...(runtimeIds ? { runtime_ids: runtimeIds } : {}) },
+      'Reading diagnostic data timed out',
     );
   }, [sendRequest]);
 
@@ -3828,8 +3850,8 @@ export function useDaemonSocket({
           forceResizeBeforeAttach: options?.forceResizeBeforeAttach,
         });
       },
-      write: async (id: string, data: string, source?: string) => {
-        sendPtyInput(id, data, source);
+      write: async (id: string, data: string, source?: string, traceId?: string) => {
+        sendPtyInput(id, data, source, traceId);
       },
       resize: async (id: string, cols: number, rows: number, reason?: string, pixels?: PtyPixelGeometry) => {
         sendPtyResize(id, cols, rows, reason, pixels);
@@ -5403,6 +5425,7 @@ export function useDaemonSocket({
     sendSessionShow,
     sendSessionReopen,
     sendBusStatusGet,
+    sendSupportSnapshot,
     sendDelegationPreferencesGet,
     sendDelegationPreferencesSave,
     sendDelegationModels,

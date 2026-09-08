@@ -26,6 +26,7 @@ declare global {
 }
 
 const ring: UiDiagEvent[] = [];
+let ringTotal = 0;
 let writeChain: Promise<void> = Promise.resolve();
 let bytes = 0;
 let sizeSeeded = false;
@@ -77,10 +78,15 @@ export function recordUiDiag(event: Omit<UiDiagEvent, 'at'>): void {
   if (typeof window === 'undefined') return;
   exposeGlobals();
   const entry = { ...event, at: Date.now() } as UiDiagEvent;
+  ringTotal += 1;
   if (ring.length >= RING_LIMIT) ring.shift();
   ring.push(entry);
   const line = `${JSON.stringify(entry)}\n`;
   writeChain = writeChain.catch(() => {}).then(() => append(line));
+}
+
+export function supportUiDiagnosticsSnapshot(): { capacity: number; total: number; events: UiDiagEvent[] } {
+  return { capacity: RING_LIMIT, total: ringTotal, events: [...ring] };
 }
 
 function errorDetail(value: unknown): { message: string; stack?: string } {

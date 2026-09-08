@@ -2265,6 +2265,47 @@ model PtyInputMessage {
   // Sparse diagnostic correlation. Absent on nearly every input; when present,
   // the daemon acknowledges after the PTY backend accepts this write.
   probe_id?: string;
+  // Content-free correlation for the bounded support trace. This rides the
+  // existing input frame and never creates a per-input acknowledgement.
+  trace_id?: string;
+}
+
+// Captures one daemon's allowlisted support data on explicit user request. It
+// never contains PTY bytes, logs, environment, prompts, or raw error strings.
+model SupportSnapshotMessage {
+  cmd: "support_snapshot";
+  request_id: string;
+  endpoint_id?: string;
+  // Restricts the potentially expensive backend inspection to runtimes the
+  // requesting app can actually describe in this report.
+  runtime_ids?: string[];
+}
+
+model SupportInputTrace {
+  sequence: safeint;
+  trace_id: string;
+  runtime_id: string;
+  received_at_unix_ms: safeint;
+  source: string;
+  byte_count: safeint;
+  write_duration_us: safeint;
+  write_result: string;
+  error_class?: string;
+}
+
+model SupportRuntimeEvidence {
+  runtime_id: string;
+  backend: string;
+  attached: boolean;
+  running?: boolean;
+  state?: string;
+  cols?: int32;
+  rows?: int32;
+  pid?: int32;
+  last_seq?: int32;
+  terminal_build?: string;
+  terminal_build_known: boolean;
+  info_error_class?: string;
 }
 
 // Reports genuine pointer movement inside a terminal pane. No bytes are written
@@ -4043,6 +4084,22 @@ model PtyInputProbeResultMessage {
   success: boolean;
   write_duration_us: safeint;
   error?: string;
+}
+
+model SupportSnapshotResultMessage {
+  event: "support_snapshot_result";
+  request_id: string;
+  endpoint_id?: string;
+  protocol_version: string;
+  daemon_instance_id: string;
+  daemon_started_at_unix_ms: safeint;
+  captured_at_unix_ms: safeint;
+  backend: string;
+  warning_codes: string[];
+  trace_capacity: safeint;
+  trace_total: safeint;
+  input_traces: SupportInputTrace[];
+  runtimes: SupportRuntimeEvidence[];
 }
 
 model SessionExitedMessage {
@@ -7399,6 +7456,7 @@ alias DaemonEvent =
   | GetScreenSnapshotResultMessage
   | PtyOutputMessage
   | PtyInputProbeResultMessage
+  | SupportSnapshotResultMessage
   | SessionExitedMessage
   | PtyDesyncMessage
   | KittyPlacementsMessage

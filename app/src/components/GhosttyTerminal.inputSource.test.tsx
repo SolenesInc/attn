@@ -150,6 +150,6 @@ describe('GhosttyTerminal input source', () => {
       fireEvent.keyDown(surface, { key: 'a', code: 'KeyA' });
     });
 
-    expect(onInput).toHaveBeenCalledWith('a', 'user');
+    expect(onInput).toHaveBeenCalledWith('a', 'user', expect.any(String));
   });
 });

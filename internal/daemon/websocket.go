@@ -1240,6 +1240,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleGetKittyImage(client, msg.(*protocol.GetKittyImageMessage))
 	case protocol.CmdPtyInput: // wire: pty_input
 		d.handlePtyInput(client, msg.(*protocol.PtyInputMessage))
+	case protocol.CmdSupportSnapshot: // wire: support_snapshot
+		d.handleSupportSnapshot(client, msg.(*protocol.SupportSnapshotMessage))
 	case protocol.CmdTerminalPointerActivity: // wire: terminal_pointer_activity
 		d.handleTerminalPointerActivity(msg.(*protocol.TerminalPointerActivityMessage))
 	case protocol.CmdBusStatusGet: // wire: bus_status_get
@@ -1634,6 +1636,10 @@ func remoteCommandWorkspaceID(cmd string, msg interface{}) string {
 
 func remoteCommandEndpointID(cmd string, msg interface{}) string {
 	switch cmd {
+	case protocol.CmdSupportSnapshot: // wire: support_snapshot
+		if typed, ok := msg.(*protocol.SupportSnapshotMessage); ok {
+			return strings.TrimSpace(protocol.Deref(typed.EndpointID))
+		}
 	case protocol.CmdGetRecentLocations: // wire: get_recent_locations
 		if typed, ok := msg.(*protocol.GetRecentLocationsMessage); ok {
 			return strings.TrimSpace(protocol.Deref(typed.EndpointID))

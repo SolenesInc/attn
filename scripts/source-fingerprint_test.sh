@@ -14,9 +14,12 @@ before="$(bash "$work/scripts/source-fingerprint.sh")"
 printf 'changed prompt\n' > "$work/internal/prompts/content/example.md"
 after="$(bash "$work/scripts/source-fingerprint.sh")"
 [[ "$before" != "$after" ]] || { echo 'Markdown edits must invalidate the build'; exit 1; }
+manifest="$(bash "$work/scripts/source-fingerprint.sh" --field dirty_paths_base64)"
+[[ -n "$manifest" ]] || { echo 'Relevant dirty paths must be embedded in the build manifest'; exit 1; }
 printf 'changed editor\n' > "$work/cmd/prompt-editor/web/app.js"
 printf 'documentation\n' > "$work/docs/example.md"
 printf 'scenario\n' > "$work/internal/prompts/scenarios/chief.json"
 printf 'draft\n' > "$work/.prompt-editor/drafts/d-example.json"
 [[ "$after" == "$(bash "$work/scripts/source-fingerprint.sh")" ]] || { echo 'Editor and documentation edits must not invalidate the product build'; exit 1; }
+[[ "$manifest" == "$(bash "$work/scripts/source-fingerprint.sh" --field dirty_paths_base64)" ]] || { echo 'Excluded paths must not enter the build manifest'; exit 1; }
 echo 'source fingerprint tests passed'

@@ -37,6 +37,7 @@ import { ShortcutsModal } from './components/ShortcutsModal';
 import { ShortcutEditorModal } from './components/ShortcutEditorModal';
 import { WhatsNewModal } from './components/WhatsNewModal';
 import { ActionMenu, type ActionMenuItem } from './components/ActionMenu';
+import { DiagnosticReportPrompt } from './components/DiagnosticReportPrompt';
 import { SnoozeMenu } from './components/SnoozeMenu';
 import { MarkdownOpener, OPENER_EXTENSIONS } from './components/palette/MarkdownOpener';
 import { resolveMarkdownOpenerTarget } from './components/palette/openerTarget';
@@ -45,8 +46,12 @@ import { NotebookBrowser } from './components/NotebookBrowser';
 import { NotificationsPanel } from './components/NotificationsPanel';
 import { ErrorToast, useErrorToast } from './components/ErrorToast';
 import { useSavedFlash } from './components/useSavedFlash';
-import { writeClipboardText } from './utils/clipboardBridge';
-import { readTerminalInputDiagnostics } from './utils/terminalDiagnosticsLog';
+import {
+  type DiagnosticCaptureContext,
+  type DiagnosticPaneDescriptor,
+  type PendingDiagnosticCapture,
+} from './utils/diagnosticReport';
+import { collectWorkspaceLayoutDiagnostics } from './utils/workspaceDiagnostics';
 import { ChordLeaderHud } from './components/ChordLeaderHud';
 import { DaemonProvider } from './contexts/DaemonContext';
 import { GitHubPollingProvider } from './contexts/GitHubPollingContext';
@@ -373,6 +378,21 @@ function activePaneIdForFocusedSession(
     return sessionActivePaneId;
   }
   return activePaneIdForWorkspace(workspace, session?.id ?? null);
+}
+
+function diagnosticFocusKind(element: Element | null): string {
+  if (!element) return 'none';
+  if (element.closest('.terminal-container, .grid-view-stage')) return 'terminal';
+  if (element.matches('input, textarea, [contenteditable="true"]')) return 'editor';
+  if (element.matches('button, a, select')) return 'control';
+  return element === document.body ? 'body' : 'other';
+}
+
+function shortenDiagnosticPath(path: string): string {
+  return path
+    .replace(/^\/Users\/[^/]+(?=\/|$)/, '~')
+    .replace(/^\/home\/[^/]+(?=\/|$)/, '~')
+    .replace(/^[A-Za-z]:\\Users\\[^\\]+(?=\\|$)/, '~');
 }
 
 function parseSemver(version: string): [number, number, number] | null {
@@ -927,6 +947,7 @@ function AppContent({
     sendCrewSleep,
     sendSessionList,
     sendSessionReopen,
+    sendSupportSnapshot,
   } = useDaemonApi();
 
   const presentationBySessionId = useMemo(
@@ -1579,20 +1600,101 @@ function AppContent({
 
   const [zoomModeBySessionId, setZoomModeBySessionId] = useState<Record<string, boolean>>({});
   const { message: errorMessage, durationMs: errorDurationMs, showError, clearError } = useErrorToast();
-  const inputDiagnosticsCopied = useSavedFlash();
-  const handleCopyInputDiagnostics = useCallback(async () => {
-    try {
-      const dump = await readTerminalInputDiagnostics();
-      if (!dump) {
-        showError('No terminal input diagnostics yet. Try typing in a terminal, then copy again.');
-        return;
+  const diagnosticReportSaved = useSavedFlash();
+  const [diagnosticCapture, setDiagnosticCapture] = useState<{
+    capture: PendingDiagnosticCapture;
+    affectedPaneId: string | null;
+  } | null>(null);
+  const actionMenuOriginRef = useRef<DiagnosticCaptureContext | null>(null);
+
+  const diagnosticPanes = useCallback((): DiagnosticPaneDescriptor[] => {
+    const sessionById = new Map(sessions.map((session) => [session.id, session]));
+    const workspaceById = new Map(daemonWorkspaces.map((workspace) => [workspace.id, workspace]));
+    const panes = new Map<string, DiagnosticPaneDescriptor>();
+    for (const session of sessions) {
+      for (const pane of session.workspace.agents) {
+        if (panes.has(pane.id)) continue;
+        panes.set(pane.id, {
+          paneId: pane.id,
+          runtimeId: pane.runtimeId,
+          sessionId: pane.sessionId,
+          title: pane.title,
+          sessionLabel: sessionById.get(pane.sessionId)?.label || pane.title,
+          workspaceId: session.workspaceId,
+          workspaceLabel: workspaceById.get(session.workspaceId)?.title || session.workspaceId,
+          available: getPaneSize(pane.sessionId, pane.id) !== null,
+        });
       }
-      await writeClipboardText(dump);
-      inputDiagnosticsCopied.flash('copied');
-    } catch (error) {
-      showError(`Could not copy terminal input diagnostics: ${String(error)}`);
     }
-  }, [inputDiagnosticsCopied.flash, showError]);
+    return [...panes.values()];
+  }, [daemonWorkspaces, getPaneSize, sessions]);
+
+  const handleCreateDiagnosticReport = useCallback(async () => {
+    const fallbackSession = activeSessionId ? sessions.find((session) => session.id === activeSessionId) : null;
+    const fallbackPaneId = fallbackSession ? getActivePaneIdForSession(fallbackSession) || null : null;
+    const context = actionMenuOriginRef.current ?? {
+      capturedAtUnixMs: Date.now(),
+      view,
+      activeSessionId,
+      activePaneId: fallbackPaneId,
+      activeElement: diagnosticFocusKind(document.activeElement),
+      documentFocused: document.hasFocus(),
+      visibility: document.visibilityState,
+      window: { width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
+    };
+    const workspaceById = new Map(daemonWorkspaces.map((workspace) => [workspace.id, workspace]));
+    const workspaces = new Map<string, {
+      id: string;
+      label: string;
+      directory: string;
+      layout: unknown;
+    }>();
+    for (const session of sessions) {
+      if (workspaces.has(session.workspaceId)) continue;
+      const workspace = workspaceById.get(session.workspaceId);
+      workspaces.set(session.workspaceId, {
+        id: session.workspaceId,
+        label: workspace?.title || session.workspaceId,
+        directory: shortenDiagnosticPath(workspace?.directory || session.cwd),
+        layout: collectWorkspaceLayoutDiagnostics(session.workspace.layoutTree),
+      });
+    }
+    const { beginDiagnosticCapture } = await import('./utils/diagnosticReport');
+    const capture = beginDiagnosticCapture({
+      context,
+      panes: diagnosticPanes(),
+      sessions: sessions.map((session) => ({
+        id: session.id,
+        label: session.label,
+        state: session.state,
+        agent: session.agent,
+        cwd: shortenDiagnosticPath(session.cwd),
+        workspaceId: session.workspaceId,
+        endpoint: session.endpointId ? 'remote' : 'local',
+        ...(session.endpointId ? { endpointId: session.endpointId } : {}),
+        active: session.id === context.activeSessionId,
+      })),
+      workspaces: [...workspaces.values()],
+      settings,
+      sendSupportSnapshot,
+    });
+    setDiagnosticCapture({ capture, affectedPaneId: context.activePaneId });
+  }, [activeSessionId, daemonWorkspaces, diagnosticPanes, getActivePaneIdForSession, sendSupportSnapshot, sessions, settings, view]);
+
+  const handleSaveDiagnosticReport = useCallback(async (selectedPaneIds: string[]) => {
+    if (!diagnosticCapture) return;
+    const { createDiagnosticReport, saveDiagnosticReport } = await import('./utils/diagnosticReport');
+    const report = await createDiagnosticReport(diagnosticCapture.capture, selectedPaneIds, (paneId) => {
+      const pane = diagnosticCapture.capture.panes.find((entry) => entry.paneId === paneId);
+      if (!pane) return { text: '', available: false };
+      return {
+        text: getPaneText(pane.sessionId, paneId),
+        available: getPaneSize(pane.sessionId, paneId) !== null,
+      };
+    });
+    await saveDiagnosticReport(report);
+    diagnosticReportSaved.flash('saved');
+  }, [diagnosticCapture, diagnosticReportSaved.flash, getPaneSize, getPaneText]);
   const [chiefTransferTarget, setChiefTransferTarget] = useState<{
     sessionId: string;
     targetLabel: string;
@@ -1731,7 +1833,8 @@ function AppContent({
     || appViewParamsPrompt !== null
     || pendingSessionClose !== null
     || sessionCreationJob !== null
-    || openPRLauncherJob !== null;
+    || openPRLauncherJob !== null
+    || diagnosticCapture !== null;
 
   // Views with nothing focusable (dashboard, empty workspaces) can leave the WebView off first responder, killing EVERY shortcut until the user clicks the window.
   useEffect(() => {
@@ -1985,14 +2088,14 @@ function AppContent({
       run: () => setShortcutEditorOpen(true),
     },
     {
-      id: 'copy-terminal-input-diagnostics',
-      title: 'Copy terminal input diagnostics',
-      description: 'Copy a troubleshooting dump to share when a terminal stops accepting input',
-      keywords: ['debug', 'logs', 'dump', 'keyboard', 'typing', 'stuck', 'frozen'],
+      id: 'create-diagnostic-report',
+      title: 'Create diagnostic report',
+      description: 'Save a private troubleshooting report you can share',
+      keywords: ['debug', 'report', 'logs', 'dump', 'keyboard', 'typing', 'stuck', 'frozen', 'error'],
       icon: <KeyboardActionIcon />,
-      run: () => { void handleCopyInputDiagnostics(); },
+      run: handleCreateDiagnosticReport,
     },
-  ], [openDockPanel, handleOpenNotebookTile, toggleGardenFrame, gardenMode, settings, handleToggleQueueMode, sendSetSetting, handleCopyInputDiagnostics]);
+  ], [openDockPanel, handleOpenNotebookTile, toggleGardenFrame, gardenMode, settings, handleToggleQueueMode, sendSetSetting, handleCreateDiagnosticReport]);
 
   const handleToggleActionMenu = useCallback(() => {
     if (actionMenuOpen) {
@@ -2003,9 +2106,20 @@ function AppContent({
       || sessionsOpen || notebookOpen || gardenHoldsWindow
       || chiefTransferTarget !== null || contextCapPromptSession !== null
       || appViewParamsPrompt !== null || pendingSessionClose !== null
-      || sessionCreationJob !== null || openPRLauncherJob !== null) {
+      || sessionCreationJob !== null || openPRLauncherJob !== null || diagnosticCapture !== null) {
       return;
     }
+    const activeSession = activeSessionId ? sessions.find((session) => session.id === activeSessionId) : null;
+    actionMenuOriginRef.current = {
+      capturedAtUnixMs: Date.now(),
+      view,
+      activeSessionId,
+      activePaneId: activeSession ? getActivePaneIdForSession(activeSession) || null : null,
+      activeElement: diagnosticFocusKind(document.activeElement),
+      documentFocused: document.hasFocus(),
+      visibility: document.visibilityState,
+      window: { width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
+    };
     setActionMenuOpen(true);
   }, [
     actionMenuOpen,
@@ -2022,6 +2136,11 @@ function AppContent({
     sessionsOpen,
     notebookOpen,
     gardenHoldsWindow,
+    diagnosticCapture,
+    activeSessionId,
+    sessions,
+    getActivePaneIdForSession,
+    view,
   ]);
   useEffect(() => {
     if (!settingError) {
@@ -4050,8 +4169,8 @@ function AppContent({
         />
       )}
       <ErrorToast message={errorMessage} durationMs={errorDurationMs} onDone={clearError} />
-      {inputDiagnosticsCopied.saved('copied') && (
-        <div className="input-diagnostics-copied" role="status">Terminal input diagnostics copied</div>
+      {diagnosticReportSaved.saved('saved') && (
+        <div className="input-diagnostics-copied" role="status">Diagnostic report saved</div>
       )}
       <ChordLeaderHud />
       <LedgerSurface
@@ -4182,6 +4301,14 @@ function AppContent({
         actions={actionMenuItemsWithQueueActions}
         onClose={() => setActionMenuOpen(false)}
       />
+      {diagnosticCapture && (
+        <DiagnosticReportPrompt
+          capture={diagnosticCapture.capture}
+          affectedPaneId={diagnosticCapture.affectedPaneId}
+          onCreate={handleSaveDiagnosticReport}
+          onClose={() => setDiagnosticCapture(null)}
+        />
+      )}
       <ShortcutsModal
         isOpen={shortcutsOpen}
         onClose={() => setShortcutsOpen(false)}

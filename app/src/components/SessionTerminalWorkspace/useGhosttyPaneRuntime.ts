@@ -34,7 +34,7 @@ function decodePtyBytes(payload: string | Uint8Array): Uint8Array {
 export interface GhosttyPaneRuntime {
   setTerminalHandle: (paneId: string, handle: GhosttyTerminalHandle | null) => void;
   handleTerminalReady: (paneId: string) => (terminal: GhosttyTerminalHandle) => Promise<void>;
-  handleTerminalInput: (paneId: string) => (data: string, source?: string) => void;
+  handleTerminalInput: (paneId: string) => (data: string, source?: string, traceId?: string) => void;
   handleTerminalResize: (paneId: string) => (cols: number, rows: number, options?: TerminalResizeOptions) => void;
   focusPane: (paneId: string, retries?: number) => void;
   fitPane: (paneId: string) => void;
@@ -297,7 +297,7 @@ export function useGhosttyPaneRuntime(
     }
   }, [paneFor]);
 
-  const handleTerminalInput = useCallback((paneId: string) => (data: string, source?: string) => {
+  const handleTerminalInput = useCallback((paneId: string) => (data: string, source?: string, traceId?: string) => {
     const pane = paneFor(paneId);
     if (!pane) return;
     if (import.meta.env.DEV && pane.testSessionId) {
@@ -307,7 +307,7 @@ export function useGhosttyPaneRuntime(
       testWindow.__TEST_SESSION_INPUT_EVENTS = testWindow.__TEST_SESSION_INPUT_EVENTS || [];
       testWindow.__TEST_SESSION_INPUT_EVENTS.push({ sessionId: pane.testSessionId, event: 'send_to_pty', data, source });
     }
-    void ptyWrite({ id: pane.runtimeId, data, ...(source ? { source } : {}) });
+    void ptyWrite({ id: pane.runtimeId, data, ...(source ? { source } : {}), ...(traceId ? { traceId } : {}) });
   }, [paneFor]);
 
   const handleTerminalResize = useCallback((paneId: string) => (cols: number, rows: number, options?: TerminalResizeOptions) => {

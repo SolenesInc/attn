@@ -131,6 +131,7 @@ declare global {
 const ring: DiagEvent[] = [];
 let ringNextIndex = 0;
 let ringWrapped = false;
+let ringTotal = 0;
 const paneHealth = new Map<string, PaneHealth>();
 const renderProbes = new Map<string, () => RenderProbe | null>();
 const repairHandlers = new Map<string, () => void>();
@@ -254,6 +255,7 @@ export async function readTerminalInputDiagnostics(): Promise<string> {
 }
 
 function pushRing(event: DiagEvent) {
+  ringTotal += 1;
   if (ring.length < RING_LIMIT) {
     ring.push(event);
     return;
@@ -261,6 +263,10 @@ function pushRing(event: DiagEvent) {
   ring[ringNextIndex] = event;
   ringNextIndex = (ringNextIndex + 1) % RING_LIMIT;
   ringWrapped = true;
+}
+
+export function supportTerminalDiagnosticsSnapshot(): { capacity: number; total: number; events: DiagEvent[] } {
+  return { capacity: RING_LIMIT, total: ringTotal, events: ringSnapshot() };
 }
 
 function ringSnapshot(): DiagEvent[] {
@@ -776,7 +782,7 @@ function stopClipSweepIfIdle(): void {
   }
 }
 
-export function dumpTerminalGeometry(): TerminalGeometrySnapshot[] {
+export function supportTerminalGeometrySnapshot(): TerminalGeometrySnapshot[] {
   const snapshots: TerminalGeometrySnapshot[] = [];
   for (const [pane, probeFn] of renderProbes) {
     let probe: RenderProbe | null = null;
@@ -814,6 +820,11 @@ export function dumpTerminalGeometry(): TerminalGeometrySnapshot[] {
         || (rightOverflowPx != null && rightOverflowPx > BOTTOM_CLIP_SLACK_PX),
     });
   }
+  return snapshots;
+}
+
+export function dumpTerminalGeometry(): TerminalGeometrySnapshot[] {
+  const snapshots = supportTerminalGeometrySnapshot();
   enqueueWrite('incident', `${JSON.stringify({ at: Date.now(), kind: 'geometry_dump', snapshots })}\n`);
   if (typeof console !== 'undefined' && typeof console.table === 'function') {
     console.table(snapshots);
