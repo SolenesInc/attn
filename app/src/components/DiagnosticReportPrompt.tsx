@@ -49,7 +49,7 @@ export function DiagnosticReportPrompt({
   };
 
   return (
-    <div className="diagnostic-report-overlay" onClick={saving ? undefined : onClose}>
+    <div className="diagnostic-report-overlay" role="presentation" onClick={saving ? undefined : onClose}>
       <FocusTrap focusTrapOptions={{ allowOutsideClick: true, escapeDeactivates: false }}>
         <section
           className="diagnostic-report-sheet"

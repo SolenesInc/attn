@@ -390,7 +390,10 @@ export function deriveInputJourneys(
     trace.push(event);
     byTrace.set(event.traceId, trace);
   }
-  const daemonByTrace = new Map(daemons.flatMap((daemon) => daemon.input_traces).map((trace) => [trace.trace_id, trace]));
+  const daemonByTrace = new Map<string, DaemonSupportSnapshot['input_traces'][number]>();
+  for (const daemon of daemons) {
+    for (const trace of daemon.input_traces) daemonByTrace.set(trace.trace_id, trace);
+  }
   const outputs = ptyOutputEvents(pty);
 
   return [...byTrace.entries()].map(([traceId, events]) => {
