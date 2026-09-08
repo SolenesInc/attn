@@ -1672,6 +1672,150 @@
               }
             ]
           }
+        },
+        {
+          "id": "pr-checkout",
+          "delivery": "message_fragment",
+          "description": "Durable pull request checkout receipt for a new delegation.",
+          "body": {
+            "kind": "text",
+            "id": "delegation.pr-checkout",
+            "source": "content/delegation/pr-checkout.md",
+            "bindings": [
+              {
+                "name": "url",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "url",
+                    "kind": "text",
+                    "description": "Canonical pull request URL."
+                  }
+                }
+              },
+              {
+                "name": "number",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "number",
+                    "kind": "text",
+                    "description": "Pull request number."
+                  }
+                }
+              },
+              {
+                "name": "state",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "state",
+                    "kind": "text",
+                    "description": "Pull request state."
+                  }
+                }
+              },
+              {
+                "name": "base_repository",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "base_repository",
+                    "kind": "text",
+                    "description": "Base repository identity."
+                  }
+                }
+              },
+              {
+                "name": "head_repository",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "head_repository",
+                    "kind": "text",
+                    "description": "Head repository identity."
+                  }
+                }
+              },
+              {
+                "name": "head_branch",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "head_branch",
+                    "kind": "text",
+                    "description": "Remote head branch."
+                  }
+                }
+              },
+              {
+                "name": "head_sha",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "head_sha",
+                    "kind": "text",
+                    "description": "Resolved head commit."
+                  }
+                }
+              },
+              {
+                "name": "local_branch",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "local_branch",
+                    "kind": "text",
+                    "description": "Checked-out local branch."
+                  }
+                }
+              },
+              {
+                "name": "worktree_path",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "worktree_path",
+                    "kind": "text",
+                    "description": "Checked-out worktree."
+                  }
+                }
+              },
+              {
+                "name": "verified_head",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "verified_head",
+                    "kind": "text",
+                    "description": "Verified worktree HEAD."
+                  }
+                }
+              },
+              {
+                "name": "disposition",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "disposition",
+                    "kind": "text",
+                    "description": "How the checkout was prepared."
+                  }
+                }
+              },
+              {
+                "name": "backup",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "backup",
+                    "kind": "text",
+                    "description": "Optional backup branch receipt."
+                  }
+                }
+              }
+            ]
+          }
         }
       ]
     },
@@ -5505,5 +5649,5 @@
       ]
     }
   ],
-  "definitions_hash": "f11b94dd3f06025911e4ddd0b7029fa0aa1ab09823473cf1413f26cbca8cad99"
+  "definitions_hash": "5ac9e515e59099051c561c6d31e43f193d45694d31e687956a70cb6257a5b036"
 }

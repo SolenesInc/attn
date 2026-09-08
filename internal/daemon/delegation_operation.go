@@ -93,7 +93,7 @@ func (d *Daemon) runDelegationOperation(id string) {
 			return
 		}
 	}
-	result, launchErr := d.delegateOperation(&msg, id, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned, record.WorktreeToken, record.ChiefSessionID, resolved)
+	result, launchErr := d.delegateOperation(&msg, id, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned, record.WorktreeToken, record.ChiefSessionID, resolved, record.Operation.PullRequest)
 	if launchErr != nil {
 		d.finishDelegationFailure(id, launchErr)
 		return

@@ -479,6 +479,67 @@ func TestClientDelegateRejectsNoWorktreeWithOverrides(t *testing.T) {
 	}
 }
 
+func TestClientStartDelegationSerializesPullRequestCheckout(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("/tmp", "attn-client-pr-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+	sockPath := filepath.Join(tmpDir, "test.sock")
+	listener, err := net.Listen("unix", sockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	requests := make(chan *protocol.DelegateMessage, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer conn.Close()
+		var raw json.RawMessage
+		if json.NewDecoder(conn).Decode(&raw) != nil {
+			return
+		}
+		_, parsed, parseErr := protocol.ParseMessage(raw)
+		if parseErr != nil {
+			return
+		}
+		requests <- parsed.(*protocol.DelegateMessage)
+		_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, DelegationOperation: &protocol.DelegationOperation{
+			OperationID: "operation-pr", RequestID: "request-pr", SessionID: "session-pr",
+			State: protocol.DelegationOperationStatePreparing,
+		}})
+	}()
+	_, err = New(sockPath).StartDelegation("source", "Review the PR", DelegateOptions{
+		RequestID: "request-pr", WorktreeRepo: "/tmp/repo", WorktreePath: "/tmp/repo--feature", PullRequest: "42",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := <-requests
+	if protocol.Deref(request.PullRequest) != "42" || request.Worktree == nil ||
+		protocol.Deref(request.Worktree.Repo) != "/tmp/repo" || protocol.Deref(request.Worktree.Path) != "/tmp/repo--feature" ||
+		request.Worktree.Branch != "" || request.Worktree.StartingFrom != nil {
+		t.Fatalf("request = %+v", request)
+	}
+}
+
+func TestClientStartDelegationRejectsPullRequestConflicts(t *testing.T) {
+	for _, options := range []DelegateOptions{
+		{PullRequest: "42"},
+		{PullRequest: "42", WorktreeRepo: "/tmp/repo", Worktree: "feature"},
+		{PullRequest: "42", WorktreeRepo: "/tmp/repo", StartingFrom: "main"},
+		{PullRequest: "42", WorktreeRepo: "/tmp/repo", NoWorktree: true},
+		{PullRequest: "42", WorktreeRepo: "/tmp/repo", Handover: &protocol.SeedHandoverRequest{SeedID: "s-test"}},
+	} {
+		if _, err := New(filepath.Join(t.TempDir(), "missing.sock")).StartDelegation("source", "brief", options); err == nil {
+			t.Fatalf("StartDelegation(%+v) succeeded", options)
+		}
+	}
+}
+
 func TestClient_NotRunning(t *testing.T) {
 	c := New("/nonexistent/socket.sock")
 	err := c.Register("id", "label", "/tmp")

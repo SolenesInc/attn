@@ -794,6 +794,7 @@ repository placement (where the agent runs):
   --worktree <branch>        choose the new worktree's branch
   --repo <path>              main repository; required when the target
                              workspace's sessions span several
+  --pr <number-or-url>       check out --repo's live pull request head in a new workspace
   --from <ref>               branch or ref to start from
   --worktree-path <path>     override the generated sibling path
 
@@ -1641,6 +1642,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	cwd := fs.String("cwd", "", "use an existing directory in a new workspace")
 	worktreeBranch := fs.String("worktree", "", "create a worktree with this branch for the delegated session")
 	worktreeRepo := fs.String("repo", "", "main repository for --worktree (defaults to the target's session repository)")
+	pullRequest := fs.String("pr", "", "pull request number or URL to check out from --repo")
 	worktreeStart := fs.String("from", "", "starting ref for --worktree")
 	worktreePath := fs.String("worktree-path", "", "custom path for --worktree")
 	noWorktree := fs.Bool("no-worktree", false, "reuse the resolved checkout instead of creating a worktree")
@@ -1731,6 +1733,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	customCWD := strings.TrimSpace(*cwd)
 	branch := strings.TrimSpace(*worktreeBranch)
 	repo := strings.TrimSpace(*worktreeRepo)
+	pr := strings.TrimSpace(*pullRequest)
 	startingFrom := strings.TrimSpace(*worktreeStart)
 	customWorktreePath := strings.TrimSpace(*worktreePath)
 	stableRequestID := strings.TrimSpace(*requestID)
@@ -1743,11 +1746,22 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	if *noWorktree && (branch != "" || repo != "" || startingFrom != "" || customWorktreePath != "") {
 		return delegateCLIArgs{}, errors.New("--no-worktree cannot be combined with --worktree, --repo, --from, or --worktree-path")
 	}
+	if pr != "" {
+		if repo == "" {
+			return delegateCLIArgs{}, errors.New("--pr requires --repo")
+		}
+		if explicitWorkspace != "" {
+			return delegateCLIArgs{}, errors.New("--pr cannot be combined with --workspace; it launches in a new workspace")
+		}
+		if branch != "" || startingFrom != "" || *noWorktree {
+			return delegateCLIArgs{}, errors.New("--pr cannot be combined with --worktree, --from, or --no-worktree")
+		}
+	}
 
 	placement := "current_workspace"
 	if explicitWorkspace != "" {
 		placement = "existing_workspace"
-	} else if *newWorkspace || customCWD != "" {
+	} else if *newWorkspace || customCWD != "" || pr != "" {
 		placement = "new_workspace"
 	}
 
@@ -1770,6 +1784,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 			Worktree:           branch,
 			WorktreePath:       customWorktreePath,
 			StartingFrom:       startingFrom,
+			PullRequest:        pr,
 			NoWorktree:         *noWorktree,
 			AllowWorktreeReuse: *allowWorktreeReuse,
 		},

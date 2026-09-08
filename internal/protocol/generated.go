@@ -2656,6 +2656,9 @@ type DelegateMessage struct {
 	// Provider corresponds to the JSON schema field "provider".
 	Provider *string `json:"provider,omitempty,omitzero"`
 
+	// PullRequest corresponds to the JSON schema field "pull_request".
+	PullRequest *string `json:"pull_request,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
 
@@ -2678,6 +2681,60 @@ type DelegateMessage struct {
 	YoloMode *bool `json:"yolo_mode,omitempty,omitzero"`
 }
 
+type DelegatePullRequestReceipt struct {
+	// BackupBranch corresponds to the JSON schema field "backup_branch".
+	BackupBranch *string `json:"backup_branch,omitempty,omitzero"`
+
+	// BackupFingerprint corresponds to the JSON schema field "backup_fingerprint".
+	BackupFingerprint *string `json:"backup_fingerprint,omitempty,omitzero"`
+
+	// BackupHead corresponds to the JSON schema field "backup_head".
+	BackupHead *string `json:"backup_head,omitempty,omitzero"`
+
+	// BackupSourceHead corresponds to the JSON schema field "backup_source_head".
+	BackupSourceHead *string `json:"backup_source_head,omitempty,omitzero"`
+
+	// BaseRepository corresponds to the JSON schema field "base_repository".
+	BaseRepository string `json:"base_repository"`
+
+	// CheckoutFingerprint corresponds to the JSON schema field
+	// "checkout_fingerprint".
+	CheckoutFingerprint *string `json:"checkout_fingerprint,omitempty,omitzero"`
+
+	// Disposition corresponds to the JSON schema field "disposition".
+	Disposition string `json:"disposition"`
+
+	// HeadBranch corresponds to the JSON schema field "head_branch".
+	HeadBranch string `json:"head_branch"`
+
+	// HeadRepository corresponds to the JSON schema field "head_repository".
+	HeadRepository string `json:"head_repository"`
+
+	// HeadSHA corresponds to the JSON schema field "head_sha".
+	HeadSHA string `json:"head_sha"`
+
+	// LocalBranch corresponds to the JSON schema field "local_branch".
+	LocalBranch string `json:"local_branch"`
+
+	// Number corresponds to the JSON schema field "number".
+	Number int `json:"number"`
+
+	// Source corresponds to the JSON schema field "source".
+	Source string `json:"source"`
+
+	// State corresponds to the JSON schema field "state".
+	State string `json:"state"`
+
+	// URL corresponds to the JSON schema field "url".
+	URL string `json:"url"`
+
+	// VerifiedHead corresponds to the JSON schema field "verified_head".
+	VerifiedHead string `json:"verified_head"`
+
+	// WorktreePath corresponds to the JSON schema field "worktree_path".
+	WorktreePath string `json:"worktree_path"`
+}
+
 type DelegateResult struct {
 	// Branch corresponds to the JSON schema field "branch".
 	Branch *string `json:"branch,omitempty,omitzero"`
@@ -2694,6 +2751,9 @@ type DelegateResult struct {
 
 	// Placement corresponds to the JSON schema field "placement".
 	Placement string `json:"placement"`
+
+	// PullRequest corresponds to the JSON schema field "pull_request".
+	PullRequest *DelegatePullRequestReceipt `json:"pull_request,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID string `json:"session_id"`
@@ -2861,6 +2921,9 @@ type DelegationOperation struct {
 
 	// Progress corresponds to the JSON schema field "progress".
 	Progress string `json:"progress"`
+
+	// PullRequest corresponds to the JSON schema field "pull_request".
+	PullRequest *DelegatePullRequestReceipt `json:"pull_request,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`

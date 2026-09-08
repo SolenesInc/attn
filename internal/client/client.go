@@ -630,6 +630,7 @@ type DelegateOptions struct {
 	Worktree            string
 	WorktreePath        string
 	StartingFrom        string
+	PullRequest         string
 	NoWorktree          bool
 	AllowWorktreeReuse  bool
 	Handover            *protocol.SeedHandoverRequest
@@ -700,13 +701,25 @@ func (c *Client) StartDelegation(sourceSessionID, brief string, opts DelegateOpt
 	if value := strings.TrimSpace(opts.CWD); value != "" {
 		msg.Cwd = protocol.Ptr(value)
 	}
+	if value := strings.TrimSpace(opts.PullRequest); value != "" {
+		msg.PullRequest = protocol.Ptr(value)
+	}
 	branch := strings.TrimSpace(opts.Worktree)
 	worktreeRepo := strings.TrimSpace(opts.WorktreeRepo)
 	worktreePath := strings.TrimSpace(opts.WorktreePath)
 	startingFrom := strings.TrimSpace(opts.StartingFrom)
+	pullRequest := strings.TrimSpace(opts.PullRequest)
 	worktreeConfigured := branch != "" || worktreeRepo != "" || worktreePath != "" || startingFrom != ""
 	if opts.NoWorktree && worktreeConfigured {
 		return nil, errors.New("no worktree cannot be combined with worktree options")
+	}
+	if pullRequest != "" {
+		if worktreeRepo == "" {
+			return nil, errors.New("pull request checkout requires a repository")
+		}
+		if branch != "" || startingFrom != "" || opts.NoWorktree || opts.Handover != nil {
+			return nil, errors.New("pull request checkout cannot be combined with branch, starting ref, no-worktree, or handover")
+		}
 	}
 	if !opts.NoWorktree && opts.Handover == nil {
 		msg.Worktree = &protocol.DelegateWorktreeRequest{

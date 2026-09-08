@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"slices"
@@ -82,6 +83,10 @@ func (d *Daemon) doListWorktrees(mainRepo string) []protocol.Worktree {
 }
 
 func (d *Daemon) doCreateWorktree(msg *protocol.CreateWorktreeMessage) (string, error) {
+	return d.doCreateWorktreeWithOptions(msg, false)
+}
+
+func (d *Daemon) doCreateWorktreeWithOptions(msg *protocol.CreateWorktreeMessage, requireStartingPoint bool) (string, error) {
 	mainRepo := git.ResolveMainRepoPath(msg.MainRepo)
 
 	requestedPath := protocol.Deref(msg.Path)
@@ -119,6 +124,9 @@ func (d *Daemon) doCreateWorktree(msg *protocol.CreateWorktreeMessage) (string, 
 	// An unresolvable start ref falls back to the repo current HEAD so creation
 	// succeeds instead of erroring.
 	if startingFrom != "" && !git.RefExists(mainRepo, startingFrom) {
+		if requireStartingPoint {
+			return "", fmt.Errorf("worktree start ref %q is no longer resolvable in %s", startingFrom, mainRepo)
+		}
 		d.logf("Worktree start ref %q not resolvable in %s; falling back to current HEAD", startingFrom, mainRepo)
 		startingFrom = ""
 	}

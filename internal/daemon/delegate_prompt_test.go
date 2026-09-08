@@ -1,6 +1,11 @@
 package daemon
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/victorarias/attn/internal/protocol"
+)
 
 func TestDelegatedBriefPromptCarriesSeedContextAndReporting(t *testing.T) {
 	const want = `Fix the launch guidance.
@@ -42,5 +47,29 @@ and any next step; do not make them inspect the seed to learn what happened.`
 func TestDelegatedBriefPromptWithoutSeedIsJustTheBrief(t *testing.T) {
 	if got := delegatedBriefPrompt("  Work on the outpost.  ", ""); got != "Work on the outpost." {
 		t.Fatalf("outpost brief = %q", got)
+	}
+}
+
+func TestDelegatedPullRequestReceiptPromptRecordsVerifiedLaunch(t *testing.T) {
+	receipt := &protocol.DelegatePullRequestReceipt{
+		URL: "https://github.com/owner/repo/pull/42", Number: 42, State: "open",
+		BaseRepository: "github.com/owner/repo", HeadRepository: "github.com/fork/repo",
+		HeadBranch: "feature", HeadSHA: "abc123", LocalBranch: "feature",
+		WorktreePath: "/work/repo--feature", VerifiedHead: "abc123", Disposition: "preserved",
+		BackupBranch: protocol.Ptr("feature--attn-backup-20260908T120000Z"),
+		BackupHead:   protocol.Ptr("def456"),
+	}
+	got := delegatedPullRequestReceiptPrompt(receipt)
+	for _, want := range []string{
+		"Pull request checkout receipt",
+		"https://github.com/owner/repo/pull/42 (#42, open)",
+		"Resolved head: abc123",
+		"Verified HEAD: abc123",
+		"Preserved prior state: feature--attn-backup-20260908T120000Z @ def456",
+		"Follow-up messages, resumes, and handovers do not synchronize it again.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("receipt prompt missing %q:\n%s", want, got)
+		}
 	}
 }

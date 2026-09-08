@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/toolhome"
@@ -568,6 +570,88 @@ func TestParseDelegateArgsNoWorktree(t *testing.T) {
 	}
 	if !parsed.options.NoWorktree {
 		t.Fatal("options.NoWorktree = false, want true")
+	}
+}
+
+func TestParseDelegateArgsPullRequest(t *testing.T) {
+	parsed, err := parseDelegateArgs([]string{
+		"--source-session", "source-session", "--brief", "Review it", "--model", "opus",
+		"--repo", "/tmp/repo", "--pr", "https://github.com/owner/repo/pull/42",
+		"--worktree-path", "/tmp/repo--feature",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.options.WorktreeRepo != "/tmp/repo" || parsed.options.PullRequest != "https://github.com/owner/repo/pull/42" || parsed.options.WorktreePath != "/tmp/repo--feature" {
+		t.Fatalf("options = %+v", parsed.options)
+	}
+	if parsed.options.Placement != "new_workspace" {
+		t.Fatalf("placement = %q, want new_workspace", parsed.options.Placement)
+	}
+}
+
+func TestDelegatePullRequestCLIReachesDaemonAsNewWorkspace(t *testing.T) {
+	parsed, err := parseDelegateArgs([]string{
+		"--source-session", "source-session", "--brief", "Review it", "--model", "opus",
+		"--repo", "/tmp/repo", "--pr", "42",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpDir, err := os.MkdirTemp("/tmp", "attn-cli-pr-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+	socket := filepath.Join(tmpDir, "attn.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	requests := make(chan *protocol.DelegateMessage, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer conn.Close()
+		var raw json.RawMessage
+		if json.NewDecoder(conn).Decode(&raw) != nil {
+			return
+		}
+		_, message, parseErr := protocol.ParseMessage(raw)
+		if parseErr != nil {
+			return
+		}
+		requests <- message.(*protocol.DelegateMessage)
+		_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, DelegationOperation: &protocol.DelegationOperation{
+			OperationID: "operation-pr", RequestID: parsed.options.RequestID, SessionID: "session-pr",
+			State: protocol.DelegationOperationStatePreparing,
+		}})
+	}()
+	if _, err := client.New(socket).StartDelegation(parsed.sourceSessionID, parsed.brief, parsed.options); err != nil {
+		t.Fatal(err)
+	}
+	request := <-requests
+	if protocol.Deref(request.Placement) != "new_workspace" || protocol.Deref(request.PullRequest) != "42" ||
+		request.Worktree == nil || protocol.Deref(request.Worktree.Repo) != "/tmp/repo" {
+		t.Fatalf("daemon request = %+v", request)
+	}
+}
+
+func TestParseDelegateArgsRejectsInvalidPullRequestPlacement(t *testing.T) {
+	for _, extra := range [][]string{
+		{"--pr", "42"},
+		{"--repo", "/tmp/repo", "--pr", "42", "--from", "main"},
+		{"--repo", "/tmp/repo", "--pr", "42", "--worktree", "other"},
+		{"--repo", "/tmp/repo", "--pr", "42", "--no-worktree"},
+		{"--repo", "/tmp/repo", "--pr", "42", "--workspace", "existing"},
+	} {
+		_, err := parseDelegateArgs(append([]string{"--source-session", "source", "--brief", "x", "--model", "opus"}, extra...))
+		if err == nil {
+			t.Fatalf("parseDelegateArgs(%v) succeeded", extra)
+		}
 	}
 }
 

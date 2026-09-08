@@ -1239,6 +1239,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{137, "name the repository a session ran in so the ledger can filter by it", ""},
 	{138, "persist delegation preferences", `CREATE TABLE IF NOT EXISTS delegation_preferences (id INTEGER PRIMARY KEY CHECK (id = 1), config TEXT NOT NULL);`},
 	{139, "convert dispatch notifications to Garden subscriptions", ""},
+	{140, "persist resolved delegation pull request receipts", ""},
 }
 
 const migration99SQL = `
@@ -1691,6 +1692,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 140 {
+			if err := applyMigration140(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else if m.version == 139 {
 			if err := migrateGardenDispatchWatches(tx); err != nil {
 				tx.Rollback()
@@ -1740,6 +1746,15 @@ func migrateDB(db *sql.DB, dbPath string) error {
 	}
 
 	return nil
+}
+
+func applyMigration140(tx *sql.Tx) error {
+	has, err := columnExists(tx, "delegation_operations", "resolved_pr_json")
+	if err != nil || has {
+		return err
+	}
+	_, err = tx.Exec("ALTER TABLE delegation_operations ADD COLUMN resolved_pr_json TEXT NOT NULL DEFAULT ''")
+	return err
 }
 
 func applyMigration121(tx *sql.Tx) error {
