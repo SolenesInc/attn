@@ -201,6 +201,30 @@ function pendingCapture(): PendingDiagnosticCapture {
 }
 
 describe('diagnostic report pane consent', () => {
+  it('creates a partial report when evidence collectors do not finish', async () => {
+    vi.useFakeTimers();
+    try {
+      const capture = pendingCapture();
+      capture.daemons = new Promise(() => {});
+      capture.nativeInput = new Promise(() => {});
+      capture.historicalInput = new Promise(() => {});
+
+      const reportPromise = createDiagnosticReport(capture, [], () => ({ text: '', available: true }));
+      await vi.advanceTimersByTimeAsync(3_000);
+      const report = await reportPromise;
+
+      expect(report.daemons).toEqual([]);
+      expect(report.omissions).toEqual(expect.arrayContaining([
+        { section: 'daemons', reason: 'snapshots_unavailable' },
+        { section: 'daemons:local', reason: 'snapshot_unavailable' },
+        { section: 'nativeInput', reason: 'unsupported_or_unavailable' },
+        { section: 'historicalInput', reason: 'no_persisted_samples' },
+      ]));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('reads no terminal content by default', async () => {
     const readPane = vi.fn(() => ({ text: 'PRIVATE_OUTPUT', available: true }));
     const report = await createDiagnosticReport(pendingCapture(), [], readPane);

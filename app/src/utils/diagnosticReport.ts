@@ -12,6 +12,7 @@ import { snapshotFrontendInputTrace, type FrontendInputTraceSnapshot } from './s
 export const DIAGNOSTIC_REPORT_SCHEMA = 'attn.support-report.v1';
 const PANE_CONTENT_BYTE_LIMIT = 32 * 1024;
 const REPORT_BYTE_LIMIT = 8 * 1024 * 1024;
+const EVIDENCE_DEADLINE_MS = 3_000;
 
 export interface NativeInputObservation {
   sequence: number;
@@ -439,10 +440,21 @@ export async function createDiagnosticReport(
   selectedPaneIds: readonly string[],
   readPane: (paneId: string) => { text: string; available: boolean },
 ): Promise<Record<string, unknown>> {
+  const unavailableNativeInput: NativeInputSnapshot = {
+    supported: false, os: 'unknown', arch: 'unknown', capacity: 512, total: 0,
+    capturedAtUnixMs: Date.now(), observations: [],
+  };
+  const unavailableHistoricalInput: BoundedDiagnosticSnapshot = {
+    capacity: 256, total: 0, capturedAtUnixMs: Date.now(), events: [],
+  };
+  const withDeadline = <T,>(promise: Promise<T>, fallback: T): Promise<T> => new Promise((resolve) => {
+    const timeout = window.setTimeout(() => resolve(fallback), EVIDENCE_DEADLINE_MS);
+    void promise.then(resolve, () => resolve(fallback)).finally(() => window.clearTimeout(timeout));
+  });
   const [daemonCapture, nativeInput, historicalInput] = await Promise.all([
-    capture.daemons,
-    capture.nativeInput,
-    capture.historicalInput,
+    withDeadline(capture.daemons, { snapshots: [], unavailableEndpoints: ['local'] }),
+    withDeadline(capture.nativeInput, unavailableNativeInput),
+    withDeadline(capture.historicalInput, unavailableHistoricalInput),
   ]);
   const daemons = daemonCapture.snapshots;
   const selected = new Set(selectedPaneIds);
