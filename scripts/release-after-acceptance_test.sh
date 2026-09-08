@@ -2,6 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$root/scripts/lib/test-git.sh"
 script="$root/scripts/release-after-acceptance.sh"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-release-after-acceptance-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
@@ -116,7 +117,7 @@ exit 2
 EOF
 chmod +x "$work/bin/gh"
 
-real_git="$(command -v git)"
+real_git="$(resolve_test_git)"
 cat >"$work/bin/git" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail

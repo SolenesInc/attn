@@ -3,6 +3,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$root/scripts/lib/test-git.sh"
 daemon_package="github.com/victorarias/attn/internal/daemon"
 shard_count="${ATTN_GO_TEST_SHARDS:-5}"
 package_parallelism="${ATTN_GO_TEST_PACKAGE_PARALLELISM:-4}"
@@ -41,7 +42,7 @@ trap cleanup EXIT
 # packages and subprocesses before any package-level setup executes. Keep the
 # outer path stable so Go can reuse successful test results; TestMain still
 # replaces it with a fresh per-process directory whenever tests actually run.
-runner_hash="$(shasum -a 256 "$root/scripts/test-go.sh" | awk '{ print $1 }')"
+runner_hash="$(shasum -a 256 "$root/scripts/test-go.sh" "$root/scripts/lib/test-git.sh" | shasum -a 256 | awk '{ print $1 }')"
 cache_namespace="$(printf '%s\n%s\n%s\n' "$root" "$($go_bin env GOVERSION)" "$runner_hash" | shasum -a 256 | awk '{ print $1 }')"
 test_cache_root="${TMPDIR:-/tmp}/attn-go-test-cache/$cache_namespace"
 mkdir -p "$test_cache_root/data"
@@ -52,20 +53,7 @@ export ATTN_DATA_DIR="$test_cache_root/data"
 unset ATTN_DB_PATH ATTN_SOCKET_PATH ATTN_CONFIG_PATH ATTN_PLUGIN_DIR ATTN_PROFILE
 
 # Tests should exercise Git itself, not an environment-specific command wrapper.
-# macOS is attn's supported platform, and /usr/bin/git provides a stable direct
-# executable. Other platforms keep their resolved Git unless explicitly pinned.
-test_git="${ATTN_TEST_GIT:-}"
-if [ -z "$test_git" ]; then
-  if [ "$(uname -s)" = "Darwin" ] && [ -x /usr/bin/git ]; then
-    test_git=/usr/bin/git
-  else
-    test_git="$(command -v git)"
-  fi
-fi
-if [ ! -x "$test_git" ]; then
-  echo "test Git is not executable: $test_git" >&2
-  exit 2
-fi
+test_git="$(resolve_test_git)"
 test_git_hash="$(shasum -a 256 "$test_git" | awk '{ print $1 }')"
 test_git_key="$(printf '%s\n%s\n' "$test_git" "$test_git_hash" | shasum -a 256 | awk '{ print $1 }')"
 test_bin_dir="$test_cache_root/git/$test_git_key"
