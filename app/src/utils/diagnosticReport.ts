@@ -661,13 +661,13 @@ function reportBaseName(now: Date): string {
 
 export async function saveDiagnosticReport(report: Record<string, unknown>): Promise<string> {
   const contents = `${JSON.stringify(report, null, 2)}\n`;
-  const [{ downloadDir, join }, { exists, writeTextFile }, { save }, { revealItemInDir }] = await Promise.all([
+  const [{ downloadDir, homeDir, join }, { exists, writeTextFile }, { save }, { revealItemInDir }] = await Promise.all([
     import('@tauri-apps/api/path'),
     import('@tauri-apps/plugin-fs'),
     import('@tauri-apps/plugin-dialog'),
     import('@tauri-apps/plugin-opener'),
   ]);
-  const downloads = await downloadDir();
+  const downloads = await downloadDir().catch(async () => join(await homeDir(), 'Downloads'));
   const baseName = reportBaseName(new Date());
   let target: string;
   try {

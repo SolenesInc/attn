@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   downloadDir: vi.fn(async () => '/Downloads'),
+  homeDir: vi.fn(async () => '/home/user'),
   join: vi.fn(async (...parts: string[]) => parts.join('/')),
   exists: vi.fn(async () => false),
   writeTextFile: vi.fn(async () => {}),
@@ -9,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   revealItemInDir: vi.fn(async () => {}),
 }));
 
-vi.mock('@tauri-apps/api/path', () => ({ downloadDir: mocks.downloadDir, join: mocks.join }));
+vi.mock('@tauri-apps/api/path', () => ({ downloadDir: mocks.downloadDir, homeDir: mocks.homeDir, join: mocks.join }));
 vi.mock('@tauri-apps/plugin-fs', () => ({ exists: mocks.exists, writeTextFile: mocks.writeTextFile }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: mocks.save }));
 vi.mock('@tauri-apps/plugin-opener', () => ({ revealItemInDir: mocks.revealItemInDir }));
@@ -19,6 +20,8 @@ import { saveDiagnosticReport } from './diagnosticReport';
 describe('saveDiagnosticReport', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.downloadDir.mockResolvedValue('/Downloads');
+    mocks.homeDir.mockResolvedValue('/home/user');
     mocks.exists.mockResolvedValue(false);
     mocks.writeTextFile.mockResolvedValue(undefined);
     mocks.save.mockResolvedValue(null);
@@ -47,6 +50,16 @@ describe('saveDiagnosticReport', () => {
     expect(mocks.save).toHaveBeenCalledOnce();
     expect(mocks.writeTextFile).toHaveBeenLastCalledWith('/chosen/report.json', expect.any(String));
     expect(mocks.revealItemInDir).toHaveBeenCalledWith('/chosen/report.json');
+  });
+
+  it('uses the conventional home download folder when the platform cannot resolve one', async () => {
+    mocks.downloadDir.mockRejectedValue(new Error('download directory is unavailable'));
+
+    const target = await saveDiagnosticReport({ schema: 'attn.support-report.v1' });
+
+    expect(target).toMatch(/^\/home\/user\/Downloads\/attn-\d{8}-\d{6}Z\.attn-report\.json$/);
+    expect(mocks.writeTextFile).toHaveBeenCalledWith(target, expect.any(String), { createNew: true });
+    expect(mocks.save).not.toHaveBeenCalled();
   });
 
   it('reports success without waiting for the desktop to reveal the file', async () => {
