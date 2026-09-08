@@ -3865,7 +3865,7 @@ model AutomationRunSummary {
   state: string;
   last_error?: string;
   cancel_reason?: string;
-  ticket_id?: string;
+  seed_id?: string;
   session_id?: string;
   pane_id?: string;
   created_at: string;

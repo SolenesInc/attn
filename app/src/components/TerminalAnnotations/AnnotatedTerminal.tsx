@@ -418,10 +418,13 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
 
     useEffect(() => {
       if (!composer?.writing) return;
-      const box = commentRef.current;
-      if (!box) return;
-      box.focus();
-      box.setSelectionRange(box.value.length, box.value.length);
+      const frame = requestAnimationFrame(() => {
+        const box = commentRef.current;
+        if (!box) return;
+        box.focus();
+        box.setSelectionRange(box.value.length, box.value.length);
+      });
+      return () => cancelAnimationFrame(frame);
     }, [composer?.writing, composer?.annotationId]);
 
     const annotations = store.list();

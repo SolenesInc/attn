@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -338,7 +339,7 @@ func TestMigration144AddsDelegationParentSnapshot(t *testing.T) {
 		db.Close()
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version = 144`); err != nil {
+	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version >= 144`); err != nil {
 		db.Close()
 		t.Fatal(err)
 	}
@@ -1979,5 +1980,61 @@ func TestMigration123AddsTranscriptPathAndIsRewindSafe(t *testing.T) {
 
 	if got := s.GetSessionConversation("legacy-session"); got != (SessionConversation{NativeID: "native-legacy"}) {
 		t.Fatalf("migrated binding = %+v, want native ID with an empty path", got)
+	}
+}
+
+func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := NewWithDB(dbPath)
+	if err != nil {
+		t.Fatalf("NewWithDB: %v", err)
+	}
+	defer s.Close()
+
+	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
+	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, _, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{}`, now, AutomationRunReservation{
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-old000", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.EnsureAutomationTicket(Ticket{ID: "legacy-ticket", Title: "Review", Status: TicketStatusWorking, Assignee: run.SessionID, AutomationRunID: run.ID}, "automation:review", TicketRoleChiefOfStaff, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DefineDocumentCollection(garden.DispatchesSchema(), now); err != nil {
+		t.Fatal(err)
+	}
+	dispatches, found, err := s.DocumentCollection(garden.Namespace, garden.CollectionDispatches)
+	if err != nil || !found {
+		t.Fatalf("load dispatch collection: found=%v err=%v", found, err)
+	}
+	if _, err := s.PutDocument(*dispatches, run.SessionID, []byte(`{"session_id":"session-1","crown":"s-live01"}`), now, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`
+		UPDATE automation_runs SET seed_id='',ticket_id='legacy-ticket' WHERE id='run-1';
+		UPDATE automation_continuity_bindings SET seed_id='',origin_run_id='',ticket_id='legacy-ticket' WHERE definition_id='review';
+		DELETE FROM schema_migrations WHERE version>=145;
+	`); err != nil {
+		t.Fatalf("rewind migration 145: %v", err)
+	}
+
+	if err := migrateDB(s.db, dbPath); err != nil {
+		t.Fatalf("migrateDB: %v", err)
+	}
+	migratedRun, err := s.GetAutomationRun(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := s.GetActiveAutomationContinuityBinding(def.ID, "singleton")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if migratedRun == nil || binding == nil || migratedRun.SeedID != "s-live01" || binding.SeedID != "s-live01" || binding.OriginRunID != run.ID {
+		t.Fatalf("migrated run=%#v binding=%#v", migratedRun, binding)
 	}
 }

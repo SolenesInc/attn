@@ -52,23 +52,25 @@ type AutomationDefinition struct {
 }
 
 type AutomationRun struct {
-	ID, DefinitionID, OccurrenceID           string
-	DefinitionRevision                       int
-	SnapshotJSON, State, CancelReason        string
-	Attempts                                 int
-	LastError                                string
-	TicketID, SessionID, WorkspaceID, PaneID string
-	ResolvedLocationJSON                     string
-	CreatedAt, UpdatedAt                     time.Time
-	DeliveredAt                              *time.Time
+	ID, DefinitionID, OccurrenceID    string
+	DefinitionRevision                int
+	SnapshotJSON, State, CancelReason string
+	Attempts                          int
+	LastError                         string
+	SeedID, LegacyTicketID            string
+	SessionID, WorkspaceID, PaneID    string
+	ResolvedLocationJSON              string
+	CreatedAt, UpdatedAt              time.Time
+	DeliveredAt                       *time.Time
 }
 
 type AutomationContinuityBinding struct {
-	ID, DefinitionID, ContinuityKey          string
-	TicketID, SessionID, WorkspaceID, PaneID string
-	Status, ReleasedReason                   string
-	ReleasedAt                               *time.Time
-	CreatedAt, UpdatedAt                     time.Time
+	ID, DefinitionID, ContinuityKey     string
+	SeedID, OriginRunID, LegacyTicketID string
+	SessionID, WorkspaceID, PaneID      string
+	Status, ReleasedReason              string
+	ReleasedAt                          *time.Time
+	CreatedAt, UpdatedAt                time.Time
 }
 
 type AutomationOccurrence struct {
@@ -78,13 +80,13 @@ type AutomationOccurrence struct {
 
 type AutomationProvenanceRecord struct {
 	RunID, DefinitionID, DefinitionName, DefinitionSpecJSON string
-	SessionID, TicketID                                     string
+	SessionID, SeedID, TicketID                             string
 	Provider, SubjectKey, PayloadJSON                       string
 	CreatedAt                                               time.Time
 }
 
 type AutomationRunReservation struct {
-	RunID, OccurrenceID, TicketID, SessionID, WorkspaceID, PaneID string
+	RunID, OccurrenceID, SeedID, SessionID, WorkspaceID, PaneID string
 }
 
 type AutomationReviewRequestCandidate struct {
@@ -351,12 +353,12 @@ func (s *Store) GetAutomationDefinitionIncludingDeleted(id string) (*AutomationD
 	return d, err
 }
 
-const automationContinuityBindingColumns = `id,definition_id,continuity_key,ticket_id,session_id,workspace_id,pane_id,status,released_reason,released_at,created_at,updated_at`
+const automationContinuityBindingColumns = `id,definition_id,continuity_key,seed_id,origin_run_id,ticket_id,session_id,workspace_id,pane_id,status,released_reason,released_at,created_at,updated_at`
 
 func scanAutomationContinuityBinding(scanner interface{ Scan(...any) error }) (*AutomationContinuityBinding, error) {
 	var b AutomationContinuityBinding
 	var releasedAt, created, updated string
-	if err := scanner.Scan(&b.ID, &b.DefinitionID, &b.ContinuityKey, &b.TicketID, &b.SessionID, &b.WorkspaceID, &b.PaneID, &b.Status, &b.ReleasedReason, &releasedAt, &created, &updated); err != nil {
+	if err := scanner.Scan(&b.ID, &b.DefinitionID, &b.ContinuityKey, &b.SeedID, &b.OriginRunID, &b.LegacyTicketID, &b.SessionID, &b.WorkspaceID, &b.PaneID, &b.Status, &b.ReleasedReason, &releasedAt, &created, &updated); err != nil {
 		return nil, err
 	}
 	b.ReleasedAt = parseOptionalAutomationTime(releasedAt)
@@ -376,6 +378,20 @@ func (s *Store) GetActiveAutomationContinuityBinding(definitionID, continuityKey
 		return nil, nil
 	}
 	return b, err
+}
+
+func (s *Store) OriginAutomationRunIDForSeed(definitionID, seedID string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return "", errors.New("automation persistence unavailable")
+	}
+	var origin string
+	err := s.db.QueryRow(`SELECT origin_run_id FROM automation_continuity_bindings WHERE definition_id=? AND seed_id=? AND origin_run_id<>'' ORDER BY created_at ASC, id ASC LIMIT 1`, definitionID, seedID).Scan(&origin)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return origin, err
 }
 
 func (s *Store) ReleaseAutomationContinuityBinding(definitionID, continuityKey, reason string, now time.Time) error {
@@ -404,18 +420,31 @@ func (s *Store) ReleaseAutomationContinuityBindings(definitionID, reason string,
 	return err
 }
 
+func pendingAutomationRunInThreadTx(tx *sql.Tx, definitionID, provider, subjectKey string) (bool, error) {
+	var pending int
+	err := tx.QueryRow(`
+		SELECT EXISTS(
+			SELECT 1
+			FROM automation_runs r
+			JOIN automation_occurrences o ON o.id=r.occurrence_id
+			WHERE r.definition_id=? AND o.provider=? AND (?='' OR o.subject_key=?) AND r.state=?
+		)
+	`, definitionID, provider, subjectKey, subjectKey, AutomationRunStatePending).Scan(&pending)
+	return pending != 0, err
+}
+
 func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID, continuityKey string, ids *AutomationRunReservation, now time.Time) error {
 	var createdAt, updatedAt string
 	err := tx.QueryRow(
-		`SELECT ticket_id,session_id,workspace_id,pane_id,created_at,updated_at FROM automation_continuity_bindings WHERE definition_id=? AND continuity_key=? AND status=?`,
+		`SELECT seed_id,session_id,workspace_id,pane_id,created_at,updated_at FROM automation_continuity_bindings WHERE definition_id=? AND continuity_key=? AND status=?`,
 		definitionID, continuityKey, AutomationBindingStatusActive,
-	).Scan(&ids.TicketID, &ids.SessionID, &ids.WorkspaceID, &ids.PaneID, &createdAt, &updatedAt)
+	).Scan(&ids.SeedID, &ids.SessionID, &ids.WorkspaceID, &ids.PaneID, &createdAt, &updatedAt)
 	switch err {
 	case sql.ErrNoRows:
 		nowRaw := formatTicketTime(now)
 		_, err = tx.Exec(
-			`INSERT INTO automation_continuity_bindings(id,definition_id,continuity_key,ticket_id,session_id,workspace_id,pane_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
-			uuid.NewString(), definitionID, continuityKey, ids.TicketID, ids.SessionID, ids.WorkspaceID, ids.PaneID, AutomationBindingStatusActive, nowRaw, nowRaw,
+			`INSERT INTO automation_continuity_bindings(id,definition_id,continuity_key,seed_id,origin_run_id,ticket_id,session_id,workspace_id,pane_id,status,created_at,updated_at) VALUES(?,?,?,?,?,'',?,?,?,?,?,?)`,
+			uuid.NewString(), definitionID, continuityKey, ids.SeedID, ids.RunID, ids.SessionID, ids.WorkspaceID, ids.PaneID, AutomationBindingStatusActive, nowRaw, nowRaw,
 		)
 		return err
 	case nil:
@@ -572,7 +601,7 @@ func (s *Store) ClaimManualAutomationRun(definitionID, requestID, subjectKey, pa
 	if _, err = tx.Exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES(?,?, 'manual',?,?,?,?,?)`, ids.OccurrenceID, definitionID, key, subjectKey, now, payloadJSON, now); err != nil {
 		return nil, false, err
 	}
-	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,ticket_id,session_id,workspace_id,pane_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.TicketID, ids.SessionID, ids.WorkspaceID, ids.PaneID, now, now); err != nil {
+	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,?,?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, ids.WorkspaceID, ids.PaneID, now, now); err != nil {
 		return nil, false, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -615,22 +644,12 @@ func (s *Store) ClaimScheduledAutomationRun(definitionID, occurrenceKey, continu
 	}
 	ids := reservation
 	if continuityKey != "" {
-		// A later occurrence must not overtake an earlier one whose ticket does not exist yet:
-		// delivery would mistake the not-yet-created ticket for one already swept.
-		var undeliveredPredecessor int
-		if err := tx.QueryRow(`
-			SELECT EXISTS(
-				SELECT 1
-				FROM automation_runs r
-				JOIN automation_occurrences o ON o.id=r.occurrence_id
-				WHERE r.definition_id=? AND o.provider='schedule' AND r.state=?
-				  AND NOT EXISTS (SELECT 1 FROM tickets t WHERE t.id=r.ticket_id)
-			)
-		`, definitionID, AutomationRunStatePending).Scan(&undeliveredPredecessor); err != nil {
+		blocked, err := pendingAutomationRunInThreadTx(tx, definitionID, "schedule", "")
+		if err != nil {
 			return nil, false, err
 		}
-		if undeliveredPredecessor != 0 {
-			return nil, false, errors.New("an earlier scheduled automation run for this definition has not created its ticket yet")
+		if blocked {
+			return nil, false, errors.New("an earlier scheduled automation run for this definition is still pending")
 		}
 		if err := getOrCreateActiveAutomationContinuityBindingTx(tx, definitionID, continuityKey, &ids, observedAt); err != nil {
 			return nil, false, err
@@ -642,7 +661,7 @@ func (s *Store) ClaimScheduledAutomationRun(definitionID, occurrenceKey, continu
 	if _, err = tx.Exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES(?,?, 'schedule',?,?,?,?,?)`, ids.OccurrenceID, definitionID, occurrenceKey, continuityKey, now, payloadJSON, now); err != nil {
 		return nil, false, err
 	}
-	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,ticket_id,session_id,workspace_id,pane_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.TicketID, ids.SessionID, ids.WorkspaceID, ids.PaneID, now, now); err != nil {
+	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,?,?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, ids.WorkspaceID, ids.PaneID, now, now); err != nil {
 		return nil, false, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -777,17 +796,6 @@ func (s *Store) ReconcileAutomationReviewRequestHeads(definitionID, host string,
 	}
 	for _, subjectKey := range deactivate {
 		if _, err := tx.Exec(`UPDATE automation_review_request_edges SET active=0,updated_at=? WHERE definition_id=? AND subject_key=?`, updatedRaw, definitionID, subjectKey); err != nil {
-			return nil, err
-		}
-		if _, err := tx.Exec(`
-			UPDATE automation_continuity_bindings
-			SET status=?,released_reason=?,released_at=?,updated_at=?
-			WHERE definition_id=? AND continuity_key=? AND status=?
-			  AND NOT EXISTS (
-				SELECT 1 FROM tickets
-				WHERE tickets.id=automation_continuity_bindings.ticket_id
-			  )
-		`, AutomationBindingStatusReleased, AutomationBindingReleasedTicketSwept, updatedRaw, updatedRaw, definitionID, subjectKey, AutomationBindingStatusActive); err != nil {
 			return nil, err
 		}
 	}
@@ -979,22 +987,12 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID, subjectKey string, 
 	if enabled == 0 {
 		return nil, false, fmt.Errorf("automation %q is disabled", definitionID)
 	}
-	// A later request cycle must not overtake the initial delivery for this subject: the
-	// binding can exist before its ticket, and delivery would mistake it for a swept one.
-	var undeliveredPredecessor int
-	if err := tx.QueryRow(`
-		SELECT EXISTS(
-			SELECT 1
-			FROM automation_runs r
-			JOIN automation_occurrences o ON o.id=r.occurrence_id
-			WHERE r.definition_id=? AND o.subject_key=? AND r.state=?
-			  AND NOT EXISTS (SELECT 1 FROM tickets t WHERE t.id=r.ticket_id)
-		)
-	`, definitionID, subjectKey, AutomationRunStatePending).Scan(&undeliveredPredecessor); err != nil {
+	blocked, err := pendingAutomationRunInThreadTx(tx, definitionID, "github", subjectKey)
+	if err != nil {
 		return nil, false, err
 	}
-	if undeliveredPredecessor != 0 {
-		return nil, false, errors.New("an earlier automation run for this subject has not created its ticket yet")
+	if blocked {
+		return nil, false, errors.New("an earlier automation run for this subject is still pending")
 	}
 	ids := reserved
 	if err := getOrCreateActiveAutomationContinuityBindingTx(tx, definitionID, subjectKey, &ids, observedAt); err != nil {
@@ -1004,7 +1002,7 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID, subjectKey string, 
 	if _, err = tx.Exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES(?,?, 'github',?,?,?,?,?)`, ids.OccurrenceID, definitionID, occurrenceKey, subjectKey, now, payloadJSON, now); err != nil {
 		return nil, false, err
 	}
-	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,ticket_id,session_id,workspace_id,pane_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.TicketID, ids.SessionID, ids.WorkspaceID, ids.PaneID, now, now); err != nil {
+	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,?,?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, ids.WorkspaceID, ids.PaneID, now, now); err != nil {
 		return nil, false, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -1014,45 +1012,10 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID, subjectKey string, 
 	return run, true, err
 }
 
-func (s *Store) EnsureAutomationContinuationTicket(ticketID, sessionID, runID, occurrencePath, author string, now time.Time) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.db == nil {
-		return errors.New("automation persistence unavailable")
-	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var assignee, originRunID string
-	if err := tx.QueryRow(`SELECT assignee,COALESCE(automation_run_id,'') FROM tickets WHERE id=?`, ticketID).Scan(&assignee, &originRunID); err != nil {
-		return err
-	}
-	if assignee != sessionID || originRunID == "" {
-		return errors.New("continuity ticket does not match its automation binding")
-	}
-	result, err := tx.Exec(`INSERT OR IGNORE INTO automation_ticket_occurrence_events(run_id,ticket_id,created_at) VALUES(?,?,?)`, runID, ticketID, formatTicketTime(now))
-	if err != nil {
-		return err
-	}
-	inserted, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if inserted == 1 {
-		comment := "Accepted automation occurrence " + runID + " for the existing reviewer. Structured occurrence input: " + occurrencePath
-		if _, err := addTicketCommentTx(tx, ticketID, author, comment, now); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
-}
-
 func scanAutomationRun(scanner interface{ Scan(...any) error }) (*AutomationRun, error) {
 	var r AutomationRun
 	var created, updated, delivered string
-	err := scanner.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.TicketID, &r.SessionID, &r.WorkspaceID, &r.PaneID, &r.ResolvedLocationJSON, &created, &updated, &delivered)
+	err := scanner.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.SeedID, &r.LegacyTicketID, &r.SessionID, &r.WorkspaceID, &r.PaneID, &r.ResolvedLocationJSON, &created, &updated, &delivered)
 	if err != nil {
 		return nil, err
 	}
@@ -1062,9 +1025,9 @@ func scanAutomationRun(scanner interface{ Scan(...any) error }) (*AutomationRun,
 	return &r, nil
 }
 
-const automationRunColumns = `id,definition_id,occurrence_id,definition_revision,snapshot_json,state,cancel_reason,attempts,last_error,ticket_id,session_id,workspace_id,pane_id,resolved_location_json,created_at,updated_at,delivered_at`
+const automationRunColumns = `id,definition_id,occurrence_id,definition_revision,snapshot_json,state,cancel_reason,attempts,last_error,seed_id,ticket_id,session_id,workspace_id,pane_id,resolved_location_json,created_at,updated_at,delivered_at`
 
-const automationRunColumnsQualified = `r.id,r.definition_id,r.occurrence_id,r.definition_revision,r.snapshot_json,r.state,r.cancel_reason,r.attempts,r.last_error,r.ticket_id,r.session_id,r.workspace_id,r.pane_id,r.resolved_location_json,r.created_at,r.updated_at,r.delivered_at`
+const automationRunColumnsQualified = `r.id,r.definition_id,r.occurrence_id,r.definition_revision,r.snapshot_json,r.state,r.cancel_reason,r.attempts,r.last_error,r.seed_id,r.ticket_id,r.session_id,r.workspace_id,r.pane_id,r.resolved_location_json,r.created_at,r.updated_at,r.delivered_at`
 
 func (s *Store) getAutomationRunUnlocked(id string) (*AutomationRun, error) {
 	r, e := scanAutomationRun(s.db.QueryRow(`SELECT `+automationRunColumns+` FROM automation_runs WHERE id=?`, id))
@@ -1150,7 +1113,7 @@ func (s *Store) ListAutomationRunsWithOccurrenceKeys(definitionID string, limit 
 		var r AutomationRun
 		var created, updated, delivered, occurrenceKey string
 		var provenance AutomationProvenanceRecord
-		if err := rows.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.TicketID, &r.SessionID, &r.WorkspaceID, &r.PaneID, &r.ResolvedLocationJSON, &created, &updated, &delivered, &occurrenceKey, &provenance.DefinitionName, &provenance.DefinitionSpecJSON, &provenance.Provider, &provenance.SubjectKey, &provenance.PayloadJSON); err != nil {
+		if err := rows.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.SeedID, &r.LegacyTicketID, &r.SessionID, &r.WorkspaceID, &r.PaneID, &r.ResolvedLocationJSON, &created, &updated, &delivered, &occurrenceKey, &provenance.DefinitionName, &provenance.DefinitionSpecJSON, &provenance.Provider, &provenance.SubjectKey, &provenance.PayloadJSON); err != nil {
 			return nil, err
 		}
 		r.CreatedAt = parseTicketTime(created)
@@ -1159,7 +1122,8 @@ func (s *Store) ListAutomationRunsWithOccurrenceKeys(definitionID string, limit 
 		provenance.RunID = r.ID
 		provenance.DefinitionID = r.DefinitionID
 		provenance.SessionID = r.SessionID
-		provenance.TicketID = r.TicketID
+		provenance.SeedID = r.SeedID
+		provenance.TicketID = r.LegacyTicketID
 		provenance.CreatedAt = r.CreatedAt
 		out = append(out, AutomationRunWithOccurrenceKey{AutomationRun: r, OccurrenceKey: occurrenceKey, Provenance: provenance})
 	}
@@ -1195,7 +1159,7 @@ func (s *Store) LatestAutomationRunPerDefinition() (map[string]AutomationRunWith
 		var r AutomationRun
 		var created, updated, delivered, occurrenceKey string
 		var provenance AutomationProvenanceRecord
-		if err := rows.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.TicketID, &r.SessionID, &r.WorkspaceID, &r.PaneID, &r.ResolvedLocationJSON, &created, &updated, &delivered, &occurrenceKey, &provenance.DefinitionName, &provenance.DefinitionSpecJSON, &provenance.Provider, &provenance.SubjectKey, &provenance.PayloadJSON); err != nil {
+		if err := rows.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.SeedID, &r.LegacyTicketID, &r.SessionID, &r.WorkspaceID, &r.PaneID, &r.ResolvedLocationJSON, &created, &updated, &delivered, &occurrenceKey, &provenance.DefinitionName, &provenance.DefinitionSpecJSON, &provenance.Provider, &provenance.SubjectKey, &provenance.PayloadJSON); err != nil {
 			return nil, err
 		}
 		r.CreatedAt = parseTicketTime(created)
@@ -1204,7 +1168,8 @@ func (s *Store) LatestAutomationRunPerDefinition() (map[string]AutomationRunWith
 		provenance.RunID = r.ID
 		provenance.DefinitionID = r.DefinitionID
 		provenance.SessionID = r.SessionID
-		provenance.TicketID = r.TicketID
+		provenance.SeedID = r.SeedID
+		provenance.TicketID = r.LegacyTicketID
 		provenance.CreatedAt = r.CreatedAt
 		out[r.DefinitionID] = AutomationRunWithOccurrenceKey{AutomationRun: r, OccurrenceKey: occurrenceKey, Provenance: provenance}
 	}
@@ -1218,7 +1183,7 @@ func (s *Store) ListLatestAutomationProvenanceRecords() ([]AutomationProvenanceR
 		return nil, nil
 	}
 	rows, err := s.db.Query(`
-		SELECT r.id,r.definition_id,d.name,d.spec_json,r.session_id,r.ticket_id,
+		SELECT r.id,r.definition_id,d.name,d.spec_json,r.session_id,r.seed_id,r.ticket_id,
 			o.provider,o.subject_key,o.payload_json,r.created_at
 		FROM automation_runs r
 		JOIN automation_occurrences o ON o.id=r.occurrence_id
@@ -1227,9 +1192,10 @@ func (s *Store) ListLatestAutomationProvenanceRecords() ([]AutomationProvenanceR
 			SELECT id FROM (
 				SELECT id,
 					ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY created_at DESC,id DESC) AS session_rank,
+					ROW_NUMBER() OVER (PARTITION BY seed_id ORDER BY created_at DESC,id DESC) AS seed_rank,
 					ROW_NUMBER() OVER (PARTITION BY ticket_id ORDER BY created_at DESC,id DESC) AS ticket_rank
 				FROM automation_runs
-			) WHERE session_rank=1 OR ticket_rank=1
+			) WHERE session_rank=1 OR seed_rank=1 OR (ticket_id<>'' AND ticket_rank=1)
 		)
 		ORDER BY r.created_at DESC,r.id DESC
 	`)
@@ -1241,7 +1207,7 @@ func (s *Store) ListLatestAutomationProvenanceRecords() ([]AutomationProvenanceR
 	for rows.Next() {
 		var record AutomationProvenanceRecord
 		var created string
-		if err := rows.Scan(&record.RunID, &record.DefinitionID, &record.DefinitionName, &record.DefinitionSpecJSON, &record.SessionID, &record.TicketID, &record.Provider, &record.SubjectKey, &record.PayloadJSON, &created); err != nil {
+		if err := rows.Scan(&record.RunID, &record.DefinitionID, &record.DefinitionName, &record.DefinitionSpecJSON, &record.SessionID, &record.SeedID, &record.TicketID, &record.Provider, &record.SubjectKey, &record.PayloadJSON, &created); err != nil {
 			return nil, err
 		}
 		record.CreatedAt = parseTicketTime(created)
@@ -1259,13 +1225,13 @@ func (s *Store) GetAutomationProvenanceRecord(runID string) (*AutomationProvenan
 	var record AutomationProvenanceRecord
 	var created string
 	err := s.db.QueryRow(`
-		SELECT r.id,r.definition_id,d.name,d.spec_json,r.session_id,r.ticket_id,
+		SELECT r.id,r.definition_id,d.name,d.spec_json,r.session_id,r.seed_id,r.ticket_id,
 			o.provider,o.subject_key,o.payload_json,r.created_at
 		FROM automation_runs r
 		JOIN automation_occurrences o ON o.id=r.occurrence_id
 		JOIN automation_definitions d ON d.id=r.definition_id
 		WHERE r.id=?
-	`, runID).Scan(&record.RunID, &record.DefinitionID, &record.DefinitionName, &record.DefinitionSpecJSON, &record.SessionID, &record.TicketID, &record.Provider, &record.SubjectKey, &record.PayloadJSON, &created)
+	`, runID).Scan(&record.RunID, &record.DefinitionID, &record.DefinitionName, &record.DefinitionSpecJSON, &record.SessionID, &record.SeedID, &record.TicketID, &record.Provider, &record.SubjectKey, &record.PayloadJSON, &created)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -1278,6 +1244,10 @@ func (s *Store) GetAutomationProvenanceRecord(runID string) (*AutomationProvenan
 
 func (s *Store) GetLatestAutomationProvenanceRecordForSession(sessionID string) (*AutomationProvenanceRecord, error) {
 	return s.getLatestAutomationProvenanceRecord(`r.session_id=?`, sessionID)
+}
+
+func (s *Store) GetLatestAutomationProvenanceRecordForSeed(seedID string) (*AutomationProvenanceRecord, error) {
+	return s.getLatestAutomationProvenanceRecord(`r.seed_id=?`, seedID)
 }
 
 func (s *Store) GetLatestAutomationProvenanceRecordForTicket(ticketID string) (*AutomationProvenanceRecord, error) {
@@ -1293,7 +1263,7 @@ func (s *Store) getLatestAutomationProvenanceRecord(where, id string) (*Automati
 	var record AutomationProvenanceRecord
 	var created string
 	err := s.db.QueryRow(`
-		SELECT r.id,r.definition_id,d.name,d.spec_json,r.session_id,r.ticket_id,
+		SELECT r.id,r.definition_id,d.name,d.spec_json,r.session_id,r.seed_id,r.ticket_id,
 			o.provider,o.subject_key,o.payload_json,r.created_at
 		FROM automation_runs r
 		JOIN automation_occurrences o ON o.id=r.occurrence_id
@@ -1301,7 +1271,7 @@ func (s *Store) getLatestAutomationProvenanceRecord(where, id string) (*Automati
 		WHERE `+where+`
 		ORDER BY r.created_at DESC,r.id DESC
 		LIMIT 1
-	`, id).Scan(&record.RunID, &record.DefinitionID, &record.DefinitionName, &record.DefinitionSpecJSON, &record.SessionID, &record.TicketID, &record.Provider, &record.SubjectKey, &record.PayloadJSON, &created)
+	`, id).Scan(&record.RunID, &record.DefinitionID, &record.DefinitionName, &record.DefinitionSpecJSON, &record.SessionID, &record.SeedID, &record.TicketID, &record.Provider, &record.SubjectKey, &record.PayloadJSON, &created)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -1356,8 +1326,6 @@ func (s *Store) MarkAutomationRunCancelled(id, reason string, now time.Time) err
 	return err
 }
 
-// ListPrunableAutomationRuns excludes the origin run of a still-bound continuity thread:
-// tickets.automation_run_id is set once, so pruning it breaks every later occurrence.
 func (s *Store) ListPrunableAutomationRuns(definitionID string, keep int, olderThan time.Time) ([]AutomationRun, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1371,15 +1339,12 @@ func (s *Store) ListPrunableAutomationRuns(definitionID string, keep int, olderT
 		  AND id NOT IN (
 			SELECT id FROM automation_runs WHERE definition_id=? ORDER BY created_at DESC LIMIT ?
 		  )
-		  -- A still-bound continuity thread's origin run is never prunable: see
-		  -- this function's doc comment.
 		  AND id NOT IN (
-			SELECT t.automation_run_id FROM tickets t
-			JOIN automation_continuity_bindings b ON b.ticket_id = t.id
-			WHERE t.automation_run_id IS NOT NULL AND t.automation_run_id <> ''
+			SELECT origin_run_id FROM automation_continuity_bindings
+			WHERE status=? AND origin_run_id <> ''
 		  )
 		ORDER BY created_at
-	`, definitionID, AutomationRunStateDelivered, AutomationRunStateFailed, AutomationRunStateCancelled, formatTicketTime(olderThan), definitionID, keep)
+	`, definitionID, AutomationRunStateDelivered, AutomationRunStateFailed, AutomationRunStateCancelled, formatTicketTime(olderThan), definitionID, keep, AutomationBindingStatusActive)
 	if err != nil {
 		return nil, err
 	}

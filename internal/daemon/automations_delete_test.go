@@ -11,7 +11,7 @@ import (
 
 func TestAutomationDeleteHappyPath(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := newHomeDaemonForTest(t, s)
 	broadcasts := automationBroadcastRecorder(d)
 
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
@@ -20,7 +20,7 @@ func TestAutomationDeleteHappyPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	run, created, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, time.Now(), store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"})
+	run, created, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, time.Now(), store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"})
 	if err != nil || !created {
 		t.Fatalf("claim created=%v err=%v", created, err)
 	}
@@ -57,7 +57,7 @@ func TestAutomationDeleteHappyPath(t *testing.T) {
 
 func TestAutomationDeleteNotFound(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := newHomeDaemonForTest(t, s)
 	if err := d.automationDelete(context.Background(), "does-not-exist"); err == nil {
 		t.Fatal("expected an error deleting an unknown definition")
 	}
@@ -65,7 +65,7 @@ func TestAutomationDeleteNotFound(t *testing.T) {
 
 func TestAutomationDeleteAlreadyDeleted(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := newHomeDaemonForTest(t, s)
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -81,7 +81,7 @@ func TestAutomationDeleteAlreadyDeleted(t *testing.T) {
 
 func TestAutomationDeleteThenReapplyResurrects(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := newHomeDaemonForTest(t, s)
 	dir := t.TempDir()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
 
@@ -90,7 +90,7 @@ func TestAutomationDeleteThenReapplyResurrects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply v1: %v", err)
 	}
-	run1, _, err := s.ClaimScheduledAutomationRun(def1.ID, "schedule:1", "singleton", def1.Revision, `{}`, `{"prompt":"v1"}`, now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"})
+	run1, _, err := s.ClaimScheduledAutomationRun(def1.ID, "schedule:1", "singleton", def1.Revision, `{}`, `{"prompt":"v1"}`, now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,21 +123,21 @@ func TestAutomationDeleteThenReapplyResurrects(t *testing.T) {
 		t.Fatalf("expected the pre-delete run to remain listable, got %#v err=%v", runs, err)
 	}
 
-	run2, fresh, err := s.ClaimScheduledAutomationRun(def2.ID, "schedule:2", "singleton", def2.Revision, `{}`, `{"prompt":"v1"}`, now.Add(24*time.Hour), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", TicketID: "ticket-2", SessionID: "session-2", WorkspaceID: "workspace-2", PaneID: "pane-2"})
+	run2, fresh, err := s.ClaimScheduledAutomationRun(def2.ID, "schedule:2", "singleton", def2.Revision, `{}`, `{"prompt":"v1"}`, now.Add(24*time.Hour), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "s-seed02", SessionID: "session-2", WorkspaceID: "workspace-2", PaneID: "pane-2"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !fresh {
 		t.Fatal("expected a fresh claim after resurrection")
 	}
-	if run2.TicketID != "ticket-2" || run2.SessionID != "session-2" {
-		t.Fatalf("expected a fresh binding after resurrection, got ticket=%q session=%q", run2.TicketID, run2.SessionID)
+	if run2.SeedID != "s-seed02" || run2.SessionID != "session-2" {
+		t.Fatalf("expected a fresh binding after resurrection, got seed=%q session=%q", run2.SeedID, run2.SessionID)
 	}
 }
 
 func TestAutomationDeleteRetiresReviewEdgesBindingsAndFencesProviderCursors(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := newHomeDaemonForTest(t, s)
 	dir := t.TempDir()
 	raw := scheduledDefinitionYAML(dir, "*/5 * * * *", "singleton", "latest", "Sweep.")
 	def, err := d.automationApply(raw)
@@ -159,7 +159,7 @@ func TestAutomationDeleteRetiresReviewEdgesBindingsAndFencesProviderCursors(t *t
 	}
 
 	origin, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:1", "singleton", def.Revision, `{}`, `{}`, observedAt, store.AutomationRunReservation{
-		RunID: "run-origin", OccurrenceID: "occ-origin", TicketID: "ticket-origin", SessionID: "session-origin", WorkspaceID: "workspace-origin", PaneID: "pane-origin",
+		RunID: "run-origin", OccurrenceID: "occ-origin", SeedID: "s-seed03", SessionID: "session-origin", WorkspaceID: "workspace-origin", PaneID: "pane-origin",
 	})
 	if err != nil {
 		t.Fatal(err)

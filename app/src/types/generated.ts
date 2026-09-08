@@ -2040,9 +2040,9 @@ export interface LastRun {
     last_error?:     string;
     occurrence_key?: string;
     pane_id?:        string;
+    seed_id?:        string;
     session_id?:     string;
     state:           string;
-    ticket_id?:      string;
     updated_at:      string;
     [property: string]: any;
 }
@@ -2225,9 +2225,9 @@ export interface AutomationRunSummary {
     last_error?:     string;
     occurrence_key?: string;
     pane_id?:        string;
+    seed_id?:        string;
     session_id?:     string;
     state:           string;
-    ticket_id?:      string;
     updated_at:      string;
     [property: string]: any;
 }
@@ -17242,9 +17242,9 @@ const typeMap: any = {
         { json: "last_error", js: "last_error", typ: u(undefined, "") },
         { json: "occurrence_key", js: "occurrence_key", typ: u(undefined, "") },
         { json: "pane_id", js: "pane_id", typ: u(undefined, "") },
+        { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: u(undefined, "") },
         { json: "state", js: "state", typ: "" },
-        { json: "ticket_id", js: "ticket_id", typ: u(undefined, "") },
         { json: "updated_at", js: "updated_at", typ: "" },
     ], "any"),
     "Automation": o([
@@ -17353,9 +17353,9 @@ const typeMap: any = {
         { json: "last_error", js: "last_error", typ: u(undefined, "") },
         { json: "occurrence_key", js: "occurrence_key", typ: u(undefined, "") },
         { json: "pane_id", js: "pane_id", typ: u(undefined, "") },
+        { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: u(undefined, "") },
         { json: "state", js: "state", typ: "" },
-        { json: "ticket_id", js: "ticket_id", typ: u(undefined, "") },
         { json: "updated_at", js: "updated_at", typ: "" },
     ], "any"),
     "AutomationRunsGetMessage": o([

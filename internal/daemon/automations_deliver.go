@@ -50,22 +50,8 @@ func (d *Daemon) failAutomationRun(run *store.AutomationRun, deliveryErr error) 
 	if err := d.store.MarkAutomationRunFailed(run.ID, deliveryErr.Error(), now); err != nil {
 		persistErr = errors.Join(persistErr, fmt.Errorf("mark run failed: %w", err))
 	}
-	if ticket, err := d.store.GetTicket(run.TicketID); err != nil {
-		persistErr = errors.Join(persistErr, fmt.Errorf("find automation ticket: %w", err))
-	} else if ticket != nil {
-		comment := automationFailureComment(run, ticket, deliveryErr.Error())
-		if ticket.AutomationRunID != "" && ticket.AutomationRunID != run.ID {
-			if _, err := d.store.AddTicketComment(ticket.ID, "automation:"+run.DefinitionID, comment, now); err != nil {
-				persistErr = errors.Join(persistErr, fmt.Errorf("record continuation failure: %w", err))
-			}
-			d.notifyTicketObservers(ticket.ID)
-			d.publishTicketFact(FactTicketCommented, ticket.ID)
-		} else if ticket.Status != store.TicketStatusFailed {
-			if _, err := d.store.SetTicketStatus(ticket.ID, store.TicketStatusFailed, store.TicketAuthorAttn, comment, now); err != nil {
-				persistErr = errors.Join(persistErr, fmt.Errorf("mark automation ticket failed: %w", err))
-			}
-			d.publishTicketFact(FactTicketStatusChanged, ticket.ID)
-		}
+	if err := d.recordAutomationRunSeedOutcome(run, automationFailureComment(run, deliveryErr.Error())); err != nil {
+		persistErr = errors.Join(persistErr, err)
 	}
 	d.broadcastAutomationsChanged(run.DefinitionID)
 	failed, err := d.store.GetAutomationRun(run.ID)
@@ -74,9 +60,9 @@ func (d *Daemon) failAutomationRun(run *store.AutomationRun, deliveryErr error) 
 	}
 	return failed, persistErr
 }
-func automationFailureComment(run *store.AutomationRun, ticket *store.Ticket, message string) string {
+func automationFailureComment(run *store.AutomationRun, message string) string {
 	comment := "Automation delivery failed: " + message
-	if run != nil && ticket != nil && ticket.AutomationRunID != "" && ticket.AutomationRunID != run.ID {
+	if run != nil {
 		comment += " (automation run " + run.ID + ")"
 	}
 	return comment
@@ -88,22 +74,8 @@ func (d *Daemon) cancelAutomationRun(run *store.AutomationRun, reason, message s
 	if err := d.store.MarkAutomationRunCancelled(run.ID, reason, now); err != nil {
 		persistErr = errors.Join(persistErr, fmt.Errorf("mark run cancelled: %w", err))
 	}
-	if ticket, err := d.store.GetTicket(run.TicketID); err != nil {
-		persistErr = errors.Join(persistErr, fmt.Errorf("find automation ticket: %w", err))
-	} else if ticket != nil {
-		comment := automationFailureComment(run, ticket, message)
-		if ticket.AutomationRunID != "" && ticket.AutomationRunID != run.ID {
-			if _, err := d.store.AddTicketComment(ticket.ID, "automation:"+run.DefinitionID, comment, now); err != nil {
-				persistErr = errors.Join(persistErr, fmt.Errorf("record continuation cancellation: %w", err))
-			}
-			d.notifyTicketObservers(ticket.ID)
-			d.publishTicketFact(FactTicketCommented, ticket.ID)
-		} else if ticket.Status != store.TicketStatusFailed {
-			if _, err := d.store.SetTicketStatus(ticket.ID, store.TicketStatusFailed, store.TicketAuthorAttn, comment, now); err != nil {
-				persistErr = errors.Join(persistErr, fmt.Errorf("mark automation ticket failed: %w", err))
-			}
-			d.publishTicketFact(FactTicketStatusChanged, ticket.ID)
-		}
+	if err := d.recordAutomationRunSeedOutcome(run, automationFailureComment(run, message)); err != nil {
+		persistErr = errors.Join(persistErr, err)
 	}
 	d.broadcastAutomationsChanged(run.DefinitionID)
 	cancelled, err := d.store.GetAutomationRun(run.ID)
@@ -111,6 +83,61 @@ func (d *Daemon) cancelAutomationRun(run *store.AutomationRun, reason, message s
 		persistErr = errors.Join(persistErr, fmt.Errorf("reload cancelled run: %w", err))
 	}
 	return cancelled, persistErr
+}
+
+func (d *Daemon) automationRunIsContinuation(run *store.AutomationRun) (bool, error) {
+	origin, err := d.store.OriginAutomationRunIDForSeed(run.DefinitionID, run.SeedID)
+	if err != nil {
+		return false, err
+	}
+	return origin != "" && origin != run.ID, nil
+}
+
+func (d *Daemon) recordAutomationRunSeedOutcome(run *store.AutomationRun, body string) error {
+	if run == nil || strings.TrimSpace(run.SeedID) == "" {
+		return errors.New("record automation outcome: seed id missing")
+	}
+	continuation, err := d.automationRunIsContinuation(run)
+	if err != nil {
+		return fmt.Errorf("record automation outcome: load continuity: %w", err)
+	}
+	if _, _, err := d.readSeed(run.SeedID); err != nil {
+		prompt, agent := "Automation delivery", ""
+		var snapshot automation.Snapshot
+		if json.Unmarshal([]byte(run.SnapshotJSON), &snapshot) == nil {
+			prompt, agent = snapshot.Prompt, snapshot.Launch.Agent
+		}
+		req := automation.WorkRequest{RunID: run.ID, DefinitionID: run.DefinitionID, Prompt: prompt, Launch: automation.EffectiveLaunch{Agent: agent}, Location: automation.LocationSpec{}, IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, WorkspaceID: run.WorkspaceID, PaneID: run.PaneID}}
+		if _, _, ensureErr := d.ensureAutomationSeed(req); ensureErr != nil {
+			return fmt.Errorf("record automation outcome: ensure seed: %w", ensureErr)
+		}
+	}
+	notes, err := d.readNotesDomain(run.SeedID)
+	if err != nil {
+		return fmt.Errorf("record automation outcome: read notes: %w", err)
+	}
+	seen := false
+	for _, note := range notes {
+		seen = seen || note.Body == body
+	}
+	if !seen {
+		if _, err := d.appendSeedNote(run.SeedID, body, run.SessionID, "", garden.NoteKindNote, nil); err != nil {
+			return fmt.Errorf("record automation outcome: append note: %w", err)
+		}
+		d.ringSeedActivity(run.SeedID, "note", run.SessionID)
+		if continuation {
+			d.claimAndDeliverSeedBell(run.SessionID, run.SeedID, "note")
+		}
+	}
+	if continuation {
+		return nil
+	}
+	seed, _, err := d.readSeed(run.SeedID)
+	if err != nil || garden.Closed(seed.Status) {
+		return err
+	}
+	_, _, err = d.applySeedTransition(run.SeedID, garden.VerbWither, garden.Ask{Actor: garden.Tender{Session: run.SessionID}, Reason: garden.TrimReason(body)})
+	return err
 }
 func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.AutomationRun) error {
 	definition, err := d.store.GetAutomationDefinition(run.DefinitionID)
@@ -151,7 +178,7 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	case "singleton":
 		continuityKey = "singleton"
 	}
-	req := automation.WorkRequest{RunID: run.ID, DefinitionID: run.DefinitionID, SubjectKey: occurrence.SubjectKey, ContinuityKey: continuityKey, Provider: occurrence.Provider, Prompt: snapshot.Prompt, Context: json.RawMessage(occurrence.PayloadJSON), Launch: snapshot.Launch, Location: snapshot.Location, IDs: automation.DeliveryIDs{TicketID: run.TicketID, SessionID: run.SessionID, WorkspaceID: run.WorkspaceID, PaneID: run.PaneID}}
+	req := automation.WorkRequest{RunID: run.ID, DefinitionID: run.DefinitionID, SubjectKey: occurrence.SubjectKey, ContinuityKey: continuityKey, Provider: occurrence.Provider, Prompt: snapshot.Prompt, Context: json.RawMessage(occurrence.PayloadJSON), Launch: snapshot.Launch, Location: snapshot.Location, IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, WorkspaceID: run.WorkspaceID, PaneID: run.PaneID}}
 	if err := d.validateAutomationContinuation(req); err != nil {
 		return err
 	}
@@ -159,13 +186,9 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	if err != nil {
 		return err
 	}
-	if err := d.activateAutomationContinuationTicket(req); err != nil {
-		return err
-	}
 	if err := d.store.MarkAutomationRunDelivered(run.ID, string(result.Resolved), time.Now()); err != nil {
 		return err
 	}
-	d.publishTicketFact(FactTicketChanged, run.TicketID)
 	// No unit-test coverage: pinned live by scenario-automation-surface.mjs
 	// leg2_run_now_and_navigable.
 	d.broadcastAutomationsChanged(run.DefinitionID)
@@ -173,15 +196,29 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 }
 
 func (d *Daemon) materializeAutomationRun(ctx context.Context, req automation.WorkRequest) (automation.DeliveryResult, error) {
-	if err := d.ensureAutomationTicket(ctx, req); err != nil {
-		return automation.DeliveryResult{}, fmt.Errorf("ensure ticket: %w", err)
+	continuation, restoreSeed, err := d.ensureAutomationSeed(req)
+	if err != nil {
+		return automation.DeliveryResult{}, fmt.Errorf("ensure seed: %w", err)
+	}
+	result, err := d.launchAutomationRun(ctx, req, continuation)
+	if err != nil && restoreSeed != nil {
+		return automation.DeliveryResult{}, errors.Join(err, restoreSeed())
+	}
+	return result, err
+}
+
+func (d *Daemon) launchAutomationRun(ctx context.Context, req automation.WorkRequest, continuation bool) (automation.DeliveryResult, error) {
+	if continuation {
+		if err := d.ensureAutomationOccurrenceNote(req); err != nil {
+			return automation.DeliveryResult{}, fmt.Errorf("record occurrence: %w", err)
+		}
 	}
 	location, err := d.prepareAutomationLocation(ctx, req)
 	if err != nil {
 		return automation.DeliveryResult{}, fmt.Errorf("prepare location: %w", err)
 	}
-	if err := d.bindAutomationTicketLocation(ctx, req, location); err != nil {
-		return automation.DeliveryResult{}, fmt.Errorf("bind ticket location: %w", err)
+	if err := d.bindAutomationSeedLocation(req, location); err != nil {
+		return automation.DeliveryResult{}, fmt.Errorf("bind seed location: %w", err)
 	}
 	if err := d.ensureAutomationWorkspace(ctx, req, location.Directory); err != nil {
 		return automation.DeliveryResult{}, fmt.Errorf("ensure workspace: %w", err)
@@ -195,58 +232,30 @@ func (d *Daemon) materializeAutomationRun(ctx context.Context, req automation.Wo
 	if err := d.verifyAutomationDelivery(ctx, req, location.Directory); err != nil {
 		return automation.DeliveryResult{}, fmt.Errorf("verify delivery: %w", err)
 	}
-	return automation.DeliveryResult{TicketID: req.IDs.TicketID, SessionID: req.IDs.SessionID, WorkspaceID: req.IDs.WorkspaceID, Directory: location.Directory, Revision: location.Revision, Resolved: location.Resolved, Mode: "created"}, nil
-}
-
-// The seam that keeps internal/automation from ever importing internal/store.
-type automationBindingStoreAdapter struct{ store *store.Store }
-
-func (a automationBindingStoreAdapter) GetActiveContinuityBinding(definitionID, continuityKey string) (*automation.Binding, error) {
-	binding, err := a.store.GetActiveAutomationContinuityBinding(definitionID, continuityKey)
-	if err != nil || binding == nil {
-		return nil, err
+	if continuation {
+		d.claimAndDeliverSeedBell(req.IDs.SessionID, req.IDs.SeedID, "note")
 	}
-	return &automation.Binding{TicketID: binding.TicketID, SessionID: binding.SessionID, WorkspaceID: binding.WorkspaceID, PaneID: binding.PaneID}, nil
-}
-func (a automationBindingStoreAdapter) ReleaseContinuityBinding(definitionID, continuityKey, reason string, now time.Time) error {
-	return a.store.ReleaseAutomationContinuityBinding(definitionID, continuityKey, reason, now)
-}
-func (a automationBindingStoreAdapter) TicketExists(ticketID string) (bool, error) {
-	ticket, err := a.store.GetTicket(ticketID)
-	if err != nil {
-		return false, err
-	}
-	return ticket != nil, nil
-}
-func (d *Daemon) resolveAutomationContinuation(definitionID, continuityKey, ownTicketID string) (automation.Continuation, error) {
-	cont, err := automation.ResolveContinuation(automationBindingStoreAdapter{d.store}, definitionID, continuityKey, ownTicketID, time.Now())
-	if err != nil {
-		return automation.Continuation{}, err
-	}
-	if cont.SelfHealedDanglingBinding {
-		d.logf("automation continuity: definition %s key %s had an active binding whose ticket vanished (e.g. TTL sweep); released it and delivering fresh", definitionID, continuityKey)
-	}
-	return cont, nil
+	return automation.DeliveryResult{SeedID: req.IDs.SeedID, SessionID: req.IDs.SessionID, WorkspaceID: req.IDs.WorkspaceID, Directory: location.Directory, Revision: location.Revision, Resolved: location.Resolved, Mode: "created"}, nil
 }
 
 func (d *Daemon) validateAutomationContinuation(req automation.WorkRequest) error {
 	if req.ContinuityKey == "" {
 		return nil
 	}
-	ticket, err := d.store.GetTicket(req.IDs.TicketID)
+	binding, err := d.store.GetActiveAutomationContinuityBinding(req.DefinitionID, req.ContinuityKey)
 	if err != nil {
 		return err
 	}
-	if ticket == nil {
-		// A binding pointing at req's own not-yet-created ticket is the thread being
-		// born; only a genuinely vanished ticket self-heals.
-		_, err := d.resolveAutomationContinuation(req.DefinitionID, req.ContinuityKey, req.IDs.TicketID)
-		return err
+	if binding == nil {
+		return errors.New("automation continuity binding missing")
 	}
-	if ticket.AutomationRunID == "" || ticket.AutomationRunID == req.RunID {
+	if binding.SeedID != req.IDs.SeedID || binding.SessionID != req.IDs.SessionID || binding.WorkspaceID != req.IDs.WorkspaceID || binding.PaneID != req.IDs.PaneID {
+		return errors.New("automation run does not match its continuity binding")
+	}
+	if binding.OriginRunID == "" || binding.OriginRunID == req.RunID {
 		return nil
 	}
-	origin, err := d.store.GetAutomationRun(ticket.AutomationRunID)
+	origin, err := d.store.GetAutomationRun(binding.OriginRunID)
 	if err != nil {
 		return err
 	}
@@ -301,7 +310,7 @@ func (d *Daemon) automationSessionIsLive(sessionID string) bool {
 func (d *Daemon) automationResumeSessionID(req automation.WorkRequest) (string, error) {
 	resumeID := strings.TrimSpace(d.store.GetResumeSessionID(req.IDs.SessionID))
 	if resumeID == "" {
-		resumeID = strings.TrimSpace(d.store.GetTicketResumeSessionID(req.IDs.SessionID))
+		resumeID = strings.TrimSpace(d.gardenDispatchResume(req.IDs.SessionID))
 	}
 	if resumeID == "" {
 		return "", errors.New("reviewer continuity cannot resume the stopped session without a recorded transcript")
@@ -312,99 +321,123 @@ func (d *Daemon) automationResumeSessionID(req automation.WorkRequest) (string, 
 	}
 	return resumeID, nil
 }
-func (d *Daemon) ensureAutomationTicket(_ context.Context, req automation.WorkRequest) error {
-	def, err := d.store.GetAutomationDefinition(req.DefinitionID)
+func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() error, error) {
+	if err := d.requireHome(garden.Surface); err != nil {
+		return false, nil, err
+	}
+	def, err := d.store.GetAutomationDefinitionIncludingDeleted(req.DefinitionID)
 	if err != nil {
-		return err
+		return false, nil, err
 	}
 	if def == nil {
-		return fmt.Errorf("definition missing")
+		return false, nil, fmt.Errorf("definition missing")
 	}
-	author := "automation:" + req.DefinitionID
-	if existing, getErr := d.store.GetTicket(req.IDs.TicketID); getErr != nil {
-		return getErr
-	} else if existing != nil {
-		if existing.AutomationRunID == req.RunID {
-			if existing.Assignee != req.IDs.SessionID {
-				return errors.New("automation ticket does not match its reserved session")
-			}
-			return nil
-		}
-		if req.ContinuityKey == "" {
-			return errors.New("automation ticket already exists without a continuity binding")
-		}
-		inputPath, err := d.ensureAutomationOccurrenceInput(req)
-		if err != nil {
-			return err
-		}
-		if err := d.store.EnsureAutomationContinuationTicket(req.IDs.TicketID, req.IDs.SessionID, req.RunID, inputPath, author, time.Now()); err != nil {
-			return err
-		}
-		d.publishTicketFact(FactTicketChanged, req.IDs.TicketID)
-		d.notifyTicketObservers(req.IDs.TicketID)
-		return nil
+	if req.IDs.SeedID == "" {
+		return false, nil, errors.New("automation seed id missing")
 	}
+	continuation := false
 	if req.ContinuityKey != "" {
-		if _, err := d.resolveAutomationContinuation(req.DefinitionID, req.ContinuityKey, req.IDs.TicketID); err != nil {
-			return err
+		binding, err := d.store.GetActiveAutomationContinuityBinding(req.DefinitionID, req.ContinuityKey)
+		if err != nil {
+			return false, nil, err
+		}
+		if binding == nil || binding.SeedID != req.IDs.SeedID || binding.SessionID != req.IDs.SessionID {
+			return false, nil, errors.New("automation seed does not match its continuity binding")
+		}
+		continuation = binding.OriginRunID != "" && binding.OriginRunID != req.RunID
+	}
+	title := strings.TrimSpace(def.Name)
+	if _, _, reviewTitle, ok := automationReviewNames(req); ok {
+		title = strings.TrimSpace(reviewTitle)
+	}
+	body := strings.TrimSpace(req.Prompt)
+	var restore func() error
+	if seed, _, readErr := d.readSeed(req.IDs.SeedID); readErr == nil {
+		if seed.TenderSession != req.IDs.SessionID || seed.Status != garden.StatusGrowing {
+			if restore, err = d.activateAutomationContinuationSeed(req.IDs.SeedID, req.IDs.SessionID); err != nil {
+				return false, nil, err
+			}
+		}
+	} else {
+		if err := garden.ValidatePlant(title, body); err != nil {
+			return false, nil, err
+		}
+		schema, schemaErr := d.seedsCollection()
+		if schemaErr != nil {
+			d.ensureGardenCollections()
+			schema, schemaErr = d.seedsCollection()
+		}
+		if schemaErr != nil {
+			return false, nil, schemaErr
+		}
+		seed := d.initializeSeedLifecycle(garden.Seed{
+			ID: req.IDs.SeedID, Title: title, Body: body,
+			Status: garden.StatusPlanted, StepSlug: garden.StepSlug(title), Edges: []garden.Edge{}, Vars: []garden.Var{},
+		})
+		seed, err = garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: req.IDs.SessionID}}, func(string) bool { return false })
+		if err != nil {
+			return false, nil, err
+		}
+		seed.LastExecutionID = req.IDs.SessionID
+		if _, err := d.plantSeed(*schema, seed); err != nil {
+			return false, nil, err
 		}
 	}
-	title := def.Name
-	if _, _, reviewTitle, ok := automationReviewNames(req); ok {
-		title = reviewTitle
+	if bound, ok := d.gardenDispatchCrown(req.IDs.SessionID); ok && bound != req.IDs.SeedID {
+		return false, nil, fmt.Errorf("automation session is bound to %s, want %s", bound, req.IDs.SeedID)
 	}
-	_, err = d.store.EnsureAutomationTicket(store.Ticket{ID: req.IDs.TicketID, Title: title, Description: req.Prompt, Status: store.TicketStatusWorking, Assignee: req.IDs.SessionID, Cwd: req.Location.Path, LastAgentID: req.Launch.Agent, AutomationRunID: req.RunID}, author, store.TicketRoleChiefOfStaff, time.Now())
-	return err
+	return continuation, restore, nil
 }
 
-func (d *Daemon) activateAutomationContinuationTicket(req automation.WorkRequest) error {
-	if req.ContinuityKey == "" {
-		return nil
-	}
-	ticket, err := d.store.GetTicket(req.IDs.TicketID)
-	if err != nil {
-		return err
-	}
-	if ticket == nil {
-		return errors.New("automation continuity ticket disappeared during delivery")
-	}
-	if ticket.AutomationRunID == req.RunID || !ticket.Status.IsTerminal() {
-		return nil
-	}
-	if err := d.activateAutomationContinuationSeed(req.IDs.SessionID); err != nil {
-		return err
-	}
-	comment := "Reopened for automation occurrence " + req.RunID + "."
-	if _, err := d.store.SetTicketStatus(ticket.ID, store.TicketStatusWorking, "automation:"+req.DefinitionID, comment, time.Now()); err != nil {
-		return err
-	}
-	d.publishTicketFact(FactTicketStatusChanged, ticket.ID)
-	d.notifyTicketObservers(ticket.ID)
-	return nil
-}
-
-func (d *Daemon) activateAutomationContinuationSeed(sessionID string) error {
-	seedID, ok := d.gardenDispatchCrown(sessionID)
-	if !ok {
-		return nil
-	}
+func (d *Daemon) activateAutomationContinuationSeed(seedID, sessionID string) (func() error, error) {
 	seed, _, err := d.readSeed(seedID)
 	if err != nil {
-		return fmt.Errorf("read automation continuation seed %s: %w", seedID, err)
+		return nil, fmt.Errorf("read automation continuation seed %s: %w", seedID, err)
 	}
 	actor := garden.Tender{Session: sessionID}
+	var restore func() error
 	if garden.Closed(seed.Status) {
+		closeVerb, closeReason := garden.VerbWither, seed.Reason
+		if seed.Status == garden.StatusHarvested {
+			closeVerb = garden.VerbHarvest
+		}
+		restore = func() error {
+			_, _, err := d.applySeedTransition(seedID, closeVerb, garden.Ask{Actor: actor, Reason: closeReason})
+			return err
+		}
 		if _, _, err := d.applySeedTransition(seedID, garden.VerbReplant, garden.Ask{Actor: actor}); err != nil {
-			return fmt.Errorf("replant automation continuation seed %s: %w", seedID, err)
+			return nil, fmt.Errorf("replant automation continuation seed %s: %w", seedID, err)
 		}
 		seed.Status = garden.StatusPlanted
 	}
 	if seed.Status == garden.StatusGrowing && seed.TenderSession == sessionID {
-		return nil
+		return restore, nil
 	}
 	if _, _, err := d.applySeedTransition(seedID, garden.VerbTend, garden.Ask{Actor: actor}); err != nil {
-		return fmt.Errorf("tend automation continuation seed %s: %w", seedID, err)
+		return nil, fmt.Errorf("tend automation continuation seed %s: %w", seedID, err)
 	}
+	return restore, nil
+}
+
+func (d *Daemon) ensureAutomationOccurrenceNote(req automation.WorkRequest) error {
+	inputPath, err := d.ensureAutomationOccurrenceInput(req)
+	if err != nil {
+		return err
+	}
+	body := "Accepted automation occurrence " + req.RunID + " for this thread. Structured occurrence input: " + inputPath
+	notes, err := d.readNotesDomain(req.IDs.SeedID)
+	if err != nil {
+		return err
+	}
+	for _, note := range notes {
+		if note.Body == body {
+			return nil
+		}
+	}
+	if _, err := d.appendSeedNote(req.IDs.SeedID, body, req.IDs.SessionID, "", garden.NoteKindNote, nil); err != nil {
+		return err
+	}
+	d.ringSeedActivity(req.IDs.SeedID, "note", req.IDs.SessionID)
 	return nil
 }
 func (d *Daemon) prepareAutomationLocation(_ context.Context, req automation.WorkRequest) (automation.PreparedLocation, error) {
@@ -511,12 +544,9 @@ func (d *Daemon) prepareAutomationLocation(_ context.Context, req automation.Wor
 		}
 	}
 	if originRun != nil && originRun.State == store.AutomationRunStateDelivered {
-		ticket, err := d.store.GetTicket(req.IDs.TicketID)
-		if err != nil {
-			return automation.PreparedLocation{}, err
-		}
-		if ticket == nil || filepath.Clean(ticket.Cwd) != filepath.Clean(worktree) {
-			return automation.PreparedLocation{}, errors.New("reviewer continuity ticket does not own the expected worktree")
+		dispatch, ok := d.gardenDispatch(req.IDs.SessionID)
+		if !ok || activeDispatchCrown(dispatch) != req.IDs.SeedID || filepath.Clean(dispatch.Cwd) != filepath.Clean(worktree) {
+			return automation.PreparedLocation{}, errors.New("reviewer continuity seed does not own the expected worktree")
 		}
 		if _, err := os.Stat(worktree); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
@@ -538,8 +568,8 @@ func (d *Daemon) prepareAutomationLocation(_ context.Context, req automation.Wor
 	})
 	return automation.PreparedLocation{Directory: worktree, Revision: pr.HeadSHA, Resolved: resolved}, nil
 }
-func (d *Daemon) bindAutomationTicketLocation(_ context.Context, req automation.WorkRequest, location automation.PreparedLocation) error {
-	return d.store.SetTicketSession(req.IDs.TicketID, location.Directory, req.Launch.Agent, time.Now())
+func (d *Daemon) bindAutomationSeedLocation(req automation.WorkRequest, location automation.PreparedLocation) error {
+	return d.recordGardenDispatch(req.IDs.SessionID, req.IDs.SeedID, "", location.Directory, req.Launch.Agent, false)
 }
 func (d *Daemon) ensureAutomationWorkspace(_ context.Context, req automation.WorkRequest, directory string) error {
 	if existing := d.store.GetWorkspace(req.IDs.WorkspaceID); existing != nil {
@@ -622,13 +652,7 @@ func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, i
 	if definition, err := d.store.GetAutomationDefinition(req.DefinitionID); err == nil && definition != nil {
 		definitionName = definition.Name
 	}
-	// Keyed by session id, so a continuation run re-binds the seed the first
-	// occurrence planted rather than planting a second one.
-	seedID, err := d.bindDelegationSeed(req.IDs.SessionID, "", req.Prompt, req.DefinitionID, "", directory, req.Launch.Agent, false)
-	if err != nil {
-		return err
-	}
-	prompt := automationSessionPrompt(req.Prompt, inputPath, seedID, definitionName, pullRequestTarget, pullRequestErr == nil)
+	prompt := automationSessionPrompt(req.Prompt, inputPath, req.IDs.SeedID, definitionName, pullRequestTarget, pullRequestErr == nil)
 	label := filepath.Base(directory)
 	if _, reviewLabel, _, ok := automationReviewNames(req); ok {
 		label = reviewLabel
@@ -651,11 +675,11 @@ func (d *Daemon) automationContinuationOrigin(req automation.WorkRequest) (*stor
 	if req.ContinuityKey == "" {
 		return nil, nil
 	}
-	ticket, err := d.store.GetTicket(req.IDs.TicketID)
-	if err != nil || ticket == nil || ticket.AutomationRunID == "" || ticket.AutomationRunID == req.RunID {
+	binding, err := d.store.GetActiveAutomationContinuityBinding(req.DefinitionID, req.ContinuityKey)
+	if err != nil || binding == nil || binding.OriginRunID == "" || binding.OriginRunID == req.RunID {
 		return nil, err
 	}
-	origin, err := d.store.GetAutomationRun(ticket.AutomationRunID)
+	origin, err := d.store.GetAutomationRun(binding.OriginRunID)
 	if err != nil {
 		return nil, err
 	}
@@ -817,21 +841,15 @@ func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest) error {
 	return errors.New("automation launch did not produce a verifiable Codex screen")
 }
 func (d *Daemon) verifyAutomationDelivery(_ context.Context, req automation.WorkRequest, directory string) error {
-	ticket, err := d.store.GetTicket(req.IDs.TicketID)
+	seed, _, err := d.readSeed(req.IDs.SeedID)
 	if err != nil {
 		return err
 	}
-	if ticket == nil {
-		return fmt.Errorf("ticket link missing")
+	if seed.ID != req.IDs.SeedID || seed.TenderSession != req.IDs.SessionID || seed.Status != garden.StatusGrowing {
+		return fmt.Errorf("seed links disagree")
 	}
-	if req.ContinuityKey == "" && ticket.AutomationRunID != req.RunID {
-		return fmt.Errorf("ticket provenance disagrees")
-	}
-	if ticket.ID != req.IDs.TicketID || ticket.Assignee != req.IDs.SessionID {
-		return fmt.Errorf("ticket links disagree")
-	}
-	if filepath.Clean(ticket.Cwd) != filepath.Clean(directory) {
-		return fmt.Errorf("ticket location disagrees")
+	if crown, ok := d.gardenDispatchCrown(req.IDs.SessionID); !ok || crown != req.IDs.SeedID {
+		return fmt.Errorf("seed dispatch link missing")
 	}
 	session := d.store.Get(req.IDs.SessionID)
 	if session == nil || session.WorkspaceID != req.IDs.WorkspaceID || filepath.Clean(session.Directory) != filepath.Clean(directory) {

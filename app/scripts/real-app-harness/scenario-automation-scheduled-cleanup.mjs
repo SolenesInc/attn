@@ -183,7 +183,7 @@ trigger:
   continuity: singleton
   catch_up: latest
 prompt: |
-  Review git worktrees of \`repo/\`; remove with \`git worktree remove\` (never --force) each linked worktree whose branch is fully merged into main AND whose tree is completely clean, then delete that fully-merged branch with \`git branch -d\`. NEVER remove a worktree with staged, unstaged, or untracked changes — list preserved worktrees with reasons. Summarize actions in the ticket.
+  Review git worktrees of \`repo/\`; remove with \`git worktree remove\` (never --force) each linked worktree whose branch is fully merged into main AND whose tree is completely clean, then delete that fully-merged branch with \`git branch -d\`. NEVER remove a worktree with staged, unstaged, or untracked changes — list preserved worktrees with reasons. Summarize actions on the seed.
 launch:
   driver: codex
   effort: medium
@@ -295,7 +295,6 @@ async function main() {
   let daemonEnv = null;
   let fixture = null;
   let probe = null;
-  let cleanupTicketID = '';
   let cleanupSeedID = '';
   let stormGuardSeedID = '';
   let cleanupSessionID = '';
@@ -340,9 +339,9 @@ async function main() {
       }, 'restart catch-up run', RESTART_RUN_TIMEOUT_MS);
       runner.assert(rows.length === 1, 'exactly one catch-up run fires despite multiple missed instants (latest policy)', { rows });
       const runRow = rows[0];
-      cleanupTicketID = runRow.ticket_id;
+      cleanupSeedID = runRow.seed_id;
       cleanupSessionID = runRow.session_id;
-      runner.assert(Boolean(cleanupTicketID) && Boolean(cleanupSessionID), 'catch-up run reserves a ticket and session', runRow);
+      runner.assert(Boolean(cleanupSeedID) && Boolean(cleanupSessionID), 'catch-up run reserves a seed and session', runRow);
 
       const occurrence = sqliteRow(
         dbPath,
@@ -364,12 +363,9 @@ async function main() {
       runner.assert(fs.existsSync(path.join(fixture.dirtyWip, 'scratch.txt')), 'dirty-wip uncommitted file is untouched');
       runner.assert(worktreeListShows(fixture.repo, fixture.dirtyWip), 'dirty-wip worktree is still tracked by git worktree list');
 
-      const ticket = sqliteRow(
-        dbPath,
-        `SELECT status FROM tickets WHERE id='${sqlEscape(cleanupTicketID)}';`,
-      );
-      runner.assert(ticket !== null, 'cleanup ticket row exists', { cleanupTicketID });
-      runner.assert(ticket[0] !== 'failed', 'cleanup ticket did not fail', { ticketStatus: ticket[0] });
+      const automationSeed = runJSON(binary, ['seed', 'show', cleanupSeedID, '--json'], daemonEnv)?.seed;
+      runner.assert(automationSeed !== null, 'cleanup seed exists', { cleanupSeedID });
+      runner.assert(automationSeed?.status !== 'withered', 'cleanup seed did not fail', automationSeed);
 
       const reported = await poll(() => {
         const listed = runJSON(binary, ['seed', 'ls', '--json'], daemonEnv) || {};
@@ -384,7 +380,7 @@ async function main() {
         'the launched agent reported its cleanup on the seed it tends',
         reported,
       );
-      cleanupSeedID = reported.seed;
+      runner.assert(reported.seed === cleanupSeedID, 'the tended seed is the one the run reserved', { reported, cleanupSeedID });
     });
 
     await runner.step('leg3_singleton_coalescing', async () => {
@@ -394,12 +390,12 @@ async function main() {
         return list.length >= 2 ? list : null;
       }, 'a second coalesced occurrence', COALESCE_TIMEOUT_MS);
       runner.assert(rows.length >= 2, 'at least a second occurrence fired while enabled', { count: rows.length });
-      const tickets = new Set(rows.map((row) => row.ticket_id));
+      const seeds = new Set(rows.map((row) => row.seed_id));
       const sessions = new Set(rows.map((row) => row.session_id));
       runner.assert(
-        tickets.size === 1 && tickets.has(cleanupTicketID),
-        'every occurrence for this definition coalesces onto the same singleton ticket',
-        { tickets: [...tickets] },
+        seeds.size === 1 && seeds.has(cleanupSeedID),
+        'every occurrence for this definition coalesces onto the same singleton seed',
+        { seeds: [...seeds] },
       );
       runner.assert(
         sessions.size === 1 && sessions.has(cleanupSessionID),
@@ -515,9 +511,9 @@ async function main() {
       );
     });
 
-    await runner.finishSuccess({ profile, cleanupID, stormGuardID, cleanupTicketID, cleanupSessionID, fixtureRoot });
+    await runner.finishSuccess({ profile, cleanupID, stormGuardID, cleanupSeedID, cleanupSessionID, fixtureRoot });
   } catch (error) {
-    await runner.finishFailure(error, { profile, cleanupID, stormGuardID, cleanupTicketID, cleanupSessionID, fixtureRoot });
+    await runner.finishFailure(error, { profile, cleanupID, stormGuardID, cleanupSeedID, cleanupSessionID, fixtureRoot });
     throw error;
   } finally {
     const teardownNeeded = cleanupApplied || stormGuardApplied || !sessionsClosed || !cleanupSeedSettled || !stormGuardSeedSettled;
