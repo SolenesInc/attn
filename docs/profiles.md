@@ -55,7 +55,9 @@ Open a named app with `make run PROFILE=<name>`.
 Full macOS builds/installs run outside the sandbox for keychain-backed signing;
 ad-hoc signing loses persistent permissions.
 On Linux, `make install PROFILE=<name>` stages an unprivileged application tree.
-The `App acceptance` CI job uses that same path before running the serial matrix.
+`make install-staged PROFILE=<name>` installs a tree another build already staged
+without rebuilding it; the `App acceptance` CI shards download one build's tree
+and install it that way before running their slice of the serial matrix.
 
 For a local Linux VM, see [Local Linux runner](linux-runner.md). It builds and
 verifies named profiles through Lima, OrbStack, or an existing SSH machine.

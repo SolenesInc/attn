@@ -23,27 +23,63 @@ for contract in \
   fi
 done
 
+app_acceptance_build_job="$(sed -n '/^  app-acceptance-build:/,/^  app-acceptance-shard:/p' "$workflow")"
+app_acceptance_shard_job="$(sed -n '/^  app-acceptance-shard:/,/^  app-acceptance:/p' "$workflow")"
 app_acceptance_job="$(sed -n '/^  app-acceptance:/,/^  release-preflight:/p' "$workflow")"
-if grep -Eq '^    concurrency:' <<<"$app_acceptance_job"; then
-  echo "App acceptance must not serialize independent hosted runners" >&2
-  exit 1
-fi
-for contract in \
-  'runs-on: ubuntu-24.04' \
-  "run: xvfb-run -a -s '-screen 0 1600x1000x24' pnpm --dir app run real-app:serial-matrix"; do
-  if ! grep -Fq "$contract" <<<"$app_acceptance_job"; then
-    echo "App acceptance must keep its isolated display and serial matrix: $contract" >&2
+for job in "$app_acceptance_build_job" "$app_acceptance_shard_job" "$app_acceptance_job"; do
+  if grep -Eq '^    concurrency:' <<<"$job"; then
+    echo "App acceptance must not serialize independent hosted runners" >&2
     exit 1
   fi
 done
 
 for contract in \
+  'runs-on: ubuntu-24.04' \
+  "xvfb-run -a -s '-screen 0 1600x1000x24'" \
+  'pnpm --dir app run real-app:serial-matrix -- --shard'; do
+  if ! grep -Fq "$contract" <<<"$app_acceptance_shard_job"; then
+    echo "App acceptance shards must keep their isolated display and serial matrix: $contract" >&2
+    exit 1
+  fi
+done
+
+# Four places name the shard count; a disagreement silently drops scenarios.
+shard_list_count="$(sed -nE 's/^        shard: \[(.*)\]$/\1/p' <<<"$app_acceptance_shard_job" | tr ',' '\n' | grep -c '[0-9]')"
+shard_name_count="$(sed -nE 's|^    name: App acceptance shard \$\{\{ matrix.shard \}\}/([0-9]+)$|\1|p' <<<"$app_acceptance_shard_job")"
+shard_run_count="$(sed -nE 's|.*--shard \$\{\{ matrix.shard \}\}/([0-9]+).*|\1|p' <<<"$app_acceptance_shard_job")"
+aggregate_count="$(sed -nE 's/.*--shard-count ([0-9]+).*/\1/p' <<<"$app_acceptance_job")"
+if [ "$shard_list_count" != "$shard_name_count" ] ||
+  [ "$shard_list_count" != "$shard_run_count" ] ||
+  [ "$shard_list_count" != "$aggregate_count" ]; then
+  echo "App acceptance shard counts disagree: matrix has $shard_list_count," \
+    "the job name says $shard_name_count, --shard says $shard_run_count," \
+    "and the aggregate expects $aggregate_count" >&2
+  exit 1
+fi
+
+for contract in \
   'continue-on-error: true' \
-  'name: Gate app acceptance' \
-  "if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.harness == 'true'"; do
+  'aggregate-shards.mjs' \
+  'name: Gate app acceptance'; do
   if ! grep -Fq "$contract" <<<"$app_acceptance_job"; then
-    echo "App acceptance needs its path policy, and its verdict in the gate step" >&2
-    echo "rather than the continue-on-error matrix: $contract" >&2
+    echo "App acceptance needs its verdict in the gate step over the aggregated" >&2
+    echo "shard digests, rather than the continue-on-error step: $contract" >&2
+    exit 1
+  fi
+done
+
+path_policy="if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.harness == 'true'"
+for job in "$app_acceptance_build_job" "$app_acceptance_shard_job"; do
+  if ! grep -Fq "$path_policy" <<<"$job"; then
+    echo "App acceptance build and shards need the harness path policy: $path_policy" >&2
+    exit 1
+  fi
+done
+for contract in \
+  '!cancelled() &&' \
+  "(needs.changes.outputs.force_all == 'true' || needs.changes.outputs.harness == 'true')"; do
+  if ! grep -Fq "$contract" <<<"$app_acceptance_job"; then
+    echo "App acceptance must aggregate even when a shard is red: $contract" >&2
     exit 1
   fi
 done
@@ -82,6 +118,8 @@ for path in \
   "app/src-tauri/**" \
   "apphost/**" \
   "scripts/build-app-runtime-host.sh" \
+  "scripts/install-app-tree.sh" \
+  ".github/actions/**" \
   ".github/workflows/app-acceptance.yml" \
   ".github/workflows/ci.yml"; do
   if ! grep -Fq "              - '$path'" <<<"$(sed -n '/^            harness:/,/^            release_preflight:/p' "$workflow")"; then
