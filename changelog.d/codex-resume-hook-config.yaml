@@ -1,0 +1,4 @@
+kind: fixed
+area: codex
+change: Preserve hook configuration when resuming Codex sessions so new conversations can update transcript tracking.
+symptom: Resumed sessions could keep tracking an old transcript after /new, leaving cost stale and reloading the wrong conversation.
