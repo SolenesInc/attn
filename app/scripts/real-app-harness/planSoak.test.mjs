@@ -6,6 +6,7 @@ const catalog = [
   { id: 'terminal-block-resize' },
   { id: 'workspace-switching' },
   { id: 'terminal-block-copy', skipOn: { linux: 'needs the macOS menu accelerator' } },
+  { id: 'remote-probe', skipOn: { linux: { reason: 'needs remote', unlessEnv: 'REMOTE' } } },
 ];
 
 describe('parseScenarioList', () => {
@@ -18,7 +19,7 @@ describe('parseScenarioList', () => {
 
   it('names unknown ids and the catalog', () => {
     expect(() => parseScenarioList('terminal-annotations,missing', catalog)).toThrow(
-      'Unknown scenario id(s): missing\nKnown scenarios: terminal-annotations, terminal-block-resize, workspace-switching',
+      'Unknown scenario id(s): missing\nKnown scenarios: terminal-annotations, terminal-block-resize, workspace-switching, terminal-block-copy, remote-probe',
     );
   });
 
@@ -35,6 +36,14 @@ describe('parseScenarioList', () => {
     expect(() => parseScenarioList('terminal-block-copy', catalog)).toThrow(
       'Scenario(s) unavailable on the Linux soak runner:\n  terminal-block-copy: needs the macOS menu accelerator',
     );
+  });
+
+  it('defers conditional availability to the selected runner', () => {
+    expect(parseScenarioList('remote-probe', catalog)).toEqual(['remote-probe']);
+    expect(() => parseScenarioList('remote-probe', catalog, {})).toThrow(
+      'Scenario(s) unavailable on the Linux soak runner:\n  remote-probe: needs remote',
+    );
+    expect(parseScenarioList('remote-probe', catalog, { REMOTE: 'host' })).toEqual(['remote-probe']);
   });
 });
 

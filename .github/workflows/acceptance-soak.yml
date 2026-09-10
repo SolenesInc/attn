@@ -100,6 +100,14 @@ jobs:
         id: runner
         run: ./scripts/ci-runner-class.sh
 
+      - name: Validate scenario on runner
+        env:
+          REPEAT: ${{ needs.plan.outputs.repeat }}
+          SCENARIOS: ${{ matrix.scenario }}
+        run: >-
+          node app/scripts/real-app-harness/plan-soak.mjs
+          --scenarios "$SCENARIOS" --repeat "$REPEAT" --check-runner-env
+
       - name: Download the app tree
         uses: actions/download-artifact@v4
         with:
@@ -136,10 +144,10 @@ jobs:
             cp "$data_dir/daemon.log" "$EVIDENCE_DIR/daemon.log"
           fi
           if [ -d "$data_dir/workers" ]; then
-            find "$data_dir/workers" -name '*.log' -exec cp {} "$EVIDENCE_DIR/" \;
+            (cd "$data_dir" && find workers -name '*.log' -exec cp --parents {} "$EVIDENCE_DIR" \;)
           fi
           if [ -d "$data_dir/pty-hosts" ]; then
-            find "$data_dir/pty-hosts" -name '*.log' -exec cp {} "$EVIDENCE_DIR/" \;
+            (cd "$data_dir" && find pty-hosts -name '*.log' -exec cp --parents {} "$EVIDENCE_DIR" \;)
           fi
 
       - name: Upload failed-iteration evidence

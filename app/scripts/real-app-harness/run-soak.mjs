@@ -17,6 +17,7 @@ import {
 } from './harnessProfile.mjs';
 import { stopMockGitHubServer } from './mockGitHub.mjs';
 import { resolveScenario, scenariosAllowingRealAgents } from './scenarioCatalog.mjs';
+import { acquireScenarioLock, packagedAppScenarioLockPath } from './scenarioRunner.mjs';
 
 if (process.env.ATTN_HARNESS_PROFILE === undefined && !process.env.ATTN_PROFILE) {
   process.env.ATTN_HARNESS_PROFILE = 'dev';
@@ -115,6 +116,22 @@ export function retainIterationEvidence(artifactPaths, { failed, failedEvidenceO
   return retained;
 }
 
+export function acquireSoakLock({ scenarioId, runDir, appPath }, {
+  acquire = acquireScenarioLock,
+  lockPath = packagedAppScenarioLockPath(),
+  childPid = process.pid,
+} = {}) {
+  const release = acquire({
+    scenarioId: `SOAK-${scenarioId}`,
+    tier: 'soak',
+    runId: path.basename(runDir),
+    runDir,
+    appPath,
+  }, lockPath);
+  process.env.ATTN_REAL_APP_SCENARIO_LOCK_PATH = `${lockPath}.children-${childPid}`;
+  return release;
+}
+
 function parseArgs(argv) {
   const args = [...argv];
   if (args[0] === '--') {
@@ -191,6 +208,11 @@ const signalExitCode = {
 };
 let activeChild = null;
 let interruptHandled = false;
+let releaseSoakLock = null;
+
+process.once('exit', () => {
+  releaseSoakLock?.();
+});
 
 function terminateActiveChild(signal) {
   if (!activeChild || activeChild.killed) {
@@ -294,6 +316,10 @@ async function main() {
     { appPath, wsUrl },
     runAgainstProd ? ['--run-against-prod'] : process.argv.slice(2),
   );
+  const artifactsRoot = harnessArtifactsRoot();
+  ensureDir(artifactsRoot);
+  const { runDir } = createRunContext({ artifactsDir: artifactsRoot, sessionRootDir: artifactsRoot }, `soak-${scenarioId}`);
+  releaseSoakLock = acquireSoakLock({ scenarioId, runDir, appPath });
   console.log(`Soak target: ${appPath} (ATTN_HARNESS_PROFILE=${process.env.ATTN_HARNESS_PROFILE || '<default>'})`);
   for (const allowed of scenariosAllowingRealAgents([scenario])) {
     const which = allowed.allowRealAgents === true ? 'all' : allowed.allowRealAgents.join(', ');
@@ -306,10 +332,6 @@ async function main() {
     await ensureFreshWorld({ profile, appPath });
   }
   assertPackagedAppBuildMatchesCurrentSource({ appPath, launchEnv: scenario.preflightLaunchEnv || null });
-
-  const artifactsRoot = harnessArtifactsRoot();
-  ensureDir(artifactsRoot);
-  const { runDir } = createRunContext({ artifactsDir: artifactsRoot, sessionRootDir: artifactsRoot }, `soak-${scenarioId}`);
 
   const records = [];
   for (let iteration = 1; iteration <= repeat; iteration += 1) {
@@ -370,6 +392,8 @@ async function main() {
     durationMs: Date.now() - soakStartedAt,
   });
   emitVerdict(verdict);
+  releaseSoakLock();
+  releaseSoakLock = null;
   if (!verdict.ok) {
     process.exitCode = 1;
   }

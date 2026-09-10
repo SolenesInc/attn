@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { scenarioSkipReason } from './matrixDigest.mjs';
 import { scenarioCatalog } from './scenarioCatalog.mjs';
 
-export function parseScenarioList(value, catalog = scenarioCatalog) {
+export function parseScenarioList(value, catalog = scenarioCatalog, env) {
   const ids = String(value).split(',').map((id) => id.trim());
   if (ids.length === 0 || ids.some((id) => !id)) {
     throw new Error('Scenario ids must be a comma-separated list with no empty entries.');
@@ -23,7 +23,14 @@ export function parseScenarioList(value, catalog = scenarioCatalog) {
   }
 
   const unavailable = ids
-    .map((id) => ({ id, reason: scenarioSkipReason(catalog.find((scenario) => scenario.id === id), 'linux', {}) }))
+    .map((id) => {
+      const scenario = catalog.find((entry) => entry.id === id);
+      const rule = scenario.skipOn?.linux;
+      const reason = typeof rule === 'object' && rule.unlessEnv && env === undefined
+        ? null
+        : scenarioSkipReason(scenario, 'linux', env || {});
+      return { id, reason };
+    })
     .filter(({ reason }) => reason);
   if (unavailable.length > 0) {
     throw new Error(`Scenario(s) unavailable on the Linux soak runner:\n${unavailable
@@ -33,13 +40,13 @@ export function parseScenarioList(value, catalog = scenarioCatalog) {
   return ids;
 }
 
-export function planSoak({ scenarios, repeat }, catalog = scenarioCatalog) {
+export function planSoak({ scenarios, repeat }, catalog = scenarioCatalog, env) {
   const parsedRepeat = Number(repeat);
   if (!Number.isInteger(parsedRepeat) || parsedRepeat <= 0) {
     throw new Error(`Repeat must be a positive integer, got: ${repeat}`);
   }
   return {
-    matrix: { scenario: parseScenarioList(scenarios, catalog) },
+    matrix: { scenario: parseScenarioList(scenarios, catalog, env) },
     repeat: parsedRepeat,
   };
 }
@@ -48,21 +55,25 @@ function parseArgs(argv) {
   const args = [...argv];
   let scenarios = '';
   let repeat = '';
+  let checkRunnerEnv = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === '--scenarios') {
       scenarios = args[++index] || '';
     } else if (arg === '--repeat') {
       repeat = args[++index] || '';
+    } else if (arg === '--check-runner-env') {
+      checkRunnerEnv = true;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
   }
-  return { scenarios, repeat };
+  return { scenarios, repeat, checkRunnerEnv };
 }
 
 function main() {
-  const plan = planSoak(parseArgs(process.argv.slice(2)));
+  const options = parseArgs(process.argv.slice(2));
+  const plan = planSoak(options, scenarioCatalog, options.checkRunnerEnv ? process.env : undefined);
   process.stdout.write(`matrix=${JSON.stringify(plan.matrix)}\nrepeat=${plan.repeat}\n`);
 }
 

@@ -87,7 +87,9 @@ for contract in \
   'matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}' \
   "xvfb-run -a -s '-screen 0 1600x1000x24'" \
   'pnpm --dir app run real-app:soak --' \
+  '--check-runner-env' \
   '--failed-evidence-only' \
+  'cp --parents' \
   'if: steps.soak.outcome != '\''success'\'''; do
   if ! grep -Fq -- "$contract" "$soak_workflow"; then
     echo "Acceptance soak is missing: $contract" >&2

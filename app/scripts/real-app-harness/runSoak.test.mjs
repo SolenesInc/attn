@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  acquireSoakLock,
   formatSoakSummary,
   isRunFailure,
   iterationArtifactPaths,
@@ -14,6 +15,7 @@ import {
 const tempDirs = [];
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const dir of tempDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -250,5 +252,28 @@ describe('retainIterationEvidence', () => {
     expect(fs.existsSync(passed)).toBe(false);
     expect(fs.existsSync(failed)).toBe(true);
     expect(fs.existsSync(local)).toBe(true);
+  });
+});
+
+describe('acquireSoakLock', () => {
+  it('reserves the shared lock and gives iterations a private child lock', () => {
+    const lockPath = path.join(os.tmpdir(), 'soak-parent.lock');
+    const release = () => {};
+    const acquire = vi.fn(() => release);
+    vi.stubEnv('ATTN_REAL_APP_SCENARIO_LOCK_PATH', 'previous.lock');
+
+    expect(acquireSoakLock({
+      scenarioId: 'demo-scenario',
+      runDir: '/tmp/soak-demo-run',
+      appPath: '/tmp/attn.app',
+    }, { acquire, lockPath, childPid: 42 })).toBe(release);
+    expect(acquire).toHaveBeenCalledWith({
+      scenarioId: 'SOAK-demo-scenario',
+      tier: 'soak',
+      runId: 'soak-demo-run',
+      runDir: '/tmp/soak-demo-run',
+      appPath: '/tmp/attn.app',
+    }, lockPath);
+    expect(process.env.ATTN_REAL_APP_SCENARIO_LOCK_PATH).toBe(`${lockPath}.children-42`);
   });
 });
