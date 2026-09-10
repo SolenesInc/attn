@@ -81,7 +81,7 @@ async function openPane(client, observer, runner, label) {
     client, observer, cwd, label, agent: 'shell',
   });
   const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${label}`, 20_000);
-  return { sessionId, paneId: pane.paneId };
+  return { sessionId, paneId: pane.paneId, cwd };
 }
 
 async function waitForSessionGone(client, sessionId, timeoutMs) {
@@ -142,8 +142,8 @@ async function main() {
       const known = new Set(observer.sessionsById.keys());
       await client.request('write_pane', {
         ...dispatcher,
-        text: `attn delegate --agent shell --model none --no-worktree --source-session ${dispatcher.sessionId} ` +
-          `--name closeme --brief "${BRIEF}"`,
+        text: `attn delegate --agent shell --model none --source-session ${dispatcher.sessionId} ` +
+          `--cwd ${dispatcher.cwd} --name closeme --brief "${BRIEF}"`,
       });
       let spawned = null;
       await observer.waitFor(() => {

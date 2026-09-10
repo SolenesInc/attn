@@ -1782,6 +1782,13 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	if *reuseCheckout && *newWorktree {
 		return delegateCLIArgs{}, errors.New("choose only one of --reuse-checkout or --new-worktree")
 	}
+	if !*reuseCheckout && !*newWorktree {
+		for _, name := range []string{"branch", "existing-branch", "from", "worktree-path", "allow-worktree-reuse"} {
+			if present[name] {
+				return delegateCLIArgs{}, fmt.Errorf("--%s requires --reuse-checkout or --new-worktree", name)
+			}
+		}
+	}
 	var checkout *protocol.DelegateCheckout
 	if *reuseCheckout {
 		if requestedBranch == "" {

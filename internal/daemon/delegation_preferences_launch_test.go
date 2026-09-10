@@ -60,6 +60,31 @@ func TestDelegationRolesResponseAndDisabledPrivacy(t *testing.T) {
 	}
 }
 
+func TestDelegationRolesResponseExpandsMaintainedGuidance(t *testing.T) {
+	d := newDelegationDaemon(t)
+	template := prompts.DelegationRoleTemplates()[0]
+	template.Choices[0].Selection = delegationprefs.Selection{Harness: "codex"}
+	if _, err := d.store.SaveDelegationPreferences(delegationprefs.Config{
+		Enabled: true, WorkflowSkillEnabled: true, Roles: []protocol.DelegationRole{template},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	server, client := net.Pipe()
+	go func() { defer server.Close(); d.handleDelegationRoles(server) }()
+	var got protocol.Response
+	if err := json.NewDecoder(client).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	client.Close()
+	if !got.Ok || got.DelegationRoles == nil || len(got.DelegationRoles.Roles) != 1 {
+		t.Fatalf("%+v", got)
+	}
+	role := got.DelegationRoles.Roles[0]
+	if role.Builtin == nil || role.Name != "Pathfinder" || role.Description == "" || role.Instructions == "" || role.StoppingPoint == "" {
+		t.Fatalf("maintained role was not expanded in JSON response: %+v", role)
+	}
+}
+
 func TestDelegationRoleLaunchContainsOnlySelectedGuidance(t *testing.T) {
 	d := newDelegationDaemon(t)
 	backend := &fakeSpawnBackend{}

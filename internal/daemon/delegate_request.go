@@ -124,6 +124,16 @@ func validateDelegateRequestShape(msg *protocol.DelegateMessage) error {
 }
 
 func (d *Daemon) resolveDelegateRuntime(msg *protocol.DelegateMessage, reservedSeedID, reservedBaseCommit, reservedNoteID, sessionID, ownedWorktreePath string, worktreeOwned bool) (*resolvedDelegationLaunch, error) {
+	return d.resolveDelegateRuntimeWithHandoverSnapshot(msg, reservedSeedID, reservedBaseCommit, reservedNoteID, sessionID, ownedWorktreePath, worktreeOwned, 0, "", "")
+}
+
+func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
+	msg *protocol.DelegateMessage,
+	reservedSeedID, reservedBaseCommit, reservedNoteID, sessionID, ownedWorktreePath string,
+	worktreeOwned bool,
+	handoverSeedRev int,
+	handoverTenderSession, handoverTenderMember string,
+) (*resolvedDelegationLaunch, error) {
 	if err := validateDelegateRequestShape(msg); err != nil {
 		return nil, err
 	}
@@ -161,6 +171,13 @@ func (d *Daemon) resolveDelegateRuntime(msg *protocol.DelegateMessage, reservedS
 		runtime.Brief = protocol.Ptr(seed.Body)
 		runtime.Plot = protocol.Ptr(seedID)
 		if msg.Assignment.Handover != nil {
+			if handoverSeedRev > 0 {
+				if int(doc.Rev) < handoverSeedRev ||
+					seed.TenderSession != strings.TrimSpace(handoverTenderSession) ||
+					seed.TenderMember != strings.TrimSpace(handoverTenderMember) {
+					return nil, fmt.Errorf("seed %s ownership changed after the delegation request was accepted", seedID)
+				}
+			}
 			runtime.Handover = &protocol.SeedHandoverRequest{
 				SeedID: seedID, ExpectedRev: int(doc.Rev), ExpectedTenderSession: seed.TenderSession,
 				ExpectedTenderMember: seed.TenderMember, Review: msg.Review,
@@ -216,9 +233,12 @@ func (d *Daemon) resolveDelegateRuntime(msg *protocol.DelegateMessage, reservedS
 			}
 			runtime.Worktree.ExistingBranch = protocol.Ptr(true)
 		} else {
+			expectedPath := strings.TrimSpace(protocol.Deref(msg.Checkout.Path))
+			if expectedPath == "" {
+				expectedPath = attngit.GenerateWorktreePath(mainRepo, runtime.Worktree.Branch)
+			}
 			ownedRecovery := worktreeOwned && strings.TrimSpace(ownedWorktreePath) != "" &&
-				strings.TrimSpace(protocol.Deref(msg.Checkout.Path)) != "" &&
-				attngit.CanonicalizePath(ownedWorktreePath) == attngit.CanonicalizePath(protocol.Deref(msg.Checkout.Path))
+				attngit.CanonicalizePath(ownedWorktreePath) == attngit.CanonicalizePath(expectedPath)
 			if attngit.RefExists(mainRepo, "refs/heads/"+runtime.Worktree.Branch) && !ownedRecovery {
 				return nil, fmt.Errorf("branch %q already exists; use --existing-branch or choose another name", runtime.Worktree.Branch)
 			}

@@ -410,7 +410,7 @@ func (d *Daemon) applyDefaultDelegationWorktree(msg *resolvedDelegationLaunch, p
 				return fmt.Errorf("workspace directory is not in a git repository; pass --repo")
 			}
 			if placement == delegationPlacementCurrent {
-				return fmt.Errorf("source directory %s is not a git repository, so this delegate would launch with no checkout; place it with --cwd <repo> or --workspace <id>, or pass --no-worktree to delegate without one", directory)
+				return fmt.Errorf("source directory %s is not a git repository; pass the intended working folder with --cwd, and omit checkout flags outside Git", directory)
 			}
 			msg.Worktree = nil
 			return nil

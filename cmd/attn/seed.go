@@ -154,12 +154,6 @@ commands:
         set or clear the seed-owned fallback used when attn has no dispatch
         record for the conversation. The three identity fields move together.
 
-  handover <id> [-m "<what the new agent should know>"] [worker flags]
-        give this seed to a new agent. The seed body remains the brief and the
-        optional handoff lands on its log only after the new agent starts. The
-        saved directory is reused; if it was removed, its verified branch is
-        recreated when safe. Use --cwd when attn asks you to choose a place.
-
   send-to-chief <id> [-m "<optional guidance>"]
         give this seed to the Chief to decide its next working context. The
         saved folder, branch and placement problem are recorded automatically;
@@ -232,13 +226,7 @@ flags:
   --discovered-from <seed>  record the seed this work came from (plant)
   --resume-session-id <id>  agent-native conversation id (plant, set-resume)
   --cwd <path>        directory to reopen in (plant, set-resume)
-  --agent <name>      agent driver to reopen with, or the new Handover agent
-                      (plant, set-resume, handover)
-  --model <name>      model for the new agent (handover; defaults normally)
-  --effort <level>    reasoning effort for the new agent (handover)
-  --name <text>       name for the new agent (handover)
-  --request-id <id>   stable retry key (handover; generated when omitted)
-  --yolo              bypass agent approval prompts (handover)
+  --agent <name>      agent driver to reopen with (plant, set-resume)
   --clear             remove the fallback identity (set-resume), or the
                       harvest condition (harvest --when-merged)
   --when-merged       harvest the seed when its pull request merges, instead
@@ -352,11 +340,6 @@ type seedFlags struct {
 	resumeID       *string
 	cwd            *string
 	agent          *string
-	model          *string
-	effort         *string
-	name           *string
-	requestID      *string
-	yolo           *bool
 	clear          *bool
 	whenMerged     *bool
 	force          *bool
@@ -394,11 +377,6 @@ func newSeedFlags(verb string) *seedFlags {
 		resumeID:       fs.String("resume-session-id", "", "agent-native conversation id"),
 		cwd:            fs.String("cwd", "", "directory to reopen in"),
 		agent:          fs.String("agent", "", "agent driver to reopen with"),
-		model:          fs.String("model", "", "model for the new agent"),
-		effort:         fs.String("effort", "", "reasoning effort for the new agent"),
-		name:           fs.String("name", "", "name for the new agent"),
-		requestID:      fs.String("request-id", "", "stable retry key"),
-		yolo:           fs.Bool("yolo", false, "bypass agent approval prompts"),
 		clear:          fs.Bool("clear", false, "remove what the verb set: the resume identity, or the harvest condition"),
 		whenMerged:     fs.Bool("when-merged", false, "harvest the seed when its pull request merges"),
 		force:          fs.Bool("force", false, "act even though somebody else still holds the seed"),

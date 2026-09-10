@@ -472,6 +472,11 @@ func TestParseDelegateArgsRejectsRetiredAndConflictingInputs(t *testing.T) {
 		{"--brief", "Task", "--cwd", "/repo", "--handover", "--agent", "codex"},
 		{"--brief", "Task", "--cwd", "/repo", "--choice", "hard", "--agent", "codex"},
 		{"--brief", "Task", "--cwd", "/repo", "--role", "builder", "--fallback"},
+		{"--brief", "Task", "--cwd", "/repo", "--branch", "feat/ignored", "--agent", "codex"},
+		{"--brief", "Task", "--cwd", "/repo", "--existing-branch", "feat/ignored", "--agent", "codex"},
+		{"--brief", "Task", "--cwd", "/repo", "--from", "origin/next", "--agent", "codex"},
+		{"--brief", "Task", "--cwd", "/repo", "--worktree-path", "/tmp/ignored", "--agent", "codex"},
+		{"--brief", "Task", "--cwd", "/repo", "--allow-worktree-reuse", "--agent", "codex"},
 	} {
 		if _, err := parseDelegateArgs(args); err == nil {
 			t.Fatalf("accepted %v", args)

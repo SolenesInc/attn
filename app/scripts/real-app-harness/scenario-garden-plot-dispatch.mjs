@@ -122,7 +122,7 @@ async function openPane(client, observer, runner, label) {
   });
   const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${label}`, 20_000);
   await waitForPaneShellReady(client, sessionId, pane.paneId);
-  return { sessionId, paneId: pane.paneId };
+  return { sessionId, paneId: pane.paneId, cwd };
 }
 
 function seedIDs(text) {
@@ -186,8 +186,8 @@ async function main() {
       const known = new Set(observer.sessionsById.keys());
       await client.request('write_pane', {
         ...pane,
-        text: `attn delegate --agent shell --model none --no-worktree --source-session ${pane.sessionId} ` +
-          `--plot ${crown} --name plotdel --brief "Tend the plot you were dispatched at."`,
+        text: `attn delegate --agent shell --model none --source-session ${pane.sessionId} ` +
+          `--cwd ${pane.cwd} --seed ${crown} --name plotdel`,
       });
       let spawned = null;
       await observer.waitFor(() => {
@@ -286,8 +286,8 @@ async function main() {
       const [, parallel, sequenced] = children;
       const known = new Set(observer.sessionsById.keys());
       const refusedCrown = await runInPane(client, pane,
-        `attn delegate --agent shell --model none --no-worktree --source-session ${pane.sessionId} ` +
-          `--plot ${crown} --name plotdel2 --brief "Tend the plot you were dispatched at."`, 'one tender at a time');
+        `attn delegate --agent shell --model none --source-session ${pane.sessionId} ` +
+          `--cwd ${pane.cwd} --seed ${crown} --name plotdel2`, 'one tender at a time');
       runner.assert(saw(refusedCrown, `${crown} is being tended by ${delegated}`),
         'dispatching at a tended crown is refused and names its tender', { refusedCrown });
       runner.assert(observer.sessionsById.size === known.size,
@@ -295,8 +295,8 @@ async function main() {
 
       await client.request('write_pane', {
         ...pane,
-        text: `attn delegate --agent shell --model none --no-worktree --source-session ${pane.sessionId} ` +
-          `--plot ${parallel} --name plotdel2 --brief "Tend the seed you were dispatched at."`,
+        text: `attn delegate --agent shell --model none --source-session ${pane.sessionId} ` +
+          `--cwd ${pane.cwd} --seed ${parallel} --name plotdel2`,
       });
       await observer.waitFor(() => {
         second = [...observer.sessionsById.keys()].find((id) => !known.has(id)) ?? null;
@@ -449,9 +449,9 @@ async function main() {
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
-    for (const id of [delegated, second, pane?.sessionId]) {
-      if (id) await client.request('close_session', { sessionId: id }).catch(() => {});
-    }
+    await Promise.all([delegated, second, pane?.sessionId]
+      .filter(Boolean)
+      .map(id => client.request('close_session', { sessionId: id }).catch(() => {})));
     await client.quitApp().catch(() => {});
     await observer.close();
   }

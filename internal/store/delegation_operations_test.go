@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -28,5 +29,36 @@ func TestDelegationOperationReservesActiveTicket(t *testing.T) {
 	}
 	if _, claimed, err := s.ClaimDelegationOperation("request-3", "operation-3", "session-3", "", "planned", `{"ticket_id":"planned"}`, now); err != nil || !claimed {
 		t.Fatalf("claim after terminal operation = %v, %v", claimed, err)
+	}
+}
+
+func TestCompletedDelegationPreservesRecordedWorktreeRootAndHandoverSnapshot(t *testing.T) {
+	s := New()
+	t.Cleanup(func() { _ = s.Close() })
+	now := time.Now()
+	snapshot := DelegationHandoverSnapshot{SeedRev: 17, TenderSession: "predecessor", TenderMember: "alder"}
+	record, claimed, err := s.ClaimDelegationOperationWithHandoverSnapshot(
+		"request", "operation", "successor", "", "s-seed", `{"assignment":{"kind":"seed"}}`, "", snapshot, now,
+	)
+	if err != nil || !claimed {
+		t.Fatalf("claim = %+v, %v, %v", record, claimed, err)
+	}
+	root := filepath.Join(t.TempDir(), "worktree")
+	if err := s.MarkDelegationWorktreeOwned(record.Operation.OperationID, root, "owner-token", now); err != nil {
+		t.Fatal(err)
+	}
+	result := &protocol.DelegateResult{SessionID: "successor", SeedID: "s-seed", Directory: filepath.Join(root, "subdir")}
+	if err := s.UpdateDelegationOperation(record.Operation.OperationID, protocol.DelegationOperationStateCompleted, "ready", "", "", "", result, nil, now); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetDelegationOperation(record.Operation.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if protocol.Deref(got.Operation.WorktreePath) != root {
+		t.Fatalf("worktree path = %q, want root %q", protocol.Deref(got.Operation.WorktreePath), root)
+	}
+	if got.HandoverSeedRev != snapshot.SeedRev || got.HandoverTenderSession != snapshot.TenderSession || got.HandoverTenderMember != snapshot.TenderMember {
+		t.Fatalf("handover snapshot = rev %d session %q member %q", got.HandoverSeedRev, got.HandoverTenderSession, got.HandoverTenderMember)
 	}
 }

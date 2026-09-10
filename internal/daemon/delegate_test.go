@@ -2300,7 +2300,7 @@ func TestDelegateRefusesDefaultWorktreeFromNonRepoSource(t *testing.T) {
 	if err == nil {
 		t.Fatal("delegate() error = nil, want refusal")
 	}
-	for _, want := range []string{cwd, "not a git repository", "--cwd", "--workspace", "--no-worktree"} {
+	for _, want := range []string{cwd, "not a git repository", "--cwd", "omit checkout flags"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("delegate() error = %q, want it to mention %q", err, want)
 		}

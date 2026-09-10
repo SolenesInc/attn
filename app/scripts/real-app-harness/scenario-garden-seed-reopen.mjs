@@ -44,15 +44,19 @@ async function openPane(client, observer, runner, label) {
     resumable: true,
     name: 'reopen mock',
     turns: [{
-      includes: 'GSREOPEN_READY',
-      actions: [{ type: 'reply', text: 'GSREOPEN_READY', state: 'waiting_input' }],
+      includes: 'attn seed show',
+      actions: [
+        { type: 'capture', from: 'prompt', pattern: '(s-[a-z0-9]{6})', name: 'seed' },
+        { type: 'attn', args: ['seed', 'show', '{{seed}}'] },
+        { type: 'reply', text: 'GSREOPEN_READY', state: 'waiting_input' },
+      ],
     }],
   });
   const sessionId = await createSessionAndWaitForInitialPane({
     client, observer, cwd, label, agent: 'shell',
   });
   const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${label}`, 20_000);
-  return { sessionId, paneId: pane.paneId };
+  return { sessionId, paneId: pane.paneId, cwd };
 }
 
 function seedIDs(text) {
@@ -113,8 +117,8 @@ async function main() {
       const delegateName = `gsr-${pane.sessionId.slice(0, 8)}`;
       await client.request('write_pane', {
         ...pane,
-        text: `attn delegate --agent codex --model gpt-5.4-mini --effort low --yolo --new-workspace --no-worktree ` +
-          `--source-session ${pane.sessionId} --name ${delegateName} --brief "${BRIEF}"`,
+        text: `attn delegate --agent codex --model gpt-5.4-mini --effort low --yolo ` +
+          `--cwd ${pane.cwd} --source-session ${pane.sessionId} --name ${delegateName} --brief "${BRIEF}"`,
       });
       let spawned = null;
       await observer.waitFor(() => {

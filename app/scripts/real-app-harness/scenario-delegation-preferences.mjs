@@ -65,7 +65,7 @@ function preferencesRequest(cmd, preferences, installWorkflowSkill = false) {
     observer.ws.send(JSON.stringify({ cmd, request_id, preferences, ...(installWorkflowSkill ? { install_workflow_skill: true } : {}) }));
   });
 }
-let source, worker, baseline;
+let source, worker, baseline, builderRoleID;
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('close_sessions', () => closeScenarioSessions(client, [worker, source].filter(Boolean)));
@@ -93,26 +93,24 @@ try {
     runner.assert(roles().roles.length === 0, 'roles lookup is empty before opt-in');
     await screenshot('01-disabled.png'); await hold();
   });
-  await runner.step('add_maintained_roles_and_configure_builder', async () => {
+  await runner.step('profile_rejects_install_then_configure_custom_builder', async () => {
     await click(`${root} .delegation-switch input`);
     await until(async () => (await preferencesRequest('delegation_preferences_get')).preferences.enabled, 'delegation preferences enabled');
     await click(`${root} > fieldset > button.settings-action`);
     await until(async () => (await text()).includes('Adopt maintained roles'), 'maintained role adoption preview');
     await click('[data-testid="delegation-add-attn-roles-confirm"]');
-    await until(async () => (await preferencesRequest('delegation_preferences_get')).preferences.roles.length === 4, 'maintained roles installed and saved');
-    runner.assert(roles().roles.every(role => role.builtin), 'all adopted roles use maintained references');
-    const header = (await client.request('dom_text', { selector: '.settings-content-head' })).text;
-    runner.assert(!header.includes('% text') && !header.includes('dark'), 'header has no appearance badges');
-    await click('[aria-label="Edit Builder"]');
+    await until(async () => (await text()).includes('installation is disabled for profile'), 'profile-safe workflow install refusal');
+    runner.assert(roles().roles.length === 0, 'failed workflow installation leaves saved roles unchanged');
+    await click(`${root} .delegation-row.between button.settings-action`);
+    await type('.delegation-role-heading input', 'Builder');
     await select('.delegation-choice-body .delegation-fields > label:first-child select', 'codex');
     await save();
-    const found = roles();
-    runner.assert(found.roles.length === 1 && found.roles.some(role => role.id === 'builder'), 'configured Builder is active while unconfigured maintained roles stay unavailable');
+    const [builder] = roles().roles;
+    runner.assert(builder?.id.startsWith('role-') && builder.name === 'Builder' && !builder.builtin, 'custom Builder saves without workflow installation');
+    builderRoleID = builder.id;
+    const header = (await client.request('dom_text', { selector: '.settings-content-head' })).text;
+    runner.assert(!header.includes('% text') && !header.includes('dark'), 'header has no appearance badges');
     await click('.delegation-tabs button:first-child');
-    for (const name of ['Pathfinder', 'Builder', 'Reviewer', 'Orchestrator']) {
-      runner.assert((await text()).includes(name), `${name} is available as a maintained role`);
-    }
-    await client.request('dom_scroll_into_view', { selector: '[aria-label="Edit Orchestrator"]' });
     await screenshot('02-roles.png'); await hold();
     await click('.delegation-tabs button:last-child');
     await select('.delegation-fields > label:first-child select', 'codex');
@@ -129,9 +127,9 @@ try {
     await type('.delegation-choice-body > label textarea', 'Verification is difficult or the requirements are ambiguous.');
     await type('.delegation-choice-body .delegation-picker input[list]', 'high');
     await save();
-    const builder = roles().roles.find(r => r.id === 'builder');
+    const builder = roles().roles.find(r => r.id === builderRoleID);
     runner.assert(builder.choices.length === 2 && builder.choices[1].selection.effort === 'high', 'alternative retains its native effort');
-    runner.assert(builder.builtin === 'builder', 'model edits preserve the maintained role reference');
+    runner.assert(!builder.builtin, 'model edits preserve the custom role');
     await screenshot('03-role-editor.png'); await hold();
     await client.request('dom_scroll_into_view', { selector: '.delegation-choice-body' });
     await screenshot('03-model-choices.png'); await hold();
@@ -154,11 +152,11 @@ try {
     await click('[data-testid="settings-close"]');
     fs.mkdirSync(runner.sessionDir, { recursive: true });
     source = await createSessionAndWaitForInitialPane({ client, observer, cwd: runner.sessionDir, label: 'Delegation source', agent: 'shell', sessionWaitMs: 30000 });
-    const output = runAttn(['delegate', '--source-session', source, '--role', 'builder', '--effort', 'high', '--brief', 'Delegation settings verification. Wait for direction.', '--cwd', runner.sessionDir, '--name', 'Builder check']);
+    const output = runAttn(['delegate', '--source-session', source, '--role', builderRoleID, '--effort', 'high', '--brief', 'Delegation settings verification. Wait for direction.', '--cwd', runner.sessionDir, '--name', 'Builder check']);
     const result = JSON.parse(output.slice(output.indexOf('{')));
     worker = result.session_id;
     await observer.waitFor(() => observer.sessionsById.has(worker), 'visible delegated session');
-    const builder = roles().roles.find(r => r.id === 'builder');
+    const builder = roles().roles.find(r => r.id === builderRoleID);
     runner.assert(builder?.choices[0]?.selection.effort === 'medium', 'request effort does not mutate the role default');
     runner.writeText('delegation-result.json', JSON.stringify(result, null, 2));
     await hold();

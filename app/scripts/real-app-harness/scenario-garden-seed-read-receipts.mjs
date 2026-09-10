@@ -97,9 +97,8 @@ function writeWatcherFixture(cwd, delegateCwd) {
       {
         includes: DISPATCH_PROMPT,
         actions: [
-          { type: 'attn', args: ['delegate', '--agent', 'codex', '--model', 'gpt-5.6-sol', '--yolo', '--no-worktree',
-            '--cwd', delegateCwd, '--plot', '{{seed}}', '--name', 'subscription-delegate',
-            '--brief', 'Wait for the subscription proof.'] },
+          { type: 'attn', args: ['delegate', '--agent', 'codex', '--model', 'gpt-5.6-sol', '--yolo',
+            '--cwd', delegateCwd, '--seed', '{{seed}}', '--name', 'subscription-delegate'] },
           { type: 'reply', text: DISPATCHED_MARKER, state: 'idle' },
         ],
       },
@@ -158,6 +157,16 @@ function readWatcherTranscript(sessionID) {
 
 function mockTranscript(sessionID) {
   return transcriptMessages(readWatcherTranscript(sessionID));
+}
+
+async function waitForTranscriptMessage(sessionID, expected, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const messages = mockTranscript(sessionID);
+    if (messages.some((message) => saw(message.text, expected))) return messages;
+    await delay(50);
+  }
+  return mockTranscript(sessionID);
 }
 
 function saw(text, expected) {
@@ -228,7 +237,11 @@ async function main() {
       watcherCwd = path.join(runner.sessionDir, 'watcher');
       const delegateCwd = path.join(runner.sessionDir, 'delegate');
       writeMockAgentFixture(delegateCwd, { name: 'subscription-delegate', turns: [
-        { includes: 'Wait for the subscription proof.', actions: [{ type: 'reply', text: 'DELEGATE_READY', state: 'idle' }] },
+        { includes: 'attn seed show', actions: [
+          { type: 'capture', from: 'prompt', pattern: '(s-[a-z0-9]{6})', name: 'seed' },
+          { type: 'attn', args: ['seed', 'show', '{{seed}}'] },
+          { type: 'reply', text: 'DELEGATE_READY', state: 'idle' },
+        ] },
       ] });
       writeWatcherFixture(watcherCwd, delegateCwd);
       const sessionId = await createSessionAndWaitForInitialPane({
@@ -322,7 +335,7 @@ async function main() {
         `${JSON.stringify(transcriptMessages(transcript), null, 2)}\n`);
     });
 
-    await runner.step('new_delegation_restores_removed_watch', async () => {
+    await runner.step('new_delegation_watches_for_successor_only', async () => {
       cli(['seed', 'unwatch', seed, '--session', watcher.sessionId]);
       const known = new Set(observer.sessionsById.keys());
       await submitPrompt(client, watcher.sessionId, watcher.paneId, DISPATCH_PROMPT);
@@ -331,13 +344,18 @@ async function main() {
         return Boolean(delegated);
       }, 'the delegated session exists');
       await waitForAgentReads(client, watcher, 3, DISPATCHED_MARKER);
-      const shown = JSON.parse(cli(['seed', 'show', seed, '--session', watcher.sessionId, '--json']));
-      runner.assert(shown.watching_via.includes(seed), 'a new delegation restores the ordinary watch', { via: shown.watching_via });
+      const successorView = JSON.parse(cli(['seed', 'show', seed, '--session', delegated, '--json']));
+      runner.assert(successorView.watching_via.includes(seed),
+        'a new delegation gives the successor an ordinary watch', { via: successorView.watching_via });
+      const predecessorView = JSON.parse(cli(['seed', 'show', seed, '--session', watcher.sessionId, '--json']));
+      runner.assert(!predecessorView.watching && predecessorView.watching_via.length === 0,
+        'delegation does not restore a watch the predecessor removed', { via: predecessorView.watching_via });
     });
 
     let keptChild;
     let droppedChild;
     await runner.step('hold_watcher_and_queue_descendant_updates', async () => {
+      cli(['seed', 'watch', seed, '--session', watcher.sessionId]);
       await submitPrompt(client, watcher.sessionId, watcher.paneId, HOLD_PROMPT);
       await observer.waitFor(() => fs.existsSync(path.join(watcherCwd, HOLD_READY)), 'watcher holding its turn');
       keptChild = JSON.parse(cli(['seed', 'plant', 'Keep child subscription', '--part-of', seed, '--json'])).id;
@@ -361,7 +379,7 @@ async function main() {
       fs.writeFileSync(path.join(watcherCwd, HOLD_RELEASE), 'release\n');
       await waitForAgentReads(client, watcher, 3, HOLD_DONE);
       await waitForAgentReads(client, watcher, 4, keptChild);
-      const messages = mockTranscript(watcher.sessionId);
+      const messages = await waitForTranscriptMessage(watcher.sessionId, `${keptChild} moved: note`);
       runner.assert(messages.some((message) => saw(message.text, `${keptChild} moved: note`)), 'the surviving child update reaches the actual inbox', { keptChild });
       runner.assert(!messages.some((message) => saw(message.text, `${droppedChild} moved: note`)), 'the removed update never reaches the inbox', { droppedChild });
     });
@@ -370,7 +388,9 @@ async function main() {
       await runInShell(client, author, `attn seed watch ${seed} --session ${watcher.sessionId}`, `watching ${seed} and its descendants`);
       cli(['seed', 'note', droppedChild, '-m', 'Rewatch restores delivery', '--ring', '--session', author.sessionId]);
       await waitForAgentReads(client, watcher, 5, droppedChild);
-      runner.assert(mockTranscript(watcher.sessionId).some((message) => saw(message.text, `${droppedChild} moved: note`)), 'rewatch delivers the next descendant update', { droppedChild });
+      const messages = await waitForTranscriptMessage(watcher.sessionId, `${droppedChild} moved: note`);
+      runner.assert(messages.some((message) => saw(message.text, `${droppedChild} moved: note`)),
+        'rewatch delivers the next descendant update', { droppedChild });
       await runInShell(client, author, `attn seed unwatch ${keptChild} --session ${watcher.sessionId}`, `attn seed unwatch ${seed}`);
       cli(['seed', 'unwatch', seed, '--session', watcher.sessionId]);
       runner.writeText('subscription-transcript.txt', await paneText(client, watcher));
@@ -398,9 +418,9 @@ async function main() {
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
-    for (const id of [delegated, watcher?.sessionId, author?.sessionId]) {
-      if (id) await client.request('close_session', { sessionId: id }).catch(() => {});
-    }
+    await Promise.all([delegated, watcher?.sessionId, author?.sessionId]
+      .filter(Boolean)
+      .map(id => client.request('close_session', { sessionId: id }).catch(() => {})));
     await client.quitApp().catch(() => {});
     await observer.close();
   }

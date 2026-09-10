@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -408,10 +409,10 @@ func TestDelegationRestartResumesPreviouslyOwnedWorktreeWithMatchingMarker(t *te
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
 	_, sourceID, _ := setupDelegationSourceAt(t, d, backend, mainRepo)
-	path := filepath.Join(root, "repo--owned")
+	path := attngit.GenerateWorktreePath(mainRepo, "feat/owned")
 	msg := explicitOperationMessage(d, "owned-resume", sourceID, "Resume original work.", "owned-resume")
 	msg.Cwd = mainRepo
-	msg.Checkout = &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindNewWorktree, Branch: "feat/owned", From: protocol.Ptr("HEAD"), Path: protocol.Ptr(path)}
+	msg.Checkout = &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindNewWorktree, Branch: "feat/owned", From: protocol.Ptr("HEAD")}
 	encoded, _ := json.Marshal(msg)
 	record, _, err := d.store.ClaimDelegationOperation(msg.RequestID, "operation-owned-resume", "session-owned-resume", "", "", string(encoded), time.Now())
 	if err != nil {

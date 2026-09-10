@@ -1,17 +1,20 @@
 package daemon
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func resolvedHandoverRequest(seed garden.Seed, docRev int64, requestID, sourceSessionID, handoff string) *resolvedDelegationLaunch {
@@ -382,6 +385,46 @@ func TestSeedHandoverLosesCleanlyWhenTheSeedMovesDuringLaunch(t *testing.T) {
 		if note.Kind == garden.NoteKindHandoff {
 			t.Fatalf("losing Handover wrote its handoff: %+v", note)
 		}
+	}
+}
+
+func TestAcceptedSeedHandoverRejectsHolderChangeBeforeRecoveryResolution(t *testing.T) {
+	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
+	consumeDelegatedPrompt(t, backend)
+	_, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
+	addGardenSession(t, d, "racing-session")
+	seed, doc, err := d.readSeed(seedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := handoverRequest(d, seed, "handover-accepted-race", sourceSessionID, "This must not target a later holder.")
+	encoded, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, claimed, err := d.store.ClaimDelegationOperationWithHandoverSnapshot(
+		msg.RequestID, "op-handover-accepted-race", "successor-session", "", seedID, string(encoded), "",
+		store.DelegationHandoverSnapshot{SeedRev: int(doc.Rev), TenderSession: seed.TenderSession, TenderMember: seed.TenderMember}, time.Now(),
+	)
+	if err != nil || !claimed {
+		t.Fatalf("claim = %+v, %v, %v", record, claimed, err)
+	}
+	if _, _, err := d.applySeedTransition(seedID, garden.VerbTend, garden.Ask{
+		Actor: garden.Tender{Session: "racing-session"}, Force: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	d.runDelegationOperation(record.Operation.OperationID)
+	done := waitDelegationOperation(t, d, record.Operation.OperationID)
+	if done.State != protocol.DelegationOperationStateFailed || done.Failure == nil || !strings.Contains(done.Failure.Message, "ownership changed after the delegation request was accepted") {
+		t.Fatalf("operation = %+v, want accepted-holder race failure", done)
+	}
+	after, _, err := d.readSeed(seedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.TenderSession != "racing-session" || d.store.Get(record.Operation.SessionID) != nil {
+		t.Fatalf("accepted handover overwrote the winner or spawned: seed=%+v session=%+v", after, d.store.Get(record.Operation.SessionID))
 	}
 }
 

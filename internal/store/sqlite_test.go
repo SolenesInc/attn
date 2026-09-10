@@ -296,6 +296,38 @@ func TestMigration73RepairsAutomationProfileMigration70Collision(t *testing.T) {
 	}
 }
 
+func TestMigration141AddsDelegationHandoverSnapshot(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "migration-141.db")
+	db, err := OpenDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, column := range []string{"handover_seed_rev", "handover_tender_session", "handover_tender_member"} {
+		if _, err := db.Exec(`ALTER TABLE delegation_operations DROP COLUMN ` + column); err != nil {
+			db.Close()
+			t.Fatalf("drop delegation_operations.%s: %v", column, err)
+		}
+	}
+	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version = 141`); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	migrated, err := OpenDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer migrated.Close()
+	for _, column := range []string{"handover_seed_rev", "handover_tender_session", "handover_tender_member"} {
+		var count int
+		if err := migrated.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('delegation_operations') WHERE name = ?`, column).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("delegation_operations.%s count = %d, err = %v", column, count, err)
+		}
+	}
+}
+
 func TestMigration75DefaultsExistingRowsToEmptySpecYAML(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-75.db")
 	db, err := OpenDB(dbPath)

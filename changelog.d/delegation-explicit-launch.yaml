@@ -1,0 +1,8 @@
+kind: changed
+area: delegation
+change: Delegations now bind one seed and require explicit working-folder and Git checkout choices, with maintained roles available through an opt-in Settings action.
+notes: |
+  The CLI, app, and daemon now share one typed launch request. Handover commits
+  seed ownership before spawning the successor, failed launches preserve known
+  resources for recovery, and adopted Attn roles follow bundled guidance while
+  retaining the user's model choices.

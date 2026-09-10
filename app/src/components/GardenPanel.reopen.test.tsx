@@ -124,9 +124,9 @@ describe('GardenPanel continuation actions', () => {
 
     await waitFor(() => expect(onHandoverSeed).toHaveBeenCalledWith({
       seedId: 's-hand11',
-		cwd: '/tmp/work',
-		checkout: undefined,
-		agent: 'codex',
+      cwd: '/tmp/work',
+      checkout: undefined,
+      agent: 'codex',
       handoff: 'The parser is done; verify the renderer.',
     }));
   });
@@ -172,13 +172,14 @@ describe('GardenPanel continuation actions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
 
     await waitFor(() => expect(onHandoverSeed).toHaveBeenCalledWith(expect.objectContaining({
-			seedId: 's-fresh11',
-			cwd: '/tmp/work',
-		})));
+      seedId: 's-fresh11',
+      cwd: '/tmp/work',
+    })));
   });
 
-  it('offers Chief instead of a manual placement override', async () => {
+  it('offers manual handover placement and Chief as separate paths', async () => {
     const value = seed({ id: 's-place11', title: 'place this handover', tender_session: 'sess-a' });
+    const onHandoverSeed = vi.fn().mockResolvedValue({ session_id: 'sess-b' });
     const onSendSeedToChief = vi.fn().mockResolvedValue({ chief_session_id: 'chief' });
     render(
       <GardenPanel
@@ -190,15 +191,31 @@ describe('GardenPanel continuation actions', () => {
           resume_available: false,
           handover_placement: 'placement_required',
           placement_reason: 'the old directory is unavailable',
+          repository_root: '/tmp/repo',
+          branch: 'old-branch',
         })))}
-        onHandoverSeed={vi.fn()}
+        onHandoverSeed={onHandoverSeed}
         onSendSeedToChief={onSendSeedToChief}
         chiefAvailable
       />,
     );
 
     fireEvent.click(screen.getByText('place this handover'));
-    expect(screen.queryByTestId('seed-handover-s-place11')).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByTestId('seed-handover-s-place11'));
+    fireEvent.change(screen.getByLabelText('Working folder'), { target: { value: '/tmp/new-home' } });
+    fireEvent.change(screen.getByLabelText('Git checkout'), { target: { value: 'new_worktree' } });
+    fireEvent.change(screen.getByLabelText('Branch'), { target: { value: 'feature/new-home' } });
+    fireEvent.change(screen.getByLabelText('Start from'), { target: { value: 'origin/next' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
+
+    await waitFor(() => expect(onHandoverSeed).toHaveBeenCalledWith({
+      seedId: 's-place11',
+      cwd: '/tmp/new-home',
+      checkout: { kind: 'new_worktree', branch: 'feature/new-home', from: 'origin/next' },
+      agent: 'codex',
+      handoff: '',
+    }));
+
     fireEvent.click(await screen.findByTestId('seed-send-to-chief-s-place11'));
     const guidance = screen.getByLabelText(/What should Chief know/);
     expect(guidance).toHaveValue('');
