@@ -132,6 +132,12 @@ export function acquireSoakLock({ scenarioId, runDir, appPath }, {
   return release;
 }
 
+export async function resetAfterIteration(scenario, { productionTarget, profile, appPath }, reset = ensureFreshWorld) {
+  if (scenario.freshWorldAfter && !productionTarget) {
+    await reset({ profile, appPath });
+  }
+}
+
 function parseArgs(argv) {
   const args = [...argv];
   if (args[0] === '--') {
@@ -350,6 +356,7 @@ async function main() {
     const artifactPaths = iterationArtifactPaths(artifactsRoot, entriesBefore);
     record.evidenceRetained = retainIterationEvidence(artifactPaths, { failed, failedEvidenceOnly });
     console.log(`--- iteration ${iteration}: ${failed ? 'failed' : 'ok'} (${record.durationMs}ms) ---`);
+    await resetAfterIteration(scenario, { productionTarget, profile, appPath });
     if (untilViolation && failed) {
       break;
     }

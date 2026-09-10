@@ -9,6 +9,7 @@ import {
   iterationArtifactPaths,
   parseVerdictFromOutput,
   retainIterationEvidence,
+  resetAfterIteration,
   summarizeSoak,
 } from './run-soak.mjs';
 
@@ -275,5 +276,30 @@ describe('acquireSoakLock', () => {
       appPath: '/tmp/attn.app',
     }, lockPath);
     expect(process.env.ATTN_REAL_APP_SCENARIO_LOCK_PATH).toBe(`${lockPath}.children-42`);
+  });
+});
+
+describe('resetAfterIteration', () => {
+  it('resets flagged non-production scenarios', async () => {
+    const reset = vi.fn();
+
+    await resetAfterIteration(
+      { freshWorldAfter: true },
+      { productionTarget: false, profile: 'test', appPath: '/tmp/attn.app' },
+      reset,
+    );
+    expect(reset).toHaveBeenCalledWith({ profile: 'test', appPath: '/tmp/attn.app' });
+  });
+
+  it('keeps unflagged and production iterations intact', async () => {
+    const reset = vi.fn();
+
+    await resetAfterIteration({}, { productionTarget: false, profile: 'test', appPath: '/tmp/attn.app' }, reset);
+    await resetAfterIteration(
+      { freshWorldAfter: true },
+      { productionTarget: true, profile: 'test', appPath: '/tmp/attn.app' },
+      reset,
+    );
+    expect(reset).not.toHaveBeenCalled();
   });
 });
