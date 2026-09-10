@@ -175,9 +175,11 @@ async function main() {
 
     await pace();
     await runner.step('the_dispatcher_closes_its_delegate', async () => {
-      const closed = await runInPane(client, dispatcher,
-        `attn agent close ${delegate} -m "${REASON}" --source-session ${dispatcher.sessionId}`,
-        'closed session');
+      const closed = cli(
+        daemonBinary,
+        profile,
+        'agent', 'close', delegate, '-m', REASON, '--source-session', dispatcher.sessionId,
+      );
       runner.assert(saw(closed, seed), 'the close says which seed it noted', { closed, seed });
       const ui = await waitForSessionGone(client, delegate, 15_000);
       runner.writeJson('session-ui-after-close.json', ui);

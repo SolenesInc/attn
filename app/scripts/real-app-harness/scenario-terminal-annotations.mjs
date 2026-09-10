@@ -546,7 +546,11 @@ async function main() {
 
     await runner.step('a_panel_row_opens_its_editor_and_keeps_its_remove_control', async () => {
       await client.request('dom_click', { selector: '[data-testid="annotation-panel"] .anno-panel-title' });
-      await sleep(300);
+      await pollFor(
+        async () => !(await client.request('get_annotation_state', {})).popupOpen,
+        'the previous editor to close',
+        5_000,
+      );
 
       await client.request('dom_click', { selector: '.anno-card-open' });
       await pollFor(
