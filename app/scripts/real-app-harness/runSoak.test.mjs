@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   formatSoakSummary,
   isRunFailure,
+  iterationArtifactPaths,
   parseVerdictFromOutput,
   retainIterationEvidence,
   summarizeSoak,
@@ -218,24 +219,35 @@ describe('formatSoakSummary', () => {
 });
 
 describe('retainIterationEvidence', () => {
-  function artifactDir() {
+  function artifactRoot() {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-run-soak-test-'));
     tempDirs.push(dir);
-    fs.writeFileSync(path.join(dir, 'summary.json'), '{}');
     return dir;
   }
 
-  it('removes passing iteration artifacts when failed-only evidence is requested', () => {
-    const dir = artifactDir();
-    expect(retainIterationEvidence(dir, { failed: false, failedEvidenceOnly: true })).toBe(false);
-    expect(fs.existsSync(dir)).toBe(false);
+  it('finds only artifacts created by the iteration and keeps tripwire state', () => {
+    const root = artifactRoot();
+    fs.mkdirSync(path.join(root, 'soak-report'));
+    const before = new Set(fs.readdirSync(root));
+    fs.mkdirSync(path.join(root, 'scenario-run'));
+    fs.mkdirSync(path.join(root, 'agent-tripwire'));
+
+    expect(iterationArtifactPaths(root, before)).toEqual([path.join(root, 'scenario-run')]);
   });
 
-  it('keeps failed iterations and normal local-run evidence', () => {
-    const failed = artifactDir();
-    const local = artifactDir();
-    expect(retainIterationEvidence(failed, { failed: true, failedEvidenceOnly: true })).toBe(true);
-    expect(retainIterationEvidence(local, { failed: false, failedEvidenceOnly: false })).toBe(true);
+  it('removes passing artifacts and keeps failed or normal local-run evidence', () => {
+    const root = artifactRoot();
+    const passed = path.join(root, 'passed');
+    const failed = path.join(root, 'failed');
+    const local = path.join(root, 'local');
+    fs.mkdirSync(passed);
+    fs.mkdirSync(failed);
+    fs.mkdirSync(local);
+
+    expect(retainIterationEvidence([passed], { failed: false, failedEvidenceOnly: true })).toBe(false);
+    expect(retainIterationEvidence([failed], { failed: true, failedEvidenceOnly: true })).toBe(true);
+    expect(retainIterationEvidence([local], { failed: false, failedEvidenceOnly: false })).toBe(true);
+    expect(fs.existsSync(passed)).toBe(false);
     expect(fs.existsSync(failed)).toBe(true);
     expect(fs.existsSync(local)).toBe(true);
   });

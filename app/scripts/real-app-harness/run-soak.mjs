@@ -99,10 +99,18 @@ export function formatSoakSummary(records, { scenarioId, runnerClass }) {
   ].join('\n');
 }
 
-export function retainIterationEvidence(artifactsDir, { failed, failedEvidenceOnly }) {
+export function iterationArtifactPaths(artifactsRoot, entriesBefore) {
+  return fs.readdirSync(artifactsRoot)
+    .filter((entry) => !entriesBefore.has(entry) && entry !== 'agent-tripwire')
+    .map((entry) => path.join(artifactsRoot, entry));
+}
+
+export function retainIterationEvidence(artifactPaths, { failed, failedEvidenceOnly }) {
   const retained = failed || !failedEvidenceOnly;
   if (!retained) {
-    fs.rmSync(artifactsDir, { recursive: true, force: true });
+    for (const artifactPath of artifactPaths) {
+      fs.rmSync(artifactPath, { recursive: true, force: true });
+    }
   }
   return retained;
 }
@@ -213,7 +221,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
   });
 }
 
-function runIteration(scenario, iteration, timeoutMs, runAgainstProd, artifactsDir) {
+function runIteration(scenario, iteration, timeoutMs, runAgainstProd, profile, artifactsRoot) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
     const childArgs = scenario.command.slice(1);
@@ -226,7 +234,7 @@ function runIteration(scenario, iteration, timeoutMs, runAgainstProd, artifactsD
     const child = spawn(scenario.command[0], childArgs, {
       cwd: process.cwd(),
       stdio: ['inherit', 'pipe', 'pipe'],
-      env: profileCliEnv(currentHarnessProfile(), { ATTN_REAL_APP_ARTIFACTS_DIR: artifactsDir }),
+      env: profileCliEnv(profile, { ATTN_REAL_APP_ARTIFACTS_DIR: artifactsRoot }),
     });
     activeChild = child;
     let stdoutBuffer = '';
@@ -306,17 +314,19 @@ async function main() {
   const records = [];
   for (let iteration = 1; iteration <= repeat; iteration += 1) {
     console.log(`\n=== soak ${scenario.id} iteration ${iteration}/${repeat} ===`);
-    const iterationArtifactsDir = path.join(runDir, `iteration-${iteration}`);
+    const entriesBefore = new Set(fs.readdirSync(artifactsRoot));
     const record = await runIteration(
       scenario,
       iteration,
       timeoutMs,
       runAgainstProd,
-      iterationArtifactsDir,
+      profile,
+      artifactsRoot,
     );
     records.push(record);
     const failed = isRunFailure(record);
-    record.evidenceRetained = retainIterationEvidence(iterationArtifactsDir, { failed, failedEvidenceOnly });
+    const artifactPaths = iterationArtifactPaths(artifactsRoot, entriesBefore);
+    record.evidenceRetained = retainIterationEvidence(artifactPaths, { failed, failedEvidenceOnly });
     console.log(`--- iteration ${iteration}: ${failed ? 'failed' : 'ok'} (${record.durationMs}ms) ---`);
     if (untilViolation && failed) {
       break;
