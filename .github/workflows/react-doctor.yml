@@ -7,9 +7,20 @@
 name: React Doctor
 
 on:
-  # Scans the PR's changed files and posts a sticky summary comment listing only the new issues introduced relative to the merge base of the target branch.
+  push:
+    branches: [main, next]
+    paths:
+      - 'app/src/**'
+      - 'app/package.json'
+      - 'app/pnpm-lock.yaml'
+      - '.github/workflows/react-doctor.yml'
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'app/src/**'
+      - 'app/package.json'
+      - 'app/pnpm-lock.yaml'
+      - '.github/workflows/react-doctor.yml'
 
 permissions:
   contents: read
@@ -25,7 +36,6 @@ concurrency:
 jobs:
   react-doctor:
     runs-on: ubuntu-24.04
-    cache-mode: none
     steps:
       # The merge ref can include newer target changes than the event's base SHA.
       # Scan the PR head with full history so only its changes enter the comparison.

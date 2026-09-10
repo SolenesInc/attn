@@ -178,13 +178,19 @@ if ! grep -Fq 'ref: ${{ github.event.pull_request.head.sha }}' <<<"$react_doctor
 fi
 react_doctor_triggers="$(sed -n '/^on:/,/^permissions:/p' "$react_doctor")"
 if ! grep -Fq 'pull_request:' <<<"$react_doctor_triggers" ||
-  grep -Fq 'push:' <<<"$react_doctor_triggers"; then
-  echo "React Doctor must run on pull requests only" >&2
+  ! grep -Fq 'push:' <<<"$react_doctor_triggers" ||
+  ! grep -Fq 'branches: [main, next]' <<<"$react_doctor_triggers"; then
+  echo "React Doctor must report on relevant pull requests and prime branch caches" >&2
   exit 1
 fi
-if ! grep -Fq 'cache-mode: none' "$react_doctor" ||
-  ! grep -Fq 'name: Report runner class' "$react_doctor"; then
-  echo "React Doctor must avoid branch-scoped caches and report its runner class" >&2
+for path in 'app/src/**' 'app/package.json' 'app/pnpm-lock.yaml' '.github/workflows/react-doctor.yml'; do
+  if [[ "$(grep -Fc -- "- '$path'" <<<"$react_doctor_triggers")" != 2 ]]; then
+    echo "React Doctor must filter pull requests and branch priming to: $path" >&2
+    exit 1
+  fi
+done
+if ! grep -Fq 'name: Report runner class' "$react_doctor"; then
+  echo "React Doctor must report its runner class" >&2
   exit 1
 fi
 
