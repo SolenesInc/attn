@@ -312,9 +312,8 @@ jobs:
       - name: Save Go build cache
         if: >-
           always() && steps.go-cache.outcome == 'success' &&
-          steps.go-cache.outputs.cache-hit != 'true' &&
-          (github.event_name == 'pull_request' || github.ref == 'refs/heads/next' ||
-          github.ref == 'refs/heads/main')
+          steps.go-cache.outputs.cache-hit != 'true' && github.event_name == 'push' &&
+          (github.ref == 'refs/heads/next' || github.ref == 'refs/heads/main')
         uses: actions/cache/save@v4
         with:
           path: |
@@ -370,8 +369,8 @@ jobs:
         if: >-
           always() && steps.go-cache.outcome == 'success' &&
           steps.go-cache.outputs.cache-hit != 'true' && runner.os == 'macOS' &&
-          (github.event_name == 'pull_request' || github.ref == 'refs/heads/next' ||
-          github.ref == 'refs/heads/main')
+          github.event_name == 'push' &&
+          (github.ref == 'refs/heads/next' || github.ref == 'refs/heads/main')
         uses: actions/cache/save@v4
         with:
           path: |
