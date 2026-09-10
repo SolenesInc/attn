@@ -319,8 +319,8 @@ describe('createScenarioRunner agent tripwire', () => {
       throw new Error('settings socket closed');
     });
 
-    await runner.finishSuccess();
-    await expect(runner.finishCleanup()).rejects.toThrow(
+    await runner.finishSuccess({ closeElapsed: 'kept', paneId: 'pane-alpha' });
+    await expect(runner.finishCleanup({ sessionId: 'session-beta' })).rejects.toThrow(
       'Scenario teardown failed: restore_settings: Error: settings socket closed',
     );
 
@@ -330,6 +330,9 @@ describe('createScenarioRunner agent tripwire', () => {
     expect(failure).toMatchObject({
       ok: false,
       failurePhase: 'teardown',
+      closeElapsed: 'kept',
+      paneId: 'pane-alpha',
+      sessionId: 'session-beta',
       teardownErrors: [{ name: 'restore_settings' }],
     });
     expect(failure.error).toContain('settings socket closed');

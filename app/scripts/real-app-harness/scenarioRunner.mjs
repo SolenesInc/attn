@@ -295,6 +295,7 @@ export function createScenarioRunner(options, {
   let cleanupPromise = null;
   let finalizationPromise = null;
   let reportedFailure = null;
+  let reportedSuccessSummary = null;
 
   const appendTrace = (message, details) => {
     const line = `[${new Date().toISOString()}] ${message}${details ? ` ${JSON.stringify(details)}` : ''}\n`;
@@ -513,6 +514,7 @@ export function createScenarioRunner(options, {
       appendTrace('mock_github:expected', { url: expectedMockGitHubURL });
     },
     async finishSuccess(summary = {}) {
+      reportedSuccessSummary = summary;
       const recorderError = await finalizeRunner();
       if (recorderError) throw recorderError;
       const ledger = collectTripwireLedger();
@@ -630,7 +632,12 @@ export function createScenarioRunner(options, {
       if (reportedFailure) {
         await runner.finishFailure(reportedFailure.error, { ...reportedFailure.summary, teardownErrors: errors });
       } else {
-        await runner.finishFailure(error, { ...summary, failurePhase: 'teardown', teardownErrors: errors });
+        await runner.finishFailure(error, {
+          ...reportedSuccessSummary,
+          ...summary,
+          failurePhase: 'teardown',
+          teardownErrors: errors,
+        });
       }
       throw error;
     },
