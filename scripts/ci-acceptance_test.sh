@@ -199,7 +199,7 @@ for job_name in backend pty-compatibility rust; do
   for contract in \
     'cache: false' \
     'uses: actions/cache/restore@v4' \
-    'key: go-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('\''go.mod'\'', '\''go.sum'\'') }}' \
+    'key: go-build-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('\''go.mod'\'', '\''go.sum'\'') }}' \
     'uses: actions/cache/save@v4' \
     "github.ref == 'refs/heads/next'" \
     "github.ref == 'refs/heads/main'" \

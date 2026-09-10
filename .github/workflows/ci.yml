@@ -255,7 +255,7 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          key: go-build-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
 
       - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
@@ -352,7 +352,7 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          key: go-build-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
@@ -571,7 +571,7 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          key: go-build-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
