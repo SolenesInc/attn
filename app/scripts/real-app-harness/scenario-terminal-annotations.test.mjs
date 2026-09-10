@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { proseRow, wordSpan } from './scenario-terminal-annotations.mjs';
+import {
+  annotationCommentEditorReady,
+  proseRow,
+  wordSpan,
+} from './scenario-terminal-annotations.mjs';
 
 const PROSE = '• A retry wrapper protects idempotent operations from duplicate network effects.';
 const SHORT_PROSE = '  Yes, exactly.';
@@ -71,5 +75,15 @@ describe('wordSpan', () => {
 
   it('refuses a row with too few words to span safely', () => {
     expect(wordSpan(SHORT_PROSE)).toBeNull();
+  });
+});
+
+describe('annotationCommentEditorReady', () => {
+  it('waits for focus after the editor mounts', () => {
+    const mounted = { popupOpen: true, popupDraft: '', commentFocused: false };
+    const focused = { ...mounted, commentFocused: true };
+
+    expect(annotationCommentEditorReady(mounted)).toBeNull();
+    expect(annotationCommentEditorReady(focused)).toBe(focused);
   });
 });
