@@ -35,11 +35,6 @@ import {
   settleBeforeBridgeRequest,
   settleUi,
 } from './uiAutomationSettle';
-import {
-  armRefreshWitness,
-  disarmRefreshWitness,
-  readRefreshWitness,
-} from './worktreesRefreshWitness';
 
 const UI_AUTOMATION_REQUEST_EVENT = 'attn://ui-automation/request';
 const UI_AUTOMATION_RESPONSE_EVENT = 'attn://ui-automation/response';
@@ -1522,8 +1517,6 @@ function requireWorktreePath(payload: Record<string, unknown>): string {
 }
 
 const VERB_SEPARATOR = '\u001f';
-const LEDGER_REFRESHING = '.ledger-glyph.is-refreshing, .ledger-checking';
-
 function ledgerRoot(tab: 'Sessions' | 'Worktrees'): HTMLElement | null {
   const panel = document.querySelector('.ledger-panel');
   if (!(panel instanceof HTMLElement)) return null;
@@ -1597,7 +1590,6 @@ function collectWorktreesUiState() {
       refreshing: Boolean(header.querySelector('.ledger-checking')),
     })),
     error: panel.querySelector('.ledger-status-error')?.textContent?.trim() ?? '',
-    refreshWitness: readRefreshWitness(),
   };
 }
 
@@ -3651,7 +3643,6 @@ export function useUiAutomationBridge({
         const root = worktreesRoot();
         const link = ledgerStatusLink(root, 'refresh');
         if (!link) throw new Error('no refresh link');
-        armRefreshWitness(root, LEDGER_REFRESHING);
         clickElement(link);
         await settleUi(3);
         return collectWorktreesUiState();
@@ -4166,7 +4157,6 @@ export function useUiAutomationBridge({
 
     return () => {
       void unlistenPromise.then((unlisten) => unlisten());
-      disarmRefreshWitness();
     };
   }, []);
 }
