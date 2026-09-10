@@ -56,6 +56,11 @@ if ! grep -Fq 'app-acceptance' <<<"$changelog_job" ||
 fi
 
 react_doctor="$root/.github/workflows/react-doctor.yml"
+react_doctor_checkout="$(sed -n '/uses: actions\/checkout@/,/uses: millionco\/react-doctor@/p' "$react_doctor")"
+if ! grep -Fq 'ref: ${{ github.event.pull_request.head.sha }}' <<<"$react_doctor_checkout"; then
+  echo "React Doctor must scan the PR head; a merge ref includes newer target-branch changes" >&2
+  exit 1
+fi
 react_doctor_triggers="$(sed -n '/^on:/,/^permissions:/p' "$react_doctor")"
 if ! grep -Fq 'pull_request:' <<<"$react_doctor_triggers" ||
   grep -Fq 'push:' <<<"$react_doctor_triggers"; then
