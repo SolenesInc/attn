@@ -184,6 +184,10 @@ const EMPTY_SEED_TARGET_SESSIONS: WorkspaceTileSessionOption[] = [];
 const EMPTY_GARDEN_SEEDS: Seed[] = [];
 const EMPTY_DELEGATION_SESSIONS: NonNullable<SessionTerminalWorkspaceProps['delegationSessions']> = [];
 
+export function annotationSurfaceOwnsFocus(active: Element | null = document.activeElement): boolean {
+  return Boolean(active?.closest('.anno-popup, .anno-panel'));
+}
+
 export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandle, SessionTerminalWorkspaceProps>(
   function SessionTerminalWorkspace({
     workspaceId,
@@ -744,6 +748,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
         return;
       }
       if (activePaneId) {
+        if (annotationSurfaceOwnsFocus()) return;
         focusActivePaneSurface();
       }
     }, [activeLeafId, activeLeafIsTile, activePaneId, focusActivePaneSurface, focusTile, focusRequestToken, isActiveSession, isSessionViewVisible, paneReadyFocusRequest, suspendedLeafIdsKey, workspaceId, sessionVisible]);
