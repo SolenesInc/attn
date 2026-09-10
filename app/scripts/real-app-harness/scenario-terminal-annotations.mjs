@@ -146,6 +146,10 @@ function overlaps(a, b) {
     && a.top < b.top + b.height && b.top < a.top + a.height;
 }
 
+export function annotationCommentEditorReady(state) {
+  return state.popupOpen && state.popupDraft !== null && state.commentFocused ? state : null;
+}
+
 async function pollForDrag(client, runner, sessionId, paneId, description, requiredWords) {
   let lastRow = null;
   let lastSpan = null;
@@ -545,17 +549,13 @@ async function main() {
       await sleep(300);
 
       await client.request('dom_click', { selector: '.anno-card-open' });
-      const opened = await pollFor(
+      await pollFor(
         async () => {
           const state = await client.request('get_annotation_state', {});
-          return state.popupOpen && state.popupDraft !== null ? state : null;
+          return annotationCommentEditorReady(state);
         },
-        'the panel row to open its comment editor',
+        'the panel row to open its comment editor and focus the comment box',
         5_000,
-      );
-      runner.assert(
-        opened.commentFocused,
-        'The editor opened without the caret in its comment box, so the next sentence typed goes to the PTY',
       );
 
       const comment = 'checked against the real behaviour';

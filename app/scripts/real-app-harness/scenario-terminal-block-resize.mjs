@@ -92,6 +92,7 @@ async function waitForPaneColumnsToChange(client, sessionId, paneId, previousCol
     20_000,
   );
   await waitForPaneReflowed(client, sessionId, paneId);
+  await waitForPaneVisible(client, sessionId, paneId);
 }
 
 // read_pane_text returns the whole buffer; click_pane_cell takes VIEWPORT rows.
