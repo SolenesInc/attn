@@ -7,7 +7,8 @@ const execFileAsync = promisify(execFile);
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function readProcessTable() {
-  const { stdout } = await execFileAsync('ps', ['-axo', 'pid=,ppid=,%cpu=,rss=,comm=,command=']);
+  // A finite process snapshot can exceed execFile's default buffer on a busy agent host.
+  const { stdout } = await execFileAsync('ps', ['-axo', 'pid=,ppid=,%cpu=,rss=,comm=,command='], { maxBuffer: Infinity });
   return stdout
     .split('\n')
     .map((line) => line.trim())
