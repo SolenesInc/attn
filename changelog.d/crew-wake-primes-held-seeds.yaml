@@ -1,0 +1,9 @@
+kind: added
+area: crew
+change: A crew member wakes knowing which seeds it holds, each with its freshest handoff note, and how many seeds are ready in their plots.
+notes: |
+  A member's claim never expires, so seeds it tended with `--member` carry across
+  its rest. Wake priming now lists them after the predecessor's letter. Past ten
+  held seeds the block names the count and points at `attn seed ls --flat`; a
+  handoff note longer than 1,200 bytes is trimmed with the command for the whole
+  note. The daemon log's `crew: priming` receipt sizes the new section.

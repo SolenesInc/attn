@@ -37,41 +37,34 @@ func runCrew() {
 func writeCrewHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn crew <command>
 
-The crew is the roster of durable named identities. A member's home is plain
-markdown under the active profile's crew directory; the registry serves reads
-over it, and a session becomes a member by launching as one:
-attn <agent> --member <name>.
-
-The crew lives at the home daemon. On an outpost every command here refuses,
-naming the home to run it on.
+Manage the Crew. Members' charters and handoffs persist across sessions
+in the active profile's crew directory.
+Launch as a member with: attn <agent> --member <name>.
+Run crew commands on the home daemon; outposts report which home to use.
 
 commands:
   list [--json]
-        every registered member, awake or asleep. An awake member names the
-        session living its current day.
+        Show all members and their active sessions, if any.
 
   wake <member> [--agent <name>] [--json]
-        start a member's day: a session bound to it, launched in the member's
-        own cwd with its awareness dirs, on the harness its record names
-        (--agent overrides for this one day), primed with
-        where to read its charter, the freshest letter left for it, and how its
-        home works. A member that is already
-        awake is not woken twice — the answer names the session it is living.
+        Start a session using the member's saved launch settings.
+        Include its charter location, latest handoff, home instructions,
+        held seeds with handoff notes, and ready counts for their plots.
+        --agent overrides the harness for this session.
+        If already awake, return the existing session.
 
   sleep <member> [--json]
-        ask an awake member to write its handoff letter and file it with
-        attn handoff --sleep. This requests consented closure; it does not
-        kill the member. An already-asleep member is a named no-op.
+        Ask the member to write a handoff and close with attn handoff --sleep.
+        The member closes its own session. Do nothing if already asleep.
 
   set <member> [--cwd <dir>] [--agent <name>] [--model <name>]
                [--awareness-dir <dir>]...
-        record where the member's sessions launch, which harness and model it
-        lives on, and which directories its charter is about. Registry state;
-        the home's markdown is never rewritten. --agent takes claude, codex or
-        any installed plugin driver. Pass either flag empty to clear it: agent
-        returns to the crew default, model to the configured harness default.
-        --awareness-dir repeats and replaces the whole list; pass it once with
-        an empty value to clear it.
+        Save launch settings without changing the member's markdown files.
+        --cwd sets the working directory; --model selects the model.
+        --agent accepts claude, codex, or an installed plugin driver.
+        --agent "" restores the crew default; --model "" the harness default.
+        --awareness-dir sets context dirs. Repeat to replace the saved list.
+        Use --awareness-dir "" to clear it.
 `)
 }
 
