@@ -351,11 +351,10 @@ func sharedHostBinaryCandidates() []string {
 		candidates = append(candidates,
 			filepath.Join(home, ".local", "bin", ptyhost.BinaryNameForProfile(config.Profile())),
 			filepath.Join(home, ".local", "bin", ptyhost.BinaryName),
-			filepath.Join(home, "Applications", "attn.app", "Contents", "MacOS", ptyhost.BinaryName),
 		)
 	}
-	if runtime.GOOS == "darwin" {
-		candidates = append(candidates, filepath.Join(string(filepath.Separator), "Applications", "attn.app", "Contents", "MacOS", ptyhost.BinaryName))
+	for _, daemonBinary := range bundledAttnCandidates(home) {
+		candidates = append(candidates, filepath.Join(filepath.Dir(daemonBinary), ptyhost.BinaryName))
 	}
 	if path, err := exec.LookPath(ptyhost.BinaryName); err == nil {
 		candidates = append(candidates, path)
