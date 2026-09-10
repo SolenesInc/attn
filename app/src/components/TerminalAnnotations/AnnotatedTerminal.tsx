@@ -72,6 +72,7 @@ type TerminalProps = Omit<
 >;
 
 export interface AnnotatedTerminalProps extends TerminalProps {
+  workspaceId: string;
   sessionId: string;
   annotationApi?: SessionAnnotationApi;
   // Gates the send shortcut's *registration*: the dispatcher consumes ⌘Enter
@@ -100,7 +101,7 @@ interface Composer {
 
 export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerminalProps>(
   function AnnotatedTerminal(
-    { sessionId, annotationApi, paneActive = false, ...terminalProps },
+    { workspaceId, sessionId, annotationApi, paneActive = false, ...terminalProps },
     ref,
   ) {
     // Built once: `useRef(new …)` would construct and discard a store per render.
@@ -698,6 +699,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
             open
             ref={popupRef}
             className={`anno-popup${popupAt ? ' anno-popup--placed' : ''}${popupDragging ? ' anno-popup--dragging' : ''}`}
+            data-workspace-id={workspaceId}
             data-testid="annotation-popup"
             aria-label="Edit terminal annotation"
             style={popupAt
@@ -829,6 +831,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
           <div
             ref={panelRef}
             className={`anno-panel${panelDragging ? ' anno-panel--dragging' : ''}`}
+            data-workspace-id={workspaceId}
             data-testid="annotation-panel"
             style={panelAt ? { left: panelAt.left, top: panelAt.top, right: 'auto', bottom: 'auto' } : undefined}
           >
