@@ -1,0 +1,103 @@
+name: Build App acceptance tree
+description: Build and pack the Linux application tree used by App acceptance runners.
+
+inputs:
+  profile:
+    description: Non-production profile to package
+    required: true
+
+outputs:
+  archive:
+    description: Path to the packed application tree
+    value: ${{ steps.pack.outputs.archive }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Linux desktop dependencies
+      uses: ./.github/actions/setup-linux-app-deps
+      with:
+        role: build
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+        # setup-go's key is content-only, so every Go job shares it and the
+        # first one to finish seals it. This action owns its entry below.
+        cache: false
+
+    - name: Restore Go build cache
+      id: go-cache
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: go-app-acceptance-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: '1.95.0'
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 9
+
+    - name: Read bun pin
+      id: bun
+      shell: bash
+      run: echo "version=$(awk '/^bun / { print $2 }' .tool-versions)" >> "$GITHUB_OUTPUT"
+
+    - name: Set up bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: ${{ steps.bun.outputs.version }}
+
+    - name: Ensure ghostty-vt artifacts
+      uses: ./.github/actions/cache-ghostty-vt
+      with:
+        include-wasm: 'true'
+
+    - name: Cache Rust build
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: |
+          app/src-tauri
+          pty-host
+
+    - name: Build the packaged app
+      shell: bash
+      env:
+        CI: 'true'
+      run: make build-app PROFILE="${{ inputs.profile }}"
+
+    - name: Save Go build cache
+      if: steps.go-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ steps.go-cache.outputs.cache-primary-key }}
+
+    # tar preserves the executable bit that upload-artifact drops.
+    - name: Pack the app tree
+      id: pack
+      shell: bash
+      run: |
+        app_name="$(./attn profile resolve --profile "${{ inputs.profile }}" --field appName)"
+        archive="$RUNNER_TEMP/app-tree.tar.gz"
+        tar -czf "$archive" \
+          attn \
+          "app/src-tauri/target/release/linux-tree/$app_name" \
+          plugins/attn-pi/node_modules
+        echo "archive=$archive" >> "$GITHUB_OUTPUT"
+        ls -l "$archive"

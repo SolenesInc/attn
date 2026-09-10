@@ -121,6 +121,7 @@ jobs:
               - 'scripts/install-app-tree.sh'
               - '.github/actions/**'
               - '.github/workflows/app-acceptance.yml'
+              - '.github/workflows/acceptance-soak.yml'
               - '.github/workflows/ci.yml'
             release_preflight:
               - '.github/workflows/ci.yml'
@@ -636,93 +637,17 @@ jobs:
       - name: Report runner class
         run: ./scripts/ci-runner-class.sh
 
-      - name: Install Linux desktop dependencies
-        uses: ./.github/actions/setup-linux-app-deps
+      - name: Build the App acceptance tree
+        id: build-app
+        uses: ./.github/actions/build-app-acceptance
         with:
-          role: build
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          # setup-go's key is content-only, so every Go job shares it and the
-          # first one to finish seals it. This job owns its entry below instead.
-          cache: false
-
-      - name: Restore Go build cache
-        id: go-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-app-acceptance-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: '1.95.0'
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Read bun pin
-        id: bun
-        run: echo "version=$(awk '/^bun / { print $2 }' .tool-versions)" >> "$GITHUB_OUTPUT"
-
-      - name: Set up bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ steps.bun.outputs.version }}
-
-      - name: Ensure ghostty-vt artifacts
-        uses: ./.github/actions/cache-ghostty-vt
-        with:
-          include-wasm: 'true'
-
-      - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            app/src-tauri
-            pty-host
-
-      - name: Build the packaged app
-        env:
-          CI: 'true'
-        run: make build-app PROFILE="$ATTN_PROFILE"
-
-      - name: Save Go build cache
-        if: steps.go-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ steps.go-cache.outputs.cache-primary-key }}
-
-      # tar: upload-artifact drops the executable bit these binaries need.
-      - name: Pack the app tree
-        run: |
-          app_name="$(./attn profile resolve --profile "$ATTN_PROFILE" --field appName)"
-          tar -czf "$RUNNER_TEMP/app-tree.tar.gz" \
-            attn \
-            "app/src-tauri/target/release/linux-tree/$app_name" \
-            plugins/attn-pi/node_modules
-          ls -l "$RUNNER_TEMP/app-tree.tar.gz"
+          profile: ${{ env.ATTN_PROFILE }}
 
       - name: Upload the app tree
         uses: actions/upload-artifact@v4
         with:
           name: app-acceptance-tree-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/app-tree.tar.gz
+          path: ${{ steps.build-app.outputs.archive }}
           retention-days: 1
           compression-level: 0
 
@@ -753,46 +678,17 @@ jobs:
       - name: Report runner class
         run: ./scripts/ci-runner-class.sh
 
-      - name: Set up Linux sandbox
-        uses: ./.github/actions/setup-linux-sandbox
-
-      - name: Install Linux desktop dependencies
-        uses: ./.github/actions/setup-linux-app-deps
-        with:
-          role: run
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Install harness dependencies
-        run: pnpm --dir app install --frozen-lockfile
-
       - name: Download the app tree
         uses: actions/download-artifact@v4
         with:
           name: app-acceptance-tree-${{ github.run_attempt }}
           path: ${{ runner.temp }}
 
-      # pi-security runs preflight, which fails a GOCACHE that does not exist yet.
-      - name: Create the Go caches preflight requires
-        run: mkdir -p "$(go env GOCACHE)" "$(go env GOMODCACHE)"
-
-      - name: Install the packaged app and bundled plugin
-        run: |
-          tar -xzf "$RUNNER_TEMP/app-tree.tar.gz"
-          make install-staged PROFILE="$ATTN_PROFILE"
-          ./attn plugin install-bundled attn-pi
-          mkdir -p "$RUNNER_TEMP/attn-harness-bin"
-          install -m 0755 app/scripts/real-app-harness/ci-xdg-open "$RUNNER_TEMP/attn-harness-bin/xdg-open"
-          echo "$RUNNER_TEMP/attn-harness-bin" >> "$GITHUB_PATH"
-          echo "$PWD/plugins/attn-pi/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Install the App acceptance tree
+        uses: ./.github/actions/install-app-acceptance
+        with:
+          profile: ${{ env.ATTN_PROFILE }}
+          archive: ${{ runner.temp }}/app-tree.tar.gz
 
       - name: Run serial matrix shard
         id: matrix

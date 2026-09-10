@@ -1,0 +1,50 @@
+name: Install App acceptance tree
+description: Prepare a Linux runner and install a packaged App acceptance tree.
+
+inputs:
+  profile:
+    description: Non-production profile to install
+    required: true
+  archive:
+    description: Path to the packed application tree
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Linux sandbox
+      uses: ./.github/actions/setup-linux-sandbox
+
+    - name: Install Linux desktop dependencies
+      uses: ./.github/actions/setup-linux-app-deps
+      with:
+        role: run
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 9
+
+    - name: Install harness dependencies
+      shell: bash
+      run: pnpm --dir app install --frozen-lockfile
+
+    - name: Create the Go caches preflight requires
+      shell: bash
+      run: mkdir -p "$(go env GOCACHE)" "$(go env GOMODCACHE)"
+
+    - name: Install the packaged app and bundled plugin
+      shell: bash
+      run: |
+        tar -xzf "${{ inputs.archive }}"
+        make install-staged PROFILE="${{ inputs.profile }}"
+        ./attn plugin install-bundled attn-pi
+        mkdir -p "$RUNNER_TEMP/attn-harness-bin"
+        install -m 0755 app/scripts/real-app-harness/ci-xdg-open "$RUNNER_TEMP/attn-harness-bin/xdg-open"
+        echo "$RUNNER_TEMP/attn-harness-bin" >> "$GITHUB_PATH"
+        echo "$PWD/plugins/attn-pi/node_modules/.bin" >> "$GITHUB_PATH"

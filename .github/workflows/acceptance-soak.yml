@@ -1,0 +1,165 @@
+name: Acceptance soak
+run-name: Acceptance soak ${{ inputs.scenarios }} at ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: Comma-separated App acceptance scenario ids
+        required: true
+        type: string
+      repeat:
+        description: Runs per scenario
+        required: true
+        type: number
+      runner:
+        description: GitHub Actions runner label
+        required: true
+        default: ubuntu-24.04
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  plan:
+    name: Plan soak
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      repeat: ${{ steps.plan.outputs.repeat }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate scenarios and repeat
+        id: plan
+        env:
+          REPEAT: ${{ inputs.repeat }}
+          SCENARIOS: ${{ inputs.scenarios }}
+        run: >-
+          node app/scripts/real-app-harness/plan-soak.mjs
+          --scenarios "$SCENARIOS" --repeat "$REPEAT" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build App acceptance tree
+    needs: plan
+    runs-on: ${{ inputs.runner }}
+    env:
+      ATTN_PROFILE: app-acceptance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Report runner class
+        run: ./scripts/ci-runner-class.sh
+
+      - name: Build the App acceptance tree
+        id: build-app
+        uses: ./.github/actions/build-app-acceptance
+        with:
+          profile: ${{ env.ATTN_PROFILE }}
+
+      - name: Upload the app tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-soak-tree-${{ github.run_id }}
+          path: ${{ steps.build-app.outputs.archive }}
+          retention-days: 1
+          compression-level: 0
+          overwrite: true
+
+  soak:
+    name: Soak ${{ matrix.scenario }}
+    needs: [plan, build]
+    strategy:
+      fail-fast: false
+      # Run 34066140419 held four github-hosted 4vcpu/16GB shards concurrently.
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ inputs.runner }}
+    env:
+      ATTN_PROFILE: app-acceptance
+      ATTN_HARNESS_PROFILE: app-acceptance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Report runner class
+        id: runner
+        run: ./scripts/ci-runner-class.sh
+
+      - name: Download the app tree
+        uses: actions/download-artifact@v4
+        with:
+          name: acceptance-soak-tree-${{ github.run_id }}
+          path: ${{ runner.temp }}
+
+      - name: Install the App acceptance tree
+        uses: ./.github/actions/install-app-acceptance
+        with:
+          profile: ${{ env.ATTN_PROFILE }}
+          archive: ${{ runner.temp }}/app-tree.tar.gz
+
+      - name: Run the scenario soak
+        id: soak
+        continue-on-error: true
+        env:
+          ATTN_REAL_APP_ARTIFACTS_DIR: ${{ runner.temp }}/attn-real-app-harness
+          ATTN_SOAK_RUNNER_CLASS: ${{ steps.runner.outputs.class }}
+        run: >-
+          xvfb-run -a -s '-screen 0 1600x1000x24'
+          pnpm --dir app run real-app:soak --
+          --scenario "${{ matrix.scenario }}"
+          --repeat "${{ needs.plan.outputs.repeat }}"
+          --failed-evidence-only
+
+      - name: Collect daemon and worker logs
+        if: steps.soak.outcome != 'success'
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/attn-real-app-harness/daemon
+        run: |
+          data_dir="$(./attn profile resolve --field dataDir 2>/dev/null || true)"
+          mkdir -p "$EVIDENCE_DIR"
+          if [ -f "$data_dir/daemon.log" ]; then
+            cp "$data_dir/daemon.log" "$EVIDENCE_DIR/daemon.log"
+          fi
+          if [ -d "$data_dir/workers" ]; then
+            find "$data_dir/workers" -name '*.log' -exec cp {} "$EVIDENCE_DIR/" \;
+          fi
+          if [ -d "$data_dir/pty-hosts" ]; then
+            find "$data_dir/pty-hosts" -name '*.log' -exec cp {} "$EVIDENCE_DIR/" \;
+          fi
+
+      - name: Upload failed-iteration evidence
+        if: steps.soak.outcome != 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-soak-evidence-${{ github.run_id }}-${{ matrix.scenario }}
+          path: ${{ runner.temp }}/attn-real-app-harness
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Clean profile
+        if: always()
+        run: ./attn profile clean "$ATTN_PROFILE"
+
+      - name: Report the scenario verdict
+        if: always()
+        env:
+          SOAK_OUTCOME: ${{ steps.soak.outcome }}
+        run: |
+          if [ "$SOAK_OUTCOME" = success ]; then
+            exit 0
+          fi
+          echo "${{ matrix.scenario }} soak failed; see its job summary and evidence artifact" >&2
+          exit 1

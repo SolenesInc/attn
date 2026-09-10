@@ -1,5 +1,22 @@
-import { describe, expect, it } from 'vitest';
-import { isRunFailure, parseVerdictFromOutput, summarizeSoak } from './run-soak.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  formatSoakSummary,
+  isRunFailure,
+  parseVerdictFromOutput,
+  retainIterationEvidence,
+  summarizeSoak,
+} from './run-soak.mjs';
+
+const tempDirs = [];
+
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 const okVerdict = {
   ok: true,
@@ -179,5 +196,47 @@ describe('summarizeSoak', () => {
 
     expect(summary.ok).toBe(false);
     expect(summary.failureCount).toBe(1);
+  });
+});
+
+describe('formatSoakSummary', () => {
+  it('writes every iteration and the aggregate failure count', () => {
+    const markdown = formatSoakSummary([
+      { iteration: 1, exitCode: 0, timedOut: false, verdict: okVerdict, durationMs: 1234 },
+      { iteration: 2, exitCode: 1, timedOut: false, verdict: failVerdict, durationMs: 5678 },
+      { iteration: 3, exitCode: 124, timedOut: true, verdict: null, durationMs: 120000 },
+    ], {
+      scenarioId: 'terminal-annotations',
+      runnerClass: 'github-hosted 4vcpu/16GB',
+    });
+
+    expect(markdown).toContain('| 1 | passed | 1234 ms | github-hosted 4vcpu/16GB |');
+    expect(markdown).toContain('| 2 | failed | 5678 ms | github-hosted 4vcpu/16GB |');
+    expect(markdown).toContain('| 3 | timed out | 120000 ms | github-hosted 4vcpu/16GB |');
+    expect(markdown).toContain('**2/3 failed for terminal-annotations.**');
+  });
+});
+
+describe('retainIterationEvidence', () => {
+  function artifactDir() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-run-soak-test-'));
+    tempDirs.push(dir);
+    fs.writeFileSync(path.join(dir, 'summary.json'), '{}');
+    return dir;
+  }
+
+  it('removes passing iteration artifacts when failed-only evidence is requested', () => {
+    const dir = artifactDir();
+    expect(retainIterationEvidence(dir, { failed: false, failedEvidenceOnly: true })).toBe(false);
+    expect(fs.existsSync(dir)).toBe(false);
+  });
+
+  it('keeps failed iterations and normal local-run evidence', () => {
+    const failed = artifactDir();
+    const local = artifactDir();
+    expect(retainIterationEvidence(failed, { failed: true, failedEvidenceOnly: true })).toBe(true);
+    expect(retainIterationEvidence(local, { failed: false, failedEvidenceOnly: false })).toBe(true);
+    expect(fs.existsSync(failed)).toBe(true);
+    expect(fs.existsSync(local)).toBe(true);
   });
 });
