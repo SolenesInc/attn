@@ -13,7 +13,9 @@ cat >"$work/runs.json" <<'EOF'
   {"databaseId":901,"headSha":"aaaa1111","headBranch":"next","conclusion":"failure",
    "createdAt":"2026-09-06T01:00:00Z","attempt":1,"event":"push","status":"completed"},
   {"databaseId":902,"headSha":"aaaa1111","headBranch":"next","conclusion":"success",
-   "createdAt":"2026-09-06T02:00:00Z","attempt":1,"event":"push","status":"completed"}
+   "createdAt":"2026-09-06T02:00:00Z","attempt":1,"event":"push","status":"completed"},
+  {"databaseId":903,"headSha":"bbbb2222","headBranch":"next","conclusion":"cancelled",
+   "createdAt":"2026-09-06T03:00:00Z","attempt":1,"event":"push","status":"completed"}
 ]
 EOF
 
@@ -23,12 +25,18 @@ EOF
 cat >"$work/jobs-902.json" <<'EOF'
 {"jobs":[]}
 EOF
+cat >"$work/jobs-903.json" <<'EOF'
+{"jobs":[{"id":5002,"name":"App acceptance","conclusion":"failure"}]}
+EOF
 
 printf '%s\n' \
   '2026-09-06T03:16:57.9648747Z PASS  garden-plot-dispatch                          61.2s' \
   '2026-09-06T03:16:57.9648747Z FAIL  worktree-surface                              97.8s' \
   '2026-09-06T03:16:57.9648747Z SKIP  terminal-block-copy                           needs macOS' \
   >"$work/logs/5001.log"
+printf '%s\n' \
+  '2026-09-06T03:17:57.9648747Z FAIL  agent-close                                  37.5s' \
+  >"$work/logs/5002.log"
 
 # gh 2.98 refuses to write a job log without --allow-escape-sequences;
 # `advertises` is whether `gh api --help` offers the flag at all.
@@ -83,6 +91,9 @@ if grep -q 'terminal-block-copy' <<<"$out"; then fail "a skipped scenario was co
 
 out="$(run_report --limit 10 --format table)" || fail "the table format should succeed"
 grep -q '1 logs read, 0 unreadable' <<<"$out" || fail "the table never says how many logs it read: $out"
+grep -q '2 completed, 1 red on final attempt' <<<"$out" \
+  || fail "the report counted a cancelled run: $out"
+if grep -q 'agent-close' <<<"$out"; then fail "a cancelled run contributed a failure: $out"; fi
 
 fake_gh no
 status=0
