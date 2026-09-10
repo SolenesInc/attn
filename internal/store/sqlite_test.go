@@ -296,8 +296,8 @@ func TestMigration73RepairsAutomationProfileMigration70Collision(t *testing.T) {
 	}
 }
 
-func TestMigration141AddsDelegationHandoverSnapshot(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "migration-141.db")
+func TestMigration143AddsDelegationHandoverSnapshot(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "migration-143.db")
 	db, err := OpenDB(dbPath)
 	if err != nil {
 		t.Fatal(err)
@@ -308,7 +308,7 @@ func TestMigration141AddsDelegationHandoverSnapshot(t *testing.T) {
 			t.Fatalf("drop delegation_operations.%s: %v", column, err)
 		}
 	}
-	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version = 141`); err != nil {
+	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version = 143`); err != nil {
 		db.Close()
 		t.Fatal(err)
 	}
