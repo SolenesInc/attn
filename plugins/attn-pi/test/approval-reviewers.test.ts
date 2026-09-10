@@ -75,7 +75,10 @@ test("each network option answers with its own decision", async () => {
     [networkOptions.abort, { type: "abort" }],
   ] as const) {
     const it = card((labels) => labels.find((option) => option === label));
-    expect(await it.review(network)).toEqual(decision);
+    expect(await it.review({ ...network, trigger: command })).toEqual(decision);
+    expect(it.titles[0]).toContain("https://example.com:443");
+    expect(it.titles[0]).toContain(command.command);
+    expect(it.titles[0]).toContain(`in ${command.cwd}`);
   }
 });
 

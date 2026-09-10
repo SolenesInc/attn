@@ -120,10 +120,11 @@ export function reviewReason(request: ApprovalRequest): string | undefined {
 
 export function reviewTitle(request: ApprovalRequest): string {
   const reason = reviewReason(request);
-  const head =
-    request.kind === "command"
-      ? `Run this command?\n${request.command}\nin ${request.cwd}`
-      : `Allow network access to ${networkScheme(request.protocol)}://${request.host}:${request.port}?`;
+  const question = request.kind === "command"
+    ? "Run this command?"
+    : `Allow network access to ${networkScheme(request.protocol)}://${request.host}:${request.port}?`;
+  const command = request.kind === "command" ? request : request.trigger;
+  const head = command ? `${question}\n${command.command}\nin ${command.cwd}` : question;
   return reason === undefined ? head : `${head}\n${reason}`;
 }
 
