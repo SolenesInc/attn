@@ -12,13 +12,17 @@ import { appDaemonInTree } from './platform.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// The daemon's automation-schedule ticker fires once a real minute; these
-// windows are sized around that cadence plus margin.
-const ANCHOR_POLL_TIMEOUT_MS = 90_000; // the anchor tick lands within one 60s ticker interval of apply, plus margin.
-const DOWNTIME_MS = 135_000; // >= two whole-minute instants missed while stopped.
-const RESTART_RUN_TIMEOUT_MS = 120_000; // daemon start + first post-restart tick + delivery.
-const CLEANUP_EVIDENCE_TIMEOUT_MS = 90_000; // delivery, launch and the agent's git work measured 12s; the ticker owns the rest.
-const COALESCE_TIMEOUT_MS = 90_000; // one more live tick after cleanup evidence lands.
+const SCHEDULE_TICK_INTERVAL = '1s';
+const SCHEDULE_CRON = '@every 2s';
+// Local run automation-scheduled-cleanup-2026-09-10T20-37-20-445Z: the 2s
+// schedule repeated; three periods leave at least two missed instants.
+const DOWNTIME_MS = 6_000;
+// That run took 1.0s to anchor, 7.1s to restart, 1.6s for cleanup evidence,
+// 10.3s to coalesce and 16.0s for the fresh-continuity restart.
+const ANCHOR_POLL_TIMEOUT_MS = 30_000;
+const RESTART_RUN_TIMEOUT_MS = 45_000;
+const CLEANUP_EVIDENCE_TIMEOUT_MS = 45_000;
+const COALESCE_TIMEOUT_MS = 30_000;
 const CLEANUP_SUMMARY = 'removed merged-clean, kept dirty-wip';
 
 function parseArgs(argv) {
@@ -153,7 +157,7 @@ name: Slice 5 packaged scheduled cleanup proof
 trigger:
   type: scheduled
   schedule:
-    cron: "* * * * *"
+    cron: ${JSON.stringify(SCHEDULE_CRON)}
     time_zone: UTC
   continuity: singleton
   catch_up: latest
@@ -175,7 +179,7 @@ name: Slice 5 scheduler storm-guard probe
 trigger:
   type: scheduled
   schedule:
-    cron: "* * * * *"
+    cron: ${JSON.stringify(SCHEDULE_CRON)}
     time_zone: UTC
   continuity: fresh
   catch_up: latest
@@ -261,6 +265,7 @@ async function main() {
     await runner.step('restart_isolated_daemon', async () => {
       await ensureFreshWorld({ profile, appPath: resources.appPath });
       try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}
+      daemonEnv.ATTN_AUTOMATION_SCHEDULE_INTERVAL = SCHEDULE_TICK_INTERVAL;
       run(binary, ['daemon', 'ensure'], daemonEnv);
       await waitForDaemonReady(binary, daemonEnv);
     });
@@ -294,12 +299,7 @@ async function main() {
         `SELECT o.occurrence_key FROM automation_occurrences o JOIN automation_runs r ON r.occurrence_id=o.id WHERE r.id='${sqlEscape(runRow.id)}';`,
       );
       runner.assert(occurrence !== null, 'catch-up run has a resolvable occurrence row', { runID: runRow.id });
-      const occurrenceKey = occurrence[0];
-      runner.assert(
-        /^scheduled:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00Z$/.test(occurrenceKey),
-        'occurrence key carries the scheduled prefix and is minute-aligned',
-        { occurrenceKey },
-      );
+      runner.assert(occurrence[0].startsWith('scheduled:'), 'occurrence key carries the scheduled prefix', { occurrenceKey: occurrence[0] });
     });
 
     await runner.step('leg2_cleanup_evidence', async () => {

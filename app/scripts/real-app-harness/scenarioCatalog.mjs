@@ -121,6 +121,13 @@ export const scenarioCatalog = [
     timeoutMs: 180_000,
   },
   {
+    id: 'crew-seed-header',
+    runnerId: 'CrewSeedHeader',
+    label: 'Crew header: member claim, latest note and a fresh wake session',
+    command: ['node', 'scripts/real-app-harness/scenario-crew-seed-header.mjs'],
+    timeoutMs: 180_000,
+  },
+  {
     id: 'agent-settings',
     runnerId: 'AgentSettings',
     label: 'Agent settings: grouped defaults, background agents, autosave acknowledgements and close recovery',
@@ -153,6 +160,27 @@ export const scenarioCatalog = [
     label: 'Automation lifecycle: edit-rebind, delete-resurrect, cleanup-dirty-safe',
     command: ['pnpm', 'run', 'real-app:scenario-automation-lifecycle'],
     timeoutMs: 600_000,
+  },
+  {
+    id: 'automation-form',
+    runnerId: 'AUTOMATION-FORM',
+    label: 'Automation form: validation, create, edit, collision, schedule and persistence',
+    command: ['pnpm', 'run', 'real-app:scenario-automation-form'],
+    timeoutMs: 240_000,
+  },
+  {
+    id: 'automation-surface',
+    runnerId: 'AUTOMATION-SURFACE',
+    label: 'Automation panel: manual delivery, scheduled rows, disabled rejection and restart persistence',
+    command: ['node', 'scripts/real-app-harness/scenario-automation-surface.mjs'],
+    timeoutMs: 240_000,
+  },
+  {
+    id: 'automation-scheduled-cleanup',
+    runnerId: 'AUTOMATION-SCHEDULED-CLEANUP',
+    label: 'Scheduled cleanup: restart catch-up, singleton coalescing, dirty worktree safety and storm guard',
+    command: ['pnpm', 'run', 'real-app:scenario-automation-scheduled-cleanup'],
+    timeoutMs: 240_000,
   },
   {
     id: 'worktree-surface',
@@ -245,6 +273,14 @@ export const scenarioCatalog = [
     freshWorldAfter: true,
   },
   {
+    id: 'tr402',
+    skipOn: { linux: { reason: 'needs a provisioned SSH machine; set ATTN_HARNESS_REMOTE_SSH_TARGET to its target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
+    runnerId: 'TR-402',
+    label: 'TR-402 remote split close redraw and initial pane recovery',
+    command: ['pnpm', 'run', 'real-app:scenario-tr402'],
+    freshWorldAfter: true,
+  },
+  {
     id: 'tr201-local-claude',
     runnerId: 'TR-201',
     label: 'TR-201 relaunch restores an existing split with its content, SGR styling and deep colored scrollback',
@@ -295,6 +331,34 @@ export const scenarioCatalog = [
     label: 'Focus probe (no focus steal on background session create)',
     command: ['pnpm', 'run', 'real-app:focus-probe'],
     // Not part of the serial matrix sweep — only runnable directly (run-soak).
+    soakOnly: true,
+  },
+  {
+    id: 'offset-soak',
+    runnerId: 'OFFSET-SOAK',
+    label: 'Seeded pane offset and overflow soak',
+    command: ['pnpm', 'run', 'real-app:scenario-offset-soak'],
+    soakOnly: true,
+  },
+  {
+    id: 'perf-baseline',
+    runnerId: 'perf-baseline',
+    label: 'App CPU, memory, startup and streaming baseline',
+    command: ['pnpm', 'run', 'real-app:scenario-perf-baseline'],
+    soakOnly: true,
+  },
+  {
+    id: 'perf-cold-warm',
+    runnerId: 'perf-cold-warm',
+    label: 'Cold and warm app performance comparison',
+    command: ['pnpm', 'run', 'real-app:scenario-perf-cold-warm'],
+    soakOnly: true,
+  },
+  {
+    id: 'perf-leak-soak',
+    runnerId: 'perf-leak-soak',
+    label: 'Repeated create and close memory leak soak',
+    command: ['pnpm', 'run', 'real-app:scenario-perf-leak-soak'],
     soakOnly: true,
   },
 ];
