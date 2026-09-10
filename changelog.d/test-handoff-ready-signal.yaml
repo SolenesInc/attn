@@ -1,0 +1,3 @@
+kind: internal
+area: terminal
+change: Fail the PTY handoff fixture directly when its command blocks are malformed.
