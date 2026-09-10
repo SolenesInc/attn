@@ -10,6 +10,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import { appDaemonInTree } from './platform.mjs';
+import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -193,6 +194,7 @@ async function main() {
   let manualApplied = false;
   let scheduledApplied = false;
   let firstRunId = '';
+  let manualSessionID = '';
 
   try {
     daemonEnv = profileEnv(profile);
@@ -241,6 +243,9 @@ async function main() {
       runner.assert(runs[0].state === 'delivered', 'the run reached delivered', runs[0]);
       runner.assert(runs[0].navigable === true, 'the delivered run is navigable (its ticket exists)', runs[0]);
       firstRunId = runs[0].id;
+      const daemonRuns = runJSON(binary, ['automation', 'runs', manualID], daemonEnv) || [];
+      manualSessionID = daemonRuns.find((row) => row.id === firstRunId)?.session_id || '';
+      runner.assert(Boolean(manualSessionID), 'the delivered run names its launched session', daemonRuns);
 
       const reopened = await closeAndReopenPanel(client);
       const reopenedRuns = currentRuns(reopened);
@@ -318,6 +323,15 @@ async function main() {
       runner.assert(runs[0].navigable === true, 'the run is still navigable after restart', runs[0]);
     });
 
+    await runner.step('cleanup_probe_session', async () => {
+      disableDefinition(binary, manualID, daemonEnv);
+      manualApplied = false;
+      disableDefinition(binary, scheduledID, daemonEnv);
+      scheduledApplied = false;
+      await cleanupSessionViaAppClose(client, observer, manualSessionID, RESTART_READY_TIMEOUT_MS);
+      manualSessionID = '';
+    });
+
     await runner.finishSuccess({ profile, manualID, scheduledID, firstRunId, fixturePath });
   } catch (error) {
     await captureFailureEvidence(runner, client).catch(() => {});
@@ -329,6 +343,9 @@ async function main() {
     if (daemonEnv) {
       if (manualApplied) { try { disableDefinition(binary, manualID, daemonEnv); } catch {} }
       if (scheduledApplied) { try { disableDefinition(binary, scheduledID, daemonEnv); } catch {} }
+    }
+    if (manualSessionID) {
+      await cleanupSessionViaAppClose(client, observer, manualSessionID, RESTART_READY_TIMEOUT_MS).catch(() => {});
     }
     if (fixturePath) {
       try { fs.rmSync(fixturePath, { recursive: true, force: true }); } catch {}

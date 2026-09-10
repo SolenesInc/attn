@@ -9,6 +9,7 @@ import { currentHarnessProfile, dataDirForProfile, resolveHarnessResources, prof
 import { ensureFreshWorld } from './freshWorld.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree } from './platform.mjs';
+import { registeredAgentPid } from './workerRegistry.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -217,6 +218,17 @@ async function waitForDaemonReady(binary, daemonEnv) {
   }, 'profile daemon');
 }
 
+async function stopRegisteredAgent(dataDir, sessionID, cwd) {
+  const pid = registeredAgentPid(dataDir, sessionID, cwd);
+  if (pid === null) throw new Error(`no live registered agent for session ${sessionID}`);
+  process.kill(pid, 'SIGTERM');
+  await poll(
+    () => (registeredAgentPid(dataDir, sessionID, cwd) === null ? true : null),
+    `registered agent ${pid} to exit`,
+    RESTART_RUN_TIMEOUT_MS,
+  );
+}
+
 async function main() {
   const { options, help } = parseArgs(process.argv.slice(2));
   if (help) {
@@ -253,6 +265,7 @@ async function main() {
   let probe = null;
   let cleanupTicketID = '';
   let cleanupSessionID = '';
+  let stormGuardSessionID = '';
   let cleanupApplied = false;
   let stormGuardApplied = false;
 
@@ -381,21 +394,25 @@ async function main() {
       run(binary, ['daemon', 'ensure'], daemonEnv);
       await waitForDaemonReady(binary, daemonEnv);
 
-      // Poll for delivery, not existence: waiting on the row alone can race the
-      // next minute tick into a second run under fresh continuity.
-      const rows = await poll(() => {
+      const claimed = await poll(() => {
         const list = runJSON(binary, ['automation', 'runs', stormGuardID], daemonEnv) || [];
-        const delivered = list.filter((row) => row.state === 'delivered');
-        return delivered.length >= 1 ? delivered : null;
-      }, 'storm-guard restart catch-up run delivered', RESTART_RUN_TIMEOUT_MS);
-      runner.assert(rows.length === 1, 'storm-guard: exactly one catch-up run under fresh continuity too', { rows });
-
+        return list.length >= 1 ? list[0] : null;
+      }, 'storm-guard restart catch-up run claimed', RESTART_RUN_TIMEOUT_MS);
+      stormGuardSessionID = claimed.session_id;
       disableDefinition(binary, stormGuardID, daemonEnv);
+
+      const delivered = await poll(() => {
+        const list = runJSON(binary, ['automation', 'runs', stormGuardID], daemonEnv) || [];
+        return list[0]?.state === 'delivered' ? list : null;
+      }, 'storm-guard restart catch-up run delivered', RESTART_RUN_TIMEOUT_MS);
+      runner.assert(delivered.length === 1, 'storm-guard: exactly one catch-up run under fresh continuity too', { rows: delivered });
 
       await poll(() => (invocations(probe.log).length >= 1 ? invocations(probe.log) : null), 'storm-guard probe launch');
       runner.assert(invocations(probe.log).length === 1, 'exactly one process spawn backs the single catch-up run (no replay storm)', {
         invocations: invocations(probe.log),
       });
+
+      await stopRegisteredAgent(dataDirForProfile(profile), stormGuardSessionID, fixtureRoot);
     });
 
     await runner.finishSuccess({ profile, cleanupID, stormGuardID, cleanupTicketID, cleanupSessionID, fixtureRoot });
@@ -409,6 +426,9 @@ async function main() {
       if (cleanupApplied) { try { disableDefinition(binary, cleanupID, daemonEnv); } catch {} }
       if (stormGuardApplied) { try { disableDefinition(binary, stormGuardID, daemonEnv); } catch {} }
     }
+    if (stormGuardSessionID) {
+      try { await stopRegisteredAgent(dataDirForProfile(profile), stormGuardSessionID, fixtureRoot); } catch {}
+    }
     try {
       const transcripts = path.join(fixtureRoot, '.attn-mock-agent');
       for (const name of fs.readdirSync(transcripts)) {
@@ -416,6 +436,7 @@ async function main() {
       }
     } catch {}
     try { fs.rmSync(fixtureRoot, { recursive: true, force: true }); } catch {}
+    try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}
     try { run(binary, ['daemon', 'ensure'], profileEnv(profile)); } catch {}
     await runner.close();
   }

@@ -273,14 +273,6 @@ export const scenarioCatalog = [
     freshWorldAfter: true,
   },
   {
-    id: 'tr402',
-    skipOn: { linux: { reason: 'needs a provisioned SSH machine; set ATTN_HARNESS_REMOTE_SSH_TARGET to its target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
-    runnerId: 'TR-402',
-    label: 'TR-402 remote split close redraw and initial pane recovery',
-    command: ['pnpm', 'run', 'real-app:scenario-tr402'],
-    freshWorldAfter: true,
-  },
-  {
     id: 'tr201-local-claude',
     runnerId: 'TR-201',
     label: 'TR-201 relaunch restores an existing split with its content, SGR styling and deep colored scrollback',
@@ -352,13 +344,6 @@ export const scenarioCatalog = [
     runnerId: 'perf-cold-warm',
     label: 'Cold and warm app performance comparison',
     command: ['pnpm', 'run', 'real-app:scenario-perf-cold-warm'],
-    soakOnly: true,
-  },
-  {
-    id: 'perf-leak-soak',
-    runnerId: 'perf-leak-soak',
-    label: 'Repeated create and close memory leak soak',
-    command: ['pnpm', 'run', 'real-app:scenario-perf-leak-soak'],
     soakOnly: true,
   },
 ];

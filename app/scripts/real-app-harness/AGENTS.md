@@ -159,6 +159,10 @@ piece of work rather than a rediscovery.
   but it asks a real model to make that decision and waits up to four minutes
   for prose. Catalog it only after a mock fixture can express the decision and
   the claim still matters beside the Garden dispatch and read-receipt scenarios.
+- `scenario-tr402.mjs`: port, then catalog. Its remote real-Codex path is not
+  armed by the harness and leaves its session, endpoint and remote root behind.
+- `scenario-perf-leak-soak.mjs`: rewrite, then catalog. Its unconditional
+  settling waits outlive the soak runner; replace them with observed signals.
 - `scenario-notebook-link-nav.mjs`: port, then catalog. Only it drives relative
   note links, heading jumps and a parent-relative image through the packaged
   editor. Its hand-written runner has no agent tripwire, mock-GitHub receipt or
