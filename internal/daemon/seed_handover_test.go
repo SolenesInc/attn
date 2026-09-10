@@ -428,6 +428,39 @@ func TestAcceptedSeedHandoverRejectsHolderChangeBeforeRecoveryResolution(t *test
 	}
 }
 
+func TestAcceptedSeedHandoverPreservesSameTenderEditsBeforeRecoveryResolution(t *testing.T) {
+	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
+	consumeDelegatedPrompt(t, backend)
+	_, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
+	seed, acceptedDoc, err := d.readSeed(seedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := handoverRequest(d, seed, "handover-accepted-edit", sourceSessionID, "Continue from the latest seed body.")
+	edited := editSeed(t, d, seedID, "The same tender added current implementation details.")
+	_, editedDoc, err := d.readSeed(seedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if editedDoc.Rev <= acceptedDoc.Rev {
+		t.Fatalf("edited revision = %d, want newer than accepted revision %d", editedDoc.Rev, acceptedDoc.Rev)
+	}
+
+	runtime, err := d.resolveDelegateRuntimeWithHandoverSnapshot(
+		msg, seedID, "", "", "successor-session", "", false,
+		int(acceptedDoc.Rev), seed.TenderSession, seed.TenderMember,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.Handover == nil || runtime.Handover.ExpectedRev != int(editedDoc.Rev) {
+		t.Fatalf("handover = %+v, want current revision %d", runtime.Handover, editedDoc.Rev)
+	}
+	if got := protocol.Deref(runtime.Brief); got != edited.Body {
+		t.Fatalf("resolved body = %q, want latest %q", got, edited.Body)
+	}
+}
+
 func TestSeedHandoverUsesTheSubmittedDirectory(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)

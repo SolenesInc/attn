@@ -172,6 +172,8 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 		runtime.Plot = protocol.Ptr(seedID)
 		if msg.Assignment.Handover != nil {
 			if handoverSeedRev > 0 {
+				// Acceptance pins the intended holder, not the seed body. The binding transaction
+				// guards allowed same-holder edits at their current revision.
 				if int(doc.Rev) < handoverSeedRev ||
 					seed.TenderSession != strings.TrimSpace(handoverTenderSession) ||
 					seed.TenderMember != strings.TrimSpace(handoverTenderMember) {
