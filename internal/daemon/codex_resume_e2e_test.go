@@ -94,7 +94,7 @@ while :; do sleep 1; done
 	})
 	expectSpawnSuccess(t, client)
 
-	waitForFakeCodexLogLines(t, logWatcher, fakeCodexLog, 1)
+	waitForFakeCodexLog(t, logWatcher, fakeCodexLog, func(lines []string) bool { return len(lines) > 0 })
 	if got := d.store.GetResumeSessionID(sessionID); got != nativeCodexID {
 		t.Fatalf("stored resume session id = %q, want %q after hook receipt", got, nativeCodexID)
 	}
@@ -116,14 +116,27 @@ while :; do sleep 1; done
 	expectSpawnSuccess(t, client)
 	defer removePTYSession(t, d, sessionID)
 
-	lines := waitForFakeCodexLogLines(t, logWatcher, fakeCodexLog, 2)
+	lines := waitForFakeCodexLog(t, logWatcher, fakeCodexLog, func(lines []string) bool {
+		for _, line := range lines {
+			if strings.Contains(line, "resume "+nativeCodexID) {
+				return true
+			}
+		}
+		return false
+	})
 	first := lines[0]
-	second := lines[len(lines)-1]
+	resume := ""
+	for _, line := range lines {
+		if strings.Contains(line, "resume "+nativeCodexID) {
+			resume = line
+			break
+		}
+	}
 	if !strings.Contains(first, "_hook-session-start") ||
 		!strings.Contains(first, "features.hooks=true") ||
 		!strings.Contains(first, `"/<session-flags>/config.toml:session_start:0:0"`) ||
 		!strings.Contains(first, "trusted_hash") ||
-		!strings.Contains(second, "resume "+nativeCodexID) {
+		resume == "" {
 		t.Fatalf("fake Codex invocations = %q, want hook flags then resume %s", lines, nativeCodexID)
 	}
 }
@@ -174,10 +187,10 @@ func readFakeCodexLog(t *testing.T, path string) []string {
 	return lines
 }
 
-func waitForFakeCodexLogLines(t *testing.T, watcher *fsnotify.Watcher, path string, count int) []string {
+func waitForFakeCodexLog(t *testing.T, watcher *fsnotify.Watcher, path string, ready func([]string) bool) []string {
 	t.Helper()
 	for {
-		if lines := readFakeCodexLog(t, path); len(lines) >= count {
+		if lines := readFakeCodexLog(t, path); ready(lines) {
 			return lines
 		}
 		select {
