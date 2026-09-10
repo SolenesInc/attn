@@ -544,6 +544,7 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 				m.armRetryLocked(lane, delivery, err)
 				return sessionInputAttempt{id: delivery.id, stage: sessionInputPlaced, route: existing.route, reason: reason, wait: existing.wait, err: err}
 			}
+			m.clearUnstartedUserSubmitLocked(lane, delivery.sessionID)
 			if err := m.daemon.ptyBackend.Input(ctx, delivery.sessionID, []byte("\r")); err != nil {
 				existing.stage = sessionInputIndeterminate
 				return sessionInputAttempt{id: delivery.id, stage: sessionInputIndeterminate, route: existing.route, reason: sessionInputReasonTransport, wait: existing.wait, err: err}
@@ -616,6 +617,7 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 		m.armRetryLocked(lane, delivery, err)
 		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, route: sessionInputRoutePTY, reason: reason, err: err}
 	}
+	m.clearUnstartedUserSubmitLocked(lane, delivery.sessionID)
 
 	lane.pending = append(lane.pending, candidate)
 	attempt.route = sessionInputRoutePTY
@@ -857,11 +859,15 @@ func (m *sessionInputModule) observePhase(sessionID string, phase protocol.Sessi
 	lane.phase = phase
 	if phase == protocol.SessionStateWorking {
 		m.ensureRunLocked(lane, sessionID)
-		if lane.userSubmit || previous == protocol.SessionStatePendingApproval {
+		if previous == protocol.SessionStatePendingApproval {
 			lane.clearConsumedUserInputLocked()
 			m.daemon.forgetUserInput(sessionID)
 		}
 		return
+	}
+	if previous == protocol.SessionStateWorking && lane.userSubmit {
+		lane.clearConsumedUserInputLocked()
+		m.daemon.forgetUserInput(sessionID)
 	}
 	lane.run = nil
 }
@@ -878,6 +884,14 @@ func (lane *sessionInputLane) clearConsumedUserInputLocked() {
 	}
 	lane.pending = kept
 	lane.userSubmit = false
+}
+
+func (m *sessionInputModule) clearUnstartedUserSubmitLocked(lane *sessionInputLane, sessionID string) {
+	if lane.run != nil || !lane.userSubmit {
+		return
+	}
+	lane.userSubmit = false
+	m.daemon.forgetUserInput(sessionID)
 }
 
 func (m *sessionInputModule) currentUserRun(sessionID string) (sessionInputRunRef, bool) {
