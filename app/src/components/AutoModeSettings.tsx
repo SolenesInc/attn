@@ -18,7 +18,7 @@ const APPROVAL_POLICIES = ['untrusted', 'on-request', 'never'];
 const SANDBOX_MODES = ['read-only', 'workspace-write', 'danger-full-access'];
 const DECISIONS = ['allow', 'prompt', 'forbidden'];
 
-export const ruleLine = (rule: AutoModeRuleInfo): string =>
+const ruleLine = (rule: AutoModeRuleInfo): string =>
   rule.pattern
     .map((alternatives) => (alternatives.length === 1 ? alternatives[0] : `{${alternatives.join('|')}}`))
     .join(' ');
