@@ -143,7 +143,6 @@ export function useCrewLaunchAutosave(
     }
 
     const submitted = desired;
-    const submittedPending = new Set(pendingKeys);
     const submittedGeneration = { ...edit.generation };
     const expectedRevision = edit.acknowledged.revision;
     active.current.add(memberId);
@@ -185,7 +184,7 @@ export function useCrewLaunchAutosave(
 
       current.retryOnReconnect = false;
       current.uncertainWrite = false;
-      for (const key of submittedPending) {
+      for (const key of pendingKeys) {
         if (current.generation[key] !== submittedGeneration[key]) continue;
         delete current.pending[key];
       }

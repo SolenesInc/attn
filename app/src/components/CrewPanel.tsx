@@ -27,8 +27,6 @@ interface RestartAttempt {
   conflict?: boolean;
 }
 
-const DEFAULT_VALUE = '';
-
 function effectiveMember(roster: CrewMember, acknowledged?: CrewMember): CrewMember {
   if (!acknowledged || roster.revision > acknowledged.revision) return roster;
   return acknowledged;
@@ -209,6 +207,13 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
   };
 
   const sendAttempt = useCallback((memberId: string, attempt: RestartAttempt) => {
+    function finishAttempt(result: Pick<RestartAttempt, 'transportError' | 'conflict'>): void {
+      setAttempts((current) => {
+        if (current[memberId]?.requestId !== attempt.requestId) return current;
+        return { ...current, [memberId]: { ...attempt, sending: false, ...result } };
+      });
+    }
+
     setAttempts((current) => ({ ...current, [memberId]: { ...attempt, sending: true, transportError: undefined, conflict: false } }));
     void sendCrewRestart({
       member: memberId,
@@ -217,30 +222,16 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
       expectedRevision: attempt.expectedRevision,
     }).then((outcome) => {
       if (outcome.member) autosave.observe(outcome.member);
-      if (!outcome.success) {
-        setAttempts((current) => current[memberId]?.requestId !== attempt.requestId ? current : ({
-          ...current,
-          [memberId]: {
-            ...attempt,
-            sending: false,
-            transportError: outcome.error || 'The restart request failed.',
-            conflict: outcome.conflict,
-          },
-        }));
+      if (outcome.success) {
+        finishAttempt({});
         return;
       }
-      setAttempts((current) => current[memberId]?.requestId !== attempt.requestId
-        ? current
-        : ({ ...current, [memberId]: { ...attempt, sending: false } }));
+      finishAttempt({
+        transportError: outcome.error || 'The restart request failed.',
+        conflict: outcome.conflict,
+      });
     }).catch((error) => {
-      setAttempts((current) => current[memberId]?.requestId !== attempt.requestId ? current : ({
-        ...current,
-        [memberId]: {
-          ...attempt,
-          sending: false,
-          transportError: error instanceof Error ? error.message : String(error),
-        },
-      }));
+      finishAttempt({ transportError: error instanceof Error ? error.message : String(error) });
     });
   }, [autosave, sendCrewRestart]);
 
@@ -263,6 +254,15 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
     || member?.restart?.state === 'queued'
     || member?.restart?.state === 'requested';
   const savesAcknowledged = edit?.state === 'saved';
+  const nextWakeLabel = edit ? [
+    edit.acknowledged.resolved_agent,
+    edit.acknowledged.resolved_model || 'default model',
+    edit.acknowledged.resolved_effort || 'default effort',
+  ].join(' / ') : '';
+  let discoveryLabel = catalog ? 'Refresh models' : 'Discover models';
+  if (models.loading[effectiveAgent]) discoveryLabel = 'Discovering models…';
+  let restartLabel = member?.binding_session ? 'Handoff and restart' : 'Wake';
+  if (restartBusy) restartLabel = 'Restart in progress…';
 
   return (
     <div className={`crew-panel-layer ${isOpen ? 'is-open' : ''}`} aria-hidden={!isOpen}>
@@ -352,7 +352,7 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
                             updateSelection({ agent: event.target.value, model: '', effort: '' });
                           }}
                         >
-                          <option value={DEFAULT_VALUE}>Crew default</option>
+                          <option value="">Crew default</option>
                           {harnesses.map((candidate) => (
                             <option key={candidate.id} value={candidate.id} disabled={!candidate.available && candidate.id !== selection.agent}>
                               {candidate.name}{candidate.available ? '' : ' (unavailable)'}
@@ -383,7 +383,7 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
                             });
                           }}
                         >
-                          <option value={DEFAULT_VALUE}>Harness default</option>
+                          <option value="">Harness default</option>
                           {catalog?.models.map((candidate) => (
                             <option key={`${candidate.provider}/${candidate.id}`} value={modelIdentity(candidate)} disabled={candidate.access === 'unsupported'}>
                               {modelLabel(candidate)}{candidate.access === 'unsupported' ? ' (unsupported)' : ''}
@@ -436,12 +436,12 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
                         disabled={models.loading[effectiveAgent]}
                         onClick={() => void models.discover(effectiveAgent)}
                       >
-                        {models.loading[effectiveAgent] ? 'Discovering models…' : catalog ? 'Refresh models' : 'Discover models'}
+                        {discoveryLabel}
                       </button>
                     )}
                     <div className="crew-acknowledged" data-testid="crew-acknowledged">
                       <span>Acknowledged next wake</span>
-                      <strong>{[edit.acknowledged.resolved_agent, edit.acknowledged.resolved_model || 'default model', edit.acknowledged.resolved_effort || 'default effort'].join(' / ')}</strong>
+                      <strong>{nextWakeLabel}</strong>
                     </div>
                     {edit.error && <div className="crew-save-error">{edit.error}</div>}
                   </section>
@@ -457,7 +457,7 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
                       title={!savesAcknowledged ? 'Wait for launch settings to be saved' : undefined}
                       onClick={() => setConfirming(true)}
                     >
-                      {restartBusy ? 'Restart in progress…' : member.binding_session ? 'Handoff and restart' : 'Wake'}
+                      {restartLabel}
                     </button>
                   </section>
                   <RestartState
@@ -484,7 +484,7 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
                 <span className="crew-kicker">Confirm</span>
                 <h2 id="crew-confirm-title">{member.binding_session ? `Restart ${crewDisplayName(member.id)}?` : `Wake ${crewDisplayName(member.id)}?`}</h2>
                 <div className="crew-confirm-selection">
-                  {edit.acknowledged.resolved_agent} / {edit.acknowledged.resolved_model || 'default model'} / {edit.acknowledged.resolved_effort || 'default effort'}
+                  {nextWakeLabel}
                 </div>
                 <div className="crew-confirm-actions">
                   <button type="button" onClick={() => setConfirming(false)}>Cancel</button>
