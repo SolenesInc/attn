@@ -8,7 +8,7 @@ use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{SyncSender, TrySendError};
-use std::sync::{Arc, Condvar, Mutex, Weak};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -17,14 +17,13 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::boundary::safe_boundary;
 use crate::ghostty::{Terminal, Theme};
 use crate::protocol::{
     PreparedLaunchAttempt, SpawnParams, desync_event, exit_event, kitty_placements_event,
     output_event, resize_event, state_event,
 };
 use crate::queries::{
-    ColorScheme, TerminalQueries, color_scheme_report, theme_color_scheme,
+    ColorScheme, TerminalQueryStream, color_scheme_report, theme_color_scheme,
     track_color_scheme_reports,
 };
 use crate::signals::SignalObserver;
@@ -136,6 +135,7 @@ fn is_false(value: &bool) -> bool {
 struct Model {
     wire: WireFeeder,
     signals: SignalObserver,
+    queries: TerminalQueryStream,
     theme: Theme,
     reported_scheme: ColorScheme,
     color_scheme_reports: bool,
@@ -162,6 +162,48 @@ struct Subscriber {
     shutdown: UnixStream,
 }
 
+struct DeliveryGate {
+    admission: Mutex<()>,
+    boundary: Mutex<()>,
+}
+
+struct OutputAdmission<'a> {
+    gate: &'a DeliveryGate,
+    _admission: MutexGuard<'a, ()>,
+}
+
+impl DeliveryGate {
+    fn new() -> Self {
+        Self {
+            admission: Mutex::new(()),
+            boundary: Mutex::new(()),
+        }
+    }
+
+    fn admit_output(&self) -> OutputAdmission<'_> {
+        OutputAdmission {
+            gate: self,
+            _admission: self.admission.lock().expect("delivery admission poisoned"),
+        }
+    }
+
+    fn admit_resize(&self) -> MutexGuard<'_, ()> {
+        let admission = self.admission.lock().expect("delivery admission poisoned");
+        let boundary = self.boundary.lock().expect("delivery boundary poisoned");
+        drop(admission);
+        boundary
+    }
+}
+
+impl OutputAdmission<'_> {
+    fn delivery(&self) -> MutexGuard<'_, ()> {
+        self.gate
+            .boundary
+            .lock()
+            .expect("delivery boundary poisoned")
+    }
+}
+
 pub struct Session {
     pub id: String,
     pub agent: String,
@@ -172,8 +214,9 @@ pub struct Session {
 
     master: Mutex<Option<File>>,
     model: Mutex<Model>,
-    // Output processing and resize share the subscriber delivery boundary.
-    delivery: Mutex<()>,
+    // Admission hands an already-read chunk to delivery before resize can cross
+    // the subscriber boundary.
+    delivery: DeliveryGate,
     lifecycle: Mutex<Lifecycle>,
     lifecycle_changed: Condvar,
     subscribers: Mutex<HashMap<String, Subscriber>>,
@@ -231,6 +274,7 @@ impl Session {
             model: Mutex::new(Model {
                 wire: WireFeeder::new(terminal, mint_epoch()),
                 signals: SignalObserver::new(&params.agent),
+                queries: TerminalQueryStream::default(),
                 theme,
                 reported_scheme,
                 color_scheme_reports: false,
@@ -242,7 +286,7 @@ impl Session {
                 pixel_width: 0,
                 pixel_height: 0,
             }),
-            delivery: Mutex::new(()),
+            delivery: DeliveryGate::new(),
             lifecycle: Mutex::new(Lifecycle {
                 running: true,
                 state: "working".to_owned(),
@@ -463,7 +507,7 @@ impl Session {
         if cols == 0 || rows == 0 {
             return Err("cols and rows must be > 0".to_owned());
         }
-        let _delivery = self.delivery.lock().expect("delivery mutex poisoned");
+        let _delivery = self.delivery.admit_resize();
         let mut model = self.model.lock().expect("model mutex poisoned");
         let mut cell_width = 0;
         let mut cell_height = 0;
@@ -636,12 +680,12 @@ impl Session {
             .map_err(|error| format!("write PTY: {error}"))
     }
 
-    fn observe_output(&self, data: &[u8]) {
-        let _delivery = self.delivery.lock().expect("delivery mutex poisoned");
+    fn observe_output(&self, data: &[u8], admission: &OutputAdmission<'_>) {
+        let _delivery = admission.delivery();
         let (seq, wire, placements, resync, responses, observations) = {
             let mut model = self.model.lock().expect("model mutex poisoned");
-            let queries = TerminalQueries::detect(data);
-            track_color_scheme_reports(data, &mut model.color_scheme_reports);
+            let (queries, complete_queries) = model.queries.scan(data);
+            track_color_scheme_reports(&complete_queries, &mut model.color_scheme_reports);
             let mut responses = queries.replies_before_feed(&model.theme);
             let feed = model.wire.feed(data);
             let drained = model.wire.terminal_mut().drain_responses();
@@ -836,22 +880,12 @@ fn start_reader(session: Arc<Session>, mut reader: File) -> Result<(), String> {
         .stack_size(READER_STACK_BYTES)
         .spawn(move || {
             let mut buffer = vec![0_u8; 4 * 1024];
-            let mut carry = Vec::with_capacity(64);
             loop {
                 match reader.read(&mut buffer) {
-                    Ok(0) => {
-                        if !carry.is_empty() {
-                            session.observe_output(&carry);
-                        }
-                        return;
-                    }
+                    Ok(0) => return,
                     Ok(read) => {
-                        carry.extend_from_slice(&buffer[..read]);
-                        let boundary = safe_boundary(&carry);
-                        if boundary > 0 {
-                            session.observe_output(&carry[..boundary]);
-                            carry.drain(..boundary);
-                        }
+                        let admission = session.delivery.admit_output();
+                        session.observe_output(&buffer[..read], &admission);
                     }
                     Err(error) if error.kind() == ErrorKind::Interrupted => {}
                     Err(error) if error.raw_os_error() == Some(libc::EIO) => return,
@@ -1180,4 +1214,46 @@ fn unix_timestamp() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+#[cfg(test)]
+mod delivery_order_tests {
+    use std::sync::mpsc;
+    use std::sync::{Arc, TryLockError};
+    use std::thread;
+
+    use super::DeliveryGate;
+    use crate::boundary::safe_boundary;
+
+    #[test]
+    fn paused_fragment_crosses_the_boundary_without_blocking_resize() {
+        let gate = Arc::new(DeliveryGate::new());
+        let resize_gate = Arc::clone(&gate);
+        let (attempted_tx, attempted_rx) = mpsc::sync_channel(0);
+        let (events_tx, events_rx) = mpsc::channel();
+        let output = gate.admit_output();
+        let fragment = b"\x1b[6";
+        assert_eq!(safe_boundary(fragment), 0);
+
+        let resize_events = events_tx.clone();
+        let resize = thread::spawn(move || {
+            attempted_tx.send(()).unwrap();
+            let _delivery = resize_gate.admit_resize();
+            resize_events.send("resize").unwrap();
+        });
+        attempted_rx.recv().unwrap();
+        assert!(matches!(
+            gate.admission.try_lock(),
+            Err(TryLockError::WouldBlock)
+        ));
+
+        let delivery = output.delivery();
+        events_tx.send("output").unwrap();
+        drop(delivery);
+        drop(output);
+        resize.join().unwrap();
+
+        assert_eq!(events_rx.recv().unwrap(), "output");
+        assert_eq!(events_rx.recv().unwrap(), "resize");
+    }
 }
