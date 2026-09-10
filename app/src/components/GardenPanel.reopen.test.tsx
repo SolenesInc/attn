@@ -124,9 +124,9 @@ describe('GardenPanel continuation actions', () => {
 
     await waitFor(() => expect(onHandoverSeed).toHaveBeenCalledWith({
       seedId: 's-hand11',
-      expectedRev: 7,
-      expectedTenderSession: 'sess-a',
-      expectedTenderMember: '',
+		cwd: '/tmp/work',
+		checkout: undefined,
+		agent: 'codex',
       handoff: 'The parser is done; verify the renderer.',
     }));
   });
@@ -171,7 +171,10 @@ describe('GardenPanel continuation actions', () => {
     fireEvent.click(await screen.findByTestId('seed-handover-s-fresh11'));
     fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
 
-    await waitFor(() => expect(onHandoverSeed).toHaveBeenCalledWith(expect.objectContaining({ expectedRev: 2 })));
+    await waitFor(() => expect(onHandoverSeed).toHaveBeenCalledWith(expect.objectContaining({
+			seedId: 's-fresh11',
+			cwd: '/tmp/work',
+		})));
   });
 
   it('offers Chief instead of a manual placement override', async () => {

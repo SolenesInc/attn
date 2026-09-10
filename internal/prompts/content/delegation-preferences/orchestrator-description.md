@@ -1,1 +1,1 @@
-Own an agreed outcome across delegated work, integration, and verification.
+Execute an agreed plan by coordinating implementation, review, and verification.

@@ -1,1 +1,0 @@
-When the approach needs a user decision, return grounded alternatives, tradeoffs, your recommendation, and the deciding question; wait for discussion. Once the direction is agreed, deliver the actionable plan and verification strategy. Stop before implementation.

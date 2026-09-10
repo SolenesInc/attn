@@ -105,7 +105,7 @@ function useDelegationModelCatalogs(config: DelegationPreferences | null, loadMo
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const discover = async (harness: string) => {
-    if (!config?.enabled || loading[harness]) return;
+    if (!config || loading[harness]) return;
     setLoading(current => ({ ...current, [harness]: true }));
     setErrors(current => ({ ...current, [harness]: '' }));
     try {
@@ -127,13 +127,35 @@ export function DelegationSettings({ policy, loadModels }: { policy: DelegationP
   const [choiceID, setChoiceID] = useState('');
   const [iconsOpen, setIconsOpen] = useState(false);
   const [undo, setUndo] = useState<DelegationPreferences | null>(null);
+  const [adoption, setAdoption] = useState<Record<string, string> | null>(null);
   const { catalogs, loading, errors: modelErrors, discover } = useDelegationModelCatalogs(config, loadModels);
   if (!config || !state) return <div role="status">{error || 'Loading delegation preferences…'}{error && <button className="settings-action" onClick={() => void reload()}>Retry</button>}</div>;
   const update = (next: DelegationPreferences) => setDraft(next);
   const role = config.roles.find(r => r.id === roleID);
+  const expandedRole = role?.builtin
+    ? state.expandedRoles.find(candidate => candidate.id === roleID && candidate.builtin === role.builtin) ?? role
+    : role;
   const updateRole = (next: DelegationRole) => update({ ...config, roles: config.roles.map(r => r.id === next.id ? next : r) });
   const picker = (selection: DelegationSelection, onChange: (s: DelegationSelection) => void) => <SelectionPicker value={selection} onChange={onChange} harnesses={state.harnesses} catalog={catalogs[selection.harness]} loading={!!loading[selection.harness]} error={modelErrors[selection.harness]} discover={h => void discover(h)} />;
-  const addTemplates = () => update({ ...config, roles: [...config.roles, ...structuredClone(state.templates.filter(t => !config.roles.some(r => r.id === t.id)))] });
+  const missingTemplates = state.templates.filter(template => !config.roles.some(role => role.builtin === template.builtin));
+  const beginAdoption = () => setAdoption(Object.fromEntries(missingTemplates.map(template => [template.builtin ?? template.id, 'new'])));
+  const addTemplates = () => {
+    const replaced = new Set(Object.values(adoption ?? {}).filter(value => value !== 'new'));
+    const additions = missingTemplates.map(template => {
+      const key = template.builtin ?? template.id;
+      const destination = adoption?.[key] ?? 'new';
+      if (destination !== 'new') {
+        const previous = config.roles.find(role => role.id === destination);
+        if (previous) return { ...structuredClone(template), id: previous.id, enabled: previous.enabled, default_choice_id: previous.default_choice_id, choices: structuredClone(previous.choices) };
+      }
+      let roleID = template.id;
+      while (config.roles.some(role => role.id === roleID)) roleID = id(template.id);
+      return { ...structuredClone(template), id: roleID };
+    });
+    const next = { ...config, workflow_skill_enabled: true, roles: [...config.roles.filter(role => !replaced.has(role.id)), ...additions] };
+    setAdoption(null);
+    void persist(next, true);
+  };
   const addRole = () => {
     const next: DelegationRole = { id: id('role'), name: 'New role', icon: '', enabled: true, description: '', instructions: '', stopping_point: '', default_choice_id: 'default', choices: [{ id: 'default', name: 'Default', when: '', selection: emptySelection() }] };
     update({ ...config, roles: [...config.roles, next] }); setRoleID(next.id); setChoiceID('default');
@@ -149,13 +171,12 @@ export function DelegationSettings({ policy, loadModels }: { policy: DelegationP
       <div><h3>Use delegation preferences</h3></div>
       <label className="delegation-switch"><input type="checkbox" checked={config.enabled} disabled={busy} onChange={e => {
         const next = { ...config, enabled: e.target.checked };
-        if (next.enabled && next.revision === 0 && !next.roles.length) next.roles = structuredClone(state.templates);
         void persist(next);
       }} />{config.enabled ? 'On' : 'Off'}</label>
     </div>
     {error && <p role="alert" className="settings-warning">{error}</p>}
     {changedElsewhere && <p role="alert" className="settings-warning">Preferences changed elsewhere. Your draft is preserved. Revert changes before making a new edit.</p>}
-    {!config.enabled ? <div className="delegation-off"><p className="settings-description">Enable to configure roles and models for delegated work.</p></div> : <fieldset disabled={busy} className="delegation-content">
+    <fieldset disabled={busy} className="delegation-content">
       <div className="delegation-tabs settings-segmented" role="group" aria-label="Delegation settings">
         <button className={`settings-segmented-option ${screen === 'roles' ? 'active' : ''}`} aria-pressed={screen === 'roles'} onClick={() => { setScreen('roles'); setRoleID(''); }}>Roles</button>
         <button className={`settings-segmented-option ${screen === 'fallback' ? 'active' : ''}`} aria-pressed={screen === 'fallback'} onClick={() => { setScreen('fallback'); setRoleID(''); }}>Fallback</button>
@@ -164,16 +185,20 @@ export function DelegationSettings({ policy, loadModels }: { policy: DelegationP
         <h3>When no role fits</h3>
         {picker(config.fallback.selection, selection => update({ ...config, fallback: { ...config.fallback, selection } }))}
         <label className="delegation-field">Instructions (optional)<textarea value={config.fallback.instructions} onChange={e => update({ ...config, fallback: { ...config.fallback, instructions: e.target.value } })} /></label>
-      </> : role ? <>
+      </> : role && expandedRole ? <>
         <div className="delegation-row between"><button className="settings-action" onClick={() => { setRoleID(''); setIconsOpen(false); }}>← All roles</button><button className="settings-action danger" onClick={removeRole}>Delete role</button></div>
-        <div className="delegation-role-heading"><button className="delegation-icon" aria-label="Choose role icon" aria-expanded={iconsOpen} onClick={() => setIconsOpen(v => !v)}><DelegationRoleIcon icon={role.icon} name={role.name} /></button>
-          <label className="delegation-field">Role name<input value={role.name} onChange={e => updateRole({ ...role, name: e.target.value })} /></label></div>
-        {iconsOpen && <div className="delegation-icons" role="group" aria-label="Role icons"><button className="settings-action" onClick={() => { updateRole({ ...role, icon: '' }); setIconsOpen(false); }}>Initial</button>{DELEGATION_ICONS.map(icon => <button key={icon} className="delegation-icon" aria-label={`${icon} icon`} aria-pressed={role.icon === icon} onClick={() => { updateRole({ ...role, icon }); setIconsOpen(false); }}><DelegationRoleIcon icon={icon} name={role.name} /></button>)}</div>}
-        <label className="delegation-field">When to choose this role<input value={role.description} onChange={e => updateRole({ ...role, description: e.target.value })} /></label>
+        <div className="delegation-role-heading"><button className="delegation-icon" disabled={Boolean(role.builtin)} aria-label="Choose role icon" aria-expanded={iconsOpen} onClick={() => setIconsOpen(v => !v)}><DelegationRoleIcon icon={expandedRole.icon} name={expandedRole.name} /></button>
+          <label className="delegation-field">Role name<input value={expandedRole.name} readOnly={Boolean(role.builtin)} onChange={e => updateRole({ ...role, name: e.target.value })} /></label></div>
+        {!role.builtin && iconsOpen && <div className="delegation-icons" role="group" aria-label="Role icons"><button className="settings-action" onClick={() => { updateRole({ ...role, icon: '' }); setIconsOpen(false); }}>Initial</button>{DELEGATION_ICONS.map(icon => <button key={icon} className="delegation-icon" aria-label={`${icon} icon`} aria-pressed={role.icon === icon} onClick={() => { updateRole({ ...role, icon }); setIconsOpen(false); }}><DelegationRoleIcon icon={icon} name={role.name} /></button>)}</div>}
+        <label className="delegation-field">When to choose this role<input value={expandedRole.description} readOnly={Boolean(role.builtin)} onChange={e => updateRole({ ...role, description: e.target.value })} /></label>
         <details className="delegation-behavior" open key={role.id}><summary>Instructions and stopping point</summary>
-          <label className="delegation-field">Instructions<textarea value={role.instructions} onChange={e => updateRole({ ...role, instructions: e.target.value })} /></label>
-          <label className="delegation-field">Stopping point<textarea value={role.stopping_point} onChange={e => updateRole({ ...role, stopping_point: e.target.value })} /></label>
+          <label className="delegation-field">Instructions<textarea value={expandedRole.instructions} readOnly={Boolean(role.builtin)} onChange={e => updateRole({ ...role, instructions: e.target.value })} /></label>
+          <label className="delegation-field">Stopping point<textarea value={expandedRole.stopping_point} readOnly={Boolean(role.builtin)} onChange={e => updateRole({ ...role, stopping_point: e.target.value })} /></label>
         </details>
+        {role.builtin && <button className="settings-action" onClick={() => {
+          const copy = { ...structuredClone(expandedRole), id: id('role'), builtin: undefined, name: `${expandedRole.name} copy` };
+          update({ ...config, roles: [...config.roles, copy] }); setRoleID(copy.id); setChoiceID(copy.default_choice_id);
+        }}>Duplicate as custom role</button>}
         <div className="delegation-row between"><h3>Model choices</h3><button className="settings-action" data-testid="delegation-add-choice" onClick={addChoice}>+ Add alternative</button></div>
         {[...role.choices].sort((a, b) => Number(b.id === role.default_choice_id) - Number(a.id === role.default_choice_id)).map(choice => {
           const isDefault = role.default_choice_id === choice.id;
@@ -194,10 +219,15 @@ export function DelegationSettings({ policy, loadModels }: { policy: DelegationP
         })}
       </> : <>
         <div className="delegation-row between"><h3>Roles</h3><button className="settings-action" onClick={addRole}>+ New role</button></div>
-        {config.roles.map(r => <div className={`delegation-role-row ${r.enabled ? '' : 'disabled'}`} key={r.id}><span className="delegation-icon"><DelegationRoleIcon icon={r.icon} name={r.name} /></span><div className="delegation-role-summary"><h4>{r.name}</h4><p className="settings-description">{r.description}</p><p className="delegation-route">{route(r.choices.find(c => c.id === r.default_choice_id)?.selection ?? emptySelection())}{r.choices.length > 1 ? ` · ${r.choices.length - 1} alternatives` : ''}</p></div><button className="settings-action" aria-label={`Edit ${r.name}`} onClick={() => { setRoleID(r.id); setChoiceID(r.default_choice_id); setIconsOpen(false); }}>Edit</button><input type="checkbox" aria-label={`Enable ${r.name}`} checked={r.enabled} onChange={e => updateRole({ ...r, enabled: e.target.checked })} /></div>)}
-        <button className="settings-action" disabled={state.templates.every(t => config.roles.some(r => r.id === t.id))} onClick={addTemplates}>Add starter roles</button>
+        {config.roles.map(r => { const view = r.builtin ? state.expandedRoles.find(candidate => candidate.id === r.id && candidate.builtin === r.builtin) ?? r : r; return <div className={`delegation-role-row ${r.enabled ? '' : 'disabled'}`} key={r.id}><span className="delegation-icon"><DelegationRoleIcon icon={view.icon} name={view.name} /></span><div className="delegation-role-summary"><h4>{view.name}</h4><p className="settings-description">{view.description}</p><p className="delegation-route">{route(r.choices.find(c => c.id === r.default_choice_id)?.selection ?? emptySelection())}{r.choices.length > 1 ? ` · ${r.choices.length - 1} alternatives` : ''}</p></div><button className="settings-action" aria-label={`Edit ${view.name}`} onClick={() => { setRoleID(r.id); setChoiceID(r.default_choice_id); setIconsOpen(false); }}>Edit</button><input type="checkbox" aria-label={`Enable ${view.name}`} checked={r.enabled} onChange={e => updateRole({ ...r, enabled: e.target.checked })} /></div>; })}
+        {adoption && <section className="delegation-choice"><h4>Adopt maintained roles</h4><p className="settings-description">Choose whether each role is added or replaces one custom row. Replacement keeps that row's enabled state and model choices.</p>
+          {missingTemplates.map(template => { const key = template.builtin ?? template.id; return <label className="delegation-field" key={key}>{state.expandedRoles.find(role => role.builtin === template.builtin)?.name ?? key}<select value={adoption[key]} onChange={event => setAdoption({ ...adoption, [key]: event.target.value })}><option value="new">Add as a new role</option>{config.roles.filter(role => !role.builtin && !Object.values(adoption).includes(role.id)).map(role => <option key={role.id} value={role.id}>Replace {role.name}</option>)}{adoption[key] !== 'new' && <option value={adoption[key]}>Replace {config.roles.find(role => role.id === adoption[key])?.name}</option>}</select></label>; })}
+          <div className="delegation-row"><button className="settings-action" onClick={() => setAdoption(null)}>Cancel</button><button className="settings-action primary" data-testid="delegation-add-attn-roles-confirm" onClick={addTemplates}>{dirty ? 'Save changes and add Attn roles' : 'Add Attn roles'}</button></div>
+        </section>}
+        {!adoption && <button className="settings-action" disabled={missingTemplates.length === 0 || changedElsewhere} onClick={beginAdoption}>{dirty ? 'Save changes and add Attn roles' : 'Add Attn roles'}</button>}
+        <p className="settings-description">Adds Attn's maintained roles and installs the <code>attn-workflow</code> skill. Attn keeps their guidance updated; your model choices remain yours.</p>
       </>}
-    </fieldset>}
+    </fieldset>
     {undo && <div role="status" className="delegation-row"><button className="settings-action" onClick={() => { update({ ...undo, revision: config.revision }); setUndo(null); }}>Undo</button></div>}
     <div className="delegation-save"><span role="status">{busy ? 'Saving…' : dirty ? 'Unsaved changes' : 'Saved'}</span><button className="settings-action" disabled={busy || (!dirty && !changedElsewhere)} onClick={() => { setUndo(null); void reload(true); }}>Revert changes</button><button className="settings-action primary" data-testid="delegation-save" disabled={busy || !dirty || changedElsewhere} onClick={() => void persist(config)}>Save</button></div>
   </div>;

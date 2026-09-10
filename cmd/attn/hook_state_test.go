@@ -1,13 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
-	"strings"
 	"testing"
-
-	"github.com/victorarias/attn/internal/hooks"
-	"github.com/victorarias/attn/internal/protocol"
 )
 
 type recordedConversationObservation struct {
@@ -82,49 +77,5 @@ func TestPromptConversationObservationRequiresAnExactPath(t *testing.T) {
 				t.Fatalf("unexpected observations: %+v", recorder.observations)
 			}
 		})
-	}
-}
-
-type recordingSessionStartClient struct {
-	recordingConversationObserver
-	fakeSessionStartClient
-}
-
-func TestPathlessSessionStartStillEmitsIndependentGuidance(t *testing.T) {
-	t.Setenv("ATTN_AGENT_GUIDANCE", "")
-	t.Setenv("ATTN_CHIEF_GUIDANCE", "")
-	c := &recordingSessionStartClient{
-		fakeSessionStartClient: fakeSessionStartClient{
-			ready: &protocol.SeedReadyResult{},
-		},
-	}
-
-	output, primeErr := sessionStartHookOutput(c, "attn-session", hookInput{
-		SessionID: "pathless-claude-session",
-	})
-	if primeErr != nil {
-		t.Fatalf("pathless SessionStart error = %v", primeErr)
-	}
-	if len(c.observations) != 0 {
-		t.Fatalf("pathless SessionStart observations = %+v, want none", c.observations)
-	}
-
-	var decoded struct {
-		HookSpecificOutput struct {
-			HookEventName     string `json:"hookEventName"`
-			AdditionalContext string `json:"additionalContext"`
-		} `json:"hookSpecificOutput"`
-	}
-	if err := json.Unmarshal([]byte(output), &decoded); err != nil {
-		t.Fatalf("pathless SessionStart output is not JSON: %v", err)
-	}
-	if decoded.HookSpecificOutput.HookEventName != "SessionStart" {
-		t.Fatalf("pathless SessionStart event = %q", decoded.HookSpecificOutput.HookEventName)
-	}
-	context := decoded.HookSpecificOutput.AdditionalContext
-	for _, want := range []string{hooks.AgentGuidance, "Nothing is ready now."} {
-		if !strings.Contains(context, want) {
-			t.Fatalf("pathless SessionStart context = %q, want it to contain %q", context, want)
-		}
 	}
 }

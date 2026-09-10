@@ -48,10 +48,10 @@ func TestDelegationPlantsASeedTendedByItsDelegate(t *testing.T) {
 	var prompt string
 	capturePrompt(t, backend, &prompt)
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Migrate the store to X",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Migrate the store to X"),
 		Label:           protocol.Ptr("Store migration"),
 		Agent:           protocol.Ptr("codex"),
 	})
@@ -85,12 +85,10 @@ func TestDelegationPlantsASeedTendedByItsDelegate(t *testing.T) {
 	if !strings.Contains(prompt, seedID) {
 		t.Fatalf("the delegate's prompt never names its seed %s:\n%s", seedID, prompt)
 	}
-	for _, verb := range []string{"attn seed show", "attn seed note", "attn seed harvest"} {
-		if !strings.Contains(prompt, verb) {
-			t.Fatalf("the delegate's prompt omits %q", verb)
-		}
+	if !strings.Contains(prompt, "attn seed show "+seedID) {
+		t.Fatalf("the delegate's prompt omits its seed read: %q", prompt)
 	}
-	for _, removed := range []string{"attn seed attach", "attn seed detach", "attn seed link", "attn seed wither", "attn ticket"} {
+	for _, removed := range []string{seed.Body, "attn seed note", "attn seed harvest", "attn seed attach", "attn seed detach", "attn seed link", "attn seed wither", "attn ticket"} {
 		if strings.Contains(prompt, removed) {
 			t.Fatalf("the delegate's prompt kept standing garden copy %q", removed)
 		}
@@ -109,10 +107,10 @@ func TestDelegationAtACrownBindsItWithoutPlanting(t *testing.T) {
 	consumeDelegatedPrompt(t, backend)
 	crown := plantForDelegation(t, d, sourceSessionID, "The epic")
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "work the plot",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("work the plot"),
 		Plot:            protocol.Ptr(crown.ID),
 		Agent:           protocol.Ptr("codex"),
 	})
@@ -151,10 +149,10 @@ func TestDelegationAtASeedHeldByADeadSessionRebindsIt(t *testing.T) {
 	tendAs(t, d, seed.ID, "gone-session")
 	d.store.Remove("gone-session")
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "take it over",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("take it over"),
 		Plot:            protocol.Ptr(seed.ID),
 		Agent:           protocol.Ptr("codex"),
 	})
@@ -174,10 +172,10 @@ func TestDelegationAtASeedHeldByALiveSessionRefusesBeforeAnythingIsCreated(t *te
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
 	seed := plantForDelegation(t, d, sourceSessionID, "Somebody else's work")
-	first, err := d.delegate(&protocol.DelegateMessage{
+	first, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "work it",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("work it"),
 		Plot:            protocol.Ptr(seed.ID),
 		Agent:           protocol.Ptr("codex"),
 	})
@@ -187,10 +185,10 @@ func TestDelegationAtASeedHeldByALiveSessionRefusesBeforeAnythingIsCreated(t *te
 	holder := first.SessionID
 
 	sessionsBefore := len(d.store.List(""))
-	_, err = d.delegate(&protocol.DelegateMessage{
+	_, err = d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "take it over",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("take it over"),
 		Plot:            protocol.Ptr(seed.ID),
 		Agent:           protocol.Ptr("codex"),
 	})
@@ -218,10 +216,10 @@ func TestDelegationAtASeedTheDelegatorHoldsHandsItOver(t *testing.T) {
 	seed := plantForDelegation(t, d, sourceSessionID, "Mine until now")
 	tendAs(t, d, seed.ID, sourceSessionID)
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "here, you take it",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("here, you take it"),
 		Plot:            protocol.Ptr(seed.ID),
 		Agent:           protocol.Ptr("codex"),
 	})
@@ -245,10 +243,10 @@ func TestDelegationAtAClosedSeedRefuses(t *testing.T) {
 		t.Fatalf("harvest: %v", err)
 	}
 
-	_, err := d.delegate(&protocol.DelegateMessage{
+	_, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "work it",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("work it"),
 		Plot:            protocol.Ptr(seed.ID),
 		Agent:           protocol.Ptr("codex"),
 	})
@@ -267,13 +265,13 @@ func tendAs(t *testing.T, d *Daemon, seedID, sessionID string) {
 func TestDelegationRecoveryRebindsTheSameSeed(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
-	msg := &protocol.DelegateMessage{
+	msg := &resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Migrate the store to X",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Migrate the store to X"),
 		Agent:           protocol.Ptr("codex"),
 	}
-	result, err := d.delegate(msg)
+	result, err := d.delegateResolved(msg)
 	if err != nil {
 		t.Fatalf("delegate(): %v", err)
 	}
@@ -295,7 +293,7 @@ func TestDelegationRecoveryRebindsTheSameSeed(t *testing.T) {
 	}
 }
 
-func TestDelegationOnAnOutpostBindsNoSeedAndStillLaunches(t *testing.T) {
+func TestDelegationOnAnOutpostRefusesBeforeLaunch(t *testing.T) {
 	d := newEnrolledDaemon(t, "d-"+strings.Repeat("a", 32))
 	t.Cleanup(d.stopEventBus)
 	d.ensureGardenCollections()
@@ -304,23 +302,17 @@ func TestDelegationOnAnOutpostBindsNoSeedAndStillLaunches(t *testing.T) {
 	var prompt string
 	capturePrompt(t, backend, &prompt)
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	_, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Migrate the store to X",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Migrate the store to X"),
 		Agent:           protocol.Ptr("codex"),
 	})
-	if err != nil {
-		t.Fatalf("delegate() on an outpost: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "it is an outpost") {
+		t.Fatalf("delegate() on an outpost = %v, want refusal", err)
 	}
-	if bound, ok := d.gardenDispatchCrown(result.SessionID); ok {
-		t.Fatalf("an outpost bound seed %q", bound)
-	}
-	if strings.Contains(prompt, "attn seed note") {
-		t.Fatalf("the delegate was pointed at a garden that is not here:\n%s", prompt)
-	}
-	if session := d.store.Get(result.SessionID); session == nil {
-		t.Fatalf("the delegation did not launch on an outpost")
+	if len(d.store.List("")) != 1 || prompt != "" {
+		t.Fatalf("outpost refusal launched a worker or prompt: sessions=%d prompt=%q", len(d.store.List("")), prompt)
 	}
 }
 
@@ -339,10 +331,10 @@ func plantForDelegation(t *testing.T, d *Daemon, sessionID, title string) protoc
 func TestStatusReportsLandOnTheBoundSeedsLog(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Migrate the store to X",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Migrate the store to X"),
 		Agent:           protocol.Ptr("codex"),
 	})
 	if err != nil {
@@ -397,9 +389,9 @@ func TestStatusReportsLandOnTheBoundSeedsLog(t *testing.T) {
 func TestCompletedReportDoesNotHarvestTheSeed(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
-	result, err := d.delegate(&protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, SourceSessionID: sourceSessionID,
-		Brief: "Migrate the store to X", Agent: protocol.Ptr("codex"),
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
+		Cmd: protocol.CmdDelegate, SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief: protocol.Ptr("Migrate the store to X"), Agent: protocol.Ptr("codex"),
 	})
 	if err != nil {
 		t.Fatalf("delegate(): %v", err)
@@ -426,16 +418,16 @@ func TestCompletedReportDoesNotHarvestTheSeed(t *testing.T) {
 func TestNudgingSomebodyElsesTicketMirrorsNothing(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
-	worker, err := d.delegate(&protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, SourceSessionID: sourceSessionID,
-		Brief: "Migrate the store to X", Agent: protocol.Ptr("codex"),
+	worker, err := d.delegateResolved(&resolvedDelegationLaunch{
+		Cmd: protocol.CmdDelegate, SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief: protocol.Ptr("Migrate the store to X"), Agent: protocol.Ptr("codex"),
 	})
 	if err != nil {
 		t.Fatalf("delegate(): %v", err)
 	}
-	peer, err := d.delegate(&protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, SourceSessionID: sourceSessionID,
-		Brief: "Something else entirely", Label: protocol.Ptr("Peer work"), Agent: protocol.Ptr("codex"),
+	peer, err := d.delegateResolved(&resolvedDelegationLaunch{
+		Cmd: protocol.CmdDelegate, SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief: protocol.Ptr("Something else entirely"), Label: protocol.Ptr("Peer work"), Agent: protocol.Ptr("codex"),
 	})
 	if err != nil {
 		t.Fatalf("delegate(): %v", err)
@@ -463,9 +455,9 @@ func TestNudgingSomebodyElsesTicketMirrorsNothing(t *testing.T) {
 func TestAgentMsgToASeedReachesItsTender(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
-	result, err := d.delegate(&protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, SourceSessionID: sourceSessionID,
-		Brief: "Migrate the store to X", Agent: protocol.Ptr("codex"),
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
+		Cmd: protocol.CmdDelegate, SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief: protocol.Ptr("Migrate the store to X"), Agent: protocol.Ptr("codex"),
 	})
 	if err != nil {
 		t.Fatalf("delegate(): %v", err)
@@ -533,10 +525,10 @@ func awaitStatusHandled(t *testing.T, d *Daemon, msg *protocol.SetTicketStatusMe
 func TestBroadcastSessionCarriesTheSeedItReportsTo(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Report on a seed",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Report on a seed"),
 		Agent:           protocol.Ptr("codex"),
 	})
 	if err != nil {
@@ -563,10 +555,10 @@ func TestSeedDecorationSeesADispatchRecordedAfterTheFirstBroadcast(t *testing.T)
 		t.Fatalf("seed_id = %v before any dispatch, want unset", s.SeedID)
 	}
 	consumeDelegatedPrompt(t, backend)
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Report on a seed",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Report on a seed"),
 		Agent:           protocol.Ptr("codex"),
 	})
 	if err != nil {
@@ -582,10 +574,10 @@ func TestDelegationFromADelegateNestsItsSeedUnderTheCallers(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
 
-	first, err := d.delegate(&protocol.DelegateMessage{
+	first, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "scout the flaky test",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("scout the flaky test"),
 		Label:           protocol.Ptr("the scout"),
 		Agent:           protocol.Ptr("codex"),
 	})
@@ -606,10 +598,10 @@ func TestDelegationFromADelegateNestsItsSeedUnderTheCallers(t *testing.T) {
 		}
 	}
 
-	second, err := d.delegate(&protocol.DelegateMessage{
+	second, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: first.SessionID,
-		Brief:           "fix what the scout found",
+		SourceSessionID: protocol.Ptr(first.SessionID),
+		Brief:           protocol.Ptr("fix what the scout found"),
 		Label:           protocol.Ptr("the fix"),
 		Agent:           protocol.Ptr("codex"),
 	})

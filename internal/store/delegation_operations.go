@@ -26,6 +26,8 @@ type DelegationOperationRecord struct {
 	WorktreeOwned       bool
 	WorktreeToken       string
 	ChiefSessionID      string
+	BaseCommit          string
+	HandoffNoteID       string
 }
 
 func (s *Store) ClaimDelegationOperation(requestID, operationID, sessionID, chiefSessionID, ticketID, requestJSON string, now time.Time) (*DelegationOperationRecord, bool, error) {
@@ -99,14 +101,14 @@ func (s *Store) GetDelegationOperation(id string) (*DelegationOperationRecord, e
 
 func getDelegationOperation(db *sql.DB, id string) (*DelegationOperationRecord, error) {
 	var rec DelegationOperationRecord
-	var state, workspaceID, ticketID, worktreePath, worktreeToken, chiefSessionID, resultJSON, errorText string
+	var state, workspaceID, ticketID, directory, branch, baseCommit, handoffNoteID, worktreePath, worktreeToken, chiefSessionID, resultJSON, errorText, failureCode string
 	var worktreeOwned int
 	err := db.QueryRow(`SELECT request_id, operation_id, request_json, state, progress,
-		session_id, workspace_id, ticket_id, worktree_path, worktree_owned, worktree_token, chief_session_id, result_json, error, resolved_preferences, created_at, updated_at
+		session_id, workspace_id, ticket_id, directory, branch, base_commit, handoff_note_id, worktree_path, worktree_owned, worktree_token, chief_session_id, result_json, error, failure_code, resolved_preferences, created_at, updated_at
 		FROM delegation_operations WHERE request_id = ? OR operation_id = ?`, id, id).Scan(
 		&rec.Operation.RequestID, &rec.Operation.OperationID, &rec.RequestJSON, &state,
 		&rec.Operation.Progress, &rec.Operation.SessionID, &workspaceID, &ticketID,
-		&worktreePath, &worktreeOwned, &worktreeToken, &chiefSessionID, &resultJSON, &errorText, &rec.ResolvedPreferences, &rec.Operation.CreatedAt, &rec.Operation.UpdatedAt)
+		&directory, &branch, &baseCommit, &handoffNoteID, &worktreePath, &worktreeOwned, &worktreeToken, &chiefSessionID, &resultJSON, &errorText, &failureCode, &rec.ResolvedPreferences, &rec.Operation.CreatedAt, &rec.Operation.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -114,17 +116,30 @@ func getDelegationOperation(db *sql.DB, id string) (*DelegationOperationRecord, 
 	rec.WorktreeOwned = worktreeOwned == 1
 	rec.WorktreeToken = worktreeToken
 	rec.ChiefSessionID = chiefSessionID
+	rec.BaseCommit = baseCommit
+	rec.HandoffNoteID = handoffNoteID
 	if workspaceID != "" {
 		rec.Operation.WorkspaceID = protocol.Ptr(workspaceID)
 	}
 	if ticketID != "" {
 		rec.Operation.TicketID = protocol.Ptr(ticketID)
+		rec.Operation.SeedID = protocol.Ptr(ticketID)
+	}
+	if directory != "" {
+		rec.Operation.Directory = protocol.Ptr(directory)
+	}
+	if branch != "" {
+		rec.Operation.Branch = protocol.Ptr(branch)
 	}
 	if worktreePath != "" {
 		rec.Operation.WorktreePath = protocol.Ptr(worktreePath)
 	}
 	if errorText != "" {
 		rec.Operation.Error = protocol.Ptr(errorText)
+		if failureCode == "" {
+			failureCode = "delegation_failed"
+		}
+		rec.Operation.Failure = &protocol.DelegationFailure{Code: failureCode, Message: errorText}
 	}
 	if resultJSON != "" {
 		var result protocol.DelegateResult
@@ -134,6 +149,22 @@ func getDelegationOperation(db *sql.DB, id string) (*DelegationOperationRecord, 
 		rec.Operation.Result = &result
 	}
 	return &rec, nil
+}
+
+func (s *Store) RecordDelegationResolution(id, seedID, directory, branch, baseCommit, handoffNoteID string, now time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	stamp := now.UTC().Format(sortableTimeFormat)
+	_, err := s.db.Exec(`UPDATE delegation_operations SET
+		ticket_id = CASE WHEN ? = '' THEN ticket_id ELSE ? END,
+		directory = CASE WHEN ? = '' THEN directory ELSE ? END,
+		branch = CASE WHEN ? = '' THEN branch ELSE ? END,
+		base_commit = CASE WHEN ? = '' THEN base_commit ELSE ? END,
+		handoff_note_id = CASE WHEN ? = '' THEN handoff_note_id ELSE ? END,
+		updated_at = ? WHERE request_id = ? OR operation_id = ?`,
+		seedID, seedID, directory, directory, branch, branch, baseCommit, baseCommit,
+		handoffNoteID, handoffNoteID, stamp, id, id)
+	return err
 }
 
 func (s *Store) MarkDelegationWorktreeOwned(id, path, token string, now time.Time) error {
@@ -164,14 +195,50 @@ func (s *Store) UpdateDelegationOperation(id string, state protocol.DelegationOp
 		errorText = operationErr.Error()
 	}
 	stamp := now.UTC().Format(sortableTimeFormat)
+	failureCode := ""
+	resultDirectory := ""
+	resultBranch := ""
+	if operationErr != nil {
+		failureCode = delegationFailureCode(errorText)
+	}
+	if result != nil {
+		if ticketID == "" {
+			ticketID = result.SeedID
+		}
+		if worktreePath == "" && result.Checkout == "created" {
+			worktreePath = result.Directory
+		}
+		resultDirectory = result.Directory
+		resultBranch = protocol.Deref(result.Branch)
+	}
 	_, err := s.db.Exec(`UPDATE delegation_operations SET state = ?, progress = ?,
 		workspace_id = CASE WHEN ? = '' THEN workspace_id ELSE ? END,
 		ticket_id = CASE WHEN ? = '' THEN ticket_id ELSE ? END,
+		directory = CASE WHEN ? = '' THEN directory ELSE ? END,
+		branch = CASE WHEN ? = '' THEN branch ELSE ? END,
 		worktree_path = CASE WHEN ? = '' THEN worktree_path ELSE ? END,
-		result_json = ?, error = ?, updated_at = ? WHERE request_id = ? OR operation_id = ?`,
+		result_json = ?, error = ?, failure_code = ?, updated_at = ? WHERE request_id = ? OR operation_id = ?`,
 		string(state), progress, workspaceID, workspaceID, ticketID, ticketID,
-		worktreePath, worktreePath, resultJSON, errorText, stamp, id, id)
+		resultDirectory, resultDirectory, resultBranch, resultBranch,
+		worktreePath, worktreePath, resultJSON, errorText, failureCode, stamp, id, id)
 	return err
+}
+
+func delegationFailureCode(message string) string {
+	switch {
+	case strings.Contains(message, "retired implicit launch contract"):
+		return "legacy_request_requires_explicit_retry"
+	case strings.Contains(message, "base ref"):
+		return "invalid_base_ref"
+	case strings.Contains(message, "active Attn session") || strings.Contains(message, "worktree") || strings.Contains(message, "checkout"):
+		return "checkout_conflict"
+	case strings.Contains(message, "seed") || strings.Contains(message, "handover") || strings.Contains(message, "holder"):
+		return "assignment_conflict"
+	case strings.Contains(message, "spawn") || strings.Contains(message, "first turn") || strings.Contains(message, "exited"):
+		return "worker_launch_failed"
+	default:
+		return "delegation_failed"
+	}
 }
 
 func (s *Store) PendingDelegationOperations() ([]DelegationOperationRecord, error) {

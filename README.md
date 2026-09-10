@@ -181,11 +181,22 @@ clipboard directly. No xclip / X server needed on the remote.
 
 Your agents can work as a team:
 
-- **Delegation.** An agent spins up a fresh, visible session with a focused
-  brief (`attn delegate`). You can open that session, talk to the agent, and
-  steer the work directly. Delegation is retry-safe: the CLI prints a stable
-  request ID before any repository or worktree work, and repeating the command
-  with that ID resumes the same seed and session.
+- **Delegation.** Delegation starts a steerable agent on a seed. Supply a brief
+  for new work or a seed for an existing assignment, plus an explicit working
+  folder and Git choice:
+
+      attn delegate --brief-file task.md --role builder \
+        --cwd /repo --new-worktree --branch feature-x --from origin/main
+
+  To hand the same seed to an executor, record the next step without repeating
+  its plan:
+
+      attn delegate --seed s-example --handover --role orchestrator \
+        --cwd /repo --reuse-checkout --branch feature-x \
+        -m "The user approved the plan. Execute it."
+
+  The previous agent remains running. The CLI prints a stable request ID before
+  mutation; use `attn delegate status <request-id>` when the outcome is uncertain.
 - **The Garden.** `attn seed plant`, `tend`, `note`, `harvest`. Seeds are what
   agents hand off to each other and what survives a restart, a new session, or a
   new chief.

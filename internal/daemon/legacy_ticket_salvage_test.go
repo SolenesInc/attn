@@ -41,7 +41,7 @@ func addOrphanDelegation(t *testing.T, s *store.Store, requestID, ticketID, requ
 	if err != nil || !claimed {
 		t.Fatalf("claim delegation: %#v claimed=%v err=%v", record, claimed, err)
 	}
-	result := &protocol.DelegateResult{SessionID: "session-" + requestID, WorkspaceID: "workspace-1", Directory: "/repo", Placement: "reuse"}
+	result := &protocol.DelegateResult{SessionID: "session-" + requestID, WorkspaceID: protocol.Ptr("workspace-1"), Directory: "/repo"}
 	if err := s.UpdateDelegationOperation(record.Operation.OperationID, protocol.DelegationOperationStateCompleted,
 		"ready", "workspace-1", ticketID, "", result, nil, now.Add(time.Minute)); err != nil {
 		t.Fatal(err)

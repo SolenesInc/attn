@@ -24,6 +24,9 @@ func (d *Daemon) startDelegation(msg *protocol.DelegateMessage) (*protocol.Deleg
 	}
 	msg.RequestID = requestID
 	msg.Cmd = protocol.CmdDelegate
+	if err := validateDelegateRequestShape(msg); err != nil {
+		return nil, err
+	}
 	encoded, err := json.Marshal(msg)
 	if err != nil {
 		return nil, fmt.Errorf("encode delegation request: %w", err)
@@ -53,10 +56,14 @@ func (d *Daemon) startDelegation(msg *protocol.DelegateMessage) (*protocol.Deleg
 		resolvedJSON = string(raw)
 	}
 	chiefSessionID := ""
-	if currentChief := d.chiefOfStaffSessionID(); currentChief == strings.TrimSpace(msg.SourceSessionID) {
+	if currentChief := d.chiefOfStaffSessionID(); currentChief == strings.TrimSpace(protocol.Deref(msg.SourceSessionID)) {
 		chiefSessionID = currentChief
 	}
-	record, claimed, err := d.store.ClaimDelegationOperationWithPreferences(requestID, "op-"+uuid.NewString(), uuid.NewString(), chiefSessionID, strings.TrimSpace(protocol.Deref(msg.TicketID)), string(encoded), resolvedJSON, time.Now())
+	seedID := ""
+	if msg.Assignment.Kind == protocol.DelegateAssignmentKindSeed {
+		seedID = strings.TrimSpace(protocol.Deref(msg.Assignment.SeedID))
+	}
+	record, claimed, err := d.store.ClaimDelegationOperationWithPreferences(requestID, "op-"+uuid.NewString(), uuid.NewString(), chiefSessionID, seedID, string(encoded), resolvedJSON, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -81,6 +88,25 @@ func (d *Daemon) runDelegationOperation(id string) {
 	}
 	_ = d.store.UpdateDelegationOperation(id, protocol.DelegationOperationStatePreparing,
 		"validating delegation request", "", "", "", nil, nil, time.Now())
+	var shape struct {
+		Assignment json.RawMessage `json:"assignment"`
+	}
+	if err := json.Unmarshal([]byte(record.RequestJSON), &shape); err != nil {
+		d.finishDelegationFailure(id, fmt.Errorf("decode accepted delegation request: %w", err))
+		return
+	}
+	if len(shape.Assignment) == 0 || string(shape.Assignment) == "null" {
+		if existing := d.store.Get(record.Operation.SessionID); existing != nil && d.sessionHasLiveWorker(existing.ID) {
+			result := d.completedDelegationResult(existing, "", record.WorktreeOwned)
+			if seedID, ok := d.gardenDispatchCrown(existing.ID); ok {
+				result.SeedID = seedID
+			}
+			d.persistDelegationTerminal(id, protocol.DelegationOperationStateCompleted, "reconciled legacy delegated session", existing.WorkspaceID, protocol.Deref(record.Operation.WorktreePath), result, nil)
+			return
+		}
+		d.finishDelegationFailure(id, fmt.Errorf("%w; no live successor can prove the old implicit launch intent. Submit a new request with the known seed, cwd, and checkout", errLegacyDelegationRequest))
+		return
+	}
 	var msg protocol.DelegateMessage
 	if err := json.Unmarshal([]byte(record.RequestJSON), &msg); err != nil {
 		d.finishDelegationFailure(id, fmt.Errorf("decode accepted delegation request: %w", err))
@@ -93,13 +119,37 @@ func (d *Daemon) runDelegationOperation(id string) {
 			return
 		}
 	}
-	result, launchErr := d.delegateOperation(&msg, id, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned, record.WorktreeToken, record.ChiefSessionID, resolved)
+	runtime, err := d.resolveDelegateRuntime(&msg, protocol.Deref(record.Operation.SeedID), record.BaseCommit, record.HandoffNoteID, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned)
+	if err != nil {
+		d.finishDelegationFailure(id, err)
+		return
+	}
+	resolvedSeedID := strings.TrimSpace(protocol.Deref(runtime.Plot))
+	if runtime.Handover != nil {
+		resolvedSeedID = strings.TrimSpace(runtime.Handover.SeedID)
+	}
+	resolvedBranch, baseCommit := "", ""
+	if runtime.Worktree != nil {
+		resolvedBranch = strings.TrimSpace(runtime.Worktree.Branch)
+		baseCommit = strings.TrimSpace(protocol.Deref(runtime.Worktree.StartingFrom))
+	} else if runtime.Checkout != nil {
+		resolvedBranch = strings.TrimSpace(runtime.Checkout.Branch)
+	}
+	handoffNoteID := ""
+	if runtime.Handover != nil {
+		handoffNoteID = strings.TrimSpace(protocol.Deref(runtime.Handover.NoteID))
+	}
+	if err := d.store.RecordDelegationResolution(id, resolvedSeedID, runtime.Cwd, resolvedBranch, baseCommit, handoffNoteID, time.Now()); err != nil {
+		d.finishDelegationFailure(id, fmt.Errorf("record resolved delegation: %w", err))
+		return
+	}
+	result, launchErr := d.delegateOperation(runtime, id, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned, record.WorktreeToken, record.ChiefSessionID, resolved)
 	if launchErr != nil {
 		d.finishDelegationFailure(id, launchErr)
 		return
 	}
 	d.persistDelegationTerminal(id, protocol.DelegationOperationStateCompleted,
-		"delegation ready", result.WorkspaceID, "", result, nil)
+		"delegation ready", protocol.Deref(result.WorkspaceID), "", result, nil)
 }
 
 func (d *Daemon) finishDelegationFailure(id string, err error) {
@@ -153,7 +203,30 @@ func (d *Daemon) delegationOperation(id string) (*protocol.DelegationOperation, 
 	if err != nil {
 		return nil, err
 	}
-	return &record.Operation, nil
+	operation := record.Operation
+	facts := []string{operation.Progress}
+	if session := d.store.Get(operation.SessionID); session != nil {
+		if d.sessionHasLiveWorker(session.ID) {
+			facts = append(facts, "worker is running")
+		} else {
+			facts = append(facts, "worker is not running")
+		}
+	} else {
+		facts = append(facts, "worker state is unknown")
+	}
+	if seedID := strings.TrimSpace(protocol.Deref(operation.SeedID)); seedID != "" {
+		if seed, _, seedErr := d.readSeed(seedID); seedErr == nil {
+			holder := seed.Tender().DisplayName()
+			if holder == "" {
+				holder = "nobody"
+			}
+			facts = append(facts, fmt.Sprintf("seed %s is held by %s", seedID, holder))
+		} else {
+			facts = append(facts, fmt.Sprintf("seed %s state is unknown", seedID))
+		}
+	}
+	operation.Progress = strings.Join(facts, "; ")
+	return &operation, nil
 }
 
 func (d *Daemon) resumePendingDelegations() {

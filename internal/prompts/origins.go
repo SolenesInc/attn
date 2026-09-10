@@ -23,7 +23,7 @@ func template(id, source string, fields ...Field) Node {
 }
 
 func delegatedBrief(body Node) Node {
-	return Join("", Trim(body), When(Present(seedID), seedContract))
+	return Compose(Trim(body), When(Present(seedID), seedContract))
 }
 
 func leafOpening(body Node) Node {
@@ -32,15 +32,13 @@ func leafOpening(body Node) Node {
 }
 
 func originRecipients() []Recipient {
-	handoff := Trimmed(TextField("handoff", "Letter for the new tender."))
-	handover := Compose(Trim(Input(brief)), When(Present(handoff), template("delegation.handover-letter", "content/delegation/handover-letter.md", handoff)), template("delegation.handover-seed", "content/delegation/handover-seed.md", seedID))
 	return []Recipient{
 		{ID: "delegation", Description: "Visible delegated session; appended after launch instructions.", Events: []Event{
-			On("handover", "opening_message", "Existing seed assigned to a new tender with a handoff.", leafOpening(handover)),
-			On("handover-brief", "message_fragment", "Seed handover before the leaf identity wrapper.", handover),
-			On("opening", "opening_message", "Delegation brief and reporting contract, wrapped in leaf identity.", leafOpening(delegatedBrief(Input(brief)))),
-			On("brief", "message_fragment", "Reporting contract before the leaf wrapper.", delegatedBrief(Input(brief))),
-			On("identity", "message_fragment", "Leaf wrapper shared by delegation and automation.", leafOpening(Input(brief))),
+			On("handover", "opening_message", "Existing seed assigned to a new agent.", leafOpening(seedContract)),
+			On("handover-brief", "message_fragment", "Seed reference for a handover opening.", seedContract),
+			On("opening", "opening_message", "Delegation identity and seed reference.", leafOpening(seedContract)),
+			On("brief", "message_fragment", "Seed reference for the delegated opening.", seedContract),
+			On("identity", "message_fragment", "Delegation identity shared by delegation and automation.", leafOpening(Input(brief))),
 		}},
 		{ID: "automation", Description: "Scheduled or event-triggered visible session.", Events: []Event{
 			On("opening", "opening_message", "Configured task, local-review restriction, reporting seed and occurrence input.",

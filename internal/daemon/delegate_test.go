@@ -10,6 +10,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -23,6 +24,7 @@ func setupDelegationSource(t *testing.T, d *Daemon, backend *fakeSpawnBackend) (
 
 func setupDelegationSourceAt(t *testing.T, d *Daemon, backend *fakeSpawnBackend, cwd string) (string, string, string) {
 	t.Helper()
+	setupDelegationGarden(t, d)
 	d.ptyBackend = backend
 	client := newWorkspaceProtocolTestClient()
 	workspaceID := "workspace-source"
@@ -54,6 +56,21 @@ func setupDelegationSourceAt(t *testing.T, d *Daemon, backend *fakeSpawnBackend,
 	})
 	expectSpawnResult(t, client, sessionID, true)
 	return workspaceID, sessionID, cwd
+}
+
+func setupDelegationGarden(t *testing.T, d *Daemon) {
+	t.Helper()
+	if d.daemonInstanceID == "" {
+		id, err := enrollment.EnsureDaemonID(d.dataRoot)
+		if err != nil {
+			t.Fatalf("prepare test Garden identity: %v", err)
+		}
+		d.daemonInstanceID = id
+		if err := d.ensureEnrollment(); err != nil {
+			t.Fatalf("prepare test Garden enrollment: %v", err)
+		}
+	}
+	d.ensureGardenCollections()
 }
 
 func TestActiveSessionInLinkedWorktree_IgnoresRecoverableSession(t *testing.T) {
@@ -117,19 +134,19 @@ func TestDelegateSpawnsAgentInSourceWorkspaceWithBrief(t *testing.T) {
 		}
 	}
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Investigate the delegated task.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Investigate the delegated task."),
 		Agent:           protocol.Ptr("codex"),
 	})
 	if err != nil {
 		t.Fatalf("delegate() error = %v", err)
 	}
-	if result.WorkspaceID != workspaceID || result.Directory != cwd {
+	if protocol.Deref(result.WorkspaceID) != workspaceID || result.Directory != cwd {
 		t.Fatalf("result = %+v, want workspace=%s directory=%s", result, workspaceID, cwd)
 	}
-	if !strings.Contains(prompt, "Investigate the delegated task.") {
+	if strings.Contains(prompt, "Investigate the delegated task.") || !strings.Contains(prompt, "attn seed show") {
 		t.Fatalf("initial prompt = %q", prompt)
 	}
 	if promptPath == "" {
@@ -167,8 +184,8 @@ func TestDelegateRefusesTicketAdoption(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := d.delegate(&protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, SourceSessionID: sourceSessionID,
+	_, err := d.delegateResolved(&resolvedDelegationLaunch{
+		Cmd: protocol.CmdDelegate, SourceSessionID: protocol.Ptr(sourceSessionID),
 		TicketID: protocol.Ptr("planned-fix"), Agent: protocol.Ptr("codex"),
 	})
 	if err == nil {
@@ -190,17 +207,17 @@ func TestDelegateDefaultsToNewWorktreeForGitRepository(t *testing.T) {
 	workspaceID, sourceSessionID, _ := setupDelegationSourceAt(t, d, backend, mainRepo)
 	consumeDelegatedPrompt(t, backend)
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Investigate the repository.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Investigate the repository."),
 		Label:           protocol.Ptr("parser"),
 		Worktree:        &protocol.DelegateWorktreeRequest{},
 	})
 	if err != nil {
 		t.Fatalf("delegate() error = %v", err)
 	}
-	if result.WorkspaceID != workspaceID ||
+	if protocol.Deref(result.WorkspaceID) != workspaceID ||
 		result.Directory == mainRepo ||
 		!protocol.Deref(result.WorktreeCreated) {
 		t.Fatalf("result = %+v, want isolated worktree in source workspace", result)
@@ -222,16 +239,16 @@ func TestDelegateNoWorktreeReusesGitCheckout(t *testing.T) {
 	workspaceID, sourceSessionID, _ := setupDelegationSourceAt(t, d, backend, mainRepo)
 	consumeDelegatedPrompt(t, backend)
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Continue in the existing checkout.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Continue in the existing checkout."),
 		Label:           protocol.Ptr("continuation"),
 	})
 	if err != nil {
 		t.Fatalf("delegate() error = %v", err)
 	}
-	if result.WorkspaceID != workspaceID ||
+	if protocol.Deref(result.WorkspaceID) != workspaceID ||
 		result.Directory != mainRepo ||
 		protocol.Deref(result.WorktreeCreated) {
 		t.Fatalf("result = %+v, want source checkout without worktree", result)
@@ -261,17 +278,17 @@ func TestChiefOfStaffDelegateBindsSeedAndPrompt(t *testing.T) {
 		}
 	}
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Investigate the tracked task.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Investigate the tracked task."),
 		Agent:           protocol.Ptr("codex"),
 	})
 	if err != nil {
 		t.Fatalf("delegate() error = %v", err)
 	}
 
-	if !strings.Contains(prompt, "Investigate the tracked task.") {
+	if strings.Contains(prompt, "Investigate the tracked task.") || !strings.Contains(prompt, "attn seed show") {
 		t.Fatalf("tracked initial prompt = %q", prompt)
 	}
 
@@ -310,16 +327,16 @@ func TestChiefOfStaffDelegationPreservesCoordinationIdentityAcrossPlacements(t *
 			}
 			consumeDelegatedPrompt(t, backend)
 
-			msg := &protocol.DelegateMessage{
+			msg := &resolvedDelegationLaunch{
 				Cmd:             protocol.CmdDelegate,
-				SourceSessionID: chiefSessionID,
-				Brief:           "Exercise tracked coordination identity.",
+				SourceSessionID: protocol.Ptr(chiefSessionID),
+				Brief:           protocol.Ptr("Exercise tracked coordination identity."),
 				Agent:           protocol.Ptr("codex"),
 				Placement:       protocol.Ptr(placement),
 			}
 			switch placement {
 			case delegationPlacementNew:
-				msg.Cwd = protocol.Ptr(t.TempDir())
+				msg.Cwd = t.TempDir()
 			case delegationPlacementExisting:
 				targetDirectory := t.TempDir()
 				msg.WorkspaceID = protocol.Ptr("workspace-target")
@@ -331,7 +348,7 @@ func TestChiefOfStaffDelegationPreservesCoordinationIdentityAcrossPlacements(t *
 				})
 			}
 
-			result, err := d.delegate(msg)
+			result, err := d.delegateResolved(msg)
 			if err != nil {
 				t.Fatalf("delegate() error = %v", err)
 			}
@@ -361,10 +378,10 @@ func TestDelegatedFromChiefDecoratesBroadcastSession(t *testing.T) {
 	}
 	consumeDelegatedPrompt(t, backend)
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Investigate the tracked task.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Investigate the tracked task."),
 		Agent:           protocol.Ptr("codex"),
 	})
 	if err != nil {
@@ -423,10 +440,10 @@ func TestOrdinaryDelegationBindsSeedWithoutChiefDecoration(t *testing.T) {
 		}
 	}
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Plain delegated task.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Plain delegated task."),
 		Agent:           protocol.Ptr("codex"),
 	})
 	if err != nil {
@@ -442,11 +459,8 @@ func TestOrdinaryDelegationBindsSeedWithoutChiefDecoration(t *testing.T) {
 		t.Fatalf("bound seed = %+v, err=%v", seed, err)
 	}
 
-	if !strings.Contains(prompt, "attn seed note "+seedID) {
-		t.Fatalf("ordinary delegated prompt missing the seed report contract: %q", prompt)
-	}
-	if !strings.Contains(prompt, "a leaf, not a coordinator") {
-		t.Fatalf("ordinary delegated prompt missing the leaf identity: %q", prompt)
+	if !strings.Contains(prompt, "attn seed show "+seedID) || strings.Contains(prompt, "Plain delegated task.") {
+		t.Fatalf("ordinary delegated prompt must reference the seed without copying its task: %q", prompt)
 	}
 
 	delegated := d.sessionForBroadcast(d.store.Get(result.SessionID))
@@ -467,10 +481,10 @@ func TestDelegateRollsBackPaneWhenSpawnFails(t *testing.T) {
 	_, sourceSessionID, _ := setupDelegationSource(t, d, backend)
 	d.ptyBackend = &failingSpawnBackend{err: os.ErrPermission}
 
-	if _, err := d.delegate(&protocol.DelegateMessage{
+	if _, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "This spawn should fail.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("This spawn should fail."),
 		Agent:           protocol.Ptr("codex"),
 	}); err == nil {
 		t.Fatal("delegate() succeeded, want spawn failure")
@@ -501,16 +515,16 @@ func TestDelegateAcceptsCopilotInitialPrompt(t *testing.T) {
 		}
 	}
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Use Copilot for this delegated task.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Use Copilot for this delegated task."),
 		Agent:           protocol.Ptr("copilot"),
 	})
 	if err != nil {
 		t.Fatalf("delegate() error = %v, want copilot delegation to succeed", err)
 	}
-	if !strings.Contains(prompt, "Use Copilot for this delegated task.") {
+	if strings.Contains(prompt, "Use Copilot for this delegated task.") || !strings.Contains(prompt, "attn seed show") {
 		t.Fatalf("delegated initial prompt = %q", prompt)
 	}
 	session := d.store.Get(result.SessionID)
@@ -529,10 +543,10 @@ func TestDelegateThreadsModelAndEffortIntoSpawn(t *testing.T) {
 	_, sourceSessionID, _ := setupDelegationSource(t, d, backend)
 	consumeDelegatedPrompt(t, backend)
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Run pinned to a specific model.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Run pinned to a specific model."),
 		Agent:           protocol.Ptr("claude"),
 		Model:           protocol.Ptr("claude-fable-5"),
 		Effort:          protocol.Ptr("Low"),
@@ -590,10 +604,10 @@ func TestDelegateDefaultsEffortIntoPluginDriver(t *testing.T) {
 		}
 	}()
 
-	if _, err := d.delegate(&protocol.DelegateMessage{
+	if _, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Use the selected OpenCode variant.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Use the selected OpenCode variant."),
 		Agent:           protocol.Ptr("fixture"),
 		Model:           protocol.Ptr("spotify-glm/zai-org/GLM-5.2-FP8"),
 	}); err != nil {
@@ -608,10 +622,10 @@ func TestDelegateDefaultsEffortForSupportedAgent(t *testing.T) {
 	_, sourceSessionID, _ := setupDelegationSource(t, d, backend)
 	consumeDelegatedPrompt(t, backend)
 
-	if _, err := d.delegate(&protocol.DelegateMessage{
+	if _, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Run with the default effort.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Run with the default effort."),
 		Agent:           protocol.Ptr("claude"),
 		Model:           protocol.Ptr("opus"),
 	}); err != nil {
@@ -629,10 +643,10 @@ func TestDelegateDoesNotDefaultEffortForUnsupportedAgent(t *testing.T) {
 	_, sourceSessionID, _ := setupDelegationSource(t, d, backend)
 	consumeDelegatedPrompt(t, backend)
 
-	if _, err := d.delegate(&protocol.DelegateMessage{
+	if _, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Run without an unsupported effort pin.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Run without an unsupported effort pin."),
 		Agent:           protocol.Ptr("copilot"),
 	}); err != nil {
 		t.Fatalf("delegate() error = %v", err)
@@ -648,23 +662,23 @@ func TestDelegateRejectsModelEffortForUnsupportedAgent(t *testing.T) {
 	backend := &fakeSpawnBackend{}
 	_, sourceSessionID, _ := setupDelegationSource(t, d, backend)
 
-	for flag, msg := range map[string]*protocol.DelegateMessage{
+	for flag, msg := range map[string]*resolvedDelegationLaunch{
 		"--model": {
 			Cmd:             protocol.CmdDelegate,
-			SourceSessionID: sourceSessionID,
-			Brief:           "Pin a model on copilot.",
+			SourceSessionID: protocol.Ptr(sourceSessionID),
+			Brief:           protocol.Ptr("Pin a model on copilot."),
 			Agent:           protocol.Ptr("copilot"),
 			Model:           protocol.Ptr("gpt-5"),
 		},
 		"--effort": {
 			Cmd:             protocol.CmdDelegate,
-			SourceSessionID: sourceSessionID,
-			Brief:           "Pin effort on copilot.",
+			SourceSessionID: protocol.Ptr(sourceSessionID),
+			Brief:           protocol.Ptr("Pin effort on copilot."),
 			Agent:           protocol.Ptr("copilot"),
 			Effort:          protocol.Ptr("high"),
 		},
 	} {
-		_, err := d.delegate(msg)
+		_, err := d.delegateResolved(msg)
 		if err == nil || !strings.Contains(err.Error(), "does not support "+flag) {
 			t.Fatalf("delegate(%s) error = %v, want unsupported-agent rejection", flag, err)
 		}
@@ -682,10 +696,10 @@ func TestDelegateRejectsRemoteSourceSession(t *testing.T) {
 	source.EndpointID = protocol.Ptr("endpoint-remote")
 	d.store.Add(source)
 
-	_, err := d.delegate(&protocol.DelegateMessage{
+	_, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Do not launch this locally.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Do not launch this locally."),
 		Agent:           protocol.Ptr("codex"),
 	})
 	if err == nil || !strings.Contains(err.Error(), "delegation from remote session") {
@@ -707,10 +721,10 @@ func TestDelegateWebSocketCommandReturnsResult(t *testing.T) {
 		client.setIdentity("test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
 
 		payload, err := json.Marshal(protocol.DelegateMessage{
-			Cmd:             protocol.CmdDelegate,
-			SourceSessionID: sourceSessionID,
-			Brief:           "Handle this through the websocket dispatcher.",
-			Agent:           protocol.Ptr("codex"),
+			Cmd: protocol.CmdDelegate, RequestID: "websocket-delegation",
+			SourceSessionID: protocol.Ptr(sourceSessionID),
+			Assignment:      protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr("Handle this through the websocket dispatcher.")},
+			Cwd:             d.store.Get(sourceSessionID).Directory, Agent: protocol.Ptr("codex"),
 		})
 		if err != nil {
 			t.Fatalf("marshal delegate message: %v", err)
@@ -728,8 +742,8 @@ func TestDelegateWebSocketCommandReturnsResult(t *testing.T) {
 		if result.Event != protocol.EventDelegateResult || !result.Success || result.Result == nil {
 			t.Fatalf("delegate result = %+v", result)
 		}
-		if result.Result.WorkspaceID != "workspace-source" {
-			t.Fatalf("workspace = %q, want workspace-source", result.Result.WorkspaceID)
+		if protocol.Deref(result.Result.WorkspaceID) != "workspace-source" {
+			t.Fatalf("workspace = %q, want workspace-source", protocol.Deref(result.Result.WorkspaceID))
 		}
 	})
 }
@@ -750,10 +764,10 @@ func TestDelegateKillsSpawnedRuntimeWhenPersistenceFails(t *testing.T) {
 		}
 	}
 
-	_, err := d.delegate(&protocol.DelegateMessage{
+	_, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Persistence will fail after this runtime starts.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Persistence will fail after this runtime starts."),
 		Agent:           protocol.Ptr("codex"),
 	})
 	if err == nil || !strings.Contains(err.Error(), "persist spawned session") {
@@ -797,25 +811,25 @@ func TestDelegateCreatesNewWorkspaceAtCustomDirectory(t *testing.T) {
 	consumeDelegatedPrompt(t, backend)
 	targetDir := t.TempDir()
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Work in a separate directory.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Work in a separate directory."),
 		Placement:       protocol.Ptr(delegationPlacementNew),
-		Cwd:             protocol.Ptr(targetDir),
+		Cwd:             targetDir,
 	})
 	if err != nil {
 		t.Fatalf("delegate() error = %v", err)
 	}
 	targetDir = git.CanonicalizePath(targetDir)
-	if result.Placement != delegationPlacementNew || result.Directory != targetDir {
+	if result.Directory != targetDir {
 		t.Fatalf("result = %+v", result)
 	}
-	workspace := d.store.GetWorkspace(result.WorkspaceID)
+	workspace := d.store.GetWorkspace(protocol.Deref(result.WorkspaceID))
 	if workspace == nil || workspace.Directory != targetDir {
 		t.Fatalf("delegated workspace = %+v", workspace)
 	}
-	layout := d.store.GetWorkspaceLayout(result.WorkspaceID)
+	layout := d.store.GetWorkspaceLayout(protocol.Deref(result.WorkspaceID))
 	if layout == nil || len(layout.Panes) != 1 || layout.Panes[0].SessionID != result.SessionID {
 		t.Fatalf("delegated workspace layout = %+v", layout)
 	}
@@ -828,24 +842,24 @@ func TestDelegateNamesNewWorkspaceAndSessionFromExplicitName(t *testing.T) {
 	consumeDelegatedPrompt(t, backend)
 	targetDir := t.TempDir()
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Name everything from --name.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Name everything from --name."),
 		Placement:       protocol.Ptr(delegationPlacementNew),
-		Cwd:             protocol.Ptr(targetDir),
+		Cwd:             targetDir,
 		Label:           protocol.Ptr("launcher"),
 	})
 	if err != nil {
 		t.Fatalf("delegate() error = %v", err)
 	}
-	if workspace := d.store.GetWorkspace(result.WorkspaceID); workspace == nil || workspace.Title != "launcher" {
+	if workspace := d.store.GetWorkspace(protocol.Deref(result.WorkspaceID)); workspace == nil || workspace.Title != "launcher" {
 		t.Fatalf("delegated workspace = %+v, want title %q", workspace, "launcher")
 	}
 	if session := d.store.Get(result.SessionID); session == nil || session.Label != "launcher" {
 		t.Fatalf("delegated session = %+v, want label %q", session, "launcher")
 	}
-	layout := d.store.GetWorkspaceLayout(result.WorkspaceID)
+	layout := d.store.GetWorkspaceLayout(protocol.Deref(result.WorkspaceID))
 	if layout == nil || len(layout.Panes) != 1 || layout.Panes[0].Title != "launcher" {
 		t.Fatalf("delegated layout = %+v, want one pane titled %q", layout, "launcher")
 	}
@@ -861,17 +875,17 @@ func TestDelegateDefaultsNameToDirectoryBasename(t *testing.T) {
 		t.Fatalf("mkdir target: %v", err)
 	}
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Default the name to the folder.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Default the name to the folder."),
 		Placement:       protocol.Ptr(delegationPlacementNew),
-		Cwd:             protocol.Ptr(targetDir),
+		Cwd:             targetDir,
 	})
 	if err != nil {
 		t.Fatalf("delegate() error = %v", err)
 	}
-	if workspace := d.store.GetWorkspace(result.WorkspaceID); workspace == nil || workspace.Title != "myproj" {
+	if workspace := d.store.GetWorkspace(protocol.Deref(result.WorkspaceID)); workspace == nil || workspace.Title != "myproj" {
 		t.Fatalf("delegated workspace = %+v, want title %q", workspace, "myproj")
 	}
 	if session := d.store.Get(result.SessionID); session == nil || session.Label != "myproj" {
@@ -886,12 +900,12 @@ func TestDelegateRejectsNameTooLong(t *testing.T) {
 	consumeDelegatedPrompt(t, backend)
 	targetDir := t.TempDir()
 
-	_, err := d.delegate(&protocol.DelegateMessage{
+	_, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Name is too long.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Name is too long."),
 		Placement:       protocol.Ptr(delegationPlacementNew),
-		Cwd:             protocol.Ptr(targetDir),
+		Cwd:             targetDir,
 		Label:           protocol.Ptr(strings.Repeat("long-", 10)),
 	})
 	if err == nil || !strings.Contains(err.Error(), "too long") {
@@ -914,12 +928,12 @@ func TestDelegateRejectsDuplicateWorkspaceName(t *testing.T) {
 		Directory: t.TempDir(),
 	})
 
-	_, err := d.delegate(&protocol.DelegateMessage{
+	_, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Reuse a workspace name.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Reuse a workspace name."),
 		Placement:       protocol.Ptr(delegationPlacementNew),
-		Cwd:             protocol.Ptr(t.TempDir()),
+		Cwd:             t.TempDir(),
 		Label:           protocol.Ptr("taken"),
 	})
 	if err == nil || !strings.Contains(err.Error(), "already in use") {
@@ -934,24 +948,24 @@ func TestDelegateRejectsDuplicateSessionNameInWorkspace(t *testing.T) {
 	consumeDelegatedPrompt(t, backend)
 	targetDir := t.TempDir()
 
-	first, err := d.delegate(&protocol.DelegateMessage{
+	first, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "First agent.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("First agent."),
 		Placement:       protocol.Ptr(delegationPlacementNew),
-		Cwd:             protocol.Ptr(targetDir),
+		Cwd:             targetDir,
 		Label:           protocol.Ptr("alpha"),
 	})
 	if err != nil {
 		t.Fatalf("first delegate() error = %v", err)
 	}
 
-	_, err = d.delegate(&protocol.DelegateMessage{
+	_, err = d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Second agent, same name, same workspace.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Second agent, same name, same workspace."),
 		Placement:       protocol.Ptr(delegationPlacementExisting),
-		WorkspaceID:     protocol.Ptr(first.WorkspaceID),
+		WorkspaceID:     first.WorkspaceID,
 		Label:           protocol.Ptr("alpha"),
 	})
 	if err == nil || !strings.Contains(err.Error(), "already used in this workspace") {
@@ -974,10 +988,10 @@ func TestDelegateTruncatesLongWorktreeDefaultName(t *testing.T) {
 	consumeDelegatedPrompt(t, backend)
 	worktreePath := filepath.Join(root, "repo--feat-delegated-with-a-branch-name-past-the-cap")
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "No --name; the worktree folder is too long.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("No --name; the worktree folder is too long."),
 		Placement:       protocol.Ptr(delegationPlacementNew),
 		Worktree: &protocol.DelegateWorktreeRequest{
 			Repo:   protocol.Ptr(mainRepo),
@@ -992,7 +1006,7 @@ func TestDelegateTruncatesLongWorktreeDefaultName(t *testing.T) {
 	if len([]rune(wantName)) > maxSessionNameRunes {
 		t.Fatalf("test setup bug: wantName %q exceeds max", wantName)
 	}
-	workspace := d.store.GetWorkspace(result.WorkspaceID)
+	workspace := d.store.GetWorkspace(protocol.Deref(result.WorkspaceID))
 	if workspace == nil || workspace.Title != wantName {
 		t.Fatalf("delegated workspace = %+v, want title %q", workspace, wantName)
 	}
@@ -1002,7 +1016,7 @@ func TestDelegateTruncatesLongWorktreeDefaultName(t *testing.T) {
 	}
 }
 
-func TestDelegateRejectsActiveWorktreeCollisionWithoutExplicitReuse(t *testing.T) {
+func TestDelegateSeparatesCreationFromExplicitCheckoutReuse(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
 	if err := os.MkdirAll(mainRepo, 0o755); err != nil {
@@ -1015,35 +1029,33 @@ func TestDelegateRejectsActiveWorktreeCollisionWithoutExplicitReuse(t *testing.T
 	_, sourceSessionID, _ := setupDelegationSourceAt(t, d, backend, mainRepo)
 	consumeDelegatedPrompt(t, backend)
 	worktreePath := filepath.Join(root, "repo--shared")
-	base := protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, SourceSessionID: sourceSessionID, Brief: "First owner.",
+	base := resolvedDelegationLaunch{
+		Cmd: protocol.CmdDelegate, SourceSessionID: protocol.Ptr(sourceSessionID), Brief: protocol.Ptr("First owner."),
 		Agent: protocol.Ptr("codex"), Label: protocol.Ptr("owner"), Placement: protocol.Ptr(delegationPlacementNew),
 		Worktree: &protocol.DelegateWorktreeRequest{Repo: protocol.Ptr(mainRepo), Branch: "feat/shared", Path: protocol.Ptr(worktreePath)},
 	}
-	if _, err := d.delegate(&base); err != nil {
+	owner, err := d.delegateResolved(&base)
+	if err != nil {
 		t.Fatalf("first delegate: %v", err)
 	}
+	backend.sessionIDs = append(backend.sessionIDs, owner.SessionID)
 
 	retry := base
-	retry.Brief = "Unintentional second owner."
+	retry.Brief = protocol.Ptr("Unintentional second owner.")
 	retry.Label = protocol.Ptr("collision")
 	retry.Placement = protocol.Ptr(delegationPlacementCurrent)
-	if _, err := d.delegate(&retry); err == nil || !strings.Contains(err.Error(), "--allow-worktree-reuse") {
-		t.Fatalf("collision error=%v, want explicit reuse guidance", err)
+	if _, err := d.delegateResolved(&retry); err == nil || !strings.Contains(err.Error(), "cannot be reinterpreted as checkout reuse") {
+		t.Fatalf("collision error=%v, want explicit creation-vs-reuse guidance", err)
 	}
 	retry.AllowWorktreeReuse = protocol.Ptr(true)
-	result, err := d.delegate(&retry)
-	if err != nil {
-		t.Fatalf("explicit reuse: %v", err)
-	}
-	if result.Directory != git.CanonicalizePath(worktreePath) {
-		t.Fatalf("directory=%q want %q", result.Directory, worktreePath)
+	if _, err := d.delegateResolved(&retry); err == nil || !strings.Contains(err.Error(), "cannot be reinterpreted as checkout reuse") {
+		t.Fatalf("sharing consent reinterpreted creation as reuse: %v", err)
 	}
 
-	byCWD := protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, SourceSessionID: sourceSessionID, Brief: "CWD collision.",
+	byCWD := resolvedDelegationLaunch{
+		Cmd: protocol.CmdDelegate, SourceSessionID: protocol.Ptr(sourceSessionID), Brief: protocol.Ptr("CWD collision."),
 		Agent: protocol.Ptr("codex"), Label: protocol.Ptr("cwd-collision"),
-		Placement: protocol.Ptr(delegationPlacementNew), Cwd: protocol.Ptr(worktreePath),
+		Placement: protocol.Ptr(delegationPlacementNew), Cwd: worktreePath,
 	}
 	if main := git.GetMainRepoFromWorktree(worktreePath); main == "" {
 		t.Fatal("test setup did not produce a linked worktree")
@@ -1054,11 +1066,11 @@ func TestDelegateRejectsActiveWorktreeCollisionWithoutExplicitReuse(t *testing.T
 	if protocol.Deref(byCWD.AllowWorktreeReuse) {
 		t.Fatal("cwd collision unexpectedly opted into reuse")
 	}
-	if _, err := d.delegate(&byCWD); err == nil || !strings.Contains(err.Error(), "--allow-worktree-reuse") {
+	if _, err := d.delegateResolved(&byCWD); err == nil || !strings.Contains(err.Error(), "--allow-worktree-reuse") {
 		t.Fatalf("cwd collision error=%v, want explicit reuse guidance", err)
 	}
 	byCWD.AllowWorktreeReuse = protocol.Ptr(true)
-	if _, err := d.delegate(&byCWD); err != nil {
+	if _, err := d.delegateResolved(&byCWD); err != nil {
 		t.Fatalf("explicit cwd reuse: %v", err)
 	}
 
@@ -1066,16 +1078,16 @@ func TestDelegateRejectsActiveWorktreeCollisionWithoutExplicitReuse(t *testing.T
 	if err := os.MkdirAll(subdir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	bySubdir := protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, SourceSessionID: sourceSessionID, Brief: "Nested CWD collision.",
+	bySubdir := resolvedDelegationLaunch{
+		Cmd: protocol.CmdDelegate, SourceSessionID: protocol.Ptr(sourceSessionID), Brief: protocol.Ptr("Nested CWD collision."),
 		Agent: protocol.Ptr("codex"), Label: protocol.Ptr("nested-collision"),
-		Placement: protocol.Ptr(delegationPlacementNew), Cwd: protocol.Ptr(subdir),
+		Placement: protocol.Ptr(delegationPlacementNew), Cwd: subdir,
 	}
-	if _, err := d.delegate(&bySubdir); err == nil || !strings.Contains(err.Error(), git.CanonicalizePath(worktreePath)) {
+	if _, err := d.delegateResolved(&bySubdir); err == nil || !strings.Contains(err.Error(), git.CanonicalizePath(worktreePath)) {
 		t.Fatalf("nested cwd collision error=%v, want resolved worktree root", err)
 	}
 	bySubdir.AllowWorktreeReuse = protocol.Ptr(true)
-	if _, err := d.delegate(&bySubdir); err != nil {
+	if _, err := d.delegateResolved(&bySubdir); err != nil {
 		t.Fatalf("explicit nested cwd reuse: %v", err)
 	}
 }
@@ -1164,12 +1176,12 @@ func TestDelegateRejectsDuplicateWorkspaceNameFromDefault(t *testing.T) {
 		t.Fatalf("mkdir target: %v", err)
 	}
 
-	_, err := d.delegate(&protocol.DelegateMessage{
+	_, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Default name collides with an existing workspace.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Default name collides with an existing workspace."),
 		Placement:       protocol.Ptr(delegationPlacementNew),
-		Cwd:             protocol.Ptr(targetDir),
+		Cwd:             targetDir,
 	})
 	if err == nil || !strings.Contains(err.Error(), "already in use") {
 		t.Fatalf("delegate() error = %v, want a duplicate-workspace error from the default-name path", err)
@@ -1186,10 +1198,10 @@ func TestDelegateRejectsNameMatchingSourceSession(t *testing.T) {
 	if source == nil || strings.TrimSpace(source.Label) == "" {
 		t.Fatalf("source session has no label: %+v", source)
 	}
-	_, err := d.delegate(&protocol.DelegateMessage{
+	_, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Clash with the pre-existing source session name.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Clash with the pre-existing source session name."),
 		Label:           protocol.Ptr(strings.ToLower(source.Label)),
 	})
 	if err == nil || !strings.Contains(err.Error(), "already used in this workspace") {
@@ -1214,17 +1226,17 @@ func TestDelegateTargetsExistingWorkspace(t *testing.T) {
 		t.Fatalf("mute target workspace: %s", errMsg)
 	}
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Join the target workspace.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Join the target workspace."),
 		Placement:       protocol.Ptr(delegationPlacementExisting),
 		WorkspaceID:     protocol.Ptr(targetWorkspaceID),
 	})
 	if err != nil {
 		t.Fatalf("delegate() error = %v", err)
 	}
-	if result.WorkspaceID != targetWorkspaceID || result.Directory != sourceDir {
+	if protocol.Deref(result.WorkspaceID) != targetWorkspaceID || result.Directory != sourceDir {
 		t.Fatalf("result = %+v", result)
 	}
 	if workspace := d.store.GetWorkspace(targetWorkspaceID); workspace == nil || !workspace.Muted {
@@ -1249,17 +1261,17 @@ func TestDelegateTargetsPinnedEmptyWorkspace(t *testing.T) {
 		t.Fatalf("pin target workspace: %s", errMsg)
 	}
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Reuse the empty pinned workspace.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Reuse the empty pinned workspace."),
 		Placement:       protocol.Ptr(delegationPlacementExisting),
 		WorkspaceID:     protocol.Ptr(targetWorkspaceID),
 	})
 	if err != nil {
 		t.Fatalf("delegate() error = %v", err)
 	}
-	if result.WorkspaceID != targetWorkspaceID || result.Directory != sourceDir {
+	if protocol.Deref(result.WorkspaceID) != targetWorkspaceID || result.Directory != sourceDir {
 		t.Fatalf("result = %+v", result)
 	}
 	if sessions := d.store.SessionsInWorkspace(targetWorkspaceID); len(sessions) != 1 || sessions[0] != result.SessionID {
@@ -1287,10 +1299,10 @@ func TestChiefOfStaffDelegateUnmutesExistingWorkspace(t *testing.T) {
 		t.Fatalf("mute target workspace: %s", errMsg)
 	}
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Join the muted target workspace.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Join the muted target workspace."),
 		Placement:       protocol.Ptr(delegationPlacementExisting),
 		WorkspaceID:     protocol.Ptr(targetWorkspaceID),
 	})
@@ -1332,10 +1344,10 @@ func TestDelegateCreatesWorktreeInExistingWorkspace(t *testing.T) {
 	})
 
 	worktreePath := filepath.Join(root, "repo--feat-existing-ws")
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Work in a worktree placed in an existing workspace.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Work in a worktree placed in an existing workspace."),
 		Label:           protocol.Ptr("delegated"),
 		Placement:       protocol.Ptr(delegationPlacementExisting),
 		WorkspaceID:     protocol.Ptr(targetWorkspaceID),
@@ -1348,8 +1360,7 @@ func TestDelegateCreatesWorktreeInExistingWorkspace(t *testing.T) {
 		t.Fatalf("delegate() error = %v", err)
 	}
 	worktreePath = git.CanonicalizePath(worktreePath)
-	if result.Placement != delegationPlacementExisting ||
-		result.WorkspaceID != targetWorkspaceID ||
+	if protocol.Deref(result.WorkspaceID) != targetWorkspaceID ||
 		result.Directory != worktreePath ||
 		!protocol.Deref(result.WorktreeCreated) {
 		t.Fatalf("result = %+v", result)
@@ -1383,10 +1394,10 @@ func TestDelegateCreatesWorktreeInSourceWorkspace(t *testing.T) {
 	consumeDelegatedPrompt(t, backend)
 	worktreePath := filepath.Join(root, "repo--feat-delegated-current")
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Implement this in an isolated branch in this workspace.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Implement this in an isolated branch in this workspace."),
 		Label:           protocol.Ptr("delegated"),
 		Worktree: &protocol.DelegateWorktreeRequest{
 			Repo:   protocol.Ptr(mainRepo),
@@ -1398,8 +1409,7 @@ func TestDelegateCreatesWorktreeInSourceWorkspace(t *testing.T) {
 		t.Fatalf("delegate() error = %v", err)
 	}
 	worktreePath = git.CanonicalizePath(worktreePath)
-	if result.Placement != delegationPlacementCurrent ||
-		result.WorkspaceID != sourceWorkspaceID ||
+	if protocol.Deref(result.WorkspaceID) != sourceWorkspaceID ||
 		result.Directory != worktreePath ||
 		!protocol.Deref(result.WorktreeCreated) {
 		t.Fatalf("result = %+v", result)
@@ -1436,10 +1446,10 @@ func TestDelegateCreatesWorktreeAndNewWorkspace(t *testing.T) {
 	consumeDelegatedPrompt(t, backend)
 	worktreePath := filepath.Join(root, "repo--feat-delegated")
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Implement this in an isolated branch.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Implement this in an isolated branch."),
 		Placement:       protocol.Ptr(delegationPlacementNew),
 		Label:           protocol.Ptr("delegated"),
 		Worktree: &protocol.DelegateWorktreeRequest{
@@ -1452,8 +1462,7 @@ func TestDelegateCreatesWorktreeAndNewWorkspace(t *testing.T) {
 		t.Fatalf("delegate() error = %v", err)
 	}
 	worktreePath = git.CanonicalizePath(worktreePath)
-	if result.Placement != delegationPlacementNew ||
-		result.WorkspaceID == sourceWorkspaceID ||
+	if protocol.Deref(result.WorkspaceID) == sourceWorkspaceID ||
 		result.Directory != worktreePath ||
 		!protocol.Deref(result.WorktreeCreated) {
 		t.Fatalf("result = %+v", result)
@@ -1461,7 +1470,7 @@ func TestDelegateCreatesWorktreeAndNewWorkspace(t *testing.T) {
 	if workspaces := d.store.ListWorkspaces(); len(workspaces) != 2 {
 		t.Fatalf("workspaces = %+v, want source and delegated workspaces", workspaces)
 	}
-	delegatedWorkspace := d.store.GetWorkspace(result.WorkspaceID)
+	delegatedWorkspace := d.store.GetWorkspace(protocol.Deref(result.WorkspaceID))
 	if delegatedWorkspace == nil || delegatedWorkspace.Title != "delegated" {
 		t.Fatalf("delegated workspace = %+v, want title %q", delegatedWorkspace, "delegated")
 	}
@@ -1474,7 +1483,7 @@ func TestDelegateCreatesWorktreeAndNewWorkspace(t *testing.T) {
 	}
 }
 
-func TestDelegateRollsBackCurrentWorkspaceWorktreeWhenSpawnFails(t *testing.T) {
+func TestDelegatePreservesCurrentWorkspaceWorktreeWhenSpawnFails(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
 	if err := os.MkdirAll(mainRepo, 0o755); err != nil {
@@ -1489,10 +1498,10 @@ func TestDelegateRollsBackCurrentWorkspaceWorktreeWhenSpawnFails(t *testing.T) {
 	d.ptyBackend = &failingSpawnBackend{err: os.ErrPermission}
 	worktreePath := filepath.Join(root, "repo--feat-current-rollback")
 
-	if _, err := d.delegate(&protocol.DelegateMessage{
+	if _, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "This spawn should roll back in the source workspace.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("This spawn should roll back in the source workspace."),
 		Label:           protocol.Ptr("rollback"),
 		Worktree: &protocol.DelegateWorktreeRequest{
 			Repo:   protocol.Ptr(mainRepo),
@@ -1502,8 +1511,8 @@ func TestDelegateRollsBackCurrentWorkspaceWorktreeWhenSpawnFails(t *testing.T) {
 	}); err == nil {
 		t.Fatal("delegate() succeeded, want spawn failure")
 	}
-	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
-		t.Fatalf("worktree still exists after rollback: %v", err)
+	if _, err := os.Stat(worktreePath); err != nil {
+		t.Fatalf("failed launch removed worktree: %v", err)
 	}
 	if workspaces := d.store.ListWorkspaces(); len(workspaces) != 1 || workspaces[0].ID != sourceWorkspaceID {
 		t.Fatalf("workspaces after rollback = %+v, want only source workspace", workspaces)
@@ -1514,7 +1523,7 @@ func TestDelegateRollsBackCurrentWorkspaceWorktreeWhenSpawnFails(t *testing.T) {
 	}
 }
 
-func TestDelegateRollsBackNewWorkspaceAndWorktreeWhenSpawnFails(t *testing.T) {
+func TestDelegatePreservesNewWorkspaceWorktreeWhenSpawnFails(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
 	if err := os.MkdirAll(mainRepo, 0o755); err != nil {
@@ -1529,10 +1538,10 @@ func TestDelegateRollsBackNewWorkspaceAndWorktreeWhenSpawnFails(t *testing.T) {
 	d.ptyBackend = &failingSpawnBackend{err: os.ErrPermission}
 	worktreePath := filepath.Join(root, "repo--feat-rollback")
 
-	if _, err := d.delegate(&protocol.DelegateMessage{
+	if _, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "This spawn should roll back.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("This spawn should roll back."),
 		Placement:       protocol.Ptr(delegationPlacementNew),
 		Label:           protocol.Ptr("rollback"),
 		Worktree: &protocol.DelegateWorktreeRequest{
@@ -1543,8 +1552,8 @@ func TestDelegateRollsBackNewWorkspaceAndWorktreeWhenSpawnFails(t *testing.T) {
 	}); err == nil {
 		t.Fatal("delegate() succeeded, want spawn failure")
 	}
-	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
-		t.Fatalf("worktree still exists after rollback: %v", err)
+	if _, err := os.Stat(worktreePath); err != nil {
+		t.Fatalf("failed launch removed worktree: %v", err)
 	}
 	for _, workspace := range d.store.ListWorkspaces() {
 		if workspace != nil && workspace.Directory == worktreePath {
@@ -1568,13 +1577,13 @@ func TestDelegateComposesCwdAndWorktree(t *testing.T) {
 	consumeDelegatedPrompt(t, backend)
 	worktreePath := filepath.Join(root, "repo--feat-cwd-compose")
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Compose --cwd with --worktree.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Compose --cwd with --worktree."),
 		Placement:       protocol.Ptr(delegationPlacementNew),
 		Label:           protocol.Ptr("composed"),
-		Cwd:             protocol.Ptr(mainRepo),
+		Cwd:             mainRepo,
 		Worktree: &protocol.DelegateWorktreeRequest{
 			Branch: "feat/cwd-compose",
 			Path:   protocol.Ptr(worktreePath),
@@ -1584,12 +1593,11 @@ func TestDelegateComposesCwdAndWorktree(t *testing.T) {
 		t.Fatalf("delegate() error = %v", err)
 	}
 	worktreePath = git.CanonicalizePath(worktreePath)
-	if result.Placement != delegationPlacementNew ||
-		result.Directory != worktreePath ||
+	if result.Directory != worktreePath ||
 		!protocol.Deref(result.WorktreeCreated) {
 		t.Fatalf("result = %+v, want directory %q", result, worktreePath)
 	}
-	workspace := d.store.GetWorkspace(result.WorkspaceID)
+	workspace := d.store.GetWorkspace(protocol.Deref(result.WorkspaceID))
 	if workspace == nil || workspace.Directory != worktreePath {
 		t.Fatalf("delegated workspace = %+v, want directory %q", workspace, worktreePath)
 	}
@@ -1611,12 +1619,12 @@ func TestDelegateComposedCwdWorktreeRequiresRepoWhenNotAGitRepo(t *testing.T) {
 	consumeDelegatedPrompt(t, backend)
 	notARepo := t.TempDir()
 
-	_, err := d.delegate(&protocol.DelegateMessage{
+	_, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "cwd is not a git repo and no --repo is given.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("cwd is not a git repo and no --repo is given."),
 		Placement:       protocol.Ptr(delegationPlacementNew),
-		Cwd:             protocol.Ptr(notARepo),
+		Cwd:             notARepo,
 		Worktree: &protocol.DelegateWorktreeRequest{
 			Branch: "feat/no-repo",
 		},
@@ -1636,12 +1644,12 @@ func TestDelegateTruncatesLongDirectoryDefaultName(t *testing.T) {
 		t.Fatalf("mkdir target: %v", err)
 	}
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "No --name; the directory basename is too long.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("No --name; the directory basename is too long."),
 		Placement:       protocol.Ptr(delegationPlacementNew),
-		Cwd:             protocol.Ptr(targetDir),
+		Cwd:             targetDir,
 	})
 	if err != nil {
 		t.Fatalf("delegate() error = %v", err)
@@ -1650,7 +1658,7 @@ func TestDelegateTruncatesLongDirectoryDefaultName(t *testing.T) {
 	if len([]rune(wantName)) > maxSessionNameRunes {
 		t.Fatalf("test setup bug: wantName %q exceeds max", wantName)
 	}
-	workspace := d.store.GetWorkspace(result.WorkspaceID)
+	workspace := d.store.GetWorkspace(protocol.Deref(result.WorkspaceID))
 	if workspace == nil || workspace.Title != wantName {
 		t.Fatalf("delegated workspace = %+v, want title %q", workspace, wantName)
 	}
@@ -1724,10 +1732,10 @@ func TestDelegateWorktreeIgnoresStaleWorkspaceDirectory(t *testing.T) {
 		t.Fatalf("precondition: workspace directory = %+v, want %q", workspace, repoB)
 	}
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Work on the repo this workspace actually uses.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Work on the repo this workspace actually uses."),
 		Placement:       protocol.Ptr(delegationPlacementExisting),
 		WorkspaceID:     protocol.Ptr(targetWorkspaceID),
 		Label:           protocol.Ptr("delegated"),
@@ -1772,10 +1780,10 @@ func TestDelegateWorktreeAmbiguousWorkspaceRepoRequiresRepo(t *testing.T) {
 	addWorkspaceSessionAt(t, d, targetWorkspaceID, "session-a", repoA)
 	addWorkspaceSessionAt(t, d, targetWorkspaceID, "session-b", repoB)
 
-	_, err := d.delegate(&protocol.DelegateMessage{
+	_, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Ambiguous repo.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Ambiguous repo."),
 		Placement:       protocol.Ptr(delegationPlacementExisting),
 		WorkspaceID:     protocol.Ptr(targetWorkspaceID),
 		Worktree: &protocol.DelegateWorktreeRequest{
@@ -1811,16 +1819,16 @@ func TestDelegateNoWorktreeReusesSourceCheckoutInMixedWorkspace(t *testing.T) {
 	addWorkspaceSessionAt(t, d, targetWorkspaceID, "session-a", repoA)
 	addWorkspaceSessionAt(t, d, targetWorkspaceID, "session-b", repoB)
 
-	result, err := d.delegate(&protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, SourceSessionID: sourceSessionID,
-		Brief:     "Reuse the checkout this command was invoked from.",
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
+		Cmd: protocol.CmdDelegate, SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:     protocol.Ptr("Reuse the checkout this command was invoked from."),
 		Placement: protocol.Ptr(delegationPlacementExisting), WorkspaceID: protocol.Ptr(targetWorkspaceID),
 		AllowWorktreeReuse: protocol.Ptr(true),
 	})
 	if err != nil {
 		t.Fatalf("delegate() error = %v", err)
 	}
-	if result.WorkspaceID != targetWorkspaceID || result.Directory != sourceRepo || protocol.Deref(result.WorktreeCreated) {
+	if protocol.Deref(result.WorkspaceID) != targetWorkspaceID || result.Directory != sourceRepo || protocol.Deref(result.WorktreeCreated) {
 		t.Fatalf("result = %+v, want mixed workspace organization with source checkout %s", result, sourceRepo)
 	}
 }
@@ -1834,9 +1842,9 @@ func TestDelegateRejectsConflictingRepositoryPlacement(t *testing.T) {
 		backend := &fakeSpawnBackend{}
 		_, sourceSessionID, _ := setupDelegationSource(t, d, backend)
 
-		_, err := d.delegate(&protocol.DelegateMessage{
-			Cmd: protocol.CmdDelegate, SourceSessionID: sourceSessionID, Brief: "Conflicting repositories.",
-			Placement: protocol.Ptr(delegationPlacementNew), Cwd: protocol.Ptr(repoA),
+		_, err := d.delegateResolved(&resolvedDelegationLaunch{
+			Cmd: protocol.CmdDelegate, SourceSessionID: protocol.Ptr(sourceSessionID), Brief: protocol.Ptr("Conflicting repositories."),
+			Placement: protocol.Ptr(delegationPlacementNew), Cwd: repoA,
 			Worktree: &protocol.DelegateWorktreeRequest{Repo: protocol.Ptr(repoB), Branch: "feat/conflict"},
 		})
 		if err == nil || !strings.Contains(err.Error(), repoA) || !strings.Contains(err.Error(), repoB) || !strings.Contains(err.Error(), "remove --repo") {
@@ -1857,8 +1865,8 @@ func TestDelegateRejectsConflictingRepositoryPlacement(t *testing.T) {
 		backend := &fakeSpawnBackend{}
 		_, sourceSessionID, _ := setupDelegationSource(t, d, backend)
 
-		_, err := d.delegate(&protocol.DelegateMessage{
-			Cmd: protocol.CmdDelegate, SourceSessionID: sourceSessionID, Brief: "Conflicting worktree path.",
+		_, err := d.delegateResolved(&resolvedDelegationLaunch{
+			Cmd: protocol.CmdDelegate, SourceSessionID: protocol.Ptr(sourceSessionID), Brief: protocol.Ptr("Conflicting worktree path."),
 			Worktree: &protocol.DelegateWorktreeRequest{
 				Repo: protocol.Ptr(repoA), Branch: "feat/shared", Path: protocol.Ptr(pathB),
 			},
@@ -1889,10 +1897,10 @@ func TestDelegateWorktreeExplicitRepoOverridesWorkspaceSessions(t *testing.T) {
 	})
 	addWorkspaceSessionAt(t, d, targetWorkspaceID, "session-target", repoA)
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Explicit repo wins.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Explicit repo wins."),
 		Placement:       protocol.Ptr(delegationPlacementExisting),
 		WorkspaceID:     protocol.Ptr(targetWorkspaceID),
 		Label:           protocol.Ptr("delegated"),
@@ -1949,34 +1957,32 @@ func TestDelegateNamedWorktreeUsesRepoDefaultForEveryPlacement(t *testing.T) {
 			if tt.useRepo {
 				request.Repo = protocol.Ptr(repo)
 			}
-			msg := &protocol.DelegateMessage{
+			msg := &resolvedDelegationLaunch{
 				Cmd:             protocol.CmdDelegate,
-				SourceSessionID: sourceSessionID,
-				Brief:           "Start from the default branch.",
+				SourceSessionID: protocol.Ptr(sourceSessionID),
+				Brief:           protocol.Ptr("Start from the default branch."),
 				Placement:       protocol.Ptr(tt.placement),
 				Label:           protocol.Ptr("delegated"),
 				Worktree:        request,
 			}
 			if tt.useCWD {
-				msg.Cwd = protocol.Ptr(repo)
+				msg.Cwd = repo
 			}
 
-			result, err := d.delegate(msg)
+			result, err := d.delegateResolved(msg)
 			if err != nil {
 				t.Fatalf("delegate() error = %v", err)
 			}
 			head := gitRevParseDaemon(t, result.Directory, "HEAD")
-			if head == ambientHead {
-				t.Fatalf("new branch inherited ambient checkout head %s", head)
+			if head != ambientHead {
+				t.Fatalf("legacy internal launch head = %s, want current checkout head %s; public delegation requires an explicit base", head, ambientHead)
 			}
-			if head != defaultHead {
-				t.Fatalf("new branch head = %s, want default branch head %s", head, defaultHead)
-			}
+			_ = defaultHead
 		})
 	}
 }
 
-func TestDelegateWorktreeSameRepoDifferentBranchesUsesRepoDefault(t *testing.T) {
+func TestLegacyDelegateWorktreeDoesNotInferARepositoryDefault(t *testing.T) {
 	root := t.TempDir()
 	repo := initDelegationRepo(t, root, "repo")
 	runGitDaemon(t, repo, "branch", "-M", "main")
@@ -2013,10 +2019,10 @@ func TestDelegateWorktreeSameRepoDifferentBranchesUsesRepoDefault(t *testing.T) 
 	addWorkspaceSessionAt(t, d, targetWorkspaceID, "session-a", worktreeA)
 	addWorkspaceSessionAt(t, d, targetWorkspaceID, "session-b", worktreeB)
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Same repo, two branches.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Same repo, two branches."),
 		Placement:       protocol.Ptr(delegationPlacementExisting),
 		WorkspaceID:     protocol.Ptr(targetWorkspaceID),
 		Label:           protocol.Ptr("delegated"),
@@ -2037,13 +2043,10 @@ func TestDelegateWorktreeSameRepoDifferentBranchesUsesRepoDefault(t *testing.T) 
 		t.Fatalf("new branch started from a member session's branch (head %s; feat/a %s, feat/b %s); "+
 			"the starting ref must not depend on which session sorts first", head, headA, headB)
 	}
-	if head == ambientHead {
-		t.Fatalf("new branch started from the main checkout's current HEAD (%s); "+
-			"the starting ref must not depend on what the main checkout happens to have checked out", head)
+	if head != ambientHead {
+		t.Fatalf("legacy internal launch head = %s, want current checkout head %s; public delegation requires an explicit base", head, ambientHead)
 	}
-	if head != mainHead {
-		t.Fatalf("new branch head = %s, want the repository default branch %s", head, mainHead)
-	}
+	_ = mainHead
 }
 
 func TestDelegateWorktreeExplicitFromStillWins(t *testing.T) {
@@ -2069,10 +2072,10 @@ func TestDelegateWorktreeExplicitFromStillWins(t *testing.T) {
 	})
 	addWorkspaceSessionAt(t, d, targetWorkspaceID, "session-a", worktreeA)
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Explicit from.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Explicit from."),
 		Placement:       protocol.Ptr(delegationPlacementExisting),
 		WorkspaceID:     protocol.Ptr(targetWorkspaceID),
 		Label:           protocol.Ptr("delegated"),
@@ -2089,7 +2092,7 @@ func TestDelegateWorktreeExplicitFromStillWins(t *testing.T) {
 	}
 }
 
-func TestDelegateWorktreePrefersRemoteDefaultBranch(t *testing.T) {
+func TestLegacyDelegateWorktreeDoesNotFetchRemoteDefaultBranch(t *testing.T) {
 	root := t.TempDir()
 	origin := filepath.Join(root, "origin.git")
 	runGitDaemon(t, root, "init", "--bare", "-b", "main", origin)
@@ -2123,10 +2126,10 @@ func TestDelegateWorktreePrefersRemoteDefaultBranch(t *testing.T) {
 	})
 	addWorkspaceSessionAt(t, d, targetWorkspaceID, "session-a", repo)
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Start from upstream.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Start from upstream."),
 		Placement:       protocol.Ptr(delegationPlacementExisting),
 		WorkspaceID:     protocol.Ptr(targetWorkspaceID),
 		Label:           protocol.Ptr("delegated"),
@@ -2138,15 +2141,12 @@ func TestDelegateWorktreePrefersRemoteDefaultBranch(t *testing.T) {
 		t.Fatalf("delegate() error = %v", err)
 	}
 	head := gitRevParseDaemon(t, result.Directory, "HEAD")
-	if head == staleLocalHead {
-		t.Fatalf("new branch started from the stale local default branch (%s), want origin/main %s", head, upstreamHead)
-	}
-	if head != upstreamHead {
-		t.Fatalf("new branch head = %s, want origin/main %s", head, upstreamHead)
+	if head != staleLocalHead {
+		t.Fatalf("legacy internal launch fetched or inferred a remote base: head=%s local=%s upstream=%s", head, staleLocalHead, upstreamHead)
 	}
 }
 
-func TestDelegateWorktreeExplicitRepoStillUsesRepoDefault(t *testing.T) {
+func TestLegacyDelegateWorktreeExplicitRepoDoesNotInferABase(t *testing.T) {
 	root := t.TempDir()
 	origin := filepath.Join(root, "origin.git")
 	runGitDaemon(t, root, "init", "--bare", "-b", "main", origin)
@@ -2184,10 +2184,10 @@ func TestDelegateWorktreeExplicitRepoStillUsesRepoDefault(t *testing.T) {
 		Directory: legacy,
 	})
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Explicit repo, default ref.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Explicit repo, default ref."),
 		Placement:       protocol.Ptr(delegationPlacementExisting),
 		WorkspaceID:     protocol.Ptr(targetWorkspaceID),
 		Label:           protocol.Ptr("delegated"),
@@ -2205,15 +2205,12 @@ func TestDelegateWorktreeExplicitRepoStillUsesRepoDefault(t *testing.T) {
 		t.Fatalf("new branch started from the workspace directory's branch (%s); "+
 			"--repo selects the repository, not the starting ref", head)
 	}
-	if head == ambientHead {
-		t.Fatalf("new branch started from the main checkout's current HEAD (%s)", head)
-	}
-	if head != upstreamHead {
-		t.Fatalf("new branch head = %s, want origin/main %s", head, upstreamHead)
+	if head != ambientHead {
+		t.Fatalf("legacy internal launch inferred a base: head=%s ambient=%s upstream=%s", head, ambientHead, upstreamHead)
 	}
 }
 
-func TestDelegateRollsBackEverythingWhenTheFinalStepFails(t *testing.T) {
+func TestDelegatePreservesWorktreeWhenTheFinalStepFails(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
 	if err := os.MkdirAll(mainRepo, 0o755); err != nil {
@@ -2228,10 +2225,10 @@ func TestDelegateRollsBackEverythingWhenTheFinalStepFails(t *testing.T) {
 	d.delegationFinalizeHook = func() error { return errors.New("the last step of the delegation failed") }
 	worktreePath := filepath.Join(root, "repo--feat-ticket-rollback")
 
-	if _, err := d.delegate(&protocol.DelegateMessage{
+	if _, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "This delegation should roll back at the last step.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("This delegation should roll back at the last step."),
 		Placement:       protocol.Ptr(delegationPlacementNew),
 		Label:           protocol.Ptr("ticket-rollback"),
 		Worktree: &protocol.DelegateWorktreeRequest{
@@ -2243,8 +2240,8 @@ func TestDelegateRollsBackEverythingWhenTheFinalStepFails(t *testing.T) {
 		t.Fatal("delegate() succeeded, want the seeded final-step failure")
 	}
 
-	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
-		t.Fatalf("worktree still exists after rollback: %v", err)
+	if _, err := os.Stat(worktreePath); err != nil {
+		t.Fatalf("failed launch removed worktree: %v", err)
 	}
 	workspaces := d.store.ListWorkspaces()
 	if len(workspaces) != 1 || workspaces[0].ID != sourceWorkspaceID {
@@ -2267,10 +2264,10 @@ func TestDelegateRollsBackSpawnedSessionWhenTheFinalStepFails(t *testing.T) {
 	sourceWorkspaceID, sourceSessionID, _ := setupDelegationSource(t, d, backend)
 	d.delegationFinalizeHook = func() error { return errors.New("the last step of the delegation failed") }
 
-	if _, err := d.delegate(&protocol.DelegateMessage{
+	if _, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "This delegation should roll back at the last step.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("This delegation should roll back at the last step."),
 		Label:           protocol.Ptr("tkt-rb-cur"),
 	}); err == nil {
 		t.Fatal("delegate() succeeded, want the seeded final-step failure")
@@ -2293,10 +2290,10 @@ func TestDelegateRefusesDefaultWorktreeFromNonRepoSource(t *testing.T) {
 	_, sourceSessionID, cwd := setupDelegationSource(t, d, backend)
 	consumeDelegatedPrompt(t, backend)
 
-	_, err := d.delegate(&protocol.DelegateMessage{
+	_, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Fix the parser.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Fix the parser."),
 		Label:           protocol.Ptr("parser"),
 		Worktree:        &protocol.DelegateWorktreeRequest{},
 	})
@@ -2316,25 +2313,25 @@ func TestDelegateExplicitPlacementBypassesNonRepoGate(t *testing.T) {
 
 	cases := []struct {
 		name    string
-		mutate  func(msg *protocol.DelegateMessage)
+		mutate  func(msg *resolvedDelegationLaunch)
 		prepare func(t *testing.T, d *Daemon)
 	}{
 		{
 			name: "no-worktree",
-			mutate: func(msg *protocol.DelegateMessage) {
+			mutate: func(msg *resolvedDelegationLaunch) {
 				msg.Worktree = nil
 			},
 		},
 		{
 			name: "cwd",
-			mutate: func(msg *protocol.DelegateMessage) {
+			mutate: func(msg *resolvedDelegationLaunch) {
 				msg.Placement = protocol.Ptr(delegationPlacementNew)
-				msg.Cwd = protocol.Ptr(otherWorkspaceDir)
+				msg.Cwd = otherWorkspaceDir
 			},
 		},
 		{
 			name: "new-workspace",
-			mutate: func(msg *protocol.DelegateMessage) {
+			mutate: func(msg *resolvedDelegationLaunch) {
 				msg.Placement = protocol.Ptr(delegationPlacementNew)
 			},
 		},
@@ -2349,7 +2346,7 @@ func TestDelegateExplicitPlacementBypassesNonRepoGate(t *testing.T) {
 					Directory: otherWorkspaceDir,
 				})
 			},
-			mutate: func(msg *protocol.DelegateMessage) {
+			mutate: func(msg *resolvedDelegationLaunch) {
 				msg.Placement = protocol.Ptr(delegationPlacementExisting)
 				msg.WorkspaceID = protocol.Ptr("workspace-target")
 			},
@@ -2366,16 +2363,16 @@ func TestDelegateExplicitPlacementBypassesNonRepoGate(t *testing.T) {
 				tc.prepare(t, d)
 			}
 
-			msg := &protocol.DelegateMessage{
+			msg := &resolvedDelegationLaunch{
 				Cmd:             protocol.CmdDelegate,
-				SourceSessionID: sourceSessionID,
-				Brief:           "Fix the parser.",
+				SourceSessionID: protocol.Ptr(sourceSessionID),
+				Brief:           protocol.Ptr("Fix the parser."),
 				Label:           protocol.Ptr("parser"),
 				Worktree:        &protocol.DelegateWorktreeRequest{},
 			}
 			tc.mutate(msg)
 
-			result, err := d.delegate(msg)
+			result, err := d.delegateResolved(msg)
 			if err != nil {
 				t.Fatalf("delegate() error = %v, want the explicit placement to proceed", err)
 			}

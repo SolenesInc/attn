@@ -24,6 +24,12 @@ interface ComposerState {
   drafting: boolean;
   error: string;
   pendingDraft: string;
+  cwd: string;
+  checkoutKind: 'none' | 'reuse' | 'new_worktree' | 'existing_branch_worktree';
+  branch: string;
+  from: string;
+  path: string;
+  agent: string;
 }
 
 export interface GardenReviewPanelProps {
@@ -201,6 +207,7 @@ function emptyComposer(item: GardenReviewItem, kind: ComposerKind): ComposerStat
     drafting: false,
     error: '',
     pendingDraft: '',
+    cwd: '', checkoutKind: 'none', branch: '', from: '', path: '', agent: '',
   };
 }
 
@@ -362,15 +369,17 @@ export function GardenReviewPanel({
     try {
       const document = await fetchSeedDocument(item.seed_id);
       const continuation = document.seed.continuation;
-      if (continuation?.handover_placement === 'placement_required') {
-        setComposer({ ...state, busy: false, error: 'Send this seed to Chief to choose a different working context.' });
-        return;
-      }
+      const checkout = state.checkoutKind === 'none' ? undefined : {
+        kind: state.checkoutKind,
+        branch: state.branch.trim(),
+        ...(state.checkoutKind === 'new_worktree' ? { from: state.from.trim() } : {}),
+        ...(state.checkoutKind !== 'reuse' && state.path.trim() ? { path: state.path.trim() } : {}),
+      };
       await onHandoverSeed({
         seedId: item.seed_id,
-        expectedRev: document.seed.rev,
-        expectedTenderSession: document.seed.tender_session || '',
-        expectedTenderMember: document.seed.tender_member || '',
+        cwd: state.cwd.trim(),
+        checkout,
+        agent: state.agent.trim() || continuation?.agent || undefined,
         handoff: state.text,
         review: reviewContext(review, item),
       });
@@ -643,6 +652,16 @@ export function GardenReviewPanel({
                         }
                       }}
                     />
+                    {composer.kind === 'handover' && <>
+                      <label>Working folder<input required value={composer.cwd} onChange={(event) => setComposer({ ...composer, cwd: event.target.value })} /></label>
+                      <label>Git checkout<select value={composer.checkoutKind} onChange={(event) => setComposer({ ...composer, checkoutKind: event.target.value as ComposerState['checkoutKind'] })}>
+                        <option value="none">Not a Git folder</option><option value="reuse">Reuse this checkout</option><option value="new_worktree">Create a new branch worktree</option><option value="existing_branch_worktree">Create a worktree for an existing branch</option>
+                      </select></label>
+                      {composer.checkoutKind !== 'none' && <label>Branch<input required value={composer.branch} onChange={(event) => setComposer({ ...composer, branch: event.target.value })} /></label>}
+                      {composer.checkoutKind === 'new_worktree' && <label>Start from<input required value={composer.from} onChange={(event) => setComposer({ ...composer, from: event.target.value })} /></label>}
+                      {(composer.checkoutKind === 'new_worktree' || composer.checkoutKind === 'existing_branch_worktree') && <label>Worktree path<input value={composer.path} onChange={(event) => setComposer({ ...composer, path: event.target.value })} /></label>}
+                      <label>Agent<input value={composer.agent} onChange={(event) => setComposer({ ...composer, agent: event.target.value })} placeholder="codex" /></label>
+                    </>}
                     {composer.pendingDraft && (
                       <p className="garden-review__draft-ready">
                         Draft ready. Your edits were kept.

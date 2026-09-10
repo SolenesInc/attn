@@ -491,6 +491,12 @@ export function GardenPanel({
     seedId: string;
     kind: 'handover' | 'chief';
     text: string;
+    cwd: string;
+    checkoutKind: 'none' | 'reuse' | 'new_worktree' | 'existing_branch_worktree';
+    branch: string;
+    from: string;
+    path: string;
+    agent: string;
     busy: boolean;
     error: string;
   } | null>(null);
@@ -808,8 +814,7 @@ export function GardenPanel({
   const seedIsOpen = seedDoc ? !isClosed(seedDoc.seed) : false;
   const canResume = Boolean(documentIsCurrent && onResumeSeed && seedIsOpen && continuation?.resume_available);
   const canHandover = Boolean(
-    documentIsCurrent && onHandoverSeed && seedIsOpen && continuation
-      && continuation.handover_placement !== 'placement_required',
+    documentIsCurrent && onHandoverSeed && seedIsOpen && continuation,
   );
   const canSendToChief = Boolean(documentIsCurrent && onSendSeedToChief && chiefAvailable && seedIsOpen);
   const composingContinuation = continuationDraft?.seedId === here?.id;
@@ -825,7 +830,13 @@ export function GardenPanel({
       };
       if (continuationDraft.kind === 'handover') {
         if (!onHandoverSeed) throw new Error('Handover is unavailable');
-        await onHandoverSeed({ ...common, handoff: continuationDraft.text });
+        const checkout = continuationDraft.checkoutKind === 'none' ? undefined : {
+          kind: continuationDraft.checkoutKind,
+          branch: continuationDraft.branch.trim(),
+          ...(continuationDraft.checkoutKind === 'new_worktree' ? { from: continuationDraft.from.trim() } : {}),
+          ...(continuationDraft.checkoutKind !== 'reuse' && continuationDraft.path.trim() ? { path: continuationDraft.path.trim() } : {}),
+        };
+        await onHandoverSeed({ seedId: common.seedId, cwd: continuationDraft.cwd.trim(), checkout, handoff: continuationDraft.text, agent: continuationDraft.agent.trim() || undefined });
       } else {
         if (!onSendSeedToChief) throw new Error('Chief is unavailable');
         await onSendSeedToChief({ ...common, guidance: continuationDraft.text });
@@ -1099,7 +1110,7 @@ export function GardenPanel({
               <button
                 type="button"
                 data-testid={`seed-handover-${here.id}`}
-                onClick={() => setContinuationDraft({ seedId: here.id, kind: 'handover', text: '', busy: false, error: '' })}
+                onClick={() => setContinuationDraft({ seedId: here.id, kind: 'handover', text: '', cwd: continuation?.cwd ?? '', checkoutKind: continuation?.repository_root ? 'reuse' : 'none', branch: continuation?.branch ?? '', from: '', path: '', agent: continuation?.agent ?? '', busy: false, error: '' })}
               >
                 Handover
               </button>
@@ -1108,7 +1119,7 @@ export function GardenPanel({
               <button
                 type="button"
                 data-testid={`seed-send-to-chief-${here.id}`}
-                onClick={() => setContinuationDraft({ seedId: here.id, kind: 'chief', text: '', busy: false, error: '' })}
+                onClick={() => setContinuationDraft({ seedId: here.id, kind: 'chief', text: '', cwd: '', checkoutKind: 'none', branch: '', from: '', path: '', agent: '', busy: false, error: '' })}
               >
                 Send to Chief
               </button>
@@ -1162,6 +1173,19 @@ export function GardenPanel({
                 }
               }}
             />
+            {continuationDraft.kind === 'handover' && <>
+              <label>Working folder<input required value={continuationDraft.cwd} onChange={(event) => setContinuationDraft({ ...continuationDraft, cwd: event.target.value })} /></label>
+              <label>Git checkout<select value={continuationDraft.checkoutKind} onChange={(event) => setContinuationDraft({ ...continuationDraft, checkoutKind: event.target.value as typeof continuationDraft.checkoutKind })}>
+                <option value="none">Not a Git folder</option>
+                <option value="reuse">Reuse this checkout</option>
+                <option value="new_worktree">Create a new branch worktree</option>
+                <option value="existing_branch_worktree">Create a worktree for an existing branch</option>
+              </select></label>
+              {continuationDraft.checkoutKind !== 'none' && <label>Branch<input required value={continuationDraft.branch} onChange={(event) => setContinuationDraft({ ...continuationDraft, branch: event.target.value })} /></label>}
+              {continuationDraft.checkoutKind === 'new_worktree' && <label>Start from<input required value={continuationDraft.from} onChange={(event) => setContinuationDraft({ ...continuationDraft, from: event.target.value })} placeholder="origin/main or a commit" /></label>}
+              {(continuationDraft.checkoutKind === 'new_worktree' || continuationDraft.checkoutKind === 'existing_branch_worktree') && <label>Worktree path<span>optional</span><input value={continuationDraft.path} onChange={(event) => setContinuationDraft({ ...continuationDraft, path: event.target.value })} /></label>}
+              <label>Agent{continuationDraft.agent ? null : <span>required without a source session</span>}<input value={continuationDraft.agent} onChange={(event) => setContinuationDraft({ ...continuationDraft, agent: event.target.value })} placeholder="codex" /></label>
+            </>}
             {continuationDraft.error && <p className="garden-handover__error" role="alert">{continuationDraft.error}</p>}
             <div className="garden-handover__actions">
               {continuationDraft.busy ? (

@@ -17,9 +17,13 @@ import (
 
 func configuredBuild(t *testing.T, d *Daemon) delegationprefs.Config {
 	t.Helper()
-	roles := prompts.DelegationRoleTemplates()
-	roles[2].Choices[0].Selection = delegationprefs.Selection{Harness: "codex"}
-	roles[2].Instructions = "Check {{literal}} carefully"
+	roles := prompts.ExpandDelegationRoles(prompts.DelegationRoleTemplates())
+	build := roles[1]
+	build.ID = "build"
+	build.Builtin = nil
+	build.Choices[0].Selection = delegationprefs.Selection{Harness: "codex"}
+	build.Instructions = "Check {{literal}} carefully"
+	roles = []protocol.DelegationRole{build}
 	cfg, err := d.store.SaveDelegationPreferences(delegationprefs.Config{Enabled: true, Roles: roles})
 	if err != nil {
 		t.Fatal(err)
@@ -28,7 +32,7 @@ func configuredBuild(t *testing.T, d *Daemon) delegationprefs.Config {
 }
 
 func TestDelegationRolesResponseAndDisabledPrivacy(t *testing.T) {
-	d := newDaemonForTest(t)
+	d := newDelegationDaemon(t)
 	cfg := configuredBuild(t, d)
 	for _, enabled := range []bool{true, false} {
 		if !enabled {
@@ -57,7 +61,7 @@ func TestDelegationRolesResponseAndDisabledPrivacy(t *testing.T) {
 }
 
 func TestDelegationRoleLaunchContainsOnlySelectedGuidance(t *testing.T) {
-	d := newDaemonForTest(t)
+	d := newDelegationDaemon(t)
 	backend := &fakeSpawnBackend{}
 	_, source, _ := setupDelegationSource(t, d, backend)
 	cfg := configuredBuild(t, d)
@@ -75,7 +79,11 @@ func TestDelegationRoleLaunchContainsOnlySelectedGuidance(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	result, err := d.delegate(&protocol.DelegateMessage{SourceSessionID: source, Brief: "Implement this task", Role: protocol.Ptr("build"), PreferencesRevision: &cfg.Revision})
+	result, err := d.delegate(&protocol.DelegateMessage{
+		Cmd: protocol.CmdDelegate, RequestID: "selected-guidance", SourceSessionID: protocol.Ptr(source),
+		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr("Implement this task")},
+		Cwd:        d.store.Get(source).Directory, Agent: protocol.Ptr("codex"), Role: protocol.Ptr("build"),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,12 +91,12 @@ func TestDelegationRoleLaunchContainsOnlySelectedGuidance(t *testing.T) {
 	if !ok || spawn.ID != result.SessionID || spawn.Model != "" || spawn.Effort != "" {
 		t.Fatalf("blank settings must keep harness defaults: %+v", spawn)
 	}
-	for _, part := range []string{"Implement this task", "Role: Build", "Check {{literal}} carefully", cfg.Roles[2].StoppingPoint} {
+	for _, part := range []string{"Role: Builder", "Check {{literal}} carefully", cfg.Roles[0].StoppingPoint, "attn seed show " + result.SeedID} {
 		if !strings.Contains(prompt, part) {
 			t.Fatalf("missing %q: %s", part, prompt)
 		}
 	}
-	for _, absent := range []string{"Role: Scout", "--preferences-revision", cfg.Roles[0].Instructions} {
+	for _, absent := range []string{"Implement this task", "--preferences-revision", "Role: Pathfinder"} {
 		if strings.Contains(prompt, absent) {
 			t.Fatalf("other routing data leaked: %q", absent)
 		}
@@ -112,7 +120,7 @@ func TestDelegationDiscoveryAndEffortValidation(t *testing.T) {
 		t.Fatal("disabled discovery launched a process")
 	}
 	cfg := configuredBuild(t, d)
-	cfg.Roles[2].Choices[0].Selection = delegationprefs.Selection{Harness: "claude", Model: "known", Effort: "high"}
+	cfg.Roles[0].Choices[0].Selection = delegationprefs.Selection{Harness: "claude", Model: "known", Effort: "high"}
 	if _, err := d.store.SaveDelegationPreferences(cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +144,10 @@ func TestDelegationDiscoveryAndEffortValidation(t *testing.T) {
 func TestDelegationInvalidRoleCreatesNoOperation(t *testing.T) {
 	d := newDaemonForTest(t)
 	configuredBuild(t, d)
-	if _, err := d.startDelegation(&protocol.DelegateMessage{RequestID: "invalid-role", Role: protocol.Ptr("missing"), Brief: "Task"}); err == nil {
+	if _, err := d.startDelegation(&protocol.DelegateMessage{
+		Cmd: protocol.CmdDelegate, RequestID: "invalid-role", Role: protocol.Ptr("missing"), Agent: protocol.Ptr("codex"),
+		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr("Task")}, Cwd: t.TempDir(),
+	}); err == nil {
 		t.Fatal("invalid role accepted")
 	}
 	if _, err := d.store.GetDelegationOperation("invalid-role"); err == nil {

@@ -20,7 +20,7 @@ func TestParseCommand(t *testing.T) {
 		},
 		{
 			name:    "delegate message",
-			input:   `{"cmd":"delegate","source_session_id":"abc","brief":"Investigate this","agent":"codex"}`,
+			input:   `{"cmd":"delegate","request_id":"request-1","source_session_id":"abc","assignment":{"kind":"new","brief":"Investigate this"},"cwd":"/repo","agent":"codex"}`,
 			wantCmd: CmdDelegate,
 		},
 		{
@@ -215,8 +215,8 @@ func TestParseAgentInboxSupportsBatchAndLegacyMessages(t *testing.T) {
 	}
 }
 
-func TestParseDelegatePlacementAndWorktree(t *testing.T) {
-	input := `{"cmd":"delegate","source_session_id":"source-1","brief":"Investigate this","agent":"codex","placement":"new_workspace","worktree":{"repo":"/repo","branch":"feat/delegated","starting_from":"main"}}`
+func TestParseDelegateAssignmentAndCheckout(t *testing.T) {
+	input := `{"cmd":"delegate","request_id":"request-1","source_session_id":"source-1","assignment":{"kind":"new","brief":"Investigate this"},"cwd":"/repo","agent":"codex","checkout":{"kind":"new_worktree","branch":"feat/delegated","from":"main"}}`
 	cmd, data, err := ParseMessage([]byte(input))
 	if err != nil {
 		t.Fatalf("ParseMessage() error = %v", err)
@@ -225,11 +225,11 @@ func TestParseDelegatePlacementAndWorktree(t *testing.T) {
 		t.Fatalf("cmd = %q, want %q", cmd, CmdDelegate)
 	}
 	msg := data.(*DelegateMessage)
-	if Deref(msg.Placement) != "new_workspace" || msg.Worktree == nil || msg.Worktree.Branch != "feat/delegated" {
+	if msg.Assignment.Kind != DelegateAssignmentKindNew || Deref(msg.Assignment.Brief) != "Investigate this" || msg.Checkout == nil || msg.Checkout.Branch != "feat/delegated" {
 		t.Fatalf("delegate message = %+v", msg)
 	}
-	if Deref(msg.Worktree.Repo) != "/repo" || Deref(msg.Worktree.StartingFrom) != "main" {
-		t.Fatalf("delegate worktree = %+v", msg.Worktree)
+	if msg.Cwd != "/repo" || msg.Checkout.Kind != DelegateCheckoutKindNewWorktree || Deref(msg.Checkout.From) != "main" {
+		t.Fatalf("delegate checkout = %+v", msg.Checkout)
 	}
 }
 

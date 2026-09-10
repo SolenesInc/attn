@@ -305,6 +305,7 @@ func TestAutomationOccurrenceInputIsStructurallySeparateFromPrompt(t *testing.T)
 func TestEnsureAutomationSessionPassesOneUnattendedContract(t *testing.T) {
 	directory := t.TempDir()
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	setupDelegationGarden(t, d)
 	backend := &fakeSpawnBackend{}
 	d.ptyBackend = backend
 	addTestWorkspace(d, "workspace-1", directory)
@@ -1013,6 +1014,7 @@ func TestChangedHeadContinuationKeepsContractAndIdentityChecks(t *testing.T) {
 
 func TestStoppedContinuationResumesRecordedReviewerWithPinnedContract(t *testing.T) {
 	d := newDaemonForTest(t)
+	setupDelegationGarden(t, d)
 	backend := &automationResumeBackend{fakeSpawnBackend: &fakeSpawnBackend{}}
 	d.ptyBackend = backend
 	now := time.Date(2026, 7, 20, 8, 0, 0, 0, time.UTC)

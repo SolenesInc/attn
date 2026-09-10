@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/victorarias/attn/internal/config"
@@ -15,14 +16,17 @@ import (
 
 // content/skills/attn/references/showing.md retains its HumanLayer MIT attribution.
 var attnSkillFiles = prompts.AttnSkillFiles()
+var attnWorkflowSkillFiles = prompts.AttnWorkflowSkillFiles()
 
-func installAttnSkill(skillDir string) error {
+const harnessSkillSyncEnv = "ATTN_HARNESS_SKILL_SYNC"
+
+func installBundledSkill(files fs.ReadFileFS, root, skillDir string) error {
 	expected := map[string]bool{}
-	err := fs.WalkDir(attnSkillFiles, "attn_skill", func(path string, entry fs.DirEntry, walkErr error) error {
+	err := fs.WalkDir(files, root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		relative := strings.TrimPrefix(path, "attn_skill")
+		relative := strings.TrimPrefix(path, root)
 		relative = strings.TrimPrefix(relative, "/")
 		target := filepath.Join(skillDir, filepath.FromSlash(relative))
 		expected[target] = true
@@ -33,7 +37,7 @@ func installAttnSkill(skillDir string) error {
 			return nil
 		}
 
-		content, err := fs.ReadFile(attnSkillFiles, path)
+		content, err := fs.ReadFile(files, path)
 		if err != nil {
 			return fmt.Errorf("read bundled attn skill file %s: %w", path, err)
 		}
@@ -51,6 +55,14 @@ func installAttnSkill(skillDir string) error {
 		return err
 	}
 	return pruneOrphanedSkillFiles(skillDir, expected)
+}
+
+func installAttnSkill(skillDir string) error {
+	return installBundledSkill(attnSkillFiles, "attn_skill", skillDir)
+}
+
+func installAttnWorkflowSkill(skillDir string) error {
+	return installBundledSkill(attnWorkflowSkillFiles, "attn_workflow_skill", skillDir)
 }
 
 // Without this an installed skill accumulates stale content forever: a retired reference stays loadable by name and can contradict the current skill's guidance.
@@ -124,7 +136,10 @@ func ensureAttnCopilotSkillInstalled() error {
 
 func userGlobalSkillSyncEnabled() bool {
 	profile := config.Profile()
-	return profile == "" || profile == "dev"
+	if profile == "" || profile == "dev" {
+		return true
+	}
+	return os.Getenv("ATTN_AUTOMATION") == "1" && os.Getenv(harnessSkillSyncEnv) == "1" && strings.TrimSpace(os.Getenv(toolhome.EnvVar)) != ""
 }
 
 func EnsureClaudeSkillInstalled() (bool, error) {
@@ -146,4 +161,36 @@ func EnsureCopilotSkillInstalled() (bool, error) {
 		return false, nil
 	}
 	return true, ensureAttnCopilotSkillInstalled()
+}
+
+func EnsureWorkflowSkillsInstalled(harnesses []string) ([]string, bool, error) {
+	if !userGlobalSkillSyncEnabled() {
+		return nil, false, nil
+	}
+	homeDir, err := toolhome.Dir()
+	if err != nil {
+		return nil, true, fmt.Errorf("resolve home directory for workflow skills: %w", err)
+	}
+	wanted := map[string]bool{}
+	for _, harness := range harnesses {
+		switch strings.TrimSpace(harness) {
+		case "claude":
+			wanted[filepath.Join(homeDir, ".claude", "skills", "attn-workflow")] = true
+		case "codex", "pi":
+			wanted[filepath.Join(homeDir, ".agents", "skills", "attn-workflow")] = true
+		case "copilot":
+			wanted[filepath.Join(homeDir, ".copilot", "skills", "attn-workflow")] = true
+		}
+	}
+	paths := make([]string, 0, len(wanted))
+	for target := range wanted {
+		paths = append(paths, target)
+	}
+	slices.Sort(paths)
+	for _, target := range paths {
+		if err := installAttnWorkflowSkill(target); err != nil {
+			return paths, true, fmt.Errorf("install attn-workflow at %s: %w", target, err)
+		}
+	}
+	return paths, true, nil
 }

@@ -20,10 +20,10 @@ func delegateBoundSession(t *testing.T, d *Daemon) string {
 		t.Fatalf("set chief role: %v", err)
 	}
 	consumeDelegatedPrompt(t, backend)
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: chiefSessionID,
-		Brief:           "Migrate the store to X",
+		SourceSessionID: protocol.Ptr(chiefSessionID),
+		Brief:           protocol.Ptr("Migrate the store to X"),
 		Agent:           protocol.Ptr("codex"),
 	})
 	if err != nil {

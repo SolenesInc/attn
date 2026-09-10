@@ -677,8 +677,8 @@ commands:
   agent msg-status <message-id>         inspect a sent peer message
   session <command>                 read the session ledger and a session's conversation
   state explain <id>                replay why a session's state is what it is
-  delegate --brief-file <path> --model <name>  start another agent with a delegated brief
-  delegate --plot <seed-id> --model <name>     start another agent at an existing seed
+  delegate --brief-file <path> --cwd <path>    start another agent on a new seed
+  delegate --seed <id> --cwd <path>            start another agent on an existing seed
   journal append --entry <text>     serialized append to the daily notebook journal
   open <file.md|seed-id> [--session <id>]   show a document in attn
   browser <command>                 open and control the in-app browser
@@ -754,15 +754,15 @@ func runDelegate() {
 	warnIfDaemonVersionMismatch()
 	c := client.New("")
 	// Must print before crossing the transport: the daemon may durably accept the request even if the response never arrives.
-	fmt.Fprintf(os.Stderr, "delegation request: request_id=%s\n", args.options.RequestID)
-	operation, err := c.StartDelegation(args.sourceSessionID, args.brief, args.options)
+	fmt.Fprintf(os.Stderr, "delegation request: request_id=%s\n", args.request.RequestID)
+	operation, err := c.StartDelegation(args.request)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "delegate: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Fprintf(os.Stderr, "delegation accepted: request_id=%s operation_id=%s session_id=%s\n",
 		operation.RequestID, operation.OperationID, operation.SessionID)
-	operation, err = waitDelegationCLI(c, operation, args.options.RequestID, os.Stderr)
+	operation, err = waitDelegationCLI(c, operation, args.request.RequestID, os.Stderr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "delegate: %v\n", err)
 		os.Exit(1)
@@ -793,7 +793,11 @@ func waitDelegationCLI(
 		operation = next
 	}
 	if operation.State == protocol.DelegationOperationStateFailed {
-		return nil, fmt.Errorf("%s (request_id=%s)", protocol.Deref(operation.Error), operation.RequestID)
+		message := "unknown failure"
+		if operation.Failure != nil {
+			message = operation.Failure.Message
+		}
+		return nil, fmt.Errorf("%s (request_id=%s)", message, operation.RequestID)
 	}
 	if operation.Result == nil {
 		return nil, errors.New("completed operation has no result")
@@ -802,64 +806,49 @@ func waitDelegationCLI(
 }
 
 func writeDelegateHelp(w io.Writer) {
-	fmt.Fprint(w, `usage: attn delegate (--brief <text> | --brief-file <path>) [--model <name> | --role <id> | --fallback] [options]
+	fmt.Fprint(w, `usage: attn delegate (--brief TEXT | --brief-file PATH | --seed ID)
+       --cwd PATH [role/model options] [checkout options]
 
-A delegation binds a seed: the brief is its body, the delegate its tender, and
-the seed is where the delegate reports. Tickets retired.
+Every delegation has a seed. A brief creates one; --seed uses its current
+assignment. The delegated agent reads the seed when it starts.
 
-task source:
-  --brief <text>              delegate a short task; it becomes the seed's body
-  --brief-file <path>         delegate a task file; it becomes the seed's body
+assignment:
+  --brief TEXT / --brief-file PATH   create a seed for new work
+  --seed ID                          use an existing seed
+  --handover                         transfer that seed to a new agent
+  -m TEXT                            optional handover note
 
-workspace placement (where the pane appears):
-  (no flags)                 add a pane to the source workspace
-  --new-workspace            create a workspace for the delegated pane
-  --workspace <id>           add a pane to an existing workspace; this does not
-                             choose that workspace's repository
-  --cwd <path>               create a workspace and use this checkout/repository
+folder and Git:
+  --cwd PATH                         required working folder/repository
+  --reuse-checkout --branch NAME     use the checkout on this branch
+  --new-worktree --branch NAME --from REF
+                                     create branch and worktree
+  --new-worktree --existing-branch NAME
+                                     create worktree for a local branch
+  --worktree-path PATH               optional new-worktree destination
+  --allow-worktree-reuse             explicitly share an occupied checkout
 
-repository placement (where the agent runs):
-  (no flags)                 create a worktree of the source checkout's
-                             repository (with --workspace: the repository that
-                             workspace's sessions are in); a non-repository
-                             source is refused, pass --cwd or --no-worktree
-  --no-worktree              reuse the source checkout; with --workspace, only
-                             the pane moves to the target workspace
-  --worktree <branch>        choose the new worktree's branch
-  --repo <path>              main repository; required when the target
-                             workspace's sessions span several
-  --from <ref>               branch or ref to start from
-  --worktree-path <path>     override the generated sibling path
+Inside Git, choose one complete checkout form. Outside Git, cwd is enough.
+Handover leaves the previous agent running. It needs no force/confirm flag.
 
 session options:
 	--request-id <id>          stable retry key (generated and printed when omitted; op- is reserved)
   --agent <name>             configured prompt-capable built-in or plugin agent
-  --model <name>             pin the model; required for a manual launch
+  --model <name>             pin the model; "default" selects the harness default
   --role <id>                use a configured role and its default choice
   --choice <id>              use an alternative within --role
   --fallback                 use the configured unmatched-work fallback
-  --preferences-revision <n> require the revision returned by delegate roles
   --provider <id>            provider for a plugin harness model
   --effort <level>           pin the agent's reasoning effort (claude: low,
                              medium, high, xhigh, max; codex: minimal, low,
                              medium, high, xhigh); defaults to medium for agents
                              that support reasoning effort
-  --name <text>              name for the agent and, when a new workspace is
-                             created, the workspace (max 16 chars, must be
-                             unique; defaults to the directory name)
+  --name <text>              session name (max 16 chars; defaults from cwd)
   --source-session <id>      source session (defaults to ATTN_SESSION_ID)
   --yolo                     bypass agent approval prompts
-  --plot <seed>              dispatch the delegate at an existing seed instead of
-                             planting a new one. The delegate becomes that seed's
-                             tender, and the dispatch refuses before creating
-                             anything if a live session already holds it. Aimed
-                             at a plot it launches knowing that plan, and a
-                             flag-free "attn seed ready" inside it answers with
-                             the plot's ready seeds. Beyond that seed it is
-                             scope, not a fence: who holds each child stays that
-                             seed's tender, and --all steps back out to the
-                             whole garden.
-	--allow-worktree-reuse     explicitly allow another active session to share the worktree
+
+Only a handover's predecessor is exempt from checkout occupancy. Any unrelated
+active session requires --allow-worktree-reuse.
 
 discovery:
   attn delegate roles [--json]  complete active roles, choices, and fallback
@@ -1646,9 +1635,7 @@ func resolveChiefNotebookRoot(c notebookGuideClient, sessionID string) string {
 }
 
 type delegateCLIArgs struct {
-	sourceSessionID string
-	brief           string
-	options         client.DelegateOptions
+	request protocol.DelegateMessage
 }
 
 func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
@@ -1656,28 +1643,35 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	fs.SetOutput(io.Discard)
 	briefText := fs.String("brief", "", "delegated task brief")
 	briefFile := fs.String("brief-file", "", "file containing the delegated task brief")
+	seedID := fs.String("seed", "", "existing seed containing the assignment")
+	handover := fs.Bool("handover", false, "transfer an existing seed to the new agent")
+	handoffNote := fs.String("m", "", "optional handover note")
 	ticketID := fs.String("ticket", "", "retired: delegations bind a seed, not a ticket")
 	confirm := fs.Bool("confirm", false, "retired: went with --ticket")
 	agentName := fs.String("agent", "", "target agent (defaults to the source session agent)")
 	role := fs.String("role", "", "configured delegation role")
 	choice := fs.String("choice", "", "choice within the role")
 	fallback := fs.Bool("fallback", false, "configured unmatched-work fallback")
-	revision := fs.Int("preferences-revision", 0, "expected configuration revision")
 	provider := fs.String("provider", "", "plugin model provider")
 	model := fs.String("model", "", "pin the delegated agent's model (alias or full id)")
 	effort := fs.String("effort", "", "pin the delegated agent's reasoning effort")
 	name := fs.String("name", "", "name for the agent and, when a new workspace is created, the workspace")
 	sourceSessionID := fs.String("source-session", "", "source session id (defaults to ATTN_SESSION_ID)")
 	yolo := fs.Bool("yolo", false, "launch the target agent in yolo mode")
-	plot := fs.String("plot", "", "dispatch the delegate at a plot: it is what flag-free `attn seed ready` answers with")
-	newWorkspace := fs.Bool("new-workspace", false, "create a new workspace for the delegated agent")
-	workspaceID := fs.String("workspace", "", "place the delegated agent in an existing workspace")
-	cwd := fs.String("cwd", "", "use an existing directory in a new workspace")
-	worktreeBranch := fs.String("worktree", "", "create a worktree with this branch for the delegated session")
-	worktreeRepo := fs.String("repo", "", "main repository for --worktree (defaults to the target's session repository)")
-	worktreeStart := fs.String("from", "", "starting ref for --worktree")
-	worktreePath := fs.String("worktree-path", "", "custom path for --worktree")
-	noWorktree := fs.Bool("no-worktree", false, "reuse the resolved checkout instead of creating a worktree")
+	cwd := fs.String("cwd", "", "working folder or repository")
+	reuseCheckout := fs.Bool("reuse-checkout", false, "use the checkout at cwd on its current branch")
+	newWorktree := fs.Bool("new-worktree", false, "create a worktree")
+	branch := fs.String("branch", "", "branch for reuse or new branch creation")
+	existingBranch := fs.String("existing-branch", "", "existing local branch for a new worktree")
+	worktreeStart := fs.String("from", "", "starting ref for a new branch")
+	worktreePath := fs.String("worktree-path", "", "custom new-worktree destination")
+	plot := fs.String("plot", "", "retired: use --seed")
+	newWorkspace := fs.Bool("new-workspace", false, "retired: delegation placement is internal")
+	workspaceID := fs.String("workspace", "", "retired: delegation placement is internal")
+	worktreeBranch := fs.String("worktree", "", "retired: use --new-worktree --branch")
+	worktreeRepo := fs.String("repo", "", "retired: --cwd supplies repository context")
+	noWorktree := fs.Bool("no-worktree", false, "retired: use --reuse-checkout")
+	preferencesRevision := fs.String("preferences-revision", "", "retired: preferences resolve when accepted")
 	requestID := fs.String("request-id", "", "stable delegation request id")
 	allowWorktreeReuse := fs.Bool("allow-worktree-reuse", false, "allow active sessions to share a worktree")
 	if err := fs.Parse(args); err != nil {
@@ -1693,21 +1687,11 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 
 	present := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { present[f.Name] = true })
-	var expectedRevision *int
-	if present["preferences-revision"] {
-		if *revision < 0 {
-			return delegateCLIArgs{}, errors.New("--preferences-revision must not be negative")
-		}
-		expectedRevision = revision
-	}
 	if *fallback && *role != "" {
 		return delegateCLIArgs{}, errors.New("--role and --fallback cannot be combined")
 	}
 	if *choice != "" && *role == "" {
 		return delegateCLIArgs{}, errors.New("--choice requires --role")
-	}
-	if expectedRevision != nil && *role == "" && !*fallback {
-		return delegateCLIArgs{}, errors.New("--preferences-revision requires --role or --fallback")
 	}
 	var modelOverride, effortOverride, providerOverride *string
 	if present["model"] {
@@ -1735,16 +1719,31 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	if source == "" {
 		source = strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
 	}
-	if source == "" {
-		return delegateCLIArgs{}, errors.New("no source session; run inside attn or pass --source-session")
-	}
 	// Retired flags stay parseable so the answer is the signpost, not "flag provided but not defined".
 	if ticket := strings.TrimSpace(*ticketID); ticket != "" {
 		return delegateCLIArgs{}, fmt.Errorf(
-			"--ticket retired: plant the work and dispatch at it — `attn seed plant %q -m \"<brief>\"`, then `attn delegate --brief \"<brief>\" --plot <seed-id>`", ticket)
+			"--ticket retired: plant the work and dispatch at it — `attn seed plant %q -m \"<brief>\"`, then `attn delegate --seed <seed-id> --cwd <path>`", ticket)
 	}
 	if *confirm {
-		return delegateCLIArgs{}, errors.New("--confirm retired: it went with --ticket, and a seed is claimed by its tender (`attn seed tend <seed-id>`)")
+		return delegateCLIArgs{}, errors.New("--confirm retired: use --handover to transfer a seed; use attn seed tend for manual ownership")
+	}
+	if strings.TrimSpace(*plot) != "" {
+		return delegateCLIArgs{}, errors.New("--plot retired: use --seed <id> without a second brief")
+	}
+	if *newWorkspace || strings.TrimSpace(*workspaceID) != "" {
+		return delegateCLIArgs{}, errors.New("--workspace and --new-workspace retired: pass the explicit working folder with --cwd")
+	}
+	if strings.TrimSpace(*worktreeBranch) != "" {
+		return delegateCLIArgs{}, errors.New("--worktree retired: use --new-worktree --branch <name> --from <ref>")
+	}
+	if strings.TrimSpace(*worktreeRepo) != "" {
+		return delegateCLIArgs{}, errors.New("--repo retired: --cwd supplies repository context")
+	}
+	if *noWorktree {
+		return delegateCLIArgs{}, errors.New("--no-worktree retired: use --reuse-checkout --branch <name>")
+	}
+	if present["preferences-revision"] || strings.TrimSpace(*preferencesRevision) != "" {
+		return delegateCLIArgs{}, errors.New("--preferences-revision retired: Attn snapshots current preferences when it accepts the request")
 	}
 	if strings.TrimSpace(*briefText) != "" && strings.TrimSpace(*briefFile) != "" {
 		return delegateCLIArgs{}, errors.New("pass only one of --brief or --brief-file")
@@ -1757,57 +1756,109 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 		}
 		brief = strings.TrimSpace(string(content))
 	}
-	if brief == "" {
-		return delegateCLIArgs{}, errors.New("--brief or --brief-file is required")
+	seed := strings.TrimSpace(*seedID)
+	if (brief == "") == (seed == "") {
+		return delegateCLIArgs{}, errors.New("pass exactly one of --brief, --brief-file, or --seed")
+	}
+	if *handover && seed == "" {
+		return delegateCLIArgs{}, errors.New("--handover requires --seed")
+	}
+	if strings.TrimSpace(*handoffNote) != "" && !*handover {
+		return delegateCLIArgs{}, errors.New("-m requires --handover")
 	}
 
-	explicitWorkspace := strings.TrimSpace(*workspaceID)
 	customCWD := strings.TrimSpace(*cwd)
-	branch := strings.TrimSpace(*worktreeBranch)
-	repo := strings.TrimSpace(*worktreeRepo)
+	if customCWD == "" {
+		return delegateCLIArgs{}, errors.New("--cwd is required")
+	}
+	requestedBranch := strings.TrimSpace(*branch)
+	localBranch := strings.TrimSpace(*existingBranch)
 	startingFrom := strings.TrimSpace(*worktreeStart)
 	customWorktreePath := strings.TrimSpace(*worktreePath)
 	stableRequestID := strings.TrimSpace(*requestID)
 	if stableRequestID == "" {
 		stableRequestID = uuid.NewString()
 	}
-	if explicitWorkspace != "" && (*newWorkspace || customCWD != "") {
-		return delegateCLIArgs{}, errors.New("--workspace cannot be combined with --new-workspace or --cwd")
+	if *reuseCheckout && *newWorktree {
+		return delegateCLIArgs{}, errors.New("choose only one of --reuse-checkout or --new-worktree")
 	}
-	if *noWorktree && (branch != "" || repo != "" || startingFrom != "" || customWorktreePath != "") {
-		return delegateCLIArgs{}, errors.New("--no-worktree cannot be combined with --worktree, --repo, --from, or --worktree-path")
+	var checkout *protocol.DelegateCheckout
+	if *reuseCheckout {
+		if requestedBranch == "" {
+			return delegateCLIArgs{}, errors.New("--reuse-checkout requires --branch")
+		}
+		if localBranch != "" || startingFrom != "" || customWorktreePath != "" {
+			return delegateCLIArgs{}, errors.New("--reuse-checkout accepts --branch only")
+		}
+		checkout = &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindReuse, Branch: requestedBranch}
+	}
+	if *newWorktree {
+		if (requestedBranch == "") == (localBranch == "") {
+			return delegateCLIArgs{}, errors.New("--new-worktree requires either --branch <name> --from <ref> or --existing-branch <name>")
+		}
+		if requestedBranch != "" && startingFrom == "" {
+			return delegateCLIArgs{}, errors.New("--new-worktree --branch requires --from")
+		}
+		if localBranch != "" && startingFrom != "" {
+			return delegateCLIArgs{}, errors.New("--new-worktree --existing-branch does not accept --from")
+		}
+		kind := protocol.DelegateCheckoutKindNewWorktree
+		selectedBranch := requestedBranch
+		if localBranch != "" {
+			kind = protocol.DelegateCheckoutKindExistingBranchWorktree
+			selectedBranch = localBranch
+		}
+		checkout = &protocol.DelegateCheckout{Kind: kind, Branch: selectedBranch}
+		if startingFrom != "" {
+			checkout.From = protocol.Ptr(startingFrom)
+		}
+		if customWorktreePath != "" {
+			checkout.Path = protocol.Ptr(customWorktreePath)
+		}
+	}
+	if !*newWorktree && customWorktreePath != "" {
+		return delegateCLIArgs{}, errors.New("--worktree-path requires --new-worktree")
 	}
 
-	placement := "current_workspace"
-	if explicitWorkspace != "" {
-		placement = "existing_workspace"
-	} else if *newWorkspace || customCWD != "" {
-		placement = "new_workspace"
+	assignment := protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr(brief)}
+	if seed != "" {
+		assignment = protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindSeed, SeedID: protocol.Ptr(seed)}
+		if *handover {
+			assignment.Handover = &protocol.DelegateHandover{}
+			if note := strings.TrimSpace(*handoffNote); note != "" {
+				assignment.Handover.Note = protocol.Ptr(note)
+			}
+		}
 	}
-
-	return delegateCLIArgs{
-		sourceSessionID: source,
-		brief:           brief,
-		options: client.DelegateOptions{
-			Role: strings.TrimSpace(*role), Choice: strings.TrimSpace(*choice), Fallback: *fallback, PreferencesRevision: expectedRevision, Provider: providerOverride, ModelOverride: modelOverride, EffortOverride: effortOverride,
-			RequestID:          stableRequestID,
-			Agent:              strings.TrimSpace(*agentName),
-			Model:              modelPin,
-			Effort:             strings.TrimSpace(*effort),
-			Label:              strings.TrimSpace(*name),
-			Yolo:               *yolo,
-			Placement:          placement,
-			Plot:               strings.TrimSpace(*plot),
-			WorkspaceID:        explicitWorkspace,
-			CWD:                customCWD,
-			WorktreeRepo:       repo,
-			Worktree:           branch,
-			WorktreePath:       customWorktreePath,
-			StartingFrom:       startingFrom,
-			NoWorktree:         *noWorktree,
-			AllowWorktreeReuse: *allowWorktreeReuse,
-		},
-	}, nil
+	request := protocol.DelegateMessage{Cmd: protocol.CmdDelegate, RequestID: stableRequestID, Assignment: assignment, Cwd: customCWD, Checkout: checkout}
+	if source != "" {
+		request.SourceSessionID = protocol.Ptr(source)
+	}
+	if value := strings.TrimSpace(*agentName); value != "" {
+		request.Agent = protocol.Ptr(value)
+	}
+	request.Model = modelOverride
+	request.Effort = effortOverride
+	request.Provider = providerOverride
+	if value := strings.TrimSpace(*role); value != "" {
+		request.Role = protocol.Ptr(value)
+	}
+	if value := strings.TrimSpace(*choice); value != "" {
+		request.Choice = protocol.Ptr(value)
+	}
+	if *fallback {
+		request.Fallback = protocol.Ptr(true)
+	}
+	if value := strings.TrimSpace(*name); value != "" {
+		request.Label = protocol.Ptr(value)
+	}
+	if *yolo {
+		request.YoloMode = protocol.Ptr(true)
+	}
+	if *allowWorktreeReuse {
+		request.AllowWorktreeReuse = protocol.Ptr(true)
+	}
+	return delegateCLIArgs{request: request}, nil
 }
 
 func parseOpenArgs(args []string) (rawPath string, sessionFlag string, err error) {
@@ -2633,47 +2684,7 @@ func runHookSessionStart() {
 	_ = json.NewDecoder(os.Stdin).Decode(&input)
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
-	output, primeErr := sessionStartHookOutput(c, sessionID, input)
-	if primeErr != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not load garden status: %v\n", primeErr)
-	}
-
-	if output != "" {
-		fmt.Fprintln(os.Stdout, output)
-	}
-}
-
-type sessionStartHookClient interface {
-	agentConversationObserver
-	sessionStartClient
-}
-
-func sessionStartHookOutput(c sessionStartHookClient, sessionID string, input hookInput) (output string, primeErr error) {
 	observeAgentConversation(c, sessionID, input.SessionID, input.TranscriptPath)
-	contexts, primeErr := sessionStartContexts(c, sessionID)
-	return hooks.SessionStartOutput(contexts...), primeErr
-}
-
-type sessionStartClient interface {
-	SeedReady(sessionID, plot string, all bool) (*protocol.SeedReadyResult, error)
-}
-
-// A bare harness launched outside attn's wrapper still gets the agent guidance here.
-func sessionStartContexts(c sessionStartClient, sessionID string) (contexts []string, primeErr error) {
-	if !launchGuidanceProvided() {
-		contexts = append(contexts, hooks.AgentGuidance)
-	}
-
-	ready, primeErr := c.SeedReady(sessionID, "", false)
-	if primeErr == nil {
-		contexts = append(contexts, seedPrimeTailFromReady(ready))
-	}
-	return contexts, primeErr
-}
-
-func launchGuidanceProvided() bool {
-	return strings.TrimSpace(os.Getenv("ATTN_AGENT_GUIDANCE")) != "" ||
-		strings.TrimSpace(os.Getenv("ATTN_CHIEF_GUIDANCE")) != ""
 }
 
 func runHookState() {

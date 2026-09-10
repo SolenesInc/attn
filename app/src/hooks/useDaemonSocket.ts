@@ -140,11 +140,14 @@ export type SeedArtifactReference = GeneratedSeedArtifactReference;
 export type SeedDocument = GeneratedSeedDocument;
 export interface SeedHandoverOptions {
   seedId: string;
-  expectedRev: number;
-  expectedTenderSession: string;
-  expectedTenderMember: string;
+  cwd: string;
+  checkout?: { kind: 'reuse' | 'new_worktree' | 'existing_branch_worktree'; branch: string; from?: string; path?: string };
+  allowWorktreeReuse?: boolean;
   sourceSessionId?: string;
   handoff?: string;
+  role?: string;
+  choice?: string;
+  fallback?: boolean;
   agent?: string;
   model?: string;
   effort?: string;
@@ -3149,8 +3152,8 @@ export function useDaemonSocket({
 
   const sendDelegationPreferencesGet = useCallback((): Promise<DelegationSettingsState> =>
     sendRequest('delegation_preferences_get', {}, 'Reading delegation preferences timed out'), [sendRequest]);
-  const sendDelegationPreferencesSave = useCallback((preferences: DelegationPreferences): Promise<DelegationSettingsState> =>
-    sendRequest('delegation_preferences_save', { preferences }, 'Saving delegation preferences timed out'), [sendRequest]);
+  const sendDelegationPreferencesSave = useCallback((preferences: DelegationPreferences, installWorkflowSkill = false): Promise<DelegationSettingsState> =>
+    sendRequest('delegation_preferences_save', { preferences, ...(installWorkflowSkill ? { install_workflow_skill: true } : {}) }, 'Saving delegation preferences timed out'), [sendRequest]);
   const sendDelegationModels = useCallback((harness: string): Promise<DelegationModelCatalog> =>
     sendRequest('delegation_models', { harness }, 'Discovering models timed out', 70_000), [sendRequest]);
 
@@ -4613,21 +4616,15 @@ export function useDaemonSocket({
       {
         cmd: 'delegate',
         request_id: requestId,
-        source_session_id: options.sourceSessionId ?? '',
-        brief: '',
-        handover: {
-          seed_id: options.seedId,
-          expected_rev: options.expectedRev,
-          expected_tender_session: options.expectedTenderSession,
-          expected_tender_member: options.expectedTenderMember,
-          ...(options.handoff?.trim() ? { handoff: options.handoff.trim() } : {}),
-          ...(options.review ? {
-            review: {
-              review_id: options.review.reviewId,
-              evidence_version: options.review.evidenceVersion,
-            },
-          } : {}),
-        },
+        ...(options.sourceSessionId ? { source_session_id: options.sourceSessionId } : {}),
+        assignment: { kind: 'seed', seed_id: options.seedId, handover: options.handoff?.trim() ? { note: options.handoff.trim() } : {} },
+        cwd: options.cwd,
+        ...(options.checkout ? { checkout: options.checkout } : {}),
+        ...(options.allowWorktreeReuse ? { allow_worktree_reuse: true } : {}),
+        ...(options.role?.trim() ? { role: options.role.trim() } : {}),
+        ...(options.choice?.trim() ? { choice: options.choice.trim() } : {}),
+        ...(options.fallback ? { fallback: true } : {}),
+        ...(options.review ? { review: { review_id: options.review.reviewId, evidence_version: options.review.evidenceVersion } } : {}),
         ...(options.agent?.trim() ? { agent: options.agent.trim() } : {}),
         ...(options.model?.trim() ? { model: options.model.trim() } : {}),
         ...(options.effort?.trim() ? { effort: options.effort.trim() } : {}),

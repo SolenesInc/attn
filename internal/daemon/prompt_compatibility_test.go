@@ -21,7 +21,7 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 	}
 	for _, body := range []string{"", " Brief λ {{literal}}\nnext line "} {
 		for _, seed := range []string{"", "s-example"} {
-			out["delegation/"+body+"/"+seed] = withLeafIdentity(delegatedBriefPrompt(body, seed))
+			out["delegation/"+body+"/"+seed] = prompts.RenderText("delegation", "opening", prompts.Values{"seed_id": seed})
 			for _, review := range []bool{false, true} {
 				for _, pr := range []*automation.PullRequestInput{nil, {Number: 12, URL: "https://example.org/review/12", HeadSHA: "abc"}} {
 					out[fmt.Sprintf("automation/%s/%s/%t/%t", body, seed, review, pr != nil)] = automationSessionPrompt(body, "/tmp/input", seed, "Daily \"review\"", pr, review)
@@ -68,7 +68,7 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 	out["chief/assignment"] = chiefSeedAssignmentPrompt("s-example")
 	for _, body := range []string{"", " Task λ {{literal}} "} {
 		for _, handoff := range []string{"", " Next {{literal}} "} {
-			out["handover/"+body+"/"+handoff] = handoverPrompt(body, handoff, "s-example")
+			out["handover/"+body+"/"+handoff] = prompts.RenderText("delegation", "handover", prompts.Values{"seed_id": "s-example"})
 		}
 	}
 	out["garden-update"] = mailboxItemContent(agentmailbox.Delivery{Item: agentmailbox.Item{Kind: agentmailbox.KindGardenSeed, SourceID: "s-example", Hint: "note"}})

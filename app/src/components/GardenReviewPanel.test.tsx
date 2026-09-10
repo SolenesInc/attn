@@ -317,13 +317,14 @@ describe('GardenReviewPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
     const handoff = screen.getByLabelText(/What should the new agent know/);
     fireEvent.change(handoff, { target: { value: 'Keep this text' } });
+		fireEvent.change(screen.getByLabelText('Working folder'), { target: { value: '/tmp/placed' } });
     fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
 
     expect(await screen.findByText('Worker could not start')).toBeInTheDocument();
     expect(handoff).toHaveValue('Keep this text');
     expect(options.onHandoverSeed).toHaveBeenCalledWith(expect.objectContaining({
       seedId: 's-review1',
-      expectedRev: 7,
+			cwd: '/tmp/placed',
       handoff: 'Keep this text',
       review: { reviewId: 'r-review1', evidenceVersion: 'evidence-1' },
     }));

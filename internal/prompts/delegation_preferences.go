@@ -2,20 +2,20 @@ package prompts
 
 import (
 	"encoding/json"
-	"strconv"
 	"strings"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-var delegationRoleSpecs = []struct{ id, name, icon string }{
-	{"scout", "Scout", "search"},
-	{"design", "Design", "diamond"},
-	{"build", "Build", "code"},
-	{"ship", "Ship", "arrow"},
-	{"review", "Review", "list"},
-	{"verify", "Verify", "circle"},
-	{"orchestrator", "Orchestrator", "spark"},
+var delegationRoleSpecs = []struct {
+	id   protocol.BuiltinDelegationRole
+	name string
+	icon string
+}{
+	{protocol.BuiltinDelegationRolePathfinder, "Pathfinder", "search"},
+	{protocol.BuiltinDelegationRoleBuilder, "Builder", "code"},
+	{protocol.BuiltinDelegationRoleReviewer, "Reviewer", "list"},
+	{protocol.BuiltinDelegationRoleOrchestrator, "Orchestrator", "spark"},
 }
 
 func delegationPreferencesRecipient() Recipient {
@@ -31,7 +31,7 @@ func delegationPreferencesRecipient() Recipient {
 		id    string
 		names []string
 	}{
-		{"guidance", []string{"revision"}}, {"empty", nil},
+		{"guidance", nil}, {"empty", nil},
 		{"role", []string{"name", "id", "description", "instructions", "stopping_point", "choices"}},
 		{"choice", []string{"kind", "name", "id", "selection", "condition"}},
 		{"fallback", []string{"selection", "instructions"}},
@@ -43,7 +43,7 @@ func delegationPreferencesRecipient() Recipient {
 	}
 	for _, role := range delegationRoleSpecs {
 		for _, field := range []string{"description", "instructions", "stopping-point"} {
-			id := role.id + "-" + field
+			id := string(role.id) + "-" + field
 			events = append(events, On(id, "message_fragment", "Editable starting guidance for a delegation role.", Use("delegation-preferences."+id, "content/delegation-preferences/"+id+".md")))
 		}
 	}
@@ -61,13 +61,42 @@ func preferenceText(event string, values Values) string {
 func DelegationRoleTemplates() []protocol.DelegationRole {
 	result := []protocol.DelegationRole{}
 	for _, item := range delegationRoleSpecs {
-		result = append(result, protocol.DelegationRole{ID: item.id, Name: item.name, Icon: item.icon, Enabled: true, Description: preferenceText(item.id+"-description", nil), Instructions: preferenceText(item.id+"-instructions", nil), StoppingPoint: preferenceText(item.id+"-stopping-point", nil), DefaultChoiceID: "default", Choices: []protocol.DelegationChoice{{ID: "default", Name: "Default"}}})
+		builtin := item.id
+		result = append(result, protocol.DelegationRole{ID: string(item.id), Builtin: &builtin, Enabled: true, DefaultChoiceID: "default", Choices: []protocol.DelegationChoice{{ID: "default", Name: "Default"}}})
 	}
 	return result
 }
 
-func DelegationRoutingGuidance(revision int) string {
-	return preferenceText("guidance", Values{"revision": strconv.Itoa(revision)})
+func ExpandDelegationRoles(roles []protocol.DelegationRole) []protocol.DelegationRole {
+	expanded := make([]protocol.DelegationRole, 0, len(roles))
+	for _, role := range roles {
+		copy := role
+		if role.Builtin != nil {
+			for _, spec := range delegationRoleSpecs {
+				if spec.id != *role.Builtin {
+					continue
+				}
+				key := string(spec.id)
+				copy.Name = spec.name
+				copy.Icon = spec.icon
+				copy.Description = preferenceText(key+"-description", nil)
+				copy.Instructions = preferenceText(key+"-instructions", nil)
+				copy.StoppingPoint = preferenceText(key+"-stopping-point", nil)
+				break
+			}
+		}
+		expanded = append(expanded, copy)
+	}
+	return expanded
+}
+
+func ExpandDelegationPreferences(cfg protocol.DelegationPreferences) protocol.DelegationPreferences {
+	cfg.Roles = ExpandDelegationRoles(cfg.Roles)
+	return cfg
+}
+
+func DelegationRoutingGuidance() string {
+	return preferenceText("guidance", nil)
 }
 
 func DelegationRolesText(result protocol.DelegationRolesResult) string {
@@ -75,6 +104,7 @@ func DelegationRolesText(result protocol.DelegationRolesResult) string {
 		return preferenceText("empty", nil)
 	}
 	parts := []string{result.Guidance}
+	result.Roles = ExpandDelegationRoles(result.Roles)
 	selection := func(value protocol.DelegationSelection) string { raw, _ := json.Marshal(value); return string(raw) }
 	for _, r := range result.Roles {
 		choices := []string{}

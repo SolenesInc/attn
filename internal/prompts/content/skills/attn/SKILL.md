@@ -28,36 +28,18 @@ If a command reports an unknown subcommand or version, check `attn --version`
 and `which -a attn`; recover with `"$ATTN_WRAPPER_PATH"` when it is set.
 `attn skill` prints the bundled copy of this skill and its references.
 
-## Confirm Your Role First
+## Delegation and reporting
 
-A **subagent** is always a native runtime subagent, including in phrases such as
-"delegate subagents" and "dispatch subagents." Native subagents report to the
-calling agent. An **attn delegation** creates a visible agent session the user
-can inspect, converse with, and steer directly.
+An Attn delegation creates a separate session the user can inspect and steer. A subagent is a native runtime subagent that reports to its calling agent.
 
-Choose your role before reading anything about delegation:
+Follow the task brief and its authorization boundaries. Start further Attn delegations when authorized by the user or the assigned task. A configured role or a reporting seed alone does not grant that authority.
 
-- **Chief of staff**, if your system prompt says so: follow its delegation authority and read the delegation reference
-  for current mechanics and configured roles.
-- **A delegated leaf**, if your initial task opens with a line identifying you
-  as a delegated attn session: do the work here. An explicit request from the
-  user steering *this* session selects attn delegation; otherwise, use native
-  subagents. See
-  [references/delegated-agent.md](references/delegated-agent.md).
-- **Otherwise, an ordinary session:** use attn delegation when the user requests
-  it or your assigned task or role explicitly authorizes it. Use native subagents
-  for internal subtasks. Configured delegation roles do not grant this authority.
-
-A tracked task is still a leaf task. Every delegation binds a seed, so a bound
-seed says nothing about your role: it means your delegator and the chief are
-*watching* your seed, not that you inherited a delegation license.
+For delegation mechanics and configured role selection, read [references/delegation.md](references/delegation.md). For an assigned delegation's reporting and completion, read [references/delegated-agent.md](references/delegated-agent.md).
 
 ## Capability Index
 
-- **Create a visible interactive agent the user can steer** (per the role check
-  above): read [references/delegation.md](references/delegation.md).
-- **You are a delegated leaf — confirm what you may do, and report your work
-  state if it's tracked:** read
+- **Create an authorized Attn delegation:** read [references/delegation.md](references/delegation.md).
+- **Report on an assigned delegation:** read
   [references/delegated-agent.md](references/delegated-agent.md).
 - **See what other sessions are running here, watch one without interrupting it,
   send one a message, or close one you are done with — and know what a message

@@ -2021,6 +2021,13 @@ type BrowserControlResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type BuiltinDelegationRole string
+
+const BuiltinDelegationRoleBuilder BuiltinDelegationRole = "builder"
+const BuiltinDelegationRoleOrchestrator BuiltinDelegationRole = "orchestrator"
+const BuiltinDelegationRolePathfinder BuiltinDelegationRole = "pathfinder"
+const BuiltinDelegationRoleReviewer BuiltinDelegationRole = "reviewer"
+
 type BusConsumerStatus struct {
 	// Cursor corresponds to the JSON schema field "cursor".
 	Cursor int `json:"cursor"`
@@ -2627,6 +2634,50 @@ type DaemonWarning struct {
 	Message string `json:"message"`
 }
 
+type DelegateAssignment struct {
+	// Brief corresponds to the JSON schema field "brief".
+	Brief *string `json:"brief,omitempty,omitzero"`
+
+	// Handover corresponds to the JSON schema field "handover".
+	Handover *DelegateHandover `json:"handover,omitempty,omitzero"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind DelegateAssignmentKind `json:"kind"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID *string `json:"seed_id,omitempty,omitzero"`
+}
+
+type DelegateAssignmentKind string
+
+const DelegateAssignmentKindNew DelegateAssignmentKind = "new"
+const DelegateAssignmentKindSeed DelegateAssignmentKind = "seed"
+
+type DelegateCheckout struct {
+	// Branch corresponds to the JSON schema field "branch".
+	Branch string `json:"branch"`
+
+	// From corresponds to the JSON schema field "from".
+	From *string `json:"from,omitempty,omitzero"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind DelegateCheckoutKind `json:"kind"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path *string `json:"path,omitempty,omitzero"`
+}
+
+type DelegateCheckoutKind string
+
+const DelegateCheckoutKindExistingBranchWorktree DelegateCheckoutKind = "existing_branch_worktree"
+const DelegateCheckoutKindNewWorktree DelegateCheckoutKind = "new_worktree"
+const DelegateCheckoutKindReuse DelegateCheckoutKind = "reuse"
+
+type DelegateHandover struct {
+	// Note corresponds to the JSON schema field "note".
+	Note *string `json:"note,omitempty,omitzero"`
+}
+
 type DelegateMessage struct {
 	// Agent corresponds to the JSON schema field "agent".
 	Agent *string `json:"agent,omitempty,omitzero"`
@@ -2634,8 +2685,11 @@ type DelegateMessage struct {
 	// AllowWorktreeReuse corresponds to the JSON schema field "allow_worktree_reuse".
 	AllowWorktreeReuse *bool `json:"allow_worktree_reuse,omitempty,omitzero"`
 
-	// Brief corresponds to the JSON schema field "brief".
-	Brief string `json:"brief"`
+	// Assignment corresponds to the JSON schema field "assignment".
+	Assignment DelegateAssignment `json:"assignment"`
+
+	// Checkout corresponds to the JSON schema field "checkout".
+	Checkout *DelegateCheckout `json:"checkout,omitempty,omitzero"`
 
 	// Choice corresponds to the JSON schema field "choice".
 	Choice *string `json:"choice,omitempty,omitzero"`
@@ -2643,11 +2697,8 @@ type DelegateMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
-	// Confirm corresponds to the JSON schema field "confirm".
-	Confirm *bool `json:"confirm,omitempty,omitzero"`
-
 	// Cwd corresponds to the JSON schema field "cwd".
-	Cwd *string `json:"cwd,omitempty,omitzero"`
+	Cwd string `json:"cwd"`
 
 	// Effort corresponds to the JSON schema field "effort".
 	Effort *string `json:"effort,omitempty,omitzero"`
@@ -2655,24 +2706,11 @@ type DelegateMessage struct {
 	// Fallback corresponds to the JSON schema field "fallback".
 	Fallback *bool `json:"fallback,omitempty,omitzero"`
 
-	// Handover corresponds to the JSON schema field "handover".
-	Handover *SeedHandoverRequest `json:"handover,omitempty,omitzero"`
-
 	// Label corresponds to the JSON schema field "label".
 	Label *string `json:"label,omitempty,omitzero"`
 
 	// Model corresponds to the JSON schema field "model".
 	Model *string `json:"model,omitempty,omitzero"`
-
-	// Placement corresponds to the JSON schema field "placement".
-	Placement *string `json:"placement,omitempty,omitzero"`
-
-	// Plot corresponds to the JSON schema field "plot".
-	Plot *string `json:"plot,omitempty,omitzero"`
-
-	// PreferencesRevision corresponds to the JSON schema field
-	// "preferences_revision".
-	PreferencesRevision *int `json:"preferences_revision,omitempty,omitzero"`
 
 	// Provider corresponds to the JSON schema field "provider".
 	Provider *string `json:"provider,omitempty,omitzero"`
@@ -2680,31 +2718,34 @@ type DelegateMessage struct {
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
 
+	// Review corresponds to the JSON schema field "review".
+	Review *SeedReviewActionContext `json:"review,omitempty,omitzero"`
+
 	// Role corresponds to the JSON schema field "role".
 	Role *string `json:"role,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID string `json:"source_session_id"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID *string `json:"ticket_id,omitempty,omitzero"`
-
-	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID *string `json:"workspace_id,omitempty,omitzero"`
-
-	// Worktree corresponds to the JSON schema field "worktree".
-	Worktree *DelegateWorktreeRequest `json:"worktree,omitempty,omitzero"`
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
 
 	// YoloMode corresponds to the JSON schema field "yolo_mode".
 	YoloMode *bool `json:"yolo_mode,omitempty,omitzero"`
 }
 
 type DelegateResult struct {
+	// Agent corresponds to the JSON schema field "agent".
+	Agent string `json:"agent"`
+
 	// Branch corresponds to the JSON schema field "branch".
 	Branch *string `json:"branch,omitempty,omitzero"`
 
+	// Checkout corresponds to the JSON schema field "checkout".
+	Checkout string `json:"checkout"`
+
 	// Directory corresponds to the JSON schema field "directory".
 	Directory string `json:"directory"`
+
+	// Effort corresponds to the JSON schema field "effort".
+	Effort string `json:"effort"`
 
 	// FirstTurnAt corresponds to the JSON schema field "first_turn_at".
 	FirstTurnAt *string `json:"first_turn_at,omitempty,omitzero"`
@@ -2713,14 +2754,24 @@ type DelegateResult struct {
 	// "first_turn_unconfirmed".
 	FirstTurnUnconfirmed *string `json:"first_turn_unconfirmed,omitempty,omitzero"`
 
-	// Placement corresponds to the JSON schema field "placement".
-	Placement string `json:"placement"`
+	// Model corresponds to the JSON schema field "model".
+	Model string `json:"model"`
+
+	// PredecessorSessionID corresponds to the JSON schema field
+	// "predecessor_session_id".
+	PredecessorSessionID *string `json:"predecessor_session_id,omitempty,omitzero"`
+
+	// Role corresponds to the JSON schema field "role".
+	Role *string `json:"role,omitempty,omitzero"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID string `json:"session_id"`
 
 	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID string `json:"workspace_id"`
+	WorkspaceID *string `json:"workspace_id,omitempty,omitzero"`
 
 	// WorktreeCreated corresponds to the JSON schema field "worktree_created".
 	WorktreeCreated *bool `json:"worktree_created,omitempty,omitzero"`
@@ -2780,6 +2831,14 @@ type DelegationChoice struct {
 
 	// When corresponds to the JSON schema field "when".
 	When string `json:"when"`
+}
+
+type DelegationFailure struct {
+	// Code corresponds to the JSON schema field "code".
+	Code string `json:"code"`
+
+	// Message corresponds to the JSON schema field "message".
+	Message string `json:"message"`
 }
 
 type DelegationFallback struct {
@@ -2871,11 +2930,20 @@ type DelegationModelsResultMessage struct {
 }
 
 type DelegationOperation struct {
+	// Branch corresponds to the JSON schema field "branch".
+	Branch *string `json:"branch,omitempty,omitzero"`
+
 	// CreatedAt corresponds to the JSON schema field "created_at".
 	CreatedAt string `json:"created_at"`
 
+	// Directory corresponds to the JSON schema field "directory".
+	Directory *string `json:"directory,omitempty,omitzero"`
+
 	// Error corresponds to the JSON schema field "error".
 	Error *string `json:"error,omitempty,omitzero"`
+
+	// Failure corresponds to the JSON schema field "failure".
+	Failure *DelegationFailure `json:"failure,omitempty,omitzero"`
 
 	// OperationID corresponds to the JSON schema field "operation_id".
 	OperationID string `json:"operation_id"`
@@ -2888,6 +2956,9 @@ type DelegationOperation struct {
 
 	// Result corresponds to the JSON schema field "result".
 	Result *DelegateResult `json:"result,omitempty,omitzero"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID *string `json:"seed_id,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID string `json:"session_id"`
@@ -2941,6 +3012,10 @@ type DelegationPreferences struct {
 
 	// Roles corresponds to the JSON schema field "roles".
 	Roles []DelegationRole `json:"roles"`
+
+	// WorkflowSkillEnabled corresponds to the JSON schema field
+	// "workflow_skill_enabled".
+	WorkflowSkillEnabled bool `json:"workflow_skill_enabled"`
 }
 
 type DelegationPreferencesChangedMessage struct {
@@ -2966,6 +3041,9 @@ type DelegationPreferencesResultMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
+	// ExpandedRoles corresponds to the JSON schema field "expanded_roles".
+	ExpandedRoles []DelegationRole `json:"expanded_roles,omitempty,omitzero"`
+
 	// Harnesses corresponds to the JSON schema field "harnesses".
 	Harnesses []DelegationHarness `json:"harnesses,omitempty,omitzero"`
 
@@ -2980,11 +3058,18 @@ type DelegationPreferencesResultMessage struct {
 
 	// Templates corresponds to the JSON schema field "templates".
 	Templates []DelegationRole `json:"templates,omitempty,omitzero"`
+
+	// WorkflowSkillPaths corresponds to the JSON schema field "workflow_skill_paths".
+	WorkflowSkillPaths []string `json:"workflow_skill_paths,omitempty,omitzero"`
 }
 
 type DelegationPreferencesSaveMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// InstallWorkflowSkill corresponds to the JSON schema field
+	// "install_workflow_skill".
+	InstallWorkflowSkill *bool `json:"install_workflow_skill,omitempty,omitzero"`
 
 	// Preferences corresponds to the JSON schema field "preferences".
 	Preferences DelegationPreferences `json:"preferences"`
@@ -2994,6 +3079,9 @@ type DelegationPreferencesSaveMessage struct {
 }
 
 type DelegationRole struct {
+	// Builtin corresponds to the JSON schema field "builtin".
+	Builtin *BuiltinDelegationRole `json:"builtin,omitempty,omitzero"`
+
 	// Choices corresponds to the JSON schema field "choices".
 	Choices []DelegationChoice `json:"choices"`
 
@@ -7429,6 +7517,9 @@ type SeedHandoverRequest struct {
 
 	// Handoff corresponds to the JSON schema field "handoff".
 	Handoff *string `json:"handoff,omitempty,omitzero"`
+
+	// NoteID corresponds to the JSON schema field "note_id".
+	NoteID *string `json:"note_id,omitempty,omitzero"`
 
 	// Review corresponds to the JSON schema field "review".
 	Review *SeedReviewActionContext `json:"review,omitempty,omitzero"`

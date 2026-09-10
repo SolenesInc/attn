@@ -310,7 +310,7 @@ func TestSeedHandoverSubscriptionFailureRollsBackTheWholeTransfer(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	msg := handoverRequest(before, doc.Rev, "handover-failure", "planner", "handoff must commit with the transfer")
+	msg := resolvedHandoverRequest(before, doc.Rev, "handover-failure", "planner", "handoff must commit with the transfer")
 	if _, err := db.Exec(`CREATE TRIGGER refuse_subscription BEFORE INSERT ON garden_seed_watches BEGIN SELECT RAISE(ABORT, 'subscription unavailable'); END`); err != nil {
 		t.Fatal(err)
 	}
@@ -338,14 +338,14 @@ func TestSeedHandoverSubscriptionFailureRollsBackTheWholeTransfer(t *testing.T) 
 	if _, err := d.bindSeedHandover(msg, "handover-failure", "successor", "/tmp/a", "codex", false); err != nil {
 		t.Fatal(err)
 	}
-	if watching, err := d.store.GardenSeedWatching("planner", planted.ID); err != nil || !watching {
+	if watching, err := d.store.GardenSeedWatching("successor", planted.ID); err != nil || !watching {
 		t.Fatalf("handover retry lacks watch: %v %v", watching, err)
 	}
-	watchSeed(t, d, "planner", planted.ID, true)
+	watchSeed(t, d, "successor", planted.ID, true)
 	if _, err := d.bindSeedHandover(msg, "handover-failure", "successor", "/tmp/a", "codex", false); err != nil {
 		t.Fatal(err)
 	}
-	if watching, err := d.store.GardenSeedWatching("planner", planted.ID); err != nil || watching {
+	if watching, err := d.store.GardenSeedWatching("successor", planted.ID); err != nil || watching {
 		t.Fatalf("binding replay restored watch: %v %v", watching, err)
 	}
 }

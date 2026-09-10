@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -11,7 +12,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
@@ -930,57 +930,7 @@ func runSeedSetResume(args []string) {
 }
 
 func runSeedHandover(args []string) {
-	f := newSeedFlags("handover")
-	positionals := f.parse("handover", args)
-	if len(positionals) != 1 {
-		seedFail("handover", fmt.Errorf("needs exactly one seed id, got %d: attn seed handover s-7k3f9m", len(positionals)))
-	}
-	seedID := strings.TrimSpace(positionals[0])
-	c := seedClient()
-	document, err := c.SeedShow(f.sessionID(), seedID)
-	if err != nil {
-		seedFail("handover", err)
-	}
-	requestID := strings.TrimSpace(*f.requestID)
-	if requestID == "" {
-		requestID = uuid.NewString()
-	}
-	handoff := strings.TrimSpace(f.text("handover"))
-	request := &protocol.SeedHandoverRequest{
-		SeedID:                document.Seed.ID,
-		ExpectedRev:           document.Seed.Rev,
-		ExpectedTenderSession: document.Seed.TenderSession,
-		ExpectedTenderMember:  document.Seed.TenderMember,
-	}
-	if handoff != "" {
-		request.Handoff = protocol.Ptr(handoff)
-	}
-
-	fmt.Fprintf(os.Stderr, "handover request: request_id=%s seed_id=%s\n", requestID, seedID)
-	operation, err := c.StartDelegation(f.sessionID(), "", client.DelegateOptions{
-		RequestID: requestID,
-		Agent:     strings.TrimSpace(*f.agent),
-		Model:     strings.TrimSpace(*f.model),
-		Effort:    strings.TrimSpace(*f.effort),
-		Label:     strings.TrimSpace(*f.name),
-		Yolo:      *f.yolo,
-		CWD:       strings.TrimSpace(*f.cwd),
-		Handover:  request,
-	})
-	if err != nil {
-		seedFail("handover", err)
-	}
-	fmt.Fprintf(os.Stderr, "handover accepted: request_id=%s operation_id=%s session_id=%s\n",
-		operation.RequestID, operation.OperationID, operation.SessionID)
-	operation, err = waitDelegationCLI(c, operation, requestID, os.Stderr)
-	if err != nil {
-		seedFail("handover", err)
-	}
-	if *f.json {
-		writeJSON(operation.Result)
-		return
-	}
-	fmt.Printf("%s handed over to session %s in %s\n", seedID, operation.Result.SessionID, operation.Result.Directory)
+	seedFail("handover", errors.New("retired: use `attn delegate --seed <id> --handover --cwd <path>` with an explicit checkout choice inside Git"))
 }
 
 func runSeedSendToChief(args []string) {

@@ -3,7 +3,7 @@ import type { DelegationPreferences } from '../types/generated';
 import type { DelegationSettingsState } from './daemonDelegationEvents';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
 
-export function useDelegationPreferences(active: boolean, load: () => Promise<DelegationSettingsState>, save: (value: DelegationPreferences) => Promise<DelegationSettingsState>) {
+export function useDelegationPreferences(active: boolean, load: () => Promise<DelegationSettingsState>, save: (value: DelegationPreferences, installWorkflowSkill?: boolean) => Promise<DelegationSettingsState>) {
   const [state, setState] = useState<DelegationSettingsState | null>(null);
   const [draft, setDraft] = useState<DelegationPreferences | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,11 +39,11 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
   useEffect(() => { if (active && !busyRef.current) void reload(); }, [active, pushed, reload]);
   useEffect(() => () => { request.current++; }, []);
 
-  const persist = useCallback(async (value: DelegationPreferences) => {
+  const persist = useCallback(async (value: DelegationPreferences, installWorkflowSkill = false) => {
     if (busyRef.current) return;
     busyRef.current = true; setBusy(true); setError(''); request.current++;
     try {
-      const next = await save(value);
+      const next = await save(value, installWorkflowSkill);
       setState(next); setDraft(structuredClone(next.preferences)); setChangedElsewhere(false);
     } catch (e) { setError(String(e instanceof Error ? e.message : e)); }
     finally { busyRef.current = false; setBusy(false); }

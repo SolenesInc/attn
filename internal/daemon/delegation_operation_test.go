@@ -32,6 +32,14 @@ func waitDelegationOperation(t *testing.T, d *Daemon, id string) *protocol.Deleg
 	return nil
 }
 
+func explicitOperationMessage(d *Daemon, requestID, sourceID, brief, label string) protocol.DelegateMessage {
+	return protocol.DelegateMessage{
+		Cmd: protocol.CmdDelegate, RequestID: requestID, SourceSessionID: protocol.Ptr(sourceID),
+		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr(brief)},
+		Cwd:        d.store.Get(sourceID).Directory, Agent: protocol.Ptr("codex"), Label: protocol.Ptr(label),
+	}
+}
+
 func TestDelegationOperationSequentialAndResponseLossRetryConverge(t *testing.T) {
 	d := newDelegationDaemon(t)
 	backend := &fakeSpawnBackend{}
@@ -40,13 +48,13 @@ func TestDelegationOperationSequentialAndResponseLossRetryConverge(t *testing.T)
 		t.Fatal(err)
 	}
 	consumeDelegatedPrompt(t, backend)
-	msg := &protocol.DelegateMessage{Cmd: protocol.CmdDelegate, RequestID: "stable-request", SourceSessionID: sourceID, Brief: "Do the work once.", Agent: protocol.Ptr("codex"), Label: protocol.Ptr("once")}
+	msg := explicitOperationMessage(d, "stable-request", sourceID, "Do the work once.", "once")
 
-	first, err := d.startDelegation(msg)
+	first, err := d.startDelegation(&msg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := d.startDelegation(msg)
+	second, err := d.startDelegation(&msg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +63,7 @@ func TestDelegationOperationSequentialAndResponseLossRetryConverge(t *testing.T)
 	}
 	done := waitDelegationOperation(t, d, first.OperationID)
 	if done.Result == nil {
-		t.Fatalf("completed operation has no result: %+v", done)
+		t.Fatalf("completed operation has no result: %+v failure=%s", done, protocol.Deref(done.Error))
 	}
 	if done.WorktreePath != nil {
 		t.Fatalf("ordinary delegation reported worktree_path=%q", protocol.Deref(done.WorktreePath))
@@ -69,10 +77,11 @@ func TestDelegationOperationSequentialAndResponseLossRetryConverge(t *testing.T)
 }
 
 func TestDelegationOperationReservesOperationIDNamespace(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d := newDelegationDaemon(t)
 	backend := &fakeSpawnBackend{}
 	_, sourceID, _ := setupDelegationSource(t, d, backend)
-	_, err := d.startDelegation(&protocol.DelegateMessage{Cmd: protocol.CmdDelegate, RequestID: "op-caller-value", SourceSessionID: sourceID, Brief: "Must reject.", Agent: protocol.Ptr("codex")})
+	msg := explicitOperationMessage(d, "op-caller-value", sourceID, "Must reject.", "reserved")
+	_, err := d.startDelegation(&msg)
 	if err == nil || !strings.Contains(err.Error(), "reserved operation prefix") {
 		t.Fatalf("error=%v", err)
 	}
@@ -92,11 +101,11 @@ func TestRecoveredDelegationResultDistinguishesReusedWorktree(t *testing.T) {
 }
 
 func TestDelegationOperationConcurrentRetriesConverge(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d := newDelegationDaemon(t)
 	backend := &fakeSpawnBackend{}
 	_, sourceID, _ := setupDelegationSource(t, d, backend)
 	consumeDelegatedPrompt(t, backend)
-	msg := protocol.DelegateMessage{Cmd: protocol.CmdDelegate, RequestID: "concurrent-request", SourceSessionID: sourceID, Brief: "Launch once concurrently.", Agent: protocol.Ptr("codex"), Label: protocol.Ptr("parallel")}
+	msg := explicitOperationMessage(d, "concurrent-request", sourceID, "Launch once concurrently.", "parallel")
 	const callers = 12
 	results := make(chan *protocol.DelegationOperation, callers)
 	errs := make(chan error, callers)
@@ -131,7 +140,7 @@ func TestDelegationOperationConcurrentRetriesConverge(t *testing.T) {
 	}
 	done := waitDelegationOperation(t, d, operationID)
 	if done.Result == nil || len(d.store.List("")) != 2 {
-		t.Fatalf("operation=%+v sessions=%d", done, len(d.store.List("")))
+		t.Fatalf("operation=%+v failure=%s sessions=%d", done, protocol.Deref(done.Error), len(d.store.List("")))
 	}
 }
 
@@ -159,11 +168,10 @@ func TestDelegationOperationAcceptedBeforeSlowPreparation(t *testing.T) {
 		<-release
 	}
 	start := time.Now()
-	op, err := d.startDelegation(&protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, RequestID: "slow-request", SourceSessionID: sourceID,
-		Brief: "Slow worktree launch.", Agent: protocol.Ptr("codex"), Label: protocol.Ptr("slow"),
-		Worktree: &protocol.DelegateWorktreeRequest{Repo: protocol.Ptr(mainRepo), Branch: "feat/slow", Path: protocol.Ptr(filepath.Join(root, "repo--slow"))},
-	})
+	slow := explicitOperationMessage(d, "slow-request", sourceID, "Slow worktree launch.", "slow")
+	slow.Cwd = mainRepo
+	slow.Checkout = &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindNewWorktree, Branch: "feat/slow", From: protocol.Ptr("HEAD"), Path: protocol.Ptr(filepath.Join(root, "repo--slow"))}
+	op, err := d.startDelegation(&slow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,12 +209,12 @@ func TestDelegationOperationRestartResumesAcceptedRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d1 := NewForTesting(filepath.Join(t.TempDir(), "one.sock"))
+	d1 := newDelegationDaemon(t)
 	_ = d1.store.Close()
 	d1.store = persistent
 	backend := &fakeSpawnBackend{}
 	_, sourceID, _ := setupDelegationSource(t, d1, backend)
-	msg := protocol.DelegateMessage{Cmd: protocol.CmdDelegate, RequestID: "restart-request", SourceSessionID: sourceID, Brief: "Resume after restart.", Agent: protocol.Ptr("codex"), Label: protocol.Ptr("restart")}
+	msg := explicitOperationMessage(d1, "restart-request", sourceID, "Resume after restart.", "restart")
 	requestJSON, _ := json.Marshal(msg)
 	record, claimed, err := d1.store.ClaimDelegationOperation(msg.RequestID, "operation-restart", "session-restart", "", "", string(requestJSON), time.Now())
 	if err != nil || !claimed {
@@ -220,16 +228,18 @@ func TestDelegationOperationRestartResumesAcceptedRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d2 := NewForTesting(filepath.Join(t.TempDir(), "two.sock"))
+	d2 := NewForTesting(filepath.Join(d1.dataRoot, "two.sock"))
+	d2.daemonInstanceID = d1.daemonInstanceID
 	_ = d2.store.Close()
 	d2.store = reopened
 	d2.ptyBackend = &fakeSpawnBackend{}
+	d2.ensureGardenCollections()
 	consumeDelegatedPrompt(t, d2.ptyBackend.(*fakeSpawnBackend))
 	d2.loadWorkspacesFromStore()
 	d2.resumePendingDelegations()
 	done := waitDelegationOperation(t, d2, record.Operation.OperationID)
 	if done.State != protocol.DelegationOperationStateCompleted || done.SessionID != "session-restart" {
-		t.Fatalf("resumed operation=%+v", done)
+		t.Fatalf("resumed operation=%+v failure=%+v error=%q", done, done.Failure, protocol.Deref(done.Error))
 	}
 }
 
@@ -237,14 +247,13 @@ func TestDelegationOperationAdoptsReconciledReservedRuntime(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
 	workspaceID, sourceID, cwd := setupDelegationSource(t, d, backend)
-	msg := protocol.DelegateMessage{Cmd: protocol.CmdDelegate, RequestID: "spawn-crash", SourceSessionID: sourceID, Brief: "Adopt the surviving runtime.", Agent: protocol.Ptr("codex"), Label: protocol.Ptr("adopted")}
-	encoded, _ := json.Marshal(msg)
-	record, _, err := d.store.ClaimDelegationOperation(msg.RequestID, "operation-spawn-crash", "session-spawn-crash", "", "", string(encoded), time.Now())
+	encoded, _ := json.Marshal(map[string]any{"cmd": "delegate", "request_id": "spawn-crash", "source_session_id": sourceID, "brief": "Adopt the surviving runtime.", "agent": "codex", "label": "adopted"})
+	record, _, err := d.store.ClaimDelegationOperation("spawn-crash", "operation-spawn-crash", "session-spawn-crash", "", "", string(encoded), time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
 	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{ID: record.Operation.SessionID, Label: filepath.Base(cwd), Agent: protocol.SessionAgentCodex, Directory: cwd, State: protocol.SessionStateLaunching, StateSince: now, StateUpdatedAt: now, LastSeen: now})
+	d.store.Add(&protocol.Session{ID: record.Operation.SessionID, WorkspaceID: workspaceID, Label: "adopted", Agent: protocol.SessionAgentCodex, Directory: cwd, State: protocol.SessionStateLaunching, StateSince: now, StateUpdatedAt: now, LastSeen: now})
 	backend.sessionIDs = append(backend.sessionIDs, record.Operation.SessionID)
 	d.runDelegationOperation(record.Operation.OperationID)
 	done := waitDelegationOperation(t, d, record.Operation.OperationID)
@@ -260,13 +269,12 @@ func TestDelegationOperationAdoptsReconciledReservedRuntime(t *testing.T) {
 	}
 }
 
-func TestDelegationOperationRespawnsPersistedSessionWithoutLiveRuntime(t *testing.T) {
+func TestLegacyDelegationOperationWithoutLiveRuntimeRequiresExplicitRetry(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
 	workspaceID, sourceID, cwd := setupDelegationSource(t, d, backend)
-	msg := protocol.DelegateMessage{Cmd: protocol.CmdDelegate, RequestID: "spawn-missing", SourceSessionID: sourceID, Brief: "Recover the missing runtime.", Agent: protocol.Ptr("codex"), Label: protocol.Ptr("respawned")}
-	encoded, _ := json.Marshal(msg)
-	record, _, err := d.store.ClaimDelegationOperation(msg.RequestID, "operation-spawn-missing", "session-spawn-missing", "", "", string(encoded), time.Now())
+	encoded, _ := json.Marshal(map[string]any{"cmd": "delegate", "request_id": "spawn-missing", "source_session_id": sourceID, "brief": "Recover the missing runtime.", "agent": "codex", "label": "respawned"})
+	record, _, err := d.store.ClaimDelegationOperation("spawn-missing", "operation-spawn-missing", "session-spawn-missing", "", "", string(encoded), time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,14 +282,11 @@ func TestDelegationOperationRespawnsPersistedSessionWithoutLiveRuntime(t *testin
 	d.store.Add(&protocol.Session{ID: record.Operation.SessionID, WorkspaceID: workspaceID, Label: "respawned", Agent: protocol.SessionAgentCodex, Directory: cwd, State: protocol.SessionStateRecoverable, StateSince: now, StateUpdatedAt: now, LastSeen: now})
 	d.runDelegationOperation(record.Operation.OperationID)
 	done := waitDelegationOperation(t, d, record.Operation.OperationID)
-	if done.State != protocol.DelegationOperationStateCompleted {
+	if done.State != protocol.DelegationOperationStateFailed || done.Failure == nil || !strings.Contains(done.Failure.Message, "new request") {
 		t.Fatalf("operation=%+v", done)
 	}
-	if got := len(backend.spawnOpts); got != 2 {
-		t.Fatalf("spawn count=%d, want source plus recovered delegation", got)
-	}
-	if backend.spawnOpts[1].ID != record.Operation.SessionID {
-		t.Fatalf("recovered spawn=%+v", backend.spawnOpts[1])
+	if got := len(backend.spawnOpts); got != 1 {
+		t.Fatalf("spawn count=%d, want only source runtime", got)
 	}
 }
 
@@ -289,7 +294,9 @@ func TestDelegationOperationTerminalFailureRetryDoesNotRelaunch(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
 	_, sourceID, _ := setupDelegationSource(t, d, backend)
-	msg := &protocol.DelegateMessage{Cmd: protocol.CmdDelegate, RequestID: "failed-request", SourceSessionID: sourceID, Brief: "Fail once.", Agent: protocol.Ptr("missing-agent")}
+	value := explicitOperationMessage(d, "failed-request", sourceID, "Fail once.", "failed")
+	value.Agent = protocol.Ptr("missing-agent")
+	msg := &value
 	first, err := d.startDelegation(msg)
 	if err != nil {
 		t.Fatal(err)
@@ -322,11 +329,9 @@ func TestDelegationRestartDoesNotOwnWorktreeFromPathJournalAlone(t *testing.T) {
 	backend := &fakeSpawnBackend{}
 	_, sourceID, _ := setupDelegationSourceAt(t, d, backend, mainRepo)
 	path := filepath.Join(root, "repo--external")
-	msg := protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, RequestID: "path-only", SourceSessionID: sourceID,
-		Brief: "Do not adopt external work.", Agent: protocol.Ptr("codex"), Label: protocol.Ptr("path-only"),
-		Worktree: &protocol.DelegateWorktreeRequest{Repo: protocol.Ptr(mainRepo), Branch: "feat/external", Path: protocol.Ptr(path)},
-	}
+	msg := explicitOperationMessage(d, "path-only", sourceID, "Do not adopt external work.", "path-only")
+	msg.Cwd = mainRepo
+	msg.Checkout = &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindNewWorktree, Branch: "feat/external", From: protocol.Ptr("HEAD"), Path: protocol.Ptr(path)}
 	encoded, _ := json.Marshal(msg)
 	record, _, err := d.store.ClaimDelegationOperation(msg.RequestID, "operation-path-only", "session-path-only", "", "", string(encoded), time.Now())
 	if err != nil {
@@ -366,11 +371,9 @@ func TestDelegationRestartDoesNotDeleteReplacementForPreviouslyOwnedWorktree(t *
 	backend := &fakeSpawnBackend{}
 	_, sourceID, _ := setupDelegationSourceAt(t, d, backend, mainRepo)
 	path := filepath.Join(root, "repo--replacement")
-	msg := protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, RequestID: "owned-replaced", SourceSessionID: sourceID,
-		Brief: "Do not delete replacement work.", Agent: protocol.Ptr("codex"), Label: protocol.Ptr("owned-replaced"),
-		Worktree: &protocol.DelegateWorktreeRequest{Repo: protocol.Ptr(mainRepo), Branch: "feat/replacement", Path: protocol.Ptr(path)},
-	}
+	msg := explicitOperationMessage(d, "owned-replaced", sourceID, "Do not delete replacement work.", "owned-replaced")
+	msg.Cwd = mainRepo
+	msg.Checkout = &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindNewWorktree, Branch: "feat/replacement", From: protocol.Ptr("HEAD"), Path: protocol.Ptr(path)}
 	encoded, _ := json.Marshal(msg)
 	record, _, err := d.store.ClaimDelegationOperation(msg.RequestID, "operation-owned-replaced", "session-owned-replaced", "", "", string(encoded), time.Now())
 	if err != nil {
@@ -406,11 +409,9 @@ func TestDelegationRestartResumesPreviouslyOwnedWorktreeWithMatchingMarker(t *te
 	backend := &fakeSpawnBackend{}
 	_, sourceID, _ := setupDelegationSourceAt(t, d, backend, mainRepo)
 	path := filepath.Join(root, "repo--owned")
-	msg := protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, RequestID: "owned-resume", SourceSessionID: sourceID,
-		Brief: "Resume original work.", Agent: protocol.Ptr("codex"), Label: protocol.Ptr("owned-resume"),
-		Worktree: &protocol.DelegateWorktreeRequest{Repo: protocol.Ptr(mainRepo), Branch: "feat/owned", Path: protocol.Ptr(path)},
-	}
+	msg := explicitOperationMessage(d, "owned-resume", sourceID, "Resume original work.", "owned-resume")
+	msg.Cwd = mainRepo
+	msg.Checkout = &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindNewWorktree, Branch: "feat/owned", From: protocol.Ptr("HEAD"), Path: protocol.Ptr(path)}
 	encoded, _ := json.Marshal(msg)
 	record, _, err := d.store.ClaimDelegationOperation(msg.RequestID, "operation-owned-resume", "session-owned-resume", "", "", string(encoded), time.Now())
 	if err != nil {
@@ -428,7 +429,7 @@ func TestDelegationRestartResumesPreviouslyOwnedWorktreeWithMatchingMarker(t *te
 	d.runDelegationOperation(record.Operation.OperationID)
 	completed := waitDelegationOperation(t, d, record.Operation.OperationID)
 	if completed.State != protocol.DelegationOperationStateCompleted || completed.Result == nil {
-		t.Fatalf("operation=%+v", completed)
+		t.Fatalf("operation=%+v failure=%+v error=%q", completed, completed.Failure, protocol.Deref(completed.Error))
 	}
 	if completed.Result.SessionID != record.Operation.SessionID || !protocol.Deref(completed.Result.WorktreeCreated) {
 		t.Fatalf("result=%+v", completed.Result)
@@ -447,11 +448,9 @@ func TestDelegationRestartLeavesOwnedWorktreeWhenAnotherSessionOccupiesIt(t *tes
 	backend := &fakeSpawnBackend{}
 	_, sourceID, _ := setupDelegationSourceAt(t, d, backend, mainRepo)
 	path := filepath.Join(root, "repo--occupied")
-	msg := protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, RequestID: "owned-occupied", SourceSessionID: sourceID,
-		Brief: "Do not disturb the occupant.", Agent: protocol.Ptr("codex"), Label: protocol.Ptr("owned-occupied"),
-		Worktree: &protocol.DelegateWorktreeRequest{Repo: protocol.Ptr(mainRepo), Branch: "feat/occupied", Path: protocol.Ptr(path)},
-	}
+	msg := explicitOperationMessage(d, "owned-occupied", sourceID, "Do not disturb the occupant.", "owned-occupied")
+	msg.Cwd = mainRepo
+	msg.Checkout = &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindNewWorktree, Branch: "feat/occupied", From: protocol.Ptr("HEAD"), Path: protocol.Ptr(path)}
 	encoded, _ := json.Marshal(msg)
 	record, _, err := d.store.ClaimDelegationOperation(msg.RequestID, "operation-owned-occupied", "session-owned-occupied", "", "", string(encoded), time.Now())
 	if err != nil {
@@ -467,6 +466,7 @@ func TestDelegationRestartLeavesOwnedWorktreeWhenAnotherSessionOccupiesIt(t *tes
 	}
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{ID: "other-session", Label: "other", Agent: protocol.SessionAgentCodex, Directory: path, State: protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now})
+	backend.sessionIDs = append(backend.sessionIDs, "other-session")
 
 	d.runDelegationOperation(record.Operation.OperationID)
 	failed := waitDelegationOperation(t, d, record.Operation.OperationID)
