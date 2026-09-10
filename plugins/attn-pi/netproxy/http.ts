@@ -167,6 +167,9 @@ function rebuildOriginForm(head: RequestHead, path: string): string {
     const name = token.trim().toLowerCase();
     if (name !== "") dropped.add(name);
   }
+  // The body is forwarded without decoding, so its transfer framing and trailer declaration must survive.
+  dropped.delete("transfer-encoding");
+  dropped.delete("trailer");
   const kept = head.headers.filter(([name]) => !dropped.has(name.toLowerCase()));
   const lines = [
     `${head.method} ${path} ${head.version}`,

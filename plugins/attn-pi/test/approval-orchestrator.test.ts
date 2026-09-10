@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createLocalBashOperations } from "@earendil-works/pi-coding-agent";
 import { ApprovalOrchestrator, retryWithoutSandboxReason, turnAbortedMessage } from "../approval/orchestrator";
-import { commandOptions, userRejection } from "../approval/reviewers";
+import { commandOptions, UserReviewer, userRejection } from "../approval/reviewers";
 import { PiApproval } from "../approval/session";
 import { defaultApprovalConfig, type ApprovalConfig } from "../approval/config";
 import type { ApprovalRequest, ReviewDecision, Reviewer } from "../approval/types";
@@ -23,6 +23,7 @@ function fixture(options: {
   rules?: PrefixRule[];
   approvalPolicy?: ApprovalPolicy;
   sandboxMode?: SandboxMode;
+  reviewer?: Reviewer;
 } ) {
   const root = canonical(mkdtempSync(join(tmpdir(), "pi-approval-test-")));
   roots.push(root);
@@ -52,7 +53,7 @@ function fixture(options: {
       cwd: root,
       temp: root,
     }),
-    reviewer: () => reviewer,
+    reviewer: () => options.reviewer ?? reviewer,
     rules: options.rules ?? [],
     run: (command, cwd, run) => { announce(); return local.exec(command, cwd, run); },
     onDenial: (denial) => denials.push({ rule: denial.rule, reason: denial.reason, action: denial.action }),
@@ -188,6 +189,34 @@ test("under never, a network request is denied without asking anyone", async () 
   expect(it.seen).toHaveLength(0);
   await expect(started).rejects.toThrow("was blocked by policy");
 });
+
+test.skipIf(process.platform !== "darwin")(
+  "a cached sandbox approval still asks before an unsandboxed retry",
+  async () => {
+    const reviewer = new UserReviewer({ rules: () => [] });
+    const it = fixture({
+      script: () => ({ type: "approved" }),
+      reviewer,
+      sandboxMode: "read-only",
+    });
+    const titles: string[] = [];
+    const target = join(it.root, "artifact");
+    const result = await it.orchestrator.runBash({ command: `printf built > ${JSON.stringify(target)}` }, {
+      ...it.ctx,
+      ui: {
+        select: async (title) => {
+          titles.push(title);
+          return titles.length === 1 ? commandOptions.forSession : commandOptions.deny;
+        },
+        notify: () => {},
+      },
+    });
+    expect(titles).toHaveLength(2);
+    expect(titles[1]).toContain(retryWithoutSandboxReason);
+    expect(result.exitCode).not.toBe(0);
+    expect(existsSync(target)).toBe(false);
+  },
+);
 
 test.skipIf(process.platform !== "darwin")(
   "a sandbox denial under untrusted asks once more and reruns without the sandbox",

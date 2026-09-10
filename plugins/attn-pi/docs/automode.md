@@ -139,7 +139,9 @@ proxy can attribute every connection and the sandboxed command never holds the
 relay's auth. The sandbox allows outbound TCP only to the proxy's loopback port.
 
 Host rules are allow and deny lists with wildcards; deny wins, and the allowlist
-is consulted first. A name that resolves to a private address is denied unless
+is consulted first. A host with a port, such as `localhost:9849`, matches only
+that port; a host without one matches every port. IPv6 hosts with a port use
+brackets, such as `[::1]:9849`. A name that resolves to a private address is denied unless
 `allow_local_binding` is on, and the resolved address is checked again at connect
 time.
 

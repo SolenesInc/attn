@@ -267,34 +267,48 @@ function globToRegExp(glob: string): RegExp {
 
 /** Compiled allow or deny domain rules; `matches` takes an already normalized host. */
 export class DomainMatcher {
-  private readonly patterns: RegExp[];
+  private readonly patterns: { host: RegExp; port?: number }[];
 
   constructor(patterns: string[]) {
     const seen = new Set<string>();
     this.patterns = [];
     for (const pattern of patterns) {
+      const port = domainPort(pattern);
       for (const candidate of expandDomainPattern(normalizePattern(pattern))) {
-        if (candidate === "" || seen.has(candidate)) continue;
-        seen.add(candidate);
-        this.patterns.push(globToRegExp(candidate));
+        const key = JSON.stringify([candidate, port]);
+        if (candidate === "" || seen.has(key)) continue;
+        seen.add(key);
+        this.patterns.push({ host: globToRegExp(candidate), port });
       }
     }
   }
 
-  matches(normalizedHost: string): boolean {
+  matches(normalizedHost: string, port?: number): boolean {
     const unscoped = unscopedIpLiteral(normalizedHost);
     return this.patterns.some(
-      (pattern) => pattern.test(normalizedHost) || (unscoped !== undefined && pattern.test(unscoped)),
+      (pattern) => (pattern.port === undefined || pattern.port === port) &&
+        (pattern.host.test(normalizedHost) || (unscoped !== undefined && pattern.host.test(unscoped))),
     );
   }
 }
 
-export function isExplicitLocalAllowlisted(allowedDomains: string[], normalizedHost: string): boolean {
+export function domainPort(input: string): number | undefined {
+  const host = input.trim();
+  if (host.startsWith("[")) {
+    const end = host.indexOf("]");
+    return end >= 0 && host[end + 1] === ":" ? Number(host.slice(end + 2)) : undefined;
+  }
+  return countColons(host) === 1 ? Number(host.slice(host.indexOf(":") + 1)) : undefined;
+}
+
+export function isExplicitLocalAllowlisted(allowedDomains: string[], normalizedHost: string, port?: number): boolean {
   const unscoped = unscopedIpLiteral(normalizedHost);
   return allowedDomains.some((raw) => {
     const pattern = raw.trim();
     if (pattern === "*" || pattern.startsWith("*.") || pattern.startsWith("**.")) return false;
     if (pattern.includes("*") || pattern.includes("?")) return false;
+    const allowedPort = domainPort(pattern);
+    if (allowedPort !== undefined && allowedPort !== port) return false;
     const normalized = normalizeHost(pattern);
     return normalized === normalizedHost || (unscoped !== undefined && normalized === unscoped);
   });

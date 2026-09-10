@@ -131,7 +131,9 @@ export class ApprovalOrchestrator {
     // Only "untrusted" retries after a sandbox denial; other policies return the denied output as-is.
     if (!first.denied || this.options.approvalPolicy() !== "untrusted") return first.result;
 
-    const retry: CommandApprovalRequest = { ...request, retryReason: retryWithoutSandboxReason };
+    const retry: CommandApprovalRequest = {
+      ...request, sandboxPermissions: "require_escalated", retryReason: retryWithoutSandboxReason,
+    };
     const decision = await this.options.reviewer().review(retry, ctx);
     if (decision.type === "abort") {
       ctx.abort?.();
@@ -139,7 +141,7 @@ export class ApprovalOrchestrator {
     }
     if (!isApproval(decision)) return first.result;
     this.apply(decision, retry);
-    const second = await this.execute({ ...request, sandboxPermissions: "require_escalated" }, true, ctx);
+    const second = await this.execute(retry, true, ctx);
     if (second.rejection !== undefined) throw new Error(second.rejection);
     return second.result;
   }

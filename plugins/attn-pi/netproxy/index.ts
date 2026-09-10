@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { serveHttp } from "./http";
 import {
   DomainMatcher,
+  domainPort,
   isExplicitLocalAllowlisted,
   isLocalLiteral,
   isNonPublicIp,
@@ -137,10 +138,10 @@ export class NetworkProxy implements ProxyGate {
     return since === undefined ? [...entries] : entries.filter((entry) => entry.at > since);
   }
 
-  evaluateHost(credentials: string, host: string): HostDecision | "ask" {
+  evaluateHost(credentials: string, host: string, port = domainPort(host)): HostDecision | "ask" {
     const normalized = normalizeHost(host);
-    if (this.literalDenyReason(normalized) !== undefined) return "deny";
-    if (this.allowMatcher.matches(normalized)) return "allow";
+    if (this.literalDenyReason(normalized, port) !== undefined) return "deny";
+    if (this.allowMatcher.matches(normalized, port)) return "allow";
     return this.hasGrant(credentials, normalized) ? "allow" : "ask";
   }
 
@@ -150,12 +151,12 @@ export class NetworkProxy implements ProxyGate {
 
   async authorize(request: NetworkRequest): Promise<GateVerdict> {
     const normalized = normalizeHost(request.host);
-    const hardDeny = await this.hardDenyReason(normalized);
+    const hardDeny = await this.hardDenyReason(normalized, request.port);
     if (hardDeny !== undefined) {
       this.recordDenial(request, hardDeny);
       return { allowed: false, reason: hardDeny };
     }
-    if (this.allowMatcher.matches(normalized) || this.takeGrant(request.credentials, normalized)) {
+    if (this.allowMatcher.matches(normalized, request.port) || this.takeGrant(request.credentials, normalized)) {
       return { allowed: true };
     }
 
@@ -198,7 +199,7 @@ export class NetworkProxy implements ProxyGate {
     } catch (error) {
       return { outcome: "unreachable", error };
     }
-    const targets = addresses.filter((address) => this.allowsTarget(normalized, address));
+    const targets = addresses.filter((address) => this.allowsTarget(normalized, address, request.port));
     if (targets.length === 0) {
       this.recordDenial(request, "not_allowed_local");
       return { outcome: "denied", reason: "not_allowed_local" };
@@ -210,19 +211,19 @@ export class NetworkProxy implements ProxyGate {
     }
   }
 
-  private literalDenyReason(normalizedHost: string): DenialReason | undefined {
+  private literalDenyReason(normalizedHost: string, port?: number): DenialReason | undefined {
     if (!this.policy.enabled) return "denied";
-    if (this.denyMatcher.matches(normalizedHost)) return "denied";
+    if (this.denyMatcher.matches(normalizedHost, port)) return "denied";
     if (this.policy.allow_local_binding) return undefined;
-    if (isLocalLiteral(normalizedHost) && !isExplicitLocalAllowlisted(this.policy.allowed_domains, normalizedHost)) {
+    if (isLocalLiteral(normalizedHost) && !isExplicitLocalAllowlisted(this.policy.allowed_domains, normalizedHost, port)) {
       return "not_allowed_local";
     }
     return undefined;
   }
 
   // An allowlisted host is still denied here if it resolves to a non-public address.
-  private async hardDenyReason(normalizedHost: string): Promise<DenialReason | undefined> {
-    const literal = this.literalDenyReason(normalizedHost);
+  private async hardDenyReason(normalizedHost: string, port: number): Promise<DenialReason | undefined> {
+    const literal = this.literalDenyReason(normalizedHost, port);
     if (literal !== undefined || this.policy.allow_local_binding) return literal;
     if (isLocalLiteral(normalizedHost)) return undefined;
     return (await this.resolvesToNonPublic(normalizedHost)) ? "not_allowed_local" : undefined;
@@ -244,10 +245,10 @@ export class NetworkProxy implements ProxyGate {
     return withTimeout(this.lookup(normalizedHost), dnsLookupTimeoutMs, normalizedHost);
   }
 
-  private allowsTarget(normalizedHost: string, address: string): boolean {
+  private allowsTarget(normalizedHost: string, address: string, port: number): boolean {
     if (!isNonPublicIp(address)) return parseIp(address) !== undefined;
     if (this.policy.allow_local_binding) return true;
-    return targetMatchesNonPublicAddress(normalizedHost, address) && this.literalDenyReason(normalizedHost) === undefined;
+    return targetMatchesNonPublicAddress(normalizedHost, address) && this.literalDenyReason(normalizedHost, port) === undefined;
   }
 
   private hasGrant(credentials: string, normalizedHost: string): boolean {

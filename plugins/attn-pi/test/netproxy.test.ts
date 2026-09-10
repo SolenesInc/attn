@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, jest, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { createConnection, createServer, type Server, type Socket } from "node:net";
+import { createServer as createHttpServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NetworkProxy } from "../netproxy";
@@ -412,6 +413,39 @@ describe("network proxy over the wire", () => {
     expect(proxy.evaluateHost(token, "sub.exact.test")).toBe("ask");
   });
 
+  test("port-qualified rules preserve DNS wildcards and IPv6 literals", async () => {
+    const allowed = await startUpstream();
+    const denied = await startUpstream();
+    for (const [pattern, host] of [
+      ["*.example.test", "api.example.test"],
+      ["localhost", "localhost"],
+      ["[::1]", "::1"],
+      ["[::ffff:127.0.0.1]", "::ffff:127.0.0.1"],
+    ]) {
+      const { proxy } = await startProxy({
+        allowed_domains: [`${pattern}:${allowed.port}`],
+        denied_domains: [`${pattern}:${denied.port}`],
+      });
+      expect(proxy.evaluateHost(token, host!, allowed.port)).toBe("allow");
+      expect(proxy.evaluateHost(token, host!, denied.port)).toBe("deny");
+    }
+  });
+
+  test("a port-specific local allow does not exempt another port from the local guard", async () => {
+    const allowed = await startUpstream();
+    const other = await startUpstream();
+    const { proxy } = await startProxy({
+      allowed_domains: [`127.0.0.1:${allowed.port}`],
+      allow_local_binding: false,
+    });
+    expect(proxy.evaluateHost(token, "127.0.0.1", allowed.port)).toBe("allow");
+    expect(proxy.evaluateHost(token, "127.0.0.1", other.port)).toBe("deny");
+    const request = { credentials: token, host: "127.0.0.1", protocol: "http" as const };
+    expect(await proxy.authorize({ ...request, port: allowed.port })).toEqual({ allowed: true });
+    expect(await proxy.authorize({ ...request, port: other.port })).toEqual({ allowed: false, reason: "not_allowed_local" });
+    expect((await proxy.dial({ ...request, port: other.port })).outcome).toBe("denied");
+  });
+
   test("an HTTP connection with no credentials is refused before any policy check", async () => {
     const { port, decider, proxy } = await startProxy({ allowed_domains: ["*"] });
     const wire = await Wire.open(port);
@@ -623,11 +657,61 @@ describe("the HTTP head is checked before anything is forwarded", () => {
 
     expect(await wire.readToClose()).toContain("UPSTREAM");
     expect(upstream.received[0]).not.toContain("X-Hop");
-    expect(upstream.received[0]).not.toContain("Transfer-Encoding");
+    expect(upstream.received[0]).toContain("Transfer-Encoding: chunked");
   });
 });
 
 describe("the reader reads by demand", () => {
+  test("a chunked upload reaches an HTTP server with its body and framing headers intact", async () => {
+    const bodies: string[] = [];
+    const headers: Record<string, string | string[] | undefined>[] = [];
+    const upstream = createHttpServer((request, response) => {
+      let body = "";
+      request.on("data", (chunk) => { body += chunk.toString(); });
+      request.on("end", () => {
+        bodies.push(body);
+        headers.push(request.headers);
+        response.end("RECEIVED");
+      });
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+    cleanups.push(() => new Promise<void>((resolve) => upstream.close(() => resolve())));
+    const address = upstream.address();
+    if (!address || typeof address === "string") throw new Error("upstream has no TCP address");
+    const { port } = await startProxy({ allowed_domains: ["127.0.0.1"] });
+    const wire = await Wire.open(port);
+    wire.write([
+      `POST http://127.0.0.1:${address.port}/upload HTTP/1.1`,
+      `Host: 127.0.0.1:${address.port}`,
+      `Proxy-Authorization: Basic ${basic(token)}`,
+      "Transfer-Encoding: chunked",
+      "Trailer: X-Receipt",
+      "", "4", "body", "0", "X-Receipt: complete", "", "",
+    ].join("\r\n"));
+    expect(await wire.readToClose()).toContain("RECEIVED");
+    expect(bodies).toEqual(["body"]);
+    expect(headers[0]).toMatchObject({ "transfer-encoding": "chunked", trailer: "X-Receipt" });
+  });
+
+  test("a denial for attn's port leaves other localhost ports reachable", async () => {
+    const upstream = await startUpstream();
+    const blocked = await startUpstream();
+    const { port, decider } = await startProxy({
+      allowed_domains: ["127.0.0.1"],
+      denied_domains: [`127.0.0.1:${blocked.port}`],
+    });
+    const allowedWire = await Wire.open(port);
+    allowedWire.write(connectRequest("127.0.0.1", upstream.port, token));
+    expect(await allowedWire.readUntil("\r\n\r\n")).toContain("200 Connection established");
+    allowedWire.write("ping\n");
+    expect(await allowedWire.readToClose()).toContain("UPSTREAM");
+    const blockedWire = await Wire.open(port);
+    blockedWire.write(connectRequest("127.0.0.1", blocked.port, token));
+    expect(await blockedWire.readToClose()).toContain("403 Forbidden");
+    expect(blocked.received).toEqual([]);
+    expect(decider.calls).toEqual([]);
+  });
+
   test("a reader nobody is asking stops reading, so bytes stay in the client's socket", async () => {
     const heads: SocketReader[] = [];
     const server = createServer((socket) => {

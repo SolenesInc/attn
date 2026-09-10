@@ -129,6 +129,7 @@ const toPromotion = (event: AutoModeDaemonEvent): AutoModePromotion => ({
 const configEditCommands: [string, string][] = [
   ['automode_rule_add', 'Adding the rule failed'],
   ['automode_rule_remove', 'Removing the rule failed'],
+  ['automode_legacy_dismiss', 'Dismissing the pattern failed'],
   ['automode_host_add', 'Adding the host failed'],
   ['automode_host_remove', 'Removing the host failed'],
   ['automode_policy_set', 'Saving the approval policy failed'],
