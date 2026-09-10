@@ -248,13 +248,19 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      - name: Resolve Go cache paths
+        id: go-cache-paths
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+
       - name: Restore Go build cache
         id: go-cache
         uses: actions/cache/restore@v4
         with:
           path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
+            ${{ steps.go-cache-paths.outputs.build }}
+            ${{ steps.go-cache-paths.outputs.modules }}
           key: go-build-blacksmith-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
 
       - name: Ensure ghostty-vt artifacts
@@ -318,8 +324,8 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
+            ${{ steps.go-cache-paths.outputs.build }}
+            ${{ steps.go-cache-paths.outputs.modules }}
           key: ${{ steps.go-cache.outputs.cache-primary-key }}
 
   pty-compatibility:
@@ -345,13 +351,18 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      - name: Resolve Go cache paths
+        id: go-cache-paths
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
       - name: Restore Go build cache
         id: go-cache
         uses: actions/cache/restore@v4
         with:
           path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
+            ${{ steps.go-cache-paths.outputs.build }}
+            ${{ steps.go-cache-paths.outputs.modules }}
           key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -375,8 +386,8 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
+            ${{ steps.go-cache-paths.outputs.build }}
+            ${{ steps.go-cache-paths.outputs.modules }}
           key: ${{ steps.go-cache.outputs.cache-primary-key }}
 
   frontend:
@@ -564,13 +575,19 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      - name: Resolve Go cache paths
+        id: go-cache-paths
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+
       - name: Restore Go build cache
         id: go-cache
         uses: actions/cache/restore@v4
         with:
           path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
+            ${{ steps.go-cache-paths.outputs.build }}
+            ${{ steps.go-cache-paths.outputs.modules }}
           key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
 
       - name: Set up Rust

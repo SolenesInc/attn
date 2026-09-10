@@ -198,6 +198,11 @@ for job_name in backend pty-compatibility rust; do
   job="$(sed -n "/^  ${job_name}:/,/^  [a-z0-9-]\+:/p" "$workflow")"
   for contract in \
     'cache: false' \
+    'name: Resolve Go cache paths' \
+    'echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"' \
+    'echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"' \
+    '${{ steps.go-cache-paths.outputs.build }}' \
+    '${{ steps.go-cache-paths.outputs.modules }}' \
     'uses: actions/cache/restore@v4' \
     'name: Report runner class'; do
     if ! grep -Fq "$contract" <<<"$job"; then
@@ -231,6 +236,10 @@ for owner_job in "$backend_job" "$pty_job"; do
       exit 1
     fi
   done
+  if grep -Fq "github.event_name == 'pull_request'" <<<"$owner_job"; then
+    echo "Shared Go cache owners must not write pull-request-scoped caches" >&2
+    exit 1
+  fi
 done
 if grep -Fq 'uses: actions/cache/save@v4' <<<"$rust_job"; then
   echo "Daemon and PTY must own Go cache saves; Tauri restores only" >&2
