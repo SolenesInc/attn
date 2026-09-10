@@ -204,8 +204,19 @@ func TestAdoptedSessionStillReapsItsChild(t *testing.T) {
 func TestHandoffCarriesCommandBlocks(t *testing.T) {
 	const id = "handoff-blocks"
 	m := NewManager(nil)
+	applied := make(chan struct{}, 1)
+	readLoopAppliedHook = func() {
+		select {
+		case applied <- struct{}{}:
+		default:
+		}
+	}
+	t.Cleanup(func() {
+		m.Shutdown()
+		readLoopAppliedHook = nil
+	})
 	script := `printf '\033]133;A\007$ \033]133;B\007echo hi\r\n\033]133;C\007hi\r\n\033]133;D;0\007'; ` +
-		`printf '\033]133;A\007$ \033]133;B\007READY'; sleep 30`
+		`printf '\033]133;A\007$ \033]133;B\007READY'; read _`
 	if err := m.Spawn(SpawnOptions{
 		ID:              id,
 		CWD:             t.TempDir(),
@@ -216,28 +227,34 @@ func TestHandoffCarriesCommandBlocks(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Spawn() error: %v", err)
 	}
-	c := newCollector()
-	if _, err := m.Attach(id, "before", c.send, nil); err != nil {
-		t.Fatalf("Attach() error: %v", err)
-	}
-	c.waitFor(t, "READY")
 
 	session, err := m.getSession(id)
 	if err != nil {
 		t.Fatalf("getSession: %v", err)
 	}
-	session.replayMu.Lock()
-	want := session.wireFeed.snapshotBlocks()
-	session.replayMu.Unlock()
+	for {
+		<-applied
+		session.replayMu.Lock()
+		ready := len(session.wireFeed.snapshotBlocks()) >= 2
+		session.replayMu.Unlock()
+		if ready {
+			break
+		}
+	}
+
+	info, err := m.Attach(id, "before", func([]byte, uint32) bool { return true }, nil)
+	if err != nil {
+		t.Fatalf("Attach() error: %v", err)
+	}
+	want := info.GhosttyBlocks
 	if len(want) < 2 {
-		t.Fatalf("fixture produced %d blocks, want the completed one and the pending one", len(want))
+		t.Fatalf("attach snapshot carried %d blocks, want the completed one and the pending one", len(want))
 	}
 
 	state, err := m.Handoff(id)
 	if err != nil {
 		t.Fatalf("Handoff() error: %v", err)
 	}
-	t.Cleanup(m.Shutdown)
 
 	after := NewManager(nil)
 	t.Cleanup(after.Shutdown)
