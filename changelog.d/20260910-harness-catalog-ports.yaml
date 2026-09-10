@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Catalog previously invisible real-app scenarios and shorten the scheduled-cleanup acceptance path.

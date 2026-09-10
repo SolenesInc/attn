@@ -88,6 +88,9 @@ func TestObserveDueSchedulesFiresWithinGraceForBothCatchUpPolicies(t *testing.T)
 			if occurrence.OccurrenceKey != wantKey {
 				t.Fatalf("occurrence key=%s want=%s", occurrence.OccurrenceKey, wantKey)
 			}
+			if want := "scheduled:2026-07-20T03:01:00Z"; occurrence.OccurrenceKey != want {
+				t.Fatalf("minute schedule occurrence key=%s want=%s", occurrence.OccurrenceKey, want)
+			}
 			input, err := automation.ParseScheduledInput(json.RawMessage(occurrence.PayloadJSON))
 			if err != nil {
 				t.Fatalf("payload round-trip: %v", err)
