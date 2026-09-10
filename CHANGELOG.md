@@ -200,6 +200,9 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
   a notice offers Reload instead.
 
 ### Changed
+- **CI.** The default branch registers the on-demand App acceptance soak so it
+  can run against `next` or another implementation branch.
+
 - **Tickets retired into the Garden.** Every `attn ticket` write verb
   now prints the garden command that replaced it and exits nonzero, so
   an agent on stale guidance is told where the capability went. The
