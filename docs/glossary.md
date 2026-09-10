@@ -3,6 +3,7 @@
 ## Sessions
 
 - Session: attn runtime hosting an agent through a PTY.
+- Session selection: navigation may wait for a session's pane to arrive. Only the latest request may complete; another session, pane, history move, Home, grid, or sessionless workspace cancels the earlier request.
 - Agent conversation: provider history and resume target; can change within one session.
 - Run: one prompt and response.
 - Prompt: starts a run.
