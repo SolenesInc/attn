@@ -204,11 +204,11 @@ func TestAdoptedSessionStillReapsItsChild(t *testing.T) {
 func TestHandoffCarriesCommandBlocks(t *testing.T) {
 	const id = "handoff-blocks"
 	m := NewManager(nil)
-	applied := make(chan struct{}, 1)
-	readLoopAppliedHook = func() {
-		select {
-		case applied <- struct{}{}:
-		default:
+	readyApplied := make(chan struct{})
+	var readyOnce sync.Once
+	readLoopAppliedHook = func(data []byte) {
+		if bytes.Contains(data, []byte("READY")) {
+			readyOnce.Do(func() { close(readyApplied) })
 		}
 	}
 	t.Cleanup(func() {
@@ -232,14 +232,16 @@ func TestHandoffCarriesCommandBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getSession: %v", err)
 	}
-	for {
-		<-applied
-		session.replayMu.Lock()
-		ready := len(session.wireFeed.snapshotBlocks()) >= 2
-		session.replayMu.Unlock()
-		if ready {
-			break
-		}
+	select {
+	case <-readyApplied:
+	case <-session.exited:
+		t.Fatal("fixture child exited before the read loop applied READY")
+	}
+	session.replayMu.Lock()
+	blockCount := len(session.wireFeed.snapshotBlocks())
+	session.replayMu.Unlock()
+	if blockCount < 2 {
+		t.Fatalf("fixture produced %d blocks, want the completed one and the pending one", blockCount)
 	}
 
 	info, err := m.Attach(id, "before", func([]byte, uint32) bool { return true }, nil)
