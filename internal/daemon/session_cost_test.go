@@ -215,6 +215,7 @@ func TestRecoveredSessionUsageTrackerKeepsExistingObservations(t *testing.T) {
 	}
 	first := newBubbleDaemon(t)
 	first.stopEventBus()
+	first.eventBus = nil
 	_ = first.store.Close()
 	first.store = firstStore
 	first.ensureEventBus()
@@ -249,6 +250,7 @@ func TestRecoveredSessionUsageTrackerKeepsExistingObservations(t *testing.T) {
 	t.Cleanup(func() { _ = reopened.Close() })
 	recovered := newBubbleDaemon(t)
 	recovered.stopEventBus()
+	recovered.eventBus = nil
 	_ = recovered.store.Close()
 	recovered.store = reopened
 	recovered.ensureEventBus()
@@ -265,6 +267,32 @@ func TestRecoveredSessionUsageTrackerKeepsExistingObservations(t *testing.T) {
 		}
 		if !reflect.DeepEqual(after, before) {
 			t.Fatalf("recovery changed cost state:\n before: %+v\n  after: %+v", before, after)
+		}
+
+		var pushed []*protocol.WebSocketEvent
+		recovered.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) { pushed = append(pushed, event) }
+		appendUsageLines(t, root, codexUsageLine("gpt-5.5", 7, 2, 3))
+		advancePolls(1)
+		continued, err := recovered.store.SessionCost(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := continued.Ledger["gpt-5.5"]; got.InputTokens != 11 || got.CacheReadInputTokens != 6 || got.OutputTokens != 5 {
+			t.Fatalf("usage after recovery = %+v", got)
+		}
+		if len(continued.Observations) != 2 {
+			t.Fatalf("observations after recovery = %+v, want both turns", continued.Observations)
+		}
+		wantUsage := recovered.sessionForBroadcast(recovered.store.Get(id)).Usage
+		projected := false
+		for _, event := range pushed {
+			if event.Event == protocol.EventSessionStateChanged && event.Session != nil &&
+				event.Session.ID == id && reflect.DeepEqual(event.Session.Usage, wantUsage) {
+				projected = true
+			}
+		}
+		if !projected {
+			t.Fatalf("recovered usage was not projected to the app: %+v", pushed)
 		}
 	})
 }
