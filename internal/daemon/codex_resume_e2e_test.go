@@ -19,6 +19,9 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
+// Receipt: run 34539029783, Daemon test shard 95.459s on blacksmith-4vcpu-ubuntu-2404; this failure tripwire exceeds the whole shard.
+const codexResumeSignalTripwire = 2 * time.Minute
+
 func TestCodexResumeMappingEndToEnd(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping PTY end-to-end test in short mode")
@@ -190,6 +193,8 @@ func readFakeCodexLog(t *testing.T, path string) []string {
 
 func waitForFakeCodexLog(t *testing.T, watcher *fsnotify.Watcher, path string, ready func([]string) bool) []string {
 	t.Helper()
+	timer := time.NewTimer(codexResumeSignalTripwire)
+	defer timer.Stop()
 	for {
 		lines := readFakeCodexLog(t, path)
 		for _, line := range lines {
@@ -210,6 +215,8 @@ func waitForFakeCodexLog(t *testing.T, watcher *fsnotify.Watcher, path string, r
 				t.Fatal("fake Codex log watcher closed")
 			}
 			t.Fatalf("watch fake Codex log: %v", err)
+		case <-timer.C:
+			t.Fatalf("fake Codex produced no expected invocation before %s; log = %q", codexResumeSignalTripwire, lines)
 		}
 	}
 }
