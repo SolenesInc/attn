@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -31,13 +32,21 @@ func TestCodexResumeMappingEndToEnd(t *testing.T) {
 	nativeCodexID := "codex-native-session-123"
 	fakeScript := fmt.Sprintf(`#!/bin/sh
 set -eu
-printf 'ARGS:%%s\n' "$*" >> %q
 printf '{"session_id":%q,"transcript_path":"/tmp/fake-codex.jsonl"}' | "$ATTN_WRAPPER_PATH" _hook-session-start
+printf 'ARGS:%%s\n' "$*" >> %q
 trap 'exit 0' TERM INT
 while :; do sleep 1; done
-`, fakeCodexLog, nativeCodexID)
+`, nativeCodexID, fakeCodexLog)
 	if err := os.WriteFile(fakeCodex, []byte(fakeScript), 0o755); err != nil {
 		t.Fatalf("write fake codex: %v", err)
+	}
+	logWatcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer logWatcher.Close()
+	if err := logWatcher.Add(tmpDir); err != nil {
+		t.Fatal(err)
 	}
 
 	port, err := freeTCPPort()
@@ -85,9 +94,10 @@ while :; do sleep 1; done
 	})
 	expectSpawnSuccess(t, client)
 
-	waitForCondition(t, 5*time.Second, func() bool {
-		return d.store.GetResumeSessionID(sessionID) == nativeCodexID
-	}, "codex hook to store native session id")
+	waitForFakeCodexLogLines(t, logWatcher, fakeCodexLog, 1)
+	if got := d.store.GetResumeSessionID(sessionID); got != nativeCodexID {
+		t.Fatalf("stored resume session id = %q, want %q after hook receipt", got, nativeCodexID)
+	}
 
 	removePTYSession(t, d, sessionID)
 
@@ -106,19 +116,16 @@ while :; do sleep 1; done
 	expectSpawnSuccess(t, client)
 	defer removePTYSession(t, d, sessionID)
 
-	waitForCondition(t, 5*time.Second, func() bool {
-		lines := readFakeCodexLog(t, fakeCodexLog)
-		if len(lines) < 2 {
-			return false
-		}
-		first := lines[0]
-		second := lines[len(lines)-1]
-		return strings.Contains(first, "_hook-session-start") &&
-			strings.Contains(first, "features.hooks=true") &&
-			strings.Contains(first, `"/<session-flags>/config.toml:session_start:0:0"`) &&
-			strings.Contains(first, "trusted_hash") &&
-			strings.Contains(second, "resume "+nativeCodexID)
-	}, "reload to invoke fake codex with native resume id")
+	lines := waitForFakeCodexLogLines(t, logWatcher, fakeCodexLog, 2)
+	first := lines[0]
+	second := lines[len(lines)-1]
+	if !strings.Contains(first, "_hook-session-start") ||
+		!strings.Contains(first, "features.hooks=true") ||
+		!strings.Contains(first, `"/<session-flags>/config.toml:session_start:0:0"`) ||
+		!strings.Contains(first, "trusted_hash") ||
+		!strings.Contains(second, "resume "+nativeCodexID) {
+		t.Fatalf("fake Codex invocations = %q, want hook flags then resume %s", lines, nativeCodexID)
+	}
 }
 
 func expectSpawnSuccess(t *testing.T, client *wsClient) {
@@ -165,6 +172,26 @@ func readFakeCodexLog(t *testing.T, path string) []string {
 		}
 	}
 	return lines
+}
+
+func waitForFakeCodexLogLines(t *testing.T, watcher *fsnotify.Watcher, path string, count int) []string {
+	t.Helper()
+	for {
+		if lines := readFakeCodexLog(t, path); len(lines) >= count {
+			return lines
+		}
+		select {
+		case _, ok := <-watcher.Events:
+			if !ok {
+				t.Fatal("fake Codex log watcher closed")
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				t.Fatal("fake Codex log watcher closed")
+			}
+			t.Fatalf("watch fake Codex log: %v", err)
+		}
+	}
 }
 
 func waitForCondition(t *testing.T, timeout time.Duration, ok func() bool, description string) {
