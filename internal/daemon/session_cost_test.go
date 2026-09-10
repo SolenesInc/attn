@@ -1,10 +1,14 @@
 package daemon
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
@@ -201,6 +205,154 @@ func testSessionUsageResumeBaseline(t *testing.T, legacy bool) {
 	if got := state.Ledger[sessioncost.AgentKey("claude-sonnet-4-5")]; got.InputTokens != 5 || got.OutputTokens != 6 {
 		t.Fatalf("new child usage = %+v", got)
 	}
+}
+
+func TestRecoveredSessionUsageTrackerKeepsExistingObservations(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "attn.db")
+	firstStore, err := store.NewWithDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := newBubbleDaemon(t)
+	first.stopEventBus()
+	first.eventBus = nil
+	_ = first.store.Close()
+	first.store = firstStore
+	first.ensureEventBus()
+	const id = "recovered-codex"
+	addCostSession(t, first, id, protocol.SessionAgentCodex)
+	if err := first.store.InitializeSessionCostTracking(id); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "rollout-recovered.jsonl")
+	writeUsageLines(t, root, codexMeta("native-recovered", `"cli"`), codexUsageLine("gpt-5.5", 10, 4, 2))
+	if changed, err := first.store.TransitionSessionConversation(id, "native-recovered", root); err != nil || !changed {
+		t.Fatalf("seed conversation: changed=%t err=%v", changed, err)
+	}
+	watcher := &transcriptWatcher{sessionID: id, agent: protocol.SessionAgentCodex}
+	first.newSessionUsageTracker(watcher, root).Reconcile()
+	before, err := first.store.SessionCost(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before.Observations) != 1 {
+		t.Fatalf("seeded recovery cost = %+v, want one observation", before)
+	}
+	first.stopEventBus()
+	if err := first.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := store.NewWithDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	recovered := newBubbleDaemon(t)
+	recovered.stopEventBus()
+	recovered.eventBus = nil
+	_ = recovered.store.Close()
+	recovered.store = reopened
+	recovered.ensureEventBus()
+	recovered.ptyBackend = &fakeSpawnBackend{sessionIDs: []string{id}}
+
+	synctest.Test(t, func(t *testing.T) {
+		stopDaemonBackground(t, recovered)
+		recovered.restoreTranscriptWatchers()
+		requireTranscriptDiscovery(t, recovered, id)
+
+		after, err := recovered.store.SessionCost(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(after, before) {
+			t.Fatalf("recovery changed cost state:\n before: %+v\n  after: %+v", before, after)
+		}
+
+		var pushed []*protocol.WebSocketEvent
+		recovered.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) { pushed = append(pushed, event) }
+		appendUsageLines(t, root, codexUsageLine("gpt-5.5", 7, 2, 3))
+		advancePolls(1)
+		continued, err := recovered.store.SessionCost(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := continued.Ledger["gpt-5.5"]; got.InputTokens != 11 || got.CacheReadInputTokens != 6 || got.OutputTokens != 5 {
+			t.Fatalf("usage after recovery = %+v", got)
+		}
+		if len(continued.Observations) != 2 {
+			t.Fatalf("observations after recovery = %+v, want both turns", continued.Observations)
+		}
+		wantUsage := recovered.sessionForBroadcast(recovered.store.Get(id)).Usage
+		projected := false
+		for _, event := range pushed {
+			if event.Event == protocol.EventSessionStateChanged && event.Session != nil &&
+				event.Session.ID == id && reflect.DeepEqual(event.Session.Usage, wantUsage) {
+				projected = true
+			}
+		}
+		if !projected {
+			t.Fatalf("recovered usage was not projected to the app: %+v", pushed)
+		}
+	})
+}
+
+func TestCodexNewConversationKeepsCostAndPredecessorRollout(t *testing.T) {
+	d := newBubbleDaemon(t)
+	synctest.Test(t, func(t *testing.T) {
+		stopDaemonBackground(t, d)
+		const id = "codex-new"
+		addCostSession(t, d, id, protocol.SessionAgentCodex)
+		if err := d.store.InitializeSessionCostTracking(id); err != nil {
+			t.Fatal(err)
+		}
+		dir := t.TempDir()
+		oldPath := filepath.Join(dir, "rollout-old.jsonl")
+		oldBytes := []byte(joinUsageLines([]string{codexMeta("native-old", `"cli"`), codexUsageLine("gpt-5.5", 10, 4, 2)}))
+		if err := os.WriteFile(oldPath, oldBytes, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if changed, err := d.store.TransitionSessionConversation(id, "native-old", oldPath); err != nil || !changed {
+			t.Fatalf("bind old conversation: changed=%t err=%v", changed, err)
+		}
+		d.startTranscriptWatcherAtPath(id, protocol.SessionAgentCodex, dir, time.Now(), oldPath)
+		requireTranscriptDiscovery(t, d, id)
+		before, err := d.store.SessionCost(id)
+		if err != nil || len(before.Observations) != 1 {
+			t.Fatalf("old conversation cost = %+v, err=%v", before, err)
+		}
+		d.watchersMu.Lock()
+		oldWatcher := d.transcriptWatch[id]
+		d.watchersMu.Unlock()
+
+		newPath := filepath.Join(dir, "rollout-new.jsonl")
+		writeUsageLines(t, newPath, codexMeta("native-new", `"cli"`), codexUsageLine("gpt-5.5", 20, 5, 3))
+		d.observeAgentConversation(agentConversationObservation{
+			SessionID: id, NativeID: "native-new", TranscriptPath: newPath,
+		})
+		requireDone(t, oldWatcher.doneCh, "old watcher did not stop after /new")
+		d.watchersMu.Lock()
+		newWatcher := d.transcriptWatch[id]
+		d.watchersMu.Unlock()
+		if newWatcher == nil || newWatcher == oldWatcher {
+			t.Fatalf("watcher was not rebound after /new: old=%p new=%p", oldWatcher, newWatcher)
+		}
+		requireTranscriptDiscovery(t, d, id)
+
+		state, err := d.store.SessionCost(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := state.Ledger["gpt-5.5"]; got.InputTokens != 21 || got.CacheReadInputTokens != 9 || got.OutputTokens != 5 {
+			t.Fatalf("usage across /new = %+v", got)
+		}
+		if len(state.Observations) != 2 {
+			t.Fatalf("observations across /new = %+v, want both conversations", state.Observations)
+		}
+		if got, err := os.ReadFile(oldPath); err != nil || !bytes.Equal(got, oldBytes) {
+			t.Fatalf("predecessor rollout after /new = %q, err=%v", got, err)
+		}
+	})
 }
 
 func TestSessionUsageTrackerFollowsCodexLineageRecursively(t *testing.T) {
