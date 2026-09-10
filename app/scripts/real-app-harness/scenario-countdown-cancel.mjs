@@ -466,9 +466,9 @@ async function main() {
       const unread = await pollFor(
         () => {
           const s = observer.getSession(targetId);
-          return s && s.ticket_unread === true ? s : null;
+          return s && s.ticket_unread === true && IDLE_STATES.has(s.state) ? s : null;
         },
-        `target ${targetId} to show unread ticket activity`,
+        `target ${targetId} to show unread ticket activity after its prior turn settles`,
         30_000,
       );
       note('target shows unread ticket activity', {
