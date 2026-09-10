@@ -1,10 +1,13 @@
 package daemon
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
+	"testing/synctest"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
@@ -200,6 +203,85 @@ func testSessionUsageResumeBaseline(t *testing.T, legacy bool) {
 	}
 	if got := state.Ledger["claude-sonnet-4-5"]; got.InputTokens != 5 || got.OutputTokens != 6 {
 		t.Fatalf("new child usage = %+v", got)
+	}
+}
+
+func TestRecoveredSessionUsageTrackerKeepsExistingObservations(t *testing.T) {
+	d := newBubbleDaemon(t)
+	synctest.Test(t, func(t *testing.T) {
+		stopDaemonBackground(t, d)
+		const id = "recovered-codex"
+		addCostSession(t, d, id, protocol.SessionAgentCodex)
+		if err := d.store.InitializeSessionCostTracking(id); err != nil {
+			t.Fatal(err)
+		}
+		root := filepath.Join(t.TempDir(), "rollout-recovered.jsonl")
+		writeUsageLines(t, root, codexMeta("native-recovered", `"cli"`), codexUsageLine("gpt-5.5", 10, 4, 2))
+		if changed, err := d.store.TransitionSessionConversation(id, "native-recovered", root); err != nil || !changed {
+			t.Fatalf("seed conversation: changed=%t err=%v", changed, err)
+		}
+		watcher := &transcriptWatcher{sessionID: id, agent: protocol.SessionAgentCodex}
+		d.newSessionUsageTracker(watcher, root).Reconcile()
+		before, err := d.store.SessionCost(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(before.Observations) != 1 {
+			t.Fatalf("seeded recovery cost = %+v, want one observation", before)
+		}
+
+		d.ptyBackend = &fakeSpawnBackend{sessionIDs: []string{id}}
+		d.restoreTranscriptWatchers()
+		requireTranscriptDiscovery(t, d, id)
+
+		after, err := d.store.SessionCost(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(after, before) {
+			t.Fatalf("recovery changed cost state:\n before: %+v\n  after: %+v", before, after)
+		}
+	})
+}
+
+func TestCodexNewConversationKeepsCostAndPredecessorRollout(t *testing.T) {
+	d := newTurnDaemon(t)
+	const id = "codex-new"
+	addCostSession(t, d, id, protocol.SessionAgentCodex)
+	if err := d.store.InitializeSessionCostTracking(id); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	oldPath := filepath.Join(dir, "rollout-old.jsonl")
+	oldBytes := []byte(joinUsageLines([]string{codexMeta("native-old", `"cli"`), codexUsageLine("gpt-5.5", 10, 4, 2)}))
+	if err := os.WriteFile(oldPath, oldBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if changed, err := d.store.TransitionSessionConversation(id, "native-old", oldPath); err != nil || !changed {
+		t.Fatalf("bind old conversation: changed=%t err=%v", changed, err)
+	}
+	watcher := &transcriptWatcher{sessionID: id, agent: protocol.SessionAgentCodex}
+	d.newSessionUsageTracker(watcher, oldPath).Reconcile()
+
+	newPath := filepath.Join(dir, "rollout-new.jsonl")
+	writeUsageLines(t, newPath, codexMeta("native-new", `"cli"`), codexUsageLine("gpt-5.5", 20, 5, 3))
+	if changed, err := d.store.TransitionSessionConversation(id, "native-new", newPath); err != nil || !changed {
+		t.Fatalf("bind new conversation: changed=%t err=%v", changed, err)
+	}
+	d.newSessionUsageTracker(watcher, newPath).Reconcile()
+
+	state, err := d.store.SessionCost(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := state.Ledger["gpt-5.5"]; got.InputTokens != 21 || got.CacheReadInputTokens != 9 || got.OutputTokens != 5 {
+		t.Fatalf("usage across /new = %+v", got)
+	}
+	if len(state.Observations) != 2 {
+		t.Fatalf("observations across /new = %+v, want both conversations", state.Observations)
+	}
+	if got, err := os.ReadFile(oldPath); err != nil || !bytes.Equal(got, oldBytes) {
+		t.Fatalf("predecessor rollout after /new = %q, err=%v", got, err)
 	}
 }
 
