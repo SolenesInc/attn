@@ -37,8 +37,8 @@ func runCrew() {
 func writeCrewHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn crew <command>
 
-Manage named agents whose charters and handoffs persist across sessions.
-Their files live in the active profile's crew directory.
+Manage the Crew. Members' charters and handoffs persist across sessions
+in the active profile's crew directory.
 Launch as a member with: attn <agent> --member <name>.
 Run crew commands on the home daemon; outposts report which home to use.
 
