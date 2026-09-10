@@ -32,11 +32,12 @@ func TestCodexResumeMappingEndToEnd(t *testing.T) {
 	nativeCodexID := "codex-native-session-123"
 	fakeScript := fmt.Sprintf(`#!/bin/sh
 set -eu
+trap 'status=$?; if [ "$status" -ne 0 ]; then printf "EXIT:%%s\n" "$status" >> %q; fi' EXIT
 printf '{"session_id":%q,"transcript_path":"/tmp/fake-codex.jsonl"}' | "$ATTN_WRAPPER_PATH" _hook-session-start
 printf 'ARGS:%%s\n' "$*" >> %q
 trap 'exit 0' TERM INT
 while :; do sleep 1; done
-`, nativeCodexID, fakeCodexLog)
+`, fakeCodexLog, nativeCodexID, fakeCodexLog)
 	if err := os.WriteFile(fakeCodex, []byte(fakeScript), 0o755); err != nil {
 		t.Fatalf("write fake codex: %v", err)
 	}
@@ -190,7 +191,13 @@ func readFakeCodexLog(t *testing.T, path string) []string {
 func waitForFakeCodexLog(t *testing.T, watcher *fsnotify.Watcher, path string, ready func([]string) bool) []string {
 	t.Helper()
 	for {
-		if lines := readFakeCodexLog(t, path); ready(lines) {
+		lines := readFakeCodexLog(t, path)
+		for _, line := range lines {
+			if strings.HasPrefix(line, "EXIT:") {
+				t.Fatalf("fake Codex exited before expected invocation: %s", line)
+			}
+		}
+		if ready(lines) {
 			return lines
 		}
 		select {
