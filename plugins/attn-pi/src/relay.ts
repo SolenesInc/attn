@@ -26,6 +26,7 @@ type Pending = {
 export type RelayDelegate = {
   suiteHello(connection: RelayConnection, params: unknown): Promise<{ ok: true }>;
   suiteReportState(params: unknown): Promise<void>;
+  suiteReportProxyCommands(params: unknown): Promise<void>;
   suiteReportStop(params: unknown): Promise<void>;
   suiteReportDenial(params: unknown): Promise<void>;
   suiteReportInputTaken(params: unknown): Promise<void>;
@@ -41,6 +42,7 @@ export type RelayDelegateSource = RelayDelegate | (() => RelayDelegate);
 
 export const suiteReports: Record<string, Exclude<keyof RelayDelegate, "suiteHello">> = {
   [relayMethods.reportState]: "suiteReportState",
+  [relayMethods.reportProxyCommands]: "suiteReportProxyCommands",
   [relayMethods.reportStop]: "suiteReportStop",
   [relayMethods.reportDenial]: "suiteReportDenial",
   [relayMethods.reportInputTaken]: "suiteReportInputTaken",

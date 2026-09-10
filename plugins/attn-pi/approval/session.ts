@@ -17,6 +17,7 @@ export const statusKey = "attn-auto";
 
 export type ApprovalSuiteLike = {
   networkDecider: Decider | undefined;
+  acquireCommandProxy(proxy: ProxyAddress, signal?: AbortSignal): Promise<{ proxy: ProxyAddress; release: () => void }>;
   reportDenial(denial: { tool: string; action: string; reason: string; rule: string; at: string }): void;
   reportApprovalWindow(open: boolean): void;
   reportExecPolicyAmendment(amendment: { pattern: string[]; decision: string; justification?: string }): Promise<void>;
@@ -91,7 +92,7 @@ export class PiApproval {
       sandbox: () => this.sandboxSource(),
       reviewer: () => this.reviewer(),
       rules: compiled.rules,
-      ...(setup.proxy ? { proxy: setup.proxy } : {}),
+      ...(setup.proxy ? { proxy: setup.proxy, acquireProxy: (signal) => setup.suite.acquireCommandProxy(setup.proxy!, signal) } : {}),
       run: (command, cwd, options) => local.exec(command, cwd, options),
       onDenial: (denial) => this.record(denial),
       onExecPolicyAmendment: (pattern) =>

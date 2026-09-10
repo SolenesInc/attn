@@ -889,3 +889,19 @@ describe("the local network guard", () => {
     expect(decider.calls).toEqual([]);
   });
 });
+
+test("revoking a command while review is pending cannot restore its access with a late answer", async () => {
+  const { proxy, decider } = await startProxy({});
+  let answer!: (value: NetworkDecision) => void;
+  let called!: () => void;
+  const asked = new Promise<void>((resolve) => { called = resolve; });
+  decider.answer = () => new Promise<NetworkDecision>((resolve) => { answer = resolve; called(); });
+  const verdict = proxy.authorize({ credentials: token, host: "example.com", port: 443, protocol: "https_connect" });
+  await asked;
+  proxy.revokeCredentials(token);
+  answer({ decision: "allow", scope: "session" });
+  expect(await verdict).toEqual({ allowed: false, reason: "no_credentials" });
+  expect(proxy.knowsCredentials(token)).toBe(false);
+  proxy.registerCredentials(token);
+  expect(proxy.evaluateHost(token, "example.com", 443)).toBe("ask");
+});

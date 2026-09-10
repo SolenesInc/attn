@@ -134,9 +134,18 @@ hand; nothing enforces them.
 
 One proxy runs per profile inside the plugin driver process, speaking plain
 HTTP, HTTPS CONNECT and SOCKS5 TCP. Sessions reach it through `HTTP_PROXY`,
-`HTTPS_PROXY` and `ALL_PROXY`, with per-run credentials the driver mints, so the
-proxy can attribute every connection and the sandboxed command never holds the
-relay's auth. The sandbox allows outbound TCP only to the proxy's loopback port.
+`HTTPS_PROXY` and `ALL_PROXY`. Each bash execution gets fresh credentials,
+registered through the authenticated suite relay before the command starts.
+The proxy passes those credentials back to the suite to identify the exact
+command, even while sibling tools run concurrently. The sandboxed command never
+holds the relay's auth. The sandbox allows outbound TCP only to the proxy's
+loopback port.
+
+Commands run concurrently; approval cards and Guardian requests share one review
+queue. A cancelled command dismisses its active card and cannot open a queued
+one. A network denial stops only the command that made the request. Credentials
+are revoked when that execution ends. Session host approvals remain available to
+later commands in the same session.
 
 Host rules are allow and deny lists with wildcards; deny wins, and the allowlist
 is consulted first. A host with a port, such as `localhost:9849`, matches only
@@ -154,7 +163,9 @@ policy.` "Allow in the future" persists the host rule; the driver's proxy picks
 it up at once, other sessions at their next launch.
 
 The proxy comes back on its persisted port after a driver restart, so an
-inherited session's next connection is held for a decision rather than refused.
+inherited session's next connection can reach its reviewer. The suite restores
+its active command identities in the reconnect handshake. Credential snapshots
+carry a revision so a delayed report cannot restore a completed command's access.
 
 Bare pi's network allow is unrestricted on both platforms. An attn session
 instead runs through the proxy on macOS; on Linux the sandbox has no network

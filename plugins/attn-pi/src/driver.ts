@@ -21,7 +21,7 @@ import type {
   RelayReportStateParams,
   RelayReportStopParams,
 } from "./relay-protocol";
-import { relayMethods } from "./relay-protocol";
+import { relayMethods, type ProxyCommands } from "./relay-protocol";
 import {
   compareVersion,
   evaluatePiVersion,
@@ -47,6 +47,7 @@ type RunState = {
   /** Proxy credentials, distinct from `token`: these reach the sandboxed command in its
    * environment, and the relay token must never be reachable from inside the sandbox. */
   proxyCredentials?: string;
+  proxyCommands?: ProxyCommands;
   sessionID: string;
   runID: string;
   seq: number;
@@ -238,9 +239,11 @@ export class PiDriver implements RelayDelegate {
   }
 
   private forgetProxyCredentials(run: RunState): void {
-    if (!run.proxyCredentials) return;
-    this.runsByProxyCredentials.delete(run.proxyCredentials);
-    this.proxyState?.proxy.revokeCredentials(run.proxyCredentials);
+    for (const credentials of [run.proxyCredentials, ...(run.proxyCommands?.credentials ?? [])]) {
+      if (!credentials) continue;
+      this.runsByProxyCredentials.delete(credentials);
+      this.proxyState?.proxy.revokeCredentials(credentials);
+    }
   }
 
   async close(): Promise<void> {
@@ -259,6 +262,7 @@ export class PiDriver implements RelayDelegate {
     const params = parseRelayHello(rawParams);
     const run = this.requireRunByToken(params.token);
     this.adoptProxyCredentials(run, params.proxy_credentials);
+    if (params.proxy_commands) this.syncProxyCommands(run, params.proxy_commands);
     run.connection = connection;
     this.markBacked(run);
     if (params.dropped_reports !== undefined) {
@@ -278,6 +282,32 @@ export class PiDriver implements RelayDelegate {
     await this.reportMetadata(run);
     if (params.pi_state !== undefined) await this.restateAfterUnknown(run, params.pi_state);
     return { ok: true };
+  }
+
+  async suiteReportProxyCommands(rawParams: unknown): Promise<void> {
+    const params = rawParams as { token: string; proxy_commands: unknown };
+    const run = this.requireRunByToken(params.token);
+    this.syncProxyCommands(run, parseProxyCommands(params.proxy_commands));
+  }
+
+  private syncProxyCommands(run: RunState, commands: ProxyCommands): void {
+    if (run.proxyCommands && commands.revision <= run.proxyCommands.revision) return;
+    for (const credentials of commands.credentials) {
+      const owner = this.runsByProxyCredentials.get(credentials);
+      if (owner && owner !== run) throw new Error("proxy command credentials belong to another run");
+      if (credentials === run.proxyCredentials) throw new Error("a command cannot use the run proxy credentials");
+    }
+    const active = new Set(commands.credentials);
+    for (const credentials of run.proxyCommands?.credentials ?? []) {
+      if (active.has(credentials)) continue;
+      this.runsByProxyCredentials.delete(credentials);
+      this.proxyState?.proxy.revokeCredentials(credentials);
+    }
+    for (const credentials of active) {
+      this.runsByProxyCredentials.set(credentials, run);
+      this.proxyState?.proxy.registerCredentials(credentials);
+    }
+    run.proxyCommands = commands;
   }
 
   private adoptProxyCredentials(run: RunState, offered: string | undefined): void {
@@ -585,7 +615,7 @@ export class PiDriver implements RelayDelegate {
     if (!connection) {
       throw new Error(`no live pi suite for these proxy credentials; nothing can decide ${request.host}`);
     }
-    const params: RelayNetworkDecideParams = { host: request.host, port: request.port, protocol: request.protocol };
+    const params: RelayNetworkDecideParams = { credentials: request.credentials, host: request.host, port: request.port, protocol: request.protocol };
     return this.relay.networkDecide<RelayNetworkDecideParams, RelayNetworkDecideResult>(connection, params);
   }
 
@@ -690,7 +720,17 @@ function parseRelayHello(value: unknown): RelayHelloParams {
     dropped_reports: typeof dropped === "number" && Number.isFinite(dropped) && dropped > 0 ? dropped : undefined,
     pi_state: piState,
     proxy_credentials: typeof record.proxy_credentials === "string" ? record.proxy_credentials.trim() : undefined,
+    ...(record.proxy_commands === undefined ? {} : { proxy_commands: parseProxyCommands(record.proxy_commands) }),
   };
+}
+
+function parseProxyCommands(value: unknown): ProxyCommands {
+  const commands = value as ProxyCommands | null;
+  if (!commands || !Number.isSafeInteger(commands.revision) || commands.revision < 0 ||
+      !Array.isArray(commands.credentials) || commands.credentials.some((item) => typeof item !== "string" || !item.trim())) {
+    throw new Error("proxy_commands requires a nonnegative integer revision and nonempty credential strings");
+  }
+  return { revision: commands.revision, credentials: [...new Set(commands.credentials)] };
 }
 
 function parseRelayReportState(value: unknown): RelayReportStateParams {

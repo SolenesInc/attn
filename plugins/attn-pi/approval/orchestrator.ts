@@ -1,3 +1,4 @@
+import { CredentialFilter, FilteredStream } from "../security/filter";
 import { evaluateCommand, amendRules, type ApprovalPolicy, type PrefixRule, type SandboxMode } from "../execpolicy/index";
 import { initShellParsing, shellParsingReady } from "../shell/index";
 import {
@@ -61,6 +62,7 @@ export type OrchestratorOptions = {
   reviewer: () => Reviewer;
   rules: readonly PrefixRule[];
   proxy?: ProxyAddress;
+  acquireProxy?: (signal?: AbortSignal) => Promise<{ proxy: ProxyAddress; release: () => void }>;
   run: RunShell;
   onDenial?: (denial: OrchestratorDenial) => void;
   onExecPolicyAmendment?: (prefix: string[]) => void;
@@ -70,6 +72,7 @@ export type OrchestratorOptions = {
 
 type RunningCommand = {
   request: CommandApprovalRequest;
+  toolCallId: string;
   controller: AbortController;
   ctx: ReviewContext;
   rejection?: string;
@@ -78,7 +81,8 @@ type RunningCommand = {
 export class ApprovalOrchestrator {
   private currentRules: PrefixRule[];
   private readonly sessionAllowedHosts = new Set<string>();
-  private readonly running: RunningCommand[] = [];
+  private readonly running = new Map<string, RunningCommand>();
+  private reviewTail: Promise<void> = Promise.resolve();
   private shellReady: Promise<void> | undefined;
 
   constructor(private readonly options: OrchestratorOptions) {
@@ -123,7 +127,7 @@ export class ApprovalOrchestrator {
 
     if (evaluation.decision === "prompt") {
       const reviewed = { ...request, ...(evaluation.reason === undefined ? {} : { reason: evaluation.reason }) };
-      this.settle(await this.options.reviewer().review(reviewed, ctx), reviewed, ctx);
+      this.settle(await this.review(reviewed, ctx), reviewed, ctx);
     }
 
     const first = await this.execute(request, evaluation.bypassSandbox, ctx);
@@ -134,7 +138,7 @@ export class ApprovalOrchestrator {
     const retry: CommandApprovalRequest = {
       ...request, sandboxPermissions: "require_escalated", retryReason: retryWithoutSandboxReason,
     };
-    const decision = await this.options.reviewer().review(retry, ctx);
+    const decision = await this.review(retry, ctx);
     if (decision.type === "abort") {
       ctx.abort?.();
       throw new Error(turnAbortedMessage);
@@ -147,7 +151,7 @@ export class ApprovalOrchestrator {
   }
 
   readonly decideNetwork = async (request: NetworkRequest): Promise<NetworkDecision> => {
-    const trigger = this.running.at(-1);
+    const trigger = this.running.get(request.credentials);
     if (!trigger) return { decision: "deny" };
     if (this.sessionAllowedHosts.has(hostKey(request))) return { decision: "allow", scope: "session" };
     if (this.options.approvalPolicy() === "never") {
@@ -163,22 +167,20 @@ export class ApprovalOrchestrator {
       reason: networkPromptReason(request.host),
       retryReason: networkRejection(request),
     };
-    const ctx = trigger.ctx;
+    const ctx = { ...trigger.ctx, signal: trigger.controller.signal };
     let decision: ReviewDecision;
     try {
-      decision = await this.options.reviewer().review(approval, ctx);
+      decision = await this.review(approval, ctx);
     } catch {
-      this.denyNetwork(trigger, request);
+      if (!trigger.controller.signal.aborted) this.denyNetwork(trigger, request);
       return { decision: "deny" };
     }
     switch (decision.type) {
       case "approved":
         return { decision: "allow", scope: "once" };
       case "approved_for_session":
-        this.sessionAllowedHosts.add(hostKey(request));
         return { decision: "allow", scope: "session" };
       case "network_amendment":
-        this.sessionAllowedHosts.add(hostKey(request));
         this.options.onNetworkAmendment?.(request.host);
         return { decision: "allow", scope: "session" };
       case "abort":
@@ -191,10 +193,30 @@ export class ApprovalOrchestrator {
     }
   };
 
+  private async review(request: CommandApprovalRequest | NetworkApprovalRequest, ctx: ReviewContext): Promise<ReviewDecision> {
+    const previous = this.reviewTail;
+    let release!: () => void;
+    this.reviewTail = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try {
+      ctx.signal?.throwIfAborted();
+      if (request.kind === "network" && this.sessionAllowedHosts.has(hostKey(request))) return { type: "approved_for_session" };
+      const decision = await this.options.reviewer().review(request, ctx);
+      ctx.signal?.throwIfAborted();
+      // Publish session grants before the next queued request can open another card.
+      if (request.kind === "network" && (decision.type === "approved_for_session" || decision.type === "network_amendment")) {
+        this.sessionAllowedHosts.add(hostKey(request));
+      }
+      return decision;
+    } finally {
+      release();
+    }
+  }
+
   private denyNetwork(trigger: RunningCommand, request: NetworkRequest): void {
     const rejection = networkRejection(request);
     trigger.rejection = rejection;
-    this.recordDenial("", describeCommand(trigger.request), rejection, "network");
+    this.recordDenial(trigger.toolCallId, describeCommand(trigger.request), rejection, "network");
     trigger.controller.abort();
   }
 
@@ -230,22 +252,31 @@ export class ApprovalOrchestrator {
   private async execute(
     request: CommandApprovalRequest,
     bypassSandbox: boolean,
-    ctx: ReviewContext & { onData: (data: Buffer) => void; timeout?: number; env?: NodeJS.ProcessEnv },
+    ctx: ReviewContext & { toolCallId: string; onData: (data: Buffer) => void; timeout?: number; env?: NodeJS.ProcessEnv },
   ): Promise<{ result: ExecResult; denied: boolean; rejection?: string }> {
+    ctx.signal?.throwIfAborted();
     const source = this.options.sandbox();
-    const spec = bypassSandbox
+    const initialSpec = bypassSandbox
       ? "unsandboxed"
       : sandboxSpecFor(source.config, source.cwd, source.temp, {
           permissions: request.sandboxPermissions,
           ...(this.options.proxy ? { proxy: this.options.proxy } : {}),
         });
+    const lease = initialSpec !== "unsandboxed" && initialSpec.network.mode === "proxy"
+      ? await this.options.acquireProxy?.(ctx.signal) : undefined;
+    const proxy = lease?.proxy ?? this.options.proxy;
+    const spec = lease && initialSpec !== "unsandboxed"
+      ? { ...initialSpec, network: { mode: "proxy" as const, proxy: lease.proxy } } : initialSpec;
     const controller = new AbortController();
     const abort = () => controller.abort();
     ctx.signal?.addEventListener("abort", abort, { once: true });
-    const handle: RunningCommand = { request, controller, ctx };
-    this.running.push(handle);
+    const handle: RunningCommand = { request, toolCallId: ctx.toolCallId, controller, ctx };
+    const credentials = proxy?.credentials ?? ctx.toolCallId;
+    this.running.set(credentials, handle);
     const scanner = new DenialScanner();
+    const output = lease ? new FilteredStream(new CredentialFilter({ PROXY_CREDENTIALS: lease.proxy.credentials }), ctx.onData) : undefined;
     try {
+      ctx.signal?.throwIfAborted();
       // A killed process throws rather than returning, and a network denial is
       // exactly that kill: the rejection is the tool result, not the kill.
       let result: ExecResult;
@@ -256,7 +287,7 @@ export class ApprovalOrchestrator {
           {
             onData: (data) => {
               scanner.push(data.toString());
-              ctx.onData(data);
+              if (output) output.write(data); else ctx.onData(data);
             },
             signal: controller.signal,
             ...(ctx.timeout === undefined ? {} : { timeout: ctx.timeout }),
@@ -275,8 +306,10 @@ export class ApprovalOrchestrator {
       return { result, denied, ...(handle.rejection === undefined ? {} : { rejection: handle.rejection }) };
     } finally {
       ctx.signal?.removeEventListener("abort", abort);
-      const index = this.running.indexOf(handle);
-      if (index >= 0) this.running.splice(index, 1);
+      this.running.delete(credentials);
+      controller.abort();
+      lease?.release();
+      output?.finish();
     }
   }
 

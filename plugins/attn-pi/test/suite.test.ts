@@ -97,6 +97,10 @@ class RecordingDelegate implements RelayDelegate {
     return { ok: true };
   }
 
+  async suiteReportProxyCommands(params: unknown): Promise<void> {
+    this.calls.push({ method: relayMethods.reportProxyCommands, params });
+  }
+
   async suiteReportState(params: unknown): Promise<void> {
     this.calls.push({ method: relayMethods.reportState, params });
   }
@@ -178,6 +182,7 @@ describe("AttnPiSuite: session_start -> suite.hello", () => {
         pi_version: "0.80.10",
         reason,
         pi_state: "idle",
+        proxy_commands: { revision: 0, credentials: [] },
       })),
     );
 
@@ -572,6 +577,7 @@ describe("AttnPiSuite: the driver was replaced under a live session", () => {
       pi_version: "0.80.10",
       reason: "reconnect",
       pi_state: "idle",
+      proxy_commands: { revision: 0, credentials: [] },
     });
 
     suite.close();
@@ -602,6 +608,7 @@ describe("AttnPiSuite: the driver was replaced under a live session", () => {
       pi_version: "0.80.10",
       reason: "reconnect",
       pi_state: "idle",
+      proxy_commands: { revision: 0, credentials: [] },
     });
 
     suite.close();

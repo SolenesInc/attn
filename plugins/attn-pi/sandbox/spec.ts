@@ -3,7 +3,7 @@ import { canonical, within } from "../security/policy";
 
 export type SandboxMode = "read-only" | "workspace-write" | "danger-full-access";
 export type SandboxPermissions = "use_default" | "require_escalated";
-/** credentials = the run's proxy credentials (ATTN_PI_PROXY_CREDENTIALS), never the run token. */
+/** Each shell execution gets its own proxy credentials; the relay token never reaches the sandbox. */
 export type ProxyAddress = { host: "127.0.0.1"; port: number; credentials: string };
 
 /** "proxy" asks for attn's proxy; sandboxSpecFor falls back to "off" when none is running. */

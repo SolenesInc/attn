@@ -13,6 +13,7 @@ export type RelayHelloParams = {
   /** How an adopted run recovers its proxy credentials: the suite still holds the value
    * a past spawn minted, and a restarted driver has no other way to learn it. */
   proxy_credentials?: string;
+  proxy_commands?: ProxyCommands;
 };
 export type RelayHelloState = "idle" | "working" | "pending_approval";
 export type RelayHelloResult = { ok: true };
@@ -44,12 +45,16 @@ export type RelayReportNetworkAmendmentParams = { token: string; host: string; d
 export type RelayDeliverMessageParams = { input_id: string; text: string };
 export type RelayDeliverMessageResult = { delivered: boolean };
 
-export type RelayNetworkDecideParams = { host: string; port: number; protocol: NetworkProtocol };
+export type ProxyCommands = { revision: number; credentials: string[] };
+export type RelayReportProxyCommandsParams = { token: string; proxy_commands: ProxyCommands };
+
+export type RelayNetworkDecideParams = { credentials: string; host: string; port: number; protocol: NetworkProtocol };
 export type RelayNetworkDecideResult = NetworkDecision;
 
 export const relayMethods = {
   hello: "suite.hello",
   reportState: "suite.report_state",
+  reportProxyCommands: "suite.report_proxy_commands",
   reportStop: "suite.report_stop",
   reportDenial: "suite.report_denial",
   reportInputTaken: "suite.report_input_taken",

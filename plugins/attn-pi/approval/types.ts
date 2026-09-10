@@ -34,7 +34,7 @@ export type ReviewDecision =
   | { type: "timed_out" };
 
 export type ReviewUI = {
-  select(title: string, options: string[]): Promise<string | undefined>;
+  select(title: string, options: string[], opts?: { signal?: AbortSignal }): Promise<string | undefined>;
   notify(message: string, level?: "info" | "warning" | "error"): void;
   setStatus?(key: string, text: string | undefined): void;
 };

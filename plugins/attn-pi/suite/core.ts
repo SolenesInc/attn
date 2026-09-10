@@ -1,5 +1,7 @@
 // Duck-typed against pi's ExtensionAPI/ExtensionContext (verified against pi v0.80.10) so
 // this file loads under `bun test` with no pi runtime present.
+import { randomUUID } from "node:crypto";
+import type { ProxyAddress } from "../sandbox";
 import { createConnection, type Socket } from "node:net";
 import {
   relayMethods,
@@ -357,6 +359,8 @@ export class AttnPiSuite {
 
   private readonly piVersion: string;
   private readonly proxyCredentials: string;
+  private proxyCommandRevision = 0;
+  private readonly proxyCommands = new Set<string>();
   private readonly relay: { client: RelaySuiteClient; token: string } | undefined;
 
   private currentPi: ExtensionAPILike | undefined;
@@ -396,6 +400,7 @@ export class AttnPiSuite {
       reason,
       pi_state: this.currentState(ctx),
       ...(this.proxyCredentials ? { proxy_credentials: this.proxyCredentials } : {}),
+      proxy_commands: this.proxyCommandSnapshot(),
     };
   }
 
@@ -515,6 +520,44 @@ export class AttnPiSuite {
     });
   }
 
+  private proxyCommandSnapshot() {
+    return { revision: this.proxyCommandRevision, credentials: [...this.proxyCommands] };
+  }
+
+  async acquireCommandProxy(proxy: ProxyAddress, signal?: AbortSignal): Promise<{ proxy: ProxyAddress; release: () => void }> {
+    const relay = this.relay;
+    if (!relay) throw new Error("command network proxy requires the attn relay");
+    signal?.throwIfAborted();
+    const credentials = randomUUID();
+    this.proxyCommands.add(credentials);
+    this.proxyCommandRevision += 1;
+    const release = () => {
+      if (!this.proxyCommands.delete(credentials)) return;
+      this.proxyCommandRevision += 1;
+      relay.client.reportFact("proxy-commands", relayMethods.reportProxyCommands, {
+        token: relay.token, proxy_commands: this.proxyCommandSnapshot(),
+      });
+    };
+    let abort: (() => void) | undefined;
+    try {
+      const registration = relay.client.send(relayMethods.reportProxyCommands, {
+        token: relay.token, proxy_commands: this.proxyCommandSnapshot(),
+      });
+      await new Promise<void>((resolve, reject) => {
+        abort = () => reject(signal?.reason ?? new Error("command cancelled"));
+        signal?.addEventListener("abort", abort, { once: true });
+        registration.then(resolve, reject);
+        if (signal?.aborted) abort();
+      });
+      return { proxy: { ...proxy, credentials }, release };
+    } catch (error) {
+      release();
+      throw error;
+    } finally {
+      if (abort) signal?.removeEventListener("abort", abort);
+    }
+  }
+
   close(): void {
     this.relay?.client.close();
   }
@@ -524,7 +567,7 @@ export class AttnPiSuite {
   ): Promise<RelayNetworkDecideResult> => {
     const decider = this.networkDecider;
     if (!decider) return { decision: "deny" };
-    return decider({ credentials: this.proxyCredentials, ...params });
+    return decider(params);
   };
 
   private readonly handleDeliverMessage = async (

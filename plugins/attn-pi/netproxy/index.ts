@@ -150,8 +150,10 @@ export class NetworkProxy implements ProxyGate {
   }
 
   async authorize(request: NetworkRequest): Promise<GateVerdict> {
+    if (!this.knowsCredentials(request.credentials)) return { allowed: false, reason: "no_credentials" };
     const normalized = normalizeHost(request.host);
     const hardDeny = await this.hardDenyReason(normalized, request.port);
+    if (!this.knowsCredentials(request.credentials)) return { allowed: false, reason: "no_credentials" };
     if (hardDeny !== undefined) {
       this.recordDenial(request, hardDeny);
       return { allowed: false, reason: hardDeny };
@@ -167,6 +169,7 @@ export class NetworkProxy implements ProxyGate {
       this.recordDenial(request, "decider_unavailable");
       return { allowed: false, reason: "decider_unavailable" };
     }
+    if (!this.knowsCredentials(request.credentials)) return { allowed: false, reason: "no_credentials" };
     if (answer?.decision !== "allow") {
       this.recordDenial(request, "not_allowed");
       return { allowed: false, reason: "not_allowed" };

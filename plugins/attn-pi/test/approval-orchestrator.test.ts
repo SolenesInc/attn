@@ -64,7 +64,7 @@ function fixture(options: {
   let aborted = 0;
   const controller = new AbortController();
   const ctx = {
-    cwd: root, toolCallId: "call-1", onData: (data: Buffer) => { output += data.toString(); },
+    cwd: root, toolCallId: "run-token", onData: (data: Buffer) => { output += data.toString(); },
     abort: () => { aborted += 1; }, signal: controller.signal,
   };
   return {
@@ -247,7 +247,7 @@ test.skipIf(process.platform !== "darwin")(
 );
 
 function request(host: string): NetworkRequest {
-  return { host, port: 443, protocol: "https_connect" };
+  return { credentials: "run-token", host, port: 443, protocol: "https_connect" };
 }
 
 /** Builds a real security policy for the paths, plus the daemon's approval config for everything else. */
@@ -394,4 +394,48 @@ test("a session with network policy on but no running proxy is told it runs offl
       level: "warning",
     },
   ]);
+});
+
+test("approval cards queue, abort dismisses the active card, and a cancelled waiter never executes", async () => {
+  let cardOpened!: () => void;
+  const opened = new Promise<void>((resolve) => { cardOpened = resolve; });
+  let nextCard!: () => void;
+  const secondOpened = new Promise<void>((resolve) => { nextCard = resolve; });
+  let approve!: (choice: string) => void;
+  const titles: string[] = [];
+  let active = 0;
+  const ui = {
+    notify: () => {},
+    select: (title: string, _choices: string[], options?: { signal?: AbortSignal }) => {
+      titles.push(title);
+      expect(++active).toBe(1);
+      const result = new Promise<string | undefined>((resolve) => {
+        approve = resolve;
+        options?.signal?.addEventListener("abort", () => resolve(undefined), { once: true });
+      }).finally(() => { active -= 1; });
+      if (titles.length === 1) cardOpened(); else nextCard();
+      return result;
+    },
+  };
+  const reviewer = new UserReviewer({ rules: () => [] });
+  const it = fixture({ script: () => ({ type: "approved" }), reviewer });
+  const firstAbort = new AbortController();
+  const cancelled = new AbortController();
+  const run = (command: string, signal?: AbortSignal) => it.orchestrator.runBash(
+    { command, sandbox_permissions: "require_escalated" },
+    { ...it.ctx, toolCallId: command, ui, signal },
+  ).catch((error: Error) => error.message);
+  const first = run("echo first", firstAbort.signal);
+  await opened;
+  const second = run("echo second");
+  const third = run("echo cancelled", cancelled.signal);
+  cancelled.abort();
+  expect(titles).toHaveLength(1);
+  firstAbort.abort();
+  await secondOpened;
+  approve(commandOptions.approve);
+  await Promise.all([first, second, third]);
+  expect(titles).toHaveLength(2);
+  expect(it.output()).toBe("second\n");
+  expect(active).toBe(0);
 });

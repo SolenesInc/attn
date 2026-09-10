@@ -52,7 +52,7 @@ export class UserReviewer implements Reviewer {
     this.options.onWaiting?.(true);
     let choice: string | undefined;
     try {
-      choice = await ui.select(reviewTitle(request), labels.map((label) => label.text));
+      choice = await ui.select(reviewTitle(request), labels.map((label) => label.text), { signal: ctx.signal });
     } finally {
       this.options.onWaiting?.(false);
     }
