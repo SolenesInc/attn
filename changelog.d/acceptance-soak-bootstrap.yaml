@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: Register the on-demand App acceptance soak workflow on the default branch.
