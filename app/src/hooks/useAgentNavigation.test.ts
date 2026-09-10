@@ -31,10 +31,48 @@ function controller(overrides: Partial<Parameters<typeof useAgentNavigation>[0]>
     requestTerminalFocus: vi.fn(),
     ...overrides,
   };
-  return { options, ...renderHook(() => useAgentNavigation(options)) };
+  return { options, ...renderHook(() => useAgentNavigation({ ...options })) };
 }
 
 describe('useAgentNavigation', () => {
+  it.each(['session', 'pane', 'back', 'forward', 'cancel'] as const)(
+    'a newer %s action cancels a deferred selection from an older render',
+    (action) => {
+      const { result, options, rerender } = controller({ sessions: [session('a')] });
+      const beforeCreation = result.current.selectAgent;
+      options.sessions = [session('a'), session('b')];
+      rerender();
+      act(() => { beforeCreation('b'); });
+
+      vi.mocked(options.navigateAgentHistory).mockReturnValue('a');
+      act(() => {
+        if (action === 'session') result.current.selectAgent('a');
+        if (action === 'pane') result.current.selectAgentPane('a', 'pane-a');
+        if (action === 'back') result.current.back();
+        if (action === 'forward') result.current.forward();
+        if (action === 'cancel') result.current.cancelPendingSelection();
+      });
+      options.sessions = [...options.sessions];
+      rerender();
+
+      expect(vi.mocked(options.setActiveSession).mock.calls).toEqual(
+        action === 'session' || action === 'pane' ? [['a']] : [],
+      );
+    },
+  );
+
+  it('only selects the latest deferred target when both panes arrive together', () => {
+    const { result, options, rerender } = controller({ sessions: [session('a')] });
+    act(() => {
+      result.current.selectAgent('b');
+      result.current.selectAgent('c');
+    });
+    options.sessions = [session('a'), session('b'), session('c')];
+    rerender();
+
+    expect(vi.mocked(options.setActiveSession).mock.calls).toEqual([['c']]);
+  });
+
   it('selects a session-backed pane and runs the reveal/focus sequence', () => {
     const { result, options } = controller();
 

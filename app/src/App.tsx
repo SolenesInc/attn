@@ -1026,6 +1026,7 @@ function AppContent({
   const {
     selectAgent,
     selectAgentPane,
+    cancelPendingSelection,
     back: navigateAgentHistoryBack,
     forward: navigateAgentHistoryForward,
   } = useAgentNavigation({
@@ -1038,30 +1039,8 @@ function AppContent({
     requestTerminalFocus,
   });
 
-  const pendingSessionSelectionsRef = useRef(new Set<string>());
-
-  const selectSessionWhenReady = useCallback((sessionId: string) => {
-    if (selectAgent(sessionId)) {
-      return true;
-    }
-    pendingSessionSelectionsRef.current.add(sessionId);
-    return false;
-  }, [selectAgent]);
-
-  const handleSelectSession = selectSessionWhenReady;
-  const selectCreatedSession = selectSessionWhenReady;
-
-  useEffect(() => {
-    for (const sessionId of pendingSessionSelectionsRef.current) {
-      if (!sessions.some((session) => session.id === sessionId)) {
-        pendingSessionSelectionsRef.current.delete(sessionId);
-        continue;
-      }
-      if (selectAgent(sessionId)) {
-        pendingSessionSelectionsRef.current.delete(sessionId);
-      }
-    }
-  }, [selectAgent, sessions]);
+  const handleSelectSession = selectAgent;
+  const selectCreatedSession = selectAgent;
 
   const rollbackSessionCreation = useCallback(async ({
     sessionId,
@@ -1465,10 +1444,11 @@ function AppContent({
 
   const [followNextTurn, setFollowNextTurn] = useState(false);
   const enterHome = useCallback((awaitingNextTurn: boolean) => {
+    cancelPendingSelection();
     setActiveSession(null);
     setView('dashboard');
     setFollowNextTurn(awaitingNextTurn);
-  }, [setActiveSession]);
+  }, [cancelPendingSelection, setActiveSession]);
 
   const goToDashboard = useCallback(() => enterHome(false), [enterHome]);
 
@@ -1479,8 +1459,9 @@ function AppContent({
   }, [view]);
 
   const toggleGridMode = useCallback(() => {
+    cancelPendingSelection();
     setView((prev) => (prev === 'grid' ? (activeSessionId ? 'session' : 'dashboard') : 'grid'));
-  }, [activeSessionId]);
+  }, [activeSessionId, cancelPendingSelection]);
 
 
   const clearDockPanelCloseTimer = useCallback((panelId: DockPanelId) => {
@@ -2819,10 +2800,11 @@ function AppContent({
 
   const [gridLayout, setGridLayout] = useState<GridLayout>(readGridLayout);
   const handleSelectGridLayout = useCallback((layout: GridLayout) => {
+    cancelPendingSelection();
     setGridLayout(layout);
     persistGridLayout(layout);
     setView('grid');
-  }, []);
+  }, [cancelPendingSelection]);
 
   const [excludedGridSessions, setExcludedGridSessions] = useState<Set<string>>(readExcludedGridSessions);
   const gridMembers = useMemo(
@@ -3179,11 +3161,12 @@ function AppContent({
         handleSelectSession(sessionId);
         return;
       }
+      cancelPendingSelection();
       setSelectedSessionlessWorkspaceId(workspace.id);
       setView('session');
       requestTerminalFocus();
     },
-    [handleSelectSession, requestTerminalFocus, sidebarWorkspaceViews, workspaceViews],
+    [cancelPendingSelection, handleSelectSession, requestTerminalFocus, sidebarWorkspaceViews, workspaceViews],
   );
   selectWorkspaceRef.current = handleSelectWorkspace;
 
