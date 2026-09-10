@@ -1,0 +1,35 @@
+name: Acceptance soak
+run-name: Acceptance soak ${{ inputs.scenarios }} at ${{ github.ref_name }}
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/acceptance-soak.yml]
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: Comma-separated App acceptance scenario ids
+        required: true
+        type: string
+      repeat:
+        description: Runs per scenario
+        required: true
+        type: number
+      runner:
+        description: GitHub Actions runner label
+        required: true
+        type: string
+
+jobs:
+  bootstrap:
+    name: Choose an implementation ref
+    runs-on: ubuntu-24.04
+    steps:
+      - if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "Acceptance soak is registered on main but implemented on next."
+          echo "Run it with --ref next, or another ref that carries the implementation." >&2
+          exit 1
+
+      - if: github.event_name == 'push'
+        run: echo "Acceptance soak is ready for dispatch against an implementation ref."
