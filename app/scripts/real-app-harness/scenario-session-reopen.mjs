@@ -10,7 +10,6 @@ import {
   parseCommonArgs,
   printCommonHelp,
   queryDaemonDb,
-  restoreHarnessSettings,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
@@ -269,10 +268,11 @@ async function main() {
     process.exitCode = 1;
   } finally {
     if (sessionId) await client.request('close_session', { sessionId }).catch(() => {});
-    await client.quitApp().catch(() => {});
-    await observer.close().catch(() => {});
-    await restoreHarnessSettings();
-    await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) }).catch(() => {});
+    try {
+      await runner.finishCleanup({ sessionId });
+    } finally {
+      await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) }).catch(() => {});
+    }
   }
 }
 

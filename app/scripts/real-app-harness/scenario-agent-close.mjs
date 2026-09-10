@@ -8,7 +8,6 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
-  restoreHarnessSettings,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
@@ -241,9 +240,7 @@ async function main() {
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
-    await client.quitApp().catch(() => {});
-    await observer.close().catch(() => {});
-    await restoreHarnessSettings();
+    await runner.finishCleanup({ delegate, seed });
   }
 }
 

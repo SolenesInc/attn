@@ -294,6 +294,7 @@ export function createScenarioRunner(options, {
   const cleanupHandlers = [];
   let cleanupPromise = null;
   let finalizationPromise = null;
+  let reportedFailure = null;
 
   const appendTrace = (message, details) => {
     const line = `[${new Date().toISOString()}] ${message}${details ? ` ${JSON.stringify(details)}` : ''}\n`;
@@ -333,6 +334,7 @@ export function createScenarioRunner(options, {
       return cleanupPromise;
     }
     cleanupPromise = (async () => {
+      const errors = [];
       // beforeExit does not fire on a signal; draining the queue makes whichever
       // of the two runs second a no-op.
       try {
@@ -342,9 +344,10 @@ export function createScenarioRunner(options, {
         }
       } catch (error) {
         appendTrace('settings:restore_failed', { error: normalizeError(error) });
+        errors.push({ name: 'restore_harness_settings', error: normalizeError(error) });
       }
       if (cleanupHandlers.length === 0) {
-        return;
+        return errors;
       }
       appendTrace('cleanup:start', { reason, count: cleanupHandlers.length });
       for (const cleanup of [...cleanupHandlers].reverse()) {
@@ -353,17 +356,24 @@ export function createScenarioRunner(options, {
           await cleanup.fn();
           appendTrace('cleanup:ok', { reason, name: cleanup.name });
         } catch (error) {
+          const normalized = normalizeError(error);
           appendTrace('cleanup:error', {
             reason,
             name: cleanup.name,
-            error: normalizeError(error),
+            error: normalized,
           });
+          errors.push({ name: cleanup.name, error: normalized });
         }
       }
       appendTrace('cleanup:done', { reason });
+      return errors;
     })();
     return cleanupPromise;
   };
+
+  const teardownError = (errors) => new Error(
+    `Scenario teardown failed: ${errors.map(({ name, error }) => `${name}: ${error.split(/\r?\n/, 1)[0]}`).join('; ')}`,
+  );
 
   const finalizeRunner = async () => {
     if (finalizationPromise) return finalizationPromise;
@@ -562,6 +572,7 @@ export function createScenarioRunner(options, {
       return finalSummary;
     },
     async finishFailure(error, summary = {}) {
+      reportedFailure = { error, summary };
       const recorderError = await finalizeRunner();
       const ledger = collectTripwireLedger();
       const finalSummary = {
@@ -586,6 +597,7 @@ export function createScenarioRunner(options, {
         ...summary,
       };
       const summaryPath = path.join(runDir, 'failure.json');
+      fs.rmSync(path.join(runDir, 'summary.json'), { force: true });
       writeJson(summaryPath, finalSummary);
       const digest = buildFailureDigest({
         scenarioId,
@@ -608,6 +620,19 @@ export function createScenarioRunner(options, {
         durationMs: Date.now() - runnerCreatedAt,
       });
       return finalSummary;
+    },
+    async finishCleanup(summary = {}) {
+      const errors = await runRegisteredCleanup('finish');
+      if (errors.length === 0) {
+        return;
+      }
+      const error = teardownError(errors);
+      if (reportedFailure) {
+        await runner.finishFailure(reportedFailure.error, { ...reportedFailure.summary, teardownErrors: errors });
+      } else {
+        await runner.finishFailure(error, { ...summary, failurePhase: 'teardown', teardownErrors: errors });
+      }
+      throw error;
     },
     async close() {
       const recorderError = await finalizeRunner();
