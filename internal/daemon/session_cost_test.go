@@ -277,7 +277,7 @@ func TestRecoveredSessionUsageTrackerKeepsExistingObservations(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := continued.Ledger["gpt-5.5"]; got.InputTokens != 11 || got.CacheReadInputTokens != 6 || got.OutputTokens != 5 {
+		if got := continued.Ledger[sessioncost.AgentKey("gpt-5.5")]; got.InputTokens != 11 || got.CacheReadInputTokens != 6 || got.OutputTokens != 5 {
 			t.Fatalf("usage after recovery = %+v", got)
 		}
 		if len(continued.Observations) != 2 {
@@ -343,7 +343,7 @@ func TestCodexNewConversationKeepsCostAndPredecessorRollout(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := state.Ledger["gpt-5.5"]; got.InputTokens != 21 || got.CacheReadInputTokens != 9 || got.OutputTokens != 5 {
+		if got := state.Ledger[sessioncost.AgentKey("gpt-5.5")]; got.InputTokens != 21 || got.CacheReadInputTokens != 9 || got.OutputTokens != 5 {
 			t.Fatalf("usage across /new = %+v", got)
 		}
 		if len(state.Observations) != 2 {
