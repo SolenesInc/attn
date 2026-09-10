@@ -158,7 +158,7 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 	return priming, nil
 }
 
-// The whole garden, not a page: a claim never expires, so a held seed can outlive any snapshot.
+// Read all pages so older member claims are included.
 func (d *Daemon) primeCrewGarden(priming *crew.Priming, memberID string) {
 	read, err := d.readWholeGarden()
 	if err != nil {
