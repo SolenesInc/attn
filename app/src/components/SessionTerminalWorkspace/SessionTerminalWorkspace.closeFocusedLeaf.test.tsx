@@ -147,15 +147,17 @@ describe('SessionTerminalWorkspace selection style', () => {
 });
 
 describe('SessionTerminalWorkspace leaf focus', () => {
-  it('recognizes focus held by a portalled annotation editor', () => {
+  it('keeps annotation focus only for its owning workspace', () => {
     const popup = document.createElement('dialog');
     popup.className = 'anno-popup';
+    popup.dataset.workspaceId = 'workspace-split';
     const textarea = document.createElement('textarea');
     popup.appendChild(textarea);
     document.body.appendChild(popup);
     textarea.focus();
 
-    expect(annotationSurfaceOwnsFocus()).toBe(true);
+    expect(annotationSurfaceOwnsFocus('workspace-split')).toBe(true);
+    expect(annotationSurfaceOwnsFocus('workspace-next')).toBe(false);
 
     popup.remove();
   });
