@@ -112,6 +112,41 @@ func TestSessionInput_UserInputLaterInHeartbeatRunArmsAutoSettle(t *testing.T) {
 	}
 }
 
+func TestSessionInput_UserPromptTakenAfterWorkingTransitionArmsAutoSettle(t *testing.T) {
+	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
+	d.store.SetSetting(SettingAutoSettleEnabled, "true")
+	d.store.SetSetting(SettingAutoSettleArmSeconds, "3600")
+	d.store.SetSetting(SettingAutoSettleCountdownSeconds, "3600")
+	if !d.store.OpenTurnIfClosed(sessionID, time.Now()) {
+		t.Fatal("fixture did not open a user turn")
+	}
+
+	if err := d.writeSessionPTY(sessionID, []byte("the actual answer\r"), "user"); err != nil {
+		t.Fatalf("user input: %v", err)
+	}
+	if !d.applyState(sessionStateChange{sessionID: sessionID, state: protocol.StateWorking, cause: liveSignal{}}) {
+		t.Fatal("working transition was not applied")
+	}
+	d.observePromptTaken(sessionID, "the actual answer", time.Now())
+	if _, pending := autoSettlePending(d, sessionID); !pending {
+		t.Fatal("working-before-hook ordering lost the user input that arms auto-settle")
+	}
+}
+
+func TestSessionInput_UnobservedUserSubmitDoesNotLeakPastWorkingRun(t *testing.T) {
+	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
+	if err := d.writeSessionPTY(sessionID, []byte("unobserved answer\r"), "user"); err != nil {
+		t.Fatalf("user input: %v", err)
+	}
+	d.sessionInputs().observePhase(sessionID, protocol.SessionStateWorking)
+	d.sessionInputs().observePhase(sessionID, protocol.SessionStateWaitingInput)
+	d.sessionInputs().observePhase(sessionID, protocol.SessionStateWorking)
+	d.observePromptTaken(sessionID, "later maintenance", time.Now())
+	if _, credited := d.sessionInputs().currentUserRun(sessionID); credited {
+		t.Fatal("an unobserved submit leaked user credit into the next working run")
+	}
+}
+
 func TestSessionInput_MaintenanceNudgeLaterInHeartbeatRunDoesNotArmAutoSettle(t *testing.T) {
 	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
 	d.store.SetSetting(SettingAutoSettleEnabled, "true")

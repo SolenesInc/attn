@@ -857,11 +857,15 @@ func (m *sessionInputModule) observePhase(sessionID string, phase protocol.Sessi
 	lane.phase = phase
 	if phase == protocol.SessionStateWorking {
 		m.ensureRunLocked(lane, sessionID)
-		if lane.userSubmit || previous == protocol.SessionStatePendingApproval {
+		if previous == protocol.SessionStatePendingApproval {
 			lane.clearConsumedUserInputLocked()
 			m.daemon.forgetUserInput(sessionID)
 		}
 		return
+	}
+	if previous == protocol.SessionStateWorking {
+		lane.clearConsumedUserInputLocked()
+		m.daemon.forgetUserInput(sessionID)
 	}
 	lane.run = nil
 }
