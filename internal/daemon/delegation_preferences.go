@@ -99,13 +99,13 @@ func (d *Daemon) handleDelegationPreferencesSave(client *wsClient, msg *protocol
 	if err == nil {
 		cfg, err = d.store.SaveDelegationPreferences(msg.Preferences)
 	}
+	result.WorkflowSkillPaths = installedPaths
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 	} else {
 		result.Success = true
 		result.Preferences = &cfg
 		result.ExpandedRoles = append(prompts.ExpandDelegationRoles(cfg.Roles), prompts.ExpandDelegationRoles(prompts.DelegationRoleTemplates())...)
-		result.WorkflowSkillPaths = installedPaths
 		result.Harnesses = d.delegationHarnesses()
 		result.Templates = prompts.DelegationRoleTemplates()
 		d.publishFact(FactDelegationPreferencesChanged, "preferences", nil)

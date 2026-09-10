@@ -112,3 +112,56 @@ func TestAddAttnRolesInstallsWorkflowBeforeSavingReferences(t *testing.T) {
 		}
 	}
 }
+
+func TestAddAttnRolesReportsPathsWhenWorkflowInstallIsPartial(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(toolhome.EnvVar, home)
+	t.Setenv("ATTN_PROFILE", "dev")
+	d := newDaemonForTest(t)
+	for _, harness := range []string{"codex", "claude"} {
+		d.store.SetSetting(canonicalExecutableSettingKey(harness), os.Args[0])
+	}
+	for _, harness := range []string{"copilot", "pi"} {
+		d.store.SetSetting(canonicalExecutableSettingKey(harness), filepath.Join(home, "missing-"+harness))
+	}
+	blocked := filepath.Join(home, ".claude", "skills", "attn-workflow")
+	if err := os.MkdirAll(filepath.Dir(blocked), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(blocked, []byte("blocks the skill directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	client := newInternalWSClient()
+	d.handleDelegationPreferencesGet(client, &protocol.DelegationPreferencesGetMessage{RequestID: "load"})
+	loaded := readPreferencesResult(t, client)
+	cfg := *loaded.Preferences
+	cfg.WorkflowSkillEnabled = true
+	cfg.Roles = loaded.Templates
+	d.handleDelegationPreferencesSave(client, &protocol.DelegationPreferencesSaveMessage{
+		RequestID: "partial-install", Preferences: cfg, InstallWorkflowSkill: protocol.Ptr(true),
+	})
+	got := readPreferencesResult(t, client)
+	if got.Success || got.Error == nil {
+		t.Fatalf("partial install result=%+v", got)
+	}
+	wantPaths := []string{
+		filepath.Join(home, ".agents", "skills", "attn-workflow"),
+		blocked,
+	}
+	if len(got.WorkflowSkillPaths) != len(wantPaths) {
+		t.Fatalf("workflow paths=%v, want %v", got.WorkflowSkillPaths, wantPaths)
+	}
+	for i := range wantPaths {
+		if got.WorkflowSkillPaths[i] != wantPaths[i] {
+			t.Fatalf("workflow paths=%v, want %v", got.WorkflowSkillPaths, wantPaths)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(wantPaths[0], "SKILL.md")); err != nil {
+		t.Fatalf("earlier target was not left inspectable after partial failure: %v", err)
+	}
+	stored, err := d.store.GetDelegationPreferences()
+	if err != nil || stored.WorkflowSkillEnabled || len(stored.Roles) != 0 {
+		t.Fatalf("partial install changed preferences: %+v, %v", stored, err)
+	}
+}
