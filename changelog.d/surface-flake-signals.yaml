@@ -1,0 +1,5 @@
+kind: internal
+area: harness
+change: >
+  The sessions and worktree surface scenarios wait for persisted filters and
+  one complete refresh pass, removing two races in the Linux acceptance matrix.

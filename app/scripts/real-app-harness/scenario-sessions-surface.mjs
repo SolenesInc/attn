@@ -285,6 +285,11 @@ async function main() {
       const picked = await waitForSessions(client, (s) => s.scope === 'Closed' && s.range === '7d',
         'the filters this run wants remembered');
       runner.writeJson('filters-picked.json', picked);
+      const remembered = JSON.stringify({
+        scope: 'closed', range: '7d', customFrom: '', customTo: '', workspaceId: '', repository: repo,
+      });
+      await observer.waitFor(() => observer.getSetting(SESSIONS_FILTERS_SETTING) === remembered,
+        'the daemon to persist the filters');
       await hold();
 
       await closeTheSurface(client);
@@ -293,10 +298,7 @@ async function main() {
       runner.writeJson('filters-after-reopen.json', reopened);
       await hold();
 
-      const stored = observer.getSetting(SESSIONS_FILTERS_SETTING) || '';
-      runner.assert(stored.includes('"scope":"closed"') && stored.includes('"range":"7d"'),
-        'the daemon holds the filters, not the browser', { stored });
-      runner.writeText('filters-setting.json', stored);
+      runner.writeText('filters-setting.json', remembered);
 
       await closeTheSurface(client);
       await relaunchAppAndConnect(client, observer);
