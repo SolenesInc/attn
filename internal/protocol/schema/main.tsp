@@ -1888,6 +1888,7 @@ model GetSettingsMessage {
 
 model SetSettingMessage {
   cmd: "set_setting";
+  request_id?: string;
   key: string;
   value: string;
 }
@@ -2264,6 +2265,47 @@ model PtyInputMessage {
   // Sparse diagnostic correlation. Absent on nearly every input; when present,
   // the daemon acknowledges after the PTY backend accepts this write.
   probe_id?: string;
+  // Content-free correlation for the bounded support trace. This rides the
+  // existing input frame and never creates a per-input acknowledgement.
+  trace_id?: string;
+}
+
+// Captures one daemon's allowlisted support data on explicit user request. It
+// never contains PTY bytes, logs, environment, prompts, or raw error strings.
+model SupportSnapshotMessage {
+  cmd: "support_snapshot";
+  request_id: string;
+  endpoint_id?: string;
+  // Restricts the potentially expensive backend inspection to runtimes the
+  // requesting app can actually describe in this report.
+  runtime_ids?: string[];
+}
+
+model SupportInputTrace {
+  sequence: safeint;
+  trace_id: string;
+  runtime_id: string;
+  received_at_unix_ms: safeint;
+  source: string;
+  byte_count: safeint;
+  write_duration_us: safeint;
+  write_result: string;
+  error_class?: string;
+}
+
+model SupportRuntimeEvidence {
+  runtime_id: string;
+  backend: string;
+  attached: boolean;
+  running?: boolean;
+  state?: string;
+  cols?: int32;
+  rows?: int32;
+  pid?: int32;
+  last_seq?: int32;
+  terminal_build?: string;
+  terminal_build_known: boolean;
+  info_error_class?: string;
 }
 
 // Reports genuine pointer movement inside a terminal pane. No bytes are written
@@ -3551,6 +3593,7 @@ model GitOperationFinishedMessage {
 
 model SettingsUpdatedMessage {
   event: "settings_updated";
+  request_id?: string;
   settings?: Record<string>;
   changed_key?: string;
   success?: boolean;
@@ -4041,6 +4084,22 @@ model PtyInputProbeResultMessage {
   success: boolean;
   write_duration_us: safeint;
   error?: string;
+}
+
+model SupportSnapshotResultMessage {
+  event: "support_snapshot_result";
+  request_id: string;
+  endpoint_id?: string;
+  protocol_version: string;
+  daemon_instance_id: string;
+  daemon_started_at_unix_ms: safeint;
+  captured_at_unix_ms: safeint;
+  backend: string;
+  warning_codes: string[];
+  trace_capacity: safeint;
+  trace_total: safeint;
+  input_traces: SupportInputTrace[];
+  runtimes: SupportRuntimeEvidence[];
 }
 
 model SessionExitedMessage {
@@ -4749,17 +4808,17 @@ model SeedSearchResult {
 model SeedShowMessage {
   "cmd": "seed_show";
   // The reading session. When present, showing the seed consumes its pending
-  // bell for this reader and reports whether the reader explicitly watches it.
+  // bell for this reader and reports its effective watch coverage.
   "source_session_id"?: string;
   "seed_id": string;
 }
 
 model SeedShowResult {
   "seed": Seed;
-  // This session explicitly watches this seed. Automatic dispatch watches are
-  // intentionally not rendered: they are part of the dispatch relationship,
-  // not a subscription the session can remove.
+  // At least one subscription covers this seed (directly or through an ancestor).
   "watching": boolean;
+  // Direct subscription seed ids covering this seed; each can be unwatched.
+  "watching_via": string[];
   // The newest entries on the seed's log, and how many it holds. Notes ride
   // the read the tender already runs: a log nobody is told to look at is the
   // unread bulletin board this surface replaces. The list is bounded, so
@@ -5118,7 +5177,7 @@ model SeedNotesResult {
   "total": int32;
 }
 
-// Add or remove one session's explicit watch on a seed. The watch survives
+// Add or remove one session's ordinary watch on a seed. The watch survives
 // daemon restarts and session state changes; unwatch is the exact way out.
 model SeedWatchMessage {
   "cmd": "seed_watch";
@@ -5130,6 +5189,8 @@ model SeedWatchMessage {
 model SeedWatchResult {
   "seed_id": string;
   "watching": boolean;
+  // Direct subscription seed ids covering this seed; each can be unwatched.
+  "watching_via": string[];
   // False when the subscription was already exactly as requested.
   "changed": boolean;
 }
@@ -7395,6 +7456,7 @@ alias DaemonEvent =
   | GetScreenSnapshotResultMessage
   | PtyOutputMessage
   | PtyInputProbeResultMessage
+  | SupportSnapshotResultMessage
   | SessionExitedMessage
   | PtyDesyncMessage
   | KittyPlacementsMessage

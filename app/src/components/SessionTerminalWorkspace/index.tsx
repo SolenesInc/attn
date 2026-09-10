@@ -59,6 +59,7 @@ import {
   type AttentionViewport,
 } from './attentionLayout';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
+import { delegatesByDispatcher, dispatcherOf, type DelegationSession } from '../../utils/delegationLinks';
 
 const RESIZE_MOUSE_SUPPRESSION_MS = 1_500;
 // Only swallows the trailing pointerup/synthetic click from the release itself,
@@ -121,6 +122,10 @@ interface SessionTerminalWorkspaceProps {
     automation?: AutomationProvenanceValue;
     pullRequests?: SessionPullRequest[];
   }>;
+  delegationSessions?: Array<DelegationSession & {
+    agent: SessionAgent;
+    state: UISessionState;
+  }>;
   seedTargetSessions?: WorkspaceTileSessionOption[];
   gardenSeeds?: Seed[];
   onOpenSeed?: (seedId: string) => void;
@@ -143,6 +148,7 @@ interface SessionTerminalWorkspaceProps {
   onClosePane: (paneId: string) => void;
   onFocusPane: (paneId: string) => void;
   onRenameSession?: (sessionId: string, label: string) => Promise<void>;
+  onSelectSession?: (sessionId: string) => void;
   onTriggerNudge?: (sessionId: string) => void;
   onCancelCountdown?: (sessionId: string) => void;
   onTerminalPointerActivity?: (sessionId: string) => void;
@@ -176,12 +182,14 @@ interface SessionTerminalWorkspaceProps {
 
 const EMPTY_SEED_TARGET_SESSIONS: WorkspaceTileSessionOption[] = [];
 const EMPTY_GARDEN_SEEDS: Seed[] = [];
+const EMPTY_DELEGATION_SESSIONS: NonNullable<SessionTerminalWorkspaceProps['delegationSessions']> = [];
 
 export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandle, SessionTerminalWorkspaceProps>(
   function SessionTerminalWorkspace({
     workspaceId,
     workspaceDirectory,
     workspaceSessions = [],
+    delegationSessions = EMPTY_DELEGATION_SESSIONS,
     seedTargetSessions = EMPTY_SEED_TARGET_SESSIONS,
     gardenSeeds = EMPTY_GARDEN_SEEDS,
     onOpenSeed,
@@ -204,6 +212,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     onClosePane,
     onFocusPane,
     onRenameSession,
+    onSelectSession,
     onTriggerNudge,
     onCancelCountdown,
     onTerminalPointerActivity,
@@ -243,6 +252,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       if (seedPopoverRequest) setPinnedSeedPopover(seedPopoverRequest.sessionId);
     }, [seedPopoverRequest]);
     const [pinnedUsagePopover, setPinnedUsagePopover] = useState<string | null>(null);
+    const [provenancePopoverOwner, setProvenancePopoverOwner] = useState<string | null>(null);
     useEffect(() => {
       if (usagePopoverRequest) setPinnedUsagePopover(usagePopoverRequest.sessionId);
     }, [usagePopoverRequest]);
@@ -298,6 +308,15 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     const sessionById = useMemo(() => new Map(
       workspaceSessions.map((entry) => [entry.id, entry] as const),
     ), [workspaceSessions]);
+
+    const delegationSessionById = useMemo(() => new Map(
+      delegationSessions.map((entry) => [entry.id, entry] as const),
+    ), [delegationSessions]);
+
+    const delegatesByDispatcherId = useMemo(
+      () => delegatesByDispatcher(delegationSessions),
+      [delegationSessions],
+    );
 
     const agentPanes = useMemo(() => workspace.agents, [workspace.agents]);
 
@@ -1057,6 +1076,11 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
         const autoSettleFiresAt = paneSession?.autoSettleFiresAt;
         const autoSettleHeld = paneSession?.autoSettleHeld;
         const autoSettleDismissArmed = paneSession?.autoSettleDismissArmed;
+        const delegationSession = delegationSessionById.get(agentPane.sessionId);
+        const dispatcher = delegationSession
+          ? dispatcherOf(delegationSession, delegationSessions)
+          : null;
+        const delegates = delegatesByDispatcherId.get(agentPane.sessionId) ?? [];
         return (
           <div
             key={agentPane.id}
@@ -1094,11 +1118,27 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
                     pinned={pinnedUsagePopover === agentPane.sessionId}
                     onPopoverClosed={() => setPinnedUsagePopover(null)}
                   />
+                  <SessionProvenance
+                    dispatcher={dispatcher}
+                    delegates={delegates}
+                    onSelectSession={onSelectSession}
+                    interactive
+                    popoverGroup={{
+                      id: `${agentPane.id}:delegation`,
+                      activeId: provenancePopoverOwner,
+                      onOpen: setProvenancePopoverOwner,
+                    }}
+                  />
                 </span>
                 <SessionProvenance
                   automation={paneSession?.automation}
                   pullRequests={paneSession?.pullRequests}
                   interactive
+                  popoverGroup={{
+                    id: `${agentPane.id}:details`,
+                    activeId: provenancePopoverOwner,
+                    onOpen: setProvenancePopoverOwner,
+                  }}
                 />
               </span>
               {onRenameSession ? (
@@ -1327,6 +1367,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       onRevealSeedInGarden,
       pinnedSeedPopover,
       pinnedUsagePopover,
+      provenancePopoverOwner,
       annotationApi,
       onCancelCountdown,
     ]);

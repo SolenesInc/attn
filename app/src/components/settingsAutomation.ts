@@ -5,6 +5,8 @@ const SETTINGS_SECTION_IDS = [
   'workspace',
   'hygiene',
   'agents',
+  'backgroundAgents',
+  'terminal',
   'autoMode',
   'delegation',
   'connectivity',
@@ -24,7 +26,7 @@ export interface SettingsAutomationState {
 
 export interface SettingsAutomationHandle {
   getState(): SettingsAutomationState;
-  selectSection(sectionId: string): void;
+  selectSection(sectionId: string): void | Promise<void>;
 }
 
 let handle: SettingsAutomationHandle | null = null;

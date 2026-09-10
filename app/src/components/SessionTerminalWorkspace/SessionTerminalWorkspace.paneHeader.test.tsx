@@ -93,7 +93,9 @@ describe('SessionTerminalWorkspace pane header', () => {
       }],
     });
 
-    expect(screen.getByText('GPT Sol medium')).toBeInTheDocument();
+    const automation = screen.getByText('GPT Sol medium');
+    expect(automation).toBeInTheDocument();
+    expect(automation.closest('.workspace-pane-identity-main')).toBeNull();
     expect(screen.getByRole('button', { name: 'feed-nexus-web#101 ↗' })).toBeInTheDocument();
     expect(screen.getByText('Fix validation race')).toBeInTheDocument();
   });
@@ -138,6 +140,35 @@ describe('SessionTerminalWorkspace pane header', () => {
     });
 
     expect(screen.getByLabelText('Session usage $1.23')).toHaveTextContent('$1.23');
+  });
+
+  it('places delegation controls after session usage on the headline', () => {
+    const { container } = renderLonePane({
+      workspaceSessions: [{
+        id: 'sess-1',
+        label: GENERATED_NAME,
+        agent: 'claude',
+        cwd: '/tmp/project',
+        usage: usage(2.61),
+      }],
+      delegationSessions: [
+        { id: 'dispatcher', label: 'chief', agent: 'claude', state: 'idle' },
+        {
+          id: 'sess-1',
+          label: GENERATED_NAME,
+          agent: 'claude',
+          state: 'working',
+          dispatcher_session_id: 'dispatcher',
+        },
+      ],
+      onSelectSession: vi.fn(),
+    });
+
+    const headline = container.querySelector('.workspace-pane-identity-main');
+    expect(headline).not.toBeNull();
+    expect(headline).toContainElement(screen.getByLabelText('Session usage $2.61'));
+    expect(headline).toContainElement(screen.getByRole('button', { name: /delegated by chief/i }));
+    expect(headline?.textContent).toMatch(/\$2\.61.*delegated by chief/i);
   });
 
   it('does not round real sub-cent usage down to free', () => {

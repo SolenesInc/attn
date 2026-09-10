@@ -32,6 +32,7 @@ Fields:
   commit
   short_commit
   dirty
+  dirty_paths_base64
 EOF
       exit 0
       ;;
@@ -102,10 +103,11 @@ emit_result() {
   local commit="$2"
   local short_commit="$3"
   local dirty="$4"
+  local dirty_paths_base64="$5"
 
   if [[ "${output_mode}" == "json" ]]; then
-    printf '{"fingerprint":"%s","commit":"%s","short_commit":"%s","dirty":%s}\n' \
-      "${fingerprint}" "${commit}" "${short_commit}" "${dirty}"
+    printf '{"fingerprint":"%s","commit":"%s","short_commit":"%s","dirty":%s,"dirty_paths_base64":"%s"}\n' \
+      "${fingerprint}" "${commit}" "${short_commit}" "${dirty}" "${dirty_paths_base64}"
     return
   fi
 
@@ -122,6 +124,9 @@ emit_result() {
     dirty)
       printf '%s\n' "${dirty}"
       ;;
+    dirty_paths_base64)
+      printf '%s\n' "${dirty_paths_base64}"
+      ;;
     *)
       echo "Unknown field: ${field}" >&2
       exit 1
@@ -130,7 +135,22 @@ emit_result() {
 }
 
 if ! git -C "${ROOT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  emit_result "unknown" "unknown" "unknown" "false"
+  emit_result "unknown" "unknown" "unknown" "false" ""
+  exit 0
+fi
+
+dirty_paths_base64="$({
+  git -C "${ROOT_DIR}" diff --name-only -z --ignore-submodules --
+  git -C "${ROOT_DIR}" diff --cached --name-only -z --ignore-submodules --
+  git -C "${ROOT_DIR}" ls-files --others --exclude-standard -z
+} | sort -zu | while IFS= read -r -d '' relative_path; do
+  if ! should_exclude_path "${relative_path}"; then
+    printf '%s\0' "${relative_path}"
+  fi
+done | base64 | tr -d '\n')"
+
+if [[ "${output_mode}" == "text" && "${field}" == "dirty_paths_base64" ]]; then
+  printf '%s\n' "${dirty_paths_base64}"
   exit 0
 fi
 
@@ -152,7 +172,7 @@ done < <(
 )
 
 if [[ "${dirty}" == "false" ]]; then
-  emit_result "git:${commit}" "${commit}" "${short_commit}" "${dirty}"
+  emit_result "git:${commit}" "${commit}" "${short_commit}" "${dirty}" "${dirty_paths_base64}"
   exit 0
 fi
 
@@ -179,4 +199,4 @@ while IFS= read -r -d '' relative_path; do
 done < <(git -C "${ROOT_DIR}" ls-files -z --cached --others --exclude-standard)
 
 tree_hash="$(hash_file "${tmp_payload}")"
-emit_result "tree:${tree_hash}" "${commit}" "${short_commit}" "${dirty}"
+emit_result "tree:${tree_hash}" "${commit}" "${short_commit}" "${dirty}" "${dirty_paths_base64}"

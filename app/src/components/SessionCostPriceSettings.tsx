@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useAutosaveSetting, useSettingsAutosave, type SaveSetting } from './SettingsAutosave';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 export const SESSION_COST_PRICE_PREFIX = 'session_cost.price.';
 
@@ -52,7 +53,7 @@ function draftFromRaw(raw: string): PriceDraft {
 function priceCardFromDraft(draft: PriceDraft): PriceCard | null {
   const card = {} as PriceCard;
   for (const { key } of RATE_FIELDS) {
-    if (draft[key].trim() === '') return null;
+    if (String(draft[key]).trim() === '') return null;
     const rate = Number(draft[key]);
     if (!Number.isFinite(rate) || rate < 0) return null;
     card[key] = rate;
@@ -68,9 +69,10 @@ interface RateInputsProps {
   draft: PriceDraft;
   idPrefix: string;
   onChange: (key: RateField, value: string) => void;
+  onCommit: () => void;
 }
 
-function RateInputs({ draft, idPrefix, onChange }: RateInputsProps) {
+function RateInputs({ draft, idPrefix, onChange, onCommit }: RateInputsProps) {
   return (
     <div className="settings-price-grid">
       {RATE_FIELDS.map(({ key, label }) => {
@@ -88,6 +90,8 @@ function RateInputs({ draft, idPrefix, onChange }: RateInputsProps) {
               className="settings-input settings-price-input"
               value={draft[key]}
               onChange={(event) => onChange(key, event.target.value)}
+              onBlur={onCommit}
+              onKeyDown={(event) => { if (event.key === 'Enter') onCommit(); }}
               placeholder="0"
             />
           </div>
@@ -100,16 +104,19 @@ function RateInputs({ draft, idPrefix, onChange }: RateInputsProps) {
 interface ExistingPriceOverrideProps {
   modelId: string;
   raw: string;
-  onSetSetting: (key: string, value: string) => void;
+  onSetSetting: SaveSetting;
 }
 
 function ExistingPriceOverride({ modelId, raw, onSetSetting }: ExistingPriceOverrideProps) {
   const parsed = useMemo(() => parsePriceCard(raw), [raw]);
-  const [draft, setDraft] = useState(() => draftFromRaw(raw));
-  const card = priceCardFromDraft(draft);
-  const serialized = card ? serializePriceCard(card) : null;
-  const changed = serialized !== (parsed ? serializePriceCard(parsed) : null);
   const settingKey = `${SESSION_COST_PRICE_PREFIX}${modelId}`;
+  const field = useAutosaveSetting(settingKey, JSON.stringify(draftFromRaw(raw)), onSetSetting, (value) => {
+    if (value === '') return '';
+    const card = priceCardFromDraft(JSON.parse(value) as PriceDraft);
+    if (!card) throw new Error(`Complete every rate for ${modelId} with a non-negative number; use 0 for unused rates.`);
+    return serializePriceCard(card);
+  });
+  const draft = field.value ? JSON.parse(field.value) as PriceDraft : draftFromRaw(raw);
   const idPrefix = `settings-price-${modelId}`;
 
   return (
@@ -119,18 +126,9 @@ function ExistingPriceOverride({ modelId, raw, onSetSetting }: ExistingPriceOver
         <div className="settings-price-actions">
           <button
             type="button"
-            className="settings-action"
-            data-testid={`${idPrefix}-save`}
-            disabled={!card || !changed}
-            onClick={() => card && onSetSetting(settingKey, serializePriceCard(card))}
-          >
-            Save
-          </button>
-          <button
-            type="button"
             className="settings-action danger"
             data-testid={`${idPrefix}-remove`}
-            onClick={() => onSetSetting(settingKey, '')}
+            onClick={() => void field.apply('')}
           >
             Remove
           </button>
@@ -144,7 +142,8 @@ function ExistingPriceOverride({ modelId, raw, onSetSetting }: ExistingPriceOver
       <RateInputs
         draft={draft}
         idPrefix={idPrefix}
-        onChange={(key, value) => setDraft((current) => ({ ...current, [key]: value }))}
+        onChange={(key, value) => field.set(JSON.stringify({ ...draft, [key]: value }))}
+        onCommit={field.onBlur}
       />
     </div>
   );
@@ -152,7 +151,7 @@ function ExistingPriceOverride({ modelId, raw, onSetSetting }: ExistingPriceOver
 
 interface SessionCostPriceSettingsProps {
   settings: Record<string, string>;
-  onSetSetting: (key: string, value: string) => void;
+  onSetSetting: SaveSetting;
 }
 
 export function SessionCostPriceSettings({ settings, onSetSetting }: SessionCostPriceSettingsProps) {
@@ -166,17 +165,49 @@ export function SessionCostPriceSettings({ settings, onSetSetting }: SessionCost
     return result.sort((left, right) => left.modelId.localeCompare(right.modelId));
   }, [settings]);
   const existingModelIds = useMemo(() => new Set(overrides.map(({ modelId }) => modelId)), [overrides]);
+  const autosave = useSettingsAutosave();
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const submitted = useRef<{ key: string; value: string } | null>(null);
   const [modelId, setModelId] = useState('');
   const [draft, setDraft] = useState<PriceDraft>(blankDraft);
   const card = priceCardFromDraft(draft);
   const normalizedModelId = modelId.trim();
   const canAdd = Boolean(card && normalizedModelId && !existingModelIds.has(normalizedModelId));
 
-  const addOverride = () => {
-    if (!card || !canAdd) return;
-    onSetSetting(`${SESSION_COST_PRICE_PREFIX}${normalizedModelId}`, serializePriceCard(card));
-    setModelId('');
-    setDraft(blankDraft());
+  useEffect(() => {
+    const pending = submitted.current;
+    if (!pending || settings[pending.key] !== pending.value) return;
+    if (pending.key === `${SESSION_COST_PRICE_PREFIX}${normalizedModelId}` && card && serializePriceCard(card) === pending.value) {
+      setModelId('');
+      setDraft(blankDraft());
+      submitted.current = null;
+    }
+  }, [settings, normalizedModelId, card]);
+
+  const addOverride = async () => {
+    if (!card || !canAdd || adding) return;
+    const key = `${SESSION_COST_PRICE_PREFIX}${normalizedModelId}`;
+    const value = serializePriceCard(card);
+    submitted.current = { key, value };
+    setAdding(true);
+    setAddError(null);
+    try {
+      if (autosave) {
+        autosave.ensure(key, settings[key] || '');
+        autosave.set(key, value);
+        if (!await autosave.commit(key)) return;
+      } else {
+        await onSetSetting(key, value);
+      }
+      setModelId('');
+      setDraft(blankDraft());
+      submitted.current = null;
+    } catch (error) {
+      setAddError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAdding(false);
+    }
   };
 
   return (
@@ -194,7 +225,7 @@ export function SessionCostPriceSettings({ settings, onSetSetting }: SessionCost
           <div className="settings-price-list">
             {overrides.map(({ modelId: overrideModelId, raw }) => (
               <ExistingPriceOverride
-                key={`${overrideModelId}:${raw}`}
+                key={overrideModelId}
                 modelId={overrideModelId}
                 raw={raw}
                 onSetSetting={onSetSetting}
@@ -203,7 +234,7 @@ export function SessionCostPriceSettings({ settings, onSetSetting }: SessionCost
           </div>
         )}
 
-        <div className="settings-price-card settings-price-card--new">
+        <fieldset className="settings-price-card settings-price-card--new" disabled={adding}>
           <div className="settings-field">
             <label className="settings-label" htmlFor="settings-price-new-model">Exact model ID</label>
             <input
@@ -213,6 +244,8 @@ export function SessionCostPriceSettings({ settings, onSetSetting }: SessionCost
               className="settings-input"
               value={modelId}
               onChange={(event) => setModelId(event.target.value)}
+              onBlur={addOverride}
+              onKeyDown={(event) => { if (event.key === 'Enter') addOverride(); }}
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
@@ -223,22 +256,15 @@ export function SessionCostPriceSettings({ settings, onSetSetting }: SessionCost
             draft={draft}
             idPrefix="settings-price-new"
             onChange={(key, value) => setDraft((current) => ({ ...current, [key]: value }))}
+            onCommit={addOverride}
           />
           {normalizedModelId && existingModelIds.has(normalizedModelId) && (
             <div className="settings-warning">That model already has an override above.</div>
           )}
-          <div className="settings-price-actions">
-            <button
-              type="button"
-              className="settings-action"
-              data-testid="settings-price-add"
-              disabled={!canAdd}
-              onClick={addOverride}
-            >
-              Add price override
-            </button>
-          </div>
-        </div>
+          {addError && <div className="settings-warning" role="alert">{addError} <button type="button" className="settings-action" onClick={() => void addOverride()}>Retry</button></div>}
+          {normalizedModelId && !card && <p className="settings-hint">Complete every rate with a non-negative number.</p>}
+          <p className="settings-hint">The override is added automatically when the model ID and every rate are filled. Use 0 for unused rates.</p>
+        </fieldset>
       </div>
     </section>
   );

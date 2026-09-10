@@ -1,6 +1,8 @@
 // app/src/shortcuts/cheatsheet.test.ts
 import { describe, it, expect } from 'vitest';
 import { buildCheatsheet } from './cheatsheet';
+import { SHORTCUTS } from './registry';
+import { SHORTCUT_META } from './metadata';
 import { withNavigatorPlatform } from '../test/platformStub';
 
 describe('buildCheatsheet', () => {
@@ -49,5 +51,32 @@ describe('buildCheatsheet', () => {
     const newSession = rows.find((r) => r.label === 'New session in this workspace');
     expect(newWorkspace?.combos[0]).toEqual(['⌘', 'T']);
     expect(newSession?.combos[0]).toEqual(['⌘', 'N']);
+  });
+
+  it('includes history bindings and corrected workspace labels', () => {
+    const rows = buildCheatsheet().flatMap((category) => category.rows);
+    expect(rows.find((row) => row.label === 'Previous / next workspace')?.combos).toEqual([
+      ['⌘', '↑'], ['⌘', '↓'],
+    ]);
+    expect(rows.find((row) => row.label === 'Back / forward through agent history')?.combos).toEqual([
+      ['⌘', '['], ['⌘', ']'],
+    ]);
+    expect(SHORTCUT_META['session.prev'].label).toBe('Previous workspace');
+    expect(SHORTCUT_META['session.next'].label).toBe('Next workspace');
+    expect(SHORTCUT_META['session.historyBack'].label).toBe('Back through agent history');
+    expect(SHORTCUT_META['session.historyForward'].label).toBe('Forward through agent history');
+  });
+
+  it('keeps editor metadata exhaustive with the shortcut registry', () => {
+    expect(Object.keys(SHORTCUT_META).sort()).toEqual(Object.keys(SHORTCUTS).sort());
+  });
+
+  it('renders Linux history bindings with Ctrl+Shift', () => {
+    withNavigatorPlatform('Linux aarch64', () => {
+      const rows = buildCheatsheet().flatMap((category) => category.rows);
+      expect(rows.find((row) => row.label === 'Back / forward through agent history')?.combos).toEqual([
+        ['Ctrl', 'Shift', '{'], ['Ctrl', 'Shift', '}'],
+      ]);
+    });
   });
 });

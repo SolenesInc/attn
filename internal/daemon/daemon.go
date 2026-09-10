@@ -216,6 +216,8 @@ type Daemon struct {
 	pluginDriverSilenceGraceOverride  time.Duration
 	sessionStateReasonOnce            sync.Once
 	sessionStateReason                *sessionStateReasons
+	supportInputTraceOnce             sync.Once
+	supportInputTrace                 *supportInputTraceRing
 	nudgeMu                           sync.Mutex
 	nudgeCountdowns                   map[string]*nudgeCountdown
 	unreadCache                       map[string]bool
@@ -345,6 +347,7 @@ type Daemon struct {
 	gardenDispatchAfterWrite  func(string)
 	seedHandoverBeforeCommit  func()
 	gitHubPollingOffLogged    bool
+	gardenWatchMu             sync.Mutex
 	gardenReviewMu            sync.Mutex
 	dispatchSeedsMu           sync.Mutex
 	dispatchSeeds             map[string]string

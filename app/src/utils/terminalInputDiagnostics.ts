@@ -1,6 +1,11 @@
 import type { TerminalInputDiagnostic } from '../ghostty/input';
 import { recordDiag } from './terminalDiagnosticsLog';
 import { getPtyPerfSnapshot } from './ptyPerf';
+import {
+  observeDocumentInput,
+  recordTerminalInputTrace,
+  recordTransportInputTrace,
+} from './supportInputTrace';
 
 const RECENT_LIMIT = 32;
 const SAMPLE_INTERVAL_MS = 30_000;
@@ -51,6 +56,7 @@ function focusKind(element: Element | null): string {
 function installDocumentListener(doc: Document): void {
   if (documentListeners.has(doc)) return;
   const keydown = (event: KeyboardEvent) => {
+    observeDocumentInput(event, focusKind(event.target instanceof Element ? event.target : null));
     const path = new Set(event.composedPath());
     for (const trace of traces) {
       if (trace.element.ownerDocument !== doc) continue;
@@ -63,8 +69,20 @@ function installDocumentListener(doc: Document): void {
       }, inTerminal ? undefined : 'key_elsewhere');
     }
   };
+  const paste = (event: ClipboardEvent) => {
+    observeDocumentInput(event, focusKind(event.target instanceof Element ? event.target : null));
+  };
+  const compositionend = (event: CompositionEvent) => {
+    observeDocumentInput(event, focusKind(event.target instanceof Element ? event.target : null));
+  };
   doc.addEventListener('keydown', keydown, true);
-  documentListeners.set(doc, () => doc.removeEventListener('keydown', keydown, true));
+  doc.addEventListener('paste', paste, true);
+  doc.addEventListener('compositionend', compositionend, true);
+  documentListeners.set(doc, () => {
+    doc.removeEventListener('keydown', keydown, true);
+    doc.removeEventListener('paste', paste, true);
+    doc.removeEventListener('compositionend', compositionend, true);
+  });
 }
 
 export function observeTerminalInput(element: HTMLElement, state: () => TerminalInputState) {
@@ -161,6 +179,17 @@ export function observeTerminalInput(element: HTMLElement, state: () => Terminal
         ? 'composition_mismatch'
         : event.outcome === 'no_target' || event.outcome === 'error' ? event.outcome : undefined;
       note({ ...event }, reason);
+      const current = state();
+      recordTerminalInputTrace(event.traceId, {
+        event: event.event,
+        outcome: event.outcome,
+        keyClass: event.keyClass,
+        repeat: event.repeat,
+        modifiers: event.modifiers,
+        runtimeId: current.runtimeId,
+        sessionId: current.sessionId,
+        paneId: current.paneId,
+      });
     },
     dispose() {
       if (disposed) return;
@@ -182,7 +211,15 @@ export function noteTerminalInputTransport(runtimeId: string, detail: {
   socketState: number | null;
   initialStateReceived: boolean;
   probeId?: string;
+  traceId?: string;
 }): void {
+  recordTransportInputTrace(detail.traceId, {
+    event: 'websocket_send',
+    runtimeId,
+    socketState: detail.socketState,
+    initialStateReceived: detail.initialStateReceived,
+    probeId: detail.probeId,
+  });
   for (const trace of traces) {
     if (trace.state().runtimeId !== runtimeId) continue;
     trace.note({ event: 'transport_send', ...detail },

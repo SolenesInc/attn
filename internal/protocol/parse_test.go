@@ -496,3 +496,27 @@ func TestParseSetChiefOfStaff(t *testing.T) {
 		t.Fatalf("message = %#v, want chief-of-staff assignment", data)
 	}
 }
+
+func TestParseSupportTracingFields(t *testing.T) {
+	t.Run("pty input trace", func(t *testing.T) {
+		cmd, data, err := ParseMessage([]byte(`{"cmd":"pty_input","id":"runtime-1","data":"private","trace_id":"trace-1"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		msg, ok := data.(*PtyInputMessage)
+		if cmd != CmdPtyInput || !ok || Deref(msg.TraceID) != "trace-1" {
+			t.Fatalf("parsed (%q, %T, %+v)", cmd, data, msg)
+		}
+	})
+
+	t.Run("remote support snapshot", func(t *testing.T) {
+		cmd, data, err := ParseMessage([]byte(`{"cmd":"support_snapshot","request_id":"request-1","endpoint_id":"remote-1"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		msg, ok := data.(*SupportSnapshotMessage)
+		if cmd != CmdSupportSnapshot || !ok || msg.RequestID != "request-1" || Deref(msg.EndpointID) != "remote-1" {
+			t.Fatalf("parsed (%q, %T, %+v)", cmd, data, msg)
+		}
+	})
+}

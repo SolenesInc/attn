@@ -28,6 +28,29 @@ describe('sessionParticipatesInQueue', () => {
 });
 
 describe('buildQueueBands', () => {
+  it('keeps band order unchanged when sessions carry dispatcher fields', () => {
+    const sessions: QueueBandSession[] = [
+      { id: 'root', label: 'root', workspaceId: 'ws-a' },
+      { id: 'newer', label: 'newer', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
+      { id: 'older', label: 'older', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
+    ];
+    const withDispatchers = sessions.map((session) => (
+      session.id === 'root'
+        ? session
+        : { ...session, dispatcher_session_id: 'root', dispatcher_member: 'alder' }
+    ));
+    const ids = (bands: ReturnType<typeof buildQueueBands<QueueBandSession>>) => ({
+      chief: bands.chief?.session.id ?? null,
+      turns: bands.turns.map((row) => row.session.id),
+      settled: bands.settled.map((row) => row.session.id),
+      pinned: bands.pinned.map((row) => row.session.id),
+      crew: bands.crew.map((row) => row.session.id),
+      snoozed: bands.snoozed.map((row) => row.session.id),
+    });
+
+    expect(ids(buildQueueBands(views(withDispatchers)))).toEqual(ids(buildQueueBands(views(sessions))));
+  });
+
   it('lists the oldest turn first, across workspaces', () => {
     const bands = buildQueueBands(views([
       { id: 'newest', label: 'newest', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },

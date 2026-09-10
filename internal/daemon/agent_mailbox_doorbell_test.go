@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/agentmailbox"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -461,10 +462,25 @@ func TestAgentMailboxDoorbellCoalescesMixedBurstAndBatchReadsEachBodyOnce(t *tes
 	if err := d.deliverAgentMailboxItem(maintenance); err != nil {
 		t.Fatalf("place burst doorbell: %v", err)
 	}
+	d.ensureGardenCollections()
+	schema, err := d.seedsCollection()
+	if err != nil {
+		t.Fatal(err)
+	}
 	expectedIDs := []string{"maintenance-burst"}
 	expectedContent := map[string]bool{"maintenance body": true}
 	for i := 1; i <= 9; i++ {
-		seedID := fmt.Sprintf("s-burst-%02d", i)
+		seedID := fmt.Sprintf("s-%06d", i)
+		body, err := (garden.Seed{ID: seedID, Title: "burst seed", Status: garden.StatusPlanted}).Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := d.store.PutDocument(*schema, seedID, body, base, nil); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := d.store.SetGardenSeedWatch("mailbox-target", seedID, true, base); err != nil {
+			t.Fatal(err)
+		}
 		itemID := fmt.Sprintf("garden-burst-%02d", i)
 		claimed, err := d.store.ClaimGardenSeedMailboxItem(
 			"mailbox-target", seedID, "note", itemID, base.Add(time.Duration(i)*time.Second),

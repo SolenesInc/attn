@@ -13,6 +13,8 @@ function ShortcutHarness(props: {
   onToggleZoom?: () => void;
   onSelectWorkspace?: () => void;
   onTerminalFind?: () => void;
+  onHistoryBack?: () => void;
+  onHistoryForward?: () => void;
   terminalEnabled?: boolean;
 }) {
   useShortcut('session.close', props.onSessionClose, true);
@@ -20,6 +22,8 @@ function ShortcutHarness(props: {
   useShortcut('terminal.toggleZoom', props.onToggleZoom ?? (() => {}), props.onToggleZoom !== undefined);
   useShortcut('workspace.select1', props.onSelectWorkspace ?? (() => {}), props.onSelectWorkspace !== undefined);
   useShortcut('terminal.find', props.onTerminalFind ?? (() => {}), props.onTerminalFind !== undefined);
+  useShortcut('session.historyBack', props.onHistoryBack ?? (() => {}), props.onHistoryBack !== undefined);
+  useShortcut('session.historyForward', props.onHistoryForward ?? (() => {}), props.onHistoryForward !== undefined);
 
   return (
     <div>
@@ -201,6 +205,52 @@ describe('useShortcut close priority', () => {
 
     expect(allowed).toBe(false);
     expect(onSelectWorkspace).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes Cmd+[ and Cmd+] to history handlers in a terminal', () => {
+    const onHistoryBack = vi.fn();
+    const onHistoryForward = vi.fn();
+    render(
+      <ShortcutHarness
+        onSessionClose={vi.fn()}
+        onTerminalClose={vi.fn()}
+        onHistoryBack={onHistoryBack}
+        onHistoryForward={onHistoryForward}
+      />,
+    );
+
+    expect(fireEvent.keyDown(screen.getByTestId('terminal-target'), {
+      key: '[', code: 'BracketLeft', metaKey: true,
+    })).toBe(false);
+    expect(fireEvent.keyDown(screen.getByTestId('terminal-target'), {
+      key: ']', code: 'BracketRight', metaKey: true,
+    })).toBe(false);
+    expect(onHistoryBack).toHaveBeenCalledOnce();
+    expect(onHistoryForward).toHaveBeenCalledOnce();
+  });
+
+  it('routes Ctrl+Shift brackets to history handlers on Linux', () => {
+    withNavigatorPlatform('Linux aarch64', () => {
+      const onHistoryBack = vi.fn();
+      const onHistoryForward = vi.fn();
+      render(
+        <ShortcutHarness
+          onSessionClose={vi.fn()}
+          onTerminalClose={vi.fn()}
+          onHistoryBack={onHistoryBack}
+          onHistoryForward={onHistoryForward}
+        />,
+      );
+
+      fireEvent.keyDown(screen.getByTestId('terminal-target'), {
+        key: '{', code: 'BracketLeft', ctrlKey: true, shiftKey: true,
+      });
+      fireEvent.keyDown(screen.getByTestId('terminal-target'), {
+        key: '}', code: 'BracketRight', ctrlKey: true, shiftKey: true,
+      });
+      expect(onHistoryBack).toHaveBeenCalledOnce();
+      expect(onHistoryForward).toHaveBeenCalledOnce();
+    });
   });
 });
 

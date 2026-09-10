@@ -1,3 +1,4 @@
+import { useAutosaveSetting, type SaveSetting } from './SettingsAutosave';
 import { useCallback, useMemo, useState } from 'react';
 import type { SessionAgent } from '../types/sessionAgent';
 import { agentLabel } from '../utils/agentAvailability';
@@ -30,7 +31,7 @@ const EFFORT_LEVELS: Partial<Record<SessionAgent, string[]>> = {
 interface SessionActivitySettingsProps {
   settings: Record<string, string>;
   agents: SessionAgent[];
-  onSetSetting: (key: string, value: string) => void;
+  onSetSetting: SaveSetting;
 }
 
 export function SessionActivitySettings({
@@ -45,38 +46,39 @@ export function SessionActivitySettings({
   );
   const enabled = (settings[ACTIVITY_ENABLED_SETTING] || 'false') === 'true';
 
-  const [agent, setAgent] = useState<SessionAgent | ''>(saved.agent);
-  const [model, setModel] = useState(saved.model);
-  const [effort, setEffort] = useState(saved.effort);
-  // Kept beside the value rather than inferred from it, so clearing a custom model does not snap the control back to the preset list mid-edit.
+  const configDraft = useAutosaveSetting(ACTIVITY_CONFIG_SETTING, JSON.stringify(saved), onSetSetting, (raw) => {
+    const value = JSON.parse(raw) as typeof saved;
+    if (!value.agent) return '';
+    return JSON.stringify({ agent: value.agent, ...(value.model.trim() && { model: value.model.trim() }), ...(value.effort && { effort: value.effort }) });
+  });
+  const { agent, model, effort } = JSON.parse(configDraft.value) as typeof saved;
+  const intervalsDraft = useAutosaveSetting(ACTIVITY_INTERVALS_SETTING, JSON.stringify(savedIntervals), onSetSetting, (raw) => {
+    const values = JSON.parse(raw) as { watching: string; present: string };
+    const result = { watching: Number(values.watching), present: Number(values.present) };
+    for (const [name, value] of Object.entries(result)) {
+      if (!Number.isInteger(value) || value < INTERVAL_MIN_SECONDS || value > INTERVAL_MAX_SECONDS) {
+        throw new Error(`${name} refresh must be a whole number from ${INTERVAL_MIN_SECONDS} to ${INTERVAL_MAX_SECONDS} seconds; entered ${values[name as keyof typeof values] || 'empty'}.`);
+      }
+    }
+    return JSON.stringify(result);
+  });
+  const { watching, present } = JSON.parse(intervalsDraft.value) as typeof savedIntervals;
   const [customModel, setCustomModel] = useState(
     Boolean(saved.model) && !(MODEL_PRESETS[saved.agent as SessionAgent] ?? []).some((p) => p.value === saved.model),
   );
-  const [watching, setWatching] = useState(savedIntervals.watching);
-  const [present, setPresent] = useState(savedIntervals.present);
+  const updateConfig = (updates: Partial<typeof saved>, commit = true) => {
+    const next = JSON.stringify({ agent, model, effort, ...updates });
+    if (commit) void configDraft.apply(next); else configDraft.set(next);
+  };
+  const updateInterval = (key: string, value: string) => intervalsDraft.set(JSON.stringify({ watching, present, [key]: value }));
 
   const presets = agent ? MODEL_PRESETS[agent] ?? [] : [];
   const efforts = agent ? EFFORT_LEVELS[agent] ?? [] : [];
 
-  const handleAgentChange = useCallback((next: SessionAgent | '') => {
-    setAgent(next);
-    // The models are per-agent, so carrying one across would save a model the new agent cannot run.
-    setModel('');
-    setEffort('');
+  const handleAgentChange = (next: SessionAgent | '') => {
+    updateConfig({ agent: next, model: '', effort: '' });
     setCustomModel(false);
-  }, []);
-
-  const save = useCallback(() => {
-    if (!agent) return;
-    const config: Record<string, string> = { agent };
-    if (model.trim()) config.model = model.trim();
-    if (effort.trim()) config.effort = effort.trim();
-    onSetSetting(ACTIVITY_CONFIG_SETTING, JSON.stringify(config));
-    onSetSetting(ACTIVITY_INTERVALS_SETTING, JSON.stringify({
-      watching: Number(watching) || 120,
-      present: Number(present) || 300,
-    }));
-  }, [agent, model, effort, watching, present, onSetSetting]);
+  };
 
   const toggle = useCallback(() => {
     onSetSetting(ACTIVITY_ENABLED_SETTING, enabled ? 'false' : 'true');
@@ -88,12 +90,8 @@ export function SessionActivitySettings({
         <div className="settings-kicker">Agents</div>
         <h3>Session activity</h3>
         <p className="settings-description">
-          Shows one short line per session on home saying what that agent is doing right now,
-          written from the session's own transcript by a non-interactive agent. Off by default:
-          it costs a little money per session per refresh and sends transcript excerpts to a
-          model. Lines are only generated while you are using attn — showing home refreshes
-          them fastest, being elsewhere in the app refreshes them slower, and leaving the app
-          stops generation entirely.
+          Summarize each session on Home using its transcript. This sends transcript excerpts
+          to the selected model and incurs usage costs. Updates run only while you use attn.
         </p>
       </div>
       <div className="settings-block-body">
@@ -101,8 +99,7 @@ export function SessionActivitySettings({
           <div>
             <p className="settings-row-title">Generate activity lines</p>
             <p className="settings-row-copy">
-              Needs an agent selected below. Run <code>attn activity</code> in a terminal to see
-              the lines and why any are missing.
+              Off by default. Choose an agent below to enable.
             </p>
           </div>
           <button
@@ -111,7 +108,7 @@ export function SessionActivitySettings({
             data-testid="settings-activity-toggle"
             onClick={toggle}
             disabled={!enabled && !saved.agent}
-            title={!enabled && !saved.agent ? 'Choose and save an agent first' : undefined}
+            title={!enabled && !saved.agent ? 'Choose an agent first' : undefined}
           >
             {enabled ? 'Disable' : 'Enable'}
           </button>
@@ -147,7 +144,7 @@ export function SessionActivitySettings({
               onChange={(event) => {
                 const next = event.target.value;
                 setCustomModel(next === 'custom');
-                setModel(next === 'custom' ? '' : next);
+                if (next !== 'custom') updateConfig({ model: next });
               }}
               disabled={!agent}
             >
@@ -169,7 +166,9 @@ export function SessionActivitySettings({
               type="text"
               className="settings-input"
               value={model}
-              onChange={(event) => setModel(event.target.value)}
+              onChange={(event) => updateConfig({ model: event.target.value }, false)}
+              onBlur={configDraft.onBlur}
+              onKeyDown={configDraft.onKeyDown}
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
@@ -185,7 +184,7 @@ export function SessionActivitySettings({
               data-testid="settings-activity-effort"
               className="settings-input"
               value={effort}
-              onChange={(event) => setEffort(event.target.value)}
+              onChange={(event) => updateConfig({ effort: event.target.value })}
             >
               <option value="">Recommended default</option>
               {efforts.map((level) => (
@@ -208,7 +207,9 @@ export function SessionActivitySettings({
               max={INTERVAL_MAX_SECONDS}
               className="settings-input"
               value={watching}
-              onChange={(event) => setWatching(event.target.value)}
+              onChange={(event) => updateInterval('watching', event.target.value)}
+              onBlur={intervalsDraft.onBlur}
+              onKeyDown={intervalsDraft.onKeyDown}
             />
           </div>
           <div className="settings-field">
@@ -223,22 +224,13 @@ export function SessionActivitySettings({
               max={INTERVAL_MAX_SECONDS}
               className="settings-input"
               value={present}
-              onChange={(event) => setPresent(event.target.value)}
+              onChange={(event) => updateInterval('present', event.target.value)}
+              onBlur={intervalsDraft.onBlur}
+              onKeyDown={intervalsDraft.onKeyDown}
             />
           </div>
         </div>
 
-        <div className="settings-row-inline">
-          <button
-            type="button"
-            className="settings-action"
-            data-testid="settings-activity-save"
-            onClick={save}
-            disabled={!agent}
-          >
-            Save
-          </button>
-        </div>
         <div className="settings-hint">
           A session that has written nothing since its last line is skipped, so blocked and
           finished agents cost nothing however long home stays open.

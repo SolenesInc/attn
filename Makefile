@@ -1,4 +1,4 @@
-.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
+.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -41,6 +41,7 @@ BUILD_DIR=./cmd/attn
 VERSION ?= $(shell bash ./scripts/version.sh)
 BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 SOURCE_FINGERPRINT ?= $(shell bash ./scripts/source-fingerprint.sh --field fingerprint)
+SOURCE_DIRTY_PATHS_BASE64 ?= $(shell bash ./scripts/source-fingerprint.sh --field dirty_paths_base64)
 GIT_COMMIT ?= $(shell bash ./scripts/source-fingerprint.sh --field commit)
 # Identity of the terminal-snapshot wire format. The frontend computes it from
 # the same script, so a bundle's worker and app agree by construction.
@@ -200,6 +201,7 @@ test-hooks:
 
 # Same blind spot for the shell an agent runs by hand.
 test-scripts:
+	@bash ./scripts/test-git_test.sh
 	@bash ./scripts/source-fingerprint_test.sh
 	@bash ./scripts/pr-evidence_test.sh
 	@bash ./scripts/ci-acceptance_test.sh
@@ -276,7 +278,7 @@ test-all: test test-frontend
 # `ATTN_PROFILE=dev make` would silently reinstall the prod bundle.
 # The empty-goal case (bare `make`) is represented by the current
 # DEFAULT_GOAL ("run"); we substitute that in so the check catches it.
-GUARDED_PROD_TARGETS := run install install-daemon
+GUARDED_PROD_TARGETS := run install install-staged install-daemon
 ACTIVE_GOALS := $(if $(MAKECMDGOALS),$(MAKECMDGOALS),$(.DEFAULT_GOAL))
 GUARDED_INVOCATION := $(filter $(GUARDED_PROD_TARGETS),$(ACTIVE_GOALS))
 ifneq (,$(GUARDED_INVOCATION))
@@ -293,6 +295,9 @@ endif
 endif
 endif
 
+# LaunchServices only forwards shell overrides named with `open --env`.
+MACOS_OPEN := open$(if $(filter undefined,$(origin ATTN_AUTOMATION)),, --env "ATTN_AUTOMATION=$(ATTN_AUTOMATION)")
+
 # Build + install + open the PROFILE's app (bare `make` = prod). Every path is
 # derived from the single authority so a named profile opens its own bundle.
 run: install
@@ -300,7 +305,7 @@ run: install
 	attn="$(CURDIR)/$(OUTPUT)"; \
 	app_path="$$("$$attn" profile resolve --profile "$(PROFILE)" --field appPath)"; \
 	if [ "$(UNAME_S)" = "Darwin" ]; then \
-		open "$$app_path"; \
+		$(MACOS_OPEN) "$$app_path"; \
 	else \
 		app_exec="$$("$$attn" profile resolve --profile "$(PROFILE)" --field appExecutable)"; \
 		data_dir="$$("$$attn" profile resolve --profile "$(PROFILE)" --field dataDir)"; \
@@ -309,42 +314,17 @@ run: install
 	fi; \
 	echo "Launched $$app_path"
 
+INSTALL_APP_TREE = PROFILE="$(PROFILE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" WORKTREE="$(CURDIR)" \
+	PROFILE_DAEMON_UNSET="$(PROFILE_DAEMON_UNSET)" PROFILE_ROUTING_VARS="$(PROFILE_ROUTING_VARS)" \
+	bash ./scripts/install-app-tree.sh
+
 # Install-only (no open). `make install` = prod; `make install PROFILE=agent7`
 # = the isolated agent7 bundle. Resources resolved from `attn profile resolve`.
 install: build-app
-	@set -e; \
-	profile="$(PROFILE)"; \
-	attn="$(CURDIR)/$(OUTPUT)"; \
-	app_name="$$("$$attn" profile resolve --profile "$$profile" --field appName)"; \
-	ws_port="$$("$$attn" profile resolve --profile "$$profile" --field wsPort)"; \
-	label="$$("$$attn" profile resolve --profile "$$profile" --field label)"; \
-	app_bundle="$$("$$attn" profile resolve --profile "$$profile" --field appPath)"; \
-	app_binary="$$("$$attn" profile resolve --profile "$$profile" --field appDaemon)"; \
-	if [ "$(UNAME_S)" = "Darwin" ]; then \
-		staged="app/src-tauri/target/release/bundle/macos/$$app_name.app"; \
-	else \
-		staged="app/src-tauri/target/release/linux-tree/$$app_name"; \
-	fi; \
-	echo ">>> Installing $$label: $$app_bundle (port=$$ws_port)"; \
-	mkdir -p "$$(dirname "$$app_bundle")"; \
-	: "Quit a running instance first. macOS keeps the running image via mmap,"; \
-	: "so rm -rf + cp alone would leave an old process out of a deleted bundle."; \
-	"$$attn" profile stop-app --profile "$$profile" >/dev/null; \
-	rm -rf "$$app_bundle"; \
-	cp -r "$$staged" "$$app_bundle"; \
-	if [ "$(UNAME_S)" != "Darwin" ]; then \
-		"$$attn" profile register-scheme --profile "$$profile"; \
-	fi; \
-	if [ -n "$$profile" ]; then \
-		$(WARN_LEAKED_ROUTING); \
-		env $(PROFILE_DAEMON_UNSET) ATTN_PROFILE="$$profile" "$$app_binary" daemon ensure >/dev/null; \
-		: "Install time is the only moment the worktree behind a profile is known"; \
-		: "for certain, so record it here for cleanup tooling to read back."; \
-		"$$attn" profile set-origin "$$profile" --worktree "$(CURDIR)" >/dev/null || true; \
-	else \
-		"$$app_binary" daemon ensure >/dev/null; \
-	fi; \
-	echo "Installed $$app_bundle (profile=$$label, port=$$ws_port)"
+	@$(INSTALL_APP_TREE)
+
+install-staged:
+	@$(INSTALL_APP_TREE)
 
 # Fast path: swap just the Go daemon sidecar into the already-installed PROFILE
 # bundle, re-sign, and restart its daemon. `make install-daemon PROFILE=agent7`.
@@ -515,6 +495,7 @@ build-app: ensure-codesign-identity build build-pty-host
 	@PROFILE="$(PROFILE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" \
 		ATTN_PTY_HOST_BIN="$(CURDIR)/$(PTY_HOST_BINARY)" \
 		VERSION='$(VERSION)' SOURCE_FINGERPRINT='$(SOURCE_FINGERPRINT)' \
+		SOURCE_DIRTY_PATHS_BASE64='$(SOURCE_DIRTY_PATHS_BASE64)' \
 		GIT_COMMIT='$(GIT_COMMIT)' BUILD_TIME='$(BUILD_TIME)' \
 		MACOS_CODESIGN_IDENTITY='$(MACOS_CODESIGN_IDENTITY)' \
 		bash ./scripts/build-app-profile.sh
@@ -552,7 +533,7 @@ sign-app: ensure-codesign-identity
 
 # Create distributable DMG
 dist: build-app
-	cd app && VITE_INSTALL_CHANNEL=source VITE_ATTN_BUILD_VERSION='$(VERSION)' VITE_ATTN_SOURCE_FINGERPRINT='$(SOURCE_FINGERPRINT)' VITE_ATTN_GIT_COMMIT='$(GIT_COMMIT)' VITE_ATTN_BUILD_TIME='$(BUILD_TIME)' pnpm tauri build --bundles dmg
+	cd app && VITE_INSTALL_CHANNEL=source VITE_ATTN_BUILD_VERSION='$(VERSION)' VITE_ATTN_SOURCE_FINGERPRINT='$(SOURCE_FINGERPRINT)' VITE_ATTN_SOURCE_DIRTY_PATHS_BASE64='$(SOURCE_DIRTY_PATHS_BASE64)' VITE_ATTN_GIT_COMMIT='$(GIT_COMMIT)' VITE_ATTN_BUILD_TIME='$(BUILD_TIME)' pnpm tauri build --bundles dmg
 	@echo "DMG created at app/src-tauri/target/release/bundle/dmg/"
 
 release:

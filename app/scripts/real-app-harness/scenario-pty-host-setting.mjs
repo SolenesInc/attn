@@ -61,7 +61,7 @@ async function main() {
 
   async function openSettings() {
     await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
-    await client.request('settings_select_section', { sectionId: 'agents' });
+    await client.request('settings_select_section', { sectionId: 'terminal' });
     await client.request('dom_scroll_into_view', { selector: TOGGLE });
   }
 

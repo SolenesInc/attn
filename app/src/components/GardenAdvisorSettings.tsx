@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useAutosaveSetting, type SaveSetting } from './SettingsAutosave';
+import { useMemo, useState } from 'react';
 import type { SessionAgent } from '../types/sessionAgent';
 import { agentLabel } from '../utils/agentAvailability';
 import {
@@ -23,7 +24,7 @@ const EFFORT_LEVELS: Record<string, string[]> = {
 interface GardenAdvisorSettingsProps {
   settings: Record<string, string>;
   agents: SessionAgent[];
-  onSetSetting: (key: string, value: string) => void;
+  onSetSetting: SaveSetting;
 }
 
 export function GardenAdvisorSettings({
@@ -35,9 +36,12 @@ export function GardenAdvisorSettings({
     () => parseGardenAdvisorSetting(settings[GARDEN_ADVISOR_SETTING]),
     [settings],
   );
-  const [agent, setAgent] = useState(saved.agent);
-  const [model, setModel] = useState(saved.model);
-  const [effort, setEffort] = useState(saved.effort);
+  const draft = useAutosaveSetting(GARDEN_ADVISOR_SETTING, serializeGardenAdvisorConfig(saved), onSetSetting);
+  const { agent, model, effort } = JSON.parse(draft.value) as typeof saved;
+  const update = (updates: Partial<typeof saved>, commit = true) => {
+    const next = JSON.stringify({ agent, model, effort, ...updates });
+    if (commit) void draft.apply(next); else draft.set(next);
+  };
   const [customModel, setCustomModel] = useState(
     !(MODEL_PRESETS[saved.agent] ?? []).some((preset) => preset.value === saved.model),
   );
@@ -47,17 +51,10 @@ export function GardenAdvisorSettings({
   const available = settings[`${agent}_available`] !== 'false'
     && settings[`${agent}_cap_headless_task`] !== 'false';
 
-  const changeAgent = useCallback((next: SessionAgent) => {
-    const defaults = defaultGardenAdvisorConfig(next);
-    setAgent(defaults.agent);
-    setModel(defaults.model);
-    setEffort(defaults.effort);
+  const changeAgent = (next: SessionAgent) => {
+    update(defaultGardenAdvisorConfig(next));
     setCustomModel(false);
-  }, []);
-
-  const save = useCallback(() => {
-    onSetSetting(GARDEN_ADVISOR_SETTING, serializeGardenAdvisorConfig({ agent, model, effort }));
-  }, [agent, effort, model, onSetSetting]);
+  };
 
   return (
     <section className="settings-block">
@@ -101,7 +98,7 @@ export function GardenAdvisorSettings({
               onChange={(event) => {
                 const next = event.target.value;
                 setCustomModel(next === 'custom');
-                setModel(next === 'custom' ? '' : next);
+                if (next !== 'custom') update({ model: next });
               }}
             >
               {presets.map((preset) => (
@@ -123,7 +120,9 @@ export function GardenAdvisorSettings({
               type="text"
               className="settings-input"
               value={model}
-              onChange={(event) => setModel(event.target.value)}
+              onChange={(event) => update({ model: event.target.value }, false)}
+              onBlur={draft.onBlur}
+              onKeyDown={draft.onKeyDown}
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
@@ -141,7 +140,7 @@ export function GardenAdvisorSettings({
               data-testid="settings-garden-advisor-effort"
               className="settings-input"
               value={effort}
-              onChange={(event) => setEffort(event.target.value)}
+              onChange={(event) => update({ effort: event.target.value })}
             >
               {agent === 'copilot' && <option value="">Recommended default</option>}
               {efforts.map((level) => (
@@ -151,16 +150,6 @@ export function GardenAdvisorSettings({
           </div>
         )}
 
-        <div className="settings-row-inline">
-          <button
-            type="button"
-            className="settings-action"
-            data-testid="settings-garden-advisor-save"
-            onClick={save}
-          >
-            Save
-          </button>
-        </div>
       </div>
     </section>
   );

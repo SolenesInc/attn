@@ -32,11 +32,12 @@ import { SessionCreationProgress, type SessionCreationPhase } from './components
 import { RightDock } from './components/RightDock';
 import { SessionTerminalWorkspace } from './components/SessionTerminalWorkspace';
 import type { DockTarget } from './components/SessionTerminalWorkspace/dockTarget';
-import { SettingsModal } from './components/SettingsModal';
+import { SettingsModal, type SettingsModalHandle } from './components/SettingsModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { ShortcutEditorModal } from './components/ShortcutEditorModal';
 import { WhatsNewModal } from './components/WhatsNewModal';
 import { ActionMenu, type ActionMenuItem } from './components/ActionMenu';
+import { DiagnosticReportPrompt } from './components/DiagnosticReportPrompt';
 import { SnoozeMenu } from './components/SnoozeMenu';
 import { MarkdownOpener, OPENER_EXTENSIONS } from './components/palette/MarkdownOpener';
 import { resolveMarkdownOpenerTarget } from './components/palette/openerTarget';
@@ -45,8 +46,12 @@ import { NotebookBrowser } from './components/NotebookBrowser';
 import { NotificationsPanel } from './components/NotificationsPanel';
 import { ErrorToast, useErrorToast } from './components/ErrorToast';
 import { useSavedFlash } from './components/useSavedFlash';
-import { writeClipboardText } from './utils/clipboardBridge';
-import { readTerminalInputDiagnostics } from './utils/terminalDiagnosticsLog';
+import {
+  type DiagnosticCaptureContext,
+  type DiagnosticPaneDescriptor,
+  type PendingDiagnosticCapture,
+} from './utils/diagnosticReport';
+import { collectWorkspaceLayoutDiagnostics } from './utils/workspaceDiagnostics';
 import { ChordLeaderHud } from './components/ChordLeaderHud';
 import { DaemonProvider } from './contexts/DaemonContext';
 import { GitHubPollingProvider } from './contexts/GitHubPollingContext';
@@ -70,6 +75,7 @@ import {
 import { useDaemonSocket, DaemonWorktree, DaemonSession, DaemonWorkspace, DaemonPR, DaemonEndpoint, DaemonPlugin, DaemonPluginIssue, GitStatusUpdate, SessionExitInfo, CriticalNotificationState, type SeedReviewActionContext } from './hooks/useDaemonSocket';
 import type { Presentation, SessionLedgerEntry, SessionReopen } from './types/generated';
 import { useSessionWorkspaceController } from './hooks/useSessionWorkspaceController';
+import { useAgentNavigation } from './hooks/useAgentNavigation';
 import { useGardenPresentation } from './hooks/useGardenPresentation';
 import { isAttentionSessionState, normalizeSessionState, type UISessionState } from './types/sessionState';
 import { GridView, type GridSessionTile } from './components/grid/GridView';
@@ -111,6 +117,7 @@ import { ptySpawn } from './pty/bridge';
 import { clearBrowserHostFocus, controlBrowserHost, isBrowserHostOwnedTarget } from './browser/host';
 import { probeUiAfterSwitch, UI_DIAGNOSTICS_FILE_DISPLAY } from './utils/uiDiagnosticsLog';
 import { BannerStack } from './components/BannerStack';
+import { dispatcherOf } from './utils/delegationLinks';
 import {
   agentLabel,
   getAgentAvailability,
@@ -136,6 +143,10 @@ import {
 } from './utils/queueBands';
 import { useWorkspaceSelectionController } from './hooks/useWorkspaceSelectionController';
 import { hideBootSplash } from './utils/bootSplash';
+import {
+  areSidebarHarnessLogosEnabled,
+  SIDEBAR_HARNESS_LOGOS_SETTING,
+} from './utils/sidebarHarnessLogos';
 import { getTerminalAnsiPaletteColors, getTerminalTheme } from './utils/terminalSizing';
 import './App.css';
 
@@ -367,6 +378,21 @@ function activePaneIdForFocusedSession(
     return sessionActivePaneId;
   }
   return activePaneIdForWorkspace(workspace, session?.id ?? null);
+}
+
+function diagnosticFocusKind(element: Element | null): string {
+  if (!element) return 'none';
+  if (element.closest('.terminal-container, .grid-view-stage')) return 'terminal';
+  if (element.matches('input, textarea, [contenteditable="true"]')) return 'editor';
+  if (element.matches('button, a, select')) return 'control';
+  return element === document.body ? 'body' : 'other';
+}
+
+function shortenDiagnosticPath(path: string): string {
+  return path
+    .replace(/^\/Users\/[^/]+(?=\/|$)/, '~')
+    .replace(/^\/home\/[^/]+(?=\/|$)/, '~')
+    .replace(/^[A-Za-z]:\\Users\\[^\\]+(?=\\|$)/, '~');
 }
 
 function parseSemver(version: string): [number, number, number] | null {
@@ -821,6 +847,7 @@ function AppContent({
     sendSetSessionContextWindowCap,
     sendUnregisterSession,
     sendSetSetting,
+    sendSaveSetting,
     sendCreateWorktree,
     sendDeleteWorktree,
     sendListPlugins,
@@ -920,6 +947,7 @@ function AppContent({
     sendCrewSleep,
     sendSessionList,
     sendSessionReopen,
+    sendSupportSnapshot,
   } = useDaemonApi();
 
   const presentationBySessionId = useMemo(
@@ -944,6 +972,7 @@ function AppContent({
     createSession,
     closeSession,
     setActiveSession,
+    navigateAgentHistory,
     takeSessionSpawnArgs,
     reloadSession,
     setLauncherConfig,
@@ -954,6 +983,85 @@ function AppContent({
   const [selectedSessionlessWorkspaceId, setSelectedSessionlessWorkspaceId] = useState<string | null>(null);
   const [selectedTile, setSelectedTile] = useState<{ workspaceId: string; tileId: string } | null>(null);
   const selectWorkspaceRef = useRef<(workspaceId: string) => void>(() => {});
+  const [view, setView] = useState<'dashboard' | 'session' | 'grid'>('dashboard');
+  const [utilityFocusRequestToken, setUtilityFocusRequestToken] = useState(0);
+
+  const revealSessionView = useCallback(() => {
+    setSelectedTile(null);
+    setSelectedSessionlessWorkspaceId(null);
+    setView('session');
+  }, []);
+
+  const requestTerminalFocus = useCallback(() => {
+    setUtilityFocusRequestToken((token) => token + 1);
+  }, []);
+
+  const {
+    eventRouter: paneRuntimeEventRouter,
+    getActivePaneIdForSession,
+    setActivePane,
+    prepareClosePaneFocus,
+    clearPreparedClosePaneFocus,
+    setWorkspaceRef,
+    removeWorkspaceRef,
+    getWorkspaceLeafDropSnapshot,
+    focusWorkspaceLeaf,
+    focusSessionPane,
+    typeInSessionPaneViaUI,
+    isSessionPaneInputFocused,
+    scrollSessionPaneToTop,
+    fitSessionActivePane,
+    getPaneText,
+    getPaneSize,
+    getPaneVisibleContent,
+    getPaneVisibleStyleSummary,
+    getPaneBlockState,
+    getPanePlacementState,
+    resetSessionPaneTerminal,
+    injectSessionPaneBytes,
+    injectSessionPaneBase64,
+    drainSessionPaneTerminal,
+  } = useSessionWorkspaceController(sessions, activeSessionId);
+
+  const {
+    selectAgent,
+    selectAgentPane,
+    back: navigateAgentHistoryBack,
+    forward: navigateAgentHistoryForward,
+  } = useAgentNavigation({
+    sessions,
+    setActiveSession,
+    navigateAgentHistory,
+    setActivePane,
+    focusSessionPane,
+    revealSessionView,
+    requestTerminalFocus,
+  });
+
+  const pendingSessionSelectionsRef = useRef(new Set<string>());
+
+  const selectSessionWhenReady = useCallback((sessionId: string) => {
+    if (selectAgent(sessionId)) {
+      return true;
+    }
+    pendingSessionSelectionsRef.current.add(sessionId);
+    return false;
+  }, [selectAgent]);
+
+  const handleSelectSession = selectSessionWhenReady;
+  const selectCreatedSession = selectSessionWhenReady;
+
+  useEffect(() => {
+    for (const sessionId of pendingSessionSelectionsRef.current) {
+      if (!sessions.some((session) => session.id === sessionId)) {
+        pendingSessionSelectionsRef.current.delete(sessionId);
+        continue;
+      }
+      if (selectAgent(sessionId)) {
+        pendingSessionSelectionsRef.current.delete(sessionId);
+      }
+    }
+  }, [selectAgent, sessions]);
 
   const rollbackSessionCreation = useCallback(async ({
     sessionId,
@@ -1027,11 +1135,20 @@ function AppContent({
     takeSessionSpawnArgs,
   ]);
 
+  const createSessionForUiAutomation = useCallback(async (
+    ...args: Parameters<typeof createWorkspaceSession>
+  ) => {
+    const sessionId = await createWorkspaceSession(...args);
+    selectCreatedSession(sessionId);
+    return sessionId;
+  }, [createWorkspaceSession, selectCreatedSession]);
+
   useEffect(() => {
     if (!sessionCreationJob?.sessionId || sessionCreationJob.error) {
       return;
     }
     if (daemonSessions.some((session) => session.id === sessionCreationJob.sessionId)) {
+      selectCreatedSession(sessionCreationJob.sessionId);
       setSessionCreationJob((current) => (
         current?.id === sessionCreationJob.id ? null : current
       ));
@@ -1045,7 +1162,7 @@ function AppContent({
       ));
     }, 35_000);
     return () => window.clearTimeout(timeoutId);
-  }, [daemonSessions, sessionCreationJob]);
+  }, [daemonSessions, selectCreatedSession, sessionCreationJob]);
 
   const { scale, increaseScale, decreaseScale, resetScale } = useUIScale();
   const terminalFontSize = Math.round(14 * scale);
@@ -1068,6 +1185,7 @@ function AppContent({
   }, [hasReceivedInitialState, resolvedTheme, sendSetTerminalTheme]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsModalRef = useRef<SettingsModalHandle>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
@@ -1156,16 +1274,16 @@ function AppContent({
           const currentSessions = useSessionStore.getState().sessions;
           const existingSession = currentSessions.find((s) => s.cwd === cwd);
           if (existingSession) {
-            setActiveSession(existingSession.id);
+            selectAgent(existingSession.id);
           } else {
-            void createWorkspaceSession(label, cwd);
+            void createWorkspaceSession(label, cwd).then(selectCreatedSession);
           }
         }
       }
     } catch (e) {
       console.error('Failed to parse deep-link URL:', e);
     }
-  }, [createWorkspaceSession, setActiveSession]);
+  }, [createWorkspaceSession, selectAgent, selectCreatedSession]);
 
   useEffect(() => {
     getCurrent().then((urls) => {
@@ -1218,6 +1336,8 @@ function AppContent({
       isWorktree: daemonSession?.is_worktree ?? s.isWorktree,
       chiefOfStaff: daemonSession?.chief_of_staff ?? false,
       delegatedFromChief: daemonSession?.delegated_from_chief ?? false,
+      dispatcher_session_id: daemonSession?.dispatcher_session_id,
+      dispatcher_member: daemonSession?.dispatcher_member,
       ticketUnread: daemonSession?.ticket_unread ?? false,
       seedId: daemonSession?.seed_id,
       nudgeFiresAt: daemonSession?.nudge_fires_at,
@@ -1241,37 +1361,22 @@ function AppContent({
     };
   });
 
+  const delegationSessions = useMemo(
+    () => daemonSessions.map((session) => ({
+      id: session.id,
+      label: session.label,
+      agent: normalizeSessionAgent(session.agent),
+      state: normalizeSessionState(session.state),
+      dispatcher_session_id: session.dispatcher_session_id,
+      dispatcher_member: session.dispatcher_member,
+    })),
+    [daemonSessions],
+  );
+
   const visibleEnrichedSessions = filterSessionsRepresentedInWorkspaceLayouts(daemonWorkspaces, enrichedLocalSessions);
 
   const notebookChiefSession = enrichedLocalSessions.find((session) => session.chiefOfStaff);
   const notebookChiefActive = notebookChiefSession ? notebookChiefSession.state === 'working' : undefined;
-
-  const {
-    eventRouter: paneRuntimeEventRouter,
-    getActivePaneIdForSession,
-    setActivePane,
-    prepareClosePaneFocus,
-    clearPreparedClosePaneFocus,
-    setWorkspaceRef,
-    removeWorkspaceRef,
-    getWorkspaceLeafDropSnapshot,
-    focusWorkspaceLeaf,
-    focusSessionPane,
-    typeInSessionPaneViaUI,
-    isSessionPaneInputFocused,
-    scrollSessionPaneToTop,
-    fitSessionActivePane,
-    getPaneText,
-    getPaneSize,
-    getPaneVisibleContent,
-    getPaneVisibleStyleSummary,
-    getPaneBlockState,
-    getPanePlacementState,
-    resetSessionPaneTerminal,
-    injectSessionPaneBytes,
-    injectSessionPaneBase64,
-    drainSessionPaneTerminal,
-  } = useSessionWorkspaceController(sessions, activeSessionId);
 
   useEffect(() => {
     void connect();
@@ -1280,8 +1385,6 @@ function AppContent({
   type DockPanelId = 'workflowRun' | 'attention' | 'automations' | 'garden';
 
   const [sidebarMutedExpanded, setSidebarMutedExpanded] = useState(false);
-
-  const [view, setView] = useState<'dashboard' | 'session' | 'grid'>('dashboard');
 
   useClientPresence(sendSetClientPresence, {
     dashboardVisible: view === 'dashboard',
@@ -1311,9 +1414,9 @@ function AppContent({
 
   useEffect(() => {
     if (view === 'session' && !activeSessionId && sessions.length > 0) {
-      setActiveSession(sessions[0].id);
+      selectAgent(sessions[0].id);
     }
-  }, [activeSessionId, sessions, setActiveSession, view]);
+  }, [activeSessionId, selectAgent, sessions, view]);
 
   useEffect(() => {
     if (view === 'session' && activeSessionId) {
@@ -1497,20 +1600,101 @@ function AppContent({
 
   const [zoomModeBySessionId, setZoomModeBySessionId] = useState<Record<string, boolean>>({});
   const { message: errorMessage, durationMs: errorDurationMs, showError, clearError } = useErrorToast();
-  const inputDiagnosticsCopied = useSavedFlash();
-  const handleCopyInputDiagnostics = useCallback(async () => {
-    try {
-      const dump = await readTerminalInputDiagnostics();
-      if (!dump) {
-        showError('No terminal input diagnostics yet. Try typing in a terminal, then copy again.');
-        return;
+  const diagnosticReportSaved = useSavedFlash();
+  const [diagnosticCapture, setDiagnosticCapture] = useState<{
+    capture: PendingDiagnosticCapture;
+    affectedPaneId: string | null;
+  } | null>(null);
+  const actionMenuOriginRef = useRef<DiagnosticCaptureContext | null>(null);
+
+  const diagnosticPanes = useCallback((): DiagnosticPaneDescriptor[] => {
+    const sessionById = new Map(sessions.map((session) => [session.id, session]));
+    const workspaceById = new Map(daemonWorkspaces.map((workspace) => [workspace.id, workspace]));
+    const panes = new Map<string, DiagnosticPaneDescriptor>();
+    for (const session of sessions) {
+      for (const pane of session.workspace.agents) {
+        if (panes.has(pane.id)) continue;
+        panes.set(pane.id, {
+          paneId: pane.id,
+          runtimeId: pane.runtimeId,
+          sessionId: pane.sessionId,
+          title: pane.title,
+          sessionLabel: sessionById.get(pane.sessionId)?.label || pane.title,
+          workspaceId: session.workspaceId,
+          workspaceLabel: workspaceById.get(session.workspaceId)?.title || session.workspaceId,
+          available: getPaneSize(pane.sessionId, pane.id) !== null,
+        });
       }
-      await writeClipboardText(dump);
-      inputDiagnosticsCopied.flash('copied');
-    } catch (error) {
-      showError(`Could not copy terminal input diagnostics: ${String(error)}`);
     }
-  }, [inputDiagnosticsCopied.flash, showError]);
+    return [...panes.values()];
+  }, [daemonWorkspaces, getPaneSize, sessions]);
+
+  const handleCreateDiagnosticReport = useCallback(async () => {
+    const fallbackSession = activeSessionId ? sessions.find((session) => session.id === activeSessionId) : null;
+    const fallbackPaneId = fallbackSession ? getActivePaneIdForSession(fallbackSession) || null : null;
+    const context = actionMenuOriginRef.current ?? {
+      capturedAtUnixMs: Date.now(),
+      view,
+      activeSessionId,
+      activePaneId: fallbackPaneId,
+      activeElement: diagnosticFocusKind(document.activeElement),
+      documentFocused: document.hasFocus(),
+      visibility: document.visibilityState,
+      window: { width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
+    };
+    const workspaceById = new Map(daemonWorkspaces.map((workspace) => [workspace.id, workspace]));
+    const workspaces = new Map<string, {
+      id: string;
+      label: string;
+      directory: string;
+      layout: unknown;
+    }>();
+    for (const session of sessions) {
+      if (workspaces.has(session.workspaceId)) continue;
+      const workspace = workspaceById.get(session.workspaceId);
+      workspaces.set(session.workspaceId, {
+        id: session.workspaceId,
+        label: workspace?.title || session.workspaceId,
+        directory: shortenDiagnosticPath(workspace?.directory || session.cwd),
+        layout: collectWorkspaceLayoutDiagnostics(session.workspace.layoutTree),
+      });
+    }
+    const { beginDiagnosticCapture } = await import('./utils/diagnosticReport');
+    const capture = beginDiagnosticCapture({
+      context,
+      panes: diagnosticPanes(),
+      sessions: sessions.map((session) => ({
+        id: session.id,
+        label: session.label,
+        state: session.state,
+        agent: session.agent,
+        cwd: shortenDiagnosticPath(session.cwd),
+        workspaceId: session.workspaceId,
+        endpoint: session.endpointId ? 'remote' : 'local',
+        ...(session.endpointId ? { endpointId: session.endpointId } : {}),
+        active: session.id === context.activeSessionId,
+      })),
+      workspaces: [...workspaces.values()],
+      settings,
+      sendSupportSnapshot,
+    });
+    setDiagnosticCapture({ capture, affectedPaneId: context.activePaneId });
+  }, [activeSessionId, daemonWorkspaces, diagnosticPanes, getActivePaneIdForSession, sendSupportSnapshot, sessions, settings, view]);
+
+  const handleSaveDiagnosticReport = useCallback(async (selectedPaneIds: string[]) => {
+    if (!diagnosticCapture) return;
+    const { createDiagnosticReport, saveDiagnosticReport } = await import('./utils/diagnosticReport');
+    const report = await createDiagnosticReport(diagnosticCapture.capture, selectedPaneIds, (paneId) => {
+      const pane = diagnosticCapture.capture.panes.find((entry) => entry.paneId === paneId);
+      if (!pane) return { text: '', available: false };
+      return {
+        text: getPaneText(pane.sessionId, paneId),
+        available: getPaneSize(pane.sessionId, paneId) !== null,
+      };
+    });
+    await saveDiagnosticReport(report);
+    diagnosticReportSaved.flash('saved');
+  }, [diagnosticCapture, diagnosticReportSaved.flash, getPaneSize, getPaneText]);
   const [chiefTransferTarget, setChiefTransferTarget] = useState<{
     sessionId: string;
     targetLabel: string;
@@ -1649,7 +1833,8 @@ function AppContent({
     || appViewParamsPrompt !== null
     || pendingSessionClose !== null
     || sessionCreationJob !== null
-    || openPRLauncherJob !== null;
+    || openPRLauncherJob !== null
+    || diagnosticCapture !== null;
 
   // Views with nothing focusable (dashboard, empty workspaces) can leave the WebView off first responder, killing EVERY shortcut until the user clicks the window.
   useEffect(() => {
@@ -1733,6 +1918,12 @@ function AppContent({
   }, [sendSetSetting, settings]);
   const handleToggleCrewQueue = useCallback(() => {
     sendSetSetting(QUEUE_CREW_SETTING, isCrewQueueEnabled(settings) ? 'false' : 'true');
+  }, [sendSetSetting, settings]);
+  const handleToggleSidebarHarnessLogos = useCallback(() => {
+    sendSetSetting(
+      SIDEBAR_HARNESS_LOGOS_SETTING,
+      areSidebarHarnessLogosEnabled(settings) ? 'false' : 'true',
+    );
   }, [sendSetSetting, settings]);
   const markdownOpenerTarget = useMemo(
     () => resolveMarkdownOpenerTarget(
@@ -1897,14 +2088,14 @@ function AppContent({
       run: () => setShortcutEditorOpen(true),
     },
     {
-      id: 'copy-terminal-input-diagnostics',
-      title: 'Copy terminal input diagnostics',
-      description: 'Copy a troubleshooting dump to share when a terminal stops accepting input',
-      keywords: ['debug', 'logs', 'dump', 'keyboard', 'typing', 'stuck', 'frozen'],
+      id: 'create-diagnostic-report',
+      title: 'Create diagnostic report',
+      description: 'Save a private troubleshooting report you can share',
+      keywords: ['debug', 'report', 'logs', 'dump', 'keyboard', 'typing', 'stuck', 'frozen', 'error'],
       icon: <KeyboardActionIcon />,
-      run: () => { void handleCopyInputDiagnostics(); },
+      run: handleCreateDiagnosticReport,
     },
-  ], [openDockPanel, handleOpenNotebookTile, toggleGardenFrame, gardenMode, settings, handleToggleQueueMode, sendSetSetting, handleCopyInputDiagnostics]);
+  ], [openDockPanel, handleOpenNotebookTile, toggleGardenFrame, gardenMode, settings, handleToggleQueueMode, sendSetSetting, handleCreateDiagnosticReport]);
 
   const handleToggleActionMenu = useCallback(() => {
     if (actionMenuOpen) {
@@ -1915,9 +2106,20 @@ function AppContent({
       || sessionsOpen || notebookOpen || gardenHoldsWindow
       || chiefTransferTarget !== null || contextCapPromptSession !== null
       || appViewParamsPrompt !== null || pendingSessionClose !== null
-      || sessionCreationJob !== null || openPRLauncherJob !== null) {
+      || sessionCreationJob !== null || openPRLauncherJob !== null || diagnosticCapture !== null) {
       return;
     }
+    const activeSession = activeSessionId ? sessions.find((session) => session.id === activeSessionId) : null;
+    actionMenuOriginRef.current = {
+      capturedAtUnixMs: Date.now(),
+      view,
+      activeSessionId,
+      activePaneId: activeSession ? getActivePaneIdForSession(activeSession) || null : null,
+      activeElement: diagnosticFocusKind(document.activeElement),
+      documentFocused: document.hasFocus(),
+      visibility: document.visibilityState,
+      window: { width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
+    };
     setActionMenuOpen(true);
   }, [
     actionMenuOpen,
@@ -1934,6 +2136,11 @@ function AppContent({
     sessionsOpen,
     notebookOpen,
     gardenHoldsWindow,
+    diagnosticCapture,
+    activeSessionId,
+    sessions,
+    getActivePaneIdForSession,
+    view,
   ]);
   useEffect(() => {
     if (!settingError) {
@@ -1973,9 +2180,6 @@ function AppContent({
       console.error('[App] Failed to hydrate workflow run:', error);
     });
   }, [workflowRunIdToHydrate, getWorkflowRun]);
-
-  const [utilityFocusRequestToken, setUtilityFocusRequestToken] = useState(0);
-
 
   const handleNewWorkspace = useCallback(() => {
     setLocationPickerPurpose('workspace');
@@ -2035,9 +2239,7 @@ function AppContent({
       } else {
         throw new Error('Session spawn arguments were not prepared.');
       }
-      setView('session');
-      setActiveSession(sessionId);
-      setUtilityFocusRequestToken((token) => token + 1);
+      selectCreatedSession(sessionId);
     } catch (error) {
       await rollbackSessionCreation({
         sessionId,
@@ -2055,7 +2257,7 @@ function AppContent({
     rollbackSessionCreation,
     sendWorkspaceAddSessionPane,
     sessions,
-    setActiveSession,
+    selectCreatedSession,
     showError,
     takeSessionSpawnArgs,
   ]);
@@ -2139,6 +2341,7 @@ function AppContent({
           yoloMode,
           { chiefOfStaff, autoMode },
         );
+        selectCreatedSession(sessionId);
         setSessionCreationJob((current) => (
           current?.id === jobId
             ? { ...current, sessionId, phase: 'starting_session' }
@@ -2152,7 +2355,7 @@ function AppContent({
         ));
       }
     },
-    [activeLocalSession?.workspaceId, agentAvailability, createSplitSession, createWorkspaceSession, daemonEndpoints, hasAvailableAgents, locationPickerPurpose, locationPickerSessionDirection, showError]
+    [activeLocalSession?.workspaceId, agentAvailability, createSplitSession, createWorkspaceSession, daemonEndpoints, hasAvailableAgents, locationPickerPurpose, locationPickerSessionDirection, selectCreatedSession, showError]
   );
 
   const handleCreateWorktreeSession = useCallback((
@@ -2207,6 +2410,7 @@ function AppContent({
           return;
         }
         const sessionId = await createWorkspaceSession(folderName, worktreePath, undefined, agent, endpointId, yoloMode, { autoMode });
+        selectCreatedSession(sessionId);
         setSessionCreationJob((current) => (
           current?.id === jobId
             ? { ...current, label: folderName, path: worktreePath, phase: 'starting_session', sessionId }
@@ -2222,7 +2426,7 @@ function AppContent({
         worktreeSessionCreateEndpointsRef.current.delete(endpointKey);
       }
     })();
-  }, [activeLocalSession?.workspaceId, createSplitSession, createWorkspaceSession, locationPickerPurpose, locationPickerSessionDirection, sendCreateWorktree, showError]);
+  }, [activeLocalSession?.workspaceId, createSplitSession, createWorkspaceSession, locationPickerPurpose, locationPickerSessionDirection, selectCreatedSession, sendCreateWorktree, showError]);
 
   const closeLocationPicker = useCallback(() => {
     setLocationPickerOpen(false);
@@ -2276,7 +2480,7 @@ function AppContent({
     return sendWorkspaceClosePane(workspaceId, paneId)
       .then((result) => {
         if (fallbackSessionId) {
-          setActiveSession(fallbackSessionId);
+          selectAgentPane(fallbackSessionId, fallbackPaneId);
         }
         return result;
       })
@@ -2284,7 +2488,7 @@ function AppContent({
         clearPreparedClosePaneFocus(sessionId);
         throw error;
       });
-  }, [clearPreparedClosePaneFocus, daemonSessions, enrichedLocalSessions, prepareClosePaneFocus, sendWorkspaceClosePane, sessions, setActiveSession, showError]);
+  }, [clearPreparedClosePaneFocus, daemonSessions, enrichedLocalSessions, prepareClosePaneFocus, selectAgentPane, sendWorkspaceClosePane, sessions, showError]);
 
   const handleRequestCloseSession = useCallback((id: string) => {
     const session = sessions.find((entry) => entry.id === id);
@@ -2330,20 +2534,12 @@ function AppContent({
     void handleCloseSession(sessionID);
   }, [handleCloseSession, pendingSessionClose]);
 
-  const handleSelectSession = useCallback(
-    (id: string) => {
-      setSelectedTile(null);
-      setSelectedSessionlessWorkspaceId(null);
-      const session = sessions.find((entry) => entry.id === id);
-      const sessionPane = session?.workspace.agents.find((pane) => pane.sessionId === id);
-      if (sessionPane) {
-        setActivePane(id, sessionPane.id);
-      }
-      setActiveSession(id);
-      setUtilityFocusRequestToken((token) => token + 1);
-    },
-    [sessions, setActivePane, setActiveSession]
-  );
+  const handleSelectOrchestrator = useCallback(() => {
+    const session = daemonSessions.find((entry) => entry.id === activeSessionId);
+    if (!session) return;
+    const dispatcher = dispatcherOf(session, daemonSessions);
+    if (dispatcher?.session) handleSelectSession(dispatcher.session.id);
+  }, [activeSessionId, daemonSessions, handleSelectSession]);
 
   useUiAutomationBridge({
     sessions,
@@ -2351,7 +2547,7 @@ function AppContent({
     daemonReady: hasReceivedInitialState && !connectionError,
     connectionError,
     getActivePaneIdForSession,
-    createSession: createWorkspaceSession,
+    createSession: createSessionForUiAutomation,
     selectSession: handleSelectSession,
     selectWorkspace: (workspaceId: string) => selectWorkspaceRef.current(workspaceId),
     moveWorkspaceLeafToWorkspace: sendWorkspaceMoveLeafToWorkspace,
@@ -2365,10 +2561,10 @@ function AppContent({
     },
     closePane: handleClosePane,
     focusPane: (sessionId: string, paneId: string) => {
-      setActiveSession(sessionId);
-      setUtilityFocusRequestToken((token) => token + 1);
-      setActivePane(sessionId, paneId);
-      focusSessionPane(sessionId, paneId, 40);
+      const ownerSessionId = sessions.find((session) => (
+        session.workspace.agents.some((pane) => pane.id === paneId && pane.sessionId === session.id)
+      ))?.id;
+      selectAgentPane(ownerSessionId ?? sessionId, paneId);
     },
     typeInSessionPaneViaUI,
     isSessionPaneInputFocused,
@@ -2430,6 +2626,7 @@ function AppContent({
         return;
       }
       if (result.success) {
+        selectCreatedSession(result.sessionId);
         console.log(`[App] Worktree created at ${result.worktreePath}`);
         return;
       }
@@ -2460,7 +2657,7 @@ function AppContent({
         }
       }
     },
-    [agentAvailability, hasAvailableAgents, openPR, settings.new_session_agent]
+    [agentAvailability, hasAvailableAgents, openPR, selectCreatedSession, settings.new_session_agent]
   );
 
   const workspaceViews = useMemo(
@@ -2984,9 +3181,9 @@ function AppContent({
       }
       setSelectedSessionlessWorkspaceId(workspace.id);
       setView('session');
-      setUtilityFocusRequestToken((token) => token + 1);
+      requestTerminalFocus();
     },
-    [handleSelectSession, setView, sidebarWorkspaceViews, workspaceViews],
+    [handleSelectSession, requestTerminalFocus, sidebarWorkspaceViews, workspaceViews],
   );
   selectWorkspaceRef.current = handleSelectWorkspace;
 
@@ -3473,10 +3670,16 @@ function AppContent({
     onSelectWorkspaceByIndex: handleSelectWorkspaceByIndex,
     onPrevSession: handlePrevWorkspace,
     onNextSession: handleNextWorkspace,
+    onHistoryBack: () => navigateAgentHistoryBack(view !== 'session'),
+    onHistoryForward: () => navigateAgentHistoryForward(view !== 'session'),
+    onSelectOrchestrator: handleSelectOrchestrator,
     onToggleSidebar: toggleSidebarCollapse,
     onRefreshPRs: handleRefreshPRs,
     onToggleAttentionPanel: () => toggleDockPanel('attention'),
-    onOpenSettings: useCallback(() => setSettingsOpen(prev => !prev), []),
+    onOpenSettings: useCallback(() => {
+      if (settingsOpen) void settingsModalRef.current?.close();
+      else setSettingsOpen(true);
+    }, [settingsOpen]),
     onShowShortcuts: useCallback(() => setShortcutsOpen(prev => !prev), []),
     onIncreaseFontSize: increaseScale,
     onDecreaseFontSize: decreaseScale,
@@ -3595,6 +3798,8 @@ function AppContent({
           onToggleQueueMode={handleToggleQueueMode}
           crewQueueEnabled={crewQueueEnabled}
           onToggleCrewQueue={handleToggleCrewQueue}
+          harnessLogosEnabled={areSidebarHarnessLogosEnabled(settings)}
+          onToggleHarnessLogos={handleToggleSidebarHarnessLogos}
           workspaceSelectionStyle={workspaceSelectionStyle}
           onWorkspaceSelectionStyleChange={handleWorkspaceSelectionStyleChange}
           leafDrag={leafWorkspaceDrag ? {
@@ -3714,6 +3919,7 @@ function AppContent({
                       automation: entry.automation,
                       pullRequests: entry.pullRequests,
                     }))}
+                    delegationSessions={delegationSessions}
                     seedTargetSessions={daemonSessions.map((session) => ({
                       sessionId: session.id,
                       label: session.label || session.id,
@@ -3763,6 +3969,7 @@ function AppContent({
                       }
                     }}
                     onRenameSession={sendRenameSession}
+                    onSelectSession={handleSelectSession}
                     onResizeSplit={(splitId, ratio) => {
                       return sendWorkspaceSetSplitRatio(workspace.id, splitId, ratio);
                     }}
@@ -3772,10 +3979,7 @@ function AppContent({
                       if (!paneSessionId) {
                         return;
                       }
-                      setActivePane(paneSessionId, paneId);
-                      if (paneSessionId !== activeSessionId) {
-                        setActiveSession(paneSessionId);
-                      }
+                      selectAgentPane(paneSessionId, paneId);
                     }}
                     zoomActive={Boolean(zoomModeBySessionId[workspace.id])}
                     onSetZoomActive={(active) => {
@@ -3868,7 +4072,7 @@ function AppContent({
                   applyDefinition={applyAutomationDefinition}
                   deleteDefinition={deleteAutomationDefinition}
                   onSelectSession={handleSelectSession}
-                  onFocusPane={(sessionId, paneId) => focusSessionPane(sessionId, paneId, 40)}
+                  onFocusPane={(sessionId, paneId) => selectAgentPane(sessionId, paneId)}
                 />
               ),
             },
@@ -3965,8 +4169,8 @@ function AppContent({
         />
       )}
       <ErrorToast message={errorMessage} durationMs={errorDurationMs} onDone={clearError} />
-      {inputDiagnosticsCopied.saved('copied') && (
-        <div className="input-diagnostics-copied" role="status">Terminal input diagnostics copied</div>
+      {diagnosticReportSaved.saved('saved') && (
+        <div className="input-diagnostics-copied" role="status">Diagnostic report saved</div>
       )}
       <ChordLeaderHud />
       <LedgerSurface
@@ -4097,6 +4301,14 @@ function AppContent({
         actions={actionMenuItemsWithQueueActions}
         onClose={() => setActionMenuOpen(false)}
       />
+      {diagnosticCapture && (
+        <DiagnosticReportPrompt
+          capture={diagnosticCapture.capture}
+          affectedPaneId={diagnosticCapture.affectedPaneId}
+          onCreate={handleSaveDiagnosticReport}
+          onClose={() => setDiagnosticCapture(null)}
+        />
+      )}
       <ShortcutsModal
         isOpen={shortcutsOpen}
         onClose={() => setShortcutsOpen(false)}
@@ -4118,6 +4330,7 @@ function AppContent({
         }}
       />
       <SettingsModal
+        ref={settingsModalRef}
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         mutedRepos={mutedRepos}
@@ -4139,7 +4352,7 @@ function AppContent({
         onUninstallPlugin={sendUninstallPlugin}
         onRemovePlugin={sendRemovePlugin}
         onSetPluginPriority={sendSetPluginPriority}
-        onSetSetting={sendSetSetting}
+        onSetSetting={sendSaveSetting}
         themePreference={themePreference}
         onSetTheme={setTheme}
         uiScale={scale}

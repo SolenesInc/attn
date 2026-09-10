@@ -58,7 +58,7 @@
 - Keep growing: resolve one review item without changing the seed; seven quiet days must pass before it qualifies again.
 - Artifact: owned file under `<Notebook>/seeds/<seed-id>/`, retained across session/workspace/seed lifecycles.
 - Linked artifact: reference to an external file, Notebook document, or URL.
-- Note: seed log entry. Handoff: note for the next tender. Watch: interest in change notifications.
+- Note: seed log entry. Handoff: note for the next tender. Watch: a session's subscription to a seed and its current descendants. Explicit watch and new delegation create the same subscription; unwatch removes it and discards queued updates with no remaining coverage. Separate child subscriptions remain. Dispatch records retain ownership and history; they do not grant notifications. Existing dispatch subscriptions are converted once on upgrade; recovery never restores removed subscriptions.
 - Delegation preferences: optional, daemon-local choices for already-authorized delegations. A role describes the work, instructions, and stopping point; its choices select a harness, provider, model, and effort. An alternative has a condition, and a separate fallback covers unmatched work. Preferences do not grant delegation authority. Starter roles are editable templates; adding missing presets preserves existing roles and leaves model selections to the user. Verify produces evidence for an assigned revision and environment; Orchestrator judges its sufficiency and repeats checks only when changes or evidence gaps warrant it.
 - Dispatch-at-plot: delegation bound to an existing seed as its tender.
 - Ticket: archived pre-Garden work item; user tickets and their history remain permanently.
@@ -99,6 +99,8 @@
 - Client token: profile protocol credential. Browser host token: trusted WebView identity.
 - HTTP bearer: operator credential for exposed WebSockets.
 - Headless task: model run the daemon starts on its own, with no session and no PTY.
+- Background agents (Settings): configuration for Session activity, Garden advisor, and Chief launches. Chief launches are sessions; the other two run as headless tasks.
+- Settings autosave: selections commit immediately; text commits on blur, Enter, navigation, or close. The daemon acknowledges persistence by request id. Failed drafts remain editable and retryable.
 - Headless tasks switch: `ATTN_HEADLESS_TASKS` / `headless_tasks.enabled`; off refuses every headless task before it spawns. The environment wins.
 - Settings snapshot for that switch: `headless_tasks.enabled` is the effective value, `.stored` the setting alone, `.override` the raw environment value when it decides.
 - State marker: `<!-- attn:state=waiting_input|idle -->` in an agent's last assistant message. With the switch off it is the stop verdict, so no model runs; without one the stop settles on hook evidence. Transcript readers strip it from messages; a marker-only message is never shown.

@@ -261,7 +261,7 @@ func (d *Daemon) guardWorkflowRunStart(run *protocol.WorkflowRun) error {
 	if parseBooleanSetting(d.store.GetSetting(SettingWorkflowsEnabled)) {
 		return nil
 	}
-	return fmt.Errorf("workflows are disabled; enable Workflows in attn Settings (Agents) to run one")
+	return fmt.Errorf("workflows are disabled; enable Workflows in attn Settings (Delegation) to run one")
 }
 
 func (d *Daemon) handleWorkflowRunUpsert(conn net.Conn, msg *protocol.WorkflowRunUpsertMessage) {

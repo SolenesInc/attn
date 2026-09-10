@@ -121,6 +121,12 @@ export const scenarioCatalog = [
     timeoutMs: 180_000,
   },
   {
+    id: 'agent-settings',
+    runnerId: 'AgentSettings',
+    label: 'Agent settings: grouped defaults, background agents, autosave acknowledgements and close recovery',
+    command: ['node', 'scripts/real-app-harness/scenario-agent-settings.mjs'],
+  },
+  {
     id: 'delegation-preferences',
     runnerId: 'DelegationPreferences',
     label: 'Delegation preferences: opt in, configure roles, override one launch, disable, and restore',
@@ -178,7 +184,7 @@ export const scenarioCatalog = [
   {
     id: 'terminal-input',
     runnerId: 'TERMINAL-INPUT',
-    label: 'Terminal input via packaged browser events, shortcuts, paste, and zoomed grid',
+    label: 'Terminal input and diagnostic report via packaged browser events, shortcuts, paste, and zoomed grid',
     command: ['pnpm', 'run', 'real-app:scenario-terminal-input'],
   },
   {

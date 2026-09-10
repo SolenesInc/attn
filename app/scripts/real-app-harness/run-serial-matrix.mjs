@@ -17,6 +17,7 @@ import { formatResultTable, scenarioSkipReason, selectFailedScenarios } from './
 import { ensureMockGitHubServer, stopMockGitHubServer } from './mockGitHub.mjs';
 import { resolveScenarios as resolveScenariosFromCatalog, scenarioCatalog, scenariosAllowingRealAgents } from './scenarioCatalog.mjs';
 import { acquireScenarioLock, packagedAppScenarioLockPath } from './scenarioRunner.mjs';
+import { parseShardSelector, readRecordedDurations, selectShard } from './shardPlan.mjs';
 
 // Must run before any import that reads ATTN_HARNESS_PROFILE at module load.
 // An unset ATTN_PROFILE falls back to dev, never to prod.
@@ -35,6 +36,7 @@ function parseArgs(argv) {
   let runAgainstProd = false;
   let failedOnly = false;
   let noFreshWorld = false;
+  let shard = null;
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -50,9 +52,11 @@ function parseArgs(argv) {
       failedOnly = true;
     } else if (arg === '--no-fresh-world') {
       noFreshWorld = true;
+    } else if (arg === '--shard') {
+      shard = parseShardSelector(args[++index]);
     } else if (arg === '--help' || arg === '-h') {
       return {
-        help: true, selected: [], failFast: false, timeoutMs: 120_000, runAgainstProd: false, failedOnly: false, noFreshWorld: false,
+        help: true, selected: [], failFast: false, timeoutMs: 120_000, runAgainstProd: false, failedOnly: false, noFreshWorld: false, shard: null,
       };
     } else {
       throw new Error(`Unknown argument: ${arg}`);
@@ -68,7 +72,7 @@ function parseArgs(argv) {
   }
 
   return {
-    help: false, selected, failFast, timeoutMs, runAgainstProd, failedOnly, noFreshWorld,
+    help: false, selected, failFast, timeoutMs, runAgainstProd, failedOnly, noFreshWorld, shard,
   };
 }
 
@@ -93,6 +97,7 @@ function printHelp() {
   node scripts/real-app-harness/run-serial-matrix.mjs --timeout-ms 180000
   node scripts/real-app-harness/run-serial-matrix.mjs --failed-only
   node scripts/real-app-harness/run-serial-matrix.mjs --no-fresh-world
+  node scripts/real-app-harness/run-serial-matrix.mjs --shard 2/4
   ATTN_HARNESS_PROFILE= node scripts/real-app-harness/run-serial-matrix.mjs --run-against-prod
 
 Target: defaults to the dev install (~/Applications/attn-dev.app, port 29849)
@@ -239,7 +244,7 @@ function runScenario(scenario, timeoutMs, runAgainstProd) {
 async function main() {
   const matrixStartedAt = Date.now();
   const {
-    help, selected, failFast, timeoutMs, runAgainstProd, failedOnly, noFreshWorld,
+    help, selected, failFast, timeoutMs, runAgainstProd, failedOnly, noFreshWorld, shard,
   } = parseArgs(process.argv.slice(2));
   if (help) {
     printHelp();
@@ -261,7 +266,14 @@ async function main() {
     scenarioIds = failedIds;
   }
 
-  const scenarios = resolveScenarios(scenarioIds);
+  let scenarios = resolveScenarios(scenarioIds);
+  let shardPlan = null;
+  if (shard) {
+    shardPlan = selectShard(scenarios, readRecordedDurations(), shard);
+    scenarios = shardPlan.scenarios;
+    console.log(`Shard ${shard.index}/${shard.count}: ${scenarios.length} scenarios, `
+      + `${shardPlan.seconds.toFixed(1)}s of recorded work — ${shardPlan.ids.join(', ')}`);
+  }
   const profile = currentHarnessProfile();
   const appPath = process.env.ATTN_REAL_APP_PATH || defaultAppPathForProfile(profile);
   const wsUrl = process.env.ATTN_REAL_APP_WS_URL || defaultWSURLForProfile();
@@ -357,8 +369,9 @@ async function main() {
     path.join(artifactsRoot, 'last-matrix.json'),
     `${JSON.stringify({
       finishedAt: new Date().toISOString(),
+      shard: shard ? { index: shard.index, count: shard.count } : null,
       results: results.map((result) => {
-        const entry = { id: result.id, code: result.code };
+        const entry = { id: result.id, code: result.code, durationMs: result.durationMs };
         if (result.skipped) {
           entry.skipped = true;
           entry.skipReason = result.skipReason;

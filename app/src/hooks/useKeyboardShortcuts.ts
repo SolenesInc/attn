@@ -18,6 +18,9 @@ interface KeyboardShortcutsConfig {
   onSelectWorkspaceByIndex: (index: number) => void;
   onPrevSession: () => void;
   onNextSession: () => void;
+  onHistoryBack: () => void;
+  onHistoryForward: () => void;
+  onSelectOrchestrator?: () => void;
   onToggleSidebar?: () => void;
   onRefreshPRs?: () => void;
   onToggleAttentionPanel?: () => void;
@@ -52,6 +55,9 @@ export function useKeyboardShortcuts({
   onSelectWorkspaceByIndex,
   onPrevSession,
   onNextSession,
+  onHistoryBack,
+  onHistoryForward,
+  onSelectOrchestrator,
   onToggleSidebar,
   onRefreshPRs,
   onToggleAttentionPanel,
@@ -77,6 +83,9 @@ export function useKeyboardShortcuts({
   useShortcut('session.close', onCloseSession, enabled);
   useShortcut('session.prev', onPrevSession, enabled);
   useShortcut('session.next', onNextSession, enabled);
+  useShortcut('session.historyBack', onHistoryBack, enabled);
+  useShortcut('session.historyForward', onHistoryForward, enabled);
+  useShortcut('session.orchestrator', onSelectOrchestrator ?? (() => {}), enabled && !!onSelectOrchestrator);
   useShortcut('session.goToDashboard', onGoToDashboard, enabled);
   useShortcut('view.toggleGrid', onToggleGridMode ?? (() => {}), enabled && !!onToggleGridMode);
   useShortcut('session.jumpToWaiting', onJumpToWaiting, enabled);

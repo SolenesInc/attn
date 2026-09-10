@@ -46,6 +46,7 @@ const (
 	SettingModelCaptureBytes             = "model_capture.bytes"
 	SettingQueueModeEnabled              = "queue_mode_enabled"
 	SettingQueueCrewEnabled              = "queue_crew_enabled"
+	SettingSidebarHarnessLogosEnabled    = "sidebar_harness_logos_enabled"
 	SettingAutoApproveEnabled            = "auto_approve_enabled"
 	SettingOpenSentFilesEnabled          = "open_sent_files_enabled"
 	SettingAutoSettleEnabled             = "auto_settle_enabled"
@@ -100,10 +101,14 @@ func (d *Daemon) handleSetSettingWS(client *wsClient, msg *protocol.SetSettingMe
 	if err == nil && msg.Key == SettingSharedPTYHostEnabled {
 		err = d.setSharedPTYHostEnabled(parseBooleanSetting(msg.Value))
 	}
+	if err == nil && msg.Key != SettingSharedPTYHostEnabled {
+		err = d.store.SetSettingChecked(msg.Key, msg.Value)
+	}
 	if err != nil {
 		d.logf("Setting validation failed: %v", err)
 		d.sendToClient(client, &protocol.SettingsUpdatedMessage{
 			Event:      protocol.EventSettingsUpdated,
+			RequestID:  msg.RequestID,
 			Settings:   d.settingsWithAgentAvailability(),
 			ChangedKey: protocol.Ptr(msg.Key),
 			Error:      protocol.Ptr(err.Error()),
@@ -112,9 +117,6 @@ func (d *Daemon) handleSetSettingWS(client *wsClient, msg *protocol.SetSettingMe
 		return
 	}
 
-	if msg.Key != SettingSharedPTYHostEnabled {
-		d.store.SetSetting(msg.Key, msg.Value)
-	}
 	if isSessionCostPriceSetting(msg.Key) {
 		d.publishSessionCostReprices()
 	}
@@ -138,6 +140,14 @@ func (d *Daemon) handleSetSettingWS(client *wsClient, msg *protocol.SetSettingMe
 		d.clearAllSessionActivity()
 	}
 	d.publishSettingsFact(FactSettingChanged, msg.Key)
+	if msg.RequestID != nil {
+		d.sendToClient(client, &protocol.SettingsUpdatedMessage{
+			Event:      protocol.EventSettingsUpdated,
+			RequestID:  msg.RequestID,
+			ChangedKey: protocol.Ptr(msg.Key),
+			Success:    protocol.Ptr(true),
+		})
+	}
 }
 
 func (d *Daemon) publishSettingsFact(name, subject string) {
@@ -288,6 +298,7 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 	}
 	settings[SettingQueueModeEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingQueueModeEnabled]))
 	settings[SettingQueueCrewEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingQueueCrewEnabled]))
+	settings[SettingSidebarHarnessLogosEnabled] = strconv.FormatBool(defaultOnBooleanSetting(stored[SettingSidebarHarnessLogosEnabled]))
 	settings[SettingAutoApproveEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAutoApproveEnabled]))
 	settings[SettingAutoSettleEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAutoSettleEnabled]))
 	settings[SettingAutoSettleArmSeconds] = strconv.Itoa(int(resolveAutoSettleSeconds(stored[SettingAutoSettleArmSeconds], defaultAutoSettleArmSeconds) / time.Second))
@@ -465,7 +476,7 @@ func (d *Daemon) validateSetting(key, value string) error {
 		return validateTheme(value)
 	case SettingSharedPTYHostEnabled:
 		return validateBooleanSetting(value)
-	case SettingTailscaleEnabled, SettingWorkflowsEnabled, SettingAutoApproveEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled:
+	case SettingTailscaleEnabled, SettingWorkflowsEnabled, SettingAutoApproveEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingSidebarHarnessLogosEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled:
 		return validateBooleanSetting(value)
 	case SettingModelCaptureIntervalSeconds:
 		return validateModelCaptureInterval(value)
@@ -590,6 +601,10 @@ func parseBooleanSetting(value string) bool {
 	default:
 		return false
 	}
+}
+
+func defaultOnBooleanSetting(value string) bool {
+	return strings.TrimSpace(value) == "" || parseBooleanSetting(value)
 }
 
 func validateUIScale(value string) error {

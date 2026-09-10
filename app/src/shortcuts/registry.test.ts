@@ -223,8 +223,25 @@ describe('shortcut registry', () => {
       expect(SHORTCUTS['session.newHorizontal']).toEqual({ key: 'n', meta: true, shift: true });
       expect(SHORTCUTS['session.newWorkspace']).toEqual({ key: 't', meta: true });
       expect(SHORTCUTS['session.close']).toEqual({ key: 'w', meta: true });
+      expect(MAC_SHORTCUTS['session.historyBack']).toEqual({
+        key: '[', code: 'BracketLeft', meta: true,
+      });
+      expect(MAC_SHORTCUTS['session.historyForward']).toEqual({
+        key: ']', code: 'BracketRight', meta: true,
+      });
       expect(SHORTCUTS['session.goToDashboard']).toEqual({ key: 'h', meta: true, shift: true });
+      expect(MAC_SHORTCUTS['session.orchestrator']).toEqual({ key: 'ArrowUp', meta: true, shift: true });
+      expect(LINUX_SHORTCUTS['session.orchestrator']).toEqual({ key: 'o', code: 'KeyO', meta: true, alt: true });
       expect(SHORTCUTS['view.toggleGrid']).toEqual({ key: 'g', meta: true });
+    });
+
+    it('uses shifted physical bracket bindings for Linux history navigation', () => {
+      expect(LINUX_SHORTCUTS['session.historyBack']).toEqual({
+        key: '{', code: 'BracketLeft', meta: true, shift: true,
+      });
+      expect(LINUX_SHORTCUTS['session.historyForward']).toEqual({
+        key: '}', code: 'BracketRight', meta: true, shift: true,
+      });
     });
 
     it('has expected workspace shortcuts defined', () => {
@@ -314,6 +331,26 @@ describe('shortcut registry', () => {
       expect(LINUX_SHORTCUTS['ui.actionMenu']).toEqual({ key: 'k', meta: true, shift: true });
       expect(LINUX_SHORTCUTS['terminal.splitHorizontal']).toEqual({ key: 'd', meta: true, alt: true });
       expect(LINUX_SHORTCUTS['terminal.focusLeft']).toEqual({ key: 'ArrowLeft', meta: true, shift: true });
+    });
+
+    it('matches history bindings by platform and physical bracket code', () => {
+      withNavigatorPlatform('MacIntel', () => {
+        expect(matchesShortcut(new KeyboardEvent('keydown', {
+          key: '[', code: 'BracketLeft', metaKey: true,
+        }), MAC_SHORTCUTS['session.historyBack'])).toBe(true);
+        expect(matchesShortcut(new KeyboardEvent('keydown', {
+          key: ']', code: 'BracketRight', metaKey: true,
+        }), MAC_SHORTCUTS['session.historyForward'])).toBe(true);
+      });
+
+      withNavigatorPlatform('Linux aarch64', () => {
+        expect(matchesShortcut(new KeyboardEvent('keydown', {
+          key: '{', code: 'BracketLeft', ctrlKey: true, shiftKey: true,
+        }), LINUX_SHORTCUTS['session.historyBack'])).toBe(true);
+        expect(matchesShortcut(new KeyboardEvent('keydown', {
+          key: '}', code: 'BracketRight', ctrlKey: true, shiftKey: true,
+        }), LINUX_SHORTCUTS['session.historyForward'])).toBe(true);
+      });
     });
   });
 
