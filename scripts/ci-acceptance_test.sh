@@ -67,6 +67,11 @@ for contract in \
     exit 1
   fi
 done
+if grep -Fq 'go env GOCACHE' "$install_action" ||
+  grep -Fq 'go env GOMODCACHE' "$install_action"; then
+  echo "App acceptance must not create Go caches before preflight" >&2
+  exit 1
+fi
 
 soak_triggers="$(sed -n '/^on:/,/^permissions:/p' "$soak_workflow")"
 if ! grep -Fq 'workflow_dispatch:' <<<"$soak_triggers" ||
@@ -177,6 +182,28 @@ if ! grep -Fq 'pull_request:' <<<"$react_doctor_triggers" ||
   echo "React Doctor must run on pull requests only" >&2
   exit 1
 fi
+if ! grep -Fq 'cache-mode: none' "$react_doctor" ||
+  ! grep -Fq 'name: Report runner class' "$react_doctor"; then
+  echo "React Doctor must avoid branch-scoped caches and report its runner class" >&2
+  exit 1
+fi
+
+for job_name in backend pty-compatibility rust; do
+  job="$(sed -n "/^  ${job_name}:/,/^  [a-z0-9-]\+:/p" "$workflow")"
+  for contract in \
+    'cache: false' \
+    'uses: actions/cache/restore@v4' \
+    'key: go-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('\''go.mod'\'', '\''go.sum'\'') }}' \
+    'uses: actions/cache/save@v4' \
+    "github.ref == 'refs/heads/next'" \
+    "github.ref == 'refs/heads/main'" \
+    'name: Report runner class'; do
+    if ! grep -Fq "$contract" <<<"$job"; then
+      echo "$job_name is missing its Go cache contract: $contract" >&2
+      exit 1
+    fi
+  done
+done
 
 changes_job="$(sed -n '/^  changes:/,/^  changelog:/p' "$workflow")"
 if ! grep -Fq 'fetch-depth: 0' <<<"$changes_job" ||

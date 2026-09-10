@@ -25,6 +25,7 @@ concurrency:
 jobs:
   react-doctor:
     runs-on: ubuntu-24.04
+    cache-mode: none
     steps:
       # The merge ref can include newer target changes than the event's base SHA.
       # Scan the PR head with full history so only its changes enter the comparison.
@@ -32,6 +33,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+
+      - name: Report runner class
+        run: ./scripts/ci-runner-class.sh
 
       # Pinned to the commit the v2 tag pointed at on 2026-07-24. The tag is
       # mutable and this action runs on every PR with write access to comments,
