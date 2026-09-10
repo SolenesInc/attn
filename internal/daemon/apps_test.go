@@ -241,10 +241,11 @@ func TestAppVersionChangeReconcilesAtTheFrozenCursorThenDeliversTheRetainedFact(
 		t.Fatalf("disable: %v", protocol.Deref(resp.Error))
 	}
 	d.publishFact("ticket.created", "tk-1", nil)
-	_, retainedSeq, err := d.store.BusBounds()
-	if err != nil {
-		t.Fatal(err)
+	retained := appFacts(t, d, "ticket.created")
+	if len(retained) != 1 || retained[0].Subject != "tk-1" {
+		t.Fatalf("retained ticket facts = %+v, want ticket.created for tk-1", retained)
 	}
+	retainedSeq := retained[0].Seq
 	secondManifest := firstManifest
 	secondManifest.Description = "version two"
 	second := installApp(t, d, "approval-gate", secondManifest)
