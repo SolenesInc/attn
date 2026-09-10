@@ -10,6 +10,12 @@
       "recordedAt": "2026-09-07",
       "scenarioRun": "crew-management-2026-09-07T01-45-07-590Z",
       "note": "The fully green Linux serial matrix reports 32.9s for crew-management in matrix-digest.txt. Its scenario source is unchanged from this run."
+    },
+    "terminalAnnotations": {
+      "recordedAt": "2026-09-10",
+      "platform": "macOS",
+      "scenarioRun": "terminal-annotations-2026-09-10T23-34-56-879Z",
+      "note": "The green annotation/terminal-resize/Crew serial matrix reports 28.8s for the reduced native annotation boundary scenario. Browser interaction coverage runs separately in e2e/terminal-annotations.spec.ts."
     }
   },
   "seconds": {
@@ -37,7 +43,7 @@
     "agent-queue": 91,
     "automation-lifecycle": 48.9,
     "worktree-surface": 37.8,
-    "terminal-annotations": 21.2,
+    "terminal-annotations": 28.8,
     "terminal-context-menu": 9.1,
     "terminal-input": 11.7,
     "pty-host-setting": 8.9,

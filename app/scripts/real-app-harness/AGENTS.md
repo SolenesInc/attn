@@ -64,6 +64,37 @@ cheaper layer. Look here before re-adding one; the twin is the place to change.
   `app_autodisable_test.go` own the reconcile state machine; the scaffold brief
   is `TestScaffoldAgentsMDTeachesReconcile` in `internal/appbuild`.
 
+## Annotation coverage by boundary
+
+`terminal-annotations` retains grid-to-message anchoring, saves in the real daemon,
+app relaunch, annotations across turns, native pointer/keyboard handoff, note
+persistence and delivery into the agent. Its detailed editor interaction proofs run
+independently in `app/e2e/terminal-annotations.spec.ts`, through production
+`SessionTerminalWorkspace`, `AnnotatedTerminal` and `GhosttyTerminal`.
+
+| Behavior | Browser proof |
+| --- | --- |
+| Comment focus during workspace updates | `panel editing owns the keyboard through workspace updates` |
+| Async message completion during typing | `message delivery while editing preserves keyboard ownership` |
+| Workspace-scoped focus | `another workspace can take focus while an annotation draft is open` |
+| Terminal/editor pointer handoff and intact draft | `pointer focus moves between terminal and editor without losing text` |
+| Editor geometry and panel avoidance | `popup placement respects its pane and panel` |
+| Dragging and keyboard movement | `pointer dragging preserves the draft and pane bounds`, `keyboard movement preserves pane bounds` |
+| Saved comments, reopening, wrapping rows and remove control | `a wrapping comment keeps the remove control beside its row` |
+| Note editing and intact annotation set | `note editing preserves the marks` |
+
+The browser fixture controls API response delivery without implementing daemon
+persistence. Removing the annotation focus guard must fail the typing proof;
+making that guard global must fail the workspace-switch proof. Keep real terminal
+focus in these tests. A mocked terminal div cannot establish keyboard ownership.
+
+For native clicks, arm `arm_native_pointer_witness` with the expected DOM selector
+before posting OS input, then await `wait_native_pointer_witness`. The receipt
+reports the first trusted mouseup's coordinates and target, including a wrong
+target. A missing receipt fails through the automation client's request deadline.
+Synthetic `dom_click` events do not satisfy it. Check the receipt before asserting
+focus so a delivery failure identifies the actual boundary that failed.
+
 ## Scenarios that were merged into another id
 
 A family that rebuilt the same world to assert one more thing now shares one

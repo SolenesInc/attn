@@ -40,6 +40,7 @@ import {
   disarmRefreshWitness,
   readRefreshWitness,
 } from './worktreesRefreshWitness';
+import { armNativePointerWitness, disarmNativePointerWitness, waitForNativePointerWitness } from './nativePointerWitness';
 
 const UI_AUTOMATION_REQUEST_EVENT = 'attn://ui-automation/request';
 const UI_AUTOMATION_RESPONSE_EVENT = 'attn://ui-automation/response';
@@ -3288,6 +3289,17 @@ export function useUiAutomationBridge({
       case 'get_annotation_state': {
         return annotationSurfaceState();
       }
+      case 'arm_native_pointer_witness': {
+        const selector = typeof payload.selector === 'string' ? payload.selector : '';
+        if (!selector) throw new Error('arm_native_pointer_witness requires selector');
+        armNativePointerWitness(selector);
+        return { armed: true };
+      }
+      case 'wait_native_pointer_witness': {
+        const receipt = await waitForNativePointerWitness();
+        await settleUi();
+        return receipt;
+      }
       case 'drag_pane_selection': {
         const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
         const session = sessions.find((entry) => entry.id === sessionId);
@@ -4221,6 +4233,7 @@ export function useUiAutomationBridge({
     return () => {
       void unlistenPromise.then((unlisten) => unlisten());
       disarmRefreshWitness();
+      disarmNativePointerWitness();
     };
   }, []);
 }
