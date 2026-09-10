@@ -5,10 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/victorarias/attn/internal/sessioncost"
 )
 
-// Redacted captures from Claude Code 2.1.233 and Codex 0.147.0: record shapes and
-// token counts unchanged, content replaced.
+// Redacted Claude Code 2.1.233 and Codex 0.147.0 captures: shapes and counts kept,
+// content replaced. The pi capture is verbatim, plus hand-written guardian entries.
 func usageFixture(t *testing.T, name string) string {
 	t.Helper()
 	path := filepath.Join("testdata", "usage", name)
@@ -147,6 +149,70 @@ func TestSupportsUsage(t *testing.T) {
 	for _, agent := range []string{"copilot", "shell", "plugin-driver", ""} {
 		if SupportsUsage(agent) {
 			t.Fatalf("SupportsUsage(%q) = true", agent)
+		}
+	}
+}
+func TestFollowerExtractsPiAgentAndGuardianUsage(t *testing.T) {
+	follower, err := NewFollower(usageFixture(t, "pi-0.83.0.jsonl"), "pi", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	batch, err := follower.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(batch.Usage) != 8 {
+		t.Fatalf("usage = %+v, want six assistant messages and two guardian decisions", batch.Usage)
+	}
+
+	first := batch.Usage[0]
+	if first.Key != "pi:a4e94c7b" || first.Model != "deepseek-v4-flash" || first.Purpose != sessioncost.PurposeAgent {
+		t.Fatalf("first assistant identity = %+v", first)
+	}
+	if first.InputTokens != 5379 || first.OutputTokens != 232 || first.CacheReadTokens != 0 || first.CacheWriteUnclassifiedTokens != 0 {
+		t.Fatalf("first assistant tokens = %+v", first)
+	}
+	if first.ReportedCostUSD != 0.0013365000000000002 {
+		t.Fatalf("first assistant reported cost = %v", first.ReportedCostUSD)
+	}
+
+	cached := batch.Usage[1]
+	if cached.Key != "pi:7ab076d2" || cached.CacheReadTokens != 5504 || cached.InputTokens != 474 {
+		t.Fatalf("second assistant usage = %+v", cached)
+	}
+
+	for _, usage := range batch.Usage[:6] {
+		if usage.Purpose != sessioncost.PurposeAgent {
+			t.Fatalf("assistant message priced as %q: %+v", usage.Purpose, usage)
+		}
+	}
+
+	guardian := batch.Usage[6]
+	if guardian.Key != "pi:c1f0a2b7" || guardian.Purpose != sessioncost.PurposeGuardian || guardian.Model != "deepseek-v4-flash" {
+		t.Fatalf("guardian identity = %+v", guardian)
+	}
+	if guardian.InputTokens != 812 || guardian.OutputTokens != 64 || guardian.ReportedCostUSD != 0.00022088 {
+		t.Fatalf("guardian usage = %+v", guardian)
+	}
+	second := batch.Usage[7]
+	if second.Key != "pi:e5b41d90" || second.Purpose != sessioncost.PurposeGuardian || second.CacheReadTokens != 768 {
+		t.Fatalf("second guardian usage = %+v", second)
+	}
+}
+
+func TestPiExtractorIgnoresEntriesThatAreNotPricedTraffic(t *testing.T) {
+	extractor := NewUsageExtractor("pi")
+	lines := map[string]string{
+		"user message":       `{"type":"message","id":"u1","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}`,
+		"tool result":        `{"type":"message","id":"t1","message":{"role":"toolResult","content":[{"type":"text","text":"ok"}]}}`,
+		"model change":       `{"type":"model_change","id":"m1","provider":"opencode-go","modelId":"deepseek-v4-flash"}`,
+		"other custom entry": `{"type":"custom","id":"x1","customType":"attn-note","data":{"text":"ignored"}}`,
+		"assistant so far":   `{"type":"message","id":"a1","message":{"role":"assistant","model":"deepseek-v4-flash"}}`,
+		"empty guardian":     `{"type":"custom","id":"g1","customType":"attn-guardian-usage","data":{"model":"deepseek-v4-flash","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"cost":{"total":0}}}}`,
+	}
+	for name, line := range lines {
+		if usage, ok := extractor.Observe([]byte(line), "ignored"); ok {
+			t.Fatalf("%s produced usage: %+v", name, usage)
 		}
 	}
 }

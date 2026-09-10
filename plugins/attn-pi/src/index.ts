@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { AttnRPCClient } from "./attn-rpc";
 import { PiDriver } from "./driver";
-import { RelayServer, type RelayConnection } from "./relay";
+import { RelayServer } from "./relay";
 import type { DriverSpawnParams, SessionClosedParams } from "./types";
 
 const pluginVersion = "0.2.0";
@@ -29,14 +29,8 @@ async function runPlugin(): Promise<void> {
   let driver: PiDriver;
   const relay = new RelayServer({
     socketPath: relaySocketPath(),
-    delegate: {
-      suiteHello: (connection: RelayConnection, params: unknown) => driver.suiteHello(connection, params),
-      suiteReportState: (params: unknown) => driver.suiteReportState(params),
-      suiteReportStop: (params: unknown) => driver.suiteReportStop(params),
-      suiteReportDenial: (params: unknown) => driver.suiteReportDenial(params),
-      suiteReportInputTaken: (params: unknown) => driver.suiteReportInputTaken(params),
-      suiteReportPullRequest: (params: unknown) => driver.suiteReportPullRequest(params),
-    },
+    delegate: () => driver,
+    log: (line: string) => console.error(`attn-pi: ${line}`),
   });
   driver = new PiDriver({ rpc, relay, suitePath: suitePath() });
 
@@ -45,7 +39,7 @@ async function runPlugin(): Promise<void> {
   rpc.handle("driver.resume", (params) => driver.resume(params as DriverSpawnParams));
   rpc.handle("driver.session_closed", (params) => driver.sessionClosed(params as SessionClosedParams));
   rpc.handle("driver.deliver_message", (params) => driver.deliverMessage(params));
-  rpc.handle("automode.models", () => driver.models());
+  rpc.handle("automode.policy_changed", (params) => driver.policyChanged(params));
   rpc.handle("driver.models", () => driver.delegationModels());
 
   await rpc.connect();

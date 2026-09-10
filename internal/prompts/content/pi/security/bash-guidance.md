@@ -1,1 +1,0 @@
-Use bash with the current Pi execution permissions. Existing build-cache grants need no sandbox request. When additional access is needed and review is available, submit a narrow bash.sandbox request directly. An OS error is not an auto-mode refusal; follow a refusal's stated recovery instructions.

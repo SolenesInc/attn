@@ -506,27 +506,6 @@ describe('createScenarioRunner agent tripwire', () => {
       isRecordingEnabled: () => false,
     })).toThrow(/UNLISTED-PROBE.*no scenarioCatalog\.mjs entry/s);
   });
-
-  it('arms what the catalog says the scenario may still run for real', () => {
-    const armTripwire = vi.fn(() => ({ marker: 'm', ledgerPath: '/dev/null', read: () => [], readReceipt: () => null }));
-    createScenarioRunner({
-      appPath: '/tmp/test-attn.app',
-      artifactsDir: path.join(tmpDir, 'artifacts'),
-      sessionRootDir: path.join(tmpDir, 'sessions'),
-    }, {
-      scenarioId: 'PI-AUTOMODE',
-      tier: 'test',
-    }, {
-      assertBuildMatches: vi.fn(),
-      armTripwire,
-      ensureDaemonArmed: vi.fn(),
-      ensureMockGitHub: vi.fn(() => null),
-      emitRunnerVerdict: vi.fn(),
-      isRecordingEnabled: () => false,
-    });
-
-    expect(armTripwire.mock.calls[0][0]).toMatchObject({ scenarioId: 'PI-AUTOMODE', allowRealAgents: ['pi'] });
-  });
 });
 
 describe('createScenarioRunner recording contract', () => {

@@ -14,7 +14,7 @@ Install Lima with `brew install lima`, then run from the repository:
 pnpm --dir app real-app:linux provision
 pnpm --dir app real-app:linux run -- bash -c 'cd plugins/attn-pi && bun install --frozen-lockfile && bun test'
 pnpm --dir app real-app:linux build
-pnpm --dir app real-app:linux test -- --scenario pi-automode
+pnpm --dir app real-app:linux test -- --scenario automode-environment
 ```
 
 `provision` creates or starts `attn-linux` and installs the tools. The template
@@ -31,7 +31,7 @@ An Apple Silicon host runs ARM64 Linux. Keep x86_64 verification in CI.
 ```sh
 pnpm --dir app real-app:linux provision --provider orb --name attn-linux
 pnpm --dir app real-app:linux provision --provider ssh --target tester@linux
-pnpm --dir app real-app:linux test --provider ssh --target tester@linux -- --scenario pi-automode
+pnpm --dir app real-app:linux test --provider ssh --target tester@linux -- --scenario automode-environment
 ```
 
 The SSH provider can use `--ssh-config <file>`. It provisions an existing Ubuntu

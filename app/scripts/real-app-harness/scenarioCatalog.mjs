@@ -283,27 +283,9 @@ export const scenarioCatalog = [
     timeoutMs: 240_000,
   },
   {
-    id: 'pi-security',
-    runnerId: 'PI-SECURITY',
-    label: 'Pi sandbox and credential filtering',
-    command: ['pnpm', 'run', 'real-app:scenario-pi-security'],
-    allowRealAgents: ['pi'],
-    timeoutMs: 360_000,
-  },
-  {
-    id: 'pi-automode',
-    runnerId: 'PI-AUTOMODE',
-    allowRealAgents: ['pi'],
-    label: 'pi auto mode: envelope invisibility, a denial and its surfaces, a conversational grant, the circuit breaker',
-    command: ['pnpm', 'run', 'real-app:scenario-pi-automode'],
-    // Needs `pi` on PATH and the attn-pi plugin installed, but no credentials and
-    // no network: the model and the classifier are both a loopback stub.
-    timeoutMs: 900_000,
-  },
-  {
     id: 'automode-environment',
     runnerId: 'AutoModeEnvironment',
-    label: 'Auto mode: a slot written from the pane and from the CLI, what an unfilled one says, and that a named model is what turns auto mode on',
+    label: 'Auto mode: a slot written from the pane and from the CLI, and what an unfilled one says',
     command: ['pnpm', 'run', 'real-app:scenario-automode-environment'],
     timeoutMs: 300_000,
   },

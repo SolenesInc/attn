@@ -1,1 +1,1 @@
-An approved request applies only to this execution and its children. Protected paths and credential filtering remain enforced. Follow any review refusal's instructions; do not repeat an unchanged request or evade it through another tool.
+Protected paths and credential filtering are enforced on every command, whatever the approval policy allows. Follow a rejection's instructions; do not repeat an unchanged command or evade it through another tool.

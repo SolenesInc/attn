@@ -1,4 +1,6 @@
 
+import type { NetworkDecision, NetworkProtocol } from "../netproxy";
+
 // `dropped_reports` counts reports the suite could not hand over since its last hello; it
 // cannot log. `pi_state` is taken only when attn has nothing, or reconnects reopen turns.
 export type RelayHelloParams = {
@@ -8,6 +10,10 @@ export type RelayHelloParams = {
   reason: string;
   dropped_reports?: number;
   pi_state?: RelayHelloState;
+  /** How an adopted run recovers its proxy credentials: the suite still holds the value
+   * a past spawn minted, and a restarted driver has no other way to learn it. */
+  proxy_credentials?: string;
+  proxy_commands?: ProxyCommands;
 };
 export type RelayHelloState = "idle" | "working" | "pending_approval";
 export type RelayHelloResult = { ok: true };
@@ -16,6 +22,7 @@ export type RelayReportStateParams = { token: string; state: RelaySuiteState };
 export type RelayReportInputTakenParams = { token: string; input_id: string };
 export type RelayReportStopParams = { token: string; assistant_text: string; aborted?: boolean };
 export type RelayReportPullRequestParams = { token: string; url: string };
+export type RelayReportSessionFileParams = { token: string; path: string };
 export type RelayReportDenialParams = {
   token: string;
   tool: string;
@@ -25,15 +32,36 @@ export type RelayReportDenialParams = {
   at: string;
 };
 
+// A "don't ask again" answer inside a session is a human promoting, so the daemon
+// records the proposal and applies it in one move.
+export type RelayReportExecPolicyAmendmentParams = {
+  token: string;
+  pattern: string[];
+  decision: string;
+  justification?: string;
+};
+export type RelayReportNetworkAmendmentParams = { token: string; host: string; decision: string };
+
 export type RelayDeliverMessageParams = { input_id: string; text: string };
 export type RelayDeliverMessageResult = { delivered: boolean };
+
+export type ProxyCommands = { revision: number; credentials: string[] };
+export type RelayReportProxyCommandsParams = { token: string; proxy_commands: ProxyCommands };
+
+export type RelayNetworkDecideParams = { credentials: string; host: string; port: number; protocol: NetworkProtocol };
+export type RelayNetworkDecideResult = NetworkDecision;
 
 export const relayMethods = {
   hello: "suite.hello",
   reportState: "suite.report_state",
+  reportProxyCommands: "suite.report_proxy_commands",
   reportStop: "suite.report_stop",
   reportDenial: "suite.report_denial",
   reportInputTaken: "suite.report_input_taken",
   reportPullRequest: "suite.report_pull_request",
+  reportSessionFile: "suite.report_session_file",
+  reportExecPolicyAmendment: "suite.report_execpolicy_amendment",
+  reportNetworkAmendment: "suite.report_network_amendment",
   deliverMessage: "driver.deliver_message",
+  networkDecide: "driver.network_decide",
 } as const;

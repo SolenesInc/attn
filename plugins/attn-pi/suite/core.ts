@@ -1,13 +1,23 @@
 // Duck-typed against pi's ExtensionAPI/ExtensionContext (verified against pi v0.80.10) so
 // this file loads under `bun test` with no pi runtime present.
+import { randomUUID } from "node:crypto";
+import type { ProxyAddress } from "../sandbox";
 import { createConnection, type Socket } from "node:net";
 import {
   relayMethods,
   type RelayDeliverMessageParams,
   type RelayDeliverMessageResult,
   type RelayHelloState,
+  type RelayNetworkDecideParams,
+  type RelayNetworkDecideResult,
 } from "../src/relay-protocol";
+import type { Decider } from "../netproxy";
 import { pullRequestsCreated } from "../src/pullrequest";
+
+export type RelaySuiteHandlers = {
+  deliverMessage(params: RelayDeliverMessageParams): Promise<RelayDeliverMessageResult>;
+  networkDecide(params: RelayNetworkDecideParams): Promise<RelayNetworkDecideResult>;
+};
 
 export type SessionStartReason = "startup" | "reload" | "new" | "resume" | "fork";
 
@@ -28,7 +38,9 @@ export type ToolResultEvent = {
 };
 export type MessageStartEvent = { type: "message_start"; message: AgentMessageLike };
 
-export type SessionManagerLike = { getSessionId(): string };
+// getSessionFile is absent on pi builds before 0.83 and empty until the session
+// file exists, so the report is skipped rather than sent as a guess.
+export type SessionManagerLike = { getSessionId(): string; getSessionFile?(): string | undefined };
 
 export type ExtensionContextLike = {
   isIdle(): boolean;
@@ -80,7 +92,7 @@ export class RelaySuiteClient {
 
   constructor(
     private readonly socketPath: string,
-    private readonly onDeliverMessage: (params: RelayDeliverMessageParams) => Promise<RelayDeliverMessageResult>,
+    private readonly handlers: RelaySuiteHandlers,
     private readonly helloParams: () => unknown | undefined,
   ) {}
 
@@ -140,6 +152,8 @@ export class RelaySuiteClient {
     }
   }
 
+  /** Rejects on a dropped report: this channel carries answers the user already
+   * gave, and the caller is the only one who can tell them it did not land. */
   async send(method: string, params: unknown): Promise<void> {
     try {
       const socket = await this.ensureConnected();
@@ -147,8 +161,9 @@ export class RelaySuiteClient {
       // token", so the hello goes first.
       this.sayHello(socket);
       await this.request(socket, method, params);
-    } catch {
+    } catch (error) {
       this.dropped += 1;
+      throw error;
     }
   }
 
@@ -281,16 +296,33 @@ export class RelaySuiteClient {
   }
 
   private async respond(request: JSONRPCRequest): Promise<void> {
-    if (request.method !== relayMethods.deliverMessage) {
-      this.send_(request.id, { error: { code: -32601, message: `unknown method ${request.method}` } });
+    // A network decision can outlive the socket that asked for it. Answering on
+    // whatever socket is current would hand the reply to a different conversation.
+    const asked = this.socket;
+    const reply = (outcome: { result: unknown } | { error: { code: number; message: string } }): void => {
+      if (this.socket !== asked || asked === undefined || asked.destroyed) return;
+      this.send_(request.id, outcome);
+    };
+    const handler = this.handlerFor(request.method);
+    if (!handler) {
+      reply({ error: { code: -32601, message: `unknown method ${request.method}` } });
       return;
     }
     try {
-      const result = await this.onDeliverMessage(request.params as RelayDeliverMessageParams);
-      this.send_(request.id, { result });
+      reply({ result: await handler(request.params) });
     } catch (error) {
-      this.send_(request.id, { error: { code: -32603, message: error instanceof Error ? error.message : String(error) } });
+      reply({ error: { code: -32603, message: error instanceof Error ? error.message : String(error) } });
     }
+  }
+
+  private handlerFor(method: string): ((params: unknown) => Promise<unknown>) | undefined {
+    if (method === relayMethods.deliverMessage) {
+      return (params) => this.handlers.deliverMessage(params as RelayDeliverMessageParams);
+    }
+    if (method === relayMethods.networkDecide) {
+      return (params) => this.handlers.networkDecide(params as RelayNetworkDecideParams);
+    }
+    return undefined;
   }
 
   private send_(id: JSONRPCID, outcome: { result: unknown } | { error: { code: number; message: string } }): void {
@@ -308,6 +340,9 @@ export type SuiteEnv = {
   socketPath: string | undefined;
   token: string | undefined;
   piVersion: string;
+  /** This run's proxy credentials, which the decider sees. Never the relay token: the
+   * sandboxed command holds these, so they must not authenticate the approval channel. */
+  proxyCredentials?: string;
 };
 
 export type SuiteDenial = {
@@ -319,7 +354,13 @@ export type SuiteDenial = {
 };
 
 export class AttnPiSuite {
+  /** Set by the approval orchestrator; until then every held connection is denied. */
+  networkDecider: Decider | undefined;
+
   private readonly piVersion: string;
+  private readonly proxyCredentials: string;
+  private proxyCommandRevision = 0;
+  private readonly proxyCommands = new Set<string>();
   private readonly relay: { client: RelaySuiteClient; token: string } | undefined;
 
   private currentPi: ExtensionAPILike | undefined;
@@ -332,12 +373,17 @@ export class AttnPiSuite {
 
   constructor(env: SuiteEnv) {
     this.piVersion = env.piVersion;
+    this.proxyCredentials = env.proxyCredentials?.trim() ?? "";
     const socketPath = env.socketPath?.trim();
     const token = env.token?.trim();
     this.relay =
       socketPath && token
         ? {
-            client: new RelaySuiteClient(socketPath, this.handleDeliverMessage, () => this.helloParams("reconnect")),
+            client: new RelaySuiteClient(
+              socketPath,
+              { deliverMessage: this.handleDeliverMessage, networkDecide: this.handleNetworkDecide },
+              () => this.helloParams("reconnect"),
+            ),
             token,
           }
         : undefined;
@@ -353,7 +399,16 @@ export class AttnPiSuite {
       pi_version: this.piVersion,
       reason,
       pi_state: this.currentState(ctx),
+      ...(this.proxyCredentials ? { proxy_credentials: this.proxyCredentials } : {}),
+      proxy_commands: this.proxyCommandSnapshot(),
     };
+  }
+
+  private reportSessionFile(ctx: ExtensionContextLike): void {
+    const relay = this.relay;
+    const path = ctx.sessionManager.getSessionFile?.()?.trim();
+    if (!relay || !path) return;
+    relay.client.reportFact("session_file", relayMethods.reportSessionFile, { token: relay.token, path });
   }
 
   private currentState(ctx: ExtensionContextLike): RelayHelloState {
@@ -370,6 +425,7 @@ export class AttnPiSuite {
       this.currentContext = ctx;
       const params = this.helloParams(event.reason);
       if (params) relay.client.announce(params);
+      this.reportSessionFile(ctx);
     });
 
     pi.on("agent_start", (_event, ctx) => {
@@ -426,22 +482,93 @@ export class AttnPiSuite {
     });
   }
 
+  // A denial is attn's own bookkeeping, not an answer the user is waiting on, so a
+  // dropped one stays with the counter that rides the next hello.
   reportDenial(denial: SuiteDenial): void {
     const relay = this.relay;
     if (!relay) return;
-    void relay.client.send(relayMethods.reportDenial, {
+    void relay.client
+      .send(relayMethods.reportDenial, {
+        token: relay.token,
+        tool: denial.tool,
+        action: denial.action,
+        reason: denial.reason,
+        rule: denial.rule,
+        at: denial.at,
+      })
+      .catch(() => {});
+  }
+
+  async reportExecPolicyAmendment(amendment: { pattern: string[]; decision: string; justification?: string }): Promise<void> {
+    const relay = this.relay;
+    if (!relay) return;
+    await relay.client.send(relayMethods.reportExecPolicyAmendment, {
       token: relay.token,
-      tool: denial.tool,
-      action: denial.action,
-      reason: denial.reason,
-      rule: denial.rule,
-      at: denial.at,
+      pattern: amendment.pattern,
+      decision: amendment.decision,
+      ...(amendment.justification ? { justification: amendment.justification } : {}),
     });
+  }
+
+  async reportNetworkAmendment(amendment: { host: string; decision: string }): Promise<void> {
+    const relay = this.relay;
+    if (!relay) return;
+    await relay.client.send(relayMethods.reportNetworkAmendment, {
+      token: relay.token,
+      host: amendment.host,
+      decision: amendment.decision,
+    });
+  }
+
+  private proxyCommandSnapshot() {
+    return { revision: this.proxyCommandRevision, credentials: [...this.proxyCommands] };
+  }
+
+  async acquireCommandProxy(proxy: ProxyAddress, signal?: AbortSignal): Promise<{ proxy: ProxyAddress; release: () => void }> {
+    const relay = this.relay;
+    if (!relay) throw new Error("command network proxy requires the attn relay");
+    signal?.throwIfAborted();
+    const credentials = randomUUID();
+    this.proxyCommands.add(credentials);
+    this.proxyCommandRevision += 1;
+    const release = () => {
+      if (!this.proxyCommands.delete(credentials)) return;
+      this.proxyCommandRevision += 1;
+      relay.client.reportFact("proxy-commands", relayMethods.reportProxyCommands, {
+        token: relay.token, proxy_commands: this.proxyCommandSnapshot(),
+      });
+    };
+    let abort: (() => void) | undefined;
+    try {
+      const registration = relay.client.send(relayMethods.reportProxyCommands, {
+        token: relay.token, proxy_commands: this.proxyCommandSnapshot(),
+      });
+      await new Promise<void>((resolve, reject) => {
+        abort = () => reject(signal?.reason ?? new Error("command cancelled"));
+        signal?.addEventListener("abort", abort, { once: true });
+        registration.then(resolve, reject);
+        if (signal?.aborted) abort();
+      });
+      return { proxy: { ...proxy, credentials }, release };
+    } catch (error) {
+      release();
+      throw error;
+    } finally {
+      if (abort) signal?.removeEventListener("abort", abort);
+    }
   }
 
   close(): void {
     this.relay?.client.close();
   }
+
+  private readonly handleNetworkDecide = async (
+    params: RelayNetworkDecideParams,
+  ): Promise<RelayNetworkDecideResult> => {
+    const decider = this.networkDecider;
+    if (!decider) return { decision: "deny" };
+    return decider(params);
+  };
 
   private readonly handleDeliverMessage = async (
     params: RelayDeliverMessageParams,

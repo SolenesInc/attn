@@ -1,0 +1,5 @@
+kind: fixed
+area: pi
+change: A "don't ask again" answer attn never recorded says so in the session instead of vanishing.
+symptom: Answering an approval card with a host or command amendment left nothing in `attn automode show` and no trace anywhere along the way.
+notes: The daemon now logs every refused plugin request, the pi driver logs every relay handler failure, and the suite tells the user the amendment holds for this session only.
