@@ -218,6 +218,12 @@ export async function ptyResize(request: {
     if (!mockSessions.has(request.id)) {
       return;
     }
+    emitPtyEvent({
+      event: 'local_resize',
+      id: request.id,
+      cols: request.cols,
+      rows: request.rows,
+    });
     return;
   }
   if (!backend) {

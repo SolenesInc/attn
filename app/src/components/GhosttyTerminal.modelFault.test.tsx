@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const control = {
-    failFirstRendererNextRender: false,
+    renderFailuresRemaining: 0,
     useLargeFit: false,
   };
   const terminals: Array<{
@@ -18,7 +18,6 @@ const mocks = vi.hoisted(() => {
 
   const createTerminal = () => {
     createTerminalCalls.push([]);
-    const index = terminals.length;
     const terminal = {
       cols: 80,
       rows: 24,
@@ -26,7 +25,6 @@ const mocks = vi.hoisted(() => {
       write: () => undefined,
       resize(cols: number, rows: number) {
         terminal.resizeCalls.push([cols, rows]);
-        if (index === 1) throw new Error('replacement initial fit failed');
         terminal.cols = cols;
         terminal.rows = rows;
       },
@@ -60,9 +58,9 @@ const mocks = vi.hoisted(() => {
 
     resize() {}
     render() {
-      if (this.id === 0 && control.failFirstRendererNextRender) {
-        control.failFirstRendererNextRender = false;
-        throw new Error('original model render failed');
+      if (control.renderFailuresRemaining > 0) {
+        control.renderFailuresRemaining -= 1;
+        throw new Error(this.id === 0 ? 'original model render failed' : 'replacement initial fit failed');
       }
       return {
         quads: 0,
@@ -150,7 +148,7 @@ describe('GhosttyTerminal model-fault containment', () => {
       expect(mocks.resizeCallbacks).toHaveLength(1);
 
       mocks.control.useLargeFit = true;
-      mocks.control.failFirstRendererNextRender = true;
+      mocks.control.renderFailuresRemaining = 2;
       await act(async () => {
         mocks.resizeCallbacks[0]([], {} as ResizeObserver);
       });
@@ -163,7 +161,7 @@ describe('GhosttyTerminal model-fault containment', () => {
 
       // The first replacement reached its initial fit and faulted there. It
       // never became ready; only the third, healthy model did.
-      expect(mocks.terminals[1].resizeCalls).toEqual([[81, 24]]);
+      expect(mocks.renderers).toHaveLength(3);
       expect(mocks.noteModelFaultCalls).toHaveLength(2);
       expect(mocks.noteRecoveryCalls.map(([, detail]) => (detail as { outcome: string }).outcome)).toEqual([
         'modelFault',

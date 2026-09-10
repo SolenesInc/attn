@@ -884,24 +884,25 @@ func (b *WorkerBackend) Input(ctx context.Context, sessionID string, data []byte
 	return err
 }
 
-func (b *WorkerBackend) Resize(ctx context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (bool, error) {
+func (b *WorkerBackend) Resize(ctx context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (ResizeResult, error) {
 	session, err := b.getSession(sessionID)
 	if err != nil {
-		return false, err
+		return ResizeResult{}, err
 	}
 	var result ptyworker.ResizeResult
 	retried, err := b.callResultPersistent(ctx, session, ptyworker.MethodResize, ptyworker.ResizeParams{
 		Cols: cols, Rows: rows, XPixel: xpixel, YPixel: ypixel,
 	}, &result)
 	if err != nil {
-		return false, err
+		return ResizeResult{}, err
 	}
+	streamOrdered := result.StreamOrdered != nil && *result.StreamOrdered
 	// The first request may have applied before its connection failed; preserve
 	// the broadcast after any retry even when that retry reports a no-op.
 	if retried {
-		return true, nil
+		return ResizeResult{Changed: true, StreamOrdered: streamOrdered}, nil
 	}
-	return resizeResultChanged(result), nil
+	return ResizeResult{Changed: resizeResultChanged(result), StreamOrdered: streamOrdered}, nil
 }
 
 func resizeResultChanged(result ptyworker.ResizeResult) bool {
@@ -2676,6 +2677,22 @@ func convertWorkerEvent(evt ptyworker.EventEnvelope) (OutputEvent, bool) {
 			reason = *evt.Reason
 		}
 		return OutputEvent{Kind: OutputEventKindDesync, Reason: reason}, true
+	case ptyworker.EventResize:
+		if evt.Cols == nil || evt.Rows == nil {
+			return OutputEvent{}, false
+		}
+		var xpixel, ypixel uint16
+		if evt.XPixel != nil {
+			xpixel = *evt.XPixel
+		}
+		if evt.YPixel != nil {
+			ypixel = *evt.YPixel
+		}
+		return OutputEvent{
+			Kind: OutputEventKindResize,
+			Cols: *evt.Cols, Rows: *evt.Rows,
+			XPixel: xpixel, YPixel: ypixel,
+		}, true
 	case ptyworker.EventKittyPlacements:
 		seq := uint32(0)
 		if evt.Seq != nil {

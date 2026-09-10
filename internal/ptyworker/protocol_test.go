@@ -172,4 +172,7 @@ func TestAdditiveAttachAndResizeFieldsPreserveLegacyDefaults(t *testing.T) {
 	if oldResize.Changed != nil {
 		t.Fatalf("legacy resize changed = %v, want absent", *oldResize.Changed)
 	}
+	if oldResize.StreamOrdered != nil {
+		t.Fatalf("legacy resize stream ordering = %v, want absent", *oldResize.StreamOrdered)
+	}
 }

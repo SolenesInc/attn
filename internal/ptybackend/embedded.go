@@ -69,12 +69,19 @@ func (b *EmbeddedBackend) Attach(_ context.Context, sessionID, subscriberID stri
 			Placements: update.Placements,
 		})
 	})
+	onResize := pty.OnResize(func(update pty.ResizeUpdate) {
+		_ = stream.publish(OutputEvent{
+			Kind: OutputEventKindResize,
+			Cols: update.Cols, Rows: update.Rows,
+			XPixel: update.XPixel, YPixel: update.YPixel,
+		})
+	})
 
 	omitReplay := len(opts) > 0 && opts[len(opts)-1].OmitReplay
 	var info pty.AttachInfo
 	var err error
 	if omitReplay {
-		info, err = b.manager.Subscribe(sessionID, subscriberID, send, onDrop, onPlacements)
+		info, err = b.manager.Subscribe(sessionID, subscriberID, send, onDrop, onPlacements, onResize)
 	} else {
 		info, err = b.manager.Attach(
 			sessionID,
@@ -84,6 +91,7 @@ func (b *EmbeddedBackend) Attach(_ context.Context, sessionID, subscriberID stri
 			// Placements ride the byte stream so a set stays ordered behind the
 			// output it was measured on.
 			onPlacements,
+			onResize,
 		)
 	}
 	if err != nil {
@@ -119,8 +127,9 @@ func (b *EmbeddedBackend) Input(_ context.Context, sessionID string, data []byte
 	return b.manager.Input(sessionID, data)
 }
 
-func (b *EmbeddedBackend) Resize(_ context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (bool, error) {
-	return b.manager.Resize(sessionID, cols, rows, xpixel, ypixel)
+func (b *EmbeddedBackend) Resize(_ context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (ResizeResult, error) {
+	changed, err := b.manager.Resize(sessionID, cols, rows, xpixel, ypixel)
+	return ResizeResult{Changed: changed, StreamOrdered: true}, err
 }
 
 func (b *EmbeddedBackend) SetTheme(_ context.Context, sessionID string, theme pty.TerminalTheme) error {

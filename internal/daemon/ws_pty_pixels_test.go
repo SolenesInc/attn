@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"sync"
 	"syscall"
@@ -20,13 +21,14 @@ type recordingResizeBackend struct {
 	mu      sync.Mutex
 	calls   []resizeCall
 	changed bool
+	ordered bool
 }
 
-func (b *recordingResizeBackend) Resize(_ context.Context, _ string, cols, rows, xpixel, ypixel uint16) (bool, error) {
+func (b *recordingResizeBackend) Resize(_ context.Context, _ string, cols, rows, xpixel, ypixel uint16) (ptybackend.ResizeResult, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.calls = append(b.calls, resizeCall{cols, rows, xpixel, ypixel})
-	return b.changed, nil
+	return ptybackend.ResizeResult{Changed: b.changed, StreamOrdered: b.ordered}, nil
 }
 
 func (b *recordingResizeBackend) lastCall(t *testing.T) resizeCall {
@@ -92,7 +94,7 @@ func TestPtyResizeCarriesPixelGeometryToTheBackendAndTheEcho(t *testing.T) {
 	}
 }
 
-func TestPtyResizeDoesNotBroadcastAnUnchangedGeometry(t *testing.T) {
+func TestPtyResizeBroadcastsLegacyWorkerNoOp(t *testing.T) {
 	d, backend, capture := newResizeDaemon(t)
 	backend.changed = false
 
@@ -104,9 +106,44 @@ func TestPtyResizeDoesNotBroadcastAnUnchangedGeometry(t *testing.T) {
 	if got := backend.lastCall(t); got != (resizeCall{40, 12, 720, 540}) {
 		t.Fatalf("the backend was resized with %+v, want the reported geometry", got)
 	}
+	event := resizedEvent(t, capture)
+	if protocol.Deref(event.Cols) != 40 || protocol.Deref(event.Rows) != 12 {
+		t.Fatalf("pty_resized echoed %v x %v cells, want 40 x 12", event.Cols, event.Rows)
+	}
+}
+
+func TestPtyResizeDoesNotBroadcastAheadOfAStreamOrderedResize(t *testing.T) {
+	d, backend, capture := newResizeDaemon(t)
+	backend.ordered = true
+
+	d.handlePtyResize(nil, &protocol.PtyResizeMessage{ID: "sess-1", Cols: 40, Rows: 12})
+
 	for _, event := range capture.snapshot() {
 		if event.Event == protocol.EventPtyResized {
-			t.Fatal("unchanged geometry reached the wire")
+			t.Fatal("stream-ordered geometry was also broadcast out of band")
+		}
+	}
+}
+
+func TestPtyStreamForwardsResizeBetweenAdjacentOutput(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	client := spawnTestClient()
+	stream := newFakeOutputStream()
+	stream.events <- ptybackend.OutputEvent{Kind: ptybackend.OutputEventKindOutput, Data: []byte("before"), Seq: 1}
+	stream.events <- ptybackend.OutputEvent{Kind: ptybackend.OutputEventKindResize, Cols: 80, Rows: 24}
+	stream.events <- ptybackend.OutputEvent{Kind: ptybackend.OutputEventKindOutput, Data: []byte("after"), Seq: 2}
+	_ = stream.Close()
+
+	d.forwardPTYStreamEvents(client, "sess-1", stream)
+
+	for index, want := range []string{protocol.EventPtyOutput, protocol.EventPtyResized, protocol.EventPtyOutput} {
+		message := <-client.send
+		var event protocol.WebSocketEvent
+		if err := json.Unmarshal(message.payload, &event); err != nil {
+			t.Fatalf("decode event %d: %v", index, err)
+		}
+		if event.Event != want {
+			t.Fatalf("event %d = %q, want %q", index, event.Event, want)
 		}
 	}
 }

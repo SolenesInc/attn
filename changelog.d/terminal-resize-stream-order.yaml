@@ -1,0 +1,5 @@
+kind: fixed
+area: terminal
+change: >
+  Terminal panes now change grid size at an ordered point in their PTY output,
+  so a shell redraw after a sibling closes cannot erase completed output.

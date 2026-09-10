@@ -738,7 +738,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
             match session.resize(params.cols, params.rows, params.xpixel, params.ypixel) {
                 Ok(changed) => connection.send(response(
                     &request.id,
-                    json!({"ok": true, "changed": changed}),
+                    json!({"ok": true, "changed": changed, "stream_ordered": true}),
                 )),
                 Err(message) => connection.fail(&request.id, ERR_IO, message),
             }

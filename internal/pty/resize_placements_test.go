@@ -13,7 +13,7 @@ import (
 
 func newHeldKittySpawn(t *testing.T, id, payload string) *kittySpawn {
 	t.Helper()
-	return newKittySpawnCmd(t, id, payload, "read release; cat %s; read hold")
+	return newKittySpawnCmd(t, id, payload, "stty -echo; read release; cat %s; read hold")
 }
 
 // Blocking here keeps the resize from racing the chunk that placed the image.

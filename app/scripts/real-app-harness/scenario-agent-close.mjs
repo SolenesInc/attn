@@ -26,6 +26,7 @@ import { recordingEnabled } from './windowRecording.mjs';
 const BRIEF = 'BRIEF7 hold this seed until the dispatcher closes you';
 const REASON = 'REASON3 its report landed, nothing left to drive';
 const SELF_REASON = 'REASON4 I am done and nobody is waiting on me';
+const REPRO_PROMPT = `${'p'.repeat(78)}$ `;
 
 const PACE_MS = recordingEnabled() ? 1_400 : 0;
 
@@ -129,6 +130,14 @@ async function main() {
     await launchFreshAppAndConnect(client, observer);
     dispatcher = await runner.step('open_dispatcher', () => openPane(client, observer, runner, 'dispatcher'));
     sibling = await runner.step('open_sibling', () => openPane(client, observer, runner, 'sibling'));
+
+    await runner.step('use_a_wrapped_bash_prompt', async () => {
+      await client.request('write_pane', {
+        ...dispatcher,
+        text: 'exec /bin/bash --noprofile --norc',
+      });
+      await runInPane(client, dispatcher, `PS1='${REPRO_PROMPT}'`, '');
+    });
 
     delegate = await runner.step('dispatch_a_delegate', async () => {
       const known = new Set(observer.sessionsById.keys());

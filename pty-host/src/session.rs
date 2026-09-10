@@ -21,7 +21,7 @@ use crate::boundary::safe_boundary;
 use crate::ghostty::{Terminal, Theme};
 use crate::protocol::{
     PreparedLaunchAttempt, SpawnParams, desync_event, exit_event, kitty_placements_event,
-    output_event, state_event,
+    output_event, resize_event, state_event,
 };
 use crate::queries::{
     ColorScheme, TerminalQueries, color_scheme_report, theme_color_scheme,
@@ -172,6 +172,8 @@ pub struct Session {
 
     master: Mutex<Option<File>>,
     model: Mutex<Model>,
+    // Output processing and resize share the subscriber delivery boundary.
+    delivery: Mutex<()>,
     lifecycle: Mutex<Lifecycle>,
     lifecycle_changed: Condvar,
     subscribers: Mutex<HashMap<String, Subscriber>>,
@@ -240,6 +242,7 @@ impl Session {
                 pixel_width: 0,
                 pixel_height: 0,
             }),
+            delivery: Mutex::new(()),
             lifecycle: Mutex::new(Lifecycle {
                 running: true,
                 state: "working".to_owned(),
@@ -460,6 +463,7 @@ impl Session {
         if cols == 0 || rows == 0 {
             return Err("cols and rows must be > 0".to_owned());
         }
+        let _delivery = self.delivery.lock().expect("delivery mutex poisoned");
         let mut model = self.model.lock().expect("model mutex poisoned");
         let mut cell_width = 0;
         let mut cell_height = 0;
@@ -482,6 +486,8 @@ impl Session {
             || model.pixel_width != xpixel
             || model.pixel_height != ypixel;
         if !changed {
+            drop(model);
+            self.broadcast_subscriber_event(resize_event(&self.id, cols, rows, xpixel, ypixel));
             return Ok(false);
         }
         model.wire.terminal_mut().resize_no_reflow(
@@ -500,10 +506,6 @@ impl Session {
         model.pixel_height = ypixel;
         drop(model);
 
-        if let Some(placements) = placements {
-            self.broadcast_placements(placement_seq, &placements);
-        }
-
         let winsize = libc::winsize {
             ws_row: rows,
             ws_col: cols,
@@ -516,6 +518,11 @@ impl Session {
             if rc != 0 {
                 return Err(format!("resize PTY: {}", std::io::Error::last_os_error()));
             }
+        }
+        drop(master);
+        self.broadcast_subscriber_event(resize_event(&self.id, cols, rows, xpixel, ypixel));
+        if let Some(placements) = placements {
+            self.broadcast_placements(placement_seq, &placements);
         }
         Ok(true)
     }
@@ -630,6 +637,7 @@ impl Session {
     }
 
     fn observe_output(&self, data: &[u8]) {
+        let _delivery = self.delivery.lock().expect("delivery mutex poisoned");
         let (seq, wire, placements, resync, responses, observations) = {
             let mut model = self.model.lock().expect("model mutex poisoned");
             let queries = TerminalQueries::detect(data);
