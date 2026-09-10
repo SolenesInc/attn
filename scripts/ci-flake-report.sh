@@ -83,7 +83,7 @@ fi
 
 # Only completed runs carry a trustworthy verdict; in-flight ones are skipped so
 # a run that is still red-but-running is not mistaken for a finished failure.
-jq '[.[] | select(.status == "completed")]' "$runs" >"$work/runs.completed"
+jq '[.[] | select(.status == "completed" and .conclusion != "cancelled")]' "$runs" >"$work/runs.completed"
 mv "$work/runs.completed" "$runs"
 
 total_runs="$(jq 'length' "$runs")"

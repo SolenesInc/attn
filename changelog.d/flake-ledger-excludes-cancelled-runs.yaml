@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: The CI flake ledger excludes cancelled workflow runs from its totals and failures.
