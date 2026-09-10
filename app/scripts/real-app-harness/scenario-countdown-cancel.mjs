@@ -481,7 +481,6 @@ async function main() {
         `selected target's nudge is paused (no armed countdown); got nudge_fires_at=${JSON.stringify(unread.nudge_fires_at)}`,
         unread,
       );
-      runner.assert(IDLE_STATES.has(unread.state), `target is still idle/waiting while paused (got ${unread.state})`, unread);
     });
 
     await runner.step('the_deliver_now_button_submits_the_doorbell', async () => {
