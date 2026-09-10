@@ -121,9 +121,10 @@ Two page sizes come out of these numbers. The merged-pull-request query asks for
 refuses above 5000 rows, a tripwire rather than a budget: the largest registry
 measured is 147 rows across two repositories.
 
-`real-app:scenario-worktree-surface` builds a deliberately slow repository to
-watch the surface stay answering: 40,000 files, measured at 6.5 s of
-`git status --untracked-files=all` and 1.9 s of tree walking on macOS/APFS.
+`real-app:scenario-worktree-surface` builds a deliberately slow repository and
+keeps querying the surface until every fixture row has a verdict and the refresh
+is idle: 40,000 files, measured at 6.5 s of `git status --untracked-files=all`
+and 1.9 s of tree walking on macOS/APFS.
 
 ## Reversal and inspection
 

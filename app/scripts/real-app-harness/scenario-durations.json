@@ -4,7 +4,16 @@
     "job": "App acceptance",
     "recordedAt": "2026-09-07",
     "matrixSeconds": 785.7,
-    "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these."
+    "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these.",
+    "updates": {
+      "worktree-surface": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34532356568/attempts/3",
+        "job": "App acceptance shard 4/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 34.8,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      }
+    }
   },
   "seconds": {
     "prompt-composition": 14.9,
@@ -30,7 +39,7 @@
     "countdown-cancel": 48.2,
     "agent-queue": 91,
     "automation-lifecycle": 48.9,
-    "worktree-surface": 37.8,
+    "worktree-surface": 34.8,
     "terminal-annotations": 21.2,
     "terminal-context-menu": 9.1,
     "terminal-input": 11.7,
