@@ -11,6 +11,8 @@ on:
       repeat:
         description: Runs per scenario
         required: true
+        # Run 34540075827: ten iterations took 196.363s on github-hosted 4vcpu/16GB.
+        default: 10
         type: number
       runner:
         description: GitHub Actions runner label
