@@ -1173,6 +1173,12 @@ model DelegateMessage {
   agent?: string;
   label?: string;
   yolo_mode?: boolean;
+  // Per-session override of the daemon's auto-mode `approval_policy` /
+  // `sandbox_mode`, for an agent whose driver advertises `auto_mode`. Absent
+  // means "follow the daemon config"; the values are the same sets as the
+  // auto-mode config carries. Each may be given without the other.
+  approval_policy?: string;
+  sandbox_mode?: string;
   `model`?: string; // Pin the delegated agent's model (alias or full id); empty = agent default
   effort?: string; // Pin the delegated agent's reasoning effort; empty = agent default
   allow_worktree_reuse?: boolean; // Exceptional opt-in to share an existing worktree
@@ -2240,6 +2246,12 @@ model SpawnSessionMessage {
   // session alone. Persisted with the launch intent, so a revive or a reload
   // relaunches on the choice that was made rather than on today's default.
   auto_mode?: boolean;
+  // Per-session override of the daemon's auto-mode `approval_policy` /
+  // `sandbox_mode`, for an agent whose driver advertises `auto_mode`. Absent
+  // means "follow the daemon config"; the values are the same sets as the
+  // auto-mode config carries. Each may be given without the other.
+  approval_policy?: string;
+  sandbox_mode?: string;
   chief_of_staff?: boolean;    // Launch this session already holding the chief role (guidance injected at first spawn)
   spawned_from?: string;       // The session this one was split from. Consulted only for agent "shell": the daemon resolves it to the owning agent session and stores that as the satellite's parent.
   initial_prompt?: string;
@@ -5978,6 +5990,19 @@ model AutoModeConfigInfo {
   // Old allow/hard-deny globs the migration could not turn into a prefix rule.
   // Nothing enforces them; settings shows them so the user can rewrite them.
   "legacy_patterns": string[];
+  // The named pairs a client offers instead of two raw dropdowns. Static, and
+  // resolved at read time like the shipped rules, so no client keeps a copy.
+  "presets": AutoModePresetInfo[];
+}
+
+// One named approval policy and sandbox mode pair. "id" is what a launcher
+// names on the CLI; the pair is what reaches spawn_session and delegate.
+model AutoModePresetInfo {
+  "id": string;
+  "label": string;
+  "description": string;
+  "approval_policy": string;
+  "sandbox_mode": string;
 }
 
 // One Codex prefix rule. "pattern" is the command's leading tokens, and each

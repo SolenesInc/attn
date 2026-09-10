@@ -554,16 +554,18 @@ func (d *Daemon) spawnDelegatedRuntime(msg *resolvedDelegationLaunch, sessionID,
 		initialPrompt = prompts.DelegationOpeningWithGuidance(initialPrompt, guidance)
 	}
 	spawnMsg := &protocol.SpawnSessionMessage{
-		Cmd:           protocol.CmdSpawnSession,
-		ID:            sessionID,
-		Cwd:           directory,
-		WorkspaceID:   workspaceID,
-		Agent:         agent,
-		Cols:          80,
-		Rows:          24,
-		Label:         protocol.Ptr(name),
-		YoloMode:      msg.YoloMode,
-		InitialPrompt: protocol.Ptr(initialPrompt),
+		Cmd:            protocol.CmdSpawnSession,
+		ID:             sessionID,
+		Cwd:            directory,
+		WorkspaceID:    workspaceID,
+		Agent:          agent,
+		Cols:           80,
+		Rows:           24,
+		Label:          protocol.Ptr(name),
+		YoloMode:       msg.YoloMode,
+		ApprovalPolicy: msg.ApprovalPolicy,
+		SandboxMode:    msg.SandboxMode,
+		InitialPrompt:  protocol.Ptr(initialPrompt),
 	}
 	if model != "" {
 		spawnMsg.Model = protocol.Ptr(model)

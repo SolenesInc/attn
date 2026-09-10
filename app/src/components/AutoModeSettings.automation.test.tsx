@@ -30,6 +30,7 @@ const config = (over: Partial<AutoModeConfigInfo> = {}): AutoModeConfigInfo => (
   network: { enabled: true, allowed_domains: ['crates.io'], denied_domains: ['localhost:29849'], allow_local_binding: false },
   shipped_denied_domains: ['localhost:29849'],
   legacy_patterns: ['*curl*'],
+  presets: [],
   ...over,
 });
 

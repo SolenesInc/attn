@@ -5,6 +5,7 @@ import type {
   AutoModeEnvironmentSlot,
   AutoModeEnvironmentSlotValue,
   AutoModeNetworkInfo,
+  AutoModePresetInfo,
   AutoModeProposalInfo,
   AutoModeRuleInfo,
 } from '../types/generated';
@@ -71,6 +72,7 @@ const emptyConfig = (): AutoModeConfigInfo => ({
   network: emptyNetwork(),
   shipped_denied_domains: [],
   legacy_patterns: [],
+  presets: [],
 });
 
 const toEnvironment = (value: unknown): AutoModeEnvironmentInfo => {
@@ -106,6 +108,7 @@ const toConfig = (value: unknown): AutoModeConfigInfo => {
     network: toNetwork(raw.network),
     shipped_denied_domains: list<string>(raw.shipped_denied_domains),
     legacy_patterns: list<string>(raw.legacy_patterns),
+    presets: list<AutoModePresetInfo>(raw.presets),
   };
 };
 

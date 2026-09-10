@@ -1015,6 +1015,9 @@ type AutoModeConfigInfo struct {
 	// Network corresponds to the JSON schema field "network".
 	Network AutoModeNetworkInfo `json:"network"`
 
+	// Presets corresponds to the JSON schema field "presets".
+	Presets []AutoModePresetInfo `json:"presets"`
+
 	// Rules corresponds to the JSON schema field "rules".
 	Rules []AutoModeRuleInfo `json:"rules"`
 
@@ -1283,6 +1286,23 @@ type AutoModePolicySetMessage struct {
 
 	// SandboxMode corresponds to the JSON schema field "sandbox_mode".
 	SandboxMode *string `json:"sandbox_mode,omitempty,omitzero"`
+}
+
+type AutoModePresetInfo struct {
+	// ApprovalPolicy corresponds to the JSON schema field "approval_policy".
+	ApprovalPolicy string `json:"approval_policy"`
+
+	// Description corresponds to the JSON schema field "description".
+	Description string `json:"description"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label string `json:"label"`
+
+	// SandboxMode corresponds to the JSON schema field "sandbox_mode".
+	SandboxMode string `json:"sandbox_mode"`
 }
 
 type AutoModePromoteMessage struct {
@@ -2685,6 +2705,9 @@ type DelegateMessage struct {
 	// AllowWorktreeReuse corresponds to the JSON schema field "allow_worktree_reuse".
 	AllowWorktreeReuse *bool `json:"allow_worktree_reuse,omitempty,omitzero"`
 
+	// ApprovalPolicy corresponds to the JSON schema field "approval_policy".
+	ApprovalPolicy *string `json:"approval_policy,omitempty,omitzero"`
+
 	// Assignment corresponds to the JSON schema field "assignment".
 	Assignment DelegateAssignment `json:"assignment"`
 
@@ -2723,6 +2746,9 @@ type DelegateMessage struct {
 
 	// Role corresponds to the JSON schema field "role".
 	Role *string `json:"role,omitempty,omitzero"`
+
+	// SandboxMode corresponds to the JSON schema field "sandbox_mode".
+	SandboxMode *string `json:"sandbox_mode,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
 	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
@@ -9414,6 +9440,9 @@ type SpawnSessionMessage struct {
 	// Agent corresponds to the JSON schema field "agent".
 	Agent string `json:"agent"`
 
+	// ApprovalPolicy corresponds to the JSON schema field "approval_policy".
+	ApprovalPolicy *string `json:"approval_policy,omitempty,omitzero"`
+
 	// AutoMode corresponds to the JSON schema field "auto_mode".
 	AutoMode *bool `json:"auto_mode,omitempty,omitzero"`
 
@@ -9467,6 +9496,9 @@ type SpawnSessionMessage struct {
 
 	// Rows corresponds to the JSON schema field "rows".
 	Rows int `json:"rows"`
+
+	// SandboxMode corresponds to the JSON schema field "sandbox_mode".
+	SandboxMode *string `json:"sandbox_mode,omitempty,omitzero"`
 
 	// SpawnedFrom corresponds to the JSON schema field "spawned_from".
 	SpawnedFrom *string `json:"spawned_from,omitempty,omitzero"`

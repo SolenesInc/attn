@@ -1,0 +1,3 @@
+kind: added
+area: pi
+change: A pi session can now be launched with its own approval policy and sandbox mode (the Read Only, Default, Full Access and Untrusted presets, or a raw pair) instead of the auto mode default, keeping that choice across a relaunch, with `--yolo` on a pi launch now meaning Full Access.

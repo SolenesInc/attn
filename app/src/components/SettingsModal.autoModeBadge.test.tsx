@@ -31,6 +31,7 @@ const autoModeState = (proposals: number): AutoModeState => ({
     network: { enabled: true, allowed_domains: [], denied_domains: [], allow_local_binding: false },
     shipped_denied_domains: [],
     legacy_patterns: [],
+    presets: [],
   },
   proposals: Array.from({ length: proposals }, (_unused, index) => ({
     id: index + 1,

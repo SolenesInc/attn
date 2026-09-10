@@ -232,6 +232,48 @@ func autoModeDenialNotification(label string, denial store.AutoModeDenial) store
 	}
 }
 
+// applySessionPolicyPair puts the session's own pair over the daemon's default;
+// an empty half keeps the default.
+func applySessionPolicyPair(cfg automode.Config, policy, sandbox string) automode.Config {
+	if policy != "" {
+		cfg.ApprovalPolicy = policy
+	}
+	if sandbox != "" {
+		cfg.SandboxMode = sandbox
+	}
+	return cfg
+}
+
+// The pair as asked for. A bad value is refused on this, so a launcher that
+// mistyped one is told, even when yolo would have replaced it.
+func requestedSpawnPolicyPair(msg *protocol.SpawnSessionMessage) (string, string) {
+	return strings.TrimSpace(protocol.Deref(msg.ApprovalPolicy)),
+		strings.TrimSpace(protocol.Deref(msg.SandboxMode))
+}
+
+// Yolo asks for the full-access preset and wins over a pair sent beside it.
+func effectiveSpawnPolicyPair(msg *protocol.SpawnSessionMessage) (string, string) {
+	if protocol.Deref(msg.YoloMode) {
+		return automode.PolicyNever, automode.SandboxDangerFullAccess
+	}
+	return requestedSpawnPolicyPair(msg)
+}
+
+func autoModePresetInfos() []protocol.AutoModePresetInfo {
+	presets := automode.Presets()
+	infos := make([]protocol.AutoModePresetInfo, 0, len(presets))
+	for _, preset := range presets {
+		infos = append(infos, protocol.AutoModePresetInfo{
+			ID:             preset.ID,
+			Label:          preset.Label,
+			Description:    preset.Description,
+			ApprovalPolicy: preset.ApprovalPolicy,
+			SandboxMode:    preset.SandboxMode,
+		})
+	}
+	return infos
+}
+
 func autoModeConfigInfo(cfg automode.Config) protocol.AutoModeConfigInfo {
 	return protocol.AutoModeConfigInfo{
 		EnabledDefault: cfg.EnabledDefault,
@@ -248,6 +290,7 @@ func autoModeConfigInfo(cfg automode.Config) protocol.AutoModeConfigInfo {
 		},
 		ShippedDeniedDomains: nonNilStrings(automode.ShippedDeniedDomains(config.WSPort())),
 		LegacyPatterns:       nonNilStrings(cfg.LegacyPatterns),
+		Presets:              autoModePresetInfos(),
 	}
 }
 
