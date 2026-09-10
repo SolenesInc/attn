@@ -36,6 +36,8 @@ var infoSnapshotHook func()
 
 var readLoopSeqGapHook func()
 
+var readLoopAppliedHook func()
+
 var colorSchemeReplyHook func()
 
 type sessionSubscriber struct {
@@ -350,6 +352,9 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 				}
 				s.lastReplaySeq = seq
 				s.replayMu.Unlock()
+				if readLoopAppliedHook != nil {
+					readLoopAppliedHook()
+				}
 				s.drainGhosttyResponses(logf)
 				// After the chunk is applied, in ask order: fish sends ESC[6n
 				// ESC[0c and blocks its prompt redraw until it gets both.
