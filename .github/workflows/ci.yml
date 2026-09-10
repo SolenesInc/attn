@@ -255,7 +255,7 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-build-shared-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          key: go-build-blacksmith-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
 
       - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
@@ -312,8 +312,9 @@ jobs:
       - name: Save Go build cache
         if: >-
           always() && steps.go-cache.outcome == 'success' &&
-          steps.go-cache.outputs.cache-hit != 'true' && github.event_name == 'push' &&
-          (github.ref == 'refs/heads/next' || github.ref == 'refs/heads/main')
+          steps.go-cache.outputs.cache-hit != 'true' &&
+          (github.event_name == 'pull_request' || github.ref == 'refs/heads/next' ||
+          github.ref == 'refs/heads/main')
         uses: actions/cache/save@v4
         with:
           path: |
@@ -351,7 +352,7 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-build-shared-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
@@ -368,9 +369,9 @@ jobs:
       - name: Save Go build cache
         if: >-
           always() && steps.go-cache.outcome == 'success' &&
-          steps.go-cache.outputs.cache-hit != 'true' && runner.os == 'macOS' &&
-          github.event_name == 'push' &&
-          (github.ref == 'refs/heads/next' || github.ref == 'refs/heads/main')
+          steps.go-cache.outputs.cache-hit != 'true' &&
+          (github.event_name == 'pull_request' || github.ref == 'refs/heads/next' ||
+          github.ref == 'refs/heads/main')
         uses: actions/cache/save@v4
         with:
           path: |
@@ -570,7 +571,7 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-build-shared-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master

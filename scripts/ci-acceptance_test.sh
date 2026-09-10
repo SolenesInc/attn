@@ -199,7 +199,6 @@ for job_name in backend pty-compatibility rust; do
   for contract in \
     'cache: false' \
     'uses: actions/cache/restore@v4' \
-    'key: go-build-shared-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('\''go.mod'\'', '\''go.sum'\'') }}' \
     'name: Report runner class'; do
     if ! grep -Fq "$contract" <<<"$job"; then
       echo "$job_name is missing its Go cache contract: $contract" >&2
@@ -211,6 +210,17 @@ done
 backend_job="$(sed -n '/^  backend:/,/^  pty-compatibility:/p' "$workflow")"
 pty_job="$(sed -n '/^  pty-compatibility:/,/^  frontend:/p' "$workflow")"
 rust_job="$(sed -n '/^  rust:/,/^  rust-gate:/p' "$workflow")"
+if ! grep -Fq 'key: go-build-blacksmith-${{ runner.os }}-${{ runner.arch }}-' <<<"$backend_job"; then
+  echo "Daemon must keep its Blacksmith Go cache separate" >&2
+  exit 1
+fi
+for hosted_job in "$pty_job" "$rust_job"; do
+  if ! grep -Fq 'key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-' <<<"$hosted_job"; then
+    echo "Hosted PTY and Tauri jobs must share their platform Go cache" >&2
+    exit 1
+  fi
+done
+
 for owner_job in "$backend_job" "$pty_job"; do
   for contract in \
     'uses: actions/cache/save@v4' \
@@ -222,9 +232,8 @@ for owner_job in "$backend_job" "$pty_job"; do
     fi
   done
 done
-if ! grep -Fq "runner.os == 'macOS'" <<<"$pty_job" ||
-  grep -Fq 'uses: actions/cache/save@v4' <<<"$rust_job"; then
-  echo "Daemon must own Linux Go cache saves; PTY must own macOS; Tauri restores only" >&2
+if grep -Fq 'uses: actions/cache/save@v4' <<<"$rust_job"; then
+  echo "Daemon and PTY must own Go cache saves; Tauri restores only" >&2
   exit 1
 fi
 
