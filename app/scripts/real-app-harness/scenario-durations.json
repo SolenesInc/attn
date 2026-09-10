@@ -4,7 +4,13 @@
     "job": "App acceptance",
     "recordedAt": "2026-09-07",
     "matrixSeconds": 785.7,
-    "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these."
+    "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these.",
+    "crewManagement": {
+      "run": "https://github.com/SolenesInc/attn/actions/runs/34529576010/job/103047307714",
+      "recordedAt": "2026-09-10",
+      "scenarioRun": "crew-management-2026-09-10T21-13-32-295Z",
+      "note": "CrewManagement passed in 32577 ms; the matrix failed separately in agent-close."
+    }
   },
   "seconds": {
     "prompt-composition": 14.9,
@@ -46,6 +52,7 @@
     "present-submit-closes-window": 9.9,
     "pi-security": 66.2,
     "pi-automode": 11.7,
-    "automode-environment": 5.4
+    "automode-environment": 5.4,
+    "crew-management": 32.577
   }
 }
