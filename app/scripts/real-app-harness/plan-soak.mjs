@@ -2,6 +2,7 @@
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { scenarioSkipReason } from './matrixDigest.mjs';
 import { scenarioCatalog } from './scenarioCatalog.mjs';
 
 export function parseScenarioList(value, catalog = scenarioCatalog) {
@@ -19,6 +20,15 @@ export function parseScenarioList(value, catalog = scenarioCatalog) {
   const duplicate = ids.find((id, index) => ids.indexOf(id) !== index);
   if (duplicate) {
     throw new Error(`Duplicate scenario id: ${duplicate}`);
+  }
+
+  const unavailable = ids
+    .map((id) => ({ id, reason: scenarioSkipReason(catalog.find((scenario) => scenario.id === id), 'linux', {}) }))
+    .filter(({ reason }) => reason);
+  if (unavailable.length > 0) {
+    throw new Error(`Scenario(s) unavailable on the Linux soak runner:\n${unavailable
+      .map(({ id, reason }) => `  ${id}: ${reason}`)
+      .join('\n')}`);
   }
   return ids;
 }

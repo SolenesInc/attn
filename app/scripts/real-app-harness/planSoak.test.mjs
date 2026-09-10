@@ -5,6 +5,7 @@ const catalog = [
   { id: 'terminal-annotations' },
   { id: 'terminal-block-resize' },
   { id: 'workspace-switching' },
+  { id: 'terminal-block-copy', skipOn: { linux: 'needs the macOS menu accelerator' } },
 ];
 
 describe('parseScenarioList', () => {
@@ -27,6 +28,12 @@ describe('parseScenarioList', () => {
     );
     expect(() => parseScenarioList('workspace-switching,workspace-switching', catalog)).toThrow(
       'Duplicate scenario id: workspace-switching',
+    );
+  });
+
+  it('rejects scenarios the Linux runner would skip', () => {
+    expect(() => parseScenarioList('terminal-block-copy', catalog)).toThrow(
+      'Scenario(s) unavailable on the Linux soak runner:\n  terminal-block-copy: needs the macOS menu accelerator',
     );
   });
 });
