@@ -36,7 +36,7 @@ describe("suite composition", () => {
     const registered = await load(suiteEntry, {
       [approvalConfigEnvVar]: JSON.stringify({ enabled_default: true }),
     });
-    expect(registered.commands).toEqual(["security", "auto"]);
+    expect(registered.commands).toEqual(["security", "auto", "permissions"]);
     expect(registered.flags).toEqual(["auto", "no-auto"]);
     expect(registered.events).toContain("session_start");
     expect(registered.events).toContain("agent_start");

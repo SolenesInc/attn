@@ -13,7 +13,7 @@ const theme = { fg: (_color: string, text: string) => text, bold: (text: string)
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0)) await cleanup(); });
 
-async function fixture(mode = "tui") {
+async function fixture(mode = "tui", options: { approvals?: boolean } = {}) {
   const root = canonical(mkdtempSync(join(tmpdir(), "pi-security-ui-")));
   for (const name of ["agent", "project", "cache", "outside"]) mkdirSync(join(root, name));
   const configPath = join(root, "agent", "attn-security.json");
@@ -27,13 +27,14 @@ async function fixture(mode = "tui") {
   let panel: SecurityPanel;
   let closed = false;
   let rows = 40;
+  const statuses: string[] = [];
   const ctx = { mode, hasUI: true, cwd: join(root, "project"), ui: {
-    setStatus() {}, notify: (text: string) => notices.push(text),
+    setStatus: (_key: string, text: string) => statuses.push(text), notify: (text: string) => notices.push(text),
     custom: (make: any) => new Promise<void>((resolve) => {
       panel = make({ terminal: { get rows() { return rows; } }, requestRender() {} }, theme, {}, () => { closed = true; resolve(); });
     }),
   } };
-  const security = new PiSecurity(configPath);
+  const security = new PiSecurity(configPath, options.approvals ? (async () => ({ output: "", exitCode: 0, cancelled: false, truncated: false })) as never : undefined);
   security.register({ on: (name: string, handler: any) => handlers.set(name, handler), registerCommand: (name: string, command: any) => commands.set(name, command), registerTool: (tool: any) => tools.set(tool.name, tool) } as never);
   cleanups.push(async () => { await handlers.get("session_shutdown")({}, ctx); rmSync(root, { recursive: true, force: true }); });
   await handlers.get("session_start")({}, ctx);
@@ -52,7 +53,7 @@ async function fixture(mode = "tui") {
   };
   const choose = async (label: string) => { await select(label); await press("\r"); };
   const run = (tool: string, args: unknown) => tools.get(tool).execute("ui-test", args, undefined, undefined, ctx);
-  return { root, configPath, screen, press, choose, select, notices, command, run, config: () => loadSecurityConfig(configPath),
+  return { root, configPath, screen, press, choose, select, notices, statuses, command, run, config: () => loadSecurityConfig(configPath),
     closed: () => closed, resize: (height: number) => { rows = height; },
     reopen: () => { opening = command(""); },
     close: async () => { await press("\x1b"); await opening; },
@@ -214,4 +215,29 @@ test("save failures stay visible without claiming a toggle succeeded", async () 
   expect(panel.render(100).join("\n")).toContain("Settings disk is read-only");
   expect(panel.render(100).join("\n")).toContain("OS sandbox · on");
   expect(ui.config().enabled).toBe(true);
+});
+
+test("standalone pi keeps the sandbox wording, since it has no /permissions and no session sandbox mode", async () => {
+  const ui = await fixture();
+
+  expect(ui.screen()).toContain("Sandbox on · Credentials filtered");
+  expect(ui.screen()).toContain("Bash commands also pass the approval policy; /auto status shows it.");
+  expect(ui.statuses.at(-1)).toBe("sandbox: on · credential filtering: on");
+  expect(await ui.close());
+  const rpc = await fixture("rpc");
+  await rpc.command("status");
+  expect(rpc.notices.at(-1)).toStartWith("Sandbox: on;");
+});
+
+test("under attn the panel and footer name the file tools, and point bash at /permissions", async () => {
+  const ui = await fixture("tui", { approvals: true });
+
+  expect(ui.screen()).toContain("File tools guarded · Credentials filtered");
+  expect(ui.screen()).toContain("Bash commands run under this session's sandbox mode; /permissions shows it.");
+  expect(ui.statuses.at(-1)).toBe("credential filtering: on");
+  expect(ui.screen()).not.toContain("Sandbox on ·");
+  expect(await ui.close());
+  const rpc = await fixture("rpc", { approvals: true });
+  await rpc.command("status");
+  expect(rpc.notices.at(-1)).toStartWith("Built-in file tools and !/!! commands: guarded;");
 });

@@ -113,12 +113,15 @@ function gitWritePaths(cwd: string): string[] {
   }
 }
 
-export function assertPath(policy: SecurityPolicy, path: string, mode: "read" | "write"): string {
+/** "write-anywhere" is danger-full-access: the deny lists still hold, the
+ * allowWrite roots do not, the same way bash runs unwrapped under that mode. */
+export function assertPath(policy: SecurityPolicy, path: string, mode: "read" | "write" | "write-anywhere"): string {
   const target = expand(path.replace(/^@/, ""), policy.cwd);
   if (!policy.enabled) return target;
-  const denies = mode === "write" ? policy.denyWrite : policy.denyRead;
+  const verb = mode === "read" ? "read" : "write";
+  const denies = mode === "read" ? policy.denyRead : policy.denyWrite;
   const protectedBy = denies.find((root) => within(target, canonical(root)));
-  if (protectedBy) throw new Error(`Security blocked ${mode}: ${target}. This path is explicitly protected by ${protectedBy}. Auto mode cannot override this restriction. Explain what you need to the user; do not retry through another tool or change security settings yourself.`);
+  if (protectedBy) throw new Error(`Security blocked ${verb}: ${target}. This path is explicitly protected by ${protectedBy}. Auto mode cannot override this restriction. Explain what you need to the user; do not retry through another tool or change security settings yourself.`);
   if (mode === "write" && !policy.allowWrite.some((root) => within(target, root))) {
     throw new Error(`Security blocked write outside allowed paths: ${target}. ${writeRecovery(policy)}`);
   }

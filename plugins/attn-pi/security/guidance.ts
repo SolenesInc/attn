@@ -1,4 +1,5 @@
 import { renderPrompt } from "../automode/prompt-catalog";
+import type { SandboxMode } from "../sandbox/spec";
 import type { SecurityPolicy } from "./policy";
 
 export const securityPrompt = (event: string, values: Record<string, string> = {}): string => renderPrompt(event, values, "pi-security");
@@ -19,15 +20,18 @@ const missingProxyNotice = "unavailable inside the sandbox: attn configured netw
 
 export function securityInstructions(
   policy: SecurityPolicy,
-  { platform = process.platform, attnNetwork }: { platform?: string; attnNetwork?: "proxy" | "missing" } = {},
+  { platform = process.platform, attnNetwork, sandboxMode = "workspace-write" }:
+    { platform?: string; attnNetwork?: "proxy" | "missing"; sandboxMode?: SandboxMode } = {},
 ): string {
   return securityPrompt("instructions", {
+    file_tools_read_only: String(sandboxMode === "read-only"),
+    file_tools_full_access: String(sandboxMode === "danger-full-access"),
     enabled: String(policy.enabled), sandbox: policy.enabled ? "enabled" : "disabled",
     network: !policy.enabled ? "unrestricted (sandbox disabled)"
       : attnNetwork === "missing" ? missingProxyNotice
       : attnNetwork === "proxy" && platform === "linux" ? linuxNetworkNotice
       : policy.network,
-    write_paths: JSON.stringify(policy.allowWrite),
+    write_paths: JSON.stringify(sandboxMode === "read-only" ? [] : policy.allowWrite),
     cache_paths: policy.buildCaches.enabled ? JSON.stringify(policy.cacheWritePaths) : "disabled",
     has_unavailable_caches: String(policy.unavailableCaches.length > 0), unavailable_caches: JSON.stringify(policy.unavailableCaches),
   });

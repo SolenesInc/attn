@@ -17,10 +17,11 @@ Auto mode is which reviewer answers, nothing else. `/auto on` is the Guardian,
 `/auto off` is the user's card. To understand or modify any of it, read
 [docs/automode.md](docs/automode.md) and [docs/security.md](docs/security.md).
 
-Rules, hosts, the approval policy and the sandbox mode are daemon-owned. Writes
-go through `PromoteAutoModeProposal` or, for a "don't ask again" answered inside
-a session, the pi relay's `PromoteReportedAmendment`. The CLI proposes; the app
-promotes.
+Rules, hosts and the launch approval policy and sandbox mode are daemon-owned.
+`/permissions` switches that pair inside one session, for that session only, and
+writes nothing back. Writes go through `PromoteAutoModeProposal` or, for a
+"don't ask again" answered inside a session, the pi relay's
+`PromoteReportedAmendment`. The CLI proposes; the app promotes.
 
 ## Reporting pull requests
 

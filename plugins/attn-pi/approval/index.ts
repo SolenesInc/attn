@@ -7,7 +7,8 @@ export {
 } from "./orchestrator";
 export { UserReviewer, commandOptions, networkOptions, userRejection, reviewReason, reviewTitle } from "./reviewers";
 export { GuardianReviewer, parseAssessment, denialText, type GuardianUsageEntry } from "./guardian";
-export { PiApproval, attnApprovalSource, proxyFromEnvironment, approvalConfigEnvVar, type SandboxPaths } from "./session";
+export { PiApproval, attnApprovalSource, proxyFromEnvironment, approvalConfigEnvVar, statusKey, type Permissions, type SandboxPaths } from "./session";
+export { presets, presetByID, presetFor, describePermissions, type Preset, type PresetID } from "./presets";
 export { compileRules, toPrefixRule } from "./rules";
 export { guardianRejectionInstructions, guardianTimeoutInstructions } from "./instructions";
 export type {

@@ -247,6 +247,47 @@
             "source": "content/pi/security/instructions.md",
             "bindings": [
               {
+                "name": "file_tools",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "file_tools_read_only",
+                      "kind": "flag",
+                      "description": "The session's permissions make the file tools read-only."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "pi-security.file-tools-read-only",
+                      "source": "content/pi/security/file-tools-read-only.md",
+                      "keep_final_newline": true
+                    },
+                    {
+                      "kind": "when",
+                      "condition": {
+                        "field": {
+                          "name": "file_tools_full_access",
+                          "kind": "flag",
+                          "description": "The session's permissions let the file tools write anywhere."
+                        },
+                        "test": "enabled"
+                      },
+                      "children": [
+                        {
+                          "kind": "text",
+                          "id": "pi-security.file-tools-full-access",
+                          "source": "content/pi/security/file-tools-full-access.md",
+                          "keep_final_newline": true
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
                 "name": "sandbox",
                 "node": {
                   "kind": "input",
@@ -594,7 +635,9 @@
     "content/pi/security/disabled.md": "The OS sandbox is off, so commands run with your full user permissions. The approval policy still applies to every bash command.\n",
     "content/pi/security/enabled.md": "Writable paths: {{paths}}.\nBuild-cache grants: {{caches}}. Use these caches normally.\n{{unavailable}}{{request}}\n{{local_cache}}\n{{refusal}}\n",
     "content/pi/security/execution-scope.md": "Protected paths and credential filtering are enforced on every command, whatever the approval policy allows. Follow a rejection's instructions; do not repeat an unchanged command or evade it through another tool.\n",
-    "content/pi/security/instructions.md": "Pi execution permissions:\nSandbox: {{sandbox}}. Tool network: {{network}}. Credential filtering: enabled.\n{{guidance}}\n{{credentials}}\n",
+    "content/pi/security/file-tools-full-access.md": "This session's permissions are full access: the write and edit tools reach any path, inside this workspace or outside it, except the ones security settings protect.\n",
+    "content/pi/security/file-tools-read-only.md": "This session's permissions are read-only: the write and edit tools refuse every change, so ask the user to change `/permissions`, or run the change as a bash command with `sandbox_permissions=require_escalated` so a reviewer can approve it.\n",
+    "content/pi/security/instructions.md": "Pi execution permissions:\nSandbox: {{sandbox}}. Tool network: {{network}}. Credential filtering: enabled.\n{{file_tools}}{{guidance}}\n{{credentials}}\n",
     "content/pi/security/local-cache.md": "Use a project-local cache when it is a straightforward equivalent. Do not change the intended operation, skip tests, or change security settings to work around a restriction. Permission and DNS/download errors can have ordinary causes; check whether more access would actually address the failure.\n",
     "content/pi/security/network-failure.md": "The command reported a network error while tool networking was blocked. This may be the sandbox restriction; an ordinary network failure can look similar.\n",
     "content/pi/security/not-initialized.md": "Pi security is not initialized; tools cannot run.\n",
@@ -715,6 +758,8 @@
       "values": {
         "cache_paths": "cache_paths: literal {{token}} / λ / \"quoted\"\nsecond line",
         "enabled": "false",
+        "file_tools_full_access": "false",
+        "file_tools_read_only": "false",
         "has_unavailable_caches": "false",
         "network": "network: literal {{token}} / λ / \"quoted\"\nsecond line",
         "sandbox": "sandbox: literal {{token}} / λ / \"quoted\"\nsecond line",
@@ -729,6 +774,8 @@
       "values": {
         "cache_paths": "cache_paths: literal {{token}} / λ / \"quoted\"\nsecond line",
         "enabled": "true",
+        "file_tools_full_access": "false",
+        "file_tools_read_only": "false",
         "has_unavailable_caches": "false",
         "network": "network: literal {{token}} / λ / \"quoted\"\nsecond line",
         "sandbox": "sandbox: literal {{token}} / λ / \"quoted\"\nsecond line",
@@ -743,6 +790,104 @@
       "values": {
         "cache_paths": "cache_paths: literal {{token}} / λ / \"quoted\"\nsecond line",
         "enabled": "false",
+        "file_tools_full_access": "true",
+        "file_tools_read_only": "false",
+        "has_unavailable_caches": "false",
+        "network": "network: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "sandbox": "sandbox: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "unavailable_caches": "unavailable_caches: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "write_paths": "write_paths: literal {{token}} / λ / \"quoted\"\nsecond line"
+      },
+      "sha256": "73ffd4d4a70c6965e6c7fc11c5d40ae86796ceb8eb0f20334e69d80ca1331b9d"
+    },
+    {
+      "recipient": "pi-security",
+      "event": "instructions",
+      "values": {
+        "cache_paths": "cache_paths: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "enabled": "true",
+        "file_tools_full_access": "true",
+        "file_tools_read_only": "false",
+        "has_unavailable_caches": "false",
+        "network": "network: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "sandbox": "sandbox: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "unavailable_caches": "unavailable_caches: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "write_paths": "write_paths: literal {{token}} / λ / \"quoted\"\nsecond line"
+      },
+      "sha256": "0242e4d59fcf13761bf59efacfcff1858117e9d6880cc538c377bd8bb74b30ae"
+    },
+    {
+      "recipient": "pi-security",
+      "event": "instructions",
+      "values": {
+        "cache_paths": "cache_paths: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "enabled": "false",
+        "file_tools_full_access": "false",
+        "file_tools_read_only": "true",
+        "has_unavailable_caches": "false",
+        "network": "network: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "sandbox": "sandbox: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "unavailable_caches": "unavailable_caches: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "write_paths": "write_paths: literal {{token}} / λ / \"quoted\"\nsecond line"
+      },
+      "sha256": "520c43501532228ee9ab653ff6a150b3ac48471078ea03e8ede946ed98c44deb"
+    },
+    {
+      "recipient": "pi-security",
+      "event": "instructions",
+      "values": {
+        "cache_paths": "cache_paths: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "enabled": "true",
+        "file_tools_full_access": "false",
+        "file_tools_read_only": "true",
+        "has_unavailable_caches": "false",
+        "network": "network: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "sandbox": "sandbox: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "unavailable_caches": "unavailable_caches: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "write_paths": "write_paths: literal {{token}} / λ / \"quoted\"\nsecond line"
+      },
+      "sha256": "66b31c925444387246acb09079a46c9db2aaf828f0066f45d0cd809e21a97855"
+    },
+    {
+      "recipient": "pi-security",
+      "event": "instructions",
+      "values": {
+        "cache_paths": "cache_paths: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "enabled": "false",
+        "file_tools_full_access": "true",
+        "file_tools_read_only": "true",
+        "has_unavailable_caches": "false",
+        "network": "network: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "sandbox": "sandbox: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "unavailable_caches": "unavailable_caches: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "write_paths": "write_paths: literal {{token}} / λ / \"quoted\"\nsecond line"
+      },
+      "sha256": "520c43501532228ee9ab653ff6a150b3ac48471078ea03e8ede946ed98c44deb"
+    },
+    {
+      "recipient": "pi-security",
+      "event": "instructions",
+      "values": {
+        "cache_paths": "cache_paths: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "enabled": "true",
+        "file_tools_full_access": "true",
+        "file_tools_read_only": "true",
+        "has_unavailable_caches": "false",
+        "network": "network: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "sandbox": "sandbox: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "unavailable_caches": "unavailable_caches: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "write_paths": "write_paths: literal {{token}} / λ / \"quoted\"\nsecond line"
+      },
+      "sha256": "66b31c925444387246acb09079a46c9db2aaf828f0066f45d0cd809e21a97855"
+    },
+    {
+      "recipient": "pi-security",
+      "event": "instructions",
+      "values": {
+        "cache_paths": "cache_paths: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "enabled": "false",
+        "file_tools_full_access": "false",
+        "file_tools_read_only": "false",
         "has_unavailable_caches": "true",
         "network": "network: literal {{token}} / λ / \"quoted\"\nsecond line",
         "sandbox": "sandbox: literal {{token}} / λ / \"quoted\"\nsecond line",
@@ -757,6 +902,8 @@
       "values": {
         "cache_paths": "cache_paths: literal {{token}} / λ / \"quoted\"\nsecond line",
         "enabled": "true",
+        "file_tools_full_access": "false",
+        "file_tools_read_only": "false",
         "has_unavailable_caches": "true",
         "network": "network: literal {{token}} / λ / \"quoted\"\nsecond line",
         "sandbox": "sandbox: literal {{token}} / λ / \"quoted\"\nsecond line",
@@ -764,6 +911,102 @@
         "write_paths": "write_paths: literal {{token}} / λ / \"quoted\"\nsecond line"
       },
       "sha256": "1c3ce173ec4a4d5d1a79a3e9131be21fa3b537025797f52ab23c508513bfce17"
+    },
+    {
+      "recipient": "pi-security",
+      "event": "instructions",
+      "values": {
+        "cache_paths": "cache_paths: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "enabled": "false",
+        "file_tools_full_access": "true",
+        "file_tools_read_only": "false",
+        "has_unavailable_caches": "true",
+        "network": "network: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "sandbox": "sandbox: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "unavailable_caches": "unavailable_caches: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "write_paths": "write_paths: literal {{token}} / λ / \"quoted\"\nsecond line"
+      },
+      "sha256": "73ffd4d4a70c6965e6c7fc11c5d40ae86796ceb8eb0f20334e69d80ca1331b9d"
+    },
+    {
+      "recipient": "pi-security",
+      "event": "instructions",
+      "values": {
+        "cache_paths": "cache_paths: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "enabled": "true",
+        "file_tools_full_access": "true",
+        "file_tools_read_only": "false",
+        "has_unavailable_caches": "true",
+        "network": "network: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "sandbox": "sandbox: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "unavailable_caches": "unavailable_caches: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "write_paths": "write_paths: literal {{token}} / λ / \"quoted\"\nsecond line"
+      },
+      "sha256": "347ff921d633d18ab1a89d7b10c910ae77be3543c5053757938073f976d1be94"
+    },
+    {
+      "recipient": "pi-security",
+      "event": "instructions",
+      "values": {
+        "cache_paths": "cache_paths: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "enabled": "false",
+        "file_tools_full_access": "false",
+        "file_tools_read_only": "true",
+        "has_unavailable_caches": "true",
+        "network": "network: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "sandbox": "sandbox: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "unavailable_caches": "unavailable_caches: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "write_paths": "write_paths: literal {{token}} / λ / \"quoted\"\nsecond line"
+      },
+      "sha256": "520c43501532228ee9ab653ff6a150b3ac48471078ea03e8ede946ed98c44deb"
+    },
+    {
+      "recipient": "pi-security",
+      "event": "instructions",
+      "values": {
+        "cache_paths": "cache_paths: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "enabled": "true",
+        "file_tools_full_access": "false",
+        "file_tools_read_only": "true",
+        "has_unavailable_caches": "true",
+        "network": "network: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "sandbox": "sandbox: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "unavailable_caches": "unavailable_caches: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "write_paths": "write_paths: literal {{token}} / λ / \"quoted\"\nsecond line"
+      },
+      "sha256": "5f87e39cf48e2378ff526a0cb42cf0b83af14154fcff022a5f25e200978baa05"
+    },
+    {
+      "recipient": "pi-security",
+      "event": "instructions",
+      "values": {
+        "cache_paths": "cache_paths: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "enabled": "false",
+        "file_tools_full_access": "true",
+        "file_tools_read_only": "true",
+        "has_unavailable_caches": "true",
+        "network": "network: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "sandbox": "sandbox: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "unavailable_caches": "unavailable_caches: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "write_paths": "write_paths: literal {{token}} / λ / \"quoted\"\nsecond line"
+      },
+      "sha256": "520c43501532228ee9ab653ff6a150b3ac48471078ea03e8ede946ed98c44deb"
+    },
+    {
+      "recipient": "pi-security",
+      "event": "instructions",
+      "values": {
+        "cache_paths": "cache_paths: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "enabled": "true",
+        "file_tools_full_access": "true",
+        "file_tools_read_only": "true",
+        "has_unavailable_caches": "true",
+        "network": "network: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "sandbox": "sandbox: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "unavailable_caches": "unavailable_caches: literal {{token}} / λ / \"quoted\"\nsecond line",
+        "write_paths": "write_paths: literal {{token}} / λ / \"quoted\"\nsecond line"
+      },
+      "sha256": "5f87e39cf48e2378ff526a0cb42cf0b83af14154fcff022a5f25e200978baa05"
     },
     {
       "recipient": "pi-security",
