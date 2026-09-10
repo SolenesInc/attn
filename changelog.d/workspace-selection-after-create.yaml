@@ -1,0 +1,3 @@
+kind: fixed
+area: navigation
+change: Keep the workspace you select after creating another session, instead of jumping back when its delayed selection completes.

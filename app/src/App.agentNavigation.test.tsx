@@ -8,6 +8,7 @@ const mockUseSessionStore = vi.fn();
 const mockUseDaemonStore = vi.fn();
 const mockUseDaemonSocket = vi.fn();
 const mockUseKeyboardShortcuts = vi.fn();
+const mockUseUiAutomationBridge = vi.fn();
 
 const { mockNavigateAgentHistory, mockSetActiveSession } = vi.hoisted(() => ({
   mockNavigateAgentHistory: vi.fn(() => null as string | null),
@@ -16,6 +17,7 @@ const { mockNavigateAgentHistory, mockSetActiveSession } = vi.hoisted(() => ({
 
 let turnOwed: Record<string, boolean>;
 let activeSessionId: string | null;
+let sessionIds: string[];
 
 vi.mock('@tauri-apps/plugin-deep-link', () => ({
   onOpenUrl: vi.fn(async () => () => {}),
@@ -51,6 +53,9 @@ vi.mock('./components/ErrorToast', () => ({
 vi.mock('./hooks/useKeyboardShortcuts', () => ({
   useKeyboardShortcuts: (args: unknown) => mockUseKeyboardShortcuts(args),
 }));
+vi.mock('./hooks/useUiAutomationBridge', () => ({
+  useUiAutomationBridge: (args: unknown) => mockUseUiAutomationBridge(args),
+}));
 vi.mock('./hooks/useUIScale', () => ({
   useUIScale: () => ({ scale: 1, increaseScale: vi.fn(), decreaseScale: vi.fn(), resetScale: vi.fn() }),
 }));
@@ -82,8 +87,12 @@ function shortcutHandlers<T>(): T {
   return calls[calls.length - 1]?.[0] as T;
 }
 
+function selectSession(): (id: string) => void {
+  return mockUseUiAutomationBridge.mock.lastCall![0].selectSession;
+}
+
 function workspacePayload() {
-  return ['s1', 's2'].map((id) => ({
+  return sessionIds.map((id) => ({
     id: `workspace-${id}`,
     title: id,
     directory: `/tmp/${id}`,
@@ -128,19 +137,20 @@ function workTheQueueDownToHome() {
   expect(activeSessionId).toBeNull();
 }
 
-describe('waiting at home for the next turn', () => {
+describe('agent navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
     turnOwed = { s1: true, s2: false };
     activeSessionId = null;
+    sessionIds = ['s1', 's2'];
 
     mockSetActiveSession.mockImplementation((id: string | null) => { activeSessionId = id; });
     mockNavigateAgentHistory.mockReturnValue(null);
 
     mockUseSessionStore.mockImplementation(() => ({
-      sessions: ['s1', 's2'].map((id) => ({
+      sessions: sessionIds.map((id) => ({
         id,
         label: id,
         state: 'working',
@@ -170,7 +180,7 @@ describe('waiting at home for the next turn', () => {
     }));
 
     mockUseDaemonStore.mockImplementation(() => ({
-      daemonSessions: ['s1', 's2'].map((id) => ({
+      daemonSessions: sessionIds.map((id) => ({
         id,
         label: id,
         directory: `/tmp/${id}`,
@@ -220,6 +230,44 @@ describe('waiting at home for the next turn', () => {
       clearWarnings: fn,
       sendSetTerminalTheme: fn,
     });
+  });
+
+  it('keeps a newer selection when an old callback queues a now-ready session', () => {
+    sessionIds = ['s1'];
+    const app = render(<App />);
+    const beforeCreation = selectSession();
+
+    sessionIds = ['s1', 's2'];
+    app.rerender(<App />);
+    act(() => { beforeCreation('s2'); });
+    act(() => { selectSession()('s1'); });
+
+    expect(activeSessionId).toBe('s1');
+  });
+
+  it('selects a deferred session when its pane becomes available', () => {
+    sessionIds = ['s1'];
+    const app = render(<App />);
+    act(() => { selectSession()('s2'); });
+
+    sessionIds = ['s1', 's2'];
+    app.rerender(<App />);
+
+    expect(activeSessionId).toBe('s2');
+  });
+
+  it('does not leave home when an older deferred selection becomes ready', () => {
+    sessionIds = ['s1'];
+    const app = render(<App />);
+    const beforeCreation = selectSession();
+    sessionIds = ['s1', 's2'];
+    app.rerender(<App />);
+    act(() => { beforeCreation('s2'); });
+
+    act(() => { shortcutHandlers<{ onGoToDashboard: () => void }>().onGoToDashboard(); });
+    broadcast();
+
+    expect(activeSessionId).toBeNull();
   });
 
   it('takes the user to the next turn that opens after the queue ran dry', () => {
