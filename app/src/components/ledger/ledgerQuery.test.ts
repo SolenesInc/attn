@@ -56,6 +56,7 @@ describe('parseQuery', () => {
 
     expect(token).not.toMatch(/\s/);
     expect(parseQuery(token, spacedFacets, label).filters.repository).toBe(repository);
+    expect(parseQuery(token, null, label).filters.repository).toBe(repository);
   });
 
   it('keeps an at-prefixed repository name literal', () => {

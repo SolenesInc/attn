@@ -37,6 +37,10 @@ export function parseQuery(
       if (key === 'from') filters.customFrom = value; else filters.customTo = value;
     } else if (key === 'repo' || key === 'repo-path') {
       const repository = key === 'repo-path' ? repositoryTokenValue(value) : value;
+      if (key === 'repo-path') {
+        filters.repository = repository;
+        continue;
+      }
       const repositories = facets?.repositories ?? [];
       const exact = repositories.find((facet) => facet.value === repository)?.value;
       const preferred = baseName(preferredRepository).toLowerCase() === repository.toLowerCase()
