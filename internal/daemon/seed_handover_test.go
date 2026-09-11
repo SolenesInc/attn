@@ -565,6 +565,9 @@ func TestSeedHandoverFinishesAfterAnInterruptedLaunchCapturedTheNewSession(t *te
 	if err != nil || runtime.Handover == nil {
 		t.Fatalf("resolve already-bound handover = %+v, %v", runtime, err)
 	}
+	if runtime.PreviousTenderSession != seed.TenderSession {
+		t.Fatalf("recovered predecessor = %q, want accepted holder %q", runtime.PreviousTenderSession, seed.TenderSession)
+	}
 }
 
 func TestSeedHandoverDoesNotTakeAnotherSeedSharingTheOldSession(t *testing.T) {

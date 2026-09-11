@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/toolhome"
 )
 
 func configuredBuild(t *testing.T, d *Daemon) delegationprefs.Config {
@@ -125,6 +126,33 @@ func TestDelegationRoleLaunchContainsOnlySelectedGuidance(t *testing.T) {
 		if strings.Contains(prompt, absent) {
 			t.Fatalf("other routing data leaked: %q", absent)
 		}
+	}
+}
+
+func TestDelegationRoleLaunchRefreshesOptedInWorkflowSkill(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(toolhome.EnvVar, home)
+	t.Setenv("ATTN_PROFILE", "dev")
+	d := newDelegationDaemon(t)
+	backend := &fakeSpawnBackend{}
+	_, source, _ := setupDelegationSource(t, d, backend)
+	cfg := configuredBuild(t, d)
+	cfg.WorkflowSkillEnabled = true
+	if _, err := d.store.SaveDelegationPreferences(cfg); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, ".agents", "skills", "attn-workflow", "references", "planning.md")
+	backend.onSpawn = func(ptybackend.SpawnOptions) {
+		if _, err := os.Stat(want); err != nil {
+			t.Errorf("workflow skill was not refreshed before spawn: %v", err)
+		}
+	}
+	if _, err := d.delegate(&protocol.DelegateMessage{
+		Cmd: protocol.CmdDelegate, RequestID: "workflow-sync", SourceSessionID: protocol.Ptr(source),
+		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr("Implement this task")},
+		Cwd:        d.store.Get(source).Directory, Agent: protocol.Ptr("codex"), Role: protocol.Ptr("build"),
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 

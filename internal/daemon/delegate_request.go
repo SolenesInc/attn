@@ -33,16 +33,17 @@ type resolvedDelegationLaunch struct {
 	Provider           *string
 	Review             *protocol.SeedReviewActionContext
 
-	Brief               *string
-	TicketID            *string
-	Placement           *string
-	WorkspaceID         *string
-	Worktree            *protocol.DelegateWorktreeRequest
-	Plot                *string
-	Handover            *protocol.SeedHandoverRequest
-	Confirm             *bool
-	PreferencesRevision *int
-	ParentSeedID        string
+	Brief                 *string
+	TicketID              *string
+	Placement             *string
+	WorkspaceID           *string
+	Worktree              *protocol.DelegateWorktreeRequest
+	Plot                  *string
+	Handover              *protocol.SeedHandoverRequest
+	Confirm               *bool
+	PreferencesRevision   *int
+	ParentSeedID          string
+	PreviousTenderSession string
 }
 
 func resolveLaunchInput(msg *protocol.DelegateMessage) resolvedDelegationLaunch {
@@ -195,6 +196,11 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 		runtime.Brief = protocol.Ptr(seed.Body)
 		runtime.Plot = protocol.Ptr(seedID)
 		if msg.Assignment.Handover != nil {
+			previousTenderSession := seed.TenderSession
+			if handoverSeedRev > 0 {
+				previousTenderSession = strings.TrimSpace(handoverTenderSession)
+			}
+			runtime.PreviousTenderSession = previousTenderSession
 			alreadyBound := strings.TrimSpace(operationID) != "" && d.handoverAlreadyBound(operationID, sessionID, seedID)
 			if handoverSeedRev > 0 && !alreadyBound {
 				// Acceptance pins the intended holder, not the seed body. The binding transaction

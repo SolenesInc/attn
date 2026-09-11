@@ -144,6 +144,44 @@ func TestDoCreateWorktree_AfterCreateHookErrorReturnsCreatedPath(t *testing.T) {
 	}
 }
 
+func TestDelegationOperationRecordsProviderPathAfterCreateHookFailure(t *testing.T) {
+	tmpDir, mainDir := initProviderTestRepo(t)
+	d := newDelegationDaemon(t)
+	backend := &fakeSpawnBackend{}
+	_, sourceID, _ := setupDelegationSourceAt(t, d, backend, mainDir)
+
+	providerClient, providerDone := startPluginPipe(t, d, "delegation-path-provider", []string{worktreeCreateProviderSurface})
+	defer providerClient.Close()
+	hookClient, hookDone := startPluginPipe(t, d, "delegation-after-hook", []string{worktreeAfterCreateSurface})
+	defer hookClient.Close()
+	providerPath := filepath.Join(tmpDir, "provider-actual")
+	providerResponse := respondToCreateProviderCall(t, providerClient, func(params worktreeCreateProviderParams) worktreeCreateProviderResult {
+		runGitDaemon(t, mainDir, "worktree", "add", "-b", params.Branch, providerPath)
+		return worktreeCreateProviderResult{Status: providerStatusHandled, Path: providerPath, Branch: params.Branch}
+	})
+	hookResponse := respondToAfterCreateHookCall(t, hookClient, func(worktreeAfterCreateHookParams) error {
+		return errors.New("dependency bootstrap failed")
+	})
+
+	msg := explicitOperationMessage(d, "provider-path-failure", sourceID, "Use the provider path.", "provider-path")
+	msg.Cwd = mainDir
+	msg.Checkout = &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindNewWorktree, Branch: "feat/provider-path", From: protocol.Ptr("HEAD")}
+	op, err := d.startDelegation(&msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := waitDelegationOperation(t, d, op.OperationID)
+	if done.State != protocol.DelegationOperationStateFailed || protocol.Deref(done.WorktreePath) != git.CanonicalizePath(providerPath) {
+		t.Fatalf("operation = %+v, want actual provider path %s", done, providerPath)
+	}
+	waitForProviderResponse(t, providerResponse)
+	waitForProviderResponse(t, hookResponse)
+	_ = providerClient.Close()
+	_ = hookClient.Close()
+	<-providerDone
+	<-hookDone
+}
+
 func TestDoCreateWorktree_ProviderDeclineFallsBackToBuiltInGit(t *testing.T) {
 	tmpDir, mainDir := initProviderTestRepo(t)
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))

@@ -580,6 +580,9 @@ func (d *Daemon) spawnDelegatedRuntime(msg *resolvedDelegationLaunch, sessionID,
 func (d *Daemon) delegateOperation(msg *resolvedDelegationLaunch, operationID, reservedSessionID, ownedWorktreePath string, worktreeOwned bool, worktreeToken, initiatingChiefSessionID string, resolved *delegationprefs.Resolved) (*protocol.DelegateResult, error) {
 	guidance := ""
 	if resolved != nil {
+		if err := d.ensureDelegationWorkflowSkill(resolved.Selection.Harness); err != nil {
+			return nil, err
+		}
 		copy := *msg
 		msg = &copy
 		s := resolved.Selection
@@ -642,8 +645,16 @@ func (d *Daemon) delegateOperation(msg *resolvedDelegationLaunch, operationID, r
 		effort = d.defaultDelegationEffort(agent, effort)
 	}
 	if handover == nil && msg.Assignment.Kind != protocol.DelegateAssignmentKindNew {
-		if err := d.validateDispatchCrown(strings.TrimSpace(protocol.Deref(msg.Plot)), sourceSessionID); err != nil {
+		seedID := strings.TrimSpace(protocol.Deref(msg.Plot))
+		if err := d.validateDispatchCrown(seedID, sourceSessionID); err != nil {
 			return nil, err
+		}
+		if msg.Assignment.Kind == protocol.DelegateAssignmentKindSeed {
+			if seed, _, readErr := d.readSeed(seedID); readErr != nil {
+				return nil, readErr
+			} else if sourceSessionID != "" && strings.TrimSpace(seed.TenderSession) == sourceSessionID && d.sessionExists(sourceSessionID) {
+				return nil, fmt.Errorf("seed %s is tended by the source session; use --handover to transfer it to another worker", seedID)
+			}
 		}
 	}
 	name := strings.TrimSpace(protocol.Deref(msg.Label))
@@ -723,8 +734,8 @@ func (d *Daemon) delegateOperation(msg *resolvedDelegationLaunch, operationID, r
 		}
 		result := d.completedDelegationResult(existing, placement, worktreeOwned)
 		result.SeedID, result.Agent, result.Model, result.Effort = seedID, agent, model, effort
-		if handover != nil && handover.seed.TenderSession != "" {
-			result.PredecessorSessionID = protocol.Ptr(handover.seed.TenderSession)
+		if handover != nil && strings.TrimSpace(msg.PreviousTenderSession) != "" {
+			result.PredecessorSessionID = protocol.Ptr(strings.TrimSpace(msg.PreviousTenderSession))
 		}
 		if resolved != nil {
 			result.Role = protocol.Ptr(resolved.RoleName)
@@ -840,6 +851,13 @@ func (d *Daemon) delegateOperation(msg *resolvedDelegationLaunch, operationID, r
 		}
 		worktreePath, created, createErr := d.createDelegationWorktree(directory, inferredWorktreeRepo, msg.Worktree, operationID, ownedWorktreePath, worktreeOwned, worktreeToken, protocol.Deref(msg.AllowWorktreeReuse))
 		if createErr != nil {
+			if operationID != "" && strings.TrimSpace(worktreePath) != "" {
+				actualPath := git.CanonicalizePath(worktreePath)
+				if recordErr := d.store.UpdateDelegationOperation(operationID, protocol.DelegationOperationStatePreparing,
+					"worktree creation failed after creating "+actualPath, "", "", actualPath, nil, nil, time.Now()); recordErr != nil {
+					return nil, fmt.Errorf("%w; record actual worktree path %s: %v", createErr, actualPath, recordErr)
+				}
+			}
 			return nil, createErr
 		}
 		worktreePath = git.CanonicalizePath(worktreePath)
@@ -873,7 +891,7 @@ func (d *Daemon) delegateOperation(msg *resolvedDelegationLaunch, operationID, r
 	}
 	predecessorID := ""
 	if handover != nil {
-		predecessorID = handover.seed.TenderSession
+		predecessorID = strings.TrimSpace(msg.PreviousTenderSession)
 	}
 	if worktreeRoot, occupants := d.activeSessionInCheckout(directory, predecessorID, sessionID); len(occupants) > 0 && !protocol.Deref(msg.AllowWorktreeReuse) {
 		// Once another active session occupies the worktree it must not be rolled back,

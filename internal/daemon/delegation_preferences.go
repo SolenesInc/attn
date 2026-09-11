@@ -133,6 +133,28 @@ func usesDelegationPreferences(msg *protocol.DelegateMessage) bool {
 	return msg.Role != nil || msg.Choice != nil || protocol.Deref(msg.Fallback)
 }
 
+func (d *Daemon) ensureDelegationWorkflowSkill(harness string) error {
+	cfg, err := d.store.GetDelegationPreferences()
+	if err != nil {
+		return err
+	}
+	if !cfg.WorkflowSkillEnabled {
+		return nil
+	}
+	paths, attempted, err := agentdriver.EnsureWorkflowSkillsInstalled([]string{harness})
+	if err != nil {
+		return fmt.Errorf("sync attn-workflow before delegated role launch: %w", err)
+	}
+	if !attempted {
+		d.logf("skipping user-global attn-workflow skill sync for profile %q", config.ProfileLabel())
+		return nil
+	}
+	if len(paths) == 0 {
+		return fmt.Errorf("harness %q has no supported attn-workflow skill directory", harness)
+	}
+	return nil
+}
+
 func (d *Daemon) resolveDelegationPreferences(msg *protocol.DelegateMessage) (*delegationprefs.Resolved, error) {
 	if !usesDelegationPreferences(msg) {
 		if msg.Provider != nil {

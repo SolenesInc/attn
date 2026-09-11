@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -85,6 +86,37 @@ func TestDelegationOperationReservesOperationIDNamespace(t *testing.T) {
 	_, err := d.startDelegation(&msg)
 	if err == nil || !strings.Contains(err.Error(), "reserved operation prefix") {
 		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestExplicitSeedDispatchRequiresHandoverBeforeCreatingWorktree(t *testing.T) {
+	root := t.TempDir()
+	repo := initDelegationRepo(t, root, "repo")
+	d := newDelegationDaemon(t)
+	backend := &fakeSpawnBackend{}
+	_, sourceID, _ := setupDelegationSourceAt(t, d, backend, repo)
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "held work", Body: protocol.Ptr("Keep ownership explicit.")})
+	move(t, d, sourceID, seed.ID, garden.VerbTend, "", "")
+	path := filepath.Join(root, "repo--unexpected")
+	msg := protocol.DelegateMessage{
+		Cmd: protocol.CmdDelegate, RequestID: "seed-without-handover", SourceSessionID: protocol.Ptr(sourceID),
+		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindSeed, SeedID: protocol.Ptr(seed.ID)},
+		Cwd:        repo, Agent: protocol.Ptr("codex"),
+		Checkout: &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindNewWorktree, Branch: "feat/unexpected", From: protocol.Ptr("HEAD"), Path: protocol.Ptr(path)},
+	}
+	op, err := d.startDelegation(&msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := waitDelegationOperation(t, d, op.OperationID)
+	if done.State != protocol.DelegationOperationStateFailed || done.Failure == nil || !strings.Contains(done.Failure.Message, "use --handover") {
+		t.Fatalf("operation = %+v, want explicit handover refusal", done)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("refused dispatch created worktree %s: %v", path, err)
+	}
+	if attngit.RefExists(repo, "feat/unexpected") {
+		t.Fatal("refused dispatch created its branch")
 	}
 }
 
