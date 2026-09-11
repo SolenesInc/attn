@@ -521,7 +521,7 @@ describe('SettingsModal', () => {
       />
     );
 
-    fireEvent.click(screen.getByTestId('settings-nav-delegation'));
+    fireEvent.click(screen.getByTestId('settings-nav-workflows'));
     const toggle = await screen.findByTestId('settings-workflows-toggle');
     expect(toggle).toHaveTextContent('Enable');
     fireEvent.click(toggle);
@@ -554,7 +554,7 @@ describe('SettingsModal', () => {
       />
     );
 
-    fireEvent.click(screen.getByTestId('settings-nav-delegation'));
+    fireEvent.click(screen.getByTestId('settings-nav-workflows'));
     const toggleOn = await screen.findByTestId('settings-workflows-toggle');
     expect(toggleOn).toHaveTextContent('Disable');
     fireEvent.click(toggleOn);

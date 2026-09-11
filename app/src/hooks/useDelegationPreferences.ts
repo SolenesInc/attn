@@ -3,52 +3,70 @@ import type { DelegationPreferences } from '../types/generated';
 import type { DelegationSettingsState } from './daemonDelegationEvents';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
 
+type Pending = { value: DelegationPreferences; installWorkflowSkill: boolean };
+const message = (e: unknown) => String(e instanceof Error ? e.message : e);
+
+// Every edit saves at once. One request flies at a time; edits made meanwhile collapse into a
+// single pending value that is sent with the revision the daemon returned.
 export function useDelegationPreferences(active: boolean, load: () => Promise<DelegationSettingsState>, save: (value: DelegationPreferences, installWorkflowSkill?: boolean) => Promise<DelegationSettingsState>) {
   const [state, setState] = useState<DelegationSettingsState | null>(null);
-  const [draft, setDraft] = useState<DelegationPreferences | null>(null);
+  const [preferences, setPreferences] = useState<DelegationPreferences | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [changedElsewhere, setChangedElsewhere] = useState(false);
   const pushed = useDelegationPreferencesPush(s => s.version);
-  const draftRef = useRef(draft);
-  const savedRef = useRef(state?.preferences);
-  const busyRef = useRef(false);
-  const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(state?.preferences);
+  const revision = useRef(0);
+  const flight = useRef<Promise<void> | null>(null);
+  const pending = useRef<Pending | null>(null);
   const request = useRef(0);
 
-  useEffect(() => {
-    draftRef.current = draft;
-    savedRef.current = state?.preferences;
-  }, [draft, state?.preferences]);
+  const apply = useCallback((next: DelegationSettingsState) => {
+    revision.current = next.preferences.revision;
+    setState(next);
+    setPreferences(structuredClone(next.preferences));
+  }, []);
 
-  const reload = useCallback(async (discard = false) => {
+  const fetch = useCallback(async () => {
     const id = ++request.current;
-    setError('');
     try {
       const next = await load();
-      if (id !== request.current) return;
-      const edited = draftRef.current !== null && JSON.stringify(draftRef.current) !== JSON.stringify(savedRef.current);
-      if (edited && !discard) {
-        if (next.preferences.revision !== savedRef.current?.revision) setChangedElsewhere(true);
-        return;
-      }
-      setState(next); setDraft(structuredClone(next.preferences)); setChangedElsewhere(false);
-    } catch (e) { if (id === request.current) setError(String(e instanceof Error ? e.message : e)); }
-  }, [load]);
+      if (id === request.current) apply(next);
+    } catch (e) {
+      if (id === request.current) setError(message(e));
+    }
+  }, [load, apply]);
 
-  useEffect(() => { if (active && !busyRef.current) void reload(); }, [active, pushed, reload]);
+  const reload = useCallback(async () => { setError(''); await fetch(); }, [fetch]);
+
+  useEffect(() => { if (active && !flight.current && !pending.current) void reload(); }, [active, pushed, reload]);
   useEffect(() => () => { request.current++; }, []);
 
-  const persist = useCallback(async (value: DelegationPreferences, installWorkflowSkill = false) => {
-    if (busyRef.current) return;
-    busyRef.current = true; setBusy(true); setError(''); request.current++;
-    try {
-      const next = await save(value, installWorkflowSkill);
-      setState(next); setDraft(structuredClone(next.preferences)); setChangedElsewhere(false);
-    } catch (e) { setError(String(e instanceof Error ? e.message : e)); }
-    finally { busyRef.current = false; setBusy(false); }
-  }, [save]);
+  const drain = useCallback(async () => {
+    while (pending.current) {
+      const { value, installWorkflowSkill } = pending.current;
+      pending.current = null;
+      try {
+        const next = await save({ ...value, revision: revision.current }, installWorkflowSkill);
+        revision.current = next.preferences.revision;
+        if (pending.current) setState(next); else apply(next);
+      } catch (e) {
+        pending.current = null;
+        setError(message(e));
+        await fetch();
+      }
+    }
+  }, [save, apply, fetch]);
 
-  return { state, draft, setDraft, busy, dirty, error, changedElsewhere, reload, persist };
+  const persist = useCallback((value: DelegationPreferences, installWorkflowSkill = false) => {
+    setPreferences(value);
+    setError('');
+    pending.current = { value, installWorkflowSkill };
+    if (flight.current) return flight.current;
+    request.current++;
+    setBusy(true);
+    flight.current = drain().finally(() => { flight.current = null; setBusy(false); });
+    return flight.current;
+  }, [drain]);
+
+  return { state, preferences, busy, error, reload, save: persist };
 }
 export type DelegationPreferencesPolicy = ReturnType<typeof useDelegationPreferences>;

@@ -611,8 +611,37 @@ async function runMockAgent() {
   if (launch.initialPrompt.trim()) take(launch.initialPrompt);
 }
 
+// `codex app-server` as internal/agent/codex_models.go drives it: answer initialize and
+// model/list over JSON-RPC lines, then leave when the daemon closes stdin.
+export const MOCK_AGENT_MODEL_LIST = [{ id: MOCK_AGENT_MODEL, model: MOCK_AGENT_MODEL, displayName: 'Mock agent 1', description: 'The harness stand-in model.', supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'medium' }, { reasoningEffort: 'high' }] }];
+export function answerAppServerLine(line) {
+  const request = JSON.parse(line);
+  if (request.id === undefined) return null;
+  if (request.method === 'initialize') return { id: request.id, result: { userAgent: 'mock-agent' } };
+  if (request.method === 'model/list') return { id: request.id, result: { data: MOCK_AGENT_MODEL_LIST, nextCursor: null } };
+  return { id: request.id, error: { message: `mock agent app-server does not know ${request.method}` } };
+}
+function runAppServer() {
+  let buffer = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk) => {
+    buffer += chunk;
+    let newline;
+    while ((newline = buffer.indexOf('\n')) !== -1) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (!line) continue;
+      const reply = answerAppServerLine(line);
+      if (reply) process.stdout.write(`${JSON.stringify(reply)}\n`);
+    }
+  });
+  process.stdin.on('end', () => process.exit(0));
+  process.stdin.resume();
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === executablePath) {
-  runMockAgent().catch((error) => {
+  if (process.argv[2] === 'app-server') runAppServer();
+  else runMockAgent().catch((error) => {
     console.error(`mock agent failed: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
   });

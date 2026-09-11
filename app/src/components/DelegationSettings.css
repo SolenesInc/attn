@@ -1,56 +1,110 @@
-.delegation-settings { max-width: 920px; }
-.delegation-settings h3, .delegation-settings h4 { margin: 0; }
-.delegation-settings h3 { font-size: var(--font-size-md); font-weight: 600; }
-.delegation-settings h4 { font-size: var(--font-size-sm); font-weight: 600; }
-.delegation-settings p { margin: 6px 0; line-height: 1.5; }
-.delegation-settings .settings-hint { margin: 6px 0; }
-.delegation-enable, .delegation-row, .delegation-role-heading, .delegation-save { display: flex; align-items: center; gap: 12px; }
-.delegation-enable { justify-content: space-between; padding-bottom: 24px; border-bottom: 1px solid var(--color-border-subtle); }
-.delegation-switch { display: flex; align-items: center; gap: 8px; font-size: var(--font-size-sm); cursor: pointer; }
-.delegation-off { padding: 32px 0; max-width: 560px; }
-.delegation-content { border: 0; padding: 0; margin: 0; min-width: 0; }
-.delegation-tabs { margin: 20px 0; }
-.delegation-row.between { justify-content: space-between; }
-.delegation-role-row { display: flex; gap: 16px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--color-border-subtle); }
-.delegation-role-row:last-of-type { margin-bottom: 20px; }
-.delegation-role-row.disabled .delegation-role-summary { opacity: .55; }
-.delegation-role-summary { flex: 1; min-width: 0; }
-.delegation-icon { display: flex; flex: 0 0 36px; width: 36px; height: 36px; align-items: center; justify-content: center; border: 1px solid var(--color-border-subtle); border-radius: 8px; background: var(--color-bg-elevated); color: var(--color-text-secondary); font-size: 18px; }
-button.delegation-icon { cursor: pointer; }
-.delegation-icon svg { width: 18px; height: 18px; }
-.delegation-icons { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0; }
-.delegation-route { color: var(--color-text-tertiary); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
-.delegation-role-heading { margin-top: 24px; }
-.delegation-role-heading .delegation-field { flex: 1; }
-.delegation-field, .delegation-fields label { display: flex; flex-direction: column; gap: 8px; font-size: var(--font-size-sm); color: var(--color-text-secondary); }
-.delegation-field { margin: 20px 0; }
-.delegation-settings input:not([type=checkbox]), .delegation-settings select, .delegation-settings textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 9px 12px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg-input); color: var(--color-text-primary); font: inherit; }
-.delegation-settings input:not([type=checkbox]), .delegation-settings select { min-height: 38px; line-height: 1.4; }
-.delegation-select { position: relative; display: block; min-width: 0; }
-.delegation-select::after { content: ''; position: absolute; top: 50%; right: 14px; width: 6px; height: 6px; border-right: 1.5px solid var(--color-text-tertiary); border-bottom: 1.5px solid var(--color-text-tertiary); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
-.delegation-settings select { -webkit-appearance: none; appearance: none; padding-right: 34px; cursor: pointer; text-overflow: ellipsis; }
-.delegation-settings select:hover:not(:disabled) { border-color: var(--color-text-tertiary); }
-.delegation-settings select:disabled { opacity: .5; cursor: default; }
-.delegation-settings textarea { min-height: 96px; resize: vertical; line-height: 1.5; }
+.delegation-settings { max-width: 960px; --delegation-cols: 36px minmax(0, 1fr) minmax(240px, 340px) 40px; }
+.delegation-settings button { font: inherit; }
+.delegation-settings .settings-action.quiet { background: transparent; border-color: transparent; }
+.delegation-settings .settings-action.quiet:hover:not(:disabled) { background: var(--color-bg-button); border-color: var(--color-border-hover); }
+.delegation-settings .settings-action.primary { color: #1c1308; background: #f59b4a; border-color: rgba(245, 155, 74, 0.8); }
+.delegation-settings .settings-action.primary:hover:not(:disabled) { color: #1c1308; background: #ffab5e; }
+.delegation-settings .settings-action.danger { color: var(--color-error); border-color: transparent; }
+.delegation-settings .settings-action.danger:hover:not(:disabled) { border-color: rgba(255, 116, 108, 0.38); }
 .delegation-settings :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-.delegation-settings input[type=checkbox] { accent-color: var(--color-accent); }
-.delegation-fields { display: grid; grid-template-columns: 1fr 1.6fr 1fr; gap: 12px; }
-.delegation-picker { margin: 16px 0; }
-.delegation-picker .delegation-row { justify-content: flex-end; margin-top: 10px; }
-.delegation-picker .settings-hint { margin-right: auto; }
-.delegation-picker .settings-action { flex-shrink: 0; }
-.delegation-fields.custom-model { grid-template-columns: 1fr 1fr auto; align-items: end; margin-top: 12px; }
-.delegation-behavior { margin: 24px 0; }
-.delegation-behavior summary { cursor: pointer; font-size: var(--font-size-sm); font-weight: 600; }
-.delegation-choice { padding: 16px 0; border-bottom: 1px solid var(--color-border-subtle); }
-.delegation-choice-default { margin-left: 8px; color: var(--color-text-tertiary); font-size: var(--font-size-xs); font-weight: 400; }
-.delegation-choice-body { border-top: 1px solid var(--color-border-subtle); margin-top: 12px; }
-/* Extend the sticky actions through the scroll container's bottom padding. */
-.delegation-save { position: sticky; bottom: calc(-1 * var(--settings-body-padding-bottom, 0px)); z-index: 1; background: var(--color-bg-panel); padding: 16px 0 calc(16px + var(--settings-body-padding-bottom, 0px)); border-top: 1px solid var(--color-border-subtle); margin-top: 24px; margin-bottom: calc(-1 * var(--settings-body-padding-bottom, 0px)); }
-.delegation-save > span { margin-right: auto; color: var(--color-text-tertiary); font-size: var(--font-size-xs); }
-.delegation-settings .danger { color: var(--color-text-secondary); }
+.delegation-lead { max-width: 68ch; margin: 0 0 16px; color: var(--color-text-secondary); font-size: var(--font-size-md); line-height: 1.45; }
+.delegation-lead.off { color: var(--color-text-tertiary); }
+
+/* Head switch */
+.delegation-switch { display: inline-flex; align-items: center; gap: 10px; padding: 0; border: 0; background: none; color: var(--color-text-secondary); font-size: var(--font-size-sm); font-weight: 700; cursor: pointer; }
+.delegation-switch-track { position: relative; width: 36px; height: 20px; border-radius: 10px; background: var(--color-bg-button); border: 1px solid var(--color-border); transition: background .15s; }
+.delegation-switch-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--color-text-tertiary); transition: transform .15s, background .15s; }
+.delegation-switch[aria-checked="true"] .delegation-switch-track { background: #f59b4a; border-color: rgba(245, 155, 74, 0.8); }
+.delegation-switch[aria-checked="true"] .delegation-switch-track::after { transform: translateX(16px); background: #1c1308; }
+
+/* Table */
+.delegation-table { overflow: hidden; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-bg-panel); transition: opacity .15s; }
+.delegation-table.dim { opacity: .5; }
+.delegation-thead { display: grid; grid-template-columns: var(--delegation-cols); gap: 14px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--color-border-subtle); background: var(--color-bg-elevated); font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: var(--font-size-xs); font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--color-text-tertiary); }
+.delegation-row { border-bottom: 1px solid var(--color-border-subtle); }
+.delegation-row-main { display: grid; grid-template-columns: var(--delegation-cols); gap: 14px; align-items: center; min-height: 60px; padding: 12px 16px; }
+.delegation-row-main:hover, .delegation-row.open > .delegation-row-main { background: color-mix(in srgb, var(--color-bg-elevated) 60%, transparent); }
+.delegation-row.off .delegation-name, .delegation-row.off .delegation-desc, .delegation-row.off .delegation-icon { opacity: .45; }
+.delegation-icon { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--color-border-subtle); border-radius: 8px; background: var(--color-bg-elevated); color: var(--color-text-secondary); font-size: 16px; }
+.delegation-icon svg { width: 18px; height: 18px; }
+.delegation-icon.fallback { border-style: dashed; background: transparent; }
+.delegation-icon.pick { cursor: pointer; }
+.delegation-icon.pick.active { border-color: #f59b4a; color: var(--color-text-primary); }
+.delegation-icons { display: flex; flex-wrap: wrap; gap: 8px; }
+.delegation-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
+.delegation-name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--color-text-primary); font-size: var(--font-size-md); font-weight: 600; }
+.delegation-tag { padding: 1px 5px; border: 1px solid var(--color-border); border-radius: 4px; font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: var(--font-size-xs); font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-tertiary); }
+.delegation-tag.needs { color: var(--color-warning); border-color: color-mix(in srgb, var(--color-warning) 50%, transparent); }
+.delegation-desc { color: var(--color-text-secondary); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
+.delegation-cell { display: grid; gap: 5px; justify-items: start; min-width: 0; }
+.delegation-model { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-width: 0; white-space: nowrap; padding: 6px 10px; border: 1px solid transparent; border-radius: 6px; background: none; font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: var(--font-size-sm); color: var(--color-text-primary); text-align: left; cursor: pointer; }
+.delegation-model:hover, .delegation-model[aria-expanded="true"] { border-color: var(--color-border-hover); background: var(--color-bg-input); }
+.delegation-model .h { color: var(--color-text-tertiary); }
+.delegation-model .m { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.delegation-model .h { flex: none; }
+.delegation-model .e { color: #f59b4a; }
+.delegation-model.unset { color: var(--color-warning); border-style: dashed; border-color: color-mix(in srgb, var(--color-warning) 45%, transparent); }
+.delegation-model.pinned { color: var(--color-text-tertiary); }
+.delegation-caret { margin-left: auto; opacity: .55; line-height: 0; transform: translateY(-3px); }
+.delegation-altchip { margin-left: 10px; padding: 2px 7px; border: 1px dashed var(--color-border); border-radius: 4px; background: none; font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: var(--font-size-xs); letter-spacing: 0.04em; color: var(--color-text-tertiary); cursor: pointer; }
+.delegation-altchip:hover { color: var(--color-text-primary); border-color: var(--color-border-hover); }
+.delegation-more { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 6px; background: none; color: var(--color-text-tertiary); font-weight: 700; letter-spacing: 0.1em; cursor: pointer; }
+.delegation-more:hover, .delegation-more.open { background: var(--color-bg-button); color: var(--color-text-primary); }
+
+/* Expanded details */
+.delegation-row.open .delegation-details, .delegation-row.open .delegation-alt, .delegation-row.open .delegation-alt-edit { background: color-mix(in srgb, var(--color-bg-elevated) 25%, transparent); }
+.delegation-details { display: grid; gap: 14px; max-width: calc(78ch + 66px); padding: 4px 16px 18px 66px; }
+.delegation-details.actions { max-width: none; padding-top: 6px; }
+.delegation-row.open .delegation-details:not(.actions) { padding-bottom: 10px; }
+.delegation-row.open .delegation-details + div > .delegation-alt, .delegation-row.open .delegation-details + .delegation-alt { padding-top: 10px; border-top: 1px dashed var(--color-border-subtle); }
+.delegation-field { display: grid; gap: 6px; }
+.delegation-field label, .delegation-field-label { display: flex; align-items: baseline; gap: 8px; font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: var(--font-size-xs); font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--color-text-tertiary); }
+.delegation-field-note { font-family: system-ui, sans-serif; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--color-text-tertiary); }
+.delegation-field input, .delegation-field textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg-input); color: var(--color-text-primary); font: inherit; font-size: var(--font-size-sm); line-height: 1.5; }
+.delegation-field textarea { min-height: 72px; resize: vertical; }
+.delegation-alt-edit .delegation-field textarea { min-height: 120px; }
+.delegation-hint { font-size: var(--font-size-xs); color: var(--color-text-tertiary); line-height: 1.5; }
+.delegation-ro { padding: 8px 10px; border-radius: 6px; background: color-mix(in srgb, var(--color-bg-elevated) 50%, transparent); color: var(--color-text-secondary); font-size: var(--font-size-sm); line-height: 1.55; white-space: pre-wrap; }
+.delegation-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.delegation-actions.center { justify-content: center; padding-top: 8px; }
+.delegation-spacer { flex: 1; }
+
+/* Alternatives as sub rows */
+.delegation-alt { display: grid; grid-template-columns: var(--delegation-cols); gap: 14px; align-items: center; padding: 6px 16px 10px; }
+.delegation-alt > .delegation-model { max-width: 100%; }
+.delegation-alt.add { padding-top: 2px; }
+.delegation-alt-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; margin-left: -6px; padding: 4px 6px; border: 0; border-radius: 6px; background: none; color: inherit; text-align: left; cursor: pointer; }
+.delegation-alt-who:hover { background: color-mix(in srgb, var(--color-bg-elevated) 60%, transparent); }
+.delegation-alt-name { color: var(--color-text-primary); font-size: var(--font-size-sm); font-weight: 600; }
+.delegation-alt-when { color: var(--color-text-secondary); font-size: var(--font-size-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.delegation-alt-when .w { margin-right: 6px; font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; color: var(--color-text-tertiary); }
+.delegation-alt-when.blank { color: var(--color-warning); }
+.delegation-alt-edit { display: grid; gap: 12px; max-width: calc(78ch + 66px); padding: 0 16px 14px 66px; }
+.delegation-alt-edit > .delegation-field { padding: 0; }
+.delegation-rm { display: grid; place-items: center; width: 32px; height: 32px; justify-self: center; border: 0; border-radius: 6px; background: none; font-size: 18px; line-height: 1; color: var(--color-text-tertiary); cursor: pointer; }
+.delegation-rm:hover { background: var(--color-bg-button); color: var(--color-error); }
+
+/* Add row, foot, empty, confirm, undo */
+.delegation-addrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px; background: color-mix(in srgb, var(--color-bg-elevated) 40%, transparent); }
+.delegation-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 12px; color: var(--color-text-tertiary); font-size: var(--font-size-sm); }
+.delegation-foot code { font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; }
+.delegation-live { display: inline-flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: var(--font-size-xs); letter-spacing: 0.06em; }
+.delegation-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--color-success); }
+.delegation-live.off .delegation-dot { background: var(--color-text-tertiary); }
+.delegation-empty { display: grid; justify-items: center; gap: 10px; padding: 44px 24px; border: 1px dashed var(--color-border); border-radius: 10px; text-align: center; }
+.delegation-empty h3 { margin: 0; font-size: var(--font-size-md); font-weight: 600; }
+.delegation-empty p { max-width: 52ch; margin: 0; color: var(--color-text-secondary); font-size: var(--font-size-sm); }
+.delegation-confirm { display: grid; gap: 10px; margin-top: 14px; padding: 16px 18px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-bg-elevated); }
+.delegation-confirm h4 { margin: 0; font-size: var(--font-size-sm); font-weight: 600; }
+.delegation-confirm p { margin: 0; color: var(--color-text-secondary); font-size: var(--font-size-sm); }
+.delegation-confirm-line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: var(--font-size-sm); }
+.delegation-confirm select { padding: 5px 8px; border: 1px solid var(--color-border); border-radius: 5px; background: var(--color-bg-input); color: var(--color-text-primary); font: inherit; font-size: var(--font-size-sm); }
+.delegation-undo { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg-elevated); color: var(--color-text-secondary); font-size: var(--font-size-sm); }
+.delegation-undo .settings-action { min-height: 30px; color: #f59b4a; }
 @media (max-width: 760px) {
-  .delegation-fields { grid-template-columns: 1fr; }
-  .delegation-save, .delegation-picker .delegation-row { flex-wrap: wrap; }
-  .delegation-role-row { gap: 10px; }
+  .delegation-settings { --delegation-cols: 36px minmax(0, 1fr) 40px; }
+  .delegation-thead span:nth-child(3) { display: none; }
+  .delegation-row-main .delegation-cell, .delegation-alt .delegation-model { grid-column: 2; }
+  .delegation-details, .delegation-alt-edit { padding-left: 16px; }
 }
+@media (prefers-reduced-motion: reduce) { .delegation-table, .delegation-switch-track, .delegation-switch-track::after { transition: none; } }

@@ -137,8 +137,8 @@ try {
     runner.assert((await text('[data-testid="settings-section-workspace"]')).includes('Editor'), 'editor belongs with file locations');
     await section('terminal');
     runner.assert((await text('[data-testid="settings-section-terminal"]')).includes('PTY Backend'), 'terminal hosting is under System');
-    await section('delegation');
-    runner.assert((await text('[data-testid="settings-section-delegation"]')).includes('Enable workflows'), 'workflows live beside delegation');
+    await section('workflows');
+    runner.assert((await text('[data-testid="settings-section-workflows"]')).includes('Enable workflows'), 'workflows have their own section');
     await section('agents');
     await screenshot('04-finished.png');
   });

@@ -7,11 +7,9 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, profileCliEnv, socketPathForProfile } from './harnessProfile.mjs';
-import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
-import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
+import { appDaemonInTree, delay } from './platform.mjs';
 import { captureWebKitPids, readLiveDaemonPid, readProcessTable, snapshot, readAppFootprint } from './perfMeasure.mjs';
-
-process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
+import { MOCK_AGENT_MODEL } from './mockAgent.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
 const profile = currentHarnessProfile();
@@ -21,34 +19,40 @@ process.env.ATTN_HARNESS_SKILL_SYNC = '1';
 process.env.ATTN_TOOL_HOME = path.join(runner.runDir, 'tool-home');
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
-const driver = createWindowDriver({ appPath: options.appPath });
 const root = '[data-testid="delegation-settings"]';
+const toggle = '.settings-content-head [role="switch"][aria-label="Delegation preferences"]';
+const popover = '[role="dialog"][aria-label="Choose a model"]';
 const runAttn = args => execFileSync(appDaemonInTree(options.appPath), args, { encoding: 'utf8', env: profileCliEnv(profile, { ATTN_SOCKET_PATH: socketPathForProfile(profile) }) });
 const roles = () => JSON.parse(runAttn(['delegate', 'roles', '--json']));
 const click = selector => client.request('dom_click', { selector });
 const type = (selector, text) => client.request('dom_type', { selector, text });
-const select = (selector, value) => client.request('dom_select', { selector, value });
-const text = async () => (await client.request('dom_text', { selector: root })).text;
+const text = async (selector = root) => (await client.request('dom_text', { selector })).text;
+const exists = selector => client.request('dom_text', { selector }).then(() => true, () => false);
 const hold = () => process.env.ATTN_HARNESS_RECORD === '1' ? delay(1200) : Promise.resolve();
 async function until(check, description) {
   for (let i = 0; i < 100; i++) { const found = await check(); if (found) return found; await delay(100); }
   throw new Error(`Timed out: ${description}`);
 }
-async function save() {
-  await click('[data-testid="delegation-save"]');
-  await until(async () => !(await text()).includes('Unsaved changes') && !(await text()).includes('Saving…'), 'preferences saved');
+// Every edit autosaves; the saved preferences are the receipt, not a Save button.
+const preferences = async () => (await preferencesRequest('delegation_preferences_get')).preferences;
+const savedRole = (name, check = () => true) => until(async () => (await preferences()).roles.find(role => role.name === name && check(role)), `${name} saved`);
+// Text fields commit on blur: focus the field, set its value, then move focus to the open row's details button.
+async function fill(selector, value) {
+  await client.request('dom_focus', { selector });
+  await type(selector, value);
+  await client.request('dom_focus', { selector: `${root} .delegation-row.open .delegation-more` });
 }
-async function screenshot(name) {
+async function openModel(label) {
+  await click(`${root} [aria-label="Model for ${label}"]`);
+  await until(() => exists(popover), `model popover for ${label}`);
+}
+const closePopover = () => click(`${root} .delegation-lead`);
+// DOM pixels through the bridge, so nothing activates the window. A fixed popover only paints
+// from body; a whole-body capture is safe here because no terminal pane exists yet.
+async function screenshot(name, selector = '[data-testid="settings-modal"]') {
   if (process.env.ATTN_HARNESS_SCREENSHOTS === '0') return;
-  await driver.activateApp();
-  const outputPath = path.join(runner.runDir, name);
-  if (process.platform === 'darwin') {
-    const windowId = await driver.mainWindowId();
-    if (!windowId) throw new Error(`Cannot capture ${name}: no native window found for ${profile}`);
-    execFileSync('/usr/sbin/screencapture', ['-x', '-l', String(windowId), outputPath]);
-  } else {
-    await captureFrontWindowScreenshot(outputPath, { client, appPath: options.appPath });
-  }
+  const shot = await client.request('capture_screenshot_data', { selector });
+  fs.writeFileSync(path.join(runner.runDir, name), Buffer.from(shot.pngBase64, 'base64'));
 }
 
 function preferencesRequest(cmd, preferences, installWorkflowSkill = false) {
@@ -79,71 +83,84 @@ try {
     await preferencesRequest('delegation_preferences_save', { ...baseline, revision: current.preferences.revision });
   });
   if (baseline.revision !== 0) {
-    await preferencesRequest('delegation_preferences_save', { ...baseline, enabled: false, roles: initial.templates, fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } });
+    await preferencesRequest('delegation_preferences_save', { ...baseline, enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } });
   }
   await runner.step('disabled_by_default', async () => {
     await client.request('dismiss_whats_new');
     await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
     await client.request('settings_select_section', { sectionId: 'general' });
-    const appearanceStatus = (await client.request('dom_text', { selector: '.settings-status-pair' })).text;
+    const appearanceStatus = await text('.settings-status-pair');
     runner.assert(appearanceStatus.trim() === '', 'appearance header has no decorative status pills');
     await screenshot('00-appearance.png'); await hold();
     await client.request('settings_select_section', { sectionId: 'delegation' });
-    await until(async () => (await text()).includes('Add Attn roles'), 'disabled preferences with role setup available');
+    await until(async () => (await text()).includes('No roles yet'), 'empty table with role setup available');
+    runner.assert((await text(toggle)).includes('Off'), 'the head switch reads Off before opt-in');
     runner.assert(roles().roles.length === 0, 'roles lookup is empty before opt-in');
     await screenshot('01-disabled.png'); await hold();
   });
   await runner.step('profile_rejects_install_then_configure_custom_builder', async () => {
-    await click(`${root} .delegation-switch input`);
-    await until(async () => (await preferencesRequest('delegation_preferences_get')).preferences.enabled, 'delegation preferences enabled');
-    await click(`${root} > fieldset > button.settings-action`);
-    await until(async () => (await text()).includes('Adopt maintained roles'), 'maintained role adoption preview');
-    await click('[data-testid="delegation-add-attn-roles-confirm"]');
+    await click(toggle);
+    await until(async () => (await preferences()).enabled, 'delegation preferences enabled');
+    await click(`${root} .delegation-empty .settings-action.primary`);
     await until(async () => (await text()).includes('installation is disabled for profile'), 'profile-safe workflow install refusal');
-    runner.assert(roles().roles.length === 0, 'failed workflow installation leaves saved roles unchanged');
-    await click(`${root} .delegation-row.between button.settings-action`);
-    await type('.delegation-role-heading input', 'Builder');
-    await select('.delegation-choice-body .delegation-fields > label:first-child select', 'codex');
-    await save();
-    const [builder] = roles().roles;
-    runner.assert(builder?.id.startsWith('role-') && builder.name === 'Builder' && !builder.builtin, 'custom Builder saves without workflow installation');
+    runner.assert((await preferences()).roles.length === 0, 'failed workflow installation leaves saved roles unchanged');
+    await click(`${root} .delegation-empty .settings-action:not(.primary)`);
+    await until(() => exists('input[id^="name-role-"]'), 'new custom role opens its editor');
+    await fill('input[id^="name-role-"]', 'Builder');
+    const builder = await savedRole('Builder');
+    runner.assert(builder.id.startsWith('role-') && !builder.builtin, 'custom Builder saves without workflow installation');
     builderRoleID = builder.id;
-    const header = (await client.request('dom_text', { selector: '.settings-content-head' })).text;
+    runner.assert(roles().roles.length === 0, 'a role without a harness is not offered to agents');
+    await openModel('Builder');
+    await click(`${popover} [data-harness="codex"]`);
+    await savedRole('Builder', role => role.choices[0].selection.harness === 'codex');
+    await until(() => exists(`${popover} [data-model="${MOCK_AGENT_MODEL}"]`), 'Codex lists its models through the mock app-server');
+    await click(`${popover} [data-model="${MOCK_AGENT_MODEL}"]`);
+    await savedRole('Builder', role => role.choices[0].selection.model === MOCK_AGENT_MODEL);
+    await click(`${popover} [data-effort="medium"]`);
+    await savedRole('Builder', role => role.choices[0].selection.effort === 'medium');
+    runner.assert(roles().roles.some(role => role.id === builderRoleID), 'a role with a harness and model is offered to agents');
+    const header = await text('.settings-content-head');
     runner.assert(!header.includes('% text') && !header.includes('dark'), 'header has no appearance badges');
-    await click('.delegation-tabs button:first-child');
+    await closePopover();
     await screenshot('02-roles.png'); await hold();
-    await click('.delegation-tabs button:last-child');
-    await select('.delegation-fields > label:first-child select', 'codex');
-    await save();
+    await openModel('anything else');
+    await click(`${popover} [data-harness="codex"]`);
+    await until(async () => (await preferences()).fallback.selection.harness === 'codex', 'fallback harness saved');
     runner.assert(roles().fallback?.selection.harness === 'codex', 'fallback configures independently');
-    await screenshot('02-fallback.png'); await hold();
-    await click('.delegation-tabs button:first-child');
+    await screenshot('02-fallback.png', 'body'); await hold();
+    await closePopover();
   });
   await runner.step('add_builder_effort_alternative', async () => {
-    await click('[aria-label="Edit Builder"]');
-    await type('.delegation-choice-body .delegation-picker input[list]', 'medium');
-    await click('[data-testid="delegation-add-choice"]');
-    await type('.delegation-choice-body > label input', 'Difficult verification');
-    await type('.delegation-choice-body > label textarea', 'Verification is difficult or the requirements are ambiguous.');
-    await type('.delegation-choice-body .delegation-picker input[list]', 'high');
-    await save();
-    const builder = roles().roles.find(r => r.id === builderRoleID);
-    runner.assert(builder.choices.length === 2 && builder.choices[1].selection.effort === 'high', 'alternative retains its native effort');
-    runner.assert(!builder.builtin, 'model edits preserve the custom role');
-    await screenshot('03-role-editor.png'); await hold();
-    await client.request('dom_scroll_into_view', { selector: '.delegation-choice-body' });
-    await screenshot('03-model-choices.png'); await hold();
+    if (!(await exists(`${root} .delegation-row.open[data-role-id="${builderRoleID}"]`))) await click(`${root} [aria-label="Builder"]`);
+    await click(`${root} .delegation-alt.add button`);
+    await until(() => exists('input[id^="altname-"]'), 'alternative editor opens');
+    await fill('input[id^="altname-"]', 'Difficult verification');
+    await fill('textarea[id^="when-"]', 'Verification is difficult.\n\nOr the requirements are ambiguous and the agent has to ask.');
+    await savedRole('Builder', role => role.choices.length === 2 && role.choices[1].when.includes('ambiguous'));
+    await openModel('Difficult verification');
+    await click(`${popover} [data-effort="high"]`);
+    const builder = await savedRole('Builder', role => role.choices[1].selection.effort === 'high');
+    runner.assert(builder.choices[1].name === 'Difficult verification' && builder.choices[1].selection.model === MOCK_AGENT_MODEL, 'the alternative starts from the default model and keeps its own effort');
+    runner.assert(builder.choices[0].selection.effort === 'medium' && !builder.builtin, 'the default choice and the custom role are untouched');
+    await screenshot('03-model-choices.png', 'body'); await hold();
+    await closePopover();
+    await screenshot('03-role-editor.png', `${root} .delegation-row.open`); await hold();
   });
   await runner.step('custom_role_can_be_deleted_and_restored', async () => {
-    await click('.delegation-tabs button:first-child');
-    await click(`${root} .delegation-content > .delegation-row.between button`);
-    await type('.delegation-role-heading input', 'Debug');
-    await select('.delegation-choice-body .delegation-fields > label:first-child select', 'copilot');
-    await save();
-    runner.assert(roles().roles.some(r => r.name === 'Debug' && r.choices[0].selection.harness === 'copilot'), 'custom role keeps Copilot default');
-    await click('.delegation-content > .delegation-row.between .danger');
-    await click(`${root} > [role="status"] button`);
-    await save();
+    await click(`${root} .delegation-addrow .settings-action:first-child`);
+    await until(() => exists(`${root} .delegation-row.open:not([data-role-id="${builderRoleID}"]) input[id^="name-role-"]`), 'second custom role opens its editor');
+    await fill(`${root} .delegation-row.open input[id^="name-role-"]`, 'Debug');
+    await savedRole('Debug');
+    await openModel('Debug');
+    await click(`${popover} [data-harness="codex"]`);
+    await savedRole('Debug', role => role.choices[0].selection.harness === 'codex' && role.choices[0].selection.model === '');
+    await closePopover();
+    runner.assert(roles().roles.some(r => r.name === 'Debug' && r.choices[0].selection.harness === 'codex'), 'a harness default is a complete choice');
+    await click(`${root} .delegation-row.open .delegation-details.actions .danger`);
+    await until(async () => !(await preferences()).roles.some(role => role.name === 'Debug'), 'Debug deleted');
+    await click(`${root} .delegation-undo button`);
+    await savedRole('Debug');
     runner.assert(roles().roles.some(r => r.name === 'Debug'), 'Undo restores a deleted role');
     await screenshot('04-custom-role.png'); await hold();
   });
@@ -164,10 +181,12 @@ try {
   await runner.step('disable_hides_roles_and_reenable_restores_them', async () => {
     await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
     await client.request('settings_select_section', { sectionId: 'delegation' });
-    await click(`${root} .delegation-switch input`);
+    await click(toggle);
     await until(() => roles().roles.length === 0, 'roles hidden');
+    await until(() => exists(`${toggle}[aria-checked="false"]`), 'the switch reads Off');
+    runner.assert((await text()).includes('Your table is kept'), 'the table stays visible while off');
     await hold();
-    await click(`${root} .delegation-switch input`);
+    await click(toggle);
     await until(() => roles().roles.length === before.roles.length, 'saved roles restored');
     runner.writeJson('roles.json', roles());
     await screenshot('05-restored.png'); await hold();
@@ -191,7 +210,6 @@ try {
   });
   console.log(JSON.stringify(await runner.finishSuccess({ source, worker }), null, 2));
 } catch (error) {
-  await screenshot('failure.png').catch(() => {});
   console.error(JSON.stringify(await runner.finishFailure(error), null, 2));
   process.exitCode = 1;
 }
