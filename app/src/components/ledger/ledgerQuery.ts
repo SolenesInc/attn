@@ -38,12 +38,15 @@ export function parseQuery(
     } else if (key === 'repo' || key === 'repo-path') {
       const repository = key === 'repo-path' ? repositoryTokenValue(value) : value;
       const repositories = facets?.repositories ?? [];
-      const exact = repositories.find((facet) => facet.value === repository);
+      const exact = repositories.find((facet) => facet.value === repository)?.value;
+      const preferred = baseName(preferredRepository).toLowerCase() === repository.toLowerCase()
+        ? preferredRepository
+        : '';
       const named = repositories.filter((facet) => baseName(facet.value).toLowerCase() === repository.toLowerCase());
       const match = exact
-        ?? named.find((facet) => facet.value === preferredRepository)
-        ?? (named.length === 1 ? named[0] : undefined);
-      if (match) filters.repository = match.value; else unresolved.push(token);
+        || preferred
+        || (named.length === 1 ? named[0].value : '');
+      if (match) filters.repository = match; else unresolved.push(token);
     } else if (key === 'ws') {
       const match = (facets?.workspaces ?? []).find((facet) =>
         facet.value === value || wsToken(workspaceLabel(facet.value)) === value.toLowerCase());

@@ -40,6 +40,10 @@ describe('parseQuery', () => {
 
     expect(parseQuery('repo:attn', duplicateNames, label, '/tmp/checkout/attn').filters.repository)
       .toBe('/tmp/checkout/attn');
+    expect(parseQuery('repo:attn', {
+      ...duplicateNames,
+      repositories: [{ value: '/Users/victor/projects/attn', count: 3 }],
+    }, label, '/tmp/checkout/attn').filters.repository).toBe('/tmp/checkout/attn');
     expect(parseQuery('repo:attn', duplicateNames, label).unresolved).toEqual(['repo:attn']);
     expect(parseQuery('repo:/Users/victor/projects/attn', duplicateNames, label).filters.repository)
       .toBe('/Users/victor/projects/attn');
