@@ -46,9 +46,9 @@ function disableDefinition(binary, id, env) {
   return runJSON(binary, ['automation', 'disable', id], env);
 }
 
-function sessionForDefinition(binary, definitionID, env) {
+function sessionsForDefinition(binary, definitionID, env) {
   const runs = runJSON(binary, ['automation', 'runs', definitionID], env) || [];
-  return runs.find((automationRun) => automationRun.session_id)?.session_id || '';
+  return [...new Set(runs.map((automationRun) => automationRun.session_id).filter(Boolean))];
 }
 
 function seedForSession(binary, sessionID, env) {
@@ -387,29 +387,47 @@ async function main() {
     await runner.finishFailure(error, { profile, manualID, scheduledID, firstRunId, fixturePath });
     throw error;
   } finally {
+    if (daemonEnv) {
+      try {
+        run(binary, ['daemon', 'ensure'], daemonEnv);
+        await waitForDaemonReady(binary, daemonEnv);
+      } catch {}
+    }
     // Disable first so a failed session teardown cannot leave a directory
     // definition ticking against the fixture while cleanup continues.
     if (daemonEnv) {
       if (manualApplied) { try { disableDefinition(binary, manualID, daemonEnv); } catch {} }
       if (scheduledApplied) { try { disableDefinition(binary, scheduledID, daemonEnv); } catch {} }
     }
-    if (!manualSessionID && manualApplied && daemonEnv) {
-      try { manualSessionID = sessionForDefinition(binary, manualID, daemonEnv); } catch {}
+    const teardownSessionIDs = new Set(manualSessionID ? [manualSessionID] : []);
+    if (manualApplied && daemonEnv) {
+      try {
+        for (const sessionID of sessionsForDefinition(binary, manualID, daemonEnv)) teardownSessionIDs.add(sessionID);
+      } catch {}
     }
-    if (!manualSeedID && manualSessionID && daemonEnv) {
-      try { manualSeedID = seedForSession(binary, manualSessionID, daemonEnv)?.id || ''; } catch {}
+    const teardownSeedIDs = new Set(manualSeedID ? [manualSeedID] : []);
+    if (daemonEnv) {
+      for (const sessionID of teardownSessionIDs) {
+        try {
+          const seedID = seedForSession(binary, sessionID, daemonEnv)?.id;
+          if (seedID) teardownSeedIDs.add(seedID);
+        } catch {}
+      }
     }
-    if (manualSessionID) {
+    for (const sessionID of teardownSessionIDs) {
       await closeProbeSession(
         client,
         observer,
         dataDirForProfile(profile),
-        manualSessionID,
+        sessionID,
         fixturePath,
       ).catch(() => {});
     }
-    if (!manualSeedSettled && manualSeedID && daemonEnv) {
-      try { run(binary, ['seed', 'wither', manualSeedID, '-m', 'Automation surface harness fixture complete'], daemonEnv); } catch {}
+    if (daemonEnv) {
+      for (const seedID of teardownSeedIDs) {
+        if (manualSeedSettled && seedID === manualSeedID) continue;
+        try { run(binary, ['seed', 'wither', seedID, '-m', 'Automation surface harness fixture complete'], daemonEnv); } catch {}
+      }
     }
     if (daemonEnv) {
       if (manualApplied) { try { run(binary, ['automation', 'delete', manualID], daemonEnv); } catch {} }

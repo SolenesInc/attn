@@ -612,9 +612,13 @@ async function main() {
     throw error;
   } finally {
     if (daemonEnv) {
-      for (const id of createdDefinitions) {
-        try { run(binary, ['automation', 'delete', id], daemonEnv); } catch {}
-      }
+      try {
+        run(binary, ['daemon', 'ensure'], daemonEnv);
+        await waitForDaemonReady(binary, daemonEnv);
+        for (const id of createdDefinitions) {
+          try { run(binary, ['automation', 'delete', id], daemonEnv); } catch {}
+        }
+      } catch {}
     }
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
