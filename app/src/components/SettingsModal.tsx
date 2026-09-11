@@ -851,6 +851,8 @@ function SettingsModalContent({
     pluginIssues.length,
     plugins.length,
     autoModePolicy.pendingCount,
+    delegationPolicy.preferences,
+    workflowsEnabled,
   ]);
 
   const filteredNavGroups = useMemo(() => {
