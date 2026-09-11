@@ -58,6 +58,20 @@ function seedForSession(binary, sessionID, env) {
   return (listed.seeds || []).find((seed) => seed.tender_session === sessionID) || null;
 }
 
+function recordedSessionIDs(binary, definitionIDs, env) {
+  const sessionIDs = new Set();
+  for (const definitionID of definitionIDs) {
+    const runs = runJSON(binary, ['automation', 'runs', definitionID], env) || [];
+    for (const row of runs) if (row.session_id) sessionIDs.add(row.session_id);
+  }
+  return sessionIDs;
+}
+
+function boundSeedsForSessions(binary, sessionIDs, env) {
+  const listed = runJSON(binary, ['seed', 'ls', '--json'], env) || {};
+  return (listed.seeds || []).filter((seed) => sessionIDs.has(seed.tender_session));
+}
+
 async function poll(fn, description, timeoutMs = 30_000) {
   const started = Date.now();
   let last = null;
@@ -441,7 +455,18 @@ async function main() {
     });
 
     await runner.step('cleanup_and_restart_receipt', async () => {
-      const sessionIDs = new Set([cleanupSessionID, stormGuardSessionID]);
+      const sessionIDs = recordedSessionIDs(binary, [cleanupID, stormGuardID], daemonEnv);
+      runner.assert(
+        sessionIDs.size === 2 && sessionIDs.has(cleanupSessionID) && sessionIDs.has(stormGuardSessionID),
+        'the two fixture definitions own the expected delivered sessions',
+        { sessionIDs: [...sessionIDs], cleanupSessionID, stormGuardSessionID },
+      );
+      const boundSeeds = boundSeedsForSessions(binary, sessionIDs, daemonEnv);
+      runner.assert(
+        boundSeeds.length === 2 && boundSeeds.some((seed) => seed.id === cleanupSeedID) && boundSeeds.some((seed) => seed.id === stormGuardSeedID),
+        'the delivered sessions own the expected two synthetic seeds',
+        { boundSeeds, cleanupSeedID, stormGuardSeedID },
+      );
       const closed = await closeDeliveredSessions(
         options.wsUrl,
         dataDirForProfile(profile),
@@ -453,10 +478,11 @@ async function main() {
         closed: closed.map((session) => session.id),
       });
       sessionsClosed = true;
-      run(binary, ['seed', 'wither', cleanupSeedID, '-m', 'Scheduled cleanup harness fixture complete'], daemonEnv);
-      cleanupSeedSettled = true;
-      run(binary, ['seed', 'wither', stormGuardSeedID, '-m', 'Scheduled storm-guard harness fixture complete'], daemonEnv);
-      stormGuardSeedSettled = true;
+      for (const seed of boundSeeds) {
+        run(binary, ['seed', 'wither', seed.id, '-m', 'Scheduled automation harness fixture complete'], daemonEnv);
+        if (seed.id === cleanupSeedID) cleanupSeedSettled = true;
+        if (seed.id === stormGuardSeedID) stormGuardSeedSettled = true;
+      }
 
       run(binary, ['automation', 'delete', cleanupID], daemonEnv);
       cleanupApplied = false;
@@ -495,16 +521,17 @@ async function main() {
     throw error;
   } finally {
     const teardownNeeded = cleanupApplied || stormGuardApplied || !sessionsClosed || !cleanupSeedSettled || !stormGuardSeedSettled;
+    const teardownSessionIDs = new Set([cleanupSessionID, stormGuardSessionID].filter(Boolean));
+    const teardownSeedIDs = new Set();
     if (daemonEnv && teardownNeeded) {
       try {
         run(binary, ['daemon', 'ensure'], daemonEnv);
         await waitForDaemonReady(binary, daemonEnv);
-      } catch {}
-    }
-    if (daemonEnv && ((!cleanupSeedID && cleanupSessionID) || (!stormGuardSeedID && stormGuardSessionID))) {
-      try {
-        if (!cleanupSeedID && cleanupSessionID) cleanupSeedID = seedForSession(binary, cleanupSessionID, daemonEnv)?.id || '';
-        if (!stormGuardSeedID && stormGuardSessionID) stormGuardSeedID = seedForSession(binary, stormGuardSessionID, daemonEnv)?.id || '';
+        const appliedDefinitionIDs = [];
+        if (cleanupApplied) appliedDefinitionIDs.push(cleanupID);
+        if (stormGuardApplied) appliedDefinitionIDs.push(stormGuardID);
+        for (const sessionID of recordedSessionIDs(binary, appliedDefinitionIDs, daemonEnv)) teardownSessionIDs.add(sessionID);
+        for (const seed of boundSeedsForSessions(binary, teardownSessionIDs, daemonEnv)) teardownSeedIDs.add(seed.id);
       } catch {}
     }
     if (!sessionsClosed) {
@@ -513,15 +540,14 @@ async function main() {
           options.wsUrl,
           dataDirForProfile(profile),
           fixtureRoot,
-          [cleanupSessionID, stormGuardSessionID],
+          [...teardownSessionIDs],
         );
       } catch {}
     }
-    if (!cleanupSeedSettled && cleanupSeedID && daemonEnv) {
-      try { run(binary, ['seed', 'wither', cleanupSeedID, '-m', 'Scheduled cleanup harness fixture complete'], daemonEnv); } catch {}
-    }
-    if (!stormGuardSeedSettled && stormGuardSeedID && daemonEnv) {
-      try { run(binary, ['seed', 'wither', stormGuardSeedID, '-m', 'Scheduled storm-guard harness fixture complete'], daemonEnv); } catch {}
+    if (!cleanupSeedSettled && cleanupSeedID) teardownSeedIDs.add(cleanupSeedID);
+    if (!stormGuardSeedSettled && stormGuardSeedID) teardownSeedIDs.add(stormGuardSeedID);
+    if (daemonEnv) for (const seedID of teardownSeedIDs) {
+      try { run(binary, ['seed', 'wither', seedID, '-m', 'Scheduled automation harness fixture complete'], daemonEnv); } catch {}
     }
     if (daemonEnv) {
       if (cleanupApplied) { try { run(binary, ['automation', 'delete', cleanupID], daemonEnv); } catch {} }

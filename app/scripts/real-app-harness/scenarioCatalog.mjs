@@ -325,27 +325,6 @@ export const scenarioCatalog = [
     // Not part of the serial matrix sweep — only runnable directly (run-soak).
     soakOnly: true,
   },
-  {
-    id: 'offset-soak',
-    runnerId: 'OFFSET-SOAK',
-    label: 'Seeded pane offset and overflow soak',
-    command: ['pnpm', 'run', 'real-app:scenario-offset-soak'],
-    soakOnly: true,
-  },
-  {
-    id: 'perf-baseline',
-    runnerId: 'perf-baseline',
-    label: 'App CPU, memory, startup and streaming baseline',
-    command: ['pnpm', 'run', 'real-app:scenario-perf-baseline'],
-    soakOnly: true,
-  },
-  {
-    id: 'perf-cold-warm',
-    runnerId: 'perf-cold-warm',
-    label: 'Cold and warm app performance comparison',
-    command: ['pnpm', 'run', 'real-app:scenario-perf-cold-warm'],
-    soakOnly: true,
-  },
 ];
 
 export function resolveScenarios(selected, catalog = scenarioCatalog) {

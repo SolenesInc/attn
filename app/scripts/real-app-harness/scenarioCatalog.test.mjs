@@ -128,6 +128,12 @@ describe('scenarioCatalog soakOnly handling', () => {
   it('throws on an unknown id in direct single-scenario resolution', () => {
     expect(() => resolveScenario('does-not-exist')).toThrow('Unknown scenario id: does-not-exist');
   });
+
+  it('keeps hand-written soaks with unsafe teardown out of direct selection', () => {
+    for (const id of ['offset-soak', 'perf-baseline', 'perf-cold-warm']) {
+      expect(() => resolveScenario(id), id).toThrow(`Unknown scenario id: ${id}`);
+    }
+  });
 });
 
 describe('scenarioCatalog daemon isolation', () => {

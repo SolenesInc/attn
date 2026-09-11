@@ -165,6 +165,14 @@ piece of work rather than a rediscovery.
   the claim still matters beside the Garden dispatch and read-receipt scenarios.
 - `scenario-tr402.mjs`: port, then catalog. Its remote real-Codex path is not
   armed by the harness and leaves its session, endpoint and remote root behind.
+- `scenario-offset-soak.mjs`: hand-run only. Its hand-written soak lacks
+  signal-safe teardown and Mock GitHub isolation; port both before cataloging.
+- `scenario-perf-baseline.mjs`: hand-run only. Its hand-written soak lacks
+  signal-safe teardown and Mock GitHub isolation; port both before cataloging.
+- `scenario-perf-cold-warm.mjs`: hand-run only. Its hand-written soak lacks
+  signal-safe teardown and Mock GitHub isolation, and can erase the worker
+  registry before asynchronous workers exit. Port those boundaries before
+  cataloging.
 - `scenario-perf-leak-soak.mjs`: rewrite, then catalog. Its unconditional
   settling waits outlive the soak runner; replace them with observed signals.
 - `scenario-notebook-link-nav.mjs`: port, then catalog. Only it drives relative
