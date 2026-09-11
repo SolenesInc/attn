@@ -336,6 +336,9 @@ describe('GardenReviewPanel', () => {
     const handoff = await screen.findByLabelText(/What should the new agent know/);
     fireEvent.change(handoff, { target: { value: 'Keep this text' } });
     fireEvent.change(screen.getByLabelText('Working folder'), { target: { value: '/tmp/placed' } });
+    fireEvent.change(screen.getByLabelText('Git checkout'), { target: { value: 'reuse' } });
+    fireEvent.change(screen.getByLabelText('Branch'), { target: { value: 'feature/shared' } });
+    fireEvent.click(screen.getByLabelText('Allow sharing an occupied checkout'));
     fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
 
     expect(await screen.findByText('Worker could not start')).toBeInTheDocument();
@@ -343,6 +346,8 @@ describe('GardenReviewPanel', () => {
     expect(options.onHandoverSeed).toHaveBeenCalledWith(expect.objectContaining({
       seedId: 's-review1',
       cwd: '/tmp/placed',
+      checkout: { kind: 'reuse', branch: 'feature/shared' },
+      allowWorktreeReuse: true,
       handoff: 'Keep this text',
       review: { reviewId: 'r-review1', evidenceVersion: 'evidence-1' },
     }));

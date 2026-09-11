@@ -219,8 +219,9 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 	repoRoot = attngit.CanonicalizePath(repoRoot)
 	switch msg.Checkout.Kind {
 	case protocol.DelegateCheckoutKindReuse:
-		branch, err := attngit.GetCurrentBranch(directory)
-		if err != nil || strings.TrimSpace(branch) == "" {
+		branchOutput, err := attngit.Output(attngit.OpMetadata, directory, "symbolic-ref", "--short", "HEAD")
+		branch := strings.TrimSpace(string(branchOutput))
+		if err != nil || branch == "" {
 			return nil, fmt.Errorf("cannot reuse detached or unreadable checkout %s: %v", repoRoot, err)
 		}
 		if branch != strings.TrimSpace(msg.Checkout.Branch) {

@@ -61,6 +61,13 @@
         "recordedAt": "2026-09-11",
         "seconds": 34.3,
         "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "delegation-preferences": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34545299234",
+        "job": "App acceptance shard 2/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 24.4,
+        "runnerClass": "github-hosted 4vcpu/16GB"
       }
     }
   },
@@ -78,7 +85,7 @@
     "countdown-cancel": 46.3,
     "crash-recovery": 9,
     "crew-seed-header": 53.2,
-    "delegation-preferences": 24.9,
+    "delegation-preferences": 24.4,
     "garden-plot-dispatch": 22.9,
     "garden-seed-header": 17.4,
     "garden-seed-read-receipts": 14.4,

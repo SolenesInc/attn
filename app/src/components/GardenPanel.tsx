@@ -63,6 +63,7 @@ type ContinuationDraft = {
   from: string;
   path: string;
   agent: string;
+  allowWorktreeReuse: boolean;
   busy: boolean;
   error: string;
 };
@@ -79,6 +80,7 @@ function newContinuationDraft(seed: Seed, kind: ContinuationDraft['kind']): Cont
     from: '',
     path: '',
     agent: continuation?.agent ?? '',
+    allowWorktreeReuse: false,
     busy: false,
     error: '',
   };
@@ -98,7 +100,14 @@ async function runContinuation(
       ...(draft.checkoutKind === 'new_worktree' ? { from: draft.from.trim() } : {}),
       ...(draft.checkoutKind !== 'reuse' && draft.path.trim() ? { path: draft.path.trim() } : {}),
     };
-    await onHandoverSeed({ seedId: document.seed.id, cwd: draft.cwd.trim(), checkout, handoff: draft.text, agent: draft.agent.trim() || undefined });
+    await onHandoverSeed({
+      seedId: document.seed.id,
+      cwd: draft.cwd.trim(),
+      checkout,
+      ...(draft.allowWorktreeReuse ? { allowWorktreeReuse: true } : {}),
+      handoff: draft.text,
+      agent: draft.agent.trim() || undefined,
+    });
     return;
   }
   if (!onSendSeedToChief) throw new Error('Chief is unavailable');

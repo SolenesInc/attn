@@ -148,6 +148,25 @@ func TestResolveDelegateRuntimeVerifiesReusedBranch(t *testing.T) {
 	}
 }
 
+func TestResolveDelegateRuntimeRejectsDetachedReuse(t *testing.T) {
+	d := newDelegationDaemon(t)
+	repo := filepath.Join(t.TempDir(), "repo")
+	if err := os.Mkdir(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGitDaemon(t, repo, "init")
+	runGitDaemon(t, repo, "commit", "--allow-empty", "-m", "base")
+	head := strings.TrimSpace(string(mustGitOutput(t, repo, "rev-parse", "--short", "HEAD")))
+	runGitDaemon(t, repo, "checkout", "--detach")
+
+	msg := validNewDelegateRequest(repo)
+	msg.Checkout = &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindReuse, Branch: head}
+	_, err := d.resolveDelegateRuntime(&msg, "s-reserved", "", "", "session-reserved", "", false)
+	if err == nil || !strings.Contains(err.Error(), "cannot reuse detached") {
+		t.Fatalf("error=%v, want detached checkout error", err)
+	}
+}
+
 func mustGitOutput(t *testing.T, repo string, args ...string) []byte {
 	t.Helper()
 	out, err := attngit.Output(attngit.OpMetadata, repo, args...)

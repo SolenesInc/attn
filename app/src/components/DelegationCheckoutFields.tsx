@@ -5,6 +5,7 @@ export type DelegationCheckoutDraft = {
   from: string;
   path: string;
   agent: string;
+  allowWorktreeReuse: boolean;
 };
 
 export function DelegationCheckoutFields({ value, onChange, agentHint = false }: {
@@ -26,6 +27,7 @@ export function DelegationCheckoutFields({ value, onChange, agentHint = false }:
     {hasCheckout && <label>Branch<input required value={value.branch} onChange={(event) => onChange({ branch: event.target.value })} /></label>}
     {newWorktree && <label>Start from<input required value={value.from} onChange={(event) => onChange({ from: event.target.value })} placeholder="origin/main or a commit" /></label>}
     {worktree && <label>Worktree path<span>optional</span><input value={value.path} onChange={(event) => onChange({ path: event.target.value })} /></label>}
+    {hasCheckout && <label><input type="checkbox" checked={value.allowWorktreeReuse} onChange={(event) => onChange({ allowWorktreeReuse: event.target.checked })} />Allow sharing an occupied checkout</label>}
     <label>Agent{agentHint && !value.agent ? <span>required without a source session</span> : null}<input value={value.agent} onChange={(event) => onChange({ agent: event.target.value })} placeholder="codex" /></label>
   </>;
 }

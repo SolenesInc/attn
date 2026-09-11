@@ -206,12 +206,14 @@ describe('GardenPanel continuation actions', () => {
     fireEvent.change(screen.getByLabelText('Git checkout'), { target: { value: 'new_worktree' } });
     fireEvent.change(screen.getByLabelText('Branch'), { target: { value: 'feature/new-home' } });
     fireEvent.change(screen.getByLabelText('Start from'), { target: { value: 'origin/next' } });
+    fireEvent.click(screen.getByLabelText('Allow sharing an occupied checkout'));
     fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
 
     await waitFor(() => expect(onHandoverSeed).toHaveBeenCalledWith({
       seedId: 's-place11',
       cwd: '/tmp/new-home',
       checkout: { kind: 'new_worktree', branch: 'feature/new-home', from: 'origin/next' },
+      allowWorktreeReuse: true,
       agent: 'codex',
       handoff: '',
     }));

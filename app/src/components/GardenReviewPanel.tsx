@@ -31,6 +31,7 @@ interface ComposerState {
   from: string;
   path: string;
   agent: string;
+  allowWorktreeReuse: boolean;
 }
 
 export interface GardenReviewPanelProps {
@@ -215,6 +216,7 @@ function emptyComposer(item: GardenReviewItem, kind: ComposerKind, document?: Se
     from: '',
     path: '',
     agent: continuation?.agent ?? '',
+    allowWorktreeReuse: false,
   };
 }
 
@@ -345,7 +347,15 @@ function createReviewActions({ review, composer, fetchSeedDocument, onMoveSeed, 
         ...(state.checkoutKind === 'new_worktree' ? { from: state.from.trim() } : {}),
         ...(state.checkoutKind !== 'reuse' && state.path.trim() ? { path: state.path.trim() } : {}),
       };
-      await onHandoverSeed({ seedId: item.seed_id, cwd: state.cwd.trim(), checkout, agent: state.agent.trim() || continuation?.agent || undefined, handoff: state.text, review: reviewContext(review, item) });
+      await onHandoverSeed({
+        seedId: item.seed_id,
+        cwd: state.cwd.trim(),
+        checkout,
+        ...(state.allowWorktreeReuse ? { allowWorktreeReuse: true } : {}),
+        agent: state.agent.trim() || continuation?.agent || undefined,
+        handoff: state.text,
+        review: reviewContext(review, item),
+      });
       setComposer(null);
       await refresh();
     } catch (error) {
