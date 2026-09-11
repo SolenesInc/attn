@@ -15,6 +15,7 @@ const (
 	OutputEventKindOutput = "output"
 	OutputEventKindDesync = "desync"
 	OutputEventKindExit   = "exit"
+	OutputEventKindResize = "resize"
 	// Placement positions only mean anything in order against the same-seq bytes.
 	OutputEventKindPlacements = "kitty_placements"
 )
@@ -128,8 +129,17 @@ type OutputEvent struct {
 	Data   []byte
 	Seq    uint32
 	Reason string
+	Cols   uint16
+	Rows   uint16
+	XPixel uint16
+	YPixel uint16
 	// An empty set is how a client learns the last image is gone.
 	Placements []pty.KittyPlacement
+}
+
+type ResizeResult struct {
+	Changed       bool
+	StreamOrdered bool
 }
 
 type SessionInfo struct {
@@ -177,7 +187,7 @@ type Backend interface {
 	Attach(ctx context.Context, sessionID, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error)
 	Input(ctx context.Context, sessionID string, data []byte) error
 	// xpixel/ypixel are total device pixels, 0 when unknown.
-	Resize(ctx context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (bool, error)
+	Resize(ctx context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (ResizeResult, error)
 	// Best-effort: a worker predating the method returns nil.
 	SetTheme(ctx context.Context, sessionID string, theme pty.TerminalTheme) error
 	// Returns nil only after the child process has exited.

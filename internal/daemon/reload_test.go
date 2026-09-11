@@ -103,8 +103,8 @@ func (b *fakeReloadBackend) Attach(context.Context, string, string, ...ptybacken
 	return ptybackend.AttachInfo{Running: true}, newFakeOutputStream(), nil
 }
 func (b *fakeReloadBackend) Input(context.Context, string, []byte) error { return nil }
-func (b *fakeReloadBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (bool, error) {
-	return true, nil
+func (b *fakeReloadBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (ptybackend.ResizeResult, error) {
+	return ptybackend.ResizeResult{Changed: true}, nil
 }
 func (b *fakeReloadBackend) SetTheme(context.Context, string, pty.TerminalTheme) error {
 	return nil

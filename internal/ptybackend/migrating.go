@@ -137,10 +137,10 @@ func (b *MigratingBackend) Input(ctx context.Context, sessionID string, data []b
 	return backend.Input(ctx, sessionID, data)
 }
 
-func (b *MigratingBackend) Resize(ctx context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (bool, error) {
+func (b *MigratingBackend) Resize(ctx context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (ResizeResult, error) {
 	backend, err := b.backendFor(sessionID)
 	if err != nil {
-		return false, err
+		return ResizeResult{}, err
 	}
 	return backend.Resize(ctx, sessionID, cols, rows, xpixel, ypixel)
 }

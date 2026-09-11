@@ -212,7 +212,7 @@ describe('useGhosttyPaneRuntime', () => {
     expect(mockPtyResize).toHaveBeenCalledWith({ id: 'runtime-1', cols: 130, rows: 45, reason: 'test' });
   });
 
-  it('uses the measured pixels before the first attach without resending the size afterwards', async () => {
+  it('uses pending measured geometry before attach while the model waits for its resize boundary', async () => {
     let resolveAttach: (() => void) | undefined;
     mockPtyAttach.mockReturnValueOnce(new Promise<void>((resolve) => {
       resolveAttach = resolve;
@@ -226,7 +226,7 @@ describe('useGhosttyPaneRuntime', () => {
       },
     ], 'pane-session', router, { current: true }));
     const terminal = createTerminal();
-    vi.mocked(terminal.getSize).mockReturnValue({ cols: 106, rows: 64 });
+    vi.mocked(terminal.getSize).mockReturnValue({ cols: 80, rows: 24 });
 
     let readyPromise: Promise<void>;
     act(() => {
@@ -276,7 +276,7 @@ describe('useGhosttyPaneRuntime', () => {
     });
   });
 
-  it('queues geometry during snapshot delivery until the pane finishes attaching', async () => {
+  it('uses geometry queued during snapshot delivery for the attach', async () => {
     const { result } = renderHook(() => useGhosttyPaneRuntime([
       { paneId: 'pane-session', runtimeId: 'runtime-1', paneKind: 'agent' },
     ], 'pane-session', router, { current: true }));
@@ -296,7 +296,18 @@ describe('useGhosttyPaneRuntime', () => {
     await act(async () => {
       await result.current.handleTerminalReady('pane-session')(terminal);
     });
-    expect(mockPtyResize).toHaveBeenCalledWith({ id: 'runtime-1', cols: 130, rows: 45, reason: 'attached' });
+    expect(mockPtyAttach).toHaveBeenCalledWith({
+      args: {
+        id: 'runtime-1',
+        cols: 130,
+        rows: 45,
+        shell: false,
+        agent: undefined,
+        policy: 'same_app_remount',
+      },
+      forceResizeBeforeAttach: true,
+    });
+    expect(mockPtyResize).not.toHaveBeenCalled();
   });
 
   it('reattaches a ready runtime when its terminal model remounts', async () => {

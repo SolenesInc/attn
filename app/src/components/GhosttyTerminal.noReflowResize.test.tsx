@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 type ModelOp = { kind: 'write'; data: string } | { kind: 'resize'; cols: number; rows: number };
 
 const mocks = vi.hoisted(() => {
-  const control = { wraparound: true };
+  const control = { wraparound: true, fit: { cols: 80, rows: 24 } };
   const terminals: Array<{ ops: ModelOp[] }> = [];
 
   const createTerminal = () => {
@@ -47,9 +47,10 @@ const mocks = vi.hoisted(() => {
   class MockRenderer {
     readonly cellWidth = 8;
     readonly cellHeight = 16;
+    readonly dpr = 1;
 
     fitDimensions() {
-      return { cols: 80, rows: 24 };
+      return control.fit;
     }
 
     resize() {}
@@ -89,6 +90,7 @@ vi.mock('../utils/terminalPerf', () => ({ registerTerminalPerfGetter: () => () =
 import { GhosttyTerminal, type GhosttyTerminalHandle } from './GhosttyTerminal';
 
 beforeEach(() => {
+  mocks.control.fit = { cols: 80, rows: 24 };
   globalThis.ResizeObserver = class {
     observe() {}
     unobserve() {}
@@ -99,22 +101,24 @@ beforeEach(() => {
 async function mountTerminal(): Promise<{
   handle: GhosttyTerminalHandle;
   model: { ops: ModelOp[] };
+  onResize: ReturnType<typeof vi.fn>;
 }> {
   mocks.terminals.length = 0;
   let ready: GhosttyTerminalHandle | null = null;
+  const onResize = vi.fn();
   render(
     <GhosttyTerminal
       fontSize={14}
       debugName="no-reflow-resize-test"
       onInput={vi.fn()}
       onReady={(terminal) => { ready = terminal; }}
-      onResize={vi.fn()}
+      onResize={onResize}
     />,
   );
   await waitFor(() => expect(ready).not.toBeNull());
   const model = mocks.terminals[0];
   model.ops.length = 0;
-  return { handle: ready as unknown as GhosttyTerminalHandle, model };
+  return { handle: ready as unknown as GhosttyTerminalHandle, model, onResize };
 }
 
 const noReflowRecipe = (cols: number, rows: number): ModelOp[] => [
@@ -124,6 +128,25 @@ const noReflowRecipe = (cols: number, rows: number): ModelOp[] => [
 ];
 
 describe('GhosttyTerminal no-reflow resize', () => {
+  it('keeps the model at the old width until the daemon streams the resize', async () => {
+    mocks.control.fit = { cols: 100, rows: 30 };
+    const { handle, model, onResize } = await mountTerminal();
+
+    act(() => handle.fit());
+
+    expect(model.ops).toEqual([]);
+    expect(onResize).toHaveBeenCalledWith(100, 30, {
+      reason: 'ghostty_fit',
+      xpixel: 800,
+      ypixel: 480,
+    });
+
+    await act(async () => {
+      await handle.resizeLocal(100, 30);
+    });
+    expect(model.ops).toEqual(noReflowRecipe(100, 30));
+  });
+
   it('drives the daemon resize echo through the mode-7 recipe', async () => {
     mocks.control.wraparound = true;
     const { handle, model } = await mountTerminal();
@@ -133,6 +156,27 @@ describe('GhosttyTerminal no-reflow resize', () => {
     });
 
     expect(model.ops).toEqual(noReflowRecipe(100, 30));
+  });
+
+  it('applies a streamed resize between the adjacent byte chunks', async () => {
+    mocks.control.wraparound = true;
+    const { handle, model } = await mountTerminal();
+
+    await act(async () => {
+      await Promise.all([
+        handle.write(new TextEncoder().encode('before')),
+        handle.resizeLocal(100, 30),
+        handle.write(new TextEncoder().encode('after')),
+      ]);
+    });
+
+    expect(model.ops).toEqual([
+      { kind: 'write', data: 'before' },
+      { kind: 'write', data: '\x1b[?2027h' },
+      ...noReflowRecipe(100, 30),
+      { kind: 'write', data: 'after' },
+      { kind: 'write', data: '\x1b[?2027h' },
+    ]);
   });
 
   it('resizes plainly when the program already turned wraparound off', async () => {

@@ -968,15 +968,35 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 				)
 			}
 		})
+		onResize := pty.OnResize(func(update pty.ResizeUpdate) {
+			cols, rows := update.Cols, update.Rows
+			xpixel, ypixel := update.XPixel, update.YPixel
+			if !c.sendEvent(EventEnvelope{
+				Type:      "evt",
+				Event:     EventResize,
+				SessionID: c.runtime.cfg.SessionID,
+				Cols:      &cols,
+				Rows:      &rows,
+				XPixel:    &xpixel,
+				YPixel:    &ypixel,
+			}) {
+				c.runtime.logf(
+					"worker resize forward failed: session=%s conn=%s sub=%s",
+					c.runtime.cfg.SessionID,
+					c.connID,
+					subID,
+				)
+			}
+		})
 		var info pty.AttachInfo
 		var err error
 		if params.OmitReplay {
 			info, err = c.runtime.manager.Subscribe(
-				c.runtime.cfg.SessionID, subID, send, onDrop, onPlacements,
+				c.runtime.cfg.SessionID, subID, send, onDrop, onPlacements, onResize,
 			)
 		} else {
 			info, err = c.runtime.manager.Attach(
-				c.runtime.cfg.SessionID, subID, send, onDrop, onPlacements,
+				c.runtime.cfg.SessionID, subID, send, onDrop, onPlacements, onResize,
 			)
 		}
 		if err != nil {
@@ -1056,7 +1076,8 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 			c.sendError(req.ID, ErrIO, err.Error())
 			return
 		}
-		c.sendResult(req.ID, ResizeResult{OK: true, Changed: &changed})
+		streamOrdered := true
+		c.sendResult(req.ID, ResizeResult{OK: true, Changed: &changed, StreamOrdered: &streamOrdered})
 	case MethodSetTheme:
 		var params SetThemeParams
 		if err := json.Unmarshal(req.Params, &params); err != nil {

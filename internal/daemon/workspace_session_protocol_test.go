@@ -1196,8 +1196,8 @@ func (b *failingSpawnBackend) Attach(context.Context, string, string, ...ptyback
 	return ptybackend.AttachInfo{}, nil, errors.New("attach unsupported")
 }
 func (b *failingSpawnBackend) Input(context.Context, string, []byte) error { return nil }
-func (b *failingSpawnBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (bool, error) {
-	return true, nil
+func (b *failingSpawnBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (ptybackend.ResizeResult, error) {
+	return ptybackend.ResizeResult{Changed: true}, nil
 }
 func (b *failingSpawnBackend) SetTheme(context.Context, string, pty.TerminalTheme) error {
 	return nil
