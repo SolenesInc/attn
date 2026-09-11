@@ -89,6 +89,7 @@ export async function waitForPaneVisible(client, sessionId, paneId, timeoutMs = 
       state?.pane?.bounds &&
       state.pane.bounds.width >= 120 &&
       state.pane.bounds.height >= 80 &&
+      state.pane.dom?.terminalContainer &&
       state?.renderHealth?.flags?.terminalVisible !== false
     ),
     `pane ${paneId} visible`,

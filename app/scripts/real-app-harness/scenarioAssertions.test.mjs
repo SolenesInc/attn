@@ -126,7 +126,7 @@ describe('waitForPaneVisible', () => {
     vi.useRealTimers();
   });
 
-  it('retries transient session absence while waiting for pane visibility', async () => {
+  it('waits for the terminal container after the pane wrapper appears', async () => {
     vi.useFakeTimers();
     const client = {
       request: vi.fn()
@@ -134,6 +134,18 @@ describe('waitForPaneVisible', () => {
         .mockResolvedValueOnce({
           pane: {
             bounds: { width: 160, height: 120 },
+            dom: { terminalContainer: null },
+          },
+          renderHealth: {
+            flags: {
+              terminalVisible: true,
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          pane: {
+            bounds: { width: 160, height: 120 },
+            dom: { terminalContainer: { bounds: { width: 160, height: 120 } } },
           },
           renderHealth: {
             flags: {
@@ -151,7 +163,7 @@ describe('waitForPaneVisible', () => {
         bounds: { width: 160, height: 120 },
       },
     });
-    expect(client.request).toHaveBeenCalledTimes(2);
+    expect(client.request).toHaveBeenCalledTimes(3);
   });
 });
 

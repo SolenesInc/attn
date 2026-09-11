@@ -3166,6 +3166,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
+        const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
         const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
         const size = getPaneSize(viewSessionId, paneId);
         const cell = payload.cell as { col?: unknown; row?: unknown } | undefined;
@@ -3174,9 +3175,9 @@ export function useUiAutomationBridge({
         }
         selectSession(sessionId);
         await settleUi(1);
-        clickPaneCell(viewSessionId, paneId, size, { col: cell.col, row: cell.row });
+        clickPaneCell(ownerSessionId, paneId, size, { col: cell.col, row: cell.row });
         await settleUi(2);
-        return { sessionId, paneId, viewSessionId };
+        return { sessionId, paneId, ownerSessionId, viewSessionId };
       }
       case 'hover_pane_cell': {
         const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
@@ -3185,6 +3186,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
+        const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
         const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
         const size = getPaneSize(viewSessionId, paneId);
         const cell = payload.cell as { col?: unknown; row?: unknown } | undefined;
@@ -3194,7 +3196,7 @@ export function useUiAutomationBridge({
         selectSession(sessionId);
         await settleUi(1);
         const hovered = hoverPaneCell(
-          viewSessionId,
+          ownerSessionId,
           paneId,
           size,
           { col: cell.col, row: cell.row },
@@ -3202,7 +3204,7 @@ export function useUiAutomationBridge({
           payload.alt === true,
         );
         await settleUi(2);
-        return { sessionId, paneId, viewSessionId, cursor: getComputedStyle(hovered).cursor };
+        return { sessionId, paneId, ownerSessionId, viewSessionId, cursor: getComputedStyle(hovered).cursor };
       }
       case 'get_pane_cell_rect': {
         const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
@@ -3211,6 +3213,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
+        const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
         const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
         const size = getPaneSize(viewSessionId, paneId);
         const cell = payload.cell as { col?: unknown; row?: unknown } | undefined;
@@ -3220,8 +3223,9 @@ export function useUiAutomationBridge({
         return {
           sessionId,
           paneId,
+          ownerSessionId,
           viewSessionId,
-          ...paneCellRect(viewSessionId, paneId, size, { col: cell.col, row: cell.row }),
+          ...paneCellRect(ownerSessionId, paneId, size, { col: cell.col, row: cell.row }),
         };
       }
       case 'get_terminal_context_menu_state': {
@@ -3237,6 +3241,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
+        const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
         const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
         const size = getPaneSize(viewSessionId, paneId);
         const start = payload.start as { col?: unknown; row?: unknown } | undefined;
@@ -3250,7 +3255,7 @@ export function useUiAutomationBridge({
         await settleUi(1);
         const altKey = payload.altKey === true;
         dragPaneSelection(
-          viewSessionId,
+          ownerSessionId,
           paneId,
           size,
           { col: start.col, row: start.row },
@@ -3258,7 +3263,7 @@ export function useUiAutomationBridge({
           { altKey },
         );
         await settleUi(2);
-        return { sessionId, paneId, viewSessionId, start, end, altKey };
+        return { sessionId, paneId, ownerSessionId, viewSessionId, start, end, altKey };
       }
       case 'drag_leaf': {
         const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';

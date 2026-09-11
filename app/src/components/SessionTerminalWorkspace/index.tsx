@@ -184,6 +184,13 @@ const EMPTY_SEED_TARGET_SESSIONS: WorkspaceTileSessionOption[] = [];
 const EMPTY_GARDEN_SEEDS: Seed[] = [];
 const EMPTY_DELEGATION_SESSIONS: NonNullable<SessionTerminalWorkspaceProps['delegationSessions']> = [];
 
+export function annotationSurfaceOwnsFocus(
+  workspaceId: string,
+  active: Element | null = document.activeElement,
+): boolean {
+  return active?.closest('.anno-popup, .anno-panel')?.getAttribute('data-workspace-id') === workspaceId;
+}
+
 export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandle, SessionTerminalWorkspaceProps>(
   function SessionTerminalWorkspace({
     workspaceId,
@@ -744,6 +751,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
         return;
       }
       if (activePaneId) {
+        if (annotationSurfaceOwnsFocus(workspaceId)) return;
         focusActivePaneSurface();
       }
     }, [activeLeafId, activeLeafIsTile, activePaneId, focusActivePaneSurface, focusTile, focusRequestToken, isActiveSession, isSessionViewVisible, paneReadyFocusRequest, suspendedLeafIdsKey, workspaceId, sessionVisible]);
@@ -1213,6 +1221,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
               ) : (
                 <AnnotatedTerminal
                   ref={terminalRefForPane(agentPane.id)}
+                  workspaceId={workspaceId}
                   sessionId={agentPane.sessionId}
                   annotationApi={annotationApi}
                   // At most one pane owns ⌘Enter for the annotation send shortcut.
