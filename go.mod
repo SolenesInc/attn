@@ -1,32 +1,26 @@
 module github.com/victorarias/attn
 
-go 1.25.3
-
-require (
-	github.com/mattn/go-sqlite3 v1.14.32
-	nhooyr.io/websocket v1.8.17
-)
-
-require github.com/google/uuid v1.6.0
-
-require (
-	github.com/creack/pty v1.1.24
-	golang.org/x/time v0.14.0
-)
+go 1.27.1
 
 require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/Shopify/toxiproxy/v2 v2.12.0
+	github.com/creack/pty v1.1.24
 	github.com/dop251/goja v0.0.0-20260607120635-348e6bea910d
 	github.com/fsnotify/fsnotify v1.10.1
+	github.com/google/uuid v1.6.0
+	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/prometheus/client_golang v1.21.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/zerolog v1.33.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
+	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0
+	golang.org/x/time v0.14.0
 	golang.org/x/tools v0.49.0
 	gopkg.in/yaml.v3 v3.0.1
 	mvdan.cc/sh/v3 v3.12.0
+	nhooyr.io/websocket v1.8.17
 	pgregory.net/rapid v1.3.0
 )
 
@@ -47,7 +41,6 @@ require (
 	github.com/rs/xid v1.5.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20231108232855-2478ac86f678 // indirect
 	golang.org/x/mod v0.39.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.39.0 // indirect
 	google.golang.org/protobuf v1.36.1 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
