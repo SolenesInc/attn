@@ -116,3 +116,15 @@ func TestPendingDelegationReservesItsSuccessorSession(t *testing.T) {
 		t.Fatal("failed operation kept reserving its successor")
 	}
 }
+
+func TestDelegationFailureCodeClassifiesBranchValidationAsCheckoutConflict(t *testing.T) {
+	for _, message := range []string{
+		"branch mismatch: expected feature/new; /repo is on next. No worker started; seed ownership unchanged",
+		`local branch "feature/missing" does not exist; create it with --branch and --from when starting from a remote ref`,
+		`branch "feature/existing" already exists; use --existing-branch or choose another name`,
+	} {
+		if got := delegationFailureCode(message); got != "checkout_conflict" {
+			t.Errorf("delegationFailureCode(%q) = %q, want checkout_conflict", message, got)
+		}
+	}
+}

@@ -72,6 +72,7 @@ type ContinuationDraft = {
 function newContinuationDraft(seed: Seed, kind: ContinuationDraft['kind']): ContinuationDraft {
   const continuation = kind === 'handover' ? seed.continuation : undefined;
   const recreateBranch = continuation?.handover_placement === 'recreate_branch';
+  const reuseCwd = continuation?.handover_placement === 'reuse_cwd';
   const recreateRoot = continuation?.repository_root?.replace(/\/$/, '');
   const recreateCwd = recreateRoot && continuation?.repository_subdir
     ? `${recreateRoot}/${continuation.repository_subdir}`
@@ -81,8 +82,8 @@ function newContinuationDraft(seed: Seed, kind: ContinuationDraft['kind']): Cont
     requestId: crypto.randomUUID(),
     kind,
     text: '',
-    cwd: (recreateBranch ? recreateCwd : continuation?.cwd) ?? '',
-    checkoutKind: recreateBranch ? 'existing_branch_worktree' : continuation?.repository_root ? 'reuse' : 'none',
+    cwd: (recreateBranch ? recreateCwd : reuseCwd ? continuation?.cwd : undefined) ?? '',
+    checkoutKind: recreateBranch ? 'existing_branch_worktree' : reuseCwd && continuation?.repository_root ? 'reuse' : 'none',
     branch: continuation?.branch ?? '',
     from: '',
     path: '',

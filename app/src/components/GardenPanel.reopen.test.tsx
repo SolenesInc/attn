@@ -229,6 +229,9 @@ describe('GardenPanel continuation actions', () => {
 
     fireEvent.click(screen.getByText('place this handover'));
     fireEvent.click(await screen.findByTestId('seed-handover-s-place11'));
+
+    expect(screen.getByLabelText('Working folder')).toHaveValue('');
+    expect(screen.getByLabelText('Git checkout')).toHaveValue('none');
     fireEvent.change(screen.getByLabelText('Working folder'), { target: { value: '/tmp/new-home' } });
     fireEvent.change(screen.getByLabelText('Git checkout'), { target: { value: 'new_worktree' } });
     fireEvent.change(screen.getByLabelText('Branch'), { target: { value: 'feature/new-home' } });

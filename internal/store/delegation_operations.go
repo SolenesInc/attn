@@ -262,7 +262,9 @@ func delegationFailureCode(message string) string {
 		return "legacy_request_requires_explicit_retry"
 	case strings.Contains(message, "base ref"):
 		return "invalid_base_ref"
-	case strings.Contains(message, "active Attn session") || strings.Contains(message, "worktree") || strings.Contains(message, "checkout"):
+	case strings.Contains(message, "active Attn session") || strings.Contains(message, "worktree") || strings.Contains(message, "checkout") ||
+		strings.Contains(message, "branch mismatch") || strings.Contains(message, "local branch") ||
+		(strings.Contains(message, "branch \"") && strings.Contains(message, "already exists")):
 		return "checkout_conflict"
 	case strings.Contains(message, "seed") || strings.Contains(message, "handover") || strings.Contains(message, "holder"):
 		return "assignment_conflict"

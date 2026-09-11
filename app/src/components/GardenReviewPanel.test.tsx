@@ -317,6 +317,25 @@ describe('GardenReviewPanel', () => {
     expect(screen.getByLabelText('Branch')).toHaveValue('feature/recreate');
   });
 
+  it('requires explicit placement when the saved working folder cannot be reused', async () => {
+    const options = props();
+    options.fetchSeedDocument = vi.fn().mockResolvedValue(document({
+      seed: seed({ continuation: {
+        ...seed().continuation!,
+        cwd: '/tmp/unavailable',
+        handover_placement: 'placement_required',
+        repository_root: '/tmp/repo',
+        branch: 'feature-old',
+      } }),
+    }));
+    render(<GardenReviewPanel {...options} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
+
+    expect(await screen.findByLabelText('Working folder')).toHaveValue('');
+    expect(screen.getByLabelText('Git checkout')).toHaveValue('none');
+  });
+
   it('sends optional guidance to Chief without asking for placement', async () => {
     const options = props(review(item({ actions: ['send_to_chief', 'park'] })));
     options.fetchSeedDocument = vi.fn().mockResolvedValue(document({
