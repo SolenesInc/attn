@@ -211,7 +211,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '26'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -412,7 +412,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '26'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -466,7 +466,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '26'
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -855,7 +855,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '26'
 
       - name: Download shard results
         if: needs.app-acceptance-build.result == 'success'

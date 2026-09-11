@@ -98,4 +98,4 @@ should not know which VM manager launched the machine.
 The shared `scripts/setup-linux-sandbox.sh` is also used by CI. It grants user
 namespaces to `/usr/bin/bwrap` through AppArmor while keeping Ubuntu's global
 restriction enabled. Tool versions come from `go.mod`, `rust-toolchain.toml`,
-and `.tool-versions`; Node 22 and pnpm 9 match the CI major versions.
+and `.tool-versions`; Node 26 and pnpm 9 match the CI major versions.
