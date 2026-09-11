@@ -151,7 +151,7 @@ jobs:
           fi
 
       - name: Upload failed-iteration evidence
-        if: steps.soak.outcome != 'success'
+        if: always() && steps.soak.outcome != 'success'
         uses: actions/upload-artifact@v4
         with:
           name: acceptance-soak-evidence-${{ github.run_id }}-${{ matrix.scenario }}
