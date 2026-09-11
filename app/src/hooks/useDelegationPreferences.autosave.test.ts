@@ -45,6 +45,30 @@ it('collapses edits made during a save into one follow-up carrying the returned 
   expect(daemon.getCalls('load')).toHaveLength(1);
 });
 
+it('keeps an install queued behind a running save through the edits that collapse into it', async () => {
+  const { daemon, hook, releaseFirst } = setup();
+  await waitFor(() => expect(hook.result.current.preferences).not.toBeNull());
+  act(() => { void hook.result.current.save(preferences(0, 'one')); });
+  act(() => { void hook.result.current.save(preferences(0, 'two'), true); });
+  act(() => { void hook.result.current.save(preferences(0, 'three')); });
+  releaseFirst();
+  await waitFor(() => expect(hook.result.current.busy).toBe(false));
+  expect(daemon.getCalls('save').map(call => [(call.args[0] as DelegationPreferences).fallback.instructions, call.args[1]])).toEqual([['one', false], ['three', true]]);
+});
+
+it('ignores the push announcing its own save', async () => {
+  const { daemon, hook, releaseFirst } = setup();
+  await waitFor(() => expect(hook.result.current.preferences).not.toBeNull());
+  act(() => { void hook.result.current.save(preferences(0, 'one')); });
+  releaseFirst();
+  await waitFor(() => expect(hook.result.current.busy).toBe(false));
+  expect(hook.result.current.generation).toBe(2);
+  act(() => useDelegationPreferencesPush.getState().push(1));
+  await act(async () => { await Promise.resolve(); });
+  expect(daemon.getCalls('load')).toHaveLength(1);
+  expect(hook.result.current.generation).toBe(2);
+});
+
 it('drops local edits and reloads when the daemon reports a conflict', async () => {
   const { daemon, hook, bump, releaseFirst } = setup();
   await waitFor(() => expect(hook.result.current.preferences).not.toBeNull());

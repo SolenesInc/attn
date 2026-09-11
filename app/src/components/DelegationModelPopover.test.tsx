@@ -7,6 +7,7 @@ import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
 const harnesses: DelegationHarness[] = [
   { id: 'claude', name: 'Claude Code', available: true, model_pin: true, effort_pin: true, discovery: true },
   { id: 'copilot', name: 'Copilot', available: true, model_pin: false, effort_pin: false, discovery: false },
+  { id: 'pi', name: 'Pi', available: true, model_pin: true, effort_pin: true, discovery: false },
 ];
 const catalog: DelegationModelCatalog = { detail: 'Reported by Claude Code', models: [
   { harness: 'claude', provider: '', id: 'opus', name: 'Opus', description: 'Deep work', detail: '', effort_support: ModelCapabilitySupport.Supported, effort_levels: ['medium', 'high'], access: ModelCapabilitySupport.Unknown },
@@ -76,6 +77,22 @@ it('a popover reopened during discovery shows the models when that discovery set
   settle(structuredClone(catalog));
   await screen.findByRole('option', { name: /Opus/ });
   expect(screen.queryByLabelText('Discovering models')).not.toBeInTheDocument();
+});
+
+it('takes a provider with a manual model for a plugin harness only', () => {
+  const claude = open({ harness: 'claude', provider: '', model: '', effort: '' });
+  fireEvent.click(screen.getByRole('button', { name: 'Enter a model ID' }));
+  expect(screen.queryByLabelText('Provider')).not.toBeInTheDocument();
+  cleanup();
+
+  const { onChange, loadModels } = open({ harness: 'pi', provider: '', model: '', effort: '' });
+  expect(loadModels).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Enter a model ID' }));
+  fireEvent.change(screen.getByLabelText('Provider'), { target: { value: ' openai ' } });
+  fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'gpt-next' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Use it' }));
+  expect(onChange).toHaveBeenLastCalledWith({ harness: 'pi', provider: 'openai', model: 'gpt-next', effort: '' });
+  expect(claude.onChange).not.toHaveBeenCalled();
 });
 
 it('commits a pinned harness alone and never discovers for it', () => {

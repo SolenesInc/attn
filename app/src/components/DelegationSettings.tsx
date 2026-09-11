@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { DelegationChoice, DelegationPreferences, DelegationRole, DelegationSelection, DelegationHarness } from '../types/generated';
 import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
 import type { DelegationPreferencesPolicy } from '../hooks/useDelegationPreferences';
@@ -27,7 +27,7 @@ export function DelegationSwitch({ policy }: { policy: DelegationPreferencesPoli
 }
 
 type PopoverTarget = { key: string; anchor: Anchor };
-type Undo = { label: string; previous: DelegationPreferences };
+type Undo = { label: string; previous: DelegationPreferences; generation: number };
 
 function adoptMaintainedRoles(config: DelegationPreferences, templates: DelegationRole[], adoption: Record<string, string>): DelegationPreferences {
   const replaced = new Set(Object.values(adoption).filter(destination => destination !== 'new'));
@@ -107,19 +107,20 @@ function AdoptionPanel({ config, templates, names, adoption, onChange, onCancel,
 }
 
 export function DelegationSettings({ policy, loadModels }: { policy: DelegationPreferencesPolicy; loadModels: (harness: string) => Promise<DelegationModelCatalog> }) {
-  const { state, preferences: config, error, loaded, reload, save } = policy;
+  const { state, preferences: config, error, generation, reload, save } = policy;
   const [expanded, setExpanded] = useState<string | null>(null);
   const [expandedAlt, setExpandedAlt] = useState<string | null>(null);
   const [popover, setPopover] = useState<PopoverTarget | null>(null);
   const [undo, setUndo] = useState<Undo | null>(null);
   const [adoption, setAdoption] = useState<Record<string, string> | null>(null);
-  useEffect(() => { setUndo(null); }, [loaded]);
   if (!config || !state) return <div role="status">{error || 'Loading delegation preferences…'}{error && <button type="button" className="settings-action" onClick={() => void reload()}>Retry</button>}</div>;
 
   const views = new Map(state.expandedRoles.map(role => [roleViewKey(role), role]));
   const view = (role: DelegationRole) => role.builtin ? views.get(roleViewKey(role)) ?? role : role;
-  const commit = (next: DelegationPreferences) => { setUndo(null); void save(next); };
-  const commitUndoable = (next: DelegationPreferences, label: string) => { void save(next); setUndo({ label, previous: structuredClone(config) }); };
+  const commit = (next: DelegationPreferences) => { void save(next); };
+  // The save moves generation by one; the undo lives while nothing else moves it.
+  const commitUndoable = (next: DelegationPreferences, label: string) => { void save(next); setUndo({ label, previous: structuredClone(config), generation: generation + 1 }); };
+  const undoLive = undo && undo.generation === generation ? undo : null;
   const updateRole = (next: DelegationRole) => commit({ ...config, roles: config.roles.map(role => role.id === next.id ? next : role) });
   const updateChoice = (role: DelegationRole, next: DelegationChoice) => updateRole({ ...role, choices: role.choices.map(choice => choice.id === next.id ? next : choice) });
   const toggle = (key: string) => { setExpanded(current => current === key ? null : key); setExpandedAlt(null); };
@@ -278,7 +279,7 @@ export function DelegationSettings({ policy, loadModels }: { policy: DelegationP
         </div>
       </div>}
     {adoption && <AdoptionPanel config={config} templates={missing} names={templateName} adoption={adoption} onChange={setAdoption} onCancel={() => setAdoption(null)} onConfirm={confirmAdoption} />}
-    {undo && <div role="status" className="delegation-undo"><span>{undo.label}.</span><button type="button" className="settings-action quiet" onClick={() => { void save(undo.previous); setUndo(null); }}>Undo</button></div>}
+    {undoLive && <div role="status" className="delegation-undo"><span>{undoLive.label}.</span><button type="button" className="settings-action quiet" onClick={() => { void save(undoLive.previous); setUndo(null); }}>Undo</button></div>}
     {config.roles.length > 0 && <div className="delegation-foot">
       <span className={`delegation-live ${config.enabled ? '' : 'off'}`} role="status"><span className="delegation-dot" />{liveText}</span>
       <span className="delegation-spacer" />

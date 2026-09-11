@@ -150,8 +150,20 @@ it('withdraws undo when a change made elsewhere reloads the table', async () => 
   expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
 
   bump();
-  act(() => useDelegationPreferencesPush.getState().push(1));
+  act(() => useDelegationPreferencesPush.getState().push(getState().preferences.revision));
   await waitFor(() => expect(daemon.getCalls('load').length).toBeGreaterThanOrEqual(2));
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument());
   expect(getState().preferences.roles).toHaveLength(0);
+});
+
+it('withdraws undo when the delegation switch saves', async () => {
+  const { getState } = setup([custom]);
+  fireEvent.click(await screen.findByRole('button', { name: 'Build' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+  await waitFor(() => expect(getState().preferences.roles).toHaveLength(0));
+  expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('switch', { name: 'Delegation preferences' }));
+  await waitFor(() => expect(getState().preferences.enabled).toBe(false));
+  expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
 });

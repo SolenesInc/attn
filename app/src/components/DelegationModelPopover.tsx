@@ -50,6 +50,7 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
   const { catalog, loading, error, discover } = useCatalog(harness, loadModels);
   const [manual, setManual] = useState(false);
   const [manualID, setManualID] = useState('');
+  const [manualProvider, setManualProvider] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ top: anchor.bottom + 6, left: anchor.left });
   useEscapeStack(onClose, true);
@@ -92,13 +93,16 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
   const submitManual = () => {
     const id = manualID.trim();
     if (!id) return;
-    onChange({ ...value, provider: '', model: id, effort: '' });
+    onChange({ ...value, provider: pluginHarness ? manualProvider.trim() : '', model: id, effort: '' });
     setManual(false);
     setManualID('');
+    setManualProvider('');
   };
 
   const selected = catalog?.models.find(m => m.id === value.model && m.provider === value.provider);
   const pinned = harness && !harness.model_pin;
+  // Built-in harnesses run their configured provider; a plugin harness takes provider/model.
+  const pluginHarness = !!harness && !['claude', 'codex', 'copilot'].includes(harness.id);
   const levels = selected?.effort_levels ?? [];
   const showEffort = harness?.effort_pin && value.model !== '' && selected?.effort_support !== 'unsupported';
 
@@ -143,7 +147,8 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
         </div>}
         {manual
           ? <form className="delegation-pop-manual" onSubmit={e => { e.preventDefault(); submitManual(); }}>
-            <input aria-label="Model ID" className="delegation-pop-input" autoFocus value={manualID} placeholder="Exact model ID from the harness" onChange={e => setManualID(e.target.value)} />
+            {pluginHarness && <input aria-label="Provider" className="delegation-pop-input" autoFocus value={manualProvider} placeholder="Provider, as the harness names it" onChange={e => setManualProvider(e.target.value)} />}
+            <input aria-label="Model ID" className="delegation-pop-input" autoFocus={!pluginHarness} value={manualID} placeholder="Exact model ID from the harness" onChange={e => setManualID(e.target.value)} />
             <button type="submit" className="settings-action" disabled={!manualID.trim()}>Use it</button>
           </form>
           : null}

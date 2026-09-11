@@ -13,8 +13,9 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
   const [preferences, setPreferences] = useState<DelegationPreferences | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [loaded, setLoaded] = useState(0);
+  const [generation, setGeneration] = useState(0);
   const pushed = useDelegationPreferencesPush(s => s.version);
+  const pushedRevision = useDelegationPreferencesPush(s => s.revision);
   const revision = useRef(0);
   const flight = useRef<Promise<void> | null>(null);
   const pending = useRef<Pending | null>(null);
@@ -30,7 +31,7 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
     const id = ++request.current;
     try {
       const next = await load();
-      if (id === request.current) { apply(next); setLoaded(n => n + 1); }
+      if (id === request.current) { apply(next); setGeneration(n => n + 1); }
     } catch (e) {
       if (id === request.current) setError(message(e));
     }
@@ -38,7 +39,8 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
 
   const reload = useCallback(async () => { setError(''); await fetch(); }, [fetch]);
 
-  useEffect(() => { if (active && !flight.current && !pending.current) void reload(); }, [active, pushed, reload]);
+  // The daemon announces our own save too; a push naming the revision already held is not news.
+  useEffect(() => { if (active && !flight.current && !pending.current && pushedRevision !== revision.current) void reload(); }, [active, pushed, pushedRevision, reload]);
   useEffect(() => () => { request.current++; }, []);
 
   const drain = useCallback(async () => {
@@ -60,7 +62,9 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
   const persist = useCallback((value: DelegationPreferences, installWorkflowSkill = false) => {
     setPreferences(value);
     setError('');
-    pending.current = { value, installWorkflowSkill };
+    setGeneration(n => n + 1);
+    // An install queued behind a running save must survive the edits that collapse into it.
+    pending.current = { value, installWorkflowSkill: installWorkflowSkill || (pending.current?.installWorkflowSkill ?? false) };
     if (flight.current) return flight.current;
     request.current++;
     setBusy(true);
@@ -68,7 +72,7 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
     return flight.current;
   }, [drain]);
 
-  // loaded counts tables that arrived by load rather than by save; an undo taken before one is stale.
-  return { state, preferences, busy, error, loaded, reload, save: persist };
+  // generation moves on every save request and every load, so an undo taken at one is stale at the next.
+  return { state, preferences, busy, error, generation, reload, save: persist };
 }
 export type DelegationPreferencesPolicy = ReturnType<typeof useDelegationPreferences>;
