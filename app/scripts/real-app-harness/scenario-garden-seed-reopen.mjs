@@ -130,7 +130,6 @@ async function main() {
         description: 'dispatcher shell after delegation',
         timeoutMs: 30_000,
       });
-      await ensureCodexPromptReadyViaPty(client, spawned, 60_000);
       await client.request('select_session', { sessionId: spawned });
       await waitForRenderedReply(client, spawned, 'GSREOPEN_READY');
       return spawned;
