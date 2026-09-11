@@ -145,9 +145,8 @@ func TestDelegationOperationConcurrentRetriesConverge(t *testing.T) {
 	}
 }
 
-// Not synctest-able twice over: the launch creates a real git worktree (child
-// process), and the acceptance assertion measures real elapsed wall-clock. Acceptance
-// also pins an explicit base ref before journaling, so it includes one read-only Git call.
+// Not synctest-able: the launch creates a real git worktree, and acceptance measures wall-clock
+// including the read-only Git call that pins the explicit base ref before journaling.
 func TestDelegationOperationAcceptedBeforeSlowPreparation(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
