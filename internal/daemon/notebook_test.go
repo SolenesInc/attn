@@ -678,10 +678,9 @@ func TestNotebookSendToChiefQueuesForWorkingChiefAndWakesOnIdle(t *testing.T) {
 		t.Fatalf("working chief inbox = %+v, %v", unread, err)
 	}
 
-	drained := make(chan int, 1)
-	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
+	drains := observeAgentMailboxDrains(t, d)
 	d.applyState(sessionStateChange{sessionID: "chief", state: protocol.StateIdle, cause: liveSignal{}})
-	if delivered := <-drained; delivered != 1 {
+	if delivered := drains.next(); delivered != 1 {
 		t.Fatalf("idle drain delivered %d doorbells, want 1", delivered)
 	}
 	mu.Lock()
