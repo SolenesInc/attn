@@ -22,7 +22,7 @@ const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HARNESS_DIR, '../../..');
 const DEFAULT_APP_PATH = path.join(
   REPO_ROOT,
-  'app/src-tauri/target/release/bundle/macos/attn-legacy-recovery.app',
+  'app/src-tauri/target/staged/attn-legacy-recovery.app',
 );
 const RECOVERY_VERSION = 2;
 

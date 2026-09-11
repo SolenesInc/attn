@@ -1207,8 +1207,8 @@ fn open_in_editor(
     Ok(())
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
+pub fn run(context: tauri::Context<tauri::Wry>, browser_runtime_js: &'static str) {
+    browser_host::set_browser_runtime_js(browser_runtime_js);
     // Must run before anything reads ATTN_PROFILE / ATTN_WS_PORT (including
     // any spawned `attn daemon` child that inherits our env).
     profile::apply_build_profile_env();
@@ -1393,7 +1393,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
                 let _ = webview.window().set_focus();
             }
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .unwrap_or_else(|err| {
             eprintln!("attn: {err}");
             std::process::exit(1);

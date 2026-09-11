@@ -3,9 +3,23 @@ use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::LazyLock;
 use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{LazyLock, OnceLock};
 use std::time::{Duration, Instant};
+
+// The bundle is generated from the frontend on every build, so the thin app
+// crate embeds it and hands it over; embedding it here would rebuild app-core each time.
+static BROWSER_RUNTIME_JS: OnceLock<&'static str> = OnceLock::new();
+
+pub fn set_browser_runtime_js(js: &'static str) {
+    let _ = BROWSER_RUNTIME_JS.set(js);
+}
+
+fn browser_runtime_js() -> &'static str {
+    BROWSER_RUNTIME_JS
+        .get()
+        .expect("browser runtime bundle is set before the app runs")
+}
 use tauri::ipc::{CommandArg, CommandItem, InvokeError};
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl, Wry};
 
@@ -189,7 +203,7 @@ fn isolated_initialization_script() -> String {
     window.webkit?.messageHandlers?.attnBrowserLocation?.postMessage(null);
   }}, 100);
 }})()"#,
-        include_str!("../generated/browser-runtime.js"),
+        browser_runtime_js(),
     )
 }
 
@@ -645,7 +659,7 @@ async fn ensure_runtime(webview: tauri::Webview) -> Result<(), String> {
     if installed == "true" {
         return Ok(());
     }
-    let bundle = include_str!("../generated/browser-runtime.js");
+    let bundle = browser_runtime_js();
     let script = format!(
         r#"(() => {{
   try {{
@@ -1388,7 +1402,7 @@ mod tests {
         content_layout_inset, cookie_domain_can_be_set_from_host, cookie_domain_matches,
         cookie_from_stored, cookie_path_matches, focused_browser_label,
         isolated_initialization_script, page_action_timeout, page_size,
-        register_cookie_sync_worker, single_tab_script, stop_cookie_sync,
+        register_cookie_sync_worker, set_browser_runtime_js, single_tab_script, stop_cookie_sync,
         validate_browser_command_caller, StoredCookie, TrustedMainWebview,
     };
     use serde_json::{json, Map};
@@ -1535,7 +1549,7 @@ mod tests {
     #[test]
     fn browser_child_webviews_are_excluded_from_tauri_capabilities() {
         let capability: serde_json::Value =
-            serde_json::from_str(include_str!("../capabilities/default.json"))
+            serde_json::from_str(include_str!("../../capabilities/default.json"))
                 .expect("parse default capability");
         assert_eq!(capability["webviews"], json!(["main"]));
         assert!(capability.get("remote").is_none());
@@ -1544,7 +1558,7 @@ mod tests {
     #[test]
     fn present_capability_has_a_minimal_permission_surface() {
         let capability: serde_json::Value =
-            serde_json::from_str(include_str!("../capabilities/present.json"))
+            serde_json::from_str(include_str!("../../capabilities/present.json"))
                 .expect("parse present capability");
         assert_eq!(capability["windows"], json!(["present"]));
         assert_eq!(capability["webviews"], json!(["present"]));
@@ -1566,12 +1580,17 @@ mod tests {
         }
     }
 
+    fn isolated_script() -> String {
+        set_browser_runtime_js("/* browser runtime bundle stands in for tests */");
+        isolated_initialization_script()
+    }
+
     #[test]
     fn browser_initialization_reports_pointer_focus() {
         assert!(!single_tab_script().contains("attnBrowserFocus"));
-        assert!(isolated_initialization_script().contains("attnBrowserFocus"));
-        assert!(isolated_initialization_script().contains("pointerdown"));
-        assert!(isolated_initialization_script().contains("event.isTrusted"));
+        assert!(isolated_script().contains("attnBrowserFocus"));
+        assert!(isolated_script().contains("pointerdown"));
+        assert!(isolated_script().contains("event.isTrusted"));
     }
 
     #[test]
@@ -1586,8 +1605,8 @@ mod tests {
     #[test]
     fn browser_initialization_reports_history_navigation() {
         assert!(!single_tab_script().contains("attnBrowserLocation"));
-        assert!(isolated_initialization_script().contains("attnBrowserLocation"));
-        assert!(isolated_initialization_script().contains("setInterval"));
+        assert!(isolated_script().contains("attnBrowserLocation"));
+        assert!(isolated_script().contains("setInterval"));
     }
 
     #[test]

@@ -21,7 +21,7 @@ import { currentHarnessProfile, defaultDaemonPortForProfile, profileCliEnv, sock
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 // The em dash (U+2014) must match the native window title set in
-// app/src-tauri/src/lib.rs exactly, or waitForWindowTitled never matches.
+// app/src-tauri/core/src/lib.rs exactly, or waitForWindowTitled never matches.
 const PRESENT_WINDOW_TITLE = 'attn — present';
 const MANIFEST_TITLE = 'Present flow smoke';
 

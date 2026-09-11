@@ -1,0 +1,44 @@
+[package]
+name = "app-core"
+description = "Everything the attn app does; the `app` crate is the thin shell that embeds the frontend"
+authors = ["you"]
+edition = "2021"
+publish = false
+
+[lib]
+name = "app_core"
+
+[dependencies]
+tauri = { version = "=2.11.2", features = ["protocol-asset", "unstable"] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-clipboard-manager = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-plugin-deep-link = "2"
+dirs = "5"
+regex = "1"
+libc = "0.2"
+base64 = "0.22"
+getrandom = "0.2"
+image = { version = "0.25", default-features = false, features = ["png", "tiff"] }
+
+# Linux delivers a deep link as argv to a NEW process; the deep-link feature makes
+# this plugin hand that argv to the already-running app instead.
+[target.'cfg(target_os = "linux")'.dependencies]
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+# Same requirement and default features the plugin declares, so the fence shares
+# its resolved zbus instead of building a second one.
+zbus = "5.9"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "block2", "NSAlert", "NSApplication", "NSButton", "NSControl", "NSEvent", "NSImage", "NSResponder", "NSTextField", "NSView", "NSWindow"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSData", "NSError", "NSObject", "NSString"] }
+objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "WKContentWorld", "WKFrameInfo", "WKPDFConfiguration", "WKScriptMessage", "WKScriptMessageHandler", "WKSnapshotConfiguration", "WKUIDelegate", "WKUserContentController", "WKUserScript", "WKWebView", "WKWebViewConfiguration"] }
+
+[dev-dependencies]
+anyhow = "1"
