@@ -313,6 +313,31 @@ describe('createScenarioRunner agent tripwire', () => {
     expect(verdicts[0]).toMatchObject({ ok: true });
   });
 
+  it('replaces a green artifact and verdict when teardown fails', async () => {
+    const { runner, verdicts } = runnerWithTripwire({ scenarioId: 'TEARDOWN-FAILURE' });
+    runner.registerCleanup('restore_settings', () => {
+      throw new Error('settings socket closed');
+    });
+
+    await runner.finishSuccess({ closeElapsed: 'kept', paneId: 'pane-alpha' });
+    await expect(runner.finishCleanup({ sessionId: 'session-beta' })).rejects.toThrow(
+      'Scenario teardown failed: restore_settings: Error: settings socket closed',
+    );
+
+    expect(verdicts.map(({ ok }) => ok)).toEqual([true, false]);
+    expect(fs.existsSync(path.join(runner.runDir, 'summary.json'))).toBe(false);
+    const failure = JSON.parse(fs.readFileSync(path.join(runner.runDir, 'failure.json'), 'utf8'));
+    expect(failure).toMatchObject({
+      ok: false,
+      failurePhase: 'teardown',
+      closeElapsed: 'kept',
+      paneId: 'pane-alpha',
+      sessionId: 'session-beta',
+      teardownErrors: [{ name: 'restore_settings' }],
+    });
+    expect(failure.error).toContain('settings socket closed');
+  });
+
   it('starts one mock GitHub, makes the daemon carry it, and records what the daemon reads', async () => {
     const { runner, ensureMockGitHub, ensureDaemonArmed, readDaemonMockGitHub } = runnerWithTripwire();
 
