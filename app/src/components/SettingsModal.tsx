@@ -268,7 +268,7 @@ function SettingsModalContent({
     if (await autosave.flush()) setSelectedSection(section);
   }, [autosave]);
   const [selectedSection, setSelectedSection] = useState<SettingsSectionID>('connectivity');
-  const delegationPolicy = useDelegationPreferences(isOpen && selectedSection === 'delegation', sendDelegationPreferencesGet, sendDelegationPreferencesSave);
+  const delegationPolicy = useDelegationPreferences(isOpen, sendDelegationPreferencesGet, sendDelegationPreferencesSave);
   const [settingsSearch, setSettingsSearch] = useState('');
   const endpointPanel = useEndpointPanel();
   const pluginPanel = usePluginPanel(onListPlugins);
