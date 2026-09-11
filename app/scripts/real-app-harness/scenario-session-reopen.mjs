@@ -16,7 +16,7 @@ import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree } from './platform.mjs';
-import { createScenarioRunner } from './scenarioRunner.mjs';
+import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { sleep } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -133,8 +133,10 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   let sessionId = null;
 
+  runner.registerCleanup('stop_daemon', () => execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) }));
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
+  runner.registerCleanup('close_session', () => closeScenarioSessions(client, [sessionId].filter(Boolean)));
 
   try {
     const branch = `session-reopen-${runner.runId}`;
@@ -266,13 +268,6 @@ async function main() {
     const summary = await runner.finishFailure(error, { sessionId });
     console.error(summary.error);
     process.exitCode = 1;
-  } finally {
-    if (sessionId) await client.request('close_session', { sessionId }).catch(() => {});
-    try {
-      await runner.finishCleanup({ sessionId });
-    } finally {
-      await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) }).catch(() => {});
-    }
   }
 }
 

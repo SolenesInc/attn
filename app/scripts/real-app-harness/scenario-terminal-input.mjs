@@ -605,21 +605,6 @@ async function main() {
     const result = await runner.finishFailure(error, { sessionId, paneId: pane?.paneId ?? null });
     console.error(result.error);
     process.exitCode = 1;
-  } finally {
-    await client.request('set_setting', { key: 'keybindings_config', value: '' }).catch(() => {});
-    if (sessionId) {
-      const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-      for (const current of workspace?.panes || []) {
-        await client.request('close_pane', { sessionId, paneId: current.paneId }).catch(() => {});
-      }
-    }
-    await client.quitApp().catch(() => {});
-    await observer.close();
-    if (generatedReportPath && path.dirname(generatedReportPath) === downloadsDir
-      && DIAGNOSTIC_REPORT_NAME.test(path.basename(generatedReportPath))) {
-      fs.unlinkSync(generatedReportPath);
-      generatedReportPath = null;
-    }
   }
 }
 

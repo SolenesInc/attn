@@ -68,6 +68,9 @@ runner.registerCleanup('quit_app', () => client.quitApp());
 try {
   const webkitBaseline = await captureWebKitPids();
   await launchFreshAppAndConnect(client, observer);
+  runner.registerCleanup('restore_settings', async () => {
+    for (const [key, value] of baseline) await set(key, value);
+  });
   const fixture = process.env.ATTN_SETTINGS_FIXTURE
     ? JSON.parse(fs.readFileSync(process.env.ATTN_SETTINGS_FIXTURE, 'utf8'))
     : { 'activity.config': '{"agent":"codex","model":"gpt-5.6-luna","effort":"low"}', 'activity.intervals': '{"watching":120,"present":300}' };
@@ -158,12 +161,4 @@ try {
   await screenshot('failure.png').catch(() => {});
   console.error(JSON.stringify(await runner.finishFailure(error), null, 2));
   process.exitCode = 1;
-} finally {
-  if (observer.connected) {
-    for (const [key, value] of baseline) {
-      try { await set(key, value); } catch (error) { console.error(`Restore ${key}: ${error.message}`); process.exitCode = 1; }
-    }
-  }
-  await observer.close().catch(() => {});
-  await client.quitApp().catch(() => {});
 }

@@ -18,7 +18,7 @@ import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree } from './platform.mjs';
 import { ensureCodexInitialPanePromptReady } from './scenarioAgents.mjs';
 import { waitForFirstWorkspacePane, waitForPaneVisible } from './scenarioAssertions.mjs';
-import { createScenarioRunner } from './scenarioRunner.mjs';
+import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const CLOSE_BUDGET_MS = 1_000;
@@ -105,9 +105,13 @@ async function main() {
   const client = new UiAutomationClient({ appPath: options.appPath, launchEnv: slowGit.env });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   let sessionId = null;
+  let cleanupSessionId = null;
 
+  runner.registerCleanup('stop_daemon', () => execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) }));
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
+  runner.registerCleanup('close_session', () => closeScenarioSessions(client, [cleanupSessionId].filter(Boolean)));
+  runner.registerCleanup('remove_slow_git_gate', () => fs.rmSync(slowGit.gate, { force: true }));
 
   try {
     writeMockAgentFixture(runner.sessionDir, {
@@ -133,6 +137,7 @@ async function main() {
         waitForInitialPaneVisible: false,
         sessionWaitMs: 30_000,
       });
+      cleanupSessionId = sessionId;
       await client.request('select_session', { sessionId });
       await ensureCodexInitialPanePromptReady(client, sessionId, 45_000);
       pane = await waitForFirstWorkspacePane(client, sessionId, 'stubborn mock agent pane', 20_000);
@@ -158,6 +163,7 @@ async function main() {
       const startedAt = performance.now();
       await client.request('close_pane', { sessionId, paneId: pane.paneId });
       await waitForSessionGone(client, sessionId, CLOSE_BUDGET_MS);
+      cleanupSessionId = null;
       closeElapsedMs = performance.now() - startedAt;
       runner.assert(
         closeElapsedMs < CLOSE_BUDGET_MS,
@@ -179,14 +185,6 @@ async function main() {
     const summary = await runner.finishFailure(error, { sessionId });
     console.error(summary.error);
     process.exitCode = 1;
-  } finally {
-    fs.rmSync(slowGit.gate, { force: true });
-    if (sessionId) await client.request('close_session', { sessionId }).catch(() => {});
-    try {
-      await runner.finishCleanup({ sessionId });
-    } finally {
-      await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) }).catch(() => {});
-    }
   }
 }
 
