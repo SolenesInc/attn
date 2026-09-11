@@ -80,6 +80,7 @@ export function useGhosttyPaneRuntime(
     xpixel?: number;
     ypixel?: number;
   }>());
+  const focusRetryTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const terminalsLiveRef = useRef(terminalsLive);
   panesRef.current = panes;
   terminalsLiveRef.current = terminalsLive;
@@ -178,6 +179,13 @@ export function useGhosttyPaneRuntime(
       }
     }
   }, [cancelRuntimeConnection, panes]);
+
+  useEffect(() => () => {
+    for (const timer of focusRetryTimersRef.current.values()) {
+      clearTimeout(timer);
+    }
+    focusRetryTimersRef.current.clear();
+  }, []);
 
   useEffect(() => {
     if (terminalsLive) {
@@ -351,9 +359,17 @@ export function useGhosttyPaneRuntime(
     handleTerminalResize,
     focusPane: (paneId: string, retries = 20) => {
       recordFocus(paneId, retries);
+      const pendingTimer = focusRetryTimersRef.current.get(paneId);
+      if (pendingTimer !== undefined) {
+        clearTimeout(pendingTimer);
+      }
       const focus = (remaining: number) => {
-        if (get(paneId)?.focus() || remaining <= 0) return;
-        window.setTimeout(() => focus(remaining - 1), 50);
+        if (get(paneId)?.focus() || remaining <= 0) {
+          focusRetryTimersRef.current.delete(paneId);
+          return;
+        }
+        const timer = setTimeout(() => focus(remaining - 1), 50);
+        focusRetryTimersRef.current.set(paneId, timer);
       };
       focus(retries);
     },

@@ -522,6 +522,37 @@ describe('SessionTerminalWorkspace', () => {
     expect(mockTerminalFocus).toHaveBeenCalled();
   });
 
+  it('cancels pending focus retries when the workspace unmounts', () => {
+    vi.useFakeTimers();
+    mockTerminalFocus.mockReset().mockReturnValue(false);
+
+    const { unmount } = render(
+      <SessionTerminalWorkspace
+        workspaceId="workspace-session-1"
+        workspaceSessions={[{ id: 'session-1', label: 'Session 1', agent: 'claude', cwd: '/tmp/repo' }]}
+        workspace={createSingleAgentWorkspace()}
+        activePaneId={SESSION_PANE_ID}
+        fontSize={14}
+        enabled
+        isActiveSession
+        eventRouter={mockEventRouter}
+        onSplitPane={vi.fn()}
+        onClosePane={vi.fn()}
+        onFocusPane={vi.fn()}
+        onNavigateOutOfSession={vi.fn()}
+      />,
+    );
+
+    fireEvent.mouseDown(screen.getByText('session pane'));
+    const callsBeforeUnmount = mockTerminalFocus.mock.calls.length;
+    unmount();
+
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(mockTerminalFocus).toHaveBeenCalledTimes(callsBeforeUnmount);
+  });
+
   it('focuses a session pane immediately on mouse down', () => {
     mockTerminalFocus.mockReset().mockReturnValue(true);
     const onFocusPane = vi.fn();
