@@ -19,6 +19,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { recordingEnabled } from './windowRecording.mjs';
+import { writeMockAgentFixture } from './mockAgent.mjs';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -129,6 +130,23 @@ async function readDrill(client, seedID, ready, timeoutMs = 20_000) {
 async function openPane(client, observer, runner, label) {
   const cwd = path.join(runner.sessionDir, label);
   fs.mkdirSync(cwd, { recursive: true });
+  writeMockAgentFixture(cwd, {
+    name: 'plot delegate mock',
+    turns: [
+      {
+        includes: '📬 You have unread items in your attn inbox.',
+        actions: [{ type: 'attn', args: ['agent', 'inbox'] }],
+      },
+      {
+        includes: 'attn agent inbox ',
+        actions: [
+          { type: 'capture', from: 'prompt', pattern: 'agent inbox ([0-9a-f-]{36})', name: 'message' },
+          { type: 'capture', from: 'prompt', pattern: '--session ([0-9a-f-]{36})', name: 'session' },
+          { type: 'attn', args: ['agent', 'inbox', '{{message}}', '--session', '{{session}}'] },
+        ],
+      },
+    ],
+  });
   const sessionId = await createSessionAndWaitForInitialPane({
     client, observer, cwd, label, agent: 'shell',
   });
