@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
@@ -18,9 +20,20 @@ func TestDaemonProcessWaitForReadyReturnsOnStartupSignal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	go func() {
-		_, _ = writer.WriteString("ready")
-		_ = writer.Close()
+	blockReader, blockWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("/bin/sh", "-c", "printf 'ready\\n' >&3; cat <&4 >/dev/null")
+	cmd.ExtraFiles = []*os.File{writer, blockReader}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	writer.Close()
+	blockReader.Close()
+	defer func() {
+		blockWriter.Close()
+		_ = cmd.Wait()
 	}()
 
 	if err := (daemonProcess{ready: reader}).waitForReady(context.Background()); err != nil {
@@ -34,13 +47,38 @@ func TestDaemonProcessWaitForReadyReportsStartupFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	go func() {
-		_, _ = writer.WriteString("error:open database")
+		_, _ = writer.WriteString("error:open database\n")
 		_ = writer.Close()
 	}()
 
 	err = (daemonProcess{ready: reader}).waitForReady(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "open database") {
 		t.Fatalf("waitForReady() error = %v, want startup failure", err)
+	}
+}
+
+func TestWaitForMatchingDaemonReconcilesAConcurrentStartup(t *testing.T) {
+	retry := make(chan time.Time)
+	firstAttempt := make(chan struct{})
+	fetches := 0
+	fetch := func(context.Context) (healthResponse, error) {
+		fetches++
+		if fetches == 1 {
+			close(firstAttempt)
+			return healthResponse{}, errors.New("not ready")
+		}
+		return healthResponse{Protocol: protocol.ProtocolVersion}, nil
+	}
+	previousFingerprint := buildinfo.SourceFingerprint
+	buildinfo.SourceFingerprint = "unknown"
+	t.Cleanup(func() { buildinfo.SourceFingerprint = previousFingerprint })
+	go func() {
+		<-firstAttempt
+		retry <- time.Time{}
+	}()
+
+	if err := waitForMatchingDaemon(context.Background(), retry, fetch); err != nil {
+		t.Fatalf("waitForMatchingDaemon() error = %v", err)
 	}
 }
 

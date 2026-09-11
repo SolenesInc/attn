@@ -536,10 +536,13 @@ func runDaemon() {
 	case <-d.Started():
 		if err := startupSignal.Ready(); err != nil {
 			fmt.Fprintf(os.Stderr, "daemon readiness signal error: %v\n", err)
-			os.Exit(1)
 		}
 	case err := <-startResult:
-		startupSignal.Failed(err)
+		if errors.Is(err, daemon.ErrAlreadyRunning) {
+			startupSignal.AlreadyRunning()
+		} else {
+			startupSignal.Failed(err)
+		}
 		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
 		os.Exit(1)
 	}

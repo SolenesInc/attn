@@ -88,7 +88,7 @@ fn spawn_daemon(bin_path: &Path) -> Result<(), String> {
 }
 
 fn run_daemon_ensure(bin_path: &Path) -> Result<String, String> {
-    let mut child = Command::new(bin_path)
+    let child = Command::new(bin_path)
         .arg("daemon")
         .arg("ensure")
         .stdin(Stdio::null())
@@ -103,39 +103,13 @@ fn run_daemon_ensure(bin_path: &Path) -> Result<String, String> {
             )
         })?;
 
-    let deadline = Instant::now() + DAEMON_ENSURE_TIMEOUT;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) => {
-                if Instant::now() >= deadline {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(format!(
-                        "Daemon ensure did not finish within {} seconds",
-                        DAEMON_ENSURE_TIMEOUT.as_secs()
-                    ));
-                }
-                thread::sleep(Duration::from_millis(50));
-            }
-            Err(e) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(format!("Failed while waiting for daemon ensure: {}", e));
-            }
-        }
-    };
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("Failed while waiting for daemon ensure: {}", e))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
 
-    let mut stdout = String::new();
-    let mut stderr = String::new();
-    if let Some(mut pipe) = child.stdout.take() {
-        let _ = pipe.read_to_string(&mut stdout);
-    }
-    if let Some(mut pipe) = child.stderr.take() {
-        let _ = pipe.read_to_string(&mut stderr);
-    }
-
-    if !status.success() {
+    if !output.status.success() {
         let stderr = stderr.trim();
         return Err(if stderr.is_empty() {
             "daemon ensure failed".to_string()
@@ -199,7 +173,6 @@ fn wait_for_daemon_shutdown(socket_path: &Path, timeout: Duration) -> bool {
 }
 
 const DAEMON_START_TIMEOUT: Duration = Duration::from_secs(10);
-const DAEMON_ENSURE_TIMEOUT: Duration = Duration::from_secs(20);
 
 fn wait_for_daemon_health(socket_path: &Path, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;

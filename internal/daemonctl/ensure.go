@@ -1,8 +1,10 @@
 package daemonctl
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -23,6 +25,8 @@ const (
 	stopTimeout = 5 * time.Second
 	readyFDEnv  = "ATTN_DAEMON_READY_FD"
 )
+
+var errDaemonAlreadyRunning = errors.New("daemon already running")
 
 type StartupSignal struct {
 	writer *os.File
@@ -67,8 +71,12 @@ func Ensure(ctx context.Context, binaryPath string) (EnsureResult, error) {
 		if err != nil {
 			return EnsureResult{}, err
 		}
-		if err := process.waitForReady(ctx); err != nil {
+		contended, err := waitForSpawnedDaemon(ctx, process)
+		if err != nil {
 			return EnsureResult{}, err
+		}
+		if contended {
+			return EnsureResult{Status: "already_running"}, nil
 		}
 		return EnsureResult{Status: "started"}, nil
 	}
@@ -89,8 +97,12 @@ func Ensure(ctx context.Context, binaryPath string) (EnsureResult, error) {
 	if err != nil {
 		return EnsureResult{}, err
 	}
-	if err := process.waitForReady(ctx); err != nil {
+	contended, err := waitForSpawnedDaemon(ctx, process)
+	if err != nil {
 		return EnsureResult{}, err
+	}
+	if contended {
+		return EnsureResult{Status: "already_running"}, nil
 	}
 	return EnsureResult{Status: "restarted", Reason: reason}, nil
 }
@@ -175,17 +187,22 @@ func TakeStartupSignal() (StartupSignal, error) {
 	if err != nil || fd < 3 {
 		return StartupSignal{}, fmt.Errorf("invalid daemon readiness fd %q", raw)
 	}
+	syscall.CloseOnExec(fd)
 	return StartupSignal{writer: os.NewFile(uintptr(fd), "daemon-ready")}, nil
 }
 
 func (s StartupSignal) Ready() error {
-	return s.finish("ready")
+	return s.finish("ready\n")
 }
 
 func (s StartupSignal) Failed(err error) {
 	if err != nil {
-		_ = s.finish("error:" + err.Error())
+		_ = s.finish("error:" + err.Error() + "\n")
 	}
+}
+
+func (s StartupSignal) AlreadyRunning() {
+	_ = s.finish("already-running\n")
 }
 
 func (s StartupSignal) finish(message string) error {
@@ -200,10 +217,12 @@ func (s StartupSignal) finish(message string) error {
 func (p daemonProcess) waitForReady(ctx context.Context) error {
 	result := make(chan error, 1)
 	go func() {
-		message, err := io.ReadAll(p.ready)
+		message, err := bufio.NewReader(p.ready).ReadString('\n')
 		if err == nil {
-			switch text := string(message); {
+			switch text := strings.TrimSuffix(message, "\n"); {
 			case text == "ready":
+			case text == "already-running":
+				err = errDaemonAlreadyRunning
 			case strings.HasPrefix(text, "error:"):
 				err = fmt.Errorf("daemon startup failed: %s", strings.TrimPrefix(text, "error:"))
 			default:
@@ -218,6 +237,40 @@ func (p daemonProcess) waitForReady(ctx context.Context) error {
 	case <-ctx.Done():
 		p.ready.Close()
 		return fmt.Errorf("wait for daemon readiness: %w", ctx.Err())
+	}
+}
+
+func waitForSpawnedDaemon(ctx context.Context, process daemonProcess) (bool, error) {
+	err := process.waitForReady(ctx)
+	if !errors.Is(err, errDaemonAlreadyRunning) {
+		return false, err
+	}
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	if err := waitForMatchingDaemon(ctx, ticker.C, fetchHealth); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func waitForMatchingDaemon(
+	ctx context.Context,
+	retry <-chan time.Time,
+	fetch func(context.Context) (healthResponse, error),
+) error {
+	for {
+		health, err := fetch(ctx)
+		if err == nil {
+			if daemonMatchesCurrentBinary(health) {
+				return nil
+			}
+			return fmt.Errorf("competing daemon does not match current binary")
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("wait for competing daemon readiness: %w", ctx.Err())
+		case <-retry:
+		}
 	}
 }
 
