@@ -143,15 +143,17 @@ func main() {
 		return
 	}
 
-	if err := config.ValidateProfile(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-
-	if !isProfileGroupCommand(os.Args) {
-		if err := config.ValidateProfileRouting(); err != nil {
+	daemonStart := len(os.Args) == 2 && os.Args[1] == "daemon"
+	if !daemonStart {
+		if err := config.ValidateProfile(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
+		}
+		if !isProfileGroupCommand(os.Args) {
+			if err := config.ValidateProfileRouting(); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
 		}
 	}
 
@@ -512,19 +514,14 @@ func runDaemonCommand() {
 }
 
 func runDaemon() {
-	// Routing fence again, before a PID lock and a DB migration: never boot into another profile's data dir.
-	if err := config.ValidateProfileRouting(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	socketPath := config.SocketPath()
-	if err := config.ValidateDaemonIsolation(socketPath); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-
 	startupSignal, err := daemonctl.TakeStartupSignal()
 	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	socketPath, err := daemonPreflight()
+	if err != nil {
+		startupSignal.Failed(err)
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -550,6 +547,20 @@ func runDaemon() {
 		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func daemonPreflight() (string, error) {
+	if err := config.ValidateProfile(); err != nil {
+		return "", err
+	}
+	if err := config.ValidateProfileRouting(); err != nil {
+		return "", err
+	}
+	socketPath := config.SocketPath()
+	if err := config.ValidateDaemonIsolation(socketPath); err != nil {
+		return "", err
+	}
+	return socketPath, nil
 }
 
 func runDaemonEnsure() {
