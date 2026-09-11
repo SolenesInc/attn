@@ -42,33 +42,28 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 
 ## Working rules
 
-- Carry authorized changes through implementation, affected checks, and fixing
-  failures caused by the change. Local tests scoped to disposable data and
-  verification in isolated non-production profiles need no additional approval.
-  This includes protocol bumps and DB migrations needed by the requested change.
-  Stop at a concrete blocker or a decision outside the requested scope.
+- Run tests when making changes. If relevant, install a non-production profile
+  for additional verification.
+- Make protocol bumps and DB migrations as needed by the changes.
 - Diagnose before fixing. If the cause is unknown, propose instrumentation.
-- New actions need reversal and inspection: snooze/unsnooze, create/clean.
-- Plant a Garden plot for non-trivial work; put the plan in its body, pieces
-  in children, and ordering in `blocks` edges. Offer parallel delegations
-  for independent pieces. Small changes can go straight to a PR.
-- Do not commit spikes; Victor decides what follows.
-- Comments explain directives, measured limits, or hidden traps. Maximum two
-  lines per block, enforced by `make lint`. Delete unclear compressed comments.
+- Do not commit spikes.
+- Do not add prose comments. Prefer self-explanatory code over comments.
 - Product prompts address the user, never "Victor". Distinguish the agent
   changing attn from the agents it runs.
+- Quote globs passed to shell commands; zsh rejects unmatched bare globs before
+  commands such as `rg` can handle them.
 
 ## Commands and verification
 
-| Task | Command |
-| --- | --- |
-| Go tests | `make test` |
-| Frontend tests | `make test-frontend` |
-| Browser tests | `make test-e2e` |
-| Go + frontend | `make test-all` |
-| Go + frontend + browser | `make test-harness` |
-| Frontend dev server | `pnpm --dir app run dev` |
-| Lint | `make lint` |
+| Task                    | Command                  |
+| ----------------------- | ------------------------ |
+| Go tests                | `make test`              |
+| Frontend tests          | `make test-frontend`     |
+| Browser tests           | `make test-e2e`          |
+| Go + frontend           | `make test-all`          |
+| Go + frontend + browser | `make test-harness`      |
+| Frontend dev server     | `pnpm --dir app run dev` |
+| Lint                    | `make lint`              |
 
 These targets fetch the native VT library and install `app/node_modules` as needed.
 Prefer fast integration tests; do not copy production code into tests or test
@@ -87,26 +82,29 @@ Test feel with Victor early in spikes and at the end of substantial PR arcs.
 Prepare a running profile from the branch, realistic data, and a short list
 covering changed behavior, latency, and keyboard flow.
 
+Before requesting approval or merging, remeasure every receipt in the final PR
+description and verify each value independently against the exact head.
+
 ## Task-specific guidance
 
 Read the relevant entry when the task touches its subject; unrelated entries
 need no up-front reading.
 
-| When changing or working on | Read |
-| --- | --- |
-| State ownership, PTYs, store, jobs, Garden/crew, apps, or auto mode | [Ownership](docs/maintainer-contracts.md#ownership) |
-| Command, event, or message shapes | [Protocol generation and versioning](docs/maintainer-contracts.md#protocol) |
-| `sdk/attn-app/src` or SDK consumers | [SDK generation and shared React](docs/maintainer-contracts.md#the-app-sdk) |
-| Event publishing, projections, consumers, or retention | [Event bus](docs/maintainer-contracts.md#event-bus) |
-| Native VT builds, ABI, or pin updates | [Native VT library](docs/maintainer-contracts.md#native-vt-library) |
+| When changing or working on                                                            | Read                                                                                                                                                                                                           |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| State ownership, PTYs, store, jobs, Garden/crew, apps, or auto mode                    | [Ownership](docs/maintainer-contracts.md#ownership)                                                                                                                                                            |
+| Command, event, or message shapes                                                      | [Protocol generation and versioning](docs/maintainer-contracts.md#protocol)                                                                                                                                    |
+| `sdk/attn-app/src` or SDK consumers                                                    | [SDK generation and shared React](docs/maintainer-contracts.md#the-app-sdk)                                                                                                                                    |
+| Event publishing, projections, consumers, or retention                                 | [Event bus](docs/maintainer-contracts.md#event-bus)                                                                                                                                                            |
+| Native VT builds, ABI, or pin updates                                                  | [Native VT library](docs/maintainer-contracts.md#native-vt-library)                                                                                                                                            |
 | Agent-facing content in `internal/prompts/content/**`, its Go definitions, or CLI help | [Prompt authoring](docs/prompt-authoring.md): run `go run ./cmd/prompt-editor context EVENT_OR_SOURCE --json` and read complete affected compositions before and after edits; `refresh` reloads Go definitions |
-| Domain names or rules | [Glossary](docs/glossary.md); update definitions with implementation |
-| Branches, PRs, merges, or waiting on reviews | [Working with next](docs/working-with-next.md) |
-| Changelog fragments, releases, hotfixes, or syncing `main` into `next` | [Making a release](docs/making-a-release.md) |
-| Installing, launching, or verifying profiles | [Profiles](docs/profiles.md) |
-| Frontend code or shortcuts | [Frontend guidance](app/AGENTS.md) |
-| Packaged-app scenarios or recording/publishing evidence | [Harness guidance](app/scripts/real-app-harness/AGENTS.md) |
-| Pi driver or auto-mode permissions | [Pi guidance](plugins/attn-pi/AGENTS.md) |
+| Domain names or rules                                                                  | [Glossary](docs/glossary.md); update definitions with implementation                                                                                                                                           |
+| Branches, PRs, merges, or waiting on reviews                                           | [Working with next](docs/working-with-next.md)                                                                                                                                                                 |
+| Changelog fragments, releases, hotfixes, or syncing `main` into `next`                 | [Making a release](docs/making-a-release.md)                                                                                                                                                                   |
+| Installing, launching, or verifying profiles                                           | [Profiles](docs/profiles.md)                                                                                                                                                                                   |
+| Frontend code or shortcuts                                                             | [Frontend guidance](app/AGENTS.md)                                                                                                                                                                             |
+| Packaged-app scenarios or recording/publishing evidence                                | [Harness guidance](app/scripts/real-app-harness/AGENTS.md)                                                                                                                                                     |
+| Pi driver or auto-mode permissions                                                     | [Pi guidance](plugins/attn-pi/AGENTS.md)                                                                                                                                                                       |
 
 ## Diagnostics
 
