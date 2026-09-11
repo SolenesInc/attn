@@ -79,7 +79,6 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
     return flight.current;
   }, [drain, fetch]);
 
-  // generation moves on every save request and every load, so an undo taken at one is stale at the next.
   return { state, preferences, busy, error, generation, reload, save: persist };
 }
 export type DelegationPreferencesPolicy = ReturnType<typeof useDelegationPreferences>;

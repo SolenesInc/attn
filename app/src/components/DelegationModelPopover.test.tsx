@@ -13,6 +13,7 @@ const harnesses: DelegationHarness[] = [
 const catalog: DelegationModelCatalog = { detail: 'Reported by Claude Code', models: [
   { harness: 'claude', provider: '', id: 'opus', name: 'Opus', description: 'Deep work', detail: '', effort_support: ModelCapabilitySupport.Supported, effort_levels: ['medium', 'high'], access: ModelCapabilitySupport.Unknown },
   { harness: 'claude', provider: '', id: 'haiku', name: 'Haiku', description: '', detail: '', effort_support: ModelCapabilitySupport.Unsupported, effort_levels: [], access: ModelCapabilitySupport.Unknown },
+  { harness: 'claude', provider: '', id: 'sonnet', name: 'Sonnet', description: '', detail: '', effort_support: ModelCapabilitySupport.Supported, effort_levels: [], access: ModelCapabilitySupport.Unknown },
 ] };
 const anchor = { top: 100, bottom: 130, left: 40, right: 240 };
 
@@ -109,6 +110,18 @@ it('returns focus to the opener when Escape closes it', async () => {
   fireEvent.keyDown(document.activeElement ?? document, { key: 'Escape' });
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose a model' })).not.toBeInTheDocument());
   expect(document.activeElement).toBe(opener);
+});
+
+it('commits a typed effort when a click outside closes the popover', async () => {
+  const { onChange, onClose } = open({ harness: 'claude', provider: '', model: 'sonnet', effort: '' });
+  await screen.findByRole('option', { name: /Sonnet/ });
+  const effort = screen.getByLabelText('Effort');
+  act(() => { effort.focus(); });
+  fireEvent.change(effort, { target: { value: ' max ' } });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  fireEvent.mouseDown(document.body);
+  expect(onChange).toHaveBeenLastCalledWith({ harness: 'claude', provider: '', model: 'sonnet', effort: 'max' });
+  expect(onClose).toHaveBeenCalledTimes(1);
 });
 
 it('commits a pinned harness alone and never discovers for it', () => {

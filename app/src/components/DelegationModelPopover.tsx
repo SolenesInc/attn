@@ -53,7 +53,13 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
   const [manualProvider, setManualProvider] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ top: anchor.bottom + 6, left: anchor.left });
-  useEscapeStack(onClose, true);
+  // A field that commits on blur must commit before the popover unmounts under it.
+  const close = () => {
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && containerRef.current?.contains(focused)) focused.blur();
+    onClose();
+  };
+  useEscapeStack(close, true);
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -66,7 +72,6 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
     setPosition({ top, left });
   }, [anchor, loading, manual]);
 
-  // Focus moves into the popover on open and back to the opener on close, unless a click already placed it.
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     containerRef.current?.querySelector<HTMLButtonElement>('.delegation-pop-harness[aria-selected="true"], .delegation-pop-harness')?.focus();
@@ -76,11 +81,11 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
   // Deferred a tick so the click that opened the popover doesn't close it.
   useEffect(() => {
     const onMouseDown = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) onClose();
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) close();
     };
     const id = window.setTimeout(() => document.addEventListener('mousedown', onMouseDown), 0);
     return () => { window.clearTimeout(id); document.removeEventListener('mousedown', onMouseDown); };
-  }, [onClose]);
+  }, [onClose]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pickHarness = (next: DelegationHarness) => {
     if (next.id === value.harness) return;

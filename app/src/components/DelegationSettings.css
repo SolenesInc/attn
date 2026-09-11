@@ -10,14 +10,12 @@
 .delegation-lead { max-width: 68ch; margin: 0 0 16px; color: var(--color-text-secondary); font-size: var(--font-size-md); line-height: 1.45; }
 .delegation-lead.off { color: var(--color-text-tertiary); }
 
-/* Head switch */
 .delegation-switch { display: inline-flex; align-items: center; gap: 10px; padding: 0; border: 0; background: none; color: var(--color-text-secondary); font-size: var(--font-size-sm); font-weight: 700; cursor: pointer; }
 .delegation-switch-track { position: relative; width: 36px; height: 20px; border-radius: 10px; background: var(--color-bg-button); border: 1px solid var(--color-border); transition: background .15s; }
 .delegation-switch-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--color-text-tertiary); transition: transform .15s, background .15s; }
 .delegation-switch[aria-checked="true"] .delegation-switch-track { background: #f59b4a; border-color: rgba(245, 155, 74, 0.8); }
 .delegation-switch[aria-checked="true"] .delegation-switch-track::after { transform: translateX(16px); background: #1c1308; }
 
-/* Table */
 .delegation-table { overflow: hidden; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-bg-panel); transition: opacity .15s; }
 .delegation-table.dim { opacity: .5; }
 .delegation-thead { display: grid; grid-template-columns: var(--delegation-cols); gap: 14px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--color-border-subtle); background: var(--color-bg-elevated); font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: var(--font-size-xs); font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--color-text-tertiary); }
@@ -51,7 +49,6 @@
 .delegation-more { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 6px; background: none; color: var(--color-text-tertiary); font-weight: 700; letter-spacing: 0.1em; cursor: pointer; }
 .delegation-more:hover, .delegation-more.open { background: var(--color-bg-button); color: var(--color-text-primary); }
 
-/* Expanded details */
 .delegation-row.open .delegation-details, .delegation-row.open .delegation-alt, .delegation-row.open .delegation-alt-edit { background: color-mix(in srgb, var(--color-bg-elevated) 25%, transparent); }
 .delegation-details { display: grid; gap: 14px; max-width: calc(78ch + 66px); padding: 4px 16px 18px 66px; }
 .delegation-details.actions { max-width: none; padding-top: 6px; }
@@ -69,7 +66,6 @@
 .delegation-actions.center { justify-content: center; padding-top: 8px; }
 .delegation-spacer { flex: 1; }
 
-/* Alternatives as sub rows */
 .delegation-alt { display: grid; grid-template-columns: var(--delegation-cols); gap: 14px; align-items: center; padding: 6px 16px 10px; }
 .delegation-alt > .delegation-model { max-width: 100%; }
 .delegation-alt.add { padding-top: 2px; }
@@ -84,7 +80,6 @@
 .delegation-rm { display: grid; place-items: center; width: 32px; height: 32px; justify-self: center; border: 0; border-radius: 6px; background: none; font-size: 18px; line-height: 1; color: var(--color-text-tertiary); cursor: pointer; }
 .delegation-rm:hover { background: var(--color-bg-button); color: var(--color-error); }
 
-/* Add row, foot, empty, confirm, undo */
 .delegation-addrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px; background: color-mix(in srgb, var(--color-bg-elevated) 40%, transparent); }
 .delegation-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 12px; color: var(--color-text-tertiary); font-size: var(--font-size-sm); }
 .delegation-foot code { font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; }

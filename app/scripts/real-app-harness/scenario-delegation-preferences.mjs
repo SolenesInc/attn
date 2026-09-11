@@ -33,7 +33,6 @@ async function until(check, description) {
   for (let i = 0; i < 100; i++) { const found = await check(); if (found) return found; await delay(100); }
   throw new Error(`Timed out: ${description}`);
 }
-// Every edit autosaves; the saved preferences are the receipt, not a Save button.
 const preferences = async () => (await preferencesRequest('delegation_preferences_get')).preferences;
 const savedRole = (name, check = () => true) => until(async () => (await preferences()).roles.find(role => role.name === name && check(role)), `${name} saved`);
 // Text fields commit on blur: focus the field, set its value, then move focus to the open row's details button.
