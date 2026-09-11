@@ -131,6 +131,7 @@ function props(overrides: {
   paneActive?: boolean;
 }) {
   return {
+    workspaceId: 'workspace-1',
     sessionId: 'session-1',
     annotationApi: overrides.api,
     paneActive: overrides.paneActive ?? false,
@@ -333,12 +334,12 @@ describe('AnnotatedTerminal', () => {
     await windowReady('turn-1');
 
     anchor('turn-1', 0, 26);
-    expect(screen.getByTestId('annotation-popup')).toBeTruthy();
+    expect(screen.getByTestId('annotation-popup')).toHaveAttribute('data-workspace-id', 'workspace-1');
 
     pickLabel('Verify this');
 
     expect(screen.queryByTestId('annotation-popup')).toBeNull();
-    expect(screen.getByTestId('annotation-panel')).toBeTruthy();
+    expect(screen.getByTestId('annotation-panel')).toHaveAttribute('data-workspace-id', 'workspace-1');
     expect(stored()[0]?.quickLabelId).toBe('verify-this');
     expect(stored()[0]?.quote).toBe(TURN_1.slice(0, 26));
   });

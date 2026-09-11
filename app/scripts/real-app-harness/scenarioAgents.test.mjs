@@ -14,7 +14,11 @@ describe('ensureCodexInitialPanePromptReady', () => {
             };
           case 'get_pane_state':
             return {
-              pane: { bounds: { width: 640, height: 480 }, inputFocused: true },
+              pane: {
+                bounds: { width: 640, height: 480 },
+                dom: { terminalContainer: {} },
+                inputFocused: true,
+              },
               inputFocused: true,
               renderHealth: { flags: { terminalVisible: true } },
             };

@@ -1,0 +1,3 @@
+kind: fixed
+area: annotations
+change: Terminal annotation editors keep keyboard focus while the active pane settles.

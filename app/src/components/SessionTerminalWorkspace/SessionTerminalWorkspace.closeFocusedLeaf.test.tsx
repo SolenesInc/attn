@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
-import { SessionTerminalWorkspace } from './index';
+import { annotationSurfaceOwnsFocus, SessionTerminalWorkspace } from './index';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
 import { tileContentKey, type TerminalWorkspaceState } from '../../types/workspace';
 import { NotebookSurfaceProvider, type NotebookSurfaceContextValue } from '../../contexts/NotebookSurfaceContext';
@@ -147,6 +147,21 @@ describe('SessionTerminalWorkspace selection style', () => {
 });
 
 describe('SessionTerminalWorkspace leaf focus', () => {
+  it('keeps annotation focus only for its owning workspace', () => {
+    const popup = document.createElement('dialog');
+    popup.className = 'anno-popup';
+    popup.dataset.workspaceId = 'workspace-split';
+    const textarea = document.createElement('textarea');
+    popup.appendChild(textarea);
+    document.body.appendChild(popup);
+    textarea.focus();
+
+    expect(annotationSurfaceOwnsFocus('workspace-split')).toBe(true);
+    expect(annotationSurfaceOwnsFocus('workspace-next')).toBe(false);
+
+    popup.remove();
+  });
+
   it('makes a clicked tile the active leaf and gives its body DOM focus', () => {
     const { container } = renderSplit();
 
