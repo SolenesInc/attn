@@ -15,12 +15,11 @@ func TestSeedNudges_InjectionLeavesTheBellUnreadUntilShow(t *testing.T) {
 	fixture := newSeededNudgeGarden(t)
 	doorbell := &recordingDoorbell{}
 	fixture.d.ptyBackend = doorbell.backend()
-	drained := make(chan int, 2)
-	fixture.d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
+	drains := observeAgentMailboxDrains(t, fixture.d)
 	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
 
 	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "look now", true)
-	if delivered := <-drained; delivered != 1 {
+	if delivered := drains.next(); delivered != 1 {
 		t.Fatalf("drain delivered %d bells, want 1", delivered)
 	}
 	prompts := doorbell.pasted()
@@ -45,7 +44,7 @@ func TestSeedNudges_InjectionLeavesTheBellUnreadUntilShow(t *testing.T) {
 		t.Fatalf("show: %v", protocol.Deref(resp.Error))
 	}
 	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "after read", true)
-	if delivered := <-drained; delivered != 1 {
+	if delivered := drains.next(); delivered != 1 {
 		t.Fatalf("post-read drain delivered %d bells, want 1", delivered)
 	}
 	if prompts := doorbell.pasted(); len(prompts) != 2 {
