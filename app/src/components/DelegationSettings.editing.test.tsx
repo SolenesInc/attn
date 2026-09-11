@@ -141,3 +141,17 @@ it('renders a configured maintained role by built-in kind when a template shares
   expect(screen.getByRole('button', { name: 'Restore Attn roles (1)' })).toBeInTheDocument();
   await act(async () => { state = { ...state }; });
 });
+
+it('withdraws undo when a change made elsewhere reloads the table', async () => {
+  const { daemon, getState, bump } = setup([custom]);
+  fireEvent.click(await screen.findByRole('button', { name: 'Build' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+  await waitFor(() => expect(getState().preferences.roles).toHaveLength(0));
+  expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
+
+  bump();
+  act(() => useDelegationPreferencesPush.getState().push(1));
+  await waitFor(() => expect(daemon.getCalls('load').length).toBeGreaterThanOrEqual(2));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument());
+  expect(getState().preferences.roles).toHaveLength(0);
+});

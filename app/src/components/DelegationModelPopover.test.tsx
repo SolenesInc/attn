@@ -63,6 +63,21 @@ it('reuses the catalog across reopen and lets an exact id through', async () => 
   expect(onChange).toHaveBeenLastCalledWith({ harness: 'claude', provider: '', model: 'claude-next', effort: '' });
 });
 
+it('a popover reopened during discovery shows the models when that discovery settles', async () => {
+  let settle: (catalog: DelegationModelCatalog) => void = () => {};
+  const loadModels = vi.fn(() => new Promise<DelegationModelCatalog>(resolve => { settle = resolve; }));
+  const props = { harnesses, anchor, onChange: vi.fn(), onClose: vi.fn(), loadModels, value: { harness: 'claude', provider: '', model: '', effort: '' } };
+  render(<DelegationModelPopover {...props} />);
+  expect(screen.getByLabelText('Discovering models')).toBeInTheDocument();
+  cleanup();
+  render(<DelegationModelPopover {...props} />);
+  expect(screen.getByLabelText('Discovering models')).toBeInTheDocument();
+  expect(loadModels).toHaveBeenCalledTimes(1);
+  settle(structuredClone(catalog));
+  await screen.findByRole('option', { name: /Opus/ });
+  expect(screen.queryByLabelText('Discovering models')).not.toBeInTheDocument();
+});
+
 it('commits a pinned harness alone and never discovers for it', () => {
   const { loadModels, onChange } = open({ harness: '', provider: '', model: '', effort: '' });
   expect(screen.getByText('Pick a harness to see its models.')).toBeInTheDocument();

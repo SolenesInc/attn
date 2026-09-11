@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { DelegationChoice, DelegationPreferences, DelegationRole, DelegationSelection, DelegationHarness } from '../types/generated';
 import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
 import type { DelegationPreferencesPolicy } from '../hooks/useDelegationPreferences';
@@ -107,12 +107,13 @@ function AdoptionPanel({ config, templates, names, adoption, onChange, onCancel,
 }
 
 export function DelegationSettings({ policy, loadModels }: { policy: DelegationPreferencesPolicy; loadModels: (harness: string) => Promise<DelegationModelCatalog> }) {
-  const { state, preferences: config, error, reload, save } = policy;
+  const { state, preferences: config, error, loaded, reload, save } = policy;
   const [expanded, setExpanded] = useState<string | null>(null);
   const [expandedAlt, setExpandedAlt] = useState<string | null>(null);
   const [popover, setPopover] = useState<PopoverTarget | null>(null);
   const [undo, setUndo] = useState<Undo | null>(null);
   const [adoption, setAdoption] = useState<Record<string, string> | null>(null);
+  useEffect(() => { setUndo(null); }, [loaded]);
   if (!config || !state) return <div role="status">{error || 'Loading delegation preferences…'}{error && <button type="button" className="settings-action" onClick={() => void reload()}>Retry</button>}</div>;
 
   const views = new Map(state.expandedRoles.map(role => [roleViewKey(role), role]));

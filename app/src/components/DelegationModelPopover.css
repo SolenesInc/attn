@@ -1,16 +1,16 @@
 /* Above the settings modal (z-index 10001); the popover is portaled to body. */
-.delegation-pop { position: fixed; z-index: 10002; width: min(560px, calc(100vw - 32px)); display: grid; grid-template-columns: 168px minmax(0, 1fr); overflow: hidden; border: 1px solid var(--color-border-hover); border-radius: 10px; background: var(--color-bg-panel); box-shadow: 0 16px 36px rgba(0, 0, 0, 0.34); font-size: var(--font-size-sm); }
+.delegation-pop { position: fixed; z-index: 10002; width: min(560px, calc(100vw - 32px)); display: grid; grid-template-columns: 168px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; max-height: calc(100vh - 32px); overflow: hidden; border: 1px solid var(--color-border-hover); border-radius: 10px; background: var(--color-bg-panel); box-shadow: 0 16px 36px rgba(0, 0, 0, 0.34); font-size: var(--font-size-sm); }
 .delegation-pop button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; }
 .delegation-pop button:disabled { cursor: not-allowed; opacity: .45; }
 .delegation-pop :focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
-.delegation-pop-harnesses { display: grid; align-content: start; gap: 2px; padding: 8px; border-right: 1px solid var(--color-border-subtle); background: var(--color-bg-elevated); }
+.delegation-pop-harnesses { display: grid; align-content: start; gap: 2px; overflow-y: auto; padding: 8px; border-right: 1px solid var(--color-border-subtle); background: var(--color-bg-elevated); }
 .delegation-pop-kicker { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 4px; font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: var(--font-size-xs); font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--color-text-tertiary); }
 .delegation-pop-harness { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 8px 10px; border-radius: 6px; font-weight: 600; color: var(--color-text-secondary); text-align: left; }
 .delegation-pop-harness:hover { background: var(--color-bg-button); color: var(--color-text-primary); }
 .delegation-pop-harness[aria-selected="true"] { background: var(--color-bg-panel); color: var(--color-text-primary); box-shadow: inset 0 0 0 1px var(--color-border); }
 .delegation-pop-status { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--color-success); }
 .delegation-pop-status.bad { background: var(--color-error); }
-.delegation-pop-models { display: grid; align-content: start; gap: 2px; min-height: 240px; padding: 8px; }
+.delegation-pop-models { display: grid; align-content: start; gap: 2px; min-height: min(240px, 100%); overflow-y: auto; padding: 8px; }
 .delegation-pop-list { display: grid; gap: 2px; }
 .delegation-pop-refresh { font-family: inherit; font-size: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--color-text-tertiary); }
 .delegation-pop-refresh:hover:not(:disabled) { color: var(--color-text-primary); }
@@ -38,7 +38,7 @@
 .delegation-pop-link { color: var(--color-text-secondary); font-size: var(--font-size-xs); text-decoration: underline dotted; text-underline-offset: 3px; }
 .delegation-pop-link:hover { color: var(--color-text-primary); }
 @media (max-width: 720px) {
-  .delegation-pop { grid-template-columns: 1fr; }
+  .delegation-pop { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr) auto; }
   .delegation-pop-harnesses { grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--color-border-subtle); }
   .delegation-pop-harnesses .delegation-pop-kicker { display: none; }
 }

@@ -9,7 +9,7 @@ Every edit saves as it happens. There is no Save button and no draft: a change
 is live for the next `attn delegate roles` call as soon as the row settles. A
 save that collides with a change made elsewhere reloads the table and shows the
 daemon's reason; make the edit again on the fresh table. Deleting a role offers
-Undo until the next edit.
+Undo until the next edit, or until a change made elsewhere reloads the table.
 
 ## Rows
 

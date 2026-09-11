@@ -13,6 +13,7 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
   const [preferences, setPreferences] = useState<DelegationPreferences | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [loaded, setLoaded] = useState(0);
   const pushed = useDelegationPreferencesPush(s => s.version);
   const revision = useRef(0);
   const flight = useRef<Promise<void> | null>(null);
@@ -29,7 +30,7 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
     const id = ++request.current;
     try {
       const next = await load();
-      if (id === request.current) apply(next);
+      if (id === request.current) { apply(next); setLoaded(n => n + 1); }
     } catch (e) {
       if (id === request.current) setError(message(e));
     }
@@ -67,6 +68,7 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
     return flight.current;
   }, [drain]);
 
-  return { state, preferences, busy, error, reload, save: persist };
+  // loaded counts tables that arrived by load rather than by save; an undo taken before one is stale.
+  return { state, preferences, busy, error, loaded, reload, save: persist };
 }
 export type DelegationPreferencesPolicy = ReturnType<typeof useDelegationPreferences>;
