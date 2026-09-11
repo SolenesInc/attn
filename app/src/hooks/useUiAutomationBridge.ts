@@ -19,6 +19,7 @@ import {
 } from '../components/MarkdownReader/annotations/annotationsAutomation';
 import { getSettingsAutomationHandle, INACTIVE_SETTINGS_STATE } from '../components/settingsAutomation';
 import { getAutoModeAutomationHandle, INACTIVE_AUTOMODE_STATE } from '../components/autoModeAutomation';
+import { repositoryQueryToken } from '../components/ledger/ledgerQuery';
 import { getTerminalPerfSnapshot } from '../utils/terminalPerf';
 import { readWarmWorkspaceLimit } from '../utils/terminalVirtualization';
 import { dumpTerminalGeometry } from '../utils/terminalDiagnosticsLog';
@@ -2883,7 +2884,6 @@ export function useUiAutomationBridge({
           await settleUi(2);
         }
         // The typed query is the filter: rewrite its tokens rather than drive controls.
-        const baseName = (value: string) => value.replace(/\/+$/, '').split('/').pop() || value;
         setSessionsQuery(root, (tokens) => {
           let next = tokens;
           if (range !== undefined) {
@@ -2900,8 +2900,8 @@ export function useUiAutomationBridge({
             if (workspace) next.push(`ws:${workspace}`);
           }
           if (repository !== undefined) {
-            next = next.filter((token) => !/^repo:/i.test(token));
-            if (repository) next.push(`repo:${baseName(repository)}`);
+            next = next.filter((token) => !/^repo(?:-path)?:/i.test(token));
+            if (repository) next.push(repositoryQueryToken(repository));
           }
           return next;
         });

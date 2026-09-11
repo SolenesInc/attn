@@ -91,7 +91,10 @@ export function SessionsTab({
   const workspaceLabel = useCallback((id: string) => workspaceNames[id] ?? id, [workspaceNames]);
 
   const [text, setText] = useState(() => formatQuery(restoredFilters, workspaceLabel));
-  const parsed = useMemo(() => parseQuery(text, ledger.facets, workspaceLabel), [text, ledger.facets, workspaceLabel]);
+  const parsed = useMemo(
+    () => parseQuery(text, ledger.facets, workspaceLabel, filters.repository),
+    [text, ledger.facets, workspaceLabel, filters.repository],
+  );
   const facetsPending = ledger.facets === null;
   const unresolvedRepository = facetsPending
     && parsed.unresolved.some((token) => token.toLowerCase().startsWith('repo:'));
