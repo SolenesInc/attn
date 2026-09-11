@@ -54,6 +54,13 @@ describe('parseQuery', () => {
     expect(parseQuery(token, spacedFacets, label).filters.repository).toBe(repository);
   });
 
+  it('keeps an at-prefixed repository name literal', () => {
+    const repository = '/work/@scope';
+    const scopedFacets = { ...facets, repositories: [{ value: repository, count: 2 }] };
+
+    expect(parseQuery('repo:@scope', scopedFacets, label, repository).filters.repository).toBe(repository);
+  });
+
   it('round-trips through formatQuery', () => {
     const filters = { scope: 'all' as const, range: 'custom' as const, customFrom: '2026-08-01', customTo: '2026-08-03', workspaceId: 'ws-1', repository: '/Users/victor/projects/attn' };
     const text = formatQuery(filters, label);

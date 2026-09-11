@@ -2900,7 +2900,7 @@ export function useUiAutomationBridge({
             if (workspace) next.push(`ws:${workspace}`);
           }
           if (repository !== undefined) {
-            next = next.filter((token) => !/^repo:/i.test(token));
+            next = next.filter((token) => !/^repo(?:-path)?:/i.test(token));
             if (repository) next.push(repositoryQueryToken(repository));
           }
           return next;
