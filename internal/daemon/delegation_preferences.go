@@ -133,7 +133,8 @@ func usesDelegationPreferences(msg *protocol.DelegateMessage) bool {
 	return msg.Role != nil || msg.Choice != nil || protocol.Deref(msg.Fallback)
 }
 
-func (d *Daemon) ensureDelegationWorkflowSkill(harness string) error {
+func (d *Daemon) ensureDelegationWorkflowSkill(resolved *delegationprefs.Resolved) error {
+	harness := resolved.Selection.Harness
 	cfg, err := d.store.GetDelegationPreferences()
 	if err != nil {
 		return err
@@ -149,7 +150,7 @@ func (d *Daemon) ensureDelegationWorkflowSkill(harness string) error {
 		d.logf("skipping user-global attn-workflow skill sync for profile %q", config.ProfileLabel())
 		return nil
 	}
-	if len(paths) == 0 {
+	if len(paths) == 0 && resolved.Builtin != nil {
 		return fmt.Errorf("harness %q has no supported attn-workflow skill directory", harness)
 	}
 	return nil

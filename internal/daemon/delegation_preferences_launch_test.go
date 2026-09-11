@@ -156,6 +156,44 @@ func TestDelegationRoleLaunchRefreshesOptedInWorkflowSkill(t *testing.T) {
 	}
 }
 
+func TestWorkflowSkillUnsupportedHarnessOnlyBlocksMaintainedRoles(t *testing.T) {
+	t.Setenv(toolhome.EnvVar, t.TempDir())
+	t.Setenv("ATTN_PROFILE", "dev")
+	d := newDelegationDaemon(t)
+	cfg := configuredBuild(t, d)
+	cfg.WorkflowSkillEnabled = true
+	cfg.Roles[0].Choices[0].Selection = delegationprefs.Selection{Harness: "custom-plugin"}
+	cfg.Fallback.Selection = delegationprefs.Selection{Harness: "custom-plugin"}
+	maintained := prompts.DelegationRoleTemplates()[0]
+	maintained.Choices[0].Selection = delegationprefs.Selection{Harness: "custom-plugin"}
+	cfg.Roles = append(cfg.Roles, maintained)
+	if _, err := d.store.SaveDelegationPreferences(cfg); err != nil {
+		t.Fatal(err)
+	}
+	for _, request := range []delegationprefs.Request{{Role: "build"}, {Fallback: true}, {Role: maintained.ID}} {
+		resolved, err := delegationprefs.Resolve(prompts.ExpandDelegationPreferences(cfg), request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := json.Marshal(resolved)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var accepted delegationprefs.Resolved
+		if err := json.Unmarshal(raw, &accepted); err != nil {
+			t.Fatal(err)
+		}
+		err = d.ensureDelegationWorkflowSkill(&accepted)
+		if request.Role == maintained.ID {
+			if err == nil || !strings.Contains(err.Error(), "no supported") {
+				t.Fatalf("maintained role error = %v", err)
+			}
+		} else if err != nil {
+			t.Fatalf("custom/fallback launch blocked: %v", err)
+		}
+	}
+}
+
 func TestDelegationDiscoveryAndEffortValidation(t *testing.T) {
 	d := newDaemonForTest(t)
 	dir := t.TempDir()

@@ -580,7 +580,7 @@ func (d *Daemon) spawnDelegatedRuntime(msg *resolvedDelegationLaunch, sessionID,
 func (d *Daemon) delegateOperation(msg *resolvedDelegationLaunch, operationID, reservedSessionID, ownedWorktreePath string, worktreeOwned bool, worktreeToken, initiatingChiefSessionID string, resolved *delegationprefs.Resolved) (*protocol.DelegateResult, error) {
 	guidance := ""
 	if resolved != nil {
-		if err := d.ensureDelegationWorkflowSkill(resolved.Selection.Harness); err != nil {
+		if err := d.ensureDelegationWorkflowSkill(resolved); err != nil {
 			return nil, err
 		}
 		copy := *msg
@@ -614,13 +614,14 @@ func (d *Daemon) delegateOperation(msg *resolvedDelegationLaunch, operationID, r
 		return nil, fmt.Errorf("a brief is required")
 	}
 	var source *protocol.Session
+	existingSession := d.store.Get(sessionID)
 	if sourceSessionID != "" {
 		source = d.store.Get(sourceSessionID)
-		if source == nil {
+		if source == nil && existingSession == nil {
 			return nil, fmt.Errorf("source session %s was not found; omit --source-session for a standalone launch", sourceSessionID)
 		}
 	}
-	if source == nil && msg.Agent == nil {
+	if source == nil && existingSession == nil && msg.Agent == nil {
 		return nil, fmt.Errorf("source inheritance is unavailable; choose an agent directly or through a configured role/fallback")
 	}
 	if source != nil {
@@ -631,6 +632,8 @@ func (d *Daemon) delegateOperation(msg *resolvedDelegationLaunch, operationID, r
 	sourceAgent := ""
 	if source != nil {
 		sourceAgent = string(source.Agent)
+	} else if existingSession != nil {
+		sourceAgent = string(existingSession.Agent)
 	}
 	agent, err := d.resolveDelegationAgent(sourceAgent, msg.Agent)
 	if err != nil {

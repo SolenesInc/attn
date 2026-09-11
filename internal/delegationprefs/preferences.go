@@ -105,11 +105,12 @@ type Request struct {
 }
 
 type Resolved struct {
-	Selection     Selection `json:"selection"`
-	RoleName      string    `json:"role_name"`
-	Instructions  string    `json:"instructions"`
-	StoppingPoint string    `json:"stopping_point"`
-	Revision      int       `json:"revision"`
+	Builtin       *protocol.BuiltinDelegationRole `json:"builtin,omitempty"`
+	Selection     Selection                       `json:"selection"`
+	RoleName      string                          `json:"role_name"`
+	Instructions  string                          `json:"instructions"`
+	StoppingPoint string                          `json:"stopping_point"`
+	Revision      int                             `json:"revision"`
 }
 
 func Resolve(c Config, r Request) (Resolved, error) {
@@ -154,6 +155,7 @@ func Resolve(c Config, r Request) (Resolved, error) {
 			return out, fmt.Errorf("choice %q needs a Use when condition in Settings > Delegation", choiceID)
 		}
 		out.Selection, out.RoleName, out.Instructions, out.StoppingPoint = choice.Selection, role.Name, role.Instructions, role.StoppingPoint
+		out.Builtin = role.Builtin
 	}
 	s := &out.Selection
 	if r.Harness != nil && *r.Harness != s.Harness {

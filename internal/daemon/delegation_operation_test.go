@@ -2,11 +2,13 @@ package daemon
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/garden"
@@ -87,6 +89,75 @@ func TestDelegationOperationReservesOperationIDNamespace(t *testing.T) {
 	_, err := d.startDelegation(&msg)
 	if err == nil || !strings.Contains(err.Error(), "reserved operation prefix") {
 		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestDelegationOperationWaitsForStartupRecovery(t *testing.T) {
+	d := newDelegationDaemon(t)
+	backend := &fakeSpawnBackend{}
+	_, sourceID, _ := setupDelegationSource(t, d, backend)
+	msg := explicitOperationMessage(d, "startup-recovery", sourceID, "Wait for recovered workers.", "waiting")
+	msg.Agent = protocol.Ptr("missing-agent")
+	synctest.Test(t, func(t *testing.T) {
+		d.done = make(chan struct{})
+		d.setRecovering(true)
+		op, err := d.startDelegation(&msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		pending, err := d.store.GetDelegationOperation(op.OperationID)
+		if err != nil || pending.Operation.State != protocol.DelegationOperationStateAccepted {
+			t.Fatalf("operation advanced during recovery: %+v, %v", pending, err)
+		}
+		d.setRecovering(false)
+		synctest.Wait()
+		done, err := d.store.GetDelegationOperation(op.OperationID)
+		if err != nil || done.Operation.State != protocol.DelegationOperationStateFailed {
+			t.Fatalf("operation did not resume after recovery: %+v, %v", done, err)
+		}
+	})
+}
+
+func TestDelegationRecoveryWithoutSourceSession(t *testing.T) {
+	for _, handover := range []bool{false, true} {
+		t.Run(fmt.Sprint("handover=", handover), func(t *testing.T) {
+			d := newDelegationDaemon(t)
+			backend := &fakeSpawnBackend{}
+			_, sourceID, _ := setupDelegationSource(t, d, backend)
+			consumeDelegatedPrompt(t, backend)
+			msg := explicitOperationMessage(d, "removed-source", sourceID, "Keep the successor.", "successor")
+			msg.Agent = nil
+			if handover {
+				seed := plant(t, d, protocol.SeedPlantMessage{Title: "handover work", Body: protocol.Ptr("Keep the successor.")})
+				tendAs(t, d, seed.ID, sourceID)
+				msg.Assignment = protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindSeed, SeedID: protocol.Ptr(seed.ID), Handover: &protocol.DelegateHandover{}}
+			}
+			op, err := d.startDelegation(&msg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			first := waitDelegationOperation(t, d, op.OperationID)
+			if first.Result == nil {
+				t.Fatalf("launch failed: %+v", first)
+			}
+			backend.mu.Lock()
+			backend.sessionIDs = append(backend.sessionIDs, op.SessionID)
+			spawns := len(backend.spawnOpts)
+			backend.mu.Unlock()
+			d.store.Remove(sourceID)
+			if err := d.store.UpdateDelegationOperation(op.OperationID, protocol.DelegationOperationStatePreparing, "interrupted after spawn", "", "", "", nil, nil, time.Now()); err != nil {
+				t.Fatal(err)
+			}
+			d.runDelegationOperation(op.OperationID)
+			done := waitDelegationOperation(t, d, op.OperationID)
+			if done.State != protocol.DelegationOperationStateCompleted || done.Result == nil || done.Result.SeedID != first.Result.SeedID {
+				t.Fatalf("recovery lost successor: %+v", done)
+			}
+			if len(backend.spawnOpts) != spawns {
+				t.Fatal("recovery spawned another worker")
+			}
+		})
 	}
 }
 

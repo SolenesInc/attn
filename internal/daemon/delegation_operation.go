@@ -102,6 +102,11 @@ func (d *Daemon) runDelegationOperation(id string) {
 		return
 	}
 	defer d.endDelegationRun(id)
+	select {
+	case <-d.recoverySettledSignal():
+	case <-d.done:
+		return
+	}
 	record, err := d.store.GetDelegationOperation(id)
 	if err != nil {
 		d.logf("delegate operation %s disappeared: %v", id, err)
