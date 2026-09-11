@@ -139,7 +139,7 @@ function writeCleanupFixture(root, fixture) {
       actions: [
         { type: 'exec', cwd: fixture.repo, cmd: 'git', args: ['worktree', 'remove', fixture.mergedClean], allowFailure: true },
         { type: 'exec', cwd: fixture.repo, cmd: 'git', args: ['branch', '-d', 'merged-work'], allowFailure: true },
-        { type: 'capture', from: 'prompt', pattern: 'Your work is seed `(s-[a-z0-9]{6})`', name: 'seed' },
+        { type: 'capture', from: 'prompt', pattern: 'Your assignment is in seed `(s-[a-z0-9]{6})`', name: 'seed' },
         { type: 'attn', args: ['seed', 'note', '{{seed}}', '-m', CLEANUP_SUMMARY], state: 'idle' },
       ],
     }],
