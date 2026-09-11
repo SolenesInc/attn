@@ -59,10 +59,11 @@ tender.
 
 ## Rings and watches
 
-Lifecycle moves ring watching sessions. Notes stay quiet unless you add `--ring`.
-`attn seed watch <id>` subscribes this session to the seed and its descendants,
-including children planted later. A new delegation starts the same watch on
-the seed it binds.
+Lifecycle moves ring watching sessions. Harvesting or withering a blocker also
+rings whoever holds each seed it set free. Notes stay quiet unless you add
+`--ring`. `attn seed watch <id>` subscribes this session to the seed and its
+descendants, including children planted later. A new delegation starts the same
+watch on the seed it binds.
 
 `attn seed unwatch <id>` removes that subscription and drops queued updates
 that no remaining watch covers. Separate child watches remain. An ancestor
