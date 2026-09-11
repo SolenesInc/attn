@@ -45,7 +45,7 @@ jobs:
 
       - name: Classify changed paths
         id: changes
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3
         with:
           token: ''
           filters: |

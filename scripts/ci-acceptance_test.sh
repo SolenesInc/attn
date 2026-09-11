@@ -197,6 +197,7 @@ for path in 'app/src/**' 'sdk/attn-app/**' 'app/package.json' 'app/pnpm-lock.yam
   fi
 done
 for contract in \
+  'uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad' \
   "if: steps.changes.outputs.react == 'true'" \
   "if: steps.changes.outputs.react != 'true'" \
   'No React source or package inputs changed; scan skipped.'; do
