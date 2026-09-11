@@ -67,6 +67,11 @@ for contract in \
     exit 1
   fi
 done
+if grep -Fq 'go env GOCACHE' "$install_action" ||
+  grep -Fq 'go env GOMODCACHE' "$install_action"; then
+  echo "App acceptance must not create Go caches before preflight" >&2
+  exit 1
+fi
 
 soak_triggers="$(sed -n '/^on:/,/^permissions:/p' "$soak_workflow")"
 if ! grep -Fq 'workflow_dispatch:' <<<"$soak_triggers" ||
@@ -173,8 +178,71 @@ if ! grep -Fq 'ref: ${{ github.event.pull_request.head.sha }}' <<<"$react_doctor
 fi
 react_doctor_triggers="$(sed -n '/^on:/,/^permissions:/p' "$react_doctor")"
 if ! grep -Fq 'pull_request:' <<<"$react_doctor_triggers" ||
-  grep -Fq 'push:' <<<"$react_doctor_triggers"; then
-  echo "React Doctor must run on pull requests only" >&2
+  ! grep -Fq 'push:' <<<"$react_doctor_triggers" ||
+  ! grep -Fq 'branches: [main, next]' <<<"$react_doctor_triggers"; then
+  echo "React Doctor must report on relevant pull requests and prime branch caches" >&2
+  exit 1
+fi
+for path in 'app/src/**' 'sdk/attn-app/**' 'app/package.json' 'app/pnpm-lock.yaml' '.github/workflows/react-doctor.yml'; do
+  if [[ "$(grep -Fc -- "- '$path'" <<<"$react_doctor_triggers")" != 2 ]]; then
+    echo "React Doctor must filter pull requests and branch priming to: $path" >&2
+    exit 1
+  fi
+done
+if ! grep -Fq 'name: Report runner class' "$react_doctor"; then
+  echo "React Doctor must report its runner class" >&2
+  exit 1
+fi
+
+for job_name in backend pty-compatibility rust; do
+  job="$(sed -n "/^  ${job_name}:/,/^  [a-z0-9-]\+:/p" "$workflow")"
+  for contract in \
+    'cache: false' \
+    'name: Resolve Go cache paths' \
+    'echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"' \
+    'echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"' \
+    '${{ steps.go-cache-paths.outputs.build }}' \
+    '${{ steps.go-cache-paths.outputs.modules }}' \
+    'uses: actions/cache/restore@v4' \
+    'name: Report runner class'; do
+    if ! grep -Fq "$contract" <<<"$job"; then
+      echo "$job_name is missing its Go cache contract: $contract" >&2
+      exit 1
+    fi
+  done
+done
+
+backend_job="$(sed -n '/^  backend:/,/^  pty-compatibility:/p' "$workflow")"
+pty_job="$(sed -n '/^  pty-compatibility:/,/^  frontend:/p' "$workflow")"
+rust_job="$(sed -n '/^  rust:/,/^  rust-gate:/p' "$workflow")"
+if ! grep -Fq 'key: go-build-blacksmith-${{ runner.os }}-${{ runner.arch }}-' <<<"$backend_job"; then
+  echo "Daemon must keep its Blacksmith Go cache separate" >&2
+  exit 1
+fi
+for hosted_job in "$pty_job" "$rust_job"; do
+  if ! grep -Fq 'key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-' <<<"$hosted_job"; then
+    echo "Hosted PTY and Tauri jobs must share their platform Go cache" >&2
+    exit 1
+  fi
+done
+
+for owner_job in "$backend_job" "$pty_job"; do
+  for contract in \
+    'uses: actions/cache/save@v4' \
+    "github.ref == 'refs/heads/next'" \
+    "github.ref == 'refs/heads/main'"; do
+    if ! grep -Fq "$contract" <<<"$owner_job"; then
+      echo "A shared Go cache owner is missing: $contract" >&2
+      exit 1
+    fi
+  done
+  if grep -Fq "github.event_name == 'pull_request'" <<<"$owner_job"; then
+    echo "Shared Go cache owners must not write pull-request-scoped caches" >&2
+    exit 1
+  fi
+done
+if grep -Fq 'uses: actions/cache/save@v4' <<<"$rust_job"; then
+  echo "Daemon and PTY must own Go cache saves; Tauri restores only" >&2
   exit 1
 fi
 

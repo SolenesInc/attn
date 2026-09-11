@@ -7,9 +7,22 @@
 name: React Doctor
 
 on:
-  # Scans the PR's changed files and posts a sticky summary comment listing only the new issues introduced relative to the merge base of the target branch.
+  push:
+    branches: [main, next]
+    paths:
+      - 'app/src/**'
+      - 'sdk/attn-app/**'
+      - 'app/package.json'
+      - 'app/pnpm-lock.yaml'
+      - '.github/workflows/react-doctor.yml'
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'app/src/**'
+      - 'sdk/attn-app/**'
+      - 'app/package.json'
+      - 'app/pnpm-lock.yaml'
+      - '.github/workflows/react-doctor.yml'
 
 permissions:
   contents: read
@@ -32,6 +45,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+
+      - name: Report runner class
+        run: ./scripts/ci-runner-class.sh
 
       # Pinned to the commit the v2 tag pointed at on 2026-07-24. The tag is
       # mutable and this action runs on every PR with write access to comments,

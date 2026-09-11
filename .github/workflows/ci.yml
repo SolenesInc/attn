@@ -234,6 +234,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Report runner class
+        run: ./scripts/ci-runner-class.sh
+
       # Blacksmith's /etc/profile.d resets HOME for the runner user, which skips the
       # login-shell overlay the shell integration tests launch bash with.
       - name: Keep login shells from resetting HOME
@@ -243,6 +246,22 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: Resolve Go cache paths
+        id: go-cache-paths
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go build cache
+        id: go-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ steps.go-cache-paths.outputs.build }}
+            ${{ steps.go-cache-paths.outputs.modules }}
+          key: go-build-blacksmith-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
 
       - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
@@ -296,6 +315,19 @@ jobs:
       - name: Test repository scripts
         run: make test-scripts
 
+      - name: Save Go build cache
+        if: >-
+          always() && steps.go-cache.outcome == 'success' &&
+          steps.go-cache.outputs.cache-hit != 'true' &&
+          github.event_name == 'push' &&
+          (github.ref == 'refs/heads/next' || github.ref == 'refs/heads/main')
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ steps.go-cache-paths.outputs.build }}
+            ${{ steps.go-cache-paths.outputs.modules }}
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
+
   pty-compatibility:
     name: PTY upgrade (${{ matrix.os }})
     needs: changes
@@ -313,9 +345,25 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Report runner class
+        run: ./scripts/ci-runner-class.sh
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: false
+      - name: Resolve Go cache paths
+        id: go-cache-paths
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+      - name: Restore Go build cache
+        id: go-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ steps.go-cache-paths.outputs.build }}
+            ${{ steps.go-cache-paths.outputs.modules }}
+          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
@@ -329,6 +377,18 @@ jobs:
         run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./internal/ptybackend -run '^Test(SharedHost_|MigratingHost_)' -count=1
       - name: Verify profile cleanup with live host generations
         run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./cmd/attn -run '^TestProfileClean.*SharedHost' -count=1
+      - name: Save Go build cache
+        if: >-
+          always() && steps.go-cache.outcome == 'success' &&
+          steps.go-cache.outputs.cache-hit != 'true' &&
+          github.event_name == 'push' &&
+          (github.ref == 'refs/heads/next' || github.ref == 'refs/heads/main')
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ steps.go-cache-paths.outputs.build }}
+            ${{ steps.go-cache-paths.outputs.modules }}
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
 
   frontend:
     name: Frontend
@@ -498,6 +558,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Report runner class
+        working-directory: .
+        run: ./scripts/ci-runner-class.sh
+
       - name: Install Linux webview deps
         if: runner.os == 'Linux'
         run: |
@@ -509,6 +573,22 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: Resolve Go cache paths
+        id: go-cache-paths
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go build cache
+        id: go-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ steps.go-cache-paths.outputs.build }}
+            ${{ steps.go-cache-paths.outputs.modules }}
+          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master

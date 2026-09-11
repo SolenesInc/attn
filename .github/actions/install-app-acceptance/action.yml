@@ -40,10 +40,6 @@ runs:
       shell: bash
       run: pnpm --dir app install --frozen-lockfile
 
-    - name: Create the Go caches preflight requires
-      shell: bash
-      run: mkdir -p "$(go env GOCACHE)" "$(go env GOMODCACHE)"
-
     - name: Install the packaged app and bundled plugin
       shell: bash
       run: |
