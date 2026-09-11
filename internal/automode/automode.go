@@ -564,3 +564,90 @@ func DescribeProposal(kind, value string) string {
 	}
 	return value
 }
+
+// Preset is a named approval policy and sandbox mode pair: Codex's three plus
+// attn's untrusted. Ids and labels are Codex's, so a user reads one vocabulary.
+type Preset struct {
+	ID             string `json:"id"`
+	Label          string `json:"label"`
+	Description    string `json:"description"`
+	ApprovalPolicy string `json:"approval_policy"`
+	SandboxMode    string `json:"sandbox_mode"`
+}
+
+func Presets() []Preset {
+	return []Preset{
+		{
+			ID:    "read-only",
+			Label: "Read Only",
+			Description: "The agent can read files in the current workspace. Approval is required " +
+				"to edit files or access the internet.",
+			ApprovalPolicy: PolicyOnRequest,
+			SandboxMode:    SandboxReadOnly,
+		},
+		{
+			ID:    "default",
+			Label: "Default",
+			Description: "The agent can read and edit files in the current workspace, and run " +
+				"commands. Approval is required to access the internet or edit other files.",
+			ApprovalPolicy: PolicyOnRequest,
+			SandboxMode:    SandboxWorkspaceWrite,
+		},
+		{
+			ID:    "full-access",
+			Label: "Full Access",
+			Description: "The agent can edit files outside this workspace and access the internet " +
+				"without asking for approval. Exercise caution when using.",
+			ApprovalPolicy: PolicyNever,
+			SandboxMode:    SandboxDangerFullAccess,
+		},
+		{
+			ID:    "untrusted",
+			Label: "Untrusted",
+			Description: "Every command that no rule allows is reviewed before it runs, and a " +
+				"command the sandbox refuses is reviewed before it reruns unsandboxed.",
+			ApprovalPolicy: PolicyUntrusted,
+			SandboxMode:    SandboxWorkspaceWrite,
+		},
+	}
+}
+
+func PresetByID(id string) (Preset, bool) {
+	for _, preset := range Presets() {
+		if preset.ID == id {
+			return preset, true
+		}
+	}
+	return Preset{}, false
+}
+
+func PresetFor(policy, mode string) (Preset, bool) {
+	for _, preset := range Presets() {
+		if preset.ApprovalPolicy == policy && preset.SandboxMode == mode {
+			return preset, true
+		}
+	}
+	return Preset{}, false
+}
+
+// An empty value means "not set", which is how a launcher says "follow the daemon's".
+func ValidatePolicyPair(policy, mode string) error {
+	if policy != "" {
+		if err := validateOneOf("approval policy", policy, Policies()); err != nil {
+			return err
+		}
+	}
+	if mode == "" {
+		return nil
+	}
+	return validateOneOf("sandbox mode", mode, SandboxModes())
+}
+
+func validateOneOf(what, value string, allowed []string) error {
+	for _, known := range allowed {
+		if known == value {
+			return nil
+		}
+	}
+	return fmt.Errorf("%s %q is not one of %s", what, value, strings.Join(allowed, ", "))
+}

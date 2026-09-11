@@ -278,6 +278,12 @@ func buildStoredIntentSpawn(session *protocol.Session, intent store.LaunchIntent
 		YoloMode:    protocol.Ptr(intent.YoloMode),
 		AutoMode:    intent.AutoMode,
 	}
+	if intent.ApprovalPolicy != "" {
+		spawnMsg.ApprovalPolicy = protocol.Ptr(intent.ApprovalPolicy)
+	}
+	if intent.SandboxMode != "" {
+		spawnMsg.SandboxMode = protocol.Ptr(intent.SandboxMode)
+	}
 	if intent.Executable != "" {
 		spawnMsg.Executable = protocol.Ptr(intent.Executable)
 	}

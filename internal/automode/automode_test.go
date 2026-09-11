@@ -279,3 +279,65 @@ func TestValidateApprovalPolicyAndSandboxModeNameTheChoices(t *testing.T) {
 		t.Error("an unknown sandbox mode was accepted")
 	}
 }
+
+func TestPresetsRoundTripThroughBothLookups(t *testing.T) {
+	presets := Presets()
+	if len(presets) == 0 {
+		t.Fatal("the preset table is empty")
+	}
+	seen := map[string]bool{}
+	for _, preset := range presets {
+		if seen[preset.ID] {
+			t.Fatalf("preset id %q appears twice", preset.ID)
+		}
+		seen[preset.ID] = true
+		if preset.Label == "" || preset.Description == "" {
+			t.Errorf("preset %q = %+v, want a label and a description a picker can show", preset.ID, preset)
+		}
+		if err := ValidatePolicyPair(preset.ApprovalPolicy, preset.SandboxMode); err != nil {
+			t.Errorf("preset %q: %v", preset.ID, err)
+		}
+		byID, ok := PresetByID(preset.ID)
+		if !ok || byID != preset {
+			t.Errorf("PresetByID(%q) = %+v, %t", preset.ID, byID, ok)
+		}
+		byPair, ok := PresetFor(preset.ApprovalPolicy, preset.SandboxMode)
+		if !ok || byPair.ID != preset.ID {
+			t.Errorf("PresetFor(%q, %q) = %+v, %t", preset.ApprovalPolicy, preset.SandboxMode, byPair, ok)
+		}
+	}
+	if preset, ok := PresetByID("yolo"); ok {
+		t.Errorf("PresetByID(\"yolo\") = %+v, want no preset", preset)
+	}
+	// A real pair no preset names: nothing may be reported as a named preset.
+	if preset, ok := PresetFor(PolicyUntrusted, SandboxDangerFullAccess); ok {
+		t.Errorf("PresetFor untrusted/danger-full-access = %+v, want no preset", preset)
+	}
+}
+
+func TestValidatePolicyPairNamesTheValueAndTheAllowedSet(t *testing.T) {
+	if err := ValidatePolicyPair("", ""); err != nil {
+		t.Errorf("an unset pair is a valid pair: %v", err)
+	}
+	if err := ValidatePolicyPair(PolicyNever, ""); err != nil {
+		t.Errorf("one half alone is a valid pair: %v", err)
+	}
+	err := ValidatePolicyPair("sometimes", SandboxReadOnly)
+	if err == nil {
+		t.Fatal("an unknown approval policy was accepted")
+	}
+	for _, want := range []string{`"sometimes"`, "untrusted, on-request, never"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %q, want it to name %q", err, want)
+		}
+	}
+	err = ValidatePolicyPair(PolicyNever, "read-write")
+	if err == nil {
+		t.Fatal("an unknown sandbox mode was accepted")
+	}
+	for _, want := range []string{`"read-write"`, "read-only, workspace-write, danger-full-access"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %q, want it to name %q", err, want)
+		}
+	}
+}

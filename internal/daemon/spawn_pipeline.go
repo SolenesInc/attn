@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -41,6 +42,7 @@ type spawnRequest struct {
 	driver          agentdriver.Driver
 	resumeSessionID string
 	parentSessionID string
+	autoModeDriver  bool
 }
 
 type spawnPlan struct {
@@ -127,6 +129,16 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 			}
 		}
 	}
+	autoModeDriver := hasPluginDriver && pluginDriver.Capabilities["auto_mode"]
+	if policy, sandbox := requestedSpawnPolicyPair(msg); policy != "" || sandbox != "" {
+		if err := automode.ValidatePolicyPair(policy, sandbox); err != nil {
+			return nil, &spawnRejection{err: err}
+		}
+		if !autoModeDriver {
+			return nil, &spawnRejection{err: fmt.Errorf(
+				"agent %q does not support a per-session approval policy or sandbox mode", agent)}
+		}
+	}
 	workspaceID := strings.TrimSpace(msg.WorkspaceID)
 	if workspaceID == "" {
 		return nil, &spawnRejection{commandError: "missing workspace_id"}
@@ -135,7 +147,7 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 		d.setWorkspacePaneStatusForSession(msg.ID, workspacelayout.PaneStatusFailed, "unknown workspace")
 		return nil, &spawnRejection{commandError: "unknown workspace"}
 	}
-	return &spawnRequest{msg: msg, policy: policy, agent: agent, pluginDriver: pluginDriver, hasPluginDriver: hasPluginDriver, isShell: isShell, initialPrompt: initialPrompt, workspaceID: workspaceID}, nil
+	return &spawnRequest{msg: msg, policy: policy, agent: agent, pluginDriver: pluginDriver, hasPluginDriver: hasPluginDriver, isShell: isShell, initialPrompt: initialPrompt, workspaceID: workspaceID, autoModeDriver: autoModeDriver}, nil
 }
 
 func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
@@ -309,6 +321,8 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			if msg.AutoMode != nil {
 				cfg.EnabledDefault = *msg.AutoMode
 			}
+			policy, sandbox := effectiveSpawnPolicyPair(msg)
+			cfg = applySessionPolicyPair(cfg, policy, sandbox)
 			cfg = d.autoModeConfigForSession(cfg, params.CWD)
 			params.AutoMode = &cfg
 		}
@@ -358,6 +372,9 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	plan.priorIntent, plan.hadPriorIntent = d.store.LaunchIntent(session.ID)
 	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
 	intent.AutoMode = msg.AutoMode
+	if req.autoModeDriver {
+		intent.ApprovalPolicy, intent.SandboxMode = effectiveSpawnPolicyPair(msg)
+	}
 	d.store.SetLaunchIntent(session.ID, intent)
 	// After the already-live no-op returns, before the runtime whose first
 	// UserPromptSubmit can beat commitSpawn.

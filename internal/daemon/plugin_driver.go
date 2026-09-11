@@ -766,6 +766,11 @@ func (d *Daemon) notifyPluginDriverSessionClosed(pluginName, sessionID, runID, r
 }
 
 func (d *Daemon) resolvePluginDriverLaunch(reg pluginDriverRegistration, params pluginDriverSpawnParams, resume bool) (pluginDriverSpawnResult, error) {
+	// A driver that reads auto mode takes yolo as the full-access pair in
+	// AutoMode; handing it a flag it never advertised is what the refusal stops.
+	if params.Yolo && !reg.Capabilities["yolo"] && reg.Capabilities["auto_mode"] {
+		params.Yolo = false
+	}
 	if params.Yolo && !reg.Capabilities["yolo"] {
 		return pluginDriverSpawnResult{}, fmt.Errorf("agent %q does not support yolo launches", reg.Agent)
 	}

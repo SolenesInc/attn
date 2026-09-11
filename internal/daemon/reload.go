@@ -238,6 +238,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 	// it alone would drop the launcher's override on every reload.
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
 		intent.AutoMode = prior.AutoMode
+		intent.ApprovalPolicy, intent.SandboxMode = prior.ApprovalPolicy, prior.SandboxMode
 	}
 	d.store.SetLaunchIntent(sessionID, intent)
 	d.recordReviewerEvidence(sessionID, opts.ApprovalRoute.ReviewerInLoop())
@@ -451,8 +452,11 @@ func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend
 			prepared.abort()
 			return nil, fmt.Errorf("read auto mode config: %w", err)
 		}
-		if intent, ok := d.store.LaunchIntent(session.ID); ok && intent.AutoMode != nil {
-			cfg.EnabledDefault = *intent.AutoMode
+		if intent, ok := d.store.LaunchIntent(session.ID); ok {
+			if intent.AutoMode != nil {
+				cfg.EnabledDefault = *intent.AutoMode
+			}
+			cfg = applySessionPolicyPair(cfg, intent.ApprovalPolicy, intent.SandboxMode)
 		}
 		cfg = d.autoModeConfigForSession(cfg, params.CWD)
 		params.AutoMode = &cfg

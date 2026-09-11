@@ -66,12 +66,15 @@ type ActiveAgentDriverRun struct {
 type LaunchIntent struct {
 	YoloMode bool `json:"yolo_mode,omitempty"`
 	// nil means "follow the promoted config", not off.
-	AutoMode      *bool                        `json:"auto_mode,omitempty"`
-	ApprovalRoute launchcontract.ApprovalRoute `json:"approval_route,omitempty"`
-	Executable    string                       `json:"executable,omitempty"`
-	Model         string                       `json:"model,omitempty"`
-	Effort        string                       `json:"effort,omitempty"`
-	ChiefOfStaff  bool                         `json:"chief_of_staff,omitempty"`
+	AutoMode *bool `json:"auto_mode,omitempty"`
+	// Empty means "follow the promoted config" for that half of the pair.
+	ApprovalPolicy string                       `json:"approval_policy,omitempty"`
+	SandboxMode    string                       `json:"sandbox_mode,omitempty"`
+	ApprovalRoute  launchcontract.ApprovalRoute `json:"approval_route,omitempty"`
+	Executable     string                       `json:"executable,omitempty"`
+	Model          string                       `json:"model,omitempty"`
+	Effort         string                       `json:"effort,omitempty"`
+	ChiefOfStaff   bool                         `json:"chief_of_staff,omitempty"`
 	// Zero value means attended.
 	UnattendedLaunch launchcontract.UnattendedLaunchSpec `json:"unattended_launch,omitzero"`
 }
