@@ -42,6 +42,7 @@ type resolvedDelegationLaunch struct {
 	Handover            *protocol.SeedHandoverRequest
 	Confirm             *bool
 	PreferencesRevision *int
+	ParentSeedID        string
 }
 
 func resolveLaunchInput(msg *protocol.DelegateMessage) resolvedDelegationLaunch {
@@ -124,7 +125,27 @@ func validateDelegateRequestShape(msg *protocol.DelegateMessage) error {
 }
 
 func (d *Daemon) resolveDelegateRuntime(msg *protocol.DelegateMessage, reservedSeedID, reservedBaseCommit, reservedNoteID, sessionID, ownedWorktreePath string, worktreeOwned bool) (*resolvedDelegationLaunch, error) {
-	return d.resolveDelegateRuntimeWithHandoverSnapshot(msg, reservedSeedID, reservedBaseCommit, reservedNoteID, sessionID, ownedWorktreePath, worktreeOwned, 0, "", "")
+	return d.resolveDelegateRuntimeWithHandoverSnapshot(msg, reservedSeedID, reservedBaseCommit, reservedNoteID, sessionID, ownedWorktreePath, worktreeOwned, 0, "", "", "", "")
+}
+
+func resolveAcceptedDelegationBase(msg *protocol.DelegateMessage) (string, error) {
+	if msg.Checkout == nil || msg.Checkout.Kind != protocol.DelegateCheckoutKindNewWorktree {
+		return "", nil
+	}
+	directory, err := validateDelegationDirectory(msg.Cwd)
+	if err != nil {
+		return "", err
+	}
+	repoRoot, err := attngit.GetRepoRoot(directory)
+	if err != nil {
+		return "", fmt.Errorf("checkout flags are invalid outside Git: %s", directory)
+	}
+	base := strings.TrimSpace(protocol.Deref(msg.Checkout.From))
+	commit, err := attngit.Output(attngit.OpMetadata, attngit.ResolveMainRepoPath(repoRoot), "rev-parse", "--verify", base+"^{commit}")
+	if err != nil || strings.TrimSpace(string(commit)) == "" {
+		return "", fmt.Errorf("base ref %q is unavailable; fetch it explicitly or choose another ref", base)
+	}
+	return strings.TrimSpace(string(commit)), nil
 }
 
 func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
@@ -133,6 +154,8 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 	worktreeOwned bool,
 	handoverSeedRev int,
 	handoverTenderSession, handoverTenderMember string,
+	operationID string,
+	parentSeedID string,
 ) (*resolvedDelegationLaunch, error) {
 	if err := validateDelegateRequestShape(msg); err != nil {
 		return nil, err
@@ -144,6 +167,7 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 	runtime.Handover = nil
 	runtime.Worktree = nil
 	runtime.WorkspaceID = nil
+	runtime.ParentSeedID = strings.TrimSpace(parentSeedID)
 
 	if msg.Assignment.Kind == protocol.DelegateAssignmentKindNew {
 		if err := d.requireHome(garden.Surface); err != nil {
@@ -171,7 +195,8 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 		runtime.Brief = protocol.Ptr(seed.Body)
 		runtime.Plot = protocol.Ptr(seedID)
 		if msg.Assignment.Handover != nil {
-			if handoverSeedRev > 0 {
+			alreadyBound := strings.TrimSpace(operationID) != "" && d.handoverAlreadyBound(operationID, sessionID, seedID)
+			if handoverSeedRev > 0 && !alreadyBound {
 				// Acceptance pins the intended holder, not the seed body. The binding transaction
 				// guards allowed same-holder edits at their current revision.
 				if int(doc.Rev) < handoverSeedRev ||

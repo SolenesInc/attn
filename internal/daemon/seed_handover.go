@@ -192,6 +192,9 @@ func (d *Daemon) bindSeedHandover(
 			return nil, err
 		}
 		if conflict.Collection == garden.CollectionSeeds {
+			if attempt == attempts {
+				return nil, fmt.Errorf("seed %s changed under all %d Handover attempts: %w", conflict.ID, attempts, err)
+			}
 			latest, latestDoc, readErr := d.readSeed(seed.ID)
 			if readErr != nil {
 				return nil, readErr

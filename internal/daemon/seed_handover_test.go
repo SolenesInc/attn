@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -388,6 +389,33 @@ func TestSeedHandoverLosesCleanlyWhenTheSeedMovesDuringLaunch(t *testing.T) {
 	}
 }
 
+func TestSeedHandoverStopsAfterRepeatedSameHolderConflicts(t *testing.T) {
+	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
+	consumeDelegatedPrompt(t, backend)
+	_, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
+	seed, _, err := d.readSeed(seedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempts := 0
+	d.seedHandoverBeforeCommit = func() {
+		attempts++
+		editSeed(t, d, seedID, fmt.Sprintf("same holder edit %d", attempts))
+	}
+
+	op, err := d.startDelegation(handoverRequest(d, seed, "handover-conflict-limit", sourceSessionID, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := waitDelegationOperation(t, d, op.OperationID)
+	if done.State != protocol.DelegationOperationStateFailed || done.Failure == nil || !strings.Contains(done.Failure.Message, "all 3 Handover attempts") {
+		t.Fatalf("operation = %+v, want bounded conflict failure", done)
+	}
+	if attempts != 3 {
+		t.Fatalf("handover attempts = %d, want 3", attempts)
+	}
+}
+
 func TestAcceptedSeedHandoverRejectsHolderChangeBeforeRecoveryResolution(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
@@ -404,7 +432,7 @@ func TestAcceptedSeedHandoverRejectsHolderChangeBeforeRecoveryResolution(t *test
 	}
 	record, claimed, err := d.store.ClaimDelegationOperationWithHandoverSnapshot(
 		msg.RequestID, "op-handover-accepted-race", "successor-session", "", seedID, string(encoded), "",
-		store.DelegationHandoverSnapshot{SeedRev: int(doc.Rev), TenderSession: seed.TenderSession, TenderMember: seed.TenderMember}, time.Now(),
+		"", "", store.DelegationHandoverSnapshot{SeedRev: int(doc.Rev), TenderSession: seed.TenderSession, TenderMember: seed.TenderMember}, time.Now(),
 	)
 	if err != nil || !claimed {
 		t.Fatalf("claim = %+v, %v, %v", record, claimed, err)
@@ -448,7 +476,7 @@ func TestAcceptedSeedHandoverPreservesSameTenderEditsBeforeRecoveryResolution(t 
 
 	runtime, err := d.resolveDelegateRuntimeWithHandoverSnapshot(
 		msg, seedID, "", "", "successor-session", "", false,
-		int(acceptedDoc.Rev), seed.TenderSession, seed.TenderMember,
+		int(acceptedDoc.Rev), seed.TenderSession, seed.TenderMember, "", "",
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -528,6 +556,14 @@ func TestSeedHandoverFinishesAfterAnInterruptedLaunchCapturedTheNewSession(t *te
 	dispatch, ok := d.gardenDispatch(newSessionID)
 	if !ok || dispatch.Crown != seedID || dispatch.OperationID != "op-recovered" {
 		t.Fatalf("recovered dispatch = %+v, ok=%v", dispatch, ok)
+	}
+	original := handoverRequest(d, seed, "handover-recovered-request", sourceSessionID, "Recovered after restart.")
+	runtime, err := d.resolveDelegateRuntimeWithHandoverSnapshot(
+		original, seedID, "", "", newSessionID, "", false,
+		int(doc.Rev), seed.TenderSession, seed.TenderMember, "op-recovered", "",
+	)
+	if err != nil || runtime.Handover == nil {
+		t.Fatalf("resolve already-bound handover = %+v, %v", runtime, err)
 	}
 }
 

@@ -613,6 +613,9 @@ func (d *Daemon) delegateOperation(msg *resolvedDelegationLaunch, operationID, r
 	var source *protocol.Session
 	if sourceSessionID != "" {
 		source = d.store.Get(sourceSessionID)
+		if source == nil {
+			return nil, fmt.Errorf("source session %s was not found; omit --source-session for a standalone launch", sourceSessionID)
+		}
 	}
 	if source == nil && msg.Agent == nil {
 		return nil, fmt.Errorf("source inheritance is unavailable; choose an agent directly or through a configured role/fallback")
@@ -693,7 +696,7 @@ func (d *Daemon) delegateOperation(msg *resolvedDelegationLaunch, operationID, r
 			if msg.Assignment.Kind == "" {
 				seedID, err = d.bindDelegationSeed(sessionID, sourceSessionID, brief, existing.Label, seedID, existing.Directory, agent, delegatedByChief)
 			} else {
-				seedID, err = d.bindDelegationAssignment(operationID, sessionID, sourceSessionID, brief, existing.Label, seedID, existing.Directory, agent, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew)
+				seedID, err = d.bindDelegationAssignment(operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, existing.Label, seedID, existing.Directory, agent, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew)
 			}
 			if err != nil {
 				return nil, err
@@ -897,7 +900,7 @@ func (d *Daemon) delegateOperation(msg *resolvedDelegationLaunch, operationID, r
 		if msg.Assignment.Kind == "" {
 			seedID, err = d.bindDelegationSeed(sessionID, sourceSessionID, brief, name, seedID, directory, agent, delegatedByChief)
 		} else {
-			seedID, err = d.bindDelegationAssignment(operationID, sessionID, sourceSessionID, brief, name, seedID, directory, agent, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew)
+			seedID, err = d.bindDelegationAssignment(operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, name, seedID, directory, agent, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew)
 		}
 		if err != nil {
 			return nil, err

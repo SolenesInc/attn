@@ -41,7 +41,7 @@ func TestCompletedDelegationPreservesRecordedWorktreeRootAndHandoverSnapshot(t *
 	now := time.Now()
 	snapshot := DelegationHandoverSnapshot{SeedRev: 17, TenderSession: "predecessor", TenderMember: "alder"}
 	record, claimed, err := s.ClaimDelegationOperationWithHandoverSnapshot(
-		"request", "operation", "successor", "", "s-seed", `{"assignment":{"kind":"seed"}}`, "", snapshot, now,
+		"request", "operation", "successor", "", "s-seed", `{"assignment":{"kind":"seed"}}`, "", "base-commit", "s-parent", snapshot, now,
 	)
 	if err != nil || !claimed {
 		t.Fatalf("claim = %+v, %v, %v", record, claimed, err)
@@ -66,5 +66,53 @@ func TestCompletedDelegationPreservesRecordedWorktreeRootAndHandoverSnapshot(t *
 	}
 	if got.HandoverSeedRev != snapshot.SeedRev || got.HandoverTenderSession != snapshot.TenderSession || got.HandoverTenderMember != snapshot.TenderMember {
 		t.Fatalf("handover snapshot = rev %d session %q member %q", got.HandoverSeedRev, got.HandoverTenderSession, got.HandoverTenderMember)
+	}
+	if got.BaseCommit != "base-commit" {
+		t.Fatalf("base commit = %q, want acceptance snapshot", got.BaseCommit)
+	}
+	if got.ParentSeedID != "s-parent" {
+		t.Fatalf("parent seed = %q, want acceptance snapshot", got.ParentSeedID)
+	}
+}
+
+func TestExplicitSeedDelegationsAreNotLegacySalvageRows(t *testing.T) {
+	s := New()
+	t.Cleanup(func() { _ = s.Close() })
+	now := time.Now()
+	request := `{"assignment":{"kind":"seed","seed_id":"s-current"}}`
+	record, claimed, err := s.ClaimDelegationOperationWithHandoverSnapshot(
+		"request-current", "operation-current", "session-current", "", "s-current", request, "", "", "", DelegationHandoverSnapshot{}, now,
+	)
+	if err != nil || !claimed {
+		t.Fatalf("claim = %+v, %v, %v", record, claimed, err)
+	}
+	if err := s.UpdateDelegationOperation(record.Operation.OperationID, protocol.DelegationOperationStateFailed, "failed", "", "", "", nil, errors.New("failed"), now); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := s.ListLegacyDelegationOperations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("legacy salvage rows = %+v, want explicit seed operation excluded", rows)
+	}
+}
+
+func TestPendingDelegationReservesItsSuccessorSession(t *testing.T) {
+	s := New()
+	t.Cleanup(func() { _ = s.Close() })
+	now := time.Now()
+	record, claimed, err := s.ClaimDelegationOperation("request-reserved", "operation-reserved", "session-reserved", "", "", `{}`, now)
+	if err != nil || !claimed {
+		t.Fatalf("claim = %+v, %v, %v", record, claimed, err)
+	}
+	if !s.DelegationSessionReserved("session-reserved") {
+		t.Fatal("accepted successor was not reserved")
+	}
+	if err := s.UpdateDelegationOperation(record.Operation.OperationID, protocol.DelegationOperationStateFailed, "failed", "", "", "", nil, errors.New("failed"), now); err != nil {
+		t.Fatal(err)
+	}
+	if s.DelegationSessionReserved("session-reserved") {
+		t.Fatal("failed operation kept reserving its successor")
 	}
 }

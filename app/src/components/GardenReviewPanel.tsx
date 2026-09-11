@@ -19,6 +19,7 @@ type ComposerKind = LifecycleAction | 'handover' | 'chief';
 
 interface ComposerState {
   itemId: string;
+  requestId: string;
   kind: ComposerKind;
   text: string;
   busy: boolean;
@@ -202,16 +203,22 @@ function FrameGlyph({ direction }: { direction: 'out' | 'in' }) {
 function emptyComposer(item: GardenReviewItem, kind: ComposerKind, document?: SeedDocument): ComposerState {
   const guidance = advisorGuidance(item, kind);
   const continuation = kind === 'handover' ? document?.seed.continuation : undefined;
+  const recreateBranch = continuation?.handover_placement === 'recreate_branch';
+  const recreateRoot = continuation?.repository_root?.replace(/\/$/, '');
+  const recreateCwd = recreateRoot && continuation?.repository_subdir
+    ? `${recreateRoot}/${continuation.repository_subdir}`
+    : recreateRoot ?? continuation?.cwd;
   return {
     itemId: item.id,
+    requestId: crypto.randomUUID(),
     kind,
     text: kind === 'wither' ? lifecycleReason(guidance) : guidance,
     busy: false,
     drafting: false,
     error: '',
     pendingDraft: '',
-    cwd: continuation?.cwd ?? '',
-    checkoutKind: continuation?.repository_root ? 'reuse' : 'none',
+    cwd: (recreateBranch ? recreateCwd : continuation?.cwd) ?? '',
+    checkoutKind: recreateBranch ? 'existing_branch_worktree' : continuation?.repository_root ? 'reuse' : 'none',
     branch: continuation?.branch ?? '',
     from: '',
     path: '',
@@ -349,6 +356,7 @@ function createReviewActions({ review, composer, fetchSeedDocument, onMoveSeed, 
       };
       await onHandoverSeed({
         seedId: item.seed_id,
+        requestId: state.requestId,
         cwd: state.cwd.trim(),
         checkout,
         ...(state.allowWorktreeReuse ? { allowWorktreeReuse: true } : {}),
@@ -359,7 +367,14 @@ function createReviewActions({ review, composer, fetchSeedDocument, onMoveSeed, 
       setComposer(null);
       await refresh();
     } catch (error) {
-      setComposer((current) => current && current.itemId === item.id ? { ...current, busy: false, error: error instanceof Error ? error.message : 'Handover failed' } : current);
+      setComposer((current) => current && current.itemId === item.id ? {
+        ...current,
+        requestId: error instanceof Error && error.message === 'Handover timed out'
+          ? current.requestId
+          : crypto.randomUUID(),
+        busy: false,
+        error: error instanceof Error ? error.message : 'Handover failed',
+      } : current);
       await refresh().catch(() => {});
     }
   };

@@ -295,6 +295,28 @@ describe('GardenReviewPanel', () => {
     expect(screen.getByLabelText('Agent')).toHaveValue('codex');
   });
 
+  it('recreates a missing branch checkout from its repository context', async () => {
+    const options = props();
+    options.fetchSeedDocument = vi.fn().mockResolvedValue(document({
+      seed: seed({ continuation: {
+        ...seed().continuation!,
+        cwd: '/tmp/missing-worktree/subdir',
+        directory_state: 'missing',
+        handover_placement: 'recreate_branch',
+        repository_root: '/tmp/repo',
+        repository_subdir: 'subdir',
+        branch: 'feature/recreate',
+      } }),
+    }));
+    render(<GardenReviewPanel {...options} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
+
+    expect(await screen.findByLabelText('Working folder')).toHaveValue('/tmp/repo/subdir');
+    expect(screen.getByLabelText('Git checkout')).toHaveValue('existing_branch_worktree');
+    expect(screen.getByLabelText('Branch')).toHaveValue('feature/recreate');
+  });
+
   it('sends optional guidance to Chief without asking for placement', async () => {
     const options = props(review(item({ actions: ['send_to_chief', 'park'] })));
     options.fetchSeedDocument = vi.fn().mockResolvedValue(document({

@@ -61,6 +61,7 @@ func (d *Daemon) startDelegation(msg *protocol.DelegateMessage) (*protocol.Deleg
 		chiefSessionID = currentChief
 	}
 	seedID := ""
+	parentSeedID := ""
 	handoverSnapshot := store.DelegationHandoverSnapshot{}
 	if msg.Assignment.Kind == protocol.DelegateAssignmentKindSeed {
 		seedID = strings.TrimSpace(protocol.Deref(msg.Assignment.SeedID))
@@ -77,7 +78,16 @@ func (d *Daemon) startDelegation(msg *protocol.DelegateMessage) (*protocol.Deleg
 			}
 		}
 	}
-	record, claimed, err := d.store.ClaimDelegationOperationWithHandoverSnapshot(requestID, "op-"+uuid.NewString(), uuid.NewString(), chiefSessionID, seedID, string(encoded), resolvedJSON, handoverSnapshot, time.Now())
+	if msg.Assignment.Kind == protocol.DelegateAssignmentKindNew {
+		if sourceID := strings.TrimSpace(protocol.Deref(msg.SourceSessionID)); sourceID != "" {
+			parentSeedID, _ = d.gardenDispatchCrown(sourceID)
+		}
+	}
+	baseCommit, err := resolveAcceptedDelegationBase(msg)
+	if err != nil {
+		return nil, err
+	}
+	record, claimed, err := d.store.ClaimDelegationOperationWithHandoverSnapshot(requestID, "op-"+uuid.NewString(), uuid.NewString(), chiefSessionID, seedID, string(encoded), resolvedJSON, baseCommit, parentSeedID, handoverSnapshot, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +146,7 @@ func (d *Daemon) runDelegationOperation(id string) {
 	runtime, err := d.resolveDelegateRuntimeWithHandoverSnapshot(
 		&msg, protocol.Deref(record.Operation.SeedID), record.BaseCommit, record.HandoffNoteID,
 		record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned,
-		record.HandoverSeedRev, record.HandoverTenderSession, record.HandoverTenderMember,
+		record.HandoverSeedRev, record.HandoverTenderSession, record.HandoverTenderMember, id, record.ParentSeedID,
 	)
 	if err != nil {
 		d.finishDelegationFailure(id, err)

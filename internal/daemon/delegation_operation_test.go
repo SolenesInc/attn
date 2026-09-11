@@ -146,7 +146,8 @@ func TestDelegationOperationConcurrentRetriesConverge(t *testing.T) {
 }
 
 // Not synctest-able twice over: the launch creates a real git worktree (child
-// process), and the acceptance assertion measures real elapsed wall-clock.
+// process), and the acceptance assertion measures real elapsed wall-clock. Acceptance
+// also pins an explicit base ref before journaling, so it includes one read-only Git call.
 func TestDelegationOperationAcceptedBeforeSlowPreparation(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
@@ -176,7 +177,7 @@ func TestDelegationOperationAcceptedBeforeSlowPreparation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if time.Since(start) > 100*time.Millisecond {
+	if time.Since(start) > 250*time.Millisecond {
 		t.Fatalf("durable acceptance was not prompt: %v", time.Since(start))
 	}
 	select {

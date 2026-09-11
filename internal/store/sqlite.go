@@ -1243,6 +1243,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{141, "record where a plugin session's harness writes its transcript", ""},
 	{142, "add explicit delegation recovery facts", ""},
 	{143, "snapshot accepted delegation handovers", ""},
+	{144, "snapshot accepted delegation parents", ""},
 }
 
 const migration99SQL = `
@@ -1712,6 +1713,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			}
 		} else if m.version == 143 {
 			if err := applyMigration143(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 144 {
+			if err := applyMigration144(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -3663,6 +3669,15 @@ func applyMigration143(tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+func applyMigration144(tx *sql.Tx) error {
+	has, err := columnExists(tx, "delegation_operations", "parent_seed_id")
+	if err != nil || has {
+		return err
+	}
+	_, err = tx.Exec("ALTER TABLE delegation_operations ADD COLUMN parent_seed_id TEXT NOT NULL DEFAULT ''")
+	return err
 }
 
 func columnExists(tx *sql.Tx, table, column string) (bool, error) {

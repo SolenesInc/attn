@@ -710,6 +710,25 @@ func TestDelegateRejectsRemoteSourceSession(t *testing.T) {
 	}
 }
 
+func TestDelegateRejectsUnknownExplicitSourceSession(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	backend := &fakeSpawnBackend{}
+	setupDelegationSource(t, d, backend)
+
+	_, err := d.delegateResolved(&resolvedDelegationLaunch{
+		Cmd:             protocol.CmdDelegate,
+		SourceSessionID: protocol.Ptr("missing-source"),
+		Brief:           protocol.Ptr("Do not lose source attribution."),
+		Agent:           protocol.Ptr("codex"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "source session missing-source was not found") {
+		t.Fatalf("delegate() error = %v, want unknown source rejection", err)
+	}
+	if len(backend.spawnOpts) != 1 {
+		t.Fatalf("spawn count = %d, want only the fixture source", len(backend.spawnOpts))
+	}
+}
+
 func TestDelegateWebSocketCommandReturnsResult(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {

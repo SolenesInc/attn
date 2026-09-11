@@ -140,6 +140,7 @@ export type SeedArtifactReference = GeneratedSeedArtifactReference;
 export type SeedDocument = GeneratedSeedDocument;
 export interface SeedHandoverOptions {
   seedId: string;
+  requestId?: string;
   cwd: string;
   checkout?: { kind: 'reuse' | 'new_worktree' | 'existing_branch_worktree'; branch: string; from?: string; path?: string };
   allowWorktreeReuse?: boolean;
@@ -4610,7 +4611,7 @@ export function useDaemonSocket({
   }, [sendRequest]);
 
   const sendSeedHandover = useCallback((options: SeedHandoverOptions): Promise<SeedHandoverResult> => {
-    const requestId = nextRequestID('seed_handover');
+    const requestId = options.requestId ?? nextRequestID('seed_handover');
     return sendKeyedRequest<SeedHandoverResult>(
       pendingRequestKey('delegate', requestId),
       {

@@ -55,6 +55,7 @@ interface GardenPanelProps {
 
 type ContinuationDraft = {
   seedId: string;
+  requestId: string;
   kind: 'handover' | 'chief';
   text: string;
   cwd: string;
@@ -70,12 +71,18 @@ type ContinuationDraft = {
 
 function newContinuationDraft(seed: Seed, kind: ContinuationDraft['kind']): ContinuationDraft {
   const continuation = kind === 'handover' ? seed.continuation : undefined;
+  const recreateBranch = continuation?.handover_placement === 'recreate_branch';
+  const recreateRoot = continuation?.repository_root?.replace(/\/$/, '');
+  const recreateCwd = recreateRoot && continuation?.repository_subdir
+    ? `${recreateRoot}/${continuation.repository_subdir}`
+    : recreateRoot ?? continuation?.cwd;
   return {
     seedId: seed.id,
+    requestId: crypto.randomUUID(),
     kind,
     text: '',
-    cwd: continuation?.cwd ?? '',
-    checkoutKind: continuation?.repository_root ? 'reuse' : 'none',
+    cwd: (recreateBranch ? recreateCwd : continuation?.cwd) ?? '',
+    checkoutKind: recreateBranch ? 'existing_branch_worktree' : continuation?.repository_root ? 'reuse' : 'none',
     branch: continuation?.branch ?? '',
     from: '',
     path: '',
@@ -102,6 +109,7 @@ async function runContinuation(
     };
     await onHandoverSeed({
       seedId: document.seed.id,
+      requestId: draft.requestId,
       cwd: draft.cwd.trim(),
       checkout,
       ...(draft.allowWorktreeReuse ? { allowWorktreeReuse: true } : {}),
@@ -129,7 +137,7 @@ function ContinuationForm({ draft, onChange, onCancel, onSubmit }: {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => textareaRef.current?.focus(), []);
   const handover = draft.kind === 'handover';
-  return <form className="garden-handover" onSubmit={(event) => { event.preventDefault(); onSubmit(); }}>
+  return <form className="garden-handover" onSubmit={(event) => { event.preventDefault(); if (!draft.busy) onSubmit(); }}>
     <label htmlFor={`garden-continuation-${draft.seedId}`}>
       {handover ? 'What should the new agent know?' : 'What should Chief know?'}<span>optional</span>
     </label>
@@ -141,7 +149,7 @@ function ContinuationForm({ draft, onChange, onCancel, onSubmit }: {
       onKeyDown={(event) => {
         if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
           event.preventDefault();
-          onSubmit();
+          event.currentTarget.form?.requestSubmit();
         }
       }}
     />
@@ -919,6 +927,9 @@ export function GardenPanel({
     } catch (error) {
       setContinuationDraft((draft) => draft ? {
         ...draft,
+        requestId: error instanceof Error && error.message === 'Handover timed out'
+          ? draft.requestId
+          : crypto.randomUUID(),
         busy: false,
         error: error instanceof Error
           ? error.message

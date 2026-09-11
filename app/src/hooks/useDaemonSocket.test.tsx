@@ -2915,6 +2915,7 @@ describe('useDaemonSocket seed resume request/result', () => {
 
     const promise = result.current.sendSeedHandover({
       seedId: 's-1',
+      requestId: 'stable-handover-request',
       cwd: '/tmp/placed',
       checkout: { kind: 'reuse', branch: 'feature' },
       sourceSessionId: 'sess-chief',
@@ -2924,6 +2925,7 @@ describe('useDaemonSocket seed resume request/result', () => {
     const sent = lastSent(ws);
     expect(sent).toMatchObject({
       cmd: 'delegate',
+      request_id: 'stable-handover-request',
       source_session_id: 'sess-chief',
       assignment: { kind: 'seed', seed_id: 's-1', handover: { note: 'Continue from the parser tests.' } },
       cwd: '/tmp/placed',

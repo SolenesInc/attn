@@ -11,7 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-func (d *Daemon) bindDelegationAssignment(operationID, sessionID, plannerSessionID, brief, name, seedID, cwd, agent string, fromChief, createSeed bool) (string, error) {
+func (d *Daemon) bindDelegationAssignment(operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID, cwd, agent string, fromChief, createSeed bool) (string, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", err
 	}
@@ -46,7 +46,7 @@ func (d *Daemon) bindDelegationAssignment(operationID, sessionID, plannerSession
 			return "", fmt.Errorf("new delegation seed identity was not reserved")
 		}
 		seed = garden.Seed{ID: seedID, Title: title, Body: body, Status: garden.StatusPlanted, StepSlug: garden.StepSlug(title), PlanterSession: plannerSessionID, PlanterMember: d.resolveTenderMember("", plannerSessionID), Edges: []garden.Edge{}, Vars: []garden.Var{}}
-		if parent, ok := d.gardenDispatchCrown(plannerSessionID); ok && parent != "" {
+		if parent := strings.TrimSpace(parentSeedID); parent != "" {
 			seed.Edges = append(seed.Edges, garden.Edge{Kind: garden.EdgePartOf, To: parent})
 		}
 		seedExpected = docstore.ExpectAbsent
@@ -64,9 +64,13 @@ func (d *Daemon) bindDelegationAssignment(operationID, sessionID, plannerSession
 		}
 		seedExpected = doc.Rev
 	}
+	previousStatus := seed.Status
 	seed, err = garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: sessionID}}, func(string) bool { return false })
 	if err != nil {
 		return "", err
+	}
+	if createSeed || seed.Status != previousStatus {
+		seed.StateChangedAt = formatGardenTime(d.gardenTime())
 	}
 	seed.LastExecutionID = sessionID
 	seedBody, err := seed.Encode()

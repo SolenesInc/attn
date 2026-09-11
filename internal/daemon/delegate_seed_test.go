@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -79,6 +80,9 @@ func TestDelegationPlantsASeedTendedByItsDelegate(t *testing.T) {
 	if seed.Status != garden.StatusGrowing {
 		t.Fatalf("status = %q, want growing — a tended seed is not still planted", seed.Status)
 	}
+	if strings.TrimSpace(seed.StateChangedAt) == "" {
+		t.Fatal("new delegated seed has no lifecycle timestamp")
+	}
 	if seed.PlanterSession != sourceSessionID {
 		t.Fatalf("planter = %q, want the delegating session %q", seed.PlanterSession, sourceSessionID)
 	}
@@ -99,6 +103,54 @@ func TestDelegationPlantsASeedTendedByItsDelegate(t *testing.T) {
 	}
 	if ticket != nil {
 		t.Fatalf("the delegation created a ticket: %+v", ticket)
+	}
+}
+
+func TestAcceptedParentSnapshotSurvivesSourceDispatchChanges(t *testing.T) {
+	d, _, sourceSessionID := newGardenDelegationDaemon(t)
+	parent := plantForDelegation(t, d, sourceSessionID, "Original plot")
+	replacement := plantForDelegation(t, d, sourceSessionID, "Later plot")
+	if err := d.recordGardenDispatch(sourceSessionID, replacement.ID, "", d.store.Get(sourceSessionID).Directory, "codex", false); err != nil {
+		t.Fatal(err)
+	}
+
+	seedID, err := d.bindDelegationAssignment(
+		"op-parent-snapshot", "session-child", sourceSessionID, parent.ID,
+		"Do the child work.", "Child work", "s-par123", t.TempDir(), "codex", false, true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, _, err := d.readSeed(seedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(child.Edges) != 1 || child.Edges[0].Kind != garden.EdgePartOf || child.Edges[0].To != parent.ID {
+		t.Fatalf("child edges = %+v, want accepted parent %s", child.Edges, parent.ID)
+	}
+}
+
+func TestPendingDelegationTenderBlocksAnotherClaim(t *testing.T) {
+	d, _, sourceSessionID := newGardenDelegationDaemon(t)
+	seed := plantForDelegation(t, d, sourceSessionID, "Reserved work")
+	record, _, err := d.store.ClaimDelegationOperation(
+		"request-reserved-tender", "operation-reserved-tender", "session-reserved-tender", "", "", `{}`, time.Now(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addGardenSession(t, d, record.Operation.SessionID)
+	tendAs(t, d, seed.ID, record.Operation.SessionID)
+	d.store.Remove(record.Operation.SessionID)
+	addGardenSession(t, d, "contender-session")
+	if _, _, err := d.applySeedTransition(seed.ID, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: "contender-session"}}); err == nil || !strings.Contains(err.Error(), "being tended") {
+		t.Fatalf("contending tend error = %v, want pending successor to hold", err)
+	}
+	if err := d.store.UpdateDelegationOperation(record.Operation.OperationID, protocol.DelegationOperationStateFailed, "failed", "", "", "", nil, errors.New("failed"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := d.applySeedTransition(seed.ID, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: "contender-session"}}); err != nil {
+		t.Fatalf("claim after failed operation: %v", err)
 	}
 }
 
