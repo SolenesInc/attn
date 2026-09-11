@@ -267,7 +267,7 @@ func newPluginConnection(conn net.Conn, reader *bufio.Reader, params pluginHello
 }
 
 func (p *pluginConnection) request(ctx context.Context, method string, params interface{}, result interface{}) error {
-	return p.jsonrpcPeer.request(ctx, "plugin", method, params, result)
+	return p.jsonrpcPeer.request(ctx, fmt.Sprintf("plugin %q", p.name), method, params, result)
 }
 
 // The check timestamp is deliberately not part of the moved answer: it advances

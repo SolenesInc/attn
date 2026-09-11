@@ -4,10 +4,13 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // Ids are per-direction; a frame with a method is a call, one without is an answer.
@@ -16,7 +19,7 @@ type jsonrpcPeer struct {
 	conn   net.Conn
 	reader *bufio.Reader
 
-	writeMu sync.Mutex
+	writeGate chan struct{}
 
 	pendingMu sync.Mutex
 	pending   map[string]chan jsonRPCMessage
@@ -26,16 +29,61 @@ type jsonrpcPeer struct {
 
 func newJSONRPCPeer(conn net.Conn, reader *bufio.Reader) *jsonrpcPeer {
 	return &jsonrpcPeer{
-		conn:    conn,
-		reader:  reader,
-		pending: make(map[string]chan jsonRPCMessage),
+		conn:      conn,
+		reader:    reader,
+		writeGate: make(chan struct{}, 1),
+		pending:   make(map[string]chan jsonRPCMessage),
 	}
 }
 
 func (p *jsonrpcPeer) send(msg jsonRPCMessage) error {
-	p.writeMu.Lock()
-	defer p.writeMu.Unlock()
-	return json.NewEncoder(p.conn).Encode(msg)
+	return p.sendContext(context.Background(), msg)
+}
+
+func (p *jsonrpcPeer) sendContext(ctx context.Context, msg jsonRPCMessage) error {
+	select {
+	case p.writeGate <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-p.writeGate }()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	deadline, hasDeadline := ctx.Deadline()
+	if hasDeadline {
+		if err := p.conn.SetWriteDeadline(deadline); err != nil {
+			return fmt.Errorf("set write deadline: %w", err)
+		}
+	}
+	var stop func() bool
+	var interrupted chan struct{}
+	if ctx.Done() != nil {
+		interrupted = make(chan struct{})
+		stop = context.AfterFunc(ctx, func() {
+			_ = p.conn.SetWriteDeadline(time.Now())
+			close(interrupted)
+		})
+	}
+
+	err := json.NewEncoder(p.conn).Encode(msg)
+	if stop != nil && !stop() {
+		<-interrupted
+		hasDeadline = true
+	}
+	if err != nil {
+		// A failed write may have emitted a partial frame; the stream cannot be reused.
+		_ = p.conn.Close()
+		return err
+	}
+	if hasDeadline {
+		if err := p.conn.SetWriteDeadline(time.Time{}); err != nil {
+			_ = p.conn.Close()
+			return fmt.Errorf("clear write deadline: %w", err)
+		}
+	}
+	return nil
 }
 
 func (p *jsonrpcPeer) closePending(err error) {
@@ -95,11 +143,11 @@ func (p *jsonrpcPeer) request(ctx context.Context, label, method string, params 
 		Method:  method,
 		Params:  payload,
 	}
-	if err := p.send(request); err != nil {
+	if err := p.sendContext(ctx, request); err != nil {
 		p.pendingMu.Lock()
 		delete(p.pending, id)
 		p.pendingMu.Unlock()
-		return fmt.Errorf("send %s request: %w", label, err)
+		return jsonRPCRequestContextError(ctx, label, method, "write", err)
 	}
 
 	select {
@@ -107,7 +155,7 @@ func (p *jsonrpcPeer) request(ctx context.Context, label, method string, params 
 		p.pendingMu.Lock()
 		delete(p.pending, id)
 		p.pendingMu.Unlock()
-		return ctx.Err()
+		return jsonRPCRequestContextError(ctx, label, method, "response", ctx.Err())
 	case response := <-responseCh:
 		if response.Error != nil {
 			return fmt.Errorf("%s %s: %s", label, method, response.Error.Message)
@@ -123,4 +171,18 @@ func (p *jsonrpcPeer) request(ctx context.Context, label, method string, params 
 		}
 		return nil
 	}
+}
+
+func jsonRPCRequestContextError(ctx context.Context, label, method, phase string, cause error) error {
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return fmt.Errorf("%s %s %s canceled: %w", label, method, phase, context.Canceled)
+	}
+	deadline, hasDeadline := ctx.Deadline()
+	if hasDeadline && (errors.Is(cause, os.ErrDeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded)) {
+		return fmt.Errorf("%s %s %s deadline %s exceeded: %w", label, method, phase, deadline.Format(time.RFC3339Nano), context.DeadlineExceeded)
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("%s %s %s canceled: %w", label, method, phase, err)
+	}
+	return fmt.Errorf("send %s %s request: %w", label, method, cause)
 }
