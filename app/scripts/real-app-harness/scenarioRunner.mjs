@@ -296,6 +296,7 @@ export function createScenarioRunner(options, {
   let finalizationPromise = null;
   let reportedFailure = null;
   let reportedSuccessSummary = null;
+  let finalFailureSummary = null;
 
   const appendTrace = (message, details) => {
     const line = `[${new Date().toISOString()}] ${message}${details ? ` ${JSON.stringify(details)}` : ''}\n`;
@@ -571,12 +572,26 @@ export function createScenarioRunner(options, {
         summaryPath,
         durationMs: Date.now() - runnerCreatedAt,
       });
+      const errors = await runRegisteredCleanup('finish');
+      if (errors.length > 0) {
+        const error = teardownError(errors);
+        await runner.finishFailure(error, {
+          ...summary,
+          failurePhase: 'teardown',
+          teardownErrors: errors,
+        });
+        throw error;
+      }
       return finalSummary;
     },
     async finishFailure(error, summary = {}) {
+      if (finalFailureSummary) {
+        return finalFailureSummary;
+      }
       reportedFailure = { error, summary };
       const recorderError = await finalizeRunner();
       const ledger = collectTripwireLedger();
+      const teardownErrors = await runRegisteredCleanup('finish');
       const finalSummary = {
         ok: false,
         scenarioId,
@@ -597,6 +612,7 @@ export function createScenarioRunner(options, {
           ? { agentTripwire: { count: ledger.length, ledgerPath: tripwire.ledgerPath, lines: ledger } }
           : {}),
         ...summary,
+        ...(teardownErrors.length > 0 ? { teardownErrors } : {}),
       };
       const summaryPath = path.join(runDir, 'failure.json');
       fs.rmSync(path.join(runDir, 'summary.json'), { force: true });
@@ -621,11 +637,12 @@ export function createScenarioRunner(options, {
         summaryPath,
         durationMs: Date.now() - runnerCreatedAt,
       });
+      finalFailureSummary = finalSummary;
       return finalSummary;
     },
     async finishCleanup(summary = {}) {
       const errors = await runRegisteredCleanup('finish');
-      if (errors.length === 0) {
+      if (errors.length === 0 || finalFailureSummary) {
         return;
       }
       const error = teardownError(errors);
