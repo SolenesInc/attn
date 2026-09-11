@@ -143,15 +143,17 @@ func main() {
 		return
 	}
 
-	if err := config.ValidateProfile(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-
-	if !isProfileGroupCommand(os.Args) {
-		if err := config.ValidateProfileRouting(); err != nil {
+	daemonStart := len(os.Args) == 2 && os.Args[1] == "daemon"
+	if !daemonStart {
+		if err := config.ValidateProfile(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
+		}
+		if !isProfileGroupCommand(os.Args) {
+			if err := config.ValidateProfileRouting(); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
 		}
 	}
 
@@ -512,24 +514,56 @@ func runDaemonCommand() {
 }
 
 func runDaemon() {
-	// Routing fence again, before a PID lock and a DB migration: never boot into another profile's data dir.
-	if err := config.ValidateProfileRouting(); err != nil {
+	startupSignal, err := daemonctl.TakeStartupSignal()
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	socketPath := config.SocketPath()
-	if err := config.ValidateDaemonIsolation(socketPath); err != nil {
+	socketPath, err := daemonPreflight()
+	if err != nil {
+		startupSignal.Failed(err)
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-
 	d := daemon.New(socketPath)
 	// Must precede Start(), which warms the login-shell env cache.
 	d.ScrubInheritedAgentSessionEnv()
-	if err := d.Start(); err != nil {
+	startResult := make(chan error, 1)
+	go func() {
+		startResult <- d.Start()
+	}()
+	select {
+	case <-d.Started():
+		if err := startupSignal.Ready(); err != nil {
+			fmt.Fprintf(os.Stderr, "daemon readiness signal error: %v\n", err)
+		}
+	case err := <-startResult:
+		if errors.Is(err, daemon.ErrAlreadyRunning) {
+			startupSignal.AlreadyRunning()
+		} else {
+			startupSignal.Failed(err)
+		}
 		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
 		os.Exit(1)
 	}
+	if err := <-startResult; err != nil {
+		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func daemonPreflight() (string, error) {
+	if err := config.ValidateProfile(); err != nil {
+		return "", err
+	}
+	if err := config.ValidateProfileRouting(); err != nil {
+		return "", err
+	}
+	socketPath := config.SocketPath()
+	if err := config.ValidateDaemonIsolation(socketPath); err != nil {
+		return "", err
+	}
+	return socketPath, nil
 }
 
 func runDaemonEnsure() {

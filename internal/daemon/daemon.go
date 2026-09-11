@@ -95,6 +95,8 @@ const (
 	warnGHVersionTooOld           = "gh_version_too_old"
 )
 
+var ErrAlreadyRunning = errors.New("daemon already running")
+
 type Daemon struct {
 	socketPath                  string
 	pidPath                     string
@@ -564,6 +566,10 @@ func (d *Daemon) waitStarted(timeout time.Duration) bool {
 	case <-time.After(timeout):
 		return false
 	}
+}
+
+func (d *Daemon) Started() <-chan struct{} {
+	return d.startedCh
 }
 
 func New(socketPath string) *Daemon {
@@ -2425,7 +2431,7 @@ func (d *Daemon) acquirePIDLock() error {
 			}
 		}
 		f.Close()
-		return fmt.Errorf("daemon already running (pid %s)", existingPID)
+		return fmt.Errorf("%w (pid %s)", ErrAlreadyRunning, existingPID)
 	}
 
 	f.Truncate(0)
