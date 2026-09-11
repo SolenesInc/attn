@@ -77,6 +77,18 @@ async function runInRevealedPane(client, pane, command, expected, timeoutMs = 30
   return runInPane(client, pane, command, expected, timeoutMs);
 }
 
+async function waitForMessageNotification(client, pane, messageID, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  let status = '';
+  while (Date.now() < deadline) {
+    status = await runInPane(client, pane,
+      `attn agent msg-status ${messageID} --session ${pane.sessionId}`, 'message');
+    if (saw(status, 'notified:') || saw(status, 'read:')) return status;
+    await delay(200);
+  }
+  throw new Error(`message ${messageID} never became readable: ${flat(status)}`);
+}
+
 async function awaitDockRow(client, seedID, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
   let state = { present: false, seeds: [] };
@@ -343,6 +355,7 @@ async function main() {
       // print, so the id is read instead of the status word.
       const messageID = sent.match(/\(id\s*([0-9a-f-]{36})\)/)?.[1] ?? null;
       runner.assert(Boolean(messageID), 'the steer returned its mailbox id', { sent });
+      await waitForMessageNotification(client, pane, messageID);
 
       const delegatePane = await waitForFirstWorkspacePane(client, delegated, 'the delegate’s pane', 20_000);
       const tender = { sessionId: delegated, paneId: delegatePane.paneId };
