@@ -1,7 +1,12 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { daemonPidFilePathForProfile, dataDirForProfile } from './harnessProfile.mjs';
+import {
+  daemonPidFilePathForProfile,
+  dataDirForProfile,
+  socketPathForProfile,
+} from './harnessProfile.mjs';
 
 const execFileAsync = promisify(execFile);
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -276,16 +281,51 @@ export async function sampleWindow(appPid, daemonPid, webkitBaseline, windowMs, 
   return { peak, last: samples[samples.length - 1], count: samples.length };
 }
 
-export function readLiveDaemonPid(profile) {
+export function readLivePidFile(pidPath) {
   let pid = null;
   try {
-    pid = Number(fs.readFileSync(daemonPidFilePathForProfile(profile), 'utf8').trim());
+    pid = Number(fs.readFileSync(pidPath, 'utf8').trim());
   } catch {
     return null;
   }
   if (!Number.isInteger(pid) || pid <= 0) return null;
   try { process.kill(pid, 0); } catch { return null; }
   return pid;
+}
+
+export function readLiveDaemonPid(profile) {
+  return readLivePidFile(daemonPidFilePathForProfile(profile));
+}
+
+function canonicalPath(filePath) {
+  try {
+    return fs.realpathSync(filePath);
+  } catch {
+    return path.resolve(filePath);
+  }
+}
+
+export function assertDaemonRestartDoesNotHostSession(profile, {
+  env = process.env,
+  resolveSocket = socketPathForProfile,
+  readDaemonPid = readLiveDaemonPid,
+  readPidFile = readLivePidFile,
+} = {}) {
+  const sessionId = String(env.ATTN_SESSION_ID || '').trim();
+  const hostingSocket = String(env.ATTN_SOCKET_PATH || '').trim();
+  if (!sessionId || !hostingSocket) return;
+
+  const targetSocket = resolveSocket(profile);
+  const targetPid = readDaemonPid(profile);
+  const hostingPid = readPidFile(path.join(path.dirname(hostingSocket), 'attn.pid'));
+  const sameDaemon = canonicalPath(targetSocket) === canonicalPath(hostingSocket)
+    || (Number.isInteger(targetPid) && targetPid > 0 && targetPid === hostingPid);
+  if (sameDaemon) {
+    throw new Error(
+      `refusing to restart profile ${JSON.stringify(profile || 'production')} daemon pid ${targetPid ?? 'unknown'} `
+      + `at ${targetSocket}: it hosts invoking session ${sessionId}; run from another profile or pass --no-restart-daemon`,
+    );
+  }
 }
 
 export async function stopDaemon(profile) {

@@ -53,6 +53,11 @@ function disableDefinition(binary, id, env) {
   return runJSON(binary, ['automation', 'disable', id], env);
 }
 
+function seedForSession(binary, sessionID, env) {
+  const listed = runJSON(binary, ['seed', 'ls', '--json'], env) || {};
+  return (listed.seeds || []).find((seed) => seed.tender_session === sessionID) || null;
+}
+
 async function poll(fn, description, timeoutMs = 30_000) {
   const started = Date.now();
   let last = null;
@@ -278,12 +283,14 @@ async function main() {
   let probe = null;
   let cleanupTicketID = '';
   let cleanupSeedID = '';
+  let stormGuardSeedID = '';
   let cleanupSessionID = '';
   let stormGuardSessionID = '';
   let cleanupApplied = false;
   let stormGuardApplied = false;
   let sessionsClosed = false;
   let cleanupSeedSettled = false;
+  let stormGuardSeedSettled = false;
 
   try {
     daemonEnv = profileEnv(profile);
@@ -423,6 +430,9 @@ async function main() {
         return list[0]?.state === 'delivered' ? list : null;
       }, 'storm-guard restart catch-up run delivered', RESTART_RUN_TIMEOUT_MS);
       runner.assert(delivered.length === 1, 'storm-guard: exactly one catch-up run under fresh continuity too', { rows: delivered });
+      const stormGuardSeed = seedForSession(binary, stormGuardSessionID, daemonEnv);
+      runner.assert(Boolean(stormGuardSeed), 'storm-guard run owns a synthetic seed', { stormGuardSessionID, stormGuardSeed });
+      stormGuardSeedID = stormGuardSeed.id;
 
       await poll(() => (invocations(probe.log).length >= 1 ? invocations(probe.log) : null), 'storm-guard probe launch');
       runner.assert(invocations(probe.log).length === 1, 'exactly one process spawn backs the single catch-up run (no replay storm)', {
@@ -445,6 +455,8 @@ async function main() {
       sessionsClosed = true;
       run(binary, ['seed', 'wither', cleanupSeedID, '-m', 'Scheduled cleanup harness fixture complete'], daemonEnv);
       cleanupSeedSettled = true;
+      run(binary, ['seed', 'wither', stormGuardSeedID, '-m', 'Scheduled storm-guard harness fixture complete'], daemonEnv);
+      stormGuardSeedSettled = true;
 
       run(binary, ['automation', 'delete', cleanupID], daemonEnv);
       cleanupApplied = false;
@@ -469,10 +481,11 @@ async function main() {
         { sessions, sessionIDs: [...sessionIDs] },
       );
       const cleanupSeed = runJSON(binary, ['seed', 'show', cleanupSeedID, '--json'], daemonEnv)?.seed;
+      const stormGuardSeed = runJSON(binary, ['seed', 'show', stormGuardSeedID, '--json'], daemonEnv)?.seed;
       runner.assert(
-        cleanupSeed?.status === 'withered',
-        'the synthetic cleanup seed remains withered after daemon restart',
-        { cleanupSeedID, cleanupSeed },
+        cleanupSeed?.status === 'withered' && stormGuardSeed?.status === 'withered',
+        'the synthetic automation seeds remain withered after daemon restart',
+        { cleanupSeedID, cleanupSeed, stormGuardSeedID, stormGuardSeed },
       );
     });
 
@@ -481,17 +494,17 @@ async function main() {
     await runner.finishFailure(error, { profile, cleanupID, stormGuardID, cleanupTicketID, cleanupSessionID, fixtureRoot });
     throw error;
   } finally {
-    const teardownNeeded = cleanupApplied || stormGuardApplied || !sessionsClosed || !cleanupSeedSettled;
+    const teardownNeeded = cleanupApplied || stormGuardApplied || !sessionsClosed || !cleanupSeedSettled || !stormGuardSeedSettled;
     if (daemonEnv && teardownNeeded) {
       try {
         run(binary, ['daemon', 'ensure'], daemonEnv);
         await waitForDaemonReady(binary, daemonEnv);
       } catch {}
     }
-    if (!cleanupSeedID && cleanupSessionID && daemonEnv) {
+    if (daemonEnv && ((!cleanupSeedID && cleanupSessionID) || (!stormGuardSeedID && stormGuardSessionID))) {
       try {
-        const listed = runJSON(binary, ['seed', 'ls', '--json'], daemonEnv) || {};
-        cleanupSeedID = (listed.seeds || []).find((seed) => seed.tender_session === cleanupSessionID)?.id || '';
+        if (!cleanupSeedID && cleanupSessionID) cleanupSeedID = seedForSession(binary, cleanupSessionID, daemonEnv)?.id || '';
+        if (!stormGuardSeedID && stormGuardSessionID) stormGuardSeedID = seedForSession(binary, stormGuardSessionID, daemonEnv)?.id || '';
       } catch {}
     }
     if (!sessionsClosed) {
@@ -506,6 +519,9 @@ async function main() {
     }
     if (!cleanupSeedSettled && cleanupSeedID && daemonEnv) {
       try { run(binary, ['seed', 'wither', cleanupSeedID, '-m', 'Scheduled cleanup harness fixture complete'], daemonEnv); } catch {}
+    }
+    if (!stormGuardSeedSettled && stormGuardSeedID && daemonEnv) {
+      try { run(binary, ['seed', 'wither', stormGuardSeedID, '-m', 'Scheduled storm-guard harness fixture complete'], daemonEnv); } catch {}
     }
     if (daemonEnv) {
       if (cleanupApplied) { try { run(binary, ['automation', 'delete', cleanupID], daemonEnv); } catch {} }
