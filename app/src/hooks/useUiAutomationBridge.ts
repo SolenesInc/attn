@@ -2883,7 +2883,6 @@ export function useUiAutomationBridge({
           await settleUi(2);
         }
         // The typed query is the filter: rewrite its tokens rather than drive controls.
-        const baseName = (value: string) => value.replace(/\/+$/, '').split('/').pop() || value;
         setSessionsQuery(root, (tokens) => {
           let next = tokens;
           if (range !== undefined) {
@@ -2901,7 +2900,7 @@ export function useUiAutomationBridge({
           }
           if (repository !== undefined) {
             next = next.filter((token) => !/^repo:/i.test(token));
-            if (repository) next.push(`repo:${baseName(repository)}`);
+            if (repository) next.push(`repo:${repository}`);
           }
           return next;
         });

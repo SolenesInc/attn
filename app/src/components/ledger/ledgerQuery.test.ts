@@ -29,6 +29,22 @@ describe('parseQuery', () => {
     expect(parsed.unresolved).toEqual(['repo:nope', 'ws:nobody']);
   });
 
+  it('keeps the selected repository when two paths share a base name', () => {
+    const duplicateNames = {
+      ...facets,
+      repositories: [
+        { value: '/Users/victor/projects/attn', count: 3 },
+        { value: '/tmp/checkout/attn', count: 2 },
+      ],
+    };
+
+    expect(parseQuery('repo:attn', duplicateNames, label, '/tmp/checkout/attn').filters.repository)
+      .toBe('/tmp/checkout/attn');
+    expect(parseQuery('repo:attn', duplicateNames, label).unresolved).toEqual(['repo:attn']);
+    expect(parseQuery('repo:/Users/victor/projects/attn', duplicateNames, label).filters.repository)
+      .toBe('/Users/victor/projects/attn');
+  });
+
   it('round-trips through formatQuery', () => {
     const filters = { scope: 'all' as const, range: 'custom' as const, customFrom: '2026-08-01', customTo: '2026-08-03', workspaceId: 'ws-1', repository: '/Users/victor/projects/attn' };
     const text = formatQuery(filters, label);

@@ -19,6 +19,7 @@ export function parseQuery(
   text: string,
   facets: SessionLedgerFacets | null,
   workspaceLabel: (id: string) => string,
+  preferredRepository = '',
 ): ParsedQuery {
   const filters: ParsedQuery['filters'] = { range: 'any', customFrom: '', customTo: '', workspaceId: '', repository: '' };
   const words: string[] = [];
@@ -35,8 +36,12 @@ export function parseQuery(
       filters.range = 'custom';
       if (key === 'from') filters.customFrom = value; else filters.customTo = value;
     } else if (key === 'repo') {
-      const match = (facets?.repositories ?? []).find((facet) =>
-        facet.value === value || baseName(facet.value).toLowerCase() === value.toLowerCase());
+      const repositories = facets?.repositories ?? [];
+      const exact = repositories.find((facet) => facet.value === value);
+      const named = repositories.filter((facet) => baseName(facet.value).toLowerCase() === value.toLowerCase());
+      const match = exact
+        ?? named.find((facet) => facet.value === preferredRepository)
+        ?? (named.length === 1 ? named[0] : undefined);
       if (match) filters.repository = match.value; else unresolved.push(token);
     } else if (key === 'ws') {
       const match = (facets?.workspaces ?? []).find((facet) =>
