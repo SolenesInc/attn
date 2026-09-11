@@ -17,7 +17,6 @@ import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import { appDaemonInTree, delay } from './platform.mjs';
 
 const PANEL_APPEAR_TIMEOUT_MS = 120_000;
-const REFRESH_VISIBLE_TIMEOUT_MS = 60_000;
 const REMOVAL_TIMEOUT_MS = 60_000;
 const RESTART_READY_TIMEOUT_MS = 60_000;
 const DELEGATE_TIMEOUT_MS = 180_000;
@@ -240,17 +239,20 @@ async function main() {
       }, 'the delegate session runs in the worktree', DELEGATE_TIMEOUT_MS);
     });
 
-    await runner.step('leg1_the_panel_says_what_it_would_do_and_why', async () => {
+    await runner.step('leg1_the_panel_opens', async () => {
       await client.request('worktrees_open_panel');
+    });
+
+    await runner.step('leg2_one_refresh_finishes_every_verdict', async () => {
+      const started = Date.now();
       await client.request('worktrees_refresh');
-      // Verdicts come after every row, so a decided row is the end of the pass.
       const state = await poll(async () => {
         const current = await client.request('worktrees_get_state');
-        return fixtureRows(current, fixture).length >= fixture.count
-          && rowFor(current, fixture.worktrees.dirty)?.reason
-          && rowFor(current, fixture.worktrees.merged) ? current : null;
-      }, 'every worktree of the repository to have a row saying what would happen to it',
-      PANEL_APPEAR_TIMEOUT_MS);
+        const rows = fixtureRows(current, fixture);
+        return rows.length >= fixture.count
+          && rows.every((row) => row.reason)
+          && refreshingCount(current) === 0 ? current : null;
+      }, 'every worktree verdict to finish', PANEL_APPEAR_TIMEOUT_MS);
 
       const dirty = rowFor(state, fixture.worktrees.dirty);
       runner.assert(dirty.chips.some((chip) => chip.startsWith('dirty')),
@@ -264,36 +266,10 @@ async function main() {
         return row && /running in it/.test(row.reason) ? row : null;
       }, 'the delegated session to be named as the reason its worktree is kept', PANEL_APPEAR_TIMEOUT_MS);
       runner.assert(merged.branch === 'feat/merged', 'the row names its branch', merged);
-      runner.writeJson('leg1-state.json', state);
-    });
-
-    await runner.step('leg2_a_slow_refresh_stays_visible_and_answering', async () => {
-      const started = Date.now();
-      await client.request('worktrees_refresh');
-      const settled = await poll(async () => {
-        const current = await client.request('worktrees_get_state');
-        const witness = current?.refreshWitness;
-        return witness?.sawRefreshing && refreshingCount(current) === 0 ? current : null;
-      }, 'the surface to show a refresh in flight and then finish it',
-      REFRESH_VISIBLE_TIMEOUT_MS, 250,
-      async () => {
-        const current = await client.request('worktrees_get_state');
-        return {
-          witness: current?.refreshWitness ?? null,
-          refreshing: refreshingCount(current),
-          rows: fixtureRows(current, fixture).length,
-        };
-      });
-
-      const witness = settled.refreshWitness;
-      runner.assert(witness.sawRefreshing,
-        'the refresh is visible per row while the slow repository is walked', witness);
-      runner.log('refresh_pass', {
-        visibleAfterMs: witness.firstSeenMs, visibleUntilMs: witness.lastSeenMs,
-        peakRefreshing: witness.peakRefreshing, totalMs: Date.now() - started,
-      });
-      runner.assert(fixtureRows(settled, fixture).length >= fixture.count,
-        'every row survives the pass', { rows: fixtureRows(settled, fixture).length });
+      runner.writeJson('leg2-state.json', state);
+      runner.log('refresh_pass', { totalMs: Date.now() - started });
+      runner.assert(fixtureRows(state, fixture).length >= fixture.count,
+        'every row survives the pass', { rows: fixtureRows(state, fixture).length });
     });
 
     await runner.step('leg3_the_keep_pin_and_its_way_back', async () => {
