@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { baseName, formatQuery, matchesDir, matchesWords, parseQuery, removeToken } from './ledgerQuery';
+import { baseName, formatQuery, matchesDir, matchesWords, parseQuery, removeToken, repositoryQueryToken } from './ledgerQuery';
 import { nameIds, relativeStamp, shortPath, tildePath } from './ledgerTime';
 
 const facets = {
@@ -43,6 +43,15 @@ describe('parseQuery', () => {
     expect(parseQuery('repo:attn', duplicateNames, label).unresolved).toEqual(['repo:attn']);
     expect(parseQuery('repo:/Users/victor/projects/attn', duplicateNames, label).filters.repository)
       .toBe('/Users/victor/projects/attn');
+  });
+
+  it('carries an exact repository path with spaces in one token', () => {
+    const repository = '/tmp/attn run/ledger-repo';
+    const token = repositoryQueryToken(repository);
+    const spacedFacets = { ...facets, repositories: [{ value: repository, count: 2 }] };
+
+    expect(token).not.toMatch(/\s/);
+    expect(parseQuery(token, spacedFacets, label).filters.repository).toBe(repository);
   });
 
   it('round-trips through formatQuery', () => {

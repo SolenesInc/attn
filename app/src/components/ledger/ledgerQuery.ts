@@ -36,9 +36,10 @@ export function parseQuery(
       filters.range = 'custom';
       if (key === 'from') filters.customFrom = value; else filters.customTo = value;
     } else if (key === 'repo') {
+      const repository = repositoryTokenValue(value);
       const repositories = facets?.repositories ?? [];
-      const exact = repositories.find((facet) => facet.value === value);
-      const named = repositories.filter((facet) => baseName(facet.value).toLowerCase() === value.toLowerCase());
+      const exact = repositories.find((facet) => facet.value === repository);
+      const named = repositories.filter((facet) => baseName(facet.value).toLowerCase() === repository.toLowerCase());
       const match = exact
         ?? named.find((facet) => facet.value === preferredRepository)
         ?? (named.length === 1 ? named[0] : undefined);
@@ -82,6 +83,15 @@ export function baseName(path: string): string {
   const trimmed = path.replace(/\/+$/, '');
   const cut = trimmed.lastIndexOf('/');
   return cut < 0 ? trimmed : trimmed.slice(cut + 1);
+}
+
+export function repositoryQueryToken(repository: string): string {
+  return `repo:@${encodeURIComponent(repository)}`;
+}
+
+function repositoryTokenValue(value: string): string {
+  if (!value.startsWith('@')) return value;
+  return new URLSearchParams(`repository=${value.slice(1)}`).get('repository') ?? '';
 }
 
 export function matchesWords(haystack: string[], words: string[]): boolean {

@@ -19,6 +19,7 @@ import {
 } from '../components/MarkdownReader/annotations/annotationsAutomation';
 import { getSettingsAutomationHandle, INACTIVE_SETTINGS_STATE } from '../components/settingsAutomation';
 import { getAutoModeAutomationHandle, INACTIVE_AUTOMODE_STATE } from '../components/autoModeAutomation';
+import { repositoryQueryToken } from '../components/ledger/ledgerQuery';
 import { getTerminalPerfSnapshot } from '../utils/terminalPerf';
 import { readWarmWorkspaceLimit } from '../utils/terminalVirtualization';
 import { dumpTerminalGeometry } from '../utils/terminalDiagnosticsLog';
@@ -2900,7 +2901,7 @@ export function useUiAutomationBridge({
           }
           if (repository !== undefined) {
             next = next.filter((token) => !/^repo:/i.test(token));
-            if (repository) next.push(`repo:${repository}`);
+            if (repository) next.push(repositoryQueryToken(repository));
           }
           return next;
         });
