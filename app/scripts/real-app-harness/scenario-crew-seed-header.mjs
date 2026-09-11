@@ -61,7 +61,7 @@ async function main() {
   runner.registerCleanup('settle_seeds', settleSeeds);
   runner.registerCleanup('close_crew_session', async () => {
     const current = sessions.at(-1);
-    if (observer.connected && current && observer.getSession(current)?.crew_member === member) {
+    if (current) {
       // Handoff filenames have minute precision, so the successor's closing
       // letter must wait for the previous letter's minute to end.
       const nextMinute = Math.ceil((lastHandoffAt + 1) / 60_000) * 60_000;
@@ -90,7 +90,6 @@ async function main() {
     if (process.env.ATTN_HARNESS_RECORD === '1') await delay(1800);
   };
 
-  let failure = null;
   try {
     fs.mkdirSync(home, { recursive: true });
     fs.writeFileSync(path.join(home, 'CHARTER.md'), '# Fern\n\nWait for seed header checks.\n');
@@ -166,12 +165,14 @@ async function main() {
         { firstSeed, secondSeed },
       );
     });
+    await runner.finishSuccess();
   } catch (error) {
-    failure = error;
+    await runner.finishFailure(error);
+    throw error;
   }
-  const result = await runner.finish(failure);
-  if (!result.ok) console.error(result.error);
-  process.exitCode = result.ok ? 0 : 1;
 }
 
-await main();
+main().catch((error) => {
+  console.error(error instanceof Error ? error.stack || error.message : String(error));
+  process.exitCode = 1;
+});

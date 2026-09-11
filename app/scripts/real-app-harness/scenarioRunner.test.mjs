@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { acquireScenarioLock, createScenarioRunner } from './scenarioRunner.mjs';
+import { acquireScenarioLock, closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 
 let tmpDir;
 
@@ -315,16 +315,18 @@ describe('createScenarioRunner agent tripwire', () => {
 
   it('replaces a green artifact and verdict when teardown fails', async () => {
     const { runner, verdicts } = runnerWithTripwire({ scenarioId: 'TEARDOWN-FAILURE' });
+    const lockPath = process.env.ATTN_REAL_APP_SCENARIO_LOCK_PATH;
     runner.registerCleanup('restore_settings', () => {
+      expect(fs.existsSync(lockPath)).toBe(true);
       throw new Error('settings socket closed');
     });
 
-    await runner.finishSuccess({ closeElapsed: 'kept', paneId: 'pane-alpha' });
-    await expect(runner.finishCleanup({ sessionId: 'session-beta' })).rejects.toThrow(
+    await expect(runner.finishSuccess({ closeElapsed: 'kept', paneId: 'pane-alpha' })).rejects.toThrow(
       'Scenario teardown failed: restore_settings: Error: settings socket closed',
     );
 
-    expect(verdicts.map(({ ok }) => ok)).toEqual([true, false]);
+    expect(verdicts.map(({ ok }) => ok)).toEqual([false]);
+    expect(fs.existsSync(lockPath)).toBe(false);
     expect(fs.existsSync(path.join(runner.runDir, 'summary.json'))).toBe(false);
     const failure = JSON.parse(fs.readFileSync(path.join(runner.runDir, 'failure.json'), 'utf8'));
     expect(failure).toMatchObject({
@@ -332,33 +334,28 @@ describe('createScenarioRunner agent tripwire', () => {
       failurePhase: 'teardown',
       closeElapsed: 'kept',
       paneId: 'pane-alpha',
-      sessionId: 'session-beta',
       teardownErrors: [{ name: 'restore_settings' }],
     });
     expect(failure.error).toContain('settings socket closed');
   });
 
-  it('runs cleanup under the lock and emits only a red verdict when it fails', async () => {
-    const { runner, verdicts } = runnerWithTripwire({ scenarioId: 'LOCKED-TEARDOWN-FAILURE' });
-    const lockPath = process.env.ATTN_REAL_APP_SCENARIO_LOCK_PATH;
-    let lockHeldDuringCleanup = false;
-    runner.registerCleanup('remove_member', () => {
-      lockHeldDuringCleanup = fs.existsSync(lockPath);
-      throw new Error('member delete failed');
+  it('restores the shared profile before sessions and app connections close', async () => {
+    const { runner } = runnerWithTripwire({ scenarioId: 'PROFILE-RESTORE' });
+    const profile = { setting: 'baseline' };
+    const cleanup = [];
+    runner.registerCleanup('close_observer', () => cleanup.push(`observer:${profile.setting}`));
+    runner.registerCleanup('quit_app', () => cleanup.push(`app:${profile.setting}`));
+    runner.registerCleanup('close_sessions', () => cleanup.push(`sessions:${profile.setting}`));
+    runner.registerCleanup('restore_profile', () => {
+      profile.setting = 'baseline';
+      cleanup.push('restore');
     });
+    profile.setting = 'scenario';
 
-    const result = await runner.finish(null, { member: 'fern' });
+    await runner.finishSuccess();
 
-    expect(result).toMatchObject({
-      ok: false,
-      failurePhase: 'teardown',
-      member: 'fern',
-      teardownErrors: [{ name: 'remove_member' }],
-    });
-    expect(lockHeldDuringCleanup).toBe(true);
-    expect(verdicts.map(({ ok }) => ok)).toEqual([false]);
-    expect(fs.existsSync(lockPath)).toBe(false);
-    expect(fs.existsSync(path.join(runner.runDir, 'summary.json'))).toBe(false);
+    expect(profile.setting).toBe('baseline');
+    expect(cleanup).toEqual(['restore', 'sessions:baseline', 'app:baseline', 'observer:baseline']);
   });
 
   it('starts one mock GitHub, makes the daemon carry it, and records what the daemon reads', async () => {
@@ -388,7 +385,7 @@ describe('createScenarioRunner agent tripwire', () => {
       `mock GitHub: MOCK-GH finished against a daemon that does not carry ATTN_MOCK_GH_URL=http://127.0.0.1:32556`,
     );
     await expect(runner.finishSuccess()).rejects.toThrow(JSON.stringify(observed));
-    expect(verdicts).toEqual([]);
+    expect(verdicts.map(({ ok }) => ok)).toEqual([false]);
     expect(fs.existsSync(path.join(runner.runDir, 'summary.json'))).toBe(false);
   });
 
@@ -440,7 +437,7 @@ describe('createScenarioRunner agent tripwire', () => {
     const { runner, verdicts } = runnerWithTripwire({ scenarioId: 'AGENT-QUEUE', ledger });
 
     await expect(runner.finishSuccess()).rejects.toThrow('2 real agent exec(s) during AGENT-QUEUE');
-    expect(verdicts).toEqual([]);
+    expect(verdicts.map(({ ok }) => ok)).toEqual([false]);
 
     const failure = await runner.finishFailure(new Error('agent tripwire tripped'));
 
@@ -553,6 +550,25 @@ describe('createScenarioRunner agent tripwire', () => {
       emitRunnerVerdict: vi.fn(),
       isRecordingEnabled: () => false,
     })).toThrow(/UNLISTED-PROBE.*no scenarioCatalog\.mjs entry/s);
+  });
+});
+
+describe('scenario session cleanup', () => {
+  it('attempts every close before reporting failures', async () => {
+    const firstFailure = new Error('first session stayed open');
+    const client = {
+      request: vi.fn()
+        .mockRejectedValueOnce(firstFailure)
+        .mockResolvedValueOnce(),
+    };
+
+    await expect(closeScenarioSessions(client, ['first', 'second'])).rejects.toMatchObject({
+      errors: [firstFailure],
+    });
+    expect(client.request.mock.calls).toEqual([
+      ['close_session', { sessionId: 'first' }],
+      ['close_session', { sessionId: 'second' }],
+    ]);
   });
 });
 

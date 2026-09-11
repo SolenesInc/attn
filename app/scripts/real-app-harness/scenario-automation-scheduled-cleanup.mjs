@@ -530,6 +530,7 @@ async function main() {
         const appliedDefinitionIDs = [];
         if (cleanupApplied) appliedDefinitionIDs.push(cleanupID);
         if (stormGuardApplied) appliedDefinitionIDs.push(stormGuardID);
+        for (const definitionID of appliedDefinitionIDs) disableDefinition(binary, definitionID, daemonEnv);
         for (const sessionID of recordedSessionIDs(binary, appliedDefinitionIDs, daemonEnv)) teardownSessionIDs.add(sessionID);
         for (const seed of boundSeedsForSessions(binary, teardownSessionIDs, daemonEnv)) teardownSeedIDs.add(seed.id);
       } catch {}

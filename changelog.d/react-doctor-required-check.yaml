@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: Run the required React Doctor check on every pull request, skipping its scan when React inputs are unchanged.
