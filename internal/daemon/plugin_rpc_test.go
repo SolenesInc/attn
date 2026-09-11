@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"path/filepath"
 	"strings"
@@ -619,8 +620,17 @@ func sendPluginHelloWithGeneration(t *testing.T, conn net.Conn, name string, sur
 
 func decodeJSONRPCMessage(t *testing.T, conn net.Conn) jsonRPCMessage {
 	t.Helper()
+	var frame []byte
+	var b [1]byte
+	// net.Pipe cannot accept the reply until Encoder.Encode's newline is consumed.
+	for b[0] != '\n' {
+		if _, err := io.ReadFull(conn, b[:]); err != nil {
+			t.Fatalf("read JSON-RPC frame: %v", err)
+		}
+		frame = append(frame, b[0])
+	}
 	var msg jsonRPCMessage
-	if err := json.NewDecoder(conn).Decode(&msg); err != nil {
+	if err := json.Unmarshal(frame, &msg); err != nil {
 		t.Fatalf("decode JSON-RPC message: %v", err)
 	}
 	return msg
