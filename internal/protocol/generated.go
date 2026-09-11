@@ -2413,6 +2413,9 @@ type CrewMember struct {
 	// Cwd corresponds to the JSON schema field "cwd".
 	Cwd *string `json:"cwd,omitempty,omitzero"`
 
+	// Effort corresponds to the JSON schema field "effort".
+	Effort *string `json:"effort,omitempty,omitzero"`
+
 	// HomeDir corresponds to the JSON schema field "home_dir".
 	HomeDir string `json:"home_dir"`
 
@@ -2421,6 +2424,21 @@ type CrewMember struct {
 
 	// Model corresponds to the JSON schema field "model".
 	Model *string `json:"model,omitempty,omitzero"`
+
+	// ResolvedAgent corresponds to the JSON schema field "resolved_agent".
+	ResolvedAgent string `json:"resolved_agent"`
+
+	// ResolvedEffort corresponds to the JSON schema field "resolved_effort".
+	ResolvedEffort *string `json:"resolved_effort,omitempty,omitzero"`
+
+	// ResolvedModel corresponds to the JSON schema field "resolved_model".
+	ResolvedModel *string `json:"resolved_model,omitempty,omitzero"`
+
+	// Restart corresponds to the JSON schema field "restart".
+	Restart *CrewRestart `json:"restart,omitempty,omitzero"`
+
+	// Revision corresponds to the JSON schema field "revision".
+	Revision int `json:"revision"`
 }
 
 type CrewPrimeMessage struct {
@@ -2445,6 +2463,87 @@ type CrewPrimeResult struct {
 	PrimingBytes int `json:"priming_bytes"`
 }
 
+type CrewRestart struct {
+	// DeliveryStatus corresponds to the JSON schema field "delivery_status".
+	DeliveryStatus *AgentMsgStatus `json:"delivery_status,omitempty,omitzero"`
+
+	// Detail corresponds to the JSON schema field "detail".
+	Detail *string `json:"detail,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// LetterPath corresponds to the JSON schema field "letter_path".
+	LetterPath *string `json:"letter_path,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+
+	// State corresponds to the JSON schema field "state".
+	State CrewRestartState `json:"state"`
+
+	// SuccessorSessionID corresponds to the JSON schema field "successor_session_id".
+	SuccessorSessionID *string `json:"successor_session_id,omitempty,omitzero"`
+}
+
+type CrewRestartMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision *int `json:"expected_revision,omitempty,omitzero"`
+
+	// ExpectedSessionID corresponds to the JSON schema field "expected_session_id".
+	ExpectedSessionID *string `json:"expected_session_id,omitempty,omitzero"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type CrewRestartResult struct {
+	// Member corresponds to the JSON schema field "member".
+	Member CrewMember `json:"member"`
+
+	// Restart corresponds to the JSON schema field "restart".
+	Restart CrewRestart `json:"restart"`
+}
+
+type CrewRestartResultMessage struct {
+	// Conflict corresponds to the JSON schema field "conflict".
+	Conflict bool `json:"conflict"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member *CrewMember `json:"member,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Restart corresponds to the JSON schema field "restart".
+	Restart *CrewRestart `json:"restart,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type CrewRestartState string
+
+const CrewRestartStateCompleted CrewRestartState = "completed"
+const CrewRestartStateFailed CrewRestartState = "failed"
+const CrewRestartStateQueued CrewRestartState = "queued"
+const CrewRestartStateRequested CrewRestartState = "requested"
+
 type CrewSetMessage struct {
 	// Agent corresponds to the JSON schema field "agent".
 	Agent *string `json:"agent,omitempty,omitzero"`
@@ -2461,16 +2560,45 @@ type CrewSetMessage struct {
 	// Cwd corresponds to the JSON schema field "cwd".
 	Cwd *string `json:"cwd,omitempty,omitzero"`
 
+	// Effort corresponds to the JSON schema field "effort".
+	Effort *string `json:"effort,omitempty,omitzero"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision *int `json:"expected_revision,omitempty,omitzero"`
+
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
 
 	// Model corresponds to the JSON schema field "model".
 	Model *string `json:"model,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
 
 type CrewSetResult struct {
 	// Member corresponds to the JSON schema field "member".
 	Member CrewMember `json:"member"`
+}
+
+type CrewSetResultMessage struct {
+	// Conflict corresponds to the JSON schema field "conflict".
+	Conflict bool `json:"conflict"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member *CrewMember `json:"member,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type CrewSleepMessage struct {
@@ -6767,6 +6895,9 @@ type Response struct {
 
 	// CrewPrimeResult corresponds to the JSON schema field "crew_prime_result".
 	CrewPrimeResult *CrewPrimeResult `json:"crew_prime_result,omitempty,omitzero"`
+
+	// CrewRestartResult corresponds to the JSON schema field "crew_restart_result".
+	CrewRestartResult *CrewRestartResult `json:"crew_restart_result,omitempty,omitzero"`
 
 	// CrewSetResult corresponds to the JSON schema field "crew_set_result".
 	CrewSetResult *CrewSetResult `json:"crew_set_result,omitempty,omitzero"`

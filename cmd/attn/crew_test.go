@@ -238,14 +238,28 @@ func TestParseCrewSetArgs_CarriesTheModelAndTheWayBack(t *testing.T) {
 	}
 }
 
+func TestParseCrewSetArgs_CarriesEffortAndTheWayBack(t *testing.T) {
+	parsed, err := parseCrewSetArgs([]string{"trellis", "--effort", "high"})
+	if err != nil {
+		t.Fatalf("parseCrewSetArgs: %v", err)
+	}
+	if parsed.effort == nil || *parsed.effort != "high" {
+		t.Fatalf("effort = %v, want high", parsed.effort)
+	}
+	cleared, err := parseCrewSetArgs([]string{"trellis", "--effort", ""})
+	if err != nil || cleared.effort == nil || *cleared.effort != "" {
+		t.Fatalf("cleared effort = %v, err=%v", cleared.effort, err)
+	}
+}
+
 func TestPrintCrewList_NamesTheHarnessEachMemberRunsOn(t *testing.T) {
 	var out bytes.Buffer
 	printCrewList(&out, []protocol.CrewMember{
-		{ID: "keel", HomeDir: "/home/.attn/crew/keel", Agent: protocol.Ptr("codex"), Model: protocol.Ptr("gpt-5.6-sol")},
-		{ID: "trellis", HomeDir: "/home/.attn/crew/trellis", Agent: protocol.Ptr("claude"), Model: protocol.Ptr("claude-haiku-4-5")},
+		{ID: "keel", HomeDir: "/home/.attn/crew/keel", ResolvedAgent: "codex", ResolvedModel: protocol.Ptr("gpt-5.6-sol"), ResolvedEffort: protocol.Ptr("high")},
+		{ID: "trellis", HomeDir: "/home/.attn/crew/trellis", ResolvedAgent: "claude", ResolvedModel: protocol.Ptr("claude-haiku-4-5")},
 	})
 	text := out.String()
-	for _, want := range []string{"AGENT", "MODEL", "codex", "claude", "gpt-5.6-sol", "claude-haiku-4-5"} {
+	for _, want := range []string{"AGENT", "MODEL", "EFFORT", "codex", "claude", "gpt-5.6-sol", "claude-haiku-4-5", "high"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("crew list output is missing %q:\n%s", want, text)
 		}

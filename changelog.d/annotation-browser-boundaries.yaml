@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Verify annotation editor interactions independently in a real browser and acknowledge native pointer delivery in packaged acceptance.

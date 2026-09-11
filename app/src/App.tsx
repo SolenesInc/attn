@@ -8,6 +8,7 @@ import { Sidebar, type SidebarHeaderAction, type DockItem, WorkflowIcon, EditorI
 import { Dashboard } from './components/Dashboard';
 import { LedgerSurface } from './components/ledger/LedgerSurface';
 import type { LedgerTab } from './components/ledger/LedgerSurface';
+import { CrewPanel } from './components/CrewPanel';
 import { activityStaleMs } from './utils/activitySettings';
 import { crewDisplayName } from './utils/crewName';
 import { AttentionDrawer } from './components/AttentionDrawer';
@@ -1194,6 +1195,11 @@ function AppContent({
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [ledgerTab, setLedgerTab] = useState<LedgerTab>('sessions');
   const openLedger = useCallback((tab: LedgerTab) => { setLedgerTab(tab); setSessionsOpen(true); }, []);
+  const [crewPanel, setCrewPanel] = useState<{
+    open: boolean;
+    member?: string;
+    returnFocus?: HTMLElement;
+  }>({ open: false });
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [notebookRequestedPath, setNotebookRequestedPath] = useState<string | null>(null);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
@@ -1826,6 +1832,7 @@ function AppContent({
     || shortcutEditorOpen
     || actionMenuOpen
     || sessionsOpen
+    || crewPanel.open
     || notebookOpen
     || gardenHoldsWindow
     || chiefTransferTarget !== null
@@ -2103,7 +2110,7 @@ function AppContent({
       return;
     }
     if (settingsOpen || shortcutsOpen || locationPickerOpen || whatsNew.isOpen
-      || sessionsOpen || notebookOpen || gardenHoldsWindow
+      || sessionsOpen || crewPanel.open || notebookOpen || gardenHoldsWindow
       || chiefTransferTarget !== null || contextCapPromptSession !== null
       || appViewParamsPrompt !== null || pendingSessionClose !== null
       || sessionCreationJob !== null || openPRLauncherJob !== null || diagnosticCapture !== null) {
@@ -2134,6 +2141,7 @@ function AppContent({
     shortcutsOpen,
     whatsNew.isOpen,
     sessionsOpen,
+    crewPanel.open,
     notebookOpen,
     gardenHoldsWindow,
     diagnosticCapture,
@@ -3449,6 +3457,18 @@ function AppContent({
       .catch((error) => showError(error instanceof Error ? error.message : `Failed to ask ${crewDisplayName(member)} to sleep`));
   }, [sendCrewSleep, showError]);
 
+  const handleOpenCrew = useCallback((member: string | undefined, returnFocus: HTMLElement) => {
+    setCrewPanel({ open: true, member, returnFocus });
+  }, []);
+
+  const handleCloseCrew = useCallback(() => {
+    const returnFocus = crewPanel.returnFocus;
+    setCrewPanel((current) => ({ ...current, open: false }));
+    window.requestAnimationFrame(() => {
+      if (returnFocus?.isConnected) returnFocus.focus();
+    });
+  }, [crewPanel.returnFocus]);
+
   // One stable object: the surface re-fetches on identity change.
   const annotationApi = useMemo(() => ({
     fetchMessages: sendSessionMessagesGet,
@@ -3794,6 +3814,8 @@ function AppContent({
           crew={crew}
           onWakeCrewMember={handleWakeCrewMember}
           onSleepCrewMember={handleSleepCrewMember}
+          onManageCrew={(event) => handleOpenCrew(undefined, event.currentTarget)}
+          onOpenCrewMemberDetails={(member, returnFocus) => handleOpenCrew(member, returnFocus)}
           queueModeEnabled={queueModeEnabled}
           onToggleQueueMode={handleToggleQueueMode}
           crewQueueEnabled={crewQueueEnabled}
@@ -4086,6 +4108,13 @@ function AppContent({
           ]}
         />
       </div>
+      <CrewPanel
+        isOpen={crewPanel.open}
+        initialMember={crewPanel.member}
+        members={crew}
+        sessions={daemonSessions}
+        onClose={handleCloseCrew}
+      />
         </div>
       </div>
 

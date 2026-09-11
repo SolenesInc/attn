@@ -99,10 +99,11 @@ func TestAReconcileThatKeepsThrowingDisablesTheAppAndSaysSo(t *testing.T) {
 	d := newAppDaemon(t)
 	clock := newAppTestClock(d)
 	reconcilingApp(t, d, "greeter")
-	runtime := startFakeAppRuntime(t, d, nil)
-	runtime.reconcile = func(*fakeAppRuntime, appReconcileRequest) error {
-		return errors.New("TypeError: snapshot.sessions is not iterable")
-	}
+	startConfiguredAppRuntime(t, d, fakeAppRuntimeHandlers{
+		reconcile: func(*fakeAppRuntime, appReconcileRequest) error {
+			return errors.New("TypeError: snapshot.sessions is not iterable")
+		},
+	})
 	claim, err := d.store.AppReconcilePending("greeter")
 	if err != nil {
 		t.Fatal(err)
@@ -174,9 +175,13 @@ func TestACommandIsRefusedByNameWhileAReconcileIsOwed(t *testing.T) {
 	second := manifest
 	second.Description = "the version that owes a rebuild"
 	installApp(t, d, "greeter", second)
-	runtime := startFakeAppRuntime(t, d, nil)
-	runtime.reconcile = func(*fakeAppRuntime, appReconcileRequest) error {
-		return errors.New("this rebuild never succeeds")
+	startConfiguredAppRuntime(t, d, fakeAppRuntimeHandlers{
+		reconcile: func(*fakeAppRuntime, appReconcileRequest) error {
+			return errors.New("this rebuild never succeeds")
+		},
+	})
+	if err := appReconcilePreDrain(t, d, "greeter"); err == nil || !strings.Contains(err.Error(), "this rebuild never succeeds") {
+		t.Fatalf("the configured rebuild must fail before the command: %v", err)
 	}
 
 	result := newAppCommandCaller().invoke(t, d, "greeter", "refresh", "")

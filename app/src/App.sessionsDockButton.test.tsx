@@ -102,6 +102,7 @@ describe('sessions dock button', () => {
 
     mockUseDaemonStore.mockImplementation(() => ({
       daemonSessions: [],
+      crew: [],
       setDaemonSessions: vi.fn(),
       prs: [], setPRs: vi.fn(),
       repoStates: [], setRepoStates: vi.fn(),

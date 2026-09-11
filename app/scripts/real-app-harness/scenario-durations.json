@@ -4,7 +4,21 @@
     "job": "App acceptance",
     "recordedAt": "2026-09-07",
     "matrixSeconds": 785.7,
-    "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these."
+    "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these.",
+    "crewManagement": {
+      "run": "https://github.com/SolenesInc/attn/actions/runs/34073350549/job/101594808961",
+      "recordedAt": "2026-09-07",
+      "scenarioRun": "crew-management-2026-09-07T01-45-07-590Z",
+      "note": "The fully green Linux serial matrix reports 32.9s for crew-management in matrix-digest.txt. Its scenario source is unchanged from this run."
+    },
+    "terminalAnnotations": {
+      "run": "https://github.com/SolenesInc/attn/actions/runs/34543069126",
+      "job": "https://github.com/SolenesInc/attn/actions/runs/34543069126/job/103091680265",
+      "recordedAt": "2026-09-10",
+      "platform": "Linux",
+      "head": "0fe04fea6c69f857d42add6d4f6cb1978e5feabb",
+      "note": "All four Linux acceptance shards and the aggregate passed. Shard 3/4 reports PASS terminal-annotations 18.9s in its matrix digest. The native annotation scenario is unchanged from this run."
+    }
   },
   "seconds": {
     "prompt-composition": 14.9,
@@ -31,7 +45,7 @@
     "agent-queue": 91,
     "automation-lifecycle": 48.9,
     "worktree-surface": 37.8,
-    "terminal-annotations": 21.2,
+    "terminal-annotations": 18.9,
     "terminal-context-menu": 9.1,
     "terminal-input": 11.7,
     "pty-host-setting": 8.9,
@@ -46,6 +60,7 @@
     "present-submit-closes-window": 9.9,
     "pi-security": 66.2,
     "pi-automode": 11.7,
-    "automode-environment": 5.4
+    "automode-environment": 5.4,
+    "crew-management": 32.9
   }
 }

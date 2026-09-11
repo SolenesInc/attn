@@ -36,7 +36,6 @@ const EXISTING_COMPOSER_TEXT = 'Please include the remaining case count. ';
 const FIRST_MESSAGE = 'A retry wrapper protects idempotent operations from duplicate network effects.';
 const SECOND_MESSAGE = 'A circuit breaker stops repeated calls while a dependency is failing.';
 const FIRST_MESSAGE_WORDS = ['retry', 'wrapper', 'idempotent', 'duplicate', 'network', 'effects'];
-const SECOND_MESSAGE_WORDS = ['circuit', 'breaker', 'repeated', 'calls', 'dependency', 'failing'];
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -134,16 +133,8 @@ async function waitForTurn(observer, sessionId, description) {
   );
 }
 
-function contains(outer, inner) {
-  return inner.left >= outer.left - 1
-    && inner.top >= outer.top - 1
-    && inner.left + inner.width <= outer.left + outer.width + 1
-    && inner.top + inner.height <= outer.top + outer.height + 1;
-}
-
-function overlaps(a, b) {
-  return a.left < b.left + b.width && b.left < a.left + a.width
-    && a.top < b.top + b.height && b.top < a.top + a.height;
+export function annotationCommentEditorReady(state) {
+  return state.popupOpen && state.popupDraft !== null && state.commentFocused ? state : null;
 }
 
 async function pollForDrag(client, runner, sessionId, paneId, description, requiredWords) {
@@ -511,55 +502,20 @@ async function main() {
       );
     });
 
-    // The editor is positioned against the window but is only usable inside the
-    // pane it annotates; the sidebar and neighbouring panes paint over it.
-    await runner.step('the_editor_lands_inside_its_pane', async () => {
-      await pollForDrag(client, runner, sessionId, paneId, 'the second turn', SECOND_MESSAGE_WORDS);
-      const state = await pollFor(
-        async () => {
-          const current = await client.request('get_annotation_state', {});
-          return current.popupOpen && current.popupRect ? current : null;
-        },
-        'the editor to report its geometry',
-        5_000,
-      );
-      const { popupRect, panelRect, paneRects, viewport } = state;
-      runner.assert(
-        Array.isArray(paneRects) && paneRects.length > 0,
-        'No terminal grid reported its geometry, so this step can prove nothing',
-      );
-      runner.assert(
-        paneRects.some((pane) => contains(pane, popupRect)),
-        `The annotation editor was drawn outside every terminal pane, where the app's chrome covers it: `
-        + `popup ${JSON.stringify(popupRect)}, panes ${JSON.stringify(paneRects)}, viewport ${JSON.stringify(viewport)}`,
-      );
-      runner.assert(
-        !panelRect || !overlaps(panelRect, popupRect),
-        `The annotation editor was drawn under the annotations panel: `
-        + `popup ${JSON.stringify(popupRect)}, panel ${JSON.stringify(panelRect)}`,
-      );
-    });
-
-    await runner.step('a_panel_row_opens_its_editor_and_keeps_its_remove_control', async () => {
+    await runner.step('native_pointer_and_keyboard_move_between_terminal_and_comment', async () => {
       await client.request('dom_click', { selector: '[data-testid="annotation-panel"] .anno-panel-title' });
-      await sleep(300);
-
       await client.request('dom_click', { selector: '.anno-card-open' });
-      const opened = await pollFor(
+      await pollFor(
         async () => {
           const state = await client.request('get_annotation_state', {});
-          return state.popupOpen && state.popupDraft !== null ? state : null;
+          return annotationCommentEditorReady(state);
         },
-        'the panel row to open its comment editor',
+        'the panel row to open its comment editor and focus the comment box',
         5_000,
-      );
-      runner.assert(
-        opened.commentFocused,
-        'The editor opened without the caret in its comment box, so the next sentence typed goes to the PTY',
       );
 
       const comment = 'checked against the real behaviour';
-      await client.request('dom_type', { selector: '.anno-popup-text', text: comment });
+      await driver.typeText(comment);
 
       const typed = await client.request('get_annotation_state', {});
       const windowBounds = await client.request('get_window_bounds', {});
@@ -573,7 +529,11 @@ async function main() {
         typed.viewport.width,
         typed.viewport.height,
       );
+      await client.request('arm_native_pointer_witness', { selector: '.terminal-container.ghostty-terminal' });
       await driver.clickWindow(outsideWindow.relativeX, outsideWindow.relativeY);
+      const outsideReceipt = await client.request('wait_native_pointer_witness', {});
+      runner.assert(outsideReceipt.matches,
+        `Native terminal click landed elsewhere: ${JSON.stringify({ outside, outsideWindow, outsideReceipt })}`);
 
       const afterOutside = await client.request('get_annotation_state', {});
       runner.assert(
@@ -594,89 +554,20 @@ async function main() {
         afterOutside.viewport.width,
         afterOutside.viewport.height,
       );
+      await client.request('arm_native_pointer_witness', { selector: '.anno-popup-quote' });
       await driver.clickWindow(quoteWindow.relativeX, quoteWindow.relativeY);
-      let refocused = await client.request('get_annotation_state', {});
+      const quoteReceipt = await client.request('wait_native_pointer_witness', {});
+      runner.assert(quoteReceipt.matches,
+        `Native editor click landed elsewhere: ${JSON.stringify({ quoteWindow, quoteReceipt })}`);
+      const refocused = await client.request('get_annotation_state', {});
       runner.assert(
         refocused.commentFocused && refocused.popupDraft === comment,
         `Clicking the editor background did not restore its focus and draft: ${JSON.stringify(refocused)}`,
       );
 
-      await driver.clickWindow(outsideWindow.relativeX, outsideWindow.relativeY);
-      refocused = await client.request('get_annotation_state', {});
-      const commentRect = refocused.popupCommentRect;
-      runner.assert(Boolean(commentRect), `The open editor has no comment box: ${JSON.stringify(refocused)}`);
-      const commentWindow = windowRelativePoint(
-        commentRect.left + commentRect.width / 2,
-        commentRect.top + commentRect.height / 2,
-        windowBounds,
-        refocused.viewport.width,
-        refocused.viewport.height,
-      );
-      await driver.clickWindow(commentWindow.relativeX, commentWindow.relativeY);
-      refocused = await client.request('get_annotation_state', {});
-      runner.assert(
-        refocused.commentFocused && refocused.popupDraft === comment,
-        `Clicking the comment box did not restore its focus and draft: ${JSON.stringify(refocused)}`,
-      );
-
-      const beforeDrag = refocused.popupRect;
-      const handleRect = refocused.popupDragHandleRect;
-      runner.assert(Boolean(beforeDrag && handleRect), `The open editor has no drag handle: ${JSON.stringify(refocused)}`);
-      const dragFrom = windowRelativePoint(
-        handleRect.left + handleRect.width / 2,
-        handleRect.top + handleRect.height / 2,
-        windowBounds,
-        refocused.viewport.width,
-        refocused.viewport.height,
-      );
-      const dragTo = windowRelativePoint(
-        handleRect.left + handleRect.width / 2 + 48,
-        handleRect.top + handleRect.height / 2 + 36,
-        windowBounds,
-        refocused.viewport.width,
-        refocused.viewport.height,
-      );
-      await driver.dragWindow(
-        dragFrom.relativeX,
-        dragFrom.relativeY,
-        dragTo.relativeX,
-        dragTo.relativeY,
-        { steps: 6 },
-      );
-      const afterDrag = await client.request('get_annotation_state', {});
-      runner.assert(
-        afterDrag.popupOpen
-          && afterDrag.popupDraft === comment
-          && (Math.abs(afterDrag.popupRect.left - beforeDrag.left) > 8
-            || Math.abs(afterDrag.popupRect.top - beforeDrag.top) > 8),
-        `Dragging did not move the comment editor with its draft: ${JSON.stringify({ beforeDrag, afterDrag })}`,
-      );
-      const owningPane = afterDrag.paneRects.find((pane) => contains(pane, afterDrag.popupRect));
-      runner.assert(
-        Boolean(owningPane),
-        `Dragging moved the comment editor outside its terminal pane: ${JSON.stringify(afterDrag)}`,
-      );
-
-      await client.request('dom_focus', { selector: '.anno-popup-drag-handle' });
-      const moveRight = afterDrag.popupRect.left + afterDrag.popupRect.width / 2
-        < owningPane.left + owningPane.width / 2;
-      await driver.pressKeyCode(moveRight ? 124 : 123);
-      const afterKeyboardMove = await pollFor(
-        async () => {
-          const current = await client.request('get_annotation_state', {});
-          return Math.abs(current.popupRect.left - afterDrag.popupRect.left) >= 8 ? current : null;
-        },
-        'an arrow key on the move control to reposition the editor',
-        5_000,
-      );
-      runner.assert(
-        afterKeyboardMove.paneRects.some((pane) => contains(pane, afterKeyboardMove.popupRect)),
-        `Keyboard movement moved the comment editor outside its terminal pane: ${JSON.stringify(afterKeyboardMove)}`,
-      );
-
       await client.request('dom_click', { selector: '.anno-popup-save' });
 
-      const withComment = await pollFor(
+      await pollFor(
         async () => {
           const state = await client.request('get_annotation_state', {});
           return state.annotations?.[0]?.comment === comment ? state : null;
@@ -684,25 +575,6 @@ async function main() {
         'the comment to land on the panel row',
         5_000,
       );
-      const [row] = withComment.annotations;
-      runner.assert(
-        row.rect && row.removeRect,
-        `Panel row reported no geometry: ${JSON.stringify(row)}`,
-      );
-      // A comment wraps inside the row, and the remove control used to be
-      // auto-placed after it. 12px is a tripwire, not the real 5px offset.
-      const offset = row.removeRect.top - row.rect.top;
-      runner.assert(
-        offset <= 12,
-        `The remove control starts ${offset}px below the row's top, so a commented row pushed it onto its own line `
-        + `(row ${JSON.stringify(row.rect)}, control ${JSON.stringify(row.removeRect)})`,
-      );
-      runner.assert(
-        row.removeRect.left + row.removeRect.width <= row.rect.left + row.rect.width + 1,
-        `The remove control overflows its row: ${JSON.stringify(row.removeRect)} vs ${JSON.stringify(row.rect)}`,
-      );
-      await client.request('dom_click', { selector: '[data-testid="annotation-panel"] .anno-panel-title' });
-      await sleep(300);
     });
 
     await runner.step('a_note_is_drafted_beside_the_marks', async () => {

@@ -52,6 +52,8 @@ interface QueueBandsProps {
   /** Start a sleeping member's day. Resolves once its session exists. */
   onWakeCrewMember?: (member: string) => void;
   onSleepCrewMember?: (member: string) => void;
+  onManageCrew?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onOpenCrewMemberActions?: (member: string, event: ReactMouseEvent<HTMLButtonElement>) => void;
   selectedId: string | null;
   onSelectSession: (id: string) => void;
   onSettleTurn: (id: string) => void;
@@ -278,6 +280,8 @@ export function QueueBands({
   crew,
   onWakeCrewMember,
   onSleepCrewMember,
+  onManageCrew,
+  onOpenCrewMemberActions,
   selectedId,
   onSelectSession,
   onSettleTurn,
@@ -378,6 +382,11 @@ export function QueueBands({
           <div className="queue-band-header">
             <span>Pinned</span>
             <span className="queue-band-count">{bands.pinned.length + crewRows.length}</span>
+            {crewRows.length > 0 && onManageCrew && (
+              <button type="button" className="queue-band-manage" data-testid="manage-crew" onClick={onManageCrew}>
+                Manage crew
+              </button>
+            )}
           </div>
           {/* A member is pin-shaped but is not a pin: nobody put it here and there is no unpin. */}
           {crewRows.map((crewRow) => (
@@ -399,6 +408,7 @@ export function QueueBands({
               kinClass={crewRow.row ? kinClass(crewRow.row.session.id) : ''}
               onHoverSession={onHoverSession}
               onSelectSession={onSelectSession}
+              onOpenMemberActions={onOpenCrewMemberActions && ((event) => onOpenCrewMemberActions(crewRow.member, event))}
             />
           ))}
           {bands.pinned.map((row) => (
@@ -453,6 +463,7 @@ function CrewRowView({
   kinClass,
   onHoverSession,
   onSelectSession,
+  onOpenMemberActions,
 }: {
   member: string;
   row?: QueueRow<QueueBandSessionView>;
@@ -466,6 +477,7 @@ function CrewRowView({
   kinClass: string;
   onHoverSession: (id: string | null) => void;
   onSelectSession: (id: string) => void;
+  onOpenMemberActions?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
 }) {
   const awake = Boolean(row);
   const { phase, trigger, rowRef } = useWakeConfirm(onWake);
@@ -519,10 +531,10 @@ function CrewRowView({
         {awake ? 'crew' : 'asleep'}
       </span>
       <SidebarDelegateCount delegates={delegates} />
-      {!awake && onWake && (
+      {!awake && (onWake || onOpenMemberActions) && (
         <div className="queue-row-controls">
           {armed && <span className="crew-wake-confirm">confirm</span>}
-          <button
+          {onWake && <button
             type="button"
             className="queue-row-wake"
             data-testid={`queue-crew-wake-${member}`}
@@ -534,7 +546,22 @@ function CrewRowView({
             }}
           >
             <CrewWakeSun phase={phase} />
-          </button>
+          </button>}
+          {onOpenMemberActions && (
+            <button
+              type="button"
+              className="session-action-btn session-more-btn"
+              data-testid={`crew-actions-${member}`}
+              title={`Actions for ${name}`}
+              aria-label={`Actions for ${name}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenMemberActions(event);
+              }}
+            >
+              •••
+            </button>
+          )}
         </div>
       )}
       {awake && (onSleep || onOpenActions) && (

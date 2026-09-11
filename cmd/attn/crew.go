@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
@@ -25,6 +26,8 @@ func runCrew() {
 		runCrewWake(os.Args[3:])
 	case "sleep":
 		runCrewSleep(os.Args[3:])
+	case "restart":
+		runCrewRestart(os.Args[3:])
 	case "set":
 		runCrewSet(os.Args[3:])
 	default:
@@ -57,12 +60,18 @@ commands:
         Ask the member to write a handoff and close with attn handoff --sleep.
         The member closes its own session. Do nothing if already asleep.
 
-  set <member> [--cwd <dir>] [--agent <name>] [--model <name>]
+  restart <member> [--json]
+        ask an awake member to finish its work, write its own handoff and start
+        a fresh day. An asleep member wakes directly. The durable result says
+        queued, requested, failed or completed; delivery alone is not completion.
+
+  set <member> [--cwd <dir>] [--agent <name>] [--model <name>] [--effort <level>]
                [--awareness-dir <dir>]...
         Save launch settings without changing the member's markdown files.
         --cwd sets the working directory; --model selects the model.
         --agent accepts claude, codex, or an installed plugin driver.
         --agent "" restores the crew default; --model "" the harness default.
+        --effort selects reasoning effort; --effort "" restores the harness default.
         --awareness-dir sets context dirs. Repeat to replace the saved list.
         Use --awareness-dir "" to clear it.
 `)
@@ -183,10 +192,14 @@ type crewSleepArgs struct {
 }
 
 func parseCrewSleepArgs(args []string) (crewSleepArgs, error) {
+	return parseCrewLifecycleArgs(args, "crew sleep")
+}
+
+func parseCrewLifecycleArgs(args []string, verb string) (crewSleepArgs, error) {
 	fs := flag.NewFlagSet("crew sleep", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
-	member, err := parseMemberAndFlags(fs, args, "crew sleep")
+	member, err := parseMemberAndFlags(fs, args, verb)
 	if err != nil {
 		return crewSleepArgs{}, err
 	}
@@ -230,6 +243,29 @@ func crewSleepOutcomeLine(result *protocol.CrewSleepResult) string {
 	return fmt.Sprintf("Asked %s in session %s to write its handoff and file it with `attn handoff --sleep`.", name, agentShortID(protocol.Deref(result.SessionID)))
 }
 
+func runCrewRestart(args []string) {
+	parsed, err := parseCrewLifecycleArgs(args, "crew restart")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "crew restart: %v\n", err)
+		writeCrewHelp(os.Stderr)
+		os.Exit(2)
+	}
+	result, err := client.New("").CrewRestart(parsed.member, uuid.NewString())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "crew restart: %v\n", err)
+		os.Exit(1)
+	}
+	if parsed.json {
+		printJSON(result)
+		return
+	}
+	line := fmt.Sprintf("Restart for %s is %s", crew.DisplayName(result.Member.ID), result.Restart.State)
+	if detail := strings.TrimSpace(protocol.Deref(result.Restart.Detail)); detail != "" {
+		line += ": " + detail
+	}
+	fmt.Fprintln(os.Stdout, line+".")
+}
+
 type crewDirList struct {
 	values []string
 	set    bool
@@ -252,6 +288,7 @@ type crewSetArgs struct {
 	cwd       *string
 	agent     *string
 	model     *string
+	effort    *string
 	awareness []string
 	json      bool
 }
@@ -262,6 +299,7 @@ func parseCrewSetArgs(args []string) (crewSetArgs, error) {
 	cwd := fs.String("cwd", "", "where the member's sessions launch")
 	agent := fs.String("agent", "", "the harness the member's days run on; empty goes back to the default")
 	model := fs.String("model", "", "the model the member's days run on; empty goes back to the configured default")
+	effort := fs.String("effort", "", "the reasoning effort the member's days run on; empty goes back to the harness default")
 	var dirs crewDirList
 	fs.Var(&dirs, "awareness-dir", "a directory the member's charter is about; repeat for several")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
@@ -278,6 +316,8 @@ func parseCrewSetArgs(args []string) (crewSetArgs, error) {
 			parsed.agent = agent
 		case "model":
 			parsed.model = model
+		case "effort":
+			parsed.effort = effort
 		}
 	})
 	if dirs.set {
@@ -286,8 +326,8 @@ func parseCrewSetArgs(args []string) (crewSetArgs, error) {
 			parsed.awareness = []string{}
 		}
 	}
-	if parsed.cwd == nil && parsed.agent == nil && parsed.model == nil && !dirs.set {
-		return crewSetArgs{}, errors.New("nothing to set — pass --cwd, --agent, --model, --awareness-dir, or any of them together")
+	if parsed.cwd == nil && parsed.agent == nil && parsed.model == nil && parsed.effort == nil && !dirs.set {
+		return crewSetArgs{}, errors.New("nothing to set — pass --cwd, --agent, --model, --effort, --awareness-dir, or any of them together")
 	}
 	return parsed, nil
 }
@@ -299,7 +339,7 @@ func runCrewSet(args []string) {
 		writeCrewHelp(os.Stderr)
 		os.Exit(2)
 	}
-	result, err := client.New("").CrewSet(parsed.member, parsed.cwd, parsed.agent, parsed.model, parsed.awareness)
+	result, err := client.New("").CrewSet(parsed.member, parsed.cwd, parsed.agent, parsed.model, parsed.effort, parsed.awareness)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew set: %v\n", err)
 		os.Exit(1)
@@ -309,7 +349,7 @@ func runCrewSet(args []string) {
 		return
 	}
 	record := result.Member
-	fmt.Printf("%s launches in %s on %s, model %s\n", crew.DisplayName(record.ID), valueOrDash(protocol.Deref(record.Cwd)), valueOrDash(protocol.Deref(record.Agent)), valueOrDash(protocol.Deref(record.Model)))
+	fmt.Printf("%s launches in %s on %s, model %s, effort %s\n", crew.DisplayName(record.ID), valueOrDash(protocol.Deref(record.Cwd)), valueOrDash(record.ResolvedAgent), valueOrDash(protocol.Deref(record.ResolvedModel)), valueOrDash(protocol.Deref(record.ResolvedEffort)))
 	fmt.Printf("awareness dirs: %s\n", valueOrDash(strings.Join(record.AwarenessDirs, ", ")))
 }
 
@@ -325,13 +365,13 @@ func printCrewList(w io.Writer, members []protocol.CrewMember) {
 		fmt.Fprintln(w, "No crew members are registered. A <name>/CHARTER.md home in the active profile's crew directory joins the roster at the daemon's next start.")
 		return
 	}
-	fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-10s  %s\n", "MEMBER", "STATE", "AGENT", "MODEL", "SESSION", "HOME")
+	fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-8s  %-10s  %s\n", "MEMBER", "STATE", "AGENT", "MODEL", "EFFORT", "SESSION", "HOME")
 	for _, member := range members {
 		state, session := "asleep", "-"
 		if id := strings.TrimSpace(protocol.Deref(member.BindingSession)); id != "" {
 			state, session = "awake", agentShortID(id)
 		}
-		fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-10s  %s\n", crew.DisplayName(member.ID), state, valueOrDash(protocol.Deref(member.Agent)), valueOrDash(protocol.Deref(member.Model)), session, member.HomeDir)
+		fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-8s  %-10s  %s\n", crew.DisplayName(member.ID), state, valueOrDash(member.ResolvedAgent), valueOrDash(protocol.Deref(member.ResolvedModel)), valueOrDash(protocol.Deref(member.ResolvedEffort)), session, member.HomeDir)
 	}
 	fmt.Fprintf(w, "\nAn awake MEMBER or SESSION works with `attn agent peek <target>`.\n")
 }

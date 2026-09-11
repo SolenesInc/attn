@@ -60,20 +60,21 @@ func TestAppPreDrainDispatchesReconcileAndCompletesItsClaim(t *testing.T) {
 	if _, err := d.store.RequestAppReconcileGap("approval-gate", 1, 4, now); err != nil {
 		t.Fatal(err)
 	}
-	runtime := startFakeAppRuntime(t, d, nil)
 	snapshots := make(chan appCurrentStateSnapshot, 1)
-	runtime.reconcile = func(f *fakeAppRuntime, req appReconcileRequest) error {
-		data, err := f.call("app.current.snapshot", appCurrentStateParams{Dispatch: req.Dispatch})
-		if err != nil {
-			return err
-		}
-		var snapshot appCurrentStateSnapshot
-		if err := json.Unmarshal(data, &snapshot); err != nil {
-			return err
-		}
-		snapshots <- snapshot
-		return nil
-	}
+	runtime := startConfiguredAppRuntime(t, d, fakeAppRuntimeHandlers{
+		reconcile: func(f *fakeAppRuntime, req appReconcileRequest) error {
+			data, err := f.call("app.current.snapshot", appCurrentStateParams{Dispatch: req.Dispatch})
+			if err != nil {
+				return err
+			}
+			var snapshot appCurrentStateSnapshot
+			if err := json.Unmarshal(data, &snapshot); err != nil {
+				return err
+			}
+			snapshots <- snapshot
+			return nil
+		},
+	})
 
 	hook := d.appPreDrain("approval-gate")
 	if err := hook(context.Background(), bus.Consumer{Name: apps.ConsumerName("approval-gate")}, nil); err != nil {
@@ -121,14 +122,15 @@ func TestAppPreDrainRetriesTheSameClaimAfterAThrow(t *testing.T) {
 	if _, err := d.store.RequestAppReconcileGap("approval-gate", 1, 4, now); err != nil {
 		t.Fatal(err)
 	}
-	runtime := startFakeAppRuntime(t, d, nil)
 	var attempts atomic.Int32
-	runtime.reconcile = func(_ *fakeAppRuntime, _ appReconcileRequest) error {
-		if attempts.Add(1) == 1 {
-			return errors.New("rebuild failed")
-		}
-		return nil
-	}
+	runtime := startConfiguredAppRuntime(t, d, fakeAppRuntimeHandlers{
+		reconcile: func(_ *fakeAppRuntime, _ appReconcileRequest) error {
+			if attempts.Add(1) == 1 {
+				return errors.New("rebuild failed")
+			}
+			return nil
+		},
+	})
 
 	hook := d.appPreDrain("approval-gate")
 	consumer := bus.Consumer{Name: apps.ConsumerName("approval-gate")}

@@ -40,6 +40,7 @@ import {
   disarmRefreshWitness,
   readRefreshWitness,
 } from './worktreesRefreshWitness';
+import { armNativePointerWitness, disarmNativePointerWitness, waitForNativePointerWitness } from './nativePointerWitness';
 
 const UI_AUTOMATION_REQUEST_EVENT = 'attn://ui-automation/request';
 const UI_AUTOMATION_RESPONSE_EVENT = 'attn://ui-automation/response';
@@ -2313,6 +2314,60 @@ export function useUiAutomationBridge({
         }
         return { text: (element.textContent ?? '').replace(/\s+/g, ' ').trim() };
       }
+      case 'dom_bounds': {
+        const selector = typeof payload.selector === 'string' ? payload.selector : null;
+        if (!selector) throw new Error('dom_bounds requires selector');
+        const element = document.querySelector(selector);
+        if (!(element instanceof HTMLElement)) {
+          throw new Error(`dom_bounds selector not found in DOM: ${selector}`);
+        }
+        return { bounds: rectSnapshot(element) };
+      }
+      case 'dom_wait': {
+        const selector = typeof payload.selector === 'string' ? payload.selector : null;
+        const includes = typeof payload.includes === 'string' ? payload.includes : null;
+        const focused = payload.focused === true;
+        const timeoutMs = typeof payload.timeoutMs === 'number' ? payload.timeoutMs : 0;
+        if (!selector) throw new Error('dom_wait requires selector');
+        if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('dom_wait requires a positive timeoutMs');
+
+        const readMatch = () => {
+          const element = document.querySelector(selector);
+          if (!(element instanceof HTMLElement)) return null;
+          const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim();
+          if (includes !== null && !text.includes(includes)) return null;
+          if (focused && document.activeElement !== element) return null;
+          return { text, focused: document.activeElement === element };
+        };
+        const immediate = readMatch();
+        if (immediate) return immediate;
+
+        return new Promise((resolve, reject) => {
+          const finish = () => {
+            const match = readMatch();
+            if (!match) return;
+            window.clearTimeout(timer);
+            observer.disconnect();
+            document.removeEventListener('focusin', finish);
+            resolve(match);
+          };
+          const observer = new MutationObserver(finish);
+          const timer = window.setTimeout(() => {
+            observer.disconnect();
+            document.removeEventListener('focusin', finish);
+            reject(new Error(
+              `dom_wait timed out after ${timeoutMs}ms: selector=${selector}, includes=${includes ?? '*'}, focused=${focused}`,
+            ));
+          }, timeoutMs);
+          observer.observe(document.documentElement, {
+            attributes: true,
+            childList: true,
+            subtree: true,
+            characterData: true,
+          });
+          document.addEventListener('focusin', finish);
+        });
+      }
       case 'dom_scroll_into_view': {
         const selector = typeof payload.selector === 'string' ? payload.selector : null;
         if (!selector) throw new Error('dom_scroll_into_view requires selector');
@@ -3166,6 +3221,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
+        const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
         const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
         const size = getPaneSize(viewSessionId, paneId);
         const cell = payload.cell as { col?: unknown; row?: unknown } | undefined;
@@ -3174,9 +3230,9 @@ export function useUiAutomationBridge({
         }
         selectSession(sessionId);
         await settleUi(1);
-        clickPaneCell(viewSessionId, paneId, size, { col: cell.col, row: cell.row });
+        clickPaneCell(ownerSessionId, paneId, size, { col: cell.col, row: cell.row });
         await settleUi(2);
-        return { sessionId, paneId, viewSessionId };
+        return { sessionId, paneId, ownerSessionId, viewSessionId };
       }
       case 'hover_pane_cell': {
         const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
@@ -3185,6 +3241,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
+        const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
         const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
         const size = getPaneSize(viewSessionId, paneId);
         const cell = payload.cell as { col?: unknown; row?: unknown } | undefined;
@@ -3194,7 +3251,7 @@ export function useUiAutomationBridge({
         selectSession(sessionId);
         await settleUi(1);
         const hovered = hoverPaneCell(
-          viewSessionId,
+          ownerSessionId,
           paneId,
           size,
           { col: cell.col, row: cell.row },
@@ -3202,7 +3259,7 @@ export function useUiAutomationBridge({
           payload.alt === true,
         );
         await settleUi(2);
-        return { sessionId, paneId, viewSessionId, cursor: getComputedStyle(hovered).cursor };
+        return { sessionId, paneId, ownerSessionId, viewSessionId, cursor: getComputedStyle(hovered).cursor };
       }
       case 'get_pane_cell_rect': {
         const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
@@ -3211,6 +3268,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
+        const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
         const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
         const size = getPaneSize(viewSessionId, paneId);
         const cell = payload.cell as { col?: unknown; row?: unknown } | undefined;
@@ -3220,8 +3278,9 @@ export function useUiAutomationBridge({
         return {
           sessionId,
           paneId,
+          ownerSessionId,
           viewSessionId,
-          ...paneCellRect(viewSessionId, paneId, size, { col: cell.col, row: cell.row }),
+          ...paneCellRect(ownerSessionId, paneId, size, { col: cell.col, row: cell.row }),
         };
       }
       case 'get_terminal_context_menu_state': {
@@ -3230,6 +3289,17 @@ export function useUiAutomationBridge({
       case 'get_annotation_state': {
         return annotationSurfaceState();
       }
+      case 'arm_native_pointer_witness': {
+        const selector = typeof payload.selector === 'string' ? payload.selector : '';
+        if (!selector) throw new Error('arm_native_pointer_witness requires selector');
+        armNativePointerWitness(selector);
+        return { armed: true };
+      }
+      case 'wait_native_pointer_witness': {
+        const receipt = await waitForNativePointerWitness();
+        await settleUi();
+        return receipt;
+      }
       case 'drag_pane_selection': {
         const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
         const session = sessions.find((entry) => entry.id === sessionId);
@@ -3237,6 +3307,7 @@ export function useUiAutomationBridge({
           throw new Error('Session not found');
         }
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
+        const ownerSessionId = resolvePaneOwnerSessionId(session, paneId);
         const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
         const size = getPaneSize(viewSessionId, paneId);
         const start = payload.start as { col?: unknown; row?: unknown } | undefined;
@@ -3250,7 +3321,7 @@ export function useUiAutomationBridge({
         await settleUi(1);
         const altKey = payload.altKey === true;
         dragPaneSelection(
-          viewSessionId,
+          ownerSessionId,
           paneId,
           size,
           { col: start.col, row: start.row },
@@ -3258,7 +3329,7 @@ export function useUiAutomationBridge({
           { altKey },
         );
         await settleUi(2);
-        return { sessionId, paneId, viewSessionId, start, end, altKey };
+        return { sessionId, paneId, ownerSessionId, viewSessionId, start, end, altKey };
       }
       case 'drag_leaf': {
         const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
@@ -4162,6 +4233,7 @@ export function useUiAutomationBridge({
     return () => {
       void unlistenPromise.then((unlisten) => unlisten());
       disarmRefreshWitness();
+      disarmNativePointerWitness();
     };
   }, []);
 }

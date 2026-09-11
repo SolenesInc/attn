@@ -279,4 +279,88 @@ describe('useDaemonSocket crew', () => {
 
     await expect(asked!).rejects.toThrow('cannot receive agent messages');
   });
+
+  it('sends one atomic launch selection and returns the authoritative revision', async () => {
+    const { ws, result } = await renderWithCrew([member('keel')]);
+
+    let saved: ReturnType<typeof result.current.sendCrewSet>;
+    act(() => {
+      saved = result.current.sendCrewSet({
+        member: 'keel', expectedRevision: 7, agent: 'codex', model: 'gpt-6-astra', effort: 'high',
+      });
+    });
+    const sent = JSON.parse(ws.sent[ws.sent.length - 1]);
+    expect(sent).toMatchObject({
+      cmd: 'crew_set', member: 'keel', expected_revision: 7,
+      agent: 'codex', model: 'gpt-6-astra', effort: 'high',
+    });
+
+    const current = {
+      ...member('keel'), revision: 8, agent: 'codex', model: 'gpt-6-astra', effort: 'high',
+      resolved_agent: 'codex', resolved_model: 'gpt-6-astra', resolved_effort: 'high',
+    };
+    act(() => {
+      ws.emit({
+        event: 'crew_set_result', request_id: sent.request_id, success: true, conflict: false, member: current,
+      });
+    });
+
+    await expect(saved!).resolves.toEqual({ success: true, conflict: false, member: current });
+  });
+
+  it('preserves an authoritative member on a settings conflict', async () => {
+    const { ws, result } = await renderWithCrew([member('keel')]);
+    let saved: ReturnType<typeof result.current.sendCrewSet>;
+    act(() => {
+      saved = result.current.sendCrewSet({
+        member: 'keel', expectedRevision: 7, agent: '', model: '', effort: '',
+      });
+    });
+    const sent = JSON.parse(ws.sent[ws.sent.length - 1]);
+    const current = { ...member('keel'), revision: 9, resolved_agent: 'claude' };
+    act(() => {
+      ws.emit({
+        event: 'crew_set_result', request_id: sent.request_id, success: false, conflict: true,
+        error: 'the member changed', member: current,
+      });
+    });
+
+    await expect(saved!).resolves.toEqual({
+      success: false, conflict: true, error: 'the member changed', member: current,
+    });
+  });
+
+  it('reuses the caller restart identity and ignores another request result', async () => {
+    const { ws, result } = await renderWithCrew([member('keel', 'sess-keel')]);
+    let restarted: ReturnType<typeof result.current.sendCrewRestart>;
+    act(() => {
+      restarted = result.current.sendCrewRestart({
+        member: 'keel', requestId: 'restart-stable', expectedSessionId: 'sess-keel', expectedRevision: 12,
+      });
+    });
+    const sent = JSON.parse(ws.sent[ws.sent.length - 1]);
+    expect(sent).toEqual({
+      cmd: 'crew_restart', request_id: 'restart-stable', member: 'keel',
+      expected_session_id: 'sess-keel', expected_revision: 12,
+    });
+
+    const current = {
+      ...member('keel', 'sess-keel'), revision: 13, resolved_agent: 'claude',
+      restart: { request_id: 'restart-stable', session_id: 'sess-keel', state: 'queued' },
+    };
+    act(() => {
+      ws.emit({
+        event: 'crew_restart_result', request_id: 'another-request', success: true, conflict: false,
+        member: current, restart: current.restart,
+      });
+      ws.emit({
+        event: 'crew_restart_result', request_id: 'restart-stable', success: true, conflict: false,
+        member: current, restart: current.restart,
+      });
+    });
+
+    await expect(restarted!).resolves.toEqual({
+      success: true, conflict: false, member: current, restart: current.restart,
+    });
+  });
 });

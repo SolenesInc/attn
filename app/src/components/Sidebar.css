@@ -1434,6 +1434,24 @@
   letter-spacing: 0;
 }
 
+.queue-band-manage {
+  margin-left: auto;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+
+.queue-band-manage:hover,
+.queue-band-manage:focus-visible {
+  color: var(--color-text-primary);
+}
+
 .queue-band-empty {
   color: var(--color-text-dimmed);
   font-size: var(--font-size-sm);

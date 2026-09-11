@@ -293,9 +293,28 @@ export interface CrewMember {
   readonly binding_session?: string
   readonly charter_path: string
   readonly cwd?: string
+  readonly effort?: string
   readonly home_dir: string
   readonly id: string
   readonly model?: string
+  readonly resolved_agent: string
+  readonly resolved_effort?: string
+  readonly resolved_model?: string
+  readonly restart?: CrewRestart
+  readonly revision: number
+}
+
+export type CrewRestartState = "queued" | "requested" | "failed" | "completed"
+
+export interface CrewRestart {
+  readonly delivery_status?: "notified" | "queued" | "refused"
+  readonly detail?: string
+  readonly error?: string
+  readonly letter_path?: string
+  readonly request_id: string
+  readonly session_id: string
+  readonly state: CrewRestartState
+  readonly successor_session_id?: string
 }
 
 export interface AppViewInfo {

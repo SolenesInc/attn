@@ -535,7 +535,7 @@ func TestCrewHandoff_ANewDayInheritsNoLetterToRetry(t *testing.T) {
 	}
 }
 
-func TestCrewHandoff_TheSuccessorCarriesTheClosedDaysLaunchParams(t *testing.T) {
+func TestCrewHandoff_TheSuccessorKeepsApprovalButReturnsToTheMembersLaunchPins(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("keel", "")
 	if err != nil {
@@ -560,11 +560,88 @@ func TestCrewHandoff_TheSuccessorCarriesTheClosedDaysLaunchParams(t *testing.T) 
 	if successor.ApprovalRoute != launchcontract.ApprovalRouteBypass || !successor.YoloMode {
 		t.Errorf("the successor launched route=%q yolo=%t; a nap must not silently change how a member runs", successor.ApprovalRoute, successor.YoloMode)
 	}
-	if successor.Effort != "high" {
-		t.Errorf("the successor launched effort=%q, want the closed day's high", successor.Effort)
+	if successor.Effort != "" {
+		t.Errorf("the successor carried the closed day's effort %q past the day boundary", successor.Effort)
 	}
 	if successor.Model != crewWakeFallbackModel {
 		t.Errorf("the successor launched model=%q, want the fallback %q", successor.Model, crewWakeFallbackModel)
+	}
+}
+
+func TestCrewHandoff_SettingsChangeClearsAnExactLaunchContractButKeepsItsApprovalRoute(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	woken, err := d.crewWake("keel", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	intent, ok := d.store.LaunchIntent(woken.SessionID)
+	if !ok {
+		t.Fatal("the woken day recorded no launch intent")
+	}
+	intent.ApprovalRoute = launchcontract.ApprovalRouteReviewer
+	intent.UnattendedLaunch = launchcontract.UnattendedLaunchSpec{
+		Agent: "claude", Model: crewWakeFallbackModel,
+		ApprovalProductMode: launchcontract.ApprovalAuto, ApprovalDriverMode: launchcontract.ApprovalAutoReview,
+		DirectoryTrust: launchcontract.TrustConfiguredDirectory, Recovery: launchcontract.RecoveryAdoptOrRestartFresh,
+	}
+	d.store.SetLaunchIntent(woken.SessionID, intent)
+	if response := crewSet(t, d, protocol.CrewSetMessage{Member: "keel", Model: protocol.Ptr("claude-haiku-4-5")}); !response.Ok {
+		t.Fatalf("crew set: %v", protocol.Deref(response.Error))
+	}
+
+	response := crewHandoffCall(t, d, woken.SessionID, "Use the new launch settings.")
+	if !response.Ok || response.CrewHandoffResult.NapError != nil {
+		t.Fatalf("handoff: %+v", response)
+	}
+	spawns := spawnedSessions(t, backend)
+	successor := spawns[len(spawns)-1]
+	if successor.Model != "claude-haiku-4-5" || !successor.UnattendedLaunch.IsZero() {
+		t.Fatalf("successor model/contract = %q/%#v", successor.Model, successor.UnattendedLaunch)
+	}
+	if successor.ApprovalRoute != launchcontract.ApprovalRouteReviewer || !successor.AutoApprove {
+		t.Fatalf("successor approval route/auto = %q/%t", successor.ApprovalRoute, successor.AutoApprove)
+	}
+}
+
+func TestCrewHandoff_OneDayHarnessOverrideReturnsToSavedPinsWithoutExecutableLeakage(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	d.store.SetSetting(SettingDefaultEffortPrefix+"claude", "medium")
+	if response := crewSet(t, d, protocol.CrewSetMessage{
+		Member: "keel", Agent: protocol.Ptr("claude"), Model: protocol.Ptr("claude-haiku-4-5"), Effort: protocol.Ptr(""),
+	}); !response.Ok {
+		t.Fatalf("save member launch pins: %v", protocol.Deref(response.Error))
+	}
+	woken, err := d.crewWake("keel", "codex")
+	if err != nil {
+		t.Fatalf("wake one day on codex: %v", err)
+	}
+	intent, ok := d.store.LaunchIntent(woken.SessionID)
+	if !ok {
+		t.Fatal("the overridden day recorded no launch intent")
+	}
+	intent.Executable = "/tmp/codex-one-day"
+	intent.ApprovalRoute = launchcontract.ApprovalRouteReviewer
+	intent.UnattendedLaunch = launchcontract.UnattendedLaunchSpec{
+		Agent: "codex", Model: "gpt-one-day", Effort: "high", Executable: "/tmp/codex-one-day",
+		ApprovalProductMode: launchcontract.ApprovalAuto, ApprovalDriverMode: launchcontract.ApprovalAutoReview,
+		DirectoryTrust: launchcontract.TrustConfiguredDirectory, Recovery: launchcontract.RecoveryAdoptOrRestartFresh,
+	}
+	d.store.SetLaunchIntent(woken.SessionID, intent)
+
+	response := crewHandoffCall(t, d, woken.SessionID, "Return to the saved launch contract.")
+	if !response.Ok || response.CrewHandoffResult.NapError != nil {
+		t.Fatalf("handoff: %+v", response)
+	}
+	spawns := spawnedSessions(t, backend)
+	successor := spawns[len(spawns)-1]
+	if successor.Agent != "claude" || successor.Model != "claude-haiku-4-5" || successor.Effort != "medium" {
+		t.Fatalf("successor agent/model/effort = %q/%q/%q", successor.Agent, successor.Model, successor.Effort)
+	}
+	if successor.Executable != "" || !successor.UnattendedLaunch.IsZero() {
+		t.Fatalf("successor leaked executable/contract = %q/%#v", successor.Executable, successor.UnattendedLaunch)
+	}
+	if successor.ApprovalRoute != launchcontract.ApprovalRouteReviewer || !successor.AutoApprove {
+		t.Fatalf("successor approval route/auto = %q/%t", successor.ApprovalRoute, successor.AutoApprove)
 	}
 }
 

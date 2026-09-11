@@ -24,14 +24,16 @@ import (
 	"github.com/victorarias/attn/internal/supervise"
 )
 
-type fakeAppRuntime struct {
-	t    *testing.T
-	conn net.Conn
-
-	handler func(*fakeAppRuntime, appDispatchRequest) error
-
+type fakeAppRuntimeHandlers struct {
+	handler   func(*fakeAppRuntime, appDispatchRequest) error
 	command   func(*fakeAppRuntime, appCommandRequest) (json.RawMessage, error)
 	reconcile func(*fakeAppRuntime, appReconcileRequest) error
+}
+
+type fakeAppRuntime struct {
+	fakeAppRuntimeHandlers
+	t    *testing.T
+	conn net.Conn
 
 	writeMu sync.Mutex
 
@@ -58,12 +60,19 @@ func (f *fakeAppRuntime) frozen() bool {
 
 func startFakeAppRuntime(t *testing.T, d *Daemon, handler func(*fakeAppRuntime, appDispatchRequest) error) *fakeAppRuntime {
 	t.Helper()
+	return startConfiguredAppRuntime(t, d, fakeAppRuntimeHandlers{handler: handler})
+}
+
+func startConfiguredAppRuntime(t *testing.T, d *Daemon, handlers fakeAppRuntimeHandlers) *fakeAppRuntime {
+	t.Helper()
 	serverConn, clientConn := net.Pipe()
+	// Connecting can immediately drain an owed reconcile; install every handler
+	// before the daemon can dispatch work to this runtime.
 	runtime := &fakeAppRuntime{
-		t:       t,
-		conn:    clientConn,
-		handler: handler,
-		pending: make(map[string]chan jsonRPCMessage),
+		fakeAppRuntimeHandlers: handlers,
+		t:                      t,
+		conn:                   clientConn,
+		pending:                make(map[string]chan jsonRPCMessage),
 	}
 
 	served := make(chan struct{})
