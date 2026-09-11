@@ -14,9 +14,9 @@ app_bundle="$("${attn}" profile resolve --profile "${profile}" --field appPath)"
 app_binary="$("${attn}" profile resolve --profile "${profile}" --field appDaemon)"
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
-  staged="app/src-tauri/target/release/bundle/macos/${app_name}.app"
+  staged="app/src-tauri/target/staged/${app_name}.app"
 else
-  staged="app/src-tauri/target/release/linux-tree/${app_name}"
+  staged="app/src-tauri/target/staged/linux-tree/${app_name}"
 fi
 
 if [[ ! -d "${staged}" ]]; then

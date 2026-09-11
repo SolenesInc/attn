@@ -77,6 +77,8 @@ runs:
       shell: bash
       env:
         CI: 'true'
+        # Acceptance tests what ships, not the unoptimized app-core named profiles get locally.
+        ATTN_APP_CARGO_PROFILE: release
       run: make build-app PROFILE="${{ inputs.profile }}"
 
     - name: Save Go build cache
@@ -97,7 +99,7 @@ runs:
         archive="$RUNNER_TEMP/app-tree.tar.gz"
         tar -czf "$archive" \
           attn \
-          "app/src-tauri/target/release/linux-tree/$app_name" \
+          "app/src-tauri/target/staged/linux-tree/$app_name" \
           plugins/attn-pi/node_modules
         echo "archive=$archive" >> "$GITHUB_OUTPUT"
         ls -l "$archive"

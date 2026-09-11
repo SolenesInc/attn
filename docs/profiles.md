@@ -51,6 +51,10 @@ Select the named profile before installing; `ATTN_PROFILE` must match `PROFILE`.
 | App, plugins, protocol, bundle metadata | `make dev` | `make install PROFILE=<name>` |
 
 Use a full build when unsure or when the daemon-only build misses the change.
+A named profile compiles the Rust shell with the `fast` cargo profile (release
+code paths, `app-core` unoptimized); the default profile, releases, and CI
+acceptance builds use `release`. `ATTN_APP_CARGO_PROFILE=release make install
+PROFILE=<name>` builds a named profile the shipping way.
 Open a named app with `make run PROFILE=<name>`.
 Full macOS builds/installs run outside the sandbox for keychain-backed signing;
 ad-hoc signing loses persistent permissions.
