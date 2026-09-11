@@ -22,16 +22,17 @@ export function parseScenarioList(value, catalog = scenarioCatalog, env) {
     throw new Error(`Duplicate scenario id: ${duplicate}`);
   }
 
-  const unavailable = ids
-    .map((id) => {
-      const scenario = catalog.find((entry) => entry.id === id);
-      const rule = scenario.skipOn?.linux;
-      const reason = typeof rule === 'object' && rule.unlessEnv && env === undefined
-        ? null
-        : scenarioSkipReason(scenario, 'linux', env || {});
-      return { id, reason };
-    })
-    .filter(({ reason }) => reason);
+  const unavailable = [];
+  for (const id of ids) {
+    const scenario = catalog.find((entry) => entry.id === id);
+    const rule = scenario.skipOn?.linux;
+    const reason = typeof rule === 'object' && rule.unlessEnv && env === undefined
+      ? null
+      : scenarioSkipReason(scenario, 'linux', env || {});
+    if (reason) {
+      unavailable.push({ id, reason });
+    }
+  }
   if (unavailable.length > 0) {
     throw new Error(`Scenario(s) unavailable on the Linux soak runner:\n${unavailable
       .map(({ id, reason }) => `  ${id}: ${reason}`)

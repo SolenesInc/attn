@@ -101,9 +101,13 @@ export function formatSoakSummary(records, { scenarioId, runnerClass }) {
 }
 
 export function iterationArtifactPaths(artifactsRoot, entriesBefore) {
-  return fs.readdirSync(artifactsRoot)
-    .filter((entry) => !entriesBefore.has(entry) && entry !== 'agent-tripwire')
-    .map((entry) => path.join(artifactsRoot, entry));
+  const paths = [];
+  for (const entry of fs.readdirSync(artifactsRoot)) {
+    if (!entriesBefore.has(entry) && entry !== 'agent-tripwire') {
+      paths.push(path.join(artifactsRoot, entry));
+    }
+  }
+  return paths;
 }
 
 export function retainIterationEvidence(artifactPaths, { failed, failedEvidenceOnly }) {
