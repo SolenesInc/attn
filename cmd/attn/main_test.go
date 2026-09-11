@@ -12,20 +12,10 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
-	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/toolhome"
 	"github.com/victorarias/attn/internal/transcript"
 )
-
-type fakeSessionStartClient struct {
-	ready    *protocol.SeedReadyResult
-	readyErr error
-}
-
-func (f *fakeSessionStartClient) SeedReady(string, string, bool) (*protocol.SeedReadyResult, error) {
-	return f.ready, f.readyErr
-}
 
 func TestWritePrivateFileReplacesPublicFileWithOwnerOnlyPermissions(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "capture.png")
@@ -422,26 +412,6 @@ func TestReadInitialPromptFileRemovesFile(t *testing.T) {
 	}
 }
 
-func TestLaunchGuidanceProvided(t *testing.T) {
-	t.Setenv("ATTN_AGENT_GUIDANCE", "developer_instructions")
-	t.Setenv("ATTN_CHIEF_GUIDANCE", "")
-	if !launchGuidanceProvided() {
-		t.Fatal("agent launch guidance should suppress hook guidance output")
-	}
-
-	t.Setenv("ATTN_AGENT_GUIDANCE", "")
-	t.Setenv("ATTN_CHIEF_GUIDANCE", "append_system_prompt")
-	if !launchGuidanceProvided() {
-		t.Fatal("chief launch guidance should suppress hook guidance output")
-	}
-
-	t.Setenv("ATTN_AGENT_GUIDANCE", "")
-	t.Setenv("ATTN_CHIEF_GUIDANCE", "")
-	if launchGuidanceProvided() {
-		t.Fatal("missing launch guidance should preserve hook fallback output")
-	}
-}
-
 type fakeNotebookGuideClient struct {
 	result *protocol.NotebookGuideResult
 	err    error
@@ -477,292 +447,40 @@ func TestResolveChiefNotebookRoot(t *testing.T) {
 	})
 }
 
-func TestSessionStartContextsCarriesPrimeOnStartupAndCompact(t *testing.T) {
-	t.Setenv("ATTN_AGENT_GUIDANCE", "developer_instructions")
-	t.Setenv("ATTN_CHIEF_GUIDANCE", "")
-	ready := &protocol.SeedReadyResult{Seeds: []protocol.Seed{{ID: "s-ready1", Title: "ready now"}}}
-
-	for _, event := range []string{"startup", "compact"} {
-		t.Run(event, func(t *testing.T) {
-			c := &fakeSessionStartClient{ready: ready}
-			contexts, primeErr := sessionStartContexts(c, "session-1")
-			if primeErr != nil {
-				t.Fatalf("SessionStart %s error = %v", event, primeErr)
-			}
-			raw := hooks.SessionStartOutput(contexts...)
-			var output struct {
-				HookSpecificOutput struct {
-					HookEventName     string `json:"hookEventName"`
-					AdditionalContext string `json:"additionalContext"`
-				} `json:"hookSpecificOutput"`
-			}
-			if err := json.Unmarshal([]byte(raw), &output); err != nil {
-				t.Fatalf("SessionStart %s output is not JSON: %v", event, err)
-			}
-			if output.HookSpecificOutput.HookEventName != "SessionStart" {
-				t.Fatalf("SessionStart %s event = %q", event, output.HookSpecificOutput.HookEventName)
-			}
-			if got, want := output.HookSpecificOutput.AdditionalContext, strings.TrimSpace(seedPrimeTailFromReady(ready)); got != want {
-				t.Fatalf("SessionStart %s tail differs:\n%s", event, firstDifference(got, want))
-			}
-			if strings.Contains(output.HookSpecificOutput.AdditionalContext, seedPrimeText) || strings.Contains(output.HookSpecificOutput.AdditionalContext, "attn seed prime") {
-				t.Fatalf("SessionStart %s re-injected standing guidance: %q", event, output.HookSpecificOutput.AdditionalContext)
-			}
-		})
-	}
-}
-
-func TestSessionStartContextsOutpostAddsNoPrimer(t *testing.T) {
-	const home = "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	t.Setenv("ATTN_AGENT_GUIDANCE", "append_system_prompt")
-	c := &fakeSessionStartClient{
-		readyErr: fmt.Errorf("seed garden is unavailable on this outpost; home is %s", home),
-	}
-	contexts, primeErr := sessionStartContexts(c, "session-1")
-	if primeErr == nil || !strings.Contains(primeErr.Error(), home) {
-		t.Fatalf("garden error = %v, want the home named", primeErr)
-	}
-	if output := hooks.SessionStartOutput(contexts...); output != "" {
-		t.Fatalf("outpost SessionStart output = %q, want no injected context", output)
-	}
-	if got := (hooks.Launch{}).Instructions(); strings.Contains(got, hooks.GardenGuidance) {
-		t.Fatalf("outpost launch guidance = %q, want no garden block", got)
-	}
-}
-
-func TestParseDelegateArgsDefaultsToCurrentWorkspace(t *testing.T) {
+func TestParseDelegateArgsBuildsExplicitRequest(t *testing.T) {
 	t.Setenv("ATTN_SESSION_ID", "source-session")
-
-	parsed, err := parseDelegateArgs([]string{"--brief", "Investigate this", "--model", "opus"})
+	parsed, err := parseDelegateArgs([]string{"--brief", "Investigate this", "--cwd", "/repo", "--new-worktree", "--branch", "feat/parser", "--from", "origin/main", "--role", "builder", "--model", "default", "--effort", "high"})
 	if err != nil {
-		t.Fatalf("parseDelegateArgs() error = %v", err)
+		t.Fatal(err)
 	}
-	if parsed.sourceSessionID != "source-session" || parsed.brief != "Investigate this" {
-		t.Fatalf("parsed = %+v", parsed)
+	msg := parsed.request
+	if protocol.Deref(msg.SourceSessionID) != "source-session" || msg.Assignment.Kind != protocol.DelegateAssignmentKindNew || protocol.Deref(msg.Assignment.Brief) != "Investigate this" {
+		t.Fatalf("%+v", msg)
 	}
-	if parsed.options.Placement != "current_workspace" {
-		t.Fatalf("placement = %q", parsed.options.Placement)
+	if msg.Cwd != "/repo" || msg.Checkout == nil || msg.Checkout.Kind != protocol.DelegateCheckoutKindNewWorktree || msg.Checkout.Branch != "feat/parser" || protocol.Deref(msg.Checkout.From) != "origin/main" {
+		t.Fatalf("%+v", msg)
 	}
-	if parsed.options.NoWorktree {
-		t.Fatal("plain delegation unexpectedly disabled the default worktree")
-	}
-}
-
-func TestParseDelegateArgsRejectsMultipleTaskSources(t *testing.T) {
-	args := []string{"--source-session", "source-session", "--brief", "text", "--brief-file", "brief.md", "--model", "opus"}
-	_, err := parseDelegateArgs(args)
-	if err == nil || !strings.Contains(err.Error(), "pass only one") {
-		t.Fatalf("parseDelegateArgs(%v) error = %v", args, err)
+	if msg.Model == nil || *msg.Model != "" || protocol.Deref(msg.Effort) != "high" {
+		t.Fatalf("%+v", msg)
 	}
 }
 
-func TestParseDelegateArgsNoWorktree(t *testing.T) {
-	parsed, err := parseDelegateArgs([]string{
-		"--source-session", "source-session",
-		"--brief", "Continue in this checkout",
-		"--model", "opus",
-		"--no-worktree",
-	})
-	if err != nil {
-		t.Fatalf("parseDelegateArgs() error = %v", err)
-	}
-	if !parsed.options.NoWorktree {
-		t.Fatal("options.NoWorktree = false, want true")
-	}
-}
-
-func TestParseDelegateArgsWorkspaceNoWorktreeKeepsConceptsSeparate(t *testing.T) {
-	parsed, err := parseDelegateArgs([]string{
-		"--source-session", "source-session",
-		"--brief", "Join this workspace from my current checkout",
-		"--workspace", "workspace-mixed",
-		"--no-worktree",
-		"--allow-worktree-reuse",
-		"--model", "opus",
-	})
-	if err != nil {
-		t.Fatalf("parseDelegateArgs() error = %v", err)
-	}
-	if parsed.options.Placement != "existing_workspace" || parsed.options.WorkspaceID != "workspace-mixed" || !parsed.options.NoWorktree || !parsed.options.AllowWorktreeReuse {
-		t.Fatalf("options = %+v", parsed.options)
-	}
-}
-
-func TestParseDelegateArgsRejectsNoWorktreeOverrides(t *testing.T) {
+func TestParseDelegateArgsRejectsRetiredAndConflictingInputs(t *testing.T) {
 	for _, args := range [][]string{
-		{"--no-worktree", "--worktree", "feat/parser"},
-		{"--no-worktree", "--repo", "/tmp/repo"},
-		{"--no-worktree", "--from", "main"},
-		{"--no-worktree", "--worktree-path", "/tmp/worktree"},
+		{"--brief", "Task", "--cwd", "/repo", "--workspace", "old", "--agent", "codex"},
+		{"--brief", "Task", "--seed", "s-abc123", "--cwd", "/repo", "--agent", "codex"},
+		{"--brief", "Task", "--cwd", "/repo", "--handover", "--agent", "codex"},
+		{"--brief", "Task", "--cwd", "/repo", "--choice", "hard", "--agent", "codex"},
+		{"--brief", "Task", "--cwd", "/repo", "--role", "builder", "--fallback"},
+		{"--brief", "Task", "--cwd", "/repo", "--branch", "feat/ignored", "--agent", "codex"},
+		{"--brief", "Task", "--cwd", "/repo", "--existing-branch", "feat/ignored", "--agent", "codex"},
+		{"--brief", "Task", "--cwd", "/repo", "--from", "origin/next", "--agent", "codex"},
+		{"--brief", "Task", "--cwd", "/repo", "--worktree-path", "/tmp/ignored", "--agent", "codex"},
+		{"--brief", "Task", "--cwd", "/repo", "--allow-worktree-reuse", "--agent", "codex"},
 	} {
-		_, err := parseDelegateArgs(append([]string{
-			"--source-session", "source-session",
-			"--brief", "Conflicting placement",
-			"--model", "opus",
-		}, args...))
-		if err == nil {
-			t.Fatalf("parseDelegateArgs(%v) error = %v", args, err)
+		if _, err := parseDelegateArgs(args); err == nil {
+			t.Fatalf("accepted %v", args)
 		}
-	}
-}
-
-func TestParseDelegateArgsNameSetsLabel(t *testing.T) {
-	parsed, err := parseDelegateArgs([]string{
-		"--source-session", "source-session",
-		"--brief", "Investigate this",
-		"--model", "opus",
-		"--name", "  launcher  ",
-	})
-	if err != nil {
-		t.Fatalf("parseDelegateArgs() error = %v", err)
-	}
-	if parsed.options.Label != "launcher" {
-		t.Fatalf("options.Label = %q, want %q", parsed.options.Label, "launcher")
-	}
-}
-
-func TestParseDelegateArgsModelAndEffort(t *testing.T) {
-	parsed, err := parseDelegateArgs([]string{
-		"--source-session", "source-session",
-		"--brief", "Investigate this",
-		"--model", " claude-fable-5 ",
-		"--effort", " low ",
-	})
-	if err != nil {
-		t.Fatalf("parseDelegateArgs() error = %v", err)
-	}
-	if parsed.options.Model != "claude-fable-5" || parsed.options.Effort != "low" {
-		t.Fatalf("options model/effort = %q/%q", parsed.options.Model, parsed.options.Effort)
-	}
-}
-
-func TestParseDelegateArgsRequiresModelBeforePreparingDelegation(t *testing.T) {
-	t.Setenv("ATTN_SESSION_ID", "source-session")
-
-	_, err := parseDelegateArgs([]string{"--brief-file", filepath.Join(t.TempDir(), "does-not-exist.md")})
-	if err == nil || !strings.Contains(err.Error(), "--model is required") ||
-		!strings.Contains(err.Error(), "--model gpt-5.6-sol") ||
-		!strings.Contains(err.Error(), "--model opus") ||
-		!strings.Contains(err.Error(), "--effort defaults to medium") {
-		t.Fatalf("parseDelegateArgs() error = %v", err)
-	}
-}
-
-func TestParseDelegateArgsWorktreeUsesCurrentWorkspace(t *testing.T) {
-	parsed, err := parseDelegateArgs([]string{
-		"--source-session", "source-session",
-		"--brief", "Implement the parser",
-		"--agent", "codex",
-		"--model", "gpt-5.6-sol",
-		"--worktree", "feat/parser",
-		"--repo", "/tmp/repo",
-		"--from", "main",
-		"--worktree-path", "/tmp/repo--feat-parser",
-	})
-	if err != nil {
-		t.Fatalf("parseDelegateArgs() error = %v", err)
-	}
-	if parsed.options.Placement != "current_workspace" ||
-		parsed.options.Agent != "codex" ||
-		parsed.options.Worktree != "feat/parser" ||
-		parsed.options.WorktreeRepo != "/tmp/repo" ||
-		parsed.options.StartingFrom != "main" ||
-		parsed.options.WorktreePath != "/tmp/repo--feat-parser" {
-		t.Fatalf("options = %+v", parsed.options)
-	}
-}
-
-func TestParseDelegateArgsWorktreeUsesExplicitNewWorkspace(t *testing.T) {
-	parsed, err := parseDelegateArgs([]string{
-		"--source-session", "source-session",
-		"--brief", "Implement the parser",
-		"--new-workspace",
-		"--model", "opus",
-		"--worktree", "feat/parser",
-	})
-	if err != nil {
-		t.Fatalf("parseDelegateArgs() error = %v", err)
-	}
-	if parsed.options.Placement != "new_workspace" ||
-		parsed.options.Worktree != "feat/parser" {
-		t.Fatalf("options = %+v", parsed.options)
-	}
-}
-
-func TestParseDelegateArgsRejectsAmbiguousPlacement(t *testing.T) {
-	for _, args := range [][]string{
-		{"--workspace", "workspace-target", "--new-workspace"},
-		{"--workspace", "workspace-target", "--cwd", "/some/dir"},
-	} {
-		_, err := parseDelegateArgs(append([]string{
-			"--source-session", "source-session",
-			"--brief", "Investigate this",
-			"--model", "opus",
-		}, args...))
-		if err == nil || !strings.Contains(err.Error(), "--workspace cannot be combined") {
-			t.Fatalf("parseDelegateArgs(%v) error = %v", args, err)
-		}
-	}
-}
-
-func TestParseDelegateArgsAcceptsWorkspaceWithWorktree(t *testing.T) {
-	parsed, err := parseDelegateArgs([]string{
-		"--source-session", "source-session",
-		"--brief", "Work in an existing workspace with a worktree",
-		"--workspace", "workspace-target",
-		"--model", "opus",
-		"--worktree", "feat/parser",
-	})
-	if err != nil {
-		t.Fatalf("parseDelegateArgs error = %v", err)
-	}
-	if parsed.options.Placement != "existing_workspace" ||
-		parsed.options.WorkspaceID != "workspace-target" ||
-		parsed.options.Worktree != "feat/parser" {
-		t.Fatalf("options = %+v", parsed.options)
-	}
-}
-
-func TestParseDelegateArgsAcceptsAPlot(t *testing.T) {
-	parsed, err := parseDelegateArgs([]string{
-		"--source-session", "source-session",
-		"--brief", "Tend this plot",
-		"--plot", "s-7k3f9m",
-		"--model", "opus",
-	})
-	if err != nil {
-		t.Fatalf("parseDelegateArgs error = %v", err)
-	}
-	if parsed.options.Plot != "s-7k3f9m" || parsed.options.Placement != "current_workspace" {
-		t.Fatalf("options = %+v", parsed.options)
-	}
-
-	bare, err := parseDelegateArgs([]string{
-		"--source-session", "source-session", "--brief", "Just work", "--model", "opus",
-	})
-	if err != nil {
-		t.Fatalf("parseDelegateArgs error = %v", err)
-	}
-	if bare.options.Plot != "" {
-		t.Fatalf("a delegation with no --plot was aimed at %q", bare.options.Plot)
-	}
-}
-
-func TestParseDelegateArgsAcceptsCwdWithWorktree(t *testing.T) {
-	parsed, err := parseDelegateArgs([]string{
-		"--source-session", "source-session",
-		"--brief", "Work in a worktree of the repo at this directory",
-		"--cwd", "/some/repo",
-		"--model", "opus",
-		"--worktree", "feat/parser",
-	})
-	if err != nil {
-		t.Fatalf("parseDelegateArgs() error = %v", err)
-	}
-	if parsed.options.Placement != "new_workspace" ||
-		parsed.options.CWD != "/some/repo" ||
-		parsed.options.Worktree != "feat/parser" {
-		t.Fatalf("options = %+v", parsed.options)
 	}
 }
 

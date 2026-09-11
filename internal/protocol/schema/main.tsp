@@ -1021,6 +1021,7 @@ model DelegationChoice {
 
 model DelegationRole {
   id: string;
+  builtin?: BuiltinDelegationRole;
   name: string;
   icon: string;
   enabled: boolean;
@@ -1031,6 +1032,13 @@ model DelegationRole {
   choices: DelegationChoice[];
 }
 
+enum BuiltinDelegationRole {
+  pathfinder,
+  builder,
+  reviewer,
+  orchestrator,
+}
+
 model DelegationFallback {
   selection: DelegationSelection;
   instructions: string;
@@ -1039,6 +1047,7 @@ model DelegationFallback {
 model DelegationPreferences {
   enabled: boolean;
   revision: safeint;
+  workflow_skill_enabled: boolean;
   roles: DelegationRole[];
   fallback: DelegationFallback;
 }
@@ -1079,6 +1088,7 @@ model DelegationPreferencesSaveMessage {
   cmd: "delegation_preferences_save";
   request_id: string;
   preferences: DelegationPreferences;
+  install_workflow_skill?: boolean;
 }
 
 model DelegationPreferencesResultMessage {
@@ -1088,6 +1098,8 @@ model DelegationPreferencesResultMessage {
   error?: string;
   preferences?: DelegationPreferences;
   templates?: DelegationRole[];
+  expanded_roles?: DelegationRole[];
+  workflow_skill_paths?: string[];
   harnesses?: DelegationHarness[];
 }
 
@@ -1122,32 +1134,53 @@ model DelegationRolesResult {
   guidance: string;
 }
 
+enum DelegateAssignmentKind {
+  new,
+  seed,
+}
+
+model DelegateHandover {
+  note?: string;
+}
+
+model DelegateAssignment {
+  kind: DelegateAssignmentKind;
+  brief?: string;
+  seed_id?: string;
+  handover?: DelegateHandover;
+}
+
+enum DelegateCheckoutKind {
+  reuse,
+  new_worktree,
+  existing_branch_worktree,
+}
+
+model DelegateCheckout {
+  kind: DelegateCheckoutKind;
+  branch: string;
+  from?: string;
+  path?: string;
+}
+
 model DelegateMessage {
   cmd: "delegate";
   request_id: string; // Stable caller-supplied idempotency key for one logical delegation
-  source_session_id: string;
-  brief: string; // Empty only when ticket_id supplies the task source
-  ticket_id?: string; // Existing ticket to adopt; mutually exclusive with brief
-  confirm?: boolean; // Allow takeover when the ticket has a non-orphan assignee
+  source_session_id?: string;
+  assignment: DelegateAssignment;
+  cwd: string;
+  checkout?: DelegateCheckout;
   agent?: string;
   label?: string;
   yolo_mode?: boolean;
-  placement?: string;
-  workspace_id?: string;
-  cwd?: string;
-  worktree?: DelegateWorktreeRequest;
   `model`?: string; // Pin the delegated agent's model (alias or full id); empty = agent default
   effort?: string; // Pin the delegated agent's reasoning effort; empty = agent default
   allow_worktree_reuse?: boolean; // Exceptional opt-in to share an existing worktree
-  plot?: string; // A crown to dispatch the delegate at: scope inference for its flag-free `ready` and launch priming, never a fence or an assignment
-  // A guarded transfer of one existing seed. The expected fields are the
-  // caller's read receipt; a changed seed is refreshed, never taken over.
-  handover?: SeedHandoverRequest;
   role?: string;
   choice?: string;
   fallback?: boolean;
-  preferences_revision?: safeint;
   provider?: string;
+  review?: SeedReviewActionContext;
 }
 
 model SeedHandoverRequest {
@@ -1156,8 +1189,8 @@ model SeedHandoverRequest {
   expected_rev: safeint;
   expected_tender_session: string;
   expected_tender_member: string;
-  // Present only when Handover resolves one captured Review garden item.
   review?: SeedReviewActionContext;
+  note_id?: string; // Reserved recovery identity for a new handoff note.
 }
 
 model DelegateStatusMessage {
@@ -6815,18 +6848,29 @@ model SessionReopenResult {
 }
 
 model DelegateResult {
+  seed_id: string;
   session_id: string;
-  workspace_id: string;
+  workspace_id?: string; // Internal pane placement; CLI output does not depend on it.
   directory: string;
   branch?: string;
-  placement: string;
-  worktree_created?: boolean;
+  checkout: string; // reused | created
+  worktree_created?: boolean; // Compatibility for internal UI projections.
+  role?: string;
+  agent: string;
+  `model`: string;
+  effort: string;
+  predecessor_session_id?: string;
   // When the harness first reported a turn (hook, transcript or plugin driver).
   // Absent when the delegation completed without that: the first turn is unconfirmed.
   first_turn_at?: string;
   // Why the first turn is unconfirmed: the wait hit its limit. Names the limit
   // and where to look. Absent when first_turn_at is set.
   first_turn_unconfirmed?: string;
+}
+
+model DelegationFailure {
+  code: string;
+  message: string;
 }
 
 enum DelegationOperationState {
@@ -6842,10 +6886,15 @@ model DelegationOperation {
   state: DelegationOperationState;
   progress: string;
   session_id: string;
-  workspace_id?: string;
-  ticket_id?: string;
+  seed_id?: string;
+  directory?: string;
+  branch?: string;
   worktree_path?: string;
   result?: DelegateResult;
+  failure?: DelegationFailure;
+  // Historical operation fields remain readable after the protocol upgrade.
+  workspace_id?: string;
+  ticket_id?: string;
   error?: string;
   created_at: string;
   updated_at: string;

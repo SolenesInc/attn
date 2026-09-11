@@ -48,7 +48,7 @@ async function main() {
     await runner.step('open_an_agent_with_a_reporting_seed', async () => {
       dispatcher = await createSessionAndWaitForInitialPane({ client, observer, cwd, label: 'Garden header setup', agent: 'shell' });
       const before = new Set(observer.sessionsById.keys());
-      runAttn(['delegate', '--agent', 'codex', '--model', 'gpt-5.4-mini', '--effort', 'low', '--yolo', '--new-workspace', '--no-worktree', '--cwd', cwd,
+      runAttn(['delegate', '--agent', 'codex', '--model', 'gpt-5.4-mini', '--effort', 'low', '--yolo', '--cwd', cwd,
         '--name', `garden-${dispatcher.slice(0, 8)}`,
         '--source-session', dispatcher, '--brief', 'Give the garden a little life']);
       await observer.waitFor(() => {

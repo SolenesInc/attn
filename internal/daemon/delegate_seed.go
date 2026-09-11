@@ -5,9 +5,111 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/victorarias/attn/internal/enrollment"
+	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
+
+func (d *Daemon) bindDelegationAssignment(operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID, cwd, agent string, fromChief, createSeed bool) (string, error) {
+	if err := d.requireHome(garden.Surface); err != nil {
+		return "", err
+	}
+	if bound, ok := d.gardenDispatchCrown(sessionID); ok {
+		dispatch, _ := d.gardenDispatch(sessionID)
+		if strings.TrimSpace(dispatch.OperationID) == strings.TrimSpace(operationID) || operationID == "" {
+			return bound, nil
+		}
+		return "", fmt.Errorf("session %s is already bound by another delegation operation", sessionID)
+	}
+	seedSchema, err := d.seedsCollection()
+	if err != nil {
+		return "", err
+	}
+	dispatchSchema, err := d.dispatchesCollection()
+	if err != nil {
+		return "", err
+	}
+
+	var seed garden.Seed
+	var seedExpected int64
+	if createSeed {
+		title := strings.TrimSpace(name)
+		if title == "" {
+			title = "delegated work"
+		}
+		body := strings.TrimSpace(brief)
+		if err := garden.ValidatePlant(title, body); err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(seedID) == "" {
+			return "", fmt.Errorf("new delegation seed identity was not reserved")
+		}
+		seed = garden.Seed{ID: seedID, Title: title, Body: body, Status: garden.StatusPlanted, StepSlug: garden.StepSlug(title), PlanterSession: plannerSessionID, PlanterMember: d.resolveTenderMember("", plannerSessionID), Edges: []garden.Edge{}, Vars: []garden.Var{}}
+		if parent := strings.TrimSpace(parentSeedID); parent != "" {
+			seed.Edges = append(seed.Edges, garden.Edge{Kind: garden.EdgePartOf, To: parent})
+		}
+		seedExpected = docstore.ExpectAbsent
+	} else {
+		var doc docstore.Document
+		seed, doc, err = d.readSeed(seedID)
+		if err != nil {
+			return "", err
+		}
+		if garden.Closed(seed.Status) {
+			return "", fmt.Errorf("%s is %s; replant it before delegating", seed.ID, seed.Status)
+		}
+		if holder := seed.Tender(); holder.Holds(d.sessionExists) {
+			return "", fmt.Errorf("seed %s has active holder %s; use --handover to transfer it", seed.ID, holder.DisplayName())
+		}
+		seedExpected = doc.Rev
+	}
+	previousStatus := seed.Status
+	seed, err = garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: sessionID}}, func(string) bool { return false })
+	if err != nil {
+		return "", err
+	}
+	if createSeed || seed.Status != previousStatus {
+		seed.StateChangedAt = formatGardenTime(d.gardenTime())
+	}
+	seed.LastExecutionID = sessionID
+	seedBody, err := seed.Encode()
+	if err != nil {
+		return "", err
+	}
+	dispatch := observedGardenExecution(&protocol.Session{ID: sessionID, Directory: cwd, Agent: protocol.SessionAgent(agent)}, "", d.gardenTime())
+	dispatch.Crown = seed.ID
+	dispatch.DispatcherSession = strings.TrimSpace(plannerSessionID)
+	dispatch.DispatcherMember = d.crewMembersBySession()[dispatch.DispatcherSession]
+	dispatch.FromChief = fromChief
+	dispatch.OperationID = strings.TrimSpace(operationID)
+	dispatchBody, err := dispatch.Encode()
+	if err != nil {
+		return "", err
+	}
+	dispatchExpected := docstore.ExpectAbsent
+	commits := []store.DocumentCommit{
+		{Write: store.DocumentWrite{Schema: *seedSchema, ID: seed.ID, Body: seedBody, Expected: &seedExpected}, Fact: documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false)},
+		{Write: store.DocumentWrite{Schema: *dispatchSchema, ID: sessionID, Body: dispatchBody, Expected: &dispatchExpected}, Fact: documentChangedFact(garden.Namespace, garden.CollectionDispatches, sessionID, false)},
+	}
+	d.gardenWatchMu.Lock()
+	written, err := d.store.CommitGardenDispatchWrites(commits, store.GardenSeedWatch{WatcherSessionID: sessionID, SeedID: seed.ID}, d.gardenTime())
+	d.gardenWatchMu.Unlock()
+	if err != nil {
+		var conflict *docstore.ConflictError
+		if errors.As(err, &conflict) {
+			return "", fmt.Errorf("seed or dispatch changed while binding delegation: %w", err)
+		}
+		return "", err
+	}
+	for i, commit := range commits {
+		d.announceCommittedWrite(commit.Fact, written[i].Seq)
+	}
+	d.rememberDispatchProjection(sessionID, dispatch, written[1].Rev)
+	d.publishFact(FactGardenTended, seed.ID, nil)
+	d.ringSeedActivity(seed.ID, gardenRingEvents[garden.VerbTend], sessionID, plannerSessionID)
+	return seed.ID, nil
+}
 
 // A home without Garden support may launch locally; a failed binding must surface.
 func (d *Daemon) bindDelegationSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent string, fromChief bool) (string, error) {
@@ -15,8 +117,6 @@ func (d *Daemon) bindDelegationSeed(sessionID, plannerSessionID, brief, name, cr
 	switch {
 	case err == nil:
 		d.logf("delegate: bound seed %q to session %s", seedID, sessionID)
-	case delegationSeedUnavailable(err):
-		d.logf("delegate: no seed bound to session %s: %v", sessionID, err)
 	default:
 		return "", fmt.Errorf("bind delegation for session %s: %w", sessionID, err)
 	}
@@ -89,11 +189,6 @@ func (d *Daemon) plantDelegatedSeed(sessionID, plannerSessionID, brief, name str
 	seed.LastExecutionID = sessionID
 	seed, _, err = d.mintAndPlant(*schema, seed)
 	return seed, err
-}
-
-func delegationSeedUnavailable(err error) bool {
-	var fenced *enrollment.FencedError
-	return errors.As(err, &fenced)
 }
 
 // validateDispatchCrown already refused a seed held by a live session; this

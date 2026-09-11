@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -46,11 +47,22 @@ func spawnCount(backend *fakeSpawnBackend) int {
 
 func delegateBoundSeed(t *testing.T, d *Daemon, backend *fakeSpawnBackend, sourceSessionID, agent string) (string, string) {
 	t.Helper()
+	if d.daemonInstanceID == "" {
+		id, err := enrollment.EnsureDaemonID(d.dataRoot)
+		if err != nil {
+			t.Fatalf("prepare test Garden identity: %v", err)
+		}
+		d.daemonInstanceID = id
+		if err := d.ensureEnrollment(); err != nil {
+			t.Fatalf("prepare test Garden enrollment: %v", err)
+		}
+	}
+	d.ensureGardenCollections()
 	consumeDelegatedPrompt(t, backend)
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: sourceSessionID,
-		Brief:           "Investigate the tracked task.",
+		SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief:           protocol.Ptr("Investigate the tracked task."),
 		Agent:           protocol.Ptr(agent),
 	})
 	if err != nil {

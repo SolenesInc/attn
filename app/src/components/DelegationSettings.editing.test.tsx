@@ -5,11 +5,14 @@ import { useDelegationPreferences } from '../hooks/useDelegationPreferences';
 import { createMockDaemon } from '../test/mocks/daemon';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
 import type { DelegationSettingsState, DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
-import type { DelegationPreferences } from '../types/generated';
+import { BuiltinDelegationRole, type DelegationPreferences } from '../types/generated';
 
-function setup(enabled = false) {
+function setup(enabled = false, configure?: (state: DelegationSettingsState) => DelegationSettingsState) {
   const role = { id: 'build', name: 'Build', icon: 'code', enabled: true, description: 'Implement a change', instructions: 'Run relevant tests', stopping_point: 'Return for review', default_choice_id: 'default', choices: [{ id: 'default', name: 'Everyday', when: '', selection: { harness: '', provider: '', model: '', effort: '' } }] };
-  let state: DelegationSettingsState = { preferences: { enabled, revision: 0, roles: enabled ? [role] : [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } }, templates: [role], harnesses: [{ id: 'codex', name: 'Codex', available: true, model_pin: true, effort_pin: true, discovery: true }] };
+  const template = { ...role, id: 'builder', builtin: BuiltinDelegationRole.Builder, name: '', icon: '', description: '', instructions: '', stopping_point: '' };
+  const expandedTemplate = { ...template, name: 'Builder', icon: 'code', description: 'Implement a change', instructions: 'Run relevant tests', stopping_point: 'Return for review' };
+  let state: DelegationSettingsState = { preferences: { enabled, revision: 0, workflow_skill_enabled: false, roles: enabled ? [role] : [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } }, templates: [template], expandedRoles: enabled ? [role, expandedTemplate] : [expandedTemplate], workflowSkillPaths: [], harnesses: [{ id: 'codex', name: 'Codex', available: true, model_pin: true, effort_pin: true, discovery: true }] };
+  if (configure) state = configure(state);
   const daemon = createMockDaemon();
   daemon.setResponse('load', () => structuredClone(state));
   daemon.setResponse('save', (args: unknown[]) => {
@@ -27,14 +30,60 @@ function setup(enabled = false) {
 
 afterEach(() => { cleanup(); useDelegationPreferencesPush.getState().clear(); });
 
-it('starts off, opts in to starter roles, discovers on request and preserves edits when disabled', async () => {
+it('renders a configured maintained role by built-in kind when a template shares its id', async () => {
+  setup(true, (state) => {
+    const configured = {
+      ...structuredClone(state.templates[0]),
+      id: 'orchestrator',
+      builtin: BuiltinDelegationRole.Pathfinder,
+    };
+    const pathfinderView = {
+      ...configured,
+      name: 'Pathfinder',
+      icon: 'search',
+      description: 'Investigate the path',
+      instructions: 'Find the path',
+      stopping_point: 'Return a plan',
+    };
+    const orchestratorView = {
+      ...structuredClone(state.templates[0]),
+      id: 'orchestrator',
+      builtin: BuiltinDelegationRole.Orchestrator,
+      name: 'Orchestrator',
+      icon: 'spark',
+      description: 'Coordinate work',
+      instructions: 'Coordinate',
+      stopping_point: 'Return the outcome',
+    };
+    return {
+      ...state,
+      preferences: { ...state.preferences, roles: [configured] },
+      templates: [orchestratorView],
+      expandedRoles: [pathfinderView, orchestratorView],
+    };
+  });
+
+  expect(await screen.findByRole('button', { name: 'Edit Pathfinder' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Edit Orchestrator' })).not.toBeInTheDocument();
+});
+
+it('enabling creates no roles, then explicitly adopts maintained roles and preserves them when disabled', async () => {
   const { daemon, getState } = setup();
   await screen.findByTestId('delegation-settings');
   expect(daemon.getCalls('load')).toHaveLength(1);
   expect(daemon.getCalls('models')).toHaveLength(0);
   fireEvent.click(screen.getByRole('checkbox', { name: 'Off' }));
-  await screen.findByRole('button', { name: 'Edit Build' });
-  fireEvent.click(screen.getByRole('button', { name: 'Edit Build' }));
+  await waitFor(() => expect(daemon.getCalls('save')).toHaveLength(1));
+  expect(getState().preferences.roles).toEqual([]);
+  expect(getState().preferences.workflow_skill_enabled).toBe(false);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Add Attn roles' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add Attn roles' }));
+  await waitFor(() => expect(daemon.getCalls('save')).toHaveLength(2));
+  expect(daemon.getCalls('save')[1].args[1]).toBe(true);
+  expect(getState().preferences.workflow_skill_enabled).toBe(true);
+  await screen.findByRole('button', { name: 'Edit Builder' });
+  fireEvent.click(screen.getByRole('button', { name: 'Edit Builder' }));
   expect(screen.queryByText('Start with one model')).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText('Harness'), { target: { value: 'codex' } });
   fireEvent.click(screen.getByRole('button', { name: 'Discover models' }));
@@ -43,18 +92,18 @@ it('starts off, opts in to starter roles, discovers on request and preserves edi
   fireEvent.change(screen.getByLabelText('Model'), { target: { value: JSON.stringify(['', 'model-a']) } });
   fireEvent.change(screen.getByLabelText('Effort'), { target: { value: 'medium' } });
   expect(screen.getByText('Instructions and stopping point').closest('details')).toHaveAttribute('open');
-  fireEvent.change(screen.getByLabelText('Instructions'), { target: { value: 'Verify the migration' } });
   fireEvent.click(screen.getByRole('button', { name: '+ Add alternative' }));
   fireEvent.change(screen.getByLabelText('Choice name'), { target: { value: 'Hard verification' } });
   fireEvent.change(screen.getByLabelText('Use when'), { target: { value: 'Verification is difficult' } });
   fireEvent.change(screen.getByLabelText('Effort'), { target: { value: 'high' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-  await waitFor(() => expect(daemon.getCalls('save')).toHaveLength(2));
+  await waitFor(() => expect(daemon.getCalls('save')).toHaveLength(3));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
   const saved = getState().preferences;
   expect(saved.roles[0].choices.map(c => c.selection.effort)).toEqual(['medium', 'high']);
   expect(saved.fallback.selection.harness).toBe('');
-  expect(saved.roles[0].instructions).toBe('Verify the migration');
+  expect(saved.roles[0].builtin).toBe('builder');
+  expect(saved.roles[0].instructions).toBe('');
   fireEvent.click(screen.getByRole('checkbox', { name: 'On' }));
   await screen.findByRole('checkbox', { name: 'Off' });
   expect(getState().preferences.roles).toEqual(saved.roles);

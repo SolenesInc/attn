@@ -1,0 +1,1 @@
+Use the relevant processes in the `attn-workflow` skill to investigate the question or develop the plan with the user. When a plan is ready, use its planning guidance to recommend an execution handoff.

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/delegationprefs"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
@@ -51,6 +52,7 @@ func (d *Daemon) handleDelegationPreferencesGet(client *wsClient, msg *protocol.
 	} else {
 		result.Success = true
 		result.Preferences = &cfg
+		result.ExpandedRoles = append(prompts.ExpandDelegationRoles(cfg.Roles), prompts.ExpandDelegationRoles(prompts.DelegationRoleTemplates())...)
 		result.Harnesses = d.delegationHarnesses()
 		result.Templates = prompts.DelegationRoleTemplates()
 	}
@@ -64,12 +66,46 @@ func (d *Daemon) handleDelegationPreferencesSave(client *wsClient, msg *protocol
 		d.sendToClient(client, result)
 		return
 	}
-	cfg, err := d.store.SaveDelegationPreferences(msg.Preferences)
+	current, err := d.store.GetDelegationPreferences()
+	var installedPaths []string
+	if err == nil {
+		err = delegationprefs.Validate(msg.Preferences)
+	}
+	if err == nil && msg.Preferences.WorkflowSkillEnabled && !current.WorkflowSkillEnabled && !protocol.Deref(msg.InstallWorkflowSkill) {
+		err = fmt.Errorf("enabling attn-workflow requires the explicit Add Attn roles install action")
+	}
+	if err == nil && protocol.Deref(msg.InstallWorkflowSkill) {
+		if !msg.Preferences.WorkflowSkillEnabled {
+			err = fmt.Errorf("the install action must save workflow_skill_enabled")
+		} else if msg.Preferences.Revision != current.Revision {
+			err = delegationprefs.ErrConflict
+		} else {
+			var harnesses []string
+			for _, harness := range d.delegationHarnesses() {
+				if harness.Available {
+					harnesses = append(harnesses, harness.ID)
+				}
+			}
+			var attempted bool
+			installedPaths, attempted, err = agentdriver.EnsureWorkflowSkillsInstalled(harnesses)
+			if err == nil && !attempted {
+				err = fmt.Errorf("attn-workflow installation is disabled for profile %q; saved preferences were not changed", config.ProfileLabel())
+			} else if err == nil && len(installedPaths) == 0 {
+				err = fmt.Errorf("no available harness has a supported attn-workflow skill directory")
+			}
+		}
+	}
+	var cfg delegationprefs.Config
+	if err == nil {
+		cfg, err = d.store.SaveDelegationPreferences(msg.Preferences)
+	}
+	result.WorkflowSkillPaths = installedPaths
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 	} else {
 		result.Success = true
 		result.Preferences = &cfg
+		result.ExpandedRoles = append(prompts.ExpandDelegationRoles(cfg.Roles), prompts.ExpandDelegationRoles(prompts.DelegationRoleTemplates())...)
 		result.Harnesses = d.delegationHarnesses()
 		result.Templates = prompts.DelegationRoleTemplates()
 		d.publishFact(FactDelegationPreferencesChanged, "preferences", nil)
@@ -94,7 +130,30 @@ func supportsModelDiscovery(driver agentdriver.Driver) bool {
 }
 
 func usesDelegationPreferences(msg *protocol.DelegateMessage) bool {
-	return msg.Role != nil || msg.Choice != nil || protocol.Deref(msg.Fallback) || msg.PreferencesRevision != nil
+	return msg.Role != nil || msg.Choice != nil || protocol.Deref(msg.Fallback)
+}
+
+func (d *Daemon) ensureDelegationWorkflowSkill(resolved *delegationprefs.Resolved) error {
+	harness := resolved.Selection.Harness
+	cfg, err := d.store.GetDelegationPreferences()
+	if err != nil {
+		return err
+	}
+	if !cfg.WorkflowSkillEnabled {
+		return nil
+	}
+	paths, attempted, err := agentdriver.EnsureWorkflowSkillsInstalled([]string{harness})
+	if err != nil {
+		return fmt.Errorf("sync attn-workflow before delegated role launch: %w", err)
+	}
+	if !attempted {
+		d.logf("skipping user-global attn-workflow skill sync for profile %q", config.ProfileLabel())
+		return nil
+	}
+	if len(paths) == 0 && resolved.Builtin != nil {
+		return fmt.Errorf("harness %q has no supported attn-workflow skill directory", harness)
+	}
+	return nil
 }
 
 func (d *Daemon) resolveDelegationPreferences(msg *protocol.DelegateMessage) (*delegationprefs.Resolved, error) {
@@ -108,7 +167,8 @@ func (d *Daemon) resolveDelegationPreferences(msg *protocol.DelegateMessage) (*d
 	if err != nil {
 		return nil, err
 	}
-	resolved, err := delegationprefs.Resolve(cfg, delegationprefs.Request{Role: protocol.Deref(msg.Role), Choice: protocol.Deref(msg.Choice), Fallback: protocol.Deref(msg.Fallback), Revision: msg.PreferencesRevision, Harness: msg.Agent, Provider: msg.Provider, Model: msg.Model, Effort: msg.Effort})
+	expanded := prompts.ExpandDelegationPreferences(cfg)
+	resolved, err := delegationprefs.Resolve(expanded, delegationprefs.Request{Role: protocol.Deref(msg.Role), Choice: protocol.Deref(msg.Choice), Fallback: protocol.Deref(msg.Fallback), Harness: msg.Agent, Provider: msg.Provider, Model: msg.Model, Effort: msg.Effort})
 	if err != nil {
 		return nil, err
 	}

@@ -2915,9 +2915,9 @@ describe('useDaemonSocket seed resume request/result', () => {
 
     const promise = result.current.sendSeedHandover({
       seedId: 's-1',
-      expectedRev: 7,
-      expectedTenderSession: 'sess-old',
-      expectedTenderMember: '',
+      requestId: 'stable-handover-request',
+      cwd: '/tmp/placed',
+      checkout: { kind: 'reuse', branch: 'feature' },
       sourceSessionId: 'sess-chief',
       handoff: 'Continue from the parser tests.',
     });
@@ -2925,17 +2925,12 @@ describe('useDaemonSocket seed resume request/result', () => {
     const sent = lastSent(ws);
     expect(sent).toMatchObject({
       cmd: 'delegate',
+      request_id: 'stable-handover-request',
       source_session_id: 'sess-chief',
-      brief: '',
-      handover: {
-        seed_id: 's-1',
-        expected_rev: 7,
-        expected_tender_session: 'sess-old',
-        expected_tender_member: '',
-        handoff: 'Continue from the parser tests.',
-      },
+      assignment: { kind: 'seed', seed_id: 's-1', handover: { note: 'Continue from the parser tests.' } },
+      cwd: '/tmp/placed',
+      checkout: { kind: 'reuse', branch: 'feature' },
     });
-    expect(sent).not.toHaveProperty('cwd');
 
     ws.emit({
       event: 'delegate_result',

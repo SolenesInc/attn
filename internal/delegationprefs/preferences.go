@@ -30,8 +30,21 @@ func Validate(c Config) error {
 			return fmt.Errorf("invalid or duplicate role id %q", role.ID)
 		}
 		ids[role.ID] = true
-		if strings.TrimSpace(role.Name) == "" {
-			return fmt.Errorf("role %q needs a name", role.ID)
+		if role.Builtin != nil {
+			switch *role.Builtin {
+			case protocol.BuiltinDelegationRolePathfinder, protocol.BuiltinDelegationRoleBuilder,
+				protocol.BuiltinDelegationRoleReviewer, protocol.BuiltinDelegationRoleOrchestrator:
+			default:
+				return fmt.Errorf("role %q has unknown built-in %q", role.ID, *role.Builtin)
+			}
+			if !c.WorkflowSkillEnabled {
+				return fmt.Errorf("role %q requires the attn-workflow skill opt-in", role.ID)
+			}
+			if strings.TrimSpace(role.Name+role.Icon+role.Description+role.Instructions+role.StoppingPoint) != "" {
+				return fmt.Errorf("role %q copies maintained guidance; save only its built-in reference and choices", role.ID)
+			}
+		} else if strings.TrimSpace(role.Name) == "" {
+			return fmt.Errorf("custom role %q needs a name", role.ID)
 		}
 		choices := map[string]bool{}
 		for _, choice := range role.Choices {
@@ -92,11 +105,12 @@ type Request struct {
 }
 
 type Resolved struct {
-	Selection     Selection `json:"selection"`
-	RoleName      string    `json:"role_name"`
-	Instructions  string    `json:"instructions"`
-	StoppingPoint string    `json:"stopping_point"`
-	Revision      int       `json:"revision"`
+	Builtin       *protocol.BuiltinDelegationRole `json:"builtin,omitempty"`
+	Selection     Selection                       `json:"selection"`
+	RoleName      string                          `json:"role_name"`
+	Instructions  string                          `json:"instructions"`
+	StoppingPoint string                          `json:"stopping_point"`
+	Revision      int                             `json:"revision"`
 }
 
 func Resolve(c Config, r Request) (Resolved, error) {
@@ -141,6 +155,7 @@ func Resolve(c Config, r Request) (Resolved, error) {
 			return out, fmt.Errorf("choice %q needs a Use when condition in Settings > Delegation", choiceID)
 		}
 		out.Selection, out.RoleName, out.Instructions, out.StoppingPoint = choice.Selection, role.Name, role.Instructions, role.StoppingPoint
+		out.Builtin = role.Builtin
 	}
 	s := &out.Selection
 	if r.Harness != nil && *r.Harness != s.Harness {

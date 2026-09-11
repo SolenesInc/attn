@@ -1,27 +1,49 @@
 package daemon
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/store"
 )
 
-func handoverRequest(seed garden.Seed, docRev int64, requestID, sourceSessionID, handoff string) *protocol.DelegateMessage {
-	return &protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, RequestID: requestID, SourceSessionID: sourceSessionID,
+func resolvedHandoverRequest(seed garden.Seed, docRev int64, requestID, sourceSessionID, handoff string) *resolvedDelegationLaunch {
+	return &resolvedDelegationLaunch{RequestID: requestID, SourceSessionID: protocol.Ptr(sourceSessionID),
 		Handover: &protocol.SeedHandoverRequest{
 			SeedID: seed.ID, Handoff: protocol.Ptr(handoff), ExpectedRev: int(docRev),
 			ExpectedTenderSession: seed.TenderSession, ExpectedTenderMember: seed.TenderMember,
 		},
 	}
+}
+
+func handoverRequest(d *Daemon, seed garden.Seed, requestID, sourceSessionID, handoff string) *protocol.DelegateMessage {
+	cwd := d.store.Get(sourceSessionID).Directory
+	if dispatch, ok := d.gardenDispatch(seed.TenderSession); ok && dispatch.Cwd != "" {
+		cwd = dispatch.Cwd
+	}
+	msg := &protocol.DelegateMessage{
+		Cmd: protocol.CmdDelegate, RequestID: requestID, SourceSessionID: protocol.Ptr(sourceSessionID),
+		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindSeed, SeedID: protocol.Ptr(seed.ID), Handover: &protocol.DelegateHandover{Note: protocol.Ptr(handoff)}},
+		Cwd:        cwd, Agent: protocol.Ptr("codex"),
+	}
+	if _, err := attngit.GetRepoRoot(cwd); err == nil {
+		branch, branchErr := attngit.GetCurrentBranch(cwd)
+		if branchErr == nil && branch != "" {
+			msg.Checkout = &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindReuse, Branch: branch}
+		}
+	}
+	return msg
 }
 
 func TestSeedHandoverReusesTheExactDirectoryAndConvergesOnRetry(t *testing.T) {
@@ -42,7 +64,7 @@ func TestSeedHandoverReusesTheExactDirectoryAndConvergesOnRetry(t *testing.T) {
 	if err := os.WriteFile(dirty, []byte("still here"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	seed, doc, err := d.readSeed(seedID)
+	seed, _, err := d.readSeed(seedID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +85,7 @@ func TestSeedHandoverReusesTheExactDirectoryAndConvergesOnRetry(t *testing.T) {
 		}
 	}
 	watchSeed(t, d, sourceSessionID, seedID, true)
-	msg := handoverRequest(seed, doc.Rev, "handover-reuse", sourceSessionID, "Continue from the failing test.")
+	msg := handoverRequest(d, seed, "handover-reuse", sourceSessionID, "Continue from the failing test.")
 	op, err := d.startDelegation(msg)
 	if err != nil {
 		t.Fatal(err)
@@ -107,19 +129,19 @@ func TestSeedHandoverReusesTheExactDirectoryAndConvergesOnRetry(t *testing.T) {
 	if len(notes) != 1 || notes[0].Kind != garden.NoteKindHandoff || notes[0].Body != "Continue from the failing test." {
 		t.Fatalf("handoff notes = %+v", notes)
 	}
-	if !strings.Contains(prompt, seed.Body) || !strings.Contains(prompt, notes[0].Body) || !strings.Contains(prompt, seedID) {
-		t.Fatalf("Handover prompt omitted seed context:\n%s", prompt)
+	if strings.Contains(prompt, seed.Body) || strings.Contains(prompt, notes[0].Body) || !strings.Contains(prompt, "attn seed show "+seedID) {
+		t.Fatalf("Handover prompt must reference the seed without copying its mutable content:\n%s", prompt)
 	}
 
-	if watching, err := d.store.GardenSeedWatching(sourceSessionID, seedID); err != nil || !watching {
-		t.Fatalf("new Handover did not subscribe dispatcher: %v %v", watching, err)
+	if watching, err := d.store.GardenSeedWatching(done.SessionID, seedID); err != nil || !watching {
+		t.Fatalf("new Handover did not subscribe successor: %v %v", watching, err)
 	}
-	watchSeed(t, d, sourceSessionID, seedID, true)
+	watchSeed(t, d, done.SessionID, seedID, true)
 	retry, err := d.startDelegation(msg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if watching, err := d.store.GardenSeedWatching(sourceSessionID, seedID); err != nil || watching {
+	if watching, err := d.store.GardenSeedWatching(done.SessionID, seedID); err != nil || watching {
 		t.Fatalf("Handover replay restored removed watch: %v %v", watching, err)
 	}
 	if retry.OperationID != done.OperationID || retry.SessionID != done.SessionID {
@@ -155,7 +177,7 @@ func TestSeedHandoverCannotBeUndoneByAnInFlightMetadataRefresh(t *testing.T) {
 			d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 			consumeDelegatedPrompt(t, backend)
 			oldSessionID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
-			seed, doc, err := d.readSeed(seedID)
+			seed, _, err := d.readSeed(seedID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -180,7 +202,7 @@ func TestSeedHandoverCannotBeUndoneByAnInFlightMetadataRefresh(t *testing.T) {
 			<-refreshRead
 
 			op, err := d.startDelegation(handoverRequest(
-				seed, doc.Rev, "handover-vs-"+strings.ReplaceAll(test.name, " ", "-"), sourceSessionID, ""))
+				d, seed, "handover-vs-"+strings.ReplaceAll(test.name, " ", "-"), sourceSessionID, ""))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -228,7 +250,7 @@ func TestSeedHandoverBroadcastRejectsAnOlderCommittedMetadataRefresh(t *testing.
 			d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 			consumeDelegatedPrompt(t, backend)
 			oldSessionID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
-			seed, doc, err := d.readSeed(seedID)
+			seed, _, err := d.readSeed(seedID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -256,7 +278,7 @@ func TestSeedHandoverBroadcastRejectsAnOlderCommittedMetadataRefresh(t *testing.
 			<-refreshCommitted
 
 			op, err := d.startDelegation(handoverRequest(
-				seed, doc.Rev, "handover-after-commit-"+strings.ReplaceAll(test.name, " ", "-"), sourceSessionID, ""))
+				d, seed, "handover-after-commit-"+strings.ReplaceAll(test.name, " ", "-"), sourceSessionID, ""))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -281,17 +303,17 @@ func TestSeedHandoverBroadcastRejectsAnOlderCommittedMetadataRefresh(t *testing.
 	}
 }
 
-func TestSeedHandoverLaunchFailureLeavesTheOldBindingUntouched(t *testing.T) {
+func TestSeedHandoverLaunchFailurePreservesTheCommittedTransfer(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
 	oldSessionID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
-	seed, doc, err := d.readSeed(seedID)
+	seed, _, err := d.readSeed(seedID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	backend.spawnErr = syscall.EPERM
 
-	op, err := d.startDelegation(handoverRequest(seed, doc.Rev, "handover-fails", sourceSessionID, "This must not land."))
+	op, err := d.startDelegation(handoverRequest(d, seed, "handover-fails", sourceSessionID, "This must not land."))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,14 +325,18 @@ func TestSeedHandoverLaunchFailureLeavesTheOldBindingUntouched(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if after.TenderSession != oldSessionID || after.LastExecutionID != oldSessionID {
-		t.Fatalf("failed Handover moved ownership: %+v", after)
+	if after.TenderSession != done.SessionID || after.LastExecutionID != done.SessionID {
+		t.Fatalf("failed Handover lost committed ownership: %+v", after)
 	}
 	if session := d.store.Get(done.SessionID); session != nil {
 		t.Fatalf("failed Handover left a worker: %+v", session)
 	}
-	if notes := seedNoteCount(t, d, seedID); notes != 0 {
-		t.Fatalf("failed Handover wrote %d notes", notes)
+	if notes := seedNoteCount(t, d, seedID); notes != 1 {
+		t.Fatalf("failed Handover retained %d notes, want its durable handoff", notes)
+	}
+	oldDispatch, _ := d.gardenDispatch(oldSessionID)
+	if oldDispatch.SupersededBy != done.SessionID {
+		t.Fatalf("predecessor dispatch was not superseded: %+v", oldDispatch)
 	}
 }
 
@@ -319,7 +345,7 @@ func TestSeedHandoverLosesCleanlyWhenTheSeedMovesDuringLaunch(t *testing.T) {
 	consumeDelegatedPrompt(t, backend)
 	oldSessionID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
 	addGardenSession(t, d, "racing-session")
-	seed, doc, err := d.readSeed(seedID)
+	seed, _, err := d.readSeed(seedID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -331,12 +357,12 @@ func TestSeedHandoverLosesCleanlyWhenTheSeedMovesDuringLaunch(t *testing.T) {
 		}
 	}
 
-	op, err := d.startDelegation(handoverRequest(seed, doc.Rev, "handover-race", sourceSessionID, "This must not land."))
+	op, err := d.startDelegation(handoverRequest(d, seed, "handover-race", sourceSessionID, "This must not land."))
 	if err != nil {
 		t.Fatal(err)
 	}
 	done := waitDelegationOperation(t, d, op.OperationID)
-	if done.State != protocol.DelegationOperationStateFailed || !strings.Contains(protocol.Deref(done.Error), "changed while the new worker was starting") {
+	if done.State != protocol.DelegationOperationStateFailed || done.Failure == nil || !strings.Contains(done.Failure.Message, "ownership or state changed") {
 		t.Fatalf("operation = %+v, want guarded race failure", done)
 	}
 	after, _, err := d.readSeed(seedID)
@@ -363,34 +389,127 @@ func TestSeedHandoverLosesCleanlyWhenTheSeedMovesDuringLaunch(t *testing.T) {
 	}
 }
 
-func TestSeedHandoverAsksForPlacementAndAcceptsAnExplicitDirectory(t *testing.T) {
+func TestSeedHandoverStopsAfterRepeatedSameHolderConflicts(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
-	seedWire := plant(t, d, protocol.SeedPlantMessage{Title: "unplaced work", Body: protocol.Ptr("Do the work.")})
-	seed, doc, err := d.readSeed(seedWire.ID)
+	_, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
+	seed, _, err := d.readSeed(seedID)
 	if err != nil {
 		t.Fatal(err)
 	}
+	attempts := 0
+	d.seedHandoverBeforeCommit = func() {
+		attempts++
+		editSeed(t, d, seedID, fmt.Sprintf("same holder edit %d", attempts))
+	}
 
-	missing := handoverRequest(seed, doc.Rev, "handover-needs-place", sourceSessionID, "")
-	op, err := d.startDelegation(missing)
+	op, err := d.startDelegation(handoverRequest(d, seed, "handover-conflict-limit", sourceSessionID, ""))
 	if err != nil {
 		t.Fatal(err)
 	}
 	done := waitDelegationOperation(t, d, op.OperationID)
-	if done.State != protocol.DelegationOperationStateFailed || !strings.Contains(protocol.Deref(done.Error), "choose one with --cwd") {
-		t.Fatalf("operation = %+v, want placement request", done)
+	if done.State != protocol.DelegationOperationStateFailed || done.Failure == nil || !strings.Contains(done.Failure.Message, "all 3 Handover attempts") {
+		t.Fatalf("operation = %+v, want bounded conflict failure", done)
 	}
+	if attempts != 3 {
+		t.Fatalf("handover attempts = %d, want 3", attempts)
+	}
+}
 
-	placed := handoverRequest(seed, doc.Rev, "handover-placed", sourceSessionID, "")
-	placed.Cwd = protocol.Ptr(t.TempDir())
-	op, err = d.startDelegation(placed)
+func TestAcceptedSeedHandoverRejectsHolderChangeBeforeRecoveryResolution(t *testing.T) {
+	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
+	consumeDelegatedPrompt(t, backend)
+	_, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
+	addGardenSession(t, d, "racing-session")
+	seed, doc, err := d.readSeed(seedID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	done = waitDelegationOperation(t, d, op.OperationID)
+	msg := handoverRequest(d, seed, "handover-accepted-race", sourceSessionID, "This must not target a later holder.")
+	encoded, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, claimed, err := d.store.ClaimDelegationOperationWithHandoverSnapshot(
+		msg.RequestID, "op-handover-accepted-race", "successor-session", "", seedID, string(encoded), "",
+		"", "", store.DelegationHandoverSnapshot{SeedRev: int(doc.Rev), TenderSession: seed.TenderSession, TenderMember: seed.TenderMember}, time.Now(),
+	)
+	if err != nil || !claimed {
+		t.Fatalf("claim = %+v, %v, %v", record, claimed, err)
+	}
+	if _, _, err := d.applySeedTransition(seedID, garden.VerbTend, garden.Ask{
+		Actor: garden.Tender{Session: "racing-session"}, Force: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	d.runDelegationOperation(record.Operation.OperationID)
+	done := waitDelegationOperation(t, d, record.Operation.OperationID)
+	if done.State != protocol.DelegationOperationStateFailed || done.Failure == nil || !strings.Contains(done.Failure.Message, "ownership changed after the delegation request was accepted") {
+		t.Fatalf("operation = %+v, want accepted-holder race failure", done)
+	}
+	after, _, err := d.readSeed(seedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.TenderSession != "racing-session" || d.store.Get(record.Operation.SessionID) != nil {
+		t.Fatalf("accepted handover overwrote the winner or spawned: seed=%+v session=%+v", after, d.store.Get(record.Operation.SessionID))
+	}
+}
+
+func TestAcceptedSeedHandoverPreservesSameTenderEditsBeforeRecoveryResolution(t *testing.T) {
+	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
+	consumeDelegatedPrompt(t, backend)
+	_, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
+	seed, acceptedDoc, err := d.readSeed(seedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := handoverRequest(d, seed, "handover-accepted-edit", sourceSessionID, "Continue from the latest seed body.")
+	edited := editSeed(t, d, seedID, "The same tender added current implementation details.")
+	_, editedDoc, err := d.readSeed(seedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if editedDoc.Rev <= acceptedDoc.Rev {
+		t.Fatalf("edited revision = %d, want newer than accepted revision %d", editedDoc.Rev, acceptedDoc.Rev)
+	}
+
+	runtime, err := d.resolveDelegateRuntimeWithHandoverSnapshot(
+		msg, seedID, "", "", "successor-session", "", false,
+		int(acceptedDoc.Rev), seed.TenderSession, seed.TenderMember, "", "",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.Handover == nil || runtime.Handover.ExpectedRev != int(editedDoc.Rev) {
+		t.Fatalf("handover = %+v, want current revision %d", runtime.Handover, editedDoc.Rev)
+	}
+	if got := protocol.Deref(runtime.Brief); got != edited.Body {
+		t.Fatalf("resolved body = %q, want latest %q", got, edited.Body)
+	}
+}
+
+func TestSeedHandoverUsesTheSubmittedDirectory(t *testing.T) {
+	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
+	consumeDelegatedPrompt(t, backend)
+	seedWire := plant(t, d, protocol.SeedPlantMessage{Title: "unplaced work", Body: protocol.Ptr("Do the work.")})
+	seed, _, err := d.readSeed(seedWire.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	placed := handoverRequest(d, seed, "handover-placed", sourceSessionID, "")
+	placed.Cwd = t.TempDir()
+	op, err := d.startDelegation(placed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := waitDelegationOperation(t, d, op.OperationID)
 	if done.State != protocol.DelegationOperationStateCompleted || done.Result == nil {
 		t.Fatalf("placed operation = %+v", done)
+	}
+	if attngit.CanonicalizePath(done.Result.Directory) != attngit.CanonicalizePath(placed.Cwd) {
+		t.Fatalf("directory = %q, want submitted %q", done.Result.Directory, placed.Cwd)
 	}
 	after, _, err := d.readSeed(seed.ID)
 	if err != nil {
@@ -423,7 +542,7 @@ func TestSeedHandoverFinishesAfterAnInterruptedLaunchCapturedTheNewSession(t *te
 	if !ok || before.Crown != "" {
 		t.Fatalf("interrupted dispatch = %+v, ok=%v", before, ok)
 	}
-	msg := handoverRequest(seed, doc.Rev, "handover-recovered", sourceSessionID, "Recovered after restart.")
+	msg := resolvedHandoverRequest(seed, doc.Rev, "handover-recovered", sourceSessionID, "Recovered after restart.")
 	if _, err := d.bindSeedHandover(msg, "op-recovered", newSessionID, d.store.Get(newSessionID).Directory, "codex", false); err != nil {
 		t.Fatalf("bind recovered Handover: %v", err)
 	}
@@ -438,6 +557,17 @@ func TestSeedHandoverFinishesAfterAnInterruptedLaunchCapturedTheNewSession(t *te
 	if !ok || dispatch.Crown != seedID || dispatch.OperationID != "op-recovered" {
 		t.Fatalf("recovered dispatch = %+v, ok=%v", dispatch, ok)
 	}
+	original := handoverRequest(d, seed, "handover-recovered-request", sourceSessionID, "Recovered after restart.")
+	runtime, err := d.resolveDelegateRuntimeWithHandoverSnapshot(
+		original, seedID, "", "", newSessionID, "", false,
+		int(doc.Rev), seed.TenderSession, seed.TenderMember, "op-recovered", "",
+	)
+	if err != nil || runtime.Handover == nil {
+		t.Fatalf("resolve already-bound handover = %+v, %v", runtime, err)
+	}
+	if runtime.PreviousTenderSession != seed.TenderSession {
+		t.Fatalf("recovered predecessor = %q, want accepted holder %q", runtime.PreviousTenderSession, seed.TenderSession)
+	}
 }
 
 func TestSeedHandoverDoesNotTakeAnotherSeedSharingTheOldSession(t *testing.T) {
@@ -446,12 +576,12 @@ func TestSeedHandoverDoesNotTakeAnotherSeedSharingTheOldSession(t *testing.T) {
 	oldSessionID, crownSeedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
 	secondWire := plant(t, d, protocol.SeedPlantMessage{Title: "second responsibility", Body: protocol.Ptr("Keep the first seed assigned too.")})
 	move(t, d, oldSessionID, secondWire.ID, garden.VerbTend, "", "")
-	second, doc, err := d.readSeed(secondWire.ID)
+	second, _, err := d.readSeed(secondWire.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	op, err := d.startDelegation(handoverRequest(second, doc.Rev, "handover-one-of-two", sourceSessionID, ""))
+	op, err := d.startDelegation(handoverRequest(d, second, "handover-one-of-two", sourceSessionID, ""))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -511,7 +641,7 @@ func TestSeedHandoverRecreatesTheSavedBranchAfterWorktreeDeletion(t *testing.T) 
 	if !attngit.RefExists(repo, "feature/handover") {
 		t.Fatal("worktree deletion removed a branch still owned by an open seed")
 	}
-	seed, doc, err := d.readSeed(seedWire.ID)
+	seed, _, err := d.readSeed(seedWire.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -520,7 +650,10 @@ func TestSeedHandoverRecreatesTheSavedBranchAfterWorktreeDeletion(t *testing.T) 
 		t.Fatalf("continuation = %+v, want safe branch recreation", continuation)
 	}
 
-	op, err := d.startDelegation(handoverRequest(seed, doc.Rev, "handover-recreate", sourceSessionID, "The old worktree was removed."))
+	request := handoverRequest(d, seed, "handover-recreate", sourceSessionID, "The old worktree was removed.")
+	request.Cwd = filepath.Join(repo, "nested")
+	request.Checkout = &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindExistingBranchWorktree, Branch: "feature/handover", Path: protocol.Ptr(worktree)}
+	op, err := d.startDelegation(request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -538,60 +671,43 @@ func TestSeedHandoverRecreatesTheSavedBranchAfterWorktreeDeletion(t *testing.T) 
 	}
 }
 
-func TestSeedHandoverSurvivesTheWorkerReportingItsConversationDuringTheBind(t *testing.T) {
+func TestSeedHandoverMergesConversationMetadataAfterTheBind(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
 	oldSessionID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
-	seed, doc, err := d.readSeed(seedID)
+	seed, _, err := d.readSeed(seedID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// The session-start hook of a fast agent writes the new session's dispatch
-	// between the bind's read and its commit.
-	var spawnedID string
-	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
-		if opts.InitialPromptFile != "" {
-			spawnedID = opts.ID
-		}
-	}
-	commitAttempts := 0
-	d.seedHandoverBeforeCommit = func() {
-		commitAttempts++
-		if commitAttempts > 1 {
-			return
-		}
-		if err := d.rememberDispatchResume(spawnedID, "codex-conv-hook"); err != nil {
-			t.Errorf("session-start hook during the bind: %v", err)
-		}
-	}
-	op, err := d.startDelegation(handoverRequest(seed, doc.Rev, "handover-hook", sourceSessionID, "Pick up where the tests failed."))
+	consumeDelegatedPrompt(t, backend)
+	op, err := d.startDelegation(handoverRequest(d, seed, "handover-hook", sourceSessionID, "Pick up where the tests failed."))
 	if err != nil {
 		t.Fatal(err)
 	}
 	done := waitDelegationOperation(t, d, op.OperationID)
-	if done.State != protocol.DelegationOperationStateCompleted || done.SessionID != spawnedID {
-		t.Fatalf("Handover operation = %+v, spawned %q", done, spawnedID)
+	if done.State != protocol.DelegationOperationStateCompleted {
+		t.Fatalf("Handover operation = %+v", done)
 	}
-	if commitAttempts != 2 {
-		t.Fatalf("commit attempts = %d, want the conflicting first try and one retry", commitAttempts)
+	if err := d.rememberDispatchResume(done.SessionID, "codex-conv-hook"); err != nil {
+		t.Fatalf("merge observed conversation metadata: %v", err)
 	}
-	if d.store.Get(spawnedID) == nil {
+	if d.store.Get(done.SessionID) == nil {
 		t.Fatal("the handed-over worker was terminated")
 	}
 	after, _, err := d.readSeed(seedID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if after.TenderSession != spawnedID || after.LastExecutionID != spawnedID {
+	if after.TenderSession != done.SessionID || after.LastExecutionID != done.SessionID {
 		t.Fatalf("handed-over seed = %+v", after)
 	}
-	dispatch, ok := d.gardenDispatch(spawnedID)
+	dispatch, ok := d.gardenDispatch(done.SessionID)
 	if !ok || dispatch.Crown != seedID || dispatch.Resume != "codex-conv-hook" || dispatch.OperationID != done.OperationID {
 		t.Fatalf("new dispatch lost the hook's write or the bind: %+v", dispatch)
 	}
-	if oldAfter, _ := d.gardenDispatch(oldSessionID); oldAfter.SupersededBy != spawnedID {
-		t.Fatalf("old dispatch superseded_by = %q, want %q", oldAfter.SupersededBy, spawnedID)
+	if oldAfter, _ := d.gardenDispatch(oldSessionID); oldAfter.SupersededBy != done.SessionID {
+		t.Fatalf("old dispatch superseded_by = %q, want %q", oldAfter.SupersededBy, done.SessionID)
 	}
 	if notes := seedNoteCount(t, d, seedID); notes != 1 {
 		t.Fatalf("handoff notes = %d, want exactly one after the retry", notes)

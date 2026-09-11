@@ -3,7 +3,9 @@ The garden holds the work. Syntax: `attn seed --help`.
 WRITING A BODY
 
 A seed body is a prompt for the agent who will do the work. A new delegation
-stores its brief as the body; handover sends the stored body to the next agent.
+stores its brief as the body. A delegation at an existing seed names that seed;
+the agent reads its current body and notes. Handover adds a short next-step note
+and transfers ownership before the successor starts.
 Write every body, including plot children, for someone without this conversation.
 Do this even when you plan to do the work yourself.
 

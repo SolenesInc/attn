@@ -273,9 +273,9 @@ func TestGardenPlot_DelegationDispatchesAtACrown(t *testing.T) {
 		primed, _ = d.gardenPrime(delegatedSessionID(t, d, sourceSessionID))
 	}
 
-	result, err := d.delegate(&protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, SourceSessionID: sourceSessionID,
-		Brief: "tend this plot", Plot: protocol.Ptr(planted.Crown.ID),
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
+		Cmd: protocol.CmdDelegate, SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief: protocol.Ptr("tend this plot"), Plot: protocol.Ptr(planted.Crown.ID),
 	})
 	if err != nil {
 		t.Fatalf("delegate: %v", err)
@@ -312,9 +312,9 @@ func TestGardenPlot_DelegationRefusesACrownThatIsNotHere(t *testing.T) {
 	spawned := false
 	backend.onSpawn = func(ptybackend.SpawnOptions) { spawned = true }
 
-	_, err := d.delegate(&protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, SourceSessionID: sourceSessionID,
-		Brief: "tend nothing", Plot: protocol.Ptr("s-zzzzzz"),
+	_, err := d.delegateResolved(&resolvedDelegationLaunch{
+		Cmd: protocol.CmdDelegate, SourceSessionID: protocol.Ptr(sourceSessionID),
+		Brief: protocol.Ptr("tend nothing"), Plot: protocol.Ptr("s-zzzzzz"),
 	})
 	if err == nil || !strings.Contains(err.Error(), "s-zzzzzz") {
 		t.Fatalf("delegate error = %v, want a refusal naming the crown", err)

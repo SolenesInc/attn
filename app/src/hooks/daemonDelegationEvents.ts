@@ -5,7 +5,9 @@ import { useDelegationPreferencesPush } from '../store/delegationPreferences';
 export interface DelegationSettingsState {
   preferences: DelegationPreferences;
   templates: DelegationRole[];
+  expandedRoles: DelegationRole[];
   harnesses: DelegationHarness[];
+  workflowSkillPaths: string[];
 }
 export interface DelegationModelCatalog { models: DelegationModel[]; detail: string }
 interface DelegationEvent {
@@ -15,6 +17,8 @@ interface DelegationEvent {
   request_id?: string;
   preferences?: DelegationPreferences;
   templates?: DelegationRole[];
+  expanded_roles?: DelegationRole[];
+  workflow_skill_paths?: string[];
   harnesses?: DelegationHarness[];
   models?: DelegationModel[];
   detail?: string;
@@ -24,7 +28,7 @@ interface DelegationEvent {
 export function handleDelegationDaemonEvent(event: DelegationEvent, pending: PendingRequests): boolean {
   if (event.event === 'delegation_preferences_result') {
     const extract = (value: DelegationEvent): DelegationSettingsState | undefined => value.preferences ? {
-      preferences: value.preferences, templates: value.templates ?? [], harnesses: value.harnesses ?? [],
+      preferences: value.preferences, templates: value.templates ?? [], expandedRoles: value.expanded_roles ?? [], harnesses: value.harnesses ?? [], workflowSkillPaths: value.workflow_skill_paths ?? [],
     } : undefined;
     if (!settlePendingRequest(pending, 'delegation_preferences_get', event, extract, 'Reading delegation preferences failed')) {
       settlePendingRequest(pending, 'delegation_preferences_save', event, extract, 'Saving delegation preferences failed');

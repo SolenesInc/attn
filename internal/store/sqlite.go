@@ -1241,6 +1241,9 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{139, "convert dispatch notifications to Garden subscriptions", ""},
 	{140, "auto mode globs become prefix rules, hosts and an approval policy", ``},
 	{141, "record where a plugin session's harness writes its transcript", ""},
+	{142, "add explicit delegation recovery facts", ""},
+	{143, "snapshot accepted delegation handovers", ""},
+	{144, "snapshot accepted delegation parents", ""},
 }
 
 const migration99SQL = `
@@ -1700,6 +1703,21 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			}
 		} else if m.version == 139 {
 			if err := migrateGardenDispatchWatches(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 142 {
+			if err := applyMigration142(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 143 {
+			if err := applyMigration143(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 144 {
+			if err := applyMigration144(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -3610,6 +3628,56 @@ func carryV88Collection(tx *sql.Tx, c v88Collection) (int, error) {
 	}
 	n, err := moved.RowsAffected()
 	return int(n), err
+}
+
+func applyMigration142(tx *sql.Tx) error {
+	columns := []string{"directory", "branch", "base_commit", "handoff_note_id", "failure_code"}
+	for _, column := range columns {
+		has, err := columnExists(tx, "delegation_operations", column)
+		if err != nil {
+			return err
+		}
+		if has {
+			continue
+		}
+		if _, err := tx.Exec("ALTER TABLE delegation_operations ADD COLUMN " + column + " TEXT NOT NULL DEFAULT ''"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func applyMigration143(tx *sql.Tx) error {
+	columns := []struct {
+		name       string
+		definition string
+	}{
+		{"handover_seed_rev", "INTEGER NOT NULL DEFAULT 0"},
+		{"handover_tender_session", "TEXT NOT NULL DEFAULT ''"},
+		{"handover_tender_member", "TEXT NOT NULL DEFAULT ''"},
+	}
+	for _, column := range columns {
+		has, err := columnExists(tx, "delegation_operations", column.name)
+		if err != nil {
+			return err
+		}
+		if has {
+			continue
+		}
+		if _, err := tx.Exec("ALTER TABLE delegation_operations ADD COLUMN " + column.name + " " + column.definition); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func applyMigration144(tx *sql.Tx) error {
+	has, err := columnExists(tx, "delegation_operations", "parent_seed_id")
+	if err != nil || has {
+		return err
+	}
+	_, err = tx.Exec("ALTER TABLE delegation_operations ADD COLUMN parent_seed_id TEXT NOT NULL DEFAULT ''")
+	return err
 }
 
 func columnExists(tx *sql.Tx, table, column string) (bool, error) {

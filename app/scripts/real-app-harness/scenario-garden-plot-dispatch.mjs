@@ -19,6 +19,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { recordingEnabled } from './windowRecording.mjs';
+import { writeMockAgentFixture } from './mockAgent.mjs';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -77,6 +78,18 @@ async function runInRevealedPane(client, pane, command, expected, timeoutMs = 30
   return runInPane(client, pane, command, expected, timeoutMs);
 }
 
+async function waitForMessageNotification(client, pane, messageID, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  let status = '';
+  while (Date.now() < deadline) {
+    status = await runInPane(client, pane,
+      `attn agent msg-status ${messageID} --session ${pane.sessionId}`, 'message');
+    if (saw(status, 'notified:') || saw(status, 'read:')) return status;
+    await delay(200);
+  }
+  throw new Error(`message ${messageID} never became readable: ${flat(status)}`);
+}
+
 async function awaitDockRow(client, seedID, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
   let state = { present: false, seeds: [] };
@@ -117,12 +130,29 @@ async function readDrill(client, seedID, ready, timeoutMs = 20_000) {
 async function openPane(client, observer, runner, label) {
   const cwd = path.join(runner.sessionDir, label);
   fs.mkdirSync(cwd, { recursive: true });
+  writeMockAgentFixture(cwd, {
+    name: 'plot delegate mock',
+    turns: [
+      {
+        includes: '📬 You have unread items in your attn inbox.',
+        actions: [{ type: 'attn', args: ['agent', 'inbox'] }],
+      },
+      {
+        includes: 'attn agent inbox ',
+        actions: [
+          { type: 'capture', from: 'prompt', pattern: 'agent inbox ([0-9a-f-]{36})', name: 'message' },
+          { type: 'capture', from: 'prompt', pattern: '--session ([0-9a-f-]{36})', name: 'session' },
+          { type: 'attn', args: ['agent', 'inbox', '{{message}}', '--session', '{{session}}'] },
+        ],
+      },
+    ],
+  });
   const sessionId = await createSessionAndWaitForInitialPane({
     client, observer, cwd, label, agent: 'shell',
   });
   const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${label}`, 20_000);
   await waitForPaneShellReady(client, sessionId, pane.paneId);
-  return { sessionId, paneId: pane.paneId };
+  return { sessionId, paneId: pane.paneId, cwd };
 }
 
 function seedIDs(text) {
@@ -186,8 +216,8 @@ async function main() {
       const known = new Set(observer.sessionsById.keys());
       await client.request('write_pane', {
         ...pane,
-        text: `attn delegate --agent shell --model none --no-worktree --source-session ${pane.sessionId} ` +
-          `--plot ${crown} --name plotdel --brief "Tend the plot you were dispatched at."`,
+        text: `attn delegate --agent shell --model none --source-session ${pane.sessionId} ` +
+          `--cwd ${pane.cwd} --seed ${crown} --name plotdel`,
       });
       let spawned = null;
       await observer.waitFor(() => {
@@ -286,8 +316,8 @@ async function main() {
       const [, parallel, sequenced] = children;
       const known = new Set(observer.sessionsById.keys());
       const refusedCrown = await runInPane(client, pane,
-        `attn delegate --agent shell --model none --no-worktree --source-session ${pane.sessionId} ` +
-          `--plot ${crown} --name plotdel2 --brief "Tend the plot you were dispatched at."`, 'one tender at a time');
+        `attn delegate --agent shell --model none --source-session ${pane.sessionId} ` +
+          `--cwd ${pane.cwd} --seed ${crown} --name plotdel2`, 'one tender at a time');
       runner.assert(saw(refusedCrown, `${crown} is being tended by ${delegated}`),
         'dispatching at a tended crown is refused and names its tender', { refusedCrown });
       runner.assert(observer.sessionsById.size === known.size,
@@ -295,8 +325,8 @@ async function main() {
 
       await client.request('write_pane', {
         ...pane,
-        text: `attn delegate --agent shell --model none --no-worktree --source-session ${pane.sessionId} ` +
-          `--plot ${parallel} --name plotdel2 --brief "Tend the seed you were dispatched at."`,
+        text: `attn delegate --agent shell --model none --source-session ${pane.sessionId} ` +
+          `--cwd ${pane.cwd} --seed ${parallel} --name plotdel2`,
       });
       await observer.waitFor(() => {
         second = [...observer.sessionsById.keys()].find((id) => !known.has(id)) ?? null;
@@ -343,6 +373,7 @@ async function main() {
       // print, so the id is read instead of the status word.
       const messageID = sent.match(/\(id\s*([0-9a-f-]{36})\)/)?.[1] ?? null;
       runner.assert(Boolean(messageID), 'the steer returned its mailbox id', { sent });
+      await waitForMessageNotification(client, pane, messageID);
 
       const delegatePane = await waitForFirstWorkspacePane(client, delegated, 'the delegate’s pane', 20_000);
       const tender = { sessionId: delegated, paneId: delegatePane.paneId };
@@ -449,9 +480,9 @@ async function main() {
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
-    for (const id of [delegated, second, pane?.sessionId]) {
-      if (id) await client.request('close_session', { sessionId: id }).catch(() => {});
-    }
+    await Promise.all([delegated, second, pane?.sessionId]
+      .filter(Boolean)
+      .map(id => client.request('close_session', { sessionId: id }).catch(() => {})));
     await client.quitApp().catch(() => {});
     await observer.close();
   }

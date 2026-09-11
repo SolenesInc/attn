@@ -17,6 +17,8 @@ const options = parseCommonArgs(process.argv.slice(2));
 const profile = currentHarnessProfile();
 if (!profile) throw new Error('Delegation preferences verification requires a named profile');
 const runner = createScenarioRunner(options, { scenarioId: 'DelegationPreferences', tier: 'local', prefix: 'delegation-preferences', allowRealAgents: false });
+process.env.ATTN_HARNESS_SKILL_SYNC = '1';
+process.env.ATTN_TOOL_HOME = path.join(runner.runDir, 'tool-home');
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath });
@@ -37,6 +39,7 @@ async function save() {
   await until(async () => !(await text()).includes('Unsaved changes') && !(await text()).includes('Saving…'), 'preferences saved');
 }
 async function screenshot(name) {
+  if (process.env.ATTN_HARNESS_SCREENSHOTS === '0') return;
   await driver.activateApp();
   const outputPath = path.join(runner.runDir, name);
   if (process.platform === 'darwin') {
@@ -48,7 +51,7 @@ async function screenshot(name) {
   }
 }
 
-function preferencesRequest(cmd, preferences) {
+function preferencesRequest(cmd, preferences, installWorkflowSkill = false) {
   const request_id = crypto.randomUUID();
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => { observer.ws?.off('message', receive); reject(new Error(`${cmd} timed out`)); }, 10000);
@@ -59,10 +62,10 @@ function preferencesRequest(cmd, preferences) {
       if (value.success) resolve(value); else reject(new Error(value.error));
     };
     observer.ws.on('message', receive);
-    observer.ws.send(JSON.stringify({ cmd, request_id, preferences }));
+    observer.ws.send(JSON.stringify({ cmd, request_id, preferences, ...(installWorkflowSkill ? { install_workflow_skill: true } : {}) }));
   });
 }
-let source, worker, baseline;
+let source, worker, baseline, builderRoleID;
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('close_sessions', () => closeScenarioSessions(client, [worker, source].filter(Boolean)));
@@ -86,27 +89,28 @@ try {
     runner.assert(appearanceStatus.trim() === '', 'appearance header has no decorative status pills');
     await screenshot('00-appearance.png'); await hold();
     await client.request('settings_select_section', { sectionId: 'delegation' });
-    await until(async () => (await text()).includes('Enable to configure roles and models for delegated work.'), 'disabled preferences');
+    await until(async () => (await text()).includes('Add Attn roles'), 'disabled preferences with role setup available');
     runner.assert(roles().roles.length === 0, 'roles lookup is empty before opt-in');
     await screenshot('01-disabled.png'); await hold();
   });
-  await runner.step('configure_role_directly', async () => {
+  await runner.step('profile_rejects_install_then_configure_custom_builder', async () => {
     await click(`${root} .delegation-switch input`);
-    await until(async () => (await text()).includes('Edit'), 'role list');
-    runner.assert(!(await text()).includes('Start with one model'), 'roles open without bulk setup');
-    const header = (await client.request('dom_text', { selector: '.settings-content-head' })).text;
-    runner.assert(!header.includes('% text') && !header.includes('dark'), 'header has no appearance badges');
-    await client.request('dom_focus', { selector: '[aria-label="Edit Build"]' });
-    await driver.pressEnter();
+    await until(async () => (await preferencesRequest('delegation_preferences_get')).preferences.enabled, 'delegation preferences enabled');
+    await click(`${root} > fieldset > button.settings-action`);
+    await until(async () => (await text()).includes('Adopt maintained roles'), 'maintained role adoption preview');
+    await click('[data-testid="delegation-add-attn-roles-confirm"]');
+    await until(async () => (await text()).includes('installation is disabled for profile'), 'profile-safe workflow install refusal');
+    runner.assert(roles().roles.length === 0, 'failed workflow installation leaves saved roles unchanged');
+    await click(`${root} .delegation-row.between button.settings-action`);
+    await type('.delegation-role-heading input', 'Builder');
     await select('.delegation-choice-body .delegation-fields > label:first-child select', 'codex');
     await save();
-    const found = roles();
-    runner.assert(found.roles.length === 1 && found.roles[0].id === 'build', 'only the configured role is available');
+    const [builder] = roles().roles;
+    runner.assert(builder?.id.startsWith('role-') && builder.name === 'Builder' && !builder.builtin, 'custom Builder saves without workflow installation');
+    builderRoleID = builder.id;
+    const header = (await client.request('dom_text', { selector: '.settings-content-head' })).text;
+    runner.assert(!header.includes('% text') && !header.includes('dark'), 'header has no appearance badges');
     await click('.delegation-tabs button:first-child');
-    for (const name of ['Verify', 'Orchestrator']) {
-      runner.assert((await text()).includes(name), `${name} is available as a starter role`);
-    }
-    await client.request('dom_scroll_into_view', { selector: '[aria-label="Edit Orchestrator"]' });
     await screenshot('02-roles.png'); await hold();
     await click('.delegation-tabs button:last-child');
     await select('.delegation-fields > label:first-child select', 'codex');
@@ -115,18 +119,17 @@ try {
     await screenshot('02-fallback.png'); await hold();
     await click('.delegation-tabs button:first-child');
   });
-  await runner.step('edit_role_and_add_effort_alternative', async () => {
-    await click('[aria-label="Edit Build"]');
-    await type('.delegation-behavior label:nth-of-type(1) textarea', 'Verify the change and preserve {{literal}} in the fixture.');
+  await runner.step('add_builder_effort_alternative', async () => {
+    await click('[aria-label="Edit Builder"]');
     await type('.delegation-choice-body .delegation-picker input[list]', 'medium');
     await click('[data-testid="delegation-add-choice"]');
     await type('.delegation-choice-body > label input', 'Difficult verification');
     await type('.delegation-choice-body > label textarea', 'Verification is difficult or the requirements are ambiguous.');
     await type('.delegation-choice-body .delegation-picker input[list]', 'high');
     await save();
-    const build = roles().roles.find(r => r.id === 'build');
-    runner.assert(build.choices.length === 2 && build.choices[1].selection.effort === 'high', 'alternative retains its native effort');
-    runner.assert(build.instructions.includes('{{literal}}'), 'user guidance stays literal');
+    const builder = roles().roles.find(r => r.id === builderRoleID);
+    runner.assert(builder.choices.length === 2 && builder.choices[1].selection.effort === 'high', 'alternative retains its native effort');
+    runner.assert(!builder.builtin, 'model edits preserve the custom role');
     await screenshot('03-role-editor.png'); await hold();
     await client.request('dom_scroll_into_view', { selector: '.delegation-choice-body' });
     await screenshot('03-model-choices.png'); await hold();
@@ -149,12 +152,12 @@ try {
     await click('[data-testid="settings-close"]');
     fs.mkdirSync(runner.sessionDir, { recursive: true });
     source = await createSessionAndWaitForInitialPane({ client, observer, cwd: runner.sessionDir, label: 'Delegation source', agent: 'shell', sessionWaitMs: 30000 });
-    const output = runAttn(['delegate', '--source-session', source, '--no-worktree', '--role', 'build', '--preferences-revision', String(before.revision), '--effort', 'high', '--brief', 'Delegation settings verification. Wait for direction.', '--name', 'Build check']);
+    const output = runAttn(['delegate', '--source-session', source, '--role', builderRoleID, '--effort', 'high', '--brief', 'Delegation settings verification. Wait for direction.', '--cwd', runner.sessionDir, '--name', 'Builder check']);
     const result = JSON.parse(output.slice(output.indexOf('{')));
     worker = result.session_id;
     await observer.waitFor(() => observer.sessionsById.has(worker), 'visible delegated session');
-    const build = roles().roles.find(r => r.id === 'build');
-    runner.assert(build?.choices[0]?.selection.effort === 'medium', 'request effort does not mutate the role default');
+    const builder = roles().roles.find(r => r.id === builderRoleID);
+    runner.assert(builder?.choices[0]?.selection.effort === 'medium', 'request effort does not mutate the role default');
     runner.writeText('delegation-result.json', JSON.stringify(result, null, 2));
     await hold();
   });

@@ -1,1 +1,7 @@
-Attn delegation starts a separate agent session the user can inspect and steer. Use it when requested by the user or authorized by your assigned task or role. Before using it, read the attn skill’s delegation reference. If other instructions define another delegation router, role catalog, or model-selection policy and attn preferences are active too, stop before delegating and tell the user both systems are configured. Recommend disabling attn preferences in Settings > Delegation or removing the other instructions. A subagent is a native runtime subagent that reports to the calling agent, including “delegate subagents” and “dispatch subagents.” Use native subagents for internal subtasks.
+Attn delegation starts a separate agent session the user can inspect and steer. Start one when authorized by the user or the assigned task. Before delegating, read the delegation reference in the `attn` skill.
+
+Use Attn's configured roles and model choices by default. Honor an explicit user request to use a different role or model for a delegation without changing saved settings.
+
+If standing guidance in AGENTS.md, skills, or other instruction files conflicts with Attn's configuration, explain the specific conflict and ask the user which should govern.
+
+A subagent is a native runtime subagent that reports to its calling agent. An Attn delegation is a separate session.

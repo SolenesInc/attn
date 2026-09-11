@@ -223,7 +223,7 @@ async function main() {
       const before = seedIDs(binary, daemonEnv);
       const known = new Set(observer.sessionsById.keys());
       run(binary, [
-        'delegate', '--agent', 'shell', '--model', 'none', '--no-worktree',
+        'delegate', '--agent', 'shell', '--model', 'none', '--reuse-checkout', '--branch', 'feat/merged',
         '--cwd', fixture.worktrees.merged, '--name', 'wtproof',
         '--source-session', ownerSession, '--brief', BRIEF,
       ], daemonEnv, { timeout: DELEGATE_TIMEOUT_MS });
@@ -339,12 +339,9 @@ async function main() {
     await runner.finishFailure(error, { profile, seed, main: fixture?.main });
     throw error;
   } finally {
-    for (const id of [delegateSession, ownerSession]) {
-      if (!id) continue;
-      try {
-        await observer.unregisterMatchingSessions((session) => session.id === id, 20_000);
-      } catch {}
-    }
+    await Promise.all([delegateSession, ownerSession]
+      .filter(Boolean)
+      .map(id => observer.unregisterMatchingSessions((session) => session.id === id, 20_000).catch(() => {})));
     try { await client.quitApp(); } catch {}
     try { await observer.close(); } catch {}
   }

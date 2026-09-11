@@ -1,220 +1,110 @@
 # Delegation
 
-This file covers attn delegation mechanics. Confirm your role in SKILL.md first;
-delegated agents also read [delegated-agent.md](delegated-agent.md).
+Attn delegation starts a separate agent session the user can inspect and steer. Use it when authorized by the user or the assigned task. A subagent is a native runtime subagent that reports to its caller. Interpret the requested object: "dispatch an agent" means Attn; "use a subagent" means a native subagent.
 
-A subagent is always a native runtime subagent, including in phrases such as
-"delegate subagents" and "dispatch subagents."
+The seed holds the work: its outcome, plan, constraints, and verification. Delegation assigns an agent to that work, selecting its role, model, effort, and checkout at launch. The agent reads the seed and keeps its plan and progress current. A later handover can assign a different agent to the same seed, with a note explaining the next step and its authorization. The agent does not receive your conversation automatically.
 
-Native subagents report to the calling agent. Attn delegation creates a visible,
-full interactive agent session for the user: an agent they can inspect, converse
-with, and steer directly. Use it when the user requests it or your assigned
-task or role authorizes it. Use native subagents for internal subtasks.
+Use `attn delegate --help` for the installed command syntax. Read the complete brief before dispatching: state the outcome, starting context, constraints, authorization and verification. Name parent sections, sibling results and artifacts the agent needs and why. Use `attn seed guide` for seed authoring.
 
-Interpret the requested object first:
+## Choose the assignment
 
-- "delegate this problem" or "delegate this to an agent" means attn delegation
-- "dispatch an agent" means attn delegation
-- "use a subagent" means a native subagent
-- "delegate subagents to review" means native subagents
-- "dispatch subagents to investigate" means native subagents
+For new work, pass a brief. Attn creates its seed. If you are working on a reporting seed, the new seed becomes its child.
 
-Attn delegation starts another agent with a focused brief and binds it to a
-seed. A new seed stores the brief as its body; an existing seed keeps its body.
-The session becomes the seed's tender. It reports on the log, and you reach it
-with `attn agent msg <seed-id> "<note>"`. Read its work back with
-`attn seed show <seed-id>`. Each new delegation subscribes the dispatching
-session to that seed and its descendants. `attn seed unwatch <seed-id>` removes
-that watch; separate child watches remain. See [garden.md](garden.md) for
-coverage, queued updates, and rewatching.
+```sh
+attn delegate --brief-file question.md --role pathfinder --cwd /notes
+```
 
-Follow-up: read the seed. Never park a blocking Monitor on attn activity: a
-Monitor-blocked session reads as busy, which suppresses crew heartbeats and
-auto-sleep. Monitors remain useful for external waits such as CI; they are a
-helper, not an attn integration mechanism.
+This example assumes `/notes` is outside Git. `--brief "…"` works for short assignments.
 
-When you have what you needed from a delegate, close it:
-`attn agent close <seed-id> -m "why it is done"`. You may close a session you
-dispatched, and the reason is required. It is immediate, so read the seed first;
-the reason lands there as a note, and the seed keeps its tender and its state.
-See [converse-and-observe.md](converse-and-observe.md) for the rules and the
-refusals. Leaving finished delegates running is the cost this avoids: each one
-is a row the user has to judge later.
+For work already in a seed, read its current body and notes, then dispatch using the seed. Update the body first if the assignment has changed; do not supply a second brief.
 
-For a delegation that returns a durable plan, read the seed before continuing.
-`attn seed show <seed-id>` renders its current artifacts. If one is a repository
-path, pass that path and its repository in the follow-on brief and say that Git
-remains canonical. Otherwise pass the canonical Notebook document. The next agent
-edits that authority instead of creating a copy.
+```sh
+attn seed show s-example
+attn delegate --seed s-example --role builder \
+  --cwd /repo --reuse-checkout --branch feature-x
+```
 
-## Write the brief
+An existing seed may be a leaf or a plot. Its relationships remain intact. Closed work must be deliberately replanted before dispatch. Garden unavailable means delegation fails; there is no seedless fallback.
 
-The brief is the delegate's starting prompt. Write it for an agent without your
-conversation: state the task and outcome, starting context, constraints and
-scope, and how to verify and report completion. Follow `attn seed guide` for
-body authoring. Use plain words and a sketch when it explains the work more
-clearly ([showing.md](showing.md)).
+## Hand work to another agent
 
-For a plot child, name the parent sections, sibling results or artifacts the
-delegate must read and why. Related seed bodies are not included automatically.
-Check that the brief and those references give enough direction to start.
+Use handover to give the same seed to a fresh agent. Record what comes next and its authorization in a short handoff message; the plan stays in the body.
 
-Prefer a file so you can read and revise the complete brief before dispatch:
+```sh
+attn delegate --seed s-example --handover --role orchestrator \
+  --cwd /repo --reuse-checkout --branch feature-x \
+  -m "The user approved the plan in this seed. Execute it, coordinating implementation and review."
+```
 
-    brief_file="$(mktemp "${TMPDIR:-/tmp}/attn-delegate.XXXXXX")"
-    # Write the work prompt to this file.
-    attn delegate --brief-file "$brief_file" --model <model>
+Attn saves the note and transfers ownership before starting the successor. The previous agent remains running. Handover is the explicit transfer choice; there is no extra force/confirm flag. It does not grant permission beyond the user's authorized task. An ordinary progress note does not invalidate handover; a holder changing during preparation or the seed closing requires reconsidering the request.
 
-Use `--brief <text>` for short tasks. To track the same work without starting
-an agent, use `attn seed plant "<title>" -m "<brief>"`.
+For a completed design, recommend an Orchestrator when stronger-model advice and oversight justify coordinating Builders; otherwise recommend a Builder. Carry forward authorization already given. Agreement on a plan alone does not authorize implementation.
 
-## Dispatch at an existing seed
+## Choose the folder and checkout
 
-Read the current body and log first:
+Every delegation, including handover, requires `--cwd`. Attn does not infer it from a workspace or source session. Outside Git, the folder is enough. Inside Git, explicitly choose one mode and its branch arguments:
 
-    attn seed show <seed-id>
-    attn delegate --brief-file "$brief_file" --plot <seed-id> --model <model>
+```sh
+# Reuse a checkout on its current branch.
+attn delegate --seed s-example --role builder \
+  --cwd /repo --reuse-checkout --branch feature-x
 
-`--plot` binds the existing seed, but the opening prompt uses the supplied brief;
-it does not load or replace the stored body. Put the body's assignment and
-required references in the brief. Keep it consistent with the body, updating
-the body when the agreed task changes so a later handover gets that assignment.
+# Create a new branch and worktree from an explicit base.
+attn delegate --brief-file implementation.md --role builder \
+  --cwd /repo --new-worktree --branch feature-x --from origin/main
 
-The delegate becomes the seed's tender. A seed held by a live session refuses
-dispatch before any worktree or agent is created, naming who holds it. When the
-seed is a plot, `attn seed ready` in the delegate lists that plot's ready children.
-Placement and worktree flags behave as usual.
+# Create a worktree for an existing local branch.
+attn delegate --seed s-example --role builder \
+  --cwd /repo --new-worktree --existing-branch feature-x
+```
 
-## Naming the session
+Reuse includes an existing linked worktree. It verifies the branch without switching it. New-worktree mode generates a destination and reports its path; use `--worktree-path` for a specific destination. A cwd subdirectory is preserved in the resulting worktree.
 
-`--name` is what a person reads in the sidebar and the session ledger: a few
-plain words about the work, up to 48 characters (`review store tripwires`,
-`pi resume support`). Never an id: seed ids go in `--plot`, and a name that is
-a seed id, a hash, or a ticket key is treated as a placeholder and replaced by
-a generated title. Without `--name` the session starts as its directory name
-and attn titles it from the brief.
+New branch mode uses the specified committed base, not dirty changes in the source checkout. An unavailable base fails; fetch explicitly if needed. For a remote-tracking branch, use new branch mode with `--from remote/branch`. Existing-branch mode names a local branch.
 
-When the main work drifts from the name, rename it:
+Two conflicts have different recoveries:
 
-    attn session rename "<a few words>" [--session <id>]
+- Git already has the branch checked out elsewhere: use the reported folder with explicit reuse, or choose another branch. Attn will not turn a create request into reuse.
+- An active Attn agent uses the selected checkout: add `--allow-worktree-reuse` only when sharing is intended. Same-checkout handover exempts the predecessor; any other occupants still require the flag. No further sharing approval step follows it.
 
-The session defaults to the one running the command, so a delegate renames
-itself with one call.
+## Choose the role and model
 
-## Choose a role and model
+Read current configuration after deciding to delegate:
 
-After deciding to delegate, read the current preferences in one call:
+```sh
+attn delegate roles
+```
 
-    attn delegate roles
+`--json` returns the same catalog as structured data. Choose the role matching the outcome and a model alternative whose condition fits; otherwise use its default choice. Keep coherent work together. Roles share their instructions across model alternatives. Use the configured fallback when no role fits. With no configured roles or fallback, direct model selection remains available.
 
-The response contains every active role, its instructions and stopping point,
-all model choices and their conditions, and the unmatched-work fallback. It
-includes the configuration revision. `--json` provides the same data as JSON.
-There is no separate role-detail lookup.
+```sh
+attn delegate --brief-file question.md --cwd /notes --role pathfinder
+attn delegate --brief-file question.md --cwd /notes \
+  --role pathfinder --choice <choice-id>
+attn delegate --brief-file task.md --cwd /notes --fallback
+```
 
-If the response lists one or more roles or an unmatched-work fallback and other
-instructions define another delegation router, role catalog, or model-selection
-policy, both systems are active. Stop before delegating and tell the user about
-the conflict. Recommend disabling attn preferences in Settings > Delegation or
-removing the other instructions.
+Use Attn's configured roles and choices by default. Honor an explicit user model/role request for that delegation without saving it as a preference. If standing instructions in AGENTS.md, skills or other files actually conflict with the configuration, explain that conflict and ask which should govern.
 
-Keep related work together when one agent can own it coherently; do not create a
-separate session for every small task. Roles are alternative routes for delegated
-work, not a pipeline. Choose the role that fits each delegated unit of work. Split
-work across several sessions only when the user asks for that split or the assigned
-scope authorizes it and the split is independently useful. Choose an alternative
-whose condition fits, or use the role's default choice. Roles describe the work;
-choices set the harness, provider, model, and effort. Keep the task's scope and
-approval boundaries. If no role fits, use the configured fallback. If the request
-needs missing configuration, direct the user to Settings > Delegation. A response
-with no roles or fallback leaves existing custom routing and direct delegation
-available.
+`--agent` chooses the harness. `--model` and `--effort` override the selected values. A model change retains role instructions and clears inherited effort unless explicitly supplied; a harness change clears inherited model/provider/effort. Use `default` to explicitly select a harness's model or effort default. `--provider` identifies a plugin model provider where supported; direct plugin selection uses its supported model identifier. Never silently substitute an unavailable model. Resolve ambiguous names before dispatch.
 
-    attn delegate --brief-file "$brief_file" --role <role-id> --preferences-revision <revision>
-    attn delegate --brief-file "$brief_file" --role <role-id> --choice <choice-id> --preferences-revision <revision>
-    attn delegate --brief-file "$brief_file" --fallback --preferences-revision <revision>
+For direct delegation, choose the model explicitly. Available harnesses, models and effort levels depend on configuration; use the catalog and command help rather than assuming universal levels.
 
-Explicit requests override that delegation only. An effort-only request keeps
-the selected model and role: “build this, high effort” adds `--effort high`.
-A model change keeps role instructions but clears inherited effort unless the
-request also names effort. For “build this, Sol high”, resolve Sol to an exact
-model in the chosen harness and pass `--model <id> --effort high`. Ask if the
-model or harness is ambiguous. Changing `--agent` clears inherited model,
-provider, and effort. `--provider` selects a plugin provider. Use `--model default`
-or `--effort default` to use that harness default explicitly.
+## Follow progress and recover
 
-Never silently replace an unavailable choice or save a request override as a
-preference. A stale revision is an error; reread roles and reconsider before
-retrying. The launched agent receives the brief and selected role instructions,
-not the routing catalog.
+Successful launch output identifies the seed, session, folder/branch and operation. It means the agent launched, not that its work is done. Each new delegation creates an ordinary watch on its seed and descendants. Use the garden reference for watch/unwatch behavior; recovery does not recreate a watch you removed.
 
-For direct delegation, `--agent` selects a harness (otherwise the source
-harness is used), and `--model` is required. Plugin harnesses must support an
-initial prompt; exact models use their native identifiers, including
-`provider/model` where applicable. Direct delegation keeps its existing default
-of medium effort on harnesses that support it. Configured choices with blank
-model or effort use the harness default. Capabilities and available models vary
-by harness and account; do not assume a universal list of effort levels.
+Read work with `attn seed show <seed-id>` and reach the current tender with `attn agent msg <seed-id> "…"`. To speak to the previous session after handover, use its session identity with the messaging syntax in `attn agent --help`. Follow the reporting reference in the delegated session. Use incoming completion, progress and advice requests to decide when to respond; do not shadow every edit.
 
-## Placement
+If the CLI loses its response, check the request before starting another delegation:
 
-Placement answers two independent questions. Each flag answers one of them.
+```sh
+attn delegate status <request-id>
+```
 
-### Where the pane appears
+Retry identical input with the same `--request-id` to retrieve or continue that operation. A changed request needs a new ID. A terminal failed operation stays failed; an intentional new attempt uses the existing seed and explicit checkout under a new request ID.
 
-- no flag: the source session's workspace
-- `--workspace <id>`: an existing workspace
-- `--new-workspace`: a new workspace
-- `--cwd <path>`: a new workspace at that directory (this flag also moves the
-  checkout, see below)
+Launch failures leave transferred ownership and created worktrees/branches in place. Read the error's resource paths and current state, then explicitly reuse or remove the checkout. Attn does not restore the old owner or clean up the worktree automatically. An unknown outcome is not evidence that nothing started.
 
-Before creating a workspace, check whether one already fits. `attn list`
-groups sessions by `workspace_id`; the labels and directories show the domain
-workspaces the user keeps (code reviews, goalie rotation, triage). When the
-task matches one, place it there:
+When the delegate's work is complete and you no longer need its session, read the seed and use the close rules in `attn`'s conversation reference. A close is immediate; it is separate from harvesting the assignment.
 
-    attn delegate --brief-file "$brief_file" --workspace <workspace-id> --model <model>
-
-When delegating several independent items, route each to the workspace that
-fits its domain instead of creating one per item.
-
-`attn list` marks sessions in hidden workspaces with `workspace_muted: true`.
-When the source session is the chief of staff, delegating into a muted
-workspace unmutes it so the new agent shows in the sidebar. Ordinary
-delegation leaves the mute state alone.
-
-### Which checkout the agent edits
-
-- no flag: a new worktree. Its repository is the source checkout's; with
-  `--workspace`, it is the one that workspace's existing sessions are in, and
-  delegation fails and asks for `--repo` when they span more than one.
-- `--no-worktree`: the source session's checkout, whatever workspace the pane
-  lands in.
-- `--cwd <path>`: that directory; combined with the default worktree, a
-  worktree of the repository at that path.
-
-A workspace never chooses the checkout. `--workspace` with `--no-worktree`
-moves only the pane, even when that workspace holds sessions from another
-repository.
-
-The worktree default applies even to read-only investigation or discussion.
-Pass `--no-worktree` when the user asks to reuse the current checkout, the
-delegation continues work already happening there, or repository or agent
-guidance requires it.
-
-A new worktree gets a generated branch; `--worktree <branch>` names it. It
-starts from the repository's default branch (`origin/<default>` when that
-exists, otherwise the local one), never from what the source or main checkout
-has checked out. Pass `--from <ref>` to continue or stack on another branch.
-
-When the source directory is not a Git repository (a crew home, for instance),
-the flag-free default is refused rather than launching with no checkout. Any
-placement flag or `--no-worktree` is taken as consent.
-
-`attn delegate` refuses conflicting repository inputs before an agent starts
-(`--cwd` and `--repo` in different repositories, or a `--worktree-path` that
-already exists inside another one), and the error names both repositories.
-
-When running outside the source session, add `--source-session <session-id>`.
-Run `attn delegate --help` for the full flag list and the exact option
-combinations.

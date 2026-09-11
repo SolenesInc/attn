@@ -15,9 +15,9 @@ func (d *Daemon) handleDelegationRoles(conn net.Conn) {
 		d.sendError(conn, err.Error())
 		return
 	}
-	result := delegationprefs.Active(cfg)
+	result := delegationprefs.Active(prompts.ExpandDelegationPreferences(cfg))
 	if len(result.Roles) > 0 || result.Fallback != nil {
-		result.Guidance = prompts.DelegationRoutingGuidance(result.Revision)
+		result.Guidance = prompts.DelegationRoutingGuidance()
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, DelegationRoles: &result})
 }
