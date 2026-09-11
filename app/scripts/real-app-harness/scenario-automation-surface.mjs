@@ -325,11 +325,20 @@ async function main() {
 
     await runner.step('cleanup_probe_session', async () => {
       disableDefinition(binary, manualID, daemonEnv);
-      manualApplied = false;
       disableDefinition(binary, scheduledID, daemonEnv);
-      scheduledApplied = false;
       await cleanupSessionViaAppClose(client, observer, manualSessionID, RESTART_READY_TIMEOUT_MS);
       manualSessionID = '';
+
+      run(binary, ['automation', 'delete', manualID], daemonEnv);
+      manualApplied = false;
+      run(binary, ['automation', 'delete', scheduledID], daemonEnv);
+      scheduledApplied = false;
+      const definitions = runJSON(binary, ['automation', 'list'], daemonEnv) || [];
+      runner.assert(
+        !definitions.some((definition) => definition.id === manualID || definition.id === scheduledID),
+        'both fixture definitions are absent after cleanup',
+        { definitions, manualID, scheduledID },
+      );
     });
 
     await runner.finishSuccess({ profile, manualID, scheduledID, firstRunId, fixturePath });
@@ -338,14 +347,18 @@ async function main() {
     await runner.finishFailure(error, { profile, manualID, scheduledID, firstRunId, fixturePath });
     throw error;
   } finally {
-    // Disable before the fixture directory disappears: an enabled
-    // `directory` definition re-validates its path forever after.
+    // Disable first so a failed session teardown cannot leave a directory
+    // definition ticking against the fixture while cleanup continues.
     if (daemonEnv) {
       if (manualApplied) { try { disableDefinition(binary, manualID, daemonEnv); } catch {} }
       if (scheduledApplied) { try { disableDefinition(binary, scheduledID, daemonEnv); } catch {} }
     }
     if (manualSessionID) {
       await cleanupSessionViaAppClose(client, observer, manualSessionID, RESTART_READY_TIMEOUT_MS).catch(() => {});
+    }
+    if (daemonEnv) {
+      if (manualApplied) { try { run(binary, ['automation', 'delete', manualID], daemonEnv); } catch {} }
+      if (scheduledApplied) { try { run(binary, ['automation', 'delete', scheduledID], daemonEnv); } catch {} }
     }
     if (fixturePath) {
       try { fs.rmSync(fixturePath, { recursive: true, force: true }); } catch {}
