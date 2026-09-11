@@ -11,7 +11,8 @@ export function parseScenarioList(value, catalog = scenarioCatalog, env) {
     throw new Error('Scenario ids must be a comma-separated list with no empty entries.');
   }
 
-  const known = new Set(catalog.map((scenario) => scenario.id));
+  const scenariosById = new Map(catalog.map((scenario) => [scenario.id, scenario]));
+  const known = new Set(scenariosById.keys());
   const unknown = ids.filter((id) => !known.has(id));
   if (unknown.length > 0) {
     throw new Error(`Unknown scenario id(s): ${unknown.join(', ')}\nKnown scenarios: ${[...known].join(', ')}`);
@@ -24,7 +25,7 @@ export function parseScenarioList(value, catalog = scenarioCatalog, env) {
 
   const unavailable = [];
   for (const id of ids) {
-    const scenario = catalog.find((entry) => entry.id === id);
+    const scenario = scenariosById.get(id);
     const rule = scenario.skipOn?.linux;
     const reason = typeof rule === 'object' && rule.unlessEnv && env === undefined
       ? null

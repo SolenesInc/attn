@@ -120,7 +120,7 @@ export function retainIterationEvidence(artifactPaths, { failed, failedEvidenceO
   return retained;
 }
 
-export function acquireSoakLock({ scenarioId, runDir, appPath }, {
+export function acquireSoakLock({ scenarioId, artifactsRoot, appPath }, {
   acquire = acquireScenarioLock,
   lockPath = packagedAppScenarioLockPath(),
   childPid = process.pid,
@@ -128,8 +128,8 @@ export function acquireSoakLock({ scenarioId, runDir, appPath }, {
   const release = acquire({
     scenarioId: `SOAK-${scenarioId}`,
     tier: 'soak',
-    runId: path.basename(runDir),
-    runDir,
+    runId: `soak-${scenarioId}`,
+    runDir: artifactsRoot,
     appPath,
   }, lockPath);
   process.env.ATTN_REAL_APP_SCENARIO_LOCK_PATH = `${lockPath}.children-${childPid}`;
@@ -328,8 +328,8 @@ async function main() {
   );
   const artifactsRoot = harnessArtifactsRoot();
   ensureDir(artifactsRoot);
+  releaseSoakLock = acquireSoakLock({ scenarioId, artifactsRoot, appPath });
   const { runDir } = createRunContext({ artifactsDir: artifactsRoot, sessionRootDir: artifactsRoot }, `soak-${scenarioId}`);
-  releaseSoakLock = acquireSoakLock({ scenarioId, runDir, appPath });
   console.log(`Soak target: ${appPath} (ATTN_HARNESS_PROFILE=${process.env.ATTN_HARNESS_PROFILE || '<default>'})`);
   for (const allowed of scenariosAllowingRealAgents([scenario])) {
     const which = allowed.allowRealAgents === true ? 'all' : allowed.allowRealAgents.join(', ');
