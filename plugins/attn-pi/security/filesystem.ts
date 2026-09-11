@@ -1,8 +1,11 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
+import { commandEnvironment } from "../sandbox/environment";
+import { sandboxArgv } from "../sandbox/exec";
+import type { SandboxMode } from "../sandbox/spec";
 import type { CredentialFilter } from "./filter";
 import { assertPath, type SecurityPolicy } from "./policy";
-import { sandboxCommand, sandboxEnvironment } from "./sandbox";
+import { specForPolicy } from "./sandbox";
 
 // Native tools use a small sandboxed worker so symlink races cannot bypass the OS policy.
 const workerSource = `
@@ -35,10 +38,23 @@ type Pending = { resolve: (value: unknown) => void; reject: (error: Error) => vo
 
 export class SandboxedFilesystem {
   private child: ChildProcessWithoutNullStreams | undefined;
+  private closed = false;
   private nextID = 0;
   private readonly pending = new Map<number, Pending>();
 
-  constructor(readonly policy: SecurityPolicy, private readonly filter: CredentialFilter) {}
+  constructor(readonly policy: SecurityPolicy, private readonly filter: CredentialFilter,
+    private readonly sandboxMode: SandboxMode = "workspace-write") {}
+
+  /** The session's permissions govern the native file tools too, the way Codex governs
+   * apply_patch by the sandbox policy (core/src/safety.rs, assess_patch_safety). */
+  assertWritable(path: string): string {
+    if (this.sandboxMode !== "read-only") {
+      return assertPath(this.policy, path, this.sandboxMode === "danger-full-access" ? "write-anywhere" : "write");
+    }
+    throw new Error("This session's permissions are read-only, so nothing was written. "
+      + "Ask the user to change /permissions, or run the change as a bash command with "
+      + "sandbox_permissions=require_escalated so a reviewer can approve it.");
+  }
 
   async read(path: string): Promise<Buffer> {
     return Buffer.from(await this.request("read", path) as string, "base64");
@@ -50,7 +66,16 @@ export class SandboxedFilesystem {
   async entries(path: string): Promise<string[]> { return await this.request("readdir", path) as string[]; }
   async directory(path: string): Promise<boolean> { return (await this.request("stat", path) as { directory: boolean }).directory; }
 
+  /** Retires the instance for good: a call racing the rebuild that replaced it must not
+   * bring this worker back under the permissions the session has already left. */
   close(): Promise<void> {
+    this.closed = true;
+    return this.abort();
+  }
+
+  /** Kills the worker so in-flight requests fail and the next call starts a fresh one.
+   * A cancelled tool call ends here; only close() retires the instance. */
+  abort(): Promise<void> {
     const child = this.child;
     this.child = undefined;
     this.fail(new Error("Security filesystem worker stopped"));
@@ -62,8 +87,13 @@ export class SandboxedFilesystem {
   }
 
   private async request(operation: string, path: string, content?: string): Promise<unknown> {
-    const mode = operation === "write" || operation === "mkdir" ? "write" : "read";
-    const target = assertPath(this.policy, path, mode);
+    if (this.closed) {
+      throw new Error("This session's file tools were rebuilt after a permissions change, so this call "
+        + "did nothing. Run it again to use the tools this session has now.");
+    }
+    const target = operation === "write" || operation === "mkdir"
+      ? this.assertWritable(path)
+      : assertPath(this.policy, path, "read");
     const child = this.child ?? this.start();
     const id = ++this.nextID;
     return new Promise((resolve, reject) => {
@@ -75,10 +105,13 @@ export class SandboxedFilesystem {
   }
 
   private start(): ChildProcessWithoutNullStreams {
-    const command = sandboxCommand(this.policy, process.execPath, ["-e", workerSource]);
+    // danger-full-access starts the worker unwrapped, giving up the symlink-race
+    // protection the OS sandbox provides, exactly as bash gives it up under that mode.
+    const spec = specForPolicy(this.policy, this.sandboxMode);
+    const command = sandboxArgv(spec, process.execPath, ["-e", workerSource]);
     const child = spawn(command.executable, command.args, {
       cwd: this.policy.cwd,
-      env: sandboxEnvironment(this.policy, this.filter.environment(process.env)),
+      env: commandEnvironment(spec, this.filter.environment(process.env)),
       stdio: ["pipe", "pipe", "pipe"],
     });
     this.child = child;
@@ -93,7 +126,7 @@ export class SandboxedFilesystem {
         if (message.error) pending?.reject(new Error(this.filter.text(message.error)));
         else pending?.resolve(message.value);
       } catch {
-        this.close();
+        this.abort();
       }
     });
     child.on("error", (error) => this.fail(new Error(`Security sandbox could not start: ${this.filter.text(error.message)}`)));

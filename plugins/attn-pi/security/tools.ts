@@ -94,7 +94,7 @@ export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter,
     } }),
     createEditToolDefinition(policy.cwd, { operations: {
       readFile: rawRead, writeFile: (path, content) => fs.write(path, content),
-      access: async (path) => { assertPath(policy, path, "write"); await fs.access(path); },
+      access: async (path) => { fs.assertWritable(path); await fs.access(path); },
     } }),
     createLsToolDefinition(policy.cwd, { operations: {
       exists: async (path) => { try { await fs.access(path); return true; } catch { return false; } },
@@ -132,7 +132,7 @@ export function protectedTools(policy: SecurityPolicy, filter: CredentialFilter,
     ) : tool.renderCall ? (args, theme, context) => tool.renderCall!(filter.value(args), theme, context) : undefined,
     async execute(id, args, signal, onUpdate, ctx) {
     if (signal?.aborted) throw new Error("Aborted");
-    const abort = () => fs.close();
+    const abort = () => fs.abort();
     signal?.addEventListener("abort", abort, { once: true });
     try {
       args = structuredClone(args);

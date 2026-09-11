@@ -4,9 +4,11 @@ import { renderEnvironment } from "../automode/environment";
 import type { DenialLedgerLike } from "../automode/ledger";
 import { commandEnvironment, sandboxSpecFor, wrapCommand, type ProxyAddress, type SandboxConfig } from "../sandbox/index";
 import type { Decider } from "../netproxy/index";
-import { loadApprovalConfig, type ApprovalConfig, type RawApprovalConfig } from "./config";
+import { loadApprovalConfig, type ApprovalConfig, type ApprovalPolicy, type RawApprovalConfig, type SandboxMode } from "./config";
 import { GuardianReviewer, type GuardianUsageEntry } from "./guardian";
 import { ApprovalOrchestrator, type OrchestratorDenial, type SandboxSource } from "./orchestrator";
+import { pickPreset } from "./permissions-ui";
+import { describePermissions, presetByID, presetFor, type Preset } from "./presets";
 import { compileRules } from "./rules";
 import { UserReviewer } from "./reviewers";
 import { transcriptFromSession, truncateForGuardian, maxToolEntryTokens } from "./transcript";
@@ -14,6 +16,8 @@ import type { Reviewer } from "./types";
 
 export const approvalConfigEnvVar = "ATTN_PI_AUTOMODE_CONFIG";
 export const statusKey = "attn-auto";
+
+export type Permissions = { approvalPolicy: ApprovalPolicy; sandboxMode: SandboxMode };
 
 export type ApprovalSuiteLike = {
   networkDecider: Decider | undefined;
@@ -77,8 +81,11 @@ export class PiApproval {
   private context: ExtensionContext | undefined;
   private noticed = false;
   private readonly problems: string[];
+  private pair: Permissions;
+  private readonly listeners: ((pair: Permissions) => Promise<void> | void)[] = [];
 
   constructor(private readonly setup: ApprovalSetup) {
+    this.pair = { approvalPolicy: setup.config.approvalPolicy, sandboxMode: setup.config.sandboxMode };
     const compiled = compileRules(setup.config);
     this.problems = compiled.problems;
     this.user = new UserReviewer({
@@ -87,8 +94,8 @@ export class PiApproval {
     });
     const local = createLocalBashOperations({ shellPath: "/bin/bash" });
     this.orchestrator = new ApprovalOrchestrator({
-      approvalPolicy: () => setup.config.approvalPolicy,
-      sandboxMode: () => setup.config.sandboxMode,
+      approvalPolicy: () => this.pair.approvalPolicy,
+      sandboxMode: () => this.pair.sandboxMode,
       sandbox: () => this.sandboxSource(),
       reviewer: () => this.reviewer(),
       rules: compiled.rules,
@@ -105,6 +112,33 @@ export class PiApproval {
 
   useSandbox(paths: SandboxPaths | undefined): void {
     this.paths = paths;
+  }
+
+  /** The pair every later command runs under: attn's launch choice until /permissions changes it. */
+  permissions(): Permissions {
+    return { ...this.pair };
+  }
+
+  /** Resolves once every listener has caught up, so a caller only tells the user the
+   * session changed after the tools the new pair governs are the ones registered. */
+  async setPermissions(pair: Permissions): Promise<void> {
+    const previous = this.pair;
+    this.pair = { approvalPolicy: pair.approvalPolicy, sandboxMode: pair.sandboxMode };
+    try {
+      await this.announce(previous);
+    } finally {
+      if (this.context) this.paint(this.context);
+    }
+  }
+
+  /** Security rebuilds the native file tools from here, so the pair governs them too. */
+  onPermissions(listener: (pair: Permissions) => Promise<void> | void): void {
+    this.listeners.push(listener);
+  }
+
+  private async announce(previous: Permissions): Promise<void> {
+    if (previous.approvalPolicy === this.pair.approvalPolicy && previous.sandboxMode === this.pair.sandboxMode) return;
+    await Promise.all(this.listeners.map((listener) => listener({ ...this.pair })));
   }
 
   readonly runBash = (...args: Parameters<ApprovalOrchestrator["runBash"]>) => this.orchestrator.runBash(...args);
@@ -124,9 +158,19 @@ export class PiApproval {
       description: "Toggle attn auto mode (on | off | status)",
       handler: (args, ctx) => this.command(args, ctx),
     });
+    pi.registerCommand("permissions", {
+      description: "Choose what the agent is allowed to do (read-only | default | full-access | untrusted | status)",
+      handler: (args, ctx) => this.permissionsCommand(args, ctx),
+    });
     pi.on("session_start", async (_event, ctx) => {
       // --no-auto wins a session given both; an unset flag reads as undefined.
       this.flag = pi.getFlag("no-auto") === true ? false : pi.getFlag("auto") === true ? true : undefined;
+      // One PiApproval serves every session in this process, so a /reload or /new
+      // drops what /permissions and /auto answered and starts from the daemon's launch choice.
+      const launched = this.pair;
+      this.pair = { approvalPolicy: this.setup.config.approvalPolicy, sandboxMode: this.setup.config.sandboxMode };
+      this.choice = undefined;
+      await this.announce(launched);
       this.context = ctx;
       this.guardian = this.makeGuardian(pi, ctx);
       this.setup.suite.networkDecider = this.orchestrator.decideNetwork;
@@ -179,7 +223,7 @@ export class PiApproval {
     if (!paths) throw new Error("security has not configured a sandbox for this session yet");
     return {
       config: {
-        mode: this.setup.config.sandboxMode,
+        mode: this.pair.sandboxMode,
         network: this.setup.config.network.enabled ? "proxy" : "off",
         allowWrite: paths.allowWrite,
         denyRead: paths.denyRead,
@@ -237,8 +281,61 @@ export class PiApproval {
       : "auto mode is off: you answer every approval yourself.";
   }
 
+  private async permissionsCommand(args: string, ctx: ExtensionContext): Promise<void> {
+    const asked = args.trim().toLowerCase();
+    if (asked === "" && ctx.mode === "tui") {
+      const picked = await pickPreset(ctx, presetFor(this.pair.approvalPolicy, this.pair.sandboxMode)?.id);
+      if (picked) await this.adopt(picked, ctx);
+      return;
+    }
+    if (asked === "" || asked === "status") {
+      ctx.ui?.notify(this.permissionsStatus(), "info");
+      return;
+    }
+    const preset = presetByID(asked);
+    if (!preset) {
+      ctx.ui?.notify(
+        `unknown permissions preset ${JSON.stringify(asked)}; use read-only, default, full-access, untrusted or status`,
+        "error",
+      );
+      return;
+    }
+    await this.adopt(preset, ctx);
+  }
+
+  private async adopt(preset: Preset, ctx: ExtensionContext): Promise<void> {
+    if (preset.id === "full-access" && !(await ctx.ui?.confirm("Enable full access?", preset.description))) {
+      ctx.ui?.notify(`Permissions unchanged: ${this.describe()}.`, "info");
+      return;
+    }
+    try {
+      await this.setPermissions(preset);
+    } catch (error) {
+      ctx.ui?.notify(
+        `Permissions: ${this.describe()} for this session, but this session's file tools did not rebuild: ` +
+          `${message(error)}. Run /permissions again.`,
+        "error",
+      );
+      return;
+    }
+    ctx.ui?.notify(`Permissions: ${this.describe()} for this session`, "info");
+  }
+
+  permissionsStatus(): string {
+    return `Permissions: ${this.describe()}. Set at launch by attn; /permissions changes this session only, ` +
+      `and a relaunch returns to the launch choice.`;
+  }
+
+  private describe(): string {
+    const preset = presetFor(this.pair.approvalPolicy, this.pair.sandboxMode);
+    return preset
+      ? `${preset.id} (${preset.approvalPolicy}, ${preset.sandboxMode})`
+      : `${describePermissions(this.pair.approvalPolicy, this.pair.sandboxMode)} (no preset)`;
+  }
+
   private paint(ctx: ExtensionContext): void {
-    ctx.ui?.setStatus(statusKey, `auto: ${this.enabled() && this.guardian ? "on" : "off"}`);
+    const permissions = describePermissions(this.pair.approvalPolicy, this.pair.sandboxMode);
+    ctx.ui?.setStatus(statusKey, `auto: ${this.enabled() && this.guardian ? "on" : "off"} · ${permissions}`);
   }
 
   private speak(ctx: ExtensionContext): void {

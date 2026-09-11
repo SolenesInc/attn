@@ -12,6 +12,9 @@ export type SecuritySnapshot = {
   problem?: string;
   configPath: string;
   cwd: string;
+  /** False in standalone pi, where no /permissions command and no session
+   * sandbox mode exist and this toggle is the only thing guarding bash. */
+  approvals: boolean;
 };
 type PathGroup = "caches" | "allowWrite" | "denyRead" | "denyWrite";
 type Page = { kind: "main" } | { kind: "paths"; group: PathGroup } |
@@ -61,7 +64,10 @@ export class SecurityPanel implements Component, Focusable {
     if (this.visibleRows !== this.rowLimit()) this.rebuild(this.list.getSelectedItem()?.value);
     const { config, problem } = this.snapshot;
     const title = this.page.kind === "main" ? "Security" : `Security / ${this.title()}`;
-    const state = problem ? "Tools blocked by a settings error" : `Sandbox ${config.enabled ? "on" : "off"} · Credentials filtered`;
+    const state = problem ? "Tools blocked by a settings error"
+      : this.snapshot.approvals
+        ? `File tools ${config.enabled ? "guarded" : "unguarded"} · Credentials filtered`
+        : `Sandbox ${config.enabled ? "on" : "off"} · Credentials filtered`;
     const lines = [this.theme.fg("border", "─".repeat(inner)), this.theme.fg("accent", this.theme.bold(title)),
       this.theme.fg(problem || !config.enabled ? "warning" : "muted", state), ""];
     if (this.input) {
@@ -72,9 +78,13 @@ export class SecurityPanel implements Component, Focusable {
     const message = wrapTextWithAnsi(clean(this.busy ? "Applying settings…" : this.snapshot.problem ?? this.message), inner).slice(0, 2);
     const helpLines = Math.max(1, this.height() - 2 - lines.length - message.length - 5 - Number(noteLine));
     lines.push("", ...wrapTextWithAnsi(clean(help), inner).slice(0, Math.min(4, helpLines)).map((line) => this.theme.fg("muted", line)));
-    if (noteLine) lines.push(this.theme.fg("dim", config.enabled
-      ? "Bash commands also pass the approval policy; /auto status shows it."
-      : "Extra access: the sandbox is off, so commands run unconfined."));
+    if (noteLine) lines.push(this.theme.fg("dim", this.snapshot.approvals
+      ? (config.enabled
+        ? "Bash commands run under this session's sandbox mode; /permissions shows it."
+        : "Extra access: the file tools and !/!! commands run unconfined.")
+      : (config.enabled
+        ? "Bash commands also pass the approval policy; /auto status shows it."
+        : "Extra access: the sandbox is off, so commands run unconfined.")));
     lines.push("", ...message.map((line) => this.theme.fg(this.error || this.snapshot.problem ? "error" : "dim", line)),
       this.theme.fg("muted", this.input ? "Enter save · Esc cancel" : `↑↓ · Enter · Esc ${this.parents.length ? "back" : "close"}`),
       this.theme.fg("border", "─".repeat(inner)));

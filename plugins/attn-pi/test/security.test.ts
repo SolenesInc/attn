@@ -197,6 +197,37 @@ describe.skipIf(!["darwin", "linux"].includes(process.platform))("actual OS enfo
     expect(() => readFileSync(join(root, "outside"))).toThrow();
   });
 
+  test("a closed filesystem never brings its worker back", async () => {
+    const { policy, fs } = fixture();
+    const sample = join(policy.cwd, "sample.txt");
+    writeFileSync(sample, "hello\n");
+    expect((await fs.read(sample)).toString()).toBe("hello\n");
+
+    await fs.close();
+
+    // A restarted worker would answer the read; the rejection is the proof none was spawned.
+    await expect(fs.read(sample)).rejects.toThrow("were rebuilt after a permissions change");
+    await expect(fs.write(join(policy.cwd, "later.txt"), "no")).rejects.toThrow("were rebuilt");
+    expect(existsSync(join(policy.cwd, "later.txt"))).toBe(false);
+  });
+
+  test("cancelling a native tool call leaves the file tools usable", async () => {
+    const { policy, filter, fs } = fixture();
+    const sample = join(policy.cwd, "sample.txt");
+    writeFileSync(sample, "hello\n");
+    const read = protectedTools(policy, filter, fs).find((tool) => tool.name === "read")!;
+
+    // A pre-aborted signal throws before any request, so the abort lands after
+    // execute() issued one; pi's own read listener is what names the rejection.
+    const controller = new AbortController();
+    const cancelled = read.execute("test", { path: sample }, controller.signal, undefined, undefined as never);
+    controller.abort();
+    await expect(cancelled).rejects.toThrow("Operation aborted");
+
+    const again = await read.execute("test", { path: sample }, undefined, undefined, undefined as never);
+    expect(JSON.stringify(again)).toContain("hello");
+  });
+
   test("filters streamed shell output and overflow files before Pi can retain credentials", async () => {
     const { policy, filter, fs } = fixture();
     const bash = protectedTools(policy, filter, fs).find((tool) => tool.name === "bash")!;

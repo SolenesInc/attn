@@ -78,10 +78,11 @@ there, so it is not here either; it is seed s-r7y88n.
   `/tmp` is writable because Codex adds it as a default writable root.
 - `danger-full-access` — no sandbox wrapper.
 
-The daemon's `sandbox_mode` is what a bash command runs under. `/security` in
-the session still governs the built-in file tools, the read and write deny
-lists, and the guidance the agent is given each turn; the two do not fight
-because they cover different tools. See
+The sandbox mode is what a bash command runs under, and the built-in file tools
+with it: `read-only` refuses every write and edit, `workspace-write` confines
+them to the `/security` paths, and `danger-full-access` lets them write
+anywhere except the deny lists. `/security` owns those paths, its deny lists
+and the guidance the agent is given each turn. See
 [security.md](security.md).
 
 **Deviation from Codex.** Codex keeps a `require_escalated` command sandboxed
@@ -227,9 +228,20 @@ The queue sees the session as waiting while the card is open.
 ## Where the settings live
 
 Rules, hosts, the approval policy, the sandbox mode and the environment live in
-the daemon, and reach a session at launch as JSON. A running session keeps what
-it started with; the exception is a network host rule, which the driver's proxy
-picks up at once.
+the daemon, and reach a session at launch as JSON. That JSON is what a session
+starts with, and a running session keeps it; the exception is a network host
+rule, which the driver's proxy picks up at once. `/permissions` is the other
+way the pair moves: it switches the approval policy and the sandbox mode inside
+the pi process for the rest of that session. Nothing is reported back to attn,
+so a relaunch, or a new session in the same process, returns to the launch
+choice.
+
+The pair governs both tool surfaces. Bash runs under the sandbox mode, and so do
+the native write and edit tools: `read-only` refuses a change before it reaches
+the filesystem worker, and `danger-full-access` lets it land outside the
+workspace. Codex does the same for `apply_patch` in `assess_patch_safety`. The
+`/security` toggle's own paths still bound those tools within `workspace-write`,
+and its deny lists hold under every preset.
 
 The app's Settings is where a change takes effect. `attn automode` proposes:
 `rule add`, `rule remove`, `host add`, `host remove` and `policy` all record a

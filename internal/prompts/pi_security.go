@@ -17,7 +17,12 @@ func piSecurityRecipient() Recipient {
 		Bind("request", text("sandbox-limits")),
 		Bind("local_cache", text("local-cache")),
 		Bind("refusal", text("refusal")))
+	fileTools := Choose(Enabled(FlagField("file_tools_read_only", "The session's permissions make the file tools read-only.")),
+		Exact(text("file-tools-read-only")),
+		When(Enabled(FlagField("file_tools_full_access", "The session's permissions let the file tools write anywhere.")),
+			Exact(text("file-tools-full-access"))))
 	instructions := text("instructions",
+		Bind("file_tools", fileTools),
 		Bind("sandbox", field("sandbox", "Enabled or disabled, derived from policy.")),
 		Bind("network", field("network", "Effective tool networking policy.")),
 		Bind("guidance", Choose(Enabled(FlagField("enabled", "The OS sandbox is enabled.")), sandboxGuidance, text("disabled"))),

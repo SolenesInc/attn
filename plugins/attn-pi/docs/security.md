@@ -3,11 +3,15 @@
 Pi sessions launched by attn sandbox built-in tools and filter credentials.
 These protections stay active whichever reviewer `/auto` selects.
 
-`/security` covers the built-in file tools, the read and write deny lists, and
-the guidance each turn carries. A bash command runs under the daemon's
-`sandbox_mode` instead, which the app's Settings owns; the two cover different
-tools and do not overrule each other. [automode.md](automode.md) describes the
-approval path a bash command walks.
+`/security` owns the paths: the write grants, the read and write deny lists,
+build-cache access and the guidance each turn carries. The session's
+permissions own the sandbox mode: attn sets them at launch and `/permissions`
+switches them for that session. That mode governs bash and the built-in file
+tools alike. `read-only` refuses every write and edit, `workspace-write`
+confines them to the `/security` paths, and `danger-full-access` lets them
+write anywhere except the deny lists, which hold under every mode.
+[automode.md](automode.md) describes the presets and the approval path a bash
+command walks.
 
 `/security` opens a keyboard-driven settings panel in Pi. Use the arrow keys
 and Enter to toggle the sandbox, tool networking and build-cache access. Open
@@ -104,9 +108,10 @@ sandbox denial.
 
 The sandbox cannot be widened from inside a file-tool call. The agent is told to
 work within it or to name the exact path and reason so you can decide; you grant
-a directory with `/security allow-write <directory>`. There is no request the
-agent can submit to widen these tools, and the guidance says so rather than
-pointing at one.
+a directory with `/security allow-write <directory>`, or change the session's
+sandbox mode with `/permissions` when the refusal is the mode rather than a
+path. There is no request the agent can submit to widen these tools, and the
+guidance says so rather than pointing at one.
 
 A bash command is the exception, and it has its own route: the agent re-issues
 with `sandbox_permissions: "require_escalated"` and a justification, which goes
@@ -116,8 +121,9 @@ to the reviewer. See [automode.md](automode.md).
 
 Shell commands use macOS Seatbelt or Linux bubblewrap. Native file operations
 run in a small worker under the same OS policy. Search also runs sandboxed.
-The worker starts on first use and exits when the session closes or security
-settings change. Linux requires `bwrap` and search requires `rg` on PATH.
+The worker starts on first use and exits when the session closes or the
+security settings or the session's permissions change. Linux requires `bwrap`
+and search requires `rg` on PATH.
 Missing sandbox support or malformed settings block execution rather than
 running the tool without protection.
 On Linux, empty `.pi` and `.agents` directories are created when absent so

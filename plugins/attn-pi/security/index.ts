@@ -6,6 +6,7 @@ import {
   createLsToolDefinition, createReadToolDefinition, createWriteToolDefinition, getAgentDir,
   type ExtensionAPI, type ExtensionContext, type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import type { SandboxMode } from "../sandbox/spec";
 import { credentials } from "./filter";
 import { SandboxedFilesystem } from "./filesystem";
 import { loadSecurityConfig, resolveSecurityPolicy, saveSecurityConfig, type SecurityPolicy } from "./policy";
@@ -21,6 +22,7 @@ export class PiSecurity {
   private temp: string | undefined;
   private policy: SecurityPolicy | undefined;
   private problem: string | undefined;
+  private last: { pi: ExtensionAPI; ctx: ExtensionContext } | undefined;
   constructor(
     private readonly configPath = join(getAgentDir(), "attn-security.json"),
     private readonly approval?: BashApproval,
@@ -28,7 +30,15 @@ export class PiSecurity {
      * orchestrator wraps commands with the paths this session actually has. */
     private readonly onPolicy?: (policy: SecurityPolicy | undefined) => void,
     private readonly attnNetwork?: "proxy" | "missing",
+    /** The session's sandbox mode, which /permissions owns. Absent in standalone pi,
+     * where there is no approval config and workspace-write is the only behaviour. */
+    private readonly sandboxMode?: () => SandboxMode,
   ) {}
+
+  /** Rebuilds the tools against the current sandbox mode; a no-op until a session starts. */
+  async refresh(): Promise<void> {
+    if (this.last) await this.configure(this.last.pi, this.last.ctx);
+  }
 
   cacheWritePaths(): readonly string[] { return this.problem ? [] : this.policy?.cacheWritePaths ?? []; }
 
@@ -38,7 +48,9 @@ export class PiSecurity {
     pi.on("session_shutdown", () => this.close());
     pi.on("before_agent_start", (event) => ({ systemPrompt: event.systemPrompt + "\n\n" + credentials.text(
       this.problem ? securityPrompt("configuration-error", { problem: this.problem })
-        : this.policy ? securityInstructions(this.policy, { attnNetwork: this.attnNetwork }) : securityPrompt("not-initialized"),
+        : this.policy ? securityInstructions(this.policy, {
+          attnNetwork: this.attnNetwork, sandboxMode: this.sandboxMode?.() ?? "workspace-write",
+        }) : securityPrompt("not-initialized"),
     ) }));
     pi.on("tool_result", (event) => {
       try { return credentials.value({ content: event.content, details: event.details }); }
@@ -57,7 +69,7 @@ export class PiSecurity {
           const command = args.trim();
           const snapshot = (): SecuritySnapshot => ({
             config: loadSecurityConfig(this.configPath), policy: this.policy, problem: this.problem,
-            configPath: this.configPath, cwd: ctx.cwd,
+            configPath: this.configPath, cwd: ctx.cwd, approvals: this.approval !== undefined,
           });
           const apply = async (commands: string[]) => {
             const config = loadSecurityConfig(this.configPath);
@@ -84,11 +96,12 @@ export class PiSecurity {
 
   private async configure(pi: ExtensionAPI, ctx: ExtensionContext): Promise<void> {
     await this.close();
+    this.last = { pi, ctx };
     try {
       const config = loadSecurityConfig(this.configPath);
       this.temp = mkdtempSync(join(tmpdir(), "attn-pi-tools-"));
       this.policy = resolveSecurityPolicy(config, ctx.cwd, this.configPath, this.temp);
-      this.fs = new SandboxedFilesystem(this.policy, credentials);
+      this.fs = new SandboxedFilesystem(this.policy, credentials, this.sandboxMode?.() ?? "workspace-write");
       this.problem = undefined;
       const policy = this.policy;
       this.onPolicy?.(policy);
@@ -103,9 +116,15 @@ export class PiSecurity {
         });
       }
     }
+    // Under attn, never "sandbox": bash runs under the session's sandbox mode, which
+    // /permissions owns. Standalone pi has neither, and this toggle is bash's only guard.
     ctx.ui.setStatus("attn-security", this.problem
       ? problem(statusTheme(ctx), "security: blocked")
-      : dimmed(statusTheme(ctx), `sandbox: ${this.policy?.enabled ? "on" : "off"} · credential filtering: on`));
+      : dimmed(statusTheme(ctx), !this.approval
+        ? `sandbox: ${this.policy?.enabled ? "on" : "off"} · credential filtering: on`
+        : this.policy?.enabled === false
+          ? "file tools: unguarded · credential filtering: on"
+          : "credential filtering: on"));
     if (this.problem) ctx.ui.notify(`Pi tools are blocked: ${this.problem}`, "error");
     else if (this.policy?.unavailableCaches.length) ctx.ui.notify(`Some build caches are unavailable. /security status shows the paths and reasons.`, "warning");
   }
@@ -115,7 +134,11 @@ export class PiSecurity {
     const policy = this.policy;
     if (!policy) return "Security is not initialized";
     return credentials.text([
-      `Sandbox: ${policy.enabled ? "on" : "off"}; network: ${policy.enabled ? policy.network : "unrestricted (sandbox off)"}; credential filtering: on`,
+      this.approval
+        ? `Built-in file tools and !/!! commands: ${policy.enabled ? "guarded" : "unguarded"}; ` +
+          `network: ${policy.enabled ? policy.network : "unrestricted (guards off)"}; credential filtering: on`
+        : `Sandbox: ${policy.enabled ? "on" : "off"}; network: ${policy.enabled ? policy.network : "unrestricted (sandbox off)"}; credential filtering: on`,
+      ...(this.approval ? ["The agent's bash tool runs under this session's sandbox mode instead; /permissions shows it."] : []),
       `Build caches: ${policy.buildCaches.enabled ? "on" : "off"}. Configured paths: ${policy.buildCaches.paths.join(", ")}`,
       `Active cache grants: ${policy.cacheWritePaths.join(", ") || "none"}`,
       ...policy.unavailableCaches.map((problem) => `Unavailable cache: ${problem}`),

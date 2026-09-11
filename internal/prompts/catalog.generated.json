@@ -2272,6 +2272,47 @@
             "source": "content/pi/security/instructions.md",
             "bindings": [
               {
+                "name": "file_tools",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "file_tools_read_only",
+                      "kind": "flag",
+                      "description": "The session's permissions make the file tools read-only."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "pi-security.file-tools-read-only",
+                      "source": "content/pi/security/file-tools-read-only.md",
+                      "keep_final_newline": true
+                    },
+                    {
+                      "kind": "when",
+                      "condition": {
+                        "field": {
+                          "name": "file_tools_full_access",
+                          "kind": "flag",
+                          "description": "The session's permissions let the file tools write anywhere."
+                        },
+                        "test": "enabled"
+                      },
+                      "children": [
+                        {
+                          "kind": "text",
+                          "id": "pi-security.file-tools-full-access",
+                          "source": "content/pi/security/file-tools-full-access.md",
+                          "keep_final_newline": true
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
                 "name": "sandbox",
                 "node": {
                   "kind": "input",
@@ -4864,5 +4905,5 @@
       ]
     }
   ],
-  "definitions_hash": "23430bca7c88421a2b393eb7fa719aa60233c3d6c78454bdd7956a126ca7a304"
+  "definitions_hash": "362b5df051e1cf3b6fe52c49458e08f3b6b85b9019fefee84a36dcaea57099f6"
 }

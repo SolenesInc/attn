@@ -1,15 +1,16 @@
 import { commandEnvironment } from "../sandbox/environment";
 import { sandboxArgv, shellQuote, type SandboxedCommand } from "../sandbox/exec";
-import { sandboxSpecFor, type SandboxSpec } from "../sandbox/spec";
+import { sandboxSpecFor, type SandboxMode, type SandboxSpec } from "../sandbox/spec";
 import type { SecurityPolicy } from "./policy";
 
 export type { SandboxedCommand };
 export { shellQuote };
 
-/** The pre-Codex settings file has one sandboxed profile; disabling it is danger-full-access. */
-export function specForPolicy(policy: SecurityPolicy): SandboxSpec | "unsandboxed" {
+/** The pre-Codex settings file has one sandboxed profile; disabling it is danger-full-access,
+ * and so is a session whose /permissions say so. */
+export function specForPolicy(policy: SecurityPolicy, sandboxMode: SandboxMode = "workspace-write"): SandboxSpec | "unsandboxed" {
   return sandboxSpecFor({
-    mode: policy.enabled ? "workspace-write" : "danger-full-access",
+    mode: policy.enabled ? sandboxMode : "danger-full-access",
     network: policy.network === "allow" ? "unrestricted" : "off",
     allowWrite: policy.allowWrite,
     denyRead: policy.denyRead,
