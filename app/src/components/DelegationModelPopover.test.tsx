@@ -1,5 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
+import { useState } from 'react';
 import { DelegationModelPopover, clearDelegationModelCatalogs } from './DelegationModelPopover';
 import { ModelCapabilitySupport, type DelegationHarness, type DelegationSelection } from '../types/generated';
 import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
@@ -93,6 +94,21 @@ it('takes a provider with a manual model for a plugin harness only', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Use it' }));
   expect(onChange).toHaveBeenLastCalledWith({ harness: 'pi', provider: 'openai', model: 'gpt-next', effort: '' });
   expect(claude.onChange).not.toHaveBeenCalled();
+});
+
+it('returns focus to the opener when Escape closes it', async () => {
+  function Host() {
+    const [shown, setShown] = useState(false);
+    return <><button type="button" onClick={() => setShown(true)}>Model for Builder</button>{shown && <DelegationModelPopover value={{ harness: 'claude', provider: '', model: '', effort: '' }} harnesses={harnesses} anchor={anchor} onChange={vi.fn()} onClose={() => setShown(false)} loadModels={vi.fn(async () => structuredClone(catalog))} />}</>;
+  }
+  render(<Host />);
+  const opener = screen.getByRole('button', { name: 'Model for Builder' });
+  act(() => { opener.focus(); });
+  fireEvent.click(opener);
+  expect(document.activeElement?.getAttribute('data-harness')).toBe('claude');
+  fireEvent.keyDown(document.activeElement ?? document, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose a model' })).not.toBeInTheDocument());
+  expect(document.activeElement).toBe(opener);
 });
 
 it('commits a pinned harness alone and never discovers for it', () => {

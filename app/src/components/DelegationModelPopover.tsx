@@ -66,8 +66,11 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
     setPosition({ top, left });
   }, [anchor, loading, manual]);
 
+  // Focus moves into the popover on open and back to the opener on close, unless a click already placed it.
   useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     containerRef.current?.querySelector<HTMLButtonElement>('.delegation-pop-harness[aria-selected="true"], .delegation-pop-harness')?.focus();
+    return () => { if (!document.activeElement || document.activeElement === document.body) opener?.focus(); };
   }, []);
 
   // Deferred a tick so the click that opened the popover doesn't close it.
