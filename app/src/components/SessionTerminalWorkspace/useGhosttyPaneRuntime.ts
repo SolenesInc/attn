@@ -222,8 +222,8 @@ export function useGhosttyPaneRuntime(
       }
       if (!terminalIsCurrent()) return;
     }
-    const size = terminal.getSize();
-    if (!size || !terminalIsCurrent()) return;
+    const modelSize = terminal.getSize();
+    if (!modelSize || !terminalIsCurrent()) return;
     const attachPolicy = pane.state === 'recoverable'
       ? 'revive'
       : readyRuntimesRef.current.has(pane.runtimeId)
@@ -243,8 +243,8 @@ export function useGhosttyPaneRuntime(
     const geometryMeasured = terminal.hasMeasuredSize();
     const forceResizeBeforeAttach = attachPolicy !== 'revive' && geometryMeasured;
     const measuredResize = pendingResizeRef.current.get(pane.runtimeId);
-    const attachResize = measuredResize?.cols === size.cols && measuredResize.rows === size.rows
-      ? measuredResize : undefined;
+    const attachResize = forceResizeBeforeAttach ? measuredResize : undefined;
+    const size = attachResize ?? modelSize;
     if (forceResizeBeforeAttach && attachResize) {
       pendingResizeRef.current.delete(pane.runtimeId);
     }
