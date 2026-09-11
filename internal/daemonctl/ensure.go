@@ -132,6 +132,9 @@ func ensureWithTripwire(
 
 func acquireEnsureLock(ctx context.Context) (func(), error) {
 	lockPath := config.PIDPath() + ".ensure"
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0700); err != nil {
+		return nil, fmt.Errorf("create daemon data directory: %w", err)
+	}
 	lockFile, err := os.OpenFile(lockPath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("open daemon ensure lock: %w", err)

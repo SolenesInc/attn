@@ -153,7 +153,7 @@ func TestEnsureTripwireAcceptsDaemonThatCrossesTheBoundary(t *testing.T) {
 }
 
 func TestEnsureLockSerializesSocketInspection(t *testing.T) {
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "new-profile")
 	t.Setenv("ATTN_PROFILE", "")
 	t.Setenv("ATTN_DATA_DIR", dir)
 	t.Setenv("ATTN_SOCKET_PATH", "")
@@ -164,6 +164,9 @@ func TestEnsureLockSerializesSocketInspection(t *testing.T) {
 	release, err := acquireEnsureLock(context.Background())
 	if err != nil {
 		t.Fatal(err)
+	}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		t.Fatalf("new profile data directory was not created: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
