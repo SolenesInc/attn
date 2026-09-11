@@ -9,16 +9,22 @@ import { currentHarnessProfile, dataDirForProfile, resolveHarnessResources, prof
 import { ensureFreshWorld } from './freshWorld.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree } from './platform.mjs';
+import { registeredAgentPid } from './workerRegistry.mjs';
+import { DaemonObserver } from './daemonObserver.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// The daemon's automation-schedule ticker fires once a real minute; these
-// windows are sized around that cadence plus margin.
-const ANCHOR_POLL_TIMEOUT_MS = 90_000; // the anchor tick lands within one 60s ticker interval of apply, plus margin.
-const DOWNTIME_MS = 135_000; // >= two whole-minute instants missed while stopped.
-const RESTART_RUN_TIMEOUT_MS = 120_000; // daemon start + first post-restart tick + delivery.
-const CLEANUP_EVIDENCE_TIMEOUT_MS = 90_000; // delivery, launch and the agent's git work measured 12s; the ticker owns the rest.
-const COALESCE_TIMEOUT_MS = 90_000; // one more live tick after cleanup evidence lands.
+const SCHEDULE_TICK_INTERVAL = '1s';
+const SCHEDULE_CRON = '@every 2s';
+// Local run automation-scheduled-cleanup-2026-09-10T20-37-20-445Z: the 2s
+// schedule repeated; three periods leave at least two missed instants.
+const DOWNTIME_MS = 6_000;
+// That run took 1.0s to anchor, 7.1s to restart, 1.6s for cleanup evidence,
+// 10.3s to coalesce and 16.0s for the fresh-continuity restart.
+const ANCHOR_POLL_TIMEOUT_MS = 30_000;
+const RESTART_RUN_TIMEOUT_MS = 45_000;
+const CLEANUP_EVIDENCE_TIMEOUT_MS = 45_000;
+const COALESCE_TIMEOUT_MS = 30_000;
 const CLEANUP_SUMMARY = 'removed merged-clean, kept dirty-wip';
 
 function parseArgs(argv) {
@@ -45,6 +51,25 @@ function runJSON(binary, args, env) {
 // `enable`/`disable` are the only way to move the enabled column.
 function disableDefinition(binary, id, env) {
   return runJSON(binary, ['automation', 'disable', id], env);
+}
+
+function seedForSession(binary, sessionID, env) {
+  const listed = runJSON(binary, ['seed', 'ls', '--json'], env) || {};
+  return (listed.seeds || []).find((seed) => seed.tender_session === sessionID) || null;
+}
+
+function recordedSessionIDs(binary, definitionIDs, env) {
+  const sessionIDs = new Set();
+  for (const definitionID of definitionIDs) {
+    const runs = runJSON(binary, ['automation', 'runs', definitionID], env) || [];
+    for (const row of runs) if (row.session_id) sessionIDs.add(row.session_id);
+  }
+  return sessionIDs;
+}
+
+function boundSeedsForSessions(binary, sessionIDs, env) {
+  const listed = runJSON(binary, ['seed', 'ls', '--json'], env) || {};
+  return (listed.seeds || []).filter((seed) => sessionIDs.has(seed.tender_session));
 }
 
 async function poll(fn, description, timeoutMs = 30_000) {
@@ -153,7 +178,7 @@ name: Slice 5 packaged scheduled cleanup proof
 trigger:
   type: scheduled
   schedule:
-    cron: "* * * * *"
+    cron: ${JSON.stringify(SCHEDULE_CRON)}
     time_zone: UTC
   continuity: singleton
   catch_up: latest
@@ -175,7 +200,7 @@ name: Slice 5 scheduler storm-guard probe
 trigger:
   type: scheduled
   schedule:
-    cron: "* * * * *"
+    cron: ${JSON.stringify(SCHEDULE_CRON)}
     time_zone: UTC
   continuity: fresh
   catch_up: latest
@@ -213,6 +238,29 @@ async function waitForDaemonReady(binary, daemonEnv) {
   }, 'profile daemon');
 }
 
+async function waitForRegisteredAgentExit(dataDir, sessionID, cwd) {
+  await poll(
+    () => (registeredAgentPid(dataDir, sessionID, cwd) === null ? true : null),
+    `registered agent for session ${sessionID} to exit`,
+    RESTART_RUN_TIMEOUT_MS,
+  );
+}
+
+async function closeDeliveredSessions(wsUrl, dataDir, cwd, sessionIDs) {
+  const targets = new Set(sessionIDs.filter(Boolean));
+  if (targets.size === 0) return [];
+
+  const observer = new DaemonObserver({ wsUrl });
+  await observer.connect();
+  try {
+    const closed = await observer.unregisterMatchingSessions((session) => targets.has(session.id));
+    for (const sessionID of targets) await waitForRegisteredAgentExit(dataDir, sessionID, cwd);
+    return closed;
+  } finally {
+    await observer.close();
+  }
+}
+
 async function main() {
   const { options, help } = parseArgs(process.argv.slice(2));
   if (help) {
@@ -248,9 +296,15 @@ async function main() {
   let fixture = null;
   let probe = null;
   let cleanupTicketID = '';
+  let cleanupSeedID = '';
+  let stormGuardSeedID = '';
   let cleanupSessionID = '';
+  let stormGuardSessionID = '';
   let cleanupApplied = false;
   let stormGuardApplied = false;
+  let sessionsClosed = false;
+  let cleanupSeedSettled = false;
+  let stormGuardSeedSettled = false;
 
   try {
     daemonEnv = profileEnv(profile);
@@ -261,6 +315,7 @@ async function main() {
     await runner.step('restart_isolated_daemon', async () => {
       await ensureFreshWorld({ profile, appPath: resources.appPath });
       try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}
+      daemonEnv.ATTN_AUTOMATION_SCHEDULE_INTERVAL = SCHEDULE_TICK_INTERVAL;
       run(binary, ['daemon', 'ensure'], daemonEnv);
       await waitForDaemonReady(binary, daemonEnv);
     });
@@ -294,12 +349,7 @@ async function main() {
         `SELECT o.occurrence_key FROM automation_occurrences o JOIN automation_runs r ON r.occurrence_id=o.id WHERE r.id='${sqlEscape(runRow.id)}';`,
       );
       runner.assert(occurrence !== null, 'catch-up run has a resolvable occurrence row', { runID: runRow.id });
-      const occurrenceKey = occurrence[0];
-      runner.assert(
-        /^scheduled:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00Z$/.test(occurrenceKey),
-        'occurrence key carries the scheduled prefix and is minute-aligned',
-        { occurrenceKey },
-      );
+      runner.assert(occurrence[0].startsWith('scheduled:'), 'occurrence key carries the scheduled prefix', { occurrenceKey: occurrence[0] });
     });
 
     await runner.step('leg2_cleanup_evidence', async () => {
@@ -334,6 +384,7 @@ async function main() {
         'the launched agent reported its cleanup on the seed it tends',
         reported,
       );
+      cleanupSeedID = reported.seed;
     });
 
     await runner.step('leg3_singleton_coalescing', async () => {
@@ -381,16 +432,21 @@ async function main() {
       run(binary, ['daemon', 'ensure'], daemonEnv);
       await waitForDaemonReady(binary, daemonEnv);
 
-      // Poll for delivery, not existence: waiting on the row alone can race the
-      // next minute tick into a second run under fresh continuity.
-      const rows = await poll(() => {
+      const claimed = await poll(() => {
         const list = runJSON(binary, ['automation', 'runs', stormGuardID], daemonEnv) || [];
-        const delivered = list.filter((row) => row.state === 'delivered');
-        return delivered.length >= 1 ? delivered : null;
-      }, 'storm-guard restart catch-up run delivered', RESTART_RUN_TIMEOUT_MS);
-      runner.assert(rows.length === 1, 'storm-guard: exactly one catch-up run under fresh continuity too', { rows });
-
+        return list.length >= 1 ? list[0] : null;
+      }, 'storm-guard restart catch-up run claimed', RESTART_RUN_TIMEOUT_MS);
+      stormGuardSessionID = claimed.session_id;
       disableDefinition(binary, stormGuardID, daemonEnv);
+
+      const delivered = await poll(() => {
+        const list = runJSON(binary, ['automation', 'runs', stormGuardID], daemonEnv) || [];
+        return list[0]?.state === 'delivered' ? list : null;
+      }, 'storm-guard restart catch-up run delivered', RESTART_RUN_TIMEOUT_MS);
+      runner.assert(delivered.length === 1, 'storm-guard: exactly one catch-up run under fresh continuity too', { rows: delivered });
+      const stormGuardSeed = seedForSession(binary, stormGuardSessionID, daemonEnv);
+      runner.assert(Boolean(stormGuardSeed), 'storm-guard run owns a synthetic seed', { stormGuardSessionID, stormGuardSeed });
+      stormGuardSeedID = stormGuardSeed.id;
 
       await poll(() => (invocations(probe.log).length >= 1 ? invocations(probe.log) : null), 'storm-guard probe launch');
       runner.assert(invocations(probe.log).length === 1, 'exactly one process spawn backs the single catch-up run (no replay storm)', {
@@ -398,16 +454,105 @@ async function main() {
       });
     });
 
+    await runner.step('cleanup_and_restart_receipt', async () => {
+      const sessionIDs = recordedSessionIDs(binary, [cleanupID, stormGuardID], daemonEnv);
+      runner.assert(
+        sessionIDs.size === 2 && sessionIDs.has(cleanupSessionID) && sessionIDs.has(stormGuardSessionID),
+        'the two fixture definitions own the expected delivered sessions',
+        { sessionIDs: [...sessionIDs], cleanupSessionID, stormGuardSessionID },
+      );
+      const boundSeeds = boundSeedsForSessions(binary, sessionIDs, daemonEnv);
+      runner.assert(
+        boundSeeds.length === 2 && boundSeeds.some((seed) => seed.id === cleanupSeedID) && boundSeeds.some((seed) => seed.id === stormGuardSeedID),
+        'the delivered sessions own the expected two synthetic seeds',
+        { boundSeeds, cleanupSeedID, stormGuardSeedID },
+      );
+      const closed = await closeDeliveredSessions(
+        options.wsUrl,
+        dataDirForProfile(profile),
+        fixtureRoot,
+        [...sessionIDs],
+      );
+      runner.assert(closed.length === sessionIDs.size, 'both delivered automation sessions close intentionally', {
+        expected: [...sessionIDs],
+        closed: closed.map((session) => session.id),
+      });
+      sessionsClosed = true;
+      for (const seed of boundSeeds) {
+        run(binary, ['seed', 'wither', seed.id, '-m', 'Scheduled automation harness fixture complete'], daemonEnv);
+        if (seed.id === cleanupSeedID) cleanupSeedSettled = true;
+        if (seed.id === stormGuardSeedID) stormGuardSeedSettled = true;
+      }
+
+      run(binary, ['automation', 'delete', cleanupID], daemonEnv);
+      cleanupApplied = false;
+      run(binary, ['automation', 'delete', stormGuardID], daemonEnv);
+      stormGuardApplied = false;
+
+      run(binary, ['daemon', 'stop'], daemonEnv);
+      daemonEnv = profileEnv(profile);
+      run(binary, ['daemon', 'ensure'], daemonEnv);
+      await waitForDaemonReady(binary, daemonEnv);
+
+      const definitions = runJSON(binary, ['automation', 'list'], daemonEnv) || [];
+      runner.assert(
+        !definitions.some((definition) => definition.id === cleanupID || definition.id === stormGuardID),
+        'the timestamped definitions remain deleted after daemon restart',
+        { definitions, cleanupID, stormGuardID },
+      );
+      const sessions = runJSON(binary, ['agent', 'list', '--json'], daemonEnv) || [];
+      runner.assert(
+        !sessions.some((session) => sessionIDs.has(session.id)),
+        'the delivered sessions remain closed after daemon restart',
+        { sessions, sessionIDs: [...sessionIDs] },
+      );
+      const cleanupSeed = runJSON(binary, ['seed', 'show', cleanupSeedID, '--json'], daemonEnv)?.seed;
+      const stormGuardSeed = runJSON(binary, ['seed', 'show', stormGuardSeedID, '--json'], daemonEnv)?.seed;
+      runner.assert(
+        cleanupSeed?.status === 'withered' && stormGuardSeed?.status === 'withered',
+        'the synthetic automation seeds remain withered after daemon restart',
+        { cleanupSeedID, cleanupSeed, stormGuardSeedID, stormGuardSeed },
+      );
+    });
+
     await runner.finishSuccess({ profile, cleanupID, stormGuardID, cleanupTicketID, cleanupSessionID, fixtureRoot });
   } catch (error) {
     await runner.finishFailure(error, { profile, cleanupID, stormGuardID, cleanupTicketID, cleanupSessionID, fixtureRoot });
     throw error;
   } finally {
-    // An enabled `directory` definition re-validates its path every tick, so one
-    // left against a deleted temp root spams this profile forever.
+    const teardownNeeded = cleanupApplied || stormGuardApplied || !sessionsClosed || !cleanupSeedSettled || !stormGuardSeedSettled;
+    const teardownSessionIDs = new Set([cleanupSessionID, stormGuardSessionID].filter(Boolean));
+    const teardownSeedIDs = new Set();
+    if (daemonEnv && teardownNeeded) {
+      try {
+        run(binary, ['daemon', 'ensure'], daemonEnv);
+        await waitForDaemonReady(binary, daemonEnv);
+        const appliedDefinitionIDs = [];
+        if (cleanupApplied) appliedDefinitionIDs.push(cleanupID);
+        if (stormGuardApplied) appliedDefinitionIDs.push(stormGuardID);
+        for (const definitionID of appliedDefinitionIDs) disableDefinition(binary, definitionID, daemonEnv);
+        for (const sessionID of recordedSessionIDs(binary, appliedDefinitionIDs, daemonEnv)) teardownSessionIDs.add(sessionID);
+        for (const seed of boundSeedsForSessions(binary, teardownSessionIDs, daemonEnv)) teardownSeedIDs.add(seed.id);
+      } catch {}
+    }
+    if (!sessionsClosed) {
+      try {
+        await closeDeliveredSessions(
+          options.wsUrl,
+          dataDirForProfile(profile),
+          fixtureRoot,
+          [...teardownSessionIDs],
+        );
+      } catch {}
+    }
+    if (!cleanupSeedSettled && cleanupSeedID) teardownSeedIDs.add(cleanupSeedID);
+    if (!stormGuardSeedSettled && stormGuardSeedID) teardownSeedIDs.add(stormGuardSeedID);
+    if (daemonEnv) for (const seedID of teardownSeedIDs) {
+      try { run(binary, ['seed', 'wither', seedID, '-m', 'Scheduled automation harness fixture complete'], daemonEnv); } catch {}
+    }
     if (daemonEnv) {
-      if (cleanupApplied) { try { disableDefinition(binary, cleanupID, daemonEnv); } catch {} }
-      if (stormGuardApplied) { try { disableDefinition(binary, stormGuardID, daemonEnv); } catch {} }
+      if (cleanupApplied) { try { run(binary, ['automation', 'delete', cleanupID], daemonEnv); } catch {} }
+      if (stormGuardApplied) { try { run(binary, ['automation', 'delete', stormGuardID], daemonEnv); } catch {} }
     }
     try {
       const transcripts = path.join(fixtureRoot, '.attn-mock-agent');
@@ -416,6 +561,7 @@ async function main() {
       }
     } catch {}
     try { fs.rmSync(fixtureRoot, { recursive: true, force: true }); } catch {}
+    try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}
     try { run(binary, ['daemon', 'ensure'], profileEnv(profile)); } catch {}
     await runner.close();
   }

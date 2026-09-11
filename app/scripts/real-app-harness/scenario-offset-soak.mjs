@@ -270,6 +270,8 @@ async function main() {
   let maxOverflowSeen = 0;
   let transientCount = 0;
   const transientSteps = [];
+  let initialUiScale = null;
+  let initialWarmLimit = null;
   const TRANSIENT_RECHECK_POLL_MS = 750;
   const TRANSIENT_RECHECK_DEADLINE_MS = 4_500;
 
@@ -283,9 +285,13 @@ async function main() {
     await launchFreshAppAndConnect(client, observer);
     await closeExistingSessions(client, options.sessionRootDir);
 
-    await client.request('set_warm_workspace_limit', { limit: options.warmLimit }).catch((error) => {
-      console.warn(`[RealAppHarness] set_warm_workspace_limit failed: ${error.message}`);
-    });
+    initialUiScale = observer.getSetting('uiScale');
+    initialWarmLimit = (await client.request('get_warm_workspace_limit')).limit;
+    await client.request('dispatch_shortcut', { shortcutId: 'ui.resetFontSize' });
+    if (initialUiScale !== '' && initialUiScale !== '1') {
+      await observer.waitFor(() => observer.getSetting('uiScale') === '1', 'default UI scale persisted');
+    }
+    await client.request('set_warm_workspace_limit', { limit: options.warmLimit });
 
     for (let index = 0; index < options.workspaceCount; index += 1) {
       const sessionLabel = `offsetsoak-${runId}-${index}`;
@@ -591,8 +597,24 @@ async function main() {
     for (const workspace of workspaces.reverse()) {
       await closeWorkspacePanes(client, workspace.sessionId).catch(() => {});
     }
-    await client.quitApp().catch(() => {});
-    await observer.close();
+    try {
+      if (initialUiScale !== null) {
+        await client.request('set_setting', { key: 'uiScale', value: initialUiScale });
+        await observer.waitFor(
+          () => observer.getSetting('uiScale') === initialUiScale,
+          'initial UI scale restored',
+        );
+      }
+    } finally {
+      try {
+        if (initialWarmLimit !== null) {
+          await client.request('set_warm_workspace_limit', { limit: initialWarmLimit });
+        }
+      } finally {
+        await client.quitApp().catch(() => {});
+        await observer.close();
+      }
+    }
   }
 }
 

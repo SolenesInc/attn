@@ -5,11 +5,13 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseCommonArgs, printCommonHelp, launchFreshAppAndConnect } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile, resolveHarnessResources, profileCliEnv as profileEnv } from './harnessProfile.mjs';
+import { currentHarnessProfile, dataDirForProfile, resolveHarnessResources, profileCliEnv as profileEnv } from './harnessProfile.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import { appDaemonInTree } from './platform.mjs';
+import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
+import { registeredAgentPid } from './workerRegistry.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -42,6 +44,30 @@ function runJSON(binary, args, env) {
 
 function disableDefinition(binary, id, env) {
   return runJSON(binary, ['automation', 'disable', id], env);
+}
+
+function sessionsForDefinition(binary, definitionID, env) {
+  const runs = runJSON(binary, ['automation', 'runs', definitionID], env) || [];
+  return [...new Set(runs.map((automationRun) => automationRun.session_id).filter(Boolean))];
+}
+
+function seedForSession(binary, sessionID, env) {
+  const garden = runJSON(binary, ['seed', 'ls', '--json'], env) || {};
+  return (garden.seeds || []).find((seed) => seed.tender_session === sessionID) || null;
+}
+
+function seedByID(binary, seedID, env) {
+  const garden = runJSON(binary, ['seed', 'ls', '--json'], env) || {};
+  return (garden.seeds || []).find((seed) => seed.id === seedID) || null;
+}
+
+async function closeProbeSession(client, observer, dataDir, sessionID, cwd) {
+  await cleanupSessionViaAppClose(client, observer, sessionID, RESTART_READY_TIMEOUT_MS);
+  await poll(
+    () => (registeredAgentPid(dataDir, sessionID, cwd) === null ? true : null),
+    `registered agent for session ${sessionID} to exit`,
+    RESTART_READY_TIMEOUT_MS,
+  );
 }
 
 async function poll(fn, description, timeoutMs = 30_000) {
@@ -193,6 +219,9 @@ async function main() {
   let manualApplied = false;
   let scheduledApplied = false;
   let firstRunId = '';
+  let manualSessionID = '';
+  let manualSeedID = '';
+  let manualSeedSettled = false;
 
   try {
     daemonEnv = profileEnv(profile);
@@ -241,6 +270,9 @@ async function main() {
       runner.assert(runs[0].state === 'delivered', 'the run reached delivered', runs[0]);
       runner.assert(runs[0].navigable === true, 'the delivered run is navigable (its ticket exists)', runs[0]);
       firstRunId = runs[0].id;
+      const daemonRuns = runJSON(binary, ['automation', 'runs', manualID], daemonEnv) || [];
+      manualSessionID = daemonRuns.find((row) => row.id === firstRunId)?.session_id || '';
+      runner.assert(Boolean(manualSessionID), 'the delivered run names its launched session', daemonRuns);
 
       const reopened = await closeAndReopenPanel(client);
       const reopenedRuns = currentRuns(reopened);
@@ -318,17 +350,88 @@ async function main() {
       runner.assert(runs[0].navigable === true, 'the run is still navigable after restart', runs[0]);
     });
 
+    await runner.step('cleanup_probe_session', async () => {
+      disableDefinition(binary, manualID, daemonEnv);
+      disableDefinition(binary, scheduledID, daemonEnv);
+      const manualSeed = seedForSession(binary, manualSessionID, daemonEnv);
+      runner.assert(Boolean(manualSeed), 'the delivered manual run has a bound Garden seed', {
+        manualSessionID,
+        manualSeed,
+      });
+      manualSeedID = manualSeed.id;
+      await closeProbeSession(client, observer, dataDirForProfile(profile), manualSessionID, fixturePath);
+      manualSessionID = '';
+      run(binary, ['seed', 'wither', manualSeedID, '-m', 'Automation surface harness fixture complete'], daemonEnv);
+      manualSeedSettled = true;
+      const settledSeed = seedByID(binary, manualSeedID, daemonEnv);
+      runner.assert(settledSeed?.status === 'withered', 'the synthetic automation seed is withered after session cleanup', {
+        manualSeedID,
+        settledSeed,
+      });
+
+      run(binary, ['automation', 'delete', manualID], daemonEnv);
+      manualApplied = false;
+      run(binary, ['automation', 'delete', scheduledID], daemonEnv);
+      scheduledApplied = false;
+      const definitions = runJSON(binary, ['automation', 'list'], daemonEnv) || [];
+      runner.assert(
+        !definitions.some((definition) => definition.id === manualID || definition.id === scheduledID),
+        'both fixture definitions are absent after cleanup',
+        { definitions, manualID, scheduledID },
+      );
+    });
+
     await runner.finishSuccess({ profile, manualID, scheduledID, firstRunId, fixturePath });
   } catch (error) {
     await captureFailureEvidence(runner, client).catch(() => {});
     await runner.finishFailure(error, { profile, manualID, scheduledID, firstRunId, fixturePath });
     throw error;
   } finally {
-    // Disable before the fixture directory disappears: an enabled
-    // `directory` definition re-validates its path forever after.
+    if (daemonEnv) {
+      try {
+        run(binary, ['daemon', 'ensure'], daemonEnv);
+        await waitForDaemonReady(binary, daemonEnv);
+      } catch {}
+    }
+    // Disable first so a failed session teardown cannot leave a directory
+    // definition ticking against the fixture while cleanup continues.
     if (daemonEnv) {
       if (manualApplied) { try { disableDefinition(binary, manualID, daemonEnv); } catch {} }
       if (scheduledApplied) { try { disableDefinition(binary, scheduledID, daemonEnv); } catch {} }
+    }
+    const teardownSessionIDs = new Set(manualSessionID ? [manualSessionID] : []);
+    if (manualApplied && daemonEnv) {
+      try {
+        for (const sessionID of sessionsForDefinition(binary, manualID, daemonEnv)) teardownSessionIDs.add(sessionID);
+      } catch {}
+    }
+    const teardownSeedIDs = new Set(manualSeedID ? [manualSeedID] : []);
+    if (daemonEnv) {
+      for (const sessionID of teardownSessionIDs) {
+        try {
+          const seedID = seedForSession(binary, sessionID, daemonEnv)?.id;
+          if (seedID) teardownSeedIDs.add(seedID);
+        } catch {}
+      }
+    }
+    for (const sessionID of teardownSessionIDs) {
+      await closeProbeSession(
+        client,
+        observer,
+        dataDirForProfile(profile),
+        sessionID,
+        fixturePath,
+      ).catch(() => {});
+    }
+    if (daemonEnv) {
+      for (const seedID of teardownSeedIDs) {
+        if (manualSeedSettled && seedID === manualSeedID) continue;
+        try { run(binary, ['seed', 'wither', seedID, '-m', 'Automation surface harness fixture complete'], daemonEnv); } catch {}
+      }
+    }
+    if (daemonEnv) {
+      if (manualApplied) { try { run(binary, ['automation', 'delete', manualID], daemonEnv); } catch {} }
+      if (scheduledApplied) { try { run(binary, ['automation', 'delete', scheduledID], daemonEnv); } catch {} }
     }
     if (fixturePath) {
       try { fs.rmSync(fixturePath, { recursive: true, force: true }); } catch {}

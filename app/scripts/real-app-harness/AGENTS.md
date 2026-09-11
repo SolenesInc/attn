@@ -123,23 +123,13 @@ piece of work rather than a rediscovery.
   empty, so `set_session_resume_id` before a `close_session` no longer
   survives. Whether that clearing is intended is the open question; the
   scenario is the only thing asserting it.
-- `scenario-automation-scheduled-cleanup.mjs` — port, then catalog. Two
-  `DOWNTIME_MS` stops spend 270 s proving a restart fires exactly one catch-up
-  run over several missed instants, and its `* * * * *` cron pins those
-  instants, so shortening the ticker alone recovers nothing. PR #134 removed
-  the same cost from `automation-lifecycle` with `@every 2s` plus
-  `ATTN_AUTOMATION_SCHEDULE_INTERVAL`; the port is that change again. Only the
-  minute-aligned `occurrence_key` assertion cannot survive it, and that format
-  belongs in `automations_schedule_test.go`.
-- `scenario-reload-not-crash.mjs` — port, then catalog. It launches real `codex`
-  and `claude` and asks a model to count to 40, so it is neither free nor
-  deterministic on a runner with no credentials, and its hand-rolled `main()`
-  never builds a `createScenarioRunner`, so no tripwire and no mock-GitHub
-  receipt cover it. The claim is worth keeping and has no cheaper twin:
-  `reload_session` leaves a bound ticket working and mints no reconcile task,
-  while a real worker `SIGKILL` still stamps the ticket crashed and mints one.
-  Driving both legs with the mock agent makes it deterministic and fit for
-  the matrix.
+- `scenario-reload-not-crash.mjs`: blocked on a contract choice. The mock-agent
+  port proves a real worker death still stamps the bound ticket `crashed`, but
+  the required `allowRealAgents: false` runner also sets
+  `ATTN_HEADLESS_TASKS=off`, so the daemon refuses reconciliation before it can
+  mint the task this scenario must assert. Cataloging it requires either a
+  no-model reconciliation fixture or an explicit decision that the refusal is
+  the contract under the harness tripwire.
 - `scenario-legacy-ticket-recovery.mjs` — hand-run, on purpose. It needs a
   second packaged bundle the acceptance job does not build
   (`make build-default-profile-harness`, profile `legacy-recovery`), and its
@@ -164,6 +154,52 @@ piece of work rather than a rediscovery.
   reviewer instead. The rewrite must prove a session under auto mode ending in
   a Guardian decision, a denial reaching the TUI, `attn automode denials`, and
   the notification feed. Garden seed s-f4bna3.
+- `scenario-agent-split-blank-probe.mjs`: keep out of the matrix. It records
+  render traces around the blank-pane defect but has no pass condition, launches
+  a real provider, and says in its own header to delete it with the temporary
+  tracing. Catalog it only if it becomes a deterministic regression assertion.
+- `scenario-chief-ticket-watch.mjs`: keep out of the matrix. It is the only
+  end-to-end probe of a chief deciding to watch and react to a legacy ticket,
+  but it asks a real model to make that decision and waits up to four minutes
+  for prose. Catalog it only after a mock fixture can express the decision and
+  the claim still matters beside the Garden dispatch and read-receipt scenarios.
+- `scenario-tr402.mjs`: port, then catalog. Its remote real-Codex path is not
+  armed by the harness and leaves its session, endpoint and remote root behind.
+- `scenario-offset-soak.mjs`: hand-run only. Its hand-written soak lacks
+  signal-safe teardown and Mock GitHub isolation; port both before cataloging.
+- `scenario-perf-baseline.mjs`: hand-run only. Its hand-written soak lacks
+  signal-safe teardown and Mock GitHub isolation; port both before cataloging.
+- `scenario-perf-cold-warm.mjs`: hand-run only. Its hand-written soak lacks
+  signal-safe teardown and Mock GitHub isolation, and can erase the worker
+  registry before asynchronous workers exit. Port those boundaries before
+  cataloging.
+- `scenario-perf-leak-soak.mjs`: rewrite, then catalog. Its unconditional
+  settling waits outlive the soak runner; replace them with observed signals.
+- `scenario-notebook-link-nav.mjs`: port, then catalog. Only it drives relative
+  note links, heading jumps and a parent-relative image through the packaged
+  editor. Its hand-written runner has no agent tripwire, mock-GitHub receipt or
+  standard verdict. Move it to `createScenarioRunner` before adding it.
+- `scenario-notebook-tile-close.mjs`: port, then catalog. Only it proves the
+  native close shortcut undocks the focused Notebook tile without closing its
+  terminal or session. Its hand-written runner has no standard receipts; the
+  port must also declare the platform shortcut behavior.
+- `scenario-reveal-overflow.mjs`: port, then catalog. It catches a hidden pane
+  retaining the taller window geometry when revealed after a shrink. The
+  hand-written runner and unmeasured 600 ms convergence deadline block the
+  matrix; replace that deadline with a measured tripwire during the port.
+- `scenario-terminal-build-upgrade.mjs`: hand-run when the terminal upgrade
+  path changes. Only it installs a second daemon build over the running profile
+  and proves `execve` keeps the worker, child and PTY. That install mutates the
+  packaged tree shared by a matrix shard, so it must stay outside the sweep.
+- `scenario-terminal-kitty-image.mjs`: fix, then catalog. It uniquely checks
+  kitty placement pixels, signed z-order, scroll anchoring, delete and the
+  escape hatch. A local catalog run passed placement and scroll, then timed out
+  because the program delete left the placement live; `s-m715j1` owns that
+  finding.
+- `scenario-webgl-recovery.mjs`: port, then catalog. Only it forces a WebGL
+  context loss, checks the recovery event sequence and proves the rebuilt
+  renderer accepts new output. Its hand-written runner lacks the standard
+  tripwire, mock-GitHub and verdict receipts.
 
 A new scenario file lands with a catalog entry, or with its verdict added here.
 

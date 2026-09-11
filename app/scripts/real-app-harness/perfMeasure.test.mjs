@@ -1,5 +1,42 @@
 import { describe, expect, it } from 'vitest';
-import { appPids, parseFootprint, parseGraphicsRegions, parseVmmapSummary } from './perfMeasure.mjs';
+import {
+  appPids,
+  assertDaemonRestartDoesNotHostSession,
+  parseFootprint,
+  parseGraphicsRegions,
+  parseVmmapSummary,
+} from './perfMeasure.mjs';
+
+describe('assertDaemonRestartDoesNotHostSession', () => {
+  const hosted = {
+    env: {
+      ATTN_SESSION_ID: 'session-under-test',
+      ATTN_SOCKET_PATH: '/tmp/attn-host/attn.sock',
+    },
+    resolveSocket: () => '/tmp/attn-target/attn.sock',
+    readDaemonPid: () => null,
+    readPidFile: () => null,
+  };
+
+  it('refuses the daemon reached through the invoking session socket', () => {
+    expect(() => assertDaemonRestartDoesNotHostSession('review', {
+      ...hosted,
+      resolveSocket: () => hosted.env.ATTN_SOCKET_PATH,
+    })).toThrow(/hosts invoking session session-under-test.*--no-restart-daemon/);
+  });
+
+  it('refuses the hosting daemon reached through another socket path', () => {
+    expect(() => assertDaemonRestartDoesNotHostSession('review', {
+      ...hosted,
+      readDaemonPid: () => process.pid,
+      readPidFile: () => process.pid,
+    })).toThrow(/hosts invoking session session-under-test/);
+  });
+
+  it('allows another profile daemon', () => {
+    expect(() => assertDaemonRestartDoesNotHostSession('review', hosted)).not.toThrow();
+  });
+});
 
 const REGIONS = `owned unmapped (graphics)    unmapped-unmapped     [ 22.6M  22.6M  22.6M     0K] rw-/rw- SM=PRV PURGE=N  owned physical footprint (unmapped) (graphics)
 owned unmapped (graphics)    unmapped-unmapped     [ 27.9M  27.9M  27.9M     0K] rw-/rw- SM=PRV PURGE=N  owned physical footprint (unmapped) (graphics)

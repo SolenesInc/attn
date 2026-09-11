@@ -183,7 +183,11 @@ async function main() {
   const suffix = Date.now().toString(36);
   const primaryID = `automation-form-${suffix}`;
   const renamedID = `automation-form-renamed-${suffix}`;
+  const githubID = `automation-form-github-${suffix}`;
+  const toggleID = `automation-form-toggle-${suffix}`;
+  const deleteID = `automation-form-delete-${suffix}`;
   const primaryName = `Automation form proof ${suffix}`;
+  const createdDefinitions = new Set();
 
   let daemonEnv = null;
   let fixturePath = null;
@@ -276,6 +280,7 @@ async function main() {
       await client.request('automation_form_set_values', {
         values: manualValues({ id: primaryID, name: primaryName, prompt: promptV1, directoryPath: fixturePath }),
       });
+      createdDefinitions.add(primaryID);
       await client.request('automation_form_submit');
       await pollForm(client, (state) => state.present === false, 'the create submit to close the form');
       await captureEvidenceScreenshot(runner, client, 'leg3-after-save.png');
@@ -461,7 +466,6 @@ async function main() {
       runner.assert(rowAfterSemantic.name === renamedName, 'the renamed name is what got stored', rowAfterSemantic);
     });
 
-    const githubID = `automation-form-github-${suffix}`;
     await runner.step('leg8_github_roundtrip_no_spurious_bump', async () => {
       await client.request('automation_form_open', {});
       await client.request('automation_form_set_values', {
@@ -472,6 +476,7 @@ async function main() {
           repositoriesInclude: ['github.com/acme/widgets'],
         }),
       });
+      createdDefinitions.add(githubID);
       await client.request('automation_form_submit');
       await pollForm(client, (state) => state.present === false, 'the github-trigger create to save and close the form');
 
@@ -499,6 +504,7 @@ async function main() {
       );
 
       run(binary, ['automation', 'delete', githubID], daemonEnv);
+      createdDefinitions.delete(githubID);
     });
 
     const staleEditPrompt = 'Edited after the definition was deleted elsewhere — this save must be refused.';
@@ -510,6 +516,7 @@ async function main() {
       runner.assert(opened.revision === rowBefore.revision, "the form holds the definition's current revision before the out-of-band delete", opened);
 
       run(binary, ['automation', 'delete', primaryID], daemonEnv);
+      createdDefinitions.delete(primaryID);
       const listAfterDelete = runJSON(binary, ['automation', 'list'], daemonEnv) || [];
       runner.assert(!listAfterDelete.some((row) => row.id === primaryID), 'sanity: the out-of-band CLI delete removes the definition while the form is still open on it', listAfterDelete);
 
@@ -528,7 +535,6 @@ async function main() {
       await client.request('automation_form_click', { button: 'cancel' });
     });
 
-    const toggleID = `automation-form-toggle-${suffix}`;
     await runner.step('leg10_panel_toggle_and_form_reflects_column', async () => {
       await client.request('automation_form_open', {});
       await client.request('automation_form_set_values', {
@@ -539,6 +545,7 @@ async function main() {
           directoryPath: fixturePath,
         }),
       });
+      createdDefinitions.add(toggleID);
       await client.request('automation_form_submit');
       await pollForm(client, (state) => state.present === false, 'the toggle-fixture create to save and close the form');
 
@@ -569,9 +576,9 @@ async function main() {
       runner.assert(reEnabledRow.revision === disabledRow.revision, 're-enabling also does not bump revision', { disabled: disabledRow.revision, reEnabled: reEnabledRow.revision });
 
       run(binary, ['automation', 'delete', toggleID], daemonEnv);
+      createdDefinitions.delete(toggleID);
     });
 
-    const deleteID = `automation-form-delete-${suffix}`;
     await runner.step('leg11_form_two_step_delete', async () => {
       await client.request('automation_form_open', {});
       await client.request('automation_form_set_values', {
@@ -582,6 +589,7 @@ async function main() {
           directoryPath: fixturePath,
         }),
       });
+      createdDefinitions.add(deleteID);
       await client.request('automation_form_submit');
       await pollForm(client, (state) => state.present === false, 'the delete-fixture create to save and close the form');
 
@@ -594,6 +602,7 @@ async function main() {
       await pollForm(client, (state) => state.present === false, 'the confirmed delete to close the form');
 
       runner.assert(showFailsWithDaemonError(binary, deleteID, daemonEnv), 'the definition is gone after the confirmed delete', deleteID);
+      createdDefinitions.delete(deleteID);
     });
 
     await runner.finishSuccess({ profile, primaryID, renamedID, githubID, toggleID, deleteID, leg3Revision, appBuild, protocolVersion });
@@ -602,6 +611,15 @@ async function main() {
     await runner.finishFailure(error, { profile, primaryID, renamedID, appBuild, protocolVersion });
     throw error;
   } finally {
+    if (daemonEnv) {
+      try {
+        run(binary, ['daemon', 'ensure'], daemonEnv);
+        await waitForDaemonReady(binary, daemonEnv);
+        for (const id of createdDefinitions) {
+          try { run(binary, ['automation', 'delete', id], daemonEnv); } catch {}
+        }
+      } catch {}
+    }
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
     if (daemonEnv) { try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {} }
