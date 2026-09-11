@@ -183,9 +183,25 @@ if ! grep -Fq 'pull_request:' <<<"$react_doctor_triggers" ||
   echo "React Doctor must report on relevant pull requests and prime branch caches" >&2
   exit 1
 fi
+react_doctor_job="$(sed -n '/^  react-doctor:/,$p' "$react_doctor")"
 for path in 'app/src/**' 'sdk/attn-app/**' 'app/package.json' 'app/pnpm-lock.yaml' '.github/workflows/react-doctor.yml'; do
-  if [[ "$(grep -Fc -- "- '$path'" <<<"$react_doctor_triggers")" != 2 ]]; then
-    echo "React Doctor must filter pull requests and branch priming to: $path" >&2
+  if [[ "$(grep -Fc -- "- '$path'" <<<"$react_doctor_triggers")" != 1 ]]; then
+    echo "React Doctor must keep its branch-priming trigger for: $path" >&2
+    exit 1
+  fi
+done
+for path in 'app/src/**' 'sdk/attn-app/**' 'app/package.json' 'app/pnpm-lock.yaml'; do
+  if ! grep -Fq -- "- '$path'" <<<"$react_doctor_job"; then
+    echo "React Doctor must scan pull requests that change: $path" >&2
+    exit 1
+  fi
+done
+for contract in \
+  "if: steps.changes.outputs.react == 'true'" \
+  "if: steps.changes.outputs.react != 'true'" \
+  'No React source or package inputs changed; scan skipped.'; do
+  if ! grep -Fq "$contract" <<<"$react_doctor_job"; then
+    echo "React Doctor must succeed with an explicit verdict when a scan is not needed: $contract" >&2
     exit 1
   fi
 done
