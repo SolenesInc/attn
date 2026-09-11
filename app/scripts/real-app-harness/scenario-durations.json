@@ -63,10 +63,24 @@
         "runnerClass": "github-hosted 4vcpu/16GB"
       },
       "delegation-preferences": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/34545299234",
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34556034570",
         "job": "App acceptance shard 2/4",
         "recordedAt": "2026-09-11",
-        "seconds": 24.4,
+        "seconds": 25.9,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "garden-seed-reopen": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34556034570",
+        "job": "App acceptance shard 1/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 8.1,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "garden-plot-dispatch": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34556034570",
+        "job": "App acceptance shard 2/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 24.0,
         "runnerClass": "github-hosted 4vcpu/16GB"
       }
     }
@@ -85,11 +99,11 @@
     "countdown-cancel": 46.3,
     "crash-recovery": 9,
     "crew-seed-header": 53.2,
-    "delegation-preferences": 24.4,
-    "garden-plot-dispatch": 22.9,
+    "delegation-preferences": 25.9,
+    "garden-plot-dispatch": 24.0,
     "garden-seed-header": 17.4,
     "garden-seed-read-receipts": 14.4,
-    "garden-seed-reopen": 9.2,
+    "garden-seed-reopen": 8.1,
     "garden-seed-tile-navigation": 7.8,
     "ghostty-scroll": 6.2,
     "markdown-opener": 20.3,
