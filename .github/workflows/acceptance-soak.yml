@@ -100,14 +100,6 @@ jobs:
         id: runner
         run: ./scripts/ci-runner-class.sh
 
-      - name: Validate scenario on runner
-        env:
-          REPEAT: ${{ needs.plan.outputs.repeat }}
-          SCENARIOS: ${{ matrix.scenario }}
-        run: >-
-          node app/scripts/real-app-harness/plan-soak.mjs
-          --scenarios "$SCENARIOS" --repeat "$REPEAT" --check-runner-env
-
       - name: Download the app tree
         uses: actions/download-artifact@v4
         with:
@@ -119,6 +111,14 @@ jobs:
         with:
           profile: ${{ env.ATTN_PROFILE }}
           archive: ${{ runner.temp }}/app-tree.tar.gz
+
+      - name: Validate scenario on runner
+        env:
+          REPEAT: ${{ needs.plan.outputs.repeat }}
+          SCENARIOS: ${{ matrix.scenario }}
+        run: >-
+          node app/scripts/real-app-harness/plan-soak.mjs
+          --scenarios "$SCENARIOS" --repeat "$REPEAT" --check-runner-env
 
       - name: Run the scenario soak
         id: soak
@@ -138,7 +138,7 @@ jobs:
         env:
           EVIDENCE_DIR: ${{ runner.temp }}/attn-real-app-harness/daemon
         run: |
-          data_dir="$(./attn profile resolve --field dataDir 2>/dev/null || true)"
+          data_dir="$(./attn profile resolve --field dataDir)"
           mkdir -p "$EVIDENCE_DIR"
           if [ -f "$data_dir/daemon.log" ]; then
             cp "$data_dir/daemon.log" "$EVIDENCE_DIR/daemon.log"
