@@ -134,6 +134,11 @@ func (p *pluginFixturePeer) launch(request jsonRPCMessage) {
 		Seq:       3,
 		Verdict:   protocol.StateWaitingInput,
 	})
+	appendPluginFixtureReportReceipt(p.t, pluginDriverReportReceipt{
+		SessionID: params.SessionID,
+		RunID:     params.RunID,
+		NativeID:  request.Method + "-native",
+	})
 	if request.Method != "driver.spawn" {
 		return
 	}
