@@ -50,6 +50,26 @@ async function main() {
       unsettledSeeds.delete(id);
     }
   };
+  runner.registerCleanup('close_observer', () => observer.close());
+  runner.registerCleanup('quit_app', () => client.quitApp());
+  runner.registerCleanup('delete_member', () => {
+    if (memberRegistered) run(['doc', 'delete', 'core/crew', 'members', member]);
+  });
+  runner.registerCleanup('remove_member_home', () => {
+    if (memberRegistered) fs.rmSync(home, { recursive: true });
+  });
+  runner.registerCleanup('settle_seeds', settleSeeds);
+  runner.registerCleanup('close_crew_session', async () => {
+    const current = sessions.at(-1);
+    if (observer.connected && current && observer.getSession(current)?.crew_member === member) {
+      // Handoff filenames have minute precision, so the successor's closing
+      // letter must wait for the previous letter's minute to end.
+      const nextMinute = Math.ceil((lastHandoffAt + 1) / 60_000) * 60_000;
+      await delay(Math.max(0, nextMinute - Date.now()));
+      run(['handoff', '--session', current, '--sleep', '-m', 'Crew header verification finished.']);
+      await observer.waitFor(() => !observer.getSession(current), 'the crew session to close', 10_000);
+    }
+  });
   const wake = async () => {
     const id = json(['crew', 'wake', member, '--json']).session_id;
     sessions.push(id);
@@ -70,6 +90,7 @@ async function main() {
     if (process.env.ATTN_HARNESS_RECORD === '1') await delay(1800);
   };
 
+  let failure = null;
   try {
     fs.mkdirSync(home, { recursive: true });
     fs.writeFileSync(path.join(home, 'CHARTER.md'), '# Fern\n\nWait for seed header checks.\n');
@@ -145,49 +166,12 @@ async function main() {
         { firstSeed, secondSeed },
       );
     });
-    const result = await runner.finishSuccess();
-    process.exitCode = result.ok ? 0 : 1;
   } catch (error) {
-    console.error((await runner.finishFailure(error)).error);
-    process.exitCode = 1;
-  } finally {
-    const cleanupErrors = [];
-    const cleanup = async (action) => {
-      try {
-        await action();
-      } catch (error) {
-        cleanupErrors.push(error);
-      }
-    };
-    await cleanup(async () => {
-      const current = sessions.at(-1);
-      if (observer.connected && current && observer.getSession(current)?.crew_member === member) {
-        // Handoff filenames have minute precision, so the successor's closing
-        // letter must wait for the previous letter's minute to end.
-        const nextMinute = Math.ceil((lastHandoffAt + 1) / 60_000) * 60_000;
-        await delay(Math.max(0, nextMinute - Date.now()));
-        run(['handoff', '--session', current, '--sleep', '-m', 'Crew header verification finished.']);
-        await observer.waitFor(() => !observer.getSession(current), 'the crew session to close', 10_000);
-      }
-    });
-    await cleanup(() => settleSeeds());
-    await cleanup(() => {
-      if (memberRegistered) {
-        fs.rmSync(home, { recursive: true });
-      }
-    });
-    await cleanup(() => {
-      if (memberRegistered) {
-        run(['doc', 'delete', 'core/crew', 'members', member]);
-      }
-    });
-    await cleanup(() => client.quitApp());
-    await cleanup(() => observer.close());
-    if (cleanupErrors.length) {
-      console.error(new AggregateError(cleanupErrors, 'Crew header cleanup failed'));
-      process.exitCode = 1;
-    }
+    failure = error;
   }
+  const result = await runner.finish(failure);
+  if (!result.ok) console.error(result.error);
+  process.exitCode = result.ok ? 0 : 1;
 }
 
 await main();

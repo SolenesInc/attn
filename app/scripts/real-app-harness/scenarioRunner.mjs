@@ -623,6 +623,20 @@ export function createScenarioRunner(options, {
       });
       return finalSummary;
     },
+    async finish(error = null, summary = {}) {
+      const errors = await runRegisteredCleanup('finish');
+      if (error) {
+        return runner.finishFailure(error, errors.length > 0 ? { ...summary, teardownErrors: errors } : summary);
+      }
+      if (errors.length > 0) {
+        return runner.finishFailure(teardownError(errors), {
+          ...summary,
+          failurePhase: 'teardown',
+          teardownErrors: errors,
+        });
+      }
+      return runner.finishSuccess(summary);
+    },
     async finishCleanup(summary = {}) {
       const errors = await runRegisteredCleanup('finish');
       if (errors.length === 0) {

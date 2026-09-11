@@ -338,6 +338,29 @@ describe('createScenarioRunner agent tripwire', () => {
     expect(failure.error).toContain('settings socket closed');
   });
 
+  it('runs cleanup under the lock and emits only a red verdict when it fails', async () => {
+    const { runner, verdicts } = runnerWithTripwire({ scenarioId: 'LOCKED-TEARDOWN-FAILURE' });
+    const lockPath = process.env.ATTN_REAL_APP_SCENARIO_LOCK_PATH;
+    let lockHeldDuringCleanup = false;
+    runner.registerCleanup('remove_member', () => {
+      lockHeldDuringCleanup = fs.existsSync(lockPath);
+      throw new Error('member delete failed');
+    });
+
+    const result = await runner.finish(null, { member: 'fern' });
+
+    expect(result).toMatchObject({
+      ok: false,
+      failurePhase: 'teardown',
+      member: 'fern',
+      teardownErrors: [{ name: 'remove_member' }],
+    });
+    expect(lockHeldDuringCleanup).toBe(true);
+    expect(verdicts.map(({ ok }) => ok)).toEqual([false]);
+    expect(fs.existsSync(lockPath)).toBe(false);
+    expect(fs.existsSync(path.join(runner.runDir, 'summary.json'))).toBe(false);
+  });
+
   it('starts one mock GitHub, makes the daemon carry it, and records what the daemon reads', async () => {
     const { runner, ensureMockGitHub, ensureDaemonArmed, readDaemonMockGitHub } = runnerWithTripwire();
 
