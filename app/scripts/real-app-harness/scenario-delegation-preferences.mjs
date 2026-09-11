@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { createScenarioRunner } from './scenarioRunner.mjs';
+import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, profileCliEnv, socketPathForProfile } from './harnessProfile.mjs';
 import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
 import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
@@ -36,13 +36,6 @@ async function save() {
   await click('[data-testid="delegation-save"]');
   await until(async () => !(await text()).includes('Unsaved changes') && !(await text()).includes('Saving…'), 'preferences saved');
 }
-async function closeSessions(sessionIds, ignoreErrors = false) {
-  const [sessionId, ...rest] = sessionIds;
-  if (!sessionId) return;
-  const close = client.request('close_session', { sessionId });
-  if (ignoreErrors) await close.catch(() => {}); else await close;
-  await closeSessions(rest, ignoreErrors);
-}
 async function screenshot(name) {
   await driver.activateApp();
   const outputPath = path.join(runner.runDir, name);
@@ -72,11 +65,16 @@ function preferencesRequest(cmd, preferences) {
 let source, worker, baseline;
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
+runner.registerCleanup('close_sessions', () => closeScenarioSessions(client, [worker, source].filter(Boolean)));
 try {
   const webkitBaseline = await captureWebKitPids();
   await launchFreshAppAndConnect(client, observer);
   const initial = await preferencesRequest('delegation_preferences_get');
   baseline = initial.preferences;
+  runner.registerCleanup('restore_preferences', async () => {
+    const current = await preferencesRequest('delegation_preferences_get');
+    await preferencesRequest('delegation_preferences_save', { ...baseline, revision: current.preferences.revision });
+  });
   if (baseline.revision !== 0) {
     await preferencesRequest('delegation_preferences_save', { ...baseline, enabled: false, roles: initial.templates, fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } });
   }
@@ -172,7 +170,9 @@ try {
     await screenshot('05-restored.png'); await hold();
   });
   await runner.step('idle_preferences_page', async () => {
-    await closeSessions([worker, source].filter(Boolean));
+    await closeScenarioSessions(client, [worker, source].filter(Boolean));
+    worker = undefined;
+    source = undefined;
     await delay(3000);
     const appPid = client.readManifest().pid;
     const daemonPid = readLiveDaemonPid(profile);
@@ -191,14 +191,4 @@ try {
   await screenshot('failure.png').catch(() => {});
   console.error(JSON.stringify(await runner.finishFailure(error), null, 2));
   process.exitCode = 1;
-} finally {
-  if (baseline && observer.connected) {
-    try {
-      const current = await preferencesRequest('delegation_preferences_get');
-      await preferencesRequest('delegation_preferences_save', { ...baseline, revision: current.preferences.revision });
-    } catch (error) { console.error(`Restore preferences: ${error.message}`); process.exitCode = 1; }
-  }
-  await closeSessions([worker, source].filter(Boolean), true);
-  await observer.close().catch(() => {});
-  await client.quitApp().catch(() => {});
 }

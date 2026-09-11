@@ -144,16 +144,6 @@ async function main() {
     const summary = await runner.finishFailure(error);
     console.error(summary.error);
     process.exitCode = 1;
-  } finally {
-    for (const [name, cleanup] of cleanups) {
-      try {
-        await cleanup();
-        runner.log('cleanup:ok', { name });
-      } catch (error) {
-        runner.log('cleanup:error', { name, error: String(error) });
-        process.exitCode = 1;
-      }
-    }
   }
 }
 
