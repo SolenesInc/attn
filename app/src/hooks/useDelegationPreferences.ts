@@ -15,7 +15,6 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
   const [error, setError] = useState('');
   const [generation, setGeneration] = useState(0);
   const pushed = useDelegationPreferencesPush(s => s.version);
-  const pushedRevision = useDelegationPreferencesPush(s => s.revision);
   const revision = useRef(0);
   const flight = useRef<Promise<void> | null>(null);
   const pending = useRef<Pending | null>(null);
@@ -31,7 +30,10 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
     const id = ++request.current;
     try {
       const next = await load();
-      if (id === request.current) { apply(next); setGeneration(n => n + 1); }
+      if (id !== request.current) return;
+      // A new revision is a change; the same table with fresh harness state is not.
+      if (next.preferences.revision !== revision.current) setGeneration(n => n + 1);
+      apply(next);
     } catch (e) {
       if (id === request.current) setError(message(e));
     }
@@ -39,8 +41,7 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
 
   const reload = useCallback(async () => { setError(''); await fetch(); }, [fetch]);
 
-  // The daemon announces our own save too; a push naming the revision already held is not news.
-  useEffect(() => { if (active && !flight.current && !pending.current && pushedRevision !== revision.current) void reload(); }, [active, pushed, pushedRevision, reload]);
+  useEffect(() => { if (active && !flight.current && !pending.current) void reload(); }, [active, pushed, reload]);
   useEffect(() => () => { request.current++; }, []);
 
   const drain = useCallback(async () => {
@@ -68,9 +69,15 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
     if (flight.current) return flight.current;
     request.current++;
     setBusy(true);
-    flight.current = drain().finally(() => { flight.current = null; setBusy(false); });
+    flight.current = drain().finally(() => {
+      flight.current = null;
+      setBusy(false);
+      // A push that landed during the flight was not acted on; a newer revision than ours needs a load.
+      const announced = useDelegationPreferencesPush.getState().revision;
+      if (announced !== null && announced > revision.current) void fetch();
+    });
     return flight.current;
-  }, [drain]);
+  }, [drain, fetch]);
 
   // generation moves on every save request and every load, so an undo taken at one is stale at the next.
   return { state, preferences, busy, error, generation, reload, save: persist };

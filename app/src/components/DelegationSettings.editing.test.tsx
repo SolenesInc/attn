@@ -167,3 +167,9 @@ it('withdraws undo when the delegation switch saves', async () => {
   await waitFor(() => expect(getState().preferences.enabled).toBe(false));
   expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
 });
+
+it('keeps the fallback row when the table has no roles', async () => {
+  setup([], true);
+  await screen.findByText('No roles yet');
+  expect(screen.getByRole('button', { name: 'Model for anything else' })).toBeInTheDocument();
+});

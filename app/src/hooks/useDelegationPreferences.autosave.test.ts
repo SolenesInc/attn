@@ -56,17 +56,27 @@ it('keeps an install queued behind a running save through the edits that collaps
   expect(daemon.getCalls('save').map(call => [(call.args[0] as DelegationPreferences).fallback.instructions, call.args[1]])).toEqual([['one', false], ['three', true]]);
 });
 
-it('ignores the push announcing its own save', async () => {
+it('keeps the generation when the push announcing its own save reloads the same revision', async () => {
   const { daemon, hook, releaseFirst } = setup();
   await waitFor(() => expect(hook.result.current.preferences).not.toBeNull());
   act(() => { void hook.result.current.save(preferences(0, 'one')); });
   releaseFirst();
   await waitFor(() => expect(hook.result.current.busy).toBe(false));
-  expect(hook.result.current.generation).toBe(2);
+  expect(hook.result.current.generation).toBe(1);
   act(() => useDelegationPreferencesPush.getState().push(1));
-  await act(async () => { await Promise.resolve(); });
+  await waitFor(() => expect(daemon.getCalls('load')).toHaveLength(2));
+  expect(hook.result.current.generation).toBe(1);
+});
+
+it('loads again after a save when a newer revision was announced during the flight', async () => {
+  const { daemon, hook, releaseFirst } = setup();
+  await waitFor(() => expect(hook.result.current.preferences).not.toBeNull());
+  act(() => { void hook.result.current.save(preferences(0, 'one')); });
+  act(() => useDelegationPreferencesPush.getState().push(2));
   expect(daemon.getCalls('load')).toHaveLength(1);
-  expect(hook.result.current.generation).toBe(2);
+  releaseFirst();
+  await waitFor(() => expect(daemon.getCalls('load')).toHaveLength(2));
+  await waitFor(() => expect(hook.result.current.busy).toBe(false));
 });
 
 it('drops local edits and reloads when the daemon reports a conflict', async () => {

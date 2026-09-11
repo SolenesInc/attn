@@ -260,24 +260,23 @@ export function DelegationSettings({ policy, loadModels }: { policy: DelegationP
       ? 'Roles guide agents that delegate. Each role has a model; an agent reads this table and picks the row that fits the work.'
       : 'Off. Agents that delegate pick harness and model on their own. Turn on to route them through this table.'}</p>
     {error && <p role="alert" className="settings-warning">{error}</p>}
-    {config.roles.length === 0 && !adoption
-      ? <div className="delegation-empty">
+    <div className={`delegation-table ${config.enabled ? '' : 'dim'}`}>
+      <div className="delegation-thead"><span /><span>Role</span><span>Runs on</span><span /></div>
+      {config.roles.length === 0 && !adoption && <div className="delegation-empty">
         <h3>No roles yet</h3>
         <p>Start with Attn's four maintained roles, then pick a model for each. Attn keeps their instructions current; the model choices stay yours.</p>
         <div className="delegation-actions center">
           <button type="button" className="settings-action primary" disabled={missing.length === 0} onClick={adopt}>Add Attn roles</button>
           <button type="button" className="settings-action" onClick={addRole}>+ Custom role</button>
         </div>
-      </div>
-      : <div className={`delegation-table ${config.enabled ? '' : 'dim'}`}>
-        <div className="delegation-thead"><span /><span>Role</span><span>Runs on</span><span /></div>
-        {config.roles.map(renderRole)}
-        {renderFallback()}
-        <div className="delegation-addrow">
-          <button type="button" className="settings-action quiet" onClick={addRole}>+ Custom role</button>
-          {missing.length > 0 && <button type="button" className="settings-action quiet" onClick={adopt}>{config.roles.some(role => role.builtin) ? `Restore Attn roles (${missing.length})` : 'Add Attn roles'}</button>}
-        </div>
       </div>}
+      {config.roles.map(renderRole)}
+      {renderFallback()}
+      {config.roles.length > 0 && <div className="delegation-addrow">
+        <button type="button" className="settings-action quiet" onClick={addRole}>+ Custom role</button>
+        {missing.length > 0 && <button type="button" className="settings-action quiet" onClick={adopt}>{config.roles.some(role => role.builtin) ? `Restore Attn roles (${missing.length})` : 'Add Attn roles'}</button>}
+      </div>}
+    </div>
     {adoption && <AdoptionPanel config={config} templates={missing} names={templateName} adoption={adoption} onChange={setAdoption} onCancel={() => setAdoption(null)} onConfirm={confirmAdoption} />}
     {undoLive && <div role="status" className="delegation-undo"><span>{undoLive.label}.</span><button type="button" className="settings-action quiet" onClick={() => { void save(undoLive.previous); setUndo(null); }}>Undo</button></div>}
     {config.roles.length > 0 && <div className="delegation-foot">
