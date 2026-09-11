@@ -194,6 +194,14 @@ export async function ptyAttach(request: {
         emitPtyEvent({ event: 'data', id: request.args.id, data: encodeBase64(banner) });
       }, 30);
     }
+    if (request.forceResizeBeforeAttach) {
+      emitPtyEvent({
+        event: 'local_resize',
+        id: request.args.id,
+        cols: request.args.cols,
+        rows: request.args.rows,
+      });
+    }
     return;
   }
   if (!backend) {
