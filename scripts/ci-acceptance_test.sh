@@ -183,7 +183,7 @@ if ! grep -Fq 'pull_request:' <<<"$react_doctor_triggers" ||
   echo "React Doctor must report on relevant pull requests and prime branch caches" >&2
   exit 1
 fi
-for path in 'app/src/**' 'app/package.json' 'app/pnpm-lock.yaml' '.github/workflows/react-doctor.yml'; do
+for path in 'app/src/**' 'sdk/attn-app/**' 'app/package.json' 'app/pnpm-lock.yaml' '.github/workflows/react-doctor.yml'; do
   if [[ "$(grep -Fc -- "- '$path'" <<<"$react_doctor_triggers")" != 2 ]]; then
     echo "React Doctor must filter pull requests and branch priming to: $path" >&2
     exit 1

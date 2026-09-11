@@ -11,6 +11,7 @@ on:
     branches: [main, next]
     paths:
       - 'app/src/**'
+      - 'sdk/attn-app/**'
       - 'app/package.json'
       - 'app/pnpm-lock.yaml'
       - '.github/workflows/react-doctor.yml'
@@ -18,6 +19,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'app/src/**'
+      - 'sdk/attn-app/**'
       - 'app/package.json'
       - 'app/pnpm-lock.yaml'
       - '.github/workflows/react-doctor.yml'
