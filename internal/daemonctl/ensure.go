@@ -29,7 +29,7 @@ const (
 )
 
 var errDaemonAlreadyRunning = errors.New("daemon already running")
-var errDaemonLockHeld = errors.New("daemon lock held by another attn process")
+var errDaemonLockReleased = errors.New("daemon lock released without a live daemon")
 var errDaemonStartupTimeout = errors.New("daemon startup tripwire expired")
 
 type StartupSignal struct {
@@ -262,10 +262,6 @@ func (s StartupSignal) AlreadyRunning() {
 	_ = s.finish("already-running\n")
 }
 
-func (s StartupSignal) LockHeld() {
-	_ = s.finish("lock-held\n")
-}
-
 func (s StartupSignal) finish(message string) error {
 	if s.writer == nil {
 		return nil
@@ -284,8 +280,6 @@ func (p daemonProcess) waitForReady(ctx context.Context) error {
 			case text == "ready":
 			case text == "already-running":
 				err = errDaemonAlreadyRunning
-			case text == "lock-held":
-				err = errDaemonLockHeld
 			case strings.HasPrefix(text, "error:"):
 				err = fmt.Errorf("daemon startup failed: %s", strings.TrimPrefix(text, "error:"))
 			default:
@@ -312,7 +306,7 @@ func waitForSpawnedDaemon(ctx context.Context, process daemonProcess) (bool, err
 	defer ticker.Stop()
 	if err := waitForMatchingDaemon(ctx, ticker.C, fetchHealth, func() bool {
 		return isSocketLive(config.SocketPath())
-	}); err != nil {
+	}, pidLockAvailable); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -325,11 +319,8 @@ func startDaemon(ctx context.Context, binaryPath string) (bool, error) {
 			return false, err
 		}
 		contended, err := waitForSpawnedDaemon(ctx, process)
-		if !errors.Is(err, errDaemonLockHeld) {
+		if !errors.Is(err, errDaemonLockReleased) {
 			return contended, err
-		}
-		if err := waitForPIDLockRelease(ctx); err != nil {
-			return false, err
 		}
 		if matchingDaemonIsLive(ctx) {
 			return true, nil
@@ -337,34 +328,20 @@ func startDaemon(ctx context.Context, binaryPath string) (bool, error) {
 	}
 }
 
-func waitForPIDLockRelease(ctx context.Context) error {
+func pidLockAvailable() (bool, error) {
 	lockFile, err := os.OpenFile(config.PIDPath(), os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		return fmt.Errorf("open daemon pid lock: %w", err)
+		return false, fmt.Errorf("open daemon pid lock: %w", err)
 	}
-	result := make(chan error, 1)
-	go func() {
-		result <- syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX)
-	}()
-	select {
-	case err := <-result:
-		if err == nil {
-			_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+	defer lockFile.Close()
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return false, nil
 		}
-		lockFile.Close()
-		if err != nil {
-			return fmt.Errorf("wait for daemon pid lock: %w", err)
-		}
-		return nil
-	case <-ctx.Done():
-		go func() {
-			if <-result == nil {
-				_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
-			}
-			_ = lockFile.Close()
-		}()
-		return ctx.Err()
+		return false, fmt.Errorf("probe daemon pid lock: %w", err)
 	}
+	_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+	return true, nil
 }
 
 func waitForMatchingDaemon(
@@ -372,6 +349,7 @@ func waitForMatchingDaemon(
 	retry <-chan time.Time,
 	fetch func(context.Context) (healthResponse, error),
 	socketLive func() bool,
+	lockAvailable func() (bool, error),
 ) error {
 	for {
 		health, err := fetch(ctx)
@@ -383,6 +361,13 @@ func waitForMatchingDaemon(
 				return fmt.Errorf("competing daemon is missing its Unix listener")
 			}
 			return fmt.Errorf("competing daemon does not match current binary")
+		}
+		available, lockErr := lockAvailable()
+		if lockErr != nil {
+			return lockErr
+		}
+		if available {
+			return errDaemonLockReleased
 		}
 		select {
 		case <-ctx.Done():

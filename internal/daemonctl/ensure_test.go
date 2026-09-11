@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -58,22 +59,6 @@ func TestDaemonProcessWaitForReadyReportsStartupFailure(t *testing.T) {
 	}
 }
 
-func TestDaemonProcessWaitForReadyReportsNonDaemonLockHolder(t *testing.T) {
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	go func() {
-		_, _ = writer.WriteString("lock-held\n")
-		_ = writer.Close()
-	}()
-
-	err = (daemonProcess{ready: reader}).waitForReady(context.Background())
-	if !errors.Is(err, errDaemonLockHeld) {
-		t.Fatalf("waitForReady() error = %v, want non-daemon lock holder", err)
-	}
-}
-
 func TestWaitForMatchingDaemonReconcilesAConcurrentStartup(t *testing.T) {
 	retry := make(chan time.Time)
 	firstAttempt := make(chan struct{})
@@ -94,7 +79,7 @@ func TestWaitForMatchingDaemonReconcilesAConcurrentStartup(t *testing.T) {
 		retry <- time.Time{}
 	}()
 
-	if err := waitForMatchingDaemon(context.Background(), retry, fetch, func() bool { return true }); err != nil {
+	if err := waitForMatchingDaemon(context.Background(), retry, fetch, func() bool { return true }, func() (bool, error) { return false, nil }); err != nil {
 		t.Fatalf("waitForMatchingDaemon() error = %v", err)
 	}
 }
@@ -111,9 +96,25 @@ func TestWaitForMatchingDaemonRejectsAHealthyDaemonWithoutItsUnixSocket(t *testi
 			return healthResponse{Protocol: protocol.ProtocolVersion}, nil
 		},
 		func() bool { return false },
+		func() (bool, error) { return false, nil },
 	)
 	if err == nil || !strings.Contains(err.Error(), "missing its Unix listener") {
 		t.Fatalf("waitForMatchingDaemon() error = %v, want missing Unix listener rejection", err)
+	}
+}
+
+func TestWaitForMatchingDaemonRetriesWhenThePIDLockIsReleased(t *testing.T) {
+	err := waitForMatchingDaemon(
+		context.Background(),
+		make(chan time.Time),
+		func(context.Context) (healthResponse, error) {
+			return healthResponse{}, errors.New("not ready")
+		},
+		func() bool { return false },
+		func() (bool, error) { return true, nil },
+	)
+	if !errors.Is(err, errDaemonLockReleased) {
+		t.Fatalf("waitForMatchingDaemon() error = %v, want startup retry", err)
 	}
 }
 
@@ -182,7 +183,7 @@ func TestEnsureLockSerializesSocketInspection(t *testing.T) {
 	release()
 }
 
-func TestWaitForPIDLockReleaseUsesTheLockAsItsSignal(t *testing.T) {
+func TestPIDLockAvailableTracksTheKernelLock(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("ATTN_PROFILE", "")
 	t.Setenv("ATTN_DATA_DIR", dir)
@@ -199,16 +200,31 @@ func TestWaitForPIDLockReleaseUsesTheLockAsItsSignal(t *testing.T) {
 	if err := syscall.Flock(int(holder.Fd()), syscall.LOCK_EX); err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if err := waitForPIDLockRelease(ctx); !errors.Is(err, context.Canceled) {
-		t.Fatalf("waitForPIDLockRelease() error = %v, want context cancellation while lock is held", err)
+	if _, err := holder.WriteAt([]byte(strconv.Itoa(os.Getpid())), 0); err != nil {
+		t.Fatal(err)
+	}
+	available, err := pidLockAvailable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if available {
+		t.Fatal("pidLockAvailable() trusted numeric contents over the held flock")
+	}
+	if err := holder.Truncate(0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := holder.WriteAt([]byte(NonDaemonHolderSentinel), 0); err != nil {
+		t.Fatal(err)
 	}
 	if err := syscall.Flock(int(holder.Fd()), syscall.LOCK_UN); err != nil {
 		t.Fatal(err)
 	}
-	if err := waitForPIDLockRelease(context.Background()); err != nil {
-		t.Fatalf("waitForPIDLockRelease() after release: %v", err)
+	available, err = pidLockAvailable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !available {
+		t.Fatal("pidLockAvailable() trusted stale sentinel contents over the released flock")
 	}
 }
 

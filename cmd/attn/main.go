@@ -539,12 +539,7 @@ func runDaemon() {
 		}
 	case err := <-startResult:
 		if errors.Is(err, daemon.ErrAlreadyRunning) {
-			pid, _ := os.ReadFile(config.PIDPath())
-			if strings.TrimSpace(string(pid)) == daemonctl.NonDaemonHolderSentinel {
-				startupSignal.LockHeld()
-			} else {
-				startupSignal.AlreadyRunning()
-			}
+			startupSignal.AlreadyRunning()
 		} else {
 			startupSignal.Failed(err)
 		}
