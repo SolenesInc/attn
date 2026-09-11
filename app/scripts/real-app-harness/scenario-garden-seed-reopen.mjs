@@ -75,7 +75,10 @@ async function pollFor(fn, description, timeoutMs = 20_000, intervalMs = 250) {
 }
 
 async function waitForRenderedReply(client, sessionId, expected, timeoutMs = 120_000) {
-  const pane = await waitForFirstWorkspacePane(client, sessionId, `reply pane for ${sessionId}`, 20_000);
+  const pane = await pollFor(async () => {
+    const workspace = await client.request('get_workspace', { sessionId });
+    return (workspace.panes || []).find((entry) => entry.sessionId === sessionId) ?? null;
+  }, `reply pane for ${sessionId}`);
   const deadline = Date.now() + timeoutMs;
   let last = '';
   while (Date.now() < deadline) {
