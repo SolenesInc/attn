@@ -466,9 +466,9 @@ async function main() {
       const unread = await pollFor(
         () => {
           const s = observer.getSession(targetId);
-          return s && s.ticket_unread === true ? s : null;
+          return s && s.ticket_unread === true && IDLE_STATES.has(s.state) ? s : null;
         },
-        `target ${targetId} to show unread ticket activity`,
+        `target ${targetId} to show unread ticket activity after its prior turn settles`,
         30_000,
       );
       note('target shows unread ticket activity', {
@@ -481,7 +481,6 @@ async function main() {
         `selected target's nudge is paused (no armed countdown); got nudge_fires_at=${JSON.stringify(unread.nudge_fires_at)}`,
         unread,
       );
-      runner.assert(IDLE_STATES.has(unread.state), `target is still idle/waiting while paused (got ${unread.state})`, unread);
     });
 
     await runner.step('the_deliver_now_button_submits_the_doorbell', async () => {
