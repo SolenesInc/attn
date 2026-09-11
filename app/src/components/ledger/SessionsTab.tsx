@@ -92,11 +92,21 @@ export function SessionsTab({
 
   const [text, setText] = useState(() => formatQuery(restoredFilters, workspaceLabel));
   const parsed = useMemo(() => parseQuery(text, ledger.facets, workspaceLabel), [text, ledger.facets, workspaceLabel]);
+  const facetsPending = ledger.facets === null;
+  const unresolvedRepository = facetsPending
+    && parsed.unresolved.some((token) => token.toLowerCase().startsWith('repo:'));
+  const unresolvedWorkspace = facetsPending
+    && parsed.unresolved.some((token) => token.toLowerCase().startsWith('ws:'));
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setFilters((current) => {
-        const next = { ...current, ...parsed.filters };
+        const next = {
+          ...current,
+          ...parsed.filters,
+          repository: unresolvedRepository ? current.repository : parsed.filters.repository,
+          workspaceId: unresolvedWorkspace ? current.workspaceId : parsed.filters.workspaceId,
+        };
         const same = next.range === current.range && next.customFrom === current.customFrom
           && next.customTo === current.customTo && next.workspaceId === current.workspaceId
           && next.repository === current.repository;
@@ -104,7 +114,7 @@ export function SessionsTab({
       });
     }, 150);
     return () => window.clearTimeout(timer);
-  }, [parsed.filters, setFilters]);
+  }, [parsed.filters, setFilters, unresolvedRepository, unresolvedWorkspace]);
 
   useEffect(() => {
     if (!requestedDir) return;

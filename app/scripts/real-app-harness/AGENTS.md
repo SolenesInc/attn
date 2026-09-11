@@ -7,6 +7,10 @@ Run commands from the repository root.
 
 - Scenarios share one display; run serially. Batch with
   `pnpm --dir app run real-app:serial-matrix`.
+- Hunt a CI flake with
+  `gh workflow run acceptance-soak.yml --ref next -f scenarios=terminal-annotations,terminal-block-resize`.
+  Its job summary lists every iteration and runner class; artifacts retain
+  evidence only for failed iterations.
 - `--shard <index>/<count>` runs one balanced slice, which is how CI spreads the
   matrix across runners. The weights are `scenario-durations.json`, seconds a
   green run recorded; a scenario with no entry there fails the plan by name.

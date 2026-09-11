@@ -4,10 +4,40 @@
     "job": "App acceptance",
     "recordedAt": "2026-09-11",
     "matrixSeconds": 826.7,
-    "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these."
+    "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these.",
+    "updates": {
+      "agent-close": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34544718832",
+        "job": "App acceptance shard 1/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 8.2,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "sessions-surface": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34544718832",
+        "job": "App acceptance shard 2/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 23.6,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "terminal-annotations": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34544718832",
+        "job": "App acceptance shard 1/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 21.0,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "worktree-surface": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34544718832",
+        "job": "App acceptance shard 4/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 34.3,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      }
+    }
   },
   "seconds": {
-    "agent-close": 7.9,
+    "agent-close": 8.2,
     "agent-queue": 93.8,
     "agent-settings": 18.7,
     "autoclose-on-exit": 19.1,
@@ -35,8 +65,8 @@
     "session-close-ledger": 9.9,
     "session-reopen": 6.2,
     "session-usage": 10,
-    "sessions-surface": 23.8,
-    "terminal-annotations": 21,
+    "sessions-surface": 23.6,
+    "terminal-annotations": 21.0,
     "terminal-block-resize": 10.6,
     "terminal-context-menu": 9.7,
     "terminal-input": 12.8,
@@ -48,6 +78,6 @@
     "workspace-close-one-session-keeps-selection": 27.4,
     "workspace-creation-shortcuts": 22.6,
     "workspace-switching": 38.9,
-    "worktree-surface": 32.3
+    "worktree-surface": 34.3
   }
 }

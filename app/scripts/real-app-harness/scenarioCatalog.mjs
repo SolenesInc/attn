@@ -185,7 +185,7 @@ export const scenarioCatalog = [
   {
     id: 'worktree-surface',
     runnerId: 'WORKTREE-SURFACE',
-    label: 'Worktrees panel: a slow refresh stays visible, the keep pin goes both ways, and a removal lands on its seed',
+    label: 'Worktrees panel: one refresh completes every verdict, the keep pin goes both ways, and a removal lands on its seed',
     command: ['pnpm', 'run', 'real-app:scenario-worktree-surface'],
     timeoutMs: 900_000,
   },
