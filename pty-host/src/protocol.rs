@@ -171,6 +171,18 @@ pub fn kitty_placements_event(session_id: &str, seq: u32, placements: &[KittyPla
     })
 }
 
+pub fn resize_event(session_id: &str, cols: u16, rows: u16, xpixel: u16, ypixel: u16) -> Value {
+    json!({
+        "type": "evt",
+        "event": "resize",
+        "session_id": session_id,
+        "cols": cols,
+        "rows": rows,
+        "xpixel": xpixel,
+        "ypixel": ypixel
+    })
+}
+
 pub fn state_event(session_id: &str, state: &str, detail: &str, source: &str) -> Value {
     json!({
         "type": "evt",

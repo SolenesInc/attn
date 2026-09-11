@@ -265,14 +265,14 @@ describe('acquireSoakLock', () => {
 
     expect(acquireSoakLock({
       scenarioId: 'demo-scenario',
-      runDir: '/tmp/soak-demo-run',
+      artifactsRoot: '/tmp/attn-real-app-harness',
       appPath: '/tmp/attn.app',
     }, { acquire, lockPath, childPid: 42 })).toBe(release);
     expect(acquire).toHaveBeenCalledWith({
       scenarioId: 'SOAK-demo-scenario',
       tier: 'soak',
-      runId: 'soak-demo-run',
-      runDir: '/tmp/soak-demo-run',
+      runId: 'soak-demo-scenario',
+      runDir: '/tmp/attn-real-app-harness',
       appPath: '/tmp/attn.app',
     }, lockPath);
     expect(process.env.ATTN_REAL_APP_SCENARIO_LOCK_PATH).toBe(`${lockPath}.children-42`);

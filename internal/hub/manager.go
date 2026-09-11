@@ -790,6 +790,7 @@ func forwardsRawEvent(event string) bool {
 		protocol.EventSpawnResult,
 		protocol.EventAttachResult,
 		protocol.EventPtyOutput,
+		protocol.EventPtyResized,
 		protocol.EventPtyDesync,
 		protocol.EventKittyPlacements,
 		protocol.EventKittyImageResult,

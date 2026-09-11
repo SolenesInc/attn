@@ -86,6 +86,7 @@ type daemonHealth struct {
 type prober struct {
 	lookPath      func(string) (string, error)
 	writable      func(string) error
+	cacheWritable func(string) error
 	pathIsSocket  func(string) error
 	goCachePaths  func(context.Context) ([]string, error)
 	appProtocol   func(context.Context, string) (string, error)
@@ -98,6 +99,7 @@ func defaultProber() prober {
 	return prober{
 		lookPath:      exec.LookPath,
 		writable:      probeWritableDirectory,
+		cacheWritable: probeWritableCacheDirectory,
 		pathIsSocket:  requireSocket,
 		goCachePaths:  resolveGoCachePaths,
 		appProtocol:   readAppProtocol,
@@ -179,7 +181,7 @@ func run(ctx context.Context, opts Options, p prober) Report {
 			if i == 1 {
 				name = "path.go_module_cache"
 			}
-			if err := p.writable(path); err != nil {
+			if err := p.cacheWritable(path); err != nil {
 				add(fail(name, fmt.Sprintf("%s is not writable: %v", path, err), "Point Go at a writable cache or fix this directory's permissions."))
 			} else {
 				add(pass(name, path))
@@ -377,6 +379,26 @@ func probeWritableDirectory(path string) error {
 		return err
 	}
 	return os.Remove(name)
+}
+
+func probeWritableCacheDirectory(path string) error {
+	if !filepath.IsAbs(path) {
+		return fmt.Errorf("path is not absolute")
+	}
+	for {
+		_, err := os.Lstat(path)
+		if err == nil {
+			return probeWritableDirectory(path)
+		}
+		if !os.IsNotExist(err) {
+			return err
+		}
+		parent := filepath.Dir(path)
+		if parent == path {
+			return err
+		}
+		path = parent
+	}
 }
 
 func requireSocket(path string) error {

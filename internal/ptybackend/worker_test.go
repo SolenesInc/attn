@@ -629,11 +629,11 @@ func TestWorkerBackend_PersistentControl_RetriesAfterConnectionDrops(t *testing.
 	if err := backend.Input(context.Background(), sessionID, []byte("x")); err != nil {
 		t.Fatalf("Input() error: %v", err)
 	}
-	changed, err := backend.Resize(context.Background(), sessionID, 120, 40, 0, 0)
+	result, err := backend.Resize(context.Background(), sessionID, 120, 40, 0, 0)
 	if err != nil {
 		t.Fatalf("Resize() after dropped control connection error: %v", err)
 	}
-	if !changed {
+	if !result.Changed {
 		t.Fatal("a retried resize was suppressed even though the lost attempt may have applied")
 	}
 

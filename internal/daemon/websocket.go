@@ -1823,7 +1823,7 @@ func (d *Daemon) broadcastRawWSMessage(payload []byte) {
 			return client.resolvePendingRemoteAttach(envelope.ID, envelope.Success)
 		})
 		return
-	case protocol.EventPtyOutput, protocol.EventPtyInputProbeResult, protocol.EventPtyDesync, protocol.EventKittyPlacements, protocol.EventKittyImageResult:
+	case protocol.EventPtyOutput, protocol.EventPtyResized, protocol.EventPtyInputProbeResult, protocol.EventPtyDesync, protocol.EventKittyPlacements, protocol.EventKittyImageResult:
 		if strings.TrimSpace(envelope.ID) == "" {
 			d.wsHub.BroadcastRawText(payload)
 			return

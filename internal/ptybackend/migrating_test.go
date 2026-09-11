@@ -123,8 +123,8 @@ func (b *migrationTestBackend) Input(_ context.Context, id string, data []byte) 
 	return nil
 }
 
-func (b *migrationTestBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (bool, error) {
-	return true, nil
+func (b *migrationTestBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (ResizeResult, error) {
+	return ResizeResult{Changed: true}, nil
 }
 
 func (b *migrationTestBackend) SetTheme(context.Context, string, pty.TerminalTheme) error {
