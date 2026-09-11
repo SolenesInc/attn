@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -117,6 +118,62 @@ func TestExplicitSeedDispatchRequiresHandoverBeforeCreatingWorktree(t *testing.T
 	}
 	if attngit.RefExists(repo, "feat/unexpected") {
 		t.Fatal("refused dispatch created its branch")
+	}
+}
+
+func TestConcurrentReuseDelegationsRequireExplicitSharing(t *testing.T) {
+	root := t.TempDir()
+	repo := initDelegationRepo(t, root, "repo")
+	d := newDelegationDaemon(t)
+	backend := &fakeSpawnBackend{}
+	setupDelegationSource(t, d, backend)
+	branch, err := attngit.GetCurrentBranch(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstSpawn := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	var spawnOnce sync.Once
+	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
+		spawnOnce.Do(func() {
+			close(firstSpawn)
+			<-releaseFirst
+		})
+		backend.mu.Lock()
+		backend.sessionIDs = append(backend.sessionIDs, opts.ID)
+		backend.mu.Unlock()
+	}
+	request := func(id string) protocol.DelegateMessage {
+		return protocol.DelegateMessage{
+			Cmd: protocol.CmdDelegate, RequestID: id,
+			Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr("Use the shared checkout safely.")},
+			Cwd:        repo, Agent: protocol.Ptr("codex"), Label: protocol.Ptr(id),
+			Checkout: &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindReuse, Branch: branch},
+		}
+	}
+	firstRequest := request("reuse-first")
+	first, err := d.startDelegation(&firstRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-firstSpawn:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first delegation did not reach spawn")
+	}
+	secondRequest := request("reuse-second")
+	second, err := d.startDelegation(&secondRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	close(releaseFirst)
+	firstDone := waitDelegationOperation(t, d, first.OperationID)
+	secondDone := waitDelegationOperation(t, d, second.OperationID)
+	if firstDone.State != protocol.DelegationOperationStateCompleted {
+		t.Fatalf("first operation = %+v", firstDone)
+	}
+	if secondDone.State != protocol.DelegationOperationStateFailed || secondDone.Failure == nil || !strings.Contains(secondDone.Failure.Message, "--allow-worktree-reuse") {
+		t.Fatalf("second operation = %+v, want sharing refusal", secondDone)
 	}
 }
 

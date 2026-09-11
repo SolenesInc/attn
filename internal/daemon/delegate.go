@@ -889,6 +889,15 @@ func (d *Daemon) delegateOperation(msg *resolvedDelegationLaunch, operationID, r
 		}
 		directory = validatedDirectory
 	}
+	// Keep the occupancy check and session registration indivisible. The stored
+	// session becomes the durable reservation seen by the next launch.
+	d.delegationCheckoutMu.Lock()
+	checkoutLocked := true
+	defer func() {
+		if checkoutLocked {
+			d.delegationCheckoutMu.Unlock()
+		}
+	}()
 	predecessorID := ""
 	if handover != nil {
 		predecessorID = strings.TrimSpace(msg.PreviousTenderSession)
@@ -976,6 +985,8 @@ func (d *Daemon) delegateOperation(msg *resolvedDelegationLaunch, operationID, r
 		return nil, rollback.fail(fmt.Errorf("delegated session was not persisted"))
 	}
 	rollback.onSessionSpawned(sessionID)
+	d.delegationCheckoutMu.Unlock()
+	checkoutLocked = false
 	if d.delegationFinalizeHook != nil {
 		if err := d.delegationFinalizeHook(); err != nil {
 			return nil, rollback.fail(err)
