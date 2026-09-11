@@ -44,7 +44,7 @@ require (
 	golang.org/x/text v0.39.0 // indirect
 	google.golang.org/protobuf v1.36.1 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
-	honnef.co/go/tools v0.7.0 // indirect
+	honnef.co/go/tools v0.8.1 // indirect
 )
 
 tool honnef.co/go/tools/cmd/staticcheck
