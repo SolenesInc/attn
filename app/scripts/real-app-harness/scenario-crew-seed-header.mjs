@@ -32,14 +32,23 @@ async function main() {
   const observer = new DaemonObserver(options);
   const driver = createWindowDriver(options);
   const sessions = [];
+  const unsettledSeeds = new Set();
   let lastHandoffAt = 0;
+  let memberRegistered = false;
   const member = `fern-${Date.now().toString(36)}`;
+  const home = path.join(dataDirForProfile(profile), 'crew', member);
   const run = (args) => execFileSync(appDaemonInTree(options.appPath), args, {
     encoding: 'utf8', env: profileCliEnv(profile, { ATTN_SESSION_ID: '' }),
   });
   const json = (args) => {
     const output = run(args);
     return JSON.parse(output.slice(output.indexOf('{')));
+  };
+  const settleSeeds = () => {
+    for (const id of unsettledSeeds) {
+      run(['seed', 'wither', id, '--member', member, '-m', 'Harness fixture cleanup']);
+      unsettledSeeds.delete(id);
+    }
   };
   const wake = async () => {
     const id = json(['crew', 'wake', member, '--json']).session_id;
@@ -62,7 +71,6 @@ async function main() {
   };
 
   try {
-    const home = path.join(dataDirForProfile(profile), 'crew', member);
     fs.mkdirSync(home, { recursive: true });
     fs.writeFileSync(path.join(home, 'CHARTER.md'), '# Fern\n\nWait for seed header checks.\n');
     writeMockAgentFixture(runner.sessionDir, {
@@ -72,6 +80,7 @@ async function main() {
     await client.quitApp();
     run(['daemon', 'stop']);
     await launchFreshAppAndConnect(client, observer);
+    memberRegistered = true;
     runner.writeText('preflight.txt', run(['preflight', '--agent', 'claude', '--model', 'claude-haiku-4-5']));
     run(['crew', 'set', member, '--cwd', runner.sessionDir, '--agent', 'claude', '--model', 'claude-haiku-4-5']);
     const sessionId = await wake();
@@ -79,7 +88,9 @@ async function main() {
       if (!String(error).includes('dom_click selector not found in DOM')) throw error;
     });
     const first = json(['seed', 'plant', 'Review release notes', '--json']).id;
+    unsettledSeeds.add(first);
     const second = json(['seed', 'plant', 'Verify upload completion', '--json']).id;
+    unsettledSeeds.add(second);
     await runner.step('show_member_claims_in_the_existing_header_and_popover', async () => {
       await header(sessionId, null);
       run(['seed', 'tend', first, '--member', member]);
@@ -114,6 +125,7 @@ async function main() {
       await delay(3000);
       runner.writeText('idle-app.txt', `CPU% RSS(KiB)\nbefore ${before}\nafter ${metrics()}\n`);
       run(['seed', 'harvest', first, '--member', member, '-m', 'Header behavior verified']);
+      unsettledSeeds.delete(first);
       await header(next, null);
       run(['seed', 'tend', second, '--member', member]);
       await header(next, 'Verify upload completion');
@@ -121,6 +133,17 @@ async function main() {
       await client.request('dom_focus', { selector: `[data-testid="seed-chip-${next}"]` });
       await driver.pressEnter();
       await poll(async () => (await client.request('seed_document_get_state', { seedId: second })).present, 'the seed document');
+    });
+    await runner.step('settle_synthetic_seeds', async () => {
+      settleSeeds();
+      const seeds = json(['seed', 'ls', '--flat', '--json']).seeds;
+      const firstSeed = seeds.find(seed => seed.id === first);
+      const secondSeed = seeds.find(seed => seed.id === second);
+      runner.assert(
+        firstSeed?.status === 'harvested' && secondSeed?.status === 'withered',
+        'synthetic seeds are settled',
+        { firstSeed, secondSeed },
+      );
     });
     const result = await runner.finishSuccess();
     process.exitCode = result.ok ? 0 : 1;
@@ -137,6 +160,11 @@ async function main() {
         await delay(Math.max(0, nextMinute - Date.now()));
         run(['handoff', '--session', current, '--sleep', '-m', 'Crew header verification finished.']);
         await observer.waitFor(() => !observer.getSession(current), 'the crew session to close', 10_000);
+      }
+      settleSeeds();
+      if (memberRegistered) {
+        fs.rmSync(home, { recursive: true });
+        run(['doc', 'delete', 'core/crew', 'members', member]);
       }
     } finally {
       await client.quitApp();

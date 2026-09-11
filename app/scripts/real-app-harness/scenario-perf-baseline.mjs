@@ -289,8 +289,9 @@ async function main() {
 
   try {
     if (port && options.restartDaemon) {
-      const killed = await stopDaemon('dev');
-      console.log(`[perf] stopped dev daemon pid=${killed ?? 'none'} so a fresh one inherits ATTN_PPROF=${port}`);
+      const profile = profileForAppPath(options.appPath);
+      const killed = await stopDaemon(profile);
+      console.log(`[perf] stopped ${profile || 'production'} daemon pid=${killed ?? 'none'} so a fresh one inherits ATTN_PPROF=${port}`);
     }
 
     // Snapshot WebKit pids before relaunch so the new ones are attributable to

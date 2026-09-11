@@ -10,6 +10,7 @@ import { ensureFreshWorld } from './freshWorld.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree } from './platform.mjs';
 import { registeredAgentPid } from './workerRegistry.mjs';
+import { DaemonObserver } from './daemonObserver.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -218,15 +219,27 @@ async function waitForDaemonReady(binary, daemonEnv) {
   }, 'profile daemon');
 }
 
-async function stopRegisteredAgent(dataDir, sessionID, cwd) {
-  const pid = registeredAgentPid(dataDir, sessionID, cwd);
-  if (pid === null) throw new Error(`no live registered agent for session ${sessionID}`);
-  process.kill(pid, 'SIGTERM');
+async function waitForRegisteredAgentExit(dataDir, sessionID, cwd) {
   await poll(
     () => (registeredAgentPid(dataDir, sessionID, cwd) === null ? true : null),
-    `registered agent ${pid} to exit`,
+    `registered agent for session ${sessionID} to exit`,
     RESTART_RUN_TIMEOUT_MS,
   );
+}
+
+async function closeDeliveredSessions(wsUrl, dataDir, cwd, sessionIDs) {
+  const targets = new Set(sessionIDs.filter(Boolean));
+  if (targets.size === 0) return [];
+
+  const observer = new DaemonObserver({ wsUrl });
+  await observer.connect();
+  try {
+    const closed = await observer.unregisterMatchingSessions((session) => targets.has(session.id));
+    for (const sessionID of targets) await waitForRegisteredAgentExit(dataDir, sessionID, cwd);
+    return closed;
+  } finally {
+    await observer.close();
+  }
 }
 
 async function main() {
@@ -264,10 +277,13 @@ async function main() {
   let fixture = null;
   let probe = null;
   let cleanupTicketID = '';
+  let cleanupSeedID = '';
   let cleanupSessionID = '';
   let stormGuardSessionID = '';
   let cleanupApplied = false;
   let stormGuardApplied = false;
+  let sessionsClosed = false;
+  let cleanupSeedSettled = false;
 
   try {
     daemonEnv = profileEnv(profile);
@@ -347,6 +363,7 @@ async function main() {
         'the launched agent reported its cleanup on the seed it tends',
         reported,
       );
+      cleanupSeedID = reported.seed;
     });
 
     await runner.step('leg3_singleton_coalescing', async () => {
@@ -411,8 +428,52 @@ async function main() {
       runner.assert(invocations(probe.log).length === 1, 'exactly one process spawn backs the single catch-up run (no replay storm)', {
         invocations: invocations(probe.log),
       });
+    });
 
-      await stopRegisteredAgent(dataDirForProfile(profile), stormGuardSessionID, fixtureRoot);
+    await runner.step('cleanup_and_restart_receipt', async () => {
+      const sessionIDs = new Set([cleanupSessionID, stormGuardSessionID]);
+      const closed = await closeDeliveredSessions(
+        options.wsUrl,
+        dataDirForProfile(profile),
+        fixtureRoot,
+        [...sessionIDs],
+      );
+      runner.assert(closed.length === sessionIDs.size, 'both delivered automation sessions close intentionally', {
+        expected: [...sessionIDs],
+        closed: closed.map((session) => session.id),
+      });
+      sessionsClosed = true;
+      run(binary, ['seed', 'wither', cleanupSeedID, '-m', 'Scheduled cleanup harness fixture complete'], daemonEnv);
+      cleanupSeedSettled = true;
+
+      run(binary, ['automation', 'delete', cleanupID], daemonEnv);
+      cleanupApplied = false;
+      run(binary, ['automation', 'delete', stormGuardID], daemonEnv);
+      stormGuardApplied = false;
+
+      run(binary, ['daemon', 'stop'], daemonEnv);
+      daemonEnv = profileEnv(profile);
+      run(binary, ['daemon', 'ensure'], daemonEnv);
+      await waitForDaemonReady(binary, daemonEnv);
+
+      const definitions = runJSON(binary, ['automation', 'list'], daemonEnv) || [];
+      runner.assert(
+        !definitions.some((definition) => definition.id === cleanupID || definition.id === stormGuardID),
+        'the timestamped definitions remain deleted after daemon restart',
+        { definitions, cleanupID, stormGuardID },
+      );
+      const sessions = runJSON(binary, ['agent', 'list', '--json'], daemonEnv) || [];
+      runner.assert(
+        !sessions.some((session) => sessionIDs.has(session.id)),
+        'the delivered sessions remain closed after daemon restart',
+        { sessions, sessionIDs: [...sessionIDs] },
+      );
+      const cleanupSeed = runJSON(binary, ['seed', 'show', cleanupSeedID, '--json'], daemonEnv)?.seed;
+      runner.assert(
+        cleanupSeed?.status === 'withered',
+        'the synthetic cleanup seed remains withered after daemon restart',
+        { cleanupSeedID, cleanupSeed },
+      );
     });
 
     await runner.finishSuccess({ profile, cleanupID, stormGuardID, cleanupTicketID, cleanupSessionID, fixtureRoot });
@@ -420,14 +481,35 @@ async function main() {
     await runner.finishFailure(error, { profile, cleanupID, stormGuardID, cleanupTicketID, cleanupSessionID, fixtureRoot });
     throw error;
   } finally {
-    // An enabled `directory` definition re-validates its path every tick, so one
-    // left against a deleted temp root spams this profile forever.
-    if (daemonEnv) {
-      if (cleanupApplied) { try { disableDefinition(binary, cleanupID, daemonEnv); } catch {} }
-      if (stormGuardApplied) { try { disableDefinition(binary, stormGuardID, daemonEnv); } catch {} }
+    const teardownNeeded = cleanupApplied || stormGuardApplied || !sessionsClosed || !cleanupSeedSettled;
+    if (daemonEnv && teardownNeeded) {
+      try {
+        run(binary, ['daemon', 'ensure'], daemonEnv);
+        await waitForDaemonReady(binary, daemonEnv);
+      } catch {}
     }
-    if (stormGuardSessionID) {
-      try { await stopRegisteredAgent(dataDirForProfile(profile), stormGuardSessionID, fixtureRoot); } catch {}
+    if (!cleanupSeedID && cleanupSessionID && daemonEnv) {
+      try {
+        const listed = runJSON(binary, ['seed', 'ls', '--json'], daemonEnv) || {};
+        cleanupSeedID = (listed.seeds || []).find((seed) => seed.tender_session === cleanupSessionID)?.id || '';
+      } catch {}
+    }
+    if (!sessionsClosed) {
+      try {
+        await closeDeliveredSessions(
+          options.wsUrl,
+          dataDirForProfile(profile),
+          fixtureRoot,
+          [cleanupSessionID, stormGuardSessionID],
+        );
+      } catch {}
+    }
+    if (!cleanupSeedSettled && cleanupSeedID && daemonEnv) {
+      try { run(binary, ['seed', 'wither', cleanupSeedID, '-m', 'Scheduled cleanup harness fixture complete'], daemonEnv); } catch {}
+    }
+    if (daemonEnv) {
+      if (cleanupApplied) { try { run(binary, ['automation', 'delete', cleanupID], daemonEnv); } catch {} }
+      if (stormGuardApplied) { try { run(binary, ['automation', 'delete', stormGuardID], daemonEnv); } catch {} }
     }
     try {
       const transcripts = path.join(fixtureRoot, '.attn-mock-agent');
