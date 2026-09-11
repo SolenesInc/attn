@@ -13,6 +13,20 @@
         "seconds": 8.2,
         "runnerClass": "github-hosted 4vcpu/16GB"
       },
+      "automation-scheduled-cleanup": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34549679495",
+        "job": "App acceptance shard 3/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 38.7,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "crew-seed-header": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34549679495",
+        "job": "App acceptance shard 4/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 41.7,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
       "sessions-surface": {
         "run": "https://github.com/SolenesInc/attn/actions/runs/34544718832",
         "job": "App acceptance shard 2/4",
@@ -43,13 +57,13 @@
     "autoclose-on-exit": 19.1,
     "automation-form": 9.1,
     "automation-lifecycle": 49.3,
-    "automation-scheduled-cleanup": 36.2,
+    "automation-scheduled-cleanup": 38.7,
     "automation-surface": 13,
     "automode-environment": 4.8,
     "close-pane-nonblocking": 10,
     "countdown-cancel": 46.3,
     "crash-recovery": 9,
-    "crew-seed-header": 39.6,
+    "crew-seed-header": 41.7,
     "delegation-preferences": 24.9,
     "garden-plot-dispatch": 22.9,
     "garden-seed-header": 17.4,
