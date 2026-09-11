@@ -1,5 +1,26 @@
-import { describe, expect, it } from 'vitest';
-import { isRunFailure, parseVerdictFromOutput, summarizeSoak } from './run-soak.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  acquireSoakLock,
+  formatSoakSummary,
+  isRunFailure,
+  iterationArtifactPaths,
+  parseVerdictFromOutput,
+  retainIterationEvidence,
+  resetAfterIteration,
+  summarizeSoak,
+} from './run-soak.mjs';
+
+const tempDirs = [];
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  for (const dir of tempDirs.splice(0)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 const okVerdict = {
   ok: true,
@@ -179,5 +200,106 @@ describe('summarizeSoak', () => {
 
     expect(summary.ok).toBe(false);
     expect(summary.failureCount).toBe(1);
+  });
+});
+
+describe('formatSoakSummary', () => {
+  it('writes every iteration and the aggregate failure count', () => {
+    const markdown = formatSoakSummary([
+      { iteration: 1, exitCode: 0, timedOut: false, verdict: okVerdict, durationMs: 1234 },
+      { iteration: 2, exitCode: 1, timedOut: false, verdict: failVerdict, durationMs: 5678 },
+      { iteration: 3, exitCode: 124, timedOut: true, verdict: null, durationMs: 120000 },
+    ], {
+      scenarioId: 'terminal-annotations',
+      runnerClass: 'github-hosted 4vcpu/16GB',
+    });
+
+    expect(markdown).toContain('| 1 | passed | 1234 ms | github-hosted 4vcpu/16GB |');
+    expect(markdown).toContain('| 2 | failed | 5678 ms | github-hosted 4vcpu/16GB |');
+    expect(markdown).toContain('| 3 | timed out | 120000 ms | github-hosted 4vcpu/16GB |');
+    expect(markdown).toContain('**2/3 failed for terminal-annotations.**');
+  });
+});
+
+describe('retainIterationEvidence', () => {
+  function artifactRoot() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-run-soak-test-'));
+    tempDirs.push(dir);
+    return dir;
+  }
+
+  it('finds only artifacts created by the iteration and keeps tripwire state', () => {
+    const root = artifactRoot();
+    fs.mkdirSync(path.join(root, 'soak-report'));
+    const before = new Set(fs.readdirSync(root));
+    fs.mkdirSync(path.join(root, 'scenario-run'));
+    fs.mkdirSync(path.join(root, 'agent-tripwire'));
+
+    expect(iterationArtifactPaths(root, before)).toEqual([path.join(root, 'scenario-run')]);
+  });
+
+  it('removes passing artifacts and keeps failed or normal local-run evidence', () => {
+    const root = artifactRoot();
+    const passed = path.join(root, 'passed');
+    const failed = path.join(root, 'failed');
+    const local = path.join(root, 'local');
+    fs.mkdirSync(passed);
+    fs.mkdirSync(failed);
+    fs.mkdirSync(local);
+
+    expect(retainIterationEvidence([passed], { failed: false, failedEvidenceOnly: true })).toBe(false);
+    expect(retainIterationEvidence([failed], { failed: true, failedEvidenceOnly: true })).toBe(true);
+    expect(retainIterationEvidence([local], { failed: false, failedEvidenceOnly: false })).toBe(true);
+    expect(fs.existsSync(passed)).toBe(false);
+    expect(fs.existsSync(failed)).toBe(true);
+    expect(fs.existsSync(local)).toBe(true);
+  });
+});
+
+describe('acquireSoakLock', () => {
+  it('reserves the shared lock and gives iterations a private child lock', () => {
+    const lockPath = path.join(os.tmpdir(), 'soak-parent.lock');
+    const release = () => {};
+    const acquire = vi.fn(() => release);
+    vi.stubEnv('ATTN_REAL_APP_SCENARIO_LOCK_PATH', 'previous.lock');
+
+    expect(acquireSoakLock({
+      scenarioId: 'demo-scenario',
+      runDir: '/tmp/soak-demo-run',
+      appPath: '/tmp/attn.app',
+    }, { acquire, lockPath, childPid: 42 })).toBe(release);
+    expect(acquire).toHaveBeenCalledWith({
+      scenarioId: 'SOAK-demo-scenario',
+      tier: 'soak',
+      runId: 'soak-demo-run',
+      runDir: '/tmp/soak-demo-run',
+      appPath: '/tmp/attn.app',
+    }, lockPath);
+    expect(process.env.ATTN_REAL_APP_SCENARIO_LOCK_PATH).toBe(`${lockPath}.children-42`);
+  });
+});
+
+describe('resetAfterIteration', () => {
+  it('resets flagged non-production scenarios', async () => {
+    const reset = vi.fn();
+
+    await resetAfterIteration(
+      { freshWorldAfter: true },
+      { productionTarget: false, profile: 'test', appPath: '/tmp/attn.app' },
+      reset,
+    );
+    expect(reset).toHaveBeenCalledWith({ profile: 'test', appPath: '/tmp/attn.app' });
+  });
+
+  it('keeps unflagged and production iterations intact', async () => {
+    const reset = vi.fn();
+
+    await resetAfterIteration({}, { productionTarget: false, profile: 'test', appPath: '/tmp/attn.app' }, reset);
+    await resetAfterIteration(
+      { freshWorldAfter: true },
+      { productionTarget: true, profile: 'test', appPath: '/tmp/attn.app' },
+      reset,
+    );
+    expect(reset).not.toHaveBeenCalled();
   });
 });

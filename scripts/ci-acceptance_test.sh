@@ -26,6 +26,80 @@ done
 app_acceptance_build_job="$(sed -n '/^  app-acceptance-build:/,/^  app-acceptance-shard:/p' "$workflow")"
 app_acceptance_shard_job="$(sed -n '/^  app-acceptance-shard:/,/^  app-acceptance:/p' "$workflow")"
 app_acceptance_job="$(sed -n '/^  app-acceptance:/,/^  release-preflight:/p' "$workflow")"
+soak_workflow="$root/.github/workflows/acceptance-soak.yml"
+soak_build_job="$(sed -n '/^  build:/,/^  soak:/p' "$soak_workflow")"
+soak_job="$(sed -n '/^  soak:/,$p' "$soak_workflow")"
+build_action="$root/.github/actions/build-app-acceptance/action.yml"
+install_action="$root/.github/actions/install-app-acceptance/action.yml"
+
+for job in "$app_acceptance_build_job" "$soak_build_job"; do
+  if ! grep -Fq 'uses: ./.github/actions/build-app-acceptance' <<<"$job"; then
+    echo "CI and soak builds must share build-app-acceptance" >&2
+    exit 1
+  fi
+done
+for job in "$app_acceptance_shard_job" "$soak_job"; do
+  if ! grep -Fq 'uses: ./.github/actions/install-app-acceptance' <<<"$job"; then
+    echo "CI and soak runners must share install-app-acceptance" >&2
+    exit 1
+  fi
+done
+
+for contract in \
+  'uses: ./.github/actions/setup-linux-app-deps' \
+  'uses: actions/cache/restore@v4' \
+  'uses: Swatinem/rust-cache@v2' \
+  'run: make build-app PROFILE="${{ inputs.profile }}"' \
+  'plugins/attn-pi/node_modules'; do
+  if ! grep -Fq "$contract" "$build_action"; then
+    echo "Shared App acceptance build is missing: $contract" >&2
+    exit 1
+  fi
+done
+for contract in \
+  'uses: ./.github/actions/setup-linux-sandbox' \
+  'uses: ./.github/actions/setup-linux-app-deps' \
+  'run: pnpm --dir app install --frozen-lockfile' \
+  'make install-staged PROFILE="${{ inputs.profile }}"' \
+  './attn plugin install-bundled attn-pi'; do
+  if ! grep -Fq "$contract" "$install_action"; then
+    echo "Shared App acceptance install is missing: $contract" >&2
+    exit 1
+  fi
+done
+
+soak_triggers="$(sed -n '/^on:/,/^permissions:/p' "$soak_workflow")"
+if ! grep -Fq 'workflow_dispatch:' <<<"$soak_triggers" ||
+  grep -Eq '^  (push|pull_request|schedule):' <<<"$soak_triggers"; then
+  echo "Acceptance soak must be workflow_dispatch-only" >&2
+  exit 1
+fi
+for contract in \
+  'scenarios:' \
+  'repeat:' \
+  'runner:' \
+  'node app/scripts/real-app-harness/plan-soak.mjs' \
+  'needs: plan' \
+  'name: acceptance-soak-tree-${{ github.run_id }}' \
+  'overwrite: true' \
+  'fail-fast: false' \
+  'max-parallel: 4' \
+  'matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}' \
+  "xvfb-run -a -s '-screen 0 1600x1000x24'" \
+  'pnpm --dir app run real-app:soak --' \
+  '--check-runner-env' \
+  '--failed-evidence-only' \
+  'cp --parents' \
+  'if: steps.soak.outcome != '\''success'\'''; do
+  if ! grep -Fq -- "$contract" "$soak_workflow"; then
+    echo "Acceptance soak is missing: $contract" >&2
+    exit 1
+  fi
+done
+if grep -Fq 'github.run_attempt' "$soak_workflow"; then
+  echo "Acceptance soak artifacts must survive failed-job reruns" >&2
+  exit 1
+fi
 for job in "$app_acceptance_build_job" "$app_acceptance_shard_job" "$app_acceptance_job"; do
   if grep -Eq '^    concurrency:' <<<"$job"; then
     echo "App acceptance must not serialize independent hosted runners" >&2
@@ -126,6 +200,7 @@ for path in \
   "scripts/install-app-tree.sh" \
   ".github/actions/**" \
   ".github/workflows/app-acceptance.yml" \
+  ".github/workflows/acceptance-soak.yml" \
   ".github/workflows/ci.yml"; do
   if ! grep -Fq "              - '$path'" <<<"$(sed -n '/^            harness:/,/^            release_preflight:/p' "$workflow")"; then
     echo "Harness path filter must cover: $path" >&2

@@ -6,12 +6,18 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { assertPackagedAppBuildMatchesCurrentSource } from './buildPreflight.mjs';
 import { ATTN_VERDICT_PREFIX, createRunContext, emitVerdict, ensureDir, harnessArtifactsRoot } from './common.mjs';
+import { ensureFreshWorld } from './freshWorld.mjs';
 import {
   assertProductionRunAllowed,
+  currentHarnessProfile,
   defaultAppPathForProfile,
   defaultWSURLForProfile,
+  isProductionHarnessTarget,
+  profileCliEnv,
 } from './harnessProfile.mjs';
+import { stopMockGitHubServer } from './mockGitHub.mjs';
 import { resolveScenario, scenariosAllowingRealAgents } from './scenarioCatalog.mjs';
+import { acquireScenarioLock, packagedAppScenarioLockPath } from './scenarioRunner.mjs';
 
 if (process.env.ATTN_HARNESS_PROFILE === undefined && !process.env.ATTN_PROFILE) {
   process.env.ATTN_HARNESS_PROFILE = 'dev';
@@ -71,6 +77,71 @@ export function summarizeSoak(records, { scenarioId, runDir, summaryPath, durati
   };
 }
 
+export function formatSoakSummary(records, { scenarioId, runnerClass }) {
+  const rows = records.map((record) => {
+    let verdict = 'passed';
+    if (record.timedOut) {
+      verdict = 'timed out';
+    } else if (isRunFailure(record)) {
+      verdict = 'failed';
+    }
+    return `| ${record.iteration} | ${verdict} | ${record.durationMs} ms | ${runnerClass} |`;
+  });
+  const failed = records.filter((record) => isRunFailure(record)).length;
+  return [
+    `### ${scenarioId}`,
+    '',
+    '| iteration | verdict | duration | runner class |',
+    '| ---: | --- | ---: | --- |',
+    ...rows,
+    '',
+    `**${failed}/${records.length} failed for ${scenarioId}.**`,
+    '',
+  ].join('\n');
+}
+
+export function iterationArtifactPaths(artifactsRoot, entriesBefore) {
+  const paths = [];
+  for (const entry of fs.readdirSync(artifactsRoot)) {
+    if (!entriesBefore.has(entry) && entry !== 'agent-tripwire') {
+      paths.push(path.join(artifactsRoot, entry));
+    }
+  }
+  return paths;
+}
+
+export function retainIterationEvidence(artifactPaths, { failed, failedEvidenceOnly }) {
+  const retained = failed || !failedEvidenceOnly;
+  if (!retained) {
+    for (const artifactPath of artifactPaths) {
+      fs.rmSync(artifactPath, { recursive: true, force: true });
+    }
+  }
+  return retained;
+}
+
+export function acquireSoakLock({ scenarioId, runDir, appPath }, {
+  acquire = acquireScenarioLock,
+  lockPath = packagedAppScenarioLockPath(),
+  childPid = process.pid,
+} = {}) {
+  const release = acquire({
+    scenarioId: `SOAK-${scenarioId}`,
+    tier: 'soak',
+    runId: path.basename(runDir),
+    runDir,
+    appPath,
+  }, lockPath);
+  process.env.ATTN_REAL_APP_SCENARIO_LOCK_PATH = `${lockPath}.children-${childPid}`;
+  return release;
+}
+
+export async function resetAfterIteration(scenario, { productionTarget, profile, appPath }, reset = ensureFreshWorld) {
+  if (scenario.freshWorldAfter && !productionTarget) {
+    await reset({ profile, appPath });
+  }
+}
+
 function parseArgs(argv) {
   const args = [...argv];
   if (args[0] === '--') {
@@ -81,6 +152,7 @@ function parseArgs(argv) {
   let untilViolation = false;
   let timeoutMs = DEFAULT_TIMEOUT_MS;
   let runAgainstProd = false;
+  let failedEvidenceOnly = false;
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -94,6 +166,8 @@ function parseArgs(argv) {
       timeoutMs = Number(args[++index]);
     } else if (arg === '--run-against-prod') {
       runAgainstProd = true;
+    } else if (arg === '--failed-evidence-only') {
+      failedEvidenceOnly = true;
     } else if (arg === '--help' || arg === '-h') {
       return { help: true };
     } else {
@@ -111,7 +185,7 @@ function parseArgs(argv) {
     throw new Error(`Invalid --timeout-ms value: ${timeoutMs}`);
   }
 
-  return { help: false, scenarioId, repeat, untilViolation, timeoutMs, runAgainstProd };
+  return { help: false, scenarioId, repeat, untilViolation, timeoutMs, runAgainstProd, failedEvidenceOnly };
 }
 
 function printHelp() {
@@ -130,6 +204,7 @@ Options:
   --until-violation      Stop at the first failing run instead of running all --repeat iterations.
   --timeout-ms <n>       Per-run timeout in ms (default: ${DEFAULT_TIMEOUT_MS}).
   --run-against-prod     Explicitly allow targeting the production app.
+  --failed-evidence-only Remove the artifact directories for passing iterations.
 
 Target: defaults to the dev install (~/Applications/attn-dev.app, port 29849)
   so the soak never takes over your live prod app.
@@ -143,6 +218,11 @@ const signalExitCode = {
 };
 let activeChild = null;
 let interruptHandled = false;
+let releaseSoakLock = null;
+
+process.once('exit', () => {
+  releaseSoakLock?.();
+});
 
 function terminateActiveChild(signal) {
   if (!activeChild || activeChild.killed) {
@@ -173,7 +253,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
   });
 }
 
-function runIteration(scenario, iteration, timeoutMs, runAgainstProd) {
+function runIteration(scenario, iteration, timeoutMs, runAgainstProd, profile, artifactsRoot) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
     const childArgs = scenario.command.slice(1);
@@ -186,7 +266,7 @@ function runIteration(scenario, iteration, timeoutMs, runAgainstProd) {
     const child = spawn(scenario.command[0], childArgs, {
       cwd: process.cwd(),
       stdio: ['inherit', 'pipe', 'pipe'],
-      env: process.env,
+      env: profileCliEnv(profile, { ATTN_REAL_APP_ARTIFACTS_DIR: artifactsRoot }),
     });
     activeChild = child;
     let stdoutBuffer = '';
@@ -234,36 +314,59 @@ async function main() {
     return;
   }
 
-  const { scenarioId, repeat, untilViolation, timeoutMs, runAgainstProd } = options;
+  const {
+    scenarioId, repeat, untilViolation, timeoutMs, runAgainstProd, failedEvidenceOnly,
+  } = options;
   const scenario = resolveScenario(scenarioId);
 
-  const appPath = process.env.ATTN_REAL_APP_PATH || defaultAppPathForProfile();
+  const profile = currentHarnessProfile();
+  const appPath = process.env.ATTN_REAL_APP_PATH || defaultAppPathForProfile(profile);
   const wsUrl = process.env.ATTN_REAL_APP_WS_URL || defaultWSURLForProfile();
   assertProductionRunAllowed(
     { appPath, wsUrl },
     runAgainstProd ? ['--run-against-prod'] : process.argv.slice(2),
   );
+  const artifactsRoot = harnessArtifactsRoot();
+  ensureDir(artifactsRoot);
+  const { runDir } = createRunContext({ artifactsDir: artifactsRoot, sessionRootDir: artifactsRoot }, `soak-${scenarioId}`);
+  releaseSoakLock = acquireSoakLock({ scenarioId, runDir, appPath });
   console.log(`Soak target: ${appPath} (ATTN_HARNESS_PROFILE=${process.env.ATTN_HARNESS_PROFILE || '<default>'})`);
   for (const allowed of scenariosAllowingRealAgents([scenario])) {
     const which = allowed.allowRealAgents === true ? 'all' : allowed.allowRealAgents.join(', ');
     console.log(`[agent-tripwire] REAL AGENTS ALLOWED for every leg of ${allowed.id} (${which}).`);
   }
+  const productionTarget = isProductionHarnessTarget({ appPath, wsUrl, profile });
+  if (productionTarget) {
+    console.log('[fresh-world] skipped (production target)');
+  } else {
+    await ensureFreshWorld({ profile, appPath });
+  }
   assertPackagedAppBuildMatchesCurrentSource({ appPath, launchEnv: scenario.preflightLaunchEnv || null });
-
-  const artifactsRoot = harnessArtifactsRoot();
-  ensureDir(artifactsRoot);
-  const { runDir } = createRunContext({ artifactsDir: artifactsRoot, sessionRootDir: artifactsRoot }, `soak-${scenarioId}`);
 
   const records = [];
   for (let iteration = 1; iteration <= repeat; iteration += 1) {
     console.log(`\n=== soak ${scenario.id} iteration ${iteration}/${repeat} ===`);
-    const record = await runIteration(scenario, iteration, timeoutMs, runAgainstProd);
+    const entriesBefore = new Set(fs.readdirSync(artifactsRoot));
+    const record = await runIteration(
+      scenario,
+      iteration,
+      timeoutMs,
+      runAgainstProd,
+      profile,
+      artifactsRoot,
+    );
     records.push(record);
     const failed = isRunFailure(record);
+    const artifactPaths = iterationArtifactPaths(artifactsRoot, entriesBefore);
+    record.evidenceRetained = retainIterationEvidence(artifactPaths, { failed, failedEvidenceOnly });
     console.log(`--- iteration ${iteration}: ${failed ? 'failed' : 'ok'} (${record.durationMs}ms) ---`);
+    await resetAfterIteration(scenario, { productionTarget, profile, appPath });
     if (untilViolation && failed) {
       break;
     }
+  }
+  if (!productionTarget) {
+    stopMockGitHubServer({ profile, appPath });
   }
 
   const summaryPath = path.join(runDir, 'soak-report.json');
@@ -272,13 +375,25 @@ async function main() {
     scenarioId,
     repeatRequested: repeat,
     untilViolation,
+    failedEvidenceOnly,
     verdictMissingCount,
+    runnerClass: process.env.ATTN_SOAK_RUNNER_CLASS || 'local',
     runs: records,
   };
   fs.writeFileSync(summaryPath, JSON.stringify(report, null, 2));
   console.log(`\nSoak report:\n${JSON.stringify(report, null, 2)}`);
   if (records.length > 0 && verdictMissingCount === records.length) {
     console.warn(`[run-soak] warning: no iteration of '${scenarioId}' emitted an ATTN_VERDICT line — this scenario predates the verdict contract; pass/fail is based on exit codes only.`);
+  }
+
+  const markdown = formatSoakSummary(records, {
+    scenarioId,
+    runnerClass: report.runnerClass,
+  });
+  const digestPath = path.join(runDir, 'soak-digest.md');
+  fs.writeFileSync(digestPath, markdown, 'utf8');
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown, 'utf8');
   }
 
   const verdict = summarizeSoak(records, {
@@ -288,6 +403,8 @@ async function main() {
     durationMs: Date.now() - soakStartedAt,
   });
   emitVerdict(verdict);
+  releaseSoakLock();
+  releaseSoakLock = null;
   if (!verdict.ok) {
     process.exitCode = 1;
   }
