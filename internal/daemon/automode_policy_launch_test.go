@@ -155,45 +155,6 @@ func TestSpawnAppliesThePerSessionPolicyPair(t *testing.T) {
 	}
 }
 
-func TestDelegateCarriesThePerSessionPolicyPair(t *testing.T) {
-	d := newDelegationDaemon(t)
-	backend := &fakeSpawnBackend{}
-	consumeDelegatedPrompt(t, backend)
-	_, sourceSessionID, _ := setupDelegationSource(t, d, backend)
-	setTestAutoModePolicy(t, d, automode.PolicyOnRequest, automode.SandboxWorkspaceWrite)
-	client := registerPolicyTestDriver(t, d, map[string]bool{
-		"launch_instructions": true, "initial_prompt": true, "auto_mode": true,
-	})
-	captured := capturePolicyTestSpawn(t, client)
-
-	result, err := d.delegate(&protocol.DelegateMessage{
-		Cmd:             protocol.CmdDelegate,
-		RequestID:       "policy-launch",
-		SourceSessionID: protocol.Ptr(sourceSessionID),
-		Assignment: protocol.DelegateAssignment{
-			Kind:  protocol.DelegateAssignmentKindNew,
-			Brief: protocol.Ptr("Investigate the delegated task."),
-		},
-		Cwd:            d.store.Get(sourceSessionID).Directory,
-		Agent:          protocol.Ptr("snipe"),
-		ApprovalPolicy: protocol.Ptr(automode.PolicyUntrusted),
-		SandboxMode:    protocol.Ptr(automode.SandboxReadOnly),
-	})
-	if err != nil {
-		t.Fatalf("delegate() error = %v", err)
-	}
-	assertPolicyPair(t, awaitPolicyTestSpawn(t, captured), automode.PolicyUntrusted, automode.SandboxReadOnly)
-
-	intent, ok := d.store.LaunchIntent(result.SessionID)
-	if !ok {
-		t.Fatal("the delegated session has no launch intent")
-	}
-	if intent.ApprovalPolicy != automode.PolicyUntrusted || intent.SandboxMode != automode.SandboxReadOnly {
-		t.Errorf("delegated intent pair = %q/%q, want the delegation's",
-			intent.ApprovalPolicy, intent.SandboxMode)
-	}
-}
-
 func TestReloadKeepsThePerSessionPolicyPair(t *testing.T) {
 	backend := &fakeReloadBackend{
 		liveIDs: []string{"snipe-session"},

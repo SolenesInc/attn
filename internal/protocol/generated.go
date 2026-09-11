@@ -2705,9 +2705,6 @@ type DelegateMessage struct {
 	// AllowWorktreeReuse corresponds to the JSON schema field "allow_worktree_reuse".
 	AllowWorktreeReuse *bool `json:"allow_worktree_reuse,omitempty,omitzero"`
 
-	// ApprovalPolicy corresponds to the JSON schema field "approval_policy".
-	ApprovalPolicy *string `json:"approval_policy,omitempty,omitzero"`
-
 	// Assignment corresponds to the JSON schema field "assignment".
 	Assignment DelegateAssignment `json:"assignment"`
 
@@ -2746,9 +2743,6 @@ type DelegateMessage struct {
 
 	// Role corresponds to the JSON schema field "role".
 	Role *string `json:"role,omitempty,omitzero"`
-
-	// SandboxMode corresponds to the JSON schema field "sandbox_mode".
-	SandboxMode *string `json:"sandbox_mode,omitempty,omitzero"`
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
 	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
