@@ -8,6 +8,7 @@ import type { HarnessProps } from '../types';
 import { settleUi } from '../../src/hooks/uiAutomationSettle';
 import { listenPtyEvents } from '../../src/pty/bridge';
 import { armNativePointerWitness, disarmNativePointerWitness, waitForNativePointerWitness } from '../../src/hooks/nativePointerWitness';
+import appStyles from '../../src/App.css?inline';
 
 const quote = 'The parser already handles CRLF, so the retry wrapper is safe to land as is.';
 const mark: TerminalAnnotation = {
@@ -103,6 +104,7 @@ export function TerminalAnnotationsHarness({ onReady, setTriggerRerender }: Harn
   }, [router]);
 
   return <div style={{ position: 'fixed', inset: 0, background: '#181818', color: '#eee' }}>
+    <style>{appStyles}</style>
     {['first', 'second'].map(id => {
       const workspace: TerminalWorkspaceState = {
         agents: [{ id, runtimeId: id, sessionId: id, title: `${id} ${revision}` }],

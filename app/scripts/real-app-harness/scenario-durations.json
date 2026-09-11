@@ -12,10 +12,12 @@
       "note": "The fully green Linux serial matrix reports 32.9s for crew-management in matrix-digest.txt. Its scenario source is unchanged from this run."
     },
     "terminalAnnotations": {
+      "run": "https://github.com/SolenesInc/attn/actions/runs/34543069126",
+      "job": "https://github.com/SolenesInc/attn/actions/runs/34543069126/job/103091680265",
       "recordedAt": "2026-09-10",
-      "platform": "macOS",
-      "scenarioRun": "terminal-annotations-2026-09-10T23-34-56-879Z",
-      "note": "The green annotation/terminal-resize/Crew serial matrix reports 28.8s for the reduced native annotation boundary scenario. Browser interaction coverage runs separately in e2e/terminal-annotations.spec.ts."
+      "platform": "Linux",
+      "head": "0fe04fea6c69f857d42add6d4f6cb1978e5feabb",
+      "note": "All four Linux acceptance shards and the aggregate passed. Shard 3/4 reports PASS terminal-annotations 18.9s in its matrix digest. The native annotation scenario is unchanged from this run."
     }
   },
   "seconds": {
@@ -43,7 +45,7 @@
     "agent-queue": 91,
     "automation-lifecycle": 48.9,
     "worktree-surface": 37.8,
-    "terminal-annotations": 28.8,
+    "terminal-annotations": 18.9,
     "terminal-context-menu": 9.1,
     "terminal-input": 11.7,
     "pty-host-setting": 8.9,
