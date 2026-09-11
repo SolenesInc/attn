@@ -2,6 +2,7 @@ package daemonctl
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,52 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/protocol"
 )
+
+func TestDaemonProcessWaitForReadyReturnsOnStartupSignal(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		_, _ = writer.WriteString("ready")
+		_ = writer.Close()
+	}()
+
+	if err := (daemonProcess{ready: reader}).waitForReady(context.Background()); err != nil {
+		t.Fatalf("waitForReady() error = %v", err)
+	}
+}
+
+func TestDaemonProcessWaitForReadyReportsStartupFailure(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		_, _ = writer.WriteString("error:open database")
+		_ = writer.Close()
+	}()
+
+	err = (daemonProcess{ready: reader}).waitForReady(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "open database") {
+		t.Fatalf("waitForReady() error = %v, want startup failure", err)
+	}
+}
+
+func TestDaemonProcessWaitForReadyStopsWithContext(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err = (daemonProcess{ready: reader}).waitForReady(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("waitForReady() error = %v, want context cancellation", err)
+	}
+}
 
 func TestDaemonMatchesCurrentBinary_UsesSourceFingerprintWhenAvailable(t *testing.T) {
 	previousFingerprint := buildinfo.SourceFingerprint

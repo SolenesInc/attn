@@ -566,6 +566,10 @@ func (d *Daemon) waitStarted(timeout time.Duration) bool {
 	}
 }
 
+func (d *Daemon) Started() <-chan struct{} {
+	return d.startedCh
+}
+
 func New(socketPath string) *Daemon {
 	logger, _ := logging.New(logging.DefaultLogPath())
 

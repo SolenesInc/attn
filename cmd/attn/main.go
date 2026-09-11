@@ -523,10 +523,30 @@ func runDaemon() {
 		os.Exit(1)
 	}
 
+	startupSignal, err := daemonctl.TakeStartupSignal()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	d := daemon.New(socketPath)
 	// Must precede Start(), which warms the login-shell env cache.
 	d.ScrubInheritedAgentSessionEnv()
-	if err := d.Start(); err != nil {
+	startResult := make(chan error, 1)
+	go func() {
+		startResult <- d.Start()
+	}()
+	select {
+	case <-d.Started():
+		if err := startupSignal.Ready(); err != nil {
+			fmt.Fprintf(os.Stderr, "daemon readiness signal error: %v\n", err)
+			os.Exit(1)
+		}
+	case err := <-startResult:
+		startupSignal.Failed(err)
+		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
+		os.Exit(1)
+	}
+	if err := <-startResult; err != nil {
 		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
 		os.Exit(1)
 	}

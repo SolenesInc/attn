@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -19,9 +20,17 @@ import (
 )
 
 const (
-	defaultEnsureTimeout = 10 * time.Second
-	stopTimeout          = 5 * time.Second
+	stopTimeout = 5 * time.Second
+	readyFDEnv  = "ATTN_DAEMON_READY_FD"
 )
+
+type StartupSignal struct {
+	writer *os.File
+}
+
+type daemonProcess struct {
+	ready *os.File
+}
 
 type EnsureResult struct {
 	Status string `json:"status"`
@@ -54,10 +63,11 @@ func Ensure(ctx context.Context, binaryPath string) (EnsureResult, error) {
 		if err := removeStaleSocketFiles(); err != nil {
 			return EnsureResult{}, err
 		}
-		if err := spawnDaemon(binaryPath); err != nil {
+		process, err := spawnDaemon(binaryPath)
+		if err != nil {
 			return EnsureResult{}, err
 		}
-		if err := waitForReady(ctx); err != nil {
+		if err := process.waitForReady(ctx); err != nil {
 			return EnsureResult{}, err
 		}
 		return EnsureResult{Status: "started"}, nil
@@ -75,10 +85,11 @@ func Ensure(ctx context.Context, binaryPath string) (EnsureResult, error) {
 	if err := removeStaleSocketFiles(); err != nil {
 		return EnsureResult{}, err
 	}
-	if err := spawnDaemon(binaryPath); err != nil {
+	process, err := spawnDaemon(binaryPath)
+	if err != nil {
 		return EnsureResult{}, err
 	}
-	if err := waitForReady(ctx); err != nil {
+	if err := process.waitForReady(ctx); err != nil {
 		return EnsureResult{}, err
 	}
 	return EnsureResult{Status: "restarted", Reason: reason}, nil
@@ -133,13 +144,81 @@ func normalizedFingerprint(value string) string {
 	return trimmed
 }
 
-func spawnDaemon(binaryPath string) error {
-	cmd := exec.Command(binaryPath, "daemon")
-	cmd.Env = append(os.Environ(), "ATTN_WRAPPER_PATH="+binaryPath)
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("start daemon: %w", err)
+func spawnDaemon(binaryPath string) (daemonProcess, error) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		return daemonProcess{}, fmt.Errorf("create daemon readiness pipe: %w", err)
 	}
-	return nil
+	cmd := exec.Command(binaryPath, "daemon")
+	cmd.Env = append(os.Environ(),
+		"ATTN_WRAPPER_PATH="+binaryPath,
+		fmt.Sprintf("%s=%d", readyFDEnv, 3),
+	)
+	cmd.ExtraFiles = []*os.File{writer}
+	if err := cmd.Start(); err != nil {
+		reader.Close()
+		writer.Close()
+		return daemonProcess{}, fmt.Errorf("start daemon: %w", err)
+	}
+	writer.Close()
+	go cmd.Wait()
+	return daemonProcess{ready: reader}, nil
+}
+
+func TakeStartupSignal() (StartupSignal, error) {
+	raw := strings.TrimSpace(os.Getenv(readyFDEnv))
+	if raw == "" {
+		return StartupSignal{}, nil
+	}
+	os.Unsetenv(readyFDEnv)
+	fd, err := strconvAtoi(raw)
+	if err != nil || fd < 3 {
+		return StartupSignal{}, fmt.Errorf("invalid daemon readiness fd %q", raw)
+	}
+	return StartupSignal{writer: os.NewFile(uintptr(fd), "daemon-ready")}, nil
+}
+
+func (s StartupSignal) Ready() error {
+	return s.finish("ready")
+}
+
+func (s StartupSignal) Failed(err error) {
+	if err != nil {
+		_ = s.finish("error:" + err.Error())
+	}
+}
+
+func (s StartupSignal) finish(message string) error {
+	if s.writer == nil {
+		return nil
+	}
+	defer s.writer.Close()
+	_, err := io.WriteString(s.writer, message)
+	return err
+}
+
+func (p daemonProcess) waitForReady(ctx context.Context) error {
+	result := make(chan error, 1)
+	go func() {
+		message, err := io.ReadAll(p.ready)
+		if err == nil {
+			switch text := string(message); {
+			case text == "ready":
+			case strings.HasPrefix(text, "error:"):
+				err = fmt.Errorf("daemon startup failed: %s", strings.TrimPrefix(text, "error:"))
+			default:
+				err = fmt.Errorf("daemon exited before signaling readiness")
+			}
+		}
+		result <- err
+	}()
+	select {
+	case err := <-result:
+		return err
+	case <-ctx.Done():
+		p.ready.Close()
+		return fmt.Errorf("wait for daemon readiness: %w", ctx.Err())
+	}
 }
 
 // removeStaleSocketFiles unlinks the listening socket only. The PID file must
@@ -182,26 +261,6 @@ func stopRunningDaemon(ctx context.Context) error {
 		select {
 		case <-waitCtx.Done():
 			return fmt.Errorf("timed out waiting for daemon to stop")
-		case <-ticker.C:
-		}
-	}
-}
-
-func waitForReady(ctx context.Context) error {
-	waitCtx, cancel := context.WithTimeout(ctx, defaultEnsureTimeout)
-	defer cancel()
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		if isSocketLive(config.SocketPath()) {
-			health, err := fetchHealth(waitCtx)
-			if err == nil && strings.TrimSpace(health.Status) == "ok" {
-				return nil
-			}
-		}
-		select {
-		case <-waitCtx.Done():
-			return fmt.Errorf("daemon did not become ready before timeout")
 		case <-ticker.C:
 		}
 	}
