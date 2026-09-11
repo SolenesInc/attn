@@ -20,6 +20,9 @@ func TestDelegationOperationReservesActiveTicket(t *testing.T) {
 	if protocol.Deref(first.Operation.TicketID) != "planned" {
 		t.Fatalf("reserved ticket = %q", protocol.Deref(first.Operation.TicketID))
 	}
+	if first.Operation.SeedID != nil {
+		t.Fatalf("legacy operation seed = %q, want absent", protocol.Deref(first.Operation.SeedID))
+	}
 	_, _, err = s.ClaimDelegationOperation("request-2", "operation-2", "session-2", "", "planned", `{"ticket_id":"planned"}`, now)
 	if !errors.Is(err, ErrTicketDelegationReserved) {
 		t.Fatalf("second claim error = %v, want ErrTicketDelegationReserved", err)
@@ -57,6 +60,9 @@ func TestCompletedDelegationPreservesRecordedWorktreeRootAndHandoverSnapshot(t *
 	}
 	if protocol.Deref(got.Operation.WorktreePath) != root {
 		t.Fatalf("worktree path = %q, want root %q", protocol.Deref(got.Operation.WorktreePath), root)
+	}
+	if protocol.Deref(got.Operation.SeedID) != "s-seed" || got.Operation.TicketID != nil {
+		t.Fatalf("resource identities = seed %q ticket %q, want seed only", protocol.Deref(got.Operation.SeedID), protocol.Deref(got.Operation.TicketID))
 	}
 	if got.HandoverSeedRev != snapshot.SeedRev || got.HandoverTenderSession != snapshot.TenderSession || got.HandoverTenderMember != snapshot.TenderMember {
 		t.Fatalf("handover snapshot = rev %d session %q member %q", got.HandoverSeedRev, got.HandoverTenderSession, got.HandoverTenderMember)

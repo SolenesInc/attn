@@ -140,8 +140,11 @@ func getDelegationOperation(db *sql.DB, id string) (*DelegationOperationRecord, 
 		rec.Operation.WorkspaceID = protocol.Ptr(workspaceID)
 	}
 	if ticketID != "" {
-		rec.Operation.TicketID = protocol.Ptr(ticketID)
-		rec.Operation.SeedID = protocol.Ptr(ticketID)
+		if delegationRequestUsesSeed(rec.RequestJSON) {
+			rec.Operation.SeedID = protocol.Ptr(ticketID)
+		} else {
+			rec.Operation.TicketID = protocol.Ptr(ticketID)
+		}
 	}
 	if directory != "" {
 		rec.Operation.Directory = protocol.Ptr(directory)
@@ -167,6 +170,19 @@ func getDelegationOperation(db *sql.DB, id string) (*DelegationOperationRecord, 
 		rec.Operation.Result = &result
 	}
 	return &rec, nil
+}
+
+func delegationRequestUsesSeed(requestJSON string) bool {
+	var request struct {
+		Assignment json.RawMessage `json:"assignment"`
+	}
+	if json.Unmarshal([]byte(requestJSON), &request) != nil || len(request.Assignment) == 0 {
+		return false
+	}
+	var assignment struct {
+		Kind string `json:"kind"`
+	}
+	return json.Unmarshal(request.Assignment, &assignment) == nil && assignment.Kind != ""
 }
 
 func (s *Store) RecordDelegationResolution(id, seedID, directory, branch, baseCommit, handoffNoteID string, now time.Time) error {

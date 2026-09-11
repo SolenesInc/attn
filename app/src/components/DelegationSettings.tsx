@@ -21,6 +21,7 @@ type SelectionPickerProps = {
 };
 
 const modelKey = (provider: string, model: string) => JSON.stringify([provider, model]);
+const roleViewKey = (role: Pick<DelegationRole, 'id' | 'builtin'>) => `${role.id}\u0000${role.builtin ?? ''}`;
 
 function ModelField({ value, onChange, catalog, disabled, manual, setManual }: {
   value: DelegationSelection;
@@ -162,9 +163,9 @@ function RoleRows({ roles, expandedRoles, onEdit, onToggle }: {
   onEdit: (role: DelegationRole) => void;
   onToggle: (role: DelegationRole, enabled: boolean) => void;
 }) {
-  const views = new Map(expandedRoles.map((role) => [role.id, role]));
+  const views = new Map(expandedRoles.map((role) => [roleViewKey(role), role]));
   return roles.map((role) => {
-    const view = role.builtin ? views.get(role.id) ?? role : role;
+    const view = role.builtin ? views.get(roleViewKey(role)) ?? role : role;
     const defaultChoice = role.choices.find((choice) => choice.id === role.default_choice_id);
     return <div className={`delegation-role-row ${role.enabled ? '' : 'disabled'}`} key={role.id}>
       <span className="delegation-icon"><DelegationRoleIcon icon={view.icon} name={view.name} /></span>
