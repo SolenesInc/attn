@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import type { DelegationHarness } from '../types/generated';
 import type { DelegationModelCatalog } from './daemonDelegationEvents';
 
-// Catalogs live for the app's lifetime; refresh asks the harness again for one harness.
 const catalogs = new Map<string, DelegationModelCatalog>();
 const inflight = new Map<string, Promise<DelegationModelCatalog>>();
 const failures = new Map<string, string>();

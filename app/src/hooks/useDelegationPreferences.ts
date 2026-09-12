@@ -6,8 +6,6 @@ import { useDelegationPreferencesPush } from '../store/delegationPreferences';
 type Pending = { value: DelegationPreferences; installWorkflowSkill: boolean };
 const message = (e: unknown) => String(e instanceof Error ? e.message : e);
 
-// Every edit saves at once. One request flies at a time; edits made meanwhile collapse into a
-// single pending value that is sent with the revision the daemon returned.
 export function useDelegationPreferences(active: boolean, load: () => Promise<DelegationSettingsState>, save: (value: DelegationPreferences, installWorkflowSkill?: boolean) => Promise<DelegationSettingsState>) {
   const [state, setState] = useState<DelegationSettingsState | null>(null);
   const [preferences, setPreferences] = useState<DelegationPreferences | null>(null);

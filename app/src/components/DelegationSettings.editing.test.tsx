@@ -13,7 +13,6 @@ const custom: DelegationRole = { id: 'build', name: 'Build', icon: 'code', enabl
 const template: DelegationRole = { ...custom, id: 'builder', builtin: BuiltinDelegationRole.Builder, name: '', icon: '', description: '', instructions: '', stopping_point: '' };
 const expandedTemplate: DelegationRole = { ...template, name: 'Builder', icon: 'code', description: 'Implement a change\nSecond line', instructions: 'Run relevant tests', stopping_point: 'Return for review' };
 
-// The daemon overlays maintained guidance on a configured role and lists configured roles before templates.
 const expand = (role: DelegationRole): DelegationRole => role.builtin ? { ...role, name: expandedTemplate.name, icon: expandedTemplate.icon, description: expandedTemplate.description, instructions: expandedTemplate.instructions, stopping_point: expandedTemplate.stopping_point } : role;
 
 function setup(roles: DelegationRole[] = [], enabled = roles.length > 0) {

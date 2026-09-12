@@ -17,7 +17,6 @@ const leadText = (enabled: boolean) => enabled
   ? 'Roles guide agents that delegate. Each role has a model; an agent reads this table and picks the row that fits the work.'
   : 'Off. Agents that delegate pick harness and model on their own. Turn on to route them through this table.';
 
-// A deletion can be undone until the next edit; a save moves generation by one, so the undo lives while nothing else moves it.
 function useUndo(generation: number) {
   const [undo, setUndo] = useState<Undo | null>(null);
   const live = undo && undo.generation === generation ? undo : null;
@@ -25,7 +24,6 @@ function useUndo(generation: number) {
   return { undo: live, remember, forget: () => setUndo(null) };
 }
 
-// One row and one of its alternatives open at a time; opening another row closes both.
 function useExpansion() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [expandedAlt, setExpandedAlt] = useState<string | null>(null);

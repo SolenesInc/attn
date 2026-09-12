@@ -11,7 +11,6 @@ export const alternatives = (role: DelegationRole) => role.choices.filter(choice
 export const liveRoles = (preferences: DelegationPreferences) => preferences.roles.filter(role => role.enabled && complete(defaultChoice(role).selection));
 export const delegationLiveCount = (preferences: DelegationPreferences | null) => preferences?.enabled ? liveRoles(preferences).length : 0;
 
-// The popover edits one selection at a time, addressed as `<role>/<choice>` or the fallback.
 export function selectionAt(config: DelegationPreferences, key: string): { value: DelegationSelection; with: (selection: DelegationSelection) => DelegationPreferences } | null {
   if (key === FALLBACK) return { value: config.fallback.selection, with: selection => ({ ...config, fallback: { ...config.fallback, selection } }) };
   const [roleID, choiceID] = key.split('/');
@@ -22,7 +21,6 @@ export function selectionAt(config: DelegationPreferences, key: string): { value
   return { value: choice.selection, with: selection => ({ ...config, roles: roles({ ...role, choices: role.choices.map(candidate => candidate.id === choice.id ? { ...choice, selection } : candidate) }) }) };
 }
 
-// A maintained role renders through the daemon's expanded view; a custom role is its own view.
 // The daemon lists configured roles before templates, and an adopted role shares its template's key.
 export function roleViewer(expandedRoles: DelegationRole[]) {
   const views = new Map<string, DelegationRole>();
@@ -32,7 +30,6 @@ export function roleViewer(expandedRoles: DelegationRole[]) {
 export const roleLabel = (view: DelegationRole) => view.name || view.builtin || view.id;
 export const missingTemplates = (config: DelegationPreferences, templates: DelegationRole[]) => templates.filter(template => !config.roles.some(role => role.builtin === template.builtin));
 export const freshAdoption = (templates: DelegationRole[]) => Object.fromEntries(templates.map(template => [template.builtin ?? template.id, 'new']));
-// A custom role whose name starts with a maintained role's name is asked about before that role is added.
 export const adoptionConflicts = (config: DelegationPreferences, templates: DelegationRole[], name: (template: DelegationRole) => string) =>
   templates.some(template => config.roles.some(role => !role.builtin && role.name.trim().toLowerCase().startsWith(name(template).toLowerCase())));
 
