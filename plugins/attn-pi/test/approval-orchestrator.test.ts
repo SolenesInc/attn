@@ -106,6 +106,32 @@ test("a prompt decision runs the command once the reviewer approves", async () =
   expect(it.seen).toHaveLength(1);
 });
 
+test.skipIf(process.platform !== "darwin")(
+  "a prompt rule can require review and then bypass the sandbox",
+  async () => {
+    const outside = canonical(mkdtempSync(join(process.cwd(), ".pi-approval-outside-")));
+    roots.push(outside);
+    const file = join(outside, "written");
+    const sandboxed = fixture({
+      script: () => ({ type: "approved" }),
+      approvalPolicy: "on-request",
+      sandboxMode: "workspace-write",
+      rules: [{ pattern: ["touch"], decision: "prompt", sandbox: "inherit" }],
+    });
+    expect((await sandboxed.run(`touch ${JSON.stringify(file)}`)).exitCode).not.toBe(0);
+    expect(existsSync(file)).toBe(false);
+
+    const it = fixture({
+      script: () => ({ type: "approved" }),
+      sandboxMode: "workspace-write",
+      rules: [{ pattern: ["touch"], decision: "prompt", sandbox: "bypass" }],
+    });
+    expect((await it.run(`touch ${JSON.stringify(file)}`)).exitCode).toBe(0);
+    expect(existsSync(file)).toBe(true);
+    expect(it.seen).toHaveLength(1);
+  },
+);
+
 test("a refusal is the tool's error, is recorded, and leaves nothing behind", async () => {
   const it = fixture({ script: () => ({ type: "denied", rejection: userRejection }) });
   const file = join(it.root, "never");

@@ -289,7 +289,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '309';
+export const PROTOCOL_VERSION = '310';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -3183,10 +3183,10 @@ export function useDaemonSocket({
   }, [sendRequest]);
 
   const sendAutoModeRuleAdd = useCallback(
-    (pattern: string[], decision: string, justification: string): Promise<AutoModeConfigEdit> => {
+    (pattern: string[], decision: string, sandbox: string, justification: string): Promise<AutoModeConfigEdit> => {
       return sendRequest<AutoModeConfigEdit>(
         'automode_rule_add',
-        { pattern, decision, justification },
+        { pattern, decision, sandbox, justification },
         'Adding the rule timed out',
       );
     },

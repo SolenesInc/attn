@@ -80,7 +80,7 @@ async function main() {
     scenarioId: 'AutoModeEnvironment',
     tier: 'local',
     prefix: 'automode-environment',
-    metadata: { focus: 'slot writes from the pane and from the CLI, and what an unfilled slot says' },
+    metadata: { focus: 'independent rule review/sandbox controls, slot writes, and unfilled slot defaults' },
   });
   const note = (message, extra) => runner.log(message, extra);
 
@@ -115,6 +115,21 @@ async function main() {
       await client.request('dom_scroll_into_view', {
         selector: '[data-testid="automode-slot-' + SLOT + '"]',
       });
+      await hold();
+    });
+
+    await runner.step('rule_review_and_sandbox_are_separate_controls', async () => {
+      await client.request('dom_scroll_into_view', { selector: '[data-testid="automode-rules-sandbox"]' });
+      const decision = await client.request('dom_select', {
+        selector: '[data-testid="automode-rules-decision"]',
+        value: 'prompt',
+      });
+      const sandbox = await client.request('dom_select', {
+        selector: '[data-testid="automode-rules-sandbox"]',
+        value: 'bypass',
+      });
+      runner.assert(decision.selected === 'prompt' && sandbox.selected === 'bypass',
+        'a rule can require review and independently bypass the sandbox', { decision, sandbox });
       await hold();
     });
 

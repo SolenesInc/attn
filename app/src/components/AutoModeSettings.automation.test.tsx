@@ -15,6 +15,7 @@ import { useAutoModePolicy } from '../hooks/useAutoModePolicy';
 const shippedRule: AutoModeRuleInfo = {
   pattern: [['attn'], ['automode'], ['env']],
   decision: 'forbidden',
+  sandbox: 'inherit',
   justification: 'the environment is what the reviewer reads',
   match: [],
   not_match: [],

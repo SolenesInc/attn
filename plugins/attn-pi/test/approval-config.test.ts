@@ -49,6 +49,8 @@ describe("loadApprovalConfig", () => {
       "attn automode env",
     ]);
     expect(config.rules[0].decision).toBe("allow");
+    expect(config.rules[0].sandbox).toBe("bypass");
+    expect(config.rules[1].sandbox).toBe("inherit");
     expect(config.network.allowedDomains).toEqual(["crates.io", "github.com"]);
     expect(config.network.deniedDomains).toEqual(["localhost:29849"]);
     expect(config.network.allowLocalBinding).toBe(true);
@@ -77,6 +79,7 @@ describe("loadApprovalConfig", () => {
   test("a rule with no decision allows, which is what the daemon omits", () => {
     const config = loadApprovalConfig({ rules: [{ pattern: ["ls"] }] });
     expect(config.rules[0].decision).toBe("allow");
+    expect(config.rules[0].sandbox).toBe("bypass");
     expect(config.rules[0].justification).toBe("");
     expect(config.rules[0].match).toEqual([]);
   });
@@ -100,6 +103,8 @@ describe("loadApprovalConfig", () => {
       [{ rules: [{ pattern: [] }] }, "rules[0].pattern"],
       [{ rules: [{ pattern: ["git push"] }] }, "rules[0].pattern[0]"],
       [{ rules: [{ pattern: ["rm"], decision: "forbidden" }] }, "rules[0].justification"],
+      [{ rules: [{ pattern: ["rm"], decision: "forbidden", sandbox: "bypass", justification: "no" }] }, "rules[0].sandbox"],
+      [{ rules: [{ pattern: ["ls"], sandbox: "open" }] }, "rules[0].sandbox"],
       [{ rules: [{ pattern: ["rm"], decision: "maybe" }] }, "rules[0].decision"],
       [{ approval_policy: "yolo" }, "approval_policy"],
       [{ sandbox_mode: "open" }, "sandbox_mode"],

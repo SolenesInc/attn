@@ -29,8 +29,22 @@ func TestValidateRuleWantsTokensNotAShellLine(t *testing.T) {
 }
 
 func TestNormalizeRuleDefaultsToAllow(t *testing.T) {
-	if got := NormalizeRule(Rule{Pattern: Tokens("ls")}).Decision; got != DecisionAllow {
-		t.Errorf("decision = %q, want %q", got, DecisionAllow)
+	rule := NormalizeRule(Rule{Pattern: Tokens("ls")})
+	if rule.Decision != DecisionAllow || rule.Sandbox != RuleSandboxBypass {
+		t.Fatalf("rule = %+v, want allow with sandbox bypass", rule)
+	}
+}
+
+func TestNormalizeRulePreservesLegacySandboxBehavior(t *testing.T) {
+	prompt := NormalizeRule(Rule{Pattern: Tokens("git", "push"), Decision: DecisionPrompt})
+	if prompt.Sandbox != RuleSandboxInherit {
+		t.Fatalf("prompt sandbox = %q, want inherit", prompt.Sandbox)
+	}
+	allowed := NormalizeRule(Rule{
+		Pattern: Tokens("go", "test"), Decision: DecisionAllow, Sandbox: RuleSandboxInherit,
+	})
+	if allowed.Sandbox != RuleSandboxInherit {
+		t.Fatalf("explicit allow sandbox = %q, want inherit", allowed.Sandbox)
 	}
 }
 
@@ -57,7 +71,7 @@ func TestPatternTokenReadsAStringOrAlternatives(t *testing.T) {
 
 // pi validates the examples; the daemon only has to carry them back unchanged.
 func TestRuleCarriesMatchExamplesUntouched(t *testing.T) {
-	raw := `{"pattern":["git","push"],"decision":"prompt","justification":"leaves the machine",` +
+	raw := `{"pattern":["git","push"],"decision":"prompt","sandbox":"inherit","justification":"leaves the machine",` +
 		`"match":[["git","push","origin"]],"not_match":[["git","pull"]]}`
 	rule, err := ParseRuleValue(raw)
 	if err != nil {

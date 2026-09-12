@@ -2,8 +2,10 @@ package daemon
 
 import (
 	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +15,62 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
 )
+
+func TestAutoModeConfigForSessionMergesRepositoryRules(t *testing.T) {
+	root := t.TempDir()
+	if output, err := exec.Command("git", "init", "--quiet", root).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, output)
+	}
+	path := filepath.Join(root, automode.RepositoryRulesFile)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"rules":[{
+  "pattern":["go","test"],"decision":"prompt","sandbox":"bypass"
+}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := newDaemonForTest(t)
+	cfg, err := d.store.GetAutoModeConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, repository, err := d.autoModeConfigForSession(cfg, root)
+	if err != nil {
+		t.Fatalf("resolve session auto mode: %v", err)
+	}
+	project := automode.StripShippedRules(resolved.Rules)
+	if len(project) != 1 || project[0].Describe() != "go test" ||
+		project[0].Decision != automode.DecisionPrompt || project[0].Sandbox != automode.RuleSandboxBypass {
+		t.Fatalf("effective rules = %+v", resolved.Rules)
+	}
+	if repository.Path == "" || len(repository.Rules) != 1 {
+		t.Fatalf("repository source = %+v", repository)
+	}
+}
+
+func TestAutoModeConfigForSessionRefusesInvalidRepositoryRules(t *testing.T) {
+	root := t.TempDir()
+	if output, err := exec.Command("git", "init", "--quiet", root).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, output)
+	}
+	path := filepath.Join(root, automode.RepositoryRulesFile)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"rules":[{"pattern":[]}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := newDaemonForTest(t)
+	cfg, err := d.store.GetAutoModeConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = d.autoModeConfigForSession(cfg, root)
+	if err == nil || !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "rule 1") {
+		t.Fatalf("error = %v", err)
+	}
+}
 
 func TestSpawnCarriesThePromotedAutoModeConfig(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))

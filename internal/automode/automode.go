@@ -23,6 +23,7 @@ type Config struct {
 type Rule struct {
 	Pattern       []PatternToken `json:"pattern"`
 	Decision      string         `json:"decision"`
+	Sandbox       string         `json:"sandbox,omitempty"`
 	Justification string         `json:"justification,omitempty"`
 	Match         [][]string     `json:"match,omitempty"`
 	NotMatch      [][]string     `json:"not_match,omitempty"`
@@ -45,6 +46,9 @@ const (
 	DecisionPrompt    = "prompt"
 	DecisionForbidden = "forbidden"
 
+	RuleSandboxInherit = "inherit"
+	RuleSandboxBypass  = "bypass"
+
 	HostAllow = "allow"
 	HostDeny  = "deny"
 
@@ -57,8 +61,9 @@ const (
 	SandboxDangerFullAccess = "danger-full-access"
 )
 
-func Decisions() []string { return []string{DecisionAllow, DecisionPrompt, DecisionForbidden} }
-func Policies() []string  { return []string{PolicyUntrusted, PolicyOnRequest, PolicyNever} }
+func Decisions() []string     { return []string{DecisionAllow, DecisionPrompt, DecisionForbidden} }
+func RuleSandboxes() []string { return []string{RuleSandboxInherit, RuleSandboxBypass} }
+func Policies() []string      { return []string{PolicyUntrusted, PolicyOnRequest, PolicyNever} }
 func SandboxModes() []string {
 	return []string{SandboxReadOnly, SandboxWorkspaceWrite, SandboxDangerFullAccess}
 }
@@ -155,6 +160,7 @@ func ShippedRules() []Rule {
 		return Rule{
 			Pattern:       Tokens(literals...),
 			Decision:      DecisionForbidden,
+			Sandbox:       RuleSandboxInherit,
 			Justification: justification,
 		}
 	}
@@ -333,6 +339,22 @@ func ValidateRule(rule Rule) error {
 	default:
 		return fmt.Errorf("unknown rule decision %q (want %s)", rule.Decision, strings.Join(Decisions(), ", "))
 	}
+	sandbox := strings.TrimSpace(rule.Sandbox)
+	if sandbox == "" {
+		if rule.Decision == DecisionAllow {
+			sandbox = RuleSandboxBypass
+		} else {
+			sandbox = RuleSandboxInherit
+		}
+	}
+	switch sandbox {
+	case RuleSandboxInherit, RuleSandboxBypass:
+	default:
+		return fmt.Errorf("unknown rule sandbox %q (want %s)", sandbox, strings.Join(RuleSandboxes(), ", "))
+	}
+	if rule.Decision == DecisionForbidden && sandbox == RuleSandboxBypass {
+		return fmt.Errorf("a forbidden rule cannot bypass the sandbox")
+	}
 	return nil
 }
 
@@ -341,6 +363,14 @@ func NormalizeRule(rule Rule) Rule {
 		rule.Decision = DecisionAllow
 	}
 	rule.Decision = strings.TrimSpace(rule.Decision)
+	if strings.TrimSpace(rule.Sandbox) == "" {
+		if rule.Decision == DecisionAllow {
+			rule.Sandbox = RuleSandboxBypass
+		} else {
+			rule.Sandbox = RuleSandboxInherit
+		}
+	}
+	rule.Sandbox = strings.TrimSpace(rule.Sandbox)
 	rule.Justification = strings.TrimSpace(rule.Justification)
 	return rule
 }

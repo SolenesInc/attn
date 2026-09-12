@@ -22,14 +22,16 @@ bash(command, sandbox_permissions=use_default|require_escalated, justification?,
   │                else never → allow; untrusted → prompt;
   │                     on-request → allow, except when sandbox_permissions = require_escalated and
   │                                  the sandbox restricts the filesystem → prompt
-  │     bypass_sandbox only when every segment matched an explicit allow rule
+  │     bypass_sandbox only when every segment's matching rules say bypass
   │
   ├─ forbidden → tool error "rejected: <justification>". Nothing runs. No reviewer.
-  ├─ allow     → run. Unsandboxed only if bypass_sandbox or (require_escalated under never);
+  ├─ allow     → run. Unsandboxed only if the matching rules say bypass or
+  │              require_escalated is accepted under never;
   │              else sandboxed under sandbox_mode (danger-full-access = no sandbox wrapper).
   └─ prompt    → REVIEWER (exactly one, chosen by config: your approval card, or the Guardian)
                    approved / approved_for_session / approved_execpolicy_amendment
-                       → run; unsandboxed when require_escalated was asked, else sandboxed
+                       → run; unsandboxed when matching rules say bypass or
+                         require_escalated was asked, else sandboxed
                    denied → tool error "rejected by user", or the Guardian's rejection text
                    abort  → the turn ends
 ```
@@ -110,8 +112,19 @@ Codex's granular policy is seed s-9f13cv.
 A rule is a command prefix, one token per argument, with no wildcards. `git
 push` matches every command starting `git push`. A token may be a single string
 or an array of alternatives. `decision` is `allow` (the default), `prompt` or
-`forbidden`; a `forbidden` rule carries a `justification`, and that text is what
-the agent is told when the rule refuses.
+`forbidden`; a `justification` explains a prompt or refusal to the agent, and is
+required for `forbidden`.
+
+`sandbox` is independent: `inherit` runs under the session sandbox and `bypass`
+runs outside it after any review. Existing rules without the field keep their
+old meaning: `allow` bypasses and every other decision inherits. When several
+rules match, the strictest decision and sandbox treatment win. This makes
+`prompt` plus `bypass` the explicit form of “review this command, then run it
+outside the sandbox.”
+
+For an executable path such as `/usr/bin/git`, rules written for both that path
+and the bare name `git` apply. An exact repository rule therefore cannot hide a
+stricter shipped or global rule.
 
 `match` and `not_match` are optional example commands the rule must and must not
 match. They are checked when rules load, and a failing example is shown as a
@@ -121,6 +134,7 @@ rule error in settings rather than silently dropping the rule.
 {
   "pattern": ["git", "push"],
   "decision": "prompt",
+  "sandbox": "bypass",
   "justification": "pushes leave the machine",
   "match": [["git", "push", "origin"]],
   "not_match": [["git", "pull"]]
@@ -130,6 +144,32 @@ rule error in settings rather than silently dropping the rule.
 Rules the migration could not turn into prefix rules from the old glob lists
 arrive as `legacy_patterns`. Settings lists them so you can rewrite them by
 hand; nothing enforces them.
+
+## Repository rules
+
+A checkout may add `.attn/rules.json`. The daemon reads it from the current Git
+worktree at session launch and appends its rules to the shipped and daemon-owned
+rules. Repository rules are version-controlled project configuration: they do
+not use the proposal flow. Every applicable rule remains in force, so a local
+allow or bypass cannot weaken a stricter shipped or global match.
+
+```json
+{
+  "rules": [
+    {
+      "pattern": ["go", "test"],
+      "decision": "prompt",
+      "sandbox": "bypass"
+    }
+  ]
+}
+```
+
+The whole file is validated. An unknown field, malformed pattern, bad example,
+or invalid decision/sandbox pairing stops the session launch and names the file
+and rule. A running session keeps the rules it launched with; reloading or
+starting another session reads the checkout again. `attn automode show` resolves
+the current directory and prints the global, repository and effective rules.
 
 ## Network
 
@@ -248,14 +288,15 @@ The queue sees the session as waiting while the card is open.
 
 ## Where the settings live
 
-Rules, hosts, the approval policy, the sandbox mode and the environment live in
-the daemon, and reach a session at launch as JSON. That JSON is what a session
-starts with, and a running session keeps it; the exception is a network host
-rule, which the driver's proxy picks up at once. `/permissions` is the other
-way the pair moves: it switches the approval policy and the sandbox mode inside
-the pi process for the rest of that session. Nothing is reported back to attn,
-so a relaunch, or a new session in the same process, returns to the launch
-choice.
+Global rules, hosts, the approval policy, the sandbox mode and the environment
+live in the daemon. Repository rules live in the checkout. The daemon merges
+them and sends the effective config to a session at launch as JSON. That JSON is
+what a session starts with, and a running session keeps it; the exception is a
+network host rule, which the driver's proxy picks up at once. `/permissions` is
+the other way the pair moves: it switches the approval policy and the sandbox
+mode inside the pi process for the rest of that session. Nothing is reported
+back to attn, so a relaunch, or a new session in the same process, returns to the
+launch choice.
 
 The pair governs both tool surfaces. Bash runs under the sandbox mode, and so do
 the native write and edit tools: `read-only` refuses a change before it reaches

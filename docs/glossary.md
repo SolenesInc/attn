@@ -109,7 +109,8 @@
 - Reviewer: what answers one approval. Exactly one per session, never both in sequence.
 - Guardian: the model reviewer. Its model and reasoning come from daemon launch defaults or an in-memory `/security` override; an unset model follows the coding model. Overrides survive daemon restart but reset when the agent reloads. It retains its conversation across model changes, may run read-only sandboxed commands, and its rejection goes back to the agent as text.
 - Approval policy: what an unmatched command does — `untrusted` asks, `on-request` runs it sandboxed and asks only for escalation, `never` never asks.
-- Prefix rule: a command prefix, one token per argument, no wildcards, deciding allow, prompt or forbidden. `match`/`not_match` examples are checked when rules load.
+- Prefix rule: a command prefix, one token per argument, no wildcards. Its decision says allow, prompt or forbidden; its sandbox treatment independently says inherit or bypass. `match`/`not_match` examples are checked when rules load.
+- Repository rules: version-controlled prefix rules in a checkout's `.attn/rules.json`, merged with daemon-owned and shipped rules when a session launches. Strictest matching behavior wins.
 - Sandbox mode: `read-only`, `workspace-write` or `danger-full-access`; what a bash command runs under. `/security` still governs the file tools and the deny lists.
 - Host approval: a decision about one network host, taken while the proxy holds the connection open.
 - Config: the daemon's policy/environment snapshot, handed to a session at launch.

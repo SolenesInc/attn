@@ -6018,6 +6018,10 @@ model AutoModeRuleInfo {
   "pattern": string[][];
   // "allow" | "prompt" | "forbidden".
   "decision": string;
+  // "inherit" keeps the session sandbox; "bypass" runs outside it after any
+  // required review. Older rules omit this: allow means bypass and every other
+  // decision means inherit.
+  "sandbox": string;
   // Required for a forbidden rule: it is the text the agent is given.
   "justification": string;
   "match": string[][];
@@ -6094,10 +6098,17 @@ model AutoModeDenialInfo {
 
 model AutoModeShowMessage {
   "cmd": "automode_show";
+  // Resolve repository rules from this directory. Absent means global only.
+  "cwd"?: string;
 }
 
 model AutoModeShowResult {
+  // Effective config for cwd: shipped, daemon-owned global, then repository.
   "config": AutoModeConfigInfo;
+  // Shipped and daemon-owned rules before repository rules are appended.
+  "global_rules": AutoModeRuleInfo[];
+  "repository_rules": AutoModeRuleInfo[];
+  "repository_rules_path"?: string;
   // Everything still pending, oldest first.
   "proposals": AutoModeProposalInfo[];
 }
@@ -6207,6 +6218,8 @@ model AutoModeRuleAddMessage {
   pattern: string[];
   // Absent means "allow", Codex's default.
   decision?: string;
+  // Absent preserves the old behavior: allow bypasses; prompt inherits.
+  sandbox?: string;
   justification?: string;
   request_id: string;
 }

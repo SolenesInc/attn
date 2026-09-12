@@ -14,6 +14,7 @@ import { useAutoModePolicy } from '../hooks/useAutoModePolicy';
 const rule = (over: Partial<AutoModeRuleInfo> = {}): AutoModeRuleInfo => ({
   pattern: [['git'], ['status']],
   decision: 'allow',
+  sandbox: 'bypass',
   justification: '',
   match: [],
   not_match: [],
@@ -23,6 +24,7 @@ const rule = (over: Partial<AutoModeRuleInfo> = {}): AutoModeRuleInfo => ({
 const shippedRule = rule({
   pattern: [['attn'], ['automode'], ['env']],
   decision: 'forbidden',
+  sandbox: 'inherit',
   justification: 'the environment is what the reviewer reads',
 });
 

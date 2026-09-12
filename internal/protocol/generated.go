@@ -1408,6 +1408,9 @@ type AutoModeRuleAddMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
+
+	// Sandbox corresponds to the JSON schema field "sandbox".
+	Sandbox *string `json:"sandbox,omitempty,omitzero"`
 }
 
 type AutoModeRuleInfo struct {
@@ -1425,6 +1428,9 @@ type AutoModeRuleInfo struct {
 
 	// Pattern corresponds to the JSON schema field "pattern".
 	Pattern [][]string `json:"pattern"`
+
+	// Sandbox corresponds to the JSON schema field "sandbox".
+	Sandbox string `json:"sandbox"`
 }
 
 type AutoModeRuleRemoveMessage struct {
@@ -1441,14 +1447,27 @@ type AutoModeRuleRemoveMessage struct {
 type AutoModeShowMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// Cwd corresponds to the JSON schema field "cwd".
+	Cwd *string `json:"cwd,omitempty,omitzero"`
 }
 
 type AutoModeShowResult struct {
 	// Config corresponds to the JSON schema field "config".
 	Config AutoModeConfigInfo `json:"config"`
 
+	// GlobalRules corresponds to the JSON schema field "global_rules".
+	GlobalRules []AutoModeRuleInfo `json:"global_rules"`
+
 	// Proposals corresponds to the JSON schema field "proposals".
 	Proposals []AutoModeProposalInfo `json:"proposals"`
+
+	// RepositoryRules corresponds to the JSON schema field "repository_rules".
+	RepositoryRules []AutoModeRuleInfo `json:"repository_rules"`
+
+	// RepositoryRulesPath corresponds to the JSON schema field
+	// "repository_rules_path".
+	RepositoryRulesPath *string `json:"repository_rules_path,omitempty,omitzero"`
 }
 
 type AutoModeStateChangedMessage struct {

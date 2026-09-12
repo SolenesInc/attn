@@ -1,4 +1,4 @@
-import { CompiledPolicy, isDecision, shlexJoin } from "./policy";
+import { CompiledPolicy, isDecision, ruleSandbox, shlexJoin } from "./policy";
 import type { PatternToken, PrefixRule, RuleError } from "./types";
 
 export function renderPattern(pattern: readonly PatternToken[]): string {
@@ -51,6 +51,11 @@ function shapeError(rule: PrefixRule): string | undefined {
   }
   if (rule.decision !== undefined && !isDecision(rule.decision)) {
     return `invalid decision: ${rule.decision}`;
+  }
+  const sandbox = ruleSandbox(rule);
+  if (sandbox === undefined) return `invalid sandbox: ${rule.sandbox}`;
+  if (rule.decision === "forbidden" && sandbox === "bypass") {
+    return "invalid rule: a forbidden rule cannot bypass the sandbox";
   }
   if (rule.justification !== undefined && rule.justification.trim() === "") {
     return "invalid rule: justification cannot be empty";
