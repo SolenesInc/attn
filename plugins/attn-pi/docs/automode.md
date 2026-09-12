@@ -179,6 +179,11 @@ s-xmrk8s.
 
 ## The Guardian
 
+Choose the daemon's default in attn Settings → Auto Mode → Guardian. The model
+picker reads Pi's model catalog; reasoning choices follow the selected model's
+capabilities. Reset guardian default restores Follow session model and default
+reasoning. Edits apply to newly launched agents, not agents already running.
+
 With `/auto on`, the Guardian answers approvals instead of you. Its provider,
 model and reasoning come from attn's launch defaults, with a session override
 available in `/security` under Guardian. An unset model follows the session's

@@ -9,9 +9,12 @@ import type {
 import type { AutoModePolicy } from '../hooks/useAutoModePolicy';
 import { setAutoModeAutomationHandle } from './autoModeAutomation';
 import './AutoModeSettings.css';
+import { GuardianSettings } from './GuardianSettings';
+import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
 
 interface AutoModeSettingsProps {
   policy: AutoModePolicy;
+  loadModels?: (harness: string) => Promise<DelegationModelCatalog>;
 }
 
 const APPROVAL_POLICIES = ['untrusted', 'on-request', 'never'];
@@ -23,7 +26,7 @@ const ruleLine = (rule: AutoModeRuleInfo): string =>
     .map((alternatives) => (alternatives.length === 1 ? alternatives[0] : `{${alternatives.join('|')}}`))
     .join(' ');
 
-export function AutoModeSettings({ policy }: AutoModeSettingsProps) {
+export function AutoModeSettings({ policy, loadModels }: AutoModeSettingsProps) {
   const { state, error, loading, resolvingID, refresh, promote, discard } = policy;
 
   if (error && !state) {
@@ -68,6 +71,7 @@ export function AutoModeSettings({ policy }: AutoModeSettingsProps) {
         </div>
 
         <PolicyEditor config={config} policy={policy} />
+        {loadModels && <GuardianSettings value={config.guardian} policy={policy} loadModels={loadModels} />}
 
         <div className="automode-section-head">
           <h4>This machine</h4>

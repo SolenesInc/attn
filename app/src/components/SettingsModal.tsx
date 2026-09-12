@@ -2326,7 +2326,7 @@ function SettingsModalContent({
       case 'workflows':
         return renderWorkflowsSettings();
       case 'autoMode':
-        return <AutoModeSettings policy={autoModePolicy} />;
+        return <AutoModeSettings policy={autoModePolicy} loadModels={sendDelegationModels} />;
       case 'connectivity':
       default:
         return renderConnectivitySettings();
