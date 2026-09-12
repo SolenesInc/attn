@@ -52,6 +52,9 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
   changing attn from the agents it runs.
 - Quote globs passed to shell commands; zsh rejects unmatched bare globs before
   commands such as `rg` can handle them.
+- Do not ignore Reactor Doctor warnings and errors. Don't dismiss them as irrelevant.
+  The bar to assume they are not applicable must be very high. Ask the user for approval
+  to ignore them. Do not silently bypass it.
 
 ## Commands and verification
 

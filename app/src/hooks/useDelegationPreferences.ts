@@ -56,6 +56,8 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
         pending.current = null;
         setError(message(e));
         await fetch();
+        // An edit made against the table the conflict replaced would overwrite the change it lost to.
+        pending.current = null;
       }
     }
   }, [save, apply, fetch]);

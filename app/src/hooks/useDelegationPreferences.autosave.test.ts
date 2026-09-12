@@ -12,7 +12,8 @@ const preferences = (revision: number, instructions = ''): DelegationPreferences
 function setup() {
   let server: DelegationSettingsState = { preferences: preferences(0), templates: [], expandedRoles: [], harnesses: [], workflowSkillPaths: [] };
   const daemon = createMockDaemon();
-  daemon.setResponse('load', () => structuredClone(server));
+  let releaseLoad: (() => void) | null = null;
+  daemon.setResponse('load', async () => { if (releaseLoad) await new Promise<void>(resolve => { const r = releaseLoad; releaseLoad = () => { resolve(); r?.(); }; }); return structuredClone(server); });
   let release: (() => void) | null = null;
   daemon.setResponse('save', async (args: unknown[]) => {
     const value = args[0] as DelegationPreferences;
@@ -24,7 +25,7 @@ function setup() {
   const load = daemon.createRequest<DelegationSettingsState>('load');
   const save = daemon.createRequest<DelegationSettingsState>('save');
   const hook = renderHook(() => useDelegationPreferences(true, load, save));
-  return { daemon, hook, server: () => server, bump: () => { server = { ...server, preferences: { ...server.preferences, revision: server.preferences.revision + 1 } }; }, releaseFirst: () => { const r = release; release = () => {}; r?.(); } };
+  return { daemon, hook, server: () => server, bump: () => { server = { ...server, preferences: { ...server.preferences, revision: server.preferences.revision + 1 } }; }, releaseFirst: () => { const r = release; release = () => {}; r?.(); }, holdLoads: () => { releaseLoad = () => {}; return () => { const r = releaseLoad; releaseLoad = null; r?.(); }; } };
 }
 
 afterEach(() => useDelegationPreferencesPush.getState().clear());
@@ -77,6 +78,23 @@ it('loads again after a save when a newer revision was announced during the flig
   releaseFirst();
   await waitFor(() => expect(daemon.getCalls('load')).toHaveLength(2));
   await waitFor(() => expect(hook.result.current.busy).toBe(false));
+});
+
+it('discards an edit made while the conflict reload is still loading', async () => {
+  const { daemon, hook, server, bump, releaseFirst, holdLoads } = setup();
+  await waitFor(() => expect(hook.result.current.preferences).not.toBeNull());
+  bump();
+  const releaseLoad = holdLoads();
+  act(() => { void hook.result.current.save(preferences(0, 'one')); });
+  releaseFirst();
+  await waitFor(() => expect(hook.result.current.error).toContain('reload before saving'));
+  act(() => { void hook.result.current.save(preferences(0, 'two')); });
+  releaseLoad();
+  await waitFor(() => expect(hook.result.current.busy).toBe(false));
+  expect(daemon.getCalls('save')).toHaveLength(1);
+  expect(server().preferences.fallback.instructions).toBe('');
+  expect(hook.result.current.preferences?.revision).toBe(1);
+  expect(hook.result.current.preferences?.fallback.instructions).toBe('');
 });
 
 it('drops local edits and reloads when the daemon reports a conflict', async () => {
