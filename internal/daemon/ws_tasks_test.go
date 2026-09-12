@@ -49,18 +49,18 @@ func TestTaskToProtocolMapsFieldsAndOmitsPayload(t *testing.T) {
 	updated := time.Date(2026, 6, 14, 9, 15, 0, 0, time.UTC)
 	secret := "/Users/victor/.claude/transcripts/SUPER-SECRET-PATH.jsonl"
 	task := &jobs.Job{
-		ID:          "job-1",
-		Kind:        testTaskKind,
-		UniqueKey:   "ws-1",
-		State:       jobs.StateFailed,
-		Attempts:    3,
-		ScheduledAt: next,
-		LastError:   "boom",
+		ID:             "job-1",
+		Kind:           testTaskKind,
+		UniqueKey:      "ws-1",
+		State:          jobs.StateFailed,
+		Attempts:       3,
+		ScheduledAt:    next,
+		LastError:      "boom",
 		LastDiagnostic: "stderr: auth failed",
-		CreatedAt:   created,
-		UpdatedAt:   updated,
-		Payload:     []byte(`{"transcript_path":"` + secret + `"}`),
-		Result:      []byte(`{"wrote":"` + secret + `"}`),
+		CreatedAt:      created,
+		UpdatedAt:      updated,
+		Payload:        []byte(`{"transcript_path":"` + secret + `"}`),
+		Result:         []byte(`{"wrote":"` + secret + `"}`),
 	}
 
 	pt := taskToProtocol(task)
