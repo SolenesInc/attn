@@ -19,13 +19,6 @@ type delegationModelCatalog struct {
 }
 
 func (d *Daemon) discoverDelegationModels(ctx context.Context, harness string) (delegationModelCatalog, error) {
-	cfg, err := d.store.GetDelegationPreferences()
-	if err != nil {
-		return delegationModelCatalog{}, err
-	}
-	if !cfg.Enabled {
-		return delegationModelCatalog{}, fmt.Errorf("configure Settings > Delegation before discovering models")
-	}
 	if err := delegationprefs.ValidateSelection(delegationprefs.Selection{Harness: harness}, true); err != nil {
 		return delegationModelCatalog{}, err
 	}
@@ -100,14 +93,6 @@ func (d *Daemon) discoverDelegationModels(ctx context.Context, harness string) (
 	})
 	if err != nil {
 		return delegationModelCatalog{}, err
-	}
-	// A settings edit while the query ran must not reveal a disabled configuration.
-	latest, err := d.store.GetDelegationPreferences()
-	if err != nil {
-		return delegationModelCatalog{}, err
-	}
-	if !latest.Enabled {
-		return delegationModelCatalog{}, fmt.Errorf("delegation model discovery is no longer available")
 	}
 	return value.(delegationModelCatalog), nil
 }

@@ -1,5 +1,6 @@
 import { SettingsAutosaveProvider, SettingsAutosaveStatus, useAutosaveSetting, useSettingsAutosave, type SaveSetting } from './SettingsAutosave';
-import { DelegationSettings } from './DelegationSettings';
+import { DelegationSettings, DelegationSwitch } from './DelegationSettings';
+import { delegationLiveCount } from './delegationRoles';
 import { useDelegationPreferences } from '../hooks/useDelegationPreferences';
 import { Fragment, forwardRef, useImperativeHandle, useState, useCallback, useEffect, useMemo, type ForwardedRef } from 'react';
 import { useEscapeStack } from '../hooks/useEscapeStack';
@@ -130,6 +131,7 @@ type SettingsSectionID =
   | 'terminal'
   | 'autoMode'
   | 'delegation'
+  | 'workflows'
   | 'connectivity'
   | 'plugins'
   | 'backgroundTasks'
@@ -267,7 +269,7 @@ function SettingsModalContent({
     if (await autosave.flush()) setSelectedSection(section);
   }, [autosave]);
   const [selectedSection, setSelectedSection] = useState<SettingsSectionID>('connectivity');
-  const delegationPolicy = useDelegationPreferences(isOpen && selectedSection === 'delegation', sendDelegationPreferencesGet, sendDelegationPreferencesSave);
+  const delegationPolicy = useDelegationPreferences(isOpen, sendDelegationPreferencesGet, sendDelegationPreferencesSave);
   const [settingsSearch, setSettingsSearch] = useState('');
   const endpointPanel = useEndpointPanel();
   const pluginPanel = usePluginPanel(onListPlugins);
@@ -761,8 +763,16 @@ function SettingsModalContent({
           label: 'Delegation',
           title: 'Delegation',
           description: '',
-          count: 1,
-          keywords: 'delegate roles scout design build ship review fallback harness models effort preferences workflows hypercode',
+          count: delegationLiveCount(delegationPolicy.preferences),
+          keywords: 'delegate roles pathfinder builder reviewer orchestrator fallback harness models effort preferences alternatives',
+        },
+        {
+          id: 'workflows',
+          label: 'Workflows',
+          title: 'Workflows',
+          description: 'Durable multi-agent workflows that managed agents can run when you opt in.',
+          count: workflowsEnabled ? 1 : 0,
+          keywords: 'workflows hypercode multi-agent orchestration attn workflow run',
         },
         {
           id: 'autoMode',
@@ -842,6 +852,8 @@ function SettingsModalContent({
     pluginIssues.length,
     plugins.length,
     autoModePolicy.pendingCount,
+    delegationPolicy.preferences,
+    workflowsEnabled,
   ]);
 
   const filteredNavGroups = useMemo(() => {
@@ -866,6 +878,8 @@ function SettingsModalContent({
 
   const renderSectionStatusPills = () => {
     switch (selectedSection) {
+      case 'delegation':
+        return <DelegationSwitch policy={delegationPolicy} />;
       case 'connectivity':
         return (
           <>
@@ -1711,12 +1725,9 @@ function SettingsModalContent({
   const renderWorkflowsSettings = () => (
       <section className="settings-block">
         <div className="settings-block-intro">
-          <div className="settings-kicker">Agents</div>
-          <h3>Workflows</h3>
           <p className="settings-description">
-            Lets managed agents run durable multi-agent workflows. Off by default. When on,
-            agents learn how and when to use workflows and only start one when you opt in per
-            task ("attn workflow") or for the session ("hypercode").
+            Off by default. When on, agents learn how and when to use workflows and only start
+            one when you opt in per task ("attn workflow") or for the session ("hypercode").
           </p>
         </div>
         <div className="settings-block-body">
@@ -2311,7 +2322,9 @@ function SettingsModalContent({
       case 'eventBus':
         return renderEventBusSettings();
       case 'delegation':
-        return <><DelegationSettings policy={delegationPolicy} loadModels={sendDelegationModels} />{renderWorkflowsSettings()}</>;
+        return <DelegationSettings policy={delegationPolicy} loadModels={sendDelegationModels} />;
+      case 'workflows':
+        return renderWorkflowsSettings();
       case 'autoMode':
         return <AutoModeSettings policy={autoModePolicy} />;
       case 'connectivity':

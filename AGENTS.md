@@ -47,11 +47,30 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 - Make protocol bumps and DB migrations as needed by the changes.
 - Diagnose before fixing. If the cause is unknown, propose instrumentation.
 - Do not commit spikes.
-- Do not add prose comments. Prefer self-explanatory code over comments.
+- Do not add prose comments to code. Prefer self-explanatory code over comments.
 - Product prompts address the user, never "Victor". Distinguish the agent
   changing attn from the agents it runs.
 - Quote globs passed to shell commands; zsh rejects unmatched bare globs before
   commands such as `rg` can handle them.
+
+## PR posture
+
+- Codex reviews every PR as `chatgpt-codex-connector[bot]`. It reviews each push on
+  its own; comment `@codex review` only when a head has waited without one. Never
+  merge unless Victor asks.
+- Match the review to the head: the review body names its `Reviewed commit`, and
+  findings on an older commit are history. A review with findings is feedback to
+  address, not a pass. A 👍 reaction on the PR is a clean review for that push only;
+  👀 is activity; silence, a timeout, or the "Codex can review" help text is not a pass.
+- Read reviews, inline comments, review threads with `isResolved`, and PR reactions
+  through the API (GraphQL for threads). `gh pr view` misses reactions and thread state.
+- Address each finding with a change and a test, reply on the thread with what
+  changed, and resolve it. When no change is needed, reply with the reason and leave
+  the thread open for Victor.
+- A fix is a new head: wait for CI and a fresh Codex review on it before handing back.
+- Do not ignore React Doctor warnings and errors. Don't dismiss them as irrelevant.
+  The bar to assume they are not applicable must be very high. Ask the user for approval
+  to ignore them. Do not silently bypass it.
 
 ## Commands and verification
 

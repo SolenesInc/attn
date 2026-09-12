@@ -9,6 +9,7 @@ const SETTINGS_SECTION_IDS = [
   'terminal',
   'autoMode',
   'delegation',
+  'workflows',
   'connectivity',
   'plugins',
   'backgroundTasks',

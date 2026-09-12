@@ -204,11 +204,11 @@ func TestDelegationDiscoveryAndEffortValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.store.SetSetting(canonicalExecutableSettingKey("claude"), executable)
-	if _, err := d.discoverDelegationModels(context.Background(), "claude"); err == nil {
-		t.Fatal("discovered while disabled")
+	if catalog, err := d.discoverDelegationModels(context.Background(), "claude"); err != nil || len(catalog.Models) != 1 {
+		t.Fatalf("discovery while preferences are off: %+v %v", catalog, err)
 	}
-	if _, err := os.Stat(marker); !os.IsNotExist(err) {
-		t.Fatal("disabled discovery launched a process")
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatal("discovery did not query the harness")
 	}
 	cfg := configuredBuild(t, d)
 	cfg.Roles[0].Choices[0].Selection = delegationprefs.Selection{Harness: "claude", Model: "known", Effort: "high"}
