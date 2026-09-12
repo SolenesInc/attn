@@ -222,3 +222,16 @@ it('follows its cell when the settings body scrolls or the window resizes', asyn
   expect(dialog.style.left).toBe('90px');
   rect.top = 100; rect.bottom = 130; rect.left = 40;
 });
+
+it('keeps focus on the effort level a keyboard user just picked', async () => {
+  const { onChange, rerender } = open({ harness: 'claude', provider: '', model: 'opus', effort: '' });
+  await screen.findByRole('option', { name: /Opus/ });
+  const high = screen.getByRole('button', { name: 'high' });
+  act(() => { high.focus(); });
+  fireEvent.click(high);
+  expect(onChange).toHaveBeenLastCalledWith({ harness: 'claude', provider: '', model: 'opus', effort: 'high' });
+  rerender({ harness: 'claude', provider: '', model: 'opus', effort: 'high' });
+  const pressed = screen.getByRole('button', { name: 'high' });
+  expect(pressed).toHaveAttribute('aria-pressed', 'true');
+  expect(document.activeElement).toBe(pressed);
+});
