@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	attngit "github.com/victorarias/attn/internal/git"
 )
@@ -104,20 +105,30 @@ func repositoryMarkerPresent(cwd string) (bool, error) {
 
 func validateRepositoryRuleExamples(rule Rule) error {
 	for _, example := range rule.NotMatch {
-		if len(example) == 0 {
-			return fmt.Errorf("not_match example cannot be empty")
+		if err := validateRepositoryRuleExample("not_match", example); err != nil {
+			return err
 		}
 		if repositoryRuleMatches(rule, example) {
 			return fmt.Errorf("not_match example %q matches %q", example, rule.Describe())
 		}
 	}
 	for _, example := range rule.Match {
-		if len(example) == 0 {
-			return fmt.Errorf("match example cannot be empty")
+		if err := validateRepositoryRuleExample("match", example); err != nil {
+			return err
 		}
 		if !repositoryRuleMatches(rule, example) {
 			return fmt.Errorf("match example %q does not match %q", example, rule.Describe())
 		}
+	}
+	return nil
+}
+
+func validateRepositoryRuleExample(field string, example []string) error {
+	if len(example) == 0 {
+		return fmt.Errorf("%s example cannot be empty", field)
+	}
+	if strings.TrimFunc(example[0], isPiWhitespace) == "" {
+		return fmt.Errorf("%s example program cannot be blank", field)
 	}
 	return nil
 }
