@@ -191,6 +191,7 @@ func (d *Daemon) bindResumedSeed(
 	d.announceCommittedWrite(dispatchFact, written[1].Seq)
 	d.publishFact(FactGardenTended, seed.ID, nil)
 	d.rememberDispatchProjection(sessionID, dispatch, written[1].Rev)
+	d.reconcileRemoteGardenSeedBells()
 	d.ringSeedActivity(seed.ID, gardenRingEvents[garden.VerbTend], sessionID, "")
 	return nil
 }

@@ -107,6 +107,7 @@ func (d *Daemon) bindDelegationAssignment(operationID, sessionID, plannerSession
 	}
 	d.rememberDispatchProjection(sessionID, dispatch, written[1].Rev)
 	d.publishFact(FactGardenTended, seed.ID, nil)
+	d.reconcileRemoteGardenSeedBells()
 	d.ringSeedActivity(seed.ID, gardenRingEvents[garden.VerbTend], sessionID, plannerSessionID)
 	return seed.ID, nil
 }

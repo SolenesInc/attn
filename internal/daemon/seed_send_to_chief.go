@@ -150,6 +150,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage) (*protoco
 	if err := d.resolveGardenReviewAction(msg.Review, seed.ID, "send_to_chief"); err != nil {
 		d.logf("Garden review: settle %s after Send to Chief: %v", seed.ID, err)
 	}
+	d.reconcileRemoteGardenSeedBells()
 	d.ringSeedActivity(seed.ID, gardenRingEvents[garden.VerbTend], chiefSessionID, protocol.Deref(msg.SourceSessionID))
 	status, detail := d.deliverChiefSeedAssignment(chiefSessionID, seed.ID)
 

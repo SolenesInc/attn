@@ -470,6 +470,7 @@ func startAgentCloseOutpost(t *testing.T, d *Daemon, sessions ...protocol.Sessio
 	}
 
 	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
+	d.hubManager.SetSessionsAvailableCallback(d.reconcileRemoteGardenSeedBellSessions)
 	endpoint, err := d.hubManager.AddEndpoint("gpu-box", "gpu", "")
 	if err != nil {
 		t.Fatalf("AddEndpoint: %v", err)

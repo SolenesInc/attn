@@ -24,6 +24,7 @@ import (
 type StatusCallback func(info protocol.EndpointInfo)
 
 type SessionsChangedCallback func(endpointID string)
+type SessionsAvailableCallback func(endpointID string, sessions []protocol.Session)
 type RawEventCallback func(data []byte)
 
 type VersionMismatchError struct {
@@ -92,6 +93,7 @@ type Manager struct {
 	bootstrapper *Bootstrapper
 	onStatus     StatusCallback
 	onSessions   SessionsChangedCallback
+	onAvailable  SessionsAvailableCallback
 	onRawEvent   RawEventCallback
 	homeDaemonID func() string
 	logf         func(format string, args ...interface{})
@@ -173,6 +175,12 @@ func (m *Manager) Start(parent context.Context) {
 			m.startRuntimeLocked(id)
 		}
 	}
+}
+
+func (m *Manager) SetSessionsAvailableCallback(callback SessionsAvailableCallback) {
+	m.mu.Lock()
+	m.onAvailable = callback
+	m.mu.Unlock()
 }
 
 func (m *Manager) Stop() {
@@ -622,6 +630,7 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 				m.logf("endpoint %s: %s", id, notice)
 			}
 			m.updateStatus(id, activeStatus, activeMsg, caps, &sessionCount)
+			m.publishSessionsAvailable(id, msg.Sessions)
 			if changed {
 				m.publishSessionsChanged(id)
 			}
@@ -640,6 +649,7 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 			changed := m.ReplaceRemoteSessions(id, msg.Sessions)
 			sessionCount := int32(len(msg.Sessions))
 			m.updateStatus(id, activeStatus, activeMsg, nil, &sessionCount)
+			m.publishSessionsAvailable(id, msg.Sessions)
 			if changed {
 				m.publishSessionsChanged(id)
 			}
@@ -653,6 +663,9 @@ func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.
 			changed, sessionCount := m.upsertRemoteSession(id, *msg.Session)
 			countValue := int32(sessionCount)
 			m.updateStatus(id, activeStatus, activeMsg, nil, &countValue)
+			if peek.Event == protocol.EventSessionRegistered {
+				m.publishSessionsAvailable(id, []protocol.Session{*msg.Session})
+			}
 			if changed {
 				m.publishSessionsChanged(id)
 			}
@@ -1489,6 +1502,15 @@ func (m *Manager) clearRemoteWorkspaceLayouts(id string) bool {
 func (m *Manager) publishSessionsChanged(endpointID string) {
 	if m.onSessions != nil {
 		m.onSessions(endpointID)
+	}
+}
+
+func (m *Manager) publishSessionsAvailable(endpointID string, sessions []protocol.Session) {
+	m.mu.RLock()
+	callback := m.onAvailable
+	m.mu.RUnlock()
+	if callback != nil {
+		callback(endpointID, sessions)
 	}
 }
 

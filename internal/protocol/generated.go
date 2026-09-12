@@ -6644,6 +6644,17 @@ type RecentLocationsResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type ReconcileGardenSeedBellsMessage struct {
+	// AllowedSeedIds corresponds to the JSON schema field "allowed_seed_ids".
+	AllowedSeedIds []string `json:"allowed_seed_ids"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+}
+
 type RecordString map[string]interface{}
 
 type RefreshPRsMessage struct {

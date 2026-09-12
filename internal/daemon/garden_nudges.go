@@ -200,6 +200,10 @@ func (d *Daemon) discardUncoveredSeedBells(sessionID string) error {
 	if len(items) == 0 {
 		return d.refreshAgentMailboxUnread(sessionID)
 	}
+	status, statusErr := d.enrollmentStatus()
+	if statusErr == nil && strings.TrimSpace(status.HomeDaemonID) != "" && !status.IsHome() {
+		return d.discardUnauthorizedRemoteSeedBells(sessionID, items)
+	}
 	subscriptions, err := d.readGardenSubscriptions()
 	if err != nil {
 		return err
@@ -224,12 +228,30 @@ func (d *Daemon) discardUncoveredSeedBells(sessionID string) error {
 	return d.refreshAgentMailboxUnread(sessionID)
 }
 
+func (d *Daemon) discardUnauthorizedRemoteSeedBells(sessionID string, items []store.GardenSeedMailboxItem) error {
+	d.remoteGardenBellMu.RLock()
+	allowed, reconciled := d.remoteGardenBellAllowed[sessionID]
+	uncovered := make([]string, 0, len(items))
+	if reconciled {
+		for _, item := range items {
+			if item.EventKind != gardenRingUnblocked || !allowed[item.SeedID] {
+				uncovered = append(uncovered, item.SeedID)
+			}
+		}
+	}
+	d.remoteGardenBellMu.RUnlock()
+	if !reconciled {
+		return fmt.Errorf("garden bell authorization for session %s is waiting for its home", sessionID)
+	}
+	if err := d.store.DiscardGardenSeedMailboxItems(sessionID, uncovered, time.Now()); err != nil {
+		return err
+	}
+	return d.refreshAgentMailboxUnread(sessionID)
+}
+
 func (d *Daemon) unblockedSeedTenderedBy(item store.GardenSeedMailboxItem, sessionID string) (bool, error) {
 	if item.EventKind != gardenRingUnblocked {
 		return false, nil
-	}
-	if d.requireHome(garden.Surface) != nil {
-		return true, nil
 	}
 	seed, _, err := d.readSeed(item.SeedID)
 	if err != nil {
@@ -304,7 +326,7 @@ func (d *Daemon) claimAndDeliverSeedBell(sessionID, seedID, eventKind string) {
 }
 
 func (d *Daemon) handleDeliverGardenSeedBell(client *wsClient, msg *protocol.DeliverGardenSeedBellMessage) {
-	if client == nil || client.clientKind != "hub" {
+	if client == nil || !client.isHubClient() {
 		d.logf("garden bell: refusing remote delivery from a non-hub client")
 		return
 	}
@@ -316,7 +338,99 @@ func (d *Daemon) handleDeliverGardenSeedBell(client *wsClient, msg *protocol.Del
 		d.logf("garden bell: refusing invalid remote delivery session=%s seed=%s", sessionID, seedID)
 		return
 	}
+	d.remoteGardenBellMu.Lock()
+	if allowed, reconciled := d.remoteGardenBellAllowed[sessionID]; reconciled {
+		allowed[seedID] = true
+	}
+	d.remoteGardenBellMu.Unlock()
 	d.claimAndDeliverLocalSeedBell(sessionID, seedID, eventKind, itemID)
+}
+
+func (d *Daemon) handleReconcileGardenSeedBells(client *wsClient, msg *protocol.ReconcileGardenSeedBellsMessage) {
+	if client == nil || !client.isHubClient() {
+		d.logf("garden bell: refusing reconciliation from a non-hub client")
+		return
+	}
+	sessionID := strings.TrimSpace(msg.SessionID)
+	if sessionID == "" {
+		d.logf("garden bell: refusing reconciliation without a session")
+		return
+	}
+	allowed := make(map[string]bool, len(msg.AllowedSeedIds))
+	for _, seedID := range msg.AllowedSeedIds {
+		if seedID = strings.TrimSpace(seedID); seedID != "" {
+			allowed[seedID] = true
+		}
+	}
+	d.remoteGardenBellMu.Lock()
+	if d.remoteGardenBellAllowed == nil {
+		d.remoteGardenBellAllowed = map[string]map[string]bool{}
+	}
+	d.remoteGardenBellAllowed[sessionID] = allowed
+	d.remoteGardenBellMu.Unlock()
+
+	d.gardenWatchMu.Lock()
+	if err := d.discardUncoveredSeedBells(sessionID); err != nil {
+		d.logf("garden bell: reconcile session=%s: %v", sessionID, err)
+	}
+	d.gardenWatchMu.Unlock()
+}
+
+func (d *Daemon) clearRemoteGardenBellAuthorization() {
+	d.remoteGardenBellMu.Lock()
+	d.remoteGardenBellAllowed = nil
+	d.remoteGardenBellMu.Unlock()
+}
+
+func (d *Daemon) reconcileRemoteGardenSeedBells() {
+	if d.hubManager == nil {
+		return
+	}
+	byEndpoint := map[string][]protocol.Session{}
+	for _, session := range d.hubManager.RemoteSessions() {
+		endpointID := strings.TrimSpace(protocol.Deref(session.EndpointID))
+		if endpointID != "" {
+			byEndpoint[endpointID] = append(byEndpoint[endpointID], session)
+		}
+	}
+	for endpointID, sessions := range byEndpoint {
+		d.reconcileRemoteGardenSeedBellSessions(endpointID, sessions)
+	}
+}
+
+func (d *Daemon) reconcileRemoteGardenSeedBellSessions(endpointID string, sessions []protocol.Session) {
+	if d.hubManager == nil || strings.TrimSpace(endpointID) == "" || len(sessions) == 0 {
+		return
+	}
+	read, err := d.readGarden()
+	if err != nil {
+		d.logf("garden bell: read Garden for endpoint %s reconciliation: %v", endpointID, err)
+		return
+	}
+	targets := make(map[string]bool, len(sessions))
+	allowed := make(map[string][]string, len(sessions))
+	for _, session := range sessions {
+		targets[session.ID] = true
+	}
+	for _, seed := range read.seeds {
+		if targets[seed.TenderSession] {
+			allowed[seed.TenderSession] = append(allowed[seed.TenderSession], seed.ID)
+		}
+	}
+	for _, session := range sessions {
+		seedIDs := allowed[session.ID]
+		sort.Strings(seedIDs)
+		payload, err := json.Marshal(protocol.ReconcileGardenSeedBellsMessage{
+			Cmd: protocol.CmdReconcileGardenSeedBells, SessionID: session.ID, AllowedSeedIds: seedIDs,
+		})
+		if err != nil {
+			d.logf("garden bell: marshal reconciliation session=%s: %v", session.ID, err)
+			continue
+		}
+		if err := d.hubManager.ForwardEndpointCommand(context.Background(), endpointID, payload); err != nil {
+			d.logf("garden bell: reconcile session=%s endpoint=%s: %v", session.ID, endpointID, err)
+		}
+	}
 }
 
 func (d *Daemon) claimAndDeliverLocalSeedBell(sessionID, seedID, eventKind, itemID string) {

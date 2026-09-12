@@ -132,6 +132,12 @@ func (c *wsClient) setIdentity(kind, version string, caps []string) {
 	}
 }
 
+func (c *wsClient) isHubClient() bool {
+	c.identityMu.RLock()
+	defer c.identityMu.RUnlock()
+	return c.clientKind == "hub"
+}
+
 func (c *wsClient) setClientID(id string) {
 	c.identityMu.Lock()
 	defer c.identityMu.Unlock()
@@ -878,6 +884,9 @@ func (d *Daemon) wsPingLoop(client *wsClient, done <-chan struct{}) {
 
 func (d *Daemon) wsReadPump(client *wsClient) {
 	defer func() {
+		if client.isHubClient() {
+			d.clearRemoteGardenBellAuthorization()
+		}
 		d.dropPendingInitialState(client)
 		d.cleanupRemoteGitStatusSubscription(client)
 		d.dropFsWatchClient(client)
@@ -1119,6 +1128,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		go d.handleTriggerNudge(msg.(*protocol.TriggerNudgeMessage))
 	case protocol.CmdDeliverGardenSeedBell: // wire: deliver_garden_seed_bell
 		d.handleDeliverGardenSeedBell(client, msg.(*protocol.DeliverGardenSeedBellMessage))
+	case protocol.CmdReconcileGardenSeedBells: // wire: reconcile_garden_seed_bells
+		d.handleReconcileGardenSeedBells(client, msg.(*protocol.ReconcileGardenSeedBellsMessage))
 	case protocol.CmdPRVisited: // wire: pr_visited
 		d.handlePRVisitedWS(msg.(*protocol.PRVisitedMessage))
 	case protocol.CmdListWorktrees: // wire: list_worktrees
@@ -1485,6 +1496,10 @@ func remoteCommandSessionID(cmd string, msg interface{}) string {
 		}
 	case protocol.CmdDeliverGardenSeedBell: // wire: deliver_garden_seed_bell
 		if typed, ok := msg.(*protocol.DeliverGardenSeedBellMessage); ok {
+			return typed.SessionID
+		}
+	case protocol.CmdReconcileGardenSeedBells: // wire: reconcile_garden_seed_bells
+		if typed, ok := msg.(*protocol.ReconcileGardenSeedBellsMessage); ok {
 			return typed.SessionID
 		}
 	case protocol.CmdRenameSession: // wire: rename_session

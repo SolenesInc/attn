@@ -29,7 +29,6 @@ type SessionPullRequestRecord struct {
 	HeadBranch      string
 	StatusFetchedAt string
 	LastActivityAt  string
-	// Pacing cursor, moved on every attempt; StatusFetchedAt is the last status that landed.
 	StatusCheckedAt string
 }
 
