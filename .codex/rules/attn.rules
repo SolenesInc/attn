@@ -14,8 +14,8 @@ prefix_rule(
 
 prefix_rule(
     pattern=["make", ["test", "test-frontend", "lint"]],
-    decision="allow",
-    justification="Trusted attn verification may run repository and dependency code with host access.",
+    decision="prompt",
+    justification="Make accepts additional targets and recipe overrides; review the complete invocation.",
     match=["make test", "make test-frontend", "make lint"],
 )
 
@@ -27,10 +27,18 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern=["make", "third_party/ghostty-vt/darwin_arm64/lib/libghostty-vt.a"],
-    decision="allow",
-    justification="Fetch and verify attn's pinned native VT artifact.",
-    match=["make third_party/ghostty-vt/darwin_arm64/lib/libghostty-vt.a"],
+    pattern=["make", [
+        "third_party/ghostty-vt/darwin_arm64/lib/libghostty-vt.a",
+        "third_party/ghostty-vt/linux_amd64/lib/libghostty-vt.a",
+        "third_party/ghostty-vt/linux_arm64/lib/libghostty-vt.a",
+    ]],
+    decision="prompt",
+    justification="Fetch a pinned native VT artifact after reviewing the complete Make invocation.",
+    match=[
+        "make third_party/ghostty-vt/darwin_arm64/lib/libghostty-vt.a",
+        "make third_party/ghostty-vt/linux_amd64/lib/libghostty-vt.a",
+        "make third_party/ghostty-vt/linux_arm64/lib/libghostty-vt.a",
+    ],
 )
 
 prefix_rule(
