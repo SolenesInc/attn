@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { DelegationChoice, DelegationPreferences, DelegationRole, DelegationSelection, DelegationHarness } from '../types/generated';
 import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
 import type { DelegationPreferencesPolicy } from '../hooks/useDelegationPreferences';
@@ -36,7 +36,8 @@ function useExpansion() {
 function useModelPopover() {
   const [popover, setPopover] = useState<PopoverTarget | null>(null);
   const open = (key: string, anchor: Anchor) => setPopover(current => current?.key === key ? null : { key, anchor });
-  return { popover, key: popover?.key ?? null, open, close: () => setPopover(null) };
+  const close = useCallback(() => setPopover(null), []);
+  return { popover, key: popover?.key ?? null, open, close };
 }
 
 function LoadingState({ error, onRetry }: { error: string; onRetry: () => void }) {

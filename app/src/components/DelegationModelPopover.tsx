@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { DelegationHarness, DelegationModel, DelegationSelection } from '../types/generated';
 import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
@@ -93,7 +93,7 @@ function ModelsPane({ harness, value, catalog, loading, error, manual, discover,
     <div className="delegation-pop-kicker"><span>Model</span>{harness.discovery && <button type="button" className="delegation-pop-refresh" disabled={loading} onClick={() => discover(true)}>refresh</button>}</div>
     <ModelList harness={harness} catalog={catalog} loading={loading} value={value} selected={selected} onPick={pickModel} />
     {error && <p className="delegation-pop-note warn" role="alert">{error}</p>}
-    {showEffort && <EffortField levels={selected?.effort_levels ?? []} value={value.effort} onChange={effort => onChange({ ...value, effort })} />}
+    {showEffort && <EffortField key={`${value.provider}/${value.model}/${value.effort}`} levels={selected?.effort_levels ?? []} value={value.effort} onChange={effort => onChange({ ...value, effort })} />}
     {manual && <ManualEntry withProvider={isPluginHarness(harness)} onSubmit={(model, provider) => { onChange({ ...value, provider, model, effort: '' }); onDone(); }} />}
   </>;
 }
@@ -137,14 +137,14 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
     return () => { if (!document.activeElement || document.activeElement === document.body) opener?.focus(); };
   }, []);
 
+  const onMouseDown = useEffectEvent((event: MouseEvent) => {
+    if (containerRef.current && !containerRef.current.contains(event.target as Node)) close();
+  });
   // Deferred a tick so the click that opened the popover doesn't close it.
   useEffect(() => {
-    const onMouseDown = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) close();
-    };
     const id = window.setTimeout(() => document.addEventListener('mousedown', onMouseDown), 0);
     return () => { window.clearTimeout(id); document.removeEventListener('mousedown', onMouseDown); };
-  }, [onClose]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const pickHarness = (next: DelegationHarness) => {
     if (next.id === value.harness) return;

@@ -139,3 +139,28 @@ it('clears an assigned harness back to an empty selection and closes', () => {
   expect(onChange).toHaveBeenLastCalledWith({ harness: '', provider: '', model: '', effort: '' });
   expect(onClose).toHaveBeenCalledTimes(1);
 });
+
+it('shows the new model\'s effort after a switch instead of the previous model\'s typed value', async () => {
+  const { onChange, rerender } = open({ harness: 'claude', provider: '', model: 'sonnet', effort: 'high' });
+  await screen.findByRole('option', { name: /Sonnet/ });
+  expect(screen.getByLabelText('Effort')).toHaveValue('high');
+  rerender({ harness: 'claude', provider: '', model: 'custom-model', effort: '' });
+  const effort = screen.getByLabelText('Effort');
+  expect(effort).toHaveValue('');
+  act(() => { effort.focus(); });
+  fireEvent.blur(effort);
+  expect(onChange).not.toHaveBeenCalled();
+});
+
+it('closes on a click outside that lands right after a re-render with a fresh onClose', async () => {
+  const closed = vi.fn();
+  function Host() {
+    const [ticks, setTicks] = useState(0);
+    return <><button type="button" onClick={() => setTicks(n => n + 1)}>tick {ticks}</button><DelegationModelPopover value={{ harness: 'claude', provider: '', model: '', effort: '' }} harnesses={harnesses} anchor={anchor} onChange={vi.fn()} onClose={() => closed(ticks)} loadModels={vi.fn(async () => structuredClone(catalog))} /></>;
+  }
+  render(<Host />);
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  fireEvent.click(screen.getByRole('button', { name: /tick/ }));
+  fireEvent.mouseDown(document.body);
+  expect(closed).toHaveBeenCalledWith(1);
+});
