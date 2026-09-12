@@ -21,7 +21,7 @@ const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
 const root = '[data-testid="delegation-settings"]';
 const toggle = '.settings-content-head [role="switch"][aria-label="Delegation preferences"]';
-const popover = '[role="dialog"][aria-label="Choose a model"]';
+const popover = 'dialog[aria-label="Choose a model"]';
 const runAttn = args => execFileSync(appDaemonInTree(options.appPath), args, { encoding: 'utf8', env: profileCliEnv(profile, { ATTN_SOCKET_PATH: socketPathForProfile(profile) }) });
 const roles = () => JSON.parse(runAttn(['delegate', 'roles', '--json']));
 const click = selector => client.request('dom_click', { selector });
