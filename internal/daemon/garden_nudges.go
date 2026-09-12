@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"sort"
@@ -279,8 +281,44 @@ func (d *Daemon) ringSeedActivity(seedID, eventKind string, excludedSessionIDs .
 }
 
 func (d *Daemon) claimAndDeliverSeedBell(sessionID, seedID, eventKind string) {
+	itemID := uuid.NewString()
+	if endpointID, remote := d.sessionOwningEndpoint(sessionID); remote {
+		msg := protocol.DeliverGardenSeedBellMessage{
+			Cmd: protocol.CmdDeliverGardenSeedBell, ItemID: itemID,
+			SessionID: sessionID, SeedID: seedID, EventKind: eventKind,
+		}
+		payload, err := json.Marshal(msg)
+		if err != nil {
+			d.logf("garden bell: marshal remote delivery session=%s seed=%s: %v", sessionID, seedID, err)
+			return
+		}
+		if err := d.hubManager.ForwardEndpointCommand(context.Background(), endpointID, payload); err != nil {
+			d.logf("garden bell: forward session=%s seed=%s endpoint=%s: %v", sessionID, seedID, endpointID, err)
+		}
+		return
+	}
+	d.claimAndDeliverLocalSeedBell(sessionID, seedID, eventKind, itemID)
+}
+
+func (d *Daemon) handleDeliverGardenSeedBell(client *wsClient, msg *protocol.DeliverGardenSeedBellMessage) {
+	if client == nil || client.clientKind != "hub" {
+		d.logf("garden bell: refusing remote delivery from a non-hub client")
+		return
+	}
+	sessionID := strings.TrimSpace(msg.SessionID)
+	seedID := strings.TrimSpace(msg.SeedID)
+	eventKind := strings.TrimSpace(msg.EventKind)
+	itemID := strings.TrimSpace(msg.ItemID)
+	if sessionID == "" || seedID == "" || eventKind == "" || itemID == "" || d.store.Get(sessionID) == nil {
+		d.logf("garden bell: refusing invalid remote delivery session=%s seed=%s", sessionID, seedID)
+		return
+	}
+	d.claimAndDeliverLocalSeedBell(sessionID, seedID, eventKind, itemID)
+}
+
+func (d *Daemon) claimAndDeliverLocalSeedBell(sessionID, seedID, eventKind, itemID string) {
 	now := time.Now()
-	claimed, err := d.store.ClaimGardenSeedMailboxItem(sessionID, seedID, eventKind, uuid.NewString(), now)
+	claimed, err := d.store.ClaimGardenSeedMailboxItem(sessionID, seedID, eventKind, itemID, now)
 	if err != nil {
 		d.logf("garden bell: claiming session=%s seed=%s: %v", sessionID, seedID, err)
 		return

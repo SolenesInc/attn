@@ -172,6 +172,22 @@ func TestSeedNudges_DispatcherHearsTheDelegatesHarvest(t *testing.T) {
 	assertOneSeedBell(t, d, "sess-a", fixture.leaf.ID, "harvested")
 }
 
+func TestSeedNudges_UnblockedBellLivesWithItsRemoteTender(t *testing.T) {
+	fixture := newSeededNudgeGarden(t)
+	outpost := startAgentCloseOutpost(t, fixture.d, remoteAgentCloseSession("remote-tender", "Remote tender"))
+	remoteSeed := garden.Seed{ID: "s-remote", TenderSession: "remote-tender"}
+
+	fixture.d.ringSeedUnblocked([]garden.Seed{remoteSeed})
+
+	waitFor(t, "the outpost to persist the remote tender's bell", func() bool {
+		items, err := outpost.store.UnreadGardenSeedMailboxItems("remote-tender")
+		return err == nil && len(items) == 1 && items[0].SeedID == remoteSeed.ID && items[0].EventKind == gardenRingUnblocked
+	})
+	if items, err := fixture.d.store.UnreadGardenSeedMailboxItems("remote-tender"); err != nil || len(items) != 0 {
+		t.Fatalf("home mailbox items = %+v err=%v, want none for an outpost-owned session", items, err)
+	}
+}
+
 func TestSeedNudges_NotesRingOnlyByChoice(t *testing.T) {
 	fixture := newSeededNudgeGarden(t)
 	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)

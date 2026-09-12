@@ -1117,6 +1117,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleCancelCountdown(msg.(*protocol.CancelCountdownMessage))
 	case protocol.CmdTriggerNudge: // wire: trigger_nudge
 		go d.handleTriggerNudge(msg.(*protocol.TriggerNudgeMessage))
+	case protocol.CmdDeliverGardenSeedBell: // wire: deliver_garden_seed_bell
+		d.handleDeliverGardenSeedBell(client, msg.(*protocol.DeliverGardenSeedBellMessage))
 	case protocol.CmdPRVisited: // wire: pr_visited
 		d.handlePRVisitedWS(msg.(*protocol.PRVisitedMessage))
 	case protocol.CmdListWorktrees: // wire: list_worktrees
@@ -1479,6 +1481,10 @@ func remoteCommandSessionID(cmd string, msg interface{}) string {
 		}
 	case protocol.CmdTriggerNudge: // wire: trigger_nudge
 		if typed, ok := msg.(*protocol.TriggerNudgeMessage); ok {
+			return typed.SessionID
+		}
+	case protocol.CmdDeliverGardenSeedBell: // wire: deliver_garden_seed_bell
+		if typed, ok := msg.(*protocol.DeliverGardenSeedBellMessage); ok {
 			return typed.SessionID
 		}
 	case protocol.CmdRenameSession: // wire: rename_session

@@ -3200,6 +3200,23 @@ type DeleteWorktreeResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type DeliverGardenSeedBellMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// EventKind corresponds to the JSON schema field "event_kind".
+	EventKind string `json:"event_kind"`
+
+	// ItemID corresponds to the JSON schema field "item_id".
+	ItemID string `json:"item_id"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+}
+
 type DetachSessionMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
