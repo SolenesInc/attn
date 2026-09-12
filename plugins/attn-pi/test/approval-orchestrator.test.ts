@@ -106,6 +106,22 @@ test("a prompt decision runs the command once the reviewer approves", async () =
   expect(it.seen).toHaveLength(1);
 });
 
+test("a policy sandbox bypass is disclosed to the reviewer", async () => {
+  const it = fixture({
+    script: () => ({ type: "denied", rejection: userRejection }),
+    approvalPolicy: "on-request",
+    sandboxMode: "workspace-write",
+    rules: [{ pattern: ["echo"], decision: "prompt", sandbox: "bypass" }],
+  });
+
+  await expect(it.run("echo outside")).rejects.toThrow(userRejection);
+  expect(it.seen[0]).toMatchObject({
+    kind: "command",
+    command: "echo outside",
+    sandboxPermissions: "require_escalated",
+  });
+});
+
 test.skipIf(process.platform !== "darwin")(
   "a prompt rule can require review and then bypass the sandbox",
   async () => {

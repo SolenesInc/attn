@@ -120,17 +120,18 @@ async function main() {
 
     await runner.step('rule_review_and_sandbox_are_separate_controls', async () => {
       await client.request('dom_scroll_into_view', { selector: '[data-testid="automode-rules-sandbox"]' });
+      await client.request('dom_select', {
+        selector: '[data-testid="automode-rules-decision"]',
+        value: 'prompt',
+      }).then(() => client.request('dom_select', {
+        selector: '[data-testid="automode-rules-sandbox"]',
+        value: 'bypass',
+      }));
       const [decision, sandbox] = await Promise.all([
-        client.request('dom_select', {
-          selector: '[data-testid="automode-rules-decision"]',
-          value: 'prompt',
-        }),
-        client.request('dom_select', {
-          selector: '[data-testid="automode-rules-sandbox"]',
-          value: 'bypass',
-        }),
+        client.request('dom_value', { selector: '[data-testid="automode-rules-decision"]' }),
+        client.request('dom_value', { selector: '[data-testid="automode-rules-sandbox"]' }),
       ]);
-      runner.assert(decision.selected === 'prompt' && sandbox.selected === 'bypass',
+      runner.assert(decision.value === 'prompt' && sandbox.value === 'bypass',
         'a rule can require review and independently bypass the sandbox', { decision, sandbox });
       await hold();
     });

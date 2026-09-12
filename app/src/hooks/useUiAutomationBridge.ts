@@ -2306,6 +2306,15 @@ export function useUiAutomationBridge({
         }
         return { text: (element.textContent ?? '').replace(/\s+/g, ' ').trim() };
       }
+      case 'dom_value': {
+        const selector = typeof payload.selector === 'string' ? payload.selector : null;
+        if (!selector) throw new Error('dom_value requires selector');
+        const element = document.querySelector(selector);
+        if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement)) {
+          throw new Error(`dom_value target is not a form control: ${selector}`);
+        }
+        return { value: element.value };
+      }
       case 'dom_scroll_into_view': {
         const selector = typeof payload.selector === 'string' ? payload.selector : null;
         if (!selector) throw new Error('dom_scroll_into_view requires selector');
