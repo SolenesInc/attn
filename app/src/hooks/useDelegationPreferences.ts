@@ -18,11 +18,22 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
   const pending = useRef<Pending | null>(null);
   const request = useRef(0);
   const deferred = useRef(false);
+  const confirmed = useRef<DelegationPreferences | null>(null);
+
+  const confirm = useCallback((next: DelegationSettingsState) => {
+    revision.current = next.preferences.revision;
+    confirmed.current = next.preferences;
+    setState(next);
+  }, []);
 
   const apply = useCallback((next: DelegationSettingsState) => {
-    revision.current = next.preferences.revision;
-    setState(next);
+    confirm(next);
     setPreferences(structuredClone(next.preferences));
+  }, [confirm]);
+
+  const rollBack = useCallback(() => {
+    if (confirmed.current) setPreferences(structuredClone(confirmed.current));
+    setGeneration(n => n + 1);
   }, []);
 
   const fetch = useCallback(async () => {
@@ -54,17 +65,17 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
       pending.current = null;
       try {
         const next = await save({ ...value, revision: revision.current }, installWorkflowSkill);
-        revision.current = next.preferences.revision;
-        if (pending.current) setState(next); else apply(next);
+        if (pending.current) confirm(next); else apply(next);
       } catch (e) {
         pending.current = null;
         setError(message(e));
+        rollBack();
         await fetch();
         // An edit made against the table the conflict replaced would overwrite the change it lost to.
         if (pending.current) { pending.current = null; setError(message(e)); }
       }
     }
-  }, [save, apply, fetch]);
+  }, [save, confirm, apply, rollBack, fetch]);
 
   const persist = useCallback((value: DelegationPreferences, installWorkflowSkill = false) => {
     setPreferences(value);

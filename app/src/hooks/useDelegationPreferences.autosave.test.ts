@@ -13,7 +13,8 @@ function setup() {
   let server: DelegationSettingsState = { preferences: preferences(0), templates: [], expandedRoles: [], harnesses: [], workflowSkillPaths: [] };
   const daemon = createMockDaemon();
   let releaseLoad: (() => void) | null = null;
-  daemon.setResponse('load', async () => { if (releaseLoad) await new Promise<void>(resolve => { const r = releaseLoad; releaseLoad = () => { resolve(); r?.(); }; }); return structuredClone(server); });
+  let loadFailure = '';
+  daemon.setResponse('load', async () => { if (loadFailure) throw new Error(loadFailure); if (releaseLoad) await new Promise<void>(resolve => { const r = releaseLoad; releaseLoad = () => { resolve(); r?.(); }; }); return structuredClone(server); });
   let release: (() => void) | null = null;
   let holding = false;
   const held: (() => void)[] = [];
@@ -28,7 +29,7 @@ function setup() {
   const load = daemon.createRequest<DelegationSettingsState>('load');
   const save = daemon.createRequest<DelegationSettingsState>('save');
   const hook = renderHook(() => useDelegationPreferences(true, load, save));
-  return { daemon, hook, server: () => server, bump: () => { server = { ...server, preferences: { ...server.preferences, revision: server.preferences.revision + 1 } }; }, releaseFirst: () => { const r = release; release = () => {}; r?.(); }, holdLoads: () => { releaseLoad = () => {}; return () => { const r = releaseLoad; releaseLoad = null; r?.(); }; }, holdSaves: () => { holding = true; return () => { holding = false; held.splice(0).forEach(resolve => resolve()); }; } };
+  return { daemon, hook, server: () => server, bump: () => { server = { ...server, preferences: { ...server.preferences, revision: server.preferences.revision + 1 } }; }, releaseFirst: () => { const r = release; release = () => {}; r?.(); }, holdLoads: () => { releaseLoad = () => {}; return () => { const r = releaseLoad; releaseLoad = null; r?.(); }; }, failLoads: (reason: string) => { loadFailure = reason; return () => { loadFailure = ''; }; }, holdSaves: () => { holding = true; return () => { holding = false; held.splice(0).forEach(resolve => resolve()); }; } };
 }
 
 afterEach(() => useDelegationPreferencesPush.getState().clear());
@@ -143,4 +144,23 @@ it('defers a reload asked for during a save until the save drains, so a queued e
   expect(server().preferences.fallback.instructions).toBe('two!');
   expect(hook.result.current.preferences?.fallback.instructions).toBe('two!');
   expect(daemon.getCalls('load')).toHaveLength(2);
+});
+
+it('shows the last confirmed table when a save fails and the recovery load fails too', async () => {
+  const { daemon, hook, bump, releaseFirst, failLoads } = setup();
+  await waitFor(() => expect(hook.result.current.preferences).not.toBeNull());
+  bump();
+  const restoreLoads = failLoads('daemon unreachable');
+  act(() => { void hook.result.current.save(preferences(0, 'mine')); });
+  expect(hook.result.current.preferences?.fallback.instructions).toBe('mine');
+  releaseFirst();
+  await waitFor(() => expect(hook.result.current.busy).toBe(false));
+  expect(daemon.getCalls('load')).toHaveLength(2);
+  expect(hook.result.current.error).toBe('daemon unreachable');
+  expect(hook.result.current.preferences?.fallback.instructions).toBe('');
+  expect(hook.result.current.preferences?.revision).toBe(0);
+  restoreLoads();
+  await act(async () => { await hook.result.current.reload(); });
+  expect(hook.result.current.error).toBe('');
+  expect(hook.result.current.preferences?.revision).toBe(1);
 });
