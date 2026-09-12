@@ -82,7 +82,7 @@ function ModelsPane({ harness, value, catalog, loading, error, manual, discover,
   onDone: () => void;
 }) {
   const selected = catalog?.models.find(m => m.id === value.model && m.provider === value.provider);
-  const showEffort = harness.effort_pin && value.model !== '' && selected?.effort_support !== 'unsupported';
+  const showEffort = harness.effort_pin && selected?.effort_support !== 'unsupported';
   const pickModel = (model: DelegationModel | null) => {
     onDone();
     if (!model) { onChange({ ...value, provider: '', model: '', effort: '' }); return; }
@@ -165,6 +165,7 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
       {harness && !pinnable && <>
         <div className="delegation-pop-kicker">Model</div>
         <p className="delegation-pop-note">{harness.name} uses the model selected in its own settings. Attn can't pin one here.</p>
+        {harness.effort_pin && <EffortField key={value.effort} levels={[]} value={value.effort} onChange={effort => onChange({ ...value, effort })} />}
       </>}
       {harness && pinnable && <ModelsPane harness={harness} value={value} catalog={catalog} loading={loading} error={error} manual={manual} discover={discover} onChange={onChange} onDone={() => setManual(false)} />}
     </div>

@@ -10,6 +10,7 @@ const harnesses: DelegationHarness[] = [
   { id: 'claude', name: 'Claude Code', available: true, model_pin: true, effort_pin: true, discovery: true },
   { id: 'copilot', name: 'Copilot', available: true, model_pin: false, effort_pin: false, discovery: false },
   { id: 'pi', name: 'Pi', available: true, model_pin: true, effort_pin: true, discovery: false },
+  { id: 'plug', name: 'Plug', available: true, model_pin: false, effort_pin: true, discovery: false },
 ];
 const catalog: DelegationModelCatalog = { detail: 'Reported by Claude Code', models: [
   { harness: 'claude', provider: '', id: 'opus', name: 'Opus', description: 'Deep work', detail: '', effort_support: ModelCapabilitySupport.Supported, effort_levels: ['medium', 'high'], access: ModelCapabilitySupport.Unknown },
@@ -163,4 +164,21 @@ it('closes on a click outside that lands right after a re-render with a fresh on
   fireEvent.click(screen.getByRole('button', { name: /tick/ }));
   fireEvent.mouseDown(document.body);
   expect(closed).toHaveBeenCalledWith(1);
+});
+
+it('offers effort for a harness that picks its own model, and for a harness default', async () => {
+  const { loadModels, onChange, rerender } = open({ harness: 'plug', provider: '', model: '', effort: '' });
+  expect(screen.getByText(/Plug uses the model selected in its own settings/)).toBeInTheDocument();
+  const effort = screen.getByLabelText('Effort');
+  fireEvent.change(effort, { target: { value: 'high' } });
+  fireEvent.blur(effort);
+  expect(onChange).toHaveBeenLastCalledWith({ harness: 'plug', provider: '', model: '', effort: 'high' });
+  expect(loadModels).not.toHaveBeenCalled();
+
+  rerender({ harness: 'claude', provider: '', model: '', effort: '' });
+  await screen.findByRole('option', { name: /Opus/ });
+  const claudeEffort = screen.getByLabelText('Effort');
+  fireEvent.change(claudeEffort, { target: { value: 'max' } });
+  fireEvent.blur(claudeEffort);
+  expect(onChange).toHaveBeenLastCalledWith({ harness: 'claude', provider: '', model: '', effort: 'max' });
 });
