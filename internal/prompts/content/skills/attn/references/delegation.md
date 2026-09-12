@@ -38,7 +38,7 @@ attn delegate --seed s-example --handover --role orchestrator \
 
 Attn saves the note and transfers ownership before starting the successor. The previous agent remains running. Handover is the explicit transfer choice; there is no extra force/confirm flag. It does not grant permission beyond the user's authorized task. An ordinary progress note does not invalidate handover; a holder changing during preparation or the seed closing requires reconsidering the request.
 
-For a completed design, recommend an Orchestrator when stronger-model advice and oversight justify coordinating Builders; otherwise recommend a Builder. Follow the planning process's mandatory checkpoint: show the proposed plan and handoff, then wait for the user's choice even when their earlier request included execution. Agreement on a plan alone does not authorize implementation.
+For a completed design, recommend an Orchestrator when the plan benefits from mixing harnesses or models between the coordinating agent and its Builders; otherwise recommend a Builder. Follow the planning process's mandatory checkpoint: show the proposed plan and handoff, then wait for the user's choice even when their earlier request included execution. Agreement on a plan alone does not authorize implementation.
 
 ## Choose the folder and checkout
 

@@ -90,6 +90,16 @@ func TestDelegationGuidanceOwnsReviewAndPausesBeforeDispatch(t *testing.T) {
 		}
 	}
 	for name, guidance := range map[string]string{"planning": planning, "delegation": delegation} {
+		for _, expected := range []string{"mixing harnesses or models", "coordinating agent and its Builders"} {
+			if !strings.Contains(guidance, expected) {
+				t.Errorf("%s guidance is missing the orchestration capability %q", name, expected)
+			}
+		}
+		for _, unsupported := range []string{"stronger-model", "cheaper models"} {
+			if strings.Contains(guidance, unsupported) {
+				t.Errorf("%s guidance claims an unsupported model hierarchy %q", name, unsupported)
+			}
+		}
 		if strings.Contains(guidance, "Carry forward authorization already given") {
 			t.Errorf("%s guidance retains the conflicting authorization fast path", name)
 		}
