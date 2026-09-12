@@ -36,6 +36,7 @@ type sessionStartHookOutput struct {
 var (
 	AgentGuidance                 = prompts.RenderText("session", "agent-guidance", nil)
 	GardenGuidance                = prompts.RenderText("session", "garden-guidance", nil)
+	GardenNeedsHumanGuidance      = prompts.RenderText("session", "garden-needs-human-guidance", nil)
 	PullRequestSelfReportGuidance = prompts.RenderText("session", "pull-request-guidance", nil)
 )
 

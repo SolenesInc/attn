@@ -38,6 +38,26 @@ messages to other agents. To the user, say the slug: `mermaid-rendered-grid`
 (`s-7k3f9m`) on first mention, then the slug alone. A person should never have
 to decode an id.
 
+## Asking for a human decision
+
+When work on a seed is stuck on a judgment call that belongs to the user, raise
+one question and keep working on everything else:
+
+    attn seed ask <id> -m "<question>"
+
+The seed stays tended in its current state. One question can be open on a seed;
+a second ask refuses and prints the existing question. The user answers or
+dismisses it from the Garden, and that typed response lands on the seed log and
+rings its tender. Read it with `attn seed show <id>` or `attn seed notes <id>`.
+
+Withdraw a question when you no longer need the decision:
+
+    attn seed withdraw <id>
+
+Only the raiser can withdraw it. Use ask for decisions the user must make, and
+make ordinary implementation choices yourself when your task and guidance give
+you authority. If ask says the feature is off, do not work around that setting.
+
 ## Harvesting on a merge
 
 When the only thing left on a seed is a pull request merging, say so once and

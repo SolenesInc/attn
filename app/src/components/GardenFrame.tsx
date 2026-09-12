@@ -1,6 +1,6 @@
 import FocusTrap from 'focus-trap-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { Seed, SeedHandoverOptions, SeedSendToChiefOptions } from '../hooks/useDaemonSocket';
+import type { Seed, SeedHandoverOptions, SeedQuestionVerb, SeedSendToChiefOptions } from '../hooks/useDaemonSocket';
 import type { SeedReviewActionContext, SeedReviewOverview } from '../hooks/useDaemonSocket';
 import {
   useGardenFullscreenView,
@@ -68,6 +68,7 @@ export interface GardenFrameProps {
   onClose: () => void;
   seeds: Seed[];
   seedsTotal: number;
+  questionSeeds?: Seed[];
   fetchSeedDocument?: (seedId: string) => Promise<SeedDocument>;
   onOpenAsTile?: (seedId: string) => void;
   onOpenMarkdownArtifact?: (path: string) => void;
@@ -88,6 +89,7 @@ export interface GardenFrameProps {
     review?: SeedReviewActionContext,
   ) => Promise<Seed>;
   noteSeed?: (seedId: string, body: string) => Promise<unknown>;
+  updateSeedQuestion?: (seedId: string, verb: SeedQuestionVerb, body?: string) => Promise<unknown>;
   reviewOverview?: SeedReviewOverview;
   showReview?: (reviewId?: string) => Promise<SeedReviewOverview>;
   startReview?: () => Promise<SeedReviewOverview>;
@@ -104,6 +106,7 @@ export function GardenFrame({
   onClose,
   seeds,
   seedsTotal,
+  questionSeeds,
   fetchSeedDocument,
   onOpenAsTile,
   onOpenMarkdownArtifact,
@@ -117,6 +120,7 @@ export function GardenFrame({
   loaded = true,
   moveSeed,
   noteSeed,
+  updateSeedQuestion,
   reviewOverview,
   showReview,
   startReview,
@@ -283,6 +287,7 @@ export function GardenFrame({
                 isOpen={open}
                 seeds={seeds}
                 seedsTotal={seedsTotal}
+                questionSeeds={questionSeeds}
                 fetchSeedDocument={fetchSeedDocument}
                 onOpenAsTile={onOpenAsTile}
                 onOpenMarkdownArtifact={onOpenMarkdownArtifact}
@@ -302,6 +307,9 @@ export function GardenFrame({
                 reviewError={reviewError}
                 onOpenReview={() => void openReview()}
                 tenderSessionLabels={tenderSessionLabels}
+                onAnswerQuestion={updateSeedQuestion && ((seedId, answer) => updateSeedQuestion(seedId, 'answer', answer))}
+                onDismissQuestion={updateSeedQuestion && ((seedId, reason) => updateSeedQuestion(seedId, 'dismiss', reason))}
+                onClearQuestion={updateSeedQuestion && ((seedId) => updateSeedQuestion(seedId, 'clear'))}
               />
             )}
           </div>

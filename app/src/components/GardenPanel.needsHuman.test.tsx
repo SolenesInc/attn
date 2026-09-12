@@ -1,0 +1,137 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { Seed } from '../types/generated';
+import { SettingsProvider } from '../contexts/SettingsContext';
+import { useGardenWalk } from '../store/gardenWalk';
+import { GardenPanel } from './GardenPanel';
+import type { SeedDocument } from './SeedDocumentView';
+
+function seed(overrides: Partial<Seed> = {}): Seed {
+  return {
+    id: 's-call11',
+    title: 'Choose the storage model',
+    body: '## Background\n\nCompare both options.',
+    status: 'growing',
+    state_changed_at: '2026-09-07T08:00:00Z',
+    state_changed_at_exact: true,
+    step_slug: 'choose-storage-model',
+    planter_session: '',
+    planter_member: '',
+    tender_session: 'session-agent',
+    tender_member: '',
+    edges: [],
+    template: false,
+    gate: false,
+    vars: [],
+    ready: false,
+    rev: 2,
+    created_at: '2026-09-07T08:00:00Z',
+    updated_at: '2026-09-07T08:00:00Z',
+    question: {
+      id: 'q-call11',
+      text: 'Should this be a document or its own table?',
+      asked_at: '2026-09-07T08:30:00Z',
+      asked_by_session: 'session-agent',
+      asked_by_member: '',
+      status: 'open',
+    },
+    ...overrides,
+  };
+}
+
+function document(root: Seed): SeedDocument {
+  return {
+    seed: root,
+    tender_holds: true,
+    children: [],
+    notes: [],
+    notes_total: 0,
+    artifacts: [],
+    references: [],
+  };
+}
+
+function renderPanel(enabled: boolean, overrides: Record<string, unknown> = {}) {
+  const root = seed();
+  return render(
+    <SettingsProvider
+      settings={{ garden_needs_human_enabled: enabled ? 'true' : 'false' }}
+      setSetting={vi.fn()}
+    >
+      <GardenPanel
+        isOpen
+        onClose={vi.fn()}
+        seeds={[root]}
+        seedsTotal={1}
+        fetchSeedDocument={vi.fn().mockResolvedValue(document(root))}
+        onAnswerQuestion={vi.fn()}
+        onDismissQuestion={vi.fn()}
+        onClearQuestion={vi.fn()}
+        {...overrides}
+      />
+    </SettingsProvider>,
+  );
+}
+
+describe('GardenPanel pending decisions', () => {
+  beforeEach(() => useGardenWalk.getState().setTrail([]));
+
+  it('puts the flagged queue below search and marks its listing row', () => {
+    renderPanel(true);
+
+    const search = screen.getByRole('combobox', { name: 'Search the garden' });
+    const band = screen.getByTestId('garden-needs-human');
+    expect(search.compareDocumentPosition(band) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByText('waiting on you').length).toBeGreaterThan(1);
+    expect(screen.getByText('Should this be a document or its own table?')).toBeInTheDocument();
+  });
+
+  it('hides the queue and marks while the setting is off', () => {
+    renderPanel(false);
+
+    expect(screen.queryByTestId('garden-needs-human')).not.toBeInTheDocument();
+    expect(screen.queryByText('waiting on you')).not.toBeInTheDocument();
+  });
+
+  it('shows the question above the seed body in the reader', async () => {
+    renderPanel(true);
+    fireEvent.click(screen.getByRole('button', { name: /Choose the storage model/ }));
+
+    const question = await screen.findByLabelText('Question waiting on you');
+    const body = await screen.findByRole('heading', { name: 'Background' });
+    await waitFor(() => expect(question.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy());
+  });
+
+  it('keeps an older decision visible after the garden snapshot overflows', () => {
+    const newest = seed({
+      id: 's-new111',
+      title: 'A newer seed',
+      step_slug: 'a-newer-seed',
+      question: undefined,
+    });
+    const olderDecision = seed({
+      id: 's-old111',
+      title: 'An older decision',
+      step_slug: 'an-older-decision',
+      question: {
+        id: 'q-old111',
+        text: 'Which path should the agent take?',
+        asked_at: '2026-09-06T08:30:00Z',
+        asked_by_session: 'session-agent',
+        asked_by_member: '',
+        status: 'open',
+      },
+    });
+
+    renderPanel(true, {
+      seeds: [newest],
+      seedsTotal: 1001,
+      questionSeeds: [olderDecision],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Answer it' }));
+    expect(screen.getAllByText('Which path should the agent take?')).toHaveLength(2);
+    expect(screen.getByText('An older decision')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Open s-old111/ })).not.toBeInTheDocument();
+  });
+});

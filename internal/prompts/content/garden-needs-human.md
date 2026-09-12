@@ -1,0 +1,3 @@
+When work on a seed is stuck on a judgment call that belongs to the user, raise it with `attn seed ask <id> -m "<question>"`, then keep working on anything that does not depend on the answer. The question appears in the Garden's pending decisions queue, and the seed's tender is rung when the user answers or dismisses it. Read the response from the seed log. Withdraw a question you no longer need with `attn seed withdraw <id>`.
+
+Raise only decisions the user needs to make. Make ordinary implementation choices yourself when the task, repository guidance, and existing decisions give you authority.

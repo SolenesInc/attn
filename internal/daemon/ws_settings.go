@@ -20,24 +20,25 @@ import (
 )
 
 const (
-	SettingProjectsDirectory    = "projects_directory"
-	SettingUIScale              = "uiScale"
-	SettingGardenScale          = "gardenScale"
-	SettingClaudeExecutable     = "claude_executable"
-	SettingCodexExecutable      = "codex_executable"
-	SettingCopilotExecutable    = "copilot_executable"
-	SettingEditorExecutable     = "editor_executable"
-	SettingNewSessionAgent      = "new_session_agent"
-	SettingClaudeAvailable      = "claude_available"
-	SettingCodexAvailable       = "codex_available"
-	SettingCopilotAvailable     = "copilot_available"
-	SettingPTYBackendMode       = "pty_backend_mode"
-	SettingSharedPTYHostEnabled = "pty_shared_host_enabled"
-	SettingSharedPTYHostActive  = "pty_shared_host_active"
-	SettingTheme                = "theme"
-	SettingReviewerModel        = "reviewer_model"
-	SettingTailscaleEnabled     = "tailscale_enabled"
-	SettingWorkflowsEnabled     = "workflows_enabled"
+	SettingProjectsDirectory       = "projects_directory"
+	SettingUIScale                 = "uiScale"
+	SettingGardenScale             = "gardenScale"
+	SettingClaudeExecutable        = "claude_executable"
+	SettingCodexExecutable         = "codex_executable"
+	SettingCopilotExecutable       = "copilot_executable"
+	SettingEditorExecutable        = "editor_executable"
+	SettingNewSessionAgent         = "new_session_agent"
+	SettingClaudeAvailable         = "claude_available"
+	SettingCodexAvailable          = "codex_available"
+	SettingCopilotAvailable        = "copilot_available"
+	SettingPTYBackendMode          = "pty_backend_mode"
+	SettingSharedPTYHostEnabled    = "pty_shared_host_enabled"
+	SettingSharedPTYHostActive     = "pty_shared_host_active"
+	SettingTheme                   = "theme"
+	SettingReviewerModel           = "reviewer_model"
+	SettingTailscaleEnabled        = "tailscale_enabled"
+	SettingWorkflowsEnabled        = "workflows_enabled"
+	SettingGardenNeedsHumanEnabled = "garden_needs_human_enabled"
 	// Explicit, local-only opt-in: captured terminal text can contain secrets.
 	SettingModelCaptureEnabled           = "model_capture.enabled"
 	SettingModelCaptureIntervalSeconds   = "model_capture.interval_seconds"
@@ -299,6 +300,7 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 	}
 	settings[SettingTailscaleEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingTailscaleEnabled]))
 	settings[SettingWorkflowsEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingWorkflowsEnabled]))
+	settings[SettingGardenNeedsHumanEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingGardenNeedsHumanEnabled]))
 	settings[SettingModelCaptureEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingModelCaptureEnabled]))
 	settings[SettingModelCaptureIntervalSeconds] = strconv.Itoa(int(d.modelCaptureInterval() / time.Second))
 	settings[SettingModelCaptureMaxGB] = strconv.FormatInt(d.modelCaptureMaxBytes()>>30, 10)
@@ -489,7 +491,7 @@ func (d *Daemon) validateSetting(key, value string) error {
 		return validateTheme(value)
 	case SettingSharedPTYHostEnabled:
 		return validateBooleanSetting(value)
-	case SettingTailscaleEnabled, SettingWorkflowsEnabled, SettingAutoApproveEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingSidebarHarnessLogosEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled:
+	case SettingTailscaleEnabled, SettingWorkflowsEnabled, SettingGardenNeedsHumanEnabled, SettingAutoApproveEnabled, SettingQueueModeEnabled, SettingQueueCrewEnabled, SettingSidebarHarnessLogosEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled:
 		return validateBooleanSetting(value)
 	case SettingModelCaptureIntervalSeconds:
 		return validateModelCaptureInterval(value)

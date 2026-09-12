@@ -103,9 +103,32 @@
                 },
                 "children": [
                   {
-                    "kind": "text",
-                    "id": "session.garden",
-                    "source": "content/garden.md"
+                    "kind": "compose",
+                    "children": [
+                      {
+                        "kind": "text",
+                        "id": "session.garden",
+                        "source": "content/garden.md"
+                      },
+                      {
+                        "kind": "when",
+                        "condition": {
+                          "field": {
+                            "name": "garden_needs_human",
+                            "kind": "flag",
+                            "description": "Teach the agent to raise user decisions when the Garden feature is enabled."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "session.garden-needs-human",
+                            "source": "content/garden-needs-human.md"
+                          }
+                        ]
+                      }
+                    ]
                   }
                 ]
               },
@@ -183,6 +206,16 @@
             "kind": "text",
             "id": "session.garden",
             "source": "content/garden.md"
+          }
+        },
+        {
+          "id": "garden-needs-human-guidance",
+          "delivery": "message_fragment",
+          "description": "How to raise a decision for the user through a seed.",
+          "body": {
+            "kind": "text",
+            "id": "session.garden-needs-human",
+            "source": "content/garden-needs-human.md"
           }
         },
         {
@@ -4905,5 +4938,5 @@
       ]
     }
   ],
-  "definitions_hash": "362b5df051e1cf3b6fe52c49458e08f3b6b85b9019fefee84a36dcaea57099f6"
+  "definitions_hash": "f8a4af1b77633510b4c06ead0108805f116377ca2e45c07688505bcc65616341"
 }

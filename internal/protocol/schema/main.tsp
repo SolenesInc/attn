@@ -3257,6 +3257,9 @@ model InitialStateMessage {
   settings?: Record<string>;
   warnings?: DaemonWarning[];
   seeds?: Seed[];
+  // Every seed with an open or withdrawn question. This projection is not
+  // bounded by the newest-seed snapshot, so the decision queue stays complete.
+  question_seeds?: Seed[];
   // How many seeds the garden holds, beside the bounded `seeds`. Carried here
   // as well as on garden_seeds_updated so a client that connects to an
   // over-large garden knows it is short before anything moves.
@@ -4643,6 +4646,9 @@ model Seed {
   "template": boolean;
   "gate": boolean;
   "vars": SeedVar[];
+  // Present while a question awaits a human, and while its withdrawal remains
+  // visible for the human to clear. Answer and dismiss remove it atomically.
+  "question"?: SeedQuestion;
   // Optional fallback for reopening a conversation that has no garden dispatch
   // record. These three fields are written and cleared as one identity.
   "resume_session_id"?: string;
@@ -4671,6 +4677,17 @@ model Seed {
   "rev": safeint;
   "created_at": string;
   "updated_at": string;
+}
+
+model SeedQuestion {
+  "id": string;
+  "text": string;
+  "asked_at": string;
+  "asked_by_session": string;
+  "asked_by_member": string;
+  // open | withdrawn.
+  "status": string;
+  "resolved_at"?: string;
 }
 
 // What a seed waits on before it harvests itself. The daemon settles it when the
@@ -5141,6 +5158,36 @@ model SeedTransitionResult {
   "unblocked"?: Seed[];
 }
 
+// Raise or settle the one human judgment call attached to a seed. Ask,
+// answer and dismiss require body; withdraw and clear carry none.
+model SeedQuestionMessage {
+  "cmd": "seed_question";
+  "source_session_id"?: string;
+  // Set by a WebSocket caller, as on seed_transition.
+  "request_id"?: string;
+  "seed_id": string;
+  // ask | answer | dismiss | withdraw | clear.
+  "verb": string;
+  "body"?: string;
+  // The crew member raising or withdrawing the question.
+  "member"?: string;
+}
+
+model SeedQuestionResult {
+  "seed": Seed;
+  // Present for answer and dismiss: the typed log entry committed with the
+  // question's removal.
+  "note"?: SeedNote;
+}
+
+model SeedQuestionResultMessage {
+  "event": "seed_question_result";
+  "request_id": string;
+  "success": boolean;
+  "error"?: string;
+  "result"?: SeedQuestionResult;
+}
+
 // One entry on a seed's log: what happened and what was learned, written for
 // whoever tends the seed next. A note is anchored to the work and routed to
 // nobody — directed messages are their own surface.
@@ -5162,9 +5209,9 @@ model SeedArtifactReference {
 model SeedNote {
   "id": string;
   "seed_id": string;
-  // note, handoff, attach or detach. A handoff is written to whoever tends the
-  // seed next, and the freshest one is put in front of them by show and tend;
-  // attach and detach are the only kinds that carry an artifact.
+  // note, handoff, attach, detach, answer or dismiss. Question actions write
+  // answer and dismiss atomically; seed_note refuses callers that name them.
+  // Attach and detach are the only kinds that carry an artifact.
   "kind": string;
   "body": string;
   "author_session": string;
@@ -5304,6 +5351,8 @@ model SeedSendToChiefResultMessage {
 model GardenSeedsUpdatedMessage {
   event: "garden_seeds_updated";
   seeds: Seed[];
+  // Every seed with an open or withdrawn question, across the whole garden.
+  question_seeds: Seed[];
   // How many seeds the garden holds. Equal to `seeds`'s length until the
   // garden outgrows one push, and then the receipt that says so.
   total: int32;
@@ -6361,6 +6410,7 @@ model Response {
   seed_set_resume_result?: SeedSetResumeResult;
   seed_artifact_transfer_result?: SeedArtifactTransferResult;
   seed_transition_result?: SeedTransitionResult;
+  seed_question_result?: SeedQuestionResult;
   seed_send_to_chief_result?: SeedSendToChiefResult;
   seed_note_result?: SeedNoteResult;
   seed_notes_result?: SeedNotesResult;
@@ -7475,6 +7525,7 @@ alias DaemonEvent =
   | SeedArtifactTransferResultMessage
   | SeedArtifactTargetResultMessage
   | SeedTransitionResultMessage
+  | SeedQuestionResultMessage
   | SeedNoteResultMessage
   | CrewUpdatedMessage
   | CrewWakeResultMessage

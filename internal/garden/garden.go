@@ -46,25 +46,29 @@ type Var struct {
 // Every declared field is written unconditionally, empty string and all: a field a query
 // filters on must exist in every body, or `tender_session = ""` matches nothing.
 type Seed struct {
-	ID              string `json:"id"`
-	Title           string `json:"title"`
-	Body            string `json:"body"`
-	Status          string `json:"status"`
-	StepSlug        string `json:"step_slug"`
-	PlanterSession  string `json:"planter_session"`
-	PlanterMember   string `json:"planter_member"`
-	TenderSession   string `json:"tender_session"`
-	TenderMember    string `json:"tender_member"`
-	LastExecutionID string `json:"last_execution_id,omitempty"`
-	StateChangedAt  string `json:"state_changed_at,omitempty"`
-	Edges           []Edge `json:"edges"`
-	Template        bool   `json:"template"`
-	Gate            bool   `json:"gate"`
-	Vars            []Var  `json:"vars"`
-	Reason          string `json:"reason,omitempty"`
-	ResumeSessionID string `json:"resume_session_id,omitempty"`
-	ResumeCwd       string `json:"resume_cwd,omitempty"`
-	ResumeAgent     string `json:"resume_agent,omitempty"`
+	ID              string    `json:"id"`
+	Title           string    `json:"title"`
+	Body            string    `json:"body"`
+	Status          string    `json:"status"`
+	StepSlug        string    `json:"step_slug"`
+	PlanterSession  string    `json:"planter_session"`
+	PlanterMember   string    `json:"planter_member"`
+	TenderSession   string    `json:"tender_session"`
+	TenderMember    string    `json:"tender_member"`
+	LastExecutionID string    `json:"last_execution_id,omitempty"`
+	StateChangedAt  string    `json:"state_changed_at,omitempty"`
+	Edges           []Edge    `json:"edges"`
+	Template        bool      `json:"template"`
+	Gate            bool      `json:"gate"`
+	Vars            []Var     `json:"vars"`
+	Reason          string    `json:"reason,omitempty"`
+	ResumeSessionID string    `json:"resume_session_id,omitempty"`
+	ResumeCwd       string    `json:"resume_cwd,omitempty"`
+	ResumeAgent     string    `json:"resume_agent,omitempty"`
+	Question        *Question `json:"question,omitempty"`
+	// Flattened out of Question by Encode so the daemon can project every
+	// pending decision without scanning or bounding the whole garden.
+	QuestionPresent bool `json:"question_present"`
 
 	HarvestWhen *HarvestCondition `json:"harvest_when,omitempty"`
 	// Flattened out of HarvestWhen by Encode: a docstore field is a top-level JSON
@@ -99,6 +103,7 @@ func SeedsSchema() docstore.CollectionSchema {
 			{Name: "step_slug", Type: docstore.FieldString},
 			{Name: "tender_session", Type: docstore.FieldString},
 			{Name: "harvest_when_pull_request", Type: docstore.FieldString},
+			{Name: "question_present", Type: docstore.FieldBool},
 			{Name: "template", Type: docstore.FieldBool},
 			{Name: "gate", Type: docstore.FieldBool},
 		},
@@ -295,6 +300,7 @@ func (s Seed) Encode() ([]byte, error) {
 	if s.Vars == nil {
 		s.Vars = []Var{}
 	}
+	s.QuestionPresent = s.Question != nil
 	s.HarvestWhenPullRequest = ""
 	if s.HarvestWhen != nil {
 		s.HarvestWhenPullRequest = s.HarvestWhen.PullRequest

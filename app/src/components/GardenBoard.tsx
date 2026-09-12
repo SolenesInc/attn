@@ -11,8 +11,11 @@ import {
 } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import type { Seed } from '../hooks/useDaemonSocket';
+import { useSettings } from '../contexts/SettingsContext';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { harvestWhenDisplay, type HarvestWhenDisplay } from '../utils/harvestWhen';
+import { WaitingOnYouMark } from './GardenQuestions';
+import { isGardenNeedsHumanEnabled, isOpenQuestion, questionOf } from './seedQuestions';
 import {
   columnOf,
   heldByOther,
@@ -97,6 +100,8 @@ export function GardenBoard({
   onClose,
   onEscapeFloor,
 }: GardenBoardProps) {
+  const { settings } = useSettings();
+  const showNeedsHuman = isGardenNeedsHumanEnabled(settings);
   const [trail, setTrail] = useState<string[]>([]);
   const [closedOpen, setClosedOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -492,6 +497,7 @@ export function GardenBoard({
                             tenderLive={
                               !seed.tender_session || liveSessions.has(seed.tender_session)
                             }
+                            showNeedsHuman={showNeedsHuman}
                             onSelect={() => setSelected(seed.id)}
                             onPrimary={() => {
                               setSelected(seed.id);
@@ -611,13 +617,16 @@ interface CardProps {
   onVerb: (verb: Verb) => void;
   onDragPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
   wasDragged: () => boolean;
+  showNeedsHuman: boolean;
 }
 
 function Card({
   seed, column, selected, menuOpen, blockers, tenderLive,
-  onSelect, onPrimary, onDrill, onMenu, onVerb, onDragPointerDown, wasDragged,
+  onSelect, onPrimary, onDrill, onMenu, onVerb, onDragPointerDown, wasDragged, showNeedsHuman,
 }: CardProps) {
   const verbs = verbsFor(seed);
+  const question = questionOf(seed);
+  const waitingOnYou = showNeedsHuman && isOpenQuestion(question);
   const plot = seed.plot_progress ? plotCounts(seed) : '';
   const armed = harvestWhenDisplay(seed.harvest_when);
   const menu = useRef<HTMLDivElement | null>(null);
@@ -632,6 +641,7 @@ function Card({
         selected ? 'is-selected' : '',
         seed.plot_progress ? 'is-crown' : '',
         seed.ready ? 'is-ready' : 'is-not-ready',
+        waitingOnYou ? 'is-waiting-on-you' : '',
         column === 'closed' ? `is-${seed.status}` : '',
       ].filter(Boolean).join(' ')}
       data-seed={seed.id}
@@ -648,8 +658,13 @@ function Card({
         }}
       >
         <span className="garden-card__title">{seed.title}</span>
+        {waitingOnYou && question && <span className="garden-card__question">{question.text}</span>}
         <span className="garden-card__meta">
-          <CardMeta seed={seed} column={column} blockers={blockers} tenderLive={tenderLive} plot={plot} armed={armed} />
+          {waitingOnYou ? (
+            <WaitingOnYouMark />
+          ) : (
+            <CardMeta seed={seed} column={column} blockers={blockers} tenderLive={tenderLive} plot={plot} armed={armed} />
+          )}
           <span className="garden-card__id">{seed.id}</span>
           <span className="garden-card__age">{ageOf(seed.updated_at || seed.created_at)}</span>
         </span>

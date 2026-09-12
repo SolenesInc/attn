@@ -9,7 +9,8 @@ interface DaemonStore {
   // Newest first. `seedsTotal` exceeds seeds.length only when the garden outgrew one push.
   seeds: Seed[];
   seedsTotal: number;
-  setSeeds: (seeds: Seed[], total: number) => void;
+  questionSeeds: Seed[];
+  setSeeds: (seeds: Seed[], total: number, questionSeeds?: Seed[]) => void;
 
   crew: CrewMember[];
   setCrew: (crew: CrewMember[]) => void;
@@ -41,7 +42,8 @@ export const useDaemonStore = create<DaemonStore>((set, get) => ({
 
   seeds: [],
   seedsTotal: 0,
-  setSeeds: (seeds, total) => set({ seeds, seedsTotal: total }),
+  questionSeeds: [],
+  setSeeds: (seeds, total, questionSeeds = []) => set({ seeds, seedsTotal: total, questionSeeds }),
 
   crew: [],
   setCrew: (crew) => set({ crew }),

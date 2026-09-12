@@ -2,6 +2,7 @@ package agent
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -44,6 +45,30 @@ func TestCodexGenerateConfigOverrides_GatesWorkflowGuidance(t *testing.T) {
 	on := strings.Join((&Codex{}).GenerateConfigOverrides(SpawnOpts{SessionID: "s", InjectWorkflowGuidance: true}), "\n")
 	if !strings.Contains(on, "developer_instructions=") || !strings.Contains(on, workflowGuidanceMarker) {
 		t.Fatalf("enabled codex overrides missing workflow guidance: %q", on)
+	}
+}
+
+func TestAgentLaunchesGateGardenNeedsHumanGuidance(t *testing.T) {
+	codex := strings.Join((&Codex{}).GenerateConfigOverrides(SpawnOpts{
+		SessionID: "s", Garden: true, GardenNeedsHuman: true,
+	}), "\n")
+	_, codex, ok := strings.Cut(codex, "developer_instructions=")
+	if !ok {
+		t.Fatalf("Codex launch omitted developer instructions")
+	}
+	codex, err := strconv.Unquote(codex)
+	if err != nil {
+		t.Fatalf("decode Codex developer instructions: %v", err)
+	}
+	for name, prompt := range map[string]string{
+		"claude": argvValueAfter((&Claude{}).BuildCommand(SpawnOpts{
+			SessionID: "s", Executable: "claude", Garden: true, GardenNeedsHuman: true,
+		}).Args, "--append-system-prompt"),
+		"codex": codex,
+	} {
+		if !strings.Contains(prompt, hooks.GardenNeedsHumanGuidance) {
+			t.Fatalf("%s launch dropped needs-human guidance: %q", name, prompt)
+		}
 	}
 }
 

@@ -4336,6 +4336,9 @@ type GardenSeedsUpdatedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
+	// QuestionSeeds corresponds to the JSON schema field "question_seeds".
+	QuestionSeeds []Seed `json:"question_seeds"`
+
 	// Seeds corresponds to the JSON schema field "seeds".
 	Seeds []Seed `json:"seeds"`
 
@@ -4753,6 +4756,9 @@ type InitialStateMessage struct {
 
 	// Prs corresponds to the JSON schema field "prs".
 	Prs []PR `json:"prs,omitempty,omitzero"`
+
+	// QuestionSeeds corresponds to the JSON schema field "question_seeds".
+	QuestionSeeds []Seed `json:"question_seeds,omitempty,omitzero"`
 
 	// Repos corresponds to the JSON schema field "repos".
 	Repos []RepoState `json:"repos,omitempty,omitzero"`
@@ -7017,6 +7023,9 @@ type Response struct {
 	// SeedPlotResult corresponds to the JSON schema field "seed_plot_result".
 	SeedPlotResult *SeedPlotResult `json:"seed_plot_result,omitempty,omitzero"`
 
+	// SeedQuestionResult corresponds to the JSON schema field "seed_question_result".
+	SeedQuestionResult *SeedQuestionResult `json:"seed_question_result,omitempty,omitzero"`
+
 	// SeedReadyResult corresponds to the JSON schema field "seed_ready_result".
 	SeedReadyResult *SeedReadyResult `json:"seed_ready_result,omitempty,omitzero"`
 
@@ -7195,6 +7204,9 @@ type Seed struct {
 
 	// PlotProgress corresponds to the JSON schema field "plot_progress".
 	PlotProgress *SeedPlotProgress `json:"plot_progress,omitempty,omitzero"`
+
+	// Question corresponds to the JSON schema field "question".
+	Question *SeedQuestion `json:"question,omitempty,omitzero"`
 
 	// Ready corresponds to the JSON schema field "ready".
 	Ready bool `json:"ready"`
@@ -7816,6 +7828,77 @@ type SeedPlotResult struct {
 
 	// Crown corresponds to the JSON schema field "crown".
 	Crown Seed `json:"crown"`
+}
+
+type SeedQuestion struct {
+	// AskedAt corresponds to the JSON schema field "asked_at".
+	AskedAt string `json:"asked_at"`
+
+	// AskedByMember corresponds to the JSON schema field "asked_by_member".
+	AskedByMember string `json:"asked_by_member"`
+
+	// AskedBySession corresponds to the JSON schema field "asked_by_session".
+	AskedBySession string `json:"asked_by_session"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// ResolvedAt corresponds to the JSON schema field "resolved_at".
+	ResolvedAt *string `json:"resolved_at,omitempty,omitzero"`
+
+	// Status corresponds to the JSON schema field "status".
+	Status string `json:"status"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type SeedQuestionMessage struct {
+	// Body corresponds to the JSON schema field "body".
+	Body *string `json:"body,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member *string `json:"member,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+
+	// Verb corresponds to the JSON schema field "verb".
+	Verb string `json:"verb"`
+}
+
+type SeedQuestionResult struct {
+	// Note corresponds to the JSON schema field "note".
+	Note *SeedNote `json:"note,omitempty,omitzero"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed Seed `json:"seed"`
+}
+
+type SeedQuestionResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Result corresponds to the JSON schema field "result".
+	Result *SeedQuestionResult `json:"result,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type SeedReadyMessage struct {
