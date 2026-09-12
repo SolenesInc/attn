@@ -15,6 +15,14 @@ func TestNotifications_AddListUnread(t *testing.T) {
 		Title:      "Compaction failed",
 		Body:       "compact_context for ws-1 gave up after 3 attempts",
 		Detail:     "boom: context deadline exceeded",
+		Trigger:    "New output triggered a summary.",
+		Impact:     "The Home summary may be stale.",
+		Cause:      "agent exited with status 2",
+		Diagnostic: "stderr: authentication failed",
+		Actions: []NotificationAction{
+			{Kind: "open_session", Label: "Open session", TargetID: "ws-1"},
+			{Kind: "retry_task", Label: "Retry", TargetID: "task-1"},
+		},
 		SourceKind: "task",
 		SourceID:   "compact_context:ws-1",
 	}, now)
@@ -42,6 +50,10 @@ func TestNotifications_AddListUnread(t *testing.T) {
 	if got.Kind != "task_failed" || got.Title != "Compaction failed" ||
 		got.Detail != "boom: context deadline exceeded" || got.SourceID != "compact_context:ws-1" {
 		t.Fatalf("fields mismatch on read-back: %+v", got)
+	}
+	if got.Trigger != rec.Trigger || got.Impact != rec.Impact || got.Cause != rec.Cause ||
+		got.Diagnostic != rec.Diagnostic || len(got.Actions) != 2 || got.Actions[1].TargetID != "task-1" {
+		t.Fatalf("structured fields mismatch on read-back: %+v", got)
 	}
 	if !got.ReadAt.IsZero() {
 		t.Fatalf("expected unread on read-back, read_at=%v", got.ReadAt)

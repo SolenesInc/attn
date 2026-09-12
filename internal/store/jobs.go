@@ -17,24 +17,25 @@ type rowScanner interface {
 }
 
 type JobRecord struct {
-	ID          string
-	Kind        string
-	UniqueKey   string
-	Priority    int
-	Payload     string
-	Result      string
-	State       string
-	Attempts    int
-	MaxAttempts int
-	ScheduledAt time.Time
-	LastError   string
-	Requeued    bool
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID             string
+	Kind           string
+	UniqueKey      string
+	Priority       int
+	Payload        string
+	Result         string
+	State          string
+	Attempts       int
+	MaxAttempts    int
+	ScheduledAt    time.Time
+	LastError      string
+	LastDiagnostic string
+	Requeued       bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 const jobColumns = `id, kind, unique_key, priority, payload, result, state, attempts,
-	max_attempts, scheduled_at, last_error, requeued, created_at, updated_at`
+	max_attempts, scheduled_at, last_error, last_diagnostic, requeued, created_at, updated_at`
 
 type execer interface {
 	Exec(query string, args ...any) (sql.Result, error)
@@ -50,7 +51,7 @@ func (s *Store) UpsertJob(rec JobRecord) error {
 func upsertJob(ex execer, rec JobRecord) error {
 	_, err := ex.Exec(
 		`INSERT INTO jobs (`+jobColumns+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   kind=excluded.kind,
 		   unique_key=excluded.unique_key,
@@ -62,12 +63,13 @@ func upsertJob(ex execer, rec JobRecord) error {
 		   max_attempts=excluded.max_attempts,
 		   scheduled_at=excluded.scheduled_at,
 		   last_error=excluded.last_error,
+		   last_diagnostic=excluded.last_diagnostic,
 		   requeued=excluded.requeued,
 		   created_at=excluded.created_at,
 		   updated_at=excluded.updated_at`,
 		rec.ID, rec.Kind, rec.UniqueKey, rec.Priority, rec.Payload, rec.Result, rec.State,
 		rec.Attempts, rec.MaxAttempts, rec.ScheduledAt.UTC().Format(sortableTimeFormat),
-		rec.LastError, boolToInt(rec.Requeued),
+		rec.LastError, rec.LastDiagnostic, boolToInt(rec.Requeued),
 		rec.CreatedAt.UTC().Format(sortableTimeFormat), rec.UpdatedAt.UTC().Format(sortableTimeFormat),
 	)
 	if err != nil {
@@ -203,7 +205,7 @@ func scanJobRow(sc rowScanner) (*JobRecord, error) {
 	)
 	if err := sc.Scan(&rec.ID, &rec.Kind, &rec.UniqueKey, &rec.Priority, &rec.Payload,
 		&rec.Result, &rec.State, &rec.Attempts, &rec.MaxAttempts, &scheduledStr,
-		&rec.LastError, &requeued, &createdStr, &updateStr); err != nil {
+		&rec.LastError, &rec.LastDiagnostic, &requeued, &createdStr, &updateStr); err != nil {
 		return nil, err
 	}
 	rec.Requeued = requeued != 0

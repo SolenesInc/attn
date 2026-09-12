@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/victorarias/attn/internal/prompts"
 	"os"
 	"slices"
 	"strings"
@@ -13,6 +12,8 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/jobs"
+	"github.com/victorarias/attn/internal/prompts"
 )
 
 const (
@@ -224,7 +225,8 @@ func executeGardenAdvisor(
 		if runCtx.Err() != nil {
 			return nil, fmt.Errorf("garden advisor %s canceled: %w", task.name, runCtx.Err())
 		}
-		return nil, fmt.Errorf("run Garden advisor %s: %w (%s)", task.name, err, result.Diagnostics)
+		cause := fmt.Errorf("run Garden advisor %s: %w (%s)", task.name, err, result.Diagnostics)
+		return nil, jobs.WithDiagnostic(cause, result.FailureOutput)
 	}
 	if runCtx.Err() != nil {
 		return nil, fmt.Errorf("garden advisor %s canceled: %w", task.name, runCtx.Err())

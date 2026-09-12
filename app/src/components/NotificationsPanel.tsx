@@ -8,6 +8,7 @@ interface NotificationsPanelProps {
   listNotifications: () => Promise<{ notifications: DaemonNotification[]; unreadCount: number }>;
   markRead: (notificationId?: string) => Promise<number>;
   retryTask: (taskId: string) => Promise<Task | null>;
+  onOpenSession: (sessionId: string) => void;
   changeSignal: number;
 }
 
@@ -41,6 +42,7 @@ export function NotificationsPanel({
   listNotifications,
   markRead,
   retryTask,
+  onOpenSession,
   changeSignal,
 }: NotificationsPanelProps) {
   const [notifications, setNotifications] = useState<DaemonNotification[]>([]);
@@ -99,11 +101,10 @@ export function NotificationsPanel({
   }, [markRead]);
 
   const handleRetry = useCallback(
-    async (n: DaemonNotification) => {
-      if (n.source_kind !== 'task' || !n.source_id) return;
+    async (n: DaemonNotification, taskId: string) => {
       setRetryingIds((prev) => new Set(prev).add(n.id));
       try {
-        await retryTask(n.source_id);
+        await retryTask(taskId);
       } catch {
         /* a failed retry leaves the row as-is; a redead task adds a new row */
       } finally {
@@ -158,7 +159,7 @@ export function NotificationsPanel({
               {notifications.map((n) => {
                 const expanded = expandedId === n.id;
                 const unread = !n.read_at;
-                const canRetry = n.source_kind === 'task' && !!n.source_id;
+                const preview = n.impact || n.body;
                 return (
                   <li
                     key={n.id}
@@ -172,21 +173,70 @@ export function NotificationsPanel({
                     </button>
                     {expanded ? (
                       <div className="notification-row-detail">
-                        {n.body && <p className="notification-row-body">{n.body}</p>}
-                        {n.detail && <pre className="notification-row-error">{n.detail}</pre>}
-                        {canRetry && (
-                          <button
-                            type="button"
-                            className="notification-row-retry"
-                            onClick={() => void handleRetry(n)}
-                            disabled={retryingIds.has(n.id)}
-                          >
-                            {retryingIds.has(n.id) ? 'Retrying…' : 'Retry'}
-                          </button>
+                        {n.trigger && (
+                          <div className="notification-row-fact">
+                            <span>Trigger</span>
+                            <p>{n.trigger}</p>
+                          </div>
+                        )}
+                        {(n.impact || n.body) && (
+                          <div className="notification-row-fact">
+                            {n.impact && <span>Impact</span>}
+                            <p>{n.impact || n.body}</p>
+                          </div>
+                        )}
+                        {n.cause && (
+                          <div className="notification-row-fact">
+                            <span>Cause</span>
+                            <p>{n.cause}</p>
+                          </div>
+                        )}
+                        {n.diagnostic ? (
+                          <details className="notification-row-diagnostic">
+                            <summary>Diagnostic output</summary>
+                            <pre>{n.diagnostic}</pre>
+                          </details>
+                        ) : (
+                          !n.cause && n.detail && <pre className="notification-row-error">{n.detail}</pre>
+                        )}
+                        {!!n.actions?.length && (
+                          <div className="notification-row-actions">
+                            {n.actions.map((action) => {
+                              if (action.kind === 'retry_task') {
+                                return (
+                                  <button
+                                    key={`${action.kind}:${action.target_id}`}
+                                    type="button"
+                                    className="notification-row-action"
+                                    onClick={() => void handleRetry(n, action.target_id)}
+                                    disabled={retryingIds.has(n.id)}
+                                  >
+                                    {retryingIds.has(n.id) ? 'Retrying…' : action.label}
+                                  </button>
+                                );
+                              }
+                              if (action.kind === 'open_session') {
+                                return (
+                                  <button
+                                    key={`${action.kind}:${action.target_id}`}
+                                    type="button"
+                                    className="notification-row-action"
+                                    onClick={() => {
+                                      onClose();
+                                      onOpenSession(action.target_id);
+                                    }}
+                                  >
+                                    {action.label}
+                                  </button>
+                                );
+                              }
+                              return null;
+                            })}
+                          </div>
                         )}
                       </div>
                     ) : (
-                      n.body && <p className="notification-row-preview">{n.body}</p>
+                      preview && <p className="notification-row-preview">{preview}</p>
                     )}
                   </li>
                 );

@@ -135,6 +135,12 @@ export function BackgroundTasksSettings({
                       {task.last_error}
                     </p>
                   )}
+                  {task.last_diagnostic && (
+                    <details className="background-task-diagnostic">
+                      <summary>Diagnostic output</summary>
+                      <pre>{task.last_diagnostic}</pre>
+                    </details>
+                  )}
                 </li>
               );
             })}

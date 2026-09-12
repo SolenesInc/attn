@@ -6993,6 +6993,7 @@ model Task {
   attempts: int32;
   next_attempt_at: string;
   last_error?: string;
+  last_diagnostic?: string;
   created_at: string;
   updated_at: string;
 }
@@ -7091,6 +7092,12 @@ enum NotificationSeverity {
   critical,
 }
 
+model NotificationAction {
+  kind: string;
+  label: string;
+  target_id: string;
+}
+
 model Notification {
   id: string;
   kind: string;
@@ -7098,6 +7105,11 @@ model Notification {
   title: string;
   body: string;
   detail: string;
+  trigger: string;
+  impact: string;
+  cause: string;
+  diagnostic: string;
+  actions?: NotificationAction[];
   source_kind: string;
   source_id: string;
   created_at: string;

@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { NotificationsPanel } from './NotificationsPanel';
 import type { DaemonNotification } from '../hooks/useDaemonSocket';
@@ -12,6 +13,10 @@ function notification(over: Partial<DaemonNotification>): DaemonNotification {
     title: 'Something happened',
     body: 'body',
     detail: '',
+    trigger: '',
+    impact: '',
+    cause: '',
+    diagnostic: '',
     source_kind: '',
     source_id: '',
     created_at: new Date().toISOString(),
@@ -26,17 +31,21 @@ function renderPanel(notifications: DaemonNotification[]) {
     unreadCount: notifications.filter((n) => !n.read_at).length,
     critical: { count: 0, title: '' },
   });
+  const retryTask = vi.fn().mockResolvedValue(null);
+  const onOpenSession = vi.fn();
+  const onClose = vi.fn();
   render(
     <NotificationsPanel
       open
-      onClose={vi.fn()}
+      onClose={onClose}
       listNotifications={listNotifications}
       markRead={vi.fn().mockResolvedValue(0)}
-      retryTask={vi.fn().mockResolvedValue(null)}
+      retryTask={retryTask}
+      onOpenSession={onOpenSession}
       changeSignal={0}
     />,
   );
-  return { listNotifications };
+  return { listNotifications, retryTask, onOpenSession, onClose };
 }
 
 function rowFor(title: string): HTMLElement {
@@ -85,5 +94,45 @@ describe('NotificationsPanel severity', () => {
     const row = rowFor('Plugin stopped');
     expect(row).toHaveClass('sev-critical');
     expect(row).not.toHaveClass('is-unread');
+  });
+});
+
+describe('NotificationsPanel failure details', () => {
+  it('shows structured evidence and only the actions supplied by the daemon', async () => {
+    const user = userEvent.setup();
+    const rendered = renderPanel([
+      notification({
+        title: 'Couldn’t update activity for “ci stuff”',
+        body: 'legacy impact',
+        trigger: 'New output triggered a Home activity summary.',
+        impact: 'The Home activity summary may be stale.',
+        cause: 'The agent process exited with status 2.',
+        diagnostic: 'stderr: authentication failed',
+        actions: [
+          { kind: 'open_session', label: 'Open session', target_id: 'session-1' },
+          { kind: 'retry_task', label: 'Retry', target_id: 'task-1' },
+        ],
+      }),
+    ]);
+
+    await user.click(await screen.findByText('Couldn’t update activity for “ci stuff”'));
+    expect(screen.getByText('New output triggered a Home activity summary.')).toBeInTheDocument();
+    expect(screen.getByText('The Home activity summary may be stale.')).toBeInTheDocument();
+    expect(screen.getByText('The agent process exited with status 2.')).toBeInTheDocument();
+    await user.click(screen.getByText('Diagnostic output'));
+    expect(screen.getByText('stderr: authentication failed')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(rendered.retryTask).toHaveBeenCalledWith('task-1');
+    await user.click(screen.getByRole('button', { name: 'Open session' }));
+    expect(rendered.onClose).toHaveBeenCalled();
+    expect(rendered.onOpenSession).toHaveBeenCalledWith('session-1');
+  });
+
+  it('does not infer Retry from a task source', async () => {
+    const user = userEvent.setup();
+    renderPanel([notification({ source_kind: 'task', source_id: 'task-1', actions: [] })]);
+    await user.click(await screen.findByText('Something happened'));
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
   });
 });

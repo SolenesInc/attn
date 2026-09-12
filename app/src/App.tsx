@@ -4239,6 +4239,7 @@ function AppContent({
         listNotifications={sendNotificationList}
         markRead={sendNotificationMarkRead}
         retryTask={sendTaskRetry}
+        onOpenSession={handleSelectSession}
         changeSignal={notificationsChangeSignal}
       />
       {markdownOpenerOpen && (
