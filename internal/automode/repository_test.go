@@ -54,7 +54,7 @@ func TestLoadRepositoryRulesUsesLegacySandboxDefaults(t *testing.T) {
 
 func TestLoadRepositoryRulesNamesInvalidFileAndRule(t *testing.T) {
 	root := initRulesRepository(t)
-	writeRepositoryRules(t, root, `{"rules":[{"pattern":["go test"],"decision":"allow"}]}`)
+	writeRepositoryRules(t, root, `{"rules":[{"pattern":["go\u00a0test"],"decision":"allow"}]}`)
 
 	_, err := LoadRepositoryRules(root)
 	if err == nil || !strings.Contains(err.Error(), filepath.Join(root, RepositoryRulesFile)) ||

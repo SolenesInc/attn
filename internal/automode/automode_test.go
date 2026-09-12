@@ -11,12 +11,15 @@ func TestValidateRuleWantsTokensNotAShellLine(t *testing.T) {
 		t.Fatalf("a two-token allow rule was refused: %v", err)
 	}
 	for name, rule := range map[string]Rule{
-		"no tokens":     {Pattern: nil, Decision: DecisionAllow},
-		"blank token":   {Pattern: Tokens("git", " "), Decision: DecisionAllow},
-		"a shell line":  {Pattern: Tokens("git push"), Decision: DecisionAllow},
-		"empty token":   {Pattern: []PatternToken{{}}, Decision: DecisionAllow},
-		"bad decision":  {Pattern: Tokens("git"), Decision: "maybe"},
-		"no justifying": {Pattern: Tokens("rm"), Decision: DecisionForbidden},
+		"no tokens":       {Pattern: nil, Decision: DecisionAllow},
+		"blank token":     {Pattern: Tokens("git", " "), Decision: DecisionAllow},
+		"a shell line":    {Pattern: Tokens("git push"), Decision: DecisionAllow},
+		"form feed":       {Pattern: Tokens("git\fpush"), Decision: DecisionAllow},
+		"non-breaking":    {Pattern: Tokens("git\u00a0push"), Decision: DecisionAllow},
+		"byte order mark": {Pattern: Tokens("git\ufeffpush"), Decision: DecisionAllow},
+		"empty token":     {Pattern: []PatternToken{{}}, Decision: DecisionAllow},
+		"bad decision":    {Pattern: Tokens("git"), Decision: "maybe"},
+		"no justifying":   {Pattern: Tokens("rm"), Decision: DecisionForbidden},
 	} {
 		if err := ValidateRule(rule); err == nil {
 			t.Errorf("%s was accepted", name)
@@ -25,6 +28,9 @@ func TestValidateRuleWantsTokensNotAShellLine(t *testing.T) {
 	forbidden := Rule{Pattern: Tokens("rm"), Decision: DecisionForbidden, Justification: "no"}
 	if err := ValidateRule(forbidden); err != nil {
 		t.Errorf("a justified forbidden rule was refused: %v", err)
+	}
+	if err := ValidateRule(Rule{Pattern: Tokens("git\u0085push"), Decision: DecisionAllow}); err != nil {
+		t.Errorf("a token accepted by Pi was refused: %v", err)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode"
 )
 
 type Config struct {
@@ -321,7 +322,7 @@ func ValidateRule(rule Rule) error {
 			if strings.TrimSpace(alternative) == "" {
 				return fmt.Errorf("rule pattern token %d is blank", i)
 			}
-			if strings.ContainsAny(alternative, " \t\n\r") {
+			if strings.IndexFunc(alternative, isPiWhitespace) >= 0 {
 				return fmt.Errorf(
 					"rule pattern token %d (%q) holds whitespace: a prefix rule takes one command "+
 						"token per entry, not a shell line", i, alternative)
@@ -356,6 +357,10 @@ func ValidateRule(rule Rule) error {
 		return fmt.Errorf("a forbidden rule cannot bypass the sandbox")
 	}
 	return nil
+}
+
+func isPiWhitespace(r rune) bool {
+	return r == '\ufeff' || (r != '\u0085' && unicode.IsSpace(r))
 }
 
 func NormalizeRule(rule Rule) Rule {
