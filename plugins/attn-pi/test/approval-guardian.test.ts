@@ -165,14 +165,16 @@ test("the backoff doubles and stays inside its jitter band", () => {
 type Answer = { text?: string; stopReason?: string; errorMessage?: string; toolCall?: string };
 
 function guardian(answers: Answer[], overrides: Record<string, unknown> = {}) {
+  const calls: { model: unknown; context: any; options: any }[] = [];
   const usage: GuardianUsageEntry[] = [];
   const notices: { text: string; level: string }[] = [];
   const slept: number[] = [];
   const tools: string[] = [];
   let clock = 0;
   const provider = {
-    streamSimple: () => ({
+    streamSimple: (model: unknown, context: any, options: any) => ({
       result: async () => {
+        calls.push({ model, context: structuredClone(context), options });
         const answer = answers.shift() ?? { text: '{"outcome":"allow"}' };
         if (answer.toolCall !== undefined) {
           return {
@@ -210,7 +212,7 @@ function guardian(answers: Answer[], overrides: Record<string, unknown> = {}) {
     ...overrides,
   });
   return {
-    reviewer, usage, notices, slept, tools,
+    reviewer, usage, notices, slept, tools, calls,
     advance: (ms: number) => { clock += ms; },
     review: () => reviewer.review(command, { cwd: "/w", abort: () => notices.push({ text: "abort", level: "abort" }) }),
   };
@@ -223,6 +225,48 @@ test("an allow runs the command and records one usage row", async () => {
   expect(it.usage[0]!.outcome).toBe("allow");
   expect(it.usage[0]!.usage.totalTokens).toBe(12);
   expect(it.usage[0]!.model).toBe("claude-test");
+});
+
+test("guardian selections change across reviews while prior history is retained", async () => {
+  let selected = { model: { provider: "one", id: "first", reasoning: true }, effort: "high" };
+  const it = guardian([{ text: '{"outcome":"allow"}' }, { text: '{"outcome":"allow"}' }], { resolve: async () => ({ ...selected }) });
+  await it.review();
+  selected = { model: { provider: "two", id: "second", reasoning: true }, effort: "off" };
+  await it.review();
+  expect(it.calls[0]!.options.reasoning).toBe("high");
+  expect(it.calls[1]!.options.reasoning).toBeUndefined();
+  expect(it.calls[1]!.model).toEqual(selected.model);
+  expect(it.calls[1]!.context.messages).toHaveLength(3);
+  expect(it.calls[1]!.context.messages[1].content[0].text).toBe('{"outcome":"allow"}');
+  expect(it.usage.map(u => u.model)).toEqual(["first", "second"]);
+});
+
+test("a selection error stops the turn before any provider request", async () => {
+  const it = guardian([], { resolve: async () => { throw new Error("Guardian model missing; choose in /security"); } });
+  expect(await it.review()).toEqual({ type: "abort" });
+  expect(it.calls).toHaveLength(0);
+  expect(it.notices).toContainEqual({ text: "Guardian model missing; choose in /security", level: "error" });
+  expect(it.notices).toContainEqual({ text: "abort", level: "abort" });
+});
+
+test("an in-flight tool review keeps its selected model and effort", async () => {
+  let selected = { model: { provider: "one", id: "first", reasoning: true }, effort: "high" };
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const it = guardian([{ toolCall: "ls" }, { text: '{"outcome":"allow"}' }, { text: '{"outcome":"allow"}' }], {
+    resolve: async () => ({ ...selected }),
+    runTool: async () => { entered.resolve(); await release.promise; return { output: "fixture", isError: false }; },
+  });
+  const pending = it.review();
+  await entered.promise;
+  selected = { model: { provider: "two", id: "second", reasoning: true }, effort: "low" };
+  release.resolve();
+  await pending;
+  expect(it.calls.slice(0, 2).map(c => c.options.reasoning)).toEqual(["high", "high"]);
+  expect(it.calls.slice(0, 2).map(c => (c.model as any).id)).toEqual(["first", "first"]);
+  await it.review();
+  expect((it.calls[2]!.model as any).id).toBe("second");
+  expect(it.calls[2]!.options.reasoning).toBe("low");
 });
 
 test("a deny becomes the rejection text the agent is given", async () => {

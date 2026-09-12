@@ -5,8 +5,10 @@ import { Input, SelectList, sliceByColumn, truncateToWidth, visibleWidth, wrapTe
 import { cachePath } from "./caches";
 import { credentials } from "./filter";
 import { expand, type SecurityConfig, type SecurityPolicy } from "./policy";
+import type { GuardianSettings } from "../approval/guardian-selection";
 
 export type SecuritySnapshot = {
+  guardian?: GuardianSettings;
   config: SecurityConfig;
   policy?: SecurityPolicy;
   problem?: string;
@@ -17,7 +19,7 @@ export type SecuritySnapshot = {
   approvals: boolean;
 };
 type PathGroup = "caches" | "allowWrite" | "denyRead" | "denyWrite";
-type Page = { kind: "main" } | { kind: "paths"; group: PathGroup } |
+type Page = { kind: "main" } | { kind: "guardian" } | { kind: "guardian-providers" } | { kind: "guardian-models"; provider: string } | { kind: "guardian-effort" } | { kind: "paths"; group: PathGroup } |
   { kind: "path"; group: PathGroup; path: string; fixed: boolean } |
   { kind: "input"; group: PathGroup; previous?: string } |
   { kind: "effective" } | { kind: "info"; title: string; text: string } | { kind: "reset" };
@@ -98,6 +100,7 @@ export class SecurityPanel implements Component, Focusable {
     if (page.kind === "input") return `${page.previous ? "Edit" : "Add"} path`;
     if (page.kind === "info") return page.title;
     if (page.kind === "reset") return "Restore cache preset";
+    if (page.kind.startsWith("guardian")) return "Guardian";
     return "Effective access";
   }
 
@@ -194,6 +197,7 @@ export class SecurityPanel implements Component, Focusable {
     const groupRow = (group: PathGroup): Row => ({ id: group, label: `${groups[group].title} · ${this.paths(group).length}${group === "denyWrite" ? " + built-in" : ""} ›`,
       help: groups[group].help, action: () => this.open({ kind: "paths", group }) });
     if (page.kind === "main") return [
+      ...(this.snapshot.guardian ? [{ id: "guardian", label: "Guardian ›", help: `${this.snapshot.guardian.source}: ${this.snapshot.guardian.problem ?? this.snapshot.guardian.effective}`, action: () => this.open({ kind: "guardian" } as Page) }] : []),
       { id: "sandbox", label: `OS sandbox · ${config.enabled ? "on" : "off"}`, help: "Contains built-in tools and !/!! commands. Turning it off removes filesystem and network restrictions; credential filtering stays on.", action: () => this.save([config.enabled ? "off" : "on"]) },
       { id: "network", label: `Tool network · ${config.network === "allow" ? "allowed" : "blocked"}${config.enabled ? "" : " (inactive)"}`, help: "Blocks tool connections, including localhost. Pi can still reach your model provider. A sandboxed command reaches allowed hosts through attn's proxy.", action: () => this.save([`network ${config.network === "allow" ? "deny" : "allow"}`]) },
       { id: "cacheAccess", label: `Build-cache access · ${config.buildCaches.enabled ? "on" : "off"}${config.enabled ? "" : " (inactive)"}`, help: "Lets build tools write configured caches. Turning this off preserves cached files and other write grants.", action: () => this.save([`caches ${config.buildCaches.enabled ? "off" : "on"}`]) },
@@ -202,6 +206,22 @@ export class SecurityPanel implements Component, Focusable {
       { id: "filter", label: "Credential filtering · always on", help: "Filters sensitive environment variables and recognized secrets in tool output and model requests. It stays on when the sandbox or auto mode is off.", action: () => info("Credential filtering", "Credential filtering is always on. It removes sensitive environment variables from tools and redacts recognized secrets in text output and model requests. Images, encoded data and unrecognized secrets are not detected.") },
       { id: "file", label: "Settings file ›", help: this.snapshot.configPath, action: () => info("Settings file", `${this.snapshot.configPath}\nSettings apply immediately here and are loaded by future sessions. Other running sessions keep their current policy. Extensions and MCP servers remain trusted code outside this sandbox.`) },
       { id: "close", label: "Close", help: "All changes are already saved.", action: () => this.done() },
+    ];
+    const guardian = this.snapshot.guardian;
+    if (guardian && page.kind === "guardian") return [
+      { id: "guardian-model", label: `Model · ${guardian.selection.provider ? `${guardian.selection.provider}/${guardian.selection.model}` : "Follow session model"} ›`, help: `${guardian.source}: ${guardian.problem ?? guardian.effective}. Changes affect this session until the agent reloads.`, action: () => this.open({ kind: "guardian-providers" }) },
+      { id: "guardian-effort", label: `Reasoning · ${guardian.selection.effort ?? "Default"} ›`, help: "Default uses low reasoning when supported, otherwise the provider default.", action: () => this.open({ kind: "guardian-effort" }) },
+      { id: "guardian-reset", label: "Use attn default", help: "Remove this session override and restore the default captured at launch.", action: () => this.save(["guardian reset"]) }, back,
+    ];
+    if (guardian && page.kind === "guardian-providers") return [
+      { id: "guardian-session", label: "Follow session model", help: "Use the coding model, including later model changes.", action: () => this.save(["guardian model session"], () => this.back()) },
+      ...[...new Set(guardian.models.map(model => model.provider))].sort().map((provider): Row => ({ id: `guardian-provider-${provider}`, label: `${provider} ›`, help: "Choose a model from this configured provider.", action: () => this.open({ kind: "guardian-models", provider }) })), back,
+    ];
+    if (guardian && page.kind === "guardian-models") return [
+      ...guardian.models.filter(model => model.provider === page.provider).map((model): Row => ({ id: `guardian-${model.provider}/${model.id}`, label: `${model.provider}/${model.id}`, help: "Use this model independently of the coding model, for this session only.", action: () => this.save([`guardian model ${model.provider} ${model.id}`], () => { this.back(); this.back(); }) })), back,
+    ];
+    if (guardian && page.kind === "guardian-effort") return [
+      ...["default", ...guardian.efforts].map((effort): Row => ({ id: `guardian-effort-${effort}`, label: effort, help: "Set guardian reasoning for this session only.", action: () => this.save([`guardian effort ${effort}`], () => this.back()) })), back,
     ];
     if (page.kind === "paths") {
       const fixed = page.group === "denyWrite" ? this.fixedPaths() : [];

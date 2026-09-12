@@ -113,6 +113,11 @@ func runAutoModeShow(args []string) {
 	fmt.Fprintf(w, "enabled by default\t%t\n", cfg.EnabledDefault)
 	fmt.Fprintf(w, "approval policy\t%s\n", cfg.ApprovalPolicy)
 	fmt.Fprintf(w, "sandbox mode\t%s\n", cfg.SandboxMode)
+	guardian := automode.GuardianSelection{}
+	if cfg.Guardian != nil {
+		guardian = automode.GuardianSelection{Provider: protocol.Deref(cfg.Guardian.Provider), Model: protocol.Deref(cfg.Guardian.Model), Effort: protocol.Deref(cfg.Guardian.Effort)}
+	}
+	fmt.Fprintf(w, "guardian\t%s\n", guardian.Describe())
 	w.Flush()
 	printAutoModeEnvironment(cfg.Environment)
 	printAutoModeRules(cfg)

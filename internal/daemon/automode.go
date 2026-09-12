@@ -276,6 +276,7 @@ func autoModePresetInfos() []protocol.AutoModePresetInfo {
 
 func autoModeConfigInfo(cfg automode.Config) protocol.AutoModeConfigInfo {
 	return protocol.AutoModeConfigInfo{
+		Guardian:       &protocol.GuardianSelection{Provider: protocol.Ptr(cfg.Guardian.Provider), Model: protocol.Ptr(cfg.Guardian.Model), Effort: protocol.Ptr(cfg.Guardian.Effort)},
 		EnabledDefault: cfg.EnabledDefault,
 		ApprovalPolicy: cfg.ApprovalPolicy,
 		SandboxMode:    cfg.SandboxMode,

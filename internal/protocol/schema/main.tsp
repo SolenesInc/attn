@@ -5969,7 +5969,14 @@ model AppRollbackResult {
 // human in the app is the trust boundary no CLI caller can fake. An agent must
 // not be able to write its own leash.
 
+model GuardianSelection {
+  provider?: string;
+  "model"?: string;
+  effort?: string;
+}
+
 model AutoModeConfigInfo {
+  guardian?: GuardianSelection;
   "enabled_default": boolean;
   // "untrusted" | "on-request" | "never".
   "approval_policy": string;
@@ -6240,6 +6247,7 @@ model AutoModeHostRemoveMessage {
 // Naming neither field is refused rather than silently doing nothing.
 model AutoModePolicySetMessage {
   cmd: "automode_policy_set";
+  guardian?: GuardianSelection;
   approval_policy?: string;
   sandbox_mode?: string;
   allow_local_binding?: boolean;

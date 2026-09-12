@@ -115,6 +115,7 @@ export type GuardianToolRun = (command: string, signal: AbortSignal) => Promise<
 export type GuardianOptions = {
   registry: ModelRegistryLike;
   model: () => ModelLike | undefined;
+  resolve?: () => Promise<{ model: ModelLike; effort?: string }>;
   systemPrompt: () => string;
   transcript: () => readonly TranscriptEntry[];
   sessionId: () => string;
@@ -147,7 +148,15 @@ export class GuardianReviewer implements Reviewer {
   async review(request: ApprovalRequest, ctx: ReviewContext): Promise<ReviewDecision> {
     const now = this.options.now ?? (() => Date.now());
     const deadline = now() + reviewTimeoutMs;
-    const review: ReviewRun = { id: randomId(), usage: undefined, model: this.options.model() };
+    let selected: { model: ModelLike | undefined; effort?: string };
+    try {
+      selected = this.options.resolve ? await this.options.resolve() : { model: this.options.model(), effort: "low" };
+    } catch (error) {
+      this.options.notify(error instanceof Error ? error.message : String(error), "error");
+      ctx.abort?.();
+      return { type: "abort" };
+    }
+    const review: ReviewRun = { id: randomId(), usage: undefined, ...selected };
     const decision = await this.decide(request, ctx, review, deadline);
     this.options.onUsage({
       decision_id: review.id,
@@ -270,7 +279,7 @@ export class GuardianReviewer implements Reviewer {
       const bound = signalFor(ctx, deadline, now);
       let result: CompletionResultLike;
       try {
-        result = await complete(provider, target, this.options.systemPrompt(), messages, auth, bound.signal);
+        result = await complete(provider, target, this.options.systemPrompt(), messages, auth, bound.signal, review.effort);
       } finally {
         bound.release();
       }
@@ -303,7 +312,7 @@ export class GuardianReviewer implements Reviewer {
 
 }
 
-type ReviewRun = { id: string; usage: UsageLike | undefined; model: ModelLike | undefined };
+type ReviewRun = { id: string; usage: UsageLike | undefined; model: ModelLike | undefined; effort?: string };
 
 function usageOutcome(decision: ReviewDecision): GuardianUsageEntry["outcome"] {
   if (decision.type === "approved") return "allow";
@@ -364,6 +373,7 @@ async function complete(
   messages: unknown[],
   auth: { apiKey?: string; headers?: Record<string, string | null>; env?: Record<string, string> },
   signal?: AbortSignal,
+  effort?: string,
 ): Promise<CompletionResultLike> {
   const context = {
     systemPrompt: credentials.text(systemPrompt),
@@ -371,7 +381,7 @@ async function complete(
     tools: [guardianBashTool],
   } as unknown as Parameters<ProviderLike["streamSimple"]>[1];
   const options = {
-    ...(model.reasoning ? { reasoning: "low" } : {}),
+    ...(model.reasoning && effort && effort !== "off" ? { reasoning: effort } : {}),
     apiKey: auth.apiKey,
     headers: auth.headers,
     env: auth.env,

@@ -158,7 +158,7 @@ describe('SettingsModal drafts', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Codex' }));
     fireEvent.click(screen.getByRole('button', { name: 'Claude' }));
     rerender({ settings: { new_session_agent: 'codex' } });
-    expect(screen.getByRole('button', { name: 'Claude' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('button', { name: 'Claude' })).toHaveAttribute('aria-pressed', 'true');
     await act(async () => { acknowledge(); });
     expect(save.mock.calls).toEqual([['new_session_agent', 'codex'], ['new_session_agent', 'claude']]);
   });

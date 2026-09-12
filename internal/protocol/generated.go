@@ -1009,6 +1009,9 @@ type AutoModeConfigInfo struct {
 	// Environment corresponds to the JSON schema field "environment".
 	Environment AutoModeEnvironmentInfo `json:"environment"`
 
+	// Guardian corresponds to the JSON schema field "guardian".
+	Guardian *GuardianSelection `json:"guardian,omitempty,omitzero"`
+
 	// LegacyPatterns corresponds to the JSON schema field "legacy_patterns".
 	LegacyPatterns []string `json:"legacy_patterns"`
 
@@ -1280,6 +1283,9 @@ type AutoModePolicySetMessage struct {
 
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// Guardian corresponds to the JSON schema field "guardian".
+	Guardian *GuardianSelection `json:"guardian,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -4659,6 +4665,17 @@ type GitStatusUpdateMessage struct {
 
 	// Untracked corresponds to the JSON schema field "untracked".
 	Untracked []GitFileChange `json:"untracked"`
+}
+
+type GuardianSelection struct {
+	// Effort corresponds to the JSON schema field "effort".
+	Effort *string `json:"effort,omitempty,omitzero"`
+
+	// Model corresponds to the JSON schema field "model".
+	Model *string `json:"model,omitempty,omitzero"`
+
+	// Provider corresponds to the JSON schema field "provider".
+	Provider *string `json:"provider,omitempty,omitzero"`
 }
 
 type HeartbeatMessage struct {

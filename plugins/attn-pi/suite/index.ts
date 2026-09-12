@@ -40,7 +40,7 @@ const security = processSingleton(
     // The security policy contributes only paths; the daemon's approval config
     // owns the sandbox mode and the network switch.
     const security = new PiSecurity(undefined, approval?.runBash, (policy) => approval?.useSandbox(policy), attnNetwork,
-      approval ? () => approval.permissions().sandboxMode : undefined);
+      approval ? () => approval.permissions().sandboxMode : undefined, approval?.guardianControl);
     // Security registers first, so its session_start builds the file tools before approval
     // reseeds the pair; the reseed awaits this rebuild before the change is reported done.
     approval?.onPermissions(() => security.refresh());

@@ -12,6 +12,7 @@ import { SandboxedFilesystem } from "./filesystem";
 import { loadSecurityConfig, resolveSecurityPolicy, saveSecurityConfig, type SecurityPolicy } from "./policy";
 import { protectedBash, protectedTools } from "./tools";
 import type { BashApproval } from "../approval/index";
+import type { GuardianControl } from "../approval/guardian-selection";
 import { changeSecurityConfig } from "./settings";
 import { SecurityPanel, type SecuritySnapshot } from "./ui";
 import { securityInstructions, securityPrompt } from "./guidance";
@@ -33,6 +34,7 @@ export class PiSecurity {
     /** The session's sandbox mode, which /permissions owns. Absent in standalone pi,
      * where there is no approval config and workspace-write is the only behaviour. */
     private readonly sandboxMode?: () => SandboxMode,
+    private readonly guardian?: GuardianControl,
   ) {}
 
   /** Rebuilds the tools against the current sandbox mode; a no-op until a session starts. */
@@ -70,8 +72,14 @@ export class PiSecurity {
           const snapshot = (): SecuritySnapshot => ({
             config: loadSecurityConfig(this.configPath), policy: this.policy, problem: this.problem,
             configPath: this.configPath, cwd: ctx.cwd, approvals: this.approval !== undefined,
+            guardian: this.guardian?.snapshot(ctx),
           });
           const apply = async (commands: string[]) => {
+            if (commands.every((command) => command.startsWith("guardian "))) {
+              if (!this.guardian) throw new Error("Guardian settings require a Pi session launched by attn.");
+              for (const command of commands) await this.guardian.change(command.slice("guardian ".length), ctx);
+              return snapshot();
+            }
             const config = loadSecurityConfig(this.configPath);
             for (const command of commands) changeSecurityConfig(config, command, ctx.cwd);
             saveSecurityConfig(this.configPath, config);
@@ -85,8 +93,10 @@ export class PiSecurity {
             ));
             return;
           }
-          if (command && command !== "status") await apply([command]);
-          ctx.ui.notify(this.status(), this.problem ? "error" : "info");
+          if (command && command !== "status" && command !== "guardian status") await apply([command]);
+          const guardian = this.guardian?.snapshot(ctx);
+          const guardianStatus = guardian ? `\nGuardian (${guardian.source}): ${guardian.problem ?? guardian.effective}. Overrides last until the agent reloads.` : "";
+          ctx.ui.notify(this.status() + guardianStatus, this.problem || guardian?.problem ? "error" : "info");
         } catch (error) {
           ctx.ui.notify(credentials.text(error instanceof Error ? error.message : String(error)), "error");
         }

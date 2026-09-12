@@ -1,4 +1,5 @@
 import { emptyEnvironment, readEnvironment, type Environment } from "../automode/environment";
+import { readGuardianSelection, type GuardianSelection } from "./guardian-selection";
 
 // This mirrors internal/automode.Config's JSON; a field renamed on one side silently falls back to its default.
 
@@ -36,6 +37,7 @@ export type Network = {
 };
 
 export type ApprovalConfig = {
+  guardian: GuardianSelection;
   enabledDefault: boolean;
   approvalPolicy: ApprovalPolicy;
   sandboxMode: SandboxMode;
@@ -46,6 +48,7 @@ export type ApprovalConfig = {
 };
 
 export type RawApprovalConfig = {
+  guardian?: unknown;
   enabled_default?: unknown;
   approval_policy?: unknown;
   sandbox_mode?: unknown;
@@ -73,6 +76,7 @@ export const defaultNetwork: Network = {
 };
 
 export const defaultApprovalConfig: ApprovalConfig = {
+  guardian: {},
   enabledDefault: true,
   approvalPolicy: "on-request",
   sandboxMode: "workspace-write",
@@ -85,6 +89,7 @@ export const defaultApprovalConfig: ApprovalConfig = {
 export function loadApprovalConfig(raw: RawApprovalConfig | undefined): ApprovalConfig {
   if (raw === undefined || raw === null) return defaultApprovalConfig;
   return {
+    guardian: readGuardianSelection(raw.guardian),
     enabledDefault: readBoolean(
       raw.enabled_default,
       "enabled_default",
