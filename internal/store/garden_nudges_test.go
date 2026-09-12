@@ -60,3 +60,31 @@ func TestGardenSeedWatchAndBellLifecycle(t *testing.T) {
 		t.Fatalf("unwatch changed=%v err=%v", changed, err)
 	}
 }
+
+func TestGardenUnblockedBellPromotesTheCoalescedEvent(t *testing.T) {
+	s := New()
+	t.Cleanup(func() { _ = s.Close() })
+	now := time.Now()
+
+	claimed, err := s.ClaimGardenSeedMailboxItem("worker", "s-7k3f9m", "note", "bell-1", now)
+	if err != nil || !claimed {
+		t.Fatalf("first bell claimed=%v err=%v", claimed, err)
+	}
+	claimed, err = s.ClaimGardenSeedMailboxItem(
+		"worker", "s-7k3f9m", GardenSeedEventUnblocked, "bell-2", now.Add(time.Second))
+	if err != nil || claimed {
+		t.Fatalf("unblocked bell claimed=%v err=%v", claimed, err)
+	}
+	claimed, err = s.ClaimGardenSeedMailboxItem("worker", "s-7k3f9m", "note", "bell-3", now.Add(2*time.Second))
+	if err != nil || claimed {
+		t.Fatalf("later note claimed=%v err=%v", claimed, err)
+	}
+
+	items, err := s.UnreadGardenSeedMailboxItems("worker")
+	if err != nil || len(items) != 1 {
+		t.Fatalf("mailbox items = %+v, %v", items, err)
+	}
+	if items[0].SeedID != "s-7k3f9m" || items[0].EventKind != GardenSeedEventUnblocked {
+		t.Fatalf("coalesced item = %+v, want one promoted unblocked event", items[0])
+	}
+}

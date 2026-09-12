@@ -103,8 +103,35 @@ func TestSeedRipples_WitherFreesWhatHarvestWould(t *testing.T) {
 func TestSeedRipples_TheDoorbellRingsWhoeverHoldsTheFreedSeed(t *testing.T) {
 	fixture := newRippleGarden(t)
 	move(t, fixture.d, "sess-c", fixture.dependent.ID, garden.VerbTend, "", "")
+	doorbell := &recordingDoorbell{}
+	fixture.d.ptyBackend = doorbell.backend()
+	drains := observeAgentMailboxDrainsFor(t, fixture.d, "sess-c")
 
 	move(t, fixture.d, "sess-b", fixture.blocker.ID, garden.VerbHarvest, "pipe laid", "")
+	if delivered := drains.next(); delivered != 1 {
+		t.Fatalf("drain delivered %d doorbells, want 1", delivered)
+	}
+	assertOneSeedBell(t, fixture.d, "sess-c", fixture.dependent.ID, gardenRingUnblocked)
+	if prompts := doorbell.pasted(); len(prompts) != 1 || prompts[0] != agentMailboxDoorbellText {
+		t.Fatalf("doorbells = %q, want one generic inbox notification", prompts)
+	}
+}
+
+func TestSeedRipples_UnblockedPromotionSurvivesUnwatch(t *testing.T) {
+	fixture := newRippleGarden(t)
+	move(t, fixture.d, "sess-c", fixture.dependent.ID, garden.VerbTend, "", "")
+	watchSeed(t, fixture.d, "sess-c", fixture.dependent.ID, false)
+	if claimed, err := fixture.d.store.ClaimGardenSeedMailboxItem(
+		"sess-c", fixture.dependent.ID, "note", "note", time.Now()); err != nil || !claimed {
+		t.Fatalf("queue note: claimed=%v err=%v", claimed, err)
+	}
+	fixture.d.noteQueuedAgentMailboxItem("sess-c")
+
+	move(t, fixture.d, "sess-b", fixture.blocker.ID, garden.VerbHarvest, "pipe laid", "")
+	result := watchSeed(t, fixture.d, "sess-c", fixture.dependent.ID, true)
+	if result.Watching || !result.Changed {
+		t.Fatalf("unwatch = %+v", result)
+	}
 	assertOneSeedBell(t, fixture.d, "sess-c", fixture.dependent.ID, gardenRingUnblocked)
 }
 
@@ -138,14 +165,21 @@ func TestSeedRipples_AMemberIsRungAtTheSessionItsBindingHolds(t *testing.T) {
 		t.Fatalf("bind trellis: %v", err)
 	}
 	move(t, fixture.d, "", fixture.dependent.ID, garden.VerbTend, "", "trellis")
+	fixture.d.ptyBackend = (&recordingDoorbell{}).backend()
+	drains := observeAgentMailboxDrainsFor(t, fixture.d, "sess-d")
 
 	move(t, fixture.d, "sess-b", fixture.blocker.ID, garden.VerbHarvest, "pipe laid", "")
+	if delivered := drains.next(); delivered != 1 {
+		t.Fatalf("drain delivered %d doorbells, want 1", delivered)
+	}
 	assertOneSeedBell(t, fixture.d, "sess-d", fixture.dependent.ID, gardenRingUnblocked)
 }
 
 func TestSeedRipples_AMergedPullRequestRipplesLikeAnyOtherClose(t *testing.T) {
 	fixture := newRippleGarden(t)
 	move(t, fixture.d, "sess-c", fixture.dependent.ID, garden.VerbTend, "", "")
+	fixture.d.ptyBackend = (&recordingDoorbell{}).backend()
+	drains := observeAgentMailboxDrainsFor(t, fixture.d, "sess-c")
 	rec := recordPullRequest(t, fixture.d, "sess-a", "https://github.com/victorarias/attn/pull/71")
 	if resp := armWhenMerged(t, fixture.d, "sess-a", fixture.blocker.ID, rec.URL); !resp.Ok {
 		t.Fatalf("arm: %v", protocol.Deref(resp.Error))
@@ -162,6 +196,9 @@ func TestSeedRipples_AMergedPullRequestRipplesLikeAnyOtherClose(t *testing.T) {
 	}
 	if _, _, err := fixture.d.fulfilHarvestWhen(armed, merged, nil); err != nil {
 		t.Fatalf("fulfil: %v", err)
+	}
+	if delivered := drains.next(); delivered != 1 {
+		t.Fatalf("drain delivered %d doorbells, want 1", delivered)
 	}
 	assertOneSeedBell(t, fixture.d, "sess-c", fixture.dependent.ID, gardenRingUnblocked)
 }
@@ -194,7 +231,7 @@ func TestSeedRipples_TheGraphIsReadPastTheSnapshotPage(t *testing.T) {
 		t.Fatalf("seedsCollection: %v", err)
 	}
 	base := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	put := func(id string, at time.Time, status string, edges []garden.Edge) {
+	put := func(id string, at time.Time, status string, edges []garden.Edge, tenderSession ...string) {
 		t.Helper()
 		if edges == nil {
 			edges = []garden.Edge{}
@@ -202,6 +239,9 @@ func TestSeedRipples_TheGraphIsReadPastTheSnapshotPage(t *testing.T) {
 		seed := garden.Seed{
 			ID: id, Title: id, StepSlug: id, Status: status,
 			StateChangedAt: formatGardenTime(at), Edges: edges, Vars: []garden.Var{},
+		}
+		if len(tenderSession) != 0 {
+			seed.TenderSession = tenderSession[0]
 		}
 		body, encodeErr := seed.Encode()
 		if encodeErr != nil {
@@ -212,7 +252,7 @@ func TestSeedRipples_TheGraphIsReadPastTheSnapshotPage(t *testing.T) {
 		}
 	}
 	put("s-0000a1", base, garden.StatusPlanted, []garden.Edge{{Kind: garden.EdgeBlocks, To: "s-0000b1"}})
-	put("s-0000a2", base.Add(time.Second), garden.StatusPlanted, nil)
+	put("s-0000a2", base.Add(time.Second), garden.StatusGrowing, nil, "sess-c")
 	for i := 0; i < docstore.MaxLimit; i++ {
 		put(fmt.Sprintf("s-1%05x", i), base.Add(time.Duration(10+i)*time.Second), garden.StatusPlanted, nil)
 	}
@@ -222,6 +262,8 @@ func TestSeedRipples_TheGraphIsReadPastTheSnapshotPage(t *testing.T) {
 		{Kind: garden.EdgeBlocks, To: "s-0000a2"},
 		{Kind: garden.EdgeBlocks, To: "s-0000b1"},
 	})
+	fixture.d.ptyBackend = (&recordingDoorbell{}).backend()
+	drains := observeAgentMailboxDrainsFor(t, fixture.d, "sess-c")
 
 	resp := transition(t, fixture.d, "sess-b", "s-0000b2", garden.VerbHarvest, "done", "")
 	if got := unblockedIDs(t, resp); !slices.Equal(got, []string{"s-0000a2"}) {
@@ -229,4 +271,8 @@ func TestSeedRipples_TheGraphIsReadPastTheSnapshotPage(t *testing.T) {
 			"s-0000a2 sits past the snapshot page, and s-0000b1 is still blocked by s-0000a1, which sits past it too",
 			docstore.MaxLimit, got)
 	}
+	if delivered := drains.next(); delivered != 1 {
+		t.Fatalf("old dependent drain delivered %d doorbells, want 1", delivered)
+	}
+	assertOneSeedBell(t, fixture.d, "sess-c", "s-0000a2", gardenRingUnblocked)
 }

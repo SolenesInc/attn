@@ -18,7 +18,7 @@ var gardenRingEvents = map[garden.Verb]string{
 	garden.VerbWither: "withered", garden.VerbReplant: "replanted",
 }
 
-const gardenRingUnblocked = "unblocked"
+const gardenRingUnblocked = store.GardenSeedEventUnblocked
 
 func (d *Daemon) seedUnblocked(seedID string) ([]garden.Seed, []protocol.Seed) {
 	if d.store == nil {
@@ -39,13 +39,19 @@ func (d *Daemon) ringSeedUnblocked(unblocked []garden.Seed, excludedSessionIDs .
 	if d.store == nil {
 		return
 	}
+	d.gardenWatchMu.Lock()
+	defer d.gardenWatchMu.Unlock()
 	excluded := make(map[string]bool, len(excludedSessionIDs))
 	for _, sessionID := range excludedSessionIDs {
 		excluded[strings.TrimSpace(sessionID)] = true
 	}
 	delete(excluded, "")
 	for _, seed := range unblocked {
-		sessionID := d.tenderSession(seed.Tender())
+		sessionID, err := d.tenderSession(seed.Tender())
+		if err != nil {
+			d.logf("garden bell: resolving the tender for unblocked seed %s: %v", seed.ID, err)
+			continue
+		}
 		if sessionID == "" || excluded[sessionID] {
 			continue
 		}
@@ -53,17 +59,17 @@ func (d *Daemon) ringSeedUnblocked(unblocked []garden.Seed, excludedSessionIDs .
 	}
 }
 
-func (d *Daemon) tenderSession(tender garden.Tender) string {
+func (d *Daemon) tenderSession(tender garden.Tender) (string, error) {
 	if session := strings.TrimSpace(tender.Session); session != "" {
 		if d.sessionExists(session) {
-			return session
+			return session, nil
 		}
-		return ""
+		return "", nil
 	}
 	if member := strings.TrimSpace(tender.Member); member != "" {
 		return d.crewSessionBoundTo(member)
 	}
-	return ""
+	return "", nil
 }
 
 func (d *Daemon) handleSeedWatch(conn net.Conn, msg *protocol.SeedWatchMessage) {
@@ -185,11 +191,11 @@ func (d *Daemon) seedWatchCoverage(sessionID, seedID string) ([]string, error) {
 
 // Caller holds gardenWatchMu through the dependent enqueue or inbox read.
 func (d *Daemon) discardUncoveredSeedBells(sessionID string) error {
-	seeds, err := d.store.UnreadGardenSeedMailboxSeeds(sessionID)
+	items, err := d.store.UnreadGardenSeedMailboxItems(sessionID)
 	if err != nil {
 		return err
 	}
-	if len(seeds) == 0 {
+	if len(items) == 0 {
 		return d.refreshAgentMailboxUnread(sessionID)
 	}
 	subscriptions, err := d.readGardenSubscriptions()
@@ -197,16 +203,38 @@ func (d *Daemon) discardUncoveredSeedBells(sessionID string) error {
 		return err
 	}
 	var uncovered []string
-	for _, seedID := range seeds {
-		if len(subscriptions.coverage(seedID)[sessionID]) != 0 {
+	for _, item := range items {
+		if len(subscriptions.coverage(item.SeedID)[sessionID]) != 0 {
 			continue
 		}
-		uncovered = append(uncovered, seedID)
+		tendered, err := d.unblockedSeedTenderedBy(item, sessionID)
+		if err != nil {
+			return err
+		}
+		if tendered {
+			continue
+		}
+		uncovered = append(uncovered, item.SeedID)
 	}
 	if err := d.store.DiscardGardenSeedMailboxItems(sessionID, uncovered, time.Now()); err != nil {
 		return err
 	}
 	return d.refreshAgentMailboxUnread(sessionID)
+}
+
+func (d *Daemon) unblockedSeedTenderedBy(item store.GardenSeedMailboxItem, sessionID string) (bool, error) {
+	if item.EventKind != gardenRingUnblocked {
+		return false, nil
+	}
+	seed, _, err := d.readSeed(item.SeedID)
+	if err != nil {
+		return false, fmt.Errorf("read unblocked seed %s for %s: %w", item.SeedID, sessionID, err)
+	}
+	tenderSessionID, err := d.tenderSession(seed.Tender())
+	if err != nil {
+		return false, fmt.Errorf("resolve the tender for unblocked seed %s: %w", item.SeedID, err)
+	}
+	return tenderSessionID == sessionID, nil
 }
 
 func (d *Daemon) consumeSeedBell(sessionID, seedID string) {
