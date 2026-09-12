@@ -2,11 +2,15 @@ package daemon
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/github"
+	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -88,6 +92,36 @@ func storedPullRequest(t *testing.T, d *Daemon, sessionID string) store.SessionP
 		t.Fatalf("records = %+v, want exactly one", records)
 	}
 	return records[0]
+}
+
+func TestSessionPullRequestRefreshLeavesTheGardenIdleWithoutOpenPullRequests(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	d.ensureGardenCollections()
+	schema, err := d.seedsCollection()
+	if err != nil {
+		t.Fatalf("seeds collection: %v", err)
+	}
+	if _, err := d.store.PutDocument(*schema, "s-broken", []byte("[]"), time.Now(), nil); err != nil {
+		t.Fatalf("put unreadable seed: %v", err)
+	}
+	logPath := filepath.Join(t.TempDir(), "daemon.log")
+	logger, err := logging.New(logPath)
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	t.Cleanup(func() { _ = logger.Close() })
+	d.logger = logger
+
+	if fetched, changed := d.refreshSessionPullRequests(time.Now()); fetched != 0 || changed != 0 {
+		t.Fatalf("refresh = (%d fetched, %d changed), want no work", fetched, changed)
+	}
+	logBody, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read daemon log: %v", err)
+	}
+	if strings.Contains(string(logBody), "unreadable body") {
+		t.Fatalf("idle refresh read the Garden: %s", logBody)
+	}
 }
 
 func TestSessionPullRequestRefreshTracksGitHub(t *testing.T) {

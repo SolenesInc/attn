@@ -78,7 +78,11 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 	if d.store == nil {
 		return 0, 0
 	}
-	groups := d.dueSessionPullRequests(d.store.OpenSessionPullRequests(), d.armedPullRequestIDs(), now)
+	records := d.store.OpenSessionPullRequests()
+	if len(records) == 0 {
+		return 0, 0
+	}
+	groups := d.dueSessionPullRequests(records, d.armedPullRequestIDs(), now)
 	if len(groups) == 0 {
 		return 0, 0
 	}
