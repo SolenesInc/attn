@@ -1,14 +1,14 @@
 prefix_rule(
     pattern=["go", ["test", "list"]],
-    decision="allow",
-    justification="Trusted attn verification needs Go caches, loopback, and module access.",
+    decision="prompt",
+    justification="Go build flags can launch subprocesses; review the complete verification invocation.",
     match=["go test ./internal/daemon", "go list ./..."],
 )
 
 prefix_rule(
     pattern=["go", "run", ["./cmd/commentlint", "./cmd/changelog-check"]],
-    decision="allow",
-    justification="Trusted attn repository checks need Go caches and module access.",
+    decision="prompt",
+    justification="Runs mutable repository code with host cache and network access.",
     match=["go run ./cmd/commentlint ./...", "go run ./cmd/changelog-check"],
 )
 
@@ -28,8 +28,8 @@ prefix_rule(
 
 prefix_rule(
     pattern=["./scripts/test-go.sh"],
-    decision="allow",
-    justification="Trusted attn test wrapper needs host cache, temp, and loopback access.",
+    decision="prompt",
+    justification="Forwards arguments to Go tests and runs mutable repository code with host access.",
     match=["./scripts/test-go.sh", "./scripts/test-go.sh -v"],
 )
 
