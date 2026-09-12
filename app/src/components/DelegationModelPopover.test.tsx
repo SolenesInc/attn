@@ -11,6 +11,7 @@ const harnesses: DelegationHarness[] = [
   { id: 'copilot', name: 'Copilot', available: true, model_pin: false, effort_pin: false, discovery: false },
   { id: 'pi', name: 'Pi', available: true, model_pin: true, effort_pin: true, discovery: false },
   { id: 'plug', name: 'Plug', available: true, model_pin: false, effort_pin: true, discovery: false },
+  { id: 'socket', name: 'Socket', available: true, model_pin: false, effort_pin: true, discovery: false },
 ];
 const catalog: DelegationModelCatalog = { detail: 'Reported by Claude Code', models: [
   { harness: 'claude', provider: '', id: 'opus', name: 'Opus', description: 'Deep work', detail: '', effort_support: ModelCapabilitySupport.Supported, effort_levels: ['medium', 'high'], access: ModelCapabilitySupport.Unknown },
@@ -234,4 +235,26 @@ it('keeps focus on the effort level a keyboard user just picked', async () => {
   const pressed = screen.getByRole('button', { name: 'high' });
   expect(pressed).toHaveAttribute('aria-pressed', 'true');
   expect(document.activeElement).toBe(pressed);
+});
+
+it('starts the effort field empty when the harness changes under it', async () => {
+  const { onChange, rerender } = open({ harness: 'plug', provider: '', model: '', effort: '' });
+  fireEvent.change(screen.getByLabelText('Effort'), { target: { value: 'high' } });
+  fireEvent.click(screen.getByRole('option', { name: 'Socket' }));
+  expect(onChange).toHaveBeenLastCalledWith({ harness: 'socket', provider: '', model: '', effort: '' });
+  rerender({ harness: 'socket', provider: '', model: '', effort: '' });
+  const socketEffort = screen.getByLabelText('Effort');
+  expect(socketEffort).toHaveValue('');
+  fireEvent.blur(socketEffort);
+  expect(onChange).toHaveBeenCalledTimes(1);
+
+  rerender({ harness: 'claude', provider: '', model: '', effort: '' });
+  await screen.findByRole('option', { name: /Opus/ });
+  fireEvent.change(screen.getByLabelText('Effort'), { target: { value: 'max' } });
+  fireEvent.click(screen.getByRole('option', { name: 'Pi' }));
+  rerender({ harness: 'pi', provider: '', model: '', effort: '' });
+  const piEffort = screen.getByLabelText('Effort');
+  expect(piEffort).toHaveValue('');
+  fireEvent.blur(piEffort);
+  expect(onChange).toHaveBeenLastCalledWith({ harness: 'pi', provider: '', model: '', effort: '' });
 });

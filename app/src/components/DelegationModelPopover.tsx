@@ -41,6 +41,8 @@ function ModelList({ harness, catalog, loading, value, selected, onPick }: { har
   </div>;
 }
 
+const routeKey = (value: DelegationSelection) => `${value.harness}/${value.provider}/${value.model}`;
+
 function EffortField({ levels, value, onChange }: { levels: string[]; value: string; onChange: (effort: string) => void }) {
   return <div className="delegation-pop-effort">
     <span className="delegation-pop-kicker">Effort</span>
@@ -93,7 +95,7 @@ function ModelsPane({ harness, value, catalog, loading, error, manual, discover,
     <div className="delegation-pop-kicker"><span>Model</span>{harness.discovery && <button type="button" className="delegation-pop-refresh" disabled={loading} onClick={() => discover(true)}>refresh</button>}</div>
     <ModelList harness={harness} catalog={catalog} loading={loading} value={value} selected={selected} onPick={pickModel} />
     {error && <p className="delegation-pop-note warn" role="alert">{error}</p>}
-    {showEffort && <EffortField key={`${value.provider}/${value.model}`} levels={selected?.effort_levels ?? []} value={value.effort} onChange={effort => onChange({ ...value, effort })} />}
+    {showEffort && <EffortField key={routeKey(value)} levels={selected?.effort_levels ?? []} value={value.effort} onChange={effort => onChange({ ...value, effort })} />}
     {manual && <ManualEntry withProvider={isPluginHarness(harness)} onSubmit={(model, provider) => { onChange({ ...value, provider, model, effort: '' }); onDone(); }} />}
   </>;
 }
@@ -181,7 +183,7 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
       {harness && !pinnable && <>
         <div className="delegation-pop-kicker">Model</div>
         <p className="delegation-pop-note">{harness.name} uses the model selected in its own settings. Attn can't pin one here.</p>
-        {harness.effort_pin && <EffortField levels={[]} value={value.effort} onChange={effort => onChange({ ...value, effort })} />}
+        {harness.effort_pin && <EffortField key={routeKey(value)} levels={[]} value={value.effort} onChange={effort => onChange({ ...value, effort })} />}
       </>}
       {harness && pinnable && <ModelsPane harness={harness} value={value} catalog={catalog} loading={loading} error={error} manual={manual} discover={discover} onChange={onChange} onDone={() => setManual(false)} />}
     </div>
