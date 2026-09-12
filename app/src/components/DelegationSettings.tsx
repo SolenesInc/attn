@@ -100,7 +100,7 @@ function RoleEditor({ role, onUpdate }: { role: DelegationRole; onUpdate: (role:
   </>;
 }
 
-function AlternativeRow({ alt, harnesses, open, popoverOpen, onToggle, onOpenPopover, onUpdate, onRemove }: {
+function AlternativeRow({ alt, harnesses, open, popoverOpen, onToggle, onOpenPopover, onUpdate, onMakeDefault, onRemove }: {
   alt: DelegationChoice;
   harnesses: DelegationHarness[];
   open: boolean;
@@ -108,6 +108,7 @@ function AlternativeRow({ alt, harnesses, open, popoverOpen, onToggle, onOpenPop
   onToggle: () => void;
   onOpenPopover: (anchor: Anchor) => void;
   onUpdate: (choice: DelegationChoice) => void;
+  onMakeDefault: () => void;
   onRemove: () => void;
 }) {
   const name = alt.name || 'alternative';
@@ -125,6 +126,7 @@ function AlternativeRow({ alt, harnesses, open, popoverOpen, onToggle, onOpenPop
     {open && <div className="delegation-alt-edit">
       <TextField id={`altname-${alt.id}`} label="Name" value={alt.name} multiline={false} placeholder="Short label, shown to the agent with the condition" onCommit={next => onUpdate({ ...alt, name: next.trim() || 'Alternative' })} />
       <TextField id={`when-${alt.id}`} label="When to use this instead of the default" value={alt.when} placeholder="Describe the work this alternative fits. The agent reads this to decide, so say what it looks like and what it is not for." hint="Prose, as long as it needs to be. The first line is what the table shows." onCommit={next => onUpdate({ ...alt, when: next })} />
+      <div className="delegation-actions"><button type="button" className="settings-action quiet" onClick={onMakeDefault}>Make default</button></div>
     </div>}
   </div>;
 }
@@ -142,10 +144,11 @@ type RoleRowProps = {
   onUpdate: (role: DelegationRole) => void;
   onCopy: () => void;
   onDelete: () => void;
+  onMakeDefault: (alt: DelegationChoice) => void;
   onRemoveAlt: (alt: DelegationChoice) => void;
 };
 
-function RoleRow({ role, view: v, harnesses, open, expandedAlt, popoverKey, onToggle, onExpandAlt, onOpenPopover, onUpdate, onCopy, onDelete, onRemoveAlt }: RoleRowProps) {
+function RoleRow({ role, view: v, harnesses, open, expandedAlt, popoverKey, onToggle, onExpandAlt, onOpenPopover, onUpdate, onCopy, onDelete, onMakeDefault, onRemoveAlt }: RoleRowProps) {
   const main = defaultChoice(role);
   const alts = alternatives(role);
   const needs = role.enabled && !complete(main.selection);
@@ -180,7 +183,7 @@ function RoleRow({ role, view: v, harnesses, open, expandedAlt, popoverKey, onTo
           : <RoleEditor role={role} onUpdate={onUpdate} />}
       </div>
       {alts.map(alt => <AlternativeRow key={alt.id} alt={alt} harnesses={harnesses} open={expandedAlt === alt.id} popoverOpen={popoverKey === `${role.id}/${alt.id}`}
-        onToggle={() => onExpandAlt(expandedAlt === alt.id ? null : alt.id)} onOpenPopover={anchor => onOpenPopover(`${role.id}/${alt.id}`, anchor)} onUpdate={updateChoice} onRemove={() => onRemoveAlt(alt)} />)}
+        onToggle={() => onExpandAlt(expandedAlt === alt.id ? null : alt.id)} onOpenPopover={anchor => onOpenPopover(`${role.id}/${alt.id}`, anchor)} onUpdate={updateChoice} onMakeDefault={() => onMakeDefault(alt)} onRemove={() => onRemoveAlt(alt)} />)}
       <div className="delegation-alt add"><span /><button type="button" className="settings-action quiet" onClick={addAlternative}>+ Alternative model</button></div>
       <div className="delegation-details actions"><div className="delegation-actions">
         {readOnly && <button type="button" className="settings-action" onClick={onCopy}>Make an editable copy</button>}
@@ -312,6 +315,10 @@ export function DelegationSettings({ policy, loadModels }: { policy: DelegationP
     commitUndoable(withRoles(config.roles.filter(r => r.id !== role.id)), `Deleted ${view(role).name}`);
     rows.collapse();
   };
+  const makeDefault = (role: DelegationRole, alt: DelegationChoice) => {
+    commitUndoable(withRoles(config.roles.map(r => r.id === role.id ? { ...role, default_choice_id: alt.id } : r)), `Made ${alt.name || 'alternative'} the default for ${view(role).name}`);
+    rows.closeAlt(alt.id);
+  };
   const removeAlternative = (role: DelegationRole, alt: DelegationChoice) => {
     const name = alt.name || 'alternative';
     commitUndoable(withRoles(config.roles.map(r => r.id === role.id ? { ...role, choices: role.choices.filter(c => c.id !== alt.id) } : r)), `Removed ${name} from ${view(role).name}`);
@@ -334,7 +341,7 @@ export function DelegationSettings({ policy, loadModels }: { policy: DelegationP
       <div className="delegation-thead"><span /><span>Role</span><span>Runs on</span><span /></div>
       {config.roles.length === 0 && !adoption && <EmptyPanel canAdopt={missing.length > 0} onAdopt={adopt} onAdd={addRole} />}
       {config.roles.map(role => <RoleRow key={role.id} role={role} view={view(role)} harnesses={state.harnesses} open={rows.expanded === role.id} expandedAlt={rows.expandedAlt} popoverKey={picker.key}
-        onToggle={() => rows.toggle(role.id)} onExpandAlt={rows.setExpandedAlt} onOpenPopover={picker.open} onUpdate={updateRole} onCopy={() => copyRole(role)} onDelete={() => deleteRole(role)} onRemoveAlt={alt => removeAlternative(role, alt)} />)}
+        onToggle={() => rows.toggle(role.id)} onExpandAlt={rows.setExpandedAlt} onOpenPopover={picker.open} onUpdate={updateRole} onCopy={() => copyRole(role)} onDelete={() => deleteRole(role)} onMakeDefault={alt => makeDefault(role, alt)} onRemoveAlt={alt => removeAlternative(role, alt)} />)}
       <FallbackRow fallback={config.fallback} harnesses={state.harnesses} open={rows.expanded === FALLBACK} popoverOpen={picker.key === FALLBACK} onToggle={() => rows.toggle(FALLBACK)} onOpenPopover={anchor => picker.open(FALLBACK, anchor)} onChange={fallback => commit({ ...config, fallback })} />
       {config.roles.length > 0 && <AddRow config={config} missing={missing} onAdd={addRole} onAdopt={adopt} />}
     </div>

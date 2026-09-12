@@ -232,3 +232,25 @@ it('reloads the table, harnesses included, when the section is shown again while
   expect(await screen.findByRole('option', { name: 'Pi' })).toBeInTheDocument();
   expect(daemon.getCalls('save')).toHaveLength(0);
 });
+
+it('makes an alternative the default and keeps the former default as an alternative', async () => {
+  const everyday = { harness: 'codex', provider: '', model: 'model-a', effort: '' };
+  const careful = { harness: 'codex', provider: '', model: 'model-b', effort: 'high' };
+  const role: DelegationRole = { ...custom, choices: [{ id: 'default', name: 'Everyday', when: '', selection: everyday }, { id: 'careful', name: 'Hard verification', when: 'Verification is difficult.', selection: careful }] };
+  const { daemon, getState } = setup([role]);
+  fireEvent.click(await screen.findByRole('button', { name: 'Build' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Hard verification' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Make default' }));
+  await waitFor(() => expect(savesSoFar(daemon)).toBe(1));
+  const saved = getState().preferences.roles[0];
+  expect(saved.default_choice_id).toBe('careful');
+  expect(saved.choices.map(choice => choice.id)).toEqual(['default', 'careful']);
+  expect(screen.getByRole('button', { name: 'Everyday' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Hard verification' })).not.toBeInTheDocument();
+  expect(screen.getByText('No condition yet. The agent cannot pick this.')).toBeInTheDocument();
+  expect(screen.getByText('Made Hard verification the default for Build.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  await waitFor(() => expect(savesSoFar(daemon)).toBe(2));
+  expect(getState().preferences.roles[0].default_choice_id).toBe('default');
+  expect(daemon.getCalls('models')).toHaveLength(0);
+});

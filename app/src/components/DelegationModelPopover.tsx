@@ -125,23 +125,24 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
   };
   useEscapeStack(close, true);
 
-  useLayoutEffect(() => {
-    const place = () => {
-      const el = containerRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const at = anchor.getBoundingClientRect();
-      let top = at.bottom + 6;
-      let left = at.left;
-      if (left + rect.width > window.innerWidth - VIEWPORT_MARGIN) left = Math.max(VIEWPORT_MARGIN, window.innerWidth - rect.width - VIEWPORT_MARGIN);
-      if (top + rect.height > window.innerHeight - VIEWPORT_MARGIN) top = Math.max(VIEWPORT_MARGIN, at.top - rect.height - 6);
-      setPosition(current => current.top === top && current.left === left ? current : { top, left });
-    };
-    place();
+  const place = useEffectEvent(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const at = anchor.getBoundingClientRect();
+    let top = at.bottom + 6;
+    let left = at.left;
+    if (left + rect.width > window.innerWidth - VIEWPORT_MARGIN) left = Math.max(VIEWPORT_MARGIN, window.innerWidth - rect.width - VIEWPORT_MARGIN);
+    if (top + rect.height > window.innerHeight - VIEWPORT_MARGIN) top = Math.max(VIEWPORT_MARGIN, at.top - rect.height - 6);
+    setPosition(current => current.top === top && current.left === left ? current : { top, left });
+  });
+  // The pane grows and shrinks with what it shows; every commit places the dialog from its live size.
+  useLayoutEffect(() => { place(); });
+  useEffect(() => {
     window.addEventListener('resize', place);
     document.addEventListener('scroll', place, true);
     return () => { window.removeEventListener('resize', place); document.removeEventListener('scroll', place, true); };
-  }, [anchor, loading, manual]);
+  }, []);
 
   const opener = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {

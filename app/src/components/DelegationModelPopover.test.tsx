@@ -283,3 +283,17 @@ it('holds the effort editor until discovery settles for a model that is already 
   await act(async () => { resolveCatalog(structuredClone(catalog)); });
   expect(screen.getByRole('button', { name: 'high' })).toBeInTheDocument();
 });
+
+it('moves above its cell when what it shows grows past the bottom of the viewport', async () => {
+  rect.top = 700; rect.bottom = 730;
+  const size = { width: 320, height: 0 };
+  const { rerender } = open({ harness: 'claude', provider: '', model: '', effort: '' });
+  const dialog = await screen.findByRole('dialog', { name: 'Choose a model' });
+  dialog.getBoundingClientRect = () => ({ ...size, top: 0, left: 0, right: size.width, bottom: size.height, x: 0, y: 0, toJSON: () => size });
+  await screen.findByRole('option', { name: /Opus/ });
+  expect(dialog.style.top).toBe('736px');
+  size.height = 300;
+  rerender({ harness: 'claude', provider: '', model: 'opus', effort: '' });
+  expect(dialog.style.top).toBe('394px');
+  rect.top = 100; rect.bottom = 130;
+});
