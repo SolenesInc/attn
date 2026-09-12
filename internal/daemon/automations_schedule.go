@@ -149,7 +149,12 @@ func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefiniti
 	if continuity == "singleton" {
 		continuityKey = "singleton"
 	}
-	run, _, claimErr := d.store.ClaimScheduledAutomationRun(definition.ID, automation.ScheduledOccurrenceKey(intended), continuityKey, definition.Revision, string(payload), string(snapshotJSON), observedAt, newAutomationRunReservation())
+	reservation, claimErr := d.newAutomationRunReservation()
+	if claimErr != nil {
+		observationLock.Unlock()
+		return claimErr
+	}
+	run, _, claimErr := d.store.ClaimScheduledAutomationRun(definition.ID, automation.ScheduledOccurrenceKey(intended), continuityKey, definition.Revision, string(payload), string(snapshotJSON), observedAt, reservation)
 	observationLock.Unlock()
 	if claimErr != nil {
 		d.logf("automation schedule observation claim %s: %v", definition.ID, claimErr)

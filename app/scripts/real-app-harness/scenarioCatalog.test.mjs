@@ -142,6 +142,10 @@ describe('scenarioCatalog daemon isolation', () => {
       expect(resolveScenario(id).freshWorldAfter, id).toBe(true);
     }
   });
+
+  it('stops the daemon after exercising the shared PTY host', () => {
+    expect(resolveScenario('pty-host-setting').freshWorldAfter).toBe(true);
+  });
 });
 
 // A hand-rolled main() that never builds a runner arms no tripwire at all and

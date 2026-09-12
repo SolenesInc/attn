@@ -7,7 +7,7 @@ import net from 'node:net';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
-import { parseCommonArgs, printCommonHelp, launchFreshAppAndConnect, queryDaemonDb } from './common.mjs';
+import { parseCommonArgs, printCommonHelp, launchFreshAppAndConnect } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -261,11 +261,10 @@ async function main() {
   let mock = null;
   let daemonEnv = null;
   let sessionID = '';
-  let ticketID = '';
   let seedID = '';
   let worktree = '';
   let secondarySessionID = '';
-  let secondaryTicketID = '';
+  let secondarySeedID = '';
   let secondaryWorktree = '';
   try {
     mock = await runner.step('start_local_mock_github', async () => {
@@ -290,7 +289,7 @@ async function main() {
     await runner.step('launch_packaged_app', () => launchFreshAppAndConnect(client, observer));
     // A YAML carrying `enabled:` is rejected outright
     // (errEnabledManagedOutsideSpec in internal/automation/automation.go).
-    const definition = (id, name, model) => `api_version: attn.dev/automations/v1alpha1\nid: ${id}\nname: ${name}\ntrigger:\n  type: github_review_requested\n  repositories:\n    mode: all_accessible\n    include: [mock.github.local/owner/repo]\nprompt: |\n  Review only the local fixture and report in this ticket. Never write to GitHub.\nlaunch:\n  driver: codex\n  executable: ${JSON.stringify(probe.executable)}\n  model: ${model}\n  effort: high\nlocation:\n  type: repository_worktree\n  repository_sources:\n    default: {type: managed_cache}\n    overrides:\n      mock.github.local/owner/repo:\n        type: local_clone\n        path: ${JSON.stringify(fixture.repo)}\n`;
+    const definition = (id, name, model) => `api_version: attn.dev/automations/v1alpha1\nid: ${id}\nname: ${name}\ntrigger:\n  type: github_review_requested\n  repositories:\n    mode: all_accessible\n    include: [mock.github.local/owner/repo]\nprompt: |\n  Review only the local fixture and report on this seed. Never write to GitHub.\nlaunch:\n  driver: codex\n  executable: ${JSON.stringify(probe.executable)}\n  model: ${model}\n  effort: high\nlocation:\n  type: repository_worktree\n  repository_sources:\n    default: {type: managed_cache}\n    overrides:\n      mock.github.local/owner/repo:\n        type: local_clone\n        path: ${JSON.stringify(fixture.repo)}\n`;
     fs.writeFileSync(definitionFile, definition(definitionID, 'Slice 4 packaged continuity proof', 'gpt-5.6-sol'));
     fs.writeFileSync(secondaryDefinitionFile, definition(secondaryDefinitionID, 'Slice 4 secondary continuity proof', 'gpt-5.6-sol'));
     await runner.step('apply_definitions', async () => {
@@ -306,9 +305,9 @@ async function main() {
         return rows.find((row) => row.state === 'delivered') || null;
       }, 'initial delivered automation run', 45_000);
       sessionID = runRow.session_id;
-      ticketID = runRow.ticket_id;
+      seedID = runRow.seed_id;
       worktree = observer.getSession(sessionID)?.directory || path.join(dataDirForProfile(profile), 'automation', 'worktrees', sessionID, 'repo');
-      seedID = observer.getSession(sessionID)?.seed_id || '';
+      runner.assert(observer.getSession(sessionID)?.seed_id === seedID, 'the run and reviewer session point at the same seed');
       const firstLaunch = await poll(() => invocations(probe.log).length >= 1 ? invocations(probe.log)[0] : null, 'first Codex launch');
       const prompt = firstLaunch.argv.at(-1) || '';
       runner.assert(
@@ -328,12 +327,12 @@ async function main() {
         return rows.find((row) => row.state === 'delivered') || null;
       }, 'secondary delivered automation run', 45_000);
       secondarySessionID = secondaryRun.session_id;
-      secondaryTicketID = secondaryRun.ticket_id;
+      secondarySeedID = secondaryRun.seed_id;
       secondaryWorktree = observer.getSession(secondarySessionID)?.directory || path.join(dataDirForProfile(profile), 'automation', 'worktrees', secondarySessionID, 'repo');
       await poll(() => invocations(probe.log).length >= 2 ? invocations(probe.log) : null, 'two independent Codex launches');
       runner.assert(fs.existsSync(worktree), 'initial exact-SHA worktree exists', { worktree });
       runner.assert(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktree, encoding: 'utf8' }).trim() === fixture.sha, 'initial worktree is pinned to provider SHA');
-      runner.assert(secondarySessionID !== sessionID && secondaryTicketID !== ticketID, 'the two definitions own independent reviewer bindings');
+      runner.assert(secondarySessionID !== sessionID && secondarySeedID !== seedID, 'the two definitions own independent reviewer bindings');
       runner.assert(seedID.startsWith('s-'), 'the reviewer reports through a garden seed', { seedID });
     });
     await runner.step('continue_live_reviewer_on_new_head', async () => {
@@ -351,8 +350,8 @@ async function main() {
         const rows = runJSON(binary, ['automation', 'runs', secondaryDefinitionID], daemonEnv) || [];
         return rows.length >= 2 && rows[0].state === 'delivered' ? rows[0] : null;
       }, 'secondary changed-head continuation', 45_000);
-      runner.assert(row.session_id === sessionID && row.ticket_id === ticketID, 'changed head reuses the live reviewer session and ticket', row);
-      runner.assert(secondaryRow.session_id === secondarySessionID && secondaryRow.ticket_id === secondaryTicketID, 'changed head independently reuses the second reviewer binding', secondaryRow);
+      runner.assert(row.session_id === sessionID && row.seed_id === seedID, 'changed head reuses the live reviewer session and seed', row);
+      runner.assert(secondaryRow.session_id === secondarySessionID && secondaryRow.seed_id === secondarySeedID, 'changed head independently reuses the second reviewer binding', secondaryRow);
       runner.assert(invocations(probe.log).length === 2, 'changed head does not spawn another live reviewer for either definition', invocations(probe.log));
       runner.assert(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktree, encoding: 'utf8' }).trim() === fixture.sha, 'changed head does not move the reviewer-owned checkout');
       runner.assert(fs.readFileSync(path.join(worktree, 'review-notes.txt'), 'utf8').includes('preserve me'), 'dirty reviewer evidence survives changed-head delivery');
@@ -414,8 +413,6 @@ async function main() {
     await runner.step('seed_resume_and_stop_origin', async () => {
       await socketRequest(resources.socket, { cmd: 'set_session_resume_id', id: sessionID, resume_session_id: seed.id });
       run(binary, ['seed', 'harvest', seedID, '-m', 'first review complete', '--session', sessionID], daemonEnv);
-      const db = path.join(dataDirForProfile(profile), 'attn.db');
-      queryDaemonDb(db, `UPDATE tickets SET archived_at=datetime('now') WHERE id='${ticketID.replaceAll("'", "''")}';`);
       await client.request('close_session', { sessionId: sessionID });
       await observer.waitFor(() => !observer.getSession(sessionID) ? true : null, 'origin reviewer to unregister');
     });
@@ -432,13 +429,10 @@ async function main() {
       }, 'delivered continuation', 45_000);
       const calls = await poll(() => invocations(probe.log).length >= 3 ? invocations(probe.log) : null, 'Codex resume launch');
       const resumed = calls[2].argv;
-      runner.assert(row.session_id === sessionID && row.ticket_id === ticketID, 'continuation reuses the same session and ticket', row);
+      runner.assert(row.session_id === sessionID && row.seed_id === seedID, 'continuation reuses the same session and seed', row);
       runner.assert(resumed.includes('resume') && resumed.includes(seed.id), 'Codex receives the copied rollout id', { argv: resumed, rollout: seed.id });
       runner.assert(resumed.some((arg) => arg.includes('gpt-5.6-sol')) && resumed.some((arg) => arg.includes('high')), 'resume keeps pinned model and effort', { argv: resumed });
       runner.assert(fs.readFileSync(path.join(worktree, 'review-notes.txt'), 'utf8').includes('preserve me'), 'dirty reviewer work survives continuation');
-      const tickets = runJSON(binary, ['ticket', 'list', '--all', '--json'], daemonEnv);
-      const ticket = tickets.find((item) => item.id === ticketID);
-      runner.assert(ticket?.status === 'working' && !ticket.archived_at, 'successful continuation reopens and unarchives the ticket', ticket);
       const continuedSeed = runJSON(binary, ['seed', 'show', seedID, '--json'], daemonEnv)?.seed;
       runner.assert(continuedSeed?.status === 'growing' && continuedSeed?.tender_session === sessionID, 'successful continuation replants and retends the reviewer seed', continuedSeed);
       return row;
@@ -464,7 +458,7 @@ async function main() {
         const rows = runJSON(binary, ['automation', 'runs', definitionID], daemonEnv) || [];
         return rows.length >= 4 && rows[0].state === 'delivered' ? rows[0] : null;
       }, 'post-restart delivered continuation', 45_000);
-      runner.assert(row.session_id === sessionID && row.ticket_id === ticketID, 'post-restart continuation reuses the same session and ticket', row);
+      runner.assert(row.session_id === sessionID && row.seed_id === seedID, 'post-restart continuation reuses the same session and seed', row);
       const calls = await poll(() => invocations(probe.log).length >= 4 ? invocations(probe.log) : null, 'post-restart Codex resume launch');
       runner.assert(calls[3].argv.includes('resume'), 'post-restart launch resumes rather than starting fresh', { argv: calls[3].argv });
       runner.assert(fs.readFileSync(path.join(worktree, 'review-notes.txt'), 'utf8').includes('preserve me'), 'reviewer work survives the daemon restart');
@@ -483,9 +477,9 @@ async function main() {
       }, 'visible missing-worktree failure', 30_000);
       runner.assert(String(failed.last_error).includes('worktree') && String(failed.last_error).includes('missing'), 'missing delivered worktree fails without recreation', failed);
     });
-    await runner.finishSuccess({ profile, definitionID, sessionID, ticketID, seedID, worktree, seed, continuation });
+    await runner.finishSuccess({ profile, definitionID, sessionID, seedID, worktree, seed, continuation });
   } catch (error) {
-    await runner.finishFailure(error, { profile, definitionID, sessionID, ticketID, seedID, worktree, seed });
+    await runner.finishFailure(error, { profile, definitionID, sessionID, seedID, worktree, seed });
     throw error;
   } finally {
     await client.quitApp().catch(() => {});

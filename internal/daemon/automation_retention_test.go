@@ -26,7 +26,7 @@ func automationResolvedLocationJSON(t *testing.T, mainRepo, worktree string) str
 func claimTerminalAutomationRun(t *testing.T, s *store.Store, def *store.AutomationDefinition, requestID string, observedAt time.Time, resolvedLocationJSON string) *store.AutomationRun {
 	t.Helper()
 	run, created, err := s.ClaimManualAutomationRun(def.ID, requestID, "", `{}`, def.Revision, `{}`, observedAt, store.AutomationRunReservation{
-		RunID: "run-" + requestID, OccurrenceID: "occ-" + requestID, TicketID: "ticket-" + requestID, SessionID: "session-" + requestID, WorkspaceID: "workspace-" + requestID, PaneID: "pane-" + requestID,
+		RunID: "run-" + requestID, OccurrenceID: "occ-" + requestID, SeedID: "ticket-" + requestID, SessionID: "session-" + requestID, WorkspaceID: "workspace-" + requestID, PaneID: "pane-" + requestID,
 	})
 	if err != nil || !created {
 		t.Fatalf("claim %s created=%v err=%v", requestID, created, err)
@@ -90,7 +90,7 @@ func TestAutomationRetentionSweepPrunesCancelledRunsLikeFailed(t *testing.T) {
 	sweepAt := base.Add(48 * time.Hour)
 
 	run, created, err := s.ClaimManualAutomationRun(def.ID, "cancelled-1", "", `{}`, def.Revision, `{}`, base, store.AutomationRunReservation{
-		RunID: "run-cancelled-1", OccurrenceID: "occ-cancelled-1", TicketID: "ticket-cancelled-1", SessionID: "session-cancelled-1", WorkspaceID: "workspace-cancelled-1", PaneID: "pane-cancelled-1",
+		RunID: "run-cancelled-1", OccurrenceID: "occ-cancelled-1", SeedID: "ticket-cancelled-1", SessionID: "session-cancelled-1", WorkspaceID: "workspace-cancelled-1", PaneID: "pane-cancelled-1",
 	})
 	if err != nil || !created {
 		t.Fatalf("claim created=%v err=%v", created, err)
@@ -116,7 +116,7 @@ func TestAutomationRetentionSweepPendingRunsNeverPruned(t *testing.T) {
 	}
 	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 	run, created, err := s.ClaimManualAutomationRun(def.ID, "pending-1", "", `{}`, def.Revision, `{}`, old, store.AutomationRunReservation{
-		RunID: "run-pending-1", OccurrenceID: "occ-pending-1", TicketID: "ticket-pending-1", SessionID: "session-pending-1", WorkspaceID: "workspace-pending-1", PaneID: "pane-pending-1",
+		RunID: "run-pending-1", OccurrenceID: "occ-pending-1", SeedID: "ticket-pending-1", SessionID: "session-pending-1", WorkspaceID: "workspace-pending-1", PaneID: "pane-pending-1",
 	})
 	if err != nil || !created {
 		t.Fatalf("claim created=%v err=%v", created, err)

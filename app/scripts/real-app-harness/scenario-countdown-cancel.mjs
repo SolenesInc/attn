@@ -53,7 +53,7 @@ const IDLE_STATES = new Set(['idle', 'waiting_input']);
 const BUSY_RELEASE_FILE = 'busy-turn-release';
 const GENERIC_DOORBELL = '📬 You have unread items in your attn inbox. Run attn agent inbox to read them.';
 // Mirrors ticketNudgePrompt minus the leading emoji, which the grid can split.
-const LEGACY_ITEM_CORE = 'Activity on a ticket that predates the garden — run `attn ticket inbox` to read and acknowledge it.';
+const LEGACY_ITEM_CORE = 'Activity on a ticket that predates the garden. Run `attn ticket inbox` now. Read its output before responding.';
 
 const squashWs = (text) => text.replace(/\s+/g, '');
 

@@ -220,6 +220,7 @@ export const scenarioCatalog = [
     runnerId: 'PTY-HOST-SETTING',
     label: 'Experimental shared PTY opt-in preserves existing terminals',
     command: ['node', 'scripts/real-app-harness/scenario-pty-host-setting.mjs'],
+    freshWorldAfter: true,
   },
   {
     id: 'terminal-md-link',

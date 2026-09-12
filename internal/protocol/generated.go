@@ -1754,14 +1754,14 @@ type AutomationRunSummary struct {
 	// PaneID corresponds to the JSON schema field "pane_id".
 	PaneID *string `json:"pane_id,omitempty,omitzero"`
 
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID *string `json:"seed_id,omitempty,omitzero"`
+
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID *string `json:"session_id,omitempty,omitzero"`
 
 	// State corresponds to the JSON schema field "state".
 	State string `json:"state"`
-
-	// TicketID corresponds to the JSON schema field "ticket_id".
-	TicketID *string `json:"ticket_id,omitempty,omitzero"`
 
 	// UpdatedAt corresponds to the JSON schema field "updated_at".
 	UpdatedAt string `json:"updated_at"`

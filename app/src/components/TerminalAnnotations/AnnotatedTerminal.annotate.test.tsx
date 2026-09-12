@@ -726,7 +726,7 @@ describe('AnnotatedTerminal', () => {
 
     const box = screen.getByPlaceholderText('What should change here?') as HTMLTextAreaElement;
     expect(box.value).toBe('');
-    expect(document.activeElement).toBe(box);
+    await waitFor(() => expect(document.activeElement).toBe(box));
   });
 
   it('puts the caret after a prefilled comment rather than at its start', async () => {
@@ -743,7 +743,7 @@ describe('AnnotatedTerminal', () => {
     fireEvent.click(card().open);
 
     const box = screen.getByPlaceholderText('What should change here?') as HTMLTextAreaElement;
-    expect(document.activeElement).toBe(box);
+    await waitFor(() => expect(document.activeElement).toBe(box));
     expect(box.selectionStart).toBe('first take'.length);
   });
 
@@ -772,7 +772,7 @@ describe('AnnotatedTerminal', () => {
     anchor('turn-1', 0, 26);
     fireEvent.click(screen.getByLabelText('Write a comment'));
     const box = screen.getByPlaceholderText('What should change here?');
-    expect(document.activeElement).toBe(box);
+    await waitFor(() => expect(document.activeElement).toBe(box));
     fireEvent.change(box, { target: { value: 'say this' } });
 
     terminalFocusCalls = 0;

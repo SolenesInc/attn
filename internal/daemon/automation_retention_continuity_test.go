@@ -40,15 +40,12 @@ func TestAutomationRetentionSweepPreservesBoundThreadOriginRunAndContinuationSti
 
 	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 	origin, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:1", "singleton", def.Revision, `{}`, string(snapshotJSON), old, store.AutomationRunReservation{
-		RunID: "run-origin", OccurrenceID: "occ-origin", TicketID: "ticket-origin", SessionID: "session-origin", WorkspaceID: "workspace-origin", PaneID: "pane-origin",
+		RunID: "run-origin", OccurrenceID: "occ-origin", SeedID: "ticket-origin", SessionID: "session-origin", WorkspaceID: "workspace-origin", PaneID: "pane-origin",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := s.MarkAutomationRunDelivered(origin.ID, "{}", old); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.EnsureAutomationTicket(store.Ticket{ID: origin.TicketID, Title: "Nightly", Status: store.TicketStatusDone, Assignee: origin.SessionID, AutomationRunID: origin.ID}, "automation:nightly", store.TicketRoleChiefOfStaff, old); err != nil {
 		t.Fatal(err)
 	}
 
@@ -62,7 +59,7 @@ func TestAutomationRetentionSweepPreservesBoundThreadOriginRunAndContinuationSti
 	req := automation.WorkRequest{
 		RunID: "run-next", DefinitionID: def.ID, ContinuityKey: "singleton", Provider: "schedule",
 		Prompt: snapshot.Prompt, Launch: snapshot.Launch, Location: snapshot.Location,
-		IDs: automation.DeliveryIDs{TicketID: origin.TicketID, SessionID: origin.SessionID},
+		IDs: automation.DeliveryIDs{SeedID: origin.SeedID, SessionID: origin.SessionID},
 	}
 	resolvedOrigin, err := d.automationContinuationOrigin(req)
 	if err != nil {
@@ -111,7 +108,7 @@ func TestAutomationRetentionAndCleanupPreserveBoundThreadSharedWorktree(t *testi
 
 	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 	origin, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:1", "singleton", def.Revision, `{}`, string(snapshotJSON), old, store.AutomationRunReservation{
-		RunID: "run-origin", OccurrenceID: "occ-origin", TicketID: "ticket-origin", SessionID: "session-shared", WorkspaceID: "workspace-origin", PaneID: "pane-origin",
+		RunID: "run-origin", OccurrenceID: "occ-origin", SeedID: "ticket-origin", SessionID: "session-shared", WorkspaceID: "workspace-origin", PaneID: "pane-origin",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -119,18 +116,15 @@ func TestAutomationRetentionAndCleanupPreserveBoundThreadSharedWorktree(t *testi
 	if err := s.MarkAutomationRunDelivered(origin.ID, resolvedLocationJSON, old); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.EnsureAutomationTicket(store.Ticket{ID: origin.TicketID, Title: "Nightly", Status: store.TicketStatusDone, Assignee: origin.SessionID, AutomationRunID: origin.ID}, "automation:nightly", store.TicketRoleChiefOfStaff, old); err != nil {
-		t.Fatal(err)
-	}
 
 	second, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:2", "singleton", def.Revision, `{}`, string(snapshotJSON), old.Add(time.Minute), store.AutomationRunReservation{
-		RunID: "run-second", OccurrenceID: "occ-second", TicketID: "ticket-second", SessionID: "session-second", WorkspaceID: "workspace-second", PaneID: "pane-second",
+		RunID: "run-second", OccurrenceID: "occ-second", SeedID: "ticket-second", SessionID: "session-second", WorkspaceID: "workspace-second", PaneID: "pane-second",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.TicketID != origin.TicketID || second.SessionID != origin.SessionID {
-		t.Fatalf("expected the second occurrence to reuse the bound thread's ticket/session, got ticket=%q session=%q", second.TicketID, second.SessionID)
+	if second.SeedID != origin.SeedID || second.SessionID != origin.SessionID {
+		t.Fatalf("expected the second occurrence to reuse the bound thread's ticket/session, got ticket=%q session=%q", second.SeedID, second.SessionID)
 	}
 	if err := s.MarkAutomationRunDelivered(second.ID, resolvedLocationJSON, old.Add(time.Minute)); err != nil {
 		t.Fatal(err)

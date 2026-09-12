@@ -191,7 +191,13 @@ func (d *Daemon) observeGitHubReviewRequests(host string, prs []*protocol.PR, ob
 				observationLock.Unlock()
 				continue
 			}
-			run, _, err := d.store.ClaimGitHubReviewAutomationRun(definition.ID, candidate.SubjectKey, candidate.Cycle, definition.Revision, string(payload), string(snapshotJSON), observedAt, newAutomationRunReservation())
+			reservation, err := d.newAutomationRunReservation()
+			if err != nil {
+				observationLock.Unlock()
+				d.logf("automation GitHub observation reserve %s: %v", definition.ID, err)
+				continue
+			}
+			run, _, err := d.store.ClaimGitHubReviewAutomationRun(definition.ID, candidate.SubjectKey, candidate.Cycle, definition.Revision, string(payload), string(snapshotJSON), observedAt, reservation)
 			observationLock.Unlock()
 			if err != nil {
 				d.logf("automation GitHub observation claim %s: %v", candidate.SubjectKey, err)
@@ -254,12 +260,11 @@ func (d *Daemon) cancelWithdrawnAutomationRun(run *store.AutomationRun) error {
 	if run == nil {
 		return nil
 	}
-	ticket, ticketErr := d.store.GetTicket(run.TicketID)
-	if ticketErr != nil {
-		return ticketErr
+	continuation, err := d.automationRunIsContinuation(run)
+	if err != nil {
+		return err
 	}
-	// Continuation cycles reuse the delivered origin's session: a withdrawal must not tear down a reviewer already handed to the ordinary session lifecycle.
-	if ticket != nil && ticket.AutomationRunID == run.ID {
+	if !continuation {
 		if d.hasAutomationSession(run.SessionID) {
 			if err := d.terminateSessionChecked(run.SessionID, syscall.SIGTERM); err != nil {
 				return fmt.Errorf("stop withdrawn automation reviewer: %w", err)
@@ -267,19 +272,8 @@ func (d *Daemon) cancelWithdrawnAutomationRun(run *store.AutomationRun) error {
 			d.closeSession(run.SessionID, store.SessionClose{By: store.SessionClosedByUser, Reason: "review withdrawn"})
 		}
 	}
-	failureComment := automationFailureComment(run, ticket, automationReviewWithdrawnMessage)
 	if run.State == store.AutomationRunStateCancelled && run.CancelReason == store.AutomationCancelReasonReviewWithdrawn {
-		if ticket == nil || (ticket.AutomationRunID == run.ID && ticket.Status == store.TicketStatusFailed) {
-			return nil
-		}
-		if ticket.AutomationRunID != run.ID {
-			author := "automation:" + run.DefinitionID
-			for _, activity := range ticket.Activity {
-				if activity.Author == author && activity.Comment == failureComment {
-					return nil
-				}
-			}
-		}
+		return d.recordAutomationRunSeedOutcome(run, automationFailureComment(run, automationReviewWithdrawnMessage))
 	}
 	_, cancelErr := d.cancelAutomationRun(run, store.AutomationCancelReasonReviewWithdrawn, automationReviewWithdrawnMessage)
 	return cancelErr

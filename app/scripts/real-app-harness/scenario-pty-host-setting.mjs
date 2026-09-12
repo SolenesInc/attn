@@ -2,14 +2,15 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import {
   createSessionAndWaitForInitialPane,
   launchFreshAppAndConnect,
   parseCommonArgs,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { currentHarnessProfile, dataDirForProfile } from './harnessProfile.mjs';
-import { delay } from './platform.mjs';
+import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
+import { appDaemonInTree, delay } from './platform.mjs';
 import { waitForPaneAttached, waitForPaneShellReady, waitForPaneText } from './scenarioAssertions.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -23,11 +24,23 @@ async function main() {
   const profile = currentHarnessProfile();
   if (!profile) throw new Error('PTY host Settings verification requires a named, non-production profile');
   const dataDir = dataDirForProfile(profile);
+  const daemonBinary = appDaemonInTree(options.appPath);
+  const ptyHostBinary = path.join(path.dirname(daemonBinary), 'attn-pty-host');
   const runner = createScenarioRunner(options, {
     scenarioId: 'PTY-HOST-SETTING', tier: 'tier1-local-shell', prefix: 'pty-host-setting',
     allowRealAgents: false,
   });
-  const client = new UiAutomationClient(options);
+  const daemonEnv = profileCliEnv(profile, {
+    ATTN_PTY_HOST_BINARY: ptyHostBinary,
+    ATTN_WRAPPER_PATH: daemonBinary,
+  });
+  const client = new UiAutomationClient({
+    ...options,
+    launchEnv: {
+      ATTN_PTY_HOST_BINARY: ptyHostBinary,
+      ATTN_WRAPPER_PATH: daemonBinary,
+    },
+  });
   const observer = new DaemonObserver(options);
   const shells = [];
   let originalSetting = null;
@@ -103,6 +116,11 @@ async function main() {
 
   try {
     await runner.step('launch_and_default_off', async () => {
+      runner.assert(fs.existsSync(ptyHostBinary), 'packaged app contains the shared PTY host sidecar', {
+        ptyHostBinary,
+      });
+      execFileSync(daemonBinary, ['daemon', 'stop'], { env: daemonEnv, stdio: 'pipe' });
+      execFileSync(daemonBinary, ['daemon', 'ensure'], { env: daemonEnv, stdio: 'pipe' });
       await launchFreshAppAndConnect(client, observer);
       await client.request('dismiss_whats_new');
       originalSetting = observer.getSetting(KEY);

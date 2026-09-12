@@ -268,7 +268,7 @@ async function main() {
       const runs = currentRuns(state);
       runner.assert(runs.length === 1, 'exactly one run exists after a single run-now click', runs);
       runner.assert(runs[0].state === 'delivered', 'the run reached delivered', runs[0]);
-      runner.assert(runs[0].navigable === true, 'the delivered run is navigable (its ticket exists)', runs[0]);
+      runner.assert(runs[0].navigable === true, 'the delivered run is navigable through its session', runs[0]);
       firstRunId = runs[0].id;
       const daemonRuns = runJSON(binary, ['automation', 'runs', manualID], daemonEnv) || [];
       manualSessionID = daemonRuns.find((row) => row.id === firstRunId)?.session_id || '';

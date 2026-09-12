@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -1244,6 +1245,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{142, "add explicit delegation recovery facts", ""},
 	{143, "snapshot accepted delegation handovers", ""},
 	{144, "snapshot accepted delegation parents", ""},
+	{145, "move automation continuity from tickets to Garden seeds", ""},
 }
 
 const migration99SQL = `
@@ -1721,6 +1723,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 145 {
+			if err := applyMigration145(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else if m.version == 138 {
 			if _, err := tx.Exec(m.sql); err != nil {
 				tx.Rollback()
@@ -1770,6 +1777,170 @@ func migrateDB(db *sql.DB, dbPath string) error {
 	}
 
 	return nil
+}
+
+func applyMigration145(tx *sql.Tx) error {
+	runsExist, err := tableExists(tx, "automation_runs")
+	if err != nil || !runsExist {
+		return err
+	}
+	for _, change := range []struct {
+		table, column, sql string
+	}{
+		{"automation_runs", "seed_id", `ALTER TABLE automation_runs ADD COLUMN seed_id TEXT NOT NULL DEFAULT ''`},
+		{"automation_continuity_bindings", "seed_id", `ALTER TABLE automation_continuity_bindings ADD COLUMN seed_id TEXT NOT NULL DEFAULT ''`},
+		{"automation_continuity_bindings", "origin_run_id", `ALTER TABLE automation_continuity_bindings ADD COLUMN origin_run_id TEXT NOT NULL DEFAULT ''`},
+	} {
+		has, err := columnExists(tx, change.table, change.column)
+		if err != nil {
+			return err
+		}
+		if !has {
+			if _, err := tx.Exec(change.sql); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err := tx.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_automation_runs_seed_created
+			ON automation_runs(seed_id,created_at DESC,id DESC) WHERE seed_id<>'';
+		CREATE INDEX IF NOT EXISTS idx_automation_bindings_seed_active
+			ON automation_continuity_bindings(definition_id,seed_id) WHERE status='active' AND seed_id<>'';
+	`); err != nil {
+		return err
+	}
+
+	var dispatchCollectionID int64
+	err = tx.QueryRow(`SELECT id FROM document_collections WHERE namespace=? AND collection=?`, garden.Namespace, garden.CollectionDispatches).Scan(&dispatchCollectionID)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	if err == nil {
+		table := docstore.TableName(dispatchCollectionID)
+		for _, stmt := range []string{
+			fmt.Sprintf(`UPDATE automation_runs SET seed_id=COALESCE((SELECT json_extract(body,'$.crown') FROM %s WHERE id=automation_runs.session_id),'') WHERE seed_id=''`, table),
+			fmt.Sprintf(`UPDATE automation_continuity_bindings SET seed_id=COALESCE((SELECT json_extract(body,'$.crown') FROM %s WHERE id=automation_continuity_bindings.session_id),'') WHERE seed_id=''`, table),
+		} {
+			if _, err := tx.Exec(stmt); err != nil {
+				return err
+			}
+		}
+	}
+
+	if _, err := tx.Exec(`
+		UPDATE automation_continuity_bindings AS binding
+		SET origin_run_id=COALESCE(
+			(SELECT COALESCE(ticket.automation_run_id,'') FROM tickets AS ticket WHERE ticket.id=binding.ticket_id),
+			(SELECT run.id FROM automation_runs AS run WHERE run.ticket_id=binding.ticket_id ORDER BY run.created_at,run.id LIMIT 1),
+			''
+		)
+		WHERE origin_run_id=''
+	`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+		UPDATE automation_runs AS run
+		SET seed_id=COALESCE((
+			SELECT binding.seed_id FROM automation_continuity_bindings AS binding
+			WHERE binding.ticket_id=run.ticket_id AND binding.seed_id<>''
+			ORDER BY binding.created_at LIMIT 1
+		),'')
+		WHERE seed_id=''
+	`); err != nil {
+		return err
+	}
+
+	rows, err := tx.Query(`SELECT id,ticket_id FROM automation_continuity_bindings WHERE seed_id='' ORDER BY created_at,id`)
+	if err != nil {
+		return err
+	}
+	type emptyBinding struct{ id, ticketID string }
+	var bindings []emptyBinding
+	for rows.Next() {
+		var binding emptyBinding
+		if err := rows.Scan(&binding.id, &binding.ticketID); err != nil {
+			rows.Close()
+			return err
+		}
+		bindings = append(bindings, binding)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, binding := range bindings {
+		seedID, err := mintAutomationMigrationSeedID(tx)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE automation_continuity_bindings SET seed_id=? WHERE id=?`, seedID, binding.id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE automation_runs SET seed_id=? WHERE seed_id='' AND ticket_id=?`, seedID, binding.ticketID); err != nil {
+			return err
+		}
+	}
+
+	rows, err = tx.Query(`SELECT id FROM automation_runs WHERE seed_id='' ORDER BY created_at,id`)
+	if err != nil {
+		return err
+	}
+	var runIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		runIDs = append(runIDs, id)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, runID := range runIDs {
+		seedID, err := mintAutomationMigrationSeedID(tx)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE automation_runs SET seed_id=? WHERE id=?`, seedID, runID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func mintAutomationMigrationSeedID(tx *sql.Tx) (string, error) {
+	for range 10 {
+		seedID, err := garden.NewID()
+		if err != nil {
+			return "", err
+		}
+		var used int
+		if err := tx.QueryRow(`SELECT EXISTS(
+			SELECT 1 FROM automation_runs WHERE seed_id=?
+			UNION ALL SELECT 1 FROM automation_continuity_bindings WHERE seed_id=?
+		)`, seedID, seedID).Scan(&used); err != nil {
+			return "", err
+		}
+		if used == 0 {
+			var collectionID int64
+			err := tx.QueryRow(`SELECT id FROM document_collections WHERE namespace=? AND collection=?`, garden.Namespace, garden.CollectionSeeds).Scan(&collectionID)
+			switch err {
+			case sql.ErrNoRows:
+				return seedID, nil
+			case nil:
+				var planted int
+				if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM `+docstore.TableName(collectionID)+` WHERE id=?)`, seedID).Scan(&planted); err != nil {
+					return "", err
+				}
+				if planted == 0 {
+					return seedID, nil
+				}
+			default:
+				return "", err
+			}
+		}
+	}
+	return "", errors.New("could not mint an unused automation seed id")
 }
 
 func applyMigration121(tx *sql.Tx) error {

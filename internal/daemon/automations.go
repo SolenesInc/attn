@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/automation"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -58,7 +59,10 @@ func (d *Daemon) automationRun(ctx context.Context, definitionID, requestID, inp
 		subjectKey = pr.SubjectKey()
 	}
 	snapshotJSON, _ := json.Marshal(snapshot)
-	ids := newAutomationRunReservation()
+	ids, err := d.newAutomationRunReservation()
+	if err != nil {
+		return nil, err
+	}
 	run, _, err := d.store.ClaimManualAutomationRun(definitionID, requestID, subjectKey, canonicalInput, def.Revision, string(snapshotJSON), time.Now(), ids)
 	if err != nil {
 		return nil, err
@@ -78,9 +82,24 @@ func (d *Daemon) automationRun(ctx context.Context, definitionID, requestID, inp
 	}
 	return d.store.GetAutomationRun(run.ID)
 }
-func newAutomationRunReservation() store.AutomationRunReservation {
+func (d *Daemon) newAutomationRunReservation() (store.AutomationRunReservation, error) {
 	runID := uuid.NewString()
-	return store.AutomationRunReservation{RunID: runID, OccurrenceID: uuid.NewString(), TicketID: "auto-" + strings.ReplaceAll(runID[:18], "-", ""), SessionID: uuid.NewString(), WorkspaceID: "workspace-" + uuid.NewString(), PaneID: "pane-" + uuid.NewString()}
+	seedID, err := d.mintAutomationSeedID()
+	if err != nil {
+		return store.AutomationRunReservation{}, err
+	}
+	return store.AutomationRunReservation{RunID: runID, OccurrenceID: uuid.NewString(), SeedID: seedID, SessionID: uuid.NewString(), WorkspaceID: "workspace-" + uuid.NewString(), PaneID: "pane-" + uuid.NewString()}, nil
+}
+
+func (d *Daemon) mintAutomationSeedID() (string, error) {
+	schema, found, err := d.store.DocumentCollection(garden.Namespace, garden.CollectionSeeds)
+	if err != nil {
+		return "", err
+	}
+	if found {
+		return d.mintUnplantedSeedID(*schema)
+	}
+	return d.mintSeedID()
 }
 func (d *Daemon) automationObservationLock(definitionID, subjectKey string, cycle int) *sync.Mutex {
 	key := fmt.Sprintf("%s\x00%s\x00%d", definitionID, subjectKey, cycle)

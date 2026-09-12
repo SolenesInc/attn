@@ -55,7 +55,7 @@ func TestAutomationRunsGetWSResultCorrelatesRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	run, _, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, time.Now(), store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -96,7 +96,7 @@ func TestAutomationRunsGetWSResultTruncatesAtCap(t *testing.T) {
 		requestID := fmt.Sprintf("request-%d", i)
 		if _, _, err := s.ClaimManualAutomationRun(def.ID, requestID, "", `{}`, def.Revision, `{}`, time.Now(), store.AutomationRunReservation{
 			RunID: fmt.Sprintf("run-%d", i), OccurrenceID: fmt.Sprintf("occ-%d", i),
-			TicketID: fmt.Sprintf("ticket-%d", i), SessionID: fmt.Sprintf("session-%d", i),
+			SeedID: fmt.Sprintf("ticket-%d", i), SessionID: fmt.Sprintf("session-%d", i),
 			WorkspaceID: fmt.Sprintf("workspace-%d", i), PaneID: fmt.Sprintf("pane-%d", i),
 		}); err != nil {
 			t.Fatalf("claim %d: %v", i, err)
@@ -267,7 +267,7 @@ func TestAutomationRunWSResultCorrelatesRequest(t *testing.T) {
 	}
 	now := time.Now()
 	run, _, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -291,8 +291,8 @@ func TestAutomationRunWSResultCorrelatesRequest(t *testing.T) {
 	if res.Run == nil || res.Run.ID != run.ID {
 		t.Fatalf("run result run = %+v, want %s", res.Run, run.ID)
 	}
-	if res.Run.TicketID == nil || *res.Run.TicketID != run.TicketID || res.Run.SessionID == nil || *res.Run.SessionID != run.SessionID {
-		t.Fatalf("run result ticket/session = %+v, want %s/%s", res.Run, run.TicketID, run.SessionID)
+	if res.Run.SeedID == nil || *res.Run.SeedID != run.SeedID || res.Run.SessionID == nil || *res.Run.SessionID != run.SessionID {
+		t.Fatalf("run result ticket/session = %+v, want %s/%s", res.Run, run.SeedID, run.SessionID)
 	}
 }
 
@@ -868,7 +868,7 @@ func TestAutomationRunWSRetryWithSameRequestIDDoesNotDuplicate(t *testing.T) {
 	}
 	now := time.Now()
 	run, _, err := s.ClaimManualAutomationRun(def.ID, "retry-request", "", `{}`, def.Revision, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
 	})
 	if err != nil {
 		t.Fatal(err)

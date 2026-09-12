@@ -1,0 +1,3 @@
+kind: fixed
+area: automations
+change: Automations track work in Garden seeds without creating legacy tickets.
