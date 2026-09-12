@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
 import { DelegationSettings, DelegationSwitch } from './DelegationSettings';
-import { clearDelegationModelCatalogs } from './DelegationModelPopover';
+import { clearDelegationModelCatalogs } from '../hooks/useDelegationModelCatalog';
 import { useDelegationPreferences } from '../hooks/useDelegationPreferences';
 import { createMockDaemon } from '../test/mocks/daemon';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';

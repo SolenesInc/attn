@@ -1,7 +1,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { useState } from 'react';
-import { DelegationModelPopover, clearDelegationModelCatalogs } from './DelegationModelPopover';
+import { DelegationModelPopover } from './DelegationModelPopover';
+import { clearDelegationModelCatalogs } from '../hooks/useDelegationModelCatalog';
 import { ModelCapabilitySupport, type DelegationHarness, type DelegationSelection } from '../types/generated';
 import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
 

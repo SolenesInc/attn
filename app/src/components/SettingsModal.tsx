@@ -1,5 +1,6 @@
 import { SettingsAutosaveProvider, SettingsAutosaveStatus, useAutosaveSetting, useSettingsAutosave, type SaveSetting } from './SettingsAutosave';
-import { DelegationSettings, DelegationSwitch, delegationLiveCount } from './DelegationSettings';
+import { DelegationSettings, DelegationSwitch } from './DelegationSettings';
+import { delegationLiveCount } from './delegationRoles';
 import { useDelegationPreferences } from '../hooks/useDelegationPreferences';
 import { Fragment, forwardRef, useImperativeHandle, useState, useCallback, useEffect, useMemo, type ForwardedRef } from 'react';
 import { useEscapeStack } from '../hooks/useEscapeStack';

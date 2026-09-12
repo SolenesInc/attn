@@ -95,6 +95,7 @@ it('discards an edit made while the conflict reload is still loading', async () 
   expect(server().preferences.fallback.instructions).toBe('');
   expect(hook.result.current.preferences?.revision).toBe(1);
   expect(hook.result.current.preferences?.fallback.instructions).toBe('');
+  expect(hook.result.current.error).toContain('reload before saving');
 });
 
 it('drops local edits and reloads when the daemon reports a conflict', async () => {
