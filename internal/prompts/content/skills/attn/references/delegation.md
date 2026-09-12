@@ -38,7 +38,7 @@ attn delegate --seed s-example --handover --role orchestrator \
 
 Attn saves the note and transfers ownership before starting the successor. The previous agent remains running. Handover is the explicit transfer choice; there is no extra force/confirm flag. It does not grant permission beyond the user's authorized task. An ordinary progress note does not invalidate handover; a holder changing during preparation or the seed closing requires reconsidering the request.
 
-For a completed design, recommend an Orchestrator when stronger-model advice and oversight justify coordinating Builders; otherwise recommend a Builder. Carry forward authorization already given. Agreement on a plan alone does not authorize implementation.
+For a completed design, recommend an Orchestrator when the plan requires coordinated or reviewed Builder work, or benefits from mixing harnesses or models between the coordinating agent and its Builders; otherwise recommend a Builder. Follow the planning process's mandatory checkpoint: show the proposed plan and handoff, then wait for the user's choice even when their earlier request included execution. Agreement on a plan alone does not authorize implementation.
 
 ## Choose the folder and checkout
 
@@ -86,6 +86,8 @@ attn delegate --brief-file task.md --cwd /notes --fallback
 
 Use Attn's configured roles and choices by default. Honor an explicit user model/role request for that delegation without saving it as a preference. If standing instructions in AGENTS.md, skills or other files actually conflict with the configuration, explain that conflict and ask which should govern.
 
+Use the configured Reviewer role only when the user explicitly requests a separate Reviewer delegation; semantically equivalent wording counts even when they do not name the role. A request to review the current work assigns that review to the current agent, and a general requirement that implementation be reviewed remains the Orchestrator's responsibility. A Pathfinder or Orchestrator must not add a Reviewer to a plan proactively and treat later plan approval as authorization for that delegation.
+
 `--agent` chooses the harness. `--model` and `--effort` override the selected values. A model change retains role instructions and clears inherited effort unless explicitly supplied; a harness change clears inherited model/provider/effort. Use `default` to explicitly select a harness's model or effort default. `--provider` identifies a plugin model provider where supported; direct plugin selection uses its supported model identifier. Never silently substitute an unavailable model. Resolve ambiguous names before dispatch.
 
 For direct delegation, choose the model explicitly. Available harnesses, models and effort levels depend on configuration; use the catalog and command help rather than assuming universal levels.
@@ -107,4 +109,3 @@ Retry identical input with the same `--request-id` to retrieve or continue that 
 Launch failures leave transferred ownership and created worktrees/branches in place. Read the error's resource paths and current state, then explicitly reuse or remove the checkout. Attn does not restore the old owner or clean up the worktree automatically. An unknown outcome is not evidence that nothing started.
 
 When the delegate's work is complete and you no longer need its session, read the seed and use the close rules in `attn`'s conversation reference. A close is immediate; it is separate from harvesting the assignment.
-
