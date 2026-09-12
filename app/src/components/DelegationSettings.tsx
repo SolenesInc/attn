@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useState } from 'react';
 import type { DelegationChoice, DelegationPreferences, DelegationRole, DelegationSelection, DelegationHarness } from '../types/generated';
 import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
 import type { DelegationPreferencesPolicy } from '../hooks/useDelegationPreferences';
@@ -286,6 +286,8 @@ export function DelegationSettings({ policy, loadModels }: { policy: DelegationP
   const { undo, remember, forget } = useUndo(generation);
   const rows = useExpansion();
   const picker = useModelPopover();
+  const refreshOnReturn = useEffectEvent(() => { if (state) void reload(); });
+  useEffect(() => { refreshOnReturn(); }, []);
   if (!config || !state) return <LoadingState error={error} onRetry={() => void reload()} />;
 
   const view = roleViewer(state.expandedRoles);

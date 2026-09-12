@@ -194,3 +194,16 @@ it('closes when keyboard focus leaves it for a control behind it', async () => {
   fireEvent.blur(inside, { relatedTarget: screen.getByRole('button', { name: 'Behind' }) });
   expect(closed).toHaveBeenCalledTimes(1);
 });
+
+it('keeps focus inside when a click on its own padding drops focus to the body', async () => {
+  const closed = vi.fn();
+  render(<DelegationModelPopover value={{ harness: 'claude', provider: '', model: '', effort: '' }} harnesses={harnesses} anchor={anchor} onChange={vi.fn()} onClose={closed} loadModels={vi.fn(async () => structuredClone(catalog))} />);
+  await screen.findByRole('option', { name: /Opus/ });
+  const inside = screen.getByRole('option', { name: /Opus/ });
+  act(() => { inside.focus(); });
+  act(() => { inside.blur(); });
+  expect(document.activeElement).toBe(document.body);
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  expect(document.activeElement?.getAttribute('data-harness')).toBe('claude');
+  expect(closed).not.toHaveBeenCalled();
+});

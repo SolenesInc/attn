@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, expect, it } from 'vitest';
 import { DelegationSettings, DelegationSwitch } from './DelegationSettings';
 import { clearDelegationModelCatalogs } from '../hooks/useDelegationModelCatalog';
@@ -205,4 +206,29 @@ it('keeps the fallback row when the table has no roles', async () => {
   setup([], true);
   await screen.findByText('No roles yet');
   expect(screen.getByRole('button', { name: 'Model for anything else' })).toBeInTheDocument();
+});
+
+it('reloads the table, harnesses included, when the section is shown again while Settings stays open', async () => {
+  const daemon = createMockDaemon();
+  let harnesses = [{ id: 'codex', name: 'Codex', available: true, model_pin: true, effort_pin: true, discovery: true }];
+  daemon.setResponse('load', () => ({ preferences: { enabled: true, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: selection(), instructions: '' } }, templates: [], expandedRoles: [], workflowSkillPaths: [], harnesses }));
+  daemon.setResponse('models', { models: [], detail: '' });
+  const load = daemon.createRequest<DelegationSettingsState>('load');
+  const save = daemon.createRequest<DelegationSettingsState>('save');
+  const models = daemon.createRequest<DelegationModelCatalog>('models');
+  function Host() {
+    const policy = useDelegationPreferences(true, load, save);
+    const [shown, setShown] = useState(true);
+    return <><button type="button" onClick={() => setShown(s => !s)}>toggle</button>{shown && <DelegationSettings policy={policy} loadModels={models} />}</>;
+  }
+  render(<Host />);
+  await screen.findByRole('button', { name: 'Model for anything else' });
+  expect(daemon.getCalls('load')).toHaveLength(1);
+  harnesses = [...harnesses, { id: 'pi', name: 'Pi', available: true, model_pin: true, effort_pin: true, discovery: false }];
+  fireEvent.click(screen.getByRole('button', { name: 'toggle' }));
+  fireEvent.click(screen.getByRole('button', { name: 'toggle' }));
+  await waitFor(() => expect(daemon.getCalls('load')).toHaveLength(2));
+  fireEvent.click(await screen.findByRole('button', { name: 'Model for anything else' }));
+  expect(await screen.findByRole('option', { name: 'Pi' })).toBeInTheDocument();
+  expect(daemon.getCalls('save')).toHaveLength(0);
 });
