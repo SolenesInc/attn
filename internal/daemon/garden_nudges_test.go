@@ -8,8 +8,33 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/protocol"
 )
+
+func TestSeedNudges_RemoteTenderStopsAtTheHomeFence(t *testing.T) {
+	d := newGardenDaemon(t)
+	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
+	endpoint, err := d.hubManager.AddEndpoint("gpu-box", "gpu.example.test", "")
+	if err != nil {
+		t.Fatalf("add outpost: %v", err)
+	}
+	if !d.hubManager.ReplaceRemoteSessions(endpoint.ID, []protocol.Session{{ID: "remote-worker"}}) {
+		t.Fatal("remote session was not registered")
+	}
+	seed := garden.Seed{ID: "s-remote", TenderSession: "remote-worker"}
+
+	sessionID, err := d.localGardenTenderSession(seed.Tender())
+	if err == nil || sessionID != "" || !strings.Contains(err.Error(), "garden notifications are home-only") ||
+		!strings.Contains(err.Error(), "remote-worker") || !strings.Contains(err.Error(), endpoint.ID) {
+		t.Fatalf("remote tender = %q, %v; want a named home-only refusal", sessionID, err)
+	}
+
+	d.ringSeedUnblocked([]garden.Seed{seed})
+	if queued := queuedSeedBells(t, d, "remote-worker"); len(queued) != 0 {
+		t.Fatalf("home queued a bell for a remote tender: %q", queued)
+	}
+}
 
 func TestSeedNudges_InjectionLeavesTheBellUnreadUntilShow(t *testing.T) {
 	fixture := newSeededNudgeGarden(t)

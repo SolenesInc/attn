@@ -47,7 +47,7 @@ func (d *Daemon) ringSeedUnblocked(unblocked []garden.Seed, excludedSessionIDs .
 	}
 	delete(excluded, "")
 	for _, seed := range unblocked {
-		sessionID, err := d.tenderSession(seed.Tender())
+		sessionID, err := d.localGardenTenderSession(seed.Tender())
 		if err != nil {
 			d.logf("garden bell: resolving the tender for unblocked seed %s: %v", seed.ID, err)
 			continue
@@ -59,15 +59,27 @@ func (d *Daemon) ringSeedUnblocked(unblocked []garden.Seed, excludedSessionIDs .
 	}
 }
 
-func (d *Daemon) tenderSession(tender garden.Tender) (string, error) {
-	if session := strings.TrimSpace(tender.Session); session != "" {
-		if d.sessionExists(session) {
-			return session, nil
+func (d *Daemon) localGardenTenderSession(tender garden.Tender) (string, error) {
+	sessionID := strings.TrimSpace(tender.Session)
+	if sessionID == "" {
+		if member := strings.TrimSpace(tender.Member); member != "" {
+			var err error
+			sessionID, err = d.crewSessionBoundTo(member)
+			if err != nil {
+				return "", err
+			}
 		}
+	}
+	if sessionID == "" {
 		return "", nil
 	}
-	if member := strings.TrimSpace(tender.Member); member != "" {
-		return d.crewSessionBoundTo(member)
+	if d.store != nil && (d.store.Get(sessionID) != nil || d.store.DelegationSessionReserved(sessionID)) {
+		return sessionID, nil
+	}
+	if d.hubManager != nil {
+		if endpointID, remote := d.hubManager.EndpointIDForSession(sessionID); remote {
+			return "", fmt.Errorf("garden notifications are home-only; cannot notify tender session %s on outpost %s", sessionID, endpointID)
+		}
 	}
 	return "", nil
 }
@@ -230,7 +242,7 @@ func (d *Daemon) unblockedSeedTenderedBy(item store.GardenSeedMailboxItem, sessi
 	if err != nil {
 		return false, fmt.Errorf("read unblocked seed %s for %s: %w", item.SeedID, sessionID, err)
 	}
-	tenderSessionID, err := d.tenderSession(seed.Tender())
+	tenderSessionID, err := d.localGardenTenderSession(seed.Tender())
 	if err != nil {
 		return false, fmt.Errorf("resolve the tender for unblocked seed %s: %w", item.SeedID, err)
 	}
