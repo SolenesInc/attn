@@ -17,6 +17,7 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
   const flight = useRef<Promise<void> | null>(null);
   const pending = useRef<Pending | null>(null);
   const request = useRef(0);
+  const deferred = useRef(false);
 
   const apply = useCallback((next: DelegationSettingsState) => {
     revision.current = next.preferences.revision;
@@ -37,7 +38,12 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
     }
   }, [load, apply]);
 
-  const reload = useCallback(async () => { setError(''); await fetch(); }, [fetch]);
+  const reload = useCallback(async () => {
+    // A load that lands mid-save carries a table older than the queued edit; it runs once the save drains.
+    if (flight.current) { deferred.current = true; return; }
+    setError('');
+    await fetch();
+  }, [fetch]);
 
   useEffect(() => { if (active && !flight.current && !pending.current) void reload(); }, [active, pushed, reload]);
   useEffect(() => () => { request.current++; }, []);
@@ -74,7 +80,8 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
       setBusy(false);
       // A push that landed during the flight was not acted on; a newer revision than ours needs a load.
       const announced = useDelegationPreferencesPush.getState().revision;
-      if (announced !== null && announced > revision.current) void fetch();
+      const stale = announced !== null && announced > revision.current;
+      if (deferred.current || stale) { deferred.current = false; void fetch(); }
     });
     return flight.current;
   }, [drain, fetch]);

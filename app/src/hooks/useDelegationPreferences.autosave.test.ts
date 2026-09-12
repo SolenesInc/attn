@@ -15,9 +15,12 @@ function setup() {
   let releaseLoad: (() => void) | null = null;
   daemon.setResponse('load', async () => { if (releaseLoad) await new Promise<void>(resolve => { const r = releaseLoad; releaseLoad = () => { resolve(); r?.(); }; }); return structuredClone(server); });
   let release: (() => void) | null = null;
+  let holding = false;
+  const held: (() => void)[] = [];
   daemon.setResponse('save', async (args: unknown[]) => {
     const value = args[0] as DelegationPreferences;
     if (release === null) await new Promise<void>(resolve => { release = resolve; });
+    else if (holding) await new Promise<void>(resolve => { held.push(resolve); });
     if (value.revision !== server.preferences.revision) throw new Error('delegation preferences changed; reload before saving or choosing a role');
     server = { ...server, preferences: { ...structuredClone(value), revision: value.revision + 1 } };
     return structuredClone(server);
@@ -25,7 +28,7 @@ function setup() {
   const load = daemon.createRequest<DelegationSettingsState>('load');
   const save = daemon.createRequest<DelegationSettingsState>('save');
   const hook = renderHook(() => useDelegationPreferences(true, load, save));
-  return { daemon, hook, server: () => server, bump: () => { server = { ...server, preferences: { ...server.preferences, revision: server.preferences.revision + 1 } }; }, releaseFirst: () => { const r = release; release = () => {}; r?.(); }, holdLoads: () => { releaseLoad = () => {}; return () => { const r = releaseLoad; releaseLoad = null; r?.(); }; } };
+  return { daemon, hook, server: () => server, bump: () => { server = { ...server, preferences: { ...server.preferences, revision: server.preferences.revision + 1 } }; }, releaseFirst: () => { const r = release; release = () => {}; r?.(); }, holdLoads: () => { releaseLoad = () => {}; return () => { const r = releaseLoad; releaseLoad = null; r?.(); }; }, holdSaves: () => { holding = true; return () => { holding = false; held.splice(0).forEach(resolve => resolve()); }; } };
 }
 
 afterEach(() => useDelegationPreferencesPush.getState().clear());
@@ -119,4 +122,25 @@ it('reloads on a push while idle', async () => {
   await waitFor(() => expect(hook.result.current.preferences?.revision).toBe(1));
   expect(daemon.getCalls('load')).toHaveLength(2);
   expect(daemon.getCalls('save')).toHaveLength(0);
+});
+
+it('defers a reload asked for during a save until the save drains, so a queued edit is not rolled back or overwritten', async () => {
+  const { daemon, hook, server, releaseFirst, holdLoads, holdSaves } = setup();
+  await waitFor(() => expect(hook.result.current.preferences).not.toBeNull());
+  const releaseLoad = holdLoads();
+  const releaseSave = holdSaves();
+  act(() => { void hook.result.current.save(preferences(0, 'one')); });
+  act(() => { void hook.result.current.reload(); });
+  act(() => { void hook.result.current.save(preferences(0, 'two')); });
+  releaseFirst();
+  await waitFor(() => expect(daemon.getCalls('save')).toHaveLength(2));
+  await act(async () => { releaseLoad(); });
+  expect(hook.result.current.preferences?.fallback.instructions).toBe('two');
+  const current = hook.result.current.preferences!;
+  act(() => { void hook.result.current.save({ ...current, fallback: { ...current.fallback, instructions: current.fallback.instructions + '!' } }); });
+  releaseSave();
+  await waitFor(() => expect(hook.result.current.busy).toBe(false));
+  expect(server().preferences.fallback.instructions).toBe('two!');
+  expect(hook.result.current.preferences?.fallback.instructions).toBe('two!');
+  expect(daemon.getCalls('load')).toHaveLength(2);
 });
