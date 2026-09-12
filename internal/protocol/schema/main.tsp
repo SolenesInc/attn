@@ -6095,14 +6095,11 @@ model AutoModeDenialInfo {
 
 model AutoModeShowMessage {
   "cmd": "automode_show";
-  // Resolve repository rules from this directory. Absent means global only.
   "cwd"?: string;
 }
 
 model AutoModeShowResult {
-  // Effective config for cwd: shipped, daemon-owned global, then repository.
   "config": AutoModeConfigInfo;
-  // Shipped and daemon-owned rules before repository rules are appended.
   "global_rules": AutoModeRuleInfo[];
   "repository_rules": AutoModeRuleInfo[];
   "repository_rules_path"?: string;
@@ -6215,7 +6212,6 @@ model AutoModeRuleAddMessage {
   pattern: string[];
   // Absent means "allow", Codex's default.
   decision?: string;
-  // Absent preserves the old behavior: allow bypasses; prompt inherits.
   sandbox?: string;
   justification?: string;
   request_id: string;

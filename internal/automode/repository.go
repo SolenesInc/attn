@@ -147,9 +147,16 @@ func repositoryRuleMatches(rule Rule, command []string) bool {
 		word := command[i]
 		matched := false
 		for _, alternative := range token.Alternatives {
-			if alternative == word || (i == 0 && filepath.Base(filepath.Clean(word)) == alternative) {
+			if alternative == word {
 				matched = true
 				break
+			}
+			if i == 0 {
+				name, ok := repositoryExecutableName(word)
+				if ok && name == alternative {
+					matched = true
+					break
+				}
 			}
 		}
 		if !matched {
@@ -157,6 +164,28 @@ func repositoryRuleMatches(rule Rule, command []string) bool {
 		}
 	}
 	return true
+}
+
+func repositoryExecutableName(program string) (string, bool) {
+	if !strings.Contains(program, "/") {
+		return "", false
+	}
+	components := make([]string, 0, strings.Count(program, "/")+1)
+	for _, component := range strings.Split(program, "/") {
+		switch component {
+		case "", ".":
+		case "..":
+			if len(components) > 0 {
+				components = components[:len(components)-1]
+			}
+		default:
+			components = append(components, component)
+		}
+	}
+	if len(components) == 0 {
+		return "", false
+	}
+	return components[len(components)-1], true
 }
 
 func expectRepositoryRulesEOF(decoder *json.Decoder) error {

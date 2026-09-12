@@ -124,6 +124,42 @@ func TestLoadRepositoryRulesRejectsBlankExamplePrograms(t *testing.T) {
 	}
 }
 
+func TestRepositoryRuleMatchesPiProgramPathNormalization(t *testing.T) {
+	rule := NormalizeRule(Rule{Pattern: Tokens("rm"), Decision: DecisionPrompt})
+	for _, program := range []string{"~/bin/rm", "/usr/bin/../bin/rm", "../rm", "bin/./rm"} {
+		if !repositoryRuleMatches(rule, []string{program}) {
+			t.Errorf("%q did not match rm", program)
+		}
+	}
+	for _, program := range []string{"/..", "dir/..", "/usr/bin/rmdir"} {
+		if repositoryRuleMatches(rule, []string{program}) {
+			t.Errorf("%q matched rm", program)
+		}
+	}
+	if repositoryRuleMatches(NormalizeRule(Rule{Pattern: Tokens("."), Decision: DecisionPrompt}), []string{"dir/.."}) {
+		t.Error("a path with no executable name matched a dot rule")
+	}
+}
+
+func TestRepositoryRuleMatchesPiExecutablePathNormalization(t *testing.T) {
+	rule := NormalizeRule(Rule{Pattern: Tokens("rm"), Decision: DecisionPrompt})
+	for program, want := range map[string]bool{
+		"~/bin/rm":           true,
+		"/usr/bin/../bin/rm": true,
+		"../rm":              true,
+		"bin/./rm":           true,
+		"/..":                false,
+		"dir/..":             false,
+		"/usr/bin/rmdir":     false,
+	} {
+		t.Run(program, func(t *testing.T) {
+			if got := repositoryRuleMatches(rule, []string{program}); got != want {
+				t.Fatalf("repositoryRuleMatches(%q) = %v, want %v", program, got, want)
+			}
+		})
+	}
+}
+
 func TestLoadRepositoryRulesOutsideRepositoryIsEmpty(t *testing.T) {
 	loaded, err := LoadRepositoryRules(t.TempDir())
 	if err != nil || loaded.Path != "" || len(loaded.Rules) != 0 {
