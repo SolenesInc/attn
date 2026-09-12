@@ -13,10 +13,13 @@ const custom: DelegationRole = { id: 'build', name: 'Build', icon: 'code', enabl
 const template: DelegationRole = { ...custom, id: 'builder', builtin: BuiltinDelegationRole.Builder, name: '', icon: '', description: '', instructions: '', stopping_point: '' };
 const expandedTemplate: DelegationRole = { ...template, name: 'Builder', icon: 'code', description: 'Implement a change\nSecond line', instructions: 'Run relevant tests', stopping_point: 'Return for review' };
 
+// The daemon overlays maintained guidance on a configured role and lists configured roles before templates.
+const expand = (role: DelegationRole): DelegationRole => role.builtin ? { ...role, name: expandedTemplate.name, icon: expandedTemplate.icon, description: expandedTemplate.description, instructions: expandedTemplate.instructions, stopping_point: expandedTemplate.stopping_point } : role;
+
 function setup(roles: DelegationRole[] = [], enabled = roles.length > 0) {
   let state: DelegationSettingsState = {
     preferences: { enabled, revision: 0, workflow_skill_enabled: false, roles, fallback: { selection: selection(), instructions: '' } },
-    templates: [template], expandedRoles: [...roles, expandedTemplate], workflowSkillPaths: [],
+    templates: [template], expandedRoles: [...roles.map(expand), expandedTemplate], workflowSkillPaths: [],
     harnesses: [{ id: 'codex', name: 'Codex', available: true, model_pin: true, effort_pin: true, discovery: true }],
   };
   const daemon = createMockDaemon();
@@ -24,7 +27,7 @@ function setup(roles: DelegationRole[] = [], enabled = roles.length > 0) {
   daemon.setResponse('save', (args: unknown[]) => {
     const value = args[0] as DelegationPreferences;
     if (value.revision !== state.preferences.revision) throw new Error('delegation preferences changed; reload before saving or choosing a role');
-    state = { ...state, preferences: { ...structuredClone(value), revision: value.revision + 1 }, expandedRoles: [...value.roles.map(role => role.builtin ? { ...expandedTemplate, id: role.id } : role), expandedTemplate] };
+    state = { ...state, preferences: { ...structuredClone(value), revision: value.revision + 1 }, expandedRoles: [...value.roles.map(expand), expandedTemplate] };
     return structuredClone(state);
   });
   daemon.setResponse('models', { models: [{ harness: 'codex', provider: '', id: 'model-a', name: 'Everyday model', description: '', detail: '', effort_support: 'supported', effort_levels: ['medium', 'high'], access: 'unknown' }], detail: 'Reported by Codex' });
@@ -40,6 +43,37 @@ function setup(roles: DelegationRole[] = [], enabled = roles.length > 0) {
 const savesSoFar = (daemon: ReturnType<typeof createMockDaemon>) => daemon.getCalls('save').length;
 
 afterEach(() => { cleanup(); useDelegationPreferencesPush.getState().clear(); clearDelegationModelCatalogs(); });
+
+it('copies a maintained role with its configured model and state, not the template', async () => {
+  const configured: DelegationRole = { ...template, enabled: false, choices: [{ id: 'default', name: 'Default', when: '', selection: { harness: 'codex', provider: '', model: 'model-a', effort: 'high' } }] };
+  const { daemon, getState } = setup([configured]);
+  fireEvent.click(await screen.findByRole('button', { name: 'Builder' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Make an editable copy' }));
+  await waitFor(() => expect(savesSoFar(daemon)).toBe(1));
+  const copy = getState().preferences.roles[1];
+  expect(copy.builtin).toBeUndefined();
+  expect(copy.name).toBe('Builder (custom)');
+  expect(copy.instructions).toBe('Run relevant tests');
+  expect(copy.enabled).toBe(false);
+  expect(copy.choices[0].selection).toEqual({ harness: 'codex', provider: '', model: 'model-a', effort: 'high' });
+});
+
+it('keeps a focused draft when a change made elsewhere reloads the table, and saves it on blur', async () => {
+  const { daemon, getState, bump } = setup([custom]);
+  fireEvent.click(await screen.findByRole('button', { name: 'Build' }));
+  const field = screen.getByLabelText('Instructions') as HTMLTextAreaElement;
+  fireEvent.focus(field);
+  fireEvent.change(field, { target: { value: 'Typed here' } });
+  getState().preferences.roles[0].instructions = 'Changed elsewhere';
+  bump();
+  act(() => useDelegationPreferencesPush.getState().push(1));
+  await waitFor(() => expect(daemon.getCalls('load')).toHaveLength(2));
+  expect(field.value).toBe('Typed here');
+  fireEvent.blur(field);
+  await waitFor(() => expect(savesSoFar(daemon)).toBe(1));
+  expect((daemon.getCalls('save')[0].args[0] as DelegationPreferences).revision).toBe(1);
+  expect(getState().preferences.roles[0].instructions).toBe('Typed here');
+});
 
 it('adopts maintained roles from the empty state with the install flag and shows their guidance read-only', async () => {
   const { daemon, getState } = setup();

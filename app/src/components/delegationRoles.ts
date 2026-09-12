@@ -23,8 +23,10 @@ export function selectionAt(config: DelegationPreferences, key: string): { value
 }
 
 // A maintained role renders through the daemon's expanded view; a custom role is its own view.
+// The daemon lists configured roles before templates, and an adopted role shares its template's key.
 export function roleViewer(expandedRoles: DelegationRole[]) {
-  const views = new Map(expandedRoles.map(role => [roleViewKey(role), role]));
+  const views = new Map<string, DelegationRole>();
+  for (const role of expandedRoles) if (!views.has(roleViewKey(role))) views.set(roleViewKey(role), role);
   return (role: DelegationRole) => role.builtin ? views.get(roleViewKey(role)) ?? role : role;
 }
 export const roleLabel = (view: DelegationRole) => view.name || view.builtin || view.id;

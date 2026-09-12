@@ -66,13 +66,20 @@ function ModelCell({ selection, harnesses, label, open, onOpen }: { selection: D
   </button>;
 }
 
+// A draft exists only while the field is focused, so a reload made elsewhere cannot replace what is being typed.
 function TextField({ id: fieldID, label, value, onCommit, placeholder, hint, multiline = true, note }: { id: string; label: string; value: string; onCommit: (value: string) => void; placeholder?: string; hint?: string; multiline?: boolean; note?: string }) {
-  const commit = (next: string) => { if (next !== value) onCommit(next); };
+  const [draft, setDraft] = useState<string | null>(null);
+  const field = {
+    id: fieldID, value: draft ?? value, placeholder,
+    onFocus: () => setDraft(value),
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setDraft(e.target.value),
+    onBlur: () => { if (draft !== null && draft !== value) onCommit(draft); setDraft(null); },
+  };
   return <div className="delegation-field">
     <label htmlFor={fieldID}>{label}{note && <span className="delegation-field-note">{note}</span>}</label>
     {multiline
-      ? <textarea id={fieldID} key={value} defaultValue={value} placeholder={placeholder} onBlur={e => commit(e.target.value)} />
-      : <input id={fieldID} key={value} defaultValue={value} placeholder={placeholder} onBlur={e => commit(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />}
+      ? <textarea {...field} />
+      : <input {...field} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />}
     {hint && <span className="delegation-hint">{hint}</span>}
   </div>;
 }
@@ -295,7 +302,7 @@ export function DelegationSettings({ policy, loadModels }: { policy: DelegationP
   };
   const copyRole = (role: DelegationRole) => {
     const v = view(role);
-    const copy: DelegationRole = { ...structuredClone(v), id: newID('role'), builtin: undefined, name: `${v.name} (custom)` };
+    const copy: DelegationRole = { ...structuredClone(v), id: newID('role'), builtin: undefined, name: `${v.name} (custom)`, enabled: role.enabled, default_choice_id: role.default_choice_id, choices: structuredClone(role.choices) };
     const index = config.roles.findIndex(r => r.id === role.id);
     commit(withRoles([...config.roles.slice(0, index + 1), copy, ...config.roles.slice(index + 1)]));
     rows.expand(copy.id);
