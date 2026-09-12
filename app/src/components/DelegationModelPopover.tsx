@@ -158,7 +158,11 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
   const pinnable = harness?.model_pin ?? false;
 
   // Portal: the settings modal is transformed, which would make a fixed popover position against it.
-  return createPortal(<dialog open ref={containerRef} className="delegation-pop" aria-label="Choose a model" style={{ top: position.top, left: position.left }}>
+  const onFocusOut = (event: React.FocusEvent<HTMLDialogElement>) => {
+    const next = event.relatedTarget;
+    if (next instanceof Node && !event.currentTarget.contains(next)) onClose();
+  };
+  return createPortal(<dialog open ref={containerRef} className="delegation-pop" aria-label="Choose a model" style={{ top: position.top, left: position.left }} onBlur={onFocusOut}>
     <HarnessList harnesses={harnesses} value={value.harness} onPick={pickHarness} onClear={clearHarness} />
     <div className="delegation-pop-models">
       {!harness && <p className="delegation-pop-note">Pick a harness to see its models. None leaves this route unset.</p>}

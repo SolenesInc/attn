@@ -182,3 +182,15 @@ it('offers effort for a harness that picks its own model, and for a harness defa
   fireEvent.blur(claudeEffort);
   expect(onChange).toHaveBeenLastCalledWith({ harness: 'claude', provider: '', model: '', effort: 'max' });
 });
+
+it('closes when keyboard focus leaves it for a control behind it', async () => {
+  const closed = vi.fn();
+  render(<><button type="button">Behind</button><DelegationModelPopover value={{ harness: 'claude', provider: '', model: '', effort: '' }} harnesses={harnesses} anchor={anchor} onChange={vi.fn()} onClose={closed} loadModels={vi.fn(async () => structuredClone(catalog))} /></>);
+  await screen.findByRole('option', { name: /Opus/ });
+  const inside = screen.getByRole('option', { name: /Opus/ });
+  act(() => { inside.focus(); });
+  fireEvent.blur(inside, { relatedTarget: screen.getByRole('button', { name: 'refresh' }) });
+  expect(closed).not.toHaveBeenCalled();
+  fireEvent.blur(inside, { relatedTarget: screen.getByRole('button', { name: 'Behind' }) });
+  expect(closed).toHaveBeenCalledTimes(1);
+});
