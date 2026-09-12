@@ -228,6 +228,9 @@ func (d *Daemon) unblockedSeedTenderedBy(item store.GardenSeedMailboxItem, sessi
 	if item.EventKind != gardenRingUnblocked {
 		return false, nil
 	}
+	if d.requireHome(garden.Surface) != nil {
+		return true, nil
+	}
 	seed, _, err := d.readSeed(item.SeedID)
 	if err != nil {
 		return false, fmt.Errorf("read unblocked seed %s for %s: %w", item.SeedID, sessionID, err)

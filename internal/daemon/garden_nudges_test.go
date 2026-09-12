@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -175,6 +176,9 @@ func TestSeedNudges_DispatcherHearsTheDelegatesHarvest(t *testing.T) {
 func TestSeedNudges_UnblockedBellLivesWithItsRemoteTender(t *testing.T) {
 	fixture := newSeededNudgeGarden(t)
 	outpost := startAgentCloseOutpost(t, fixture.d, remoteAgentCloseSession("remote-tender", "Remote tender"))
+	if _, err := enrollment.Enroll(outpost.dataRoot, fixture.d.daemonInstanceID); err != nil {
+		t.Fatalf("enroll the remote daemon as an outpost: %v", err)
+	}
 	remoteSeed := garden.Seed{ID: "s-remote", TenderSession: "remote-tender"}
 
 	fixture.d.ringSeedUnblocked([]garden.Seed{remoteSeed})
@@ -185,6 +189,16 @@ func TestSeedNudges_UnblockedBellLivesWithItsRemoteTender(t *testing.T) {
 	})
 	if items, err := fixture.d.store.UnreadGardenSeedMailboxItems("remote-tender"); err != nil || len(items) != 0 {
 		t.Fatalf("home mailbox items = %+v err=%v, want none for an outpost-owned session", items, err)
+	}
+	resp := callAgentInboxBatch(t, outpost, "remote-tender", 10)
+	if !resp.Ok || resp.AgentInboxBatchResult == nil || len(resp.AgentInboxBatchResult.Items) != 1 {
+		t.Fatalf("outpost inbox = %+v error=%q, want the forwarded bell", resp, protocol.Deref(resp.Error))
+	}
+	if got := resp.AgentInboxBatchResult.Items[0].Content; !strings.Contains(got, remoteSeed.ID+" moved: "+gardenRingUnblocked) {
+		t.Fatalf("outpost inbox content = %q, want the unblocked seed", got)
+	}
+	if items, err := outpost.store.UnreadGardenSeedMailboxItems("remote-tender"); err != nil || len(items) != 0 {
+		t.Fatalf("outpost unread items after inbox = %+v err=%v, want none", items, err)
 	}
 }
 
