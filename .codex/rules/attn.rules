@@ -1,0 +1,67 @@
+prefix_rule(
+    pattern=["go", ["test", "list"]],
+    decision="prompt",
+    justification="Go build flags can launch subprocesses; review the complete verification invocation.",
+    match=["go test ./internal/daemon", "go list ./..."],
+)
+
+prefix_rule(
+    pattern=["go", "run", ["./cmd/commentlint", "./cmd/changelog-check", "./cmd/prompt-editor"]],
+    decision="prompt",
+    justification="Runs mutable repository code with host cache and network access.",
+    match=[
+        "go run ./cmd/commentlint ./...",
+        "go run ./cmd/changelog-check",
+        "go run ./cmd/prompt-editor context crew/priming --json",
+    ],
+)
+
+prefix_rule(
+    pattern=["make", ["test", "test-frontend", "test-e2e", "test-all", "test-harness", "lint"]],
+    decision="prompt",
+    justification="Make accepts additional targets and recipe overrides; review the complete invocation.",
+    match=[
+        "make test",
+        "make test-frontend",
+        "make test-e2e",
+        "make test-all",
+        "make test-harness",
+        "make lint",
+    ],
+)
+
+prefix_rule(
+    pattern=["./scripts/test-go.sh"],
+    decision="prompt",
+    justification="Forwards arguments to Go tests and runs mutable repository code with host access.",
+    match=["./scripts/test-go.sh", "./scripts/test-go.sh -v"],
+)
+
+prefix_rule(
+    pattern=["make", [
+        "third_party/ghostty-vt/darwin_arm64/lib/libghostty-vt.a",
+        "third_party/ghostty-vt/linux_amd64/lib/libghostty-vt.a",
+        "third_party/ghostty-vt/linux_arm64/lib/libghostty-vt.a",
+    ]],
+    decision="prompt",
+    justification="Fetch a pinned native VT artifact after reviewing the complete Make invocation.",
+    match=[
+        "make third_party/ghostty-vt/darwin_arm64/lib/libghostty-vt.a",
+        "make third_party/ghostty-vt/linux_amd64/lib/libghostty-vt.a",
+        "make third_party/ghostty-vt/linux_arm64/lib/libghostty-vt.a",
+    ],
+)
+
+prefix_rule(
+    pattern=["make", ["generate-types", "check-types"]],
+    decision="prompt",
+    justification="Installs generators and overwrites generated Go and TypeScript files.",
+    match=["make generate-types", "make check-types"],
+)
+
+prefix_rule(
+    pattern=["pnpm", "--dir", "internal/protocol/schema", "install"],
+    decision="prompt",
+    justification="Installs packages and may execute dependency lifecycle scripts.",
+    match=["pnpm --dir internal/protocol/schema install"],
+)
