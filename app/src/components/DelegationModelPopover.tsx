@@ -41,6 +41,10 @@ function ModelList({ harness, catalog, loading, value, selected, onPick }: { har
   </div>;
 }
 
+function focusInside(dialog: HTMLDialogElement) {
+  (dialog.querySelector<HTMLElement>('.delegation-pop-harness[aria-selected="true"]') ?? dialog.querySelector<HTMLElement>('.delegation-pop-harness') ?? dialog.querySelector<HTMLElement>('button, input'))?.focus();
+}
+
 const routeKey = (value: DelegationSelection) => `${value.harness}/${value.provider}/${value.model}`;
 
 function EffortField({ levels, value, onChange }: { levels: string[]; value: string; onChange: (effort: string) => void }) {
@@ -84,7 +88,7 @@ function ModelsPane({ harness, value, catalog, loading, error, manual, discover,
   onDone: () => void;
 }) {
   const selected = catalog?.models.find(m => m.id === value.model && m.provider === value.provider);
-  const showEffort = harness.effort_pin && selected?.effort_support !== 'unsupported';
+  const showEffort = harness.effort_pin && !loading && selected?.effort_support !== 'unsupported';
   const pickModel = (model: DelegationModel | null) => {
     onDone();
     if (!model) { onChange({ ...value, provider: '', model: '', effort: '' }); return; }
@@ -139,12 +143,18 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
     return () => { window.removeEventListener('resize', place); document.removeEventListener('scroll', place, true); };
   }, [anchor, loading, manual]);
 
-  useEffect(() => {
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const list = containerRef.current;
-    (list?.querySelector<HTMLButtonElement>('.delegation-pop-harness[aria-selected="true"]') ?? list?.querySelector<HTMLButtonElement>('.delegation-pop-harness'))?.focus();
-    return () => { if (!document.activeElement || document.activeElement === document.body) opener?.focus(); };
+  const opener = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (containerRef.current) focusInside(containerRef.current);
   }, []);
+  useEffect(() => () => { if (!document.activeElement || document.activeElement === document.body) opener.current?.focus(); }, []);
+
+  // A re-render that removes the focused control fires no blur; focus would land behind the open picker.
+  useLayoutEffect(() => {
+    const dialog = containerRef.current;
+    if (dialog && !dialog.contains(document.activeElement)) focusInside(dialog);
+  });
 
   const onMouseDown = useEffectEvent((event: MouseEvent) => {
     if (containerRef.current && !containerRef.current.contains(event.target as Node)) close();
@@ -172,8 +182,7 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
     const next = event.relatedTarget;
     if (next instanceof Node) { if (!dialog.contains(next)) onClose(); return; }
     window.setTimeout(() => {
-      if (!dialog.isConnected || dialog.contains(document.activeElement)) return;
-      (dialog.querySelector<HTMLElement>('.delegation-pop-harness[aria-selected="true"]') ?? dialog.querySelector<HTMLElement>('button, input'))?.focus();
+      if (dialog.isConnected && !dialog.contains(document.activeElement)) focusInside(dialog);
     }, 0);
   };
   return createPortal(<dialog open ref={containerRef} className="delegation-pop" aria-label="Choose a model" style={{ top: position.top, left: position.left }} onBlur={onFocusOut}>

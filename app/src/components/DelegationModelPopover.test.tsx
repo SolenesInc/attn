@@ -258,3 +258,28 @@ it('starts the effort field empty when the harness changes under it', async () =
   fireEvent.blur(piEffort);
   expect(onChange).toHaveBeenLastCalledWith({ harness: 'pi', provider: '', model: '', effort: '' });
 });
+
+it('keeps focus inside after a manual model is submitted', async () => {
+  const { onChange, onClose, rerender } = open({ harness: 'claude', provider: '', model: '', effort: '' });
+  await screen.findByRole('option', { name: /Opus/ });
+  fireEvent.click(screen.getByRole('button', { name: 'Enter a model ID' }));
+  fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'claude-next' } });
+  const use = screen.getByRole('button', { name: 'Use it' });
+  act(() => { use.focus(); });
+  fireEvent.click(use);
+  expect(onChange).toHaveBeenLastCalledWith({ harness: 'claude', provider: '', model: 'claude-next', effort: '' });
+  rerender({ harness: 'claude', provider: '', model: 'claude-next', effort: '' });
+  expect(screen.queryByRole('button', { name: 'Use it' })).toBeNull();
+  expect(screen.getByRole('dialog', { name: 'Choose a model' }).contains(document.activeElement)).toBe(true);
+  expect(onClose).not.toHaveBeenCalled();
+});
+
+it('holds the effort editor until discovery settles for a model that is already pinned', async () => {
+  let resolveCatalog: (next: typeof catalog) => void = () => {};
+  const loadModels = vi.fn(() => new Promise<typeof catalog>(resolve => { resolveCatalog = resolve; }));
+  render(<DelegationModelPopover value={{ harness: 'claude', provider: '', model: 'opus', effort: '' }} harnesses={harnesses} anchor={anchor} onChange={vi.fn()} onClose={vi.fn()} loadModels={loadModels} />);
+  expect(loadModels).toHaveBeenCalledTimes(1);
+  expect(screen.queryByLabelText('Effort')).toBeNull();
+  await act(async () => { resolveCatalog(structuredClone(catalog)); });
+  expect(screen.getByRole('button', { name: 'high' })).toBeInTheDocument();
+});
