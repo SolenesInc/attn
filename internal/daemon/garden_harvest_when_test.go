@@ -84,10 +84,14 @@ func TestArmedSeedsAreReadPastTheSnapshotPage(t *testing.T) {
 	}
 	for i := 0; i < gardenSnapshotLimit+1; i++ {
 		id := fmt.Sprintf("s-%06d", i)
+		pr := "github.com:victorarias/attn#275"
+		if i == gardenSnapshotLimit {
+			pr = "github.com:victorarias/attn#276"
+		}
 		seed := garden.Seed{
 			ID: id, Title: id, StepSlug: id, Status: garden.StatusPlanted,
 			StateChangedAt: "2026-09-12T00:00:00Z", Edges: []garden.Edge{}, Vars: []garden.Var{},
-			HarvestWhen: &garden.HarvestCondition{PullRequest: "github.com:victorarias/attn#275"},
+			HarvestWhen: &garden.HarvestCondition{PullRequest: pr},
 		}
 		body, encodeErr := seed.Encode()
 		if encodeErr != nil {
@@ -107,6 +111,27 @@ func TestArmedSeedsAreReadPastTheSnapshotPage(t *testing.T) {
 	}
 	if got := seeds[len(seeds)-1].ID; got != fmt.Sprintf("s-%06d", gardenSnapshotLimit) {
 		t.Fatalf("last armed seed is %s", got)
+	}
+}
+
+func TestArmedSeedsQueryUsesThePullRequestIndex(t *testing.T) {
+	d := newGardenDaemon(t)
+	schema, err := d.seedsCollection()
+	if err != nil {
+		t.Fatalf("seeds collection: %v", err)
+	}
+	compiled, err := armedSeedsQuery("").Compile(*schema, nil)
+	if err != nil {
+		t.Fatalf("compile armed seeds query: %v", err)
+	}
+	plan, err := d.store.QueryPlan(compiled)
+	if err != nil {
+		t.Fatalf("armed seeds query plan: %v", err)
+	}
+	joined := strings.Join(plan, "\n")
+	index := schema.Table + "_f_harvest_when_pull_request"
+	if !strings.Contains(joined, "SEARCH "+schema.Table) || !strings.Contains(joined, index) {
+		t.Fatalf("armed seeds query did not use %s:\n%s", index, joined)
 	}
 }
 

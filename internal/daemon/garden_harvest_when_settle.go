@@ -48,13 +48,7 @@ func (d *Daemon) armedSeeds() ([]garden.Seed, error) {
 	seeds := []garden.Seed{}
 	after := ""
 	for {
-		read, _, err := d.runDocQuery(docstore.Query{
-			Namespace:  garden.Namespace,
-			Collection: garden.CollectionSeeds,
-			Filters:    []docstore.Filter{{Field: garden.HarvestWhenPullRequestField, Op: docstore.OpGt, Value: ""}},
-			Limit:      gardenSnapshotLimit,
-			After:      after,
-		})
+		read, _, err := d.runDocQuery(armedSeedsQuery(after))
 		if err != nil {
 			return nil, err
 		}
@@ -73,6 +67,17 @@ func (d *Daemon) armedSeeds() ([]garden.Seed, error) {
 			return seeds, nil
 		}
 		after = read.Documents[len(read.Documents)-1].ID
+	}
+}
+
+func armedSeedsQuery(after string) docstore.Query {
+	return docstore.Query{
+		Namespace:  garden.Namespace,
+		Collection: garden.CollectionSeeds,
+		Filters:    []docstore.Filter{{Field: garden.HarvestWhenPullRequestField, Op: docstore.OpGt, Value: ""}},
+		Sort:       &docstore.Sort{Field: garden.HarvestWhenPullRequestField},
+		Limit:      gardenSnapshotLimit,
+		After:      after,
 	}
 }
 
