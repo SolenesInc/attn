@@ -1173,12 +1173,6 @@ model DelegateMessage {
   agent?: string;
   label?: string;
   yolo_mode?: boolean;
-  // Per-session override of the daemon's auto-mode `approval_policy` /
-  // `sandbox_mode`, for an agent whose driver advertises `auto_mode`. Absent
-  // means "follow the daemon config"; the values are the same sets as the
-  // auto-mode config carries. Each may be given without the other.
-  approval_policy?: string;
-  sandbox_mode?: string;
   `model`?: string; // Pin the delegated agent's model (alias or full id); empty = agent default
   effort?: string; // Pin the delegated agent's reasoning effort; empty = agent default
   allow_worktree_reuse?: boolean; // Exceptional opt-in to share an existing worktree

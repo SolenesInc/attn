@@ -17,6 +17,11 @@ func (m *DelegateMessage) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("delegate field %q is retired; use assignment, cwd, and checkout", name)
 		}
 	}
+	for _, name := range []string{"approval_policy", "sandbox_mode"} {
+		if _, found := fields[name]; found {
+			return fmt.Errorf("delegate field %q is retired; a delegation follows the daemon auto-mode config", name)
+		}
+	}
 	type plain DelegateMessage
 	return json.Unmarshal(data, (*plain)(m))
 }

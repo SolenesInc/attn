@@ -3069,7 +3069,6 @@ export interface DelegateHandover {
 export interface DelegateMessage {
     agent?:                string;
     allow_worktree_reuse?: boolean;
-    approval_policy?:      string;
     assignment:            Assignment;
     checkout?:             Checkout;
     choice?:               string;
@@ -3083,7 +3082,6 @@ export interface DelegateMessage {
     request_id:            string;
     review?:               DelegateMessageReview;
     role?:                 string;
-    sandbox_mode?:         string;
     source_session_id?:    string;
     yolo_mode?:            boolean;
     [property: string]: any;
@@ -17870,7 +17868,6 @@ const typeMap: any = {
     "DelegateMessage": o([
         { json: "agent", js: "agent", typ: u(undefined, "") },
         { json: "allow_worktree_reuse", js: "allow_worktree_reuse", typ: u(undefined, true) },
-        { json: "approval_policy", js: "approval_policy", typ: u(undefined, "") },
         { json: "assignment", js: "assignment", typ: r("Assignment") },
         { json: "checkout", js: "checkout", typ: u(undefined, r("Checkout")) },
         { json: "choice", js: "choice", typ: u(undefined, "") },
@@ -17884,7 +17881,6 @@ const typeMap: any = {
         { json: "request_id", js: "request_id", typ: "" },
         { json: "review", js: "review", typ: u(undefined, r("DelegateMessageReview")) },
         { json: "role", js: "role", typ: u(undefined, "") },
-        { json: "sandbox_mode", js: "sandbox_mode", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
         { json: "yolo_mode", js: "yolo_mode", typ: u(undefined, true) },
     ], "any"),

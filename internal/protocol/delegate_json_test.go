@@ -7,7 +7,7 @@ import (
 )
 
 func TestDelegateMessageRejectsRetiredWireFields(t *testing.T) {
-	for _, field := range []string{"brief", "ticket_id", "confirm", "placement", "workspace_id", "worktree", "plot", "handover", "preferences_revision"} {
+	for _, field := range []string{"brief", "ticket_id", "confirm", "placement", "workspace_id", "worktree", "plot", "handover", "preferences_revision", "approval_policy", "sandbox_mode"} {
 		body := `{"cmd":"delegate","request_id":"mixed","assignment":{"kind":"new","brief":"work"},"cwd":"/tmp","` + field + `":null}`
 		var msg DelegateMessage
 		err := json.Unmarshal([]byte(body), &msg)
