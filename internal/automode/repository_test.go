@@ -36,10 +36,10 @@ func TestLoadRepositoryRulesFromCheckoutRoot(t *testing.T) {
 	}
 }
 
-func TestLoadRepositoryRulesUsesLegacySandboxDefaults(t *testing.T) {
+func TestLoadRepositoryRulesAllowsSandboxedAllowAndLegacyPrompt(t *testing.T) {
 	root := initRulesRepository(t)
 	writeRepositoryRules(t, root, `{"rules":[
-  {"pattern":["go","test"],"decision":"allow"},
+  {"pattern":["go","test"],"decision":"allow","sandbox":"inherit"},
   {"pattern":["git","push"],"decision":"prompt"}
 ]}`)
 
@@ -47,8 +47,23 @@ func TestLoadRepositoryRulesUsesLegacySandboxDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Rules[0].Sandbox != RuleSandboxBypass || loaded.Rules[1].Sandbox != RuleSandboxInherit {
+	if loaded.Rules[0].Sandbox != RuleSandboxInherit || loaded.Rules[1].Sandbox != RuleSandboxInherit {
 		t.Fatalf("legacy defaults = %+v", loaded.Rules)
+	}
+}
+
+func TestLoadRepositoryRulesRejectsUnreviewedSandboxBypass(t *testing.T) {
+	for _, sandbox := range []string{"", `,"sandbox":"bypass"`} {
+		root := initRulesRepository(t)
+		writeRepositoryRules(t, root, `{"rules":[{
+  "pattern":["go","test"],"decision":"allow"`+sandbox+`
+}]}`)
+
+		_, err := LoadRepositoryRules(root)
+		if err == nil || !strings.Contains(err.Error(), "rule 1") ||
+			!strings.Contains(err.Error(), "allow cannot bypass the sandbox") {
+			t.Fatalf("error = %v", err)
+		}
 	}
 }
 
@@ -130,12 +145,12 @@ func TestLoadRepositoryRulesPropagatesCheckoutDiscoveryErrors(t *testing.T) {
 
 func TestLoadRepositoryRulesReadsTheActiveWorktree(t *testing.T) {
 	root := initRulesRepository(t)
-	writeRepositoryRules(t, root, `{"rules":[{"pattern":["go","test"]}]}`)
+	writeRepositoryRules(t, root, `{"rules":[{"pattern":["go","test"],"decision":"prompt","sandbox":"bypass"}]}`)
 	runRulesGit(t, root, "add", RepositoryRulesFile)
 	runRulesGit(t, root, "-c", "user.name=attn test", "-c", "user.email=attn@example.test", "commit", "-qm", "rules")
 	worktree := filepath.Join(t.TempDir(), "checkout")
 	runRulesGit(t, root, "worktree", "add", "--detach", worktree)
-	writeRepositoryRules(t, worktree, `{"rules":[{"pattern":["go","list"]}]}`)
+	writeRepositoryRules(t, worktree, `{"rules":[{"pattern":["go","list"],"decision":"prompt","sandbox":"bypass"}]}`)
 
 	loaded, err := LoadRepositoryRules(worktree)
 	if err != nil {

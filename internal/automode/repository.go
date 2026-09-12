@@ -64,6 +64,12 @@ func LoadRepositoryRules(cwd string) (RepositoryRules, error) {
 		if err := ValidateRule(document.Rules[i]); err != nil {
 			return RepositoryRules{}, fmt.Errorf("read repository auto-mode rules %s: rule %d: %w", path, i+1, err)
 		}
+		if document.Rules[i].Decision == DecisionAllow && document.Rules[i].Sandbox == RuleSandboxBypass {
+			return RepositoryRules{}, fmt.Errorf(
+				"read repository auto-mode rules %s: rule %d: allow cannot bypass the sandbox; use allow with inherit or prompt with bypass",
+				path, i+1,
+			)
+		}
 		if err := validateRepositoryRuleExamples(document.Rules[i]); err != nil {
 			return RepositoryRules{}, fmt.Errorf("read repository auto-mode rules %s: rule %d: %w", path, i+1, err)
 		}
