@@ -5618,8 +5618,14 @@ type NotebookWriteResultMessage struct {
 }
 
 type Notification struct {
+	// Actions corresponds to the JSON schema field "actions".
+	Actions []NotificationAction `json:"actions,omitempty,omitzero"`
+
 	// Body corresponds to the JSON schema field "body".
 	Body string `json:"body"`
+
+	// Cause corresponds to the JSON schema field "cause".
+	Cause string `json:"cause"`
 
 	// CreatedAt corresponds to the JSON schema field "created_at".
 	CreatedAt string `json:"created_at"`
@@ -5627,8 +5633,14 @@ type Notification struct {
 	// Detail corresponds to the JSON schema field "detail".
 	Detail string `json:"detail"`
 
+	// Diagnostic corresponds to the JSON schema field "diagnostic".
+	Diagnostic string `json:"diagnostic"`
+
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
+
+	// Impact corresponds to the JSON schema field "impact".
+	Impact string `json:"impact"`
 
 	// Kind corresponds to the JSON schema field "kind".
 	Kind string `json:"kind"`
@@ -5647,6 +5659,20 @@ type Notification struct {
 
 	// Title corresponds to the JSON schema field "title".
 	Title string `json:"title"`
+
+	// Trigger corresponds to the JSON schema field "trigger".
+	Trigger string `json:"trigger"`
+}
+
+type NotificationAction struct {
+	// Kind corresponds to the JSON schema field "kind".
+	Kind string `json:"kind"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label string `json:"label"`
+
+	// TargetID corresponds to the JSON schema field "target_id".
+	TargetID string `json:"target_id"`
 }
 
 type NotificationListMessage struct {
@@ -9780,6 +9806,9 @@ type Task struct {
 
 	// Kind corresponds to the JSON schema field "kind".
 	Kind string `json:"kind"`
+
+	// LastDiagnostic corresponds to the JSON schema field "last_diagnostic".
+	LastDiagnostic *string `json:"last_diagnostic,omitempty,omitzero"`
 
 	// LastError corresponds to the JSON schema field "last_error".
 	LastError *string `json:"last_error,omitempty,omitzero"`

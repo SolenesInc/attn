@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -39,10 +40,21 @@ type NotificationRecord struct {
 	Title      string
 	Body       string
 	Detail     string
+	Trigger    string
+	Impact     string
+	Cause      string
+	Diagnostic string
+	Actions    []NotificationAction
 	SourceKind string
 	SourceID   string
 	CreatedAt  time.Time
 	ReadAt     time.Time
+}
+
+type NotificationAction struct {
+	Kind     string `json:"kind"`
+	Label    string `json:"label"`
+	TargetID string `json:"target_id"`
 }
 
 func (s *Store) AddNotification(rec NotificationRecord, now time.Time) (NotificationRecord, error) {
@@ -53,10 +65,15 @@ func (s *Store) AddNotification(rec NotificationRecord, now time.Time) (Notifica
 	rec.CreatedAt = now.UTC()
 	rec.ReadAt = time.Time{}
 	rec.Severity = NormalizeNotificationSeverity(string(rec.Severity))
-	_, err := s.db.Exec(
-		`INSERT INTO notifications (id, kind, severity, title, body, detail, source_kind, source_id, created_at, read_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '')`,
-		rec.ID, rec.Kind, string(rec.Severity), rec.Title, rec.Body, rec.Detail, rec.SourceKind, rec.SourceID,
+	actionsJSON, err := json.Marshal(rec.Actions)
+	if err != nil {
+		return NotificationRecord{}, fmt.Errorf("store: encode notification actions: %w", err)
+	}
+	_, err = s.db.Exec(
+		`INSERT INTO notifications (id, kind, severity, title, body, detail, trigger, impact, cause, diagnostic, actions_json, source_kind, source_id, created_at, read_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '')`,
+		rec.ID, rec.Kind, string(rec.Severity), rec.Title, rec.Body, rec.Detail,
+		rec.Trigger, rec.Impact, rec.Cause, rec.Diagnostic, string(actionsJSON), rec.SourceKind, rec.SourceID,
 		rec.CreatedAt.Format(sortableTimeFormat),
 	)
 	if err != nil {
@@ -70,7 +87,7 @@ func (s *Store) ListNotifications() ([]NotificationRecord, error) {
 		return nil, fmt.Errorf("store: no database")
 	}
 	rows, err := s.db.Query(
-		`SELECT id, kind, severity, title, body, detail, source_kind, source_id, created_at, read_at
+		`SELECT id, kind, severity, title, body, detail, trigger, impact, cause, diagnostic, actions_json, source_kind, source_id, created_at, read_at
 		 FROM notifications ORDER BY created_at DESC, id DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("store: list notifications: %w", err)
@@ -152,12 +169,18 @@ func (s *Store) MarkAllNotificationsRead(now time.Time) (int, error) {
 
 func scanNotificationRow(sc rowScanner) (*NotificationRecord, error) {
 	var (
-		rec                              NotificationRecord
-		severityStr, createdStr, readStr string
+		rec                                           NotificationRecord
+		severityStr, actionsJSON, createdStr, readStr string
 	)
 	if err := sc.Scan(&rec.ID, &rec.Kind, &severityStr, &rec.Title, &rec.Body, &rec.Detail,
+		&rec.Trigger, &rec.Impact, &rec.Cause, &rec.Diagnostic, &actionsJSON,
 		&rec.SourceKind, &rec.SourceID, &createdStr, &readStr); err != nil {
 		return nil, err
+	}
+	if actionsJSON != "" {
+		if err := json.Unmarshal([]byte(actionsJSON), &rec.Actions); err != nil {
+			return nil, fmt.Errorf("decode notification actions: %w", err)
+		}
 	}
 	rec.Severity = NormalizeNotificationSeverity(severityStr)
 	rec.CreatedAt = parseStoreTime(createdStr)

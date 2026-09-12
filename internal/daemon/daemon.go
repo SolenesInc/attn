@@ -392,6 +392,7 @@ type Daemon struct {
 	// in Start); read via jobQueueRef(), write via setJobQueue().
 	jobQueueMu               sync.RWMutex
 	jobQueue                 *jobs.Runner
+	taskFailureRenderers     map[string]taskFailureRenderer
 	sessionActivityExecution func(
 		ctx context.Context,
 		provider agentdriver.HeadlessTaskProvider,

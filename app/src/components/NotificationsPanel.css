@@ -249,11 +249,43 @@
   gap: 8px;
 }
 
-.notification-row-body {
+.notification-row-fact {
+	display: grid;
+	gap: 3px;
+}
+
+.notification-row-fact span {
+	color: var(--color-text-muted);
+	font: 700 9px/1 ui-monospace, monospace;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.notification-row-fact p {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.notification-row-diagnostic summary {
+	color: var(--color-text-muted);
+	cursor: pointer;
+	font-size: 11px;
+}
+
+.notification-row-diagnostic pre {
+	margin: 7px 0 0;
+	max-height: 180px;
+	overflow: auto;
+	padding: 8px;
+	color: var(--color-text-secondary);
+	background: var(--color-bg-base, var(--color-bg-elevated));
+	border: 1px solid var(--color-border-subtle);
+	border-radius: 6px;
+	font: 10px/1.45 ui-monospace, 'SFMono-Regular', monospace;
+	white-space: pre-wrap;
+	word-break: break-word;
 }
 
 .notification-row-error {
@@ -270,7 +302,12 @@
   word-break: break-word;
 }
 
-.notification-row-retry {
+.notification-row-actions {
+	display: flex;
+	gap: 6px;
+}
+
+.notification-row-action {
   align-self: flex-start;
   padding: 4px 10px;
   color: var(--color-text-primary);
@@ -281,7 +318,7 @@
   font-size: 11px;
 }
 
-.notification-row-retry:disabled {
+.notification-row-action:disabled {
   opacity: 0.55;
   cursor: default;
 }

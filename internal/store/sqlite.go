@@ -1246,6 +1246,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{143, "snapshot accepted delegation handovers", ""},
 	{144, "snapshot accepted delegation parents", ""},
 	{145, "move automation continuity from tickets to Garden seeds", ""},
+	{146, "record structured task failure diagnostics", ""},
 }
 
 const migration99SQL = `
@@ -1728,6 +1729,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 146 {
+			if err := applyMigration146(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else if m.version == 138 {
 			if _, err := tx.Exec(m.sql); err != nil {
 				tx.Rollback()
@@ -1776,6 +1782,30 @@ func migrateDB(db *sql.DB, dbPath string) error {
 		}
 	}
 
+	return nil
+}
+
+func applyMigration146(tx *sql.Tx) error {
+	for _, change := range []struct {
+		table, column, sql string
+	}{
+		{"jobs", "last_diagnostic", `ALTER TABLE jobs ADD COLUMN last_diagnostic TEXT NOT NULL DEFAULT ''`},
+		{"notifications", "trigger", `ALTER TABLE notifications ADD COLUMN trigger TEXT NOT NULL DEFAULT ''`},
+		{"notifications", "impact", `ALTER TABLE notifications ADD COLUMN impact TEXT NOT NULL DEFAULT ''`},
+		{"notifications", "cause", `ALTER TABLE notifications ADD COLUMN cause TEXT NOT NULL DEFAULT ''`},
+		{"notifications", "diagnostic", `ALTER TABLE notifications ADD COLUMN diagnostic TEXT NOT NULL DEFAULT ''`},
+		{"notifications", "actions_json", `ALTER TABLE notifications ADD COLUMN actions_json TEXT NOT NULL DEFAULT ''`},
+	} {
+		has, err := columnExists(tx, change.table, change.column)
+		if err != nil {
+			return err
+		}
+		if !has {
+			if _, err := tx.Exec(change.sql); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

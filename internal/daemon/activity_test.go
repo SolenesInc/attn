@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -140,6 +141,37 @@ func TestActivityExecutorStoresTheGeneratedLine(t *testing.T) {
 	}
 	if !strings.Contains(seen.Prompt, string(protocol.SessionStateWorking)) {
 		t.Errorf("prompt does not carry the session state:\n%s", seen.Prompt)
+	}
+}
+
+func TestActivityExecutorKeepsFailureOutputOutOfTheSafeCause(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
+	installQuietActivityRunner(t, d)
+	watchingClient(d)
+
+	transcriptPath := writeActivityTranscript(t, "already summarized")
+	d.store.UpdateSessionActivity("session-1", "reading the plan", time.Now(), seedActivityCursor(t, transcriptPath))
+	appendActivityTranscript(t, transcriptPath, "new output")
+	d.sessionActivityExecution = func(context.Context, agentdriver.HeadlessTaskProvider, agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
+		return agentdriver.HeadlessTaskResult{
+			Diagnostics:   "authentication failed",
+			FailureOutput: "stderr: token rejected",
+		}, errors.New("exit status 2")
+	}
+
+	_, err := d.sessionActivityHandler(context.Background(), &jobs.Job{
+		UniqueKey: "session-1",
+		Payload:   mustJSON(t, sessionActivityPayload{Transcript: transcriptPath}),
+	})
+	if err == nil {
+		t.Fatal("handler succeeded")
+	}
+	if strings.Contains(err.Error(), "token rejected") {
+		t.Fatalf("safe cause contains diagnostic output: %q", err)
+	}
+	if got := jobs.DiagnosticOutput(err); got != "stderr: token rejected" {
+		t.Fatalf("diagnostic output = %q", got)
 	}
 }
 
