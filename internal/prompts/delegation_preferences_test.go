@@ -56,6 +56,46 @@ func TestDelegationRolesIncludesMaintainedGuidanceAndChoices(t *testing.T) {
 	}
 }
 
+func TestDelegationGuidanceOwnsReviewAndPausesBeforeDispatch(t *testing.T) {
+	roles := ExpandDelegationRoles(DelegationRoleTemplates())
+	orchestrator, reviewer, pathfinder := roles[3], roles[2], roles[0]
+	if !strings.Contains(orchestrator.Description, "reviewing each Builder's work") || !strings.Contains(orchestrator.Description, "verifying the integrated outcome") {
+		t.Fatalf("orchestrator ownership is ambiguous: %q", orchestrator.Description)
+	}
+	if !strings.Contains(reviewer.Description, "explicitly requests a separate Reviewer delegation") {
+		t.Fatalf("reviewer authority is ambiguous: %q", reviewer.Description)
+	}
+	rolesText := DelegationRolesText(protocol.DelegationRolesResult{Roles: DelegationRoleTemplates(), Guidance: DelegationRoutingGuidance()})
+	for _, expected := range []string{"reviewing each Builder's work", "explicitly requests a separate Reviewer delegation", "wait for their answer"} {
+		if !strings.Contains(rolesText, expected) {
+			t.Errorf("composed role catalog is missing %q", expected)
+		}
+	}
+	for _, expected := range []string{"present the pull-request boundaries and ordering", "review or adjust the plan, or dispatch", "wait for their answer", "earlier request included execution"} {
+		if !strings.Contains(pathfinder.Instructions, expected) {
+			t.Errorf("pathfinder checkpoint is missing %q: %s", expected, pathfinder.Instructions)
+		}
+	}
+
+	planning := RenderText("attn-workflow-skill", "planning", nil)
+	for _, expected := range []string{"proposed pull-request boundaries and ordering", "review or adjust the plan, or dispatch", "wait for their answer", "earlier request included execution"} {
+		if !strings.Contains(planning, expected) {
+			t.Errorf("planning guidance is missing %q", expected)
+		}
+	}
+	delegation := RenderText("attn-skill", "delegation", nil)
+	for _, expected := range []string{"mandatory checkpoint", "explicitly requests a separate Reviewer delegation", "remains the Orchestrator's responsibility", "must not add a Reviewer to a plan proactively"} {
+		if !strings.Contains(delegation, expected) {
+			t.Errorf("delegation guidance is missing %q", expected)
+		}
+	}
+	for name, guidance := range map[string]string{"planning": planning, "delegation": delegation} {
+		if strings.Contains(guidance, "Carry forward authorization already given") {
+			t.Errorf("%s guidance retains the conflicting authorization fast path", name)
+		}
+	}
+}
+
 func TestDelegationTemplatesKeepSelectionsUserOwned(t *testing.T) {
 	roles := DelegationRoleTemplates()
 	expanded := ExpandDelegationRoles(roles)

@@ -1,0 +1,3 @@
+kind: fixed
+area: delegation
+change: Orchestrators review Builder output themselves, separate Reviewer launches require an explicit user request, and Pathfinders pause for plan review before dispatch.

@@ -10,7 +10,7 @@ After delegating, wait for updates. Updates may report completion, a progress ch
 
 When advising, read the relevant code and evidence and ask follow-up questions as needed. Help resolve the issue and keep the plan current when decisions change. If an assignment stalls, reassess the brief and model choice before repeating the same approach.
 
-Review completed work and its verification evidence against the plan. Check how the pieces work together and return needed corrections to the Builder. Reuse valid evidence; run further checks when changes, gaps, or contradictions warrant them. Judge the overall outcome complete only when the evidence supports it.
+Review each Builder's completed work and its verification evidence against the plan yourself. Check how the pieces work together and return needed corrections to the Builder. Reuse valid evidence; run further checks when changes, gaps, or contradictions warrant them. Judge the overall outcome complete only when the evidence supports it.
 
 Make the result readable in the conversation and durable in the seed. Follow the task's authorization for delivery steps.
 
