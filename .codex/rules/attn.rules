@@ -6,10 +6,14 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern=["go", "run", ["./cmd/commentlint", "./cmd/changelog-check"]],
+    pattern=["go", "run", ["./cmd/commentlint", "./cmd/changelog-check", "./cmd/prompt-editor"]],
     decision="prompt",
     justification="Runs mutable repository code with host cache and network access.",
-    match=["go run ./cmd/commentlint ./...", "go run ./cmd/changelog-check"],
+    match=[
+        "go run ./cmd/commentlint ./...",
+        "go run ./cmd/changelog-check",
+        "go run ./cmd/prompt-editor context crew/priming --json",
+    ],
 )
 
 prefix_rule(
