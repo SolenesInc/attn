@@ -257,7 +257,12 @@ func (d *Daemon) removeAutoModeHost(msg *protocol.AutoModeHostRemoveMessage) aut
 
 func (d *Daemon) setAutoModePolicy(msg *protocol.AutoModePolicySetMessage) autoModeConfigEdit {
 	return func() (automode.Config, error) {
+		var guardian *automode.GuardianSelection
+		if msg.Guardian != nil {
+			guardian = &automode.GuardianSelection{Provider: protocol.Deref(msg.Guardian.Provider), Model: protocol.Deref(msg.Guardian.Model), Effort: protocol.Deref(msg.Guardian.Effort)}
+		}
 		return d.store.SetAutoModePolicy(automode.PolicyAmendment{
+			Guardian:          guardian,
 			ApprovalPolicy:    trimmedOption(msg.ApprovalPolicy),
 			SandboxMode:       trimmedOption(msg.SandboxMode),
 			AllowLocalBinding: msg.AllowLocalBinding,

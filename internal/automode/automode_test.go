@@ -133,7 +133,7 @@ func TestConfigMarshalsIntoThePiSideShape(t *testing.T) {
 	}
 	want := []string{
 		"enabled_default", "approval_policy", "sandbox_mode", "rules",
-		"network", "environment", "legacy_patterns",
+		"network", "environment", "legacy_patterns", "guardian",
 	}
 	if len(fields) != len(want) {
 		t.Fatalf("config has %d fields, want exactly %d: %s", len(fields), len(want), raw)

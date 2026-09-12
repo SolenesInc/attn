@@ -2,7 +2,7 @@
 // runs under `bun test` with no pi runtime present.
 import type { UsageLike } from "./usage";
 
-export type ModelLike = { provider: string; id: string; baseUrl?: string; contextWindow?: number };
+export type ModelLike = { provider: string; id: string; baseUrl?: string; contextWindow?: number; reasoning?: boolean };
 
 export type CompletionMessage = {
   role: "user";

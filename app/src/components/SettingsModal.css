@@ -12,6 +12,13 @@
   contain: paint;
 }
 
+.settings-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: transparent;
+}
+
 .settings-modal {
   position: relative;
   z-index: 10001;

@@ -22,6 +22,10 @@ policy.
 
 The panel shows why an unavailable cache was skipped and identifies built-in
 protections. Restore the standard cache preset from Cache directories.
+In an attn-launched session, Guardian selects the approval review model and
+reasoning for this session. Use attn default removes the override. Guardian
+settings are kept in agent memory, not in the security settings file; an agent
+reload resets them to the launch defaults. See [auto mode](automode.md#the-guardian).
 Credential filtering stays on independently of the sandbox and cannot be
 disabled from the panel.
 

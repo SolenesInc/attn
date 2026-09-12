@@ -101,13 +101,13 @@
 - HTTP bearer: operator credential for exposed WebSockets.
 - Headless task: model run the daemon starts on its own, with no session and no PTY.
 - Background agents (Settings): configuration for Session activity, Garden advisor, and Chief launches. Chief launches are sessions; the other two run as headless tasks.
-- Settings autosave: selections commit immediately; text commits on blur, Enter, navigation, or close. The daemon acknowledges persistence by request id. Failed drafts remain editable and retryable.
+- Settings autosave: selections commit immediately; text commits on blur, Enter, navigation, or close. The daemon acknowledges persistence by request id. Failed drafts remain editable and retryable. The modal owns draft state across section changes; section components render and edit that state without resetting it on navigation.
 - Headless tasks switch: `ATTN_HEADLESS_TASKS` / `headless_tasks.enabled`; off refuses every headless task before it spawns. The environment wins.
 - Settings snapshot for that switch: `headless_tasks.enabled` is the effective value, `.stored` the setting alone, `.override` the raw environment value when it decides.
 - State marker: `<!-- attn:state=waiting_input|idle -->` in an agent's last assistant message. With the switch off it is the stop verdict, so no model runs; without one the stop settles on hook evidence. Transcript readers strip it from messages; a marker-only message is never shown.
 - Auto mode: which reviewer answers a pi approval. On = the Guardian, off = the user's card. `/auto` toggles it; it changes nothing else.
 - Reviewer: what answers one approval. Exactly one per session, never both in sequence.
-- Guardian: the model reviewer. Runs on the session's active model, may run read-only sandboxed commands, and its rejection goes back to the agent as text.
+- Guardian: the model reviewer. Its model and reasoning come from daemon launch defaults or an in-memory `/security` override; an unset model follows the coding model. Overrides survive daemon restart but reset when the agent reloads. It retains its conversation across model changes, may run read-only sandboxed commands, and its rejection goes back to the agent as text.
 - Approval policy: what an unmatched command does — `untrusted` asks, `on-request` runs it sandboxed and asks only for escalation, `never` never asks.
 - Prefix rule: a command prefix, one token per argument, no wildcards, deciding allow, prompt or forbidden. `match`/`not_match` examples are checked when rules load.
 - Sandbox mode: `read-only`, `workspace-write` or `danger-full-access`; what a bash command runs under. `/security` still governs the file tools and the deny lists.
