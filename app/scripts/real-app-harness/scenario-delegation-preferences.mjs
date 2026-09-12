@@ -128,6 +128,12 @@ try {
     await until(async () => (await preferences()).fallback.selection.harness === 'codex', 'fallback harness saved');
     runner.assert(roles().fallback?.selection.harness === 'codex', 'fallback configures independently');
     await screenshot('02-fallback.png', 'body'); await hold();
+    await click(`${popover} [data-harness=""]`);
+    await until(async () => (await preferences()).fallback.selection.harness === '', 'fallback cleared');
+    runner.assert(!roles().fallback, 'a cleared fallback is no longer offered to agents');
+    await openModel('anything else');
+    await click(`${popover} [data-harness="codex"]`);
+    await until(async () => (await preferences()).fallback.selection.harness === 'codex', 'fallback harness saved again');
     await closePopover();
   });
   await runner.step('add_builder_effort_alternative', async () => {

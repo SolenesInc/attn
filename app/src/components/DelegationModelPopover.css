@@ -6,6 +6,7 @@
 .delegation-pop-harnesses { display: grid; align-content: start; gap: 2px; overflow-y: auto; padding: 8px; border-right: 1px solid var(--color-border-subtle); background: var(--color-bg-elevated); }
 .delegation-pop-kicker { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 4px; font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: var(--font-size-xs); font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--color-text-tertiary); }
 .delegation-pop-harness { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 8px 10px; border-radius: 6px; font-weight: 600; color: var(--color-text-secondary); text-align: left; }
+.delegation-pop-harness.none { color: var(--color-text-tertiary); font-weight: 500; }
 .delegation-pop-harness:hover { background: var(--color-bg-button); color: var(--color-text-primary); }
 .delegation-pop-harness[aria-selected="true"] { background: var(--color-bg-panel); color: var(--color-text-primary); box-shadow: inset 0 0 0 1px var(--color-border); }
 .delegation-pop-status { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--color-success); }

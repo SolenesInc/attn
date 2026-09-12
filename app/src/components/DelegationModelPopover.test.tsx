@@ -127,8 +127,15 @@ it('commits a typed effort when a click outside closes the popover', async () =>
 
 it('commits a pinned harness alone and never discovers for it', () => {
   const { loadModels, onChange } = open({ harness: '', provider: '', model: '', effort: '' });
-  expect(screen.getByText('Pick a harness to see its models.')).toBeInTheDocument();
+  expect(screen.getByText('Pick a harness to see its models. None leaves this route unset.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('option', { name: 'Copilot' }));
   expect(onChange).toHaveBeenLastCalledWith({ harness: 'copilot', provider: '', model: '', effort: '' });
   expect(loadModels).not.toHaveBeenCalled();
+});
+
+it('clears an assigned harness back to an empty selection and closes', () => {
+  const { onChange, onClose } = open({ harness: 'claude', provider: '', model: 'opus', effort: 'high' });
+  fireEvent.click(screen.getByRole('option', { name: 'None' }));
+  expect(onChange).toHaveBeenLastCalledWith({ harness: '', provider: '', model: '', effort: '' });
+  expect(onClose).toHaveBeenCalledTimes(1);
 });

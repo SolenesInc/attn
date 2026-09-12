@@ -12,10 +12,11 @@ const VIEWPORT_MARGIN = 16;
 // Built-in harnesses run their configured provider; a plugin harness takes provider/model.
 const isPluginHarness = (harness: DelegationHarness) => !['claude', 'codex', 'copilot'].includes(harness.id);
 
-function HarnessList({ harnesses, value, onPick }: { harnesses: DelegationHarness[]; value: string; onPick: (harness: DelegationHarness) => void }) {
+function HarnessList({ harnesses, value, onPick, onClear }: { harnesses: DelegationHarness[]; value: string; onPick: (harness: DelegationHarness) => void; onClear: () => void }) {
   const known = harnesses.some(h => h.id === value);
   return <div className="delegation-pop-harnesses" role="listbox" aria-label="Harness">
     <div className="delegation-pop-kicker">Harness</div>
+    <button type="button" role="option" className="delegation-pop-harness none" data-harness="" aria-selected={value === ''} onClick={onClear}>None</button>
     {harnesses.map(h => <button key={h.id} type="button" role="option" className="delegation-pop-harness" data-harness={h.id} aria-selected={h.id === value} onClick={() => onPick(h)}>
       <span>{h.name}</span>
       <span className={`delegation-pop-status ${h.available ? '' : 'bad'}`} title={h.available ? 'Available' : 'Not installed on this daemon'} />
@@ -131,7 +132,8 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
 
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    containerRef.current?.querySelector<HTMLButtonElement>('.delegation-pop-harness[aria-selected="true"], .delegation-pop-harness')?.focus();
+    const list = containerRef.current;
+    (list?.querySelector<HTMLButtonElement>('.delegation-pop-harness[aria-selected="true"]') ?? list?.querySelector<HTMLButtonElement>('.delegation-pop-harness'))?.focus();
     return () => { if (!document.activeElement || document.activeElement === document.body) opener?.focus(); };
   }, []);
 
@@ -149,13 +151,17 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
     setManual(false);
     onChange({ harness: next.id, provider: '', model: '', effort: '' });
   };
+  const clearHarness = () => {
+    if (value.harness) onChange({ harness: '', provider: '', model: '', effort: '' });
+    close();
+  };
   const pinnable = harness?.model_pin ?? false;
 
   // Portal: the settings modal is transformed, which would make a fixed popover position against it.
   return createPortal(<dialog open ref={containerRef} className="delegation-pop" aria-label="Choose a model" style={{ top: position.top, left: position.left }}>
-    <HarnessList harnesses={harnesses} value={value.harness} onPick={pickHarness} />
+    <HarnessList harnesses={harnesses} value={value.harness} onPick={pickHarness} onClear={clearHarness} />
     <div className="delegation-pop-models">
-      {!harness && <p className="delegation-pop-note">Pick a harness to see its models.</p>}
+      {!harness && <p className="delegation-pop-note">Pick a harness to see its models. None leaves this route unset.</p>}
       {harness && !pinnable && <>
         <div className="delegation-pop-kicker">Model</div>
         <p className="delegation-pop-note">{harness.name} uses the model selected in its own settings. Attn can't pin one here.</p>

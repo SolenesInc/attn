@@ -97,7 +97,7 @@ it('adopts maintained roles from the empty state with the install flag and shows
 it('saves a model picked from the row, an alternative with its condition, and the switch', async () => {
   const { daemon, getState } = setup([custom]);
   fireEvent.click(await screen.findByRole('button', { name: 'Model for Build' }));
-  expect(screen.getByText('Pick a harness to see its models.')).toBeInTheDocument();
+  expect(screen.getByText('Pick a harness to see its models. None leaves this route unset.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('option', { name: 'Codex' }));
   await waitFor(() => expect(savesSoFar(daemon)).toBe(1));
   await screen.findByRole('option', { name: /Everyday model/ });
