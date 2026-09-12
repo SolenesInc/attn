@@ -86,10 +86,10 @@ func (d *Daemon) decorateSeedHarvestCheck(seed *protocol.Seed) {
 		return
 	}
 	rec, ok := d.store.SessionPullRequestByID(seed.HarvestWhen.PullRequest)
-	if !ok || strings.TrimSpace(rec.StatusCheckedAt) == "" {
+	if !ok || strings.TrimSpace(rec.StatusFetchedAt) == "" {
 		return
 	}
-	seed.HarvestWhen.CheckedAt = protocol.Ptr(rec.StatusCheckedAt)
+	seed.HarvestWhen.CheckedAt = protocol.Ptr(rec.StatusFetchedAt)
 }
 
 func (d *Daemon) reportUntrackedHarvestCondition(seed garden.Seed) {

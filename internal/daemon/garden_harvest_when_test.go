@@ -139,8 +139,8 @@ func TestSeedShowCarriesTheHarvestCondition(t *testing.T) {
 	d := newGardenDaemon(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "ship the protocol"})
 	recordPullRequest(t, d, "sess-a", "https://github.com/victorarias/attn/pull/113")
-	checkedAt := time.Date(2026, 9, 12, 11, 42, 0, 0, time.UTC)
-	if err := d.store.MarkSessionPullRequestChecked("github.com:victorarias/attn#113", checkedAt); err != nil {
+	failedAt := time.Date(2026, 9, 12, 11, 42, 0, 0, time.UTC)
+	if err := d.store.MarkSessionPullRequestChecked("github.com:victorarias/attn#113", failedAt); err != nil {
 		t.Fatalf("mark the pull request checked: %v", err)
 	}
 	if before := show(t, d, seed.ID); before.Seed.HarvestWhen != nil {
@@ -168,8 +168,20 @@ func TestSeedShowCarriesTheHarvestCondition(t *testing.T) {
 	if got.SetAt != "2026-09-02T00:21:00Z" {
 		t.Fatalf("the wire changed when it was armed: %+v", got)
 	}
-	if protocol.Deref(got.CheckedAt) != checkedAt.Format(time.RFC3339Nano) {
-		t.Fatalf("the wire says the pull request was checked at %q, want %s", protocol.Deref(got.CheckedAt), checkedAt.Format(time.RFC3339Nano))
+	if got.CheckedAt != nil {
+		t.Fatalf("the wire reports a successful check after only a failed attempt: %+v", got)
+	}
+
+	fetchedAt := failedAt.Add(time.Minute)
+	if err := d.store.UpdateSessionPullRequestStatus("github.com:victorarias/attn#113", store.SessionPullRequestStatus{State: sessionPullRequestOpen}, fetchedAt); err != nil {
+		t.Fatalf("store the fetched pull request: %v", err)
+	}
+	if err := d.store.MarkSessionPullRequestChecked("github.com:victorarias/attn#113", fetchedAt.Add(time.Minute)); err != nil {
+		t.Fatalf("mark a later failed attempt: %v", err)
+	}
+	got = show(t, d, seed.ID).Seed.HarvestWhen
+	if protocol.Deref(got.CheckedAt) != fetchedAt.Format(time.RFC3339Nano) {
+		t.Fatalf("the wire says the pull request was checked at %q, want the successful fetch at %s", protocol.Deref(got.CheckedAt), fetchedAt.Format(time.RFC3339Nano))
 	}
 }
 
