@@ -3,7 +3,12 @@ package jobs
 import (
 	"errors"
 	"strings"
+	"unicode/utf8"
 )
+
+const diagnosticOutputLimit = 16 << 10
+
+const diagnosticTruncatedMarker = "\n…(diagnostic truncated)…\n"
 
 type diagnosticFailure interface {
 	DiagnosticOutput() string
@@ -24,7 +29,7 @@ func WithDiagnostic(cause error, diagnostic string) error {
 	if cause == nil {
 		return nil
 	}
-	diagnostic = strings.TrimSpace(diagnostic)
+	diagnostic = boundDiagnostic(diagnostic)
 	if diagnostic == "" {
 		return cause
 	}
@@ -36,5 +41,22 @@ func DiagnosticOutput(err error) string {
 	if !errors.As(err, &failure) {
 		return ""
 	}
-	return strings.TrimSpace(failure.DiagnosticOutput())
+	return boundDiagnostic(failure.DiagnosticOutput())
+}
+
+func boundDiagnostic(diagnostic string) string {
+	diagnostic = strings.TrimSpace(diagnostic)
+	if len(diagnostic) <= diagnosticOutputLimit {
+		return diagnostic
+	}
+	keep := diagnosticOutputLimit - len(diagnosticTruncatedMarker)
+	headEnd := keep / 2
+	for headEnd > 0 && !utf8.RuneStart(diagnostic[headEnd]) {
+		headEnd--
+	}
+	tailStart := len(diagnostic) - (keep - headEnd)
+	for tailStart < len(diagnostic) && !utf8.RuneStart(diagnostic[tailStart]) {
+		tailStart++
+	}
+	return diagnostic[:headEnd] + diagnosticTruncatedMarker + diagnostic[tailStart:]
 }
