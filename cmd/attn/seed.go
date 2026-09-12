@@ -1152,6 +1152,13 @@ func fprintSeed(out io.Writer, seed protocol.Seed, watching ...bool) {
 	}
 	if condition := seed.HarvestWhen; condition != nil {
 		fmt.Fprintf(w, "harvests when\t%s merges\n", pullRequestLabel(condition.PullRequest))
+		checkedAt := strings.TrimSpace(protocol.Deref(condition.CheckedAt))
+		if checkedAt == "" {
+			checkedAt = "not yet"
+		} else {
+			checkedAt = shortStamp(checkedAt)
+		}
+		fmt.Fprintf(w, "PR last checked\t%s\n", checkedAt)
 	}
 	if seed.Ready {
 		fmt.Fprintf(w, "ready\tyes\n")

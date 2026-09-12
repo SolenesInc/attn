@@ -6,6 +6,7 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func (d *Daemon) settleHarvestConditions() (harvested, cleared int) {
@@ -44,28 +45,51 @@ func (d *Daemon) settleHarvestConditions() (harvested, cleared int) {
 }
 
 func (d *Daemon) armedSeeds() ([]garden.Seed, error) {
-	read, _, err := d.runDocQuery(docstore.Query{
+	seeds := []garden.Seed{}
+	after := ""
+	for {
+		read, _, err := d.runDocQuery(armedSeedsQuery(after))
+		if err != nil {
+			return nil, err
+		}
+		for _, doc := range read.Documents {
+			seed, err := garden.Decode(doc.Body)
+			if err != nil {
+				d.logf("harvest-on-merge: seed %s has an unreadable body: %v", doc.ID, err)
+				continue
+			}
+			if seed.HarvestWhen == nil || strings.TrimSpace(seed.HarvestWhen.PullRequest) == "" {
+				continue
+			}
+			seeds = append(seeds, seed)
+		}
+		if len(read.Documents) < gardenSnapshotLimit {
+			return seeds, nil
+		}
+		after = read.Documents[len(read.Documents)-1].ID
+	}
+}
+
+func armedSeedsQuery(after string) docstore.Query {
+	return docstore.Query{
 		Namespace:  garden.Namespace,
 		Collection: garden.CollectionSeeds,
-		Filters:    []docstore.Filter{{Field: "harvest_when_pull_request", Op: docstore.OpGt, Value: ""}},
+		Filters:    []docstore.Filter{{Field: garden.HarvestWhenPullRequestField, Op: docstore.OpGt, Value: ""}},
+		Sort:       &docstore.Sort{Field: garden.HarvestWhenPullRequestField},
 		Limit:      gardenSnapshotLimit,
-	})
-	if err != nil {
-		return nil, err
+		After:      after,
 	}
-	seeds := make([]garden.Seed, 0, len(read.Documents))
-	for _, doc := range read.Documents {
-		seed, err := garden.Decode(doc.Body)
-		if err != nil {
-			d.logf("harvest-on-merge: seed %s has an unreadable body: %v", doc.ID, err)
-			continue
-		}
-		if seed.HarvestWhen == nil || strings.TrimSpace(seed.HarvestWhen.PullRequest) == "" {
-			continue
-		}
-		seeds = append(seeds, seed)
+}
+
+func (d *Daemon) decorateSeedHarvestCheck(seed *protocol.Seed) {
+	if seed.HarvestWhen == nil || d.store == nil {
+		return
 	}
-	return seeds, nil
+	rec, ok := d.store.SessionPullRequestByID(seed.HarvestWhen.PullRequest)
+	if !ok || strings.TrimSpace(rec.StatusFetchedAt) == "" {
+		return
+	}
+	seed.HarvestWhen.CheckedAt = protocol.Ptr(rec.StatusFetchedAt)
 }
 
 func (d *Daemon) reportUntrackedHarvestCondition(seed garden.Seed) {

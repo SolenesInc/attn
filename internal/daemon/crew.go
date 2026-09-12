@@ -440,22 +440,19 @@ func (d *Daemon) crewMemberBoundTo(sessionID string) string {
 	return ""
 }
 
-func (d *Daemon) crewSessionBoundTo(memberID string) string {
+func (d *Daemon) crewSessionBoundTo(memberID string) (string, error) {
 	if d.store == nil || strings.TrimSpace(memberID) == "" {
-		return ""
+		return "", nil
 	}
 	members, _, err := d.readCrewMembers()
 	if err != nil {
-		if !docstore.IsUndeclaredCollection(err) {
-			d.logf("crew: reading roster to reach %q: %v", memberID, err)
-		}
-		return ""
+		return "", err
 	}
 	member, ok := crew.Resolve(memberID, members)
 	if !ok || !d.crewBindingLive(member) {
-		return ""
+		return "", nil
 	}
-	return member.BindingSession
+	return member.BindingSession, nil
 }
 
 // Cleared otherwise so it round-trips as an omitted field.

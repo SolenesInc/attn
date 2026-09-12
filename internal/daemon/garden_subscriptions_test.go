@@ -45,6 +45,70 @@ func TestSeedNudges_DispatcherUnwatchStopsPendingAndFutureDescendants(t *testing
 	assertOneSeedBell(t, d, "sess-b", future.ID, "note")
 }
 
+func TestSeedNudges_UnwatchDiscardsAnOrdinaryUpdateForTheTender(t *testing.T) {
+	f := newSeededNudgeGarden(t)
+	d := f.d
+	move(t, d, "sess-b", f.leaf.ID, garden.VerbTend, "", "")
+	watchSeed(t, d, "sess-b", f.leaf.ID, false)
+	ringingNote(t, d, "sess-c", f.leaf.ID, "queued before unwatch", true)
+	assertOneSeedBell(t, d, "sess-b", f.leaf.ID, "note")
+
+	result := watchSeed(t, d, "sess-b", f.leaf.ID, true)
+	if result.Watching || !result.Changed {
+		t.Fatalf("unwatch = %+v", result)
+	}
+	if bells := queuedSeedBells(t, d, "sess-b"); len(bells) != 0 {
+		t.Fatalf("tender kept an ordinary update after unwatch: %v", bells)
+	}
+}
+
+func TestSeedNudges_UnblockedUpdateExpiresWhenTheTenderMoves(t *testing.T) {
+	f := newSeededNudgeGarden(t)
+	d := f.d
+	move(t, d, "sess-b", f.leaf.ID, garden.VerbTend, "", "")
+	if claimed, err := d.store.ClaimGardenSeedMailboxItem(
+		"sess-b", f.leaf.ID, gardenRingUnblocked, "unblocked", time.Now()); err != nil || !claimed {
+		t.Fatalf("queue unblocked update: claimed=%v err=%v", claimed, err)
+	}
+	d.noteQueuedAgentMailboxItem("sess-b")
+	move(t, d, "sess-b", f.leaf.ID, garden.VerbPark, "", "")
+	move(t, d, "sess-c", f.leaf.ID, garden.VerbTend, "", "")
+
+	if err := d.deliverAgentMailboxDoorbell("sess-b"); err != nil {
+		t.Fatalf("clean stale update: %v", err)
+	}
+	if bells := queuedSeedBells(t, d, "sess-b"); len(bells) != 0 {
+		t.Fatalf("old tender kept the unblocked update: %v", bells)
+	}
+}
+
+func TestSeedNudges_UnblockedLookupFailureLeavesTheUpdateUnread(t *testing.T) {
+	f := newSeededNudgeGarden(t)
+	d := f.d
+	t.Cleanup(d.stopAgentMailboxDoorbells)
+	move(t, d, "sess-b", f.leaf.ID, garden.VerbTend, "", "")
+	if claimed, err := d.store.ClaimGardenSeedMailboxItem(
+		"sess-b", f.leaf.ID, gardenRingUnblocked, "unblocked", time.Now()); err != nil || !claimed {
+		t.Fatalf("queue unblocked update: claimed=%v err=%v", claimed, err)
+	}
+	d.noteQueuedAgentMailboxItem("sess-b")
+	schema, err := d.seedsCollection()
+	if err != nil {
+		t.Fatalf("seeds collection: %v", err)
+	}
+	if _, err := d.store.PutDocument(*schema, f.leaf.ID, []byte("[]"), time.Now(), nil); err != nil {
+		t.Fatalf("make seed unreadable: %v", err)
+	}
+
+	err = d.deliverAgentMailboxDoorbell("sess-b")
+	if err == nil || !strings.Contains(err.Error(), "read unblocked seed") {
+		t.Fatalf("delivery error = %v, want the failed ownership lookup", err)
+	}
+	if bells := queuedSeedBells(t, d, "sess-b"); len(bells) != 1 {
+		t.Fatalf("ownership lookup failure discarded the update: %v", bells)
+	}
+}
+
 func TestSeedNudges_UnwatchPreservesChildSubscriptionsAndOtherRecipients(t *testing.T) {
 	for _, delegatedChild := range []bool{false, true} {
 		t.Run(map[bool]string{false: "explicit child", true: "delegated child"}[delegatedChild], func(t *testing.T) {

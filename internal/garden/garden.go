@@ -29,6 +29,8 @@ const (
 	StatusDormant   = "dormant"
 )
 
+const HarvestWhenPullRequestField = "harvest_when_pull_request"
+
 type Edge struct {
 	Kind string `json:"kind"`
 	To   string `json:"to"`
@@ -98,7 +100,7 @@ func SeedsSchema() docstore.CollectionSchema {
 			{Name: "status", Type: docstore.FieldString},
 			{Name: "step_slug", Type: docstore.FieldString},
 			{Name: "tender_session", Type: docstore.FieldString},
-			{Name: "harvest_when_pull_request", Type: docstore.FieldString},
+			{Name: HarvestWhenPullRequestField, Type: docstore.FieldString},
 			{Name: "template", Type: docstore.FieldBool},
 			{Name: "gate", Type: docstore.FieldBool},
 		},

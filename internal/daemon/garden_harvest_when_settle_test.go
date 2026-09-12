@@ -181,6 +181,33 @@ func TestSettle_TheRefreshHarvestsWhenTheMergeLands(t *testing.T) {
 	}
 }
 
+func TestSettle_TheRefreshHarvestsAfterTheArmingSessionCloses(t *testing.T) {
+	d := newGardenDaemon(t)
+	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "outlives its session"})
+	recordSettlePR(t, d, "sess-a")
+	if resp := armWhenMerged(t, d, "sess-a", seed.ID, settlePRURL); !resp.Ok {
+		t.Fatalf("arm: %v", protocol.Deref(resp.Error))
+	}
+	closed, err := d.store.CloseSession("sess-a", store.SessionClose{By: "sess-a", Reason: "work handed back"}, time.Now())
+	if err != nil || !closed {
+		t.Fatalf("close the arming session = %t, %v", closed, err)
+	}
+	if d.store.Get("sess-a") != nil {
+		t.Fatal("the arming session is still active")
+	}
+	serveHost(d, "github.com", &fakePRHost{snapshot: &github.PullRequestSnapshot{
+		Number: 113, State: "closed", Merged: true, Title: "Keep harvest-on-merge alive",
+	}})
+
+	if fetched, changed := d.refreshSessionPullRequests(time.Now()); fetched != 1 || changed != 1 {
+		t.Fatalf("refresh = (%d fetched, %d changed), want the merge to land after the session closed", fetched, changed)
+	}
+	got := show(t, d, seed.ID).Seed
+	if got.Status != garden.StatusHarvested || got.HarvestWhen != nil {
+		t.Fatalf("the closed session stranded its armed seed: %+v", got)
+	}
+}
+
 func TestSettle_AConditionNobodyTracksStaysArmedAndIsSaidOnce(t *testing.T) {
 	d := newGardenDaemon(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "armed on an untracked PR"})

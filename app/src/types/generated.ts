@@ -4643,6 +4643,7 @@ export interface EdgeElement {
 }
 
 export interface HarvestWhen {
+    checked_at?:     string;
     pull_request:    string;
     set_at:          string;
     set_by_member?:  string;
@@ -7977,6 +7978,7 @@ export interface SeedHandoverRequest {
 }
 
 export interface SeedHarvestCondition {
+    checked_at?:     string;
     pull_request:    string;
     set_at:          string;
     set_by_member?:  string;
@@ -18878,6 +18880,7 @@ const typeMap: any = {
         { json: "to", js: "to", typ: "" },
     ], "any"),
     "HarvestWhen": o([
+        { json: "checked_at", js: "checked_at", typ: u(undefined, "") },
         { json: "pull_request", js: "pull_request", typ: "" },
         { json: "set_at", js: "set_at", typ: "" },
         { json: "set_by_member", js: "set_by_member", typ: u(undefined, "") },
@@ -21034,6 +21037,7 @@ const typeMap: any = {
         { json: "seed_id", js: "seed_id", typ: "" },
     ], "any"),
     "SeedHarvestCondition": o([
+        { json: "checked_at", js: "checked_at", typ: u(undefined, "") },
         { json: "pull_request", js: "pull_request", typ: "" },
         { json: "set_at", js: "set_at", typ: "" },
         { json: "set_by_member", js: "set_by_member", typ: u(undefined, "") },

@@ -2,11 +2,16 @@ package daemon
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/github"
+	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -88,6 +93,97 @@ func storedPullRequest(t *testing.T, d *Daemon, sessionID string) store.SessionP
 		t.Fatalf("records = %+v, want exactly one", records)
 	}
 	return records[0]
+}
+
+func TestSessionPullRequestRefreshLeavesTheGardenIdleWithoutOpenPullRequests(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	d.ensureGardenCollections()
+	schema, err := d.seedsCollection()
+	if err != nil {
+		t.Fatalf("seeds collection: %v", err)
+	}
+	if _, err := d.store.PutDocument(*schema, "s-broken", []byte("[]"), time.Now(), nil); err != nil {
+		t.Fatalf("put unreadable seed: %v", err)
+	}
+	logPath := filepath.Join(t.TempDir(), "daemon.log")
+	logger, err := logging.New(logPath)
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	t.Cleanup(func() { _ = logger.Close() })
+	d.logger = logger
+
+	if fetched, changed := d.refreshSessionPullRequests(time.Now()); fetched != 0 || changed != 0 {
+		t.Fatalf("refresh = (%d fetched, %d changed), want no work", fetched, changed)
+	}
+	logBody, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read daemon log: %v", err)
+	}
+	if strings.Contains(string(logBody), "unreadable body") {
+		t.Fatalf("idle refresh read the Garden: %s", logBody)
+	}
+}
+
+func TestSessionPullRequestRefreshDoesNotDecodeGardenForInactiveUnarmedPullRequest(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	d.ensureGardenCollections()
+	schema, err := d.seedsCollection()
+	if err != nil {
+		t.Fatalf("seeds collection: %v", err)
+	}
+	if _, err := d.store.PutDocument(*schema, "s-broken", []byte("[]"), time.Now(), nil); err != nil {
+		t.Fatalf("put unreadable seed: %v", err)
+	}
+	recordPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
+	if closed, err := d.store.CloseSession("s1", store.SessionClose{}, time.Now()); err != nil || !closed {
+		t.Fatalf("close session = %t, %v", closed, err)
+	}
+	host := &fakePRHost{snapshot: openSnapshot("Unarmed", "clean", "sha-1"), review: "none"}
+	serveHost(d, "github.com", host)
+	logPath := filepath.Join(t.TempDir(), "daemon.log")
+	logger, err := logging.New(logPath)
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	t.Cleanup(func() { _ = logger.Close() })
+	d.logger = logger
+
+	if fetched, changed := d.refreshSessionPullRequests(time.Now()); fetched != 0 || changed != 0 {
+		t.Fatalf("refresh = (%d fetched, %d changed), want no work", fetched, changed)
+	}
+	if host.snapshots != 0 {
+		t.Fatalf("snapshot calls = %d, want the inactive unarmed PR left alone", host.snapshots)
+	}
+	logBody, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read daemon log: %v", err)
+	}
+	if strings.Contains(string(logBody), "unreadable body") {
+		t.Fatalf("inactive unarmed refresh decoded the Garden: %s", logBody)
+	}
+}
+
+func TestSessionPullRequestRefreshFallsBackToActiveSessionsWhenGardenLookupFails(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	registerSessionForPRTest(t, d, "s2")
+	recordPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
+	recordPRForRefresh(t, d, "s2", "https://github.com/victorarias/attn/pull/72")
+	if closed, err := d.store.CloseSession("s2", store.SessionClose{}, time.Now()); err != nil || !closed {
+		t.Fatalf("close session = %t, %v", closed, err)
+	}
+	if _, err := d.store.DeleteDocumentCollection(garden.Namespace, garden.CollectionSeeds); err != nil {
+		t.Fatalf("remove Garden collection: %v", err)
+	}
+	host := &fakePRHost{snapshot: openSnapshot("Active only", "clean", "sha-1"), review: "none"}
+	serveHost(d, "github.com", host)
+
+	if fetched, changed := d.refreshSessionPullRequests(time.Now()); fetched != 1 || changed != 1 {
+		t.Fatalf("refresh = (%d fetched, %d changed), want only the active session", fetched, changed)
+	}
+	if host.snapshots != 1 {
+		t.Fatalf("snapshot calls = %d, want only the active session's PR", host.snapshots)
+	}
 }
 
 func TestSessionPullRequestRefreshTracksGitHub(t *testing.T) {

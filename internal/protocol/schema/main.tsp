@@ -4682,6 +4682,7 @@ model SeedHarvestCondition {
   "set_at": string;
   "set_by_session"?: string;
   "set_by_member"?: string;
+  "checked_at"?: string;
 }
 
 model SeedContinuation {

@@ -13,6 +13,13 @@ type GardenSeedWatch struct {
 	SeedID           string
 }
 
+const GardenSeedEventUnblocked = "unblocked"
+
+type GardenSeedMailboxItem struct {
+	SeedID    string
+	EventKind string
+}
+
 func (s *Store) SetGardenSeedWatch(watcherSessionID, seedID string, watching bool, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -70,7 +77,7 @@ func (s *Store) GardenSeedWatches() ([]GardenSeedWatch, error) {
 	return watches, rows.Err()
 }
 
-func (s *Store) ClaimGardenSeedMailboxItem(watcherSessionID, seedID, eventKind, itemID string, now time.Time) (bool, error) {
+func (s *Store) ClaimGardenSeedMailboxItem(recipientSessionID, seedID, eventKind, itemID string, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -84,7 +91,7 @@ func (s *Store) ClaimGardenSeedMailboxItem(watcherSessionID, seedID, eventKind, 
 		INSERT OR IGNORE INTO agent_mailbox_items
 			(id, recipient_session_id, kind, source_id, coalesce_key, hint, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, itemID, watcherSessionID, agentmailbox.KindGardenSeed, seedID, seedID, eventKind, createdAt)
+	`, itemID, recipientSessionID, agentmailbox.KindGardenSeed, seedID, seedID, eventKind, createdAt)
 	if err != nil {
 		return false, fmt.Errorf("claim Garden seed mailbox item: %w", err)
 	}
@@ -93,6 +100,17 @@ func (s *Store) ClaimGardenSeedMailboxItem(watcherSessionID, seedID, eventKind, 
 		return false, err
 	}
 	if n == 0 {
+		if eventKind != GardenSeedEventUnblocked {
+			return false, nil
+		}
+		if _, err := tx.Exec(`UPDATE agent_mailbox_items SET hint = ?
+   WHERE recipient_session_id = ? AND kind = ? AND coalesce_key = ? AND read_at = ''`,
+			GardenSeedEventUnblocked, recipientSessionID, agentmailbox.KindGardenSeed, seedID); err != nil {
+			return false, fmt.Errorf("promote coalesced Garden seed mailbox item: %w", err)
+		}
+		if err := tx.Commit(); err != nil {
+			return false, err
+		}
 		return false, nil
 	}
 	if err := tx.Commit(); err != nil {
@@ -101,24 +119,36 @@ func (s *Store) ClaimGardenSeedMailboxItem(watcherSessionID, seedID, eventKind, 
 	return true, nil
 }
 
-func (s *Store) UnreadGardenSeedMailboxSeeds(sessionID string) ([]string, error) {
+func (s *Store) UnreadGardenSeedMailboxItems(sessionID string) ([]GardenSeedMailboxItem, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rows, err := s.db.Query(`SELECT DISTINCT source_id FROM agent_mailbox_items
+	rows, err := s.db.Query(`SELECT source_id, hint FROM agent_mailbox_items
   WHERE recipient_session_id = ? AND kind = ? AND read_at = ''`, sessionID, agentmailbox.KindGardenSeed)
 	if err != nil {
-		return nil, fmt.Errorf("read queued Garden seeds: %w", err)
+		return nil, fmt.Errorf("read queued Garden seed mailbox items: %w", err)
 	}
 	defer rows.Close()
-	var seeds []string
+	var items []GardenSeedMailboxItem
 	for rows.Next() {
-		var seed string
-		if err := rows.Scan(&seed); err != nil {
+		var item GardenSeedMailboxItem
+		if err := rows.Scan(&item.SeedID, &item.EventKind); err != nil {
 			return nil, err
 		}
-		seeds = append(seeds, seed)
+		items = append(items, item)
 	}
-	return seeds, rows.Err()
+	return items, rows.Err()
+}
+
+func (s *Store) UnreadGardenSeedMailboxSeeds(sessionID string) ([]string, error) {
+	items, err := s.UnreadGardenSeedMailboxItems(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	seeds := make([]string, 0, len(items))
+	for _, item := range items {
+		seeds = append(seeds, item.SeedID)
+	}
+	return seeds, nil
 }
 
 func (s *Store) DiscardGardenSeedMailboxItems(sessionID string, seedIDs []string, now time.Time) error {

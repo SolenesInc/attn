@@ -7549,6 +7549,9 @@ type SeedHandoverRequest struct {
 }
 
 type SeedHarvestCondition struct {
+	// CheckedAt corresponds to the JSON schema field "checked_at".
+	CheckedAt *string `json:"checked_at,omitempty,omitzero"`
+
 	// PullRequest corresponds to the JSON schema field "pull_request".
 	PullRequest string `json:"pull_request"`
 
