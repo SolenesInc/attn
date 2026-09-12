@@ -6,6 +6,7 @@ import { commandEnvironment, sandboxSpecFor, wrapCommand, type ProxyAddress, typ
 import type { Decider } from "../netproxy/index";
 import { loadApprovalConfig, type ApprovalConfig, type ApprovalPolicy, type RawApprovalConfig, type SandboxMode } from "./config";
 import { GuardianReviewer, type GuardianUsageEntry } from "./guardian";
+import { guardianSettings, readGuardianSelection, resolveGuardian, type GuardianControl, type GuardianSelection } from "./guardian-selection";
 import { ApprovalOrchestrator, type OrchestratorDenial, type SandboxSource } from "./orchestrator";
 import { pickPreset } from "./permissions-ui";
 import { describePermissions, presetByID, presetFor, type Preset } from "./presets";
@@ -77,6 +78,7 @@ export class PiApproval {
   private guardian: GuardianReviewer | undefined;
   private paths: SandboxPaths | undefined;
   private choice: boolean | undefined;
+  private guardianOverride: GuardianSelection | undefined;
   private flag: boolean | undefined;
   private context: ExtensionContext | undefined;
   private noticed = false;
@@ -156,7 +158,7 @@ export class PiApproval {
     pi.registerFlag("no-auto", { description: "Start with attn auto mode off", type: "boolean" });
     pi.registerCommand("auto", {
       description: "Toggle attn auto mode (on | off | status)",
-      handler: (args, ctx) => this.command(args, ctx),
+      handler: async (args, ctx) => this.command(args, ctx),
     });
     pi.registerCommand("permissions", {
       description: "Choose what the agent is allowed to do (read-only | default | full-access | untrusted | status)",
@@ -170,6 +172,7 @@ export class PiApproval {
       const launched = this.pair;
       this.pair = { approvalPolicy: this.setup.config.approvalPolicy, sandboxMode: this.setup.config.sandboxMode };
       this.choice = undefined;
+      this.guardianOverride = undefined;
       await this.announce(launched);
       this.context = ctx;
       this.guardian = this.makeGuardian(pi, ctx);
@@ -182,6 +185,7 @@ export class PiApproval {
       this.context = ctx;
       this.guardian?.startTurn();
     });
+    pi.on("model_select", (_event, ctx) => { this.context = ctx; });
   }
 
   private makeGuardian(pi: ExtensionAPI, ctx: ExtensionContext): GuardianReviewer | undefined {
@@ -195,6 +199,12 @@ export class PiApproval {
     return new GuardianReviewer({
       registry,
       model: () => this.context?.model,
+      resolve: async () => {
+        const selected = resolveGuardian(this.guardianOverride ?? this.setup.config.guardian, this.context!);
+        const auth = await registry.getApiKeyAndHeaders(selected.model);
+        if (!auth.ok) throw new Error(`Guardian ${selected.model.provider}/${selected.model.id}: ${auth.error}. Configure credentials or choose another model in /security.`);
+        return selected;
+      },
       systemPrompt: () => systemPrompt,
       transcript: () => transcriptFromSession(this.context?.sessionManager.buildContextEntries() ?? []),
       sessionId: () => this.context?.sessionManager.getSessionId() ?? "",
@@ -276,9 +286,34 @@ export class PiApproval {
     if (this.enabled() && !this.guardian) {
       return "auto mode is off: this session has no model catalog for the automatic reviewer.";
     }
-    return this.enabled()
+    const mode = this.enabled()
       ? "auto mode is on: the automatic reviewer answers approvals, and asks you when it refuses."
       : "auto mode is off: you answer every approval yourself.";
+    return `${mode}\n${this.context ? this.guardianStatus(this.context) : ""}`;
+  }
+
+  readonly guardianControl: GuardianControl = {
+    snapshot: (ctx) => guardianSettings(this.guardianOverride ?? this.setup.config.guardian, this.guardianOverride !== undefined, ctx),
+    change: async (command, ctx) => {
+      this.context = ctx;
+      if (command === "reset") { this.guardianOverride = undefined; return; }
+      const [kind, ...values] = command.trim().split(/\s+/);
+      let selection = { ...(this.guardianOverride ?? this.setup.config.guardian) };
+      if (kind === "model" && values.length === 1 && values[0] === "session") selection = { effort: selection.effort };
+      else if (kind === "model" && values.length === 2) selection = { ...selection, provider: values[0], model: values[1] };
+      else if (kind === "effort" && values.length === 1) selection.effort = values[0] === "default" ? undefined : values[0];
+      else throw new Error("Use /security guardian model <provider> <model>, model session, effort <level|default>, reset or status.");
+      selection = readGuardianSelection(selection);
+      const { model } = resolveGuardian(selection, ctx);
+      const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+      if (!auth.ok) throw new Error(`Guardian ${model.provider}/${model.id}: ${auth.error}`);
+      this.guardianOverride = selection;
+    },
+  };
+
+  guardianStatus(ctx: ExtensionContext): string {
+    const settings = this.guardianControl.snapshot(ctx);
+    return `Guardian (${settings.source}): ${settings.problem ?? settings.effective}. Overrides last until the agent reloads.`;
   }
 
   private async permissionsCommand(args: string, ctx: ExtensionContext): Promise<void> {

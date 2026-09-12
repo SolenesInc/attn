@@ -8,12 +8,15 @@ import { PiSecurity } from "../security/index";
 import { canonical, loadSecurityConfig } from "../security/policy";
 import { SecurityPanel } from "../security/ui";
 import { defaultBuildCaches } from "../security/caches";
+import { PiApproval } from "../approval/session";
+import { defaultApprovalConfig } from "../approval/config";
+import type { GuardianControl } from "../approval/guardian-selection";
 
 const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as Theme;
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0)) await cleanup(); });
 
-async function fixture(mode = "tui", options: { approvals?: boolean } = {}) {
+async function fixture(mode = "tui", options: { approvals?: boolean; guardian?: GuardianControl } = {}) {
   const root = canonical(mkdtempSync(join(tmpdir(), "pi-security-ui-")));
   for (const name of ["agent", "project", "cache", "outside"]) mkdirSync(join(root, name));
   const configPath = join(root, "agent", "attn-security.json");
@@ -28,13 +31,19 @@ async function fixture(mode = "tui", options: { approvals?: boolean } = {}) {
   let closed = false;
   let rows = 40;
   const statuses: string[] = [];
-  const ctx = { mode, hasUI: true, cwd: join(root, "project"), ui: {
+  const model = { provider: "fixture", id: "coding", reasoning: true, input: ["text"] };
+  const reviewer = { ...model, id: "reviewer" };
+  const ctx = { model, modelRegistry: {
+    getAvailable: () => [model, reviewer],
+    find: (provider: string, id: string) => [model, reviewer].find(m => m.provider === provider && m.id === id),
+    getApiKeyAndHeaders: async () => ({ ok: true }),
+  }, mode, hasUI: true, cwd: join(root, "project"), ui: {
     setStatus: (_key: string, text: string) => statuses.push(text), notify: (text: string) => notices.push(text),
     custom: (make: any) => new Promise<void>((resolve) => {
       panel = make({ terminal: { get rows() { return rows; } }, requestRender() {} }, theme, {}, () => { closed = true; resolve(); });
     }),
   } };
-  const security = new PiSecurity(configPath, options.approvals ? (async () => ({ output: "", exitCode: 0, cancelled: false, truncated: false })) as never : undefined);
+  const security = new PiSecurity(configPath, options.approvals ? (async () => ({ output: "", exitCode: 0, cancelled: false, truncated: false })) as never : undefined, undefined, undefined, undefined, options.guardian);
   security.register({ on: (name: string, handler: any) => handlers.set(name, handler), registerCommand: (name: string, command: any) => commands.set(name, command), registerTool: (tool: any) => tools.set(tool.name, tool) } as never);
   cleanups.push(async () => { await handlers.get("session_shutdown")({}, ctx); rmSync(root, { recursive: true, force: true }); });
   await handlers.get("session_start")({}, ctx);
@@ -71,6 +80,28 @@ test("bare security opens a native panel without writing; RPC with hasUI gets st
   expect(readFileSync(ui.configPath, "utf8")).toBe(before);
   const rpc = await fixture("rpc");
   expect(rpc.notices.at(-1)).toContain("credential filtering: on");
+});
+
+test("guardian picker applies model and effort, resets, and never writes the security file", async () => {
+  const approval = new PiApproval({ config: defaultApprovalConfig, suite: {} as never, ledger: { record: () => {} } });
+  const ui = await fixture("tui", { approvals: true, guardian: approval.guardianControl });
+  const before = readFileSync(ui.configPath, "utf8");
+  await ui.choose("Guardian");
+  await ui.choose("Model");
+  await ui.choose("fixture ›");
+  await ui.choose("fixture/reviewer");
+  expect(ui.screen()).toContain("Model · fixture/reviewer");
+  await ui.choose("Reasoning");
+  await ui.choose("high");
+  expect(ui.screen()).toContain("Reasoning · high");
+  await ui.command("guardian status");
+  expect(ui.notices.at(-1)).toContain("Guardian (session override): fixture/reviewer · effort high");
+  await ui.choose("Use attn default");
+  expect(ui.screen()).toContain("Model · Follow session model");
+  expect(ui.screen()).toContain("Reasoning · Default");
+  expect(readFileSync(ui.configPath, "utf8")).toBe(before);
+  await ui.press("\x1b");
+  await ui.close();
 });
 
 test("toggles persist and immediately change protected tools and agent guidance", async () => {

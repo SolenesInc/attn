@@ -138,6 +138,7 @@ describe("PiDriver", () => {
     expect(bare.env?.ATTN_PI_AUTOMODE_CONFIG).toBeUndefined();
 
     const config = {
+      guardian: { provider: "fixture", model: "review", effort: "high" },
       enabled_default: true,
       approval_policy: "on-request",
       sandbox_mode: "workspace-write",
@@ -840,4 +841,3 @@ describe("PiDriver: coming back after attn had nothing", () => {
     ).rejects.toThrow(/pi_state/);
   });
 });
-

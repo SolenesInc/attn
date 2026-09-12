@@ -9,7 +9,7 @@ describe('legacy pattern dismissal results', () => {
     const pending: PendingRequests = new Map([
       [pendingRequestKey('automode_legacy_dismiss', 'dismiss-1'), { resolve, reject }],
     ]);
-    const config = { legacy_patterns: [] };
+    const config = { legacy_patterns: [], guardian: { provider: 'fixture', model: 'review', effort: 'high' } };
 
     expect(handleAutoModeDaemonEvent({
       event: 'automode_config_result',

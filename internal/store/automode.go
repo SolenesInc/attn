@@ -55,14 +55,14 @@ func (s *Store) readAutoModeConfig(q rowQuerier) (automode.Config, error) {
 		return cfg, nil
 	}
 	var (
-		enabled                          int
-		policy, sandbox                  string
-		environment, rules, network, old string
+		enabled                                    int
+		policy, sandbox                            string
+		environment, rules, network, old, guardian string
 	)
 	err := q.QueryRow(`
-		SELECT enabled_default, approval_policy, sandbox_mode, environment, rules, network, legacy_patterns
+		SELECT enabled_default, approval_policy, sandbox_mode, environment, rules, network, legacy_patterns, guardian
 		FROM automode_config WHERE id = 1
-	`).Scan(&enabled, &policy, &sandbox, &environment, &rules, &network, &old)
+	`).Scan(&enabled, &policy, &sandbox, &environment, &rules, &network, &old, &guardian)
 	if err == sql.ErrNoRows {
 		return cfg, nil
 	}
@@ -70,6 +70,12 @@ func (s *Store) readAutoModeConfig(q rowQuerier) (automode.Config, error) {
 		return cfg, err
 	}
 	cfg.EnabledDefault = enabled != 0
+	if err := json.Unmarshal([]byte(guardian), &cfg.Guardian); err != nil {
+		return cfg, fmt.Errorf("decode guardian: %w", err)
+	}
+	if err := automode.ValidateGuardian(cfg.Guardian); err != nil {
+		return cfg, err
+	}
 	if strings.TrimSpace(policy) != "" {
 		cfg.ApprovalPolicy = policy
 	}
@@ -184,6 +190,9 @@ func (s *Store) SetAutoModePolicy(amendment automode.PolicyAmendment, now time.T
 }
 
 func applyPolicyAmendment(cfg *automode.Config, amendment automode.PolicyAmendment) {
+	if amendment.Guardian != nil {
+		cfg.Guardian = *amendment.Guardian
+	}
 	if amendment.ApprovalPolicy != nil {
 		cfg.ApprovalPolicy = *amendment.ApprovalPolicy
 	}
@@ -718,6 +727,13 @@ func (s *Store) mutateAutoModeConfig(now time.Time, apply func(*automode.Config)
 }
 
 func writeAutoModeConfig(e execer, cfg automode.Config, now time.Time) error {
+	if err := automode.ValidateGuardian(cfg.Guardian); err != nil {
+		return err
+	}
+	guardian, err := json.Marshal(cfg.Guardian)
+	if err != nil {
+		return err
+	}
 	// Every config here came out of a read, which resolved the shipped entries in;
 	// persisting them would freeze today's list into the row.
 	cfg.Rules = automode.StripShippedRules(cfg.Rules)
@@ -745,8 +761,8 @@ func writeAutoModeConfig(e execer, cfg automode.Config, now time.Time) error {
 	_, err = e.Exec(`
 		INSERT INTO automode_config
 			(id, enabled_default, approval_policy, sandbox_mode, environment, rules,
-			 network, legacy_patterns, updated_at)
-		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+			 network, legacy_patterns, guardian, updated_at)
+		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			enabled_default = excluded.enabled_default,
 			approval_policy = excluded.approval_policy,
@@ -755,9 +771,10 @@ func writeAutoModeConfig(e execer, cfg automode.Config, now time.Time) error {
 			rules           = excluded.rules,
 			network         = excluded.network,
 			legacy_patterns = excluded.legacy_patterns,
+			guardian = excluded.guardian,
 			updated_at      = excluded.updated_at
 	`, enabled, cfg.ApprovalPolicy, cfg.SandboxMode, environment, string(rules),
-		string(network), legacy, now.UTC().Format(sortableTimeFormat))
+		string(network), legacy, string(guardian), now.UTC().Format(sortableTimeFormat))
 	return err
 }
 

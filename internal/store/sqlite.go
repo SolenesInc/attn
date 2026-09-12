@@ -1246,6 +1246,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{143, "snapshot accepted delegation handovers", ""},
 	{144, "snapshot accepted delegation parents", ""},
 	{145, "move automation continuity from tickets to Garden seeds", ""},
+	{146, "guardian model selection", `ALTER TABLE automode_config ADD COLUMN guardian TEXT NOT NULL DEFAULT '{}';`},
 }
 
 const migration99SQL = `

@@ -8,6 +8,7 @@ import type {
   AutoModePresetInfo,
   AutoModeProposalInfo,
   AutoModeRuleInfo,
+  GuardianSelection,
 } from '../types/generated';
 import { type PendingRequests, settlePendingRequest } from './daemonPendingRequests';
 import { useAutoModePushStore } from '../store/autoMode';
@@ -32,6 +33,7 @@ export interface AutoModeState {
 
 // A policy edit names only what it moves; a field left out stays as it stands.
 export interface AutoModePolicyEdit {
+  guardian?: GuardianSelection;
   approvalPolicy?: string;
   sandboxMode?: string;
   allowLocalBinding?: boolean;
@@ -99,6 +101,7 @@ const toConfig = (value: unknown): AutoModeConfigInfo => {
   if (typeof value !== 'object' || value === null) return emptyConfig();
   const raw = value as Record<string, unknown>;
   return {
+    ...(typeof raw.guardian === 'object' && raw.guardian !== null ? { guardian: raw.guardian as GuardianSelection } : {}),
     enabled_default: raw.enabled_default === true,
     approval_policy: typeof raw.approval_policy === 'string' ? raw.approval_policy : '',
     sandbox_mode: typeof raw.sandbox_mode === 'string' ? raw.sandbox_mode : '',

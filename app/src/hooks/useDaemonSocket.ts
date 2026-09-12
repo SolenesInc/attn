@@ -289,7 +289,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '307';
+export const PROTOCOL_VERSION = '308';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -3245,6 +3245,7 @@ export function useDaemonSocket({
         'automode_policy_set',
         {
           ...(edit.approvalPolicy === undefined ? {} : { approval_policy: edit.approvalPolicy }),
+          ...(edit.guardian === undefined ? {} : { guardian: edit.guardian }),
           ...(edit.sandboxMode === undefined ? {} : { sandbox_mode: edit.sandboxMode }),
           ...(edit.allowLocalBinding === undefined
             ? {}

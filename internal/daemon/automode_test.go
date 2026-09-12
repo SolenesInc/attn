@@ -716,6 +716,38 @@ func TestAutoModePolicySetFromTheAppHoldsWhatItIsNotTold(t *testing.T) {
 	}
 }
 
+func TestGuardianSelectionFromAppRoundTripsAndRejectsIncompleteModels(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
+	set := autoModeEdit(t, d, func(c *wsClient) {
+		d.handleAutoModePolicySetWS(c, &protocol.AutoModePolicySetMessage{
+			Cmd: protocol.CmdAutoModePolicySet, RequestID: protocol.Ptr("guardian"),
+			Guardian: &protocol.GuardianSelection{Provider: protocol.Ptr("provider"), Model: protocol.Ptr("model"), Effort: protocol.Ptr("high")},
+		})
+	})
+	if !set.Success || set.Config == nil || set.Config.Guardian == nil {
+		t.Fatalf("selection not returned: %+v", set)
+	}
+	if protocol.Deref(set.Config.Guardian.Model) != "model" || protocol.Deref(set.Config.Guardian.Effort) != "high" {
+		t.Fatalf("selection = %+v", set.Config.Guardian)
+	}
+	refused := autoModeEdit(t, d, func(c *wsClient) {
+		d.handleAutoModePolicySetWS(c, &protocol.AutoModePolicySetMessage{
+			Cmd: protocol.CmdAutoModePolicySet, RequestID: protocol.Ptr("invalid"), Guardian: &protocol.GuardianSelection{Provider: protocol.Ptr("provider")},
+		})
+	})
+	if refused.Success {
+		t.Fatal("accepted incomplete guardian selection")
+	}
+	reset := autoModeEdit(t, d, func(c *wsClient) {
+		d.handleAutoModePolicySetWS(c, &protocol.AutoModePolicySetMessage{
+			Cmd: protocol.CmdAutoModePolicySet, RequestID: protocol.Ptr("reset"), Guardian: &protocol.GuardianSelection{},
+		})
+	})
+	if !reset.Success || reset.Config == nil || reset.Config.Guardian == nil || protocol.Deref(reset.Config.Guardian.Model) != "" {
+		t.Fatalf("reset failed: %+v", reset)
+	}
+}
+
 func TestAutoModeStateNamesWhatShipped(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
 	client := busTestClient()

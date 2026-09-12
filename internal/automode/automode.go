@@ -9,13 +9,14 @@ import (
 )
 
 type Config struct {
-	EnabledDefault bool        `json:"enabled_default"`
-	ApprovalPolicy string      `json:"approval_policy"`
-	SandboxMode    string      `json:"sandbox_mode"`
-	Rules          []Rule      `json:"rules"`
-	Network        Network     `json:"network"`
-	Environment    Environment `json:"environment"`
-	LegacyPatterns []string    `json:"legacy_patterns"`
+	Guardian       GuardianSelection `json:"guardian"`
+	EnabledDefault bool              `json:"enabled_default"`
+	ApprovalPolicy string            `json:"approval_policy"`
+	SandboxMode    string            `json:"sandbox_mode"`
+	Rules          []Rule            `json:"rules"`
+	Network        Network           `json:"network"`
+	Environment    Environment       `json:"environment"`
+	LegacyPatterns []string          `json:"legacy_patterns"`
 }
 
 // Match and NotMatch are pi's own self-tests, round-tripped here but never read.
@@ -292,9 +293,10 @@ type HostAmendment struct {
 
 // A policy amendment names only the fields it moves; a nil field stays as it stands.
 type PolicyAmendment struct {
-	ApprovalPolicy    *string `json:"approval_policy,omitempty"`
-	SandboxMode       *string `json:"sandbox_mode,omitempty"`
-	AllowLocalBinding *bool   `json:"allow_local_binding,omitempty"`
+	Guardian          *GuardianSelection `json:"guardian,omitempty"`
+	ApprovalPolicy    *string            `json:"approval_policy,omitempty"`
+	SandboxMode       *string            `json:"sandbox_mode,omitempty"`
+	AllowLocalBinding *bool              `json:"allow_local_binding,omitempty"`
 }
 
 type PatternAmendment struct {
@@ -419,9 +421,14 @@ func FormatHostValue(amendment HostAmendment) (string, error) {
 }
 
 func ValidatePolicy(amendment PolicyAmendment) error {
-	if amendment.ApprovalPolicy == nil && amendment.SandboxMode == nil && amendment.AllowLocalBinding == nil {
+	if amendment.ApprovalPolicy == nil && amendment.SandboxMode == nil && amendment.AllowLocalBinding == nil && amendment.Guardian == nil {
 		return fmt.Errorf(
-			"a policy amendment names an approval policy, a sandbox mode or local binding; it named none")
+			"a policy amendment names an approval policy, a sandbox mode, local binding or guardian; it named none")
+	}
+	if amendment.Guardian != nil {
+		if err := ValidateGuardian(*amendment.Guardian); err != nil {
+			return err
+		}
 	}
 	if amendment.ApprovalPolicy != nil {
 		if err := ValidateApprovalPolicy(*amendment.ApprovalPolicy); err != nil {
@@ -478,6 +485,9 @@ func FormatPatternValue(pattern []PatternToken) (string, error) {
 
 func DescribePolicy(amendment PolicyAmendment) string {
 	parts := []string{}
+	if amendment.Guardian != nil {
+		parts = append(parts, "guardian "+amendment.Guardian.Describe())
+	}
 	if amendment.ApprovalPolicy != nil {
 		parts = append(parts, "approval "+*amendment.ApprovalPolicy)
 	}

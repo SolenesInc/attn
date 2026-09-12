@@ -179,9 +179,25 @@ s-xmrk8s.
 
 ## The Guardian
 
-With `/auto on`, a model answers the approval instead of you. It runs on the
-session's active model with reasoning `low` when the model supports it, which
-is Codex's own fallback when its review model is not in the catalog.
+With `/auto on`, the Guardian answers approvals instead of you. Its provider,
+model and reasoning come from attn's launch defaults, with a session override
+available in `/security` under Guardian. An unset model follows the session's
+active coding model. Default reasoning uses `low` when supported, otherwise
+the provider default. Explicit selections must be available and support the
+chosen effort; a configuration or credential error interrupts the turn and
+names what to fix, without silently substituting another model.
+
+`/security guardian model <provider> <model>` selects a model, `model session`
+follows the coding model, and `/security guardian effort <level|default>` sets
+reasoning. `/security guardian reset` restores the default captured at launch.
+Both `/security status` and `/auto status` show the effective selection and
+whether it came from attn or a session override.
+
+Overrides stay in agent memory across daemon restarts. An agent `/reload` or
+new session resets them to the original launch defaults; relaunching the agent
+gets the daemon's current defaults. Global changes do not affect running
+agents. Each review retains the model and effort it started with. Switching
+models preserves the Guardian conversation through Pi's history conversion.
 
 What it sees: the security policy carrying your configured environment, the
 planned action, and a transcript trimmed to Codex's caps — 5,000 tokens per

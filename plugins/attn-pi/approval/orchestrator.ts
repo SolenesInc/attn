@@ -318,7 +318,7 @@ export class ApprovalOrchestrator {
   }
 }
 
-function isApproval(decision: ReviewDecision): boolean {
+function isApproval(decision: ReviewDecision) {
   return (
     decision.type === "approved" ||
     decision.type === "approved_for_session" ||
