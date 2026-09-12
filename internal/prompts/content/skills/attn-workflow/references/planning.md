@@ -24,7 +24,7 @@ Seed states and notes carry progress. Update the plan body when the implementati
 
 Read back the saved plan, children, and dependency links to check that they cover the intended outcome and preserve existing work. Show the user the proposed plan and, when pull-request delivery applies, its proposed pull-request boundaries and ordering. Save the plan in the seed so another agent can continue from it, and name the seed or plot for review.
 
-Recommend how to execute it. Recommend an Orchestrator when the plan benefits from mixing harnesses or models between the coordinating agent and its Builders. Otherwise, recommend a single Builder. Explain the recommendation briefly.
+Recommend how to execute it. Recommend an Orchestrator when the plan requires coordinated or reviewed Builder work, or benefits from mixing harnesses or models between the coordinating agent and its Builders. Otherwise, recommend a single Builder. Explain the recommendation briefly.
 
 Ask whether the user wants to review or adjust the plan, or dispatch, and wait for their answer. This checkpoint applies even when their earlier request included execution. Dispatch only when the user chooses dispatch after seeing the proposed plan and handoff. Give the next agent the plan seed, code location, agreed scope, verification expectations, and authorization. Agreement on the plan alone does not authorize execution. Keep execution seeds open when only the plan is complete.
 

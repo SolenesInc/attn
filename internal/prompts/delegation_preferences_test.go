@@ -90,7 +90,7 @@ func TestDelegationGuidanceOwnsReviewAndPausesBeforeDispatch(t *testing.T) {
 		}
 	}
 	for name, guidance := range map[string]string{"planning": planning, "delegation": delegation} {
-		for _, expected := range []string{"mixing harnesses or models", "coordinating agent and its Builders"} {
+		for _, expected := range []string{"requires coordinated or reviewed Builder work", "mixing harnesses or models", "coordinating agent and its Builders"} {
 			if !strings.Contains(guidance, expected) {
 				t.Errorf("%s guidance is missing the orchestration capability %q", name, expected)
 			}
