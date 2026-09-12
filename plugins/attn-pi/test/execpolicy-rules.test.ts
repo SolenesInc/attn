@@ -20,14 +20,18 @@ describe("prefix rule matching", () => {
     const rules: PrefixRule[] = [{ pattern: ["git", "status"] }];
     const evaluation = evaluateCommand("git status", allowUnmatched(rules));
     expect(evaluation.decision).toBe("allow");
-    expect(evaluation.matches).toEqual([{ rule: rules[0] as PrefixRule, command: ["git", "status"], decision: "allow" }]);
+    expect(evaluation.matches).toEqual([{
+      rule: rules[0] as PrefixRule, command: ["git", "status"], decision: "allow", sandbox: "bypass",
+    }]);
   });
 
   test("justification is attached to forbidden matches", () => {
     const rules: PrefixRule[] = [{ pattern: ["rm"], decision: "forbidden", justification: "destructive command" }];
     const evaluation = evaluateCommand("rm -rf /some/important/folder", allowUnmatched(rules));
     expect(evaluation.decision).toBe("forbidden");
-    expect(evaluation.matches).toEqual([{ rule: rules[0] as PrefixRule, command: ["rm"], decision: "forbidden" }]);
+    expect(evaluation.matches).toEqual([{
+      rule: rules[0] as PrefixRule, command: ["rm"], decision: "forbidden", sandbox: "inherit",
+    }]);
     expect(evaluation.reason).toBe("`bash -lc 'rm -rf /some/important/folder'` rejected: destructive command");
   });
 
@@ -35,7 +39,67 @@ describe("prefix rule matching", () => {
     const rules: PrefixRule[] = [{ pattern: ["ls"], decision: "allow", justification: "safe and commonly used" }];
     const evaluation = evaluateCommand("ls -l", promptUnmatched(rules));
     expect(evaluation.decision).toBe("allow");
-    expect(evaluation.matches).toEqual([{ rule: rules[0] as PrefixRule, command: ["ls"], decision: "allow" }]);
+    expect(evaluation.matches).toEqual([{
+      rule: rules[0] as PrefixRule, command: ["ls"], decision: "allow", sandbox: "bypass",
+    }]);
+  });
+
+  test("review and sandbox execution are independent", () => {
+    const reviewedOutside = evaluateCommand("go test ./...", allowUnmatched([
+      { pattern: ["go", "test"], decision: "prompt", sandbox: "bypass" },
+    ]));
+    expect(reviewedOutside.decision).toBe("prompt");
+    expect(reviewedOutside.bypassSandbox).toBe(true);
+
+    const quietInside = evaluateCommand("git status", allowUnmatched([
+      { pattern: ["git", "status"], decision: "allow", sandbox: "inherit" },
+    ]));
+    expect(quietInside.decision).toBe("allow");
+    expect(quietInside.bypassSandbox).toBe(false);
+  });
+
+  test("the strictest sandbox treatment wins across matching sources", () => {
+    const evaluation = evaluateCommand("go test ./...", allowUnmatched([
+      { pattern: ["go", "test"], decision: "prompt", sandbox: "bypass" },
+      { pattern: ["go"], decision: "allow", sandbox: "inherit" },
+    ]));
+    expect(evaluation.decision).toBe("prompt");
+    expect(evaluation.bypassSandbox).toBe(false);
+  });
+
+  test("an inherited sandbox rule reviews an explicit escalation", () => {
+    for (const approvalPolicy of ["on-request", "untrusted"] as const) {
+      const evaluation = evaluateCommand("git status", {
+        rules: [{ pattern: ["git", "status"], decision: "allow", sandbox: "inherit" }],
+        approvalPolicy,
+        sandboxMode: "workspace-write",
+        sandboxPermissions: "require_escalated",
+      });
+      expect(evaluation.decision).toBe("prompt");
+      expect(evaluation.bypassSandbox).toBe(false);
+    }
+  });
+
+  test("an explicit sandbox bypass does not review the same escalation twice", () => {
+    const evaluation = evaluateCommand("git status", {
+      rules: [{ pattern: ["git", "status"], decision: "allow", sandbox: "bypass" }],
+      approvalPolicy: "on-request",
+      sandboxMode: "workspace-write",
+      sandboxPermissions: "require_escalated",
+    });
+    expect(evaluation.decision).toBe("allow");
+    expect(evaluation.bypassSandbox).toBe(true);
+  });
+
+  test("an inherited sandbox escalation is forbidden when review is disabled", () => {
+    const evaluation = evaluateCommand("git status", {
+      rules: [{ pattern: ["git", "status"], decision: "allow", sandbox: "inherit" }],
+      approvalPolicy: "never",
+      sandboxMode: "workspace-write",
+      sandboxPermissions: "require_escalated",
+    });
+    expect(evaluation.decision).toBe("forbidden");
+    expect(evaluation.bypassSandbox).toBe(false);
   });
 
   test("only the first token alias expands to multiple rules", () => {
@@ -100,14 +164,14 @@ describe("prefix rule matching", () => {
     expect(evaluation.matches.map((match) => match.command)).toEqual([["git"]]);
   });
 
-  test("name resolution does not override an exact match", () => {
+  test("an exact executable grant cannot hide a bare-name restriction", () => {
     const rules: PrefixRule[] = [
       { pattern: ["/usr/bin/git"], decision: "allow" },
       { pattern: ["git"], decision: "prompt" },
     ];
     const evaluation = evaluateCommand("/usr/bin/git status", allowUnmatched(rules));
-    expect(evaluation.decision).toBe("allow");
-    expect(evaluation.matches.map((match) => match.command)).toEqual([["/usr/bin/git"]]);
+    expect(evaluation.decision).toBe("prompt");
+    expect(evaluation.matches.map((match) => match.command)).toEqual([["/usr/bin/git"], ["git"]]);
   });
 });
 
@@ -148,6 +212,15 @@ describe("rule validation", () => {
     expect(validateRules([{ pattern: ["ls"], decision: "prompt", justification: "   " }])).toEqual([
       { index: 0, message: "invalid rule: justification cannot be empty (rule `ls`)" },
     ]);
+  });
+
+  test("a forbidden rule cannot bypass the sandbox", () => {
+    expect(validateRules([{
+      pattern: ["rm"], decision: "forbidden", sandbox: "bypass", justification: "destructive",
+    }])).toEqual([{
+      index: 0,
+      message: "invalid rule: a forbidden rule cannot bypass the sandbox (rule `rm`)",
+    }]);
   });
 
   test("an invalid decision, pattern or example is reported with its rule index", () => {

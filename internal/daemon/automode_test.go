@@ -3,6 +3,8 @@ package daemon
 import (
 	"encoding/json"
 	"net"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,19 +12,56 @@ import (
 
 	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/config"
+	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
 
 func automodeShow(t *testing.T, d *Daemon) *protocol.AutoModeShowResult {
+	return automodeShowAt(t, d, "")
+}
+
+func automodeShowAt(t *testing.T, d *Daemon, cwd string) *protocol.AutoModeShowResult {
 	t.Helper()
 	resp := docCall(t, func(c net.Conn) {
-		d.handleAutoModeShow(c, &protocol.AutoModeShowMessage{Cmd: protocol.CmdAutoModeShow})
+		msg := &protocol.AutoModeShowMessage{Cmd: protocol.CmdAutoModeShow}
+		if cwd != "" {
+			msg.Cwd = protocol.Ptr(cwd)
+		}
+		d.handleAutoModeShow(c, msg)
 	})
 	if !resp.Ok {
 		t.Fatalf("automode show: %v", protocol.Deref(resp.Error))
 	}
 	return resp.AutomodeShowResult
+}
+
+func TestAutoModeShowResolvesRepositoryRulesForItsDirectory(t *testing.T) {
+	root := t.TempDir()
+	if output, err := exec.Command("git", "init", "--quiet", root).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, output)
+	}
+	path := filepath.Join(root, automode.RepositoryRulesFile)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"rules":[{
+  "pattern":["go","test"],"decision":"prompt","sandbox":"bypass"
+}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := automodeShowAt(t, newDaemonForTest(t), root)
+	expectedPath := filepath.Join(attngit.CanonicalizePath(root), automode.RepositoryRulesFile)
+	if result.RepositoryRulesPath == nil || *result.RepositoryRulesPath != expectedPath {
+		t.Fatalf("repository rules path = %v, want %q", result.RepositoryRulesPath, expectedPath)
+	}
+	if len(result.RepositoryRules) != 1 || result.RepositoryRules[0].Sandbox != automode.RuleSandboxBypass {
+		t.Fatalf("repository rules = %+v", result.RepositoryRules)
+	}
+	if len(result.Config.Rules) != len(result.GlobalRules)+1 {
+		t.Fatalf("effective rules = %d, global = %d", len(result.Config.Rules), len(result.GlobalRules))
+	}
 }
 
 func automodePropose(t *testing.T, d *Daemon, kind, target, value string) protocol.Response {
@@ -44,6 +83,9 @@ func TestAutoModeShowAnswersDefaultsOnAFreshProfile(t *testing.T) {
 	if cfg.Rules == nil || cfg.ShippedRules == nil || cfg.LegacyPatterns == nil ||
 		cfg.Network.AllowedDomains == nil || cfg.Network.DeniedDomains == nil {
 		t.Fatalf("a config list came back nil: %+v", cfg)
+	}
+	if result.GlobalRules == nil || result.RepositoryRules == nil || result.RepositoryRulesPath != nil {
+		t.Fatalf("rule sources on a global read = %+v", result)
 	}
 	if len(cfg.Rules) != len(cfg.ShippedRules) {
 		t.Errorf("rules = %+v on a fresh profile, want only the shipped ones", cfg.Rules)
@@ -72,7 +114,7 @@ func TestAutoModeRuleFromASessionOnlyProposes(t *testing.T) {
 	if len(after.Proposals) != 1 {
 		t.Fatalf("proposals = %d, want the one just recorded", len(after.Proposals))
 	}
-	if got := after.Proposals[0].Summary; got != "allow git push" {
+	if got := after.Proposals[0].Summary; got != "allow, bypass sandbox: git push" {
 		t.Errorf("proposal summary = %q, want the line a reviewer reads", got)
 	}
 }
@@ -628,14 +670,16 @@ func TestAutoModeRuleEditFromTheAppRoundTrips(t *testing.T) {
 	added := autoModeEdit(t, d, func(c *wsClient) {
 		d.handleAutoModeRuleAdd(c, &protocol.AutoModeRuleAddMessage{
 			Cmd: protocol.CmdAutoModeRuleAdd, Pattern: []string{"git", "status"},
-			Decision: protocol.Ptr(automode.DecisionAllow), RequestID: "r1",
+			Decision: protocol.Ptr(automode.DecisionPrompt), Sandbox: protocol.Ptr(automode.RuleSandboxBypass),
+			RequestID: "r1",
 		})
 	})
 	if !added.Success || added.Config == nil {
 		t.Fatalf("add failed: %q", protocol.Deref(added.Error))
 	}
 	stored := added.Config.Rules[len(added.Config.Rules)-1]
-	if autoModeTestRuleLine(stored) != "git status" || stored.Decision != automode.DecisionAllow {
+	if autoModeTestRuleLine(stored) != "git status" || stored.Decision != automode.DecisionPrompt ||
+		stored.Sandbox != automode.RuleSandboxBypass {
 		t.Fatalf("rules after add = %+v", added.Config.Rules)
 	}
 	if got := automodeShow(t, d).Config.Rules; len(got) != len(added.Config.Rules) {

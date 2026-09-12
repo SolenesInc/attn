@@ -11,12 +11,15 @@ func TestValidateRuleWantsTokensNotAShellLine(t *testing.T) {
 		t.Fatalf("a two-token allow rule was refused: %v", err)
 	}
 	for name, rule := range map[string]Rule{
-		"no tokens":     {Pattern: nil, Decision: DecisionAllow},
-		"blank token":   {Pattern: Tokens("git", " "), Decision: DecisionAllow},
-		"a shell line":  {Pattern: Tokens("git push"), Decision: DecisionAllow},
-		"empty token":   {Pattern: []PatternToken{{}}, Decision: DecisionAllow},
-		"bad decision":  {Pattern: Tokens("git"), Decision: "maybe"},
-		"no justifying": {Pattern: Tokens("rm"), Decision: DecisionForbidden},
+		"no tokens":       {Pattern: nil, Decision: DecisionAllow},
+		"blank token":     {Pattern: Tokens("git", " "), Decision: DecisionAllow},
+		"a shell line":    {Pattern: Tokens("git push"), Decision: DecisionAllow},
+		"form feed":       {Pattern: Tokens("git\fpush"), Decision: DecisionAllow},
+		"non-breaking":    {Pattern: Tokens("git\u00a0push"), Decision: DecisionAllow},
+		"byte order mark": {Pattern: Tokens("git\ufeffpush"), Decision: DecisionAllow},
+		"empty token":     {Pattern: []PatternToken{{}}, Decision: DecisionAllow},
+		"bad decision":    {Pattern: Tokens("git"), Decision: "maybe"},
+		"no justifying":   {Pattern: Tokens("rm"), Decision: DecisionForbidden},
 	} {
 		if err := ValidateRule(rule); err == nil {
 			t.Errorf("%s was accepted", name)
@@ -26,11 +29,28 @@ func TestValidateRuleWantsTokensNotAShellLine(t *testing.T) {
 	if err := ValidateRule(forbidden); err != nil {
 		t.Errorf("a justified forbidden rule was refused: %v", err)
 	}
+	if err := ValidateRule(Rule{Pattern: Tokens("git\u0085push"), Decision: DecisionAllow}); err != nil {
+		t.Errorf("a token accepted by Pi was refused: %v", err)
+	}
 }
 
 func TestNormalizeRuleDefaultsToAllow(t *testing.T) {
-	if got := NormalizeRule(Rule{Pattern: Tokens("ls")}).Decision; got != DecisionAllow {
-		t.Errorf("decision = %q, want %q", got, DecisionAllow)
+	rule := NormalizeRule(Rule{Pattern: Tokens("ls")})
+	if rule.Decision != DecisionAllow || rule.Sandbox != RuleSandboxBypass {
+		t.Fatalf("rule = %+v, want allow with sandbox bypass", rule)
+	}
+}
+
+func TestNormalizeRulePreservesLegacySandboxBehavior(t *testing.T) {
+	prompt := NormalizeRule(Rule{Pattern: Tokens("git", "push"), Decision: DecisionPrompt})
+	if prompt.Sandbox != RuleSandboxInherit {
+		t.Fatalf("prompt sandbox = %q, want inherit", prompt.Sandbox)
+	}
+	allowed := NormalizeRule(Rule{
+		Pattern: Tokens("go", "test"), Decision: DecisionAllow, Sandbox: RuleSandboxInherit,
+	})
+	if allowed.Sandbox != RuleSandboxInherit {
+		t.Fatalf("explicit allow sandbox = %q, want inherit", allowed.Sandbox)
 	}
 }
 
@@ -57,7 +77,7 @@ func TestPatternTokenReadsAStringOrAlternatives(t *testing.T) {
 
 // pi validates the examples; the daemon only has to carry them back unchanged.
 func TestRuleCarriesMatchExamplesUntouched(t *testing.T) {
-	raw := `{"pattern":["git","push"],"decision":"prompt","justification":"leaves the machine",` +
+	raw := `{"pattern":["git","push"],"decision":"prompt","sandbox":"inherit","justification":"leaves the machine",` +
 		`"match":[["git","push","origin"]],"not_match":[["git","pull"]]}`
 	rule, err := ParseRuleValue(raw)
 	if err != nil {
@@ -107,7 +127,9 @@ func TestValidateProposalReadsTheValueAsJSON(t *testing.T) {
 
 func TestDescribeProposalReadsAsOneLine(t *testing.T) {
 	for _, tc := range []struct{ kind, value, want string }{
-		{KindRule, `{"pattern":["git","push"],"decision":"prompt"}`, "prompt git push"},
+		{KindRule, `{"pattern":["git","push"],"decision":"prompt"}`, "prompt, inherit sandbox: git push"},
+		{KindRule, `{"pattern":["go","test"],"decision":"prompt","sandbox":"bypass"}`,
+			"prompt, bypass sandbox: go test"},
 		{KindRuleRemove, `{"pattern":["git","push"]}`, "remove rule git push"},
 		{KindHost, `{"host":"github.com","decision":"deny"}`, "deny github.com"},
 		{KindHostRemove, `{"host":"github.com","decision":"allow"}`, "remove allow github.com"},

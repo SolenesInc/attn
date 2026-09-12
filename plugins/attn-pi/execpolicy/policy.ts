@@ -1,16 +1,18 @@
-import type { Decision, PatternToken, PrefixRule } from "./types";
+import type { Decision, PatternToken, PrefixRule, RuleSandbox } from "./types";
 
 export type CompiledRule = {
   rule: PrefixRule;
   first: string;
   rest: readonly PatternToken[];
   decision: Decision;
+  sandbox: RuleSandbox;
 };
 
 export type PrefixMatch = {
   rule: PrefixRule;
   matchedPrefix: string[];
   decision: Decision;
+  sandbox: RuleSandbox;
   resolvedProgram?: string;
 };
 
@@ -31,13 +33,20 @@ export function ruleDecision(rule: PrefixRule): Decision | undefined {
   return isDecision(rule.decision) ? rule.decision : undefined;
 }
 
+export function ruleSandbox(rule: PrefixRule, decision = ruleDecision(rule)): RuleSandbox | undefined {
+  if (rule.sandbox === undefined) return decision === "allow" ? "bypass" : "inherit";
+  if (rule.sandbox === "inherit" || rule.sandbox === "bypass") return rule.sandbox;
+  return undefined;
+}
+
 export function compileRule(rule: PrefixRule): CompiledRule[] {
   const decision = ruleDecision(rule);
-  if (decision === undefined) return [];
+  const sandbox = ruleSandbox(rule, decision);
+  if (decision === undefined || sandbox === undefined || (decision === "forbidden" && sandbox === "bypass")) return [];
   const [first, ...rest] = rule.pattern;
   if (first === undefined) return [];
   const heads = typeof first === "string" ? [first] : first;
-  return heads.map((head) => ({ rule, first: head, rest, decision }));
+  return heads.map((head) => ({ rule, first: head, rest, decision, sandbox }));
 }
 
 export class CompiledPolicy {
@@ -55,8 +64,10 @@ export class CompiledPolicy {
 
   matchesForCommand(command: readonly string[]): PrefixMatch[] {
     const exact = this.matchExactRules(command);
-    if (exact.length > 0) return exact;
-    return this.matchHostExecutableRules(command);
+    const resolved = this.matchHostExecutableRules(command);
+    if (exact.length === 0) return resolved;
+    if (resolved.length === 0) return exact;
+    return [...exact, ...resolved.filter((candidate) => !exact.some((match) => match.rule === candidate.rule))];
   }
 
   private matchExactRules(command: readonly string[]): PrefixMatch[] {
@@ -65,8 +76,8 @@ export class CompiledPolicy {
     return matchAll(this.byProgram.get(program) ?? [], command);
   }
 
-  // policy.rs:344-371. A path resolves to rules written for its bare name;
-  // attn ships no host_executable allowlist, so every path resolves.
+  // policy.rs:344-371 resolves a path to rules written for its bare name.
+  // attn keeps both matches so an exact project grant cannot hide a shipped denial.
   private matchHostExecutableRules(command: readonly string[]): PrefixMatch[] {
     const program = command[0];
     if (program === undefined) return [];
@@ -100,7 +111,7 @@ function matchAll(rules: readonly CompiledRule[], command: readonly string[]): P
   for (const compiled of rules) {
     const matchedPrefix = matchesPrefix(compiled, command);
     if (matchedPrefix !== undefined) {
-      matches.push({ rule: compiled.rule, matchedPrefix, decision: compiled.decision });
+      matches.push({ rule: compiled.rule, matchedPrefix, decision: compiled.decision, sandbox: compiled.sandbox });
     }
   }
   return matches;

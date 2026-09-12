@@ -323,7 +323,12 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			}
 			policy, sandbox := effectiveSpawnPolicyPair(msg)
 			cfg = applySessionPolicyPair(cfg, policy, sandbox)
-			cfg = d.autoModeConfigForSession(cfg, params.CWD)
+			cfg, _, err = d.autoModeConfigForSession(cfg, params.CWD)
+			if err != nil {
+				d.finishPluginSessionLaunch(msg.ID, false)
+				plan.rollback(d, msg.ID)
+				return &spawnOutcome{err: err}
+			}
 			params.AutoMode = &cfg
 		}
 		// A relaunch of a known session or an explicit conversation id resumes; a

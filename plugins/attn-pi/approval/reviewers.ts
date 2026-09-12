@@ -125,7 +125,10 @@ export function reviewTitle(request: ApprovalRequest): string {
     : `Allow network access to ${networkScheme(request.protocol)}://${request.host}:${request.port}?`;
   const command = request.kind === "command" ? request : request.trigger;
   const head = command ? `${question}\n${command.command}\nin ${command.cwd}` : question;
-  return reason === undefined ? head : `${head}\n${reason}`;
+  const sandbox = command?.sandboxPermissions === "require_escalated"
+    ? "This command will run outside the sandbox."
+    : undefined;
+  return [head, sandbox, reason].filter((line) => line !== undefined).join("\n");
 }
 
 export { describeRequest };

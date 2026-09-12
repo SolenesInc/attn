@@ -12,6 +12,7 @@ export type AutoModeEditKind = 'rule' | 'host' | 'policy' | 'legacy';
 export interface AutoModeRuleDraft {
   pattern: string[];
   decision: string;
+  sandbox: string;
   justification: string;
 }
 
@@ -43,7 +44,7 @@ interface AutoModePolicyOptions {
   getState: () => Promise<AutoModeState>;
   promoteProposal: (id: number) => Promise<AutoModePromotion>;
   discardProposal: (id: number) => Promise<AutoModePromotion>;
-  addRule: (pattern: string[], decision: string, justification: string) => Promise<AutoModeConfigEdit>;
+  addRule: (pattern: string[], decision: string, sandbox: string, justification: string) => Promise<AutoModeConfigEdit>;
   removeRule: (pattern: string[][]) => Promise<AutoModeConfigEdit>;
   addHost: (host: string, decision: string) => Promise<AutoModeConfigEdit>;
   removeHost: (host: string, decision: string) => Promise<AutoModeConfigEdit>;
@@ -129,7 +130,7 @@ export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolic
 
   const addRule = useCallback(
     (draft: AutoModeRuleDraft) =>
-      edit('rule', () => writeRule(draft.pattern, draft.decision, draft.justification)),
+      edit('rule', () => writeRule(draft.pattern, draft.decision, draft.sandbox, draft.justification)),
     [edit, writeRule],
   );
   const removeRule = useCallback(

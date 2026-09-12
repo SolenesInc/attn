@@ -106,6 +106,65 @@ test("a prompt decision runs the command once the reviewer approves", async () =
   expect(it.seen).toHaveLength(1);
 });
 
+test("a policy sandbox bypass is disclosed to the reviewer", async () => {
+  const it = fixture({
+    script: () => ({ type: "denied", rejection: userRejection }),
+    approvalPolicy: "on-request",
+    sandboxMode: "workspace-write",
+    rules: [{ pattern: ["echo"], decision: "prompt", sandbox: "bypass" }],
+  });
+
+  await expect(it.run("echo outside")).rejects.toThrow(userRejection);
+  expect(it.seen[0]).toMatchObject({
+    kind: "command",
+    command: "echo outside",
+    sandboxPermissions: "require_escalated",
+  });
+});
+
+test.skipIf(process.platform !== "darwin")(
+  "a prompt rule can require review and then bypass the sandbox",
+  async () => {
+    const outside = canonical(mkdtempSync(join(process.cwd(), ".pi-approval-outside-")));
+    roots.push(outside);
+    const file = join(outside, "written");
+    const sandboxed = fixture({
+      script: () => ({ type: "approved" }),
+      approvalPolicy: "on-request",
+      sandboxMode: "workspace-write",
+      rules: [{ pattern: ["touch"], decision: "prompt", sandbox: "inherit" }],
+    });
+    expect((await sandboxed.run(`touch ${JSON.stringify(file)}`)).exitCode).not.toBe(0);
+    expect(existsSync(file)).toBe(false);
+
+    const it = fixture({
+      script: () => ({ type: "approved" }),
+      sandboxMode: "workspace-write",
+      rules: [{ pattern: ["touch"], decision: "prompt", sandbox: "bypass" }],
+    });
+    expect((await it.run(`touch ${JSON.stringify(file)}`)).exitCode).toBe(0);
+    expect(existsSync(file)).toBe(true);
+    expect(it.seen).toHaveLength(1);
+  },
+);
+
+test("an explicit escalation under an inherited sandbox rule reaches the reviewer", async () => {
+  const it = fixture({
+    script: () => ({ type: "denied", rejection: userRejection }),
+    approvalPolicy: "on-request",
+    sandboxMode: "workspace-write",
+    rules: [{ pattern: ["touch"], decision: "allow", sandbox: "inherit" }],
+  });
+  const file = join(it.root, "never-escalated");
+
+  await expect(it.run(`touch ${JSON.stringify(file)}`, {
+    sandbox_permissions: "require_escalated",
+  })).rejects.toThrow(userRejection);
+  expect(it.seen).toHaveLength(1);
+  expect(it.seen[0]).toMatchObject({ kind: "command", sandboxPermissions: "require_escalated" });
+  expect(existsSync(file)).toBe(false);
+});
+
 test("a refusal is the tool's error, is recorded, and leaves nothing behind", async () => {
   const it = fixture({ script: () => ({ type: "denied", rejection: userRejection }) });
   const file = join(it.root, "never");

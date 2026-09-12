@@ -66,7 +66,9 @@ Every command takes --json.
 
   --decision       for a rule: allow (the default), prompt or forbidden.
                    for a host: allow (the default) or deny.
-  --justification  why a forbidden rule refuses; it is the text the agent is given.
+  --sandbox        for a rule: inherit or bypass. Absent preserves legacy
+                   behavior: allow bypasses and other decisions inherit.
+  --justification  why a rule prompts or refuses; it is shown to the agent.
 
 rule, host and policy RECORD A PROPOSAL. Nothing they write changes what a session
 runs under until a human promotes it in the app. The environment is the exception:
@@ -97,7 +99,11 @@ func autoModeFail(verb string, err error) {
 
 func runAutoModeShow(args []string) {
 	asJSON := hasFlag(args, "--json")
-	result, err := autoModeClient().AutoModeShow()
+	cwd, err := os.Getwd()
+	if err != nil {
+		autoModeFail("show", err)
+	}
+	result, err := autoModeClient().AutoModeShow(cwd)
 	if err != nil {
 		autoModeFail("show", err)
 	}
@@ -120,7 +126,13 @@ func runAutoModeShow(args []string) {
 	fmt.Fprintf(w, "guardian\t%s\n", guardian.Describe())
 	w.Flush()
 	printAutoModeEnvironment(cfg.Environment)
-	printAutoModeRules(cfg)
+	if result.RepositoryRulesPath == nil {
+		printAutoModeRules("rules", cfg.Rules, cfg.ShippedRules)
+	} else {
+		printAutoModeRules("global rules", result.GlobalRules, cfg.ShippedRules)
+		printAutoModeRules("repository rules ("+*result.RepositoryRulesPath+")", result.RepositoryRules, nil)
+		printAutoModeRules("effective rules", cfg.Rules, cfg.ShippedRules)
+	}
 	printAutoModeList("network allowed", cfg.Network.AllowedDomains)
 	printAutoModeList("network denied", cfg.Network.DeniedDomains)
 	fmt.Printf("\nnetwork local binding: %t\n", cfg.Network.AllowLocalBinding)
@@ -155,24 +167,24 @@ func autoModeProposalSubject(p protocol.AutoModeProposalInfo) string {
 	return p.Value
 }
 
-func printAutoModeRules(cfg protocol.AutoModeConfigInfo) {
-	if len(cfg.Rules) == 0 {
-		fmt.Print("\nrules: none\n")
+func printAutoModeRules(label string, rules, shippedRules []protocol.AutoModeRuleInfo) {
+	if len(rules) == 0 {
+		fmt.Printf("\n%s: none\n", label)
 		return
 	}
 	shipped := map[string]bool{}
-	for _, rule := range cfg.ShippedRules {
+	for _, rule := range shippedRules {
 		shipped[autoModeRuleLine(rule)] = true
 	}
-	fmt.Print("\nrules:\n")
+	fmt.Printf("\n%s:\n", label)
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	for _, rule := range cfg.Rules {
+	for _, rule := range rules {
 		line := autoModeRuleLine(rule)
 		note := rule.Justification
 		if shipped[line] {
 			note = "built-in; " + note
 		}
-		fmt.Fprintf(w, "  %s\t%s\t%s\n", rule.Decision, line, note)
+		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n", rule.Decision, rule.Sandbox, line, note)
 	}
 	w.Flush()
 }
@@ -209,7 +221,7 @@ func runAutoModeEnv(args []string) {
 }
 
 func runAutoModeEnvList(args []string) {
-	result, err := autoModeClient().AutoModeShow()
+	result, err := autoModeClient().AutoModeShow("")
 	if err != nil {
 		autoModeFail("env", err)
 	}
@@ -350,10 +362,12 @@ func runAutoModeRuleAdd(tokens []string, args []string) {
 		os.Exit(2)
 	}
 	decision, _ := takeStringFlag(args, "--decision")
+	sandbox, _ := takeStringFlag(args, "--sandbox")
 	justification, _ := takeStringFlag(args, "--justification")
 	rule := automode.NormalizeRule(automode.Rule{
 		Pattern:       automode.Tokens(tokens...),
 		Decision:      strings.TrimSpace(decision),
+		Sandbox:       strings.TrimSpace(sandbox),
 		Justification: strings.TrimSpace(justification),
 	})
 	if err := automode.ValidateRule(rule); err != nil {
@@ -561,7 +575,7 @@ func takeStringFlag(args []string, flag string) (string, bool) {
 
 func autoModeFlagTakesValue(flag string) bool {
 	switch flag {
-	case "--limit", "--decision", "--justification", "--approval-policy", "--sandbox-mode",
+	case "--limit", "--decision", "--sandbox", "--justification", "--approval-policy", "--sandbox-mode",
 		"--allow-local-binding":
 		return true
 	}

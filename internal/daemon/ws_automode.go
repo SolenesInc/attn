@@ -226,6 +226,7 @@ func (d *Daemon) addAutoModeRule(msg *protocol.AutoModeRuleAddMessage) autoModeC
 		return d.store.AddAutoModeRule(automode.Rule{
 			Pattern:       autoModeRuleTokens(msg.Pattern),
 			Decision:      strings.TrimSpace(protocol.Deref(msg.Decision)),
+			Sandbox:       strings.TrimSpace(protocol.Deref(msg.Sandbox)),
 			Justification: strings.TrimSpace(protocol.Deref(msg.Justification)),
 		}, time.Now())
 	}

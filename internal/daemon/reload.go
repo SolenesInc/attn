@@ -458,7 +458,11 @@ func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend
 			}
 			cfg = applySessionPolicyPair(cfg, intent.ApprovalPolicy, intent.SandboxMode)
 		}
-		cfg = d.autoModeConfigForSession(cfg, params.CWD)
+		cfg, _, err = d.autoModeConfigForSession(cfg, params.CWD)
+		if err != nil {
+			prepared.abort()
+			return nil, err
+		}
 		params.AutoMode = &cfg
 	}
 	if metadata := strings.TrimSpace(d.store.GetAgentMetadata(session.ID)); metadata != "" && json.Valid([]byte(metadata)) {

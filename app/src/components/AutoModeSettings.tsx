@@ -20,6 +20,7 @@ interface AutoModeSettingsProps {
 const APPROVAL_POLICIES = ['untrusted', 'on-request', 'never'];
 const SANDBOX_MODES = ['read-only', 'workspace-write', 'danger-full-access'];
 const DECISIONS = ['allow', 'prompt', 'forbidden'];
+const RULE_SANDBOXES = ['inherit', 'bypass'];
 
 const ruleLine = (rule: AutoModeRuleInfo): string =>
   rule.pattern
@@ -64,9 +65,9 @@ export function AutoModeSettings({ policy, loadModels }: AutoModeSettingsProps) 
         {error && <span className="settings-warning">{error}</span>}
 
         <div className="automode-section-head">
-          <h4>Effective policy</h4>
+          <h4>Global policy</h4>
           <p className="settings-description">
-            What a pi session launches with today.
+            The base every pi session launches with. A checkout can add repository rules.
           </p>
         </div>
 
@@ -84,10 +85,11 @@ export function AutoModeSettings({ policy, loadModels }: AutoModeSettingsProps) 
         <EnvironmentEditor config={config} slots={environmentSlots} policy={policy} />
 
         <div className="automode-section-head">
-          <h4>Rules</h4>
+          <h4>Global rules</h4>
           <p className="settings-description">
             A rule matches a command by its leading words, one word per box:
             <code> git push</code> answers every command that starts with it.
+            Decision controls review; sandbox controls where the approved command runs.
             The built-in entries are what stop a session under auto mode from
             rewriting its own policy; they are not stored and cannot be removed.
           </p>
@@ -279,6 +281,7 @@ interface RuleEditorProps {
 function RuleEditor({ config, policy }: RuleEditorProps) {
   const [pattern, setPattern] = useState('');
   const [decision, setDecision] = useState('allow');
+  const [sandbox, setSandbox] = useState('bypass');
   const [justification, setJustification] = useState('');
   const [failure, setFailure] = useState<string | null>(null);
   const busy = policy.editing !== null;
@@ -290,7 +293,7 @@ function RuleEditor({ config, policy }: RuleEditorProps) {
     if (tokens.length === 0) return;
     setFailure(null);
     try {
-      await policy.addRule({ pattern: tokens, decision, justification: justification.trim() });
+      await policy.addRule({ pattern: tokens, decision, sandbox, justification: justification.trim() });
       setPattern('');
       setJustification('');
     } catch (err) {
@@ -325,6 +328,9 @@ function RuleEditor({ config, policy }: RuleEditorProps) {
                 <span className="automode-rule-subject">
                   <span className={`settings-pill ${rule.decision === 'allow' ? 'good' : 'warn'}`}>
                     {rule.decision}
+                  </span>
+                  <span className={`settings-pill ${rule.sandbox === 'bypass' ? 'warn' : ''}`}>
+                    {rule.sandbox === 'bypass' ? 'bypass sandbox' : 'inherit sandbox'}
                   </span>
                   <code className="automode-value">{line}</code>
                   {rule.justification && (
@@ -373,10 +379,28 @@ function RuleEditor({ config, policy }: RuleEditorProps) {
           aria-label="What the rule decides"
           value={decision}
           disabled={busy}
-          onChange={(event) => setDecision(event.target.value)}
+          onChange={(event) => {
+            const next = event.target.value;
+            setDecision(next);
+            setSandbox(next === 'allow' ? 'bypass' : 'inherit');
+          }}
         >
           {DECISIONS.map((choice) => (
             <option key={choice} value={choice}>{choice}</option>
+          ))}
+        </select>
+        <select
+          className="settings-input"
+          data-testid="automode-rules-sandbox"
+          aria-label="Where the matching command runs"
+          value={sandbox}
+          disabled={busy || decision === 'forbidden'}
+          onChange={(event) => setSandbox(event.target.value)}
+        >
+          {RULE_SANDBOXES.map((choice) => (
+            <option key={choice} value={choice}>
+              {choice === 'inherit' ? 'inherit sandbox' : 'bypass sandbox'}
+            </option>
           ))}
         </select>
         <input
