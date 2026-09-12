@@ -1526,9 +1526,6 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 			}
 		}
 		if err == nil {
-			if seed.TenderSession != next.TenderSession || seed.TenderMember != next.TenderMember {
-				d.reconcileRemoteGardenSeedBells()
-			}
 			return next, written, notes, nil
 		}
 		if !docstore.IsConflict(err) {

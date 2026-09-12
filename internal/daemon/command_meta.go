@@ -51,8 +51,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdAgentMsg:                              commandMetadata(ScopeSession, false, true),
 	protocol.CmdAgentClose:                            commandMetadata(ScopeSession, false, true),
 	protocol.CmdAgentInbox:                            commandMetadata(ScopeSession, false, true),
-	protocol.CmdDeliverGardenSeedBell:                 commandMetadata(ScopeSession, false, true),
-	protocol.CmdReconcileGardenSeedBells:              commandMetadata(ScopeSession, false, true),
 	protocol.CmdAgentMsgStatus:                        commandMetadata(ScopeSession, false, true),
 	protocol.CmdSeedPlant:                             commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdSeedPlot:                              commandMetadata(ScopeHubLocal, false, true),

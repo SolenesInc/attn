@@ -352,8 +352,6 @@ type Daemon struct {
 	seedHandoverBeforeCommit  func()
 	gitHubPollingOffLogged    bool
 	gardenWatchMu             sync.Mutex
-	remoteGardenBellMu        sync.RWMutex
-	remoteGardenBellAllowed   map[string]map[string]bool
 	gardenReviewMu            sync.Mutex
 	dispatchSeedsMu           sync.Mutex
 	dispatchSeeds             map[string]string
@@ -847,7 +845,6 @@ func (d *Daemon) Start() error {
 			d.homeDaemonIDForEnrollment,
 		)
 	}
-	d.hubManager.SetSessionsAvailableCallback(d.reconcileRemoteGardenSeedBellSessions)
 	selectedBackend := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_PTY_BACKEND")))
 	if selectedBackend == "" {
 		selectedBackend = "migrating"

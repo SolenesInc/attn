@@ -941,20 +941,6 @@ model AgentInboxMessage {
   limit?: int32;
 }
 
-model DeliverGardenSeedBellMessage {
-  cmd: "deliver_garden_seed_bell";
-  item_id: string;
-  session_id: string;
-  seed_id: string;
-  event_kind: string;
-}
-
-model ReconcileGardenSeedBellsMessage {
-  cmd: "reconcile_garden_seed_bells";
-  session_id: string;
-  allowed_seed_ids: string[];
-}
-
 // The sender inspects the durable lifecycle of one peer message.
 model AgentMsgStatusMessage {
   cmd: "agent_msg_status";

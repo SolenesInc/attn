@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -171,86 +170,6 @@ func TestSeedNudges_DispatcherHearsTheDelegatesHarvest(t *testing.T) {
 
 	move(t, d, "sess-b", fixture.leaf.ID, garden.VerbHarvest, "proof complete", "")
 	assertOneSeedBell(t, d, "sess-a", fixture.leaf.ID, "harvested")
-}
-
-func TestSeedNudges_UnblockedBellLivesWithItsRemoteTender(t *testing.T) {
-	fixture, outpost, remoteSeed := remoteTenderNudgeFixture(t)
-
-	fixture.d.ringSeedUnblocked([]garden.Seed{remoteSeed})
-
-	waitFor(t, "the outpost to persist the remote tender's bell", func() bool {
-		items, err := outpost.store.UnreadGardenSeedMailboxItems("remote-tender")
-		return err == nil && len(items) == 1 && items[0].SeedID == remoteSeed.ID && items[0].EventKind == gardenRingUnblocked
-	})
-	if items, err := fixture.d.store.UnreadGardenSeedMailboxItems("remote-tender"); err != nil || len(items) != 0 {
-		t.Fatalf("home mailbox items = %+v err=%v, want none for an outpost-owned session", items, err)
-	}
-	outpost.clearRemoteGardenBellAuthorization()
-	resp := callAgentInboxBatch(t, outpost, "remote-tender", 10)
-	if resp.Ok {
-		t.Fatalf("outpost inbox read without fresh home authorization = %+v, want refusal", resp)
-	}
-	if items, err := outpost.store.UnreadGardenSeedMailboxItems("remote-tender"); err != nil || len(items) != 1 {
-		t.Fatalf("outpost items while disconnected = %+v err=%v, want the unread bell preserved", items, err)
-	}
-	fixture.d.reconcileRemoteGardenSeedBells()
-	waitFor(t, "the reconnected home to authorize the remote tender's bell", func() bool {
-		outpost.remoteGardenBellMu.RLock()
-		defer outpost.remoteGardenBellMu.RUnlock()
-		return outpost.remoteGardenBellAllowed["remote-tender"][remoteSeed.ID]
-	})
-	resp = callAgentInboxBatch(t, outpost, "remote-tender", 10)
-	if !resp.Ok || resp.AgentInboxBatchResult == nil || len(resp.AgentInboxBatchResult.Items) != 1 {
-		t.Fatalf("outpost inbox = %+v error=%q, want the forwarded bell", resp, protocol.Deref(resp.Error))
-	}
-	if got := resp.AgentInboxBatchResult.Items[0].Content; !strings.Contains(got, remoteSeed.ID+" moved: "+gardenRingUnblocked) {
-		t.Fatalf("outpost inbox content = %q, want the unblocked seed", got)
-	}
-	if items, err := outpost.store.UnreadGardenSeedMailboxItems("remote-tender"); err != nil || len(items) != 0 {
-		t.Fatalf("outpost unread items after inbox = %+v err=%v, want none", items, err)
-	}
-}
-
-func TestSeedNudges_RemoteBellExpiresWhenTheTenderMoves(t *testing.T) {
-	fixture, outpost, remoteSeed := remoteTenderNudgeFixture(t)
-	fixture.d.ringSeedUnblocked([]garden.Seed{remoteSeed})
-	waitFor(t, "the outpost to persist the remote tender's bell", func() bool {
-		items, err := outpost.store.UnreadGardenSeedMailboxItems("remote-tender")
-		return err == nil && len(items) == 1
-	})
-
-	msg := protocol.SeedTransitionMessage{
-		Cmd: protocol.CmdSeedTransition, SeedID: remoteSeed.ID, Verb: string(garden.VerbTend),
-		SourceSessionID: protocol.Ptr("sess-b"), Force: protocol.Ptr(true),
-	}
-	resp := gardenCall(t, func(c net.Conn) { fixture.d.handleSeedTransition(c, &msg) })
-	if !resp.Ok {
-		t.Fatalf("retender %s: %v", remoteSeed.ID, protocol.Deref(resp.Error))
-	}
-	waitFor(t, "the outpost to expire the old tender's bell", func() bool {
-		items, err := outpost.store.UnreadGardenSeedMailboxItems("remote-tender")
-		return err == nil && len(items) == 0
-	})
-	resp = callAgentInboxBatch(t, outpost, "remote-tender", 10)
-	if !resp.Ok || resp.AgentInboxBatchResult == nil || len(resp.AgentInboxBatchResult.Items) != 0 {
-		t.Fatalf("old tender inbox = %+v error=%q, want no stale bell", resp, protocol.Deref(resp.Error))
-	}
-}
-
-func remoteTenderNudgeFixture(t *testing.T) (seededNudgeGarden, *Daemon, garden.Seed) {
-	t.Helper()
-	fixture := newSeededNudgeGarden(t)
-	outpost := startAgentCloseOutpost(t, fixture.d, remoteAgentCloseSession("remote-tender", "Remote tender"))
-	if _, err := enrollment.Enroll(outpost.dataRoot, fixture.d.daemonInstanceID); err != nil {
-		t.Fatalf("enroll the remote daemon as an outpost: %v", err)
-	}
-	planted := plant(t, fixture.d, protocol.SeedPlantMessage{Title: "remote tender bell"})
-	move(t, fixture.d, "remote-tender", planted.ID, garden.VerbTend, "", "")
-	seed, _, err := fixture.d.readSeed(planted.ID)
-	if err != nil {
-		t.Fatalf("read remote-tendered seed: %v", err)
-	}
-	return fixture, outpost, seed
 }
 
 func TestSeedNudges_NotesRingOnlyByChoice(t *testing.T) {

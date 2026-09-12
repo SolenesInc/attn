@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "308"
+const ProtocolVersion = "307"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -131,8 +131,6 @@ const (
 	CmdAgentMsg                              = "agent_msg"
 	CmdAgentClose                            = "agent_close"
 	CmdAgentInbox                            = "agent_inbox"
-	CmdDeliverGardenSeedBell                 = "deliver_garden_seed_bell"
-	CmdReconcileGardenSeedBells              = "reconcile_garden_seed_bells"
 	CmdAgentMsgStatus                        = "agent_msg_status"
 	CmdSeedPlant                             = "seed_plant"
 	CmdSeedPlot                              = "seed_plot"
@@ -1225,20 +1223,6 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdAgentInbox:
 		var msg AgentInboxMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdDeliverGardenSeedBell:
-		var msg DeliverGardenSeedBellMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdReconcileGardenSeedBells:
-		var msg ReconcileGardenSeedBellsMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}

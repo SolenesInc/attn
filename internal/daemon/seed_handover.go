@@ -237,7 +237,6 @@ func (d *Daemon) bindSeedHandover(
 	if dispatches.oldExecutionID != "" {
 		d.rememberDispatchProjection(dispatches.oldExecutionID, dispatches.oldDispatch, written[2].Rev)
 	}
-	d.reconcileRemoteGardenSeedBells()
 	d.ringSeedActivity(seed.ID, gardenRingEvents[garden.VerbTend], sessionID, protocol.Deref(msg.SourceSessionID))
 	if err := d.resolveGardenReviewAction(request.Review, seed.ID, "handover"); err != nil {
 		d.logf("Garden review: settle %s after Handover: %v", seed.ID, err)

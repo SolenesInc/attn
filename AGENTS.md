@@ -48,6 +48,11 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 - Diagnose before fixing. If the cause is unknown, propose instrumentation.
 - Do not commit spikes.
 - Do not add prose comments to code. Prefer self-explanatory code over comments.
+- Remote outposts are temporarily incomplete: Garden and crew remain home-only
+  until the generic uplink exists, and other cross-daemon flows may be
+  unsupported. Do not absorb that remote debt into unrelated work; preserve
+  existing fences and fail loudly when an operation depends on an unsupported
+  remote path.
 - Product prompts address the user, never "Victor". Distinguish the agent
   changing attn from the agents it runs.
 - Quote globs passed to shell commands; zsh rejects unmatched bare globs before

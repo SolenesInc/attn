@@ -3200,23 +3200,6 @@ type DeleteWorktreeResultMessage struct {
 	Success bool `json:"success"`
 }
 
-type DeliverGardenSeedBellMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// EventKind corresponds to the JSON schema field "event_kind".
-	EventKind string `json:"event_kind"`
-
-	// ItemID corresponds to the JSON schema field "item_id".
-	ItemID string `json:"item_id"`
-
-	// SeedID corresponds to the JSON schema field "seed_id".
-	SeedID string `json:"seed_id"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
-}
-
 type DetachSessionMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -6642,17 +6625,6 @@ type RecentLocationsResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
-}
-
-type ReconcileGardenSeedBellsMessage struct {
-	// AllowedSeedIds corresponds to the JSON schema field "allowed_seed_ids".
-	AllowedSeedIds []string `json:"allowed_seed_ids"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
 }
 
 type RecordString map[string]interface{}
