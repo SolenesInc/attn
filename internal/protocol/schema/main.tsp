@@ -6018,9 +6018,6 @@ model AutoModeRuleInfo {
   "pattern": string[][];
   // "allow" | "prompt" | "forbidden".
   "decision": string;
-  // "inherit" keeps the session sandbox; "bypass" runs outside it after any
-  // required review. Older rules omit this: allow means bypass and every other
-  // decision means inherit.
   "sandbox": string;
   // Required for a forbidden rule: it is the text the agent is given.
   "justification": string;

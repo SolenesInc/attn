@@ -54,10 +54,18 @@ export function evaluateCommand(command: string, input: EvaluationInput): Comman
     if (!segmentMatches.every((match) => match.sandbox === "bypass")) everySegmentBypasses = false;
   }
 
-  const decision = strictestDecision([
+  let decision = strictestDecision([
     ...matches.map((match) => match.decision),
     ...heuristics.map((heuristic) => heuristic.decision),
   ]);
+  if (
+    decision === "allow" &&
+    !everySegmentBypasses &&
+    input.sandboxPermissions === "require_escalated" &&
+    input.sandboxMode !== "danger-full-access"
+  ) {
+    decision = "prompt";
+  }
   const dangerous = commands.some((segment) => dangerousCommandMatch(segment) !== undefined);
   const evaluation = { commands, unparsed: !segmented, matches, dangerous };
 

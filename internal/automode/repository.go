@@ -23,7 +23,17 @@ type repositoryRulesDocument struct {
 
 func LoadRepositoryRules(cwd string) (RepositoryRules, error) {
 	root, err := attngit.GetRepoRoot(cwd)
-	if err != nil || root == "" {
+	if err != nil {
+		present, markerErr := repositoryMarkerPresent(cwd)
+		if markerErr != nil {
+			return RepositoryRules{}, fmt.Errorf("discover repository auto-mode rules from %s: %w", cwd, markerErr)
+		}
+		if present {
+			return RepositoryRules{}, fmt.Errorf("discover repository auto-mode rules from %s: %w", cwd, err)
+		}
+		return RepositoryRules{Rules: []Rule{}}, nil
+	}
+	if root == "" {
 		return RepositoryRules{Rules: []Rule{}}, nil
 	}
 	path := filepath.Join(root, RepositoryRulesFile)
@@ -58,6 +68,38 @@ func LoadRepositoryRules(cwd string) (RepositoryRules, error) {
 		}
 	}
 	return RepositoryRules{Path: path, Rules: document.Rules}, nil
+}
+
+func repositoryMarkerPresent(cwd string) (bool, error) {
+	dir, err := filepath.Abs(cwd)
+	if err != nil {
+		return false, err
+	}
+	dir, err = filepath.EvalSymlinks(dir)
+	if err != nil {
+		return false, err
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		return false, err
+	}
+	if !info.IsDir() {
+		return false, fmt.Errorf("working directory is not a directory: %s", dir)
+	}
+	for {
+		_, err := os.Lstat(filepath.Join(dir, ".git"))
+		if err == nil {
+			return true, nil
+		}
+		if !os.IsNotExist(err) {
+			return false, err
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return false, nil
+		}
+		dir = parent
+	}
 }
 
 func validateRepositoryRuleExamples(rule Rule) error {

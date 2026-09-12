@@ -99,6 +99,18 @@ func TestLoadRepositoryRulesOutsideRepositoryIsEmpty(t *testing.T) {
 	}
 }
 
+func TestLoadRepositoryRulesPropagatesCheckoutDiscoveryErrors(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".git"), []byte("gitdir: missing\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadRepositoryRules(root)
+	if err == nil || !strings.Contains(err.Error(), "discover repository auto-mode rules") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestLoadRepositoryRulesReadsTheActiveWorktree(t *testing.T) {
 	root := initRulesRepository(t)
 	writeRepositoryRules(t, root, `{"rules":[{"pattern":["go","test"]}]}`)

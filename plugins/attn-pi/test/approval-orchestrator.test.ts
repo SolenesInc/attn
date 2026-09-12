@@ -132,6 +132,23 @@ test.skipIf(process.platform !== "darwin")(
   },
 );
 
+test("an explicit escalation under an inherited sandbox rule reaches the reviewer", async () => {
+  const it = fixture({
+    script: () => ({ type: "denied", rejection: userRejection }),
+    approvalPolicy: "on-request",
+    sandboxMode: "workspace-write",
+    rules: [{ pattern: ["touch"], decision: "allow", sandbox: "inherit" }],
+  });
+  const file = join(it.root, "never-escalated");
+
+  await expect(it.run(`touch ${JSON.stringify(file)}`, {
+    sandbox_permissions: "require_escalated",
+  })).rejects.toThrow(userRejection);
+  expect(it.seen).toHaveLength(1);
+  expect(it.seen[0]).toMatchObject({ kind: "command", sandboxPermissions: "require_escalated" });
+  expect(existsSync(file)).toBe(false);
+});
+
 test("a refusal is the tool's error, is recorded, and leaves nothing behind", async () => {
   const it = fixture({ script: () => ({ type: "denied", rejection: userRejection }) });
   const file = join(it.root, "never");

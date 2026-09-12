@@ -67,6 +67,41 @@ describe("prefix rule matching", () => {
     expect(evaluation.bypassSandbox).toBe(false);
   });
 
+  test("an inherited sandbox rule reviews an explicit escalation", () => {
+    for (const approvalPolicy of ["on-request", "untrusted"] as const) {
+      const evaluation = evaluateCommand("git status", {
+        rules: [{ pattern: ["git", "status"], decision: "allow", sandbox: "inherit" }],
+        approvalPolicy,
+        sandboxMode: "workspace-write",
+        sandboxPermissions: "require_escalated",
+      });
+      expect(evaluation.decision).toBe("prompt");
+      expect(evaluation.bypassSandbox).toBe(false);
+    }
+  });
+
+  test("an explicit sandbox bypass does not review the same escalation twice", () => {
+    const evaluation = evaluateCommand("git status", {
+      rules: [{ pattern: ["git", "status"], decision: "allow", sandbox: "bypass" }],
+      approvalPolicy: "on-request",
+      sandboxMode: "workspace-write",
+      sandboxPermissions: "require_escalated",
+    });
+    expect(evaluation.decision).toBe("allow");
+    expect(evaluation.bypassSandbox).toBe(true);
+  });
+
+  test("an inherited sandbox escalation is forbidden when review is disabled", () => {
+    const evaluation = evaluateCommand("git status", {
+      rules: [{ pattern: ["git", "status"], decision: "allow", sandbox: "inherit" }],
+      approvalPolicy: "never",
+      sandboxMode: "workspace-write",
+      sandboxPermissions: "require_escalated",
+    });
+    expect(evaluation.decision).toBe("forbidden");
+    expect(evaluation.bypassSandbox).toBe(false);
+  });
+
   test("only the first token alias expands to multiple rules", () => {
     const rules: PrefixRule[] = [{ pattern: [["bash", "sh"], ["-c", "-l"]] }];
     const bash = evaluateCommand("bash -c echo hi", allowUnmatched(rules));
