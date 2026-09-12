@@ -6,7 +6,7 @@ import { useDelegationModelCatalog } from '../hooks/useDelegationModelCatalog';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import './DelegationModelPopover.css';
 
-export type Anchor = { top: number; bottom: number; left: number; right: number };
+export type Anchor = Element;
 
 const VIEWPORT_MARGIN = 16;
 // Built-in harnesses run their configured provider; a plugin harness takes provider/model.
@@ -110,7 +110,7 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
   const { catalog, loading, error, discover } = useDelegationModelCatalog(harness, loadModels);
   const [manual, setManual] = useState(false);
   const containerRef = useRef<HTMLDialogElement>(null);
-  const [position, setPosition] = useState({ top: anchor.bottom + 6, left: anchor.left });
+  const [position, setPosition] = useState(() => ({ top: anchor.getBoundingClientRect().bottom + 6, left: anchor.getBoundingClientRect().left }));
   // A field that commits on blur must commit before the popover unmounts under it.
   const close = () => {
     const focused = document.activeElement;
@@ -120,14 +120,21 @@ export function DelegationModelPopover({ value, harnesses, anchor, onChange, onC
   useEscapeStack(close, true);
 
   useLayoutEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    let top = anchor.bottom + 6;
-    let left = anchor.left;
-    if (left + rect.width > window.innerWidth - VIEWPORT_MARGIN) left = Math.max(VIEWPORT_MARGIN, window.innerWidth - rect.width - VIEWPORT_MARGIN);
-    if (top + rect.height > window.innerHeight - VIEWPORT_MARGIN) top = Math.max(VIEWPORT_MARGIN, anchor.top - rect.height - 6);
-    setPosition({ top, left });
+    const place = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const at = anchor.getBoundingClientRect();
+      let top = at.bottom + 6;
+      let left = at.left;
+      if (left + rect.width > window.innerWidth - VIEWPORT_MARGIN) left = Math.max(VIEWPORT_MARGIN, window.innerWidth - rect.width - VIEWPORT_MARGIN);
+      if (top + rect.height > window.innerHeight - VIEWPORT_MARGIN) top = Math.max(VIEWPORT_MARGIN, at.top - rect.height - 6);
+      setPosition(current => current.top === top && current.left === left ? current : { top, left });
+    };
+    place();
+    window.addEventListener('resize', place);
+    document.addEventListener('scroll', place, true);
+    return () => { window.removeEventListener('resize', place); document.removeEventListener('scroll', place, true); };
   }, [anchor, loading, manual]);
 
   useEffect(() => {

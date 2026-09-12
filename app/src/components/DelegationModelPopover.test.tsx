@@ -17,7 +17,9 @@ const catalog: DelegationModelCatalog = { detail: 'Reported by Claude Code', mod
   { harness: 'claude', provider: '', id: 'haiku', name: 'Haiku', description: '', detail: '', effort_support: ModelCapabilitySupport.Unsupported, effort_levels: [], access: ModelCapabilitySupport.Unknown },
   { harness: 'claude', provider: '', id: 'sonnet', name: 'Sonnet', description: '', detail: '', effort_support: ModelCapabilitySupport.Supported, effort_levels: [], access: ModelCapabilitySupport.Unknown },
 ] };
-const anchor = { top: 100, bottom: 130, left: 40, right: 240 };
+const rect = { top: 100, bottom: 130, left: 40, right: 240 };
+const anchor = document.createElement('button');
+anchor.getBoundingClientRect = () => ({ ...rect, x: rect.left, y: rect.top, width: rect.right - rect.left, height: rect.bottom - rect.top, toJSON: () => rect });
 
 function open(value: DelegationSelection) {
   const loadModels = vi.fn(async () => structuredClone(catalog));
@@ -206,4 +208,17 @@ it('keeps focus inside when a click on its own padding drops focus to the body',
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
   expect(document.activeElement?.getAttribute('data-harness')).toBe('claude');
   expect(closed).not.toHaveBeenCalled();
+});
+
+it('follows its cell when the settings body scrolls or the window resizes', async () => {
+  render(<DelegationModelPopover value={{ harness: 'claude', provider: '', model: '', effort: '' }} harnesses={harnesses} anchor={anchor} onChange={vi.fn()} onClose={vi.fn()} loadModels={vi.fn(async () => structuredClone(catalog))} />);
+  const dialog = await screen.findByRole('dialog', { name: 'Choose a model' });
+  expect(dialog.style.top).toBe('136px');
+  rect.top = 40; rect.bottom = 70;
+  act(() => { document.body.dispatchEvent(new Event('scroll', { bubbles: false })); });
+  expect(dialog.style.top).toBe('76px');
+  rect.left = 90;
+  act(() => { window.dispatchEvent(new Event('resize')); });
+  expect(dialog.style.left).toBe('90px');
+  rect.top = 100; rect.bottom = 130; rect.left = 40;
 });

@@ -60,7 +60,7 @@ function ModelCell({ selection, harnesses, label, open, onOpen }: { selection: D
   if (!complete(selection)) { className += ' unset'; body = 'Choose a model'; }
   else if (harness && !harness.model_pin) { className += ' pinned'; body = <><span className="h">{harness.name}</span><span className="m">its own model</span>{selection.effort && <span className="e">{selection.effort}</span>}</>; }
   else body = <><span className="h">{harness?.name ?? selection.harness}</span><span className="m">{selection.model ? knownModelName(selection.harness, selection.provider, selection.model) || `${selection.provider ? `${selection.provider}/` : ''}${selection.model}` : 'default'}</span>{selection.effort && <span className="e">{selection.effort}</span>}</>;
-  return <button type="button" className={className} aria-label={label} aria-haspopup="dialog" aria-expanded={open} onClick={e => { const r = e.currentTarget.getBoundingClientRect(); onOpen({ top: r.top, bottom: r.bottom, left: r.left, right: r.right }); }}>
+  return <button type="button" className={className} aria-label={label} aria-haspopup="dialog" aria-expanded={open} onClick={e => onOpen(e.currentTarget)}>
     {body}<span className="delegation-caret" aria-hidden="true">⌄</span>
   </button>;
 }
