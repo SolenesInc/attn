@@ -1,9 +1,14 @@
 package store
 
 import (
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func newSessionPRStore(t *testing.T) *Store {
@@ -76,6 +81,126 @@ func TestRecordSessionPullRequestIsIdempotentPerSession(t *testing.T) {
 	}
 	if got := s.ListSessionPullRequests("s2"); len(got) != 1 {
 		t.Errorf("s2 = %+v, want its row untouched", got)
+	}
+}
+
+func TestOpenSessionPullRequestsReferencedBy(t *testing.T) {
+	s := newSessionPRStore(t)
+	now := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
+	stamp := now.Format(time.RFC3339Nano)
+	addSession := func(id string, state protocol.SessionState) {
+		t.Helper()
+		if err := s.AddChecked(&protocol.Session{
+			ID: id, Label: id, Directory: t.TempDir(), State: state,
+			StateSince: stamp, StateUpdatedAt: stamp, LastSeen: stamp,
+		}); err != nil {
+			t.Fatalf("add session %s: %v", id, err)
+		}
+	}
+	addSession("active", protocol.SessionStateIdle)
+	addSession("active-shared", protocol.SessionStateIdle)
+	addSession("closed-armed", protocol.SessionStateIdle)
+	addSession("closed-unarmed", protocol.SessionStateIdle)
+	addSession("recoverable-armed", protocol.SessionStateRecoverable)
+	addSession("recoverable-unarmed", protocol.SessionStateRecoverable)
+	if closed, err := s.CloseSession("closed-armed", SessionClose{}, now); err != nil || !closed {
+		t.Fatalf("close armed session = %t, %v", closed, err)
+	}
+	if closed, err := s.CloseSession("closed-unarmed", SessionClose{}, now); err != nil || !closed {
+		t.Fatalf("close unarmed session = %t, %v", closed, err)
+	}
+
+	recordPR(t, s, "active", "github.com:owner/repo#1", 1, now)
+	recordPR(t, s, "active-shared", "github.com:owner/repo#2", 2, now.Add(time.Second))
+	recordPR(t, s, "closed-armed", "github.com:owner/repo#2", 2, now.Add(2*time.Second))
+	recordPR(t, s, "recoverable-armed", "github.com:owner/repo#3", 3, now.Add(3*time.Second))
+	recordPR(t, s, "orphan", "github.com:owner/repo#4", 4, now.Add(4*time.Second))
+	recordPR(t, s, "closed-unarmed", "github.com:owner/repo#5", 5, now.Add(5*time.Second))
+	recordPR(t, s, "recoverable-unarmed", "github.com:owner/repo#6", 6, now.Add(6*time.Second))
+	recordPR(t, s, "orphan", "github.com:owner/repo#7", 7, now.Add(7*time.Second))
+	if err := s.UpdateSessionPullRequestStatus("github.com:owner/repo#7", SessionPullRequestStatus{State: "merged"}, now); err != nil {
+		t.Fatalf("close referenced PR: %v", err)
+	}
+
+	schema := docstore.CollectionSchema{
+		Namespace: "test/garden", Collection: "seeds",
+		Fields: []docstore.FieldSpec{{Name: "harvest_when_pull_request", Type: docstore.FieldString}},
+	}
+	if _, err := s.DefineDocumentCollection(schema, now); err != nil {
+		t.Fatalf("define seeds: %v", err)
+	}
+	declared, found, err := s.DocumentCollection(schema.Namespace, schema.Collection)
+	if err != nil || !found {
+		t.Fatalf("read seeds declaration = found %t, %v", found, err)
+	}
+	for i, prID := range []string{
+		"github.com:owner/repo#2",
+		"github.com:owner/repo#3",
+		"github.com:owner/repo#4",
+		"github.com:owner/repo#7",
+	} {
+		body := []byte(`{"harvest_when_pull_request":"` + prID + `"}`)
+		if _, err := s.PutDocument(*declared, fmt.Sprintf("seed-%d", i), body, now, nil); err != nil {
+			t.Fatalf("put seed for %s: %v", prID, err)
+		}
+	}
+	if _, err := s.PutDocument(*declared, "seed-unreadable", []byte("[]"), now, nil); err != nil {
+		t.Fatalf("put unrelated malformed seed: %v", err)
+	}
+
+	got, err := s.OpenSessionPullRequestsReferencedBy(*declared, "harvest_when_pull_request")
+	if err != nil {
+		t.Fatalf("refreshable PRs: %v", err)
+	}
+	want := map[string]bool{
+		"active|github.com:owner/repo#1":            true,
+		"active-shared|github.com:owner/repo#2":     true,
+		"closed-armed|github.com:owner/repo#2":      true,
+		"recoverable-armed|github.com:owner/repo#3": true,
+		"orphan|github.com:owner/repo#4":            true,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("refreshable PRs = %+v, want %v", got, want)
+	}
+	for _, rec := range got {
+		key := rec.SessionID + "|" + rec.PRID
+		if !want[key] {
+			t.Errorf("unexpected refreshable PR %s", key)
+		}
+	}
+	if _, err := s.PutDocument(*declared, "seed-0", []byte(`{"harvest_when_pull_request":""}`), now, nil); err != nil {
+		t.Fatalf("clear seed condition: %v", err)
+	}
+	cleared, err := s.OpenSessionPullRequestsReferencedBy(*declared, "harvest_when_pull_request")
+	if err != nil {
+		t.Fatalf("refreshable PRs after clear: %v", err)
+	}
+	for _, rec := range cleared {
+		if rec.SessionID == "closed-armed" {
+			t.Fatalf("cleared condition kept the closed session refreshable: %+v", rec)
+		}
+	}
+
+	planRows, err := s.db.Query("EXPLAIN QUERY PLAN "+openSessionPullRequestsReferencedByQuery(
+		declared.Table, docstore.FieldColumn("harvest_when_pull_request")), protocol.SessionStateRecoverable)
+	if err != nil {
+		t.Fatalf("explain refreshable PRs: %v", err)
+	}
+	defer planRows.Close()
+	var plan []string
+	for planRows.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := planRows.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatalf("scan query plan: %v", err)
+		}
+		plan = append(plan, detail)
+	}
+	joined := strings.Join(plan, "\n")
+	t.Logf("refreshable PR query plan:\n%s", joined)
+	index := fieldIndexName(declared.Table, docstore.FieldColumn("harvest_when_pull_request"))
+	if !strings.Contains(joined, "SEARCH "+declared.Table) || !strings.Contains(joined, index) {
+		t.Fatalf("seed reference lookup did not use %s:\n%s", index, joined)
 	}
 }
 

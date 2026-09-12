@@ -45,43 +45,35 @@ func (d *Daemon) settleHarvestConditions() (harvested, cleared int) {
 }
 
 func (d *Daemon) armedSeeds() ([]garden.Seed, error) {
-	read, _, err := d.runDocQuery(docstore.Query{
-		Namespace:  garden.Namespace,
-		Collection: garden.CollectionSeeds,
-		Filters:    []docstore.Filter{{Field: "harvest_when_pull_request", Op: docstore.OpGt, Value: ""}},
-		Limit:      gardenSnapshotLimit,
-	})
-	if err != nil {
-		return nil, err
-	}
-	seeds := make([]garden.Seed, 0, len(read.Documents))
-	for _, doc := range read.Documents {
-		seed, err := garden.Decode(doc.Body)
+	seeds := []garden.Seed{}
+	after := ""
+	for {
+		read, _, err := d.runDocQuery(docstore.Query{
+			Namespace:  garden.Namespace,
+			Collection: garden.CollectionSeeds,
+			Filters:    []docstore.Filter{{Field: garden.HarvestWhenPullRequestField, Op: docstore.OpGt, Value: ""}},
+			Limit:      gardenSnapshotLimit,
+			After:      after,
+		})
 		if err != nil {
-			d.logf("harvest-on-merge: seed %s has an unreadable body: %v", doc.ID, err)
-			continue
+			return nil, err
 		}
-		if seed.HarvestWhen == nil || strings.TrimSpace(seed.HarvestWhen.PullRequest) == "" {
-			continue
+		for _, doc := range read.Documents {
+			seed, err := garden.Decode(doc.Body)
+			if err != nil {
+				d.logf("harvest-on-merge: seed %s has an unreadable body: %v", doc.ID, err)
+				continue
+			}
+			if seed.HarvestWhen == nil || strings.TrimSpace(seed.HarvestWhen.PullRequest) == "" {
+				continue
+			}
+			seeds = append(seeds, seed)
 		}
-		seeds = append(seeds, seed)
-	}
-	return seeds, nil
-}
-
-func (d *Daemon) armedPullRequestIDs() map[string]bool {
-	seeds, err := d.armedSeeds()
-	if err != nil {
-		if !docstore.IsUndeclaredCollection(err) {
-			d.logf("harvest-on-merge: reading pull requests to refresh: %v", err)
+		if len(read.Documents) < gardenSnapshotLimit {
+			return seeds, nil
 		}
-		return nil
+		after = read.Documents[len(read.Documents)-1].ID
 	}
-	pullRequests := make(map[string]bool, len(seeds))
-	for _, seed := range seeds {
-		pullRequests[seed.HarvestWhen.PullRequest] = true
-	}
-	return pullRequests
 }
 
 func (d *Daemon) decorateSeedHarvestCheck(seed *protocol.Seed) {

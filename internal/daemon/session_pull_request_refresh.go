@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
@@ -82,7 +84,23 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 	if len(records) == 0 {
 		return 0, 0
 	}
-	groups := d.dueSessionPullRequests(records, d.armedPullRequestIDs(), now)
+	if d.hasInactiveSessionPullRequest(records) {
+		schema, err := d.seedsCollection()
+		if err == nil {
+			var refreshable []store.SessionPullRequestRecord
+			refreshable, err = d.store.OpenSessionPullRequestsReferencedBy(*schema, garden.HarvestWhenPullRequestField)
+			if err == nil {
+				records = refreshable
+			}
+		}
+		if err != nil {
+			if !docstore.IsUndeclaredCollection(err) {
+				d.logf("session pull requests: selecting armed rows: %v", err)
+			}
+			records = d.activeSessionPullRequests(records)
+		}
+	}
+	groups := d.dueSessionPullRequests(records, now)
 	if len(groups) == 0 {
 		return 0, 0
 	}
@@ -147,15 +165,12 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 }
 
 func (d *Daemon) dueSessionPullRequests(
-	records []store.SessionPullRequestRecord, armedPullRequests map[string]bool, now time.Time,
+	records []store.SessionPullRequestRecord, now time.Time,
 ) []*sessionPullRequestGroup {
 	var groups []*sessionPullRequestGroup
 	byPR := make(map[string]*sessionPullRequestGroup)
 	for _, rec := range records {
 		active := d.sessionPullRequestSessionActive(rec.SessionID)
-		if !active && !armedPullRequests[rec.PRID] {
-			continue
-		}
 		group := byPR[rec.PRID]
 		if group == nil {
 			host, repo, ok := splitPullRequestRepository(rec.Repository)
@@ -183,6 +198,25 @@ func (d *Daemon) dueSessionPullRequests(
 		}
 	}
 	return due
+}
+
+func (d *Daemon) hasInactiveSessionPullRequest(records []store.SessionPullRequestRecord) bool {
+	for _, rec := range records {
+		if !d.sessionPullRequestSessionActive(rec.SessionID) {
+			return true
+		}
+	}
+	return false
+}
+
+func (d *Daemon) activeSessionPullRequests(records []store.SessionPullRequestRecord) []store.SessionPullRequestRecord {
+	active := records[:0]
+	for _, rec := range records {
+		if d.sessionPullRequestSessionActive(rec.SessionID) {
+			active = append(active, rec)
+		}
+	}
+	return active
 }
 
 func (d *Daemon) sessionPullRequestSessionActive(sessionID string) bool {
