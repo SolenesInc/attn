@@ -296,6 +296,13 @@ func seedToProtocol(seed garden.Seed, doc docstore.Document, ready bool) protoco
 	return out
 }
 
+func (d *Daemon) seedDetailsWire(seed garden.Seed, doc docstore.Document, ready bool) protocol.Seed {
+	wire := seedToProtocol(seed, doc, ready)
+	d.decorateSeedHarvestCheck(&wire)
+	d.decorateSeedContinuation(&wire, seed)
+	return wire
+}
+
 func (d *Daemon) seedsForBroadcast() []protocol.Seed {
 	if d.store == nil {
 		return nil
@@ -638,9 +645,7 @@ func (d *Daemon) handleSeedShow(conn net.Conn, msg *protocol.SeedShowMessage) {
 	if err != nil {
 		d.logf("garden: reading the garden around %s: %v", seed.ID, err)
 	}
-	wire := seedToProtocol(seed, doc, read.ready[seed.ID])
-	d.decorateSeedHarvestCheck(&wire)
-	d.decorateSeedContinuation(&wire, seed)
+	wire := d.seedDetailsWire(seed, doc, read.ready[seed.ID])
 	if progress, ok := read.progress(seed.ID); ok {
 		wire.PlotProgress = progress
 	}
@@ -735,11 +740,7 @@ func (d *Daemon) handleSeedSetResume(conn net.Conn, msg *protocol.SeedSetResumeM
 	}
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok: true, SeedSetResumeResult: &protocol.SeedSetResumeResult{
-			Seed: func() protocol.Seed {
-				wire := seedToProtocol(seed, doc, d.gardenReady()[seed.ID])
-				d.decorateSeedContinuation(&wire, seed)
-				return wire
-			}(),
+			Seed: d.seedDetailsWire(seed, doc, d.gardenReady()[seed.ID]),
 		},
 	})
 }
@@ -831,8 +832,7 @@ func (d *Daemon) handleSeedDocumentGet(client *wsClient, msg *protocol.SeedDocum
 		fail(err)
 		return
 	}
-	wireSeed := seedToProtocol(seed, doc, read.ready[seed.ID])
-	d.decorateSeedContinuation(&wireSeed, seed)
+	wireSeed := d.seedDetailsWire(seed, doc, read.ready[seed.ID])
 	if progress, ok := read.progress(seed.ID); ok {
 		wireSeed.PlotProgress = progress
 	}

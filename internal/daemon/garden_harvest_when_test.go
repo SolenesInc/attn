@@ -185,6 +185,30 @@ func TestSeedShowCarriesTheHarvestCondition(t *testing.T) {
 	}
 }
 
+func TestSeedSetResumeCarriesTheHarvestCheck(t *testing.T) {
+	d := newGardenDaemon(t)
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "ship the protocol"})
+	recordPullRequest(t, d, "sess-a", "https://github.com/victorarias/attn/pull/113")
+	fetchedAt := time.Date(2026, 9, 12, 11, 42, 0, 0, time.UTC)
+	if err := d.store.UpdateSessionPullRequestStatus("github.com:victorarias/attn#113", store.SessionPullRequestStatus{State: sessionPullRequestOpen}, fetchedAt); err != nil {
+		t.Fatalf("store the fetched pull request: %v", err)
+	}
+	armSeed(t, d, seed.ID, garden.HarvestCondition{
+		PullRequest: "github.com:victorarias/attn#113",
+		URL:         "https://github.com/victorarias/attn/pull/113",
+		SetAt:       "2026-09-02T00:21:00Z",
+	})
+
+	set := setSeedResume(t, d, seed.ID, "native-2", t.TempDir(), "codex", false)
+	if !set.Ok {
+		t.Fatalf("set resume identity: %v", protocol.Deref(set.Error))
+	}
+	got := set.SeedSetResumeResult.Seed.HarvestWhen
+	if got == nil || protocol.Deref(got.CheckedAt) != fetchedAt.Format(time.RFC3339Nano) {
+		t.Fatalf("set-resume returned harvest condition %+v, want successful fetch at %s", got, fetchedAt.Format(time.RFC3339Nano))
+	}
+}
+
 func armWhenMerged(t *testing.T, d *Daemon, session, seedID, url string) protocol.Response {
 	t.Helper()
 	msg := protocol.SeedTransitionMessage{
