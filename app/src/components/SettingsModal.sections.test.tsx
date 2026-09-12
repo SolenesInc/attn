@@ -68,6 +68,24 @@ function renderModal(overrides: Record<string, unknown> = {}) {
 }
 
 describe('SettingsModal sections', () => {
+  it('exposes theme selection and the projects directory through accessible controls', async () => {
+    renderModal();
+    fireEvent.click(screen.getByTestId('settings-nav-general'));
+    expect(await screen.findByRole('button', { name: 'System', pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Theme preference' })).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('settings-nav-workspace'));
+    expect(await screen.findByLabelText('Projects directory')).toBe(screen.getByTestId('settings-projects-directory-input'));
+  });
+
+  it('closes from the backdrop without closing when content is clicked', async () => {
+    const onClose = vi.fn();
+    renderModal({ onClose });
+    fireEvent.click(screen.getByTestId('settings-modal'));
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss settings' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+  });
+
   it('keeps the shared PTY experiment off until the daemon confirms opt-in', async () => {
     const onSetSetting = renderModal({ settings: { pty_backend_mode: 'migrating' } });
     fireEvent.click(screen.getByTestId('settings-nav-terminal'));

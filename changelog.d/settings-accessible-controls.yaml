@@ -1,0 +1,3 @@
+kind: fixed
+area: app
+change: Settings choices announce their selected state correctly, and the projects directory has a persistent field label.
