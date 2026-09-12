@@ -121,7 +121,9 @@ func TestValidateProposalReadsTheValueAsJSON(t *testing.T) {
 
 func TestDescribeProposalReadsAsOneLine(t *testing.T) {
 	for _, tc := range []struct{ kind, value, want string }{
-		{KindRule, `{"pattern":["git","push"],"decision":"prompt"}`, "prompt git push"},
+		{KindRule, `{"pattern":["git","push"],"decision":"prompt"}`, "prompt, inherit sandbox: git push"},
+		{KindRule, `{"pattern":["go","test"],"decision":"prompt","sandbox":"bypass"}`,
+			"prompt, bypass sandbox: go test"},
 		{KindRuleRemove, `{"pattern":["git","push"]}`, "remove rule git push"},
 		{KindHost, `{"host":"github.com","decision":"deny"}`, "deny github.com"},
 		{KindHostRemove, `{"host":"github.com","decision":"allow"}`, "remove allow github.com"},

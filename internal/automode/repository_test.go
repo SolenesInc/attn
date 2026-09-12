@@ -75,6 +75,23 @@ func TestLoadRepositoryRulesRejectsABadExample(t *testing.T) {
 	}
 }
 
+func TestLoadRepositoryRulesRejectsEmptyExamples(t *testing.T) {
+	for _, field := range []string{"match", "not_match"} {
+		t.Run(field, func(t *testing.T) {
+			root := initRulesRepository(t)
+			writeRepositoryRules(t, root, `{"rules":[{
+  "pattern":["go","test"],"decision":"prompt","`+field+`":[[]]
+}]}`)
+
+			_, err := LoadRepositoryRules(root)
+			if err == nil || !strings.Contains(err.Error(), "rule 1") ||
+				!strings.Contains(err.Error(), field+" example cannot be empty") {
+				t.Fatalf("error = %v", err)
+			}
+		})
+	}
+}
+
 func TestLoadRepositoryRulesOutsideRepositoryIsEmpty(t *testing.T) {
 	loaded, err := LoadRepositoryRules(t.TempDir())
 	if err != nil || loaded.Path != "" || len(loaded.Rules) != 0 {

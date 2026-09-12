@@ -583,7 +583,7 @@ func DescribeProposal(kind, value string) string {
 	switch kind {
 	case KindRule:
 		if rule, err := ParseRuleValue(value); err == nil {
-			return rule.Decision + " " + rule.Describe()
+			return rule.Decision + ", " + rule.Sandbox + " sandbox: " + rule.Describe()
 		}
 	case KindRuleRemove:
 		if pattern, err := ParsePatternValue(value); err == nil {

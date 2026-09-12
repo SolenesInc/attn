@@ -575,7 +575,7 @@ func takeStringFlag(args []string, flag string) (string, bool) {
 
 func autoModeFlagTakesValue(flag string) bool {
 	switch flag {
-	case "--limit", "--decision", "--justification", "--approval-policy", "--sandbox-mode",
+	case "--limit", "--decision", "--sandbox", "--justification", "--approval-policy", "--sandbox-mode",
 		"--allow-local-binding":
 		return true
 	}

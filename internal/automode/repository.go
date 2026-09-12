@@ -62,11 +62,17 @@ func LoadRepositoryRules(cwd string) (RepositoryRules, error) {
 
 func validateRepositoryRuleExamples(rule Rule) error {
 	for _, example := range rule.NotMatch {
+		if len(example) == 0 {
+			return fmt.Errorf("not_match example cannot be empty")
+		}
 		if repositoryRuleMatches(rule, example) {
 			return fmt.Errorf("not_match example %q matches %q", example, rule.Describe())
 		}
 	}
 	for _, example := range rule.Match {
+		if len(example) == 0 {
+			return fmt.Errorf("match example cannot be empty")
+		}
 		if !repositoryRuleMatches(rule, example) {
 			return fmt.Errorf("match example %q does not match %q", example, rule.Describe())
 		}
