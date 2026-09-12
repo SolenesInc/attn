@@ -6,6 +6,7 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func (d *Daemon) settleHarvestConditions() (harvested, cleared int) {
@@ -66,6 +67,32 @@ func (d *Daemon) armedSeeds() ([]garden.Seed, error) {
 		seeds = append(seeds, seed)
 	}
 	return seeds, nil
+}
+
+func (d *Daemon) armedPullRequestIDs() map[string]bool {
+	seeds, err := d.armedSeeds()
+	if err != nil {
+		if !docstore.IsUndeclaredCollection(err) {
+			d.logf("harvest-on-merge: reading pull requests to refresh: %v", err)
+		}
+		return nil
+	}
+	pullRequests := make(map[string]bool, len(seeds))
+	for _, seed := range seeds {
+		pullRequests[seed.HarvestWhen.PullRequest] = true
+	}
+	return pullRequests
+}
+
+func (d *Daemon) decorateSeedHarvestCheck(seed *protocol.Seed) {
+	if seed.HarvestWhen == nil || d.store == nil {
+		return
+	}
+	rec, ok := d.store.SessionPullRequestByID(seed.HarvestWhen.PullRequest)
+	if !ok || strings.TrimSpace(rec.StatusCheckedAt) == "" {
+		return
+	}
+	seed.HarvestWhen.CheckedAt = protocol.Ptr(rec.StatusCheckedAt)
 }
 
 func (d *Daemon) reportUntrackedHarvestCondition(seed garden.Seed) {

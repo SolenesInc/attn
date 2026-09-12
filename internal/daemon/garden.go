@@ -639,6 +639,7 @@ func (d *Daemon) handleSeedShow(conn net.Conn, msg *protocol.SeedShowMessage) {
 		d.logf("garden: reading the garden around %s: %v", seed.ID, err)
 	}
 	wire := seedToProtocol(seed, doc, read.ready[seed.ID])
+	d.decorateSeedHarvestCheck(&wire)
 	d.decorateSeedContinuation(&wire, seed)
 	if progress, ok := read.progress(seed.ID); ok {
 		wire.PlotProgress = progress

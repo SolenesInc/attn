@@ -78,6 +78,11 @@ func TestArmedSeedsAreFoundByTheirPullRequest(t *testing.T) {
 func TestSeedShowCarriesTheHarvestCondition(t *testing.T) {
 	d := newGardenDaemon(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "ship the protocol"})
+	recordPullRequest(t, d, "sess-a", "https://github.com/victorarias/attn/pull/113")
+	checkedAt := time.Date(2026, 9, 12, 11, 42, 0, 0, time.UTC)
+	if err := d.store.MarkSessionPullRequestChecked("github.com:victorarias/attn#113", checkedAt); err != nil {
+		t.Fatalf("mark the pull request checked: %v", err)
+	}
 	if before := show(t, d, seed.ID); before.Seed.HarvestWhen != nil {
 		t.Fatalf("an unarmed seed carries a condition on the wire: %+v", before.Seed.HarvestWhen)
 	}
@@ -102,6 +107,9 @@ func TestSeedShowCarriesTheHarvestCondition(t *testing.T) {
 	}
 	if got.SetAt != "2026-09-02T00:21:00Z" {
 		t.Fatalf("the wire changed when it was armed: %+v", got)
+	}
+	if protocol.Deref(got.CheckedAt) != checkedAt.Format(time.RFC3339Nano) {
+		t.Fatalf("the wire says the pull request was checked at %q, want %s", protocol.Deref(got.CheckedAt), checkedAt.Format(time.RFC3339Nano))
 	}
 }
 

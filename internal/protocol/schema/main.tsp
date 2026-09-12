@@ -4682,6 +4682,8 @@ model SeedHarvestCondition {
   "set_at": string;
   "set_by_session"?: string;
   "set_by_member"?: string;
+  // The last refresh attempt, absent until the daemon has checked the pull request.
+  "checked_at"?: string;
 }
 
 model SeedContinuation {

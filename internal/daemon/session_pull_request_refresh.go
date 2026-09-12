@@ -78,7 +78,7 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 	if d.store == nil {
 		return 0, 0
 	}
-	groups := d.dueSessionPullRequests(d.store.OpenSessionPullRequests(), now)
+	groups := d.dueSessionPullRequests(d.store.OpenSessionPullRequests(), d.armedPullRequestIDs(), now)
 	if len(groups) == 0 {
 		return 0, 0
 	}
@@ -142,11 +142,14 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 	return fetched, changed
 }
 
-func (d *Daemon) dueSessionPullRequests(records []store.SessionPullRequestRecord, now time.Time) []*sessionPullRequestGroup {
+func (d *Daemon) dueSessionPullRequests(
+	records []store.SessionPullRequestRecord, armedPullRequests map[string]bool, now time.Time,
+) []*sessionPullRequestGroup {
 	var groups []*sessionPullRequestGroup
 	byPR := make(map[string]*sessionPullRequestGroup)
 	for _, rec := range records {
-		if !d.sessionPullRequestSessionActive(rec.SessionID) {
+		active := d.sessionPullRequestSessionActive(rec.SessionID)
+		if !active && !armedPullRequests[rec.PRID] {
 			continue
 		}
 		group := byPR[rec.PRID]
@@ -163,7 +166,9 @@ func (d *Daemon) dueSessionPullRequests(records []store.SessionPullRequestRecord
 			byPR[rec.PRID] = group
 			groups = append(groups, group)
 		}
-		group.sessions = append(group.sessions, rec.SessionID)
+		if active {
+			group.sessions = append(group.sessions, rec.SessionID)
+		}
 		group.due = group.due || sessionPullRequestDue(rec, now)
 	}
 

@@ -143,10 +143,14 @@ func TestFprintSeedShowsTheHarvestCondition(t *testing.T) {
 		HarvestWhen: &protocol.SeedHarvestCondition{
 			PullRequest: "github.com:victorarias/attn#118",
 			URL:         "https://github.com/victorarias/attn/pull/118",
+			CheckedAt:   protocol.Ptr("2026-09-12T11:42:00Z"),
 		},
 	})
 	if !strings.Contains(buf.String(), "harvests when") || !strings.Contains(buf.String(), "victorarias/attn#118 merges") {
 		t.Fatalf("show never says the seed is armed:\n%s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "PR last checked") || !strings.Contains(buf.String(), "2026-09-12") {
+		t.Fatalf("show hides when the pull request was last checked:\n%s", buf.String())
 	}
 }
 
