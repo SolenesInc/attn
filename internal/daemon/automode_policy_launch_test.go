@@ -162,8 +162,9 @@ func TestReloadKeepsThePerSessionPolicyPair(t *testing.T) {
 		params:  ptybackend.SessionLaunchParams{Recorded: true},
 	}
 	d := newReloadTestDaemon(t, backend)
-	addTestWorkspace(d, "ws-snipe-session", t.TempDir())
-	addReloadSession(d, "snipe-session", protocol.SessionAgent("snipe"), protocol.SessionStateIdle)
+	directory := t.TempDir()
+	addTestWorkspace(d, "ws-snipe-session", directory)
+	addReloadSessionAt(d, "snipe-session", protocol.SessionAgent("snipe"), protocol.SessionStateIdle, directory)
 	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
 	setTestAutoModePolicy(t, d, automode.PolicyOnRequest, automode.SandboxWorkspaceWrite)
 	d.store.SetLaunchIntent("snipe-session", store.LaunchIntent{

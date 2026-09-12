@@ -114,7 +114,7 @@ func TestAutoModeRuleFromASessionOnlyProposes(t *testing.T) {
 	if len(after.Proposals) != 1 {
 		t.Fatalf("proposals = %d, want the one just recorded", len(after.Proposals))
 	}
-	if got := after.Proposals[0].Summary; got != "allow git push" {
+	if got := after.Proposals[0].Summary; got != "allow, bypass sandbox: git push" {
 		t.Errorf("proposal summary = %q, want the line a reviewer reads", got)
 	}
 }

@@ -160,8 +160,9 @@ func TestReloadCarriesThePromotedAutoModeConfig(t *testing.T) {
 		params:  ptybackend.SessionLaunchParams{Recorded: true},
 	}
 	d := newReloadTestDaemon(t, backend)
-	addTestWorkspace(d, "ws-snipe-session", t.TempDir())
-	addReloadSession(d, "snipe-session", protocol.SessionAgent("snipe"), protocol.SessionStateIdle)
+	directory := t.TempDir()
+	addTestWorkspace(d, "ws-snipe-session", directory)
+	addReloadSessionAt(d, "snipe-session", protocol.SessionAgent("snipe"), protocol.SessionStateIdle, directory)
 	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
 
 	now := time.Now().UTC()
@@ -341,8 +342,9 @@ func TestReloadKeepsThePerSessionAutoModeOverride(t *testing.T) {
 		params:  ptybackend.SessionLaunchParams{Recorded: true},
 	}
 	d := newReloadTestDaemon(t, backend)
-	addTestWorkspace(d, "ws-snipe-session", t.TempDir())
-	addReloadSession(d, "snipe-session", protocol.SessionAgent("snipe"), protocol.SessionStateIdle)
+	directory := t.TempDir()
+	addTestWorkspace(d, "ws-snipe-session", directory)
+	addReloadSessionAt(d, "snipe-session", protocol.SessionAgent("snipe"), protocol.SessionStateIdle, directory)
 	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
 	if _, err := d.store.SetAutoModeEnabledDefault(true, time.Now().UTC()); err != nil {
 		t.Fatalf("set default: %v", err)
