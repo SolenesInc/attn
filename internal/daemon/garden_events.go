@@ -66,13 +66,13 @@ func announceGardenSeedEvents(d *Daemon, seqs []int64) {
 }
 
 func (d *Daemon) appendGardenSeedEventOnce(
-	sourceKind, sourceID string, occurrence events.Occurrence,
+	sourceKind, sourceID, replacedSourceID string, occurrence events.Occurrence,
 ) error {
 	encoded, err := encodeGardenSeedEvents(occurrence)
 	if err != nil {
 		return err
 	}
-	seq, inserted, err := d.store.AppendBusEventOnce(sourceKind, sourceID, encoded[0], time.Now())
+	seq, inserted, err := d.store.AppendBusEventOnceReplacingSource(sourceKind, sourceID, replacedSourceID, encoded[0], time.Now())
 	if err != nil {
 		return err
 	}

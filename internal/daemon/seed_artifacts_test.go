@@ -138,7 +138,7 @@ func TestSeedArtifactCopyStartsFreshAfterDetach(t *testing.T) {
 		t.Fatalf("replacement receipt ID = %q, want %q", second.OperationID, first.OperationID)
 	}
 	secondReceipt, found, err := readSeedTransferReceipt(root, second.OperationID)
-	if err != nil || !found || secondReceipt.EventSource == "" || secondReceipt.EventSource == firstReceipt.EventSource {
+	if err != nil || !found || secondReceipt.EventSource == "" || secondReceipt.EventSource == firstReceipt.EventSource || secondReceipt.ReplacesEventSource != firstReceipt.EventSource {
 		t.Fatalf("replacement receipt = %+v found=%v err=%v, want a fresh event source after %q", secondReceipt, found, err, firstReceipt.EventSource)
 	}
 	managed := filepath.Join(notebook.SeedArtifactsDir(root, seed.ID), "report.bin")

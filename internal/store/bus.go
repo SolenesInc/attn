@@ -38,6 +38,12 @@ func (s *Store) AppendBusEvent(e BusEvent, now time.Time) (int64, error) {
 func (s *Store) AppendBusEventOnce(
 	sourceKind, sourceID string, event BusEvent, now time.Time,
 ) (int64, bool, error) {
+	return s.AppendBusEventOnceReplacingSource(sourceKind, sourceID, "", event, now)
+}
+
+func (s *Store) AppendBusEventOnceReplacingSource(
+	sourceKind, sourceID, replacedSourceID string, event BusEvent, now time.Time,
+) (int64, bool, error) {
 	if strings.TrimSpace(sourceKind) == "" || strings.TrimSpace(sourceID) == "" || strings.TrimSpace(event.Name) == "" {
 		return 0, false, fmt.Errorf("append bus event once: source kind, source id, and event name are required")
 	}
@@ -57,6 +63,9 @@ func (s *Store) AppendBusEventOnce(
 		WHERE source_kind=? AND source_id=? AND event_name=?
 	`, sourceKind, sourceID, event.Name).Scan(&existing)
 	if err == nil {
+		if err := deleteReplacedBusEventSource(tx, sourceKind, sourceID, replacedSourceID); err != nil {
+			return 0, false, err
+		}
 		return existing, false, tx.Commit()
 	}
 	if err != sql.ErrNoRows {
@@ -72,10 +81,22 @@ func (s *Store) AppendBusEventOnce(
 	`, sourceKind, sourceID, event.Name, seq); err != nil {
 		return 0, false, err
 	}
+	if err := deleteReplacedBusEventSource(tx, sourceKind, sourceID, replacedSourceID); err != nil {
+		return 0, false, err
+	}
 	if err := tx.Commit(); err != nil {
 		return 0, false, err
 	}
 	return seq, true, nil
+}
+
+func deleteReplacedBusEventSource(tx *sql.Tx, sourceKind, sourceID, replacedSourceID string) error {
+	replacedSourceID = strings.TrimSpace(replacedSourceID)
+	if replacedSourceID == "" || replacedSourceID == sourceID {
+		return nil
+	}
+	_, err := tx.Exec(`DELETE FROM garden_seed_event_sources WHERE source_kind=? AND source_id=?`, sourceKind, replacedSourceID)
+	return err
 }
 
 func (s *Store) AppendGardenSeedArtifactObservation(
