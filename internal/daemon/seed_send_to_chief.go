@@ -136,7 +136,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage) (*protoco
 		return nil, err
 	}
 	cause := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
-	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, next.ID, cause)
+	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, next.ID, cause, chiefSessionID)
 	if err != nil {
 		return nil, err
 	}

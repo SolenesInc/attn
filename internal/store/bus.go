@@ -128,6 +128,19 @@ func (s *Store) AppendGardenSeedArtifactObservation(
 	return seq, true, nil
 }
 
+func (s *Store) HasGardenSeedArtifactObservation(seedID string) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return false, nil
+	}
+	var present bool
+	err := s.db.QueryRow(`
+		SELECT EXISTS(SELECT 1 FROM garden_seed_artifact_observations WHERE seed_id=?)
+	`, seedID).Scan(&present)
+	return present, err
+}
+
 func appendBusEventWith(x execer, e BusEvent, now time.Time) (int64, error) {
 	res, err := x.Exec(`
 		INSERT INTO bus_events (name, subject, payload, source, created_at)

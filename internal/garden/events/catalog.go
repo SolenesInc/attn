@@ -22,7 +22,8 @@ const (
 )
 
 type CausePayload struct {
-	CausedBySessionID string `json:"caused_by_session_id,omitempty"`
+	CausedBySessionID         string `json:"caused_by_session_id,omitempty"`
+	DirectlyNotifiedSessionID string `json:"directly_notified_session_id,omitempty"`
 }
 
 type NoteAddedPayload struct {
@@ -82,6 +83,7 @@ func Declarations() Vocabulary {
 	seedActivity := Bell(BellSeedActivity).
 		Notify(seedParties).
 		Except(SessionThatCausedTheEvent).
+		Except(SessionNotifiedDirectly).
 		KeepPendingWhile(RecipientStillBelongsTo(seedParties))
 
 	v := Vocabulary{

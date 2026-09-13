@@ -164,7 +164,7 @@ func (d *Daemon) bindSeedHandover(
 		return nil, err
 	}
 	cause := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
-	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, cause)
+	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, cause, sessionID)
 	if err != nil {
 		return nil, err
 	}

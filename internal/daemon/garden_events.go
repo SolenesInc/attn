@@ -89,8 +89,11 @@ func firstString(values []string) string {
 	return strings.TrimSpace(values[0])
 }
 
-func gardenSeedLifecycleOccurrence(verb garden.Verb, seedID, causedBySessionID string) (events.Occurrence, error) {
-	payload := events.CausePayload{CausedBySessionID: strings.TrimSpace(causedBySessionID)}
+func gardenSeedLifecycleOccurrence(verb garden.Verb, seedID, causedBySessionID string, directlyNotifiedSessionID ...string) (events.Occurrence, error) {
+	payload := events.CausePayload{
+		CausedBySessionID:         strings.TrimSpace(causedBySessionID),
+		DirectlyNotifiedSessionID: firstString(directlyNotifiedSessionID),
+	}
 	switch verb {
 	case garden.VerbTend:
 		return events.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.Tended, seedID, payload)
@@ -125,6 +128,16 @@ func recoveredGardenSeedEvents(seed garden.Seed, notes []garden.Note) ([]store.B
 			return nil, err
 		}
 		occurrences = append(occurrences, linked)
+	}
+	if strings.TrimSpace(seed.ResumeSessionID) != "" {
+		configured, err := events.Occur(
+			gardenSeedEventModel, gardenSeedEventVocabulary.ResumeIdentityConfigured, seed.ID,
+			events.CausePayload{CausedBySessionID: seed.PlanterSession},
+		)
+		if err != nil {
+			return nil, err
+		}
+		occurrences = append(occurrences, configured)
 	}
 	var lifecycle garden.Verb
 	switch seed.Status {

@@ -11,6 +11,7 @@ import (
 type Interpreted struct {
 	bellName string
 	cause    string
+	excluded []string
 }
 
 func (i Interpreted) Quiet() bool               { return i.bellName == "" }
@@ -46,7 +47,15 @@ func (m *Model) Interpret(name, seedID string, payload []byte) (Interpreted, err
 	if decision.kind != ringAction {
 		return Interpreted{}, fmt.Errorf("%s: unsupported compiled decision", name)
 	}
-	return Interpreted{bellName: decision.bell.name, cause: values["caused_by_session_id"].(string)}, nil
+	interpreted := Interpreted{bellName: decision.bell.name, cause: values["caused_by_session_id"].(string)}
+	for _, exclusion := range decision.bell.exclusions {
+		if value, exists := values[exclusionField(exclusion)]; exists {
+			if sessionID := strings.TrimSpace(value.(string)); sessionID != "" {
+				interpreted.excluded = append(interpreted.excluded, sessionID)
+			}
+		}
+	}
+	return interpreted, nil
 }
 
 type RoleResolver interface {
@@ -65,12 +74,16 @@ func (m *Model) Recipients(seedID string, decision Interpreted, resolver RoleRes
 	if err != nil {
 		return nil, err
 	}
-	if decision.cause == "" {
+	if len(decision.excluded) == 0 {
 		return recipients, nil
+	}
+	excluded := map[string]bool{}
+	for _, sessionID := range decision.excluded {
+		excluded[sessionID] = true
 	}
 	out := recipients[:0]
 	for _, recipient := range recipients {
-		if recipient != decision.cause {
+		if !excluded[recipient] {
 			out = append(out, recipient)
 		}
 	}

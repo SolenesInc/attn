@@ -94,6 +94,21 @@ func (d *Daemon) automationRunIsContinuation(run *store.AutomationRun) (bool, er
 	return origin != "" && origin != run.ID, nil
 }
 
+func (d *Daemon) automationWorkReadyOccurrence(run *store.AutomationRun) (seedEvents.Occurrence, error) {
+	continuation, err := d.automationRunIsContinuation(run)
+	if err != nil {
+		return seedEvents.Occurrence{}, err
+	}
+	causedBySessionID := ""
+	if !continuation {
+		causedBySessionID = run.SessionID
+	}
+	return seedEvents.Occur(
+		gardenSeedEventModel, gardenSeedEventVocabulary.WorkReady, run.SeedID,
+		seedEvents.WorkReadyPayload{AutomationRunID: run.ID, CausedBySessionID: causedBySessionID},
+	)
+}
+
 func (d *Daemon) recordAutomationRunSeedOutcome(run *store.AutomationRun, body string) error {
 	if run == nil || strings.TrimSpace(run.SeedID) == "" {
 		return errors.New("record automation outcome: seed id missing")
@@ -187,10 +202,7 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	if err != nil {
 		return err
 	}
-	ready, err := seedEvents.Occur(
-		gardenSeedEventModel, gardenSeedEventVocabulary.WorkReady, run.SeedID,
-		seedEvents.WorkReadyPayload{AutomationRunID: run.ID},
-	)
+	ready, err := d.automationWorkReadyOccurrence(run)
 	if err != nil {
 		return err
 	}

@@ -259,6 +259,16 @@ func (d *Daemon) reconcileSeedArtifactObservations() error {
 		dir := notebook.SeedArtifactsDir(root, seed.ID)
 		info, statErr := os.Lstat(dir)
 		if os.IsNotExist(statErr) {
+			observed, observedErr := d.store.HasGardenSeedArtifactObservation(seed.ID)
+			if observedErr != nil {
+				return fmt.Errorf("read artifact observation for %s: %w", seed.ID, observedErr)
+			}
+			if !observed {
+				continue
+			}
+			if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+				return fmt.Errorf("reconcile removed artifacts for %s: %w", seed.ID, err)
+			}
 			continue
 		}
 		if statErr != nil {

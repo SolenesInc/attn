@@ -18,7 +18,9 @@ func parties() events.AudienceDef {
 
 func ringing() events.BellDef {
 	audience := parties()
-	return events.Bell("seed activity").Notify(audience).Except(events.SessionThatCausedTheEvent).
+	return events.Bell("seed activity").Notify(audience).
+		Except(events.SessionThatCausedTheEvent).
+		Except(events.SessionNotifiedDirectly).
 		KeepPendingWhile(events.RecipientStillBelongsTo(audience))
 }
 
@@ -69,11 +71,11 @@ func TestRejectsInvalidModelsIncludingUnselectedBranches(t *testing.T) {
 		{"zero decision", events.Catalog(event), events.Policies(events.On(event, events.Decision{})), "missing or unknown"},
 		{"bad boolean", events.Catalog(event), events.Policies(events.On(event, events.Choose(events.BoolField[events.NoteAddedPayload]("note_id"), events.Quiet(), events.Quiet()))), "required boolean"},
 		{"wrong payload predicate", events.Catalog(event), events.Policies(events.On(event, events.Choose(events.BoolField[events.UnblockedPayload]("attention_requested"), events.Quiet(), events.Quiet()))), "required boolean"},
-		{"invalid hidden branch", events.Catalog(event), events.Policies(events.On(event, events.Choose(events.BoolField[events.NoteAddedPayload]("attention_requested"), events.Quiet(), events.Ring(events.Bell("broken").Notify(tenders).Except(events.SessionThatCausedTheEvent).KeepPendingWhile(events.RecipientStillBelongsTo(watchers)))))), "audiences differ"},
-		{"incomplete audience", events.Catalog(event), events.Policies(events.On(event, events.Ring(events.Bell("broken").Notify(watchers).Except(events.SessionThatCausedTheEvent).KeepPendingWhile(events.RecipientStillBelongsTo(watchers))))), "must include"},
+		{"invalid hidden branch", events.Catalog(event), events.Policies(events.On(event, events.Choose(events.BoolField[events.NoteAddedPayload]("attention_requested"), events.Quiet(), events.Ring(events.Bell("broken").Notify(tenders).Except(events.SessionThatCausedTheEvent).Except(events.SessionNotifiedDirectly).KeepPendingWhile(events.RecipientStillBelongsTo(watchers)))))), "audiences differ"},
+		{"incomplete audience", events.Catalog(event), events.Policies(events.On(event, events.Ring(events.Bell("broken").Notify(watchers).Except(events.SessionThatCausedTheEvent).Except(events.SessionNotifiedDirectly).KeepPendingWhile(events.RecipientStillBelongsTo(watchers))))), "must include"},
 		{"missing exclusion", events.Catalog(event), events.Policies(events.On(event, events.Ring(events.Bell("broken").Notify(audience).KeepPendingWhile(events.RecipientStillBelongsTo(audience))))), "must exclude"},
-		{"missing retention", events.Catalog(event), events.Policies(events.On(event, events.Ring(events.Bell("broken").Notify(audience).Except(events.SessionThatCausedTheEvent)))), "exactly one"},
-		{"duplicate role", events.Catalog(event), events.Policies(events.On(event, events.Ring(events.Bell("broken").Notify(audience.Includes(events.CurrentTender)).Except(events.SessionThatCausedTheEvent).KeepPendingWhile(events.RecipientStillBelongsTo(audience))))), "duplicate role"},
+		{"missing retention", events.Catalog(event), events.Policies(events.On(event, events.Ring(events.Bell("broken").Notify(audience).Except(events.SessionThatCausedTheEvent).Except(events.SessionNotifiedDirectly)))), "exactly one"},
+		{"duplicate role", events.Catalog(event), events.Policies(events.On(event, events.Ring(events.Bell("broken").Notify(audience.Includes(events.CurrentTender)).Except(events.SessionThatCausedTheEvent).Except(events.SessionNotifiedDirectly).KeepPendingWhile(events.RecipientStillBelongsTo(audience))))), "duplicate role"},
 		{"empty catalog", events.Catalog(), events.Policies(), "empty event catalog"},
 	}
 	for _, test := range tests {
@@ -199,6 +201,31 @@ func TestSelectionAndRetentionShareTheAudienceResolver(t *testing.T) {
 	}
 }
 
+func TestDeclaredExclusionsCoverTheActorAndADirectlyNotifiedSession(t *testing.T) {
+	model, vocabulary := gardenModel(t)
+	occurrence, err := events.Occur(model, vocabulary.Tended, seedID, events.CausePayload{
+		CausedBySessionID: "source", DirectlyNotifiedSessionID: "destination",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := model.Encode(occurrence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision, err := model.Interpret(encoded.Name, encoded.Subject, encoded.Payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roles := roleResolver{roles: map[events.Role][]string{
+		events.CurrentTender:    {"destination"},
+		events.CoveringWatchers: {"source", "observer"},
+	}}
+	if got, err := model.Recipients(seedID, decision, roles); err != nil || !reflect.DeepEqual(got, []string{"observer"}) {
+		t.Fatalf("Recipients = %v, %v", got, err)
+	}
+}
+
 func TestNotePolicyIsConditional(t *testing.T) {
 	model, _ := gardenModel(t)
 	for _, test := range []struct {
@@ -293,7 +320,9 @@ func TestNamedScalarPayloadsAndBuilderBranchesStayPlainAndImmutable(t *testing.T
 	event := events.Event[namedScalarPayload]("garden.seed.named")
 	base := events.Audience("seed parties").Includes(events.CurrentTender)
 	parties := base.Includes(events.CoveringWatchers)
-	bell := events.Bell(events.BellSeedActivity).Notify(parties).Except(events.SessionThatCausedTheEvent).
+	bell := events.Bell(events.BellSeedActivity).Notify(parties).
+		Except(events.SessionThatCausedTheEvent).
+		Except(events.SessionNotifiedDirectly).
 		KeepPendingWhile(events.RecipientStillBelongsTo(parties))
 	model, err := events.Build(events.Catalog(event), events.Policies(events.On(event,
 		events.Choose(events.BoolField[namedScalarPayload]("attention_requested"), events.Ring(bell), events.Quiet()),
@@ -315,7 +344,9 @@ func TestNamedScalarPayloadsAndBuilderBranchesStayPlainAndImmutable(t *testing.T
 	if err != nil || decision.Quiet() || decision.CausedBySessionID() != "writer" {
 		t.Fatalf("named scalar decision=%+v err=%v", decision, err)
 	}
-	broken := events.Bell("broken").Notify(base).Except(events.SessionThatCausedTheEvent).
+	broken := events.Bell("broken").Notify(base).
+		Except(events.SessionThatCausedTheEvent).
+		Except(events.SessionNotifiedDirectly).
 		KeepPendingWhile(events.RecipientStillBelongsTo(base))
 	if _, err := events.Build(events.Catalog(event), events.Policies(events.On(event, events.Ring(broken)))); err == nil || !strings.Contains(err.Error(), "must include") {
 		t.Fatalf("base audience was mutated by a derived branch: %v", err)

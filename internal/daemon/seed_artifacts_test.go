@@ -475,6 +475,28 @@ func TestSeedArtifactObservationReconciliationPublishesMissingCurrentStateOnce(t
 	if changed != 1 {
 		t.Fatalf("reconciled artifact events = %d, want 1", changed)
 	}
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.reconcileSeedArtifactObservations(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.reconcileSeedArtifactObservations(); err != nil {
+		t.Fatal(err)
+	}
+	events, err = d.store.BusEventsSince(0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed = 0
+	for _, event := range events {
+		if event.Name == seedEvents.NameArtifactChanged && event.Subject == seed.ID {
+			changed++
+		}
+	}
+	if changed != 2 {
+		t.Fatalf("reconciled artifact events after directory removal = %d, want 2", changed)
+	}
 }
 
 func TestSeedArtifactObservationPublishesAStateThatReturnsAfterAChange(t *testing.T) {

@@ -34,7 +34,10 @@ func (a AudienceDef) Includes(role Role) AudienceDef {
 
 type Exclusion uint8
 
-const SessionThatCausedTheEvent Exclusion = 1
+const (
+	SessionThatCausedTheEvent Exclusion = iota + 1
+	SessionNotifiedDirectly
+)
 
 type Membership struct{ audience AudienceDef }
 
@@ -286,7 +289,19 @@ func (m *Model) validateDecision(event *compiledEvent, decision Decision) error 
 	case quietAction:
 		return nil
 	case ringAction:
-		return m.registerBell(decision.bell)
+		if err := m.registerBell(decision.bell); err != nil {
+			return err
+		}
+		for _, exclusion := range decision.bell.exclusions {
+			fieldName := exclusionField(exclusion)
+			if fieldName == "caused_by_session_id" {
+				continue
+			}
+			if declared, exists := event.fields[fieldName]; exists && (declared.kind != reflect.String || declared.required) {
+				return fmt.Errorf("exclusion field %s must be an optional string", fieldName)
+			}
+		}
+		return nil
 	case chooseAction:
 		declared, exists := event.fields[decision.condition.field]
 		if decision.condition.typeOf != event.def.typeOf || !exists || declared.kind != reflect.Bool || !declared.required {
@@ -353,10 +368,31 @@ func validateBell(bell BellDef) error {
 	if !selected[CurrentTender] || !selected[CoveringWatchers] {
 		return fmt.Errorf("bell %q: seed parties must include current tender and covering watchers", bell.name)
 	}
-	if len(bell.exclusions) != 1 || bell.exclusions[0] != SessionThatCausedTheEvent {
-		return fmt.Errorf("bell %q must exclude SessionThatCausedTheEvent exactly once", bell.name)
+	want := map[Exclusion]bool{
+		SessionThatCausedTheEvent: true,
+		SessionNotifiedDirectly:   true,
+	}
+	for _, exclusion := range bell.exclusions {
+		if !want[exclusion] {
+			return fmt.Errorf("bell %q has unsupported exclusion %d", bell.name, exclusion)
+		}
+		delete(want, exclusion)
+	}
+	if len(want) != 0 || len(bell.exclusions) != 2 {
+		return fmt.Errorf("bell %q must exclude SessionThatCausedTheEvent and SessionNotifiedDirectly exactly once", bell.name)
 	}
 	return nil
+}
+
+func exclusionField(exclusion Exclusion) string {
+	switch exclusion {
+	case SessionThatCausedTheEvent:
+		return "caused_by_session_id"
+	case SessionNotifiedDirectly:
+		return "directly_notified_session_id"
+	default:
+		return ""
+	}
 }
 
 func cloneBell(bell BellDef) BellDef {

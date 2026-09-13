@@ -1621,6 +1621,49 @@ func TestInitialAutomationOutcomeDoesNotRingItsOwnSession(t *testing.T) {
 	}
 }
 
+func TestAutomationWorkReadyExcludesOnlyAnInitialRunsOwnSession(t *testing.T) {
+	d := newEnrolledDaemon(t, "")
+	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID, WorkspaceID: first.WorkspaceID, PaneID: first.PaneID}}
+	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
+		t.Fatal(err)
+	}
+	assertWorkReadyCause := func(run *store.AutomationRun, want string) {
+		t.Helper()
+		occurrence, err := d.automationWorkReadyOccurrence(run)
+		if err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := gardenSeedEventModel.Encode(occurrence)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decision, err := gardenSeedEventModel.Interpret(encoded.Name, encoded.Subject, encoded.Payload)
+		if err != nil || decision.CausedBySessionID() != want {
+			t.Fatalf("work-ready cause = %q, want %q, err=%v", decision.CausedBySessionID(), want, err)
+		}
+	}
+	assertWorkReadyCause(first, first.SessionID)
+	if err := markAutomationRunDeliveredForTest(d.store, first.ID, `{}`, now); err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:two", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now.Add(time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertWorkReadyCause(second, "")
+}
+
 func TestAutomationOccurrenceNoteRecordedOncePerRun(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
