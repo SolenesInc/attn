@@ -205,9 +205,14 @@ func TestWriteStallEndsTheConnectionAndIsRemembered(t *testing.T) {
 			evictionRecorded <- record
 		}
 	}
-	go d.Start()
+	startErr := make(chan error, 1)
+	go func() { startErr <- d.Start() }()
 	defer d.Stop()
-	waitForSocket(t, sockPath, 5*time.Second)
+	select {
+	case <-d.Started():
+	case err := <-startErr:
+		t.Fatalf("daemon stopped before startup: %v", err)
+	}
 	waitForRecovery(t, d)
 
 	var logMu sync.Mutex
