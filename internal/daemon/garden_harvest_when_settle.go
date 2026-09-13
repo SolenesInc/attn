@@ -37,7 +37,6 @@ func (d *Daemon) settleHarvestConditions() (harvested, cleared int) {
 				d.logf("harvest-on-merge: clearing %s on %s: %v", seed.ID, row.PRID, err)
 				continue
 			}
-			d.ringSeedActivity(seed.ID, harvestWhenRingCleared)
 			cleared++
 		}
 	}

@@ -1,0 +1,5 @@
+kind: changed
+area: garden
+change: >
+  Garden seed notifications now follow the current tender and covering watches,
+  survive retries, and arrive only when automated work is ready or needs attention.

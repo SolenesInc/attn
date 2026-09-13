@@ -14,6 +14,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
@@ -121,12 +122,8 @@ func (d *Daemon) recordAutomationRunSeedOutcome(run *store.AutomationRun, body s
 		seen = seen || note.Body == body
 	}
 	if !seen {
-		if _, err := d.appendSeedNote(run.SeedID, body, run.SessionID, "", garden.NoteKindNote, nil); err != nil {
+		if _, err := d.appendSeedNote(run.SeedID, body, run.SessionID, "", garden.NoteKindNote, nil, true, ""); err != nil {
 			return fmt.Errorf("record automation outcome: append note: %w", err)
-		}
-		d.ringSeedActivity(run.SeedID, "note", run.SessionID)
-		if continuation {
-			d.claimAndDeliverSeedBell(run.SessionID, run.SeedID, "note")
 		}
 	}
 	if continuation {
@@ -186,8 +183,25 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	if err != nil {
 		return err
 	}
-	if err := d.store.MarkAutomationRunDelivered(run.ID, string(result.Resolved), time.Now()); err != nil {
+	ready, err := seedEvents.Occur(
+		gardenSeedEventModel, gardenSeedEventVocabulary.WorkReady, run.SeedID,
+		seedEvents.WorkReadyPayload{AutomationRunID: run.ID},
+	)
+	if err != nil {
 		return err
+	}
+	events, err := encodeGardenSeedEvents(ready)
+	if err != nil {
+		return err
+	}
+	seq, inserted, err := d.store.MarkAutomationRunDeliveredWithEvent(
+		run.ID, string(result.Resolved), events[0], time.Now(),
+	)
+	if err != nil {
+		return err
+	}
+	if inserted {
+		announceGardenSeedEvents(d, []int64{seq})
 	}
 	// No unit-test coverage: pinned live by scenario-automation-surface.mjs
 	// leg2_run_now_and_navigable.
@@ -231,9 +245,6 @@ func (d *Daemon) launchAutomationRun(ctx context.Context, req automation.WorkReq
 	}
 	if err := d.verifyAutomationDelivery(ctx, req, location.Directory); err != nil {
 		return automation.DeliveryResult{}, fmt.Errorf("verify delivery: %w", err)
-	}
-	if continuation {
-		d.claimAndDeliverSeedBell(req.IDs.SessionID, req.IDs.SeedID, "note")
 	}
 	return automation.DeliveryResult{SeedID: req.IDs.SeedID, SessionID: req.IDs.SessionID, WorkspaceID: req.IDs.WorkspaceID, Directory: location.Directory, Revision: location.Revision, Resolved: location.Resolved, Mode: "created"}, nil
 }
@@ -434,10 +445,9 @@ func (d *Daemon) ensureAutomationOccurrenceNote(req automation.WorkRequest) erro
 			return nil
 		}
 	}
-	if _, err := d.appendSeedNote(req.IDs.SeedID, body, req.IDs.SessionID, "", garden.NoteKindNote, nil); err != nil {
+	if _, err := d.appendSeedNote(req.IDs.SeedID, body, req.IDs.SessionID, "", garden.NoteKindNote, nil, false, req.IDs.SessionID); err != nil {
 		return err
 	}
-	d.ringSeedActivity(req.IDs.SeedID, "note", req.IDs.SessionID)
 	return nil
 }
 func (d *Daemon) prepareAutomationLocation(_ context.Context, req automation.WorkRequest) (automation.PreparedLocation, error) {

@@ -88,7 +88,7 @@ func TestOpenDB_CreatesSchema(t *testing.T) {
 	}
 	defer db.Close()
 
-	tables := []string{"sessions", "prs", "repos", "profile_roles", "chief_of_staff_dispatches", "peer_messages", "agent_mailbox_items", "delegation_operations", "automation_provider_cursors", "automation_review_request_edges", "automation_continuity_bindings", "automation_ticket_occurrence_events", "legacy_ticket_recovery_runs", "legacy_ticket_recovery_sources", "legacy_ticket_recovery_items", "legacy_ticket_seed_links"}
+	tables := []string{"sessions", "prs", "repos", "profile_roles", "chief_of_staff_dispatches", "peer_messages", "agent_mailbox_items", "delegation_operations", "automation_provider_cursors", "automation_review_request_edges", "automation_continuity_bindings", "automation_ticket_occurrence_events", "legacy_ticket_recovery_runs", "legacy_ticket_recovery_sources", "legacy_ticket_recovery_items", "legacy_ticket_seed_links", "garden_seed_event_receipts", "garden_seed_event_sources"}
 	for _, table := range tables {
 		var count int
 		err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count)
@@ -102,6 +102,55 @@ func TestOpenDB_CreatesSchema(t *testing.T) {
 	}
 	if baselineDefault != "0" {
 		t.Fatalf("baseline_cycle default=%q, want 0", baselineDefault)
+	}
+}
+
+func TestMigration148PreservesPendingGardenMailboxReceiptsAndNamesItsBell(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "migration-148.db")
+	db, err := OpenDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		DROP TABLE garden_seed_event_receipts;
+		DROP TABLE garden_seed_event_sources;
+		DELETE FROM schema_migrations WHERE version >= 148;
+		INSERT INTO agent_mailbox_items
+			(id, recipient_session_id, kind, source_id, coalesce_key, hint, prompt, created_at, notified_at, read_at)
+		VALUES
+			('pending', 'sess-a', 'garden_seed', 's-one', 's-one', 'unblocked', '', '2026-09-12T12:00:00Z', '2026-09-12T12:01:00Z', ''),
+			('read', 'sess-a', 'garden_seed', 's-two', 's-two', 'lifecycle', '', '2026-09-12T12:00:00Z', '2026-09-12T12:01:00Z', '2026-09-12T12:02:00Z')
+	`); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err = OpenDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var hint, bell, notified, read string
+	if err := db.QueryRow(`SELECT hint,bell_name,notified_at,read_at FROM agent_mailbox_items WHERE id='pending'`).Scan(&hint, &bell, &notified, &read); err != nil {
+		t.Fatal(err)
+	}
+	if hint != "unblocked" || bell != "seed activity" || notified != "2026-09-12T12:01:00Z" || read != "" {
+		t.Fatalf("pending row after migration = hint=%q bell=%q notified=%q read=%q", hint, bell, notified, read)
+	}
+	if err := db.QueryRow(`SELECT hint,bell_name,notified_at,read_at FROM agent_mailbox_items WHERE id='read'`).Scan(&hint, &bell, &notified, &read); err != nil {
+		t.Fatal(err)
+	}
+	if hint != "lifecycle" || bell != "" || notified != "2026-09-12T12:01:00Z" || read != "2026-09-12T12:02:00Z" {
+		t.Fatalf("read row after migration = hint=%q bell=%q notified=%q read=%q", hint, bell, notified, read)
+	}
+	for _, table := range []string{"garden_seed_event_receipts", "garden_seed_event_sources"} {
+		var count int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&count); err != nil {
+			t.Fatalf("%s missing after migration: %v", table, err)
+		}
 	}
 }
 

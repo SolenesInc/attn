@@ -263,7 +263,7 @@ func (d *Daemon) recordWorktreeRemoval(
 	body := fmt.Sprintf("attn %s the worktree %s (branch %s of %s): %s.",
 		action, wt.Path, wt.Branch, wt.MainRepo, reason)
 	for _, seedID := range seeds {
-		if _, err := d.appendSeedNote(seedID, body, "", "", "", nil); err != nil {
+		if _, err := d.appendSeedNote(seedID, body, "", "", "", nil, false, ""); err != nil {
 			d.logf("worktree removal: noting %s on seed %s: %v", wt.Path, seedID, err)
 		}
 	}

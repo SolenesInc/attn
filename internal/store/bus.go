@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -32,6 +33,49 @@ func (s *Store) AppendBusEvent(e BusEvent, now time.Time) (int64, error) {
 		return 0, nil
 	}
 	return appendBusEventWith(s.db, e, now)
+}
+
+func (s *Store) AppendBusEventOnce(
+	sourceKind, sourceID string, event BusEvent, now time.Time,
+) (int64, bool, error) {
+	if strings.TrimSpace(sourceKind) == "" || strings.TrimSpace(sourceID) == "" || strings.TrimSpace(event.Name) == "" {
+		return 0, false, fmt.Errorf("append bus event once: source kind, source id, and event name are required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return 0, false, nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var existing int64
+	err = tx.QueryRow(`
+		SELECT event_seq FROM garden_seed_event_sources
+		WHERE source_kind=? AND source_id=? AND event_name=?
+	`, sourceKind, sourceID, event.Name).Scan(&existing)
+	if err == nil {
+		return existing, false, tx.Commit()
+	}
+	if err != sql.ErrNoRows {
+		return 0, false, err
+	}
+	seq, err := appendBusEventWith(tx, event, now)
+	if err != nil {
+		return 0, false, err
+	}
+	if _, err := tx.Exec(`
+		INSERT INTO garden_seed_event_sources(source_kind, source_id, event_name, event_seq)
+		VALUES (?, ?, ?, ?)
+	`, sourceKind, sourceID, event.Name, seq); err != nil {
+		return 0, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return seq, true, nil
 }
 
 func appendBusEventWith(x execer, e BusEvent, now time.Time) (int64, error) {
@@ -278,7 +322,12 @@ func (s *Store) TrimBusEvents(cutoff time.Time) (int, error) {
 	if s.db == nil {
 		return 0, nil
 	}
-	res, err := s.db.Exec(`
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.Exec(`
 		DELETE FROM bus_events
 		WHERE created_at < ?
 		  AND seq <= COALESCE(
@@ -293,7 +342,21 @@ func (s *Store) TrimBusEvents(cutoff time.Time) (int, error) {
 		return 0, err
 	}
 	n, err := res.RowsAffected()
-	return int(n), err
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(`
+		DELETE FROM garden_seed_event_receipts
+		WHERE NOT EXISTS (
+			SELECT 1 FROM bus_events WHERE bus_events.seq = garden_seed_event_receipts.event_seq
+		)
+	`); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return int(n), nil
 }
 
 // CompactBusEvents keeps only the newest fact per subject among the named names, at or below

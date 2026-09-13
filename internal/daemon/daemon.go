@@ -364,8 +364,10 @@ type Daemon struct {
 
 	automationsBroadcastHook func(*protocol.AutomationsChangedMessage)
 
-	eventBus       *bus.Bus
-	busUnsubscribe func()
+	eventBus                       *bus.Bus
+	busUnsubscribe                 func()
+	gardenSeedEventConsumerErr     error
+	gardenSeedEventConsumerStarted bool
 
 	docSubsMu              sync.Mutex
 	docSubs                map[string]*docSubscription
@@ -827,6 +829,9 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("ensure enrollment record: %w", err)
 	}
 	d.ensureGardenCollections()
+	if err := d.reconcileSeedArtifactObservations(); err != nil {
+		return fmt.Errorf("reconcile Garden seed artifacts: %w", err)
+	}
 	waitForLegacyTicketRecovery, err := d.prepareLegacyTicketRecovery()
 	if err != nil {
 		return fmt.Errorf("prepare legacy ticket recovery: %w", err)
@@ -1041,7 +1046,14 @@ func (d *Daemon) Start() error {
 
 	go func() {
 		d.performStartupPTYRecovery(recoveryStartedAt)
-		d.seedQueuedAgentMailboxItems()
+		d.gardenWatchMu.Lock()
+		gardenBellErr := d.discardAllIneligibleGardenSeedBellsLocked()
+		d.gardenWatchMu.Unlock()
+		if gardenBellErr != nil {
+			d.logf("Garden seed mailbox startup reconciliation failed; queued updates remain undelivered: %v", gardenBellErr)
+		} else {
+			d.seedQueuedAgentMailboxItems()
+		}
 		recoverAutomationsAfterGitHubReady(githubHostsReady, d.recoverAutomations)
 		d.setRecovering(false)
 		d.resumePendingDelegations()
@@ -2014,6 +2026,7 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 	}
 	d.forgetSessionTrace(sessionID)
 	if recorded {
+		d.invalidateGardenSeedParties("session close")
 		d.publishFact(FactSessionClosed, sessionID, d.store.SessionLedgerEntry(sessionID))
 	}
 	d.clearChiefOfStaffIfSession(sessionID)
@@ -2897,6 +2910,7 @@ func (d *Daemon) publishSessionUnregistered(session *protocol.Session) {
 	if session == nil {
 		return
 	}
+	d.invalidateGardenSeedParties("session unregister")
 	d.publishFact(FactSessionUnregistered, session.ID, d.sessionForBroadcast(session))
 }
 

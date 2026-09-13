@@ -1248,6 +1248,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{145, "move automation continuity from tickets to Garden seeds", ""},
 	{146, "guardian model selection", ""},
 	{147, "record structured task failure diagnostics", ""},
+	{148, "durable Garden seed event handling", ``},
 }
 
 const migration99SQL = `
@@ -1740,6 +1741,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 148 {
+			if err := applyMigration148(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else if m.version == 138 {
 			if _, err := tx.Exec(m.sql); err != nil {
 				tx.Rollback()
@@ -1822,6 +1828,39 @@ func applyMigration147(tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+func applyMigration148(tx *sql.Tx) error {
+	if _, err := tx.Exec(`
+		CREATE TABLE IF NOT EXISTS garden_seed_event_receipts (
+			event_seq  INTEGER PRIMARY KEY,
+			handled_at TEXT NOT NULL
+		);
+		CREATE TABLE IF NOT EXISTS garden_seed_event_sources (
+			source_kind TEXT NOT NULL,
+			source_id   TEXT NOT NULL,
+			event_name  TEXT NOT NULL,
+			event_seq   INTEGER NOT NULL UNIQUE,
+			PRIMARY KEY (source_kind, source_id, event_name)
+		);
+	`); err != nil {
+		return err
+	}
+	hasBellName, err := columnExists(tx, "agent_mailbox_items", "bell_name")
+	if err != nil {
+		return err
+	}
+	if !hasBellName {
+		if _, err := tx.Exec(`ALTER TABLE agent_mailbox_items ADD COLUMN bell_name TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	_, err = tx.Exec(`
+		UPDATE agent_mailbox_items
+		SET bell_name = 'seed activity'
+		WHERE kind = 'garden_seed' AND read_at = '' AND bell_name = ''
+	`)
+	return err
 }
 
 func applyMigration145(tx *sql.Tx) error {

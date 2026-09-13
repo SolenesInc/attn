@@ -78,7 +78,9 @@ func (d *Daemon) ensureNotebookWatcher(root string) {
 		if len(artifactSeeds) > 0 {
 			d.coalesceSnapshots(func() {
 				for seedID := range artifactSeeds {
-					d.publishFact(FactGardenArtifactChanged, seedID, nil)
+					if err := d.recordObservedSeedArtifacts(seedID); err != nil {
+						d.logf("Garden artifact observation for %s: %v", seedID, err)
+					}
 				}
 			})
 		}

@@ -482,7 +482,7 @@ func TestAgentMailboxDoorbellCoalescesMixedBurstAndBatchReadsEachBodyOnce(t *tes
 			t.Fatal(err)
 		}
 		itemID := fmt.Sprintf("garden-burst-%02d", i)
-		claimed, err := d.store.ClaimGardenSeedMailboxItem(
+		claimed, err := claimGardenSeedMailboxItemForTest(d.store,
 			"mailbox-target", seedID, "note", itemID, base.Add(time.Duration(i)*time.Second),
 		)
 		if err != nil || !claimed {

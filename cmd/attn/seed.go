@@ -191,7 +191,7 @@ commands:
         whoever tends it next. - reads stdin. --handoff addresses it to your
         successor on this seed: show renders the freshest one first and tend
         prints it on the claim, so it is read before any work.
-        --ring tells watchers to look; ordinary notes stay quiet.
+        --ring tells the current tender and watchers to look; ordinary notes stay quiet.
 
   attach <id> --path <file> (--move | --copy)
         put a local regular file in durable seed-owned storage. Move is the
@@ -237,7 +237,7 @@ flags:
   --window <d>       the stale window, like 72h or 14d (ls --stale)
   -f <path>          the plot payload to read (plot; default stdin)
   --handoff          write a note to whoever tends the seed next (note)
-  --ring             ring watchers after this note lands (note)
+  --ring             ring the current tender and watchers after this note lands (note)
   --path <file>      local source, managed filename, or linked path
   --repo <name>      the repository that path lives in (attach, detach)
   --notebook <id>    a Notebook document (attach, detach)
@@ -365,7 +365,7 @@ func newSeedFlags(verb string) *seedFlags {
 		out:            fs.String("out", "", "file to write (- for stdout)"),
 		limit:          fs.Int("limit", 0, "how many log entries to read"),
 		handoff:        fs.Bool("handoff", false, "write this note to whoever tends the seed next"),
-		ring:           fs.Bool("ring", false, "ring the seed's watchers after this note lands"),
+		ring:           fs.Bool("ring", false, "ring the seed's current tender and watchers after this note lands"),
 		path:           fs.String("path", "", "a markdown document at this path"),
 		repo:           fs.String("repo", "", "the repository the path lives in"),
 		notebook:       fs.String("notebook", "", "a Notebook document, by its id"),

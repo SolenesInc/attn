@@ -59,11 +59,6 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 	}
 	wire := d.seedTransitionWire(seed, doc)
 	d.mirrorSeedMoveOntoTicket("", seed.ID, verb, protocol.Deref(msg.Reason))
-	d.ringSeedActivity(seed.ID, gardenRingEvents[verb], "")
-	if garden.Closed(seed.Status) {
-		unblocked, _ := d.seedUnblocked(seed.ID)
-		d.ringSeedUnblocked(unblocked)
-	}
 	result.Seed = &wire
 	result.Success = true
 	d.sendToClient(client, result)
@@ -89,15 +84,14 @@ func (d *Daemon) handleSeedNoteWS(client *wsClient, msg *protocol.SeedNoteMessag
 		protocol.Deref(msg.Member),
 		protocol.Deref(msg.Kind),
 		artifactFromProtocol(msg.Artifact),
+		protocol.Deref(msg.Ring),
+		"",
 	)
 	if err != nil {
 		fail(err)
 		return
 	}
 	d.mirrorSeedNoteOntoTicket("", msg.SeedID, note.Body)
-	if protocol.Deref(msg.Ring) {
-		d.ringSeedActivity(msg.SeedID, "note", "")
-	}
 	result.Note = &note
 	result.Success = true
 	d.sendToClient(client, result)

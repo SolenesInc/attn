@@ -146,7 +146,7 @@ func setupContinuationWorktree(t *testing.T) (*Daemon, automation.WorkRequest, s
 		t.Fatal(err)
 	}
 	origin, _, err := d.store.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, string(payload), `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-auto01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-at0001", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -168,7 +168,7 @@ func setupContinuationWorktree(t *testing.T) (*Daemon, automation.WorkRequest, s
 	if err := d.recordGardenDispatch(origin.SessionID, origin.SeedID, "", prepared.Directory, "codex", false); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.store.MarkAutomationRunDelivered(origin.ID, string(prepared.Resolved), now); err != nil {
+	if err := markAutomationRunDeliveredForTest(d.store, origin.ID, string(prepared.Resolved), now); err != nil {
 		t.Fatal(err)
 	}
 	continuation := firstReq
@@ -584,7 +584,7 @@ location:
 	d := &Daemon{store: s, ghRegistry: registry}
 	d.automationDeliveryHook = func(run *store.AutomationRun) error {
 		delivered.Add(1)
-		return s.MarkAutomationRunDelivered(run.ID, `{"type":"test"}`, time.Now())
+		return markAutomationRunDeliveredForTest(s, run.ID, `{"type":"test"}`, time.Now())
 	}
 	demand := []*protocol.PR{{Host: "github.com", Repo: "owner/repo", Number: 42, HeadSHA: protocol.Ptr(headOne), Role: protocol.PRRoleReviewer, State: protocol.PRStateWaiting, Reason: protocol.PRReasonReviewNeeded}}
 	observedAt := time.Now()
@@ -673,7 +673,7 @@ location: {type: repository_worktree, repository_sources: {default: {type: manag
 	delivered := make(chan struct{}, 1)
 	d := &Daemon{store: s, ghRegistry: registry, wsHub: newWSHub()}
 	d.automationDeliveryHook = func(run *store.AutomationRun) error {
-		if err := s.MarkAutomationRunDelivered(run.ID, `{}`, time.Now()); err != nil {
+		if err := markAutomationRunDeliveredForTest(s, run.ID, `{}`, time.Now()); err != nil {
 			return err
 		}
 		delivered <- struct{}{}
@@ -739,7 +739,7 @@ location: {type: repository_worktree, repository_sources: {default: {type: manag
 		if attempts.Add(1) == 1 {
 			return &retryableAutomationDeliveryError{cause: errors.New("transient launch failure")}
 		}
-		return s.MarkAutomationRunDelivered(run.ID, `{}`, time.Now())
+		return markAutomationRunDeliveredForTest(s, run.ID, `{}`, time.Now())
 	}
 	var broadcasts []string
 	d.automationsBroadcastHook = func(msg *protocol.AutomationsChangedMessage) {
@@ -845,7 +845,7 @@ func TestFailedRepeatedOccurrenceNotesSharedSeedOnce(t *testing.T) {
 	if continuation, _, err := d.ensureAutomationSeed(firstReq); err != nil || continuation {
 		t.Fatalf("initial seed continuation=%v err=%v", continuation, err)
 	}
-	if err := d.store.MarkAutomationRunDelivered(first.ID, `{}`, now); err != nil {
+	if err := markAutomationRunDeliveredForTest(d.store, first.ID, `{}`, now); err != nil {
 		t.Fatal(err)
 	}
 	second, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:two", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now.Add(time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"})
@@ -892,7 +892,7 @@ func TestChangedHeadContinuationKeepsContractAndIdentityChecks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(first.ID, `{}`, now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, first.ID, `{}`, now); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(time.Minute)); err != nil {
@@ -1140,7 +1140,7 @@ func TestAutomationRunBroadcastsAfterClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(run.ID, "{}", now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, run.ID, "{}", now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1294,7 +1294,7 @@ func TestAutomationDefinitionsGetReachesRealSocketDispatchWithLastRun(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(run.ID, "{}", now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, run.ID, "{}", now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1391,7 +1391,7 @@ func TestFailedContinuationAfterContractRotationKeepsOriginSeedOpen(t *testing.T
 	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.store.MarkAutomationRunDelivered(first.ID, `{}`, now); err != nil {
+	if err := markAutomationRunDeliveredForTest(d.store, first.ID, `{}`, now); err != nil {
 		t.Fatal(err)
 	}
 	second, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:two", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now.Add(time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"})
@@ -1522,7 +1522,7 @@ func TestFailedContinuationDeliveryRestoresClosedSeed(t *testing.T) {
 	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.store.MarkAutomationRunDelivered(first.ID, `{}`, now); err != nil {
+	if err := markAutomationRunDeliveredForTest(d.store, first.ID, `{}`, now); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := d.applySeedTransition(first.SeedID, garden.VerbHarvest, garden.Ask{Actor: garden.Tender{Session: first.SessionID}, Reason: "first check complete"}); err != nil {
@@ -1544,6 +1544,7 @@ func TestFailedContinuationDeliveryRestoresClosedSeed(t *testing.T) {
 
 func TestWithdrawnContinuationRingsItsSessionOnce(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
+	addGardenSession(t, d, "session-1")
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
 	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
 	if err != nil {
@@ -1559,7 +1560,7 @@ func TestWithdrawnContinuationRingsItsSessionOnce(t *testing.T) {
 	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.store.MarkAutomationRunDelivered(first.ID, `{}`, now); err != nil {
+	if err := markAutomationRunDeliveredForTest(d.store, first.ID, `{}`, now); err != nil {
 		t.Fatal(err)
 	}
 	second, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:two", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now.Add(time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"})
@@ -1573,7 +1574,7 @@ func TestWithdrawnContinuationRingsItsSessionOnce(t *testing.T) {
 	if err := d.recordAutomationRunSeedOutcome(second, outcome); err != nil {
 		t.Fatal(err)
 	}
-	assertOneSeedBell(t, d, second.SessionID, second.SeedID, "note")
+	assertOneSeedBell(t, d, second.SessionID, second.SeedID, "note.added")
 	if _, _, err := d.store.ReadGardenSeedMailboxItems(second.SessionID, second.SeedID, now.Add(3*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
@@ -1608,7 +1609,7 @@ func TestAutomationOccurrenceNoteRecordedOncePerRun(t *testing.T) {
 	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.store.MarkAutomationRunDelivered(first.ID, `{}`, now); err != nil {
+	if err := markAutomationRunDeliveredForTest(d.store, first.ID, `{}`, now); err != nil {
 		t.Fatal(err)
 	}
 	second, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:two", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now.Add(time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"})

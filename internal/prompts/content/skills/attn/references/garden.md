@@ -59,18 +59,20 @@ tender.
 
 ## Rings and watches
 
-Lifecycle moves ring watching sessions. Harvesting or withering a blocker also
-rings whoever holds each seed it set free. Notes stay quiet unless you add
-`--ring`. `attn seed watch <id>` subscribes this session to the seed and its
-descendants, including children planted later. A new delegation starts the same
-watch on the seed it binds.
+Lifecycle moves ring the seed's current tender and watching sessions. Harvesting
+or withering a blocker also rings the tender and watchers of each seed it set
+free. Notes stay quiet unless you add `--ring`. A successful action never rings
+the session that caused it. Automation acceptance is quiet; its bell waits until
+the work is ready or the attempt needs attention. `attn seed watch <id>`
+subscribes this session to the seed and its descendants, including children
+planted later. A new delegation starts the same watch on the seed it binds.
 
-`attn seed unwatch <id>` removes that subscription and drops queued updates
-that no remaining watch covers. Separate child watches remain. An ancestor
-watch can still cover the seed; `attn seed show <id>` and `unwatch` name those
-subscriptions and the commands to remove them. `watch` restores a subscription;
-a new delegation starts it again. Restarting or resuming the same delegation
-does not restore a removed watch.
+`attn seed unwatch <id>` removes that subscription and drops a queued update only
+when the session is neither the tender nor covered by another watch. Separate
+child watches remain. An ancestor watch can still cover the seed; `attn seed
+show <id>` and `unwatch` name those subscriptions and the commands to remove
+them. `watch` restores a subscription; a new delegation starts it again.
+Restarting or resuming the same delegation does not restore a removed watch.
 
 A bell carries the seed and what moved. Read it with `attn seed show` or
 `notes` to reset the bell for the next meaningful move. Updates already read

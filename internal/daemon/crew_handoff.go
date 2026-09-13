@@ -50,6 +50,7 @@ func (d *Daemon) transferCrewBinding(memberID, from, to string) error {
 		}
 		return err
 	}
+	d.invalidateGardenSeedParties("crew handoff")
 	d.publishFact(FactCrewBound, memberID, nil)
 	d.logf("crew: %s's binding moved from session %s to %s", crew.DisplayName(memberID), from, to)
 	return nil

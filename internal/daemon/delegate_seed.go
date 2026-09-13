@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -92,8 +93,46 @@ func (d *Daemon) bindDelegationAssignment(operationID, sessionID, plannerSession
 		{Write: store.DocumentWrite{Schema: *seedSchema, ID: seed.ID, Body: seedBody, Expected: &seedExpected}, Fact: documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false)},
 		{Write: store.DocumentWrite{Schema: *dispatchSchema, ID: sessionID, Body: dispatchBody, Expected: &dispatchExpected}, Fact: documentChangedFact(garden.Namespace, garden.CollectionDispatches, sessionID, false)},
 	}
+	occurrences := []seedEvents.Occurrence{}
+	if createSeed {
+		planted, eventErr := seedEvents.Occur(
+			gardenSeedEventModel, gardenSeedEventVocabulary.Planted, seed.ID,
+			seedEvents.CausePayload{CausedBySessionID: plannerSessionID},
+		)
+		if eventErr != nil {
+			return "", eventErr
+		}
+		occurrences = append(occurrences, planted)
+		for _, edge := range seed.Edges {
+			linked, eventErr := seedEvents.Occur(
+				gardenSeedEventModel, gardenSeedEventVocabulary.EdgeLinked, seed.ID,
+				seedEvents.EdgePayload{
+					EdgeKind: string(edge.Kind), TargetSeedID: edge.To,
+					CausedBySessionID: plannerSessionID,
+				},
+			)
+			if eventErr != nil {
+				return "", eventErr
+			}
+			occurrences = append(occurrences, linked)
+		}
+	}
+	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, sessionID)
+	if err != nil {
+		return "", err
+	}
+	occurrences = append(occurrences, tended)
+	events, err := encodeGardenSeedEvents(occurrences...)
+	if err != nil {
+		return "", err
+	}
 	d.gardenWatchMu.Lock()
-	written, err := d.store.CommitGardenDispatchWrites(commits, store.GardenSeedWatch{WatcherSessionID: sessionID, SeedID: seed.ID}, d.gardenTime())
+	written, eventSeqs, err := d.store.CommitGardenDispatchWritesWithEvents(
+		commits, store.GardenSeedWatch{WatcherSessionID: sessionID, SeedID: seed.ID}, events, d.gardenTime(),
+	)
+	if err == nil {
+		err = d.discardAllIneligibleGardenSeedBellsLocked()
+	}
 	d.gardenWatchMu.Unlock()
 	if err != nil {
 		var conflict *docstore.ConflictError
@@ -105,9 +144,8 @@ func (d *Daemon) bindDelegationAssignment(operationID, sessionID, plannerSession
 	for i, commit := range commits {
 		d.announceCommittedWrite(commit.Fact, written[i].Seq)
 	}
+	announceGardenSeedEvents(d, eventSeqs)
 	d.rememberDispatchProjection(sessionID, dispatch, written[1].Rev)
-	d.publishFact(FactGardenTended, seed.ID, nil)
-	d.ringSeedActivity(seed.ID, gardenRingEvents[garden.VerbTend], sessionID, plannerSessionID)
 	return seed.ID, nil
 }
 
@@ -148,7 +186,6 @@ func (d *Daemon) bindDelegatedSeed(sessionID, plannerSessionID, brief, name, cro
 	if err := d.recordGardenDispatch(sessionID, seedID, plannerSessionID, cwd, agent, fromChief); err != nil {
 		return "", fmt.Errorf("bind %s to session %s: %w", seedID, sessionID, err)
 	}
-	d.ringSeedActivity(seedID, gardenRingEvents[garden.VerbTend], sessionID, plannerSessionID)
 	return seedID, nil
 }
 

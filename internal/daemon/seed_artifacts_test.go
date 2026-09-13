@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -434,6 +435,33 @@ func TestSeedArtifactDirectFolderEditsRefreshGardenMembership(t *testing.T) {
 	}
 	if _, err := os.Stat(notebook.SeedArtifactsDir(root, seed.ID)); err != nil {
 		t.Fatalf("direct delete removed storage: %v", err)
+	}
+}
+
+func TestSeedArtifactObservationReconciliationPublishesMissingCurrentStateOnce(t *testing.T) {
+	d, root, seed := newSeedArtifactDaemon(t)
+	d.stopNotebookWatcher()
+	dir := notebook.SeedArtifactsDir(root, seed.ID)
+	writeArtifactSource(t, dir, "recovered.bin", []byte("current"))
+
+	if err := d.reconcileSeedArtifactObservations(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.reconcileSeedArtifactObservations(); err != nil {
+		t.Fatal(err)
+	}
+	events, err := d.store.BusEventsSince(0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var changed int
+	for _, event := range events {
+		if event.Name == seedEvents.NameArtifactChanged && event.Subject == seed.ID {
+			changed++
+		}
+	}
+	if changed != 1 {
+		t.Fatalf("reconciled artifact events = %d, want 1", changed)
 	}
 }
 

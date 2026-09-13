@@ -71,6 +71,35 @@ func deleteDoc(t *testing.T, d *Daemon, id string) bool {
 	return resp.DocDeleteResult.Existed
 }
 
+func TestGenericDocumentMutationsCannotBypassGardenOperations(t *testing.T) {
+	d := newGardenDaemon(t)
+	tests := []struct {
+		name string
+		run  func(net.Conn)
+	}{
+		{"define", func(c net.Conn) {
+			d.handleDocDefine(c, &protocol.DocDefineMessage{Schema: protocol.DocumentCollectionSchema{Namespace: "core/garden", Collection: "raw"}})
+		}},
+		{"undefine", func(c net.Conn) {
+			d.handleDocUndefine(c, &protocol.DocUndefineMessage{Namespace: "core/garden", Collection: "seeds"})
+		}},
+		{"put", func(c net.Conn) {
+			d.handleDocPut(c, &protocol.DocPutMessage{Namespace: "core/garden", Collection: "seeds", ID: "s-7k3f9m", Body: `{}`})
+		}},
+		{"delete", func(c net.Conn) {
+			d.handleDocDelete(c, &protocol.DocDeleteMessage{Namespace: "core/garden", Collection: "seeds", ID: "s-7k3f9m"})
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			resp := docCall(t, test.run)
+			if resp.Ok || resp.Error == nil || !strings.Contains(*resp.Error, "use attn seed commands") {
+				t.Fatalf("response = %+v", resp)
+			}
+		})
+	}
+}
+
 type window struct {
 	delivery  int
 	asOfSeq   int64

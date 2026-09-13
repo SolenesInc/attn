@@ -12,6 +12,7 @@ import (
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -544,7 +545,7 @@ func TestAgentMsgToAnUntendedSeedRefusesByName(t *testing.T) {
 func awaitSeedNotes(t *testing.T, d *Daemon, seedID string, want int, work func()) {
 	t.Helper()
 	landed := make(chan struct{}, want+4)
-	unsubscribe := d.eventBus.Subscribe(bus.Filter{FactGardenNoted}, func(ev bus.Event) {
+	unsubscribe := d.eventBus.Subscribe(bus.Filter{seedEvents.NameNoteAdded}, func(ev bus.Event) {
 		if ev.Subject == seedID {
 			landed <- struct{}{}
 		}

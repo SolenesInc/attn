@@ -117,6 +117,10 @@ func TestSettle_ClosedPullRequestClearsTheConditionAndRings(t *testing.T) {
 	recordSettlePR(t, d, "sess-a")
 	setPRState(t, d, "closed", "Harvest on merge")
 	armOnSettlePR(t, d, seed.ID)
+	assertOneSeedBell(t, d, "sess-b", seed.ID, "harvest_when.configured")
+	if _, _, err := d.store.ReadGardenSeedMailboxItems("sess-b", seed.ID, time.Now()); err != nil {
+		t.Fatal(err)
+	}
 
 	if harvested, cleared := d.settleHarvestConditions(); harvested != 0 || cleared != 1 {
 		t.Fatalf("settle = (%d harvested, %d cleared), want (0, 1)", harvested, cleared)
@@ -134,7 +138,7 @@ func TestSettle_ClosedPullRequestClearsTheConditionAndRings(t *testing.T) {
 	if len(bodies) != 1 || bodies[0] != want {
 		t.Fatalf("the log = %q, want %q", bodies, want)
 	}
-	assertOneSeedBell(t, d, "sess-b", seed.ID, harvestWhenRingCleared)
+	assertOneSeedBell(t, d, "sess-b", seed.ID, "harvest_when.cleared")
 }
 
 func TestSettle_ARefreshOnlySweepsWhenSomethingMoved(t *testing.T) {

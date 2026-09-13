@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -26,7 +27,14 @@ func armSeed(t *testing.T, d *Daemon, seedID string, condition garden.HarvestCon
 		t.Fatalf("read %s: %v", seedID, err)
 	}
 	seed.HarvestWhen = &condition
-	if _, err := d.writeSeed(*schema, seed, doc.Rev, FactGardenHarvestWhenChanged); err != nil {
+	occurrence, err := seedEvents.Occur(
+		gardenSeedEventModel, gardenSeedEventVocabulary.HarvestWhenConfigured, seed.ID,
+		seedEvents.HarvestWhenPayload{PullRequestID: condition.PullRequest},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.writeSeedWithEvents(*schema, seed, doc.Rev, occurrence); err != nil {
 		t.Fatalf("write %s: %v", seedID, err)
 	}
 }

@@ -127,6 +127,10 @@ func (d *Daemon) replantStrandedTicket(ticket *store.Ticket) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		semanticEvents, err := recoveredGardenSeedEvents(seed, []garden.Note{note})
+		if err != nil {
+			return "", err
+		}
 		handover := store.TicketSeedHandover{
 			TicketID: ticket.ID, SeedID: seedID, SeedBody: seedBody, SeedTitle: title, SeedDescription: body,
 			SeedFact:   documentChangedFact(garden.Namespace, garden.CollectionSeeds, seedID, false),
@@ -136,7 +140,7 @@ func (d *Daemon) replantStrandedTicket(ticket *store.Ticket) (string, error) {
 				Fact: documentChangedFact(garden.Namespace, garden.CollectionNotes, noteID, false),
 			}}, SessionIDs: []string{ticket.Assignee, ticket.ResumeSessionID},
 			HandoverKind: "stranded", EvidenceFingerprint: legacyTicketSeedFingerprint(ticket, "stranded"),
-			OriginalTicketStatus: ticket.Status, CreatedAt: now,
+			OriginalTicketStatus: ticket.Status, CreatedAt: now, Events: semanticEvents,
 		}
 		linked, err = d.store.EnsureTicketSeedHandover(handover)
 		if err != nil && docstore.IsConflict(err) {
@@ -152,10 +156,6 @@ func (d *Daemon) replantStrandedTicket(ticket *store.Ticket) (string, error) {
 	}
 	if linked.SeedID == "" {
 		return "", fmt.Errorf("ticket %s has no safe one-to-one seed: %s", ticket.ID, linked.Result)
-	}
-	if linked.Result == "created" {
-		d.publishFact(FactGardenPlanted, linked.SeedID, nil)
-		d.publishFact(FactGardenNoted, linked.SeedID, nil)
 	}
 	return linked.SeedID, nil
 }

@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -51,7 +52,7 @@ func TestCoalesceSnapshotsCollapsesTheGarden(t *testing.T) {
 
 	d.coalesceSnapshots(func() {
 		for _, id := range []string{"s-1", "s-2", "s-3", "s-4", "s-5"} {
-			d.publishFact(FactGardenNoted, id, nil)
+			d.publishFact(seedEvents.NameNoteAdded, id, seedEvents.NoteAddedPayload{NoteID: "n-7k3f9m"})
 		}
 	})
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -162,6 +163,28 @@ func (d *Daemon) bindSeedHandover(
 	if err != nil {
 		return nil, err
 	}
+	cause := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
+	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, cause)
+	if err != nil {
+		return nil, err
+	}
+	occurrences := []seedEvents.Occurrence{tended}
+	if noteCommit != nil {
+		noted, eventErr := seedEvents.Occur(
+			gardenSeedEventModel, gardenSeedEventVocabulary.NoteAdded, seed.ID,
+			seedEvents.NoteAddedPayload{
+				NoteID: note.ID, AttentionRequested: false, CausedBySessionID: cause,
+			},
+		)
+		if eventErr != nil {
+			return nil, eventErr
+		}
+		occurrences = append(occurrences, noted)
+	}
+	events, err := encodeGardenSeedEvents(occurrences...)
+	if err != nil {
+		return nil, err
+	}
 
 	// The new worker's session-start hook and the old worker's metadata refresh
 	// both rewrite dispatches while this runs; the seed itself moving is fatal.
@@ -182,9 +205,16 @@ func (d *Daemon) bindSeedHandover(
 			d.seedHandoverBeforeCommit()
 		}
 		d.gardenWatchMu.Lock()
-		written, err = d.store.CommitGardenDispatchWrites(commits, store.GardenSeedWatch{WatcherSessionID: sessionID, SeedID: seed.ID}, d.gardenTime())
+		var eventSeqs []int64
+		written, eventSeqs, err = d.store.CommitGardenDispatchWritesWithEvents(
+			commits, store.GardenSeedWatch{WatcherSessionID: sessionID, SeedID: seed.ID}, events, d.gardenTime(),
+		)
+		if err == nil {
+			err = d.discardAllIneligibleGardenSeedBellsLocked()
+		}
 		d.gardenWatchMu.Unlock()
 		if err == nil {
+			announceGardenSeedEvents(d, eventSeqs)
 			break
 		}
 		var conflict *docstore.ConflictError
@@ -229,15 +259,10 @@ func (d *Daemon) bindSeedHandover(
 	for i, commit := range commits {
 		d.announceCommittedWrite(commit.Fact, written[i].Seq)
 	}
-	d.publishFact(FactGardenTended, seed.ID, nil)
-	if noteCommit != nil {
-		d.publishFact(FactGardenNoted, seed.ID, nil)
-	}
 	d.rememberDispatchProjection(sessionID, dispatches.newDispatch, written[1].Rev)
 	if dispatches.oldExecutionID != "" {
 		d.rememberDispatchProjection(dispatches.oldExecutionID, dispatches.oldDispatch, written[2].Rev)
 	}
-	d.ringSeedActivity(seed.ID, gardenRingEvents[garden.VerbTend], sessionID, protocol.Deref(msg.SourceSessionID))
 	if err := d.resolveGardenReviewAction(request.Review, seed.ID, "handover"); err != nil {
 		d.logf("Garden review: settle %s after Handover: %v", seed.ID, err)
 	}

@@ -121,7 +121,7 @@ func TestSeedRipples_UnblockedPromotionSurvivesUnwatch(t *testing.T) {
 	fixture := newRippleGarden(t)
 	move(t, fixture.d, "sess-c", fixture.dependent.ID, garden.VerbTend, "", "")
 	watchSeed(t, fixture.d, "sess-c", fixture.dependent.ID, false)
-	if claimed, err := fixture.d.store.ClaimGardenSeedMailboxItem(
+	if claimed, err := claimGardenSeedMailboxItemForTest(fixture.d.store,
 		"sess-c", fixture.dependent.ID, "note", "note", time.Now()); err != nil || !claimed {
 		t.Fatalf("queue note: claimed=%v err=%v", claimed, err)
 	}

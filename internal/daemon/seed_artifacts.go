@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/protocol"
 	"golang.org/x/sys/unix"
@@ -203,6 +204,56 @@ func (d *Daemon) seedArtifacts(seedID string) ([]protocol.SeedArtifact, error) {
 	return artifacts, nil
 }
 
+func (d *Daemon) recordObservedSeedArtifacts(seedID string) error {
+	artifacts, err := d.seedArtifacts(seedID)
+	if err != nil {
+		return err
+	}
+	snapshot, err := json.Marshal(artifacts)
+	if err != nil {
+		return err
+	}
+	sum := sha256.Sum256(snapshot)
+	occurrence, err := seedEvents.Occur(
+		gardenSeedEventModel, gardenSeedEventVocabulary.ArtifactChanged, seedID,
+		seedEvents.CausePayload{},
+	)
+	if err != nil {
+		return err
+	}
+	return d.appendGardenSeedEventOnce(
+		"artifact_observation", seedID+":"+hex.EncodeToString(sum[:]), occurrence,
+	)
+}
+
+func (d *Daemon) reconcileSeedArtifactObservations() error {
+	read, err := d.readGardenTo(0)
+	if err != nil {
+		return err
+	}
+	root, err := d.notebookRoot()
+	if err != nil {
+		return err
+	}
+	for _, seed := range read.seeds {
+		dir := notebook.SeedArtifactsDir(root, seed.ID)
+		info, statErr := os.Lstat(dir)
+		if os.IsNotExist(statErr) {
+			continue
+		}
+		if statErr != nil {
+			return fmt.Errorf("inspect artifacts for %s: %w", seed.ID, statErr)
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return fmt.Errorf("seed artifact directory %q is not a real directory", dir)
+		}
+		if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+			return fmt.Errorf("reconcile artifacts for %s: %w", seed.ID, err)
+		}
+	}
+	return nil
+}
+
 func (d *Daemon) seedArtifactReferences(seedID string) []protocol.SeedArtifactReference {
 	notes, err := d.readNotesDomain(seedID)
 	if err != nil {
@@ -357,7 +408,16 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 	if operation != "detach" {
 		result.Artifact = &artifact
 	}
-	d.publishFact(FactGardenArtifactChanged, seedID, nil)
+	changedEvent, err := seedEvents.Occur(
+		gardenSeedEventModel, gardenSeedEventVocabulary.ArtifactChanged, seedID,
+		seedEvents.CausePayload{CausedBySessionID: protocol.Deref(msg.SourceSessionID)},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := d.appendGardenSeedEventOnce("artifact_transfer", receipt.ID, changedEvent); err != nil {
+		return nil, fmt.Errorf("artifact transfer %s is complete but its Garden event is pending; retry the same command: %w", receipt.ID, err)
+	}
 	changed := filepath.ToSlash(filepath.Join("seeds", seedID, filename))
 	d.broadcastFsChanged(root, originAgent, changed)
 	return result, nil
@@ -747,7 +807,7 @@ func (d *Daemon) detachLegacyArtifactReference(seedID, authorSession string, leg
 	for _, current := range d.seedArtifactReferences(seedID) {
 		candidate := artifactFromProtocol(&current)
 		if candidate != nil && candidate.Identity() == legacy.Identity() {
-			_, err := d.appendSeedNote(seedID, "", authorSession, "", garden.NoteKindDetach, &legacy)
+			_, err := d.appendSeedNote(seedID, "", authorSession, "", garden.NoteKindDetach, &legacy, false, authorSession)
 			return err
 		}
 	}

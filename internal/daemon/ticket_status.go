@@ -109,7 +109,7 @@ func (d *Daemon) mirrorStatusOntoSeed(sessionID string, ticket *store.Ticket, st
 	if !ok {
 		return
 	}
-	if _, err := d.appendSeedNote(seedID, statusNoteBody(state, comment), sessionID, "", garden.NoteKindNote, nil); err != nil {
+	if _, err := d.appendSeedNote(seedID, statusNoteBody(state, comment), sessionID, "", garden.NoteKindNote, nil, false, sessionID); err != nil {
 		d.logf("garden: mirroring %s onto seed %s: %v", state, seedID, err)
 	}
 }

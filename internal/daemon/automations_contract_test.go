@@ -36,7 +36,7 @@ func TestAutomationApplyContractEditRotatesContinuityBindings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(run1.ID, "{}", now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, run1.ID, "{}", now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -105,7 +105,7 @@ func TestAutomationApplyNonContractEditPreservesContinuityBindings(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(run1.ID, "{}", now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, run1.ID, "{}", now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -203,7 +203,7 @@ func TestAutomationApplyRevertAllowsFreshThreadWhenOldTicketSurvives(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(run1.ID, "{}", now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, run1.ID, "{}", now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -228,7 +228,7 @@ func TestAutomationApplyRevertAllowsFreshThreadWhenOldTicketSurvives(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(run2.ID, "{}", now.Add(5*time.Minute)); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, run2.ID, "{}", now.Add(5*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -277,7 +277,7 @@ func TestAutomationApplyLocationEditRotatesContinuityBindings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(run1.ID, "{}", now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, run1.ID, "{}", now); err != nil {
 		t.Fatal(err)
 	}
 

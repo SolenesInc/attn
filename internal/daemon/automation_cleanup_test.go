@@ -278,7 +278,7 @@ func TestAutomationCleanupBoundThreadReportsKeptActive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(run.ID, automationResolvedLocationJSON(t, mainRepo, worktree), now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, run.ID, automationResolvedLocationJSON(t, mainRepo, worktree), now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -333,7 +333,7 @@ func TestAutomationCleanupThreeWayPartition(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := s.MarkAutomationRunDelivered(run.ID, automationResolvedLocationJSON(t, mainRepo, worktree), now); err != nil {
+		if err := markAutomationRunDeliveredForTest(s, run.ID, automationResolvedLocationJSON(t, mainRepo, worktree), now); err != nil {
 			t.Fatal(err)
 		}
 		return run
@@ -393,7 +393,7 @@ func TestAutomationCleanupLogsDistinguishLiveSessionFromBoundThread(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(liveRun.ID, automationResolvedLocationJSON(t, mainRepo, liveWorktree), now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, liveRun.ID, automationResolvedLocationJSON(t, mainRepo, liveWorktree), now); err != nil {
 		t.Fatal(err)
 	}
 	s.Add(&protocol.Session{
@@ -407,7 +407,7 @@ func TestAutomationCleanupLogsDistinguishLiveSessionFromBoundThread(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(boundRun.ID, automationResolvedLocationJSON(t, mainRepo, boundWorktree), now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, boundRun.ID, automationResolvedLocationJSON(t, mainRepo, boundWorktree), now); err != nil {
 		t.Fatal(err)
 	}
 

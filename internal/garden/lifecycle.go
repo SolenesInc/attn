@@ -59,9 +59,10 @@ func (t Tender) Holds(sessionLive func(sessionID string) bool) bool {
 }
 
 type Ask struct {
-	Actor  Tender
-	Reason string
-	Force  bool
+	Actor        Tender
+	Reason       string
+	Force        bool
+	CauseSession string
 }
 
 type move struct {

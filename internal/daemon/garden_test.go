@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -409,8 +410,8 @@ func TestGarden_EveryMovePublishesItsOwnFact(t *testing.T) {
 	move(t, d, "sess-a", seed.ID, garden.VerbWither, "", "trellis")
 
 	want := []string{
-		FactGardenTended, FactGardenBodyEdited, FactGardenNoted, FactGardenParked,
-		FactGardenHarvested, FactGardenReplanted, FactGardenWithered,
+		seedEvents.NameTended, seedEvents.NameBodyEdited, seedEvents.NameNoteAdded, seedEvents.NameParked,
+		seedEvents.NameHarvested, seedEvents.NameReplanted, seedEvents.NameWithered,
 	}
 	if !slices.Equal(seen, want) {
 		t.Fatalf("the bus saw %v, want %v", seen, want)

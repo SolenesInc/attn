@@ -68,7 +68,7 @@ func TestObserveDueSchedulesFiresWithinGraceForBothCatchUpPolicies(t *testing.T)
 			var delivered []*store.AutomationRun
 			d.automationDeliveryHook = func(run *store.AutomationRun) error {
 				delivered = append(delivered, run)
-				return s.MarkAutomationRunDelivered(run.ID, "{}", time.Now())
+				return markAutomationRunDeliveredForTest(s, run.ID, "{}", time.Now())
 			}
 
 			now0 := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
@@ -114,7 +114,7 @@ func TestObserveDueSchedulesSkipGraceBoundary(t *testing.T) {
 			var delivered []*store.AutomationRun
 			d.automationDeliveryHook = func(run *store.AutomationRun) error {
 				delivered = append(delivered, run)
-				return s.MarkAutomationRunDelivered(run.ID, "{}", time.Now())
+				return markAutomationRunDeliveredForTest(s, run.ID, "{}", time.Now())
 			}
 
 			anchor := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
@@ -170,7 +170,7 @@ func TestObserveDueSchedulesIdempotentAcrossRepeatedTicks(t *testing.T) {
 	delivered := 0
 	d.automationDeliveryHook = func(run *store.AutomationRun) error {
 		delivered++
-		return s.MarkAutomationRunDelivered(run.ID, "{}", time.Now())
+		return markAutomationRunDeliveredForTest(s, run.ID, "{}", time.Now())
 	}
 
 	now0 := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
@@ -205,7 +205,7 @@ func TestObserveDueSchedulesDowntimeCatchUpPolicies(t *testing.T) {
 			var delivered []*store.AutomationRun
 			d.automationDeliveryHook = func(run *store.AutomationRun) error {
 				delivered = append(delivered, run)
-				return s.MarkAutomationRunDelivered(run.ID, "{}", time.Now())
+				return markAutomationRunDeliveredForTest(s, run.ID, "{}", time.Now())
 			}
 
 			anchor := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
@@ -497,7 +497,7 @@ func TestScheduledSingletonSecondOccurrenceContinuesFirstOccurrencesThread(t *te
 		}
 		delivered = append(delivered, run)
 		d.ptyBackend = &fakeSpawnBackend{sessionIDs: []string{run.SessionID}}
-		return s.MarkAutomationRunDelivered(run.ID, "{}", time.Now())
+		return markAutomationRunDeliveredForTest(s, run.ID, "{}", time.Now())
 	}
 
 	now0 := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
@@ -536,7 +536,7 @@ func TestScheduledPendingRunRetriedOnNextDeliveryPass(t *testing.T) {
 		if attempts == 1 {
 			return &retryableAutomationDeliveryError{cause: fmt.Errorf("transient launch failure")}
 		}
-		return s.MarkAutomationRunDelivered(r.ID, `{}`, time.Now())
+		return markAutomationRunDeliveredForTest(s, r.ID, `{}`, time.Now())
 	}
 
 	if err := d.deliverObservedAutomationRun(run); err == nil {
@@ -576,7 +576,7 @@ func TestScheduledPendingRunDeliversImmutableSnapshotAfterDefinitionEdit(t *test
 			return err
 		}
 		capturedPrompt = snap.Prompt
-		return s.MarkAutomationRunDelivered(r.ID, "{}", time.Now())
+		return markAutomationRunDeliveredForTest(s, r.ID, "{}", time.Now())
 	}
 	if err := d.deliverObservedAutomationRun(run); err != nil {
 		t.Fatal(err)
@@ -609,7 +609,7 @@ func TestObserveDueSchedulesFreshContinuityCreatesDistinctRuns(t *testing.T) {
 	var delivered []*store.AutomationRun
 	d.automationDeliveryHook = func(run *store.AutomationRun) error {
 		delivered = append(delivered, run)
-		return s.MarkAutomationRunDelivered(run.ID, "{}", time.Now())
+		return markAutomationRunDeliveredForTest(s, run.ID, "{}", time.Now())
 	}
 
 	now0 := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
@@ -641,7 +641,7 @@ func TestScheduledSingletonContinuationSkipsPullRequestParsing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(first.ID, `{}`, now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, first.ID, `{}`, now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -775,7 +775,7 @@ func deliverSingletonRunForTest(d *Daemon, s *store.Store, run *store.Automation
 		}
 	}
 	d.ptyBackend = &fakeSpawnBackend{sessionIDs: []string{run.SessionID}}
-	return s.MarkAutomationRunDelivered(run.ID, "{}", time.Now())
+	return markAutomationRunDeliveredForTest(s, run.ID, "{}", time.Now())
 }
 
 func TestScheduledSingletonHoldsLaterOccurrenceBehindPendingOrigin(t *testing.T) {

@@ -841,14 +841,14 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		t.Fatalf("seedsCollection: %v", err)
 	}
 	for _, seed := range []garden.Seed{
-		{ID: "s-old001", Title: "Original seed", Status: garden.StatusPlanted},
+		{ID: "s-0jd001", Title: "Original seed", Status: garden.StatusPlanted},
 		{ID: "s-new002", Title: "Child seed", Status: garden.StatusPlanted},
 	} {
 		if _, err := d.plantSeed(*seedSchema, seed); err != nil {
 			t.Fatalf("plant seed %s: %v", seed.ID, err)
 		}
 	}
-	if err := d.dockTile(workspaceID, "pane-1", "tile-seed", string(workspacelayout.TileKindSeed), "s-old001", "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	if err := d.dockTile(workspaceID, "pane-1", "tile-seed", string(workspacelayout.TileKindSeed), "s-0jd001", "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
 		t.Fatalf("dock seed tile: %v", err)
 	}
 	d.handleWorkspaceLayoutUpdateTile(client, &protocol.WorkspaceLayoutUpdateTileMessage{
