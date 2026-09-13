@@ -90,24 +90,33 @@ describe('the shim a real agent exec lands in', () => {
     ]);
   });
 
-  it('lets only pi pass a bare --version probe through to the real binary without a ledger entry', () => {
+  it('lets only pi pass its non-model probes through to the real binary without a ledger entry', () => {
     const env = freshEnv();
     const tripwire = armAgentTripwire({ scenarioId: 'TR-201', runDir, env, log: () => {} });
     const realDir = path.join(runDir, 'real-bin');
     fs.mkdirSync(realDir, { recursive: true });
-    fs.writeFileSync(path.join(realDir, 'pi'), '#!/bin/sh\necho pi 9.9.9\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(realDir, 'pi'), '#!/bin/sh\nprintf \'%s\\n\' "$*"\n', { mode: 0o755 });
+    const probeEnv = { ...env, PATH: `${tripwire.dir}:${realDir}:/usr/bin:/bin` };
 
     const probe = spawnSync(path.join(tripwire.dir, 'pi'), ['--version'], {
-      encoding: 'utf8', env: { ...env, PATH: `${tripwire.dir}:${realDir}:/usr/bin:/bin` },
+      encoding: 'utf8', env: probeEnv,
     });
     expect(probe.status).toBe(0);
-    expect(probe.stdout.trim()).toBe('pi 9.9.9');
+    expect(probe.stdout.trim()).toBe('--version');
+
+    const catalogArgs = ['--mode', 'rpc', '--offline', '--no-session', '--no-tools', '--no-skills', '--no-prompt-templates', '--no-context-files'];
+    const catalog = spawnSync(path.join(tripwire.dir, 'pi'), catalogArgs, { encoding: 'utf8', env: probeEnv });
+    expect(catalog.status).toBe(0);
+    expect(catalog.stdout.trim()).toBe(catalogArgs.join(' '));
+
+    const online = spawnSync(path.join(tripwire.dir, 'pi'), catalogArgs.filter((arg) => arg !== '--offline'), { encoding: 'utf8', env: probeEnv });
+    expect(online.status).toBe(TRIPWIRE_EXIT_CODE);
+    expect(tripwire.read()).toEqual([`TR-201\tpi ${catalogArgs.filter((arg) => arg !== '--offline').join(' ')}`]);
 
     const missing = spawnSync(path.join(tripwire.dir, 'pi'), ['--version'], {
       encoding: 'utf8', env: { ...env, PATH: `${tripwire.dir}:/usr/bin:/bin` },
     });
     expect(missing.status).toBe(127);
-    expect(tripwire.read()).toEqual([]);
   });
 });
 

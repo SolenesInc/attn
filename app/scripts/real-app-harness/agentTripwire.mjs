@@ -23,6 +23,10 @@ export const TRIPWIRE_EXIT_CODE = 97;
 export const TRIPWIRE_MARKER_VAR = 'ATTN_AGENT_TRIPWIRE';
 export const TRIPWIRE_LEDGER_NAME = 'agent-tripwire.ledger';
 
+const PI_CATALOG_ARGS = [
+  '--mode', 'rpc', '--offline', '--no-session', '--no-tools', '--no-skills', '--no-prompt-templates', '--no-context-files',
+];
+
 // internal/headless: `off` makes the daemon refuse every headless LLM task
 // (narration, classifier, title, reconcile) and log the refusal.
 export const HEADLESS_TASKS_VAR = 'ATTN_HEADLESS_TASKS';
@@ -74,12 +78,11 @@ export function tripwireMarker({ dir, binaries }) {
 }
 
 export function shimSource(name) {
-  // Only pi earns a --version escape (its daemon health probe calls no model);
-  // every other shim stays fail-closed, so a real --version still hits the ledger.
-  const versionEscape = name === 'pi'
-    ? `if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then
+  // Pi's version and offline catalog probes cannot reach a model; every other invocation stays fail-closed.
+  const safeProbeEscape = name === 'pi'
+    ? `if { [ "$#" -eq 1 ] && [ "$1" = "--version" ]; } || { ${PI_CATALOG_ARGS.map((arg, index) => `[ "$${index + 1}" = "${arg}" ]`).join(' && ')} && [ "$#" -eq ${PI_CATALOG_ARGS.length} ]; }; then
   rest=; IFS=:; for entry in $PATH; do [ "$entry" = "$dir" ] || rest="\${rest:+$rest:}$entry"; done; unset IFS
-  real=$(PATH="$rest" command -v "${name}" 2>/dev/null) && exec "$real" --version
+  real=$(PATH="$rest" command -v "${name}" 2>/dev/null) && exec "$real" "$@"
   exit 127
 fi
 `
@@ -95,7 +98,7 @@ if [ -r "$dir/${POINTER_FILE}" ]; then
   if [ -n "$pointer_scenario" ]; then scenario="$pointer_scenario"; fi
   if [ -n "$pointer_ledger" ]; then ledger="$pointer_ledger"; fi
 fi
-${versionEscape}full=$(printf '%s ' "${name}" "$@" | tr '\\n\\t' '  ' | sed 's/ *$//')
+${safeProbeEscape}full=$(printf '%s ' "${name}" "$@" | tr '\\n\\t' '  ' | sed 's/ *$//')
 argv=$(printf '%.${LEDGER_ARGV_CHARS}s' "$full")
 if [ \${#full} -gt ${LEDGER_ARGV_CHARS} ]; then
   argv="$argv... (+$((\${#full} - ${LEDGER_ARGV_CHARS})) chars)"
