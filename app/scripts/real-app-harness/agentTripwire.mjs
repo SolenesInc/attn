@@ -78,7 +78,6 @@ export function tripwireMarker({ dir, binaries }) {
 }
 
 export function shimSource(name) {
-  // Pi's version and offline catalog probes cannot reach a model; every other invocation stays fail-closed.
   const safeProbeEscape = name === 'pi'
     ? `if { [ "$#" -eq 1 ] && [ "$1" = "--version" ]; } || { ${PI_CATALOG_ARGS.map((arg, index) => `[ "$${index + 1}" = "${arg}" ]`).join(' && ')} && [ "$#" -eq ${PI_CATALOG_ARGS.length} ]; }; then
   rest=; IFS=:; for entry in $PATH; do [ "$entry" = "$dir" ] || rest="\${rest:+$rest:}$entry"; done; unset IFS
