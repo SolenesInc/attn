@@ -1,3 +1,4 @@
+mod drive;
 mod grid;
 mod keys;
 mod layout;
@@ -7,6 +8,7 @@ mod theme;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::io::BufRead;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -14,15 +16,17 @@ use anyhow::{Result, bail};
 use futures::StreamExt;
 use futures::channel::mpsc;
 use gpui::{
-    Animation, AnimationExt, AnyElement, AnyView, App, Application, Bounds, BoxShadow, Context,
-    Div, ElementId, FocusHandle, FontWeight, Hsla, KeyDownEvent, Keystroke, ModifiersChangedEvent,
-    MouseButton,
-    MouseDownEvent, Pixels, Render, ScrollDelta, ScrollHandle, ScrollWheelEvent, SharedString,
-    Stateful, Task, TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds,
-    WindowOptions, canvas, div, ease_in_out, linear_color_stop, linear_gradient, point,
-    prelude::*, px, relative, size,
+    Animation, AnimationExt, AnyElement, AnyView, App, Application, Bounds, BoxShadow,
+    ClipboardItem, Context, Div, ElementId, FocusHandle, FontWeight, Hsla, KeyDownEvent, Keystroke,
+    ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point, Render,
+    ScrollDelta, ScrollHandle, ScrollWheelEvent, SharedString, Stateful, Task, TitlebarOptions,
+    Window, WindowBackgroundAppearance, WindowBounds, WindowOptions, canvas, div, ease_in_out,
+    linear_color_stop, linear_gradient, point, prelude::*, px, relative, size,
 };
-use libghostty_vt::terminal::ScrollViewport;
+use libghostty_vt::fmt::Format;
+use libghostty_vt::screen::TrackedGridRef;
+use libghostty_vt::selection::{FormatOptions, Selection};
+use libghostty_vt::terminal::{Point as VtPoint, PointCoordinate, ScrollViewport};
 use zero::editor::{Editor, EditorEvent, Engine, Open};
 use zero::markdown::{self, Block};
 use zero::model::{Agent, AgentId, AgentKind, Model};
@@ -299,6 +303,7 @@ const GROUPS: [Group; 5] = [
         bind("⌘⌥- ⌘⌥=", "main column", "shrink or grow the main column"),
         bind("⌘W", "close tile", "close the focused shell or document tile"),
         bind("⌘F", "find", "search the focused terminal's scrollback; ⏎ older, ⇧⏎ newer, esc closes"),
+        bind("⌘C", "copy", "copy the text selected with the mouse; drag over a terminal to select, typing clears it"),
         bind("⌘⇧↑ ⌘⇧↓", "page", "page through the focused terminal's scrollback; the chip at the bottom returns to live output"),
     ]},
     Group { title: "zero", overlay: true, bindings: &[
@@ -340,6 +345,9 @@ struct Zero {
     ratios: HashMap<u8, f32>,
     previous_focus: Option<AgentId>,
     content: Bounds<Pixels>,
+    /// Where each terminal grid was last painted, so a mouse position maps to a cell.
+    grid_origins: HashMap<AgentId, Point<Pixels>>,
+    selecting: Option<Selecting>,
     ticker: Option<Task<()>>,
     _shell_pumps: Vec<Task<()>>,
 }
@@ -444,6 +452,8 @@ impl Zero {
             cmd_held: false,
             which_key: false,
             which_key_gen: 0,
+            grid_origins: HashMap::new(),
+            selecting: None,
             queue_morph: Morph::default(),
             ratios: HashMap::new(),
             previous_focus: None,
@@ -456,7 +466,42 @@ impl Zero {
         for id in edits {
             zero.start_edit(id, cx);
         }
+        if let Some(path) = std::env::var_os("ZERO_DRIVE") {
+            zero.start_drive(PathBuf::from(path), window, cx);
+        }
         Ok(zero)
+    }
+
+    /// The prototype's drive seam: lines read from the FIFO at `path` become mouse events on the
+    /// window (`down x y`, `move x y`, `up x y`, window points), because macOS delivers keys posted
+    /// to a pid but drops mouse events posted the same way. Only for the drives; never set otherwise.
+    fn start_drive(&mut self, path: PathBuf, window: &Window, cx: &mut Context<Self>) {
+        let (sender, mut receiver) = mpsc::unbounded::<String>();
+        thread::spawn(move || {
+            while let Ok(file) = std::fs::File::open(&path) {
+                for line in std::io::BufReader::new(file).lines().map_while(Result::ok) {
+                    if sender.unbounded_send(line).is_err() {
+                        return;
+                    }
+                }
+            }
+        });
+        self._shell_pumps.push(cx.spawn_in(window, async move |_, cx| {
+            while let Some(line) = receiver.next().await {
+                let Some((gesture, x, y)) = drive::parse(&line) else {
+                    trace(|| format!("drive: unreadable line {line:?}"));
+                    continue;
+                };
+                trace(|| format!("drive: {line}"));
+                let Ok(target) = cx.update(|window, _| drive::Target::of(window)) else {
+                    break;
+                };
+                match target {
+                    Some(target) => drive::post(&target, gesture, x, y),
+                    None => trace(|| "drive: no AppKit window to post to".to_string()),
+                }
+            }
+        }));
     }
 
     fn now(&self) -> Duration {
@@ -873,6 +918,7 @@ impl Zero {
                 "q" => cx.quit(),
                 "w" => self.close_focused(cx),
                 "f" => self.open_search(cx),
+                "c" => self.copy_selection(cx),
                 "left" if modifiers.alt => self.swap_neighbor(Direction::Left, cx),
                 "right" if modifiers.alt => self.swap_neighbor(Direction::Right, cx),
                 "up" if modifiers.alt => self.swap_neighbor(Direction::Up, cx),
@@ -906,6 +952,7 @@ impl Zero {
             agent.terminal.scroll_viewport(ScrollViewport::Bottom);
             self.dirty.insert(id);
         }
+        self.clear_selection(id);
         match self.model.agent(id).kind {
             AgentKind::Shell => {
                 if let Some(shell) = self.shells.get_mut(&id) {
@@ -1294,8 +1341,97 @@ impl Zero {
             theme::blue()
         };
         let highlights = self.visible_hits(id);
+        if self.grid_origins.insert(id, origin) != Some(origin) {
+            let (cw, lh) = (self.metrics.cell_width, self.metrics.line_height);
+            trace(|| format!("grid {id:?}: origin ({:.1}, {:.1}) cell {cw:?}×{lh:?}", f32::from(origin.x), f32::from(origin.y)));
+        }
         let grid = self.grids.get(&id).expect("the grid was just refreshed");
         Some(grid.prepare(&self.metrics, origin, focused, color, &highlights, window))
+    }
+
+    /// The cell under a window position in a terminal tile, clamped to the grid so a drag past
+    /// the edge keeps selecting; None when the tile has not been painted yet.
+    fn cell_at(&self, id: AgentId, position: Point<Pixels>) -> Option<(u16, u16)> {
+        let origin = *self.grid_origins.get(&id)?;
+        let agent = self.model.agent(id);
+        let col = (f32::from(position.x - origin.x) / f32::from(self.metrics.cell_width)).floor();
+        let row = (f32::from(position.y - origin.y) / f32::from(self.metrics.line_height)).floor();
+        Some((
+            col.clamp(0., f32::from(agent.cols.saturating_sub(1))) as u16,
+            row.clamp(0., f32::from(agent.rows.saturating_sub(1))) as u16,
+        ))
+    }
+
+    /// Mouse down on a terminal body: any selection goes, and the cell under the pointer becomes the
+    /// anchor of a possible drag. The anchor is tracked, so output arriving mid-drag does not move it.
+    fn select_press(&mut self, id: AgentId, position: Point<Pixels>, cx: &mut Context<Self>) {
+        self.selecting = None;
+        self.clear_selection(id);
+        let Some((col, row)) = self.cell_at(id, position) else {
+            return;
+        };
+        let terminal = &self.model.agent(id).terminal;
+        let point = VtPoint::Viewport(PointCoordinate { x: col, y: row as u32 });
+        if let Ok(anchor) = terminal.track_grid_ref(point) {
+            self.selecting = Some(Selecting { id, anchor, last: (col, row) });
+        }
+        trace(|| format!("select: press on {id:?} at col {col} row {row}"));
+        cx.notify();
+    }
+
+    fn select_drag(&mut self, position: Point<Pixels>, cx: &mut Context<Self>) {
+        let Some(selecting) = &self.selecting else {
+            return;
+        };
+        let id = selecting.id;
+        let Some(cell) = self.cell_at(id, position) else {
+            return;
+        };
+        if cell == selecting.last {
+            return;
+        }
+        let terminal = &self.model.agent(id).terminal;
+        let Ok(Some(start)) = selecting.anchor.snapshot(terminal) else {
+            return;
+        };
+        let Ok(end) = terminal.grid_ref(VtPoint::Viewport(PointCoordinate { x: cell.0, y: cell.1 as u32 })) else {
+            return;
+        };
+        terminal.set_selection(Some(&Selection::new(start, end, false))).ok();
+        if let Some(selecting) = &mut self.selecting {
+            selecting.last = cell;
+        }
+        trace(|| format!("select: drag on {id:?} to col {} row {}", cell.0, cell.1));
+        self.dirty.insert(id);
+        cx.notify();
+    }
+
+    fn clear_selection(&mut self, id: AgentId) {
+        let terminal = &self.model.agent(id).terminal;
+        if matches!(terminal.selection(), Ok(Some(_))) {
+            terminal.set_selection(None).ok();
+            self.dirty.insert(id);
+        }
+    }
+
+    /// ⌘C copies the focused terminal's selection as plain text; with nothing selected it does
+    /// nothing, and it never sends ^C (that is ctrl+c, a plain key that belongs to the tile).
+    fn copy_selection(&mut self, cx: &mut Context<Self>) {
+        let Some(id) = self.model.focus else {
+            return;
+        };
+        let agent = self.model.agent(id);
+        if agent.kind == AgentKind::Document {
+            return;
+        }
+        // Plain, unwrapped, trimmed is what Ghostty itself puts on the clipboard.
+        let options = FormatOptions::new().with_emit_format(Format::Plain).with_unwrap(true).with_trim(true);
+        let Ok(Some(bytes)) = agent.terminal.format_selection_alloc(None, options) else {
+            return;
+        };
+        let text = String::from_utf8_lossy(&bytes).into_owned();
+        trace(|| format!("copy: {} bytes from the selection", text.len()));
+        cx.write_to_clipboard(ClipboardItem::new_string(text));
     }
 
     /// The search hits that fall inside the tile's viewport, in viewport rows.
@@ -1627,25 +1763,35 @@ impl Zero {
             self.render_reader(id, rect.size.width, cx)
         } else {
             let editing_now = editing.is_some();
-            canvas(
-                move |bounds, window, cx| {
-                    entity.update(cx, |zero, _| {
-                        if editing_now {
-                            zero.prepare_editor(id, bounds, focused, window)
-                        } else {
-                            zero.prepare_grid(id, bounds, focused, window)
-                        }
-                    })
-                },
-                |_, prepared, window, cx| {
-                    if let Some(prepared) = prepared {
-                        prepared.paint(window, cx);
-                    }
-                },
-            )
-            .flex_1()
-            .w_full()
-            .into_any_element()
+            div()
+                .flex_1()
+                .w_full()
+                .when(!editing_now, |body| {
+                    body.on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |zero, event: &MouseDownEvent, _, cx| zero.select_press(id, event.position, cx)),
+                    )
+                })
+                .child(
+                    canvas(
+                        move |bounds, window, cx| {
+                            entity.update(cx, |zero, _| {
+                                if editing_now {
+                                    zero.prepare_editor(id, bounds, focused, window)
+                                } else {
+                                    zero.prepare_grid(id, bounds, focused, window)
+                                }
+                            })
+                        },
+                        |_, prepared, window, cx| {
+                            if let Some(prepared) = prepared {
+                                prepared.paint(window, cx);
+                            }
+                        },
+                    )
+                    .size_full(),
+                )
+                .into_any_element()
         };
         div()
             .absolute()
@@ -2388,6 +2534,15 @@ impl Render for Zero {
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::on_key_down))
             .on_modifiers_changed(cx.listener(Self::on_modifiers))
+            .on_mouse_down(MouseButton::Left, cx.listener(|_, event: &MouseDownEvent, _, _| {
+                trace(|| format!("mouse: down at ({:.1}, {:.1})", f32::from(event.position.x), f32::from(event.position.y)));
+            }))
+            .on_mouse_move(cx.listener(|zero, event: &MouseMoveEvent, _, cx| {
+                if event.pressed_button == Some(MouseButton::Left) {
+                    zero.select_drag(event.position, cx);
+                }
+            }))
+            .on_mouse_up(MouseButton::Left, cx.listener(|zero, _, _, _| zero.selecting = None))
             .font_family(".SystemUIFont")
             .text_size(px(12.5))
             .text_color(theme::fg())
@@ -2415,6 +2570,14 @@ impl Render for Zero {
         }
         root
     }
+}
+
+/// A mouse drag in progress over a terminal: the tile, the tracked anchor cell, and the last cell
+/// the pointer was over so a move inside the same cell does nothing.
+struct Selecting {
+    id: AgentId,
+    anchor: TrackedGridRef,
+    last: (u16, u16),
 }
 
 /// What the palette shows for a query: agents to jump to, verbs, completions, and a runnable command.

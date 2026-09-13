@@ -47,6 +47,7 @@ struct Cell {
     underline: bool,
     strikethrough: bool,
     wide: bool,
+    selected: bool,
 }
 
 /// A search hit inside the viewport: painted as a wash behind the cells, stronger for the current one.
@@ -82,6 +83,7 @@ impl Frame {
                         underline: cell.underline,
                         strikethrough: cell.strikethrough,
                         wide: cell.wide,
+                        selected: false,
                     })
                     .collect()
             })
@@ -128,6 +130,24 @@ impl Frame {
                         size: size(cw * (x - start) as f32, lh),
                     },
                     color,
+                ));
+            }
+            let mut x = 0;
+            while x < row.len() {
+                if !row[x].selected {
+                    x += 1;
+                    continue;
+                }
+                let start = x;
+                while x < row.len() && row[x].selected {
+                    x += 1;
+                }
+                quads.push((
+                    Bounds {
+                        origin: point(origin.x + cw * start as f32, top),
+                        size: size(cw * (x - start) as f32, lh),
+                    },
+                    theme::blue().alpha(0.35),
                 ));
             }
             let mut segment = Segment::new(0);
@@ -205,6 +225,12 @@ impl Grid {
                                 break;
                             }
                             line.push(convert(cell, &mut self.scratch)?);
+                        }
+                    }
+                    if let Some(selection) = row.selection()? {
+                        let end = (selection.end_x as usize + 1).min(line.len());
+                        for cell in &mut line[(selection.start_x as usize).min(end)..end] {
+                            cell.selected = true;
                         }
                     }
                     row.set_dirty(false)?;
@@ -384,6 +410,7 @@ fn convert(cell: &CellIteration<'_, '_>, scratch: &mut String) -> Result<Cell> {
         underline: false,
         strikethrough: false,
         wide: false,
+        selected: false,
     };
     let mut invisible = false;
     if let Some(style) = &style {
@@ -422,4 +449,41 @@ fn to_hsla(color: RgbColor) -> Hsla {
 
 fn rgb_to_hsla(color: Rgb) -> Hsla {
     gpui::rgb(((color.0 as u32) << 16) | ((color.1 as u32) << 8) | color.2 as u32).into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The non-blank cells of the first row after writing `bytes` into a fresh 40-column terminal.
+    fn cells_of(bytes: &[u8]) -> Vec<(String, bool)> {
+        let mut terminal = Terminal::new(40, 2).unwrap();
+        terminal.vt_write(bytes);
+        let mut grid = Grid::new().unwrap();
+        grid.refresh(&terminal, 40, 2).unwrap();
+        grid.frame.lines[0]
+            .iter()
+            .filter(|cell| !cell.text.trim().is_empty())
+            .map(|cell| (cell.text.clone(), cell.wide))
+            .collect()
+    }
+
+    /// Receipt: with grapheme clustering (mode 2027) off, the pin splits a ZWJ sequence into one
+    /// wide cell per emoji, the joiner riding on the first; with it on, the sequence is one cell.
+    #[test]
+    fn a_zwj_emoji_sequence_is_one_wide_cell_only_with_mode_2027() {
+        assert_eq!(
+            cells_of("|👩\u{200d}💻|".as_bytes()),
+            vec![("|".to_string(), false), ("👩\u{200d}".to_string(), true), ("💻".to_string(), true), ("|".to_string(), false)]
+        );
+        assert_eq!(
+            cells_of("\x1b[?2027h|👩\u{200d}💻|".as_bytes()),
+            vec![("|".to_string(), false), ("👩\u{200d}💻".to_string(), true), ("|".to_string(), false)]
+        );
+    }
+
+    #[test]
+    fn a_cjk_character_is_one_wide_cell() {
+        assert_eq!(cells_of("|日|".as_bytes()), vec![("|".to_string(), false), ("日".to_string(), true), ("|".to_string(), false)]);
+    }
 }

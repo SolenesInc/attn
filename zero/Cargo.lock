@@ -8483,6 +8483,8 @@ dependencies = [
  "futures",
  "gpui",
  "libghostty-vt",
+ "objc",
+ "raw-window-handle",
  "zero",
 ]
 

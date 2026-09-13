@@ -13,3 +13,11 @@ futures.workspace = true
 gpui.workspace = true
 libghostty-vt.workspace = true
 zero = { path = "../zero" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2"
+raw-window-handle = "0.6"
+
+[lints.rust]
+# objc 0.2's macros test a cargo-clippy feature this crate never declares.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }
