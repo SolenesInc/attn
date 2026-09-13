@@ -270,8 +270,8 @@ fails the scenario on a non-empty ledger and prints the lines.
   on `PATH`, so a name-resolved exec still lands in the ledger. `copilot` and `pi`
   have no mock and pin at their shims.
 - Pi's bare version probe passes through. Its exact offline, no-session catalog
-  argv forwards one `get_available_models` request, closes input, and blocks every
-  other request or model-capable invocation.
+  argv execs Pi with one `get_available_models` request and EOF, so signals reach
+  Pi directly; every other request or model-capable invocation stays blocked.
 - A command a scenario types by hand into a shell pane resolves on the login
   `PATH`, where a real agent binary can sit ahead of the shim dir. The tripwire
   covers every agent attn itself launches, not that.

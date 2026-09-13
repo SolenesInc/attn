@@ -89,8 +89,9 @@ if ${PI_CATALOG_ARGS.map((arg, index) => `[ "$${index + 1}" = "${arg}" ]`).join(
   real=$(PATH="$rest" command -v "${name}" 2>/dev/null) || exit 127
   IFS= read -r request || request=
   if printf '%s\n' "$request" | grep -Eq '^\\{"id":"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}","type":"get_available_models"\\}$'; then
-    printf '%s\n' "$request" | "$real" "$@"
-    exit $?
+    exec "$real" "$@" <<ATTN_PI_CATALOG_REQUEST
+$request
+ATTN_PI_CATALOG_REQUEST
   fi
 fi
 `

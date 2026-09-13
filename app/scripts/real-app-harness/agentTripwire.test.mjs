@@ -95,14 +95,14 @@ describe('the shim a real agent exec lands in', () => {
     const tripwire = armAgentTripwire({ scenarioId: 'TR-201', runDir, env, log: () => {} });
     const realDir = path.join(runDir, 'real-bin');
     fs.mkdirSync(realDir, { recursive: true });
-    fs.writeFileSync(path.join(realDir, 'pi'), '#!/bin/sh\nprintf \'%s\\n\' "$*"\nIFS= read -r request && printf \'%s\\n\' "$request"\nexit 0\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(realDir, 'pi'), '#!/bin/sh\nprintf \'%s\\n%s\\n\' "$$" "$*"\nIFS= read -r request && printf \'%s\\n\' "$request"\nexit 0\n', { mode: 0o755 });
     const probeEnv = { ...env, PATH: `${tripwire.dir}:${realDir}:/usr/bin:/bin` };
 
     const probe = spawnSync(path.join(tripwire.dir, 'pi'), ['--version'], {
       encoding: 'utf8', env: probeEnv,
     });
     expect(probe.status).toBe(0);
-    expect(probe.stdout.trim()).toBe('--version');
+    expect(probe.stdout.trim().split('\n')).toEqual([String(probe.pid), '--version']);
 
     const catalogArgs = ['--mode', 'rpc', '--offline', '--no-session', '--no-tools', '--no-skills', '--no-prompt-templates', '--no-context-files'];
     const catalogRequest = '{"id":"d2382ae5-48ef-4de0-b9c7-4fdf09af5608","type":"get_available_models"}';
@@ -111,7 +111,7 @@ describe('the shim a real agent exec lands in', () => {
       input: `${catalogRequest}\n{"id":"d2382ae5-48ef-4de0-b9c7-4fdf09af5608","type":"prompt"}\n`,
     });
     expect(catalog.status).toBe(0);
-    expect(catalog.stdout.trim().split('\n')).toEqual([catalogArgs.join(' '), catalogRequest]);
+    expect(catalog.stdout.trim().split('\n')).toEqual([String(catalog.pid), catalogArgs.join(' '), catalogRequest]);
 
     const modelRequest = spawnSync(path.join(tripwire.dir, 'pi'), catalogArgs, {
       encoding: 'utf8', env: probeEnv,
