@@ -49,6 +49,14 @@ struct Cell {
     wide: bool,
 }
 
+/// A search hit inside the viewport: painted as a wash behind the cells, stronger for the current one.
+pub struct Highlight {
+    pub row: u16,
+    pub col: u16,
+    pub len: u16,
+    pub current: bool,
+}
+
 /// One paint's worth of cells, wherever they came from, with the cursor and its shape.
 #[derive(Default)]
 pub struct Frame {
@@ -87,11 +95,21 @@ impl Frame {
         origin: Point<Pixels>,
         focused: bool,
         cursor_color: Hsla,
+        highlights: &[Highlight],
         window: &mut Window,
     ) -> Prepared {
         let (cw, lh) = (metrics.cell_width, metrics.line_height);
         let mut quads = Vec::new();
         let mut lines = Vec::new();
+        for highlight in highlights {
+            quads.push((
+                Bounds {
+                    origin: point(origin.x + cw * highlight.col as f32, origin.y + lh * highlight.row as f32),
+                    size: size(cw * highlight.len as f32, lh),
+                },
+                if highlight.current { theme::orange().alpha(0.7) } else { theme::yellow().alpha(0.3) },
+            ));
+        }
         for (y, row) in self.lines.iter().enumerate() {
             let top = origin.y + lh * y as f32;
             let mut x = 0;
@@ -206,9 +224,10 @@ impl Grid {
         origin: Point<Pixels>,
         focused: bool,
         cursor_color: Hsla,
+        highlights: &[Highlight],
         window: &mut Window,
     ) -> Prepared {
-        self.frame.prepare(metrics, origin, focused, cursor_color, window)
+        self.frame.prepare(metrics, origin, focused, cursor_color, highlights, window)
     }
 }
 

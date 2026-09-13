@@ -27,13 +27,14 @@ use zero::editor::{Editor, EditorEvent, Engine, Open};
 use zero::markdown::{self, Block};
 use zero::model::{Agent, AgentId, AgentKind, Model};
 use zero::palette::{self, Expect, PaletteCommand, Verb};
+use zero::search::{Haystack, Hit};
 use zero::shell::{Shell, ShellOutput};
 use zero::simulator::Simulator;
 use zero::source::{Command, Event as SourceEvent, Scenario, ScenarioAction, Source};
 use zero::switch_log::{SwitchLog, SwitchPath};
 use zero::switcher::rows;
 
-use crate::grid::{Frame, Grid, Metrics, Prepared};
+use crate::grid::{Frame, Grid, Highlight, Metrics, Prepared};
 use crate::layout::{Direction, neighbor, tiles};
 use crate::reader::{Diagram, Reader};
 
@@ -170,6 +171,45 @@ enum Popup {
     Palette { query: String, selected: usize },
     Scenario { selected: usize },
     Help,
+    Search(Search),
+}
+
+/// ⌘F on a terminal tile: the query, the text it runs against, and where the hits landed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Search {
+    id: AgentId,
+    query: String,
+    haystack: Haystack,
+    hits: Vec<Hit>,
+    current: usize,
+    /// Output arrived since the snapshot; the next render takes a fresh one.
+    stale: bool,
+}
+
+impl Search {
+    /// Rerun the query and land on the hit nearest above `anchor`, the viewport's bottom row.
+    fn requery(&mut self, anchor: usize) {
+        self.hits = self.haystack.find(&self.query);
+        self.current = self.hits.iter().rposition(|hit| hit.row < anchor).unwrap_or(0);
+    }
+
+    fn step(&mut self, delta: isize) {
+        if self.hits.is_empty() {
+            return;
+        }
+        let count = self.hits.len() as isize;
+        self.current = (self.current as isize + delta).rem_euclid(count) as usize;
+    }
+
+    fn target(&self) -> Option<(AgentId, usize)> {
+        self.hits.get(self.current).map(|hit| (self.id, hit.row))
+    }
+}
+
+fn trace(message: impl FnOnce() -> String) {
+    if std::env::var_os("ZERO_TRACE").is_some() {
+        eprintln!("{}", message());
+    }
 }
 
 /// The queue pill's hover unfold: t inches toward target a frame at a time, so reversals stay smooth.
@@ -266,6 +306,8 @@ const GROUPS: [Group; 5] = [
         bind("⌘⏎", "promote", "promote the focused pane to the main slot"),
         bind("⌘⌥- ⌘⌥=", "main column", "shrink or grow the main column"),
         bind("⌘W", "close tile", "close the focused shell or document tile"),
+        bind("⌘F", "find", "search the focused terminal's scrollback; ⏎ older, ⇧⏎ newer, esc closes"),
+        bind("⌘⇧↑ ⌘⇧↓", "page", "page through the focused terminal's scrollback; the chip at the bottom returns to live output"),
     ]},
     Group { title: "zero", overlay: true, bindings: &[
         bind("⌘S", "scenario", "the scenario menu"),
@@ -471,6 +513,7 @@ impl Zero {
                 | SourceEvent::Output { id, .. }
                 | SourceEvent::Resized { id, .. } => {
                     self.dirty.insert(*id);
+                    self.touch_search(*id);
                 }
                 SourceEvent::StateChanged { .. } | SourceEvent::TurnSettled { .. } => {}
             }
@@ -535,6 +578,7 @@ impl Zero {
             }
         }
         self.dirty.insert(id);
+        self.touch_search(id);
         cx.notify();
     }
 
@@ -543,6 +587,7 @@ impl Zero {
             shell.resize(cols, rows).ok();
             self.model.resize_terminal(id, cols, rows).ok();
             self.dirty.insert(id);
+            self.touch_search(id);
         } else {
             let events = self
                 .source
@@ -682,6 +727,137 @@ impl Zero {
         }
     }
 
+    fn page(&mut self, direction: isize, cx: &mut Context<Self>) {
+        let Some(id) = self.model.focus else {
+            return;
+        };
+        if self.model.agent(id).kind == AgentKind::Document {
+            return;
+        }
+        let agent = self.model.agent_mut(id);
+        let rows = agent.rows.max(2) as isize;
+        agent.terminal.scroll_viewport(ScrollViewport::Delta(direction * (rows - 1)));
+        self.dirty.insert(id);
+        cx.notify();
+    }
+
+    fn scroll_to_bottom(&mut self, id: AgentId, cx: &mut Context<Self>) {
+        self.model.agent_mut(id).terminal.scroll_viewport(ScrollViewport::Bottom);
+        self.dirty.insert(id);
+        cx.notify();
+    }
+
+    fn open_search(&mut self, cx: &mut Context<Self>) {
+        let Some(id) = self.model.focus else {
+            return;
+        };
+        if self.model.agent(id).kind == AgentKind::Document {
+            return;
+        }
+        let started = Instant::now();
+        let Ok(haystack) = Haystack::snapshot(&self.model.agent(id).terminal) else {
+            return;
+        };
+        let terminal = &self.model.agent(id).terminal;
+        trace(|| {
+            format!(
+                "search: opened on {} rows, {} bytes, snapshot {:?}; cap {:?} bytes / {:?} lines, {} scrollback rows at {} cols",
+                haystack.rows(),
+                haystack.bytes(),
+                started.elapsed(),
+                terminal.scrollback_max_bytes().ok().flatten(),
+                terminal.scrollback_max_lines().ok().flatten(),
+                terminal.scrollback_rows().unwrap_or(0),
+                terminal.cols().unwrap_or(0),
+            )
+        });
+        self.open(Popup::Search(Search { id, query: String::new(), haystack, hits: Vec::new(), current: 0, stale: false }), cx);
+    }
+
+    fn search_key(&mut self, keystroke: &Keystroke, cx: &mut Context<Self>) {
+        let anchor = self.search_anchor();
+        let Popup::Search(search) = &mut self.popup else {
+            return;
+        };
+        let key = keystroke.key.as_str();
+        let shift = keystroke.modifiers.shift;
+        match key {
+            "enter" | "up" if !shift => search.step(-1),
+            "enter" | "down" => search.step(1),
+            "g" if keystroke.modifiers.platform => search.step(if shift { 1 } else { -1 }),
+            "backspace" => {
+                search.query.pop();
+                search.requery(anchor);
+            }
+            _ => {
+                if let Some(text) = keys::typed_text(keystroke) {
+                    let started = Instant::now();
+                    search.query.push_str(&text);
+                    search.requery(anchor);
+                    trace(|| format!("search: {:?} found {} hits in {:?}", search.query, search.hits.len(), started.elapsed()));
+                }
+            }
+        }
+        if let Some((id, row)) = search.target() {
+            self.reveal(id, row);
+        }
+        cx.notify();
+    }
+
+    /// The row just below the searched tile's viewport; a fresh query lands on the hit nearest above it.
+    fn search_anchor(&self) -> usize {
+        let Popup::Search(search) = &self.popup else {
+            return usize::MAX;
+        };
+        self.model
+            .agent(search.id)
+            .terminal
+            .scrollbar()
+            .map(|bar| (bar.offset + bar.len) as usize)
+            .unwrap_or(usize::MAX)
+    }
+
+    /// Scroll the tile so `row` is on screen, centered, unless it already is.
+    fn reveal(&mut self, id: AgentId, row: usize) {
+        let agent = self.model.agent_mut(id);
+        let Ok(bar) = agent.terminal.scrollbar() else {
+            return;
+        };
+        let (top, len) = (bar.offset as usize, bar.len as usize);
+        if (top..top + len).contains(&row) {
+            return;
+        }
+        agent.terminal.scroll_viewport(ScrollViewport::Row(row.saturating_sub(len / 2)));
+        self.dirty.insert(id);
+    }
+
+    fn touch_search(&mut self, id: AgentId) {
+        if let Popup::Search(search) = &mut self.popup
+            && search.id == id
+        {
+            search.stale = true;
+        }
+    }
+
+    /// Output landed on the searched tile: retake the snapshot and rerun the query before painting.
+    fn refresh_search(&mut self) {
+        let anchor = self.search_anchor();
+        let Popup::Search(search) = &mut self.popup else {
+            return;
+        };
+        if !search.stale {
+            return;
+        }
+        search.stale = false;
+        let started = Instant::now();
+        let Ok(haystack) = Haystack::snapshot(&self.model.agent(search.id).terminal) else {
+            return;
+        };
+        search.haystack = haystack;
+        search.requery(anchor);
+        trace(|| format!("search: refreshed {} rows, {} hits in {:?}", search.haystack.rows(), search.hits.len(), started.elapsed()));
+    }
+
     fn run_scenario_item(&mut self, index: usize, cx: &mut Context<Self>) {
         match SCENARIO_ITEMS[index].action {
             ItemAction::Source(action) => {
@@ -723,10 +899,13 @@ impl Zero {
                 "/" => self.open(Popup::Help, cx),
                 "q" => cx.quit(),
                 "w" => self.close_focused(cx),
+                "f" => self.open_search(cx),
                 "left" if modifiers.alt => self.swap_neighbor(Direction::Left, cx),
                 "right" if modifiers.alt => self.swap_neighbor(Direction::Right, cx),
                 "up" if modifiers.alt => self.swap_neighbor(Direction::Up, cx),
                 "down" if modifiers.alt => self.swap_neighbor(Direction::Down, cx),
+                "up" if modifiers.shift => self.page(-1, cx),
+                "down" if modifiers.shift => self.page(1, cx),
                 "left" => self.focus_neighbor(Direction::Left, cx),
                 "right" => self.focus_neighbor(Direction::Right, cx),
                 "up" => self.focus_neighbor(Direction::Up, cx),
@@ -748,6 +927,12 @@ impl Zero {
         let Some(bytes) = keys::keystroke_bytes(keystroke) else {
             return;
         };
+        // Typing means "I'm back at the prompt": a scrolled-back viewport snaps to live output.
+        let agent = self.model.agent_mut(id);
+        if matches!(agent.terminal.viewport_active(), Ok(false)) {
+            agent.terminal.scroll_viewport(ScrollViewport::Bottom);
+            self.dirty.insert(id);
+        }
         match self.model.agent(id).kind {
             AgentKind::Shell => {
                 if let Some(shell) = self.shells.get_mut(&id) {
@@ -769,7 +954,7 @@ impl Zero {
 
     fn popup_key(&mut self, keystroke: &Keystroke, cx: &mut Context<Self>) {
         let key = keystroke.key.as_str();
-        if key == "escape" || (keystroke.modifiers.platform && matches!(key, "k" | "s" | "/")) {
+        if key == "escape" || (keystroke.modifiers.platform && matches!(key, "k" | "s" | "/" | "f")) {
             self.popup = Popup::None;
             cx.notify();
             return;
@@ -777,6 +962,10 @@ impl Zero {
         if let Popup::Palette { query, selected } = &self.popup {
             let (query, selected) = (query.clone(), *selected);
             self.palette_key(keystroke, query, selected, cx);
+            return;
+        }
+        if matches!(self.popup, Popup::Search(_)) {
+            self.search_key(keystroke, cx);
             return;
         }
         let mut run: Option<usize> = None;
@@ -792,7 +981,7 @@ impl Zero {
                 }
             },
             Popup::Help => self.popup = Popup::None,
-            Popup::Palette { .. } | Popup::None => {}
+            Popup::Palette { .. } | Popup::Search(_) | Popup::None => {}
         }
         if let Some(index) = run {
             self.run_scenario_item(index, cx);
@@ -1130,7 +1319,30 @@ impl Zero {
         } else {
             theme::blue()
         };
-        Some(grid.prepare(&self.metrics, origin, focused, color, window))
+        let highlights = self.visible_hits(id);
+        let grid = self.grids.get(&id).expect("the grid was just refreshed");
+        Some(grid.prepare(&self.metrics, origin, focused, color, &highlights, window))
+    }
+
+    /// The search hits that fall inside the tile's viewport, in viewport rows.
+    fn visible_hits(&self, id: AgentId) -> Vec<Highlight> {
+        let Popup::Search(search) = &self.popup else {
+            return Vec::new();
+        };
+        if search.id != id || search.hits.is_empty() {
+            return Vec::new();
+        }
+        let Ok(bar) = self.model.agent(id).terminal.scrollbar() else {
+            return Vec::new();
+        };
+        let (top, bottom) = (bar.offset as usize, (bar.offset + bar.len) as usize);
+        search
+            .hits
+            .iter()
+            .enumerate()
+            .filter(|(_, hit)| (top..bottom).contains(&hit.row))
+            .map(|(index, hit)| Highlight { row: (hit.row - top) as u16, col: hit.col, len: hit.len, current: index == search.current })
+            .collect()
     }
 
     fn doc_key(&mut self, id: AgentId, keystroke: &Keystroke, cx: &mut Context<Self>) {
@@ -1274,7 +1486,7 @@ impl Zero {
             session.editor.resize(cols, rows);
         }
         let (_, color) = theme::mode(&session.mode);
-        Some(session.frame.prepare(&self.metrics, origin, focused, color, window))
+        Some(session.frame.prepare(&self.metrics, origin, focused, color, &[], window))
     }
 
     fn render_reader(&mut self, id: AgentId, tile_width: Pixels, cx: &mut Context<Self>) -> AnyElement {
@@ -1436,6 +1648,7 @@ impl Zero {
                     }),
                 ));
         }
+        let overlays = if is_doc { Vec::new() } else { self.pane_overlays(id, cx) };
         let body: AnyElement = if is_doc && editing.is_none() {
             self.render_reader(id, rect.size.width, cx)
         } else {
@@ -1501,7 +1714,98 @@ impl Zero {
             })
             .child(header)
             .child(body)
+            .children(overlays)
             .into_any_element()
+    }
+
+    /// What floats over a terminal tile: the search bar while ⌘F is on it, a chip while it is scrolled back.
+    fn pane_overlays(&self, id: AgentId, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let mut overlays = Vec::new();
+        if let Popup::Search(search) = &self.popup
+            && search.id == id
+        {
+            let status = if search.query.is_empty() {
+                "type to search".to_string()
+            } else if search.hits.is_empty() {
+                "no matches".to_string()
+            } else {
+                format!("{} of {}", search.current + 1, search.hits.len())
+            };
+            let miss = !search.query.is_empty() && search.hits.is_empty();
+            let hint = |text: &'static str| div().text_size(px(10.5)).text_color(theme::comment()).child(text);
+            overlays.push(
+                div()
+                    .absolute()
+                    .top(px(38.))
+                    .right(px(12.))
+                    .h(px(34.))
+                    .px(px(10.))
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .rounded(px(8.))
+                    .bg(theme::bg_dark().alpha(0.96))
+                    .border_1()
+                    .border_color(theme::blue().alpha(0.7))
+                    .shadow(vec![BoxShadow {
+                        color: gpui::black().alpha(0.5),
+                        offset: point(px(0.), px(8.)),
+                        blur_radius: px(24.),
+                        spread_radius: px(0.),
+                    }])
+                    .child(key_cap("⌘F"))
+                    .child(
+                        div()
+                            .min_w(px(160.))
+                            .font_family("JetBrains Mono")
+                            .text_size(px(12.5))
+                            .text_color(theme::fg())
+                            .child(format!("{}▍", search.query)),
+                    )
+                    .child(div().text_size(px(11.)).text_color(if miss { theme::orange() } else { theme::comment() }).child(status))
+                    .child(key_cap("⏎"))
+                    .child(hint("older"))
+                    .child(key_cap("⇧⏎"))
+                    .child(hint("newer"))
+                    .child(key_cap("esc"))
+                    .into_any_element(),
+            );
+        }
+        let terminal = &self.model.agent(id).terminal;
+        if let (Ok(false), Ok(bar)) = (terminal.viewport_active(), terminal.scrollbar()) {
+            let below = bar.total.saturating_sub(bar.offset + bar.len);
+            overlays.push(
+                div()
+                    .id(("scrolled-back", id))
+                    .absolute()
+                    .bottom(px(10.))
+                    .right(px(12.))
+                    .h(px(24.))
+                    .px(px(10.))
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .rounded(px(12.))
+                    .bg(theme::bg_dark().alpha(0.94))
+                    .border_1()
+                    .border_color(theme::gutter())
+                    .text_size(px(11.))
+                    .text_color(theme::fg_dark())
+                    .cursor_pointer()
+                    .hover(|chip| chip.border_color(theme::blue()))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |zero, _, _, cx| {
+                            cx.stop_propagation();
+                            zero.scroll_to_bottom(id, cx);
+                        }),
+                    )
+                    .child(format!("↑ {below} lines back"))
+                    .child(div().text_color(theme::comment()).child("· click for live"))
+                    .into_any_element(),
+            );
+        }
+        overlays
     }
 
     /// The queue pill's hover face: every agent as a row, unfolding under the pill.
@@ -1798,7 +2102,8 @@ impl Zero {
     fn render_popup(&self, now: Duration, cx: &mut Context<Self>) -> Option<AnyElement> {
         let anchored = matches!(self.popup, Popup::Palette { .. });
         let panel = match &self.popup {
-            Popup::None => return None,
+            // The search bar lives inside its tile; see `render_pane`.
+            Popup::None | Popup::Search(_) => return None,
             Popup::Palette { query, selected } => {
                 let view = self.palette_view(query);
                 let list = palette_rows(&view);
@@ -2091,6 +2396,7 @@ impl Render for Zero {
         if self.queue_morph.step() {
             window.request_animation_frame();
         }
+        self.refresh_search();
         let now = self.now();
         let ids = self.model.desktop_agents();
         let rects = tiles(self.content, ids.len(), px(GAP), self.ratio());

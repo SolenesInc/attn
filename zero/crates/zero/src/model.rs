@@ -46,6 +46,11 @@ pub enum AgentKind {
     Document,
 }
 
+/// Scrollback per tile; pages are committed as output fills them, so an idle tile pays nothing.
+/// Receipt: libghostty's own default kept ~280 rows of `seq 1 200000`; 64MB keeps 42,137 rows at
+/// 183 cols (~1.6KB a row, RSS +40MB) and a search over all of it costs ~10ms to snapshot, ~2ms a keystroke.
+pub const SCROLLBACK_BYTES: usize = 64 << 20;
+
 pub struct Agent {
     pub id: AgentId,
     pub name: String,
@@ -71,6 +76,7 @@ impl Agent {
     ) -> Result<Self> {
         let responses = Rc::new(RefCell::new(VecDeque::new()));
         let mut terminal = Terminal::new(80, 24)?;
+        terminal.set_scrollback_max_bytes(Some(SCROLLBACK_BYTES))?;
         if kind == AgentKind::Shell {
             let callback_responses = Rc::clone(&responses);
             terminal

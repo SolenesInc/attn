@@ -5,6 +5,7 @@ pub mod mermaid;
 pub mod model;
 pub mod nvim;
 pub mod palette;
+pub mod search;
 pub mod shell;
 pub mod simulator;
 pub mod source;
