@@ -1389,22 +1389,7 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 		d.sendGardenError(conn, string(verb), err)
 		return
 	}
-	sessionID := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
-	memberName := strings.TrimSpace(protocol.Deref(msg.Member))
-	actorSession := sessionID
-	if memberName != "" {
-		actorSession = ""
-	}
-	actor := garden.Tender{
-		Session: actorSession,
-		Member:  d.resolveTenderMember(memberName, sessionID),
-	}
-	ask := garden.Ask{
-		Actor:        actor,
-		Reason:       protocol.Deref(msg.Reason),
-		Force:        protocol.Deref(msg.Force),
-		CauseSession: sessionID,
-	}
+	ask, sessionID := d.seedTransitionAsk(msg)
 	if harvestWhenRequested(msg) {
 		seed, doc, err := d.applyHarvestWhenRequest(msg, verb, ask, sessionID)
 		if err != nil {
@@ -1439,6 +1424,25 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 	// must not see the ticket mid-flight.
 	d.mirrorSeedMoveOntoTicket(sessionID, seed.ID, verb, protocol.Deref(msg.Reason))
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedTransitionResult: result})
+}
+
+func (d *Daemon) seedTransitionAsk(msg *protocol.SeedTransitionMessage) (garden.Ask, string) {
+	sessionID := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
+	memberName := strings.TrimSpace(protocol.Deref(msg.Member))
+	actorSession := sessionID
+	if memberName != "" {
+		actorSession = ""
+	}
+	actor := garden.Tender{
+		Session: actorSession,
+		Member:  d.resolveTenderMember(memberName, sessionID),
+	}
+	return garden.Ask{
+		Actor:        actor,
+		Reason:       protocol.Deref(msg.Reason),
+		Force:        protocol.Deref(msg.Force),
+		CauseSession: sessionID,
+	}, sessionID
 }
 
 func (d *Daemon) seedTransitionWire(seed garden.Seed, doc docstore.Document) protocol.Seed {

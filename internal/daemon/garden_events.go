@@ -43,26 +43,28 @@ func announceGardenSeedEvents(d *Daemon, seqs []int64) {
 	if len(seqs) == 0 || d == nil {
 		return
 	}
-	if d.eventBus != nil {
-		d.eventBus.Announce()
-	}
-	if d.gardenSeedEventConsumerStarted || d.store == nil {
-		return
-	}
-	for _, seq := range seqs {
-		rows, err := d.store.BusEventsSince(seq-1, 1)
-		if err != nil || len(rows) != 1 || rows[0].Seq != seq {
-			d.logf("Garden seed event %d committed but test-mode handling could not read it: rows=%d err=%v", seq, len(rows), err)
-			continue
+	d.coalesceSnapshots(func() {
+		if d.eventBus != nil {
+			d.eventBus.Announce()
 		}
-		row := rows[0]
-		if err := d.handleGardenSeedEventWithoutRoleLock(context.Background(), bus.Event{
-			Seq: row.Seq, Name: row.Name, Subject: row.Subject, Payload: []byte(row.Payload),
-			Source: row.Source, CreatedAt: row.CreatedAt,
-		}); err != nil {
-			d.logf("Garden seed event %d committed but test-mode handling failed: %v", seq, err)
+		if d.gardenSeedEventConsumerStarted || d.store == nil {
+			return
 		}
-	}
+		for _, seq := range seqs {
+			rows, err := d.store.BusEventsSince(seq-1, 1)
+			if err != nil || len(rows) != 1 || rows[0].Seq != seq {
+				d.logf("Garden seed event %d committed but test-mode handling could not read it: rows=%d err=%v", seq, len(rows), err)
+				continue
+			}
+			row := rows[0]
+			if err := d.handleGardenSeedEventWithoutRoleLock(context.Background(), bus.Event{
+				Seq: row.Seq, Name: row.Name, Subject: row.Subject, Payload: []byte(row.Payload),
+				Source: row.Source, CreatedAt: row.CreatedAt,
+			}); err != nil {
+				d.logf("Garden seed event %d committed but test-mode handling failed: %v", seq, err)
+			}
+		}
+	})
 }
 
 func (d *Daemon) appendGardenSeedEventOnce(

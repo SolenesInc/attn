@@ -79,6 +79,25 @@ func TestSeedNudges_InjectionLeavesTheBellUnreadUntilShow(t *testing.T) {
 	}
 }
 
+func TestSeedNudges_WebSocketTransitionDoesNotRingItsSource(t *testing.T) {
+	fixture := newSeededNudgeGarden(t)
+	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
+	watchSeed(t, fixture.d, "sess-c", fixture.leaf.ID, false)
+	client := newInternalWSClient()
+
+	fixture.d.handleSeedTransitionWS(client, &protocol.SeedTransitionMessage{
+		Cmd: protocol.CmdSeedTransition, RequestID: protocol.Ptr("move-1"),
+		SourceSessionID: protocol.Ptr("sess-b"), SeedID: fixture.leaf.ID, Verb: string(garden.VerbTend),
+	})
+	if _, err := readInternalActionResult(client); err != nil {
+		t.Fatalf("WebSocket transition: %v", err)
+	}
+	if queued := queuedSeedBells(t, fixture.d, "sess-b"); len(queued) != 0 {
+		t.Fatalf("WebSocket transition rang its source: %q", queued)
+	}
+	assertOneSeedBell(t, fixture.d, "sess-c", fixture.leaf.ID, "tended")
+}
+
 func TestSeedNudges_FailedShowDoesNotReadTheBell(t *testing.T) {
 	fixture := newSeededNudgeGarden(t)
 	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)

@@ -23,9 +23,9 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 		fail(err)
 		return
 	}
-	ask := garden.Ask{Reason: protocol.Deref(msg.Reason), Force: protocol.Deref(msg.Force)}
+	ask, sessionID := d.seedTransitionAsk(msg)
 	if harvestWhenRequested(msg) {
-		seed, doc, err := d.applyHarvestWhenRequest(msg, verb, ask, "")
+		seed, doc, err := d.applyHarvestWhenRequest(msg, verb, ask, sessionID)
 		if err != nil {
 			fail(err)
 			return
@@ -55,10 +55,10 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 		d.logf("Garden review: settle %s after %s: %v", msg.SeedID, verb, err)
 	}
 	for _, note := range notes.all() {
-		d.mirrorSeedNoteOntoTicket("", seed.ID, note.Body)
+		d.mirrorSeedNoteOntoTicket(sessionID, seed.ID, note.Body)
 	}
 	wire := d.seedTransitionWire(seed, doc)
-	d.mirrorSeedMoveOntoTicket("", seed.ID, verb, protocol.Deref(msg.Reason))
+	d.mirrorSeedMoveOntoTicket(sessionID, seed.ID, verb, protocol.Deref(msg.Reason))
 	result.Seed = &wire
 	result.Success = true
 	d.sendToClient(client, result)

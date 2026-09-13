@@ -659,6 +659,21 @@ func TestGarden_PlantingPushesTheGardenOnce(t *testing.T) {
 	}
 }
 
+func TestGarden_PlantingWithEdgesPushesTheGardenOnce(t *testing.T) {
+	d := newGardenDaemon(t)
+	plot := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "the plot"})
+
+	var pushes int
+	d.gardenBroadcastHook = func([]protocol.Seed, int) { pushes++ }
+	plant(t, d, protocol.SeedPlantMessage{
+		SourceSessionID: protocol.Ptr("sess-a"), Title: "inside", PartOf: protocol.Ptr(plot.ID),
+	})
+
+	if pushes != 1 {
+		t.Fatalf("one planting with semantic edge events produced %d garden pushes, want exactly 1", pushes)
+	}
+}
+
 func TestGarden_BulkPlantingCoalescesToOnePush(t *testing.T) {
 	d := newGardenDaemon(t)
 	var pushes int

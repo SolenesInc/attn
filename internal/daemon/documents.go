@@ -71,13 +71,15 @@ func documentChangedFact(namespace, collection, id string, deleted bool) store.B
 }
 
 func (d *Daemon) announceCommittedWrite(fact store.BusEvent, seq int64) {
-	if d.eventBus == nil {
-		d.projectToClients(bus.Event{
-			Seq: seq, Name: fact.Name, Subject: fact.Subject, Payload: json.RawMessage(fact.Payload),
-		})
-		return
-	}
-	d.eventBus.Announce()
+	d.coalesceSnapshots(func() {
+		if d.eventBus == nil {
+			d.projectToClients(bus.Event{
+				Seq: seq, Name: fact.Name, Subject: fact.Subject, Payload: json.RawMessage(fact.Payload),
+			})
+			return
+		}
+		d.eventBus.Announce()
+	})
 }
 
 func (d *Daemon) publishCollectionRemoved(namespace, collection string, documents int) {
