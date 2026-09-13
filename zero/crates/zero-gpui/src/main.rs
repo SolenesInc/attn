@@ -248,28 +248,20 @@ impl Morph {
     }
 }
 
-enum ItemAction {
-    Source(fn(&Zero) -> ScenarioAction),
-    Motion,
-}
-
 struct ScenarioItem {
     label: &'static str,
     detail: &'static str,
-    action: ItemAction,
+    action: fn(&Zero) -> ScenarioAction,
 }
 
-const MOTION_STEPS: [u64; 4] = [400, 600, 800, 1100];
-
-const SCENARIO_ITEMS: [ScenarioItem; 8] = [
-    ScenarioItem { label: "calm", detail: "12 agents, one or two waiting at a time", action: ItemAction::Source(|_| ScenarioAction::Set(Scenario::Calm)) },
-    ScenarioItem { label: "busy morning", detail: "five or more waiting, a turn every ~20s", action: ItemAction::Source(|_| ScenarioAction::Set(Scenario::BusyMorning)) },
-    ScenarioItem { label: "all busy", detail: "everyone working, nobody waiting", action: ItemAction::Source(|_| ScenarioAction::Set(Scenario::AllBusy)) },
-    ScenarioItem { label: "toggle speed", detail: "x1 or x5", action: ItemAction::Source(|_| ScenarioAction::ToggleSpeed) },
-    ScenarioItem { label: "add an agent", detail: "on this desktop", action: ItemAction::Source(|zero| ScenarioAction::AddAgent { desktop: zero.model.current_desktop, name: None }) },
-    ScenarioItem { label: "finish one now", detail: "a working agent flips to waiting", action: ItemAction::Source(|_| ScenarioAction::FinishOneNow) },
-    ScenarioItem { label: "make three wait now", detail: "three turns open at once", action: ItemAction::Source(|_| ScenarioAction::MakeThreeWaitNow) },
-    ScenarioItem { label: "motion", detail: "cycle the desktop slide duration", action: ItemAction::Motion },
+const SCENARIO_ITEMS: [ScenarioItem; 7] = [
+    ScenarioItem { label: "calm", detail: "12 agents, one or two waiting at a time", action: |_| ScenarioAction::Set(Scenario::Calm) },
+    ScenarioItem { label: "busy morning", detail: "five or more waiting, a turn every ~20s", action: |_| ScenarioAction::Set(Scenario::BusyMorning) },
+    ScenarioItem { label: "all busy", detail: "everyone working, nobody waiting", action: |_| ScenarioAction::Set(Scenario::AllBusy) },
+    ScenarioItem { label: "toggle speed", detail: "x1 or x5", action: |_| ScenarioAction::ToggleSpeed },
+    ScenarioItem { label: "add an agent", detail: "on this desktop", action: |zero| ScenarioAction::AddAgent { desktop: zero.model.current_desktop, name: None } },
+    ScenarioItem { label: "finish one now", detail: "a working agent flips to waiting", action: |_| ScenarioAction::FinishOneNow },
+    ScenarioItem { label: "make three wait now", detail: "three turns open at once", action: |_| ScenarioAction::MakeThreeWaitNow },
 ];
 
 struct Binding {
@@ -348,8 +340,6 @@ struct Zero {
     ratios: HashMap<u8, f32>,
     previous_focus: Option<AgentId>,
     content: Bounds<Pixels>,
-    slide: (i8, u64),
-    motion_ms: u64,
     ticker: Option<Task<()>>,
     _shell_pumps: Vec<Task<()>>,
 }
@@ -458,8 +448,6 @@ impl Zero {
             ratios: HashMap::new(),
             previous_focus: None,
             content: Bounds::default(),
-            slide: (0, 0),
-            motion_ms: 600,
             ticker: None,
             _shell_pumps: Vec::new(),
         };
@@ -602,7 +590,6 @@ impl Zero {
 
     fn focus(&mut self, target: Option<AgentId>, path: SwitchPath, cx: &mut Context<Self>) {
         let before = self.model.focus;
-        let before_desktop = self.model.current_desktop;
         let record = self
             .model
             .switch_focus(target, path, self.scenario_name(), timestamp_ms())
@@ -613,19 +600,10 @@ impl Zero {
         if self.model.focus != before {
             self.previous_focus = before;
         }
-        self.note_desktop_change(before_desktop);
         cx.notify();
     }
 
-    fn note_desktop_change(&mut self, before: u8) {
-        let after = self.model.current_desktop;
-        if after != before {
-            self.slide = (if after > before { 1 } else { -1 }, self.slide.1 + 1);
-        }
-    }
-
     fn go_desktop(&mut self, desktop: u8, cx: &mut Context<Self>) {
-        let before = self.model.current_desktop;
         let record = self
             .model
             .go_desktop(desktop, self.scenario_name(), timestamp_ms())
@@ -633,7 +611,6 @@ impl Zero {
         if let Some(record) = record {
             self.log.append(&record).ok();
         }
-        self.note_desktop_change(before);
         cx.notify();
     }
 
@@ -859,18 +836,9 @@ impl Zero {
     }
 
     fn run_scenario_item(&mut self, index: usize, cx: &mut Context<Self>) {
-        match SCENARIO_ITEMS[index].action {
-            ItemAction::Source(action) => {
-                let action = action(self);
-                self.popup = Popup::None;
-                self.command(Command::Scenario(action), cx);
-            }
-            ItemAction::Motion => {
-                let current = MOTION_STEPS.iter().position(|&ms| ms == self.motion_ms);
-                self.motion_ms = MOTION_STEPS[current.map_or(0, |i| (i + 1) % MOTION_STEPS.len())];
-                cx.notify();
-            }
-        }
+        let action = (SCENARIO_ITEMS[index].action)(self);
+        self.popup = Popup::None;
+        self.command(Command::Scenario(action), cx);
     }
 
     fn on_key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
@@ -881,6 +849,11 @@ impl Zero {
         }
         let modifiers = keystroke.modifiers;
         if modifiers.platform {
+            if !self.which_key {
+                // A chord before the overlay unfolds means the user knew the key: cancel the pending unfold.
+                self.which_key_gen += 1;
+                trace(|| format!("which-key: ⌘{} before the unfold, cancelled", keystroke.key));
+            }
             if let Some(desktop) = digit(keystroke) {
                 if modifiers.alt {
                     self.model.move_focused(desktop);
@@ -1197,6 +1170,7 @@ impl Zero {
                 this.update(cx, |zero, cx| {
                     if zero.which_key_gen == generation && zero.cmd_held && zero.popup == Popup::None {
                         zero.which_key = true;
+                        trace(|| "which-key: unfolded on a bare ⌘ hold".to_string());
                         cx.notify();
                     }
                 })
@@ -2321,10 +2295,7 @@ impl Zero {
                             )
                             .child(key_cap(&(index + 1).to_string()))
                             .child(div().text_color(theme::fg()).font_weight(FontWeight::MEDIUM).child(item.label))
-                            .child(div().text_color(theme::comment()).child(match item.action {
-                                ItemAction::Motion => format!("desktop slide {}ms, then {}", self.motion_ms, MOTION_STEPS[(MOTION_STEPS.iter().position(|&ms| ms == self.motion_ms).unwrap_or(0) + 1) % MOTION_STEPS.len()]),
-                                ItemAction::Source(_) => item.detail.to_string(),
-                            })),
+                            .child(div().text_color(theme::comment()).child(item.detail)),
                     );
                 }
                 panel
@@ -2405,19 +2376,7 @@ impl Render for Zero {
             .zip(rects)
             .map(|(&id, rect)| self.render_pane(id, rect, now, cx))
             .collect();
-        let (direction, generation) = self.slide;
-        let slide_from = px(64. * direction as f32);
-        let desktop_layer = div()
-            .absolute()
-            .left_0()
-            .top_0()
-            .size_full()
-            .children(panes)
-            .with_animation(
-                ("desktop", generation),
-                Animation::new(Duration::from_millis(self.motion_ms)).with_easing(ease_in_out),
-                move |layer, delta| layer.left(slide_from * (1. - delta)).opacity(0.35 + 0.65 * delta),
-            );
+        let desktop_layer = div().absolute().left_0().top_0().size_full().children(panes);
         let mut root = div()
             .relative()
             .size_full()
