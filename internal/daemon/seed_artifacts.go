@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/notebook"
@@ -36,6 +37,7 @@ const (
 type seedArtifactTransferReceipt struct {
 	Version     int                       `json:"version"`
 	ID          string                    `json:"id"`
+	EventSource string                    `json:"event_source,omitempty"`
 	SeedID      string                    `json:"seed_id"`
 	Operation   string                    `json:"operation"`
 	Source      string                    `json:"source"`
@@ -50,6 +52,13 @@ type seedArtifactTransferReceipt struct {
 	State       string                    `json:"state"`
 	Legacy      *garden.ArtifactReference `json:"legacy,omitempty"`
 	UpdatedAt   time.Time                 `json:"updated_at"`
+}
+
+func (r seedArtifactTransferReceipt) eventSource() string {
+	if source := strings.TrimSpace(r.EventSource); source != "" {
+		return source
+	}
+	return r.ID
 }
 
 type stagedSeedArtifact struct {
@@ -426,7 +435,7 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 	if err != nil {
 		return nil, err
 	}
-	if err := d.appendGardenSeedEventOnce("artifact_transfer", receipt.ID, changedEvent); err != nil {
+	if err := d.appendGardenSeedEventOnce("artifact_transfer", receipt.eventSource(), changedEvent); err != nil {
 		return nil, fmt.Errorf("artifact transfer %s is complete but its Garden event is pending; retry the same command: %w", receipt.ID, err)
 	}
 	changed := filepath.ToSlash(filepath.Join("seeds", seedID, filename))
@@ -496,7 +505,7 @@ func (d *Daemon) runSeedArtifactTransfer(root, seedID, operation, source, destin
 			return nil, false, err
 		}
 		receipt = &seedArtifactTransferReceipt{
-			Version: seedArtifactTransferVersion, ID: id, SeedID: seedID,
+			Version: seedArtifactTransferVersion, ID: id, EventSource: uuid.NewString(), SeedID: seedID,
 			Operation: operation, Source: source, Destination: destination,
 			Filename: filename, Hash: staged.hash, Size: staged.size,
 			ModTimeNS: staged.modTimeNS, Device: staged.device, Inode: staged.inode,

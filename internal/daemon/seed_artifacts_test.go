@@ -111,6 +111,10 @@ func TestSeedArtifactCopyStartsFreshAfterDetach(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	firstReceipt, found, err := readSeedTransferReceipt(root, first.OperationID)
+	if err != nil || !found || firstReceipt.EventSource == "" {
+		t.Fatalf("first receipt = %+v found=%v err=%v", firstReceipt, found, err)
+	}
 	detached := filepath.Join(t.TempDir(), "report.bin")
 	if _, err := transferSeedArtifact(t, d, protocol.SeedArtifactTransferMessage{
 		SeedID: seed.ID, Operation: "detach", Filename: protocol.Ptr("report.bin"), DestinationPath: protocol.Ptr(detached),
@@ -133,6 +137,10 @@ func TestSeedArtifactCopyStartsFreshAfterDetach(t *testing.T) {
 	if second.OperationID != first.OperationID {
 		t.Fatalf("replacement receipt ID = %q, want %q", second.OperationID, first.OperationID)
 	}
+	secondReceipt, found, err := readSeedTransferReceipt(root, second.OperationID)
+	if err != nil || !found || secondReceipt.EventSource == "" || secondReceipt.EventSource == firstReceipt.EventSource {
+		t.Fatalf("replacement receipt = %+v found=%v err=%v, want a fresh event source after %q", secondReceipt, found, err, firstReceipt.EventSource)
+	}
 	managed := filepath.Join(notebook.SeedArtifactsDir(root, seed.ID), "report.bin")
 	if got, err := os.ReadFile(managed); err != nil || string(got) != "second" {
 		t.Fatalf("fresh managed artifact = %q, %v", got, err)
@@ -151,6 +159,10 @@ func TestSeedArtifactCopyStartsFreshAfterDetach(t *testing.T) {
 	})
 	if err != nil || !retry.Recovered {
 		t.Fatalf("retry fresh copy after source deletion = %+v, %v", retry, err)
+	}
+	retriedReceipt, found, err := readSeedTransferReceipt(root, retry.OperationID)
+	if err != nil || !found || retriedReceipt.EventSource != secondReceipt.EventSource {
+		t.Fatalf("retried receipt = %+v found=%v err=%v, want event source %q", retriedReceipt, found, err, secondReceipt.EventSource)
 	}
 }
 

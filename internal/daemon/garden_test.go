@@ -207,6 +207,19 @@ func TestSeedResumeIdentityPlantsSetsAndClearsAtomically(t *testing.T) {
 	if protocol.Deref(planted.ResumeSessionID) != "native-1" || protocol.Deref(planted.ResumeCwd) != cwd || protocol.Deref(planted.ResumeAgent) != "claude" {
 		t.Fatalf("planted resume identity = %+v", planted)
 	}
+	events, err := d.store.BusEventsSince(0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var configured int
+	for _, event := range events {
+		if event.Name == seedEvents.NameResumeIdentityConfigured && event.Subject == planted.ID {
+			configured++
+		}
+	}
+	if configured != 1 {
+		t.Fatalf("resume identity events committed with plant = %d, want 1", configured)
+	}
 
 	set := setSeedResume(t, d, planted.ID, "native-2", cwd, "copilot", false)
 	if !set.Ok || protocol.Deref(set.SeedSetResumeResult.Seed.ResumeSessionID) != "native-2" {

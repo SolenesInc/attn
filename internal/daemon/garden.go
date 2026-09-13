@@ -60,7 +60,7 @@ func (d *Daemon) plantSeed(schema docstore.CollectionSchema, seed garden.Seed) (
 	}
 	expected := docstore.ExpectAbsent
 	fact := documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false)
-	occurrences := make([]seedEvents.Occurrence, 0, len(seed.Edges)+2)
+	occurrences := make([]seedEvents.Occurrence, 0, len(seed.Edges)+3)
 	planted, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.Planted, seed.ID, seedEvents.CausePayload{
 		CausedBySessionID: seed.PlanterSession,
 	})
@@ -74,6 +74,16 @@ func (d *Daemon) plantSeed(schema docstore.CollectionSchema, seed garden.Seed) (
 			return docstore.Document{}, err
 		}
 		occurrences = append(occurrences, tended)
+	}
+	if seed.ResumeSessionID != "" {
+		configured, err := seedEvents.Occur(
+			gardenSeedEventModel, gardenSeedEventVocabulary.ResumeIdentityConfigured, seed.ID,
+			seedEvents.CausePayload{CausedBySessionID: seed.PlanterSession},
+		)
+		if err != nil {
+			return docstore.Document{}, err
+		}
+		occurrences = append(occurrences, configured)
 	}
 	for _, edge := range seed.Edges {
 		linked, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.EdgeLinked, seed.ID, seedEvents.EdgePayload{
