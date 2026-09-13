@@ -532,6 +532,45 @@ func TestSeedArtifactObservationPublishesAStateThatReturnsAfterAChange(t *testin
 	}
 }
 
+func TestSeedArtifactObservationDetectsTimestampPreservingContentReplacement(t *testing.T) {
+	d, root, seed := newSeedArtifactDaemon(t)
+	d.stopNotebookWatcher()
+	dir := notebook.SeedArtifactsDir(root, seed.ID)
+	path := writeArtifactSource(t, dir, "replaced.bin", []byte("first"))
+	stamp := time.Date(2026, 9, 13, 12, 0, 0, 123, time.UTC)
+	if err := os.Chtimes(path, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("other"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+		t.Fatal(err)
+	}
+	events, err := d.store.BusEventsSince(0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var changed int
+	for _, event := range events {
+		if event.Name == seedEvents.NameArtifactChanged && event.Subject == seed.ID {
+			changed++
+		}
+	}
+	if changed != 2 {
+		t.Fatalf("same-metadata content replacement events = %d, want 2", changed)
+	}
+}
+
 func waitForArtifactRefresh(t *testing.T, refreshes <-chan struct{}) {
 	t.Helper()
 	select {

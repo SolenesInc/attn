@@ -214,8 +214,55 @@ func (d *Daemon) seedArtifacts(seedID string) ([]protocol.SeedArtifact, error) {
 	return artifacts, nil
 }
 
-func (d *Daemon) recordObservedSeedArtifacts(seedID string) error {
+type observedSeedArtifact struct {
+	Filename       string `json:"filename"`
+	RelativeTarget string `json:"relative_target"`
+	Size           int64  `json:"size"`
+	ModifiedAt     string `json:"modified_at"`
+	ContentSHA256  string `json:"content_sha256"`
+}
+
+func (d *Daemon) observedSeedArtifacts(seedID string) ([]observedSeedArtifact, error) {
 	artifacts, err := d.seedArtifacts(seedID)
+	if err != nil || len(artifacts) == 0 {
+		return []observedSeedArtifact{}, err
+	}
+	_, dir, err := d.seedArtifactDir(seedID, false)
+	if err != nil {
+		return nil, err
+	}
+	observed := make([]observedSeedArtifact, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		path := filepath.Join(dir, artifact.Filename)
+		fd, openErr := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+		if errors.Is(openErr, unix.ENOENT) || errors.Is(openErr, unix.ELOOP) {
+			continue
+		}
+		if openErr != nil {
+			return nil, fmt.Errorf("read seed artifact %q for observation: %w", artifact.Filename, openErr)
+		}
+		file := os.NewFile(uintptr(fd), path)
+		info, statErr := file.Stat()
+		hash := sha256.New()
+		_, hashErr := io.Copy(hash, file)
+		closeErr := file.Close()
+		if statErr != nil || hashErr != nil || closeErr != nil {
+			return nil, fmt.Errorf("hash seed artifact %q: %w", artifact.Filename, errors.Join(statErr, hashErr, closeErr))
+		}
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		observed = append(observed, observedSeedArtifact{
+			Filename: artifact.Filename, RelativeTarget: artifact.RelativeTarget,
+			Size: info.Size(), ModifiedAt: info.ModTime().UTC().Format(time.RFC3339Nano),
+			ContentSHA256: hex.EncodeToString(hash.Sum(nil)),
+		})
+	}
+	return observed, nil
+}
+
+func (d *Daemon) recordObservedSeedArtifacts(seedID string) error {
+	artifacts, err := d.observedSeedArtifacts(seedID)
 	if err != nil {
 		return err
 	}
