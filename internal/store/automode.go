@@ -150,6 +150,9 @@ func decodeRules(raw string) ([]automode.Rule, error) {
 	if rules == nil {
 		rules = []automode.Rule{}
 	}
+	for i := range rules {
+		rules[i] = automode.NormalizeRule(rules[i])
+	}
 	return rules, nil
 }
 

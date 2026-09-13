@@ -8,6 +8,7 @@ export function toPrefixRule(rule: Rule): PrefixRule {
   return {
     pattern: rule.pattern.map((alternatives) => (alternatives.length === 1 ? alternatives[0]! : [...alternatives])),
     decision: rule.decision,
+    sandbox: rule.sandbox,
     ...(rule.justification === "" ? {} : { justification: rule.justification }),
     ...(rule.match.length === 0 ? {} : { match: rule.match.map((example) => [...example]) }),
     ...(rule.notMatch.length === 0 ? {} : { not_match: rule.notMatch.map((example) => [...example]) }),

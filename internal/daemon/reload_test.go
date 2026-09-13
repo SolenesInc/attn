@@ -201,9 +201,13 @@ func newReloadTestDaemonOn(t *testing.T, d *Daemon, backend *fakeReloadBackend) 
 }
 
 func addReloadSession(d *Daemon, id string, agent protocol.SessionAgent, state protocol.SessionState) {
+	addReloadSessionAt(d, id, agent, state, "/tmp/"+id)
+}
+
+func addReloadSessionAt(d *Daemon, id string, agent protocol.SessionAgent, state protocol.SessionState, directory string) {
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
-		ID: id, Label: id, Agent: agent, Directory: "/tmp/" + id,
+		ID: id, Label: id, Agent: agent, Directory: directory,
 		WorkspaceID: "ws-" + id, State: state, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 }

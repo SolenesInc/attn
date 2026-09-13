@@ -125,3 +125,8 @@ test("the card shows the retry reason ahead of the policy reason", () => {
   expect(reason).not.toContain("not a known prefix");
   expect(reviewTitle({ ...command, justification: "the branch is mine" })).toContain("the branch is mine");
 });
+
+test("the card names a command that will leave the sandbox", () => {
+  expect(reviewTitle({ ...command, sandboxPermissions: "require_escalated" }))
+    .toContain("This command will run outside the sandbox.");
+});

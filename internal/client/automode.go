@@ -5,8 +5,12 @@ import "github.com/victorarias/attn/internal/protocol"
 // Nothing here writes the auto mode config. A human in the app is the trust boundary a
 // caller on this socket cannot fake, so every amendment leaves as a proposal.
 
-func (c *Client) AutoModeShow() (*protocol.AutoModeShowResult, error) {
-	resp, err := c.send(protocol.AutoModeShowMessage{Cmd: protocol.CmdAutoModeShow})
+func (c *Client) AutoModeShow(cwd string) (*protocol.AutoModeShowResult, error) {
+	msg := protocol.AutoModeShowMessage{Cmd: protocol.CmdAutoModeShow}
+	if cwd != "" {
+		msg.Cwd = protocol.Ptr(cwd)
+	}
+	resp, err := c.send(msg)
 	if err != nil {
 		return nil, err
 	}

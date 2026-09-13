@@ -1,0 +1,75 @@
+{
+  "rules": [
+    {
+      "pattern": ["go", ["test", "list"]],
+      "decision": "allow",
+      "sandbox": "bypass",
+      "justification": "Runs the repository's standard Go verification with host cache and network access.",
+      "match": [["go", "test", "./internal/daemon"], ["go", "list", "./..."]]
+    },
+    {
+      "pattern": ["go", "run", ["./cmd/commentlint", "./cmd/changelog-check", "./cmd/prompt-editor"]],
+      "decision": "allow",
+      "sandbox": "bypass",
+      "justification": "Runs trusted repository maintenance tools with host cache and network access.",
+      "match": [
+        ["go", "run", "./cmd/commentlint", "./..."],
+        ["go", "run", "./cmd/changelog-check"],
+        ["go", "run", "./cmd/prompt-editor", "context", "crew/priming", "--json"]
+      ]
+    },
+    {
+      "pattern": ["make", ["test", "test-frontend", "test-e2e", "test-all", "test-harness", "lint"]],
+      "decision": "allow",
+      "sandbox": "bypass",
+      "justification": "Runs the repository's standard verification targets with host access.",
+      "match": [
+        ["make", "test"],
+        ["make", "test-frontend"],
+        ["make", "test-e2e"],
+        ["make", "test-all"],
+        ["make", "test-harness"],
+        ["make", "lint"]
+      ]
+    },
+    {
+      "pattern": ["./scripts/test-go.sh"],
+      "decision": "allow",
+      "sandbox": "bypass",
+      "justification": "Runs the repository's Go test wrapper with host access.",
+      "match": [["./scripts/test-go.sh"], ["./scripts/test-go.sh", "-v"]]
+    },
+    {
+      "pattern": [
+        "make",
+        [
+          "third_party/ghostty-vt/darwin_arm64/lib/libghostty-vt.a",
+          "third_party/ghostty-vt/linux_amd64/lib/libghostty-vt.a",
+          "third_party/ghostty-vt/linux_arm64/lib/libghostty-vt.a"
+        ]
+      ],
+      "decision": "allow",
+      "sandbox": "bypass",
+      "justification": "Fetches the repository's pinned native VT artifact.",
+      "match": [
+        ["make", "third_party/ghostty-vt/darwin_arm64/lib/libghostty-vt.a"],
+        ["make", "third_party/ghostty-vt/linux_amd64/lib/libghostty-vt.a"],
+        ["make", "third_party/ghostty-vt/linux_arm64/lib/libghostty-vt.a"]
+      ]
+    },
+    {
+      "pattern": ["make", ["generate-types", "check-types"]],
+      "decision": "allow",
+      "sandbox": "bypass",
+      "justification": "Runs the repository's type generation and validation targets.",
+      "match": [["make", "generate-types"], ["make", "check-types"]]
+    },
+    {
+      "pattern": ["pnpm", "--dir", "internal/protocol/schema", "install"],
+      "decision": "allow",
+      "sandbox": "bypass",
+      "justification": "Installs the protocol schema's declared dependencies.",
+      "match": [["pnpm", "--dir", "internal/protocol/schema", "install"]]
+    }
+  ]
+}

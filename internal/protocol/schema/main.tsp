@@ -6018,6 +6018,7 @@ model AutoModeRuleInfo {
   "pattern": string[][];
   // "allow" | "prompt" | "forbidden".
   "decision": string;
+  "sandbox": string;
   // Required for a forbidden rule: it is the text the agent is given.
   "justification": string;
   "match": string[][];
@@ -6094,10 +6095,14 @@ model AutoModeDenialInfo {
 
 model AutoModeShowMessage {
   "cmd": "automode_show";
+  "cwd"?: string;
 }
 
 model AutoModeShowResult {
   "config": AutoModeConfigInfo;
+  "global_rules": AutoModeRuleInfo[];
+  "repository_rules": AutoModeRuleInfo[];
+  "repository_rules_path"?: string;
   // Everything still pending, oldest first.
   "proposals": AutoModeProposalInfo[];
 }
@@ -6207,6 +6212,7 @@ model AutoModeRuleAddMessage {
   pattern: string[];
   // Absent means "allow", Codex's default.
   decision?: string;
+  sandbox?: string;
   justification?: string;
   request_id: string;
 }

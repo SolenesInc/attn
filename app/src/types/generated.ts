@@ -1608,6 +1608,7 @@ export interface RuleElement {
     match:         Array<string[]>;
     not_match:     Array<string[]>;
     pattern:       Array<string[]>;
+    sandbox:       string;
     [property: string]: any;
 }
 
@@ -1922,6 +1923,7 @@ export interface AutoModeRuleAddMessage {
     justification?: string;
     pattern:        string[];
     request_id:     string;
+    sandbox?:       string;
     [property: string]: any;
 }
 
@@ -1935,6 +1937,7 @@ export interface AutoModeRuleInfo {
     match:         Array<string[]>;
     not_match:     Array<string[]>;
     pattern:       Array<string[]>;
+    sandbox:       string;
     [property: string]: any;
 }
 
@@ -1950,7 +1953,8 @@ export enum AutoModeRuleRemoveMessageCmd {
 }
 
 export interface AutoModeShowMessage {
-    cmd: AutoModeShowMessageCmd;
+    cmd:  AutoModeShowMessageCmd;
+    cwd?: string;
     [property: string]: any;
 }
 
@@ -1959,8 +1963,11 @@ export enum AutoModeShowMessageCmd {
 }
 
 export interface AutoModeShowResult {
-    config:    Config;
-    proposals: Proposal[];
+    config:                 Config;
+    global_rules:           RuleElement[];
+    proposals:              Proposal[];
+    repository_rules:       RuleElement[];
+    repository_rules_path?: string;
     [property: string]: any;
 }
 
@@ -7101,8 +7108,11 @@ export interface AutomodeProposeResult {
 }
 
 export interface AutomodeShowResult {
-    config:    Config;
-    proposals: Proposal[];
+    config:                 Config;
+    global_rules:           RuleElement[];
+    proposals:              Proposal[];
+    repository_rules:       RuleElement[];
+    repository_rules_path?: string;
     [property: string]: any;
 }
 
@@ -17033,6 +17043,7 @@ const typeMap: any = {
         { json: "match", js: "match", typ: a(a("")) },
         { json: "not_match", js: "not_match", typ: a(a("")) },
         { json: "pattern", js: "pattern", typ: a(a("")) },
+        { json: "sandbox", js: "sandbox", typ: "" },
     ], "any"),
     "AutoModeConfigResult": o([
         { json: "config", js: "config", typ: r("Config") },
@@ -17227,6 +17238,7 @@ const typeMap: any = {
         { json: "justification", js: "justification", typ: u(undefined, "") },
         { json: "pattern", js: "pattern", typ: a("") },
         { json: "request_id", js: "request_id", typ: "" },
+        { json: "sandbox", js: "sandbox", typ: u(undefined, "") },
     ], "any"),
     "AutoModeRuleInfo": o([
         { json: "decision", js: "decision", typ: "" },
@@ -17234,6 +17246,7 @@ const typeMap: any = {
         { json: "match", js: "match", typ: a(a("")) },
         { json: "not_match", js: "not_match", typ: a(a("")) },
         { json: "pattern", js: "pattern", typ: a(a("")) },
+        { json: "sandbox", js: "sandbox", typ: "" },
     ], "any"),
     "AutoModeRuleRemoveMessage": o([
         { json: "cmd", js: "cmd", typ: r("AutoModeRuleRemoveMessageCmd") },
@@ -17242,10 +17255,14 @@ const typeMap: any = {
     ], "any"),
     "AutoModeShowMessage": o([
         { json: "cmd", js: "cmd", typ: r("AutoModeShowMessageCmd") },
+        { json: "cwd", js: "cwd", typ: u(undefined, "") },
     ], "any"),
     "AutoModeShowResult": o([
         { json: "config", js: "config", typ: r("Config") },
+        { json: "global_rules", js: "global_rules", typ: a(r("RuleElement")) },
         { json: "proposals", js: "proposals", typ: a(r("Proposal")) },
+        { json: "repository_rules", js: "repository_rules", typ: a(r("RuleElement")) },
+        { json: "repository_rules_path", js: "repository_rules_path", typ: u(undefined, "") },
     ], "any"),
     "AutoModeStateChangedMessage": o([
         { json: "config", js: "config", typ: r("Config") },
@@ -20476,7 +20493,10 @@ const typeMap: any = {
     ], "any"),
     "AutomodeShowResult": o([
         { json: "config", js: "config", typ: r("Config") },
+        { json: "global_rules", js: "global_rules", typ: a(r("RuleElement")) },
         { json: "proposals", js: "proposals", typ: a(r("Proposal")) },
+        { json: "repository_rules", js: "repository_rules", typ: a(r("RuleElement")) },
+        { json: "repository_rules_path", js: "repository_rules_path", typ: u(undefined, "") },
     ], "any"),
     "CrewHandoffResultObject": o([
         { json: "member", js: "member", typ: "" },

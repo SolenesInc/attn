@@ -5,11 +5,15 @@ import { readGuardianSelection, type GuardianSelection } from "./guardian-select
 
 export type Decision = "allow" | "prompt" | "forbidden";
 
+export type RuleSandbox = "inherit" | "bypass";
+
 export type ApprovalPolicy = "untrusted" | "on-request" | "never";
 
 export type SandboxMode = "read-only" | "workspace-write" | "danger-full-access";
 
 export const decisions: readonly Decision[] = ["allow", "prompt", "forbidden"];
+
+export const ruleSandboxes: readonly RuleSandbox[] = ["inherit", "bypass"];
 
 export const approvalPolicies: readonly ApprovalPolicy[] = ["untrusted", "on-request", "never"];
 
@@ -23,6 +27,7 @@ export const sandboxModes: readonly SandboxMode[] = [
 export type Rule = {
   pattern: readonly (readonly string[])[];
   decision: Decision;
+  sandbox: RuleSandbox;
   justification: string;
   match: readonly (readonly string[])[];
   notMatch: readonly (readonly string[])[];
@@ -133,12 +138,19 @@ function readRule(value: unknown, field: string): Rule {
   const raw = value as {
     pattern?: unknown;
     decision?: unknown;
+    sandbox?: unknown;
     justification?: unknown;
     match?: unknown;
     not_match?: unknown;
   };
   const pattern = readPattern(raw.pattern, `${field}.pattern`);
   const decision = readChoice(raw.decision, `${field}.decision`, decisions, "allow");
+  const sandbox = readChoice(
+    raw.sandbox,
+    `${field}.sandbox`,
+    ruleSandboxes,
+    decision === "allow" ? "bypass" : "inherit",
+  );
   const justification = readString(raw.justification, `${field}.justification`);
   if (decision === "forbidden" && justification === "") {
     throw new ApprovalConfigError(
@@ -147,9 +159,13 @@ function readRule(value: unknown, field: string): Rule {
         `justification: it is the text the session is given when the command is refused`,
     );
   }
+  if (decision === "forbidden" && sandbox === "bypass") {
+    throw new ApprovalConfigError(`${field}.sandbox`, "a forbidden rule cannot bypass the sandbox");
+  }
   return {
     pattern,
     decision,
+    sandbox,
     justification,
     match: readExamples(raw.match, `${field}.match`),
     notMatch: readExamples(raw.not_match, `${field}.not_match`),

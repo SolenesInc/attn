@@ -14,6 +14,7 @@ import { useAutoModePolicy } from '../hooks/useAutoModePolicy';
 const rule = (over: Partial<AutoModeRuleInfo> = {}): AutoModeRuleInfo => ({
   pattern: [['git'], ['status']],
   decision: 'allow',
+  sandbox: 'bypass',
   justification: '',
   match: [],
   not_match: [],
@@ -23,6 +24,7 @@ const rule = (over: Partial<AutoModeRuleInfo> = {}): AutoModeRuleInfo => ({
 const shippedRule = rule({
   pattern: [['attn'], ['automode'], ['env']],
   decision: 'forbidden',
+  sandbox: 'inherit',
   justification: 'the environment is what the reviewer reads',
 });
 
@@ -51,7 +53,7 @@ const state = (over: Partial<AutoModeState> = {}): AutoModeState => ({
 const edited = (): AutoModeConfigEdit => ({ config: config() });
 
 type Writers = {
-  addRule: (pattern: string[], decision: string, justification: string) => Promise<AutoModeConfigEdit>;
+  addRule: (pattern: string[], decision: string, sandbox: string, justification: string) => Promise<AutoModeConfigEdit>;
   removeRule: (pattern: string[][]) => Promise<AutoModeConfigEdit>;
   addHost: (host: string, decision: string) => Promise<AutoModeConfigEdit>;
   removeHost: (host: string, decision: string) => Promise<AutoModeConfigEdit>;
@@ -100,9 +102,22 @@ describe('AutoModeSettings rules', () => {
     });
     fireEvent.click(screen.getByTestId('automode-rules-add'));
 
-    await waitFor(() => expect(addRule).toHaveBeenCalledWith(['git', 'status'], 'allow', ''));
+    await waitFor(() => expect(addRule).toHaveBeenCalledWith(['git', 'status'], 'allow', 'bypass', ''));
     await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByTestId('automode-rules-pattern')).toHaveValue(''));
+  });
+
+  it('authors review and sandbox behavior independently', async () => {
+    const { addRule } = renderPane(state());
+    await screen.findByTestId('automode-rules-pattern');
+
+    fireEvent.change(screen.getByTestId('automode-rules-pattern'), { target: { value: 'go test' } });
+    fireEvent.change(screen.getByTestId('automode-rules-decision'), { target: { value: 'prompt' } });
+    expect(screen.getByTestId('automode-rules-sandbox')).toHaveValue('inherit');
+    fireEvent.change(screen.getByTestId('automode-rules-sandbox'), { target: { value: 'bypass' } });
+    fireEvent.click(screen.getByTestId('automode-rules-add'));
+
+    await waitFor(() => expect(addRule).toHaveBeenCalledWith(['go', 'test'], 'prompt', 'bypass', ''));
   });
 
   it('carries the decision and the reason it refuses', async () => {
@@ -121,7 +136,7 @@ describe('AutoModeSettings rules', () => {
     fireEvent.click(screen.getByTestId('automode-rules-add'));
 
     await waitFor(() => expect(addRule).toHaveBeenCalledWith(
-      ['terraform', 'apply'], 'forbidden', 'it changes real infrastructure',
+      ['terraform', 'apply'], 'forbidden', 'inherit', 'it changes real infrastructure',
     ));
   });
 

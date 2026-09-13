@@ -128,6 +128,23 @@ describe('bridge dispatch', () => {
     expect((lastAnswer() as { gridActive: boolean }).gridActive).toBe(true);
   });
 
+  it('reads the settled value of a form control', async () => {
+    const { dispatch } = mountBridge(null);
+    const select = document.createElement('select');
+    select.dataset.testid = 'rule-sandbox';
+    select.innerHTML = '<option value="inherit">inherit</option><option value="bypass">bypass</option>';
+    select.value = 'bypass';
+    document.body.appendChild(select);
+
+    await dispatch({
+      request_id: 'r-value',
+      action: 'dom_value',
+      payload: { selector: '[data-testid="rule-sandbox"]' },
+    });
+
+    expect(lastAnswer().value).toBe('bypass');
+  });
+
   it('answers with props from the render that committed during the settle', async () => {
     const { dispatch, rerender } = mountBridge('before');
 

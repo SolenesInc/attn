@@ -26,11 +26,15 @@ func TestAutoModeStripFlagsKeepsThePattern(t *testing.T) {
 }
 
 func TestAutoModeStripFlagsDropsAValuedFlagsArgument(t *testing.T) {
-	if got := stripFlags([]string{"--limit", "5"}); len(got) != 0 {
-		t.Fatalf("stripFlags dropped %v, want nothing left", got)
+	for _, args := range [][]string{{"--limit", "5"}, {"--sandbox", "bypass"}} {
+		if got := stripFlags(args); len(got) != 0 {
+			t.Fatalf("stripFlags(%v) = %v, want nothing left", args, got)
+		}
 	}
-	if got := stripFlags([]string{"--limit=5", "extra"}); len(got) != 1 || got[0] != "extra" {
-		t.Fatalf("stripFlags = %v, want only the positional", got)
+	for _, args := range [][]string{{"--limit=5", "extra"}, {"--sandbox=bypass", "extra"}} {
+		if got := stripFlags(args); len(got) != 1 || got[0] != "extra" {
+			t.Fatalf("stripFlags(%v) = %v, want only the positional", args, got)
+		}
 	}
 }
 

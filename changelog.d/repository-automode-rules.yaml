@@ -1,0 +1,3 @@
+kind: added
+area: auto mode
+change: Load checkout-scoped Pi rules from .attn/rules.json, with independent review and sandbox decisions.

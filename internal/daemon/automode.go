@@ -29,7 +29,7 @@ func (d *Daemon) requireAutoModeStore(conn net.Conn) bool {
 	return true
 }
 
-func (d *Daemon) handleAutoModeShow(conn net.Conn, _ *protocol.AutoModeShowMessage) {
+func (d *Daemon) handleAutoModeShow(conn net.Conn, msg *protocol.AutoModeShowMessage) {
 	if !d.requireAutoModeStore(conn) {
 		return
 	}
@@ -38,17 +38,32 @@ func (d *Daemon) handleAutoModeShow(conn net.Conn, _ *protocol.AutoModeShowMessa
 		d.sendError(conn, err.Error())
 		return
 	}
+	globalRules := autoModeRuleInfos(cfg.Rules)
+	repository := automode.RepositoryRules{Rules: []automode.Rule{}}
+	if cwd := strings.TrimSpace(protocol.Deref(msg.Cwd)); cwd != "" {
+		cfg, repository, err = autoModeConfigWithRepositoryRules(cfg, cwd)
+		if err != nil {
+			d.sendError(conn, err.Error())
+			return
+		}
+	}
 	proposals, err := d.store.ListAutoModeProposals(automode.StatePending)
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
+	result := protocol.AutoModeShowResult{
+		Config:          autoModeConfigInfo(cfg),
+		GlobalRules:     globalRules,
+		RepositoryRules: autoModeRuleInfos(repository.Rules),
+		Proposals:       autoModeProposalInfos(proposals),
+	}
+	if repository.Path != "" {
+		result.RepositoryRulesPath = protocol.Ptr(repository.Path)
+	}
 	d.sendAutoModeResponse(conn, protocol.Response{
-		Ok: true,
-		AutomodeShowResult: &protocol.AutoModeShowResult{
-			Config:    autoModeConfigInfo(cfg),
-			Proposals: autoModeProposalInfos(proposals),
-		},
+		Ok:                 true,
+		AutomodeShowResult: &result,
 	})
 }
 
@@ -305,6 +320,7 @@ func autoModeRuleInfos(rules []automode.Rule) []protocol.AutoModeRuleInfo {
 		out = append(out, protocol.AutoModeRuleInfo{
 			Pattern:       pattern,
 			Decision:      rule.Decision,
+			Sandbox:       automode.NormalizeRule(rule).Sandbox,
 			Justification: rule.Justification,
 			Match:         nonNilCommands(rule.Match),
 			NotMatch:      nonNilCommands(rule.NotMatch),

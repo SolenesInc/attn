@@ -314,9 +314,10 @@ export const scenarioCatalog = [
   {
     id: 'automode-environment',
     runnerId: 'AutoModeEnvironment',
-    label: 'Auto mode: a slot written from the pane and from the CLI, and what an unfilled one says',
+    label: 'Auto mode: independent rule controls, environment writes, and unset slots',
     command: ['pnpm', 'run', 'real-app:scenario-automode-environment'],
     timeoutMs: 300_000,
+    allowRealAgents: ['pi'],
   },
   {
     id: 'focus-probe',

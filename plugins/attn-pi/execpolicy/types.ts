@@ -1,10 +1,13 @@
 export type Decision = "allow" | "prompt" | "forbidden";
 
+export type RuleSandbox = "inherit" | "bypass";
+
 export type PatternToken = string | string[];
 
 export type PrefixRule = {
   pattern: PatternToken[];
   decision?: Decision;
+  sandbox?: RuleSandbox;
   justification?: string;
   match?: string[][];
   not_match?: string[][];
@@ -18,7 +21,7 @@ export type SandboxMode = "read-only" | "workspace-write" | "danger-full-access"
 
 export type SandboxPermissions = "use_default" | "require_escalated";
 
-export type RuleMatch = { rule: PrefixRule; command: string[]; decision: Decision };
+export type RuleMatch = { rule: PrefixRule; command: string[]; decision: Decision; sandbox: RuleSandbox };
 
 export type CommandEvaluation = {
   decision: Decision;

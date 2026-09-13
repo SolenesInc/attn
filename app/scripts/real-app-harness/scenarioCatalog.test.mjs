@@ -43,6 +43,10 @@ describe('scenarioCatalog agent tripwire flags', () => {
     expect(allowRealAgentsForRunner('TERMINAL-ANNOTATIONS')).toBeUndefined();
   });
 
+  it('allows only Pi for the Auto Mode guardian model catalog', () => {
+    expect(allowRealAgentsForRunner('AutoModeEnvironment')).toEqual(['pi']);
+  });
+
   it('keeps the resume family armed on the mock agent', () => {
     for (const runnerId of ['CRASH-REC']) {
       expect(allowRealAgentsForRunner(runnerId), runnerId).toBeUndefined();

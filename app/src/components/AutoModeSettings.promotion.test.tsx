@@ -14,6 +14,7 @@ import { useAutoModePolicy } from '../hooks/useAutoModePolicy';
 const rule = (over: Partial<AutoModeRuleInfo> = {}): AutoModeRuleInfo => ({
   pattern: [['git'], ['status']],
   decision: 'allow',
+  sandbox: 'bypass',
   justification: '',
   match: [],
   not_match: [],
@@ -23,6 +24,7 @@ const rule = (over: Partial<AutoModeRuleInfo> = {}): AutoModeRuleInfo => ({
 const shippedRule = rule({
   pattern: [['attn'], ['automode'], ['env']],
   decision: 'forbidden',
+  sandbox: 'inherit',
   justification: 'the environment is what the reviewer reads',
 });
 
@@ -45,7 +47,7 @@ const proposal = (over: Partial<AutoModeProposalInfo> = {}): AutoModeProposalInf
   kind: 'rule',
   target: '',
   value: '{"pattern":["git","push"],"decision":"allow"}',
-  summary: 'allow git push',
+  summary: 'allow, bypass sandbox: git push',
   proposed_by: 'session-a',
   state: 'pending',
   created_at: '2026-08-16T10:00:00Z',
@@ -150,7 +152,7 @@ describe('AutoModeSettings', () => {
 
     const first = screen.getByTestId('automode-proposal-7');
     expect(first).toHaveTextContent('rule');
-    expect(first).toHaveTextContent('allow git push');
+    expect(first).toHaveTextContent('allow, bypass sandbox: git push');
     expect(first).not.toHaveTextContent('{"pattern"');
     expect(first).toHaveTextContent('session-a');
 

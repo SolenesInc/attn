@@ -80,7 +80,19 @@ func splitRepoIdentity(identity string) (host, ownerRepo string, ok bool) {
 }
 
 // The user's slots, with the detected ones filling what they left empty.
-func (d *Daemon) autoModeConfigForSession(cfg automode.Config, cwd string) automode.Config {
+func (d *Daemon) autoModeConfigForSession(
+	cfg automode.Config, cwd string,
+) (automode.Config, automode.RepositoryRules, error) {
 	cfg.Environment = cfg.Environment.WithDetected(d.detectAutoModeEnvironment(cwd))
-	return cfg
+	return autoModeConfigWithRepositoryRules(cfg, cwd)
+}
+
+func autoModeConfigWithRepositoryRules(
+	cfg automode.Config, cwd string,
+) (automode.Config, automode.RepositoryRules, error) {
+	repository, err := automode.LoadRepositoryRules(cwd)
+	if err != nil {
+		return automode.Config{}, automode.RepositoryRules{}, err
+	}
+	return automode.MergeRepositoryRules(cfg, repository), repository, nil
 }

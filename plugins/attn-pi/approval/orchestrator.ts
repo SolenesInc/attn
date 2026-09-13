@@ -126,7 +126,11 @@ export class ApprovalOrchestrator {
     }
 
     if (evaluation.decision === "prompt") {
-      const reviewed = { ...request, ...(evaluation.reason === undefined ? {} : { reason: evaluation.reason }) };
+      const reviewed: CommandApprovalRequest = {
+        ...request,
+        sandboxPermissions: evaluation.bypassSandbox ? "require_escalated" : request.sandboxPermissions,
+        ...(evaluation.reason === undefined ? {} : { reason: evaluation.reason }),
+      };
       this.settle(await this.review(reviewed, ctx), reviewed, ctx);
     }
 
