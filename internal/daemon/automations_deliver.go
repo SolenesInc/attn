@@ -380,6 +380,11 @@ func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() 
 	body := strings.TrimSpace(req.Prompt)
 	var restore func() error
 	if seed, _, readErr := d.readSeed(req.IDs.SeedID); readErr == nil {
+		if continuation {
+			if _, watchErr := d.setSeedWatch(req.IDs.SessionID, seed.ID, true); watchErr != nil {
+				return false, nil, fmt.Errorf("watch automation continuation seed %s: %w", seed.ID, watchErr)
+			}
+		}
 		if seed.TenderSession != req.IDs.SessionID || seed.Status != garden.StatusGrowing {
 			if restore, err = d.activateAutomationContinuationSeed(req.IDs.SeedID, req.IDs.SessionID); err != nil {
 				return false, nil, err

@@ -1580,7 +1580,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 			}
 			occurrences = append(occurrences, cleared)
 		}
-		if garden.Closed(next.Status) {
+		if garden.Closed(next.Status) && !ask.SuppressNotification {
 			read, readErr := d.readGardenTo(0)
 			if readErr != nil {
 				return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, readErr

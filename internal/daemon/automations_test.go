@@ -1550,7 +1550,7 @@ func enrollHomeForTest(t *testing.T, d *Daemon) {
 	}
 }
 
-func TestFailedContinuationDeliveryRestoresClosedSeed(t *testing.T) {
+func TestFailedContinuationDeliveryRestoresClosedSeedAndRingsItsSession(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	t.Cleanup(d.stopEventBus)
 	d.ensureGardenCollections()
@@ -1590,6 +1590,44 @@ func TestFailedContinuationDeliveryRestoresClosedSeed(t *testing.T) {
 	seed, _, err := d.readSeed(second.SeedID)
 	if err != nil || seed.Status != garden.StatusHarvested || seed.Reason != "first check complete" {
 		t.Fatalf("seed=%#v err=%v, want harvested with its original reason restored", seed, err)
+	}
+	watching, err := d.store.GardenSeedWatching(second.SessionID, second.SeedID)
+	if err != nil || !watching {
+		t.Fatalf("continuation watch=%v err=%v, want its durable seed watch", watching, err)
+	}
+	if err := d.recordAutomationRunSeedOutcome(second, "continuation failed after rollback"); err != nil {
+		t.Fatal(err)
+	}
+	assertOneSeedBell(t, d, second.SessionID, second.SeedID, "note.added")
+}
+
+func TestAutomationContinuationRollbackDoesNotRingAnUnchangedDependent(t *testing.T) {
+	d := newEnrolledDaemon(t, "")
+	d.ensureGardenCollections()
+	addGardenSession(t, d, "session-1")
+	addGardenSession(t, d, "session-2")
+	blocker := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("session-1"), Title: "Run the automation"})
+	dependent := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("session-2"), Title: "Use its result"})
+	mustLink(t, d, blocker.ID, garden.EdgeBlocks, dependent.ID)
+	move(t, d, "session-1", blocker.ID, garden.VerbTend, "", "")
+	move(t, d, "session-2", dependent.ID, garden.VerbTend, "", "")
+	move(t, d, "session-1", blocker.ID, garden.VerbHarvest, "complete", "")
+	if _, _, err := d.store.ReadGardenSeedMailboxItems("session-2", dependent.ID, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	restore, err := d.activateAutomationContinuationSeed(blocker.ID, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restore == nil {
+		t.Fatal("closed continuation did not provide a rollback")
+	}
+	if err := restore(); err != nil {
+		t.Fatal(err)
+	}
+	if queued := queuedSeedBells(t, d, "session-2"); len(queued) != 0 {
+		t.Fatalf("rollback rang an unchanged dependent: %q", queued)
 	}
 }
 
