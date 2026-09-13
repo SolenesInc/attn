@@ -90,7 +90,7 @@ describe('the shim a real agent exec lands in', () => {
     ]);
   });
 
-  it('lets only pi pass its non-model probes through to the real binary without a ledger entry', () => {
+  it('runs Pi version but answers only its exact catalog request without the real binary', () => {
     const env = freshEnv();
     const tripwire = armAgentTripwire({ scenarioId: 'TR-201', runDir, env, log: () => {} });
     const realDir = path.join(runDir, 'real-bin');
@@ -107,11 +107,17 @@ describe('the shim a real agent exec lands in', () => {
     const catalogArgs = ['--mode', 'rpc', '--offline', '--no-session', '--no-tools', '--no-skills', '--no-prompt-templates', '--no-context-files'];
     const catalogRequest = '{"id":"d2382ae5-48ef-4de0-b9c7-4fdf09af5608","type":"get_available_models"}';
     const catalog = spawnSync(path.join(tripwire.dir, 'pi'), catalogArgs, {
-      encoding: 'utf8', env: probeEnv,
+      encoding: 'utf8', env,
       input: `${catalogRequest}\n{"id":"d2382ae5-48ef-4de0-b9c7-4fdf09af5608","type":"prompt"}\n`,
     });
     expect(catalog.status).toBe(0);
-    expect(catalog.stdout.trim().split('\n')).toEqual([String(catalog.pid), catalogArgs.join(' '), catalogRequest]);
+    expect(JSON.parse(catalog.stdout)).toEqual({
+      id: 'd2382ae5-48ef-4de0-b9c7-4fdf09af5608',
+      type: 'response',
+      command: 'get_available_models',
+      success: true,
+      data: { models: [] },
+    });
 
     const modelRequest = spawnSync(path.join(tripwire.dir, 'pi'), catalogArgs, {
       encoding: 'utf8', env: probeEnv,

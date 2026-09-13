@@ -85,13 +85,12 @@ export function shimSource(name) {
   exit 127
 fi
 if ${PI_CATALOG_ARGS.map((arg, index) => `[ "$${index + 1}" = "${arg}" ]`).join(' && ')} && [ "$#" -eq ${PI_CATALOG_ARGS.length} ]; then
-  rest=; IFS=:; for entry in $PATH; do [ "$entry" = "$dir" ] || rest="\${rest:+$rest:}$entry"; done; unset IFS
-  real=$(PATH="$rest" command -v "${name}" 2>/dev/null) || exit 127
   IFS= read -r request || request=
   if printf '%s\n' "$request" | grep -Eq '^\\{"id":"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}","type":"get_available_models"\\}$'; then
-    exec "$real" "$@" <<ATTN_PI_CATALOG_REQUEST
-$request
-ATTN_PI_CATALOG_REQUEST
+    id=\${request#'{"id":"'}
+    id=\${id%'","type":"get_available_models"}'}
+    printf '{"id":"%s","type":"response","command":"get_available_models","success":true,"data":{"models":[]}}\n' "$id"
+    exit 0
   fi
 fi
 `
