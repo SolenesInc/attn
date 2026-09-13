@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -182,19 +183,23 @@ var wireFixtures = map[string]wireFixture{
 		subject: (*wireWorld).workspace,
 	},
 
-	FactGardenPlanted:               {events: []string{protocol.EventGardenSeedsUpdated}},
-	FactGardenBodyEdited:            {events: []string{protocol.EventGardenSeedsUpdated}},
-	FactGardenResumeIdentityChanged: {events: []string{protocol.EventGardenSeedsUpdated}},
-	FactGardenTended:                {events: []string{protocol.EventGardenSeedsUpdated}},
-	FactGardenParked:                {events: []string{protocol.EventGardenSeedsUpdated}},
-	FactGardenHarvested:             {events: []string{protocol.EventGardenSeedsUpdated}},
-	FactGardenWithered:              {events: []string{protocol.EventGardenSeedsUpdated}},
-	FactGardenReplanted:             {events: []string{protocol.EventGardenSeedsUpdated}},
-	FactGardenNoted:                 {events: []string{protocol.EventGardenSeedsUpdated}},
-	FactGardenArtifactChanged:       {events: []string{protocol.EventGardenSeedsUpdated}},
-	FactGardenLinked:                {events: []string{protocol.EventGardenSeedsUpdated}},
-	FactGardenUnlinked:              {events: []string{protocol.EventGardenSeedsUpdated}},
-	FactGardenHarvestWhenChanged:    {events: []string{protocol.EventGardenSeedsUpdated}},
+	seedEvents.NamePlanted:                  {events: []string{protocol.EventGardenSeedsUpdated}},
+	seedEvents.NameTended:                   {events: []string{protocol.EventGardenSeedsUpdated}},
+	seedEvents.NameParked:                   {events: []string{protocol.EventGardenSeedsUpdated}},
+	seedEvents.NameHarvested:                {events: []string{protocol.EventGardenSeedsUpdated}},
+	seedEvents.NameWithered:                 {events: []string{protocol.EventGardenSeedsUpdated}},
+	seedEvents.NameReplanted:                {events: []string{protocol.EventGardenSeedsUpdated}},
+	seedEvents.NameBodyEdited:               {events: []string{protocol.EventGardenSeedsUpdated}},
+	seedEvents.NameNoteAdded:                {events: []string{protocol.EventGardenSeedsUpdated}},
+	seedEvents.NameArtifactChanged:          {events: []string{protocol.EventGardenSeedsUpdated}},
+	seedEvents.NameResumeIdentityConfigured: {events: []string{protocol.EventGardenSeedsUpdated}},
+	seedEvents.NameResumeIdentityCleared:    {events: []string{protocol.EventGardenSeedsUpdated}},
+	seedEvents.NameEdgeLinked:               {events: []string{protocol.EventGardenSeedsUpdated}},
+	seedEvents.NameEdgeUnlinked:             {events: []string{protocol.EventGardenSeedsUpdated}},
+	seedEvents.NameHarvestWhenConfigured:    {events: []string{protocol.EventGardenSeedsUpdated}},
+	seedEvents.NameHarvestWhenCleared:       {events: []string{protocol.EventGardenSeedsUpdated}},
+	seedEvents.NameUnblocked:                {events: []string{protocol.EventGardenSeedsUpdated}},
+	seedEvents.NameWorkReady:                {events: []string{protocol.EventGardenSeedsUpdated}},
 	FactGardenReviewChanged: {
 		events:  []string{protocol.EventGardenReviewUpdated},
 		subject: (*wireWorld).gardenReview,
@@ -393,7 +398,7 @@ func TestEveryProjectedFactReachesTheWire(t *testing.T) {
 
 	for fact := range wireFixtures {
 		if !factIsDeclared(facts, fact) {
-			t.Errorf("wireFixtures has an entry for %q, which is not a declared fact constant in bus.go", fact)
+			t.Errorf("wireFixtures has an entry for %q, which is not declared in bus.go or the Garden event catalog", fact)
 		}
 	}
 	for fact := range factsWithoutWire {
@@ -511,8 +516,8 @@ func factIsDeclared(facts []string, fact string) bool {
 	return false
 }
 
-// Parses the fact vocabulary out of bus.go, so the only way to add a fact this
-// test does not see is to stop declaring it as one.
+// Parses the general fact vocabulary out of bus.go and joins the closed Garden
+// event catalog, so every production event projected to the wire is covered.
 func declaredFactNames(t *testing.T) []string {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -550,6 +555,7 @@ func declaredFactNames(t *testing.T) []string {
 	if len(names) == 0 {
 		t.Fatal("no Fact… constants found in bus.go — this test would pass vacuously")
 	}
+	names = append(names, gardenSeedEventModel.EventNames()...)
 	sort.Strings(names)
 	return names
 }

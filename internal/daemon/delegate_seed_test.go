@@ -12,6 +12,7 @@ import (
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -127,6 +128,73 @@ func TestAcceptedParentSnapshotSurvivesSourceDispatchChanges(t *testing.T) {
 	}
 	if len(child.Edges) != 1 || child.Edges[0].Kind != garden.EdgePartOf || child.Edges[0].To != parent.ID {
 		t.Fatalf("child edges = %+v, want accepted parent %s", child.Edges, parent.ID)
+	}
+}
+
+func TestDelegationAssignmentExcludesThePlannerAndDirectlyPromptedDelegate(t *testing.T) {
+	tests := []struct {
+		name string
+		bind func(t *testing.T, d *Daemon, plannerSessionID, workerSessionID string, parent protocol.Seed) string
+	}{
+		{
+			name: "reserved atomic assignment",
+			bind: func(t *testing.T, d *Daemon, plannerSessionID, workerSessionID string, parent protocol.Seed) string {
+				t.Helper()
+				seedID, err := d.bindDelegationAssignment(
+					"op-notification-exclusions", workerSessionID, plannerSessionID, parent.ID,
+					"Do the child work.", "Child work", "s-par123", t.TempDir(), "codex", false, true,
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return seedID
+			},
+		},
+		{
+			name: "legacy planted assignment",
+			bind: func(t *testing.T, d *Daemon, plannerSessionID, workerSessionID string, parent protocol.Seed) string {
+				t.Helper()
+				if err := d.recordGardenDispatch(plannerSessionID, parent.ID, "", d.store.Get(plannerSessionID).Directory, "codex", false); err != nil {
+					t.Fatal(err)
+				}
+				seed, err := d.plantDelegatedSeed(workerSessionID, plannerSessionID, "Do the child work.", "Child work")
+				if err != nil {
+					t.Fatal(err)
+				}
+				return seed.ID
+			},
+		},
+		{
+			name: "legacy existing assignment",
+			bind: func(t *testing.T, d *Daemon, plannerSessionID, workerSessionID string, parent protocol.Seed) string {
+				t.Helper()
+				seed := plant(t, d, protocol.SeedPlantMessage{Title: "Existing child", PartOf: protocol.Ptr(parent.ID)})
+				if err := d.tendDispatchedSeed(workerSessionID, plannerSessionID, seed.ID); err != nil {
+					t.Fatal(err)
+				}
+				return seed.ID
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			d, _, plannerSessionID := newGardenDelegationDaemon(t)
+			addGardenSession(t, d, "worker")
+			addGardenSession(t, d, "observer")
+			parent := plantForDelegation(t, d, plannerSessionID, "Parent plot")
+			watchSeed(t, d, plannerSessionID, parent.ID, false)
+			watchSeed(t, d, "observer", parent.ID, false)
+
+			seedID := test.bind(t, d, plannerSessionID, "worker", parent)
+
+			for _, sessionID := range []string{plannerSessionID, "worker"} {
+				items, err := d.store.UnreadGardenSeedMailboxItems(sessionID)
+				if err != nil || len(items) != 0 {
+					t.Fatalf("excluded session %s received delegation bell: %+v, %v", sessionID, items, err)
+				}
+			}
+			assertOneSeedBell(t, d, "observer", seedID, "tended")
+		})
 	}
 }
 
@@ -544,7 +612,7 @@ func TestAgentMsgToAnUntendedSeedRefusesByName(t *testing.T) {
 func awaitSeedNotes(t *testing.T, d *Daemon, seedID string, want int, work func()) {
 	t.Helper()
 	landed := make(chan struct{}, want+4)
-	unsubscribe := d.eventBus.Subscribe(bus.Filter{FactGardenNoted}, func(ev bus.Event) {
+	unsubscribe := d.eventBus.Subscribe(bus.Filter{seedEvents.NameNoteAdded}, func(ev bus.Event) {
 		if ev.Subject == seedID {
 			landed <- struct{}{}
 		}

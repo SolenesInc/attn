@@ -1052,6 +1052,14 @@ func (d *Daemon) recoverLegacyTicketSeeds(ctx context.Context, job *jobs.Job, ru
 			if err != nil {
 				return err
 			}
+			domainNotes := make([]garden.Note, len(notes))
+			for i := range notes {
+				domainNotes[i] = garden.Note{ID: notes[i].ID, Seed: seedID}
+			}
+			semanticEvents, err := recoveredGardenSeedEvents(seed, domainNotes)
+			if err != nil {
+				return err
+			}
 			handover := store.TicketSeedHandover{
 				TicketID: ticket.ID, SeedID: seedID, SeedBody: seedBody,
 				SeedFact:  documentChangedFact(garden.Namespace, garden.CollectionSeeds, seedID, false),
@@ -1060,6 +1068,7 @@ func (d *Daemon) recoverLegacyTicketSeeds(ctx context.Context, job *jobs.Job, ru
 				Notes: notes, SessionIDs: []string{ticket.Assignee, ticket.ResumeSessionID},
 				HandoverKind: sourceKind, EvidenceFingerprint: fingerprint,
 				OriginalTicketStatus: ticket.Status, CreatedAt: run.RecoveryAt,
+				Events: semanticEvents,
 			}
 			if err := withLegacyRecoveryCommit(job, func() error {
 				var linkErr error
@@ -1078,8 +1087,6 @@ func (d *Daemon) recoverLegacyTicketSeeds(ctx context.Context, job *jobs.Job, ru
 		}
 		switch linked.Result {
 		case "created":
-			d.publishFact(FactGardenPlanted, linked.SeedID, nil)
-			d.publishFact(FactGardenNoted, linked.SeedID, nil)
 		case "ambiguous_lineage":
 			result.Counts.Ambiguous++
 			result.Warnings = append(result.Warnings, fmt.Sprintf("ticket %s has several machine-proven Garden seeds; none was changed", ticket.ID))

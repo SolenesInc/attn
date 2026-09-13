@@ -1303,11 +1303,67 @@ func (s *Store) ListPendingAutomationRuns() ([]AutomationRun, error) {
 	}
 	return out, rows.Err()
 }
-func (s *Store) MarkAutomationRunDelivered(id, resolved string, now time.Time) error {
+func (s *Store) MarkAutomationRunDeliveredWithEvent(
+	id, resolved string, event BusEvent, now time.Time,
+) (int64, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, e := s.db.Exec(`UPDATE automation_runs SET state=?,last_error='',resolved_location_json=?,updated_at=?,delivered_at=? WHERE id=?`, AutomationRunStateDelivered, resolved, formatTicketTime(now), formatTicketTime(now), id)
-	return e
+	if s.db == nil {
+		return 0, false, errors.New("automation persistence unavailable")
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	stamp := formatTicketTime(now)
+	result, err := tx.Exec(`
+		UPDATE automation_runs
+		SET state=?, last_error='', resolved_location_json=?, updated_at=?, delivered_at=?
+		WHERE id=? AND state=?
+	`, AutomationRunStateDelivered, resolved, stamp, stamp, id, AutomationRunStatePending)
+	if err != nil {
+		return 0, false, err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return 0, false, err
+	}
+	if changed == 0 {
+		var state string
+		if err := tx.QueryRow(`SELECT state FROM automation_runs WHERE id=?`, id).Scan(&state); err != nil {
+			return 0, false, err
+		}
+		if state != AutomationRunStateDelivered {
+			return 0, false, fmt.Errorf("automation run %s is %s, not pending", id, state)
+		}
+		var seq int64
+		err := tx.QueryRow(`
+			SELECT event_seq FROM garden_seed_event_sources
+			WHERE source_kind='automation_run' AND source_id=? AND event_name=?
+		`, id, event.Name).Scan(&seq)
+		if err == sql.ErrNoRows {
+			return 0, false, fmt.Errorf("automation run %s is delivered without its %s event", id, event.Name)
+		}
+		if err != nil {
+			return 0, false, err
+		}
+		return seq, false, tx.Commit()
+	}
+	seq, err := appendBusEventWith(tx, event, now)
+	if err != nil {
+		return 0, false, err
+	}
+	if _, err := tx.Exec(`
+		INSERT INTO garden_seed_event_sources(source_kind, source_id, event_name, event_seq)
+		VALUES ('automation_run', ?, ?, ?)
+	`, id, event.Name, seq); err != nil {
+		return 0, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return seq, true, nil
 }
 func (s *Store) MarkAutomationRunFailed(id, message string, now time.Time) error {
 	s.mu.Lock()
@@ -1404,6 +1460,9 @@ func (s *Store) DeleteAutomationRun(runID string) error {
 		return tx.Commit()
 	}
 	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM garden_seed_event_sources WHERE source_kind='automation_run' AND source_id=?`, runID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM automation_runs WHERE id=?`, runID); err != nil {

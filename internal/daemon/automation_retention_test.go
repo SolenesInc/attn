@@ -31,7 +31,7 @@ func claimTerminalAutomationRun(t *testing.T, s *store.Store, def *store.Automat
 	if err != nil || !created {
 		t.Fatalf("claim %s created=%v err=%v", requestID, created, err)
 	}
-	if err := s.MarkAutomationRunDelivered(run.ID, resolvedLocationJSON, observedAt); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, run.ID, resolvedLocationJSON, observedAt); err != nil {
 		t.Fatal(err)
 	}
 	reloaded, err := s.GetAutomationRun(run.ID)

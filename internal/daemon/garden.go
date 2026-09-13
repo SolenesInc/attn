@@ -11,6 +11,7 @@ import (
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -59,14 +60,52 @@ func (d *Daemon) plantSeed(schema docstore.CollectionSchema, seed garden.Seed) (
 	}
 	expected := docstore.ExpectAbsent
 	fact := documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false)
-	written, err := d.store.CommitDocumentWrite(store.DocumentWrite{
+	occurrences := make([]seedEvents.Occurrence, 0, len(seed.Edges)+3)
+	planted, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.Planted, seed.ID, seedEvents.CausePayload{
+		CausedBySessionID: seed.PlanterSession,
+	})
+	if err != nil {
+		return docstore.Document{}, err
+	}
+	occurrences = append(occurrences, planted)
+	if seed.Status == garden.StatusGrowing {
+		tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, seed.PlanterSession, seed.TenderSession)
+		if err != nil {
+			return docstore.Document{}, err
+		}
+		occurrences = append(occurrences, tended)
+	}
+	if seed.ResumeSessionID != "" {
+		configured, err := seedEvents.Occur(
+			gardenSeedEventModel, gardenSeedEventVocabulary.ResumeIdentityConfigured, seed.ID,
+			seedEvents.CausePayload{CausedBySessionID: seed.PlanterSession},
+		)
+		if err != nil {
+			return docstore.Document{}, err
+		}
+		occurrences = append(occurrences, configured)
+	}
+	for _, edge := range seed.Edges {
+		linked, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.EdgeLinked, seed.ID, seedEvents.EdgePayload{
+			EdgeKind: string(edge.Kind), TargetSeedID: edge.To, CausedBySessionID: seed.PlanterSession,
+		})
+		if err != nil {
+			return docstore.Document{}, err
+		}
+		occurrences = append(occurrences, linked)
+	}
+	events, err := encodeGardenSeedEvents(occurrences...)
+	if err != nil {
+		return docstore.Document{}, err
+	}
+	written, eventSeqs, err := d.store.CommitDocumentWriteWithEvents(store.DocumentWrite{
 		Schema: schema, ID: seed.ID, Body: body, Expected: &expected,
-	}, fact, d.gardenTime())
+	}, fact, events, d.gardenTime())
 	if err != nil {
 		return docstore.Document{}, err
 	}
 	d.announceCommittedWrite(fact, written.Seq)
-	d.publishFact(FactGardenPlanted, seed.ID, nil)
+	announceGardenSeedEvents(d, eventSeqs)
 
 	doc, found, err := d.store.GetDocument(schema, seed.ID)
 	if err != nil || !found {
@@ -75,20 +114,26 @@ func (d *Daemon) plantSeed(schema docstore.CollectionSchema, seed garden.Seed) (
 	return *doc, nil
 }
 
-func (d *Daemon) writeSeed(schema docstore.CollectionSchema, seed garden.Seed, expected int64, fact string) (docstore.Document, error) {
+func (d *Daemon) writeSeedWithEvents(
+	schema docstore.CollectionSchema, seed garden.Seed, expected int64, occurrences ...seedEvents.Occurrence,
+) (docstore.Document, error) {
 	body, err := seed.Encode()
 	if err != nil {
 		return docstore.Document{}, err
 	}
 	changed := documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false)
-	written, err := d.store.CommitDocumentWrite(store.DocumentWrite{
+	events, err := encodeGardenSeedEvents(occurrences...)
+	if err != nil {
+		return docstore.Document{}, err
+	}
+	written, eventSeqs, err := d.store.CommitDocumentWriteWithEvents(store.DocumentWrite{
 		Schema: schema, ID: seed.ID, Body: body, Expected: &expected,
-	}, changed, d.gardenTime())
+	}, changed, events, d.gardenTime())
 	if err != nil {
 		return docstore.Document{}, err
 	}
 	d.announceCommittedWrite(changed, written.Seq)
-	d.publishFact(fact, seed.ID, nil)
+	announceGardenSeedEvents(d, eventSeqs)
 
 	doc, found, err := d.store.GetDocument(schema, seed.ID)
 	if err != nil || !found {
@@ -745,7 +790,7 @@ func (d *Daemon) handleSeedSetResume(conn net.Conn, msg *protocol.SeedSetResumeM
 	})
 }
 
-func (d *Daemon) applySeedResumeIdentity(id, resumeID, cwd, agent string) (garden.Seed, docstore.Document, error) {
+func (d *Daemon) applySeedResumeIdentity(id, resumeID, cwd, agent string, causedBy ...string) (garden.Seed, docstore.Document, error) {
 	schema, err := d.seedsCollection()
 	if err != nil {
 		return garden.Seed{}, docstore.Document{}, err
@@ -757,7 +802,17 @@ func (d *Daemon) applySeedResumeIdentity(id, resumeID, cwd, agent string) (garde
 			return garden.Seed{}, docstore.Document{}, err
 		}
 		seed.ResumeSessionID, seed.ResumeCwd, seed.ResumeAgent = resumeID, cwd, agent
-		written, err := d.writeSeed(*schema, seed, doc.Rev, FactGardenResumeIdentityChanged)
+		event := gardenSeedEventVocabulary.ResumeIdentityConfigured
+		if resumeID == "" {
+			event = gardenSeedEventVocabulary.ResumeIdentityCleared
+		}
+		occurrence, err := seedEvents.Occur(gardenSeedEventModel, event, seed.ID, seedEvents.CausePayload{
+			CausedBySessionID: firstString(causedBy),
+		})
+		if err != nil {
+			return garden.Seed{}, docstore.Document{}, err
+		}
+		written, err := d.writeSeedWithEvents(*schema, seed, doc.Rev, occurrence)
 		if err == nil {
 			return seed, written, nil
 		}
@@ -770,7 +825,7 @@ func (d *Daemon) applySeedResumeIdentity(id, resumeID, cwd, agent string) (garde
 		id, attempts, id)
 }
 
-func (d *Daemon) applySeedBodyEdit(id, body string) (garden.Seed, docstore.Document, error) {
+func (d *Daemon) applySeedBodyEdit(id, body string, causedBy ...string) (garden.Seed, docstore.Document, error) {
 	schema, err := d.seedsCollection()
 	if err != nil {
 		return garden.Seed{}, docstore.Document{}, err
@@ -782,7 +837,13 @@ func (d *Daemon) applySeedBodyEdit(id, body string) (garden.Seed, docstore.Docum
 			return garden.Seed{}, docstore.Document{}, err
 		}
 		seed.Body = body
-		written, err := d.writeSeed(*schema, seed, doc.Rev, FactGardenBodyEdited)
+		occurrence, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.BodyEdited, seed.ID, seedEvents.CausePayload{
+			CausedBySessionID: firstString(causedBy),
+		})
+		if err != nil {
+			return garden.Seed{}, docstore.Document{}, err
+		}
+		written, err := d.writeSeedWithEvents(*schema, seed, doc.Rev, occurrence)
 		if err == nil {
 			return seed, written, nil
 		}
@@ -928,12 +989,24 @@ func (d *Daemon) handleSeedLink(conn net.Conn, msg *protocol.SeedLinkMessage) {
 			})
 			return
 		}
-		fact := FactGardenLinked
+		var occurrence seedEvents.Occurrence
+		payload := seedEvents.EdgePayload{
+			EdgeKind: string(kind), TargetSeedID: to,
+		}
 		if verb == "unlink" {
-			fact = FactGardenUnlinked
+			occurrence, err = seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.EdgeUnlinked, next.ID, payload)
+		} else {
+			occurrence, err = seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.EdgeLinked, next.ID, payload)
+		}
+		if err != nil {
+			d.sendGardenError(conn, verb, err)
+			return
 		}
 		d.gardenWatchMu.Lock()
-		doc, err := d.writeSeed(*schema, next, read.docs[next.ID].Rev, fact)
+		doc, err := d.writeSeedWithEvents(*schema, next, read.docs[next.ID].Rev, occurrence)
+		if err == nil {
+			err = d.discardAllIneligibleGardenSeedBellsLocked()
+		}
 		d.gardenWatchMu.Unlock()
 		if err != nil {
 			if docstore.IsConflict(err) {
@@ -1306,14 +1379,6 @@ func (d *Daemon) gardenPrime(sessionID string) (*protocol.SeedReadyResult, error
 	return d.gardenReadyResult(crown)
 }
 
-var gardenFacts = map[garden.Verb]string{
-	garden.VerbTend:    FactGardenTended,
-	garden.VerbPark:    FactGardenParked,
-	garden.VerbHarvest: FactGardenHarvested,
-	garden.VerbWither:  FactGardenWithered,
-	garden.VerbReplant: FactGardenReplanted,
-}
-
 func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitionMessage) {
 	verb, err := garden.ParseVerb(msg.Verb)
 	if err != nil {
@@ -1324,21 +1389,7 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 		d.sendGardenError(conn, string(verb), err)
 		return
 	}
-	sessionID := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
-	memberName := strings.TrimSpace(protocol.Deref(msg.Member))
-	actorSession := sessionID
-	if memberName != "" {
-		actorSession = ""
-	}
-	actor := garden.Tender{
-		Session: actorSession,
-		Member:  d.resolveTenderMember(memberName, sessionID),
-	}
-	ask := garden.Ask{
-		Actor:  actor,
-		Reason: protocol.Deref(msg.Reason),
-		Force:  protocol.Deref(msg.Force),
-	}
+	ask, sessionID := d.seedTransitionAsk(msg)
 	if harvestWhenRequested(msg) {
 		seed, doc, err := d.applyHarvestWhenRequest(msg, verb, ask, sessionID)
 		if err != nil {
@@ -1366,16 +1417,32 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 	if verb == garden.VerbTend {
 		result.Handoff = d.gardenHandoff(seed.ID)
 	}
-	var unblocked []garden.Seed
 	if garden.Closed(seed.Status) {
-		unblocked, result.Unblocked = d.seedUnblocked(seed.ID)
+		_, result.Unblocked = d.seedUnblocked(seed.ID)
 	}
 	// Mirrored before the response: a caller that harvests and then reads the board
 	// must not see the ticket mid-flight.
 	d.mirrorSeedMoveOntoTicket(sessionID, seed.ID, verb, protocol.Deref(msg.Reason))
-	d.ringSeedActivity(seed.ID, gardenRingEvents[verb], sessionID)
-	d.ringSeedUnblocked(unblocked, sessionID)
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedTransitionResult: result})
+}
+
+func (d *Daemon) seedTransitionAsk(msg *protocol.SeedTransitionMessage) (garden.Ask, string) {
+	sessionID := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
+	memberName := strings.TrimSpace(protocol.Deref(msg.Member))
+	actorSession := sessionID
+	if memberName != "" {
+		actorSession = ""
+	}
+	actor := garden.Tender{
+		Session: actorSession,
+		Member:  d.resolveTenderMember(memberName, sessionID),
+	}
+	return garden.Ask{
+		Actor:        actor,
+		Reason:       protocol.Deref(msg.Reason),
+		Force:        protocol.Deref(msg.Force),
+		CauseSession: sessionID,
+	}, sessionID
 }
 
 func (d *Daemon) seedTransitionWire(seed garden.Seed, doc docstore.Document) protocol.Seed {
@@ -1455,10 +1522,8 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 	if err != nil {
 		return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
 	}
-	fact, ok := gardenFacts[verb]
-	if !ok {
-		return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf("no bus fact is declared for %q", verb)
-	}
+	d.gardenWatchMu.Lock()
+	defer d.gardenWatchMu.Unlock()
 	// A conflict means the seed moved between read and write; re-reading turns a
 	// lost race into the honest answer. Tripwire: two agents contending is one retry.
 	const attempts = 3
@@ -1494,8 +1559,55 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 		if d.beforeSeedMoveWrite != nil {
 			d.beforeSeedMoveWrite(id)
 		}
+		cause := strings.TrimSpace(ask.CauseSession)
+		if cause == "" {
+			cause = strings.TrimSpace(ask.Actor.Session)
+		}
+		lifecycleOccurrence := gardenSeedLifecycleOccurrence
+		if ask.SuppressNotification {
+			lifecycleOccurrence = quietGardenSeedLifecycleOccurrence
+		}
+		lifecycle, err := lifecycleOccurrence(verb, next.ID, cause, ask.DirectlyNotifiedSession)
+		if err != nil {
+			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
+		}
+		occurrences := []seedEvents.Occurrence{lifecycle}
+		if seed.HarvestWhen != nil && next.HarvestWhen == nil {
+			cleared, eventErr := seedEvents.Occur(
+				gardenSeedEventModel, gardenSeedEventVocabulary.HarvestWhenCleared, next.ID,
+				seedEvents.HarvestWhenPayload{
+					PullRequestID: seed.HarvestWhen.PullRequest, CausedBySessionID: cause,
+				},
+			)
+			if eventErr != nil {
+				return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, eventErr
+			}
+			occurrences = append(occurrences, cleared)
+		}
+		if garden.Closed(next.Status) && !ask.SuppressNotification {
+			read, readErr := d.readGardenTo(0)
+			if readErr != nil {
+				return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, readErr
+			}
+			for i := range read.seeds {
+				if read.seeds[i].ID == next.ID {
+					read.seeds[i] = next
+					break
+				}
+			}
+			for _, freed := range garden.Unblocks(read.seeds, next.ID) {
+				unblocked, eventErr := seedEvents.Occur(
+					gardenSeedEventModel, gardenSeedEventVocabulary.Unblocked, freed.ID,
+					seedEvents.UnblockedPayload{BlockerSeedID: next.ID, CausedBySessionID: cause},
+				)
+				if eventErr != nil {
+					return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, eventErr
+				}
+				occurrences = append(occurrences, unblocked)
+			}
+		}
 		if displaced == nil && comment == "" {
-			written, err = d.writeSeed(*schema, next, doc.Rev, fact)
+			written, err = d.writeSeedWithEvents(*schema, next, doc.Rev, occurrences...)
 		} else {
 			var entries []garden.Note
 			auditIndex, commentIndex := -1, -1
@@ -1515,7 +1627,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 				})
 			}
 			var writtenNotes []protocol.SeedNote
-			written, writtenNotes, err = d.writeSeedMoveWithNotes(*schema, next, doc.Rev, fact, entries)
+			written, writtenNotes, err = d.writeSeedMoveWithNotes(*schema, next, doc.Rev, occurrences, entries)
 			if err == nil {
 				if auditIndex >= 0 {
 					notes.Audit = &writtenNotes[auditIndex]
@@ -1526,6 +1638,10 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 			}
 		}
 		if err == nil {
+			if err := d.discardAllIneligibleGardenSeedBellsLocked(); err != nil {
+				return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(
+					"%s succeeded, but stale pending Garden updates could not be cleared: %w", verb, err)
+			}
 			return next, written, notes, nil
 		}
 		if !docstore.IsConflict(err) {
@@ -1554,7 +1670,7 @@ func (d *Daemon) writeSeedMoveWithNotes(
 	seedSchema docstore.CollectionSchema,
 	seed garden.Seed,
 	expected int64,
-	transitionFact string,
+	occurrences []seedEvents.Occurrence,
 	notes []garden.Note,
 ) (docstore.Document, []protocol.SeedNote, error) {
 	noteSchema, err := d.notesCollection()
@@ -1579,6 +1695,7 @@ func (d *Daemon) writeSeedMoveWithNotes(
 		}
 		noteBodies := make([][]byte, len(notes))
 		noteFacts := make([]store.BusEvent, len(notes))
+		eventOccurrences := append([]seedEvents.Occurrence(nil), occurrences...)
 		for i := range notes {
 			notes[i].ID, err = d.mintNoteID()
 			if err != nil {
@@ -1590,6 +1707,16 @@ func (d *Daemon) writeSeedMoveWithNotes(
 			}
 			noteExpected := docstore.ExpectAbsent
 			noteFacts[i] = documentChangedFact(garden.Namespace, garden.CollectionNotes, notes[i].ID, false)
+			noteAdded, eventErr := seedEvents.Occur(
+				gardenSeedEventModel, gardenSeedEventVocabulary.NoteAdded, seed.ID,
+				seedEvents.NoteAddedPayload{
+					NoteID: notes[i].ID, AttentionRequested: false, CausedBySessionID: notes[i].AuthorSession,
+				},
+			)
+			if eventErr != nil {
+				return docstore.Document{}, nil, eventErr
+			}
+			eventOccurrences = append(eventOccurrences, noteAdded)
 			commits = append(commits, store.DocumentCommit{
 				Write: store.DocumentWrite{
 					Schema: *noteSchema, ID: notes[i].ID, Body: noteBodies[i], Expected: &noteExpected,
@@ -1597,8 +1724,12 @@ func (d *Daemon) writeSeedMoveWithNotes(
 				Fact: noteFacts[i],
 			})
 		}
+		semanticEvents, eventErr := encodeGardenSeedEvents(eventOccurrences...)
+		if eventErr != nil {
+			return docstore.Document{}, nil, eventErr
+		}
 		now := d.gardenTime()
-		written, err := d.store.CommitDocumentWrites(commits, now)
+		written, eventSeqs, err := d.store.CommitDocumentWritesWithEvents(commits, semanticEvents, now)
 		if err != nil {
 			var conflict *docstore.ConflictError
 			if errors.As(err, &conflict) && conflict.Namespace == garden.Namespace &&
@@ -1610,11 +1741,10 @@ func (d *Daemon) writeSeedMoveWithNotes(
 		}
 
 		d.announceCommittedWrite(seedChanged, written[0].Seq)
-		d.publishFact(transitionFact, seed.ID, nil)
 		for i := range notes {
 			d.announceCommittedWrite(noteFacts[i], written[i+1].Seq)
-			d.publishFact(FactGardenNoted, seed.ID, nil)
 		}
+		announceGardenSeedEvents(d, eventSeqs)
 
 		seedDoc, found, readErr := d.store.GetDocument(seedSchema, seed.ID)
 		if readErr != nil || !found {
@@ -1658,15 +1788,14 @@ func (d *Daemon) handleSeedNote(conn net.Conn, msg *protocol.SeedNoteMessage) {
 		protocol.Deref(msg.Member),
 		protocol.Deref(msg.Kind),
 		artifactFromProtocol(msg.Artifact),
+		protocol.Deref(msg.Ring),
+		authorSession,
 	)
 	if err != nil {
 		d.sendGardenError(conn, "note", err)
 		return
 	}
 	d.mirrorSeedNoteOntoTicket(authorSession, msg.SeedID, note.Body)
-	if protocol.Deref(msg.Ring) {
-		d.ringSeedActivity(msg.SeedID, "note", authorSession)
-	}
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok:             true,
 		SeedNoteResult: &protocol.SeedNoteResult{Note: note},
@@ -1695,7 +1824,12 @@ func resolveNoteArtifact(kind string, artifact *garden.ArtifactReference, body s
 	return &validated, body, nil
 }
 
-func (d *Daemon) appendSeedNote(seedID, body, authorSession, member, kindName string, artifact *garden.ArtifactReference) (protocol.SeedNote, error) {
+func (d *Daemon) appendSeedNote(
+	seedID, body, authorSession, member, kindName string,
+	artifact *garden.ArtifactReference,
+	attentionRequested bool,
+	causedBySessionID string,
+) (protocol.SeedNote, error) {
 	kind, err := garden.ParseNoteKind(kindName)
 	if err != nil {
 		return protocol.SeedNote{}, err
@@ -1724,14 +1858,16 @@ func (d *Daemon) appendSeedNote(seedID, body, authorSession, member, kindName st
 		AuthorMember:  d.resolveTenderMember(member, authorSession),
 		Artifact:      artifact,
 	}
-	written, doc, err := d.mintAndWriteNote(*schema, note)
+	written, doc, err := d.mintAndWriteNote(*schema, note, attentionRequested, causedBySessionID)
 	if err != nil {
 		return protocol.SeedNote{}, err
 	}
 	return noteToProtocol(written, doc), nil
 }
 
-func (d *Daemon) mintAndWriteNote(schema docstore.CollectionSchema, note garden.Note) (garden.Note, docstore.Document, error) {
+func (d *Daemon) mintAndWriteNote(
+	schema docstore.CollectionSchema, note garden.Note, attentionRequested bool, causedBySessionID string,
+) (garden.Note, docstore.Document, error) {
 	const mintAttempts = 3
 	var lastErr error
 	for range mintAttempts {
@@ -1746,9 +1882,23 @@ func (d *Daemon) mintAndWriteNote(schema docstore.CollectionSchema, note garden.
 		}
 		expected := docstore.ExpectAbsent
 		fact := documentChangedFact(garden.Namespace, garden.CollectionNotes, note.ID, false)
-		written, err := d.store.CommitDocumentWrite(store.DocumentWrite{
+		occurrence, err := seedEvents.Occur(
+			gardenSeedEventModel, gardenSeedEventVocabulary.NoteAdded, note.Seed,
+			seedEvents.NoteAddedPayload{
+				NoteID: note.ID, AttentionRequested: attentionRequested,
+				CausedBySessionID: strings.TrimSpace(causedBySessionID),
+			},
+		)
+		if err != nil {
+			return note, docstore.Document{}, err
+		}
+		events, err := encodeGardenSeedEvents(occurrence)
+		if err != nil {
+			return note, docstore.Document{}, err
+		}
+		written, eventSeqs, err := d.store.CommitDocumentWriteWithEvents(store.DocumentWrite{
 			Schema: schema, ID: note.ID, Body: body, Expected: &expected,
-		}, fact, time.Now())
+		}, fact, events, time.Now())
 		if err != nil {
 			if !docstore.IsConflict(err) {
 				return note, docstore.Document{}, err
@@ -1757,7 +1907,7 @@ func (d *Daemon) mintAndWriteNote(schema docstore.CollectionSchema, note garden.
 			continue
 		}
 		d.announceCommittedWrite(fact, written.Seq)
-		d.publishFact(FactGardenNoted, note.Seed, nil)
+		announceGardenSeedEvents(d, eventSeqs)
 
 		doc, found, err := d.store.GetDocument(schema, note.ID)
 		if err != nil || !found {

@@ -76,7 +76,7 @@ var ticketSignposts = map[string]ticketSignpost{
 			{"read the log", `attn seed notes <seed-id>`},
 			{"read the seed", `attn seed show <seed-id>`},
 		},
-		Note: "A watch rings on lifecycle moves; notes stay quiet unless their author uses --ring.",
+		Note: "Seed lifecycle moves ring the current tender and watchers; notes stay quiet unless their author uses --ring.",
 	},
 	"unsubscribe": {
 		Lead: "unfollowing somebody else's work",

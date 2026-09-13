@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -26,7 +27,14 @@ func armSeed(t *testing.T, d *Daemon, seedID string, condition garden.HarvestCon
 		t.Fatalf("read %s: %v", seedID, err)
 	}
 	seed.HarvestWhen = &condition
-	if _, err := d.writeSeed(*schema, seed, doc.Rev, FactGardenHarvestWhenChanged); err != nil {
+	occurrence, err := seedEvents.Occur(
+		gardenSeedEventModel, gardenSeedEventVocabulary.HarvestWhenConfigured, seed.ID,
+		seedEvents.HarvestWhenPayload{PullRequestID: condition.PullRequest},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.writeSeedWithEvents(*schema, seed, doc.Rev, occurrence); err != nil {
 		t.Fatalf("write %s: %v", seedID, err)
 	}
 }
@@ -626,6 +634,32 @@ func TestAMergeThatLandsDuringArmingStillHarvests(t *testing.T) {
 	}
 	if harvested.Status != garden.StatusHarvested || harvested.HarvestWhen != nil {
 		t.Fatalf("the merge that landed during arming was missed: %+v", harvested)
+	}
+}
+
+func TestAClosureDuringArmingDoesNotRingItsInitiator(t *testing.T) {
+	d := newGardenDaemon(t)
+	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "closed during arming"})
+	watchSeed(t, d, "sess-a", seed.ID, false)
+	rec := recordPullRequest(t, d, "sess-a", "https://github.com/victorarias/attn/pull/71")
+	if resp := armWhenMerged(t, d, "sess-a", seed.ID, rec.URL); !resp.Ok {
+		t.Fatalf("arm: %v", protocol.Deref(resp.Error))
+	}
+	armed, doc, err := d.readSeed(seed.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settlePullRequest(t, d, rec.PRID, sessionPullRequestClosed, "closed between the check and the commit")
+
+	cleared, _, err := d.settleFreshlyArmed(armed, doc, "sess-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.HarvestWhen != nil {
+		t.Fatalf("closed pull request left harvest condition %+v", cleared.HarvestWhen)
+	}
+	if queued := queuedSeedBells(t, d, "sess-a"); len(queued) != 0 {
+		t.Fatalf("immediate clear rang its initiating session: %q", queued)
 	}
 }
 

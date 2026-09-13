@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -205,6 +206,19 @@ func TestSeedResumeIdentityPlantsSetsAndClearsAtomically(t *testing.T) {
 	})
 	if protocol.Deref(planted.ResumeSessionID) != "native-1" || protocol.Deref(planted.ResumeCwd) != cwd || protocol.Deref(planted.ResumeAgent) != "claude" {
 		t.Fatalf("planted resume identity = %+v", planted)
+	}
+	events, err := d.store.BusEventsSince(0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var configured int
+	for _, event := range events {
+		if event.Name == seedEvents.NameResumeIdentityConfigured && event.Subject == planted.ID {
+			configured++
+		}
+	}
+	if configured != 1 {
+		t.Fatalf("resume identity events committed with plant = %d, want 1", configured)
 	}
 
 	set := setSeedResume(t, d, planted.ID, "native-2", cwd, "copilot", false)
@@ -409,8 +423,8 @@ func TestGarden_EveryMovePublishesItsOwnFact(t *testing.T) {
 	move(t, d, "sess-a", seed.ID, garden.VerbWither, "", "trellis")
 
 	want := []string{
-		FactGardenTended, FactGardenBodyEdited, FactGardenNoted, FactGardenParked,
-		FactGardenHarvested, FactGardenReplanted, FactGardenWithered,
+		seedEvents.NameTended, seedEvents.NameBodyEdited, seedEvents.NameNoteAdded, seedEvents.NameParked,
+		seedEvents.NameHarvested, seedEvents.NameReplanted, seedEvents.NameWithered,
 	}
 	if !slices.Equal(seen, want) {
 		t.Fatalf("the bus saw %v, want %v", seen, want)
@@ -642,6 +656,21 @@ func TestGarden_PlantingPushesTheGardenOnce(t *testing.T) {
 	}
 	if len(last) != 1 || last[0].ID != planted.ID {
 		t.Fatalf("the pushed garden does not carry the new seed: %+v", last)
+	}
+}
+
+func TestGarden_PlantingWithEdgesPushesTheGardenOnce(t *testing.T) {
+	d := newGardenDaemon(t)
+	plot := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "the plot"})
+
+	var pushes int
+	d.gardenBroadcastHook = func([]protocol.Seed, int) { pushes++ }
+	plant(t, d, protocol.SeedPlantMessage{
+		SourceSessionID: protocol.Ptr("sess-a"), Title: "inside", PartOf: protocol.Ptr(plot.ID),
+	})
+
+	if pushes != 1 {
+		t.Fatalf("one planting with semantic edge events produced %d garden pushes, want exactly 1", pushes)
 	}
 }
 

@@ -121,7 +121,7 @@ func TestSeedRipples_UnblockedPromotionSurvivesUnwatch(t *testing.T) {
 	fixture := newRippleGarden(t)
 	move(t, fixture.d, "sess-c", fixture.dependent.ID, garden.VerbTend, "", "")
 	watchSeed(t, fixture.d, "sess-c", fixture.dependent.ID, false)
-	if claimed, err := fixture.d.store.ClaimGardenSeedMailboxItem(
+	if claimed, err := claimGardenSeedMailboxItemForTest(fixture.d.store,
 		"sess-c", fixture.dependent.ID, "note", "note", time.Now()); err != nil || !claimed {
 		t.Fatalf("queue note: claimed=%v err=%v", claimed, err)
 	}
@@ -164,9 +164,13 @@ func TestSeedRipples_AMemberIsRungAtTheSessionItsBindingHolds(t *testing.T) {
 	if _, err := fixture.d.claimCrewBinding("trellis", "sess-d"); err != nil {
 		t.Fatalf("bind trellis: %v", err)
 	}
-	move(t, fixture.d, "", fixture.dependent.ID, garden.VerbTend, "", "trellis")
 	fixture.d.ptyBackend = (&recordingDoorbell{}).backend()
 	drains := observeAgentMailboxDrainsFor(t, fixture.d, "sess-d")
+	move(t, fixture.d, "", fixture.dependent.ID, garden.VerbTend, "", "trellis")
+	if delivered := drains.next(); delivered != 1 {
+		t.Fatalf("tend drain delivered %d doorbells, want 1", delivered)
+	}
+	fixture.d.consumeSeedBell("sess-d", fixture.dependent.ID)
 
 	move(t, fixture.d, "sess-b", fixture.blocker.ID, garden.VerbHarvest, "pipe laid", "")
 	if delivered := drains.next(); delivered != 1 {

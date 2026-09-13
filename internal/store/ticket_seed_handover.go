@@ -28,6 +28,7 @@ type TicketSeedHandover struct {
 	NoteSchema           docstore.CollectionSchema
 	DispatchSchema       docstore.CollectionSchema
 	Notes                []TicketSeedNote
+	Events               []BusEvent
 	SessionIDs           []string
 	HandoverKind         string
 	EvidenceFingerprint  string
@@ -36,9 +37,10 @@ type TicketSeedHandover struct {
 }
 
 type TicketSeedHandoverResult struct {
-	SeedID string
-	Result string
-	Seqs   []int64
+	SeedID    string
+	Result    string
+	Seqs      []int64
+	EventSeqs []int64
 }
 
 type TicketSeedLink struct {
@@ -127,6 +129,14 @@ func (s *Store) EnsureTicketSeedHandover(handover TicketSeedHandover) (TicketSee
 	if err := insertTicketSeedLink(tx, handover, handover.SeedID); err != nil {
 		return TicketSeedHandoverResult{}, err
 	}
+	eventSeqs := make([]int64, len(handover.Events))
+	for i, event := range handover.Events {
+		seq, err := appendBusEventWith(tx, event, handover.CreatedAt)
+		if err != nil {
+			return TicketSeedHandoverResult{}, err
+		}
+		eventSeqs[i] = seq
+	}
 	if err := tx.Commit(); err != nil {
 		return TicketSeedHandoverResult{}, err
 	}
@@ -134,7 +144,9 @@ func (s *Store) EnsureTicketSeedHandover(handover TicketSeedHandover) (TicketSee
 	for i := range results {
 		seqs[i] = results[i].Seq
 	}
-	return TicketSeedHandoverResult{SeedID: handover.SeedID, Result: "created", Seqs: seqs}, nil
+	return TicketSeedHandoverResult{
+		SeedID: handover.SeedID, Result: "created", Seqs: seqs, EventSeqs: eventSeqs,
+	}, nil
 }
 
 func (s *Store) TicketSeedLink(ticketID string) (*TicketSeedLink, error) {

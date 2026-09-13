@@ -84,7 +84,7 @@ func TestSeedHandoverReusesTheExactDirectoryAndConvergesOnRetry(t *testing.T) {
 			t.Errorf("remove Handover prompt: %v", removeErr)
 		}
 	}
-	watchSeed(t, d, sourceSessionID, seedID, true)
+	watchSeed(t, d, sourceSessionID, seedID, false)
 	msg := handoverRequest(d, seed, "handover-reuse", sourceSessionID, "Continue from the failing test.")
 	op, err := d.startDelegation(msg)
 	if err != nil {
@@ -107,6 +107,12 @@ func TestSeedHandoverReusesTheExactDirectoryAndConvergesOnRetry(t *testing.T) {
 	}
 	if after.Body != seed.Body || after.TenderSession != done.SessionID || after.LastExecutionID != done.SessionID {
 		t.Fatalf("handed-over seed = %+v", after)
+	}
+	if queued := queuedSeedBells(t, d, sourceSessionID); len(queued) != 0 {
+		t.Fatalf("handover source received its own transfer bell: %q", queued)
+	}
+	if queued, err := d.store.UnreadGardenSeedMailboxItems(done.SessionID); err != nil || len(queued) != 0 {
+		t.Fatalf("directly prompted successor received a duplicate transfer bell: %+v, %v", queued, err)
 	}
 	if d.store.Get(oldSessionID) == nil {
 		t.Fatal("the previous conversation was removed")

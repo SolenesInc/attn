@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -69,13 +71,15 @@ func documentChangedFact(namespace, collection, id string, deleted bool) store.B
 }
 
 func (d *Daemon) announceCommittedWrite(fact store.BusEvent, seq int64) {
-	if d.eventBus == nil {
-		d.projectToClients(bus.Event{
-			Seq: seq, Name: fact.Name, Subject: fact.Subject, Payload: json.RawMessage(fact.Payload),
-		})
-		return
-	}
-	d.eventBus.Announce()
+	d.coalesceSnapshots(func() {
+		if d.eventBus == nil {
+			d.projectToClients(bus.Event{
+				Seq: seq, Name: fact.Name, Subject: fact.Subject, Payload: json.RawMessage(fact.Payload),
+			})
+			return
+		}
+		d.eventBus.Announce()
+	})
 }
 
 func (d *Daemon) publishCollectionRemoved(namespace, collection string, documents int) {
@@ -294,6 +298,10 @@ func (d *Daemon) sendDocErrorAs(conn net.Conn, err error, code string) {
 
 func (d *Daemon) handleDocDefine(conn net.Conn, msg *protocol.DocDefineMessage) {
 	schema := collectionSchemaFromProtocol(msg.Schema)
+	if err := rejectGenericGardenDocumentMutation(schema.Namespace); err != nil {
+		d.sendDocError(conn, err)
+		return
+	}
 	if err := schema.Validate(); err != nil {
 		d.sendDocError(conn, err)
 		return
@@ -317,6 +325,10 @@ func (d *Daemon) handleDocDefine(conn net.Conn, msg *protocol.DocDefineMessage) 
 }
 
 func (d *Daemon) handleDocUndefine(conn net.Conn, msg *protocol.DocUndefineMessage) {
+	if err := rejectGenericGardenDocumentMutation(msg.Namespace); err != nil {
+		d.sendDocError(conn, err)
+		return
+	}
 	if _, err := d.collectionFor(msg.Namespace, msg.Collection); err != nil {
 		d.sendDocError(conn, err)
 		return
@@ -358,6 +370,10 @@ func (d *Daemon) handleDocCollections(conn net.Conn, _ *protocol.DocCollectionsM
 }
 
 func (d *Daemon) handleDocPut(conn net.Conn, msg *protocol.DocPutMessage) {
+	if err := rejectGenericGardenDocumentMutation(msg.Namespace); err != nil {
+		d.sendDocError(conn, err)
+		return
+	}
 	schema, err := d.collectionFor(msg.Namespace, msg.Collection)
 	if err != nil {
 		d.sendDocError(conn, err)
@@ -428,6 +444,10 @@ func (d *Daemon) handleDocGet(conn net.Conn, msg *protocol.DocGetMessage) {
 }
 
 func (d *Daemon) handleDocDelete(conn net.Conn, msg *protocol.DocDeleteMessage) {
+	if err := rejectGenericGardenDocumentMutation(msg.Namespace); err != nil {
+		d.sendDocError(conn, err)
+		return
+	}
 	schema, err := d.collectionFor(msg.Namespace, msg.Collection)
 	if err != nil {
 		d.sendDocError(conn, err)
@@ -451,6 +471,16 @@ func (d *Daemon) handleDocDelete(conn net.Conn, msg *protocol.DocDeleteMessage) 
 			Existed: written.Changed, Seq: int(written.Seq),
 		},
 	})
+}
+
+func rejectGenericGardenDocumentMutation(namespace string) error {
+	if strings.TrimSpace(namespace) != garden.Namespace {
+		return nil
+	}
+	return fmt.Errorf(
+		"the generic document API cannot mutate namespace %q; use attn seed commands so the Garden change and its event commit together",
+		garden.Namespace,
+	)
 }
 
 func (d *Daemon) handleDocQuery(conn net.Conn, msg *protocol.DocQueryMessage) {

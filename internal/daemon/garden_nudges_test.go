@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func TestSeedNudges_RemoteTenderStopsAtTheHomeFence(t *testing.T) {
@@ -75,6 +77,45 @@ func TestSeedNudges_InjectionLeavesTheBellUnreadUntilShow(t *testing.T) {
 	if prompts := doorbell.pasted(); len(prompts) != 2 {
 		t.Fatalf("read did not re-arm the bell: %q", prompts)
 	}
+}
+
+func TestSeedNudges_WebSocketTransitionDoesNotRingItsSource(t *testing.T) {
+	fixture := newSeededNudgeGarden(t)
+	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
+	watchSeed(t, fixture.d, "sess-c", fixture.leaf.ID, false)
+	client := newInternalWSClient()
+
+	fixture.d.handleSeedTransitionWS(client, &protocol.SeedTransitionMessage{
+		Cmd: protocol.CmdSeedTransition, RequestID: protocol.Ptr("move-1"),
+		SourceSessionID: protocol.Ptr("sess-b"), SeedID: fixture.leaf.ID, Verb: string(garden.VerbTend),
+	})
+	if _, err := readInternalActionResult(client); err != nil {
+		t.Fatalf("WebSocket transition: %v", err)
+	}
+	if queued := queuedSeedBells(t, fixture.d, "sess-b"); len(queued) != 0 {
+		t.Fatalf("WebSocket transition rang its source: %q", queued)
+	}
+	assertOneSeedBell(t, fixture.d, "sess-c", fixture.leaf.ID, "tended")
+}
+
+func TestSeedNudges_WebSocketNoteDoesNotRingItsSource(t *testing.T) {
+	fixture := newSeededNudgeGarden(t)
+	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
+	watchSeed(t, fixture.d, "sess-c", fixture.leaf.ID, false)
+	client := newInternalWSClient()
+
+	fixture.d.handleSeedNoteWS(client, &protocol.SeedNoteMessage{
+		Cmd: protocol.CmdSeedNote, RequestID: protocol.Ptr("note-1"),
+		SourceSessionID: protocol.Ptr("sess-b"), SeedID: fixture.leaf.ID,
+		Body: "look now", Ring: protocol.Ptr(true),
+	})
+	if _, err := readInternalActionResult(client); err != nil {
+		t.Fatalf("WebSocket note: %v", err)
+	}
+	if queued := queuedSeedBells(t, fixture.d, "sess-b"); len(queued) != 0 {
+		t.Fatalf("WebSocket note rang its source: %q", queued)
+	}
+	assertOneSeedBell(t, fixture.d, "sess-c", fixture.leaf.ID, "note.added")
 }
 
 func TestSeedNudges_FailedShowDoesNotReadTheBell(t *testing.T) {
@@ -185,6 +226,18 @@ func assertOneSeedBell(t *testing.T, d *Daemon, sessionID, seedID, event string)
 	}
 }
 
+func TestSeedNudges_StartupRefusesAnUnknownPendingBellDefinition(t *testing.T) {
+	d := newGardenDaemon(t)
+	if _, _, err := d.store.HandleGardenSeedEvent(1, "s-7k3f9m", "note.added", "removed bell", []store.GardenSeedBellDelivery{{
+		RecipientSessionID: "sess-a", ItemID: "unknown-bell",
+	}}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.validatePendingGardenSeedBells(); err == nil || !strings.Contains(err.Error(), `pending bell "removed bell"`) {
+		t.Fatalf("startup validation error = %v", err)
+	}
+}
+
 func TestSeedNudges_DispatcherHearsTheDelegatesHarvest(t *testing.T) {
 	fixture := newSeededNudgeGarden(t)
 	d := fixture.d
@@ -206,7 +259,7 @@ func TestSeedNudges_NotesRingOnlyByChoice(t *testing.T) {
 		t.Fatalf("plain note rang: %q", queued)
 	}
 	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "please look", true)
-	assertOneSeedBell(t, fixture.d, "sess-b", fixture.leaf.ID, "note")
+	assertOneSeedBell(t, fixture.d, "sess-b", fixture.leaf.ID, "note.added")
 }
 
 func TestSeedNudges_CrownWatchBubblesFromAGrandchild(t *testing.T) {
@@ -223,7 +276,7 @@ func TestSeedNudges_CoalesceUntilShowAndThenRingAgain(t *testing.T) {
 
 	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "first", true)
 	move(t, fixture.d, "sess-c", fixture.leaf.ID, garden.VerbTend, "", "")
-	assertOneSeedBell(t, fixture.d, "sess-b", fixture.leaf.ID, "note")
+	assertOneSeedBell(t, fixture.d, "sess-b", fixture.leaf.ID, "note.added")
 
 	resp := gardenCall(t, func(c net.Conn) {
 		fixture.d.handleSeedShow(c, &protocol.SeedShowMessage{
@@ -238,7 +291,7 @@ func TestSeedNudges_CoalesceUntilShowAndThenRingAgain(t *testing.T) {
 	}
 
 	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "after the read", true)
-	assertOneSeedBell(t, fixture.d, "sess-b", fixture.leaf.ID, "note")
+	assertOneSeedBell(t, fixture.d, "sess-b", fixture.leaf.ID, "note.added")
 }
 
 func TestSeedNudges_NotesReadResetsTheBell(t *testing.T) {
@@ -255,7 +308,7 @@ func TestSeedNudges_NotesReadResetsTheBell(t *testing.T) {
 		t.Fatalf("notes: %v", protocol.Deref(resp.Error))
 	}
 	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "second", true)
-	assertOneSeedBell(t, fixture.d, "sess-b", fixture.leaf.ID, "note")
+	assertOneSeedBell(t, fixture.d, "sess-b", fixture.leaf.ID, "note.added")
 }
 
 func TestSeedNudges_NeverRingTheWriter(t *testing.T) {

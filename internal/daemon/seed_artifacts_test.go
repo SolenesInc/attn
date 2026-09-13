@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -110,6 +112,10 @@ func TestSeedArtifactCopyStartsFreshAfterDetach(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	firstReceipt, found, err := readSeedTransferReceipt(root, first.OperationID)
+	if err != nil || !found || firstReceipt.EventSource == "" {
+		t.Fatalf("first receipt = %+v found=%v err=%v", firstReceipt, found, err)
+	}
 	detached := filepath.Join(t.TempDir(), "report.bin")
 	if _, err := transferSeedArtifact(t, d, protocol.SeedArtifactTransferMessage{
 		SeedID: seed.ID, Operation: "detach", Filename: protocol.Ptr("report.bin"), DestinationPath: protocol.Ptr(detached),
@@ -132,6 +138,10 @@ func TestSeedArtifactCopyStartsFreshAfterDetach(t *testing.T) {
 	if second.OperationID != first.OperationID {
 		t.Fatalf("replacement receipt ID = %q, want %q", second.OperationID, first.OperationID)
 	}
+	secondReceipt, found, err := readSeedTransferReceipt(root, second.OperationID)
+	if err != nil || !found || secondReceipt.EventSource == "" || secondReceipt.EventSource == firstReceipt.EventSource || secondReceipt.ReplacesEventSource != firstReceipt.EventSource {
+		t.Fatalf("replacement receipt = %+v found=%v err=%v, want a fresh event source after %q", secondReceipt, found, err, firstReceipt.EventSource)
+	}
 	managed := filepath.Join(notebook.SeedArtifactsDir(root, seed.ID), "report.bin")
 	if got, err := os.ReadFile(managed); err != nil || string(got) != "second" {
 		t.Fatalf("fresh managed artifact = %q, %v", got, err)
@@ -150,6 +160,51 @@ func TestSeedArtifactCopyStartsFreshAfterDetach(t *testing.T) {
 	})
 	if err != nil || !retry.Recovered {
 		t.Fatalf("retry fresh copy after source deletion = %+v, %v", retry, err)
+	}
+	retriedReceipt, found, err := readSeedTransferReceipt(root, retry.OperationID)
+	if err != nil || !found || retriedReceipt.EventSource != secondReceipt.EventSource {
+		t.Fatalf("retried receipt = %+v found=%v err=%v, want event source %q", retriedReceipt, found, err, secondReceipt.EventSource)
+	}
+}
+
+func TestSeedArtifactTransferAndWatcherPublishOneChange(t *testing.T) {
+	d, _, seed := newSeedArtifactDaemon(t)
+	d.stopNotebookWatcher()
+	source := writeArtifactSource(t, t.TempDir(), "evidence.bin", []byte("first"))
+	result, err := transferSeedArtifact(t, d, protocol.SeedArtifactTransferMessage{
+		SeedID: seed.ID, Operation: "copy", SourcePath: protocol.Ptr(source),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+		t.Fatal(err)
+	}
+	countChanges := func() int {
+		t.Helper()
+		events, err := d.store.BusEventsSince(0, 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var changed int
+		for _, event := range events {
+			if event.Name == seedEvents.NameArtifactChanged && event.Subject == seed.ID {
+				changed++
+			}
+		}
+		return changed
+	}
+	if changed := countChanges(); changed != 1 {
+		t.Fatalf("artifact change events after transfer and watcher catch-up = %d, want 1", changed)
+	}
+	if err := os.WriteFile(result.DestinationPath, []byte("second"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+		t.Fatal(err)
+	}
+	if changed := countChanges(); changed != 2 {
+		t.Fatalf("artifact change events after transfer, watcher catch-up, and direct edit = %d, want 2", changed)
 	}
 }
 
@@ -434,6 +489,197 @@ func TestSeedArtifactDirectFolderEditsRefreshGardenMembership(t *testing.T) {
 	}
 	if _, err := os.Stat(notebook.SeedArtifactsDir(root, seed.ID)); err != nil {
 		t.Fatalf("direct delete removed storage: %v", err)
+	}
+}
+
+func TestSeedArtifactObservationReconciliationPublishesMissingCurrentStateOnce(t *testing.T) {
+	d, root, seed := newSeedArtifactDaemon(t)
+	d.stopNotebookWatcher()
+	dir := notebook.SeedArtifactsDir(root, seed.ID)
+	writeArtifactSource(t, dir, "recovered.bin", []byte("current"))
+
+	if err := d.reconcileSeedArtifactObservations(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.reconcileSeedArtifactObservations(); err != nil {
+		t.Fatal(err)
+	}
+	events, err := d.store.BusEventsSince(0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var changed int
+	for _, event := range events {
+		if event.Name == seedEvents.NameArtifactChanged && event.Subject == seed.ID {
+			changed++
+		}
+	}
+	if changed != 1 {
+		t.Fatalf("reconciled artifact events = %d, want 1", changed)
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.reconcileSeedArtifactObservations(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.reconcileSeedArtifactObservations(); err != nil {
+		t.Fatal(err)
+	}
+	events, err = d.store.BusEventsSince(0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed = 0
+	for _, event := range events {
+		if event.Name == seedEvents.NameArtifactChanged && event.Subject == seed.ID {
+			changed++
+		}
+	}
+	if changed != 2 {
+		t.Fatalf("reconciled artifact events after directory removal = %d, want 2", changed)
+	}
+}
+
+func TestSeedArtifactObservationReconciliationContinuesPastAnInvalidSeedDirectory(t *testing.T) {
+	d, root, invalid := newSeedArtifactDaemon(t)
+	d.stopNotebookWatcher()
+	healthy := plant(t, d, protocol.SeedPlantMessage{Title: "Healthy durable files"})
+
+	invalidDir := notebook.SeedArtifactsDir(root, invalid.ID)
+	if err := os.MkdirAll(filepath.Dir(invalidDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(t.TempDir(), invalidDir); err != nil {
+		t.Fatal(err)
+	}
+	writeArtifactSource(t, notebook.SeedArtifactsDir(root, healthy.ID), "recovered.bin", []byte("current"))
+
+	err := d.reconcileSeedArtifactObservations()
+	if err == nil || !strings.Contains(err.Error(), invalid.ID) {
+		t.Fatalf("reconcile error = %v, want the invalid seed named", err)
+	}
+	events, readErr := d.store.BusEventsSince(0, 100)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	var healthyChanges int
+	for _, event := range events {
+		if event.Name == seedEvents.NameArtifactChanged && event.Subject == healthy.ID {
+			healthyChanges++
+		}
+	}
+	if healthyChanges != 1 {
+		t.Fatalf("healthy seed reconciled artifact events = %d, want 1", healthyChanges)
+	}
+}
+
+func TestDaemonStartupIsReadyBeforeArtifactReconciliationFailure(t *testing.T) {
+	t.Setenv("ATTN_PTY_BACKEND", "embedded")
+	useFreeWSPort(t)
+	d := NewForTesting(filepath.Join(shortTempDir(t), "artifact.sock"))
+	daemonID, err := enrollment.EnsureDaemonID(d.dataRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.daemonInstanceID = daemonID
+	if err := d.ensureEnrollment(); err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	d.store.SetSetting(SettingNotebookRoot, root)
+	d.ensureGardenCollections()
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Unreadable durable files"})
+	dir := notebook.SeedArtifactsDir(root, seed.ID)
+	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(t.TempDir(), dir); err != nil {
+		t.Fatal(err)
+	}
+
+	startErr := make(chan error, 1)
+	go func() { startErr <- d.Start() }()
+	select {
+	case err := <-startErr:
+		t.Fatalf("daemon exited before becoming ready: %v", err)
+	case <-d.Started():
+	}
+	d.Stop()
+	if err := <-startErr; err != nil {
+		t.Fatalf("daemon stop after readiness: %v", err)
+	}
+}
+
+func TestSeedArtifactObservationPublishesAStateThatReturnsAfterAChange(t *testing.T) {
+	d, root, seed := newSeedArtifactDaemon(t)
+	d.stopNotebookWatcher()
+	dir := notebook.SeedArtifactsDir(root, seed.ID)
+
+	if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+		t.Fatal(err)
+	}
+	path := writeArtifactSource(t, dir, "transient.bin", []byte("present"))
+	if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+		t.Fatal(err)
+	}
+	events, err := d.store.BusEventsSince(0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var changed int
+	for _, event := range events {
+		if event.Name == seedEvents.NameArtifactChanged && event.Subject == seed.ID {
+			changed++
+		}
+	}
+	if changed != 3 {
+		t.Fatalf("artifact events across empty→present→empty = %d, want 3", changed)
+	}
+}
+
+func TestSeedArtifactObservationDetectsTimestampPreservingContentReplacement(t *testing.T) {
+	d, root, seed := newSeedArtifactDaemon(t)
+	d.stopNotebookWatcher()
+	dir := notebook.SeedArtifactsDir(root, seed.ID)
+	path := writeArtifactSource(t, dir, "replaced.bin", []byte("first"))
+	stamp := time.Date(2026, 9, 13, 12, 0, 0, 123, time.UTC)
+	if err := os.Chtimes(path, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("other"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+		t.Fatal(err)
+	}
+	events, err := d.store.BusEventsSince(0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var changed int
+	for _, event := range events {
+		if event.Name == seedEvents.NameArtifactChanged && event.Subject == seed.ID {
+			changed++
+		}
+	}
+	if changed != 2 {
+		t.Fatalf("same-metadata content replacement events = %d, want 2", changed)
 	}
 }
 

@@ -22,7 +22,7 @@ func TestSeedNudges_DispatcherUnwatchStopsPendingAndFutureDescendants(t *testing
 		t.Fatal(err)
 	}
 	ringingNote(t, d, "sess-c", f.leaf.ID, "queued before unwatch", true)
-	assertOneSeedBell(t, d, "sess-b", f.leaf.ID, "note")
+	assertOneSeedBell(t, d, "sess-b", f.leaf.ID, "note.added")
 	result := watchSeed(t, d, "sess-b", f.crown.ID, true)
 	if result.Watching || !result.Changed || len(result.WatchingVia) != 0 {
 		t.Fatalf("unwatch = %+v", result)
@@ -42,23 +42,41 @@ func TestSeedNudges_DispatcherUnwatchStopsPendingAndFutureDescendants(t *testing
 	}
 	watchSeed(t, d, "sess-b", f.crown.ID, false)
 	ringingNote(t, d, "sess-a", future.ID, "rewatched", true)
-	assertOneSeedBell(t, d, "sess-b", future.ID, "note")
+	assertOneSeedBell(t, d, "sess-b", future.ID, "note.added")
 }
 
-func TestSeedNudges_UnwatchDiscardsAnOrdinaryUpdateForTheTender(t *testing.T) {
+func TestSeedNudges_UnwatchPreservesAnUpdateWhileTheRecipientIsTender(t *testing.T) {
 	f := newSeededNudgeGarden(t)
 	d := f.d
 	move(t, d, "sess-b", f.leaf.ID, garden.VerbTend, "", "")
 	watchSeed(t, d, "sess-b", f.leaf.ID, false)
 	ringingNote(t, d, "sess-c", f.leaf.ID, "queued before unwatch", true)
-	assertOneSeedBell(t, d, "sess-b", f.leaf.ID, "note")
+	assertOneSeedBell(t, d, "sess-b", f.leaf.ID, "note.added")
 
 	result := watchSeed(t, d, "sess-b", f.leaf.ID, true)
 	if result.Watching || !result.Changed {
 		t.Fatalf("unwatch = %+v", result)
 	}
+	assertOneSeedBell(t, d, "sess-b", f.leaf.ID, "note.added")
+}
+
+func TestSeedNudges_LastRoleLossDiscardsAndRegainDoesNotReviveTheBell(t *testing.T) {
+	f := newSeededNudgeGarden(t)
+	d := f.d
+	move(t, d, "sess-b", f.leaf.ID, garden.VerbTend, "", "")
+	watchSeed(t, d, "sess-b", f.leaf.ID, false)
+	ringingNote(t, d, "sess-c", f.leaf.ID, "queued while holding both roles", true)
+	assertOneSeedBell(t, d, "sess-b", f.leaf.ID, "note.added")
+
+	move(t, d, "sess-b", f.leaf.ID, garden.VerbPark, "", "")
+	assertOneSeedBell(t, d, "sess-b", f.leaf.ID, "note.added")
+	watchSeed(t, d, "sess-b", f.leaf.ID, true)
 	if bells := queuedSeedBells(t, d, "sess-b"); len(bells) != 0 {
-		t.Fatalf("tender kept an ordinary update after unwatch: %v", bells)
+		t.Fatalf("last-role loss kept the old bell: %v", bells)
+	}
+	watchSeed(t, d, "sess-b", f.leaf.ID, false)
+	if bells := queuedSeedBells(t, d, "sess-b"); len(bells) != 0 {
+		t.Fatalf("regaining a role revived the old bell: %v", bells)
 	}
 }
 
@@ -66,7 +84,7 @@ func TestSeedNudges_UnblockedUpdateExpiresWhenTheTenderMoves(t *testing.T) {
 	f := newSeededNudgeGarden(t)
 	d := f.d
 	move(t, d, "sess-b", f.leaf.ID, garden.VerbTend, "", "")
-	if claimed, err := d.store.ClaimGardenSeedMailboxItem(
+	if claimed, err := claimGardenSeedMailboxItemForTest(d.store,
 		"sess-b", f.leaf.ID, gardenRingUnblocked, "unblocked", time.Now()); err != nil || !claimed {
 		t.Fatalf("queue unblocked update: claimed=%v err=%v", claimed, err)
 	}
@@ -87,7 +105,7 @@ func TestSeedNudges_UnblockedLookupFailureLeavesTheUpdateUnread(t *testing.T) {
 	d := f.d
 	t.Cleanup(d.stopAgentMailboxDoorbells)
 	move(t, d, "sess-b", f.leaf.ID, garden.VerbTend, "", "")
-	if claimed, err := d.store.ClaimGardenSeedMailboxItem(
+	if claimed, err := claimGardenSeedMailboxItemForTest(d.store,
 		"sess-b", f.leaf.ID, gardenRingUnblocked, "unblocked", time.Now()); err != nil || !claimed {
 		t.Fatalf("queue unblocked update: claimed=%v err=%v", claimed, err)
 	}
@@ -101,7 +119,7 @@ func TestSeedNudges_UnblockedLookupFailureLeavesTheUpdateUnread(t *testing.T) {
 	}
 
 	err = d.deliverAgentMailboxDoorbell("sess-b")
-	if err == nil || !strings.Contains(err.Error(), "read unblocked seed") {
+	if err == nil || !strings.Contains(err.Error(), "Garden bell eligibility") {
 		t.Fatalf("delivery error = %v, want the failed ownership lookup", err)
 	}
 	if bells := queuedSeedBells(t, d, "sess-b"); len(bells) != 1 {
@@ -178,7 +196,7 @@ func TestSeedNudges_ReplayDoesNotRestoreRemovedWatchButNewBindingDoes(t *testing
 		t.Fatal(err)
 	}
 	ringingNote(t, d, "sess-c", f.leaf.ID, "fresh delegation", true)
-	assertOneSeedBell(t, d, "sess-b", f.leaf.ID, "note")
+	assertOneSeedBell(t, d, "sess-b", f.leaf.ID, "note.added")
 }
 
 func TestSeedNudges_InboxAndDoorbellDiscardUpdatesAfterRelinking(t *testing.T) {
@@ -188,7 +206,7 @@ func TestSeedNudges_InboxAndDoorbellDiscardUpdatesAfterRelinking(t *testing.T) {
 			d := f.d
 			watchSeed(t, d, "sess-b", f.crown.ID, false)
 			// Queue directly so the read path is the first delivery attempt.
-			if _, err := d.store.ClaimGardenSeedMailboxItem("sess-b", f.leaf.ID, "note", "old-tree", time.Now()); err != nil {
+			if _, err := claimGardenSeedMailboxItemForTest(d.store, "sess-b", f.leaf.ID, "note", "old-tree", time.Now()); err != nil {
 				t.Fatal(err)
 			}
 			d.noteQueuedAgentMailboxItem("sess-b")
@@ -278,7 +296,7 @@ func TestSeedNudges_UnwatchCleanupFailureRemainsRetryable(t *testing.T) {
 	d, db := persistentSubscriptionGarden(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "retryable unwatch"})
 	watchSeed(t, d, "planner", seed.ID, false)
-	if _, err := d.store.ClaimGardenSeedMailboxItem("planner", seed.ID, "note", "pending", time.Now()); err != nil {
+	if _, err := claimGardenSeedMailboxItemForTest(d.store, "planner", seed.ID, "note", "pending", time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	d.noteQueuedAgentMailboxItem("planner")
@@ -313,7 +331,7 @@ func TestSeedNudges_UnwatchRetryRefreshesAnAlreadyClearedQueue(t *testing.T) {
 	d, _ := persistentSubscriptionGarden(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "retry unread refresh"})
 	watchSeed(t, d, "planner", seed.ID, false)
-	if _, err := d.store.ClaimGardenSeedMailboxItem("planner", seed.ID, "note", "pending", time.Now()); err != nil {
+	if _, err := claimGardenSeedMailboxItemForTest(d.store, "planner", seed.ID, "note", "pending", time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	d.noteQueuedAgentMailboxItem("planner")

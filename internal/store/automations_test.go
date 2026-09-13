@@ -7,6 +7,92 @@ import (
 	"time"
 )
 
+func markAutomationRunDeliveredForTest(s *Store, id, resolved string, now time.Time) error {
+	_, _, err := s.MarkAutomationRunDeliveredWithEvent(id, resolved, BusEvent{
+		Name: "garden.seed.work.ready", Subject: "s-test", Payload: `{"automation_run_id":"` + id + `"}`,
+	}, now)
+	return err
+}
+
+func TestAutomationDeliveryAndWorkReadyEventCommitAndRetryTogether(t *testing.T) {
+	s := New()
+	now := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
+	def, err := s.UpsertAutomationDefinition("delivery-event", "Delivery event", `{}`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, created, err := s.ClaimManualAutomationRun(
+		def.ID, "request", "", `{}`, def.Revision, `{}`, now,
+		AutomationRunReservation{RunID: "run-event", OccurrenceID: "occ-event", SeedID: "s-ready", SessionID: "sess-ready", WorkspaceID: "workspace-ready", PaneID: "pane-ready"},
+	)
+	if err != nil || !created {
+		t.Fatalf("claim created=%v err=%v", created, err)
+	}
+	event := BusEvent{Name: "garden.seed.work.ready", Subject: run.SeedID, Payload: `{"automation_run_id":"run-event"}`}
+	if _, err := s.db.Exec(`CREATE TRIGGER refuse_work_ready BEFORE INSERT ON bus_events
+		WHEN NEW.name = 'garden.seed.work.ready'
+		BEGIN SELECT RAISE(ABORT, 'work ready append failed'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.MarkAutomationRunDeliveredWithEvent(run.ID, `{}`, event, now.Add(time.Minute)); err == nil {
+		t.Fatal("delivery survived a failed work.ready append")
+	}
+	afterFailure, err := s.GetAutomationRun(run.ID)
+	if err != nil || afterFailure.State != AutomationRunStatePending {
+		t.Fatalf("run after failed append = %#v err=%v", afterFailure, err)
+	}
+	if _, err := s.db.Exec(`DROP TRIGGER refuse_work_ready`); err != nil {
+		t.Fatal(err)
+	}
+	seq, inserted, err := s.MarkAutomationRunDeliveredWithEvent(run.ID, `{}`, event, now.Add(2*time.Minute))
+	if err != nil || !inserted || seq == 0 {
+		t.Fatalf("successful delivery seq=%d inserted=%v err=%v", seq, inserted, err)
+	}
+	replaySeq, inserted, err := s.MarkAutomationRunDeliveredWithEvent(run.ID, `{}`, event, now.Add(3*time.Minute))
+	if err != nil || inserted || replaySeq != seq {
+		t.Fatalf("delivery retry seq=%d inserted=%v err=%v; want existing %d", replaySeq, inserted, err, seq)
+	}
+	events := factsOnLog(t, s)
+	var workReady int
+	for _, stored := range events {
+		if stored.Name == event.Name && stored.Subject == event.Subject {
+			workReady++
+		}
+	}
+	if workReady != 1 {
+		t.Fatalf("work.ready event count = %d, want 1", workReady)
+	}
+}
+
+func TestDeleteAutomationRunPrunesItsEventSources(t *testing.T) {
+	s := New()
+	now := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
+	def, err := s.UpsertAutomationDefinition("delete-event-source", "Delete event source", `{}`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, created, err := s.ClaimManualAutomationRun(
+		def.ID, "request", "", `{}`, def.Revision, `{}`, now,
+		AutomationRunReservation{RunID: "run-delete-source", OccurrenceID: "occ-delete-source", SeedID: "s-delete-source", SessionID: "sess-delete-source", WorkspaceID: "workspace-delete-source", PaneID: "pane-delete-source"},
+	)
+	if err != nil || !created {
+		t.Fatalf("claim created=%v err=%v", created, err)
+	}
+	if err := markAutomationRunDeliveredForTest(s, run.ID, `{}`, now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteAutomationRun(run.ID); err != nil {
+		t.Fatal(err)
+	}
+	var sources int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM garden_seed_event_sources WHERE source_kind='automation_run' AND source_id=?`, run.ID).Scan(&sources); err != nil {
+		t.Fatal(err)
+	}
+	if sources != 0 {
+		t.Fatalf("automation event sources after run deletion = %d, want 0", sources)
+	}
+}
+
 func baselineGitHubReviewAutomation(t *testing.T, s *Store, definitionID, host string, at time.Time) {
 	t.Helper()
 	if candidates, err := s.ReconcileAutomationReviewRequests(definitionID, host, nil, at); err != nil || len(candidates) != 0 {
@@ -273,7 +359,7 @@ func TestScheduledAutomationSingletonContinuityReusesBinding(t *testing.T) {
 	if _, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-21T03:00:00Z", "singleton", def.Revision, `{}`, `{}`, now.Add(24*time.Hour), secondIDs); err == nil || created {
 		t.Fatalf("second claim created=%v err=%v, want refused while the first run is still pending", created, err)
 	}
-	if err := s.MarkAutomationRunDelivered(first.ID, `{}`, now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, first.ID, `{}`, now); err != nil {
 		t.Fatal(err)
 	}
 	second, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-21T03:00:00Z", "singleton", def.Revision, `{}`, `{}`, now.Add(24*time.Hour), secondIDs)
@@ -305,7 +391,7 @@ func TestAutomationContinuityBindingLifecycleReleaseThenReclaim(t *testing.T) {
 	}
 	firstBindingID := binding.ID
 
-	if err := s.MarkAutomationRunDelivered(firstIDs.RunID, `{}`, now.Add(30*time.Second)); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, firstIDs.RunID, `{}`, now.Add(30*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -636,7 +722,7 @@ func TestGitHubReviewEdgeRetriesThenReusesContinuityBinding(t *testing.T) {
 	if first.SeedID != firstIDs.SeedID || first.SessionID != firstIDs.SessionID {
 		t.Fatalf("first run links = %#v", first)
 	}
-	if err := s.MarkAutomationRunDelivered(first.ID, `{}`, now.Add(time.Minute)); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, first.ID, `{}`, now.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	candidates, err = s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now.Add(2*time.Minute))
@@ -706,7 +792,7 @@ func TestGitHubReviewChangedHeadsAreDurableAndPendingRunCannotBeOvertaken(t *tes
 	if !created {
 		t.Fatal("first head was not claimed")
 	}
-	if err := s.MarkAutomationRunDelivered(first.ID, `{}`, now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, first.ID, `{}`, now); err != nil {
 		t.Fatal(err)
 	}
 	if candidates := reconcile(now.Add(time.Minute), headOne); len(candidates) != 0 {
@@ -732,7 +818,7 @@ func TestGitHubReviewChangedHeadsAreDurableAndPendingRunCannotBeOvertaken(t *tes
 	if created || retried.ID != second.ID {
 		t.Fatalf("newer head overtook pending run: retried=%#v created=%v pending=%#v", retried, created, second)
 	}
-	if err := s.MarkAutomationRunDelivered(second.ID, `{}`, now.Add(3*time.Minute)); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, second.ID, `{}`, now.Add(3*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	if candidates := reconcile(now.Add(4*time.Minute), headThree); len(candidates) != 1 || candidates[0].HeadSHA != headThree {
@@ -767,7 +853,7 @@ func TestGitHubReviewLegacyCycleOccurrenceUsesPayloadHeadWithoutReplay(t *testin
 	if _, err := s.db.Exec(`UPDATE automation_occurrences SET payload_json=? WHERE id=?`, `{"head_sha":"`+headOne+`"}`, run.OccurrenceID); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(run.ID, `{}`, now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, run.ID, `{}`, now); err != nil {
 		t.Fatal(err)
 	}
 	observed := func(head string, at time.Time) []AutomationReviewRequestCandidate {
@@ -820,7 +906,7 @@ func TestGitHubReviewChangedHeadsKeepDefinitionsIndependent(t *testing.T) {
 		}
 		seeds = append(seeds, first.SeedID)
 		sessions = append(sessions, first.SessionID)
-		if err := s.MarkAutomationRunDelivered(first.ID, `{}`, now); err != nil {
+		if err := markAutomationRunDeliveredForTest(s, first.ID, `{}`, now); err != nil {
 			t.Fatal(err)
 		}
 		if candidates := observe(headTwo, now.Add(time.Minute)); len(candidates) != 1 || candidates[0].Cycle != 1 {
@@ -868,7 +954,7 @@ func TestGitHubReviewAcceptedPendingRunRemainsRetryableWhileDemandIsActive(t *te
 		t.Fatalf("retry run=%#v created=%v err=%v", retried, created, err)
 	}
 
-	if err := s.MarkAutomationRunDelivered(run.ID, `{}`, now.Add(2*time.Minute)); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, run.ID, `{}`, now.Add(2*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	candidates, err = s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now.Add(3*time.Minute))
@@ -1092,7 +1178,7 @@ func TestListPrunableAutomationRunsProtectsBoundThreadOrigin(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("claim origin created=%v err=%v", created, err)
 	}
-	if err := s.MarkAutomationRunDelivered(origin.ID, "{}", now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, origin.ID, "{}", now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1120,7 +1206,7 @@ func TestListPrunableAutomationRunsStillPrunesNonContinuityRuns(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("claim created=%v err=%v", created, err)
 	}
-	if err := s.MarkAutomationRunDelivered(run.ID, "{}", now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, run.ID, "{}", now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1178,7 +1264,7 @@ func TestOriginAutomationRunIDForSeedSurvivesBindingRotation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(first.ID, `{}`, now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, first.ID, `{}`, now); err != nil {
 		t.Fatal(err)
 	}
 	second, _, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:two", "singleton", def.Revision, `{}`, `{}`, now.Add(time.Minute), AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"})

@@ -5185,8 +5185,9 @@ model SeedNoteMessage {
   // Omitted is a plain log entry, so a caller that never heard of kinds
   // writes a note. An unknown kind is refused, naming the whole set.
   "kind"?: string;
-  // Ring the seed's watchers after the note commits. Ordinary notes stay
-  // silent; ringing is the author's explicit request for eyes.
+  // Ring the seed's current tender and covering watchers after the note
+  // commits, excluding the session that caused it. Ordinary notes stay silent;
+  // ringing is the author's explicit request for eyes.
   "ring"?: boolean;
   // Required on attach and detach, refused on every other kind. When the body
   // is empty the daemon renders one from this reference.

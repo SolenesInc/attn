@@ -94,7 +94,7 @@ func TestAutomationDeleteThenReapplyResurrects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(run1.ID, "{}", now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, run1.ID, "{}", now); err != nil {
 		t.Fatal(err)
 	}
 

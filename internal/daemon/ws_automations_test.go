@@ -272,7 +272,7 @@ func TestAutomationRunWSResultCorrelatesRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(run.ID, "{}", now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, run.ID, "{}", now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -873,7 +873,7 @@ func TestAutomationRunWSRetryWithSameRequestIDDoesNotDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(run.ID, "{}", now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, run.ID, "{}", now); err != nil {
 		t.Fatal(err)
 	}
 

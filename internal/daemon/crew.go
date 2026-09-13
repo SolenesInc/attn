@@ -287,6 +287,7 @@ func (d *Daemon) claimCrewBinding(memberName, sessionID string) (string, error) 
 			if err := d.migrateCrewTicketIdentity(member.ID, sessionID); err != nil {
 				return "", err
 			}
+			d.invalidateGardenSeedParties("crew bind")
 			d.publishFact(FactCrewBound, member.ID, nil)
 			d.logf("crew: session %s bound as %s", sessionID, crew.DisplayName(member.ID))
 			return member.ID, nil
@@ -337,6 +338,7 @@ func (d *Daemon) releaseCrewBinding(memberID, sessionID string) (bool, error) {
 	if err != nil || !released {
 		return released, err
 	}
+	d.invalidateGardenSeedParties("crew release")
 	d.publishFact(FactCrewReleased, memberID, nil)
 	d.logf("crew: session %s released %s's binding", sessionID, crew.DisplayName(memberID))
 	return true, nil
@@ -388,6 +390,7 @@ func (d *Daemon) releaseCrewBindingsExcept(schema docstore.CollectionSchema, mem
 			d.logf("crew: releasing %s's binding for session %s: %v", crew.DisplayName(member.ID), sessionID, err)
 			continue
 		}
+		d.invalidateGardenSeedParties("crew release")
 		d.publishFact(FactCrewReleased, member.ID, nil)
 		d.logf("crew: session %s released %s's binding", sessionID, crew.DisplayName(member.ID))
 	}

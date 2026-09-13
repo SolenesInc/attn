@@ -1,24 +1,19 @@
 package daemon
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
 
-var gardenRingEvents = map[garden.Verb]string{
-	garden.VerbTend: "tended", garden.VerbPark: "parked", garden.VerbHarvest: "harvested",
-	garden.VerbWither: "withered", garden.VerbReplant: "replanted",
-}
-
-const gardenRingUnblocked = store.GardenSeedEventUnblocked
+var errRemoteGardenTender = errors.New("garden notifications are home-only")
 
 func (d *Daemon) seedUnblocked(seedID string) ([]garden.Seed, []protocol.Seed) {
 	if d.store == nil {
@@ -33,30 +28,6 @@ func (d *Daemon) seedUnblocked(seedID string) ([]garden.Seed, []protocol.Seed) {
 	}
 	unblocked := garden.Unblocks(read.seeds, seedID)
 	return unblocked, read.wire(unblocked)
-}
-
-func (d *Daemon) ringSeedUnblocked(unblocked []garden.Seed, excludedSessionIDs ...string) {
-	if d.store == nil {
-		return
-	}
-	d.gardenWatchMu.Lock()
-	defer d.gardenWatchMu.Unlock()
-	excluded := make(map[string]bool, len(excludedSessionIDs))
-	for _, sessionID := range excludedSessionIDs {
-		excluded[strings.TrimSpace(sessionID)] = true
-	}
-	delete(excluded, "")
-	for _, seed := range unblocked {
-		sessionID, err := d.localGardenTenderSession(seed.Tender())
-		if err != nil {
-			d.logf("garden bell: resolving the tender for unblocked seed %s: %v", seed.ID, err)
-			continue
-		}
-		if sessionID == "" || excluded[sessionID] {
-			continue
-		}
-		d.claimAndDeliverSeedBell(sessionID, seed.ID, gardenRingUnblocked)
-	}
 }
 
 func (d *Daemon) localGardenTenderSession(tender garden.Tender) (string, error) {
@@ -78,7 +49,7 @@ func (d *Daemon) localGardenTenderSession(tender garden.Tender) (string, error) 
 	}
 	if d.hubManager != nil {
 		if endpointID, remote := d.hubManager.EndpointIDForSession(sessionID); remote {
-			return "", fmt.Errorf("garden notifications are home-only; cannot notify tender session %s on outpost %s", sessionID, endpointID)
+			return "", fmt.Errorf("%w; cannot notify tender session %s on outpost %s", errRemoteGardenTender, sessionID, endpointID)
 		}
 	}
 	return "", nil
@@ -133,12 +104,18 @@ func (d *Daemon) setSeedWatch(sessionID, seedID string, watching bool) (*protoco
 
 type gardenSubscriptions struct {
 	parents map[string]string
+	seeds   map[string]garden.Seed
 	watches map[string][]store.GardenSeedWatch
 }
 
 func newGardenSubscriptions(seeds []garden.Seed, watches []store.GardenSeedWatch) gardenSubscriptions {
-	subscriptions := gardenSubscriptions{parents: make(map[string]string, len(seeds)), watches: map[string][]store.GardenSeedWatch{}}
+	subscriptions := gardenSubscriptions{
+		parents: make(map[string]string, len(seeds)),
+		seeds:   make(map[string]garden.Seed, len(seeds)),
+		watches: map[string][]store.GardenSeedWatch{},
+	}
 	for _, seed := range seeds {
+		subscriptions.seeds[seed.ID] = seed
 		subscriptions.parents[seed.ID] = ""
 		for _, edge := range seed.Edges {
 			if edge.Kind == garden.EdgePartOf {
@@ -155,9 +132,17 @@ func newGardenSubscriptions(seeds []garden.Seed, watches []store.GardenSeedWatch
 
 // Coverage names the ordinary subscriptions covering this seed for each session.
 func (s gardenSubscriptions) coverage(seedID string) map[string][]string {
+	covered, _ := s.coverageChecked(seedID)
+	return covered
+}
+
+func (s gardenSubscriptions) coverageChecked(seedID string) (map[string][]string, error) {
 	covered := map[string][]string{}
 	seen := map[string]bool{}
-	for at := seedID; !seen[at]; {
+	for at := seedID; at != ""; {
+		if seen[at] {
+			return nil, fmt.Errorf("garden seed ancestry cycle reaches %s while resolving %s", at, seedID)
+		}
 		parent, known := s.parents[at]
 		if !known {
 			break
@@ -171,11 +156,11 @@ func (s gardenSubscriptions) coverage(seedID string) map[string][]string {
 	for _, seeds := range covered {
 		sort.Strings(seeds)
 	}
-	return covered
+	return covered, nil
 }
 
 func (d *Daemon) readGardenSubscriptions() (gardenSubscriptions, error) {
-	read, err := d.readGarden()
+	read, err := d.readGardenTo(0)
 	if err != nil {
 		return gardenSubscriptions{}, err
 	}
@@ -203,50 +188,7 @@ func (d *Daemon) seedWatchCoverage(sessionID, seedID string) ([]string, error) {
 
 // Caller holds gardenWatchMu through the dependent enqueue or inbox read.
 func (d *Daemon) discardUncoveredSeedBells(sessionID string) error {
-	items, err := d.store.UnreadGardenSeedMailboxItems(sessionID)
-	if err != nil {
-		return err
-	}
-	if len(items) == 0 {
-		return d.refreshAgentMailboxUnread(sessionID)
-	}
-	subscriptions, err := d.readGardenSubscriptions()
-	if err != nil {
-		return err
-	}
-	var uncovered []string
-	for _, item := range items {
-		if len(subscriptions.coverage(item.SeedID)[sessionID]) != 0 {
-			continue
-		}
-		tendered, err := d.unblockedSeedTenderedBy(item, sessionID)
-		if err != nil {
-			return err
-		}
-		if tendered {
-			continue
-		}
-		uncovered = append(uncovered, item.SeedID)
-	}
-	if err := d.store.DiscardGardenSeedMailboxItems(sessionID, uncovered, time.Now()); err != nil {
-		return err
-	}
-	return d.refreshAgentMailboxUnread(sessionID)
-}
-
-func (d *Daemon) unblockedSeedTenderedBy(item store.GardenSeedMailboxItem, sessionID string) (bool, error) {
-	if item.EventKind != gardenRingUnblocked {
-		return false, nil
-	}
-	seed, _, err := d.readSeed(item.SeedID)
-	if err != nil {
-		return false, fmt.Errorf("read unblocked seed %s for %s: %w", item.SeedID, sessionID, err)
-	}
-	tenderSessionID, err := d.localGardenTenderSession(seed.Tender())
-	if err != nil {
-		return false, fmt.Errorf("resolve the tender for unblocked seed %s: %w", item.SeedID, err)
-	}
-	return tenderSessionID == sessionID, nil
+	return d.discardIneligibleGardenSeedBellsLocked(sessionID)
 }
 
 func (d *Daemon) consumeSeedBell(sessionID, seedID string) {
@@ -254,7 +196,14 @@ func (d *Daemon) consumeSeedBell(sessionID, seedID string) {
 	if sessionID == "" || d.store == nil {
 		return
 	}
-	consumed, remaining, err := d.store.ReadGardenSeedMailboxItems(sessionID, seedID, time.Now())
+	d.gardenWatchMu.Lock()
+	err := d.discardIneligibleGardenSeedBellsLocked(sessionID)
+	var consumed bool
+	var remaining int
+	if err == nil {
+		consumed, remaining, err = d.store.ReadGardenSeedMailboxItems(sessionID, seedID, time.Now())
+	}
+	d.gardenWatchMu.Unlock()
 	if err != nil {
 		d.logf("garden bell: consuming session=%s seed=%s: %v", sessionID, seedID, err)
 		return
@@ -262,44 +211,4 @@ func (d *Daemon) consumeSeedBell(sessionID, seedID string) {
 	if consumed {
 		d.noteAgentMailboxRead(sessionID, remaining)
 	}
-}
-
-// Watching an ancestor covers descendants planted later, because no subscription
-// is copied down the tree.
-func (d *Daemon) ringSeedActivity(seedID, eventKind string, excludedSessionIDs ...string) {
-	if d.store == nil {
-		return
-	}
-	d.gardenWatchMu.Lock()
-	defer d.gardenWatchMu.Unlock()
-	subscriptions, err := d.readGardenSubscriptions()
-	if err != nil {
-		d.logf("garden bell: reading subscriptions for %s: %v", seedID, err)
-		return
-	}
-	targets := subscriptions.coverage(seedID)
-
-	for _, sessionID := range excludedSessionIDs {
-		delete(targets, strings.TrimSpace(sessionID))
-	}
-	for sessionID := range targets {
-		if d.store.Get(sessionID) == nil {
-			continue
-		}
-		d.claimAndDeliverSeedBell(sessionID, seedID, eventKind)
-	}
-}
-
-func (d *Daemon) claimAndDeliverSeedBell(sessionID, seedID, eventKind string) {
-	now := time.Now()
-	claimed, err := d.store.ClaimGardenSeedMailboxItem(sessionID, seedID, eventKind, uuid.NewString(), now)
-	if err != nil {
-		d.logf("garden bell: claiming session=%s seed=%s: %v", sessionID, seedID, err)
-		return
-	}
-	if !claimed {
-		return
-	}
-	d.noteQueuedAgentMailboxItem(sessionID)
-	go d.drainQueuedAgentMailboxItems(sessionID)
 }

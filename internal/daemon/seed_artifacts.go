@@ -18,7 +18,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/protocol"
 	"golang.org/x/sys/unix"
@@ -33,22 +35,31 @@ const (
 )
 
 type seedArtifactTransferReceipt struct {
-	Version     int                       `json:"version"`
-	ID          string                    `json:"id"`
-	SeedID      string                    `json:"seed_id"`
-	Operation   string                    `json:"operation"`
-	Source      string                    `json:"source"`
-	Destination string                    `json:"destination"`
-	Filename    string                    `json:"filename"`
-	Hash        string                    `json:"hash"`
-	Size        int64                     `json:"size"`
-	ModTimeNS   int64                     `json:"mod_time_ns"`
-	Device      uint64                    `json:"device"`
-	Inode       uint64                    `json:"inode"`
-	Stage       string                    `json:"stage,omitempty"`
-	State       string                    `json:"state"`
-	Legacy      *garden.ArtifactReference `json:"legacy,omitempty"`
-	UpdatedAt   time.Time                 `json:"updated_at"`
+	Version             int                       `json:"version"`
+	ID                  string                    `json:"id"`
+	EventSource         string                    `json:"event_source,omitempty"`
+	ReplacesEventSource string                    `json:"replaces_event_source,omitempty"`
+	SeedID              string                    `json:"seed_id"`
+	Operation           string                    `json:"operation"`
+	Source              string                    `json:"source"`
+	Destination         string                    `json:"destination"`
+	Filename            string                    `json:"filename"`
+	Hash                string                    `json:"hash"`
+	Size                int64                     `json:"size"`
+	ModTimeNS           int64                     `json:"mod_time_ns"`
+	Device              uint64                    `json:"device"`
+	Inode               uint64                    `json:"inode"`
+	Stage               string                    `json:"stage,omitempty"`
+	State               string                    `json:"state"`
+	Legacy              *garden.ArtifactReference `json:"legacy,omitempty"`
+	UpdatedAt           time.Time                 `json:"updated_at"`
+}
+
+func (r seedArtifactTransferReceipt) eventSource() string {
+	if source := strings.TrimSpace(r.EventSource); source != "" {
+		return source
+	}
+	return r.ID
 }
 
 type stagedSeedArtifact struct {
@@ -201,6 +212,138 @@ func (d *Daemon) seedArtifacts(seedID string) ([]protocol.SeedArtifact, error) {
 	}
 	sort.Slice(artifacts, func(i, j int) bool { return artifacts[i].Filename < artifacts[j].Filename })
 	return artifacts, nil
+}
+
+type observedSeedArtifact struct {
+	Filename       string `json:"filename"`
+	RelativeTarget string `json:"relative_target"`
+	Size           int64  `json:"size"`
+	ModifiedAt     string `json:"modified_at"`
+	ContentSHA256  string `json:"content_sha256"`
+}
+
+func (d *Daemon) observedSeedArtifacts(seedID string) ([]observedSeedArtifact, error) {
+	artifacts, err := d.seedArtifacts(seedID)
+	if err != nil || len(artifacts) == 0 {
+		return []observedSeedArtifact{}, err
+	}
+	_, dir, err := d.seedArtifactDir(seedID, false)
+	if err != nil {
+		return nil, err
+	}
+	observed := make([]observedSeedArtifact, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		path := filepath.Join(dir, artifact.Filename)
+		fd, openErr := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+		if errors.Is(openErr, unix.ENOENT) || errors.Is(openErr, unix.ELOOP) {
+			continue
+		}
+		if openErr != nil {
+			return nil, fmt.Errorf("read seed artifact %q for observation: %w", artifact.Filename, openErr)
+		}
+		file := os.NewFile(uintptr(fd), path)
+		info, statErr := file.Stat()
+		hash := sha256.New()
+		_, hashErr := io.Copy(hash, file)
+		closeErr := file.Close()
+		if statErr != nil || hashErr != nil || closeErr != nil {
+			return nil, fmt.Errorf("hash seed artifact %q: %w", artifact.Filename, errors.Join(statErr, hashErr, closeErr))
+		}
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		observed = append(observed, observedSeedArtifact{
+			Filename: artifact.Filename, RelativeTarget: artifact.RelativeTarget,
+			Size: info.Size(), ModifiedAt: info.ModTime().UTC().Format(time.RFC3339Nano),
+			ContentSHA256: hex.EncodeToString(hash.Sum(nil)),
+		})
+	}
+	return observed, nil
+}
+
+func (d *Daemon) seedArtifactObservationChecksum(seedID string) (string, error) {
+	artifacts, err := d.observedSeedArtifacts(seedID)
+	if err != nil {
+		return "", err
+	}
+	snapshot, err := json.Marshal(artifacts)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(snapshot)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func (d *Daemon) recordObservedSeedArtifacts(seedID string) error {
+	d.seedArtifactMu.Lock()
+	defer d.seedArtifactMu.Unlock()
+	checksum, err := d.seedArtifactObservationChecksum(seedID)
+	if err != nil {
+		return err
+	}
+	occurrence, err := seedEvents.Occur(
+		gardenSeedEventModel, gardenSeedEventVocabulary.ArtifactChanged, seedID,
+		seedEvents.CausePayload{},
+	)
+	if err != nil {
+		return err
+	}
+	encoded, err := encodeGardenSeedEvents(occurrence)
+	if err != nil {
+		return err
+	}
+	seq, changed, err := d.store.AppendGardenSeedArtifactObservation(
+		checksum, encoded[0], time.Now(),
+	)
+	if err != nil {
+		return err
+	}
+	if changed {
+		announceGardenSeedEvents(d, []int64{seq})
+	}
+	return nil
+}
+
+func (d *Daemon) reconcileSeedArtifactObservations() error {
+	read, err := d.readGardenTo(0)
+	if err != nil {
+		return err
+	}
+	root, err := d.notebookRoot()
+	if err != nil {
+		return err
+	}
+	var reconciliationErrors []error
+	for _, seed := range read.seeds {
+		dir := notebook.SeedArtifactsDir(root, seed.ID)
+		info, statErr := os.Lstat(dir)
+		if os.IsNotExist(statErr) {
+			observed, observedErr := d.store.HasGardenSeedArtifactObservation(seed.ID)
+			if observedErr != nil {
+				reconciliationErrors = append(reconciliationErrors, fmt.Errorf("read artifact observation for %s: %w", seed.ID, observedErr))
+				continue
+			}
+			if !observed {
+				continue
+			}
+			if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+				reconciliationErrors = append(reconciliationErrors, fmt.Errorf("reconcile removed artifacts for %s: %w", seed.ID, err))
+			}
+			continue
+		}
+		if statErr != nil {
+			reconciliationErrors = append(reconciliationErrors, fmt.Errorf("inspect artifacts for %s: %w", seed.ID, statErr))
+			continue
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			reconciliationErrors = append(reconciliationErrors, fmt.Errorf("seed artifact directory %q is not a real directory", dir))
+			continue
+		}
+		if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+			reconciliationErrors = append(reconciliationErrors, fmt.Errorf("reconcile artifacts for %s: %w", seed.ID, err))
+		}
+	}
+	return errors.Join(reconciliationErrors...)
 }
 
 func (d *Daemon) seedArtifactReferences(seedID string) []protocol.SeedArtifactReference {
@@ -357,7 +500,30 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 	if operation != "detach" {
 		result.Artifact = &artifact
 	}
-	d.publishFact(FactGardenArtifactChanged, seedID, nil)
+	changedEvent, err := seedEvents.Occur(
+		gardenSeedEventModel, gardenSeedEventVocabulary.ArtifactChanged, seedID,
+		seedEvents.CausePayload{CausedBySessionID: protocol.Deref(msg.SourceSessionID)},
+	)
+	if err != nil {
+		return nil, err
+	}
+	checksum, err := d.seedArtifactObservationChecksum(seedID)
+	if err != nil {
+		return nil, fmt.Errorf("artifact transfer %s is complete but its Garden observation is pending; retry the same command: %w", receipt.ID, err)
+	}
+	encoded, err := encodeGardenSeedEvents(changedEvent)
+	if err != nil {
+		return nil, err
+	}
+	seq, inserted, err := d.store.AppendGardenSeedArtifactTransferObservation(
+		receipt.eventSource(), receipt.ReplacesEventSource, checksum, encoded[0], time.Now(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("artifact transfer %s is complete but its Garden event is pending; retry the same command: %w", receipt.ID, err)
+	}
+	if inserted {
+		announceGardenSeedEvents(d, []int64{seq})
+	}
 	changed := filepath.ToSlash(filepath.Join("seeds", seedID, filename))
 	d.broadcastFsChanged(root, originAgent, changed)
 	return result, nil
@@ -411,7 +577,9 @@ func (d *Daemon) runSeedArtifactTransfer(root, seedID, operation, source, destin
 	if found && (receipt.SeedID != seedID || receipt.Operation != operation || receipt.Source != source || receipt.Destination != destination) {
 		return nil, true, fmt.Errorf("transfer receipt %s does not match this operation", id)
 	}
+	replacesEventSource := ""
 	if found && receipt.State == seedTransferComplete && completedTransferDestinationMissing(receipt) {
+		replacesEventSource = receipt.eventSource()
 		found = false
 	}
 	if !found {
@@ -425,7 +593,7 @@ func (d *Daemon) runSeedArtifactTransfer(root, seedID, operation, source, destin
 			return nil, false, err
 		}
 		receipt = &seedArtifactTransferReceipt{
-			Version: seedArtifactTransferVersion, ID: id, SeedID: seedID,
+			Version: seedArtifactTransferVersion, ID: id, EventSource: uuid.NewString(), ReplacesEventSource: replacesEventSource, SeedID: seedID,
 			Operation: operation, Source: source, Destination: destination,
 			Filename: filename, Hash: staged.hash, Size: staged.size,
 			ModTimeNS: staged.modTimeNS, Device: staged.device, Inode: staged.inode,
@@ -747,7 +915,7 @@ func (d *Daemon) detachLegacyArtifactReference(seedID, authorSession string, leg
 	for _, current := range d.seedArtifactReferences(seedID) {
 		candidate := artifactFromProtocol(&current)
 		if candidate != nil && candidate.Identity() == legacy.Identity() {
-			_, err := d.appendSeedNote(seedID, "", authorSession, "", garden.NoteKindDetach, &legacy)
+			_, err := d.appendSeedNote(seedID, "", authorSession, "", garden.NoteKindDetach, &legacy, false, authorSession)
 			return err
 		}
 	}

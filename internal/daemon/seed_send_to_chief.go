@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -134,10 +135,20 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage) (*protoco
 	if err != nil {
 		return nil, err
 	}
-	written, notes, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, FactGardenTended, []garden.Note{{
+	cause := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
+	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, next.ID, cause, chiefSessionID)
+	if err != nil {
+		return nil, err
+	}
+	d.gardenWatchMu.Lock()
+	written, notes, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, []seedEvents.Occurrence{tended}, []garden.Note{{
 		Seed: next.ID, Kind: garden.NoteKindNote, Body: noteBody,
-		AuthorSession: strings.TrimSpace(protocol.Deref(msg.SourceSessionID)),
+		AuthorSession: cause,
 	}})
+	if err == nil {
+		err = d.discardAllIneligibleGardenSeedBellsLocked()
+	}
+	d.gardenWatchMu.Unlock()
 	if err != nil {
 		if docstore.IsConflict(err) {
 			return nil, fmt.Errorf("%s changed while it was being sent to Chief; refresh the garden", seed.ID)
@@ -150,7 +161,6 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage) (*protoco
 	if err := d.resolveGardenReviewAction(msg.Review, seed.ID, "send_to_chief"); err != nil {
 		d.logf("Garden review: settle %s after Send to Chief: %v", seed.ID, err)
 	}
-	d.ringSeedActivity(seed.ID, gardenRingEvents[garden.VerbTend], chiefSessionID, protocol.Deref(msg.SourceSessionID))
 	status, detail := d.deliverChiefSeedAssignment(chiefSessionID, seed.ID)
 
 	wire := seedToProtocol(next, written, false)

@@ -180,7 +180,20 @@ func (d *Daemon) bindResumedSeed(
 			Fact:  dispatchFact,
 		},
 	}
-	written, err := d.store.CommitDocumentWrites(commits, d.gardenTime())
+	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, sessionID)
+	if err != nil {
+		return err
+	}
+	events, err := encodeGardenSeedEvents(tended)
+	if err != nil {
+		return err
+	}
+	d.gardenWatchMu.Lock()
+	written, eventSeqs, err := d.store.CommitDocumentWritesWithEvents(commits, events, d.gardenTime())
+	if err == nil {
+		err = d.discardAllIneligibleGardenSeedBellsLocked()
+	}
+	d.gardenWatchMu.Unlock()
 	if err != nil {
 		if docstore.IsConflict(err) {
 			return fmt.Errorf("%s changed while its conversation was resuming; refresh it and try again", seed.ID)
@@ -189,9 +202,8 @@ func (d *Daemon) bindResumedSeed(
 	}
 	d.announceCommittedWrite(seedFact, written[0].Seq)
 	d.announceCommittedWrite(dispatchFact, written[1].Seq)
-	d.publishFact(FactGardenTended, seed.ID, nil)
+	announceGardenSeedEvents(d, eventSeqs)
 	d.rememberDispatchProjection(sessionID, dispatch, written[1].Rev)
-	d.ringSeedActivity(seed.ID, gardenRingEvents[garden.VerbTend], sessionID, "")
 	return nil
 }
 

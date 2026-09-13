@@ -14,6 +14,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
@@ -93,6 +94,21 @@ func (d *Daemon) automationRunIsContinuation(run *store.AutomationRun) (bool, er
 	return origin != "" && origin != run.ID, nil
 }
 
+func (d *Daemon) automationWorkReadyOccurrence(run *store.AutomationRun) (seedEvents.Occurrence, error) {
+	continuation, err := d.automationRunIsContinuation(run)
+	if err != nil {
+		return seedEvents.Occurrence{}, err
+	}
+	causedBySessionID := ""
+	if !continuation {
+		causedBySessionID = run.SessionID
+	}
+	return seedEvents.Occur(
+		gardenSeedEventModel, gardenSeedEventVocabulary.WorkReady, run.SeedID,
+		seedEvents.WorkReadyPayload{AutomationRunID: run.ID, CausedBySessionID: causedBySessionID},
+	)
+}
+
 func (d *Daemon) recordAutomationRunSeedOutcome(run *store.AutomationRun, body string) error {
 	if run == nil || strings.TrimSpace(run.SeedID) == "" {
 		return errors.New("record automation outcome: seed id missing")
@@ -121,12 +137,12 @@ func (d *Daemon) recordAutomationRunSeedOutcome(run *store.AutomationRun, body s
 		seen = seen || note.Body == body
 	}
 	if !seen {
-		if _, err := d.appendSeedNote(run.SeedID, body, run.SessionID, "", garden.NoteKindNote, nil); err != nil {
-			return fmt.Errorf("record automation outcome: append note: %w", err)
+		causedBySessionID := ""
+		if !continuation {
+			causedBySessionID = run.SessionID
 		}
-		d.ringSeedActivity(run.SeedID, "note", run.SessionID)
-		if continuation {
-			d.claimAndDeliverSeedBell(run.SessionID, run.SeedID, "note")
+		if _, err := d.appendSeedNote(run.SeedID, body, run.SessionID, "", garden.NoteKindNote, nil, true, causedBySessionID); err != nil {
+			return fmt.Errorf("record automation outcome: append note: %w", err)
 		}
 	}
 	if continuation {
@@ -186,8 +202,22 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	if err != nil {
 		return err
 	}
-	if err := d.store.MarkAutomationRunDelivered(run.ID, string(result.Resolved), time.Now()); err != nil {
+	ready, err := d.automationWorkReadyOccurrence(run)
+	if err != nil {
 		return err
+	}
+	events, err := encodeGardenSeedEvents(ready)
+	if err != nil {
+		return err
+	}
+	seq, inserted, err := d.store.MarkAutomationRunDeliveredWithEvent(
+		run.ID, string(result.Resolved), events[0], time.Now(),
+	)
+	if err != nil {
+		return err
+	}
+	if inserted {
+		announceGardenSeedEvents(d, []int64{seq})
 	}
 	// No unit-test coverage: pinned live by scenario-automation-surface.mjs
 	// leg2_run_now_and_navigable.
@@ -231,9 +261,6 @@ func (d *Daemon) launchAutomationRun(ctx context.Context, req automation.WorkReq
 	}
 	if err := d.verifyAutomationDelivery(ctx, req, location.Directory); err != nil {
 		return automation.DeliveryResult{}, fmt.Errorf("verify delivery: %w", err)
-	}
-	if continuation {
-		d.claimAndDeliverSeedBell(req.IDs.SessionID, req.IDs.SeedID, "note")
 	}
 	return automation.DeliveryResult{SeedID: req.IDs.SeedID, SessionID: req.IDs.SessionID, WorkspaceID: req.IDs.WorkspaceID, Directory: location.Directory, Revision: location.Revision, Resolved: location.Resolved, Mode: "created"}, nil
 }
@@ -353,6 +380,11 @@ func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() 
 	body := strings.TrimSpace(req.Prompt)
 	var restore func() error
 	if seed, _, readErr := d.readSeed(req.IDs.SeedID); readErr == nil {
+		if continuation {
+			if _, watchErr := d.setSeedWatch(req.IDs.SessionID, seed.ID, true); watchErr != nil {
+				return false, nil, fmt.Errorf("watch automation continuation seed %s: %w", seed.ID, watchErr)
+			}
+		}
 		if seed.TenderSession != req.IDs.SessionID || seed.Status != garden.StatusGrowing {
 			if restore, err = d.activateAutomationContinuationSeed(req.IDs.SeedID, req.IDs.SessionID); err != nil {
 				return false, nil, err
@@ -395,6 +427,9 @@ func (d *Daemon) activateAutomationContinuationSeed(seedID, sessionID string) (f
 		return nil, fmt.Errorf("read automation continuation seed %s: %w", seedID, err)
 	}
 	actor := garden.Tender{Session: sessionID}
+	quietAsk := func(reason string) garden.Ask {
+		return garden.Ask{Actor: actor, Reason: reason, SuppressNotification: true}
+	}
 	var restore func() error
 	if garden.Closed(seed.Status) {
 		closeVerb, closeReason := garden.VerbWither, seed.Reason
@@ -402,10 +437,10 @@ func (d *Daemon) activateAutomationContinuationSeed(seedID, sessionID string) (f
 			closeVerb = garden.VerbHarvest
 		}
 		restore = func() error {
-			_, _, err := d.applySeedTransition(seedID, closeVerb, garden.Ask{Actor: actor, Reason: closeReason})
+			_, _, err := d.applySeedTransition(seedID, closeVerb, quietAsk(closeReason))
 			return err
 		}
-		if _, _, err := d.applySeedTransition(seedID, garden.VerbReplant, garden.Ask{Actor: actor}); err != nil {
+		if _, _, err := d.applySeedTransition(seedID, garden.VerbReplant, quietAsk("")); err != nil {
 			return nil, fmt.Errorf("replant automation continuation seed %s: %w", seedID, err)
 		}
 		seed.Status = garden.StatusPlanted
@@ -413,7 +448,7 @@ func (d *Daemon) activateAutomationContinuationSeed(seedID, sessionID string) (f
 	if seed.Status == garden.StatusGrowing && seed.TenderSession == sessionID {
 		return restore, nil
 	}
-	if _, _, err := d.applySeedTransition(seedID, garden.VerbTend, garden.Ask{Actor: actor}); err != nil {
+	if _, _, err := d.applySeedTransition(seedID, garden.VerbTend, quietAsk("")); err != nil {
 		return nil, fmt.Errorf("tend automation continuation seed %s: %w", seedID, err)
 	}
 	return restore, nil
@@ -434,10 +469,9 @@ func (d *Daemon) ensureAutomationOccurrenceNote(req automation.WorkRequest) erro
 			return nil
 		}
 	}
-	if _, err := d.appendSeedNote(req.IDs.SeedID, body, req.IDs.SessionID, "", garden.NoteKindNote, nil); err != nil {
+	if _, err := d.appendSeedNote(req.IDs.SeedID, body, req.IDs.SessionID, "", garden.NoteKindNote, nil, false, req.IDs.SessionID); err != nil {
 		return err
 	}
-	d.ringSeedActivity(req.IDs.SeedID, "note", req.IDs.SessionID)
 	return nil
 }
 func (d *Daemon) prepareAutomationLocation(_ context.Context, req automation.WorkRequest) (automation.PreparedLocation, error) {

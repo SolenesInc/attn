@@ -45,7 +45,7 @@ func TestAutomationRetentionSweepPreservesBoundThreadOriginRunAndContinuationSti
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(origin.ID, "{}", old); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, origin.ID, "{}", old); err != nil {
 		t.Fatal(err)
 	}
 
@@ -113,7 +113,7 @@ func TestAutomationRetentionAndCleanupPreserveBoundThreadSharedWorktree(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(origin.ID, resolvedLocationJSON, old); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, origin.ID, resolvedLocationJSON, old); err != nil {
 		t.Fatal(err)
 	}
 
@@ -126,7 +126,7 @@ func TestAutomationRetentionAndCleanupPreserveBoundThreadSharedWorktree(t *testi
 	if second.SeedID != origin.SeedID || second.SessionID != origin.SessionID {
 		t.Fatalf("expected the second occurrence to reuse the bound thread's ticket/session, got ticket=%q session=%q", second.SeedID, second.SessionID)
 	}
-	if err := s.MarkAutomationRunDelivered(second.ID, resolvedLocationJSON, old.Add(time.Minute)); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, second.ID, resolvedLocationJSON, old.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 
