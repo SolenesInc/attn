@@ -40,10 +40,9 @@ const preferencesRequest = (cmd, preferences) => {
     observer.ws.send(JSON.stringify({ cmd, request_id, preferences }));
   });
 };
-const waitFor = async (read, description) => {
-  const result = await read();
-  runner.assert(Boolean(result), description, { result });
-  return result;
+const waitForSelector = async (selector, description, expectation = {}) => {
+  const result = await client.request('dom_wait', { selector, timeoutMs: 10_000, ...expectation });
+  runner.assert(result.matched, description);
 };
 const hold = () => process.env.ATTN_HARNESS_RECORD === '1' ? delay(1200) : Promise.resolve();
 const screenshot = async name => {
@@ -51,7 +50,7 @@ const screenshot = async name => {
   if (!windowId) throw new Error('The verification app has no capturable window');
   await driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId });
 };
-const chainFocus = id => exists(`${popup} [data-chain-session="${id}"]:focus`);
+const waitForChainFocus = (id, description) => waitForSelector(`${popup} [data-chain-session="${id}"]:focus`, description);
 
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
@@ -101,11 +100,11 @@ try {
   });
   await runner.step('sidebar_hover_and_header_role', async () => {
     const header = `.delegation-chain-trigger--header[data-delegation-session="${builder}"]`;
-    await waitFor(() => exists(header), 'Builder header');
+    await waitForSelector(header, 'Builder header');
     runner.assert((await text(header)) === 'Builder', 'header spells out the assigned role');
     const sidebar = `.delegation-chain-trigger--sidebar[data-delegation-session="${builder}"]`;
     await client.request('dom_hover', { selector: sidebar });
-    await waitFor(() => exists(popup), 'hovered chain');
+    await waitForSelector(popup, 'hovered chain');
     const content = await text(popup);
     runner.assert(content.includes('Orchestrator') && content.includes('Builder') && content.includes('Check keyboard flow'), 'the chain shows ancestors, roles and roleless descendants', { content });
     runner.assert(!await exists('.kin-up, .kin-down, .sidebar-delegate-count'), 'no related-row highlights or old count circle');
@@ -113,47 +112,53 @@ try {
     await hold();
     await client.request('dom_key', { selector: popup, key: 'Escape' });
     await client.request('dom_click', { selector: header });
-    await waitFor(() => chainFocus(builder), 'click focuses the current agent');
+    await waitForChainFocus(builder, 'click focuses the current agent');
     await hold();
     await driver.activateApp();
-    await driver.pressKeyCode(53);
-    await waitFor(() => exists(`${header}:focus`), 'Escape restores the header trigger');
+    await driver.pressKey('Escape');
+    await waitForSelector(`${header}:focus`, 'Escape restores the header trigger');
   });
   await runner.step('native_action_menu_arrows_enter_and_escape', async () => {
     await pressShortcutKeys(client, driver, 'ui.actionMenu');
-    await waitFor(() => exists('.action-menu input:focus'), 'native action menu shortcut');
+    await waitForSelector('.action-menu input:focus', 'native action menu shortcut');
     await driver.typeText('delegation chain');
-    await waitFor(async () => (await text('.action-menu-results')).includes('Show delegation chain'), 'chain command');
-    await driver.pressKeyCode(36);
-    await waitFor(() => chainFocus(builder), 'command transfers focus into the chain');
+    await waitForSelector('.action-menu-results', 'chain command', { textIncludes: 'Show delegation chain' });
+    await driver.pressKey('Enter');
+    await waitForChainFocus(builder, 'command transfers focus into the chain');
     await screenshot('keyboard-chain');
     await hold();
-    await driver.pressKeyCode(126);
-    await waitFor(() => chainFocus(root), 'Up selects the orchestrator');
-    await driver.pressKeyCode(125);
-    await driver.pressKeyCode(125);
-    await waitFor(() => chainFocus(child), 'Down selects the roleless descendant');
-    await driver.pressKeyCode(36);
-    await waitFor(async () => (await client.request('get_state')).activeSessionId === child, 'Enter opens the selected agent');
+    await driver.pressKey('ArrowUp');
+    await waitForChainFocus(root, 'Up selects the orchestrator');
+    await driver.pressKey('ArrowDown');
+    await driver.pressKey('ArrowDown');
+    await waitForChainFocus(child, 'Down selects the roleless descendant');
+    await driver.pressKey('Enter');
+    await waitForSelector(popup, 'selection dismisses the chain', { absent: true });
+    runner.assert((await client.request('get_state')).activeSessionId === child, 'Enter opens the selected agent');
     runner.assert(!await exists(popup), 'selection closes the popup');
     await pressShortcutKeys(client, driver, 'ui.actionMenu');
-    await waitFor(() => exists('.action-menu input:focus'), 'action menu reopens');
+    await waitForSelector('.action-menu input:focus', 'action menu reopens');
     await driver.typeText('delegation chain');
-    await driver.pressKeyCode(36);
-    await waitFor(() => chainFocus(child), 'roleless session opens its chain');
-    await driver.pressKeyCode(53);
-    await waitFor(async () => !await exists(popup), 'Escape dismisses the chain');
+    await driver.pressKey('Enter');
+    await waitForChainFocus(child, 'roleless session opens its chain');
+    await driver.pressKey('Escape');
+    await waitForSelector(popup, 'Escape dismisses the chain', { absent: true });
   });
   await runner.step('settings_changes_do_not_relabel_existing_agents', async () => {
     const current = (await preferencesRequest('delegation_preferences_get')).preferences;
     await preferencesRequest('delegation_preferences_save', { ...current, enabled: false, roles: [] });
     await client.request('select_session', { sessionId: root });
-    await waitFor(() => exists(`.delegation-chain-trigger--header[data-delegation-session="${root}"]`), 'orchestrator header after deletion');
+    await waitForSelector(`.delegation-chain-trigger--header[data-delegation-session="${root}"]`, 'orchestrator header after deletion');
     runner.assert(observer.getSession(root)?.delegation_role?.name === 'Orchestrator', 'launch identity survives deleting its role');
   });
   await runner.step('sample_idle_app_with_chain_open', async () => {
     await client.request('dom_click', { selector: `.delegation-chain-trigger--header[data-delegation-session="${root}"]` });
-    await waitFor(() => chainFocus(root), 'idle chain focus');
+    await waitForChainFocus(root, 'idle chain focus');
+    if (process.platform !== 'darwin') {
+      runner.writeJson('idle-app.json', { supported: false, reason: 'Physical app footprint collection uses macOS vmmap; no Linux resource measurement is claimed.' });
+      await screenshot('final-chain');
+      return;
+    }
     const appPid = client.readManifest().pid;
     const samples = [];
     for (let index = 0; index < 2; index += 1) {

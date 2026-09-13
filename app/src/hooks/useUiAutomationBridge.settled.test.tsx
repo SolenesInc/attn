@@ -145,6 +145,22 @@ describe('bridge dispatch', () => {
     expect(lastAnswer().value).toBe('bypass');
   });
 
+  it('exposes DOM and focus expectations through the bridge', async () => {
+    const { dispatch } = mountBridge(null);
+    const input = document.createElement('input');
+    input.className = 'menu-input';
+    document.body.append(input);
+    input.focus();
+
+    await dispatch({
+      request_id: 'r-dom-wait',
+      action: 'dom_wait',
+      payload: { selector: '.menu-input:focus', timeoutMs: 1000 },
+    });
+
+    expect(lastAnswer()).toEqual({ matched: true });
+  });
+
   it('answers with props from the render that committed during the settle', async () => {
     const { dispatch, rerender } = mountBridge('before');
 

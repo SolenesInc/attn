@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { waitForAutomationDom, type AutomationDomExpectation } from '../../src/hooks/uiAutomationDom';
 import { afterFramePaints, nextAnimationFrame, settleUi } from '../../src/hooks/uiAutomationSettle';
 import type { HarnessProps } from '../types';
 
@@ -8,6 +9,7 @@ declare global {
       resize: (width: number) => void;
       readAfter: (frames: number, tasks: number) => Promise<number>;
       readSettled: () => Promise<number>;
+      waitForDom: typeof waitForAutomationDom;
     };
   }
 }
@@ -30,6 +32,7 @@ export function BridgeSettledReadHarness({ onReady, setTriggerRerender }: Harnes
     const readCommittedWidth = () =>
       Number(document.querySelector('[data-testid="committed-width"]')?.textContent ?? -1);
     window.__SETTLE_HARNESS__ = {
+      waitForDom: (expectation: AutomationDomExpectation) => waitForAutomationDom(expectation),
       resize: (width) => {
         if (boxRef.current) boxRef.current.style.width = `${width}px`;
       },

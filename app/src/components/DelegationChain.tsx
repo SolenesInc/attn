@@ -53,7 +53,7 @@ export function SessionRoleIcon({ role }: { role?: SessionDelegationRole }) {
       <path d="M4 5v6m0-3h4a4 4 0 0 0 4-4" />
     </svg>
   );
-  const builtinIcons = { pathfinder: 'search', builder: 'code', reviewer: 'diamond', orchestrator: 'spark' };
+  const builtinIcons = { pathfinder: 'search', builder: 'code', reviewer: 'list', orchestrator: 'spark' };
   return <DelegationRoleIcon icon={role.icon || (role.builtin ? builtinIcons[role.builtin] : '')} name={role.name} />;
 }
 

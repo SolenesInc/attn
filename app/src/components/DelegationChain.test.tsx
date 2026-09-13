@@ -1,8 +1,10 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { createRef } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BuiltinDelegationRole } from '../types/generated';
-import { DelegationChainProvider, DelegationChainTrigger, type ChainSession, type DelegationChainHandle } from './DelegationChain';
+import { DelegationChainProvider, DelegationChainTrigger, SessionRoleIcon, type ChainSession, type DelegationChainHandle } from './DelegationChain';
+import { DelegationRoleIcon } from './DelegationRoleIcon';
 
 const sessions: ChainSession[] = [
   { id: 'root', label: 'Coordinate identity', agent: 'claude', state: 'idle', delegation_role: { name: 'Orchestrator', builtin: BuiltinDelegationRole.Orchestrator } },
@@ -25,6 +27,14 @@ function setup() {
 afterEach(() => vi.useRealTimers());
 
 describe('delegation chain', () => {
+  it('uses the maintained Reviewer icon for legacy snapshots and preserves explicit icons', () => {
+    const role = { name: 'Reviewer', builtin: BuiltinDelegationRole.Reviewer };
+    expect(renderToStaticMarkup(<SessionRoleIcon role={role} />))
+      .toBe(renderToStaticMarkup(<DelegationRoleIcon icon="list" name="Reviewer" />));
+    expect(renderToStaticMarkup(<SessionRoleIcon role={{ ...role, icon: 'diamond' }} />))
+      .toBe(renderToStaticMarkup(<DelegationRoleIcon icon="diamond" name="Reviewer" />));
+  });
+
   it('previews every connected agent without selecting a session or moving focus', () => {
     setup();
     const terminal = screen.getByLabelText('Terminal');
