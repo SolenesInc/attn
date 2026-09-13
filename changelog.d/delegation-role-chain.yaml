@@ -1,0 +1,4 @@
+kind: added
+area: delegation
+change: Identify agents by their delegation role in the sidebar and header, and navigate their delegation chain from a hover popup or the Action Menu.
+notes: Roles remain optional. The chain supports arrow keys, Enter to open an agent, and Escape to close, without highlighting related sidebar rows.

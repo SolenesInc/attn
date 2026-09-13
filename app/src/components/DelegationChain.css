@@ -1,0 +1,139 @@
+.delegation-chain-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.delegation-chain-trigger--sidebar {
+  position: relative;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  padding: 4px;
+  border-radius: 5px;
+}
+
+.delegation-chain-trigger--header {
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.delegation-chain-trigger svg,
+.delegation-chain-role-icon svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.delegation-chain-trigger[data-role="orchestrator"],
+.delegation-chain-role-icon[data-role="orchestrator"] {
+  color: var(--accent);
+}
+
+.delegation-chain-trigger:hover,
+.delegation-chain-trigger[aria-expanded="true"] {
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+}
+
+.delegation-chain-trigger:focus-visible {
+  outline: 1px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.delegation-chain-popover {
+  position: fixed;
+  z-index: 1000;
+  width: 340px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42);
+  font-size: var(--font-size-sm);
+}
+
+.delegation-chain-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.delegation-chain-heading button {
+  padding: 0 5px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.delegation-chain-popover p,
+.delegation-chain-earlier {
+  margin: 4px 0 8px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.delegation-chain-popover ul {
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.delegation-chain-popover li > button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px 7px calc(4px + var(--chain-depth) * 16px);
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.delegation-chain-popover li > button[aria-current="true"] {
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+}
+
+.delegation-chain-popover li > button:hover,
+.delegation-chain-popover li > button:focus-visible {
+  outline: none;
+  border-color: var(--color-border-focus);
+  background: var(--color-bg-button);
+}
+
+.delegation-chain-branch {
+  width: 10px;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.delegation-chain-role-icon { flex-shrink: 0; }
+.delegation-chain-agent { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 2px; }
+.delegation-chain-agent > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.delegation-chain-agent small,
+.delegation-chain-current { color: var(--color-text-muted); font-size: var(--font-size-xs); }
+.delegation-chain-footer { display: flex; gap: 12px; padding-top: 8px; margin-top: 6px; border-top: 1px solid var(--color-border); color: var(--color-text-muted); font-size: var(--font-size-xs); }

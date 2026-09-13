@@ -59,7 +59,8 @@ import {
   type AttentionViewport,
 } from './attentionLayout';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
-import { delegatesByDispatcher, dispatcherOf, type DelegationSession } from '../../utils/delegationLinks';
+import { delegatesByDispatcher } from '../../utils/delegationLinks';
+import { DelegationChainTrigger, type ChainSession } from '../DelegationChain';
 
 const RESIZE_MOUSE_SUPPRESSION_MS = 1_500;
 // Only swallows the trailing pointerup/synthetic click from the release itself,
@@ -122,10 +123,7 @@ interface SessionTerminalWorkspaceProps {
     automation?: AutomationProvenanceValue;
     pullRequests?: SessionPullRequest[];
   }>;
-  delegationSessions?: Array<DelegationSession & {
-    agent: SessionAgent;
-    state: UISessionState;
-  }>;
+  delegationSessions?: readonly ChainSession[];
   seedTargetSessions?: WorkspaceTileSessionOption[];
   gardenSeeds?: Seed[];
   onOpenSeed?: (seedId: string) => void;
@@ -219,7 +217,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     onClosePane,
     onFocusPane,
     onRenameSession,
-    onSelectSession,
     onTriggerNudge,
     onCancelCountdown,
     onTerminalPointerActivity,
@@ -1096,9 +1093,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
         const autoSettleHeld = paneSession?.autoSettleHeld;
         const autoSettleDismissArmed = paneSession?.autoSettleDismissArmed;
         const delegationSession = delegationSessionById.get(agentPane.sessionId);
-        const dispatcher = delegationSession
-          ? dispatcherOf(delegationSession, delegationSessions)
-          : null;
         const delegates = delegatesByDispatcherId.get(agentPane.sessionId) ?? [];
         return (
           <div
@@ -1137,17 +1131,14 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
                     pinned={pinnedUsagePopover === agentPane.sessionId}
                     onPopoverClosed={() => setPinnedUsagePopover(null)}
                   />
-                  <SessionProvenance
-                    dispatcher={dispatcher}
-                    delegates={delegates}
-                    onSelectSession={onSelectSession}
-                    interactive
-                    popoverGroup={{
-                      id: `${agentPane.id}:delegation`,
-                      activeId: provenancePopoverOwner,
-                      onOpen: setProvenancePopoverOwner,
-                    }}
-                  />
+                  {delegationSession && (
+                    <DelegationChainTrigger
+                      session={delegationSession}
+                      hasDelegates={delegates.length > 0}
+                      variant="header"
+                      onOpen={() => setProvenancePopoverOwner(`${agentPane.id}:delegation`)}
+                    />
+                  )}
                 </span>
                 <SessionProvenance
                   automation={paneSession?.automation}
@@ -1400,6 +1391,8 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       renderedPaneBounds,
       agentPaneById,
       sessionById,
+      delegationSessionById,
+      delegatesByDispatcherId,
       resolvedTheme,
       runtime,
       showPaneHeader,

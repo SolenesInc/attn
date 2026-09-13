@@ -108,6 +108,7 @@ type Resolved struct {
 	Builtin       *protocol.BuiltinDelegationRole `json:"builtin,omitempty"`
 	Selection     Selection                       `json:"selection"`
 	RoleName      string                          `json:"role_name"`
+	RoleIcon      string                          `json:"role_icon,omitempty"`
 	Instructions  string                          `json:"instructions"`
 	StoppingPoint string                          `json:"stopping_point"`
 	Revision      int                             `json:"revision"`
@@ -156,6 +157,7 @@ func Resolve(c Config, r Request) (Resolved, error) {
 		}
 		out.Selection, out.RoleName, out.Instructions, out.StoppingPoint = choice.Selection, role.Name, role.Instructions, role.StoppingPoint
 		out.Builtin = role.Builtin
+		out.RoleIcon = role.Icon
 	}
 	s := &out.Selection
 	if r.Harness != nil && *r.Harness != s.Harness {

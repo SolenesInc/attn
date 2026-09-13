@@ -279,8 +279,9 @@ export class MacOSDriver {
     console.log(`[RealAppHarness] Parked window: ${stdout.trim()}`);
   }
 
-  async screenshot(outputPath) {
-    await execFileAsync('/usr/sbin/screencapture', ['-x', outputPath]);
+  async screenshot(outputPath, opts = {}) {
+    const windowArgs = opts.windowId ? ['-l', String(opts.windowId)] : [];
+    await execFileAsync('/usr/sbin/screencapture', ['-x', ...windowArgs, outputPath]);
   }
 
   serializeModifiers(modifiers = {}) {

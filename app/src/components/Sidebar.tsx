@@ -26,9 +26,11 @@ import type { WorkspaceSelectionStyle } from '../utils/workspaceSelectionStyle';
 import type {
   AutomationProvenance as AutomationProvenanceValue,
   SessionPullRequest,
+  SessionDelegationRole,
 } from '../types/generated';
 import { SessionProvenance } from './SessionProvenance';
-import { SidebarDelegateCount, SidebarDispatcherLine } from './SidebarDelegation';
+import { SidebarDispatcherLine } from './SidebarDelegation';
+import { DelegationChainTrigger } from './DelegationChain';
 import { describeSessionPullRequest, pickSessionPullRequest } from '../utils/sessionPullRequest';
 import type { ShortcutId } from '../shortcuts/registry';
 import {
@@ -60,6 +62,7 @@ interface LocalSession {
   crewMember?: string;
   dispatcher_session_id?: string;
   dispatcher_member?: string;
+  delegation_role?: SessionDelegationRole;
   automation?: AutomationProvenanceValue;
   pullRequests?: SessionPullRequest[];
 }
@@ -226,8 +229,6 @@ function SidebarSessionRow({
   showSettling,
   dispatcher,
   delegates,
-  kinClass,
-  onHoverSession,
   onSelectSession,
 }: {
   session: LocalSession;
@@ -242,8 +243,6 @@ function SidebarSessionRow({
   showSettling: boolean;
   dispatcher: DispatcherLink<LocalSession> | null;
   delegates: readonly LocalSession[];
-  kinClass: string;
-  onHoverSession: (id: string | null) => void;
   onSelectSession: (id: string) => void;
 }) {
   const nudgeMode = deriveNudgeMode({
@@ -254,19 +253,17 @@ function SidebarSessionRow({
   });
   return (
     <div
-      className={`session-item grouped ${selected ? 'selected' : ''} ${session.state === 'recoverable' ? 'recoverable' : ''} ${draggable ? 'session-item--draggable' : ''} ${dragging ? 'session-item--dragging' : ''} ${kinClass}`.trim().replace(/\s+/g, ' ')}
+      className={`session-item grouped ${selected ? 'selected' : ''} ${session.state === 'recoverable' ? 'recoverable' : ''} ${draggable ? 'session-item--draggable' : ''} ${dragging ? 'session-item--dragging' : ''}`.trim().replace(/\s+/g, ' ')}
       data-testid={`sidebar-session-${session.id}`}
       data-state={session.state}
       onClick={onSelect}
       onClickCapture={onClickCapture}
       onPointerDown={onPointerDown}
-      onPointerEnter={() => onHoverSession(session.id)}
-      onPointerLeave={() => onHoverSession(null)}
       title={session.state === 'recoverable' ? 'Session will be recovered when opened' : undefined}
     >
       <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
       <SidebarSessionIdentity session={session} dispatcher={dispatcher} onSelectSession={onSelectSession} />
-      <SidebarDelegateCount delegates={delegates} />
+      <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
       {session.endpointName && (
         <span className={`session-endpoint-badge status-${session.endpointStatus || 'connected'}`}>
           {session.endpointName}
@@ -577,7 +574,6 @@ export function Sidebar({
   const [expandedAutomationGroups, setExpandedAutomationGroups] = useState<Set<string>>(() => new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [displayMode, setDisplayMode] = useState<'open' | 'tight' | 'boxed'>('boxed');
-  const [hoveredSessionId, setHoveredSessionId] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<{
     kind: 'session' | 'workspace';
     id: string;
@@ -632,21 +628,9 @@ export function Sidebar({
     return [...byId.values()];
   }, [workspaces, mutedWorkspaces]);
   const delegates = useMemo(() => delegatesByDispatcher(allSessions), [allSessions]);
-  const hoveredSession = hoveredSessionId
-    ? allSessions.find((session) => session.id === hoveredSessionId)
-    : undefined;
-  const kinUpId = hoveredSession ? dispatcherOf(hoveredSession, allSessions)?.session?.id : undefined;
-  const kinDownIds = new Set(
-    hoveredSessionId ? (delegates.get(hoveredSessionId) ?? []).map((session) => session.id) : [],
-  );
-  const kinClass = (id: string) => (
-    id === kinUpId ? 'kin-up' : kinDownIds.has(id) ? 'kin-down' : ''
-  );
   const rowDelegation = (session: LocalSession) => ({
     dispatcher: dispatcherOf(session, allSessions),
     delegates: delegates.get(session.id) ?? [],
-    kinClass: kinClass(session.id),
-    onHoverSession: setHoveredSessionId,
     onSelectSession,
   });
   const toggleAutomationGroup = (definitionId: string) => {
@@ -1226,8 +1210,6 @@ export function Sidebar({
           onOpenActions={openSessionActions}
           onOpenSnooze={onOpenSnooze}
           allSessions={allSessions}
-          hoveredSessionId={hoveredSessionId}
-          onHoverSession={setHoveredSessionId}
         />
       )}
 
@@ -1456,8 +1438,6 @@ export function Sidebar({
           onSelectSession={onSelectSession}
           onWakeTurn={onWakeTurn}
           allSessions={allSessions}
-          hoveredSessionId={hoveredSessionId}
-          onHoverSession={setHoveredSessionId}
         />
       )}
 
@@ -1547,12 +1527,10 @@ export function Sidebar({
                       return (
                         <div
                           key={session.id}
-                          className={`session-item grouped muted-session ${selectedId === session.id ? 'selected' : ''} ${kinClass(session.id)}`.trim()}
+                          className={`session-item grouped muted-session ${selectedId === session.id ? 'selected' : ''}`.trim()}
                           data-testid={`sidebar-session-${session.id}`}
                           data-state={session.state}
                           onClick={() => onSelectSession(session.id)}
-                          onPointerEnter={() => setHoveredSessionId(session.id)}
-                          onPointerLeave={() => setHoveredSessionId(null)}
                         >
                           <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
                           <SidebarSessionIdentity
@@ -1560,7 +1538,7 @@ export function Sidebar({
                             dispatcher={dispatcherOf(session, allSessions)}
                             onSelectSession={onSelectSession}
                           />
-                          <SidebarDelegateCount delegates={delegates.get(session.id) ?? []} />
+                          <DelegationChainTrigger session={session} hasDelegates={(delegates.get(session.id)?.length ?? 0) > 0} />
                           {session.chiefOfStaff && <ChiefOfStaffBadge />}
                           {session.delegatedFromChief && <DelegatedFromChiefBadge />}
                           {session.endpointName && (

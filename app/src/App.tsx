@@ -118,6 +118,7 @@ import { clearBrowserHostFocus, controlBrowserHost, isBrowserHostOwnedTarget } f
 import { probeUiAfterSwitch, UI_DIAGNOSTICS_FILE_DISPLAY } from './utils/uiDiagnosticsLog';
 import { BannerStack } from './components/BannerStack';
 import { dispatcherOf } from './utils/delegationLinks';
+import { DelegationChainProvider, SessionRoleIcon, type DelegationChainHandle } from './components/DelegationChain';
 import {
   agentLabel,
   getAgentAvailability,
@@ -1168,6 +1169,8 @@ function AppContent({
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const delegationChainRef = useRef<DelegationChainHandle>(null);
+  const actionMenuReturnFocusRef = useRef<HTMLElement | null>(null);
   const [seedPopoverRequest, setSeedPopoverRequest] = useState<{ sessionId: string; nonce: number }>();
   const [usagePopoverRequest, setUsagePopoverRequest] = useState<{ sessionId: string; nonce: number }>();
   const [sessionsOpen, setSessionsOpen] = useState(false);
@@ -1317,6 +1320,7 @@ function AppContent({
       delegatedFromChief: daemonSession?.delegated_from_chief ?? false,
       dispatcher_session_id: daemonSession?.dispatcher_session_id,
       dispatcher_member: daemonSession?.dispatcher_member,
+      delegation_role: daemonSession?.delegation_role,
       ticketUnread: daemonSession?.ticket_unread ?? false,
       seedId: daemonSession?.seed_id,
       nudgeFiresAt: daemonSession?.nudge_fires_at,
@@ -1348,6 +1352,8 @@ function AppContent({
       state: normalizeSessionState(session.state),
       dispatcher_session_id: session.dispatcher_session_id,
       dispatcher_member: session.dispatcher_member,
+      delegation_role: session.delegation_role,
+      endpoint_id: session.endpoint_id,
     })),
     [daemonSessions],
   );
@@ -2101,6 +2107,8 @@ function AppContent({
       visibility: document.visibilityState,
       window: { width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
     };
+    actionMenuReturnFocusRef.current = delegationChainRef.current?.dismiss()
+      ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setActionMenuOpen(true);
   }, [
     actionMenuOpen,
@@ -2683,6 +2691,14 @@ function AppContent({
     const workspace = activeWorkspaceForCommands;
     if (!workspace) return [...actionMenuItems, ...appViewMenuItems];
     const activeSession = activeSessionForCommands;
+    const delegationItems: ActionMenuItem[] = activeSession ? [{
+      id: 'show-delegation-chain',
+      title: 'Show delegation chain',
+      description: 'Navigate this agent’s dispatcher, peers, and delegates',
+      keywords: ['role', 'orchestrator', 'builder', 'parent', 'children', 'agent', 'session'],
+      icon: <SessionRoleIcon role={activeSession.delegation_role} />,
+      run: () => delegationChainRef.current?.open(activeSession.id, actionMenuReturnFocusRef.current),
+    }] : [];
     const sessionPinItems: ActionMenuItem[] = activeSession && activeSessionQueueEligible && !activeSession.chiefOfStaff
       ? [{
         id: 'pin-active-session',
@@ -2740,6 +2756,7 @@ function AppContent({
       ...actionMenuItems,
       ...appViewMenuItems,
       ...sessionPinItems,
+      ...delegationItems,
       ...sessionSeedItems,
       ...sessionUsageItems,
       ...sessionCapItems,
@@ -3722,6 +3739,7 @@ function AppContent({
     <DaemonProvider sendPRAction={sendPRAction} sendMutePR={sendMutePR} sendMuteRepo={sendMuteRepo} sendMuteAuthor={sendMuteAuthor} sendPRVisited={sendPRVisited}>
     <GitHubPollingProvider offReason={githubPollingOffReason}>
     <NotebookSurfaceProvider value={notebookSurfaceContextValue}>
+    <DelegationChainProvider ref={delegationChainRef} sessions={delegationSessions} onSelectSession={handleSelectSession}>
     <div className="app" ref={appShellRef} tabIndex={-1} style={{ outline: 'none' }} onPointerDownCapture={handleAppPointerDownCapture}>
       <BannerStack
         connectionError={connectionError}
@@ -4353,6 +4371,7 @@ function AppContent({
         taskChangeSignal={notebookTaskChangeSignal}
       />
     </div>
+    </DelegationChainProvider>
     </NotebookSurfaceProvider>
     </GitHubPollingProvider>
     </DaemonProvider>

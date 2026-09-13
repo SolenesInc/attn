@@ -8,6 +8,7 @@ import (
 func TestResolvePreservesRoleAndAppliesRequestOverrides(t *testing.T) {
 	base := Selection{Harness: "codex", Model: "everyday", Effort: "medium"}
 	c := Config{Enabled: true, Revision: 3, Roles: []Role{{ID: "build", Name: "Build", Enabled: true, Instructions: "Implement", StoppingPoint: "Return for review", DefaultChoiceID: "normal", Choices: []Choice{{ID: "normal", Name: "Everyday", Selection: base}, {ID: "hard", Name: "Demanding", When: "Verification is difficult", Selection: Selection{Harness: "claude", Model: "strong", Effort: "high"}}}}}, Fallback: Fallback{Selection: Selection{Harness: "copilot"}, Instructions: "Unmatched only"}}
+	c.Roles[0].Icon = "code"
 	ptr := func(s string) *string { return &s }
 	for _, tc := range []struct {
 		name    string
@@ -32,10 +33,10 @@ func TestResolvePreservesRoleAndAppliesRequestOverrides(t *testing.T) {
 				t.Fatalf("got %+v want %+v", got.Selection, tc.want)
 			}
 			if tc.request.Fallback {
-				if got.Instructions != "Unmatched only" || got.StoppingPoint != "" {
+				if got.Instructions != "Unmatched only" || got.StoppingPoint != "" || got.RoleName != "" || got.RoleIcon != "" {
 					t.Fatal(got)
 				}
-			} else if got.Instructions != "Implement" || got.StoppingPoint != "Return for review" {
+			} else if got.Instructions != "Implement" || got.StoppingPoint != "Return for review" || got.RoleName != "Build" || got.RoleIcon != "code" {
 				t.Fatal(got)
 			}
 		})

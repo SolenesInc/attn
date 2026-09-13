@@ -14,6 +14,7 @@ import {
 } from '../utils/sessionPullRequest';
 import { SessionPullRequestPopover, type PopoverAnchor } from './SessionPullRequestPopover';
 import { SessionDelegatesPopover, type SessionDelegateLink } from './SessionDelegatesPopover';
+import { useDelegationChainControl } from './DelegationChain';
 import './SessionProvenance.css';
 
 export type SessionProvenanceDensity = 'badge' | 'compact' | 'line' | 'detail';
@@ -102,6 +103,7 @@ export function SessionProvenance({
   popoverGroup?: SessionProvenancePopoverGroup;
 }) {
   const [popover, setPopover] = useState<{ anchor: PopoverAnchor; focused: boolean } | null>(null);
+  const delegationChain = useDelegationChainControl();
   const [delegatesPopover, setDelegatesPopover] = useState<PopoverAnchor | null>(null);
   const closeTimer = useRef<number | null>(null);
   const popoverGroupId = popoverGroup?.id;
@@ -131,6 +133,7 @@ export function SessionProvenance({
   }, [activePopoverId, closePopover, popoverGroupId]);
 
   const claimPopover = () => {
+    delegationChain?.close();
     if (popoverGroupId) openGroupPopover?.(popoverGroupId);
   };
 
@@ -150,7 +153,7 @@ export function SessionProvenance({
   };
 
   const openOnHover = (event: PointerEvent<HTMLElement>) => {
-    if (!interactive) return;
+    if (!interactive || delegationChain?.focused) return;
     cancelClose();
     setDelegatesPopover(null);
     claimPopover();
