@@ -88,6 +88,25 @@ test("an allowed command runs without ever reaching a reviewer", async () => {
   expect(it.seen).toHaveLength(0);
 });
 
+test.skipIf(process.platform !== "darwin")(
+  "an allow rule can bypass the sandbox without reaching a reviewer",
+  async () => {
+    const outside = canonical(mkdtempSync(join(process.cwd(), ".pi-approval-outside-")));
+    roots.push(outside);
+    const file = join(outside, "written");
+    const it = fixture({
+      script: () => ({ type: "approved" }),
+      approvalPolicy: "on-request",
+      sandboxMode: "workspace-write",
+      rules: [{ pattern: ["touch"], decision: "allow", sandbox: "bypass" }],
+    });
+
+    expect((await it.run(`touch ${JSON.stringify(file)}`)).exitCode).toBe(0);
+    expect(existsSync(file)).toBe(true);
+    expect(it.seen).toHaveLength(0);
+  },
+);
+
 test("a forbidden command is refused with its rule's justification and never runs", async () => {
   const it = fixture({ script: () => ({ type: "approved" }), rules: [forbidden] });
   await expect(it.run("curl https://example.com")).rejects.toThrow("networking is off in this session");

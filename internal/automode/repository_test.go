@@ -36,33 +36,20 @@ func TestLoadRepositoryRulesFromCheckoutRoot(t *testing.T) {
 	}
 }
 
-func TestLoadRepositoryRulesAllowsSandboxedAllowAndLegacyPrompt(t *testing.T) {
+func TestLoadRepositoryRulesAllowsUnreviewedSandboxBypass(t *testing.T) {
 	root := initRulesRepository(t)
 	writeRepositoryRules(t, root, `{"rules":[
-  {"pattern":["go","test"],"decision":"allow","sandbox":"inherit"},
-  {"pattern":["git","push"],"decision":"prompt"}
+  {"pattern":["go","test"],"decision":"allow","sandbox":"bypass"},
+  {"pattern":["go","list"],"decision":"allow"}
 ]}`)
 
 	loaded, err := LoadRepositoryRules(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Rules[0].Sandbox != RuleSandboxInherit || loaded.Rules[1].Sandbox != RuleSandboxInherit {
-		t.Fatalf("legacy defaults = %+v", loaded.Rules)
-	}
-}
-
-func TestLoadRepositoryRulesRejectsUnreviewedSandboxBypass(t *testing.T) {
-	for _, sandbox := range []string{"", `,"sandbox":"bypass"`} {
-		root := initRulesRepository(t)
-		writeRepositoryRules(t, root, `{"rules":[{
-  "pattern":["go","test"],"decision":"allow"`+sandbox+`
-}]}`)
-
-		_, err := LoadRepositoryRules(root)
-		if err == nil || !strings.Contains(err.Error(), "rule 1") ||
-			!strings.Contains(err.Error(), "allow cannot bypass the sandbox") {
-			t.Fatalf("error = %v", err)
+	for i, rule := range loaded.Rules {
+		if rule.Decision != DecisionAllow || rule.Sandbox != RuleSandboxBypass {
+			t.Fatalf("rule %d = %+v, want allow with sandbox bypass", i+1, rule)
 		}
 	}
 }

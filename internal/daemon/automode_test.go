@@ -46,7 +46,7 @@ func TestAutoModeShowResolvesRepositoryRulesForItsDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, []byte(`{"rules":[{
-  "pattern":["go","test"],"decision":"prompt","sandbox":"bypass"
+  "pattern":["go","test"],"decision":"allow","sandbox":"bypass"
 }]}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,8 @@ func TestAutoModeShowResolvesRepositoryRulesForItsDirectory(t *testing.T) {
 	if result.RepositoryRulesPath == nil || *result.RepositoryRulesPath != expectedPath {
 		t.Fatalf("repository rules path = %v, want %q", result.RepositoryRulesPath, expectedPath)
 	}
-	if len(result.RepositoryRules) != 1 || result.RepositoryRules[0].Sandbox != automode.RuleSandboxBypass {
+	if len(result.RepositoryRules) != 1 || result.RepositoryRules[0].Decision != automode.DecisionAllow ||
+		result.RepositoryRules[0].Sandbox != automode.RuleSandboxBypass {
 		t.Fatalf("repository rules = %+v", result.RepositoryRules)
 	}
 	if len(result.Config.Rules) != len(result.GlobalRules)+1 {

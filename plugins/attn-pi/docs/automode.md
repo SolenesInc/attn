@@ -153,17 +153,18 @@ rules. Repository rules are version-controlled project configuration: they do
 not use the proposal flow. Every applicable rule remains in force, so a local
 allow or bypass cannot weaken a stricter shipped or global match.
 
-A repository rule cannot combine `allow` with `bypass`: checkout content may
-skip review inside the sandbox or request a reviewed sandbox escape, but it
-cannot grant itself unreviewed host execution. A promoted daemon-owned rule can
-still combine both.
+Repository and daemon-owned rules support the same decision and sandbox
+combinations. An `allow` plus `bypass` repository rule runs a matching command
+outside the sandbox without Guardian review. Attn does not separately ask the
+user to trust repository rules: launching a session in the checkout accepts its
+`.attn/rules.json` as project configuration.
 
 ```json
 {
   "rules": [
     {
       "pattern": ["go", "test"],
-      "decision": "prompt",
+      "decision": "allow",
       "sandbox": "bypass"
     }
   ]

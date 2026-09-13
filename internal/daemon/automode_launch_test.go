@@ -26,7 +26,7 @@ func TestAutoModeConfigForSessionMergesRepositoryRules(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, []byte(`{"rules":[{
-  "pattern":["go","test"],"decision":"prompt","sandbox":"bypass"
+  "pattern":["go","test"],"decision":"allow","sandbox":"bypass"
 }]}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestAutoModeConfigForSessionMergesRepositoryRules(t *testing.T) {
 	}
 	project := automode.StripShippedRules(resolved.Rules)
 	if len(project) != 1 || project[0].Describe() != "go test" ||
-		project[0].Decision != automode.DecisionPrompt || project[0].Sandbox != automode.RuleSandboxBypass {
+		project[0].Decision != automode.DecisionAllow || project[0].Sandbox != automode.RuleSandboxBypass {
 		t.Fatalf("effective rules = %+v", resolved.Rules)
 	}
 	if repository.Path == "" || len(repository.Rules) != 1 {
