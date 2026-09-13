@@ -1,13 +1,16 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 type gardenCursorAttempt struct {
@@ -107,6 +110,57 @@ func TestGardenSeedConsumerReplayAfterCursorFailureDoesNotRecreateAReadBell(t *t
 	if queued := queuedSeedBells(t, d, "watcher"); len(queued) != 0 {
 		t.Fatalf("receipt replay recreated the read bell: %q", queued)
 	}
+}
+
+func TestGardenSeedEventFirstHandlingUsesTheCurrentTender(t *testing.T) {
+	d := newGardenDaemon(t)
+	addGardenSession(t, d, "sess-b")
+	addGardenSession(t, d, "sess-c")
+	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "dispatch current tender"})
+	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
+
+	if _, _, err := d.applySeedTransition(seed.ID, garden.VerbTend, garden.Ask{
+		Actor: garden.Tender{Session: "sess-b"}, Force: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	occurrence, err := seedEvents.Occur(
+		gardenSeedEventModel, gardenSeedEventVocabulary.Tended, seed.ID,
+		seedEvents.LifecyclePayload{
+			AttentionRequested: true, CausedBySessionID: "sess-a", DirectlyNotifiedSessionID: "sess-b",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := gardenSeedEventModel.Encode(occurrence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seq, err := d.store.AppendBusEvent(store.BusEvent{
+		Name: encoded.Name, Subject: encoded.Subject, Payload: string(encoded.Payload), Source: "test",
+	}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := d.applySeedTransition(seed.ID, garden.VerbTend, garden.Ask{
+		Actor: garden.Tender{Session: "sess-c"}, Force: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.handleGardenSeedEvent(context.Background(), bus.Event{
+		Seq: seq, Name: encoded.Name, Subject: encoded.Subject, Payload: encoded.Payload, Source: "test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, previousTender := range []string{"sess-a", "sess-b"} {
+		if queued := queuedSeedBells(t, d, previousTender); len(queued) != 0 {
+			t.Fatalf("previous tender %s received the delayed event: %q", previousTender, queued)
+		}
+	}
+	assertOneSeedBell(t, d, "sess-c", seed.ID, "tended")
 }
 
 func TestQuietGardenSeedEventReceiptDoesNotDependOnLiveRoleState(t *testing.T) {
