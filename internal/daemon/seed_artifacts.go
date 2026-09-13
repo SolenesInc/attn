@@ -313,33 +313,37 @@ func (d *Daemon) reconcileSeedArtifactObservations() error {
 	if err != nil {
 		return err
 	}
+	var reconciliationErrors []error
 	for _, seed := range read.seeds {
 		dir := notebook.SeedArtifactsDir(root, seed.ID)
 		info, statErr := os.Lstat(dir)
 		if os.IsNotExist(statErr) {
 			observed, observedErr := d.store.HasGardenSeedArtifactObservation(seed.ID)
 			if observedErr != nil {
-				return fmt.Errorf("read artifact observation for %s: %w", seed.ID, observedErr)
+				reconciliationErrors = append(reconciliationErrors, fmt.Errorf("read artifact observation for %s: %w", seed.ID, observedErr))
+				continue
 			}
 			if !observed {
 				continue
 			}
 			if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
-				return fmt.Errorf("reconcile removed artifacts for %s: %w", seed.ID, err)
+				reconciliationErrors = append(reconciliationErrors, fmt.Errorf("reconcile removed artifacts for %s: %w", seed.ID, err))
 			}
 			continue
 		}
 		if statErr != nil {
-			return fmt.Errorf("inspect artifacts for %s: %w", seed.ID, statErr)
+			reconciliationErrors = append(reconciliationErrors, fmt.Errorf("inspect artifacts for %s: %w", seed.ID, statErr))
+			continue
 		}
 		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-			return fmt.Errorf("seed artifact directory %q is not a real directory", dir)
+			reconciliationErrors = append(reconciliationErrors, fmt.Errorf("seed artifact directory %q is not a real directory", dir))
+			continue
 		}
 		if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
-			return fmt.Errorf("reconcile artifacts for %s: %w", seed.ID, err)
+			reconciliationErrors = append(reconciliationErrors, fmt.Errorf("reconcile artifacts for %s: %w", seed.ID, err))
 		}
 	}
-	return nil
+	return errors.Join(reconciliationErrors...)
 }
 
 func (d *Daemon) seedArtifactReferences(seedID string) []protocol.SeedArtifactReference {

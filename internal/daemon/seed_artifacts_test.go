@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/notebook"
@@ -537,6 +538,76 @@ func TestSeedArtifactObservationReconciliationPublishesMissingCurrentStateOnce(t
 	}
 	if changed != 2 {
 		t.Fatalf("reconciled artifact events after directory removal = %d, want 2", changed)
+	}
+}
+
+func TestSeedArtifactObservationReconciliationContinuesPastAnInvalidSeedDirectory(t *testing.T) {
+	d, root, invalid := newSeedArtifactDaemon(t)
+	d.stopNotebookWatcher()
+	healthy := plant(t, d, protocol.SeedPlantMessage{Title: "Healthy durable files"})
+
+	invalidDir := notebook.SeedArtifactsDir(root, invalid.ID)
+	if err := os.MkdirAll(filepath.Dir(invalidDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(t.TempDir(), invalidDir); err != nil {
+		t.Fatal(err)
+	}
+	writeArtifactSource(t, notebook.SeedArtifactsDir(root, healthy.ID), "recovered.bin", []byte("current"))
+
+	err := d.reconcileSeedArtifactObservations()
+	if err == nil || !strings.Contains(err.Error(), invalid.ID) {
+		t.Fatalf("reconcile error = %v, want the invalid seed named", err)
+	}
+	events, readErr := d.store.BusEventsSince(0, 100)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	var healthyChanges int
+	for _, event := range events {
+		if event.Name == seedEvents.NameArtifactChanged && event.Subject == healthy.ID {
+			healthyChanges++
+		}
+	}
+	if healthyChanges != 1 {
+		t.Fatalf("healthy seed reconciled artifact events = %d, want 1", healthyChanges)
+	}
+}
+
+func TestDaemonStartupIsReadyBeforeArtifactReconciliationFailure(t *testing.T) {
+	t.Setenv("ATTN_PTY_BACKEND", "embedded")
+	useFreeWSPort(t)
+	d := NewForTesting(filepath.Join(shortTempDir(t), "artifact.sock"))
+	daemonID, err := enrollment.EnsureDaemonID(d.dataRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.daemonInstanceID = daemonID
+	if err := d.ensureEnrollment(); err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	d.store.SetSetting(SettingNotebookRoot, root)
+	d.ensureGardenCollections()
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Unreadable durable files"})
+	dir := notebook.SeedArtifactsDir(root, seed.ID)
+	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(t.TempDir(), dir); err != nil {
+		t.Fatal(err)
+	}
+
+	startErr := make(chan error, 1)
+	go func() { startErr <- d.Start() }()
+	select {
+	case err := <-startErr:
+		t.Fatalf("daemon exited before becoming ready: %v", err)
+	case <-d.Started():
+	}
+	d.Stop()
+	if err := <-startErr; err != nil {
+		t.Fatalf("daemon stop after readiness: %v", err)
 	}
 }
 

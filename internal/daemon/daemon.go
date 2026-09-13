@@ -829,9 +829,6 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("ensure enrollment record: %w", err)
 	}
 	d.ensureGardenCollections()
-	if err := d.reconcileSeedArtifactObservations(); err != nil {
-		return fmt.Errorf("reconcile Garden seed artifacts: %w", err)
-	}
 	waitForLegacyTicketRecovery, err := d.prepareLegacyTicketRecovery()
 	if err != nil {
 		return fmt.Errorf("prepare legacy ticket recovery: %w", err)
@@ -1060,6 +1057,11 @@ func (d *Daemon) Start() error {
 	}()
 
 	d.signalStarted()
+	go func() {
+		if err := d.reconcileSeedArtifactObservations(); err != nil {
+			d.logf("Garden seed artifact startup reconciliation incomplete: %v", err)
+		}
+	}()
 	startSucceeded = true
 
 	for {

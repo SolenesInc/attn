@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -273,6 +274,9 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 			return nil, nil
 		}
 		sessionID, err := r.daemon.localGardenTenderSession(seed.Tender())
+		if errors.Is(err, errRemoteGardenTender) {
+			return nil, nil
+		}
 		if err != nil || sessionID == "" {
 			return nil, err
 		}
