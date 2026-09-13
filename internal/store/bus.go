@@ -57,8 +57,21 @@ func (s *Store) AppendBusEventOnceReplacingSource(
 		return 0, false, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	seq, inserted, err := appendBusEventOnceReplacingSourceWith(tx, sourceKind, sourceID, replacedSourceID, event, now)
+	if err != nil {
+		return 0, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return seq, inserted, nil
+}
+
+func appendBusEventOnceReplacingSourceWith(
+	tx *sql.Tx, sourceKind, sourceID, replacedSourceID string, event BusEvent, now time.Time,
+) (int64, bool, error) {
 	var existing int64
-	err = tx.QueryRow(`
+	err := tx.QueryRow(`
 		SELECT event_seq FROM garden_seed_event_sources
 		WHERE source_kind=? AND source_id=? AND event_name=?
 	`, sourceKind, sourceID, event.Name).Scan(&existing)
@@ -66,7 +79,7 @@ func (s *Store) AppendBusEventOnceReplacingSource(
 		if err := deleteReplacedBusEventSource(tx, sourceKind, sourceID, replacedSourceID); err != nil {
 			return 0, false, err
 		}
-		return existing, false, tx.Commit()
+		return existing, false, nil
 	}
 	if err != sql.ErrNoRows {
 		return 0, false, err
@@ -82,9 +95,6 @@ func (s *Store) AppendBusEventOnceReplacingSource(
 		return 0, false, err
 	}
 	if err := deleteReplacedBusEventSource(tx, sourceKind, sourceID, replacedSourceID); err != nil {
-		return 0, false, err
-	}
-	if err := tx.Commit(); err != nil {
 		return 0, false, err
 	}
 	return seq, true, nil
@@ -133,20 +143,57 @@ func (s *Store) AppendGardenSeedArtifactObservation(
 	if err != nil {
 		return 0, false, err
 	}
-	if _, err := tx.Exec(`
-		INSERT INTO garden_seed_artifact_observations(seed_id, checksum, event_seq, observed_at)
-		VALUES (?, ?, ?, ?)
-		ON CONFLICT(seed_id) DO UPDATE SET
-			checksum=excluded.checksum,
-			event_seq=excluded.event_seq,
-			observed_at=excluded.observed_at
-	`, event.Subject, checksum, seq, formatTicketTime(now)); err != nil {
+	if err := upsertGardenSeedArtifactObservation(tx, event.Subject, checksum, seq, now); err != nil {
 		return 0, false, err
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, false, err
 	}
 	return seq, true, nil
+}
+
+func (s *Store) AppendGardenSeedArtifactTransferObservation(
+	sourceID, replacedSourceID, checksum string, event BusEvent, now time.Time,
+) (int64, bool, error) {
+	if strings.TrimSpace(sourceID) == "" || strings.TrimSpace(checksum) == "" ||
+		strings.TrimSpace(event.Name) == "" || strings.TrimSpace(event.Subject) == "" {
+		return 0, false, fmt.Errorf("append Garden seed artifact transfer observation: source id, checksum, event name, and subject are required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return 0, false, nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	seq, inserted, err := appendBusEventOnceReplacingSourceWith(
+		tx, "artifact_transfer", sourceID, replacedSourceID, event, now,
+	)
+	if err != nil {
+		return 0, false, err
+	}
+	if err := upsertGardenSeedArtifactObservation(tx, event.Subject, checksum, seq, now); err != nil {
+		return 0, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return seq, inserted, nil
+}
+
+func upsertGardenSeedArtifactObservation(tx *sql.Tx, seedID, checksum string, eventSeq int64, now time.Time) error {
+	_, err := tx.Exec(`
+		INSERT INTO garden_seed_artifact_observations(seed_id, checksum, event_seq, observed_at)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(seed_id) DO UPDATE SET
+			checksum=excluded.checksum,
+			event_seq=excluded.event_seq,
+			observed_at=excluded.observed_at
+	`, seedID, checksum, eventSeq, formatTicketTime(now))
+	return err
 }
 
 func (s *Store) HasGardenSeedArtifactObservation(seedID string) (bool, error) {

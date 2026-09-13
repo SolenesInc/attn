@@ -261,16 +261,26 @@ func (d *Daemon) observedSeedArtifacts(seedID string) ([]observedSeedArtifact, e
 	return observed, nil
 }
 
-func (d *Daemon) recordObservedSeedArtifacts(seedID string) error {
+func (d *Daemon) seedArtifactObservationChecksum(seedID string) (string, error) {
 	artifacts, err := d.observedSeedArtifacts(seedID)
 	if err != nil {
-		return err
+		return "", err
 	}
 	snapshot, err := json.Marshal(artifacts)
 	if err != nil {
-		return err
+		return "", err
 	}
 	sum := sha256.Sum256(snapshot)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func (d *Daemon) recordObservedSeedArtifacts(seedID string) error {
+	d.seedArtifactMu.Lock()
+	defer d.seedArtifactMu.Unlock()
+	checksum, err := d.seedArtifactObservationChecksum(seedID)
+	if err != nil {
+		return err
+	}
 	occurrence, err := seedEvents.Occur(
 		gardenSeedEventModel, gardenSeedEventVocabulary.ArtifactChanged, seedID,
 		seedEvents.CausePayload{},
@@ -283,7 +293,7 @@ func (d *Daemon) recordObservedSeedArtifacts(seedID string) error {
 		return err
 	}
 	seq, changed, err := d.store.AppendGardenSeedArtifactObservation(
-		hex.EncodeToString(sum[:]), encoded[0], time.Now(),
+		checksum, encoded[0], time.Now(),
 	)
 	if err != nil {
 		return err
@@ -493,8 +503,22 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 	if err != nil {
 		return nil, err
 	}
-	if err := d.appendGardenSeedEventOnce("artifact_transfer", receipt.eventSource(), receipt.ReplacesEventSource, changedEvent); err != nil {
+	checksum, err := d.seedArtifactObservationChecksum(seedID)
+	if err != nil {
+		return nil, fmt.Errorf("artifact transfer %s is complete but its Garden observation is pending; retry the same command: %w", receipt.ID, err)
+	}
+	encoded, err := encodeGardenSeedEvents(changedEvent)
+	if err != nil {
+		return nil, err
+	}
+	seq, inserted, err := d.store.AppendGardenSeedArtifactTransferObservation(
+		receipt.eventSource(), receipt.ReplacesEventSource, checksum, encoded[0], time.Now(),
+	)
+	if err != nil {
 		return nil, fmt.Errorf("artifact transfer %s is complete but its Garden event is pending; retry the same command: %w", receipt.ID, err)
+	}
+	if inserted {
+		announceGardenSeedEvents(d, []int64{seq})
 	}
 	changed := filepath.ToSlash(filepath.Join("seeds", seedID, filename))
 	d.broadcastFsChanged(root, originAgent, changed)

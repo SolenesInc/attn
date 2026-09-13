@@ -67,23 +67,6 @@ func announceGardenSeedEvents(d *Daemon, seqs []int64) {
 	})
 }
 
-func (d *Daemon) appendGardenSeedEventOnce(
-	sourceKind, sourceID, replacedSourceID string, occurrence events.Occurrence,
-) error {
-	encoded, err := encodeGardenSeedEvents(occurrence)
-	if err != nil {
-		return err
-	}
-	seq, inserted, err := d.store.AppendBusEventOnceReplacingSource(sourceKind, sourceID, replacedSourceID, encoded[0], time.Now())
-	if err != nil {
-		return err
-	}
-	if inserted {
-		announceGardenSeedEvents(d, []int64{seq})
-	}
-	return nil
-}
-
 func firstString(values []string) string {
 	if len(values) == 0 {
 		return ""
@@ -267,7 +250,18 @@ func (d *Daemon) readGardenEventRoles() (gardenEventRoles, error) {
 
 func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]string, error) {
 	if _, exists := r.subscriptions.seeds[seedID]; !exists {
-		if _, _, err := r.daemon.readSeed(seedID); err != nil {
+		schema, err := r.daemon.seedsCollection()
+		if err != nil {
+			return nil, fmt.Errorf("read seed %s for Garden bell eligibility: %w", seedID, err)
+		}
+		doc, found, err := r.daemon.store.GetDocument(*schema, seedID)
+		if err != nil {
+			return nil, fmt.Errorf("read seed %s for Garden bell eligibility: %w", seedID, err)
+		}
+		if !found {
+			return nil, nil
+		}
+		if _, err := garden.Decode(doc.Body); err != nil {
 			return nil, fmt.Errorf("read seed %s for Garden bell eligibility: %w", seedID, err)
 		}
 		return nil, fmt.Errorf("seed %s is absent from the Garden role snapshot", seedID)

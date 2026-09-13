@@ -166,6 +166,47 @@ func TestSeedArtifactCopyStartsFreshAfterDetach(t *testing.T) {
 	}
 }
 
+func TestSeedArtifactTransferAndWatcherPublishOneChange(t *testing.T) {
+	d, _, seed := newSeedArtifactDaemon(t)
+	d.stopNotebookWatcher()
+	source := writeArtifactSource(t, t.TempDir(), "evidence.bin", []byte("first"))
+	result, err := transferSeedArtifact(t, d, protocol.SeedArtifactTransferMessage{
+		SeedID: seed.ID, Operation: "copy", SourcePath: protocol.Ptr(source),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+		t.Fatal(err)
+	}
+	countChanges := func() int {
+		t.Helper()
+		events, err := d.store.BusEventsSince(0, 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var changed int
+		for _, event := range events {
+			if event.Name == seedEvents.NameArtifactChanged && event.Subject == seed.ID {
+				changed++
+			}
+		}
+		return changed
+	}
+	if changed := countChanges(); changed != 1 {
+		t.Fatalf("artifact change events after transfer and watcher catch-up = %d, want 1", changed)
+	}
+	if err := os.WriteFile(result.DestinationPath, []byte("second"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+		t.Fatal(err)
+	}
+	if changed := countChanges(); changed != 2 {
+		t.Fatalf("artifact change events after transfer, watcher catch-up, and direct edit = %d, want 2", changed)
+	}
+}
+
 func TestSeedArtifactMoveRefusesTrackedFilesBeforeCreatingStorage(t *testing.T) {
 	d, root, seed := newSeedArtifactDaemon(t)
 	repo := filepath.Join(t.TempDir(), "repo")

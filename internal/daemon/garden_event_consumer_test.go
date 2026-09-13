@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
@@ -179,6 +180,47 @@ func TestQuietGardenSeedEventReceiptDoesNotDependOnLiveRoleState(t *testing.T) {
 	)
 	if err != nil || handled || len(created) != 0 {
 		t.Fatalf("quiet receipt replay = created=%v handled=%t err=%v", created, handled, err)
+	}
+}
+
+func TestGardenSeedMailboxReconciliationDiscardsAMissingSeedWithoutStrandingOtherMail(t *testing.T) {
+	d := newGardenDaemon(t)
+	addGardenSession(t, d, "legacy-recipient")
+	addGardenSession(t, d, "peer-recipient")
+	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "removed legacy seed"})
+	watchSeed(t, d, "legacy-recipient", seed.ID, false)
+	ringingNote(t, d, "sess-a", seed.ID, "queued before removal", true)
+	assertOneSeedBell(t, d, "legacy-recipient", seed.ID, "note.added")
+
+	schema, err := d.seedsCollection()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed, err := d.store.DeleteDocument(*schema, seed.ID, nil); err != nil || !removed {
+		t.Fatalf("delete legacy seed: removed=%v err=%v", removed, err)
+	}
+	if _, err := d.store.EnqueuePeerMessage(agentmailbox.PeerMessage{
+		ID: "unrelated-mail", SenderSessionID: "sess-a", Body: "still owed",
+		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}, "peer-recipient"); err != nil {
+		t.Fatal(err)
+	}
+
+	d.gardenWatchMu.Lock()
+	err = d.discardAllIneligibleGardenSeedBellsLocked()
+	d.gardenWatchMu.Unlock()
+	if err != nil {
+		t.Fatalf("reconcile missing seed bell: %v", err)
+	}
+	if queued := queuedSeedBells(t, d, "legacy-recipient"); len(queued) != 0 {
+		t.Fatalf("missing seed bell survived reconciliation: %q", queued)
+	}
+	if d.hasQueuedAgentMailboxItems("peer-recipient") {
+		t.Fatal("unrelated mail was already present in the fresh daemon's in-memory queue")
+	}
+	d.seedQueuedAgentMailboxItems()
+	if !d.hasQueuedAgentMailboxItems("peer-recipient") {
+		t.Fatal("missing seed bell stranded unrelated durable mail during startup reseeding")
 	}
 }
 
