@@ -131,6 +131,73 @@ func TestAcceptedParentSnapshotSurvivesSourceDispatchChanges(t *testing.T) {
 	}
 }
 
+func TestDelegationAssignmentExcludesThePlannerAndDirectlyPromptedDelegate(t *testing.T) {
+	tests := []struct {
+		name string
+		bind func(t *testing.T, d *Daemon, plannerSessionID, workerSessionID string, parent protocol.Seed) string
+	}{
+		{
+			name: "reserved atomic assignment",
+			bind: func(t *testing.T, d *Daemon, plannerSessionID, workerSessionID string, parent protocol.Seed) string {
+				t.Helper()
+				seedID, err := d.bindDelegationAssignment(
+					"op-notification-exclusions", workerSessionID, plannerSessionID, parent.ID,
+					"Do the child work.", "Child work", "s-par123", t.TempDir(), "codex", false, true,
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return seedID
+			},
+		},
+		{
+			name: "legacy planted assignment",
+			bind: func(t *testing.T, d *Daemon, plannerSessionID, workerSessionID string, parent protocol.Seed) string {
+				t.Helper()
+				if err := d.recordGardenDispatch(plannerSessionID, parent.ID, "", d.store.Get(plannerSessionID).Directory, "codex", false); err != nil {
+					t.Fatal(err)
+				}
+				seed, err := d.plantDelegatedSeed(workerSessionID, plannerSessionID, "Do the child work.", "Child work")
+				if err != nil {
+					t.Fatal(err)
+				}
+				return seed.ID
+			},
+		},
+		{
+			name: "legacy existing assignment",
+			bind: func(t *testing.T, d *Daemon, plannerSessionID, workerSessionID string, parent protocol.Seed) string {
+				t.Helper()
+				seed := plant(t, d, protocol.SeedPlantMessage{Title: "Existing child", PartOf: protocol.Ptr(parent.ID)})
+				if err := d.tendDispatchedSeed(workerSessionID, plannerSessionID, seed.ID); err != nil {
+					t.Fatal(err)
+				}
+				return seed.ID
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			d, _, plannerSessionID := newGardenDelegationDaemon(t)
+			addGardenSession(t, d, "worker")
+			addGardenSession(t, d, "observer")
+			parent := plantForDelegation(t, d, plannerSessionID, "Parent plot")
+			watchSeed(t, d, plannerSessionID, parent.ID, false)
+			watchSeed(t, d, "observer", parent.ID, false)
+
+			seedID := test.bind(t, d, plannerSessionID, "worker", parent)
+
+			for _, sessionID := range []string{plannerSessionID, "worker"} {
+				items, err := d.store.UnreadGardenSeedMailboxItems(sessionID)
+				if err != nil || len(items) != 0 {
+					t.Fatalf("excluded session %s received delegation bell: %+v, %v", sessionID, items, err)
+				}
+			}
+			assertOneSeedBell(t, d, "observer", seedID, "tended")
+		})
+	}
+}
+
 func TestPendingDelegationTenderBlocksAnotherClaim(t *testing.T) {
 	d, _, sourceSessionID := newGardenDelegationDaemon(t)
 	seed := plantForDelegation(t, d, sourceSessionID, "Reserved work")

@@ -69,7 +69,7 @@ func (d *Daemon) plantSeed(schema docstore.CollectionSchema, seed garden.Seed) (
 	}
 	occurrences = append(occurrences, planted)
 	if seed.Status == garden.StatusGrowing {
-		tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, seed.TenderSession)
+		tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, seed.PlanterSession, seed.TenderSession)
 		if err != nil {
 			return docstore.Document{}, err
 		}
@@ -1559,7 +1559,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 		if cause == "" {
 			cause = strings.TrimSpace(ask.Actor.Session)
 		}
-		lifecycle, err := gardenSeedLifecycleOccurrence(verb, next.ID, cause)
+		lifecycle, err := gardenSeedLifecycleOccurrence(verb, next.ID, cause, ask.DirectlyNotifiedSession)
 		if err != nil {
 			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
 		}

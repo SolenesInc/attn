@@ -117,7 +117,7 @@ func (d *Daemon) bindDelegationAssignment(operationID, sessionID, plannerSession
 			occurrences = append(occurrences, linked)
 		}
 	}
-	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, sessionID)
+	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, plannerSessionID, sessionID)
 	if err != nil {
 		return "", err
 	}
@@ -232,7 +232,9 @@ func (d *Daemon) plantDelegatedSeed(sessionID, plannerSessionID, brief, name str
 // take-over through garden.Transition is the race backstop behind it.
 func (d *Daemon) tendDispatchedSeed(sessionID, plannerSessionID, seedID string) error {
 	actor := garden.Tender{Session: sessionID, Member: d.resolveTenderMember("", sessionID)}
-	if _, _, err := d.applySeedTransitionAs(seedID, garden.VerbTend, garden.Ask{Actor: actor}, d.dispatchSessionLive(plannerSessionID)); err != nil {
+	if _, _, err := d.applySeedTransitionAs(seedID, garden.VerbTend, garden.Ask{
+		Actor: actor, CauseSession: plannerSessionID, DirectlyNotifiedSession: sessionID,
+	}, d.dispatchSessionLive(plannerSessionID)); err != nil {
 		return fmt.Errorf("tend %s as session %s: %w", seedID, sessionID, err)
 	}
 	return nil
