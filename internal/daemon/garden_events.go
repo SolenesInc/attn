@@ -90,7 +90,16 @@ func firstString(values []string) string {
 }
 
 func gardenSeedLifecycleOccurrence(verb garden.Verb, seedID, causedBySessionID string, directlyNotifiedSessionID ...string) (events.Occurrence, error) {
-	payload := events.CausePayload{
+	return gardenSeedLifecycleOccurrenceWithAttention(true, verb, seedID, causedBySessionID, directlyNotifiedSessionID...)
+}
+
+func quietGardenSeedLifecycleOccurrence(verb garden.Verb, seedID, causedBySessionID string, directlyNotifiedSessionID ...string) (events.Occurrence, error) {
+	return gardenSeedLifecycleOccurrenceWithAttention(false, verb, seedID, causedBySessionID, directlyNotifiedSessionID...)
+}
+
+func gardenSeedLifecycleOccurrenceWithAttention(attentionRequested bool, verb garden.Verb, seedID, causedBySessionID string, directlyNotifiedSessionID ...string) (events.Occurrence, error) {
+	payload := events.LifecyclePayload{
+		AttentionRequested:        attentionRequested,
 		CausedBySessionID:         strings.TrimSpace(causedBySessionID),
 		DirectlyNotifiedSessionID: firstString(directlyNotifiedSessionID),
 	}

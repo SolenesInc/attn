@@ -1559,7 +1559,11 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 		if cause == "" {
 			cause = strings.TrimSpace(ask.Actor.Session)
 		}
-		lifecycle, err := gardenSeedLifecycleOccurrence(verb, next.ID, cause, ask.DirectlyNotifiedSession)
+		lifecycleOccurrence := gardenSeedLifecycleOccurrence
+		if ask.SuppressNotification {
+			lifecycleOccurrence = quietGardenSeedLifecycleOccurrence
+		}
+		lifecycle, err := lifecycleOccurrence(verb, next.ID, cause, ask.DirectlyNotifiedSession)
 		if err != nil {
 			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
 		}

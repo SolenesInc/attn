@@ -22,6 +22,11 @@ const (
 )
 
 type CausePayload struct {
+	CausedBySessionID string `json:"caused_by_session_id,omitempty"`
+}
+
+type LifecyclePayload struct {
+	AttentionRequested        bool   `json:"attention_requested" required:"true"`
 	CausedBySessionID         string `json:"caused_by_session_id,omitempty"`
 	DirectlyNotifiedSessionID string `json:"directly_notified_session_id,omitempty"`
 }
@@ -55,11 +60,11 @@ type WorkReadyPayload struct {
 
 type Vocabulary struct {
 	Planted                  EventType[CausePayload]
-	Tended                   EventType[CausePayload]
-	Parked                   EventType[CausePayload]
-	Harvested                EventType[CausePayload]
-	Withered                 EventType[CausePayload]
-	Replanted                EventType[CausePayload]
+	Tended                   EventType[LifecyclePayload]
+	Parked                   EventType[LifecyclePayload]
+	Harvested                EventType[LifecyclePayload]
+	Withered                 EventType[LifecyclePayload]
+	Replanted                EventType[LifecyclePayload]
 	BodyEdited               EventType[CausePayload]
 	NoteAdded                EventType[NoteAddedPayload]
 	ArtifactChanged          EventType[CausePayload]
@@ -88,11 +93,11 @@ func Declarations() Vocabulary {
 
 	v := Vocabulary{
 		Planted:                  Event[CausePayload](NamePlanted),
-		Tended:                   Event[CausePayload](NameTended),
-		Parked:                   Event[CausePayload](NameParked),
-		Harvested:                Event[CausePayload](NameHarvested),
-		Withered:                 Event[CausePayload](NameWithered),
-		Replanted:                Event[CausePayload](NameReplanted),
+		Tended:                   Event[LifecyclePayload](NameTended),
+		Parked:                   Event[LifecyclePayload](NameParked),
+		Harvested:                Event[LifecyclePayload](NameHarvested),
+		Withered:                 Event[LifecyclePayload](NameWithered),
+		Replanted:                Event[LifecyclePayload](NameReplanted),
 		BodyEdited:               Event[CausePayload](NameBodyEdited),
 		NoteAdded:                Event[NoteAddedPayload](NameNoteAdded),
 		ArtifactChanged:          Event[CausePayload](NameArtifactChanged),
@@ -115,13 +120,14 @@ func Declarations() Vocabulary {
 		v.Unblocked, v.WorkReady,
 	)
 	attentionRequested := BoolField[NoteAddedPayload]("attention_requested")
+	lifecycleAttentionRequested := BoolField[LifecyclePayload]("attention_requested")
 	v.Rules = Policies(
 		On(v.Planted, Quiet()),
-		On(v.Tended, Ring(seedActivity)),
-		On(v.Parked, Ring(seedActivity)),
-		On(v.Harvested, Ring(seedActivity)),
-		On(v.Withered, Ring(seedActivity)),
-		On(v.Replanted, Ring(seedActivity)),
+		On(v.Tended, Choose(lifecycleAttentionRequested, Ring(seedActivity), Quiet())),
+		On(v.Parked, Choose(lifecycleAttentionRequested, Ring(seedActivity), Quiet())),
+		On(v.Harvested, Choose(lifecycleAttentionRequested, Ring(seedActivity), Quiet())),
+		On(v.Withered, Choose(lifecycleAttentionRequested, Ring(seedActivity), Quiet())),
+		On(v.Replanted, Choose(lifecycleAttentionRequested, Ring(seedActivity), Quiet())),
 		On(v.BodyEdited, Quiet()),
 		On(v.NoteAdded, Choose(attentionRequested, Ring(seedActivity), Quiet())),
 		On(v.ArtifactChanged, Quiet()),

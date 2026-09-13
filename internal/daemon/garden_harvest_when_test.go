@@ -637,6 +637,32 @@ func TestAMergeThatLandsDuringArmingStillHarvests(t *testing.T) {
 	}
 }
 
+func TestAClosureDuringArmingDoesNotRingItsInitiator(t *testing.T) {
+	d := newGardenDaemon(t)
+	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "closed during arming"})
+	watchSeed(t, d, "sess-a", seed.ID, false)
+	rec := recordPullRequest(t, d, "sess-a", "https://github.com/victorarias/attn/pull/71")
+	if resp := armWhenMerged(t, d, "sess-a", seed.ID, rec.URL); !resp.Ok {
+		t.Fatalf("arm: %v", protocol.Deref(resp.Error))
+	}
+	armed, doc, err := d.readSeed(seed.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settlePullRequest(t, d, rec.PRID, sessionPullRequestClosed, "closed between the check and the commit")
+
+	cleared, _, err := d.settleFreshlyArmed(armed, doc, "sess-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.HarvestWhen != nil {
+		t.Fatalf("closed pull request left harvest condition %+v", cleared.HarvestWhen)
+	}
+	if queued := queuedSeedBells(t, d, "sess-a"); len(queued) != 0 {
+		t.Fatalf("immediate clear rang its initiating session: %q", queued)
+	}
+}
+
 func TestSettlementIsBoundToTheConditionItObserved(t *testing.T) {
 	d := newGardenDaemon(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "cleared under the sweep"})

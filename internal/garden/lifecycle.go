@@ -64,6 +64,7 @@ type Ask struct {
 	Force                   bool
 	CauseSession            string
 	DirectlyNotifiedSession string
+	SuppressNotification    bool
 }
 
 type move struct {

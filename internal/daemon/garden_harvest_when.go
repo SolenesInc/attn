@@ -172,7 +172,7 @@ func (d *Daemon) settleFreshlyArmed(
 		return d.fulfilHarvestWhen(seed, rec, seed.HarvestWhen, sessionID)
 	case sessionPullRequestClosed:
 		cleared, doc, err := d.clearHarvestWhen(seed.ID, seed.HarvestWhen,
-			harvestWhenClosedNote(rec), garden.Tender{Member: harvestWhenActor})
+			harvestWhenClosedNote(rec), garden.Tender{Member: harvestWhenActor}, sessionID)
 		if err != nil {
 			return garden.Seed{}, docstore.Document{}, err
 		}

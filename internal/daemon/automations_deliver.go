@@ -422,6 +422,9 @@ func (d *Daemon) activateAutomationContinuationSeed(seedID, sessionID string) (f
 		return nil, fmt.Errorf("read automation continuation seed %s: %w", seedID, err)
 	}
 	actor := garden.Tender{Session: sessionID}
+	quietAsk := func(reason string) garden.Ask {
+		return garden.Ask{Actor: actor, Reason: reason, SuppressNotification: true}
+	}
 	var restore func() error
 	if garden.Closed(seed.Status) {
 		closeVerb, closeReason := garden.VerbWither, seed.Reason
@@ -429,10 +432,10 @@ func (d *Daemon) activateAutomationContinuationSeed(seedID, sessionID string) (f
 			closeVerb = garden.VerbHarvest
 		}
 		restore = func() error {
-			_, _, err := d.applySeedTransition(seedID, closeVerb, garden.Ask{Actor: actor, Reason: closeReason})
+			_, _, err := d.applySeedTransition(seedID, closeVerb, quietAsk(closeReason))
 			return err
 		}
-		if _, _, err := d.applySeedTransition(seedID, garden.VerbReplant, garden.Ask{Actor: actor}); err != nil {
+		if _, _, err := d.applySeedTransition(seedID, garden.VerbReplant, quietAsk("")); err != nil {
 			return nil, fmt.Errorf("replant automation continuation seed %s: %w", seedID, err)
 		}
 		seed.Status = garden.StatusPlanted
@@ -440,7 +443,7 @@ func (d *Daemon) activateAutomationContinuationSeed(seedID, sessionID string) (f
 	if seed.Status == garden.StatusGrowing && seed.TenderSession == sessionID {
 		return restore, nil
 	}
-	if _, _, err := d.applySeedTransition(seedID, garden.VerbTend, garden.Ask{Actor: actor}); err != nil {
+	if _, _, err := d.applySeedTransition(seedID, garden.VerbTend, quietAsk("")); err != nil {
 		return nil, fmt.Errorf("tend automation continuation seed %s: %w", seedID, err)
 	}
 	return restore, nil

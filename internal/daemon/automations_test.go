@@ -778,6 +778,8 @@ func TestSuccessfulContinuationReopensBoundSeed(t *testing.T) {
 	if _, _, err := d.applySeedTransition(seedID, garden.VerbHarvest, garden.Ask{Actor: garden.Tender{Session: sessionID}, Reason: "first review complete"}); err != nil {
 		t.Fatal(err)
 	}
+	addGardenSession(t, d, "observer")
+	watchSeed(t, d, "observer", seedID, false)
 	req := automation.WorkRequest{
 		RunID: "run-2", DefinitionID: "review", ContinuityKey: "github.com/owner/repo#42",
 		IDs: automation.DeliveryIDs{SeedID: seedID, SessionID: sessionID},
@@ -794,6 +796,55 @@ func TestSuccessfulContinuationReopensBoundSeed(t *testing.T) {
 	}
 	if seed.Status != garden.StatusGrowing || seed.TenderSession != sessionID {
 		t.Fatalf("continued seed=%#v, want growing and tended by %s", seed, sessionID)
+	}
+	if queued := queuedSeedBells(t, d, "observer"); len(queued) != 0 {
+		t.Fatalf("automation reactivation rang before work was ready: %q", queued)
+	}
+}
+
+func TestAutomationContinuationRetendStaysQuiet(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		setup func(t *testing.T, d *Daemon, seedID string)
+	}{
+		{
+			name: "parked",
+			setup: func(t *testing.T, d *Daemon, seedID string) {
+				t.Helper()
+				if _, _, err := d.applySeedTransition(seedID, garden.VerbPark, garden.Ask{Actor: garden.Tender{Session: "sess-a"}}); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "abandoned tender",
+			setup: func(t *testing.T, d *Daemon, seedID string) {
+				t.Helper()
+				addGardenSession(t, d, "stale")
+				if _, _, err := d.applySeedTransition(seedID, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: "stale"}, Force: true}); err != nil {
+					t.Fatal(err)
+				}
+				d.store.Remove("stale")
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			d := newGardenDaemon(t)
+			seedID, err := d.bindDelegationSeed("sess-a", "", "Review the pull request.", "Review", "", t.TempDir(), "codex", false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			test.setup(t, d, seedID)
+			addGardenSession(t, d, "observer")
+			watchSeed(t, d, "observer", seedID, false)
+
+			if _, err := d.activateAutomationContinuationSeed(seedID, "sess-a"); err != nil {
+				t.Fatal(err)
+			}
+			if queued := queuedSeedBells(t, d, "observer"); len(queued) != 0 {
+				t.Fatalf("automation retend rang before work was ready: %q", queued)
+			}
+		})
 	}
 }
 

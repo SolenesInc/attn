@@ -203,8 +203,8 @@ func TestSelectionAndRetentionShareTheAudienceResolver(t *testing.T) {
 
 func TestDeclaredExclusionsCoverTheActorAndADirectlyNotifiedSession(t *testing.T) {
 	model, vocabulary := gardenModel(t)
-	occurrence, err := events.Occur(model, vocabulary.Tended, seedID, events.CausePayload{
-		CausedBySessionID: "source", DirectlyNotifiedSessionID: "destination",
+	occurrence, err := events.Occur(model, vocabulary.Tended, seedID, events.LifecyclePayload{
+		AttentionRequested: true, CausedBySessionID: "source", DirectlyNotifiedSessionID: "destination",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -241,6 +241,31 @@ func TestNotePolicyIsConditional(t *testing.T) {
 		}
 		if decision.Quiet() != test.quiet {
 			t.Fatalf("payload %s quiet=%v, want %v", test.payload, decision.Quiet(), test.quiet)
+		}
+	}
+}
+
+func TestLifecyclePolicyCanKeepAnInternalTransitionQuiet(t *testing.T) {
+	model, _ := gardenModel(t)
+	for _, eventName := range []string{
+		events.NameTended,
+		events.NameParked,
+		events.NameHarvested,
+		events.NameWithered,
+		events.NameReplanted,
+	} {
+		for _, attentionRequested := range []bool{false, true} {
+			payload := `{"attention_requested":false}`
+			if attentionRequested {
+				payload = `{"attention_requested":true}`
+			}
+			decision, err := model.Interpret(eventName, seedID, []byte(payload))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if decision.Quiet() == attentionRequested {
+				t.Fatalf("event=%s attention_requested=%t produced quiet=%t", eventName, attentionRequested, decision.Quiet())
+			}
 		}
 	}
 }
