@@ -79,3 +79,19 @@ test('header names the role; the popup fits a narrow viewport and has no idle an
   expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(552);
   expect(await popup.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0);
 });
+
+test('Escape dismisses a hover preview and still reaches the terminal', async ({ page }) => {
+  const terminal = page.getByRole('textbox', { name: 'Terminal keyboard target' });
+  await terminal.evaluate((element) => element.addEventListener('keydown', (event) => {
+    element.dataset.lastKey = (event as KeyboardEvent).key;
+    element.dataset.prevented = String(event.defaultPrevented);
+  }));
+  await terminal.focus();
+  await page.getByTestId('row-builder').getByRole('button').hover();
+  await expect(page.getByRole('dialog', { name: 'Delegation chain' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Delegation chain' })).toHaveCount(0);
+  await expect(terminal).toBeFocused();
+  await expect(terminal).toHaveAttribute('data-last-key', 'Escape');
+  await expect(terminal).toHaveAttribute('data-prevented', 'false');
+});

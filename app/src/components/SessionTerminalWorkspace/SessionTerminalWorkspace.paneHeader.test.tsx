@@ -173,6 +173,7 @@ describe('SessionTerminalWorkspace pane header', () => {
           agent: 'claude',
           state: 'working',
           dispatcher_session_id: 'dispatcher',
+          delegation_role: { name: 'Builder' },
         },
       ],
       onSelectSession: vi.fn(),
@@ -181,8 +182,8 @@ describe('SessionTerminalWorkspace pane header', () => {
     const headline = container.querySelector('.workspace-pane-identity-main');
     expect(headline).not.toBeNull();
     expect(headline).toContainElement(screen.getByLabelText('Session usage $2.61'));
-    expect(headline).toContainElement(screen.getByRole('button', { name: /delegated by chief/i }));
-    expect(headline?.textContent).toMatch(/\$2\.61.*delegated by chief/i);
+    expect(headline).toContainElement(screen.getByRole('button', { name: /Builder · Show delegation chain/i }));
+    expect(headline?.textContent).toMatch(/\$2\.61.*Builder/i);
   });
 
   it('does not round real sub-cent usage down to free', () => {

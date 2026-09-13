@@ -176,7 +176,7 @@ function DelegationChainPopover({ open, sessions, onClose, onSelectSession, onPo
   const titleId = useId();
   const tree = useMemo(() => delegationTree(open.sessionId, sessions), [open.sessionId, sessions]);
   const initialFocus = useCallback(() => card.current?.querySelector<HTMLElement>('[aria-current="true"]') ?? card.current!, []);
-  useEscapeStack(onClose, true);
+  useEscapeStack(onClose, true, { consume: open.focused });
   useLayoutEffect(() => { returnFocusTarget.current = open.returnFocus; }, [open.returnFocus]);
   useLayoutEffect(() => {
     const position = () => {

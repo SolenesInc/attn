@@ -55,6 +55,20 @@ describe('delegation chain', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('closes a hover preview on Escape without taking the terminal key', () => {
+    setup();
+    const terminal = screen.getByLabelText('Terminal');
+    const receiveKey = vi.fn();
+    terminal.addEventListener('keydown', receiveKey);
+    terminal.focus();
+    fireEvent.pointerEnter(screen.getByTestId('delegation-chain-trigger-build'));
+
+    expect(fireEvent.keyDown(terminal, { key: 'Escape' })).toBe(true);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(terminal).toHaveFocus();
+    expect(receiveKey).toHaveBeenCalledOnce();
+  });
+
   it('opens from the action controller and navigates with arrows and clicks', () => {
     const { ref, onSelect } = setup();
     act(() => ref.current?.open('build'));
