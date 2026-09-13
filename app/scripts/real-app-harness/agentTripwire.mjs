@@ -79,10 +79,19 @@ export function tripwireMarker({ dir, binaries }) {
 
 export function shimSource(name) {
   const safeProbeEscape = name === 'pi'
-    ? `if { [ "$#" -eq 1 ] && [ "$1" = "--version" ]; } || { ${PI_CATALOG_ARGS.map((arg, index) => `[ "$${index + 1}" = "${arg}" ]`).join(' && ')} && [ "$#" -eq ${PI_CATALOG_ARGS.length} ]; }; then
+    ? `if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then
   rest=; IFS=:; for entry in $PATH; do [ "$entry" = "$dir" ] || rest="\${rest:+$rest:}$entry"; done; unset IFS
   real=$(PATH="$rest" command -v "${name}" 2>/dev/null) && exec "$real" "$@"
   exit 127
+fi
+if ${PI_CATALOG_ARGS.map((arg, index) => `[ "$${index + 1}" = "${arg}" ]`).join(' && ')} && [ "$#" -eq ${PI_CATALOG_ARGS.length} ]; then
+  rest=; IFS=:; for entry in $PATH; do [ "$entry" = "$dir" ] || rest="\${rest:+$rest:}$entry"; done; unset IFS
+  real=$(PATH="$rest" command -v "${name}" 2>/dev/null) || exit 127
+  IFS= read -r request || request=
+  if printf '%s\n' "$request" | grep -Eq '^\\{"id":"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}","type":"get_available_models"\\}$'; then
+    printf '%s\n' "$request" | "$real" "$@"
+    exit $?
+  fi
 fi
 `
     : '';
