@@ -78,6 +78,56 @@ func (s *Store) AppendBusEventOnce(
 	return seq, true, nil
 }
 
+func (s *Store) AppendGardenSeedArtifactObservation(
+	checksum string, event BusEvent, now time.Time,
+) (int64, bool, error) {
+	if strings.TrimSpace(checksum) == "" || strings.TrimSpace(event.Name) == "" || strings.TrimSpace(event.Subject) == "" {
+		return 0, false, fmt.Errorf("append Garden seed artifact observation: checksum, event name, and subject are required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return 0, false, nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var previousChecksum string
+	var previousSeq int64
+	err = tx.QueryRow(`
+		SELECT checksum, event_seq FROM garden_seed_artifact_observations WHERE seed_id=?
+	`, event.Subject).Scan(&previousChecksum, &previousSeq)
+	switch err {
+	case nil:
+		if previousChecksum == checksum {
+			return previousSeq, false, tx.Commit()
+		}
+	case sql.ErrNoRows:
+	default:
+		return 0, false, err
+	}
+	seq, err := appendBusEventWith(tx, event, now)
+	if err != nil {
+		return 0, false, err
+	}
+	if _, err := tx.Exec(`
+		INSERT INTO garden_seed_artifact_observations(seed_id, checksum, event_seq, observed_at)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(seed_id) DO UPDATE SET
+			checksum=excluded.checksum,
+			event_seq=excluded.event_seq,
+			observed_at=excluded.observed_at
+	`, event.Subject, checksum, seq, formatTicketTime(now)); err != nil {
+		return 0, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return seq, true, nil
+}
+
 func appendBusEventWith(x execer, e BusEvent, now time.Time) (int64, error) {
 	res, err := x.Exec(`
 		INSERT INTO bus_events (name, subject, payload, source, created_at)

@@ -465,6 +465,39 @@ func TestSeedArtifactObservationReconciliationPublishesMissingCurrentStateOnce(t
 	}
 }
 
+func TestSeedArtifactObservationPublishesAStateThatReturnsAfterAChange(t *testing.T) {
+	d, root, seed := newSeedArtifactDaemon(t)
+	d.stopNotebookWatcher()
+	dir := notebook.SeedArtifactsDir(root, seed.ID)
+
+	if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+		t.Fatal(err)
+	}
+	path := writeArtifactSource(t, dir, "transient.bin", []byte("present"))
+	if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {
+		t.Fatal(err)
+	}
+	events, err := d.store.BusEventsSince(0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var changed int
+	for _, event := range events {
+		if event.Name == seedEvents.NameArtifactChanged && event.Subject == seed.ID {
+			changed++
+		}
+	}
+	if changed != 3 {
+		t.Fatalf("artifact events across empty→present→empty = %d, want 3", changed)
+	}
+}
+
 func waitForArtifactRefresh(t *testing.T, refreshes <-chan struct{}) {
 	t.Helper()
 	select {

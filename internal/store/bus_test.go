@@ -65,6 +65,29 @@ func TestBusEventsSinceRespectsLimit(t *testing.T) {
 	}
 }
 
+func TestGardenSeedArtifactObservationDeduplicatesOnlyTheCurrentSnapshot(t *testing.T) {
+	s := New()
+	t.Cleanup(func() { _ = s.Close() })
+	event := BusEvent{Name: "garden.seed.artifact.changed", Subject: "s-seed01", Payload: `{}`, Source: "garden"}
+
+	first, changed, err := s.AppendGardenSeedArtifactObservation("a", event, busBase)
+	if err != nil || !changed {
+		t.Fatalf("first observation: seq=%d changed=%v err=%v", first, changed, err)
+	}
+	same, changed, err := s.AppendGardenSeedArtifactObservation("a", event, busBase.Add(time.Minute))
+	if err != nil || changed || same != first {
+		t.Fatalf("repeated current observation: seq=%d changed=%v err=%v, want seq=%d unchanged", same, changed, err, first)
+	}
+	second, changed, err := s.AppendGardenSeedArtifactObservation("b", event, busBase.Add(2*time.Minute))
+	if err != nil || !changed || second <= first {
+		t.Fatalf("second observation: seq=%d changed=%v err=%v, want after %d", second, changed, err, first)
+	}
+	third, changed, err := s.AppendGardenSeedArtifactObservation("a", event, busBase.Add(3*time.Minute))
+	if err != nil || !changed || third <= second {
+		t.Fatalf("return to first snapshot: seq=%d changed=%v err=%v, want after %d", third, changed, err, second)
+	}
+}
+
 func TestBusBoundsTracksTheLiveWindow(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })

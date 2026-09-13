@@ -1843,6 +1843,12 @@ func applyMigration148(tx *sql.Tx) error {
 			event_seq   INTEGER NOT NULL UNIQUE,
 			PRIMARY KEY (source_kind, source_id, event_name)
 		);
+		CREATE TABLE IF NOT EXISTS garden_seed_artifact_observations (
+			seed_id     TEXT PRIMARY KEY,
+			checksum    TEXT NOT NULL,
+			event_seq   INTEGER NOT NULL UNIQUE,
+			observed_at TEXT NOT NULL
+		);
 	`); err != nil {
 		return err
 	}

@@ -221,9 +221,20 @@ func (d *Daemon) recordObservedSeedArtifacts(seedID string) error {
 	if err != nil {
 		return err
 	}
-	return d.appendGardenSeedEventOnce(
-		"artifact_observation", seedID+":"+hex.EncodeToString(sum[:]), occurrence,
+	encoded, err := encodeGardenSeedEvents(occurrence)
+	if err != nil {
+		return err
+	}
+	seq, changed, err := d.store.AppendGardenSeedArtifactObservation(
+		hex.EncodeToString(sum[:]), encoded[0], time.Now(),
 	)
+	if err != nil {
+		return err
+	}
+	if changed {
+		announceGardenSeedEvents(d, []int64{seq})
+	}
+	return nil
 }
 
 func (d *Daemon) reconcileSeedArtifactObservations() error {

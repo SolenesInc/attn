@@ -122,7 +122,11 @@ func (d *Daemon) recordAutomationRunSeedOutcome(run *store.AutomationRun, body s
 		seen = seen || note.Body == body
 	}
 	if !seen {
-		if _, err := d.appendSeedNote(run.SeedID, body, run.SessionID, "", garden.NoteKindNote, nil, true, ""); err != nil {
+		causedBySessionID := ""
+		if !continuation {
+			causedBySessionID = run.SessionID
+		}
+		if _, err := d.appendSeedNote(run.SeedID, body, run.SessionID, "", garden.NoteKindNote, nil, true, causedBySessionID); err != nil {
 			return fmt.Errorf("record automation outcome: append note: %w", err)
 		}
 	}

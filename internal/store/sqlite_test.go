@@ -114,6 +114,7 @@ func TestMigration148PreservesPendingGardenMailboxReceiptsAndNamesItsBell(t *tes
 	if _, err := db.Exec(`
 		DROP TABLE garden_seed_event_receipts;
 		DROP TABLE garden_seed_event_sources;
+		DROP TABLE garden_seed_artifact_observations;
 		DELETE FROM schema_migrations WHERE version >= 148;
 		INSERT INTO agent_mailbox_items
 			(id, recipient_session_id, kind, source_id, coalesce_key, hint, prompt, created_at, notified_at, read_at)
@@ -146,7 +147,7 @@ func TestMigration148PreservesPendingGardenMailboxReceiptsAndNamesItsBell(t *tes
 	if hint != "lifecycle" || bell != "" || notified != "2026-09-12T12:01:00Z" || read != "2026-09-12T12:02:00Z" {
 		t.Fatalf("read row after migration = hint=%q bell=%q notified=%q read=%q", hint, bell, notified, read)
 	}
-	for _, table := range []string{"garden_seed_event_receipts", "garden_seed_event_sources"} {
+	for _, table := range []string{"garden_seed_event_receipts", "garden_seed_event_sources", "garden_seed_artifact_observations"} {
 		var count int
 		if err := db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&count); err != nil {
 			t.Fatalf("%s missing after migration: %v", table, err)
