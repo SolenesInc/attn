@@ -98,6 +98,26 @@ func TestSeedNudges_WebSocketTransitionDoesNotRingItsSource(t *testing.T) {
 	assertOneSeedBell(t, fixture.d, "sess-c", fixture.leaf.ID, "tended")
 }
 
+func TestSeedNudges_WebSocketNoteDoesNotRingItsSource(t *testing.T) {
+	fixture := newSeededNudgeGarden(t)
+	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
+	watchSeed(t, fixture.d, "sess-c", fixture.leaf.ID, false)
+	client := newInternalWSClient()
+
+	fixture.d.handleSeedNoteWS(client, &protocol.SeedNoteMessage{
+		Cmd: protocol.CmdSeedNote, RequestID: protocol.Ptr("note-1"),
+		SourceSessionID: protocol.Ptr("sess-b"), SeedID: fixture.leaf.ID,
+		Body: "look now", Ring: protocol.Ptr(true),
+	})
+	if _, err := readInternalActionResult(client); err != nil {
+		t.Fatalf("WebSocket note: %v", err)
+	}
+	if queued := queuedSeedBells(t, fixture.d, "sess-b"); len(queued) != 0 {
+		t.Fatalf("WebSocket note rang its source: %q", queued)
+	}
+	assertOneSeedBell(t, fixture.d, "sess-c", fixture.leaf.ID, "note.added")
+}
+
 func TestSeedNudges_FailedShowDoesNotReadTheBell(t *testing.T) {
 	fixture := newSeededNudgeGarden(t)
 	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)

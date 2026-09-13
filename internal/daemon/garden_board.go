@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"strings"
+
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -77,21 +79,22 @@ func (d *Daemon) handleSeedNoteWS(client *wsClient, msg *protocol.SeedNoteMessag
 		fail(err)
 		return
 	}
+	authorSession := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
 	note, err := d.appendSeedNote(
 		msg.SeedID,
 		msg.Body,
-		"",
+		authorSession,
 		protocol.Deref(msg.Member),
 		protocol.Deref(msg.Kind),
 		artifactFromProtocol(msg.Artifact),
 		protocol.Deref(msg.Ring),
-		"",
+		authorSession,
 	)
 	if err != nil {
 		fail(err)
 		return
 	}
-	d.mirrorSeedNoteOntoTicket("", msg.SeedID, note.Body)
+	d.mirrorSeedNoteOntoTicket(authorSession, msg.SeedID, note.Body)
 	result.Note = &note
 	result.Success = true
 	d.sendToClient(client, result)
