@@ -64,6 +64,35 @@ func TestAutomationDeliveryAndWorkReadyEventCommitAndRetryTogether(t *testing.T)
 	}
 }
 
+func TestDeleteAutomationRunPrunesItsEventSources(t *testing.T) {
+	s := New()
+	now := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
+	def, err := s.UpsertAutomationDefinition("delete-event-source", "Delete event source", `{}`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, created, err := s.ClaimManualAutomationRun(
+		def.ID, "request", "", `{}`, def.Revision, `{}`, now,
+		AutomationRunReservation{RunID: "run-delete-source", OccurrenceID: "occ-delete-source", SeedID: "s-delete-source", SessionID: "sess-delete-source", WorkspaceID: "workspace-delete-source", PaneID: "pane-delete-source"},
+	)
+	if err != nil || !created {
+		t.Fatalf("claim created=%v err=%v", created, err)
+	}
+	if err := markAutomationRunDeliveredForTest(s, run.ID, `{}`, now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteAutomationRun(run.ID); err != nil {
+		t.Fatal(err)
+	}
+	var sources int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM garden_seed_event_sources WHERE source_kind='automation_run' AND source_id=?`, run.ID).Scan(&sources); err != nil {
+		t.Fatal(err)
+	}
+	if sources != 0 {
+		t.Fatalf("automation event sources after run deletion = %d, want 0", sources)
+	}
+}
+
 func baselineGitHubReviewAutomation(t *testing.T, s *Store, definitionID, host string, at time.Time) {
 	t.Helper()
 	if candidates, err := s.ReconcileAutomationReviewRequests(definitionID, host, nil, at); err != nil || len(candidates) != 0 {

@@ -1462,6 +1462,9 @@ func (s *Store) DeleteAutomationRun(runID string) error {
 	if err != nil {
 		return err
 	}
+	if _, err := tx.Exec(`DELETE FROM garden_seed_event_sources WHERE source_kind='automation_run' AND source_id=?`, runID); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(`DELETE FROM automation_runs WHERE id=?`, runID); err != nil {
 		return err
 	}
