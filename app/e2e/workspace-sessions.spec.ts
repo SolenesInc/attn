@@ -159,4 +159,36 @@ test.describe('Workspace Sessions', () => {
     await expect(page.locator('[data-testid="sidebar-session-focus-agent"]')).toHaveClass(/selected/);
     await expect(activeWorkspace).toHaveAttribute('data-active-pane-id', 'pane-focus-agent');
   });
+
+  test('focus mode gives one agent the shell and restores the workspace on exit', async ({ page, daemon }) => {
+    await daemon.start();
+    await page.goto('/');
+    await page.waitForSelector('.dashboard');
+
+    await injectWorkspace(page, daemon, 'workspace-focus-mode', [
+      { id: 'focus-main', label: 'focus-main', paneId: 'pane-focus-main', cwd: '/tmp/workspace-focus-mode' },
+      { id: 'focus-peer', label: 'focus-peer', paneId: 'pane-focus-peer', cwd: '/tmp/workspace-focus-mode' },
+    ], 'pane-focus-main');
+
+    await page.locator('[data-testid="session-focus-main"]').click();
+    const workspace = page.locator('[data-session-terminal-workspace="workspace-focus-mode"]');
+
+    await expect(page.locator('.sidebar')).toBeVisible();
+    await expect(workspace.locator('[data-pane-id="pane-focus-main"]')).toBeVisible();
+    await expect(workspace.locator('[data-pane-id="pane-focus-peer"]')).toBeVisible();
+
+    await workspace.locator('[data-pane-id="pane-focus-main"] .workspace-pane-header').hover();
+    await workspace.locator('[data-testid="focus-pane-pane-focus-main"]').click();
+
+    await expect(page.locator('.sidebar')).toBeHidden();
+    await expect(workspace.locator('[data-pane-id="pane-focus-main"]')).toBeVisible();
+    await expect(workspace.locator('[data-pane-id="pane-focus-peer"]')).toHaveCount(0);
+    await expect(workspace.getByRole('button', { name: 'Return to split' })).toBeVisible();
+
+    await workspace.getByRole('button', { name: 'Return to split' }).click();
+
+    await expect(page.locator('.sidebar')).toBeVisible();
+    await expect(workspace.locator('[data-pane-id="pane-focus-main"]')).toBeVisible();
+    await expect(workspace.locator('[data-pane-id="pane-focus-peer"]')).toBeVisible();
+  });
 });

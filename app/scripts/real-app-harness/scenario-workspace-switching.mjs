@@ -18,9 +18,12 @@ import {
   waitForPaneText,
   waitForPaneVisible,
   waitForSessionWorkspace,
+  sleep,
 } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+
+const hold = () => (process.env.ATTN_HARNESS_RECORD === '1' ? sleep(1200) : Promise.resolve());
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -219,7 +222,7 @@ async function main() {
     prefix: 'workspace-switching',
     metadata: {
       agent: 'shell',
-      focus: 'session switching keeps each workspace\'s panes and history isolated, and closing one split leaves the surviving shells and their scrollback intact',
+      focus: 'session switching keeps each workspace\'s panes and history isolated, focus mode gives one agent the shell and restores it, and closing one split leaves the surviving shells and their scrollback intact',
     },
   });
 
@@ -356,6 +359,72 @@ async function main() {
       }
     });
 
+    let focusModeReceipt;
+    await runner.step('focus_mode_gives_one_agent_the_shell_and_restores_the_split', async () => {
+      await client.request('select_session', { sessionId: workspaceA.sessionId });
+      await client.request('dom_click', {
+        selector: `[data-testid="focus-pane-${workspaceA.firstPane.paneId}"]`,
+      });
+
+      const focusedSnapshot = await client.request('capture_structured_snapshot', { includePaneText: false });
+      const focused = focusedSnapshot.sessions.find((session) => session.id === workspaceA.sessionId);
+      if (!focused) {
+        throw new Error(`Focused session ${workspaceA.sessionId} is missing from the structured snapshot`);
+      }
+      const focusedPane = focused.panes.find((pane) => pane.paneId === workspaceA.firstPane.paneId);
+      const hiddenPeer = focused.panes.find((pane) => pane.paneId === horizontalA.paneId);
+      runner.assert(
+        focused.workspace?.view?.maximizedPaneId === workspaceA.firstPane.paneId,
+        `Focus mode did not maximize ${workspaceA.firstPane.paneId}: ${JSON.stringify(focused, null, 2)}`,
+        focused.workspace?.view,
+      );
+      runner.assert(
+        focused.sidebarItem?.bounds?.width === 0,
+        `Focus mode left the sidebar visible: ${JSON.stringify(focused.sidebarItem, null, 2)}`,
+        focused.sidebarItem,
+      );
+      runner.assert(
+        focusedPane?.bounds?.width > 0 && hiddenPeer?.bounds == null,
+        `Focus mode did not isolate the selected agent: ${JSON.stringify(focused.panes, null, 2)}`,
+        focused.panes,
+      );
+
+      const shot = await client.request('capture_screenshot_data', { selector: '.app' });
+      fs.writeFileSync(path.join(runner.runDir, 'focus-mode.png'), Buffer.from(shot.pngBase64, 'base64'));
+      await hold();
+
+      await client.request('dom_click', { selector: '.workspace-focus-exit' });
+      const restoredSnapshot = await client.request('capture_structured_snapshot', { includePaneText: false });
+      const restored = restoredSnapshot.sessions.find((session) => session.id === workspaceA.sessionId);
+      if (!restored) {
+        throw new Error(`Restored session ${workspaceA.sessionId} is missing from the structured snapshot`);
+      }
+      const restoredPane = restored.panes.find((pane) => pane.paneId === workspaceA.firstPane.paneId);
+      const restoredPeer = restored.panes.find((pane) => pane.paneId === horizontalA.paneId);
+      runner.assert(
+        restored.workspace?.view?.maximizedPaneId == null,
+        `Focus mode remained active after exit: ${JSON.stringify(restored.workspace?.view, null, 2)}`,
+        restored.workspace?.view,
+      );
+      runner.assert(
+        restored.sidebarItem?.bounds?.width > 0,
+        `Focus mode did not restore the sidebar: ${JSON.stringify(restored.sidebarItem, null, 2)}`,
+        restored.sidebarItem,
+      );
+      runner.assert(
+        restoredPane?.bounds?.width > 0 && restoredPeer?.bounds?.width > 0,
+        `Focus mode did not restore both panes: ${JSON.stringify(restored.panes, null, 2)}`,
+        restored.panes,
+      );
+      await hold();
+      focusModeReceipt = {
+        focusedPaneId: focused.workspace.view.maximizedPaneId,
+        focusedSidebarWidth: focused.sidebarItem.bounds.width,
+        restoredSidebarWidth: restored.sidebarItem.bounds.width,
+        restoredPaneIds: restored.panes.filter((pane) => pane.bounds?.width > 0).map((pane) => pane.paneId),
+      };
+    });
+
     const result = await runner.finishSuccess({
       workspaceA: {
         firstSessionId: workspaceA.sessionId,
@@ -363,6 +432,7 @@ async function main() {
         remainingSplitSessionId: horizontalA.runtimeId,
       },
       workspaceB: { firstSessionId: workspaceB.sessionId, closedSplitSessionId: splitB.runtimeId },
+      focusMode: focusModeReceipt,
       tokens: [tokenA1, tokenA2, tokenA3, tokenB1, tokenB2],
     });
     console.log('[RealAppHarness] Workspace switching passed.');

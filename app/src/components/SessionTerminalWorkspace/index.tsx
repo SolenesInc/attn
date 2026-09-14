@@ -530,7 +530,18 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       attentionFocusOrderRef.current = attentionFocusOrder;
     }, [attentionFocusOrder]);
     const effectivePaneId = maximizedLeafId && leafIdSet.has(maximizedLeafId) ? maximizedLeafId : null;
+    const focusedAgentSessionId = effectivePaneId
+      ? agentPaneById.get(effectivePaneId)?.sessionId ?? null
+      : null;
     const effectiveZoomedPaneId = zoomActive && leafIdSet.has(activeLeafId) ? activeLeafId : null;
+
+    const selectedWorkspaceSessionId = workspaceSessions.find((session) => session.isActive)?.id ?? null;
+    useEffect(() => {
+      if (focusedAgentSessionId && selectedWorkspaceSessionId && focusedAgentSessionId !== selectedWorkspaceSessionId) {
+        setMaximizedLeafId(null);
+      }
+    }, [focusedAgentSessionId, selectedWorkspaceSessionId]);
+
     const layoutPlan = useMemo(() => {
       if (!workspace.layoutTree) {
         return null;
@@ -1170,6 +1181,26 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
                   ✎
                 </button>
               ) : null}
+              {effectivePaneId !== agentPane.id ? (
+                <button
+                  type="button"
+                  className="workspace-pane-focus-btn"
+                  data-testid={`focus-pane-${agentPane.id}`}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    focusLeaf(agentPane.id);
+                    onSetZoomActive?.(false);
+                    setMaximizedLeafId(agentPane.id);
+                  }}
+                  title={`Focus agent (${formatShortcut('terminal.toggleMaximize')})`}
+                  aria-label={`Focus agent ${paneTitle}`}
+                >
+                  <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M6 2.5H2.5V6M10 2.5h3.5V6M6 13.5H2.5V10M10 13.5h3.5V10" />
+                  </svg>
+                </button>
+              ) : null}
               {paneSession?.presentation ? (
                 <HeaderPresentationChip
                   presentation={paneSession.presentation}
@@ -1335,6 +1366,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       effectiveDraggingLeafId,
       onOpenMarkdown,
       onOpenPresentation,
+      onSetZoomActive,
       onUndockTile,
       onUpdateTile,
       onRenameSession,
@@ -1617,7 +1649,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
 
     return (
       <div
-        className={`session-terminal-workspace workspace-selection--${workspaceSelectionStyle} ${effectivePaneId ? 'focus-mode' : ''} ${effectiveZoomedPaneId && !effectivePaneId ? 'zoom-mode' : ''} ${renderedPaneIds.length > 1 ? 'multi-leaf' : ''}`.trim().replace(/\s+/g, ' ')}
+        className={`session-terminal-workspace workspace-selection--${workspaceSelectionStyle} ${effectivePaneId ? 'focus-mode' : ''} ${effectivePaneId && agentPaneById.has(effectivePaneId) ? 'agent-focus-mode' : ''} ${effectiveZoomedPaneId && !effectivePaneId ? 'zoom-mode' : ''} ${renderedPaneIds.length > 1 ? 'multi-leaf' : ''}`.trim().replace(/\s+/g, ' ')}
         data-session-terminal-workspace={workspaceId}
         data-workspace-id={workspaceId}
         data-active-pane-id={activePaneId}

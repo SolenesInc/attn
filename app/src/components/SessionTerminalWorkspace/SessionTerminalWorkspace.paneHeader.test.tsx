@@ -65,6 +65,19 @@ function usage(costUsd?: number, hasUnpricedUsage = false, totalTokens = 3_550):
 }
 
 describe('SessionTerminalWorkspace pane header', () => {
+  it('focuses the agent from its header until exit', () => {
+    const { container } = renderLonePane();
+
+    fireEvent.click(screen.getByRole('button', { name: `Focus agent ${GENERATED_NAME}` }));
+
+    expect(container.querySelector('.session-terminal-workspace')).toHaveClass('focus-mode', 'agent-focus-mode');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Return to split' }));
+
+    expect(container.querySelector('.session-terminal-workspace')).not.toHaveClass('focus-mode');
+    expect(container.querySelector('.session-terminal-workspace')).not.toHaveClass('agent-focus-mode');
+  });
+
   it('names the session on a lone tile with nothing else to show', () => {
     const { container } = renderLonePane();
 
