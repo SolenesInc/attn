@@ -65,19 +65,16 @@ function usage(costUsd?: number, hasUnpricedUsage = false, totalTokens = 3_550):
 }
 
 describe('SessionTerminalWorkspace pane header', () => {
-  it('focuses the agent from its header and reports shell focus until exit', () => {
-    const onFocusedAgentChange = vi.fn();
-    const { container } = renderLonePane({ onFocusedAgentChange });
+  it('focuses the agent from its header until exit', () => {
+    const { container } = renderLonePane();
 
     fireEvent.click(screen.getByRole('button', { name: `Focus agent ${GENERATED_NAME}` }));
 
     expect(container.querySelector('.session-terminal-workspace')).toHaveClass('focus-mode');
-    expect(onFocusedAgentChange).toHaveBeenLastCalledWith('workspace-1', 'sess-1');
 
     fireEvent.click(screen.getByRole('button', { name: 'Return to split' }));
 
     expect(container.querySelector('.session-terminal-workspace')).not.toHaveClass('focus-mode');
-    expect(onFocusedAgentChange).toHaveBeenLastCalledWith('workspace-1', null);
   });
 
   it('names the session on a lone tile with nothing else to show', () => {

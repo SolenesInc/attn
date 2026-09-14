@@ -156,7 +156,6 @@ interface SessionTerminalWorkspaceProps {
   // Empty sessionId lets the daemon use the selected session.
   onOpenMarkdown?: (path: string, sessionId: string) => void;
   onTerminalModelRecovered?: () => void;
-  onFocusedAgentChange?: (workspaceId: string, sessionId: string | null) => void;
   zoomActive?: boolean;
   onSetZoomActive?: (active: boolean) => void;
   onNavigateOutOfSession: (direction: TerminalNavigationDirection) => void;
@@ -227,7 +226,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     onOpenPresentation,
     onOpenMarkdown,
     onTerminalModelRecovered,
-    onFocusedAgentChange,
     zoomActive = false,
     onSetZoomActive,
     onNavigateOutOfSession,
@@ -536,11 +534,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       ? agentPaneById.get(effectivePaneId)?.sessionId ?? null
       : null;
     const effectiveZoomedPaneId = zoomActive && leafIdSet.has(activeLeafId) ? activeLeafId : null;
-
-    useEffect(() => {
-      onFocusedAgentChange?.(workspaceId, focusedAgentSessionId);
-      return () => onFocusedAgentChange?.(workspaceId, null);
-    }, [focusedAgentSessionId, onFocusedAgentChange, workspaceId]);
 
     const selectedWorkspaceSessionId = workspaceSessions.find((session) => session.isActive)?.id ?? null;
     useEffect(() => {

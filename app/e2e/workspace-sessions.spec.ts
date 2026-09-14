@@ -171,7 +171,6 @@ test.describe('Workspace Sessions', () => {
     ], 'pane-focus-main');
 
     await page.locator('[data-testid="session-focus-main"]').click();
-    const app = page.locator('.app');
     const workspace = page.locator('[data-session-terminal-workspace="workspace-focus-mode"]');
 
     await expect(page.locator('.sidebar')).toBeVisible();
@@ -181,7 +180,6 @@ test.describe('Workspace Sessions', () => {
     await workspace.locator('[data-pane-id="pane-focus-main"] .workspace-pane-header').hover();
     await workspace.locator('[data-testid="focus-pane-pane-focus-main"]').click();
 
-    await expect(app).toHaveClass(/agent-focus-mode/);
     await expect(page.locator('.sidebar')).toBeHidden();
     await expect(workspace.locator('[data-pane-id="pane-focus-main"]')).toBeVisible();
     await expect(workspace.locator('[data-pane-id="pane-focus-peer"]')).toHaveCount(0);
@@ -189,7 +187,6 @@ test.describe('Workspace Sessions', () => {
 
     await workspace.getByRole('button', { name: 'Return to split' }).click();
 
-    await expect(app).not.toHaveClass(/agent-focus-mode/);
     await expect(page.locator('.sidebar')).toBeVisible();
     await expect(workspace.locator('[data-pane-id="pane-focus-main"]')).toBeVisible();
     await expect(workspace.locator('[data-pane-id="pane-focus-peer"]')).toBeVisible();
