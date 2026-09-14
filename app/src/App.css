@@ -275,12 +275,12 @@ html, body, #root {
   position: relative;
 }
 
-.app:has(.session-terminal-workspace.focus-mode[data-session-visible="1"]) .sidebar,
-.app:has(.session-terminal-workspace.focus-mode[data-session-visible="1"]) .side-panel-shell,
-.app:has(.session-terminal-workspace.focus-mode[data-session-visible="1"]) .garden-frame,
-.app:has(.session-terminal-workspace.focus-mode[data-session-visible="1"]) .garden-frame-backdrop,
-.app:has(.session-terminal-workspace.focus-mode[data-session-visible="1"]) .notifications-panel,
-.app:has(.session-terminal-workspace.focus-mode[data-session-visible="1"]) .notifications-panel-backdrop {
+.app:has(.session-terminal-workspace.agent-focus-mode[data-session-visible="1"]) .sidebar,
+.app:has(.session-terminal-workspace.agent-focus-mode[data-session-visible="1"]) .side-panel-shell,
+.app:has(.session-terminal-workspace.agent-focus-mode[data-session-visible="1"]) .garden-frame,
+.app:has(.session-terminal-workspace.agent-focus-mode[data-session-visible="1"]) .garden-frame-backdrop,
+.app:has(.session-terminal-workspace.agent-focus-mode[data-session-visible="1"]) .notifications-panel,
+.app:has(.session-terminal-workspace.agent-focus-mode[data-session-visible="1"]) .notifications-panel-backdrop {
   display: none;
 }
 

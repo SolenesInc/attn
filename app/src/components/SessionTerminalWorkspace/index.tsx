@@ -1649,7 +1649,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
 
     return (
       <div
-        className={`session-terminal-workspace workspace-selection--${workspaceSelectionStyle} ${effectivePaneId ? 'focus-mode' : ''} ${effectiveZoomedPaneId && !effectivePaneId ? 'zoom-mode' : ''} ${renderedPaneIds.length > 1 ? 'multi-leaf' : ''}`.trim().replace(/\s+/g, ' ')}
+        className={`session-terminal-workspace workspace-selection--${workspaceSelectionStyle} ${effectivePaneId ? 'focus-mode' : ''} ${effectivePaneId && agentPaneById.has(effectivePaneId) ? 'agent-focus-mode' : ''} ${effectiveZoomedPaneId && !effectivePaneId ? 'zoom-mode' : ''} ${renderedPaneIds.length > 1 ? 'multi-leaf' : ''}`.trim().replace(/\s+/g, ' ')}
         data-session-terminal-workspace={workspaceId}
         data-workspace-id={workspaceId}
         data-active-pane-id={activePaneId}
