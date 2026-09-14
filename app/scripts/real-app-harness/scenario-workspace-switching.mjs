@@ -18,9 +18,12 @@ import {
   waitForPaneText,
   waitForPaneVisible,
   waitForSessionWorkspace,
+  sleep,
 } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+
+const hold = () => (process.env.ATTN_HARNESS_RECORD === '1' ? sleep(1200) : Promise.resolve());
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -388,6 +391,7 @@ async function main() {
 
       const shot = await client.request('capture_screenshot_data', { selector: '.app' });
       fs.writeFileSync(path.join(runner.runDir, 'focus-mode.png'), Buffer.from(shot.pngBase64, 'base64'));
+      await hold();
 
       await client.request('dom_click', { selector: '.workspace-focus-exit' });
       const restoredSnapshot = await client.request('capture_structured_snapshot', { includePaneText: false });
@@ -412,6 +416,7 @@ async function main() {
         `Focus mode did not restore both panes: ${JSON.stringify(restored.panes, null, 2)}`,
         restored.panes,
       );
+      await hold();
       focusModeReceipt = {
         focusedPaneId: focused.workspace.view.maximizedPaneId,
         focusedSidebarWidth: focused.sidebarItem.bounds.width,
