@@ -1580,6 +1580,21 @@ function AppContent({
   const reopenPickRef = useRef<{ settle: (path?: string) => void } | null>(null);
 
   const [zoomModeBySessionId, setZoomModeBySessionId] = useState<Record<string, boolean>>({});
+  const [focusedAgentShell, setFocusedAgentShell] = useState<{
+    workspaceId: string;
+    sessionId: string;
+  } | null>(null);
+  const handleFocusedAgentChange = useCallback((workspaceId: string, sessionId: string | null) => {
+    setFocusedAgentShell((current) => {
+      if (!sessionId) {
+        return current?.workspaceId === workspaceId ? null : current;
+      }
+      if (current?.workspaceId === workspaceId && current.sessionId === sessionId) {
+        return current;
+      }
+      return { workspaceId, sessionId };
+    });
+  }, []);
   const { message: errorMessage, durationMs: errorDurationMs, showError, clearError } = useErrorToast();
   const diagnosticReportSaved = useSavedFlash();
   const [diagnosticCapture, setDiagnosticCapture] = useState<{
@@ -2980,6 +2995,9 @@ function AppContent({
     selectedSessionlessWorkspaceId,
   );
   const activeWorkspaceId = workspaceSelection.activeWorkspaceId;
+  const agentFocusActive = view === 'session'
+    && focusedAgentShell?.workspaceId === activeWorkspaceId
+    && focusedAgentShell.sessionId === activeSessionId;
 
   useEffect(() => {
     probeUiAfterSwitch({
@@ -3722,7 +3740,7 @@ function AppContent({
     <DaemonProvider sendPRAction={sendPRAction} sendMutePR={sendMutePR} sendMuteRepo={sendMuteRepo} sendMuteAuthor={sendMuteAuthor} sendPRVisited={sendPRVisited}>
     <GitHubPollingProvider offReason={githubPollingOffReason}>
     <NotebookSurfaceProvider value={notebookSurfaceContextValue}>
-    <div className="app" ref={appShellRef} tabIndex={-1} style={{ outline: 'none' }} onPointerDownCapture={handleAppPointerDownCapture}>
+    <div className={`app ${agentFocusActive ? 'agent-focus-mode' : ''}`.trim()} ref={appShellRef} tabIndex={-1} style={{ outline: 'none' }} onPointerDownCapture={handleAppPointerDownCapture}>
       <BannerStack
         connectionError={connectionError}
         warnings={warnings}
@@ -3931,6 +3949,7 @@ function AppContent({
                         });
                     }}
                     onTerminalModelRecovered={handleTerminalModelRecovered}
+                    onFocusedAgentChange={handleFocusedAgentChange}
                     workspace={workspaceState}
                     workspaceSelectionStyle={workspaceSelectionStyle}
                     activePaneId={activePaneId}

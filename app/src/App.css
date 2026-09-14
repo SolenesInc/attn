@@ -275,6 +275,15 @@ html, body, #root {
   position: relative;
 }
 
+.app.agent-focus-mode .sidebar,
+.app.agent-focus-mode .side-panel-shell,
+.app.agent-focus-mode .garden-frame,
+.app.agent-focus-mode .garden-frame-backdrop,
+.app.agent-focus-mode .notifications-panel,
+.app.agent-focus-mode .notifications-panel-backdrop {
+  display: none;
+}
+
 /* Home and the session view stack here, so `.view-container`'s absolute fill
    resolves against the column beside the sidebar rather than the window. */
 .view-stack {

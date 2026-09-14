@@ -636,12 +636,46 @@
   transition: opacity 0.1s, color 0.1s;
 }
 
+.workspace-pane-focus-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--color-text-dimmed);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s, background 0.1s;
+}
+
+.workspace-pane-focus-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .workspace-pane-header:hover .workspace-pane-rename-btn,
-.workspace-pane-header:focus-within .workspace-pane-rename-btn {
+.workspace-pane-header:focus-within .workspace-pane-rename-btn,
+.workspace-pane-header:hover .workspace-pane-focus-btn,
+.workspace-pane-header:focus-within .workspace-pane-focus-btn {
   opacity: 1;
 }
 
 .workspace-pane-rename-btn:hover {
+  color: var(--color-text-primary);
+}
+
+.workspace-pane-focus-btn:hover {
+  background: var(--color-bg-button);
   color: var(--color-text-primary);
 }
 

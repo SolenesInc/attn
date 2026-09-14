@@ -156,6 +156,7 @@ interface SessionTerminalWorkspaceProps {
   // Empty sessionId lets the daemon use the selected session.
   onOpenMarkdown?: (path: string, sessionId: string) => void;
   onTerminalModelRecovered?: () => void;
+  onFocusedAgentChange?: (workspaceId: string, sessionId: string | null) => void;
   zoomActive?: boolean;
   onSetZoomActive?: (active: boolean) => void;
   onNavigateOutOfSession: (direction: TerminalNavigationDirection) => void;
@@ -226,6 +227,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     onOpenPresentation,
     onOpenMarkdown,
     onTerminalModelRecovered,
+    onFocusedAgentChange,
     zoomActive = false,
     onSetZoomActive,
     onNavigateOutOfSession,
@@ -530,7 +532,23 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       attentionFocusOrderRef.current = attentionFocusOrder;
     }, [attentionFocusOrder]);
     const effectivePaneId = maximizedLeafId && leafIdSet.has(maximizedLeafId) ? maximizedLeafId : null;
+    const focusedAgentSessionId = effectivePaneId
+      ? agentPaneById.get(effectivePaneId)?.sessionId ?? null
+      : null;
     const effectiveZoomedPaneId = zoomActive && leafIdSet.has(activeLeafId) ? activeLeafId : null;
+
+    useEffect(() => {
+      onFocusedAgentChange?.(workspaceId, focusedAgentSessionId);
+      return () => onFocusedAgentChange?.(workspaceId, null);
+    }, [focusedAgentSessionId, onFocusedAgentChange, workspaceId]);
+
+    const selectedWorkspaceSessionId = workspaceSessions.find((session) => session.isActive)?.id ?? null;
+    useEffect(() => {
+      if (focusedAgentSessionId && selectedWorkspaceSessionId && focusedAgentSessionId !== selectedWorkspaceSessionId) {
+        setMaximizedLeafId(null);
+      }
+    }, [focusedAgentSessionId, selectedWorkspaceSessionId]);
+
     const layoutPlan = useMemo(() => {
       if (!workspace.layoutTree) {
         return null;
@@ -1170,6 +1188,26 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
                   ✎
                 </button>
               ) : null}
+              {effectivePaneId !== agentPane.id ? (
+                <button
+                  type="button"
+                  className="workspace-pane-focus-btn"
+                  data-testid={`focus-pane-${agentPane.id}`}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    focusLeaf(agentPane.id);
+                    onSetZoomActive?.(false);
+                    setMaximizedLeafId(agentPane.id);
+                  }}
+                  title={`Focus agent (${formatShortcut('terminal.toggleMaximize')})`}
+                  aria-label={`Focus agent ${paneTitle}`}
+                >
+                  <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M6 2.5H2.5V6M10 2.5h3.5V6M6 13.5H2.5V10M10 13.5h3.5V10" />
+                  </svg>
+                </button>
+              ) : null}
               {paneSession?.presentation ? (
                 <HeaderPresentationChip
                   presentation={paneSession.presentation}
@@ -1335,6 +1373,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       effectiveDraggingLeafId,
       onOpenMarkdown,
       onOpenPresentation,
+      onSetZoomActive,
       onUndockTile,
       onUpdateTile,
       onRenameSession,
