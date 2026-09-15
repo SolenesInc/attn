@@ -133,7 +133,7 @@ export function SessionProvenance({
   }, [activePopoverId, closePopover, popoverGroupId]);
 
   const claimPopover = () => {
-    delegationChain?.close();
+    delegationChain?.dismiss('handoff');
     if (popoverGroupId) openGroupPopover?.(popoverGroupId);
   };
 
