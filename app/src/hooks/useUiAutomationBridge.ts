@@ -2206,6 +2206,7 @@ export function useUiAutomationBridge({
         const field = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : null;
         return {
           tag: active.tagName,
+          ...(typeof payload.selector === 'string' ? { matches: active.matches(payload.selector) } : {}),
           className: active.className,
           testId: active.getAttribute('data-testid'),
           selectionStart: field?.selectionStart ?? null,

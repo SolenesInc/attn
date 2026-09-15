@@ -1563,8 +1563,9 @@ function AppContent({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const toggleSidebarCollapse = useCallback(() => {
+    if (delegationChainRef.current?.dismiss()) requestTerminalFocus();
     setSidebarCollapsed((prev) => !prev);
-  }, []);
+  }, [requestTerminalFocus]);
 
 
   const prevSessionCountRef = useRef(sessions.length);

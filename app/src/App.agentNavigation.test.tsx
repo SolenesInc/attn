@@ -249,7 +249,7 @@ describe('agent navigation', () => {
     expect(activeSessionId).toBe('s1');
   });
 
-  it.each(['onGoToDashboard', 'onHistoryBack'] as const)('dismisses the chain when %s changes navigation', (shortcut) => {
+  it.each(['onGoToDashboard', 'onHistoryBack', 'onToggleSidebar'] as const)('dismisses the chain when %s changes navigation', (shortcut) => {
     activeSessionId = 's1';
     const app = render(<App />);
     broadcast();

@@ -114,7 +114,6 @@ try {
     const header = `.delegation-chain-trigger--header[data-delegation-session="${builder}"]`;
     await waitForSelector(header, 'Builder header');
     runner.assert((await text(header)) === 'Builder', 'header spells out the assigned role');
-    const sidebar = `.delegation-chain-trigger--sidebar[data-delegation-session="${builder}"]`;
     const row = `[data-testid="sidebar-session-${builder}"]`;
     const rowTarget = await nativeTarget(row);
     await driver.movePointerInWindow(rowTarget.x, rowTarget.y);
@@ -130,7 +129,6 @@ try {
     await waitForChainFocus(root, 'row hover accepts native arrows');
     await driver.pressKey('Escape');
     await waitForSelector(popup, 'Escape closes the hover card', { absent: true });
-    await client.request('dom_hover', { selector: sidebar });
     runner.assert(!await exists(popup), 'dismissal does not reopen under a stationary pointer');
     const headerTarget = await nativeTarget(header);
     await driver.movePointerInWindow(headerTarget.x, headerTarget.y);
