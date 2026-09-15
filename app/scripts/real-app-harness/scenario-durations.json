@@ -6,6 +6,14 @@
     "matrixSeconds": 826.7,
     "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these.",
     "updates": {
+      "workspace-switching": {
+        "run": "workspace-switching-2026-09-15T21-17-34-309Z",
+        "job": "Local serial matrix, rugged-doctor profile",
+        "recordedAt": "2026-09-15",
+        "seconds": 45.7,
+        "runnerClass": "local macOS",
+        "note": "Green matrix-digest.txt, including focus exit and cross-workspace focus reset, with recording. Remeasure on Linux CI."
+      },
       "delegation-chain": {
         "run": "delegation-chain-2026-09-13T23-06-51-792Z",
         "job": "Local serial matrix, frosty-chain profile",
@@ -135,7 +143,7 @@
     "tr401-local-claude": 14.2,
     "workspace-close-one-session-keeps-selection": 27.4,
     "workspace-creation-shortcuts": 22.6,
-    "workspace-switching": 38.9,
+    "workspace-switching": 45.7,
     "worktree-surface": 34.3
   }
 }
