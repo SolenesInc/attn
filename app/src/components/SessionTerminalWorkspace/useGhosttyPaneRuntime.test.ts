@@ -627,15 +627,15 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
     await act(async () => {
       await failed.result.current.handleTerminalReady(pane.paneId)(createTerminal());
     });
-    expect(mockPtyDetach).not.toHaveBeenCalled();
+    expect(mockPtyDetach).toHaveBeenCalledTimes(1);
 
     const later = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
     await act(async () => {
       await later.result.current.handleTerminalReady(pane.paneId)(createTerminal());
     });
     later.unmount();
-    expect(mockPtyDetach).toHaveBeenCalledTimes(1);
-    expect(mockPtyDetach).toHaveBeenCalledWith({ id: pane.runtimeId });
+    expect(mockPtyDetach).toHaveBeenCalledTimes(2);
+    expect(mockPtyDetach).toHaveBeenLastCalledWith({ id: pane.runtimeId });
   });
 
   it('detaches a queued attach that lands after every holder left', async () => {
@@ -714,6 +714,33 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
     controller.handleEvent({ event: 'data', id: pane.runtimeId, data: btoa('query') });
 
     expect(liveTerminal.write).toHaveBeenCalledWith(expect.any(Uint8Array), { suppressResponses: undefined });
+  });
+
+  it('detaches when a failed duplicate attach drops the last hold after the attached view left', async () => {
+    const attached = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    await act(async () => {
+      await attached.result.current.handleTerminalReady(pane.paneId)(createTerminal());
+    });
+
+    let rejectAttach: (error: Error) => void = () => {};
+    mockPtyAttach.mockImplementationOnce(() => new Promise<void>((_, reject) => {
+      rejectAttach = reject;
+    }));
+    const duplicate = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    let duplicateReady: Promise<void> = Promise.resolve();
+    await act(async () => {
+      duplicateReady = duplicate.result.current.handleTerminalReady(pane.paneId)(createTerminal());
+    });
+
+    attached.unmount();
+    expect(mockPtyDetach).not.toHaveBeenCalled();
+
+    await act(async () => {
+      rejectAttach(new Error('daemon busy'));
+      await duplicateReady;
+    });
+    expect(mockPtyDetach).toHaveBeenCalledTimes(1);
+    expect(mockPtyDetach).toHaveBeenCalledWith({ id: pane.runtimeId });
   });
 
   it('never detaches a runtime it did not attach while another workspace holds it', async () => {
