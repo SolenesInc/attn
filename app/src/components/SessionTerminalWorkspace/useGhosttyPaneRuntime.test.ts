@@ -564,3 +564,67 @@ describe('useGhosttyPaneRuntime', () => {
     expect(terminal.write).not.toHaveBeenCalledWith(expect.stringContaining('Recovering session'));
   });
 });
+
+describe('useGhosttyPaneRuntime shared runtime holds', () => {
+  const pane = { paneId: 'pane-shared', runtimeId: 'runtime-shared', paneKind: 'agent' as const };
+  let router: PaneRuntimeEventRouter;
+
+  beforeEach(() => {
+    mockPtyAttach.mockClear();
+    mockPtyDetach.mockClear();
+    router = { registerBinding: vi.fn(() => () => {}) };
+  });
+
+  it('keeps the daemon attachment while another workspace still holds the runtime', async () => {
+    const first = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    const second = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+
+    await act(async () => {
+      await first.result.current.handleTerminalReady(pane.paneId)(createTerminal());
+      await second.result.current.handleTerminalReady(pane.paneId)(createTerminal());
+    });
+    expect(mockPtyAttach).toHaveBeenCalledTimes(2);
+
+    second.unmount();
+    expect(mockPtyDetach).not.toHaveBeenCalled();
+
+    first.unmount();
+    expect(mockPtyDetach).toHaveBeenCalledTimes(1);
+    expect(mockPtyDetach).toHaveBeenCalledWith({ id: pane.runtimeId });
+  });
+
+  it('never detaches a runtime it did not attach while another workspace holds it', async () => {
+    const holder = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    const bystander = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+
+    await act(async () => {
+      await holder.result.current.handleTerminalReady(pane.paneId)(createTerminal());
+    });
+
+    bystander.unmount();
+    expect(mockPtyDetach).not.toHaveBeenCalled();
+
+    holder.unmount();
+    expect(mockPtyDetach).toHaveBeenCalledWith({ id: pane.runtimeId });
+  });
+
+  it('releases the hold when the pane leaves the workspace so a later holder detaches cleanly', async () => {
+    const first = renderHook(
+      ({ panes }) => useGhosttyPaneRuntime(panes, pane.paneId, router, { current: true }),
+      { initialProps: { panes: [pane] } },
+    );
+    await act(async () => {
+      await first.result.current.handleTerminalReady(pane.paneId)(createTerminal());
+    });
+
+    first.rerender({ panes: [] });
+    expect(mockPtyDetach).toHaveBeenCalledTimes(1);
+
+    const second = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    await act(async () => {
+      await second.result.current.handleTerminalReady(pane.paneId)(createTerminal());
+    });
+    second.unmount();
+    expect(mockPtyDetach).toHaveBeenCalledTimes(2);
+  });
+});

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { ptyAttach, ptyDetach, ptyResize, ptyWrite, type PtyEventPayload } from '../../pty/bridge';
+import { runtimeAttachHolds } from '../../pty/attachHolds';
 import { formatExitNotice } from '../../pty/exitNotice';
 import { recordFocus } from '../../utils/terminalDiagnosticsLog';
 import type { PaneRuntimeEventRouter } from './paneRuntimeEventRouter';
@@ -82,6 +83,7 @@ export function useGhosttyPaneRuntime(
   }>());
   const focusRetryTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const terminalsLiveRef = useRef(terminalsLive);
+  const attachHolderRef = useRef<object>({});
   panesRef.current = panes;
   terminalsLiveRef.current = terminalsLive;
 
@@ -93,6 +95,9 @@ export function useGhosttyPaneRuntime(
     );
     attachedRuntimesRef.current.delete(runtimeId);
     pendingResizeRef.current.delete(runtimeId);
+    if (runtimeAttachHolds.release(runtimeId, attachHolderRef.current) > 0) {
+      return;
+    }
     void ptyDetach({ id: runtimeId });
   }, []);
 
@@ -256,6 +261,7 @@ export function useGhosttyPaneRuntime(
     if (forceResizeBeforeAttach && attachResize) {
       pendingResizeRef.current.delete(pane.runtimeId);
     }
+    runtimeAttachHolds.hold(pane.runtimeId, attachHolderRef.current);
     const attachPromise = ptyAttach({
       args: {
         id: pane.runtimeId,
