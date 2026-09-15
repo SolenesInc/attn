@@ -6,15 +6,11 @@ export interface PaneRuntimeEventBinding {
   paneId: string;
   runtimeId: string;
   onEvent: (event: PtyEventPayload) => void;
+  isLive?: () => boolean;
 }
 
 export interface PaneRuntimeEventRouter {
   registerBinding: (binding: PaneRuntimeEventBinding) => () => void;
-}
-
-interface RegisteredBinding {
-  token: symbol;
-  binding: PaneRuntimeEventBinding;
 }
 
 export interface PaneRuntimeEventRouterController extends PaneRuntimeEventRouter {
@@ -23,31 +19,35 @@ export interface PaneRuntimeEventRouterController extends PaneRuntimeEventRouter
 }
 
 export function createPaneRuntimeEventRouterController(): PaneRuntimeEventRouterController {
-  const bindings = new Map<string, RegisteredBinding>();
+  const bindingsByRuntime = new Map<string, PaneRuntimeEventBinding[]>();
 
   const registerBinding = (binding: PaneRuntimeEventBinding) => {
-    const token = Symbol(binding.runtimeId);
-    bindings.set(binding.runtimeId, { token, binding });
+    const bindings = bindingsByRuntime.get(binding.runtimeId) ?? [];
+    bindingsByRuntime.set(binding.runtimeId, [...bindings, binding]);
 
     return () => {
-      const current = bindings.get(binding.runtimeId);
-      if (!current || current.token !== token) {
+      const remaining = bindingsByRuntime.get(binding.runtimeId)?.filter((entry) => entry !== binding);
+      if (!remaining || remaining.length === 0) {
+        bindingsByRuntime.delete(binding.runtimeId);
         return;
       }
-      bindings.delete(binding.runtimeId);
+      bindingsByRuntime.set(binding.runtimeId, remaining);
     };
   };
 
   const handleEvent = (event: PtyEventPayload) => {
-    const match = bindings.get(event.id);
-    if (!match) {
+    const bindings = bindingsByRuntime.get(event.id);
+    if (!bindings) {
       return;
     }
-    match.binding.onEvent(event);
+    const authority = bindings.find((binding) => binding.isLive?.() ?? true) ?? bindings[0];
+    for (const binding of bindings) {
+      binding.onEvent(binding === authority || event.event !== 'data' ? event : { ...event, suppressResponses: true });
+    }
   };
 
   const dispose = () => {
-    bindings.clear();
+    bindingsByRuntime.clear();
   };
 
   return {

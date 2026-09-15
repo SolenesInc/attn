@@ -403,6 +403,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         const nextWorkspaceId = daemonSession.workspace_id;
         const nextBranch = daemonSession.branch ?? existing?.branch;
         const nextIsWorktree = daemonSession.is_worktree ?? existing?.isWorktree;
+        const carriedLayout = existing?.workspaceId === nextWorkspaceId ? existing : undefined;
 
         if (
           existing &&
@@ -435,10 +436,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           isWorktree: nextIsWorktree,
           automation: daemonSession.automation,
           pullRequests: daemonSession.pull_requests,
-          workspace: existing?.workspace
+          workspace: carriedLayout?.workspace
             ?? daemonLayout?.workspace
             ?? createDefaultWorkspaceState(),
-          daemonActivePaneId: existing?.daemonActivePaneId ?? daemonLayout?.daemonActivePaneId ?? '',
+          daemonActivePaneId: carriedLayout?.daemonActivePaneId ?? daemonLayout?.daemonActivePaneId ?? '',
         } satisfies Session;
       });
 
