@@ -142,7 +142,15 @@ for (const entry of ['hover', 'click', 'command'] as const) {
   test(`outside scrolling dismisses the ${entry} chain and restores keyboard focus`, async ({ page }) => {
     const terminal = page.getByRole('textbox', { name: 'Terminal keyboard target' });
     await terminal.fill(Array.from({ length: 100 }, (_, index) => `Terminal line ${index}`).join('\n'));
-    await terminal.evaluate((element) => { element.scrollTop = 0; });
+    await terminal.evaluate((element) => new Promise<void>((resolve) => {
+      element.setSelectionRange(0, 0);
+      if (element.scrollTop === 0) {
+        resolve();
+        return;
+      }
+      element.addEventListener('scroll', () => resolve(), { once: true });
+      element.scrollTop = 0;
+    }));
     const header = page.getByTestId('agent-header').getByRole('button');
     if (entry === 'command') {
       await page.keyboard.press('Meta+k');

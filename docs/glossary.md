@@ -22,6 +22,7 @@
 - Satellite: shell pane attached to an agent. Orphan: satellite without a live parent.
 - Sliver: a pane or tile suspended to a thin strip showing its name and state, when the workspace cannot give every leaf its minimum size or a drag pushes one below it. The victim is the smallest unfocused leaf, never the focused one; it expands on its own when room returns.
 - Pinned sliver: folded by a drag; stays folded until clicked or a drag gives its side room. Boundaries beside a sliver resize its visible neighbors.
+- Focus mode: one workspace leaf occupies the shell until the user returns to the split. Removing that leaf clears focus mode; selecting another agent also exits agent focus mode. Restoring a removed leaf does not restore its former focus mode.
 - Activity: generated status line. Activity cursor: transcript position already summarized.
 - Session usage: token and price receipt for one session's native conversation and native subagents. A visible delegation is another session with its own receipt.
 - Presence: watching = home visible; present = recent input elsewhere in app; away = neither.
