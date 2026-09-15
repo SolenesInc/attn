@@ -39,9 +39,9 @@ export function createPaneRuntimeEventRouterController(): PaneRuntimeEventRouter
     if (!bindings) {
       return;
     }
-    for (const binding of bindings) {
-      binding.onEvent(event);
-    }
+    bindings.forEach((binding, index) => {
+      binding.onEvent(index === 0 || event.event !== 'data' ? event : { ...event, suppressResponses: true });
+    });
   };
 
   const dispose = () => {

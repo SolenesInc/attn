@@ -283,6 +283,9 @@ export function useGhosttyPaneRuntime(
       const attachStillCurrent = attachGenerationRef.current.get(pane.runtimeId) === attachGeneration
         && terminalIsCurrent();
       if (!attachStillCurrent) {
+        if (runtimeAttachHolds.holderCount(pane.runtimeId) === 0) {
+          void ptyDetach({ id: pane.runtimeId });
+        }
         return;
       }
       readyRuntimesRef.current.add(pane.runtimeId);
@@ -301,6 +304,7 @@ export function useGhosttyPaneRuntime(
       }
     } catch (error) {
       if (attachGenerationRef.current.get(pane.runtimeId) === attachGeneration) {
+        runtimeAttachHolds.release(pane.runtimeId, attachHolderRef.current);
         pendingResizeRef.current.delete(pane.runtimeId);
         await terminal.write(`\r\n[Failed to attach PTY: ${String(error)}]\r\n`);
       }

@@ -574,7 +574,8 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
   let router: PaneRuntimeEventRouter;
 
   beforeEach(() => {
-    mockPtyAttach.mockClear();
+    mockPtyAttach.mockReset();
+    mockPtyAttach.mockImplementation(() => Promise.resolve());
     mockPtyDetach.mockClear();
     router = { registerBinding: vi.fn(() => () => {}) };
   });
@@ -618,6 +619,56 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
       .map(([bytes]) => new TextDecoder().decode(bytes as Uint8Array));
     expect(writtenText(survivingTerminal)).toContain('after');
     expect(writtenText(transientTerminal)).not.toContain('after');
+  });
+
+  it('releases the hold when the attach fails so a later holder detaches cleanly', async () => {
+    mockPtyAttach.mockRejectedValueOnce(new Error('daemon refused'));
+    const failed = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    await act(async () => {
+      await failed.result.current.handleTerminalReady(pane.paneId)(createTerminal());
+    });
+    expect(mockPtyDetach).not.toHaveBeenCalled();
+
+    const later = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    await act(async () => {
+      await later.result.current.handleTerminalReady(pane.paneId)(createTerminal());
+    });
+    later.unmount();
+    expect(mockPtyDetach).toHaveBeenCalledTimes(1);
+    expect(mockPtyDetach).toHaveBeenCalledWith({ id: pane.runtimeId });
+  });
+
+  it('detaches a queued attach that lands after every holder left', async () => {
+    const settlers: Array<{ resolve: () => void; reject: (error: Error) => void }> = [];
+    mockPtyAttach.mockImplementation(() => new Promise<void>((resolve, reject) => {
+      settlers.push({ resolve, reject });
+    }));
+    const first = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    const second = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    let firstReady: Promise<void> = Promise.resolve();
+    let secondReady: Promise<void> = Promise.resolve();
+    await act(async () => {
+      firstReady = first.result.current.handleTerminalReady(pane.paneId)(createTerminal());
+      secondReady = second.result.current.handleTerminalReady(pane.paneId)(createTerminal());
+    });
+    expect(settlers).toHaveLength(2);
+
+    second.unmount();
+    first.unmount();
+    expect(mockPtyDetach).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      settlers[0].reject(new Error('Attach session canceled'));
+      await firstReady;
+    });
+    expect(mockPtyDetach).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      settlers[1].resolve();
+      await secondReady;
+    });
+    expect(mockPtyDetach).toHaveBeenCalledTimes(2);
+    expect(mockPtyDetach).toHaveBeenLastCalledWith({ id: pane.runtimeId });
   });
 
   it('never detaches a runtime it did not attach while another workspace holds it', async () => {

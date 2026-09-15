@@ -71,8 +71,13 @@ describe('paneRuntimeEventRouter', () => {
     });
 
     controller.handleEvent({ event: 'data', id: 'runtime-1', data: 'Zm9v' });
-    expect(survivingView).toHaveBeenCalledOnce();
-    expect(transientView).toHaveBeenCalledOnce();
+    expect(survivingView).toHaveBeenCalledWith({ event: 'data', id: 'runtime-1', data: 'Zm9v' });
+    expect(transientView).toHaveBeenCalledWith({
+      event: 'data',
+      id: 'runtime-1',
+      data: 'Zm9v',
+      suppressResponses: true,
+    });
 
     disposeTransient();
     controller.handleEvent({ event: 'data', id: 'runtime-1', data: 'YmFy' });
