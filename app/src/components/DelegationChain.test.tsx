@@ -1,10 +1,11 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createRef } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BuiltinDelegationRole } from '../types/generated';
 import { DelegationChainProvider, DelegationChainTrigger, SessionRoleIcon, type ChainSession, type DelegationChainHandle } from './DelegationChain';
 import { DelegationRoleIcon } from './DelegationRoleIcon';
+import { SessionLabel } from './SessionLabel';
 
 const sessions: ChainSession[] = [
   { id: 'root', label: 'Coordinate identity', agent: 'claude', state: 'idle', delegation_role: { name: 'Orchestrator', builtin: BuiltinDelegationRole.Orchestrator } },
@@ -35,13 +36,14 @@ describe('delegation chain', () => {
       .toBe(renderToStaticMarkup(<DelegationRoleIcon icon="diamond" name="Reviewer" />));
   });
 
-  it('previews every connected agent without selecting a session or moving focus', () => {
-    setup();
+  it('focuses the current agent immediately on hover without selecting a session', () => {
+    const { onSelect } = setup();
     const terminal = screen.getByLabelText('Terminal');
     terminal.focus();
     fireEvent.pointerEnter(screen.getByTestId('delegation-chain-trigger-build'));
     const popup = screen.getByRole('dialog', { name: 'Delegation chain' });
-    expect(terminal).toHaveFocus();
+    expect(within(popup).getByRole('button', { name: /Build navigator/ })).toHaveFocus();
+    expect(onSelect).not.toHaveBeenCalled();
     expect(within(popup).getByText('Orchestrator')).toBeInTheDocument();
     expect(within(popup).getByText('Builder')).toBeInTheDocument();
     expect(within(popup).getByRole('button', { name: /Review behavior/ })).toHaveTextContent('Codex');
@@ -65,7 +67,7 @@ describe('delegation chain', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('closes a hover preview on Escape without taking the terminal key', () => {
+  it('consumes Escape from a hover card and restores the terminal', async () => {
     setup();
     const terminal = screen.getByLabelText('Terminal');
     const receiveKey = vi.fn();
@@ -73,10 +75,10 @@ describe('delegation chain', () => {
     terminal.focus();
     fireEvent.pointerEnter(screen.getByTestId('delegation-chain-trigger-build'));
 
-    expect(fireEvent.keyDown(terminal, { key: 'Escape' })).toBe(true);
+    expect(fireEvent.keyDown(document.activeElement!, { key: 'Escape' })).toBe(false);
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(terminal).toHaveFocus();
-    expect(receiveKey).toHaveBeenCalledOnce();
+    await waitFor(() => expect(terminal).toHaveFocus());
+    expect(receiveKey).not.toHaveBeenCalled();
   });
 
   it('opens from the action controller and navigates with arrows and clicks', () => {
@@ -84,7 +86,7 @@ describe('delegation chain', () => {
     act(() => ref.current?.open('build'));
     const popup = screen.getByRole('dialog');
     const current = within(popup).getByRole('button', { name: /Build navigator/ });
-    act(() => current.focus());
+    expect(current).toHaveFocus();
     fireEvent.keyDown(current, { key: 'ArrowUp' });
     expect(within(popup).getByRole('button', { name: /Coordinate identity/ })).toHaveFocus();
     fireEvent.keyDown(document.activeElement!, { key: 'End' });
@@ -109,5 +111,60 @@ describe('delegation chain', () => {
     expect(screen.getByRole('button')).toHaveAccessibleName('Orchestrator · Show delegation chain for Coordinate identity');
     expect(container.querySelectorAll('button')).toHaveLength(1);
     expect(container.querySelector('[data-role="orchestrator"] svg')).toBeInTheDocument();
+  });
+
+  it('uses one full-title and chain card for the row and role cue', () => {
+    render(
+      <DelegationChainProvider sessions={sessions} onSelectSession={vi.fn()}>
+        <div className="sidebar">
+          <div className="session-item" data-testid="row">
+            <SessionLabel label={sessions[1].label} session={sessions[1]} />
+            <DelegationChainTrigger session={sessions[1]} />
+          </div>
+        </div>
+      </DelegationChainProvider>,
+    );
+    const label = screen.getByTestId('row').querySelector('.session-label')!;
+    Object.defineProperty(label, 'scrollWidth', { value: 420 });
+    Object.defineProperty(label, 'clientWidth', { value: 80 });
+    fireEvent.pointerEnter(screen.getByTestId('row'));
+    const popup = screen.getByRole('dialog');
+    expect(popup.querySelector('.delegation-chain-heading')).toHaveTextContent(sessions[1].label);
+    expect(within(popup).getByText('Orchestrator')).toBeInTheDocument();
+    expect(screen.queryByTestId('session-label-reveal')).toBeNull();
+    fireEvent.pointerEnter(screen.getByTestId('delegation-chain-trigger-build'));
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    expect(screen.queryByTestId('session-label-reveal')).toBeNull();
+  });
+
+  it('keeps header clicks and popup clicks out of the terminal pane mouse handler', () => {
+    const focusPane = vi.fn();
+    render(
+      <DelegationChainProvider sessions={sessions} onSelectSession={vi.fn()}>
+        <div onMouseDown={focusPane}>
+          <DelegationChainTrigger session={sessions[1]} variant="header" />
+        </div>
+      </DelegationChainProvider>,
+    );
+    const trigger = screen.getByTestId('delegation-chain-trigger-build');
+    fireEvent.mouseDown(trigger);
+    fireEvent.click(trigger);
+    const current = within(screen.getByRole('dialog')).getByRole('button', { name: /Build navigator/ });
+    expect(current).toHaveFocus();
+    fireEvent.mouseDown(current);
+    expect(focusPane).not.toHaveBeenCalled();
+  });
+
+  it('does not reopen under a stationary pointer after an explicit dismissal', () => {
+    setup();
+    const trigger = screen.getByTestId('delegation-chain-trigger-build');
+    fireEvent.pointerMove(window, { clientX: 80, clientY: 40 });
+    fireEvent.pointerEnter(trigger);
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    fireEvent.pointerEnter(trigger);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.pointerMove(window, { clientX: 81, clientY: 40 });
+    fireEvent.pointerEnter(trigger);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });

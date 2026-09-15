@@ -8,7 +8,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
 import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
-import { captureWebKitPids, readLiveDaemonPid, readProcessTable, snapshot, readAppFootprint, appPids } from './perfMeasure.mjs';
+import { captureWebKitPids, readLiveDaemonPid, readProcessTable, snapshot, readAppFootprint, readGraphicsRegions, appPids } from './perfMeasure.mjs';
 import { MOCK_AGENT_MODEL, writeMockAgentFixture } from './mockAgent.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
@@ -51,6 +51,17 @@ const screenshot = async name => {
   await driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId });
 };
 const waitForChainFocus = (id, description) => waitForSelector(`${popup} [data-chain-session="${id}"]:focus`, description);
+const nativeTarget = async selector => {
+  const [{ bounds }, { logicalBounds }, { innerWidth, innerHeight }] = await Promise.all([
+    client.request('dom_hover', { selector, leave: true }),
+    client.request('get_window_bounds'),
+    client.request('get_terminal_context_menu_state'),
+  ]);
+  return {
+    x: (Math.max(0, logicalBounds.width - innerWidth) / 2 + bounds.x + bounds.width / 2) / logicalBounds.width,
+    y: (Math.max(0, logicalBounds.height - innerHeight) + bounds.y + bounds.height / 2) / logicalBounds.height,
+  };
+};
 
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
@@ -99,19 +110,35 @@ try {
     await client.request('select_session', { sessionId: builder });
   });
   await runner.step('sidebar_hover_and_header_role', async () => {
+    await driver.activateApp();
     const header = `.delegation-chain-trigger--header[data-delegation-session="${builder}"]`;
     await waitForSelector(header, 'Builder header');
     runner.assert((await text(header)) === 'Builder', 'header spells out the assigned role');
     const sidebar = `.delegation-chain-trigger--sidebar[data-delegation-session="${builder}"]`;
-    await client.request('dom_hover', { selector: sidebar });
+    const row = `[data-testid="sidebar-session-${builder}"]`;
+    const rowTarget = await nativeTarget(row);
+    await driver.movePointerInWindow(rowTarget.x, rowTarget.y);
     await waitForSelector(popup, 'hovered chain');
+    await waitForChainFocus(builder, 'row hover focuses the current agent');
+    runner.assert((await text(`${popup} .delegation-chain-heading`)).includes('Build chain navigator'), 'the shared card contains the complete title');
     const content = await text(popup);
     runner.assert(content.includes('Orchestrator') && content.includes('Builder') && content.includes('Check keyboard flow'), 'the chain shows ancestors, roles and roleless descendants', { content });
-    runner.assert(!await exists('.kin-up, .kin-down, .sidebar-delegate-count'), 'no related-row highlights or old count circle');
+    runner.assert(!await exists('.kin-up, .kin-down, .sidebar-delegate-count, .sidebar-dispatcher, .session-label-reveal'), 'one shared card, without subtitles, related-row highlights or old count circles');
     await screenshot('hover-chain');
     await hold();
-    await client.request('dom_key', { selector: popup, key: 'Escape' });
-    await client.request('dom_click', { selector: header });
+    await driver.pressKey('ArrowUp');
+    await waitForChainFocus(root, 'row hover accepts native arrows');
+    await driver.pressKey('Escape');
+    await waitForSelector(popup, 'Escape closes the hover card', { absent: true });
+    await client.request('dom_hover', { selector: sidebar });
+    runner.assert(!await exists(popup), 'dismissal does not reopen under a stationary pointer');
+    const headerTarget = await nativeTarget(header);
+    await driver.movePointerInWindow(headerTarget.x, headerTarget.y);
+    await waitForChainFocus(builder, 'header hover focuses the current agent');
+    await driver.pressKey('ArrowDown');
+    await waitForChainFocus(child, 'header hover accepts native arrows');
+    await driver.pressKey('Escape');
+    await driver.clickWindow(headerTarget.x, headerTarget.y);
     await waitForChainFocus(builder, 'click focuses the current agent');
     await hold();
     await driver.activateApp();
@@ -166,7 +193,8 @@ try {
       const processes = await snapshot(appPid, readLiveDaemonPid(profile), webkitBaseline);
       const pids = new Set(appPids(processes));
       const cpu = (await readProcessTable()).filter(process => pids.has(process.pid));
-      samples.push({ processes, cpu, footprint: await readAppFootprint(processes) });
+      const graphics = await Promise.all((processes.byClass.webkit_gpu?.pids ?? []).map(async ({ pid }) => ({ pid, surfaces: await readGraphicsRegions(pid) })));
+      samples.push({ processes, cpu, footprint: await readAppFootprint(processes), graphics });
     }
     runner.writeJson('idle-app.json', samples);
     await screenshot('final-chain');

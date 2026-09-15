@@ -70,9 +70,14 @@
 
 .delegation-chain-heading {
   display: flex;
-  align-items: center;
   justify-content: space-between;
   gap: 8px;
+  align-items: flex-start;
+}
+
+.delegation-chain-heading strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .delegation-chain-heading button {
@@ -133,7 +138,7 @@
 
 .delegation-chain-role-icon { flex-shrink: 0; }
 .delegation-chain-agent { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 2px; }
-.delegation-chain-agent > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.delegation-chain-agent > span { overflow-wrap: anywhere; }
 .delegation-chain-agent small,
 .delegation-chain-current { color: var(--color-text-muted); font-size: var(--font-size-xs); }
 .delegation-chain-footer { display: flex; gap: 12px; padding-top: 8px; margin-top: 6px; border-top: 1px solid var(--color-border); color: var(--color-text-muted); font-size: var(--font-size-xs); }

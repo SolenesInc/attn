@@ -6,7 +6,7 @@ import {
 import { createPortal, flushSync } from 'react-dom';
 import FocusTrap from 'focus-trap-react';
 import { useEscapeStack } from '../hooks/useEscapeStack';
-import { delegationTree, type DelegationSession } from '../utils/delegationLinks';
+import { delegationTree, hasDelegationChain, type DelegationSession } from '../utils/delegationLinks';
 import type { UISessionState } from '../types/sessionState';
 import type { SessionDelegationRole } from '../types/generated';
 import { DelegationRoleIcon } from './DelegationRoleIcon';
@@ -27,15 +27,15 @@ export interface DelegationChainHandle {
 interface OpenChain {
   sessionId: string;
   anchor: HTMLElement | null;
-  focused: boolean;
+  pinned: boolean;
   returnFocus: HTMLElement | null;
 }
 
 interface ChainController {
   openSessionId: string | null;
-  focused: boolean;
-  show: (sessionId: string, anchor: HTMLElement, focused: boolean) => void;
-  leave: () => void;
+  pinned: boolean;
+  show: (sessionId: string, anchor: HTMLElement, pinned: boolean) => void;
+  leave: (sessionId: string) => void;
   close: () => void;
 }
 
@@ -64,7 +64,7 @@ export function DelegationChainTrigger({ session, hasDelegates = false, variant 
   onOpen?: () => void;
 }) {
   const controller = useContext(ChainContext);
-  if (!session.delegation_role && !session.dispatcher_session_id && !session.dispatcher_member && !hasDelegates) return null;
+  if (!hasDelegationChain(session, hasDelegates)) return null;
   const role = session.delegation_role;
   const label = `${role ? `${role.name} · ` : ''}Show delegation chain for ${session.label}`;
   return (
@@ -77,15 +77,15 @@ export function DelegationChainTrigger({ session, hasDelegates = false, variant 
       aria-label={label}
       aria-haspopup="dialog"
       aria-expanded={controller?.openSessionId === session.id}
-      title={label}
       onPointerDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); }}
       onPointerEnter={(event) => {
         if (event.pointerType !== 'touch') {
           onOpen?.();
           controller?.show(session.id, event.currentTarget, false);
         }
       }}
-      onPointerLeave={() => controller?.leave()}
+      onPointerLeave={() => controller?.leave(session.id)}
       onClick={(event) => {
         event.stopPropagation();
         onOpen?.();
@@ -105,6 +105,17 @@ export const DelegationChainProvider = forwardRef<DelegationChainHandle, {
 }>(function DelegationChainProvider({ sessions, onSelectSession, children }, ref) {
   const [open, setOpen] = useState<OpenChain | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverSuppressed = useRef(false);
+  const pointerPosition = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    const moved = (event: PointerEvent) => {
+      if (event.clientX === pointerPosition.current?.x && event.clientY === pointerPosition.current?.y) return;
+      pointerPosition.current = { x: event.clientX, y: event.clientY };
+      hoverSuppressed.current = false;
+    };
+    window.addEventListener('pointermove', moved, true);
+    return () => window.removeEventListener('pointermove', moved, true);
+  }, []);
   const cancelClose = useCallback(() => {
     if (closeTimer.current !== null) clearTimeout(closeTimer.current);
     closeTimer.current = null;
@@ -112,32 +123,37 @@ export const DelegationChainProvider = forwardRef<DelegationChainHandle, {
   useEffect(() => cancelClose, [cancelClose]);
   const close = useCallback(() => {
     cancelClose();
+    hoverSuppressed.current = true;
     setOpen(null);
   }, [cancelClose]);
-  const show = useCallback((sessionId: string, anchor: HTMLElement, focused: boolean) => {
+  const show = useCallback((sessionId: string, anchor: HTMLElement, pinned: boolean) => {
+    if (!pinned && hoverSuppressed.current) return;
     cancelClose();
     setOpen((current) => {
-      if (current?.focused && !focused) return current;
-      return { sessionId, anchor, focused, returnFocus: anchor };
+      if (current?.pinned && !pinned) return current;
+      if (current?.sessionId === sessionId && current.pinned === pinned) return current;
+      const returnFocus = pinned ? anchor : current?.returnFocus
+        ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+      return { sessionId, anchor, pinned, returnFocus };
     });
   }, [cancelClose]);
-  const leave = useCallback(() => {
+  const leave = useCallback((sessionId: string) => {
     cancelClose();
-    closeTimer.current = setTimeout(() => setOpen((current) => current?.focused ? current : null), HOVER_CLOSE_DELAY_MS);
+    closeTimer.current = setTimeout(() => setOpen((current) => current?.pinned || current?.sessionId !== sessionId ? current : null), HOVER_CLOSE_DELAY_MS);
   }, [cancelClose]);
   useImperativeHandle(ref, () => ({
     open(sessionId, returnFocus) {
       cancelClose();
       const anchor = Array.from(document.querySelectorAll<HTMLElement>('.delegation-chain-trigger--header'))
         .find((element) => element.dataset.delegationSession === sessionId && element.getClientRects().length > 0) ?? null;
-      setOpen({ sessionId, anchor, focused: true, returnFocus: returnFocus ?? anchor });
+      setOpen({ sessionId, anchor, pinned: true, returnFocus: returnFocus ?? anchor });
     },
     dismiss() {
       close();
-      return open?.focused ? open.returnFocus : null;
+      return open?.returnFocus ?? null;
     },
-  }), [cancelClose, close, open?.returnFocus, open?.focused]);
-  const controller = useMemo(() => ({ openSessionId: open?.sessionId ?? null, focused: open?.focused ?? false, show, leave, close }), [open?.sessionId, open?.focused, show, leave, close]);
+  }), [cancelClose, close, open?.returnFocus]);
+  const controller = useMemo(() => ({ openSessionId: open?.sessionId ?? null, pinned: open?.pinned ?? false, show, leave, close }), [open?.sessionId, open?.pinned, show, leave, close]);
   const current = sessions.find((session) => session.id === open?.sessionId);
   useEffect(() => {
     if (open && !current) close();
@@ -153,22 +169,20 @@ export const DelegationChainProvider = forwardRef<DelegationChainHandle, {
           onClose={close}
           onSelectSession={(id) => { flushSync(close); onSelectSession(id); }}
           onPointerEnter={cancelClose}
-          onPointerLeave={leave}
-          onFocus={() => setOpen((current) => current?.focused || !current ? current : { ...current, focused: true })}
+          onPointerLeave={() => leave(open.sessionId)}
         />
       )}
     </ChainContext.Provider>
   );
 });
 
-function DelegationChainPopover({ open, sessions, onClose, onSelectSession, onPointerEnter, onPointerLeave, onFocus }: {
+function DelegationChainPopover({ open, sessions, onClose, onSelectSession, onPointerEnter, onPointerLeave }: {
   open: OpenChain;
   sessions: readonly ChainSession[];
   onClose: () => void;
   onSelectSession: (id: string) => void;
   onPointerEnter: () => void;
   onPointerLeave: () => void;
-  onFocus: () => void;
 }) {
   const card = useRef<HTMLDivElement>(null);
   const restoreFocus = useRef(true);
@@ -176,7 +190,7 @@ function DelegationChainPopover({ open, sessions, onClose, onSelectSession, onPo
   const titleId = useId();
   const tree = useMemo(() => delegationTree(open.sessionId, sessions), [open.sessionId, sessions]);
   const initialFocus = useCallback(() => card.current?.querySelector<HTMLElement>('[aria-current="true"]') ?? card.current!, []);
-  useEscapeStack(onClose, true, { consume: open.focused });
+  useEscapeStack(onClose, true);
   useLayoutEffect(() => { returnFocusTarget.current = open.returnFocus; }, [open.returnFocus]);
   useLayoutEffect(() => {
     const position = () => {
@@ -184,8 +198,8 @@ function DelegationChainPopover({ open, sessions, onClose, onSelectSession, onPo
       if (!element) return;
       const bounds = element.getBoundingClientRect();
       const anchor = open.anchor?.getBoundingClientRect();
-      const sidebar = open.anchor?.classList.contains('delegation-chain-trigger--sidebar');
-      const left = anchor ? (sidebar ? anchor.right + 4 : anchor.left) : (window.innerWidth - bounds.width) / 2;
+      const sidebar = open.anchor?.closest('.sidebar') ?? open.anchor?.closest('.session-item');
+      const left = anchor ? (sidebar ? sidebar.getBoundingClientRect().right + 4 : anchor.left) : (window.innerWidth - bounds.width) / 2;
       const top = anchor ? (sidebar ? anchor.top : anchor.bottom + 4) : (window.innerHeight - bounds.height) / 2;
       element.style.left = `${Math.max(8, Math.min(left, window.innerWidth - bounds.width - 8))}px`;
       element.style.top = `${Math.max(8, Math.min(top, window.innerHeight - bounds.height - 8))}px`;
@@ -214,8 +228,8 @@ function DelegationChainPopover({ open, sessions, onClose, onSelectSession, onPo
     return () => document.removeEventListener('pointerdown', outside, true);
   }, [onClose, open.anchor]);
   return createPortal(
-    <FocusTrap active={open.focused} focusTrapOptions={{
-      initialFocus, fallbackFocus: initialFocus, escapeDeactivates: false,
+    <FocusTrap focusTrapOptions={{
+      initialFocus, fallbackFocus: initialFocus, escapeDeactivates: false, delayInitialFocus: false, preventScroll: true,
       allowOutsideClick: true, setReturnFocus: () => restoreFocus.current && returnFocusTarget.current?.isConnected ? returnFocusTarget.current : false,
     }}>
       <div
@@ -229,7 +243,7 @@ function DelegationChainPopover({ open, sessions, onClose, onSelectSession, onPo
         onPointerEnter={onPointerEnter}
         onPointerLeave={onPointerLeave}
         onPointerDown={(event) => event.stopPropagation()}
-        onFocus={onFocus}
+        onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           event.stopPropagation();
           if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
@@ -242,10 +256,10 @@ function DelegationChainPopover({ open, sessions, onClose, onSelectSession, onPo
         }}
       >
         <div className="delegation-chain-heading">
-          <strong>Delegation chain</strong>
+          <strong>{sessions.find((session) => session.id === open.sessionId)?.label}</strong>
           <button type="button" aria-label="Close delegation chain" onClick={onClose}>×</button>
         </div>
-        <p id={titleId}>Navigate this agent’s dispatcher, peers, and delegates.</p>
+        <p id={titleId}>Delegation chain</p>
         {tree.earlierDispatcher && <div className="delegation-chain-earlier">↑ {tree.earlierDispatcher} · unavailable</div>}
         <ul aria-label="Agents in delegation chain">
           {tree.rows.map(({ session, depth }) => (

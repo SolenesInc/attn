@@ -567,41 +567,6 @@
   max-width: 100%;
 }
 
-.sidebar-dispatcher {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 4px;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-xs);
-  line-height: 1.25;
-}
-
-.sidebar-dispatcher__link,
-.sidebar-dispatcher__name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebar-dispatcher__link {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-
-.sidebar-dispatcher__link:hover,
-.sidebar-dispatcher__link:focus-visible {
-  color: var(--color-text-secondary);
-  text-decoration: underline;
-}
-
 .delegation-chain-trigger--sidebar {
   margin-left: auto;
 }

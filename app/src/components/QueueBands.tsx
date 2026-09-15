@@ -14,13 +14,8 @@ import { crewDisplayName } from '../utils/crewName';
 import { useNow, TURN_AGE_TICK_MS } from '../hooks/useNow';
 import type { AutomationProvenance as AutomationProvenanceValue, SessionDelegationRole } from '../types/generated';
 import { SessionProvenance } from './SessionProvenance';
-import { SidebarDispatcherLine } from './SidebarDelegation';
 import { DelegationChainTrigger } from './DelegationChain';
-import {
-  delegatesByDispatcher,
-  dispatcherOf,
-  type DispatcherLink,
-} from '../utils/delegationLinks';
+import { delegatesByDispatcher } from '../utils/delegationLinks';
 
 export interface QueueBandSessionView {
   id: string;
@@ -195,9 +190,7 @@ function QueueRowView({
   onUnpin,
   onOpenActions,
   showSettling,
-  dispatcher,
   delegates,
-  onSelectSession,
   testIdPrefix,
 }: {
   row: QueueRow<QueueBandSessionView>;
@@ -213,9 +206,7 @@ function QueueRowView({
   onUnpin?: () => void;
   onOpenActions?: (event: ReactMouseEvent) => void;
   showSettling?: boolean;
-  dispatcher: DispatcherLink<QueueBandSessionView> | null;
   delegates: readonly QueueBandSessionView[];
-  onSelectSession: (id: string) => void;
   testIdPrefix: string;
 }) {
   const { session } = row;
@@ -240,9 +231,8 @@ function QueueRowView({
       <span className="sidebar-session-identity">
         <span className="sidebar-session-headline">
           <HarnessIcon agent={session.agent} />
-          <SessionLabel label={session.label} />
+          <SessionLabel label={session.label} session={session} hasDelegates={delegates.length > 0} />
         </span>
-        <SidebarDispatcherLine dispatcher={dispatcher} onSelectSession={onSelectSession} />
         <SessionProvenance automation={session.automation} density="compact" />
       </span>
       {session.chiefOfStaff && <ChiefOfStaffBadge />}
@@ -292,9 +282,7 @@ export function QueueBands({
   const crewRows = buildCrewRows(crew, bands.crew, crewInOtherBands);
   const delegates = useMemo(() => delegatesByDispatcher(allSessions), [allSessions]);
   const rowDelegation = (session: QueueBandSessionView) => ({
-    dispatcher: dispatcherOf(session, allSessions),
     delegates: delegates.get(session.id) ?? [],
-    onSelectSession,
   });
 
   return (
@@ -374,9 +362,7 @@ export function QueueBands({
                   ? (event) => onOpenActions(crewRow.row!.session, event)
                   : undefined
               }
-              dispatcher={crewRow.row ? dispatcherOf(crewRow.row.session, allSessions) : null}
               delegates={crewRow.row ? delegates.get(crewRow.row.session.id) ?? [] : []}
-              onSelectSession={onSelectSession}
             />
           ))}
           {bands.pinned.map((row) => (
@@ -426,9 +412,7 @@ function CrewRowView({
   onWake,
   onSleep,
   onOpenActions,
-  dispatcher,
   delegates,
-  onSelectSession,
 }: {
   member: string;
   row?: QueueRow<QueueBandSessionView>;
@@ -437,9 +421,7 @@ function CrewRowView({
   onWake?: () => void;
   onSleep?: () => void;
   onOpenActions?: (event: ReactMouseEvent) => void;
-  dispatcher: DispatcherLink<QueueBandSessionView> | null;
   delegates: readonly QueueBandSessionView[];
-  onSelectSession: (id: string) => void;
 }) {
   const awake = Boolean(row);
   const { phase, trigger, rowRef } = useWakeConfirm(onWake);
@@ -473,20 +455,8 @@ function CrewRowView({
         // The hollow ring is the same size as an indicator, so every crew row's label starts on the same column.
         <span className="crew-asleep-dot" aria-hidden="true" />
       )}
-      {awake && dispatcher ? (
-        <span className="sidebar-session-identity">
-          <span className="sidebar-session-headline">
-            <HarnessIcon agent={row!.session.agent} />
-            <SessionLabel label={label} />
-          </span>
-          <SidebarDispatcherLine dispatcher={dispatcher} onSelectSession={onSelectSession} />
-        </span>
-      ) : (
-        <>
-          {awake && <HarnessIcon agent={row!.session.agent} />}
-          <SessionLabel label={label} />
-        </>
-      )}
+      {awake && <HarnessIcon agent={row!.session.agent} />}
+      <SessionLabel label={label} session={row?.session} hasDelegates={delegates.length > 0} />
       <span className="crew-row-mark" title={awake ? `${name} is awake` : `${name} is asleep`}>
         {awake ? 'crew' : 'asleep'}
       </span>
@@ -595,9 +565,7 @@ export function QueueSnoozedSection({
               wake={formatWakeTime(row.session.turnSnoozedUntil, now)}
               onSelect={() => onSelectSession(row.session.id)}
               onWake={() => onWakeTurn(row.session.id)}
-              dispatcher={dispatcherOf(row.session, allSessions)}
               delegates={delegates.get(row.session.id) ?? []}
-              onSelectSession={onSelectSession}
               testIdPrefix="queue-snoozed"
             />
           ))}

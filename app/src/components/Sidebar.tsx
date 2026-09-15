@@ -29,15 +29,10 @@ import type {
   SessionDelegationRole,
 } from '../types/generated';
 import { SessionProvenance } from './SessionProvenance';
-import { SidebarDispatcherLine } from './SidebarDelegation';
 import { DelegationChainTrigger } from './DelegationChain';
 import { describeSessionPullRequest, pickSessionPullRequest } from '../utils/sessionPullRequest';
 import type { ShortcutId } from '../shortcuts/registry';
-import {
-  delegatesByDispatcher,
-  dispatcherOf,
-  type DispatcherLink,
-} from '../utils/delegationLinks';
+import { delegatesByDispatcher } from '../utils/delegationLinks';
 
 interface LocalSession {
   id: string;
@@ -103,21 +98,18 @@ function SidebarSessionPullRequest({ pullRequests }: { pullRequests?: SessionPul
 
 function SidebarSessionIdentity({
   session,
-  dispatcher,
-  onSelectSession,
+  hasDelegates,
 }: {
   session: LocalSession;
-  dispatcher: DispatcherLink<LocalSession> | null;
-  onSelectSession: (id: string) => void;
+  hasDelegates: boolean;
 }) {
   return (
     <span className="sidebar-session-identity">
       <span className="sidebar-session-headline">
         <HarnessIcon agent={session.agent} />
-        <SessionLabel label={session.label} />
+        <SessionLabel label={session.label} session={session} hasDelegates={hasDelegates} />
         <SidebarSessionPullRequest pullRequests={session.pullRequests} />
       </span>
-      <SidebarDispatcherLine dispatcher={dispatcher} onSelectSession={onSelectSession} />
       <SessionProvenance automation={session.automation} density="compact" />
     </span>
   );
@@ -227,9 +219,7 @@ function SidebarSessionRow({
   onOpenActions,
   onTriggerNudge,
   showSettling,
-  dispatcher,
   delegates,
-  onSelectSession,
 }: {
   session: LocalSession;
   selected: boolean;
@@ -241,9 +231,7 @@ function SidebarSessionRow({
   onOpenActions: (event: ReactMouseEvent) => void;
   onTriggerNudge?: () => void;
   showSettling: boolean;
-  dispatcher: DispatcherLink<LocalSession> | null;
   delegates: readonly LocalSession[];
-  onSelectSession: (id: string) => void;
 }) {
   const nudgeMode = deriveNudgeMode({
     ticketUnread: session.ticketUnread,
@@ -262,7 +250,7 @@ function SidebarSessionRow({
       title={session.state === 'recoverable' ? 'Session will be recovered when opened' : undefined}
     >
       <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
-      <SidebarSessionIdentity session={session} dispatcher={dispatcher} onSelectSession={onSelectSession} />
+      <SidebarSessionIdentity session={session} hasDelegates={delegates.length > 0} />
       <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
       {session.endpointName && (
         <span className={`session-endpoint-badge status-${session.endpointStatus || 'connected'}`}>
@@ -629,9 +617,7 @@ export function Sidebar({
   }, [workspaces, mutedWorkspaces]);
   const delegates = useMemo(() => delegatesByDispatcher(allSessions), [allSessions]);
   const rowDelegation = (session: LocalSession) => ({
-    dispatcher: dispatcherOf(session, allSessions),
     delegates: delegates.get(session.id) ?? [],
-    onSelectSession,
   });
   const toggleAutomationGroup = (definitionId: string) => {
     setExpandedAutomationGroups((current) => {
@@ -1535,8 +1521,7 @@ export function Sidebar({
                           <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
                           <SidebarSessionIdentity
                             session={session}
-                            dispatcher={dispatcherOf(session, allSessions)}
-                            onSelectSession={onSelectSession}
+                            hasDelegates={(delegates.get(session.id)?.length ?? 0) > 0}
                           />
                           <DelegationChainTrigger session={session} hasDelegates={(delegates.get(session.id)?.length ?? 0) > 0} />
                           {session.chiefOfStaff && <ChiefOfStaffBadge />}

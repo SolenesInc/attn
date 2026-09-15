@@ -111,7 +111,7 @@ const baseProps = {
 };
 
 describe('Sidebar', () => {
-  it('renders and navigates delegation links in workspace tree rows', () => {
+  it('offers delegation navigation without a dispatcher subtitle in workspace rows', () => {
     const onSelectSession = vi.fn();
     const sessions: TestSession[] = [
       { id: 'root', label: 'root', state: 'working', delegation_role: { name: 'Orchestrator', builtin: BuiltinDelegationRole.Orchestrator } },
@@ -128,10 +128,9 @@ describe('Sidebar', () => {
     const root = screen.getByTestId('sidebar-session-root');
     const child = screen.getByTestId('sidebar-session-child');
     expect(within(root).getByRole('button', { name: 'Orchestrator · Show delegation chain for root' })).toHaveAttribute('data-role', 'orchestrator');
-    expect(within(child).getByTestId('sidebar-dispatcher')).toHaveTextContent('↳Alder');
-    fireEvent.click(within(child).getByRole('button', { name: 'Open dispatcher Alder' }));
-    expect(onSelectSession).toHaveBeenCalledTimes(1);
-    expect(onSelectSession).toHaveBeenCalledWith('root');
+    expect(within(child).queryByTestId('sidebar-dispatcher')).toBeNull();
+    expect(within(child).getByRole('button', { name: 'Show delegation chain for child' })).toBeInTheDocument();
+    expect(onSelectSession).not.toHaveBeenCalled();
 
     fireEvent.pointerEnter(child);
     expect(root).not.toHaveClass('kin-up');

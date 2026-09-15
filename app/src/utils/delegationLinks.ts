@@ -10,6 +10,10 @@ export interface DelegationSession {
   endpoint_id?: string;
 }
 
+export function hasDelegationChain(session: DelegationSession, hasDelegates = false): boolean {
+  return Boolean(session.delegation_role || session.dispatcher_session_id || session.dispatcher_member || hasDelegates);
+}
+
 export function delegationTree<TSession extends DelegationSession>(
   sessionId: string,
   sessions: readonly TSession[],

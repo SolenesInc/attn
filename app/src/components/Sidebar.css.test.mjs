@@ -36,11 +36,8 @@ describe('sidebar pull request reveal', () => {
 });
 
 describe('sidebar delegation links', () => {
-  it('keeps the dispatcher line visible at rest', () => {
-    const line = ruleBody('.sidebar-dispatcher');
-    expect(line).toBeTruthy();
-    expect(line).not.toMatch(/opacity:\s*0\s*;/);
-    expect(line).not.toMatch(/max-width:\s*0\s*;/);
+  it('removes the dispatcher subtitle', () => {
+    expect(ruleBody('.sidebar-dispatcher')).toBeNull();
   });
 
   it('does not highlight relatives in other rows', () => {

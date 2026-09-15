@@ -153,7 +153,7 @@ export function SessionProvenance({
   };
 
   const openOnHover = (event: PointerEvent<HTMLElement>) => {
-    if (!interactive || delegationChain?.focused) return;
+    if (!interactive || delegationChain?.pinned) return;
     cancelClose();
     setDelegatesPopover(null);
     claimPopover();

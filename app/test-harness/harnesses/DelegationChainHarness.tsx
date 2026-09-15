@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { DelegationChainProvider, DelegationChainTrigger, type ChainSession, type DelegationChainHandle } from '../../src/components/DelegationChain';
 import { ActionMenu } from '../../src/components/ActionMenu';
+import { SessionLabel } from '../../src/components/SessionLabel';
 import { BuiltinDelegationRole } from '../../src/types/generated';
 import { useShortcut } from '../../src/shortcuts/useShortcut';
 import type { HarnessProps } from '../types';
 import '../../src/App.css';
+import '../../src/components/Sidebar.css';
 
 const agents: ChainSession[] = [
   { id: 'root', label: 'Coordinate role identity', agent: 'claude', state: 'idle', delegation_role: { name: 'Orchestrator', builtin: BuiltinDelegationRole.Orchestrator } },
@@ -23,10 +25,10 @@ export function DelegationChainHarness({ onReady, setTriggerRerender }: HarnessP
   return (
     <DelegationChainProvider ref={chain} sessions={agents} onSelectSession={(id) => { setCurrent(id); terminal.current?.focus(); }}>
       <div style={{ display: 'flex', gap: 24, padding: 16, color: 'var(--color-text-primary)', background: 'var(--color-bg-app)', minHeight: '100vh' }}>
-        <aside style={{ width: 230, flexShrink: 0 }}>
+        <aside className="sidebar" style={{ width: 230, flexShrink: 0 }}>
           {agents.map((agent) => (
-            <div key={agent.id} data-testid={`row-${agent.id}`} className={`session-item ${current === agent.id ? 'selected' : ''}`} style={{ display: 'flex', gap: 8 }}>
-              <span style={{ flex: 1 }}>{agent.label}</span>
+            <div key={agent.id} data-testid={`row-${agent.id}`} className={`session-item ${current === agent.id ? 'selected' : ''}`} style={{ display: 'flex', gap: 8, marginRight: 12 }}>
+              <SessionLabel label={agent.label} session={agent} hasDelegates={agent.id === 'root'} />
               <DelegationChainTrigger session={agent} hasDelegates={agent.id === 'root'} />
             </div>
           ))}

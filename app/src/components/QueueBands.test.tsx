@@ -80,7 +80,7 @@ const sessions: TestSession[] = [
 ];
 
 describe('the queue arrangement', () => {
-  it('names a live dispatcher, jumps to it directly, and offers its delegation chain', () => {
+  it('offers the delegation chain without repeating the dispatcher below the title', () => {
     const onSelectSession = vi.fn();
     const linked: TestSession[] = [
       { id: 'root', label: 'root session', state: 'idle', workspaceId: 'ws-a', delegation_role: { name: 'Orchestrator', builtin: BuiltinDelegationRole.Orchestrator } },
@@ -96,16 +96,15 @@ describe('the queue arrangement', () => {
     renderSidebar(linked, true, { onSelectSession });
 
     const child = screen.getByTestId('queue-settled-child');
-    expect(within(child).getByTestId('sidebar-dispatcher')).toHaveTextContent('↳Alder');
-    fireEvent.click(within(child).getByRole('button', { name: 'Open dispatcher Alder' }));
-    expect(onSelectSession).toHaveBeenCalledTimes(1);
-    expect(onSelectSession).toHaveBeenCalledWith('root');
+    expect(within(child).queryByTestId('sidebar-dispatcher')).toBeNull();
+    expect(within(child).getByRole('button', { name: 'Show delegation chain for child' })).toBeInTheDocument();
+    expect(onSelectSession).not.toHaveBeenCalled();
 
     const root = screen.getByTestId('queue-settled-root');
     expect(within(root).getByRole('button', { name: 'Orchestrator · Show delegation chain for root session' })).toHaveAttribute('data-role', 'orchestrator');
   });
 
-  it('shows the dispatcher member without a link after its session ended', () => {
+  it('keeps navigation available after the dispatcher session ended without adding a subtitle', () => {
     const linked: TestSession[] = [{
       id: 'child',
       label: 'child',
@@ -117,7 +116,8 @@ describe('the queue arrangement', () => {
     renderSidebar(linked, true);
 
     const child = screen.getByTestId('queue-settled-child');
-    expect(within(child).getByTestId('sidebar-dispatcher')).toHaveTextContent('↳Alder');
+    expect(within(child).queryByTestId('sidebar-dispatcher')).toBeNull();
+    expect(within(child).getByRole('button', { name: 'Show delegation chain for child' })).toBeInTheDocument();
     expect(within(child).queryByRole('button', { name: 'Open dispatcher Alder' })).toBeNull();
   });
 
