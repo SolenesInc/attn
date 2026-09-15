@@ -428,6 +428,29 @@ async function main() {
       };
     });
 
+    await runner.step('selecting_another_workspace_clears_agent_focus_mode', async () => {
+      await client.request('dom_click', {
+        selector: `[data-testid="focus-pane-${workspaceA.firstPane.paneId}"]`,
+      });
+      await client.request('select_session', { sessionId: workspaceB.sessionId });
+      await client.request('select_session', { sessionId: workspaceA.sessionId });
+      const snapshot = await client.request('capture_structured_snapshot', { includePaneText: false });
+      const returned = snapshot.sessions.find((session) => session.id === workspaceA.sessionId);
+      runner.assert(
+        returned?.workspace?.view?.maximizedPaneId == null && returned?.sidebarItem?.bounds?.width > 0,
+        `Returning to the workspace restored stale focus mode: ${JSON.stringify(returned, null, 2)}`,
+        returned?.workspace?.view,
+      );
+      runner.assert(
+        [workspaceA.firstPane.paneId, horizontalA.paneId].every((paneId) =>
+          returned?.panes.some((pane) => pane.paneId === paneId && pane.bounds?.width > 0)),
+        `Returning to the workspace did not restore both panes: ${JSON.stringify(returned?.panes, null, 2)}`,
+        returned?.panes,
+      );
+      focusModeReceipt.returnedSidebarWidth = returned.sidebarItem.bounds.width;
+      await hold();
+    });
+
     const result = await runner.finishSuccess({
       workspaceA: {
         firstSessionId: workspaceA.sessionId,

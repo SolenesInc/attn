@@ -65,6 +65,28 @@ async function injectWorkspace(
 }
 
 test.describe('Workspace Sessions', () => {
+  test('leaves agent focus mode when selecting another workspace', async ({ page, daemon }) => {
+    await daemon.start();
+    await page.goto('/');
+    await page.waitForSelector('.dashboard');
+    await injectWorkspace(page, daemon, 'workspace-a', [
+      { id: 'a1', label: 'alpha-one', paneId: 'pane-a1', cwd: '/tmp/workspace-a' },
+    ]);
+    await injectWorkspace(page, daemon, 'workspace-b', [
+      { id: 'b1', label: 'beta-one', paneId: 'pane-b1', cwd: '/tmp/workspace-b' },
+    ]);
+    await page.getByTestId('session-a1').click();
+    await page.getByTestId('focus-pane-pane-a1').click();
+    const workspace = page.locator('[data-session-terminal-workspace="workspace-a"]');
+    await expect(workspace).toHaveClass(/agent-focus-mode/);
+    await page.keyboard.press('Meta+2');
+    await expect(page.locator('[data-session-terminal-workspace="workspace-b"]')).toBeVisible();
+    await page.keyboard.press('Meta+1');
+    await expect(workspace).toBeVisible();
+    await expect(workspace).not.toHaveClass(/agent-focus-mode/);
+    await expect(page.locator('.sidebar')).toBeVisible();
+  });
+
   test('switches workspaces and Cmd+number jumps to the first session', async ({ page, daemon }) => {
     await daemon.start();
     await page.goto('/');

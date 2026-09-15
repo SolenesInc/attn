@@ -121,6 +121,7 @@ export function AppWorkspaces() {
                   pullRequests: entry.pullRequests,
                 }))}
                 delegationSessions={delegationSessions}
+                selectedSessionId={activeSessionId}
                 seedTargetSessions={daemonSessions.map((session) => ({
                   sessionId: session.id,
                   label: session.label || session.id,

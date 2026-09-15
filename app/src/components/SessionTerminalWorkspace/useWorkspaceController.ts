@@ -84,6 +84,7 @@ export function useWorkspaceController(
     workspace,
     workspaceSelectionStyle = 'rail',
     activePaneId,
+    selectedSessionId,
     fontSize,
     resolvedTheme,
     focusRequestToken,
@@ -320,7 +321,7 @@ export function useWorkspaceController(
   const [effectivePaneId, setMaximizedLeafId] = useFocusedLeaf(
     leafIdSet,
     agentPaneById,
-    selectedWorkspaceSessionId,
+    selectedSessionId === undefined ? selectedWorkspaceSessionId : selectedSessionId,
   );
   const effectiveZoomedPaneId = zoomActive && leafIdSet.has(activeLeafId) ? activeLeafId : null;
 

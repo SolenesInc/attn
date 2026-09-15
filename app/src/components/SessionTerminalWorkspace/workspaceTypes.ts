@@ -83,6 +83,7 @@ export interface SessionTerminalWorkspaceProps {
   workspace: TerminalWorkspaceState;
   workspaceSelectionStyle?: WorkspaceSelectionStyle;
   activePaneId: string;
+  selectedSessionId?: string | null;
   fontSize: number;
   resolvedTheme?: ResolvedTheme;
   focusRequestToken?: number;
