@@ -132,8 +132,10 @@ async function waitForFreshSplitPaneAttached(client, sessionId, paneId) {
 }
 
 async function assertWorkspaceVisible(client, visibleSessionId, hiddenSessionId, expectedPaneCount) {
-  const visible = await client.request('get_session_ui_state', { sessionId: visibleSessionId });
-  const hidden = await client.request('get_session_ui_state', { sessionId: hiddenSessionId });
+  const [visible, hidden] = await Promise.all([
+    client.request('get_session_ui_state', { sessionId: visibleSessionId }),
+    client.request('get_session_ui_state', { sessionId: hiddenSessionId }),
+  ]);
   if (!visible.workspace?.view?.sessionVisible) {
     throw new Error(`Expected ${visibleSessionId} workspace to be visible: ${JSON.stringify(visible, null, 2)}`);
   }
@@ -173,13 +175,14 @@ async function writeAndAssertToken(client, sessionId, pane, token) {
 }
 
 async function capturePaneTexts(client, runDir, prefix, sessionId, panes) {
-  const payload = {};
-  for (const pane of panes) {
-    payload[pane.paneId] = await client.request('read_pane_text', {
+  const entries = await Promise.all(panes.map(async (pane) => {
+    const text = await client.request('read_pane_text', {
       sessionId,
       paneId: pane.paneId,
     }).catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
-  }
+    return [pane.paneId, text];
+  }));
+  const payload = Object.fromEntries(entries);
   fs.writeFileSync(path.join(runDir, `${prefix}-pane-texts.json`), `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
 }
 

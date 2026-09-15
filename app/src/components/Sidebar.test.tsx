@@ -423,7 +423,7 @@ describe('Sidebar', () => {
     expect(tile).toHaveTextContent('www.google.com');
     expect(screen.getByTestId('sidebar-session-s1').compareDocumentPosition(tile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    fireEvent.click(tile);
+    fireEvent.click(within(tile).getByRole('button', { name: 'Open www.google.com' }));
     expect(onSelectTile).toHaveBeenCalledWith('workspace-browser', 'tile-browser');
 
     fireEvent.click(screen.getByTestId('reload-tile-workspace-browser-tile-browser'));
@@ -513,7 +513,7 @@ describe('Sidebar', () => {
       />,
     );
 
-    const row = screen.getByTestId('sidebar-session-s1');
+    const row = screen.getByTestId('sidebar-session-s1').querySelector('.sidebar-row-select') as HTMLButtonElement;
     expect(screen.queryByTestId('session-drag-ghost')).not.toBeInTheDocument();
 
     // The leaf id is the session's layout pane id, not the session id.
@@ -523,7 +523,7 @@ describe('Sidebar', () => {
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 40 });
     expect(onSessionDragStart).toHaveBeenCalledWith('workspace-browser', undefined, 'pane-s1');
     expect(screen.getByTestId('session-drag-ghost')).toBeInTheDocument();
-    expect(row).toHaveClass('session-item--dragging');
+    expect(screen.getByTestId('sidebar-session-s1')).toHaveClass('session-item--dragging');
 
     fireEvent.pointerUp(window, { pointerId: 1, clientX: 10, clientY: 40 });
     expect(onSessionDragEnd).toHaveBeenCalledTimes(1);
@@ -545,7 +545,7 @@ describe('Sidebar', () => {
       />,
     );
 
-    const row = screen.getByTestId('sidebar-session-s1');
+    const row = screen.getByTestId('sidebar-session-s1').querySelector('.sidebar-row-select') as HTMLButtonElement;
     fireEvent.pointerDown(row, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 11, clientY: 12 });
     fireEvent.pointerUp(window, { pointerId: 1, clientX: 11, clientY: 12 });
@@ -573,7 +573,7 @@ describe('Sidebar', () => {
     );
 
     const sourceGroup = screen.getByTestId('sidebar-workspace-workspace-/repo/a');
-    const header = sourceGroup.querySelector('.workspace-group-header') as HTMLElement;
+    const header = sourceGroup.querySelector('.workspace-group-header > .sidebar-row-select') as HTMLElement;
 
     expect(screen.queryByTestId('workspace-reorder-seam-0')).not.toBeInTheDocument();
 
@@ -613,7 +613,7 @@ describe('Sidebar', () => {
 
     const header = screen
       .getByTestId('sidebar-workspace-workspace-/repo/a')
-      .querySelector('.workspace-group-header') as HTMLElement;
+      .querySelector('.workspace-group-header > .sidebar-row-select') as HTMLElement;
 
     fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 12, clientY: 11 });

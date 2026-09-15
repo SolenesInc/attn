@@ -31,6 +31,11 @@ and workflow guidance lives in [AGENTS.md](../AGENTS.md).
   SQL identifiers come from integers or validated field names, never caller text.
 - App consumer/namespace names derive from `internal/apps`; enabled state is
   the consumer's enabled bit.
+- Frontend application wiring lives in `app/src/application`: feature hooks
+  own state and effects; the surface components bind that state to views.
+  App, sidebar, and terminal-workspace contexts are scoped to their own mounted
+  compositions. Session selection remains owned by `useAgentNavigation`;
+  workspace focus mode validates its leaf against that selection and the layout.
 - Auto-mode rule, host and policy writes go through `PromoteAutoModeProposal`
   in `internal/store/automode.go` or the pi relay's `PromoteReportedAmendment`.
   The CLI proposes; the app promotes.

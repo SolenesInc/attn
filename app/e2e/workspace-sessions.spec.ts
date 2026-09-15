@@ -191,4 +191,43 @@ test.describe('Workspace Sessions', () => {
     await expect(workspace.locator('[data-pane-id="pane-focus-main"]')).toBeVisible();
     await expect(workspace.locator('[data-pane-id="pane-focus-peer"]')).toBeVisible();
   });
+  test('sidebar selection, row actions, and settings have independent keyboard targets', async ({ page, daemon }) => {
+    await daemon.start();
+    await page.goto('/');
+    await page.waitForSelector('.dashboard');
+    await injectWorkspace(page, daemon, 'workspace-keyboard', [
+      { id: 'keyboard-one', label: 'keyboard-one', paneId: 'pane-keyboard-one', cwd: '/tmp/workspace-keyboard' },
+      { id: 'keyboard-two', label: 'keyboard-two', paneId: 'pane-keyboard-two', cwd: '/tmp/workspace-keyboard' },
+    ]);
+    const first = page.getByTestId('sidebar-session-keyboard-one');
+    const second = page.getByTestId('sidebar-session-keyboard-two');
+    const icon = await first.getByRole('img', { name: 'Shell' }).boundingBox();
+    expect(icon).not.toBeNull();
+    await page.mouse.click(icon!.x + icon!.width / 2, icon!.y + icon!.height / 2);
+    await expect(first).toHaveClass(/selected/);
+    await expect(page.locator('[data-pane-id="pane-keyboard-one"]').getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+    await second.getByRole('button', { name: 'Open keyboard-two' }).focus();
+    await expect(second.getByRole('button', { name: 'Open keyboard-two' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(second).toHaveClass(/selected/);
+    await first.hover();
+    await first.getByRole('button', { name: 'Actions for keyboard-one' }).click();
+    await expect(page.getByRole('menu', { name: 'Actions for keyboard-one' })).toBeVisible();
+    await expect(second).toHaveClass(/selected/);
+    await page.keyboard.press('Escape');
+    const settings = page.getByRole('button', { name: 'Sidebar settings', exact: true });
+    await settings.focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.getByRole('dialog', { name: 'Sidebar settings' });
+    await expect(dialog.getByRole('switch', { name: 'Agent queue', exact: true })).toBeFocused();
+    const sidebar = await page.locator('.sidebar').boundingBox();
+    const popup = await dialog.boundingBox();
+    expect(popup!.x).toBeGreaterThanOrEqual(sidebar!.x);
+    expect(popup!.x + popup!.width).toBeLessThanOrEqual(sidebar!.x + sidebar!.width);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(settings).toBeFocused();
+    await expect(page.locator('.sidebar button button')).toHaveCount(0);
+  });
+
 });
