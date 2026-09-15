@@ -129,6 +129,7 @@ try {
     await waitForChainFocus(root, 'row hover accepts native arrows');
     await driver.pressKey('Escape');
     await waitForSelector(popup, 'Escape closes the hover card', { absent: true });
+    await driver.movePointerInWindow(rowTarget.x, rowTarget.y);
     runner.assert(!await exists(popup), 'dismissal does not reopen under a stationary pointer');
     const headerTarget = await nativeTarget(header);
     await driver.movePointerInWindow(headerTarget.x, headerTarget.y);

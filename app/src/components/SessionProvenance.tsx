@@ -1,3 +1,4 @@
+import { automationProvenanceDescription, sessionPullRequestDescription } from '../utils/provenanceDescription';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type PointerEvent, type ReactElement } from 'react';
 import type {
@@ -34,23 +35,6 @@ const EMPTY_DELEGATES: readonly SessionDelegateLink[] = [];
 
 function shortDefinitionName(name: string): string {
   return name.replace(/^requested pr review\s*[-—:]\s*/i, '').trim() || name;
-}
-
-export function automationProvenanceDescription(provenance: AutomationProvenanceValue): string {
-  const parts = [`Automation: ${provenance.definition_name}`];
-  const pr = provenance.pull_request;
-  if (pr) {
-    parts.push(`${pr.repository}#${pr.number}`);
-    if (pr.title) parts.push(pr.title);
-  }
-  return parts.join(' · ');
-}
-
-export function sessionPullRequestDescription(pr: SessionPullRequest): string {
-  const parts = [`PR ${sessionPullRequestRepositoryName(pr.repository)}#${pr.number}`];
-  parts.push(describeSessionPullRequest(pr).label);
-  if (pr.title) parts.push(pr.title);
-  return parts.join(' · ');
 }
 
 function provenanceEntries(
