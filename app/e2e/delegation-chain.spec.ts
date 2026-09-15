@@ -138,6 +138,49 @@ test('hovering away closes the card and gives focus back without pinning it', as
   await expect(terminal).toBeFocused();
 });
 
+for (const entry of ['hover', 'click', 'command'] as const) {
+  test(`outside scrolling dismisses the ${entry} chain and restores keyboard focus`, async ({ page }) => {
+    const terminal = page.getByRole('textbox', { name: 'Terminal keyboard target' });
+    await terminal.fill(Array.from({ length: 100 }, (_, index) => `Terminal line ${index}`).join('\n'));
+    await terminal.evaluate((element) => { element.scrollTop = 0; });
+    const header = page.getByTestId('agent-header').getByRole('button');
+    if (entry === 'command') {
+      await page.keyboard.press('Meta+k');
+      await page.getByRole('textbox', { name: 'Search actions' }).fill('delegation chain');
+      await page.keyboard.press('Enter');
+    } else await header[entry]();
+    const popup = page.getByRole('dialog', { name: 'Delegation chain' });
+    await expect(popup.getByRole('button', { name: /Build chain navigator/ })).toBeFocused();
+    const moved = await terminal.evaluate((element) => {
+      const before = element.scrollTop;
+      element.scrollTop = before > 0 ? 0 : element.scrollHeight;
+      return element.scrollTop !== before;
+    });
+    expect(moved).toBe(true);
+    await expect(popup).toHaveCount(0);
+    await expect(entry === 'click' ? header : terminal).toBeFocused();
+  });
+}
+
+test('outside clicking hands focus to the clicked input instead of the saved trigger', async ({ page }) => {
+  const terminal = page.getByRole('textbox', { name: 'Terminal keyboard target' });
+  await terminal.evaluate((element) => { element.style.position = 'fixed'; element.style.bottom = '0'; });
+  await page.getByTestId('agent-header').getByRole('button').click();
+  await terminal.click();
+  await expect(page.getByRole('dialog', { name: 'Delegation chain' })).toHaveCount(0);
+  await expect(terminal).toBeFocused();
+  await page.keyboard.type('still typing');
+  await expect(terminal).toHaveValue('still typing');
+});
+
+test('the close button restores the saved focus target', async ({ page }) => {
+  const header = page.getByTestId('agent-header').getByRole('button');
+  await header.click();
+  await page.getByRole('button', { name: 'Close delegation chain' }).click();
+  await expect(page.getByRole('dialog', { name: 'Delegation chain' })).toHaveCount(0);
+  await expect(header).toBeFocused();
+});
+
 test('Escape under one row does not suppress a new hover at the header', async ({ page }) => {
   await page.getByTestId('row-builder').hover();
   const popup = page.getByRole('dialog', { name: 'Delegation chain' });

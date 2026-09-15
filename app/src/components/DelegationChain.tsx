@@ -240,7 +240,6 @@ function DelegationChainPopover({ open, sessions, onClose, canRestoreFocus, onRe
     };
     const closeOnOutsideScroll = (event: Event) => {
       if (event.target instanceof Node && card.current?.contains(event.target)) return;
-      restoreFocus.current = false;
       onClose();
     };
     position();

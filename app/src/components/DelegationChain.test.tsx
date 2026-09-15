@@ -106,6 +106,23 @@ describe('delegation chain', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it.each(['hover', 'click', 'command'] as const)('restores focus after outside scrolling from %s entry', async (entry) => {
+    const { ref } = setup();
+    const terminal = screen.getByLabelText('Terminal');
+    const trigger = screen.getByTestId('delegation-chain-trigger-build');
+    terminal.focus();
+    if (entry === 'hover') fireEvent.pointerEnter(trigger);
+    else if (entry === 'click') fireEvent.click(trigger);
+    else act(() => ref.current?.open('build', terminal));
+    const popup = screen.getByRole('dialog');
+    fireEvent.scroll(within(popup).getByRole('list'));
+    expect(popup).toBeInTheDocument();
+    expect(within(popup).getByRole('button', { name: /Build navigator/ })).toHaveFocus();
+    fireEvent.scroll(terminal);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(entry === 'click' ? trigger : terminal).toHaveFocus());
+  });
+
   it('shows standalone assigned roles but leaves unrelated roleless sessions unmarked', () => {
     const { container } = render(<><DelegationChainTrigger session={sessions[0]} /><DelegationChainTrigger session={{ id: 'plain', label: 'plain' }} /></>);
     expect(screen.getByRole('button')).toHaveAccessibleName('Orchestrator · Show delegation chain for Coordinate identity');
