@@ -3739,7 +3739,13 @@ function AppContent({
     <DaemonProvider sendPRAction={sendPRAction} sendMutePR={sendMutePR} sendMuteRepo={sendMuteRepo} sendMuteAuthor={sendMuteAuthor} sendPRVisited={sendPRVisited}>
     <GitHubPollingProvider offReason={githubPollingOffReason}>
     <NotebookSurfaceProvider value={notebookSurfaceContextValue}>
-    <DelegationChainProvider ref={delegationChainRef} sessions={delegationSessions} onSelectSession={handleSelectSession}>
+    <DelegationChainProvider
+      ref={delegationChainRef}
+      sessions={delegationSessions}
+      onSelectSession={handleSelectSession}
+      navigationKey={`${view}:${activeSessionId ?? ''}`}
+      blocked={blockingOverlayOpen || markdownOpenerOpen}
+    >
     <div className="app" ref={appShellRef} tabIndex={-1} style={{ outline: 'none' }} onPointerDownCapture={handleAppPointerDownCapture}>
       <BannerStack
         connectionError={connectionError}

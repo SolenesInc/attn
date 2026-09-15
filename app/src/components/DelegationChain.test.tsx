@@ -167,4 +167,41 @@ describe('delegation chain', () => {
     fireEvent.pointerEnter(trigger);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
+
+  it('allows a new hover when pointer entry arrives before pointer movement', () => {
+    setup();
+    fireEvent.pointerMove(window, { clientX: 80, clientY: 40 });
+    fireEvent.pointerEnter(screen.getByTestId('delegation-chain-trigger-build'));
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    const next = screen.getByTestId('delegation-chain-trigger-root');
+    fireEvent.pointerOut(screen.getByTestId('delegation-chain-trigger-build'), { clientX: 180, clientY: 40, relatedTarget: next });
+    fireEvent.pointerEnter(next, { clientX: 180, clientY: 40 });
+    expect(within(screen.getByRole('dialog')).getByRole('button', { name: /Coordinate identity/ })).toHaveFocus();
+  });
+
+  it.each(['navigation', 'overlay'] as const)('dismisses on %s without restoring stale focus or reopening afterward', async (change) => {
+    const ref = createRef<DelegationChainHandle>();
+    const content = (navigationKey: string, blocked: boolean) => (
+      <DelegationChainProvider ref={ref} sessions={sessions} onSelectSession={vi.fn()} navigationKey={navigationKey} blocked={blocked}>
+        <input aria-label="Previous terminal" />
+        <input aria-label="New focus target" />
+        <DelegationChainTrigger session={sessions[1]} />
+      </DelegationChainProvider>
+    );
+    const view = render(content('session:build', false));
+    const previous = screen.getByLabelText('Previous terminal');
+    previous.focus();
+    act(() => ref.current?.open('build', previous));
+    expect(within(screen.getByRole('dialog')).getByRole('button', { name: /Build navigator/ })).toHaveFocus();
+    const stealFocus = vi.fn();
+    previous.addEventListener('focus', stealFocus);
+    view.rerender(content(change === 'navigation' ? 'session:root' : 'session:build', change === 'overlay'));
+    const target = screen.getByLabelText('New focus target');
+    target.focus();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(target).toHaveFocus());
+    view.rerender(content('session:build', false));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(stealFocus).not.toHaveBeenCalled();
+  });
 });

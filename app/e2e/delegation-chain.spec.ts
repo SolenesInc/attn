@@ -137,3 +137,33 @@ test('hovering away closes the card and gives focus back without pinning it', as
   await expect(popup).toHaveCount(0);
   await expect(terminal).toBeFocused();
 });
+
+test('Escape under one row does not suppress a new hover at the header', async ({ page }) => {
+  await page.getByTestId('row-builder').hover();
+  const popup = page.getByRole('dialog', { name: 'Delegation chain' });
+  await expect(popup.getByRole('button', { name: /Build chain navigator/ })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(popup).toHaveCount(0);
+  await page.getByTestId('agent-header').getByRole('button').hover();
+  await expect(popup.getByRole('button', { name: /Build chain navigator/ })).toBeFocused();
+});
+
+test('global navigation dismisses the old chain and leaves the new terminal focused', async ({ page }) => {
+  await page.getByTestId('agent-header').getByRole('button').click();
+  await page.keyboard.press('Meta+[');
+  await expect(page.getByTestId('selected-agent')).toHaveText('root');
+  await expect(page.getByRole('dialog', { name: 'Delegation chain' })).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Terminal keyboard target' })).toBeFocused();
+});
+
+test('a blocking dialog replaces the chain focus trap and Escape does not resurrect it', async ({ page }) => {
+  await page.getByRole('textbox', { name: 'Terminal keyboard target' }).focus();
+  await page.getByTestId('agent-header').getByRole('button').hover();
+  await page.keyboard.press('Meta+,');
+  await expect(page.getByRole('dialog', { name: 'Delegation chain' })).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Settings search' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('textbox', { name: 'Settings search' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});

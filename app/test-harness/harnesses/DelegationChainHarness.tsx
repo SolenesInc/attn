@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { DelegationChainProvider, DelegationChainTrigger, type ChainSession, type DelegationChainHandle } from '../../src/components/DelegationChain';
 import { ActionMenu } from '../../src/components/ActionMenu';
+import FocusTrap from 'focus-trap-react';
+import { useEscapeStack } from '../../src/hooks/useEscapeStack';
 import { SessionLabel } from '../../src/components/SessionLabel';
 import { BuiltinDelegationRole } from '../../src/types/generated';
 import { useShortcut } from '../../src/shortcuts/useShortcut';
@@ -18,12 +20,17 @@ const agents: ChainSession[] = [
 export function DelegationChainHarness({ onReady, setTriggerRerender }: HarnessProps) {
   const [current, setCurrent] = useState('builder');
   const [menu, setMenu] = useState(false);
+  const [settings, setSettings] = useState(false);
   const chain = useRef<DelegationChainHandle>(null);
   const terminal = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { terminal.current?.focus(); }, [current]);
   useEffect(() => { onReady(); setTriggerRerender(() => () => {}); }, [onReady, setTriggerRerender]);
   useShortcut('ui.actionMenu', () => { chain.current?.dismiss(); setMenu((open) => !open); }, true);
+  useShortcut('session.historyBack', () => setCurrent('root'));
+  useShortcut('ui.openSettings', () => setSettings((open) => !open));
+  useEscapeStack(() => setSettings(false), settings);
   return (
-    <DelegationChainProvider ref={chain} sessions={agents} onSelectSession={(id) => { setCurrent(id); terminal.current?.focus(); }}>
+    <DelegationChainProvider ref={chain} sessions={agents} navigationKey={current} blocked={menu || settings} onSelectSession={(id) => { setCurrent(id); terminal.current?.focus(); }}>
       <div style={{ display: 'flex', gap: 24, padding: 16, color: 'var(--color-text-primary)', background: 'var(--color-bg-app)', minHeight: '100vh' }}>
         <aside className="sidebar" style={{ width: 230, flexShrink: 0 }}>
           {agents.map((agent) => (
@@ -43,6 +50,9 @@ export function DelegationChainHarness({ onReady, setTriggerRerender }: HarnessP
         id: 'show-delegation-chain', title: 'Show delegation chain', description: 'Navigate this agent’s dispatcher, peers, and delegates', icon: '↳',
         run: () => chain.current?.open(current, terminal.current),
       }]} />
+      {settings && <FocusTrap focusTrapOptions={{ escapeDeactivates: false }}>
+        <div role="dialog" aria-label="Settings"><input aria-label="Settings search" /></div>
+      </FocusTrap>}
     </DelegationChainProvider>
   );
 }
