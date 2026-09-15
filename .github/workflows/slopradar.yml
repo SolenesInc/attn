@@ -1,0 +1,22 @@
+name: slopradar
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: slopradar-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  slopradar:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: SolenesInc/slopradar@main
+        with:
+          trend-months: "12"
+          comment: "true"
