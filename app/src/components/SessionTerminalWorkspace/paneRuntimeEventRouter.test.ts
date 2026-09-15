@@ -51,4 +51,33 @@ describe('paneRuntimeEventRouter', () => {
     expect(staleBinding).not.toHaveBeenCalled();
     expect(freshBinding).toHaveBeenCalledOnce();
   });
+
+  it('delivers to every view of a runtime and keeps the first view when a later one leaves', () => {
+    const controller = createPaneRuntimeEventRouterController();
+    const survivingView = vi.fn();
+    const transientView = vi.fn();
+
+    controller.registerBinding({
+      sessionId: 'session-1',
+      paneId: 'pane-1',
+      runtimeId: 'runtime-1',
+      onEvent: survivingView,
+    });
+    const disposeTransient = controller.registerBinding({
+      sessionId: 'session-1',
+      paneId: 'pane-1',
+      runtimeId: 'runtime-1',
+      onEvent: transientView,
+    });
+
+    controller.handleEvent({ event: 'data', id: 'runtime-1', data: 'Zm9v' });
+    expect(survivingView).toHaveBeenCalledOnce();
+    expect(transientView).toHaveBeenCalledOnce();
+
+    disposeTransient();
+    controller.handleEvent({ event: 'data', id: 'runtime-1', data: 'YmFy' });
+
+    expect(survivingView).toHaveBeenCalledTimes(2);
+    expect(transientView).toHaveBeenCalledOnce();
+  });
 });

@@ -1,7 +1,11 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGhosttyPaneRuntime } from './useGhosttyPaneRuntime';
-import type { PaneRuntimeEventBinding, PaneRuntimeEventRouter } from './paneRuntimeEventRouter';
+import {
+  createPaneRuntimeEventRouterController,
+  type PaneRuntimeEventBinding,
+  type PaneRuntimeEventRouter,
+} from './paneRuntimeEventRouter';
 import type { GhosttyTerminalHandle } from '../GhosttyTerminal';
 
 const { mockPtyAttach, mockPtyDetach, mockPtyResize, mockPtyWrite } = vi.hoisted(() => ({
@@ -591,6 +595,29 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
     first.unmount();
     expect(mockPtyDetach).toHaveBeenCalledTimes(1);
     expect(mockPtyDetach).toHaveBeenCalledWith({ id: pane.runtimeId });
+  });
+
+  it('keeps delivering output to the surviving view after a transient duplicate view unmounts', async () => {
+    const controller = createPaneRuntimeEventRouterController();
+    const survivingTerminal = createTerminal();
+    const transientTerminal = createTerminal();
+    const first = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, controller, { current: true }));
+    const second = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, controller, { current: true }));
+
+    await act(async () => {
+      await first.result.current.handleTerminalReady(pane.paneId)(survivingTerminal);
+      await second.result.current.handleTerminalReady(pane.paneId)(transientTerminal);
+    });
+
+    second.unmount();
+    expect(mockPtyDetach).not.toHaveBeenCalled();
+
+    controller.handleEvent({ event: 'data', id: pane.runtimeId, data: btoa('after') });
+
+    const writtenText = (terminal: GhosttyTerminalHandle) => vi.mocked(terminal.write).mock.calls
+      .map(([bytes]) => new TextDecoder().decode(bytes as Uint8Array));
+    expect(writtenText(survivingTerminal)).toContain('after');
+    expect(writtenText(transientTerminal)).not.toContain('after');
   });
 
   it('never detaches a runtime it did not attach while another workspace holds it', async () => {
