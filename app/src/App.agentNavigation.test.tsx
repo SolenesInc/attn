@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { act, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import App from './App';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 
@@ -30,15 +30,18 @@ vi.mock('./components/GhosttyTerminal', async () => {
   return { GhosttyTerminal: React.forwardRef(function MockTerminal() { return null; }) };
 });
 
-vi.mock('./components/Sidebar', () => ({
-  EditorIcon: () => null,
-  WorkflowIcon: () => null,
-  DiffIcon: () => null,
-  PRsIcon: () => null,
-  NotebookIcon: () => null,
-  MarkdownIcon: () => null,
-  Sidebar: () => null,
-}));
+vi.mock('./components/Sidebar', async () => {
+  const { DelegationChainTrigger } = await import('./components/DelegationChain');
+  return {
+    EditorIcon: () => null,
+    WorkflowIcon: () => null,
+    DiffIcon: () => null,
+    PRsIcon: () => null,
+    NotebookIcon: () => null,
+    MarkdownIcon: () => null,
+    Sidebar: () => <DelegationChainTrigger session={{ id: 's1', label: 's1', delegation_role: { name: 'Builder' } }} />,
+  };
+});
 
 vi.mock('./components/Dashboard', () => ({ Dashboard: () => null }));
 vi.mock('./components/grid/GridView', () => ({ GridView: () => null }));
@@ -214,6 +217,7 @@ describe('agent navigation', () => {
       sendEnsureRepo: vi.fn(async () => ({ success: true, path: '/tmp/repo' })),
       sendSubscribeGitStatus: fn, sendUnsubscribeGitStatus: fn,
       sendSessionSelected: fn, sendWorkspaceSelected: fn,
+      sendSessionList: vi.fn(async () => ({ entries: [], omitted: 0 })),
       sendWorkspaceClosePane: vi.fn(async () => ({ success: true })),
       sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
       requestTileContent: fn,
@@ -243,6 +247,28 @@ describe('agent navigation', () => {
     act(() => { selectSession()('s1'); });
 
     expect(activeSessionId).toBe('s1');
+  });
+
+  it.each(['onGoToDashboard', 'onHistoryBack', 'onToggleSidebar'] as const)('dismisses the chain when %s changes navigation', (shortcut) => {
+    activeSessionId = 's1';
+    const app = render(<App />);
+    broadcast();
+    fireEvent.click(screen.getByTestId('delegation-chain-trigger-s1'));
+    expect(screen.getByRole('dialog', { name: 'Delegation chain' })).toBeInTheDocument();
+    mockNavigateAgentHistory.mockImplementation(() => { activeSessionId = 's2'; return 's2'; });
+    act(() => { shortcutHandlers<Record<typeof shortcut, () => void>>()[shortcut](); });
+    app.rerender(<App />);
+    expect(screen.queryByRole('dialog', { name: 'Delegation chain' })).toBeNull();
+  });
+
+  it.each(['onOpenSettings', 'onShowShortcuts', 'onOpenSessions'] as const)('dismisses the chain when %s opens another surface', (shortcut) => {
+    activeSessionId = 's1';
+    render(<App />);
+    broadcast();
+    fireEvent.click(screen.getByTestId('delegation-chain-trigger-s1'));
+    expect(screen.getByRole('dialog', { name: 'Delegation chain' })).toBeInTheDocument();
+    act(() => { shortcutHandlers<Record<typeof shortcut, () => void>>()[shortcut](); });
+    expect(screen.queryByRole('dialog', { name: 'Delegation chain' })).toBeNull();
   });
 
   it('selects a deferred session when its pane becomes available', () => {

@@ -6,6 +6,14 @@
     "matrixSeconds": 826.7,
     "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these.",
     "updates": {
+      "delegation-chain": {
+        "run": "delegation-chain-2026-09-13T23-06-51-792Z",
+        "job": "Local serial matrix, frosty-chain profile",
+        "recordedAt": "2026-09-13",
+        "seconds": 41.0,
+        "runnerClass": "local macOS",
+        "note": "Measured from the green matrix-digest.txt; includes native hover, click and command-menu focus checks and idle resource samples, without recording. Remeasure on Linux CI."
+      },
       "agent-close": {
         "run": "https://github.com/SolenesInc/attn/actions/runs/34544718832",
         "job": "App acceptance shard 1/4",
@@ -99,6 +107,7 @@
     "countdown-cancel": 46.3,
     "crash-recovery": 9,
     "crew-seed-header": 53.2,
+    "delegation-chain": 41.0,
     "delegation-preferences": 25.9,
     "garden-plot-dispatch": 24.0,
     "garden-seed-header": 17.4,

@@ -115,6 +115,42 @@ func (s *Store) GetDelegationOperation(id string) (*DelegationOperationRecord, e
 	return getDelegationOperation(s.db, id)
 }
 
+func (s *Store) SessionDelegationRoles() (map[string]*protocol.SessionDelegationRole, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	roles := map[string]*protocol.SessionDelegationRole{}
+	if s.db == nil {
+		return roles, nil
+	}
+	rows, err := s.db.Query(`SELECT operation.session_id, operation.resolved_preferences
+		FROM sessions AS session JOIN delegation_operations AS operation ON operation.session_id = session.id
+		WHERE session.closed_at = '' AND operation.resolved_preferences != ''
+		ORDER BY operation.created_at, operation.request_id`)
+	if err != nil {
+		return nil, fmt.Errorf("read session delegation roles: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var sessionID, raw string
+		if err := rows.Scan(&sessionID, &raw); err != nil {
+			return nil, fmt.Errorf("read session delegation role: %w", err)
+		}
+		var resolved delegationprefs.Resolved
+		if err := json.Unmarshal([]byte(raw), &resolved); err != nil {
+			return nil, fmt.Errorf("decode delegation role for session %s: %w", sessionID, err)
+		}
+		delete(roles, sessionID)
+		if name := strings.TrimSpace(resolved.RoleName); name != "" {
+			role := &protocol.SessionDelegationRole{Name: name, Builtin: resolved.Builtin}
+			if resolved.RoleIcon != "" {
+				role.Icon = protocol.Ptr(resolved.RoleIcon)
+			}
+			roles[sessionID] = role
+		}
+	}
+	return roles, rows.Err()
+}
+
 func getDelegationOperation(db *sql.DB, id string) (*DelegationOperationRecord, error) {
 	var rec DelegationOperationRecord
 	var state, workspaceID, ticketID, directory, branch, baseCommit, handoffNoteID, worktreePath, worktreeToken, chiefSessionID, resultJSON, errorText, failureCode string

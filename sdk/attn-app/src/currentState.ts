@@ -53,6 +53,12 @@ export interface SessionUsage {
   readonly models: readonly SessionUsageModel[]
 }
 
+export interface SessionDelegationRole {
+  readonly name: string
+  readonly builtin?: "pathfinder" | "builder" | "reviewer" | "orchestrator"
+  readonly icon?: string
+}
+
 export interface Session {
   readonly activity?: string
   readonly activity_at?: string
@@ -66,6 +72,7 @@ export interface Session {
   readonly context_window_cap?: number
   readonly crew_member?: string
   readonly delegated_from_chief?: boolean
+  readonly delegation_role?: SessionDelegationRole
   readonly directory: string
   readonly dispatcher_member?: string
   readonly dispatcher_session_id?: string

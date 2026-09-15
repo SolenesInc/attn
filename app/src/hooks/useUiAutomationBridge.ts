@@ -30,6 +30,7 @@ import type { TerminalVisibleContentSnapshot } from '../utils/terminalVisibleCon
 import type { TerminalVisibleStyleSnapshot } from '../utils/terminalStyleSummary';
 import type { BlockStateSnapshot, PlacementStateSnapshot } from '../components/GhosttyTerminal';
 import { isPresentWindowAction } from './usePresentAutomationBridge';
+import { waitForAutomationDom } from './uiAutomationDom';
 import {
   afterFramePaints,
   nextAnimationFrame,
@@ -2205,6 +2206,7 @@ export function useUiAutomationBridge({
         const field = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : null;
         return {
           tag: active.tagName,
+          ...(typeof payload.selector === 'string' ? { matches: active.matches(payload.selector) } : {}),
           className: active.className,
           testId: active.getAttribute('data-testid'),
           selectionStart: field?.selectionStart ?? null,
@@ -2297,6 +2299,13 @@ export function useUiAutomationBridge({
         await settleUi(2);
         return { composed: true, text };
       }
+      case 'dom_wait':
+        return waitForAutomationDom({
+          selector: typeof payload.selector === 'string' ? payload.selector : '',
+          absent: payload.absent === true,
+          textIncludes: typeof payload.textIncludes === 'string' ? payload.textIncludes : undefined,
+          timeoutMs: typeof payload.timeoutMs === 'number' ? payload.timeoutMs : NaN,
+        });
       case 'dom_text': {
         const selector = typeof payload.selector === 'string' ? payload.selector : null;
         if (!selector) throw new Error('dom_text requires selector');

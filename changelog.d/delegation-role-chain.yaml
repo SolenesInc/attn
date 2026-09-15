@@ -1,0 +1,4 @@
+kind: added
+area: delegation
+change: Identify agents by their delegation role in the sidebar and header, and navigate their delegation chain from a hover popup or the Action Menu.
+notes: Roles remain optional. One popup combines the full session title and delegation chain, with keyboard focus on hover, click, or Action Menu entry. Arrow keys navigate, Enter opens an agent, and Escape closes the popup. Sidebar parent subtitles are removed, and header identities stay vertically centered beside seed chips.

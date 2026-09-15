@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useDelegationChainControl } from './DelegationChain';
+import { hasDelegationChain, type DelegationSession } from '../utils/delegationLinks';
 import './SessionLabel.css';
 
 // Load-bearing: the panel starts at the rail's right edge and never re-enters it,
@@ -22,16 +24,38 @@ type RevealStyle = {
   color: string;
 };
 
-export function SessionLabel({ label }: { label: string }) {
+export function SessionLabel({ label, session, hasDelegates = false }: {
+  label: string;
+  session?: DelegationSession;
+  hasDelegates?: boolean;
+}) {
   const spanRef = useRef<HTMLSpanElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [reveal, setReveal] = useState<RevealStyle | null>(null);
+  const controller = useDelegationChainControl();
+  const showChain = controller?.show;
+  const leaveChain = controller?.leave;
+  const detach = controller?.detach;
+  const setSpan = useCallback((span: HTMLSpanElement | null) => {
+    const previous = spanRef.current;
+    if (!span && previous) detach?.(previous.closest<HTMLElement>('.session-item') ?? previous);
+    spanRef.current = span;
+  }, [detach]);
+  const chainSessionId = session && hasDelegationChain(session, hasDelegates) && showChain ? session.id : null;
 
-  const hide = useCallback(() => setReveal(null), []);
+  const hide = useCallback(() => {
+    setReveal(null);
+    const span = spanRef.current;
+    if (chainSessionId && span) leaveChain?.(chainSessionId, span.closest<HTMLElement>('.session-item') ?? span);
+  }, [chainSessionId, leaveChain]);
 
   const show = useCallback(() => {
     const span = spanRef.current;
     if (!span) {
+      return;
+    }
+    if (chainSessionId && showChain) {
+      showChain(chainSessionId, span.closest<HTMLElement>('.session-item') ?? span, false);
       return;
     }
     // The extra pixel absorbs sub-pixel rounding.
@@ -54,7 +78,7 @@ export function SessionLabel({ label }: { label: string }) {
       letterSpacing: style.letterSpacing,
       color: style.color,
     });
-  }, []);
+  }, [chainSessionId, showChain]);
 
   useEffect(() => {
     const span = spanRef.current;
@@ -101,8 +125,8 @@ export function SessionLabel({ label }: { label: string }) {
 
   return (
     <>
-      <span className="session-label" ref={spanRef}>{label}</span>
-      {reveal
+      <span className="session-label" ref={setSpan}>{label}</span>
+      {reveal && !chainSessionId
         ? createPortal(
             <div
               ref={panelRef}

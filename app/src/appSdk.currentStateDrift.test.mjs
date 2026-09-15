@@ -12,6 +12,7 @@ const wireSource = readFileSync(resolve(process.cwd(), 'src/types/generated.ts')
 // and the app tsconfig carries no node types.
 const SHAPES = [
   ['Session', 'Session'],
+  ['SessionDelegationRole', 'SessionDelegationRole'],
   ['EndpointCapabilities', 'EndpointCapabilities'],
   ['EndpointInfo', 'EndpointInfo'],
   ['WorkspacePane', 'WorkspaceLayoutPane'],

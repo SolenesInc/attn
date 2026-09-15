@@ -3205,6 +3205,7 @@ func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Sessio
 		d.gardenDispatchersBySession(),
 	)
 	if decorated != nil {
+		decorated.DelegationRole = d.sessionDelegationRoles()[decorated.ID]
 		decorated.Automation = d.automationProvenanceForSession(decorated.ID)
 		decorated.PullRequests = d.sessionPullRequestsForSession(decorated.ID)
 	}
@@ -3249,17 +3250,27 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	crewBySession := d.crewMembersBySession()
 	seedBySession := d.gardenDispatchSeedsBySession()
 	dispatcherBySession := d.gardenDispatchersBySession()
+	rolesBySession := d.sessionDelegationRoles()
 	bySession, _ := d.latestAutomationProvenance()
 	pullRequestsBySession := d.store.ListSessionPullRequestsBySession()
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
 		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefOfStaffSessionID, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
+			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
 			decorated.PullRequests = sessionPullRequestsForBroadcast(pullRequestsBySession[decorated.ID])
 			out = append(out, *decorated)
 		}
 	}
 	return out
+}
+
+func (d *Daemon) sessionDelegationRoles() map[string]*protocol.SessionDelegationRole {
+	roles, err := d.store.SessionDelegationRoles()
+	if err != nil {
+		d.logf("session delegation roles: %v", err)
+	}
+	return roles
 }
 
 func (d *Daemon) mergedSessionsForBroadcast() []protocol.Session {

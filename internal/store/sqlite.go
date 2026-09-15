@@ -1249,6 +1249,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{146, "guardian model selection", ""},
 	{147, "record structured task failure diagnostics", ""},
 	{148, "durable Garden seed event handling", ``},
+	{149, "index delegation session identity", `CREATE INDEX IF NOT EXISTS idx_delegation_operations_session ON delegation_operations(session_id)`},
 }
 
 const migration99SQL = `

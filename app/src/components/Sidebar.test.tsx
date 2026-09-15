@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { Sidebar, type DockItem } from './Sidebar';
+import { BuiltinDelegationRole, type SessionDelegationRole } from '../types/generated';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { buildWorkspaceViewModels, type WorkspaceWithSessions } from '../utils/workspaceViewModels';
 
@@ -31,6 +32,7 @@ interface TestSession {
   delegatedFromChief?: boolean;
   dispatcher_session_id?: string;
   dispatcher_member?: string;
+  delegation_role?: SessionDelegationRole;
   automation?: import('../types/generated').AutomationProvenance;
   pullRequests?: import('../types/generated').SessionPullRequest[];
 }
@@ -109,10 +111,10 @@ const baseProps = {
 };
 
 describe('Sidebar', () => {
-  it('renders and navigates delegation links in workspace tree rows', () => {
+  it('offers delegation navigation without a dispatcher subtitle in workspace rows', () => {
     const onSelectSession = vi.fn();
     const sessions: TestSession[] = [
-      { id: 'root', label: 'root', state: 'working' },
+      { id: 'root', label: 'root', state: 'working', delegation_role: { name: 'Orchestrator', builtin: BuiltinDelegationRole.Orchestrator } },
       {
         id: 'child',
         label: 'child',
@@ -125,14 +127,13 @@ describe('Sidebar', () => {
 
     const root = screen.getByTestId('sidebar-session-root');
     const child = screen.getByTestId('sidebar-session-child');
-    expect(within(root).getByLabelText('1 live delegate: child')).toHaveTextContent('1');
-    expect(within(child).getByTestId('sidebar-dispatcher')).toHaveTextContent('↳Alder');
-    fireEvent.click(within(child).getByRole('button', { name: 'Open dispatcher Alder' }));
-    expect(onSelectSession).toHaveBeenCalledTimes(1);
-    expect(onSelectSession).toHaveBeenCalledWith('root');
+    expect(within(root).getByRole('button', { name: 'Orchestrator · Show delegation chain for root' })).toHaveAttribute('data-role', 'orchestrator');
+    expect(within(child).queryByTestId('sidebar-dispatcher')).toBeNull();
+    expect(within(child).getByRole('button', { name: 'Show delegation chain for child' })).toBeInTheDocument();
+    expect(onSelectSession).not.toHaveBeenCalled();
 
     fireEvent.pointerEnter(child);
-    expect(root).toHaveClass('kin-up');
+    expect(root).not.toHaveClass('kin-up');
     fireEvent.pointerLeave(child);
     expect(root).not.toHaveClass('kin-up');
   });

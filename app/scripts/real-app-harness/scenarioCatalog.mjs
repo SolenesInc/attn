@@ -141,6 +141,12 @@ export const scenarioCatalog = [
     timeoutMs: 300_000,
   },
   {
+    id: 'delegation-chain',
+    runnerId: 'DelegationChain',
+    label: 'Delegation identity: sidebar and header roles, hover chain and native keyboard navigation',
+    command: ['node', 'scripts/real-app-harness/scenario-delegation-chain.mjs'],
+  },
+  {
     id: 'countdown-cancel',
     runnerId: 'COUNTDOWN-CANCEL',
     label: 'Countdown cancel: a real Cmd+. stops the auto-settle and nudge countdowns on screen',

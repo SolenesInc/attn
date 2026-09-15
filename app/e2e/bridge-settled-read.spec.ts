@@ -1,5 +1,24 @@
 import { test, expect } from '@playwright/test';
 
+test('DOM expectations follow insertion, focus and removal events', async ({ page }) => {
+  await page.goto('/test-harness/?component=BridgeSettledRead');
+  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  const result = await page.evaluate(async () => {
+    const wait = window.__SETTLE_HARNESS__.waitForDom;
+    const focused = wait({ selector: '#late-input:focus', timeoutMs: 10000 });
+    const input = document.createElement('input');
+    input.id = 'late-input';
+    document.body.append(input);
+    await Promise.resolve();
+    input.focus();
+    const focusResult = await focused;
+    const removed = wait({ selector: '#late-input', absent: true, timeoutMs: 10000 });
+    input.remove();
+    return { focused: focusResult.matched, removed: (await removed).matched };
+  });
+  expect(result).toEqual({ focused: true, removed: true });
+});
+
 test('a settled bridge read carries the commit its frames were waiting for', async ({ page }) => {
   await page.goto('/test-harness/?component=BridgeSettledRead');
   await page.waitForFunction(() => window.__HARNESS__?.ready === true);

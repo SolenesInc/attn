@@ -8414,6 +8414,9 @@ type Session struct {
 	// DelegatedFromChief corresponds to the JSON schema field "delegated_from_chief".
 	DelegatedFromChief *bool `json:"delegated_from_chief,omitempty,omitzero"`
 
+	// DelegationRole corresponds to the JSON schema field "delegation_role".
+	DelegationRole *SessionDelegationRole `json:"delegation_role,omitempty,omitzero"`
+
 	// Directory corresponds to the JSON schema field "directory".
 	Directory string `json:"directory"`
 
@@ -8718,6 +8721,17 @@ type SessionContextWindowCapResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+}
+
+type SessionDelegationRole struct {
+	// Builtin corresponds to the JSON schema field "builtin".
+	Builtin *BuiltinDelegationRole `json:"builtin,omitempty,omitzero"`
+
+	// Icon corresponds to the JSON schema field "icon".
+	Icon *string `json:"icon,omitempty,omitzero"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
 }
 
 type SessionExitedMessage struct {
