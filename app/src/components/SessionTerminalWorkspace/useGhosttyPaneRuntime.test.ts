@@ -671,6 +671,51 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
     expect(mockPtyDetach).toHaveBeenLastCalledWith({ id: pane.runtimeId });
   });
 
+  it('keeps the hold when a remount attach fails on a view the daemon still streams to', async () => {
+    const view = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    await act(async () => {
+      await view.result.current.handleTerminalReady(pane.paneId)(createTerminal());
+    });
+
+    mockPtyAttach.mockRejectedValueOnce(new Error('daemon busy'));
+    await act(async () => {
+      await view.result.current.handleTerminalReady(pane.paneId)(createTerminal());
+    });
+
+    const transient = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    await act(async () => {
+      await transient.result.current.handleTerminalReady(pane.paneId)(createTerminal());
+    });
+    transient.unmount();
+    expect(mockPtyDetach).not.toHaveBeenCalled();
+
+    view.unmount();
+    expect(mockPtyDetach).toHaveBeenCalledTimes(1);
+  });
+
+  it('hands terminal query replies to the live view when the first view is virtualized', async () => {
+    const controller = createPaneRuntimeEventRouterController();
+    const virtualizedTerminal = createTerminal();
+    const liveTerminal = createTerminal();
+    const virtualized = renderHook(
+      ({ terminalsLive }) => useGhosttyPaneRuntime([pane], pane.paneId, controller, { current: true }, terminalsLive),
+      { initialProps: { terminalsLive: true } },
+    );
+    await act(async () => {
+      await virtualized.result.current.handleTerminalReady(pane.paneId)(virtualizedTerminal);
+    });
+    virtualized.rerender({ terminalsLive: false });
+
+    const live = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, controller, { current: true }));
+    await act(async () => {
+      await live.result.current.handleTerminalReady(pane.paneId)(liveTerminal);
+    });
+
+    controller.handleEvent({ event: 'data', id: pane.runtimeId, data: btoa('query') });
+
+    expect(liveTerminal.write).toHaveBeenCalledWith(expect.any(Uint8Array), { suppressResponses: undefined });
+  });
+
   it('never detaches a runtime it did not attach while another workspace holds it', async () => {
     const holder = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
     const bystander = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));

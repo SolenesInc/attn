@@ -85,4 +85,35 @@ describe('paneRuntimeEventRouter', () => {
     expect(survivingView).toHaveBeenCalledTimes(2);
     expect(transientView).toHaveBeenCalledOnce();
   });
+
+  it('lets the first live view answer terminal queries when an earlier view is not live', () => {
+    const controller = createPaneRuntimeEventRouterController();
+    const virtualizedView = vi.fn();
+    const liveView = vi.fn();
+
+    controller.registerBinding({
+      sessionId: 'session-1',
+      paneId: 'pane-1',
+      runtimeId: 'runtime-1',
+      onEvent: virtualizedView,
+      isLive: () => false,
+    });
+    controller.registerBinding({
+      sessionId: 'session-1',
+      paneId: 'pane-1',
+      runtimeId: 'runtime-1',
+      onEvent: liveView,
+      isLive: () => true,
+    });
+
+    controller.handleEvent({ event: 'data', id: 'runtime-1', data: 'Zm9v' });
+
+    expect(liveView).toHaveBeenCalledWith({ event: 'data', id: 'runtime-1', data: 'Zm9v' });
+    expect(virtualizedView).toHaveBeenCalledWith({
+      event: 'data',
+      id: 'runtime-1',
+      data: 'Zm9v',
+      suppressResponses: true,
+    });
+  });
 });

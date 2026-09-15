@@ -160,6 +160,7 @@ export function useGhosttyPaneRuntime(
       paneId: pane.paneId,
       runtimeId: pane.runtimeId,
       onEvent: (event) => deliverEvent(pane.paneId, event),
+      isLive: () => terminalsLiveRef.current && handlesRef.current.has(pane.paneId),
     }));
     return () => {
       disposers.forEach((dispose) => dispose());
@@ -304,7 +305,9 @@ export function useGhosttyPaneRuntime(
       }
     } catch (error) {
       if (attachGenerationRef.current.get(pane.runtimeId) === attachGeneration) {
-        runtimeAttachHolds.release(pane.runtimeId, attachHolderRef.current);
+        if (!attachedRuntimesRef.current.has(pane.runtimeId)) {
+          runtimeAttachHolds.release(pane.runtimeId, attachHolderRef.current);
+        }
         pendingResizeRef.current.delete(pane.runtimeId);
         await terminal.write(`\r\n[Failed to attach PTY: ${String(error)}]\r\n`);
       }

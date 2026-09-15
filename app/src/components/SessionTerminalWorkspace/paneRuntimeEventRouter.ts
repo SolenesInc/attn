@@ -6,6 +6,7 @@ export interface PaneRuntimeEventBinding {
   paneId: string;
   runtimeId: string;
   onEvent: (event: PtyEventPayload) => void;
+  isLive?: () => boolean;
 }
 
 export interface PaneRuntimeEventRouter {
@@ -39,9 +40,10 @@ export function createPaneRuntimeEventRouterController(): PaneRuntimeEventRouter
     if (!bindings) {
       return;
     }
-    bindings.forEach((binding, index) => {
-      binding.onEvent(index === 0 || event.event !== 'data' ? event : { ...event, suppressResponses: true });
-    });
+    const authority = bindings.find((binding) => binding.isLive?.() ?? true) ?? bindings[0];
+    for (const binding of bindings) {
+      binding.onEvent(binding === authority || event.event !== 'data' ? event : { ...event, suppressResponses: true });
+    }
   };
 
   const dispose = () => {
