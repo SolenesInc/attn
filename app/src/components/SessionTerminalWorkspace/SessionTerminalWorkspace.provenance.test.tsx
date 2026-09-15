@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SessionTerminalWorkspace } from './index';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
 import type { TerminalWorkspaceState } from '../../types/workspace';
@@ -70,7 +70,7 @@ describe('SessionTerminalWorkspace provenance line', () => {
     updateDelegation([{ ...session, delegation_role: { name: 'Orchestrator', builtin: BuiltinDelegationRole.Orchestrator } }]);
     expect(screen.getByTestId('delegation-chain-trigger-sess-1')).toHaveTextContent('Orchestrator');
   });
-  it('passes the pane delegation links through the header', () => {
+  it('passes the pane delegation links through the header', async () => {
     const onSelectSession = vi.fn();
     renderPane([], [
       { id: 'dispatcher', label: 'docs sweep', agent: 'claude', state: 'idle' },
@@ -96,11 +96,11 @@ describe('SessionTerminalWorkspace provenance line', () => {
     expect(trigger).toHaveTextContent('Orchestrator');
     fireEvent.click(trigger);
     fireEvent.click(screen.getByRole('button', { name: /docs sweep/ }));
-    expect(onSelectSession).toHaveBeenCalledWith('dispatcher');
+    await waitFor(() => expect(onSelectSession).toHaveBeenCalledExactlyOnceWith('dispatcher'));
 
     fireEvent.click(trigger);
     fireEvent.click(screen.getByRole('button', { name: /glossary rework/ }));
-    expect(onSelectSession).toHaveBeenLastCalledWith('delegate');
+    await waitFor(() => expect(onSelectSession).toHaveBeenLastCalledWith('delegate'));
   });
 
   it('carries the session PR on the pane header', () => {

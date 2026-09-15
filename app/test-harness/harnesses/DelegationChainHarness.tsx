@@ -25,12 +25,12 @@ export function DelegationChainHarness({ onReady, setTriggerRerender }: HarnessP
   const [rowGeneration, setRowGeneration] = useState(0);
   const chain = useRef<DelegationChainHandle>(null);
   const terminal = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { terminal.current?.focus(); }, [current, collapsed]);
+  useEffect(() => { terminal.current?.focus(); }, [current]);
   useEffect(() => { onReady(); setTriggerRerender(() => () => {}); }, [onReady, setTriggerRerender]);
-  useShortcut('ui.actionMenu', () => { chain.current?.dismiss(); setMenu((open) => !open); }, true);
+  useShortcut('ui.actionMenu', () => { chain.current?.prepareCommand(); setMenu((open) => !open); }, true);
   useShortcut('session.historyBack', () => setCurrent('root'));
   useShortcut('ui.openSettings', () => setSettings((open) => !open));
-  useShortcut('session.toggleSidebar', () => { chain.current?.dismiss(); setCollapsed((value) => !value); });
+  useShortcut('session.toggleSidebar', () => { chain.current?.dismiss('sidebar-collapse'); setCollapsed((value) => !value); });
   useEscapeStack(() => setSettings(false), settings);
   return (
     <DelegationChainProvider ref={chain} sessions={agents} navigationKey={current} blocked={menu || settings} onRestoreFocusFallback={() => terminal.current?.focus()} onSelectSession={(id) => { setCurrent(id); terminal.current?.focus(); }}>
@@ -52,7 +52,7 @@ export function DelegationChainHarness({ onReady, setTriggerRerender }: HarnessP
       </div>
       <ActionMenu isOpen={menu} onClose={() => setMenu(false)} actions={[{
         id: 'show-delegation-chain', title: 'Show delegation chain', description: 'Navigate this agent’s dispatcher, peers, and delegates', icon: '↳',
-        run: () => chain.current?.open(current, terminal.current),
+        run: () => chain.current?.open(current),
       }]} />
       {settings && <FocusTrap focusTrapOptions={{ escapeDeactivates: false }}>
         <div role="dialog" aria-label="Settings"><input aria-label="Settings search" /></div>
