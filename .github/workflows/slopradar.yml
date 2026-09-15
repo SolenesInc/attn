@@ -1,10 +1,3 @@
-# slopradar posts one comment per pull request with the source mass the PR adds
-# to or removes from functions over cyclomatic complexity 10, the clone pairs it
-# introduces or removes, and a twelve-month trend. Information for the reviewer,
-# never a gate: the numbers cannot fail this job.
-#
-# Source: https://github.com/SolenesInc/slopradar
-
 name: slopradar
 
 on:
@@ -14,7 +7,6 @@ permissions:
   contents: read
   pull-requests: write
 
-# Serializes report runs per PR so a later head never loses to an older one.
 concurrency:
   group: slopradar-${{ github.event.pull_request.number }}
   cancel-in-progress: false
@@ -24,10 +16,6 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-
-      # Unpinned on purpose: SolenesInc owns the action, and attn takes its
-      # improvements as they land. A broken main costs a missing comment, not
-      # a red check.
       - uses: SolenesInc/slopradar@main
         with:
           trend-months: "12"
