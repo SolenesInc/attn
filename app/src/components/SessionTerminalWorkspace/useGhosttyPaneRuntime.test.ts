@@ -743,6 +743,37 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
     expect(mockPtyDetach).toHaveBeenCalledWith({ id: pane.runtimeId });
   });
 
+  it('keeps the stream from a stale successful attach when the replacement model fails to attach', async () => {
+    const settlers: Array<{ resolve: () => void; reject: (error: Error) => void }> = [];
+    mockPtyAttach.mockImplementation(() => new Promise<void>((resolve, reject) => {
+      settlers.push({ resolve, reject });
+    }));
+    const view = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    let firstReady: Promise<void> = Promise.resolve();
+    let replacementReady: Promise<void> = Promise.resolve();
+    await act(async () => {
+      firstReady = view.result.current.handleTerminalReady(pane.paneId)(createTerminal());
+      replacementReady = view.result.current.handleTerminalReady(pane.paneId)(createTerminal());
+    });
+    expect(settlers).toHaveLength(1);
+
+    await act(async () => {
+      settlers[0].resolve();
+      await firstReady;
+    });
+    expect(settlers).toHaveLength(2);
+
+    await act(async () => {
+      settlers[1].reject(new Error('daemon busy'));
+      await replacementReady;
+    });
+    expect(mockPtyDetach).not.toHaveBeenCalled();
+
+    view.unmount();
+    expect(mockPtyDetach).toHaveBeenCalledTimes(1);
+    expect(mockPtyDetach).toHaveBeenCalledWith({ id: pane.runtimeId });
+  });
+
   it('never detaches a runtime it did not attach while another workspace holds it', async () => {
     const holder = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
     const bystander = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));

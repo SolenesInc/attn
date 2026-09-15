@@ -3,6 +3,7 @@ export type AttachHolder = object;
 export interface AttachHolds {
   hold(runtimeId: string, holder: AttachHolder): void;
   release(runtimeId: string, holder: AttachHolder): number;
+  holds(runtimeId: string, holder: AttachHolder): boolean;
   holderCount(runtimeId: string): number;
 }
 
@@ -22,6 +23,9 @@ export function createAttachHolds(): AttachHolds {
         holdersByRuntime.delete(runtimeId);
       }
       return holderCount(runtimeId);
+    },
+    holds(runtimeId, holder) {
+      return holdersByRuntime.get(runtimeId)?.has(holder) ?? false;
     },
     holderCount,
   };

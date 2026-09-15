@@ -284,7 +284,9 @@ export function useGhosttyPaneRuntime(
       const attachStillCurrent = attachGenerationRef.current.get(pane.runtimeId) === attachGeneration
         && terminalIsCurrent();
       if (!attachStillCurrent) {
-        if (runtimeAttachHolds.holderCount(pane.runtimeId) === 0) {
+        if (runtimeAttachHolds.holds(pane.runtimeId, attachHolderRef.current)) {
+          attachedRuntimesRef.current.add(pane.runtimeId);
+        } else if (runtimeAttachHolds.holderCount(pane.runtimeId) === 0) {
           void ptyDetach({ id: pane.runtimeId });
         }
         return;
