@@ -3741,6 +3741,7 @@ function AppContent({
     <GitHubPollingProvider offReason={githubPollingOffReason}>
     <NotebookSurfaceProvider value={notebookSurfaceContextValue}>
     <DelegationChainProvider
+      onRestoreFocusFallback={requestTerminalFocus}
       ref={delegationChainRef}
       sessions={delegationSessions}
       onSelectSession={handleSelectSession}

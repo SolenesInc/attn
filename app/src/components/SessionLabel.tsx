@@ -35,6 +35,12 @@ export function SessionLabel({ label, session, hasDelegates = false }: {
   const controller = useDelegationChainControl();
   const showChain = controller?.show;
   const leaveChain = controller?.leave;
+  const detach = controller?.detach;
+  const setSpan = useCallback((span: HTMLSpanElement | null) => {
+    const previous = spanRef.current;
+    if (!span && previous) detach?.(previous.closest<HTMLElement>('.session-item') ?? previous);
+    spanRef.current = span;
+  }, [detach]);
   const chainSessionId = session && hasDelegationChain(session, hasDelegates) && showChain ? session.id : null;
 
   const hide = useCallback(() => {
@@ -119,7 +125,7 @@ export function SessionLabel({ label, session, hasDelegates = false }: {
 
   return (
     <>
-      <span className="session-label" ref={spanRef}>{label}</span>
+      <span className="session-label" ref={setSpan}>{label}</span>
       {reveal && !chainSessionId
         ? createPortal(
             <div

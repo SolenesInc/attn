@@ -178,3 +178,12 @@ test('collapsing a pinned sidebar chain dismisses it and returns focus to the te
   await expect(page.getByTestId('row-builder')).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'Delegation chain' })).toHaveCount(0);
 });
+
+test('replacing a pinned sidebar row dismisses its chain and restores terminal focus', async ({ page }) => {
+  await page.getByTestId('row-builder').getByRole('button').click();
+  await expect(page.getByRole('dialog', { name: 'Delegation chain' })).toBeVisible();
+  await page.getByTestId('replace-sidebar-rows').evaluate((button) => button.click());
+  await expect(page.getByTestId('row-builder')).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Delegation chain' })).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Terminal keyboard target' })).toBeFocused();
+});

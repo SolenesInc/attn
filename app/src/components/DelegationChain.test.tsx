@@ -202,13 +202,37 @@ describe('delegation chain', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it.each(['role cue', 'row label'] as const)('dismisses when a queue update replaces the %s anchor', async (entry) => {
+    const fallback = vi.fn(() => screen.getByLabelText('Terminal').focus());
+    const content = (band: string) => (
+      <DelegationChainProvider sessions={sessions} onSelectSession={vi.fn()} onRestoreFocusFallback={fallback}>
+        <input aria-label="Terminal" />
+        <div key={band} className="session-item" data-testid="row">
+          <SessionLabel label={sessions[1].label} session={sessions[1]} />
+          <DelegationChainTrigger session={sessions[1]} />
+        </div>
+      </DelegationChainProvider>
+    );
+    const view = render(content('your-turn'));
+    screen.getByLabelText('Terminal').focus();
+    if (entry === 'role cue') fireEvent.click(screen.getByTestId('delegation-chain-trigger-build'));
+    else fireEvent.pointerEnter(screen.getByTestId('row'));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    view.rerender(content('settled'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(screen.getByLabelText('Terminal')).toHaveFocus());
+    expect(screen.getByTestId('delegation-chain-trigger-build')).toHaveAttribute('aria-expanded', 'false');
+    expect(fallback).toHaveBeenCalledTimes(entry === 'role cue' ? 1 : 0);
+  });
+
   it.each(['navigation', 'overlay'] as const)('dismisses on %s without restoring stale focus or reopening afterward', async (change) => {
     const ref = createRef<DelegationChainHandle>();
+    const fallback = vi.fn();
     const content = (navigationKey: string, blocked: boolean) => (
-      <DelegationChainProvider ref={ref} sessions={sessions} onSelectSession={vi.fn()} navigationKey={navigationKey} blocked={blocked}>
+      <DelegationChainProvider ref={ref} sessions={sessions} onSelectSession={vi.fn()} navigationKey={navigationKey} blocked={blocked} onRestoreFocusFallback={fallback}>
         <input aria-label="Previous terminal" />
         <input aria-label="New focus target" />
-        <DelegationChainTrigger session={sessions[1]} />
+        {navigationKey === 'session:build' && !blocked && <DelegationChainTrigger session={sessions[1]} />}
       </DelegationChainProvider>
     );
     const view = render(content('session:build', false));
@@ -226,5 +250,6 @@ describe('delegation chain', () => {
     view.rerender(content('session:build', false));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(stealFocus).not.toHaveBeenCalled();
+    expect(fallback).not.toHaveBeenCalled();
   });
 });

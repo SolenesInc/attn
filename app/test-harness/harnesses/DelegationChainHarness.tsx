@@ -22,6 +22,7 @@ export function DelegationChainHarness({ onReady, setTriggerRerender }: HarnessP
   const [menu, setMenu] = useState(false);
   const [settings, setSettings] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [rowGeneration, setRowGeneration] = useState(0);
   const chain = useRef<DelegationChainHandle>(null);
   const terminal = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { terminal.current?.focus(); }, [current, collapsed]);
@@ -32,11 +33,11 @@ export function DelegationChainHarness({ onReady, setTriggerRerender }: HarnessP
   useShortcut('session.toggleSidebar', () => { chain.current?.dismiss(); setCollapsed((value) => !value); });
   useEscapeStack(() => setSettings(false), settings);
   return (
-    <DelegationChainProvider ref={chain} sessions={agents} navigationKey={current} blocked={menu || settings} onSelectSession={(id) => { setCurrent(id); terminal.current?.focus(); }}>
+    <DelegationChainProvider ref={chain} sessions={agents} navigationKey={current} blocked={menu || settings} onRestoreFocusFallback={() => terminal.current?.focus()} onSelectSession={(id) => { setCurrent(id); terminal.current?.focus(); }}>
       <div style={{ display: 'flex', gap: 24, padding: 16, color: 'var(--color-text-primary)', background: 'var(--color-bg-app)', minHeight: '100vh' }}>
         <aside className="sidebar" style={{ width: 230, flexShrink: 0 }}>
           {!collapsed && agents.map((agent) => (
-            <div key={agent.id} data-testid={`row-${agent.id}`} className={`session-item ${current === agent.id ? 'selected' : ''}`} style={{ display: 'flex', gap: 8, marginRight: 12 }}>
+            <div key={`${rowGeneration}:${agent.id}`} data-testid={`row-${agent.id}`} className={`session-item ${current === agent.id ? 'selected' : ''}`} style={{ display: 'flex', gap: 8, marginRight: 12 }}>
               <SessionLabel label={agent.label} session={agent} hasDelegates={agent.id === 'root'} />
               <DelegationChainTrigger session={agent} hasDelegates={agent.id === 'root'} />
             </div>
@@ -46,6 +47,7 @@ export function DelegationChainHarness({ onReady, setTriggerRerender }: HarnessP
           <div data-testid="agent-header"><DelegationChainTrigger session={agents.find((agent) => agent.id === current)!} variant="header" /></div>
           <textarea ref={terminal} aria-label="Terminal keyboard target" />
           <output data-testid="selected-agent">{current}</output>
+          <button data-testid="replace-sidebar-rows" onClick={() => setRowGeneration((value) => value + 1)}>Replace sidebar rows</button>
         </main>
       </div>
       <ActionMenu isOpen={menu} onClose={() => setMenu(false)} actions={[{
