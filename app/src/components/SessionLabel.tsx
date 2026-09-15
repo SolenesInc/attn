@@ -39,7 +39,8 @@ export function SessionLabel({ label, session, hasDelegates = false }: {
 
   const hide = useCallback(() => {
     setReveal(null);
-    if (chainSessionId) leaveChain?.(chainSessionId);
+    const span = spanRef.current;
+    if (chainSessionId && span) leaveChain?.(chainSessionId, span.closest<HTMLElement>('.session-item') ?? span);
   }, [chainSessionId, leaveChain]);
 
   const show = useCallback(() => {

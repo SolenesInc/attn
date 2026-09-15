@@ -36,7 +36,7 @@ interface ChainController {
   openSessionId: string | null;
   pinned: boolean;
   show: (sessionId: string, anchor: HTMLElement, pinned: boolean) => void;
-  leave: (sessionId: string) => void;
+  leave: (sessionId: string, anchor: HTMLElement | null) => void;
   close: () => void;
 }
 
@@ -86,7 +86,7 @@ export function DelegationChainTrigger({ session, hasDelegates = false, variant 
           controller?.show(session.id, event.currentTarget, false);
         }
       }}
-      onPointerLeave={() => controller?.leave(session.id)}
+      onPointerLeave={(event) => controller?.leave(session.id, event.currentTarget)}
       onClick={(event) => {
         event.stopPropagation();
         onOpen?.();
@@ -144,15 +144,15 @@ export const DelegationChainProvider = forwardRef<DelegationChainHandle, {
     cancelClose();
     setOpen((current) => {
       if (current?.pinned && !pinned) return current;
-      if (current?.sessionId === sessionId && current.pinned === pinned) return current;
+      if (current?.sessionId === sessionId && current.pinned === pinned && current.anchor === anchor) return current;
       const returnFocus = pinned ? anchor : current?.returnFocus
         ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
       return { sessionId, navigationKey, anchor, pinned, returnFocus };
     });
   }, [cancelClose, navigationKey, blocked]);
-  const leave = useCallback((sessionId: string) => {
+  const leave = useCallback((sessionId: string, anchor: HTMLElement | null) => {
     cancelClose();
-    closeTimer.current = setTimeout(() => setOpen((current) => current?.pinned || current?.sessionId !== sessionId ? current : null), HOVER_CLOSE_DELAY_MS);
+    closeTimer.current = setTimeout(() => setOpen((current) => current?.pinned || current?.sessionId !== sessionId || current.anchor !== anchor ? current : null), HOVER_CLOSE_DELAY_MS);
   }, [cancelClose]);
   useImperativeHandle(ref, () => ({
     open(sessionId, returnFocus) {
@@ -184,7 +184,7 @@ export const DelegationChainProvider = forwardRef<DelegationChainHandle, {
           canRestoreFocus={canRestoreFocus}
           onSelectSession={(id) => { flushSync(close); onSelectSession(id); }}
           onPointerEnter={cancelClose}
-          onPointerLeave={() => leave(visible.sessionId)}
+          onPointerLeave={() => leave(visible.sessionId, visible.anchor)}
         />
       )}
     </ChainContext.Provider>

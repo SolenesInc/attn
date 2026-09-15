@@ -179,6 +179,29 @@ describe('delegation chain', () => {
     expect(within(screen.getByRole('dialog')).getByRole('button', { name: /Coordinate identity/ })).toHaveFocus();
   });
 
+  it.each([false, true])('keeps a header hover open after its old row leaves (dismissed first: %s)', (dismissFirst) => {
+    vi.useFakeTimers();
+    render(
+      <DelegationChainProvider sessions={sessions} onSelectSession={vi.fn()}>
+        <div className="session-item" data-testid="row">
+          <SessionLabel label={sessions[1].label} session={sessions[1]} />
+        </div>
+        <DelegationChainTrigger session={sessions[1]} variant="header" />
+      </DelegationChainProvider>,
+    );
+    const row = screen.getByTestId('row');
+    const header = screen.getByTestId('delegation-chain-trigger-build');
+    fireEvent.pointerEnter(row, { clientX: 80, clientY: 40 });
+    if (dismissFirst) fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    fireEvent.pointerOut(row, { clientX: 180, clientY: 40, relatedTarget: header });
+    fireEvent(row, new PointerEvent('pointerleave', { clientX: 180, clientY: 40, relatedTarget: header }));
+    act(() => vi.runOnlyPendingTimers());
+    expect(within(screen.getByRole('dialog')).getByRole('button', { name: /Build navigator/ })).toHaveFocus();
+    fireEvent.pointerLeave(header);
+    act(() => vi.runOnlyPendingTimers());
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
   it.each(['navigation', 'overlay'] as const)('dismisses on %s without restoring stale focus or reopening afterward', async (change) => {
     const ref = createRef<DelegationChainHandle>();
     const content = (navigationKey: string, blocked: boolean) => (
