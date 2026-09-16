@@ -1,4 +1,15 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
+
+async function scrollToTop(terminal: Locator) {
+  await terminal.evaluate((element) => new Promise<void>((resolve) => {
+    if (element.scrollTop === 0) {
+      resolve();
+      return;
+    }
+    element.addEventListener('scroll', () => resolve(), { once: true });
+    element.scrollTop = 0;
+  }));
+}
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/test-harness/?component=DelegationChain');
@@ -95,6 +106,22 @@ test('Escape dismisses the focused hover card without leaking to the terminal', 
   await expect(terminal).not.toHaveAttribute('data-last-key', 'Escape');
 });
 
+test('the action menu hands focus to the chain without returning it to the terminal', async ({ page }) => {
+  const terminal = page.getByRole('textbox', { name: 'Terminal keyboard target' });
+  await terminal.fill(Array.from({ length: 100 }, (_, index) => `Terminal line ${index}`).join('\n'));
+  await scrollToTop(terminal);
+  await page.keyboard.press('Meta+k');
+  await page.getByRole('textbox', { name: 'Search actions' }).fill('delegation chain');
+  await terminal.evaluate((element) => element.addEventListener('focusin', () => {
+    element.dataset.focusedAfterAction = 'true';
+  }));
+  await page.keyboard.press('Enter');
+  const popup = page.getByRole('dialog', { name: 'Delegation chain' });
+  await expect(popup.getByRole('button', { name: /Build chain navigator/ })).toBeFocused();
+  await expect(terminal).not.toHaveAttribute('data-focused-after-action');
+  await expect(popup).toBeVisible();
+});
+
 for (const entry of ['hover', 'click'] as const) {
   test(`header ${entry} focuses the current agent immediately and accepts navigation`, async ({ page }) => {
     const terminal = page.getByRole('textbox', { name: 'Terminal keyboard target' });
@@ -142,7 +169,7 @@ for (const entry of ['hover', 'click', 'command'] as const) {
   test(`outside scrolling dismisses the ${entry} chain and restores keyboard focus`, async ({ page }) => {
     const terminal = page.getByRole('textbox', { name: 'Terminal keyboard target' });
     await terminal.fill(Array.from({ length: 100 }, (_, index) => `Terminal line ${index}`).join('\n'));
-    await terminal.evaluate((element) => { element.scrollTop = 0; });
+    await scrollToTop(terminal);
     const header = page.getByTestId('agent-header').getByRole('button');
     if (entry === 'command') {
       await page.keyboard.press('Meta+k');
