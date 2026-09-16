@@ -15,36 +15,37 @@ import {
   type TileContentState,
 } from '../../types/workspace';
 import type { ResolvedTheme } from '../../utils/terminalSizing';
-import type { TerminalVisibleStyleSnapshot } from '../../utils/terminalStyleSummary';
-import type { TerminalVisibleContentSnapshot } from '../../utils/terminalVisibleContent';
 import type { WorkspaceSelectionStyle } from '../../utils/workspaceSelectionStyle';
 import { type ChainSession } from '../DelegationChain';
-import { type BlockStateSnapshot, type PlacementStateSnapshot } from '../GhosttyTerminal';
 import { type SessionAnnotationApi } from '../TerminalAnnotations/AnnotatedTerminal';
 import { type WorkspaceTileSessionOption } from './WorkspaceDockTile';
 import type { DockTarget } from './dockTarget';
 import { type LeafDropSnapshot } from './leafDrag';
 import type { PaneRuntimeEventRouter } from './paneRuntimeEventRouter';
+import type { GhosttyPaneRuntime } from './useGhosttyPaneRuntime';
 
-export interface SessionTerminalWorkspaceHandle {
-  fitPane: (paneId: string) => void;
-  fitActivePane: () => void;
+export interface SessionTerminalWorkspaceHandle
+  extends Pick<
+    GhosttyPaneRuntime,
+    | 'fitPane'
+    | 'fitActivePane'
+    | 'focusPane'
+    | 'isPaneInputFocused'
+    | 'scrollPaneToTop'
+    | 'getPaneText'
+    | 'getPaneSize'
+    | 'getPaneVisibleContent'
+    | 'getPaneVisibleStyleSummary'
+    | 'getPaneBlockState'
+    | 'getPanePlacementState'
+    | 'resetPaneTerminal'
+    | 'injectPaneBytes'
+    | 'injectPaneBase64'
+    | 'drainPaneTerminal'
+  > {
   focusLeaf: (leafId: string) => void;
-  focusPane: (paneId: string, retries?: number) => void;
   focusActivePane: (retries?: number) => void;
   typePaneTextViaUI: (paneId: string, text: string) => boolean;
-  isPaneInputFocused: (paneId: string) => boolean;
-  scrollPaneToTop: (paneId: string) => boolean;
-  getPaneText: (paneId: string) => string;
-  getPaneSize: (paneId: string) => { cols: number; rows: number } | null;
-  getPaneVisibleContent: (paneId: string) => TerminalVisibleContentSnapshot;
-  getPaneVisibleStyleSummary: (paneId: string) => TerminalVisibleStyleSnapshot;
-  getPaneBlockState: (paneId: string) => BlockStateSnapshot | null;
-  getPanePlacementState: (paneId: string) => PlacementStateSnapshot | null;
-  resetPaneTerminal: (paneId: string) => boolean;
-  injectPaneBytes: (paneId: string, bytes: Uint8Array) => Promise<boolean>;
-  injectPaneBase64: (paneId: string, payload: string) => Promise<boolean>;
-  drainPaneTerminal: (paneId: string) => Promise<boolean>;
   getLeafDropSnapshot: () => LeafDropSnapshot | null;
 }
 

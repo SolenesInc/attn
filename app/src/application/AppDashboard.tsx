@@ -1,34 +1,30 @@
 import { Dashboard } from '../components/Dashboard';
+import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { activityStaleMs } from '../utils/activitySettings';
-import { useAppContext } from './AppContext';
+import {
+  useAppErrorsContext,
+  useAppInputs,
+  useAppSessionsContext,
+  useAppPanelsContext,
+  useAttentionQueueContext,
+  useNavigationContext,
+  usePRLauncherContext,
+  useSessionLaunchContext,
+} from './AppContexts';
 
 export function AppDashboard() {
-  const {
-    view,
-    unmutedEnrichedSessions,
-    mutedWorkspaceViews,
-    prs,
-    hasReceivedInitialState,
-    isRefreshingPRs,
-    refreshError,
-    rateLimit,
-    daemonEndpoints,
-    handleRebootstrapEndpoint,
-    queueModeEnabled,
-    crewQueueEnabled,
-    settings,
-    followNextTurn,
-    setFollowNextTurn,
-    handleSelectSession,
-    handleNewSession,
-    sendWakeTurn,
-    handleRefreshPRs,
-    handleOpenPR,
-    setSettingsOpen,
-    setSidebarCollapsed,
-    setSidebarMutedExpanded,
-    setView,
-  } = useAppContext();
+  const { unmutedEnrichedSessions, mutedWorkspaceViews } = useAppSessionsContext();
+  const { view, followNextTurn, setFollowNextTurn, handleSelectSession, setView } =
+    useNavigationContext();
+  const { prs, daemonEndpoints, settings } = useAppInputs();
+  const { hasReceivedInitialState, rateLimit, sendWakeTurn } = useDaemonApi();
+
+  const { isRefreshingPRs, refreshError, handleRefreshPRs } = usePRLauncherContext();
+  const { handleRebootstrapEndpoint } = useAppErrorsContext();
+  const { setSettingsOpen, setSidebarCollapsed, setSidebarMutedExpanded } = useAppPanelsContext();
+  const { queueModeEnabled, crewQueueEnabled } = useAttentionQueueContext();
+  const { handleNewSession } = useSessionLaunchContext();
+  const { handleOpenPR } = usePRLauncherContext();
   return (
     <>
       <div className={`view-container ${view === 'dashboard' ? 'visible' : 'hidden'}`}>

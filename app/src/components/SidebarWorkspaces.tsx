@@ -1,3 +1,6 @@
+import type { ComponentProps, ReactNode } from 'react';
+import type { SidebarWorkspace } from './sidebarTypes';
+import type { TileLeaf } from '../types/workspace';
 import { type UISessionState } from '../types/sessionState';
 import { tileContentKey } from '../types/workspace';
 import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
@@ -11,30 +14,13 @@ import { StateIndicator } from './StateIndicator';
 
 export function SidebarWorkspaceList() {
   const {
-    selectedId,
-    selectedWorkspaceId,
-    selectedTile,
-    tileContents,
-    onScreenSessionIds,
     onMuteWorkspace,
     onPinWorkspace,
     onRenameWorkspace,
-    onWorkspaceDragEnter,
-    onWorkspaceDragLeave,
-    onWorkspaceDragDrop,
     onSessionDragStart,
-    onSelectSession,
-    onTriggerNudge,
     onSelectWorkspace,
-    onSelectTile,
-    onCloseTile,
-    onReloadTile,
     openRename,
-    openSessionActions,
-    rowDelegation,
     visibleWorkspaces,
-    canAcceptLeafDrag,
-    workspaceDragClass,
     visualIndexOfWorkspace,
     reorderDrag,
     draggingSessionId,
@@ -56,25 +42,7 @@ export function SidebarWorkspaceList() {
         return (
           <div className="workspace-row" key={`${workspace.endpointId || 'local'}:${workspace.id}`}>
             {seamIndex !== undefined && renderReorderSeam(seamIndex)}
-            <div
-              className={`workspace-group ${selectedWorkspaceId === workspace.id ? 'selected' : ''}${isReorderSource ? ' workspace-group--reorder-source' : ''}${workspaceDragClass(workspace)}`}
-              data-testid={`sidebar-workspace-${workspace.id}`}
-              onPointerEnter={() => {
-                if (canAcceptLeafDrag(workspace)) {
-                  onWorkspaceDragEnter?.(workspace);
-                }
-              }}
-              onPointerLeave={() => {
-                if (canAcceptLeafDrag(workspace)) {
-                  onWorkspaceDragLeave?.(workspace);
-                }
-              }}
-              onPointerUp={() => {
-                if (canAcceptLeafDrag(workspace)) {
-                  onWorkspaceDragDrop?.(workspace);
-                }
-              }}
-            >
+            <WorkspaceDropGroup workspace={workspace} reorderSource={isReorderSource}>
               <div className="workspace-group-header">
                 <button
                   type="button"
@@ -158,32 +126,18 @@ export function SidebarWorkspaceList() {
               {workspace.children.map((child) => {
                 if (child.kind === 'tile') {
                   return (
-                    <TileSidebarRow
-                      key={child.id}
-                      workspaceId={workspace.id}
-                      tile={child.tile}
-                      content={tileContents[tileContentKey(workspace.id, child.tile.tileId)]}
-                      selected={
-                        selectedTile?.workspaceId === workspace.id &&
-                        selectedTile.tileId === child.tile.tileId
-                      }
-                      onSelect={() => onSelectTile?.(workspace.id, child.tile.tileId)}
-                      onClose={() => onCloseTile?.(workspace.id, child.tile.tileId)}
-                      onReload={() => onReloadTile?.(workspace.id, child.tile.tileId)}
-                    />
+                    <WorkspaceTileRow key={child.id} workspaceId={workspace.id} tile={child.tile} />
                   );
                 }
                 const session = child.session;
                 const paneId = child.paneId;
                 const draggable = Boolean(paneId && onSessionDragStart);
                 return (
-                  <SidebarSessionRow
+                  <WorkspaceSessionRow
                     key={session.id}
                     session={session}
-                    selected={selectedId === session.id}
                     draggable={draggable}
                     dragging={draggingSessionId === session.id}
-                    onSelect={() => onSelectSession(session.id)}
                     onClickCapture={draggable ? handleSessionClickCapture : undefined}
                     onPointerDown={
                       draggable && paneId
@@ -197,14 +151,10 @@ export function SidebarWorkspaceList() {
                             )
                         : undefined
                     }
-                    onOpenActions={(event) => openSessionActions(session, event)}
-                    onTriggerNudge={() => onTriggerNudge?.(session.id)}
-                    showSettling={!onScreenSessionIds?.has(session.id)}
-                    {...rowDelegation(session)}
                   />
                 );
               })}
-            </div>
+            </WorkspaceDropGroup>
             {workspace.id === lastReorderParticipantId &&
               renderReorderSeam(reorderTrailingSeamIndex)}
           </div>
@@ -215,17 +165,7 @@ export function SidebarWorkspaceList() {
 }
 
 export function SidebarAutomationGroups() {
-  const {
-    selectedId,
-    onScreenSessionIds,
-    onSelectSession,
-    onTriggerNudge,
-    expandedAutomationGroups,
-    openSessionActions,
-    automationGroups,
-    rowDelegation,
-    toggleAutomationGroup,
-  } = useSidebarContext();
+  const { expandedAutomationGroups, automationGroups, toggleAutomationGroup } = useSidebarContext();
   return (
     <>
       {automationGroups.map((group) => {
@@ -253,16 +193,7 @@ export function SidebarAutomationGroups() {
             {expanded && (
               <div className="automation-session-list">
                 {group.sessions.map((session) => (
-                  <SidebarSessionRow
-                    key={session.id}
-                    session={session}
-                    selected={selectedId === session.id}
-                    onSelect={() => onSelectSession(session.id)}
-                    onOpenActions={(event) => openSessionActions(session, event)}
-                    onTriggerNudge={() => onTriggerNudge?.(session.id)}
-                    showSettling={!onScreenSessionIds?.has(session.id)}
-                    {...rowDelegation(session)}
-                  />
+                  <WorkspaceSessionRow key={session.id} session={session} />
                 ))}
               </div>
             )}
@@ -276,24 +207,13 @@ export function SidebarAutomationGroups() {
 export function SidebarMutedWorkspaces() {
   const {
     selectedId,
-    selectedWorkspaceId,
-    selectedTile,
-    tileContents,
     onMuteWorkspace,
-    onWorkspaceDragEnter,
-    onWorkspaceDragLeave,
-    onWorkspaceDragDrop,
     onSelectSession,
     onSelectWorkspace,
-    onSelectTile,
-    onCloseTile,
-    onReloadTile,
     mutedExpanded,
     setMutedExpanded,
     delegates,
     visibleMutedWorkspaces,
-    canAcceptLeafDrag,
-    workspaceDragClass,
   } = useSidebarContext();
   return (
     <>
@@ -311,25 +231,10 @@ export function SidebarMutedWorkspaces() {
             <div className="muted-sessions-list">
               {visibleMutedWorkspaces.map((workspace) => {
                 return (
-                  <div
+                  <WorkspaceDropGroup
+                    workspace={workspace}
+                    muted
                     key={`${workspace.endpointId || 'local'}:${workspace.id}`}
-                    className={`workspace-group muted-workspace ${selectedWorkspaceId === workspace.id ? 'selected' : ''}${workspaceDragClass(workspace)}`}
-                    data-testid={`sidebar-muted-workspace-${workspace.id}`}
-                    onPointerEnter={() => {
-                      if (canAcceptLeafDrag(workspace)) {
-                        onWorkspaceDragEnter?.(workspace);
-                      }
-                    }}
-                    onPointerLeave={() => {
-                      if (canAcceptLeafDrag(workspace)) {
-                        onWorkspaceDragLeave?.(workspace);
-                      }
-                    }}
-                    onPointerUp={() => {
-                      if (canAcceptLeafDrag(workspace)) {
-                        onWorkspaceDragDrop?.(workspace);
-                      }
-                    }}
                   >
                     <div className="workspace-group-header">
                       <button
@@ -365,21 +270,11 @@ export function SidebarMutedWorkspaces() {
                       {workspace.children.map((child) => {
                         if (child.kind === 'tile') {
                           return (
-                            <TileSidebarRow
+                            <WorkspaceTileRow
                               key={child.id}
                               workspaceId={workspace.id}
                               tile={child.tile}
-                              content={
-                                tileContents[tileContentKey(workspace.id, child.tile.tileId)]
-                              }
-                              selected={
-                                selectedTile?.workspaceId === workspace.id &&
-                                selectedTile.tileId === child.tile.tileId
-                              }
                               muted
-                              onSelect={() => onSelectTile?.(workspace.id, child.tile.tileId)}
-                              onClose={() => onCloseTile?.(workspace.id, child.tile.tileId)}
-                              onReload={() => onReloadTile?.(workspace.id, child.tile.tileId)}
                             />
                           );
                         }
@@ -424,7 +319,7 @@ export function SidebarMutedWorkspaces() {
                         );
                       })}
                     </div>
-                  </div>
+                  </WorkspaceDropGroup>
                 );
               })}
             </div>
@@ -432,5 +327,96 @@ export function SidebarMutedWorkspaces() {
         </div>
       )}
     </>
+  );
+}
+
+function WorkspaceDropGroup({
+  workspace,
+  muted = false,
+  reorderSource = false,
+  children,
+}: {
+  workspace: SidebarWorkspace;
+  muted?: boolean;
+  reorderSource?: boolean;
+  children: ReactNode;
+}) {
+  const {
+    selectedWorkspaceId,
+    workspaceDragClass,
+    canAcceptLeafDrag,
+    onWorkspaceDragEnter,
+    onWorkspaceDragLeave,
+    onWorkspaceDragDrop,
+  } = useSidebarContext();
+  return (
+    <div
+      className={`workspace-group ${muted ? 'muted-workspace ' : ''}${selectedWorkspaceId === workspace.id ? 'selected' : ''}${reorderSource ? ' workspace-group--reorder-source' : ''}${workspaceDragClass(workspace)}`}
+      data-testid={`sidebar-${muted ? 'muted-' : ''}workspace-${workspace.id}`}
+      onPointerEnter={() => {
+        if (canAcceptLeafDrag(workspace)) onWorkspaceDragEnter?.(workspace);
+      }}
+      onPointerLeave={() => {
+        if (canAcceptLeafDrag(workspace)) onWorkspaceDragLeave?.(workspace);
+      }}
+      onPointerUp={() => {
+        if (canAcceptLeafDrag(workspace)) onWorkspaceDragDrop?.(workspace);
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function WorkspaceTileRow({
+  workspaceId,
+  tile,
+  muted = false,
+}: {
+  workspaceId: string;
+  tile: TileLeaf;
+  muted?: boolean;
+}) {
+  const { tileContents, selectedTile, onSelectTile, onCloseTile, onReloadTile } =
+    useSidebarContext();
+  return (
+    <TileSidebarRow
+      workspaceId={workspaceId}
+      tile={tile}
+      content={tileContents[tileContentKey(workspaceId, tile.tileId)]}
+      selected={selectedTile?.workspaceId === workspaceId && selectedTile.tileId === tile.tileId}
+      muted={muted}
+      onSelect={() => onSelectTile?.(workspaceId, tile.tileId)}
+      onClose={() => onCloseTile?.(workspaceId, tile.tileId)}
+      onReload={() => onReloadTile?.(workspaceId, tile.tileId)}
+    />
+  );
+}
+
+function WorkspaceSessionRow(
+  props: Omit<
+    ComponentProps<typeof SidebarSessionRow>,
+    'selected' | 'onSelect' | 'onOpenActions' | 'onTriggerNudge' | 'showSettling' | 'delegates'
+  >,
+) {
+  const {
+    selectedId,
+    onSelectSession,
+    openSessionActions,
+    onTriggerNudge,
+    onScreenSessionIds,
+    rowDelegation,
+  } = useSidebarContext();
+  const { session } = props;
+  return (
+    <SidebarSessionRow
+      {...props}
+      selected={selectedId === session.id}
+      onSelect={() => onSelectSession(session.id)}
+      onOpenActions={(event) => openSessionActions(session, event)}
+      onTriggerNudge={() => onTriggerNudge?.(session.id)}
+      showSettling={!onScreenSessionIds?.has(session.id)}
+      {...rowDelegation(session)}
+    />
   );
 }

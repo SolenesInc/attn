@@ -152,14 +152,18 @@ vi.mock('./hooks/useUIScale', () => ({
 }));
 vi.mock('./hooks/useOpenPR', () => ({ useOpenPR: () => vi.fn() }));
 vi.mock('./hooks/usePRsNeedingAttention', () => ({ usePRsNeedingAttention: () => ({ needsAttention: [] }) }));
-vi.mock('./store/sessions', () => {
+vi.mock('./store/sessions', async () => {
+  const { selectorStoreMock } = await import('./test/mocks/selectorStore');
   const useSessionStore = Object.assign(
-    () => mockUseSessionStore(),
+    selectorStoreMock(() => mockUseSessionStore()),
     { getState: () => mockUseSessionStore() },
   );
   return { useSessionStore };
 });
-vi.mock('./store/daemonSessions', () => ({ useDaemonStore: () => mockUseDaemonStore() }));
+vi.mock('./store/daemonSessions', async () => {
+  const { selectorStoreMock } = await import('./test/mocks/selectorStore');
+  return { useDaemonStore: selectorStoreMock(() => mockUseDaemonStore()) };
+});
 vi.mock('./hooks/useDaemonSocket', async () => {
   const React = await import('react');
   return {

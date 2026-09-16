@@ -1,8 +1,13 @@
 import { openPath } from '@tauri-apps/plugin-opener';
 import { SnoozeMenu } from '../components/SnoozeMenu';
 import { MarkdownOpener } from '../components/palette/MarkdownOpener';
+import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { AppActionMenu } from './AppActionMenu';
-import { useAppContext } from './AppContext';
+import {
+  useAttentionQueueContext,
+  useWorkspaceRuntimeContext,
+  useWorkspaceTilesContext,
+} from './AppContexts';
 
 export function AppNavigationMenus() {
   const {
@@ -10,14 +15,11 @@ export function AppNavigationMenus() {
     markdownOpenerTarget,
     loadOpenerRecents,
     loadOpenerIndex,
-    sendBrowseDirectory,
     setMarkdownOpenerOpen,
-    sendOpenMarkdown,
-    focusWorkspaceLeaf,
-    snoozeMenu,
-    sendSnoozeTurn,
-    setSnoozeMenu,
-  } = useAppContext();
+  } = useWorkspaceTilesContext();
+  const { sendBrowseDirectory, sendOpenMarkdown, sendSnoozeTurn } = useDaemonApi();
+  const { focusWorkspaceLeaf } = useWorkspaceRuntimeContext();
+  const { snoozeMenu, setSnoozeMenu } = useAttentionQueueContext();
   return (
     <>
       {markdownOpenerOpen && (

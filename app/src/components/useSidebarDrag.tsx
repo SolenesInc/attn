@@ -2,6 +2,14 @@ import type { SidebarProps, SidebarWorkspace } from './sidebarTypes';
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+function reachedDragThreshold(
+  origin: { startX: number; startY: number },
+  event: PointerEvent,
+  threshold: number,
+) {
+  return Math.hypot(event.clientX - origin.startX, event.clientY - origin.startY) >= threshold;
+}
+
 export function useSidebarDrag({
   visibleVisualOrder,
   onWorkspaceReorder,
@@ -10,6 +18,13 @@ export function useSidebarDrag({
 }: Pick<SidebarProps, 'onWorkspaceReorder' | 'onSessionDragStart' | 'onSessionDragEnd'> & {
   visibleVisualOrder: SidebarWorkspace[];
 }) {
+  const activeGestureCleanup = useRef<(() => void) | null>(null);
+  const cancelActiveGesture = useCallback(() => {
+    const cleanup = activeGestureCleanup.current;
+    activeGestureCleanup.current = null;
+    cleanup?.();
+  }, []);
+  useEffect(() => cancelActiveGesture, [cancelActiveGesture]);
   const REORDER_THRESHOLD = 6;
   const [reorderDrag, setReorderDrag] = useState<{
     workspaceId: string;
@@ -110,6 +125,7 @@ export function useSidebarDrag({
       if (event.button !== 0 || !onWorkspaceReorder) {
         return;
       }
+      cancelActiveGesture();
       const sourceEl = event.currentTarget;
       reorderDragRef.current = {
         workspaceId: workspace.id,
@@ -127,9 +143,7 @@ export function useSidebarDrag({
           return;
         }
         if (!drag.armed) {
-          const dx = moveEvent.clientX - drag.startX;
-          const dy = moveEvent.clientY - drag.startY;
-          if (Math.hypot(dx, dy) < REORDER_THRESHOLD) {
+          if (!reachedDragThreshold(drag, moveEvent, REORDER_THRESHOLD)) {
             return;
           }
           drag.armed = true;
@@ -148,6 +162,7 @@ export function useSidebarDrag({
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', onUp);
         window.removeEventListener('pointercancel', onCancel);
+        if (activeGestureCleanup.current === onCancel) activeGestureCleanup.current = null;
         const drag = reorderDragRef.current;
         if (drag) {
           try {
@@ -176,11 +191,19 @@ export function useSidebarDrag({
         endReorderDrag();
       };
 
+      activeGestureCleanup.current = onCancel;
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
       window.addEventListener('pointercancel', onCancel);
     },
-    [onWorkspaceReorder, nearestSeamIndex, updateReorderSeam, endReorderDrag, commitReorder],
+    [
+      onWorkspaceReorder,
+      nearestSeamIndex,
+      updateReorderSeam,
+      endReorderDrag,
+      commitReorder,
+      cancelActiveGesture,
+    ],
   );
 
   const reorderActiveParticipants = reorderDrag ? reorderParticipants(reorderDrag.endpointId) : [];
@@ -232,6 +255,7 @@ export function useSidebarDrag({
         return;
       }
       // A fresh press always starts un-suppressed, so a drag that ended elsewhere can't swallow this row's next click.
+      cancelActiveGesture();
       suppressNextSessionClickRef.current = false;
       sessionDragRef.current = {
         pointerId: event.pointerId,
@@ -246,9 +270,7 @@ export function useSidebarDrag({
           return;
         }
         if (!drag.armed) {
-          const dx = moveEvent.clientX - drag.startX;
-          const dy = moveEvent.clientY - drag.startY;
-          if (Math.hypot(dx, dy) < SESSION_DRAG_THRESHOLD) {
+          if (!reachedDragThreshold(drag, moveEvent, SESSION_DRAG_THRESHOLD)) {
             return;
           }
           drag.armed = true;
@@ -263,6 +285,7 @@ export function useSidebarDrag({
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', onUp);
         window.removeEventListener('pointercancel', onCancel);
+        if (activeGestureCleanup.current === onCancel) activeGestureCleanup.current = null;
       };
 
       const teardownDrag = (armed: boolean) => {
@@ -286,11 +309,12 @@ export function useSidebarDrag({
         teardownDrag(Boolean(drag?.armed));
       };
 
+      activeGestureCleanup.current = onCancel;
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
       window.addEventListener('pointercancel', onCancel);
     },
-    [onSessionDragStart, onSessionDragEnd],
+    [onSessionDragStart, onSessionDragEnd, cancelActiveGesture],
   );
 
   const handleSessionClickCapture = useCallback((event: ReactMouseEvent) => {

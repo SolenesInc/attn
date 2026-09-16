@@ -228,19 +228,11 @@ function QueueRowView({
       data-workspace-id={row.workspaceId}
     >
       {/* A real button, so the row is reachable by Tab and pressed by Enter or Space; the settle, pin and actions controls sit above it so they stay independently clickable. */}
-      <button
-        type="button"
-        className="queue-row-select"
-        data-testid={`queue-select-${session.id}`}
-        aria-label={`Open ${session.label}`}
-        title={harnessLabel(session.agent)}
-        onClick={onSelect}
-      />
-      <StateIndicator
-        state={session.state}
-        size="md"
-        seed={session.id}
-        reason={session.state_reason}
+      <QueueSessionSelection
+        session={session}
+        label={session.label}
+        testId={`queue-select-${session.id}`}
+        onSelect={onSelect}
       />
       {/* No workspace name in a band row: the label needs every column, and the pin button's tooltip names the workspace. */}
       <span className="sidebar-session-identity">
@@ -522,19 +514,11 @@ function AwakeCrewRow({
       data-state={session.state}
       data-workspace-id={row.workspaceId}
     >
-      <button
-        type="button"
-        className="queue-row-select"
-        data-testid={`queue-crew-select-${member}`}
-        aria-label={`Open ${label}`}
-        title={harnessLabel(session.agent)}
-        onClick={onSelect}
-      />
-      <StateIndicator
-        state={session.state}
-        size="md"
-        seed={session.id}
-        reason={session.state_reason}
+      <QueueSessionSelection
+        session={session}
+        label={label}
+        testId={`queue-crew-select-${member}`}
+        onSelect={onSelect}
       />
       <HarnessIcon agent={session.agent} />
       <SessionLabel label={label} session={session} hasDelegates={delegates.length > 0} />
@@ -629,5 +613,36 @@ export function QueueSnoozedSection({
         </div>
       )}
     </div>
+  );
+}
+
+function QueueSessionSelection({
+  session,
+  label,
+  testId,
+  onSelect,
+}: {
+  session: QueueBandSessionView;
+  label: string;
+  testId: string;
+  onSelect?: () => void;
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        className="queue-row-select"
+        data-testid={testId}
+        aria-label={`Open ${label}`}
+        title={harnessLabel(session.agent)}
+        onClick={onSelect}
+      />
+      <StateIndicator
+        state={session.state}
+        size="md"
+        seed={session.id}
+        reason={session.state_reason}
+      />
+    </>
   );
 }

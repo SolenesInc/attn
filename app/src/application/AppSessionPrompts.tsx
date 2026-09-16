@@ -5,7 +5,16 @@ import { SessionContextCapPrompt } from '../components/SessionContextCapPrompt';
 import { SessionCreationProgress } from '../components/SessionCreationProgress';
 import { UndoToast } from '../components/UndoToast';
 import { AppViewParamsPrompt } from '../components/appViews/AppViewParamsPrompt';
-import { useAppContext } from './AppContext';
+import { useDaemonApi } from '../contexts/DaemonApiContext';
+import {
+  useAppErrorsContext,
+  useAppInputs,
+  useAppShell,
+  useChiefOfStaffContext,
+  useSessionLaunchContext,
+  useSessionLifecycleContext,
+  useWorkspaceTilesContext,
+} from './AppContexts';
 
 export function AppSessionPrompts() {
   const {
@@ -13,34 +22,33 @@ export function AppSessionPrompts() {
     locationPickerPurpose,
     closeLocationPicker,
     handleLocationSelect,
+    handleCreateWorktreeSession,
+    sessionCreationJob,
+    setSessionCreationJob,
+  } = useSessionLaunchContext();
+  const {
     sendGetRecentLocations,
     sendBrowseDirectory,
     sendInspectPath,
     getRepoInfo,
     sendCreateWorktree,
-    handleCreateWorktreeSession,
     sendDeleteWorktree,
-    showError,
-    settings,
-    agentAvailability,
-    daemonEndpoints,
+    sendSetSessionContextWindowCap,
+  } = useDaemonApi();
+  const { agentAvailability, contextCapPromptSession, setContextCapPromptSession } = useAppShell();
+  const { showError } = useAppErrorsContext();
+  const { settings, daemonEndpoints } = useAppInputs();
+  const {
     hasChiefOfStaff,
-    sessionCreationJob,
-    setSessionCreationJob,
-    pendingSessionClose,
-    handleConfirmSessionClose,
-    handleCancelSessionClose,
     chiefTransferTarget,
     chiefTransferSaving,
     handleConfirmChiefTransfer,
     setChiefTransferTarget,
-    appViewParamsPrompt,
-    dockAppViewTile,
-    setAppViewParamsPrompt,
-    contextCapPromptSession,
-    sendSetSessionContextWindowCap,
-    setContextCapPromptSession,
-  } = useAppContext();
+  } = useChiefOfStaffContext();
+  const { pendingSessionClose, handleConfirmSessionClose, handleCancelSessionClose } =
+    useSessionLifecycleContext();
+  const { appViewParamsPrompt, dockAppViewTile, setAppViewParamsPrompt } =
+    useWorkspaceTilesContext();
   return (
     <>
       <LocationPicker

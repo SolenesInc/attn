@@ -1,10 +1,17 @@
 import { useEffect, useMemo } from 'react';
+import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useSessionStore } from '../store/sessions';
 import { normalizeSessionAgent } from '../types/sessionAgent';
 import { normalizeSessionState } from '../types/sessionState';
-import { filterSessionsRepresentedInWorkspaceLayouts } from '../utils/workspaceViewModels';
+import { getAgentExecutableSettings } from '../utils/agentAvailability';
+import {
+  buildWorkspaceViewModels,
+  filterSessionsRepresentedInWorkspaceLayouts,
+} from '../utils/workspaceViewModels';
 import { AppContentProps } from './appSupport';
 interface Options {
+  activeSessionId: string | null;
+  settings: AppContentProps['settings'];
   daemonEndpoints: AppContentProps['daemonEndpoints'];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   daemonSessions: AppContentProps['daemonSessions'];
@@ -12,12 +19,36 @@ interface Options {
   connect: ReturnType<typeof useSessionStore.getState>['connect'];
 }
 export function useAppSessions({
+  activeSessionId,
+  settings,
   daemonEndpoints,
   sessions,
   daemonSessions,
   daemonWorkspaces,
   connect,
 }: Options) {
+  const { hasReceivedInitialState } = useDaemonApi();
+  const { setLauncherConfig, syncFromDaemonSessions, syncFromDaemonWorkspaces } = useSessionStore();
+  useEffect(() => {
+    setLauncherConfig({
+      executables: getAgentExecutableSettings(settings),
+    });
+  }, [settings, setLauncherConfig]);
+
+  useEffect(() => {
+    if (!hasReceivedInitialState) {
+      return;
+    }
+    syncFromDaemonSessions(daemonSessions);
+  }, [daemonSessions, hasReceivedInitialState, syncFromDaemonSessions]);
+
+  useEffect(() => {
+    if (!hasReceivedInitialState) {
+      return;
+    }
+    syncFromDaemonWorkspaces(daemonWorkspaces);
+  }, [daemonWorkspaces, hasReceivedInitialState, syncFromDaemonWorkspaces]);
+
   const endpointById = useMemo(
     () => new Map(daemonEndpoints.map((endpoint) => [endpoint.id, endpoint])),
     [daemonEndpoints],
@@ -96,7 +127,80 @@ export function useAppSessions({
     void connect();
   }, [connect]);
 
+  const activeDaemonSession = useMemo(() => {
+    if (!activeSessionId) {
+      return null;
+    }
+    return daemonSessions.find((session) => session.id === activeSessionId) || null;
+  }, [activeSessionId, daemonSessions]);
+  const activeRemoteSession = Boolean(activeDaemonSession?.endpoint_id);
+  const activeEndpoint = useMemo(() => {
+    const endpointId = activeDaemonSession?.endpoint_id;
+    if (!endpointId) {
+      return null;
+    }
+    return endpointById.get(endpointId) ?? null;
+  }, [activeDaemonSession?.endpoint_id, endpointById]);
+  const liveGardenSessions = useMemo(
+    () => new Set(daemonSessions.map((session) => session.id)),
+    [daemonSessions],
+  );
+
+  const workspaceNamesById = useMemo(() => {
+    const names: Record<string, string> = {};
+    for (const workspace of daemonWorkspaces) names[workspace.id] = workspace.name || workspace.id;
+    return names;
+  }, [daemonWorkspaces]);
+
+  const gardenSessionLabels = useMemo(
+    () => new Map(daemonSessions.map((session) => [session.id, session.label])),
+    [daemonSessions],
+  );
+
+  const worktreePanelSessions = useMemo(
+    () =>
+      daemonSessions.map((session) => ({
+        id: session.id,
+        label: session.label,
+        directory: session.directory,
+      })),
+    [daemonSessions],
+  );
+
+  const workspaceViews = useMemo(
+    () => buildWorkspaceViewModels(daemonWorkspaces, visibleEnrichedSessions),
+    [daemonWorkspaces, visibleEnrichedSessions],
+  );
+  const unmutedWorkspaceViews = useMemo(
+    () =>
+      workspaceViews.filter(
+        (workspace) => !workspace.muted && (workspace.pinned || workspace.sessions.length > 0),
+      ),
+    [workspaceViews],
+  );
+  const mutedWorkspaceViews = useMemo(
+    () =>
+      workspaceViews.filter(
+        (workspace) => workspace.muted && (workspace.pinned || workspace.sessions.length > 0),
+      ),
+    [workspaceViews],
+  );
+  const unmutedEnrichedSessions = useMemo(
+    () => unmutedWorkspaceViews.flatMap((workspace) => workspace.sessions),
+    [unmutedWorkspaceViews],
+  );
+
   return {
+    workspaceViews,
+    unmutedWorkspaceViews,
+    mutedWorkspaceViews,
+    unmutedEnrichedSessions,
+    activeEndpoint,
+    activeRemoteSession,
+    liveGardenSessions,
+    workspaceNamesById,
+    gardenSessionLabels,
+    worktreePanelSessions,
     enrichedLocalSessions,
     endpointById,
     visibleEnrichedSessions,

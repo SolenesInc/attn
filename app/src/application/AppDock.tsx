@@ -2,21 +2,34 @@ import { AttentionDrawer } from '../components/AttentionDrawer';
 import { AutomationsPanel } from '../components/AutomationsPanel';
 import { RightDock } from '../components/RightDock';
 import { WorkflowRunView } from '../components/WorkflowRunView';
-import { useAppContext } from './AppContext';
+import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { useSessionStore } from '../store/sessions';
+import {
+  useAppInputs,
+  useAppPanelsContext,
+  useAttentionQueueContext,
+  useNavigationContext,
+  useWorkflowPanelContext,
+} from './AppContexts';
 import { toneForDockPanel } from './appSupport';
 
 export function AppDock() {
   const {
     dockPanelStack,
     workflowRunPanelOpen,
-    activeSessionId,
-    activeWorkflowRun,
     closeDockPanel,
     attentionPanelOpen,
-    waitingLocalSessions,
-    prs,
-    handleSelectSession,
     automationsPanelOpen,
+    gardenPanelOpen,
+    gardenHoldsWindow,
+    gardenSlotRef,
+  } = useAppPanelsContext();
+  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const { activeWorkflowRun } = useWorkflowPanelContext();
+  const { waitingLocalSessions } = useAttentionQueueContext();
+  const { prs } = useAppInputs();
+  const { handleSelectSession, selectAgentPane } = useNavigationContext();
+  const {
     listAutomationDefinitions,
     listAutomationRuns,
     setAutomationEnabled,
@@ -24,11 +37,7 @@ export function AppDock() {
     getAutomationDefinition,
     applyAutomationDefinition,
     deleteAutomationDefinition,
-    selectAgentPane,
-    gardenPanelOpen,
-    gardenHoldsWindow,
-    gardenSlotRef,
-  } = useAppContext();
+  } = useDaemonApi();
   return (
     <>
       <RightDock

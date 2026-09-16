@@ -2,7 +2,8 @@ import { SettingsModal } from '../components/SettingsModal';
 import { ShortcutEditorModal } from '../components/ShortcutEditorModal';
 import { ShortcutsModal } from '../components/ShortcutsModal';
 import { WhatsNewModal } from '../components/WhatsNewModal';
-import { useAppContext } from './AppContext';
+import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { useAppAppearanceContext, useAppInputs, useAppPanelsContext } from './AppContexts';
 
 export function AppPreferences() {
   const {
@@ -14,15 +15,29 @@ export function AppPreferences() {
     settingsModalRef,
     settingsOpen,
     setSettingsOpen,
+  } = useAppPanelsContext();
+  const {
     mutedRepos,
-    daemonGitHubHosts,
-    sendMuteRepo,
     mutedAuthors,
-    sendMuteAuthor,
+    themePreference,
+    setTheme,
+    scale,
+    increaseScale,
+    decreaseScale,
+    resetScale,
+    gardenScale,
+  } = useAppAppearanceContext();
+  const {
+    daemonGitHubHosts,
     settings,
     daemonEndpoints,
     daemonPlugins,
     daemonPluginIssues,
+    notebookTaskChangeSignal,
+  } = useAppInputs();
+  const {
+    sendMuteRepo,
+    sendMuteAuthor,
     sendAddEndpoint,
     sendUpdateEndpoint,
     sendRemoveEndpoint,
@@ -34,17 +49,9 @@ export function AppPreferences() {
     sendRemovePlugin,
     sendSetPluginPriority,
     sendSaveSetting,
-    themePreference,
-    setTheme,
-    scale,
-    increaseScale,
-    decreaseScale,
-    resetScale,
-    gardenScale,
     sendTaskList,
     sendTaskRetry,
-    notebookTaskChangeSignal,
-  } = useAppContext();
+  } = useDaemonApi();
   return (
     <>
       <ShortcutsModal

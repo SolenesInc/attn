@@ -11,7 +11,16 @@ import {
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { dockShortcutLabel } from '../shortcuts/metadata';
 import type { ShortcutId } from '../shortcuts/registry';
-import { useAppContext } from './AppContext';
+import { useSessionStore } from '../store/sessions';
+import {
+  useAppAppearanceContext,
+  useAppErrorsContext,
+  useAppInputs,
+  useAppPanelsContext,
+  useAppSessionsContext,
+  useAppShell,
+  useNavigationContext,
+} from './AppContexts';
 import {
   AutomationsIcon,
   GardenIcon,
@@ -20,22 +29,17 @@ import {
   WorktreesIcon,
 } from './AppIcons';
 export function useAppSidebarActions() {
+  const { settings, notificationsUnread } = useAppInputs();
+  const { attentionCount, hasCriticalNotification, zoomModeBySessionId } = useAppShell();
+  const { activeEndpoint, activeRemoteSession } = useAppSessionsContext();
+  const { showError } = useAppErrorsContext();
   const {
-    settings,
-    showError,
-    sessions,
-    activeSessionId,
-    activeEndpoint,
-    activeRemoteSession,
     workflowRunPanelOpen,
     toggleDockPanel,
     attentionPanelOpen,
-    attentionCount,
     notebookOpen,
     openNotebookBrowser,
     notificationsPanelOpen,
-    notificationsUnread,
-    hasCriticalNotification,
     toggleNotificationsPanel,
     automationsPanelOpen,
     sessionsOpen,
@@ -44,10 +48,11 @@ export function useAppSidebarActions() {
     gardenMode,
     toggleGardenFromIcon,
     gardenPanelOpen,
-    activeWorkspaceId,
-    zoomModeBySessionId,
-    keybindings,
-  } = useAppContext();
+  } = useAppPanelsContext();
+  const { keybindings } = useAppAppearanceContext();
+  const sessions = useSessionStore((state) => state.sessions);
+  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const { activeWorkspaceId } = useNavigationContext();
   const isZedEditorConfigured = useMemo(() => {
     const editor = (settings.editor_executable || '').trim().toLowerCase();
     if (!editor) {

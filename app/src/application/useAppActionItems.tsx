@@ -1,13 +1,23 @@
 import { useMemo } from 'react';
 import { type ActionMenuItem } from '../components/ActionMenu';
 import { SessionRoleIcon } from '../components/DelegationChain';
+import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { shortcutTokens } from '../shortcuts/formatShortcut';
+import { useDaemonStore } from '../store/daemonSessions';
+import { useSessionStore } from '../store/sessions';
 import {
   AUTO_SETTLE_ENABLED_SETTING,
   isAutoSettleEnabled,
   isQueueModeEnabled,
 } from '../utils/queueBands';
-import { useAppContext } from './AppContext';
+import {
+  useAppDiagnosticsContext,
+  useAppInputs,
+  useAppPanelsContext,
+  useAppShell,
+  useAttentionQueueContext,
+  useWorkspaceTilesContext,
+} from './AppContexts';
 import {
   AttentionActionIcon,
   BoardActionIcon,
@@ -16,38 +26,35 @@ import {
   KeyboardActionIcon,
 } from './AppIcons';
 export function useAppActionItems() {
+  const apps = useDaemonStore((state) => state.apps);
+  const seeds = useDaemonStore((state) => state.seeds);
+  const { setAppViewParamsPrompt, dockAppViewTile, setMarkdownOpenerOpen, handleOpenNotebookTile } =
+    useWorkspaceTilesContext();
+  const { setContextCapPromptSession } = useAppShell();
   const {
-    apps,
-    setAppViewParamsPrompt,
-    dockAppViewTile,
-    setMarkdownOpenerOpen,
-    handleOpenNotebookTile,
     openLedger,
     openDockPanel,
     gardenMode,
     toggleGardenFrame,
-    settings,
-    handleToggleQueueMode,
-    sendSetSetting,
     setShortcutEditorOpen,
-    handleCreateDiagnosticReport,
-    activeWorkspaceForCommands,
-    activeSessionForCommands,
     delegationChainRef,
     actionMenuReturnFocusRef,
-    activeSessionQueueEligible,
-    sendPinSession,
-    seeds,
     setSeedPopoverRequest,
     setUsagePopoverRequest,
-    setContextCapPromptSession,
-    sendPinWorkspace,
-    sendMuteWorkspace,
+  } = useAppPanelsContext();
+  const { settings } = useAppInputs();
+  const {
+    handleToggleQueueMode,
+    activeWorkspaceForCommands,
+    activeSessionForCommands,
+    activeSessionQueueEligible,
     queueModeEnabled,
-    activeSessionId,
-    sendWakeTurn,
     handleSnoozeActiveSession,
-  } = useAppContext();
+  } = useAttentionQueueContext();
+  const { sendSetSetting, sendPinSession, sendPinWorkspace, sendMuteWorkspace, sendWakeTurn } =
+    useDaemonApi();
+  const { handleCreateDiagnosticReport } = useAppDiagnosticsContext();
+  const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const appViewMenuItems = useMemo<ActionMenuItem[]>(() => {
     const items: ActionMenuItem[] = [];
     for (const app of apps ?? []) {

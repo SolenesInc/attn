@@ -73,6 +73,34 @@ describe('useAgentNavigation', () => {
     expect(vi.mocked(options.setActiveSession).mock.calls).toEqual([['c']]);
   });
 
+  it('keeps a requested session pending across snapshots until its pane arrives', () => {
+    const { result, options, rerender } = controller({ sessions: [session('a')] });
+    act(() => { result.current.selectAgent('reopened'); });
+    options.sessions = [session('a')];
+    rerender();
+    expect(options.setActiveSession).not.toHaveBeenCalled();
+    const launching = session('reopened');
+    launching.workspace.agents = [];
+    options.sessions = [session('a'), launching];
+    rerender();
+    expect(options.setActiveSession).not.toHaveBeenCalled();
+    options.sessions = [session('a'), session('reopened')];
+    rerender();
+    expect(options.setActiveSession).toHaveBeenCalledExactlyOnceWith('reopened');
+  });
+
+  it('does not reopen a deferred target after it disappears from a snapshot', () => {
+    const launching = session('reopened');
+    launching.workspace.agents = [];
+    const { result, options, rerender } = controller({ sessions: [session('a'), launching] });
+    act(() => { result.current.selectAgent('reopened'); });
+    options.sessions = [session('a')];
+    rerender();
+    options.sessions = [session('a'), session('reopened')];
+    rerender();
+    expect(options.setActiveSession).not.toHaveBeenCalled();
+  });
+
   it('selects a session-backed pane and runs the reveal/focus sequence', () => {
     const { result, options } = controller();
 

@@ -87,6 +87,28 @@ test.describe('Workspace Sessions', () => {
     await expect(page.locator('.sidebar')).toBeVisible();
   });
 
+  test('cancels a sidebar workspace drag and can select it afterward', async ({ page, daemon }) => {
+    await daemon.start();
+    await page.goto('/');
+    await page.waitForSelector('.dashboard');
+    await injectWorkspace(page, daemon, 'drag-workspace', [
+      { id: 'drag-agent', label: 'drag-agent', paneId: 'drag-pane', cwd: '/tmp/drag-workspace' },
+    ]);
+    const group = page.getByTestId('sidebar-workspace-drag-workspace');
+    const header = group.locator('.workspace-group-header > .sidebar-row-select');
+    const box = await header.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height * 2);
+    await expect(group).toHaveClass(/workspace-group--reorder-source/);
+    await header.dispatchEvent('pointercancel', { pointerId: 1 });
+    await expect(group).not.toHaveClass(/workspace-group--reorder-source/);
+    await page.mouse.up();
+    await page.getByTestId('sidebar-session-drag-agent').getByRole('button', { name: 'Open drag-agent' }).click();
+    await expect(page.locator('[data-session-terminal-workspace="drag-workspace"]')).toBeVisible();
+  });
+
   test('switches workspaces and Cmd+number jumps to the first session', async ({ page, daemon }) => {
     await daemon.start();
     await page.goto('/');

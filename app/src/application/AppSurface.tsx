@@ -5,10 +5,23 @@ import { DelegationChainProvider } from '../components/DelegationChain';
 import { DiagnosticReportPrompt } from '../components/DiagnosticReportPrompt';
 import { ErrorToast } from '../components/ErrorToast';
 import { OpenPRLauncherProgress } from '../components/OpenPRLauncherProgress';
+import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { DaemonProvider } from '../contexts/DaemonContext';
 import { GitHubPollingProvider } from '../contexts/GitHubPollingContext';
 import { NotebookSurfaceProvider } from '../contexts/NotebookSurfaceContext';
-import { useAppContext } from './AppContext';
+import { useSessionStore } from '../store/sessions';
+import {
+  useAppDiagnosticsContext,
+  useAppErrorsContext,
+  useAppInputs,
+  useAppNotebookSurfaceContext,
+  useAppPanelsContext,
+  useAppSessionsContext,
+  useAppShell,
+  useNavigationContext,
+  usePRLauncherContext,
+  useWorkspaceTilesContext,
+} from './AppContexts';
 import { AppDashboard } from './AppDashboard';
 import { AppDock } from './AppDock';
 import { AppGrid } from './AppGrid';
@@ -26,32 +39,31 @@ export function AppSurface() {
     sendMuteRepo,
     sendMuteAuthor,
     sendPRVisited,
-    githubPollingOffReason,
-    notebookSurfaceContextValue,
-    delegationChainRef,
-    requestTerminalFocus,
-    delegationSessions,
-    handleSelectSession,
-    view,
-    activeSessionId,
-    blockingOverlayOpen,
-    markdownOpenerOpen,
-    appShellRef,
     connectionError,
     warnings,
-    updateAvailableVersion,
     clearWarnings,
+  } = useDaemonApi();
+  const {
+    githubPollingOffReason,
+    updateAvailableVersion,
     onOpenLatestRelease,
     onDismissLatestRelease,
-    openPRLauncherJob,
-    errorMessage,
-    errorDurationMs,
-    clearError,
+  } = useAppInputs();
+  const { notebookSurfaceContextValue } = useAppNotebookSurfaceContext();
+  const { blockingOverlayOpen, appShellRef } = useAppShell();
+  const { errorMessage, errorDurationMs, clearError } = useAppErrorsContext();
+  const { delegationChainRef } = useAppPanelsContext();
+  const { requestTerminalFocus, handleSelectSession, view } = useNavigationContext();
+  const { delegationSessions } = useAppSessionsContext();
+  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const { markdownOpenerOpen } = useWorkspaceTilesContext();
+  const { openPRLauncherJob } = usePRLauncherContext();
+  const {
     diagnosticReportSaved,
     diagnosticCapture,
     handleSaveDiagnosticReport,
     setDiagnosticCapture,
-  } = useAppContext();
+  } = useAppDiagnosticsContext();
   return (
     <DaemonProvider
       sendPRAction={sendPRAction}

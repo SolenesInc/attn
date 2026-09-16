@@ -2,36 +2,48 @@ import { GardenFrame } from '../components/GardenFrame';
 import { NotebookBrowser } from '../components/NotebookBrowser';
 import { NotificationsPanel } from '../components/NotificationsPanel';
 import { LedgerSurface } from '../components/ledger/LedgerSurface';
-import { useAppContext } from './AppContext';
+import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { useDaemonStore } from '../store/daemonSessions';
+import {
+  useAppGardenActionsContext,
+  useAppInputs,
+  useAppNotebookSurfaceContext,
+  useAppPanelsContext,
+  useAppSessionsContext,
+  useAppShell,
+  useChiefOfStaffContext,
+  useNavigationContext,
+  useSessionLaunchContext,
+  useSessionLifecycleContext,
+} from './AppContexts';
 
 export function AppLibrarySurfaces() {
+  const { seedForSession, handleDeleteWorktreeFromPanel } = useAppShell();
+  const { workspaceNamesById, liveGardenSessions, worktreePanelSessions, gardenSessionLabels } =
+    useAppSessionsContext();
   const {
-    seedForSession,
-    listWorktrees,
-    refreshWorktrees,
-    gitOperations,
     sessionsOpen,
     ledgerTab,
     setLedgerTab,
     setSessionsOpen,
-    locationPickerOpen,
-    locationPickerPurpose,
-    sendSessionList,
-    workspaceNamesById,
-    liveGardenSessions,
-    handleSelectSession,
-    handleOpenSeedTile,
-    handleReopenSession,
-    sessionCloseNotice,
-    sessionVerdictNotice,
-    getWorktreeSweepLog,
-    setWorktreeKeep,
-    handleDeleteWorktreeFromPanel,
-    worktreePanelSessions,
     notebookOpen,
     notebookRequestedPath,
     setNotebookOpen,
     setNotebookRequestedPath,
+    gardenMode,
+    gardenDockRect,
+    toggleGardenFrame,
+    closeGarden,
+    notificationsPanelOpen,
+    closeNotificationsPanel,
+  } = useAppPanelsContext();
+  const {
+    listWorktrees,
+    refreshWorktrees,
+    gitOperations,
+    sendSessionList,
+    getWorktreeSweepLog,
+    setWorktreeKeep,
     sendFsList,
     sendFsRead,
     sendFsWrite,
@@ -39,39 +51,37 @@ export function AppLibrarySurfaces() {
     sendFsReadAsset,
     sendNotebookBacklinks,
     sendNotebookToChief,
-    notebookBrowserListFiles,
-    notebookRootChangeSignal,
-    notebookChiefActive,
-    gardenMode,
-    gardenDockRect,
-    toggleGardenFrame,
-    closeGarden,
-    seeds,
-    seedsTotal,
-    gardenSessionLabels,
     hasReceivedInitialState,
     sendSeedTransition,
     sendSeedNote,
     sendSeedDocumentGet,
-    handleOpenMarkdownArtifact,
-    checkArtifactPath,
-    handleResumeSeed,
-    handleHandoverSeed,
-    handleSendSeedToChief,
-    hasChiefOfStaff,
     seedReviewOverview,
     sendSeedReviewShow,
     sendSeedReviewStart,
     sendSeedReviewRetry,
     sendSeedReviewKeep,
     sendSeedReviewDraft,
-    notificationsPanelOpen,
-    closeNotificationsPanel,
     sendNotificationList,
     sendNotificationMarkRead,
     sendTaskRetry,
-    notificationsChangeSignal,
-  } = useAppContext();
+  } = useDaemonApi();
+  const { locationPickerOpen, locationPickerPurpose } = useSessionLaunchContext();
+  const { handleSelectSession } = useNavigationContext();
+  const {
+    handleOpenSeedTile,
+    handleOpenMarkdownArtifact,
+    checkArtifactPath,
+    handleResumeSeed,
+    handleHandoverSeed,
+    handleSendSeedToChief,
+  } = useAppGardenActionsContext();
+  const { handleReopenSession } = useSessionLifecycleContext();
+  const { sessionCloseNotice, sessionVerdictNotice, notificationsChangeSignal } = useAppInputs();
+  const { notebookBrowserListFiles, notebookRootChangeSignal } = useAppNotebookSurfaceContext();
+  const { notebookChiefActive } = useAppSessionsContext();
+  const seeds = useDaemonStore((state) => state.seeds);
+  const seedsTotal = useDaemonStore((state) => state.seedsTotal);
+  const { hasChiefOfStaff } = useChiefOfStaffContext();
   return (
     <>
       <LedgerSurface

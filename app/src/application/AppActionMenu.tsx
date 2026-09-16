@@ -1,8 +1,8 @@
 import { ActionMenu } from '../components/ActionMenu';
-import { useAppContext } from './AppContext';
+import { useAppPanelsContext } from './AppContexts';
 import { useAppActionItems } from './useAppActionItems';
 export function AppActionMenu() {
-  const { actionMenuOpen, setActionMenuOpen } = useAppContext();
+  const { actionMenuOpen, setActionMenuOpen } = useAppPanelsContext();
   const items = useAppActionItems();
   return (
     <ActionMenu isOpen={actionMenuOpen} actions={items} onClose={() => setActionMenuOpen(false)} />

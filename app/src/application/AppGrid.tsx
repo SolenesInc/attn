@@ -1,18 +1,19 @@
 import { GridView } from '../components/grid/GridView';
-import { useAppContext } from './AppContext';
+import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { useAppAppearanceContext, useAppGridContext, useNavigationContext } from './AppContexts';
 
 export function AppGrid() {
+  const { view } = useNavigationContext();
   const {
-    view,
     visibleGridTiles,
     resolvedGridLayout,
     gridOffBoardCount,
     hiddenGridSessions,
     handleRemoveFromGrid,
     handleRestoreToGrid,
-    resolvedTheme,
-    getScreenSnapshot,
-  } = useAppContext();
+  } = useAppGridContext();
+  const { resolvedTheme } = useAppAppearanceContext();
+  const { getScreenSnapshot } = useDaemonApi();
   return (
     <>
       {view === 'grid' && (

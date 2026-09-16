@@ -33,8 +33,12 @@ and workflow guidance lives in [AGENTS.md](../AGENTS.md).
   the consumer's enabled bit.
 - Frontend application wiring lives in `app/src/application`: feature hooks
   own state and effects; the surface components bind that state to views.
-  App, sidebar, and terminal-workspace contexts are scoped to their own mounted
-  compositions. Session selection remains owned by `useAgentNavigation`;
+  The root composes workspace navigation/residency/drag, session launch/lifecycle,
+  attention, library, and shell owners through domain-scoped contexts. Views read
+  daemon operations directly rather than forwarding them through the root.
+  Queue navigation reacts to daemon turn transitions; reopen uses the same
+  cancelable pending selection as launch. Session selection remains owned by
+  `useAgentNavigation`;
   workspace focus mode validates its leaf against that selection and the layout.
 - Auto-mode rule, host and policy writes go through `PromoteAutoModeProposal`
   in `internal/store/automode.go` or the pi relay's `PromoteReportedAmendment`.

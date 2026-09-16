@@ -1,8 +1,25 @@
 import { openPath } from '@tauri-apps/plugin-opener';
 import { SessionTerminalWorkspace } from '../components/SessionTerminalWorkspace';
+import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { formatShortcut } from '../shortcuts/formatShortcut';
+import { useDaemonStore } from '../store/daemonSessions';
+import { useSessionStore } from '../store/sessions';
 import { localWorkspaceDirectory } from '../types/workspace';
-import { useAppContext } from './AppContext';
+import {
+  useAppAppearanceContext,
+  useAppErrorsContext,
+  useAppGardenActionsContext,
+  useAppInputs,
+  useAppPanelsContext,
+  useAppSessionsContext,
+  useAppShell,
+  useNavigationContext,
+  useSessionLaunchContext,
+  useSessionLifecycleContext,
+  useWorkspaceDragContext,
+  useWorkspaceResidencyContext,
+  useWorkspaceRuntimeContext,
+} from './AppContexts';
 import { activePaneIdForFocusedSession, terminalStateForWorkspaceSessions } from './appSupport';
 
 export function AppWorkspaces() {
@@ -10,58 +27,63 @@ export function AppWorkspaces() {
     workspaceViews,
     sessionlessWorkspaceStateById,
     workspaceSelection,
-    getActivePaneIdForSession,
     activeWorkspaceId,
-    warmWorkspaceIds,
+    workspaceSelectionStyle,
+    utilityFocusRequestToken,
+    view,
+    handleSelectSession,
+    selectAgentPane,
+    handleNavigateOutOfSession,
+    handleCloseTile,
+    activeWorkspaceIdRef,
+  } = useNavigationContext();
+  const {
+    getActivePaneIdForSession,
     setWorkspaceRef,
-    activeSessionId,
+    focusWorkspaceLeaf,
+    eventRouter: paneRuntimeEventRouter,
+  } = useWorkspaceRuntimeContext();
+  const { warmWorkspaceIds } = useWorkspaceResidencyContext();
+  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const sessions = useSessionStore((state) => state.sessions);
+  const {
     presentationBySessionId,
-    delegationSessions,
-    daemonSessions,
-    seeds,
-    handleOpenSeedTile,
-    handleRevealSeedInGarden,
-    seedPopoverRequest,
-    usagePopoverRequest,
     annotationApi,
+    handleOpenPresentationWindow,
+    blockingOverlayOpen,
+    zoomModeBySessionId,
+    setZoomModeBySessionId,
+  } = useAppShell();
+  const { handleTerminalModelRecovered } = useAppErrorsContext();
+  const { seedPopoverRequest, usagePopoverRequest } = useAppPanelsContext();
+  const { terminalFontSize, resolvedTheme } = useAppAppearanceContext();
+  const { delegationSessions } = useAppSessionsContext();
+  const { daemonSessions } = useAppInputs();
+  const seeds = useDaemonStore((state) => state.seeds);
+  const { handleOpenSeedTile, handleRevealSeedInGarden } = useAppGardenActionsContext();
+  const {
     sendTriggerNudge,
     sendCancelCountdown,
     sendTerminalPointerActivity,
-    handleOpenPresentationWindow,
     sendOpenMarkdown,
-    focusWorkspaceLeaf,
-    handleTerminalModelRecovered,
-    workspaceSelectionStyle,
-    terminalFontSize,
-    resolvedTheme,
-    utilityFocusRequestToken,
-    blockingOverlayOpen,
-    view,
-    paneRuntimeEventRouter,
-    createSplitSession,
-    handleClosePane,
     sendRenameSession,
-    handleSelectSession,
     sendWorkspaceSetSplitRatio,
-    selectAgentPane,
-    zoomModeBySessionId,
-    setZoomModeBySessionId,
-    handleNavigateOutOfSession,
-    handleCloseTile,
     sendWorkspaceUpdateTile,
-    activeWorkspaceIdRef,
     sendWorkspaceMoveLeafToWorkspace,
     sendWorkspaceMoveLeaf,
+    tileContents,
+    requestTileContent,
+  } = useDaemonApi();
+  const { createSplitSession } = useSessionLaunchContext();
+  const { handleClosePane } = useSessionLifecycleContext();
+  const {
     getActiveLeafDropSnapshot,
     handleLeafDragStart,
     handleLeafDragGhostMove,
     handleLeafDragPreview,
     handleLeafDragEnd,
     leafDragPreview,
-    tileContents,
-    requestTileContent,
-    sessions,
-  } = useAppContext();
+  } = useWorkspaceDragContext();
   return (
     <>
       <div className="terminal-main-area">

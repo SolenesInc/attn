@@ -55,8 +55,14 @@ vi.mock('./hooks/useUIScale', () => ({
 }));
 vi.mock('./hooks/useOpenPR', () => ({ useOpenPR: () => vi.fn() }));
 vi.mock('./hooks/usePRsNeedingAttention', () => ({ usePRsNeedingAttention: () => ({ needsAttention: [] }) }));
-vi.mock('./store/sessions', () => ({ useSessionStore: () => mockUseSessionStore() }));
-vi.mock('./store/daemonSessions', () => ({ useDaemonStore: () => mockUseDaemonStore() }));
+vi.mock('./store/sessions', async () => {
+  const { selectorStoreMock } = await import('./test/mocks/selectorStore');
+  return { useSessionStore: selectorStoreMock(() => mockUseSessionStore()) };
+});
+vi.mock('./store/daemonSessions', async () => {
+  const { selectorStoreMock } = await import('./test/mocks/selectorStore');
+  return { useDaemonStore: selectorStoreMock(() => mockUseDaemonStore()) };
+});
 vi.mock('./hooks/useDaemonSocket', () => ({
   useDaemonSocket: (args: unknown) => mockUseDaemonSocket(args),
 }));
