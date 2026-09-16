@@ -93,9 +93,9 @@ Who owns each piece of state, what changes it, and its lifecycle through success
 
 ```text
 launch intent (daemon, store.LaunchIntent)
-  set by:      spawn or delegate message
+  set by:      spawn or delegate message, stored before the runtime spawns
   read by:     spawn pipeline; reload after daemon restart
-  on failure:  launch refused before the intent is stored
+  on failure:  a new session is removed with its intent; a relaunch restores the prior intent
   on restart:  relaunched with the stored pair; a mid-session switch is lost
 ```
 
