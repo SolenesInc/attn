@@ -294,12 +294,26 @@ func TestSeedResumeRollsBackWhenSeedChangesAfterSpawn(t *testing.T) {
 	d.waitForSessionTeardown(leafID)
 
 	changed := false
+	lifecycleLockedDuringRollback := false
 	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
 		if opts.ID != leafID || changed {
 			return
 		}
 		changed = true
 		editSeed(t, d, seedID, "changed during launch")
+	}
+	backend.onKill = func() {
+		d.sessionLifecycleLocksMu.Lock()
+		entry := d.sessionLifecycleLocks[leafID]
+		d.sessionLifecycleLocksMu.Unlock()
+		if entry == nil {
+			return
+		}
+		if entry.lock.TryLock() {
+			entry.lock.Unlock()
+			return
+		}
+		lifecycleLockedDuringRollback = true
 	}
 
 	client := newInternalWSClient()
@@ -321,6 +335,9 @@ func TestSeedResumeRollsBackWhenSeedChangesAfterSpawn(t *testing.T) {
 	}
 	if workspace := d.store.GetWorkspace(reopenWorkspaceID(leafID)); workspace != nil {
 		t.Fatalf("rollback left workspace registered: %+v", workspace)
+	}
+	if !lifecycleLockedDuringRollback {
+		t.Fatal("session lifecycle lock was not retained through rollback")
 	}
 	seed, _, readErr := d.readSeed(seedID)
 	if readErr != nil {

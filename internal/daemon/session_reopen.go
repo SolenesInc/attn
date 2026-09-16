@@ -712,16 +712,8 @@ func (d *Daemon) reopenSessionRuntime(
 ) (*sessionRuntimeReopened, error) {
 	lifecycleLock := d.sessionLifecycleLockFor(plan.SessionID)
 	lifecycleLock.Lock()
-	locked := true
-	unlock := func() {
-		if locked {
-			lifecycleLock.Unlock()
-			locked = false
-		}
-	}
-	defer unlock()
+	defer lifecycleLock.Unlock()
 	fail := func(cause error) (*sessionRuntimeReopened, error) {
-		unlock()
 		return nil, rollback.fail(cause)
 	}
 
@@ -858,6 +850,7 @@ func (r *delegationRollback) onSessionReopened(sessionID string, closed store.Se
 	r.undo = append(r.undo, func() error {
 		r.d.terminateSession(sessionID, syscall.SIGTERM)
 		r.d.restoreSessionClose(sessionID, closed)
+		r.d.dissociateSessionFromWorkspace(sessionID)
 		return nil
 	})
 }

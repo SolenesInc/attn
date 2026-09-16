@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -564,11 +565,16 @@ func TestRegisterWorkspace_PersistsToStoreAndUpsertsRecentLocation(t *testing.T)
 func TestUnregisterWorkspace_CascadeClosesMemberSessions(t *testing.T) {
 	d := newDaemonForTest(t)
 	now := string(protocol.TimestampNow())
+	var preparedIDs []string
+	d.prepareSessionTeardownHook = func(sessionID string) error {
+		preparedIDs = append(preparedIDs, sessionID)
+		return nil
+	}
 
 	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
 		Cmd: protocol.CmdRegisterWorkspace, ID: "ws1", Title: "ws", Directory: "/repo",
 	})
-	for _, sid := range []string{"s1", "s2"} {
+	for _, sid := range []string{"s2", "s1"} {
 		d.store.Add(&protocol.Session{
 			ID: sid, Label: sid, Agent: protocol.SessionAgentCodex, Directory: "/repo",
 			State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
@@ -580,6 +586,9 @@ func TestUnregisterWorkspace_CascadeClosesMemberSessions(t *testing.T) {
 	d.handleUnregisterWorkspace(nil, &protocol.UnregisterWorkspaceMessage{
 		Cmd: protocol.CmdUnregisterWorkspace, ID: "ws1",
 	})
+	if !slices.Equal(preparedIDs, []string{"s1", "s2"}) {
+		t.Fatalf("session teardown lock order = %v, want [s1 s2]", preparedIDs)
+	}
 
 	if d.store.Get("s1") != nil || d.store.Get("s2") != nil {
 		t.Fatal("member sessions were not removed from the store")

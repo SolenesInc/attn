@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -501,6 +502,7 @@ func (d *Daemon) handleUnregisterWorkspace(client *wsClient, msg *protocol.Unreg
 	// Snapshot before removing session state: the association map changes with it.
 	// session_unregistered must reach clients before workspace_unregistered.
 	memberIDs := d.workspaces.sessionIDs(id)
+	sort.Strings(memberIDs)
 	teardowns := make(map[string]*sessionTeardown, len(memberIDs))
 	for _, sid := range memberIDs {
 		teardown, err := d.prepareSessionTeardown(sid)
