@@ -88,7 +88,7 @@ func (v *sessionReopenVerdict) toProtocol() *protocol.SessionReopen {
 	return out
 }
 
-func (d *Daemon) reopenExecution(entry *protocol.SessionLedgerEntry) garden.Dispatch {
+func (d *Daemon) reopenExecutionFromLedger(entry *protocol.SessionLedgerEntry) garden.Dispatch {
 	execution, _ := d.gardenDispatch(entry.ID)
 	execution.SessionID = entry.ID
 	if execution.Cwd == "" {
@@ -106,8 +106,6 @@ func (d *Daemon) reopenExecution(entry *protocol.SessionLedgerEntry) garden.Disp
 	if execution.HostKind == "" {
 		execution.HostKind = garden.HostLocal
 	}
-	// The ledger is the authority for the native conversation. A Garden
-	// dispatch may retain the value as a receipt, but must not steer a reopen.
 	execution.Resume = d.store.GetResumeSessionID(entry.ID)
 	return execution
 }
@@ -124,7 +122,7 @@ func (d *Daemon) reopenVerdictForEntry(entry *protocol.SessionLedgerEntry) *sess
 	verdict := &sessionReopenVerdict{
 		SessionID: entry.ID,
 		Entry:     entry,
-		Execution: d.reopenExecution(entry),
+		Execution: d.reopenExecutionFromLedger(entry),
 		Live:      protocol.Deref(entry.ClosedAt) == "",
 	}
 	verdict.DirectoryState = inspectContinuationDirectory(verdict.Execution)
