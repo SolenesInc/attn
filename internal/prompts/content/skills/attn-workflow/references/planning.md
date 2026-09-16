@@ -50,7 +50,7 @@ type Preset struct {
     ApprovalPolicy         string
     SandboxMode            string
 }
-func PresetFor(policy, mode string) *Preset // nil when no preset matches
+func PresetFor(policy, mode string) (Preset, bool) // false when no preset matches
 ```
 
 ```tsp
