@@ -21,11 +21,11 @@ In order:
 2. **Decisions and open questions.** The choices the user might still change, each with its reason. Open questions, split into those that block work and those the implementer may decide.
 3. **Design.** The parts below.
 4. **Execution.** The children, which changes belong to each PR, and their order.
-5. **Completion.** How the implementer proves the outcome: tests at each level, running-app evidence, recordings, and where that evidence is recorded.
+5. **Completion.** How the implementer proves the outcome: the checks the repository's verification guidance requires for the affected surfaces, from targeted tests to running-app evidence and a recording when the change is visible, and where that evidence is recorded. Name the documented exemption when one applies.
 
 ## Design
 
-The design shows how the proposed system works. Each part below is required. When a part does not apply, say so in one line with the reason, for example `State: none persisted; the picker holds its selection in memory until launch.` A part answered with prose alone is incomplete; show it.
+The design shows how the proposed system works. Each part below is required. When a part does not apply, say so in one line with the reason, for example `Interfaces: unchanged; the change is internal to one package.` In-memory state counts as state: a selection held until launch still has an owner, mutators and a lifecycle across failures and restarts. A part answered with prose alone is incomplete; show it.
 
 Scale each picture to the change: enough that the reader can judge the design without reconstructing it from the code, no more. Use names from the codebase. Put each picture beside the explanation it supports, in a fenced text block so it reads in the terminal and in the Garden. Keep pictures narrow; split a wide one into smaller views. Show separate production and test wiring when the distinction matters.
 
