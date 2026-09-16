@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: Generate the scheduled flake ledger from the ci-flake-report script on next instead of main.
