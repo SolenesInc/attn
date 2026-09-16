@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { baseName, formatQuery, matchesDir, matchesWords, parseQuery, removeToken, repositoryQueryToken } from './ledgerQuery';
-import { nameIds, relativeStamp, shortPath, tildePath } from './ledgerTime';
+import { nameIds, relativeStamp, shortPath, tildePath, untilStamp } from './ledgerTime';
 
 const facets = {
   repositories: [{ value: '/Users/victor/projects/attn', count: 3 }],
@@ -104,6 +104,15 @@ describe('ledger time and names', () => {
     expect(relativeStamp('2026-09-06T11:57:00Z', now)).toBe('3m');
     expect(relativeStamp('2026-09-06T10:00:00Z', now)).toBe('2h');
     expect(relativeStamp('2026-09-03T10:00:00Z', now)).toBe('3d');
+  });
+
+  it('stamps a future instant as time until it, never as elapsed time', () => {
+    expect(untilStamp('2026-09-06T12:00:20Z', now)).toBe('now');
+    expect(untilStamp('2026-09-06T11:00:00Z', now)).toBe('now');
+    expect(untilStamp('2026-09-06T12:03:00Z', now)).toBe('3m');
+    expect(untilStamp('2026-09-06T14:00:00Z', now)).toBe('2h');
+    expect(untilStamp('2026-09-10T12:00:00Z', now)).toBe('4d');
+    expect(untilStamp('2026-11-06T12:00:00Z', now)).toBe(new Date('2026-11-06T12:00:00Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
   });
 
   it('shortens paths to a home tilde and then to the last two components', () => {
