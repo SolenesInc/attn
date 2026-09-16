@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { ActionMenu, type ActionMenuItem } from './ActionMenu';
 
@@ -48,5 +49,34 @@ describe('ActionMenu', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(items[1].run).toHaveBeenCalledOnce();
+  });
+
+  it('keeps focus handed to an action and returns it when dismissed', async () => {
+    function Harness() {
+      const [isOpen, setIsOpen] = useState(false);
+      const [showTarget, setShowTarget] = useState(false);
+      const items = actions([{ run: () => setShowTarget(true) }]);
+      return (
+        <>
+          <button type="button" onClick={() => setIsOpen(true)}>Open menu</button>
+          {showTarget && <input aria-label="Action target" autoFocus />}
+          <ActionMenu isOpen={isOpen} actions={items} onClose={() => setIsOpen(false)} />
+        </>
+      );
+    }
+
+    render(<Harness />);
+    const opener = screen.getByRole('button', { name: 'Open menu' });
+    opener.focus();
+    fireEvent.click(opener);
+    fireEvent.keyDown(screen.getByLabelText('Search actions'), { key: 'Enter' });
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Action target' })).toHaveFocus());
+
+    opener.focus();
+    fireEvent.click(opener);
+    const search = screen.getByLabelText('Search actions');
+    await waitFor(() => expect(search).toHaveFocus());
+    fireEvent.keyDown(search, { key: 'Escape' });
+    await waitFor(() => expect(opener).toHaveFocus());
   });
 });
