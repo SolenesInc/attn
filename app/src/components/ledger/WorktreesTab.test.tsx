@@ -45,7 +45,7 @@ describe('WorktreesTab rows', () => {
     renderWorktreesTab({ listWorktrees: listing([worktree()]) });
 
     await rows().findByText('attn--feat-one');
-    expect(within(row('attn--feat-one')).getByText(/removing in/)).toBeTruthy();
+    expect(within(row('attn--feat-one')).getByText('removing in 10d')).toBeTruthy();
     expect(within(row('attn--feat-one')).getByText('merged · ancestor')).toBeTruthy();
     expect(row('attn--feat-one').getAttribute('data-reason')).toBe('merged and clean; idle 3 of 14 days');
     expect(within(inspector()).getByText('merged and clean; idle 3 of 14 days')).toBeTruthy();

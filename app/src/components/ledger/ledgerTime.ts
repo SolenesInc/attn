@@ -11,6 +11,17 @@ export function relativeStamp(iso: string, now: Date): string {
   return at.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+export function untilStamp(iso: string, now: Date): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return iso;
+  const seconds = Math.round((at.getTime() - now.getTime()) / 1000);
+  if (seconds < 45) return 'now';
+  if (seconds < 3600) return `${Math.max(1, Math.round(seconds / 60))}m`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
+  if (seconds < 30 * 86400) return `${Math.round(seconds / 86400)}d`;
+  return at.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 export function fullStamp(iso: string): string {
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return iso;
