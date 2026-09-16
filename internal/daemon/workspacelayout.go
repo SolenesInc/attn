@@ -1149,7 +1149,11 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 
 	d.sendWorkspaceLayoutActionResult(client, protocol.CmdWorkspaceLayoutClosePane, msg.WorkspaceID, protocol.Ptr(msg.PaneID), nil)
 
+	workspaceRemoved := false
 	if layoutEmpty {
+		workspaceRemoved = d.unregisterWorkspaceIfEmpty(msg.WorkspaceID)
+	}
+	if layoutEmpty && !workspaceRemoved {
 		// Publish the empty layout so clients cannot retain and replay the
 		// removed pane.
 		if d.store.GetWorkspace(msg.WorkspaceID) != nil {
@@ -1163,7 +1167,7 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 			}
 			d.broadcastWorkspaceLayoutSnapshotUpdated(emptyLayout)
 		}
-	} else {
+	} else if !layoutEmpty {
 		d.broadcastWorkspaceLayoutUpdated(msg.WorkspaceID)
 	}
 

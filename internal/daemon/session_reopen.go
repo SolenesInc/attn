@@ -723,6 +723,12 @@ func (d *Daemon) reopenSessionRuntime(
 	}
 	priorSession := d.store.Get(plan.SessionID)
 	if priorSession != nil && d.sessionHasLiveWorker(plan.SessionID) {
+		if afterSpawn != nil {
+			if err := afterSpawn(); err != nil {
+				return fail(err)
+			}
+		}
+		rollback.abandon()
 		return &sessionRuntimeReopened{
 			SessionID: plan.SessionID, WorkspaceID: entry.WorkspaceID, AlreadyRunning: true,
 		}, nil

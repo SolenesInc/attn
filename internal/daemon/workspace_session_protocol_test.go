@@ -151,6 +151,9 @@ func TestWorkspaceLayoutCloseFailedPlaceholderDoesNotCreateTeardown(t *testing.T
 	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil {
 		t.Fatalf("failed placeholder layout survived close: %+v", snapshot)
 	}
+	if workspace := d.store.GetWorkspace(workspaceID); workspace != nil {
+		t.Fatalf("empty workspace survived failed placeholder close: %+v", workspace)
+	}
 	if err := d.store.AddCheckedUnlessTeardown(&protocol.Session{ID: sessionID, Label: "retry"}); err != nil {
 		t.Fatalf("closing failed placeholder blocked session retry: %v", err)
 	}

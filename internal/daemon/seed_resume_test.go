@@ -389,6 +389,32 @@ func TestSeedResumeRollbackPreservesWorkerlessActiveLedgerRow(t *testing.T) {
 	}
 }
 
+func TestReopenSessionRuntimeRunsBindingWhenAnotherRestoreWon(t *testing.T) {
+	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
+	leafID, _ := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
+	prior := d.store.Get(leafID)
+	if prior == nil {
+		t.Fatal("delegated session is missing")
+	}
+	backend.mu.Lock()
+	backend.sessionIDs = []string{leafID}
+	backend.mu.Unlock()
+
+	bindings := 0
+	outcome, err := d.reopenSessionRuntime(sessionReopenPlan{
+		SessionID: leafID, Directory: prior.Directory, WorkspaceID: prior.WorkspaceID,
+	}, d.newDelegationRollback(), func() error {
+		bindings++
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("reopenSessionRuntime: %v", err)
+	}
+	if outcome == nil || !outcome.AlreadyRunning || bindings != 1 {
+		t.Fatalf("outcome = %+v, bindings = %d; want already running with one binding", outcome, bindings)
+	}
+}
+
 func TestSeedResumeBindingIsAtomicWhenTheSeedChangesDuringLaunch(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedWire := plant(t, d, protocol.SeedPlantMessage{Title: "racing resume", Body: protocol.Ptr("old body")})
