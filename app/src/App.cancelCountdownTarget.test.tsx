@@ -1,9 +1,9 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { act, render } from '@testing-library/react';
 import App from './App';
+import { useSessionStore } from './store/sessions';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 
-const mockUseSessionStore = vi.fn();
 const mockUseDaemonStore = vi.fn();
 const mockUseDaemonSocket = vi.fn();
 const mockUseKeyboardShortcuts = vi.fn();
@@ -55,10 +55,6 @@ vi.mock('./hooks/useUIScale', () => ({
 }));
 vi.mock('./hooks/useOpenPR', () => ({ useOpenPR: () => vi.fn() }));
 vi.mock('./hooks/usePRsNeedingAttention', () => ({ usePRsNeedingAttention: () => ({ needsAttention: [] }) }));
-vi.mock('./store/sessions', async () => {
-  const { selectorStoreMock } = await import('./test/mocks/selectorStore');
-  return { useSessionStore: selectorStoreMock(() => mockUseSessionStore()) };
-});
 vi.mock('./store/daemonSessions', async () => {
   const { selectorStoreMock } = await import('./test/mocks/selectorStore');
   return { useDaemonStore: selectorStoreMock(() => mockUseDaemonStore()) };
@@ -137,14 +133,15 @@ function shortcutRegistered(): boolean {
 describe('who ⌘. names', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useSessionStore.setState(useSessionStore.getInitialState(), true);
     localStorage.clear();
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
     autoSettleFiresAt = {};
     activeSessionId = null;
 
-    mockSetActiveSession.mockImplementation((id: string | null) => { activeSessionId = id; });
+    mockSetActiveSession.mockImplementation((id: string | null) => useSessionStore.getState().setActiveSession(id));
 
-    mockUseSessionStore.mockImplementation(() => ({
+    useSessionStore.setState({
       sessions: PANES.map((id) => ({
         id,
         label: id,
@@ -179,13 +176,9 @@ describe('who ⌘. names', () => {
       launcherConfig: { executables: {} },
       createSession: vi.fn(async () => 's1'),
       closeSession: vi.fn(),
-      setActiveSession: mockSetActiveSession,
       takeSessionSpawnArgs: vi.fn(() => null),
       reloadSession: vi.fn(async () => {}),
-      setLauncherConfig: vi.fn(),
-      syncFromDaemonSessions: vi.fn(),
-      syncFromDaemonWorkspaces: vi.fn(),
-    }));
+    });
 
     mockUseDaemonStore.mockImplementation(() => ({
       daemonSessions: PANES.map((id) => ({
@@ -247,7 +240,7 @@ describe('who ⌘. names', () => {
     broadcast();
     act(() => { mockSetActiveSession('s1'); });
     broadcast();
-    expect(activeSessionId).toBe('s1');
+    expect(useSessionStore.getState().activeSessionId).toBe('s1');
   }
 
   it('names the focused session alone when nothing is counting down', () => {
@@ -270,7 +263,7 @@ describe('who ⌘. names', () => {
     const shortcuts = shortcutHandlers<{ onGoToDashboard: () => void }>();
     act(() => { shortcuts.onGoToDashboard(); });
     broadcast();
-    expect(activeSessionId).toBeNull();
+    expect(useSessionStore.getState().activeSessionId).toBeNull();
 
     expect(shortcutRegistered()).toBe(false);
   });

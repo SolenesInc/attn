@@ -2,13 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { controlBrowserHost } from '../browser/host';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentNavigation } from '../hooks/useAgentNavigation';
-import { useAppView } from '../hooks/useAppView';
-import { useSessionWorkspaceController } from '../hooks/useSessionWorkspaceController';
 import { useWorkspaceSelectionController } from '../hooks/useWorkspaceSelectionController';
 import { useSessionStore, type TerminalWorkspaceState } from '../store/sessions';
 import { workspaceSnapshotFromDaemonWorkspace } from '../types/workspace';
 import { dispatcherOf } from '../utils/delegationLinks';
-import { advanceAfterTurnClosed, headOfQueue, oldestWantedTurn } from '../utils/queueBands';
+import { oldestWantedTurn } from '../utils/queueBands';
 import { probeUiAfterSwitch } from '../utils/uiDiagnosticsLog';
 import {
   persistWorkspaceSelectionStyle,
@@ -24,28 +22,35 @@ import { useAppSessions } from './useAppSessions';
 import type { useAttentionQueue } from './useAttentionQueue';
 
 interface Options {
-  sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   activeSessionId: string | null;
   daemonSessions: AppContentProps['daemonSessions'];
   daemonWorkspaces: AppContentProps['daemonWorkspaces'];
   workspaceViews: ReturnType<typeof useAppSessions>['workspaceViews'];
   unmutedEnrichedSessions: ReturnType<typeof useAppSessions>['unmutedEnrichedSessions'];
   attentionQueue: ReturnType<typeof useAttentionQueue>;
-  setActivePane: ReturnType<typeof useSessionWorkspaceController>['setActivePane'];
-  focusSessionPane: ReturnType<typeof useSessionWorkspaceController>['focusSessionPane'];
 }
 export function useAppNavigation({
-  sessions,
   activeSessionId,
   daemonSessions,
   daemonWorkspaces,
   workspaceViews,
   unmutedEnrichedSessions,
   attentionQueue,
-  setActivePane,
-  focusSessionPane,
 }: Options) {
-  const { setActiveSession, navigateAgentHistory } = useSessionStore();
+  const {
+    view,
+    setView,
+    followNextTurn,
+    setFollowNextTurn,
+    selectedSessionlessWorkspaceId,
+    selectSessionlessWorkspace,
+    selectedTile,
+    setSelectedTile,
+    utilityFocusRequestToken,
+    requestTerminalFocus,
+    goToDashboard,
+    goHomeAwaitingNextTurn,
+  } = useSessionStore();
   const {
     sendSessionSelected,
     sendWorkspaceSelected,
@@ -54,41 +59,13 @@ export function useAppNavigation({
   } = useDaemonApi();
   const activeWorkspaceIdRef = useRef<string | null>(null);
 
-  const [selectedSessionlessWorkspaceId, setSelectedSessionlessWorkspaceId] = useState<
-    string | null
-  >(null);
-  const [selectedTileRequest, setSelectedTile] = useState<{
-    workspaceId: string;
-    tileId: string;
-  } | null>(null);
-  const { view, setView, followNextTurn, setFollowNextTurn } = useAppView(activeSessionId);
-  const [utilityFocusRequestToken, setUtilityFocusRequestToken] = useState(0);
-
-  const revealSessionView = useCallback(() => {
-    setSelectedTile(null);
-    setSelectedSessionlessWorkspaceId(null);
-    setView('session');
-  }, [setView]);
-
-  const requestTerminalFocus = useCallback(() => {
-    setUtilityFocusRequestToken((token) => token + 1);
-  }, []);
-
   const {
     selectAgent,
     selectAgentPane,
     cancelPendingSelection,
     back: navigateAgentHistoryBack,
     forward: navigateAgentHistoryForward,
-  } = useAgentNavigation({
-    sessions,
-    setActiveSession,
-    navigateAgentHistory,
-    setActivePane,
-    focusSessionPane,
-    revealSessionView,
-    requestTerminalFocus,
-  });
+  } = useAgentNavigation();
 
   const handleSelectSession = selectAgent;
   const selectCreatedSession = selectAgent;
@@ -99,47 +76,7 @@ export function useAppNavigation({
     }
   }, [activeSessionId, sendSessionSelected, view]);
 
-  const enterHome = useCallback(
-    (awaitingNextTurn: boolean) => {
-      cancelPendingSelection();
-      setActiveSession(null);
-      setView('dashboard');
-      setFollowNextTurn(awaitingNextTurn);
-    },
-    [cancelPendingSelection, setActiveSession, setView, setFollowNextTurn],
-  );
-
-  const goToDashboard = useCallback(() => enterHome(false), [enterHome]);
-
-  const goHomeAwaitingNextTurn = useCallback(() => enterHome(true), [enterHome]);
-
-  const { queueBands, queueModeEnabled, wantsAttention } = attentionQueue;
-  const previousQueueTurnsRef = useRef<NonNullable<typeof queueBands>['turns']>([]);
-  useEffect(() => {
-    const previousTurns = previousQueueTurnsRef.current;
-    previousQueueTurnsRef.current = queueBands?.turns ?? [];
-    if (!queueModeEnabled || view !== 'session') return;
-    const advance = advanceAfterTurnClosed(previousTurns, queueBands, activeSessionId);
-    if (!advance) return;
-    if (advance.to === 'session') {
-      handleSelectSession(advance.row.session.id);
-    } else {
-      goHomeAwaitingNextTurn();
-    }
-  }, [
-    queueBands,
-    queueModeEnabled,
-    view,
-    activeSessionId,
-    handleSelectSession,
-    goHomeAwaitingNextTurn,
-  ]);
-
-  useEffect(() => {
-    if (!followNextTurn || !queueModeEnabled || view !== 'dashboard') return;
-    const next = headOfQueue(queueBands);
-    if (next) handleSelectSession(next.session.id);
-  }, [followNextTurn, queueModeEnabled, view, queueBands, handleSelectSession]);
+  const { wantsAttention } = attentionQueue;
 
   const handleJumpToWaiting = useCallback(() => {
     const waiting = oldestWantedTurn(unmutedEnrichedSessions, wantsAttention);
@@ -149,9 +86,8 @@ export function useAppNavigation({
   }, [unmutedEnrichedSessions, handleSelectSession, wantsAttention]);
 
   const toggleGridMode = useCallback(() => {
-    cancelPendingSelection();
     setView((prev) => (prev === 'grid' ? (activeSessionId ? 'session' : 'dashboard') : 'grid'));
-  }, [activeSessionId, cancelPendingSelection, setView]);
+  }, [activeSessionId, setView]);
 
   const [showSessionlessWorkspaces, setShowSessionlessWorkspaces] = useState<boolean>(
     readShowSessionlessWorkspaces,
@@ -239,19 +175,9 @@ export function useAppNavigation({
         handleSelectSession(sessionId);
         return;
       }
-      cancelPendingSelection();
-      setSelectedSessionlessWorkspaceId(workspace.id);
-      setView('session');
-      requestTerminalFocus();
+      selectSessionlessWorkspace(workspace.id);
     },
-    [
-      cancelPendingSelection,
-      handleSelectSession,
-      requestTerminalFocus,
-      sidebarWorkspaceViews,
-      workspaceViews,
-      setView,
-    ],
+    [handleSelectSession, selectSessionlessWorkspace, sidebarWorkspaceViews, workspaceViews],
   );
 
   const handleSelectTile = useCallback(
@@ -259,7 +185,7 @@ export function useAppNavigation({
       handleSelectWorkspace(workspaceId);
       setSelectedTile({ workspaceId, tileId });
     },
-    [handleSelectWorkspace],
+    [handleSelectWorkspace, setSelectedTile],
   );
 
   const handleCloseTile = useCallback(
@@ -269,7 +195,7 @@ export function useAppNavigation({
       );
       void sendWorkspaceUndockTile(workspaceId, tileId).catch(() => {});
     },
-    [sendWorkspaceUndockTile],
+    [sendWorkspaceUndockTile, setSelectedTile],
   );
 
   const handleReloadTile = useCallback((workspaceId: string, tileId: string) => {
@@ -277,19 +203,6 @@ export function useAppNavigation({
       console.warn('[App] Failed to reload browser tile:', error);
     });
   }, []);
-
-  const selectedTile =
-    selectedTileRequest &&
-    workspaceViews.some(
-      (workspace) =>
-        workspace.id === selectedTileRequest.workspaceId &&
-        workspace.children.some(
-          (child) => child.kind === 'tile' && child.tile.tileId === selectedTileRequest.tileId,
-        ),
-    )
-      ? selectedTileRequest
-      : null;
-  if (selectedTileRequest && !selectedTile) setSelectedTile(null);
 
   const handleWorkspaceReorder = useCallback(
     (args: { workspaceId: string; prevWorkspaceId?: string; nextWorkspaceId?: string }) => {

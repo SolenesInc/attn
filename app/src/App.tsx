@@ -17,6 +17,7 @@ import {
   useDaemonSocket,
 } from './hooks/useDaemonSocket';
 import { useReleaseUpdates } from './hooks/useReleaseUpdates';
+import { useSessionStore } from './store/sessions';
 import { useDaemonStore } from './store/daemonSessions';
 import type { Presentation, SessionLedgerEntry, SessionReopen } from './types/generated';
 import { hideBootSplash } from './utils/bootSplash';
@@ -116,6 +117,7 @@ function App() {
 
   const daemon = useDaemonSocket({
     onSessionsUpdate: (sessions) => {
+      useSessionStore.getState().syncFromDaemonSessions(sessions);
       setDaemonSessions(sessions);
     },
     onPresentationAdded: (p) => setPresentationNotices((prev) => upsertPresentationNotice(prev, p)),
@@ -135,14 +137,20 @@ function App() {
     onSeedsUpdate: setSeeds,
     onAppsUpdate: setApps,
     onCrewUpdate: setCrew,
-    onWorkspacesUpdate: setDaemonWorkspaces,
+    onWorkspacesUpdate: (workspaces) => {
+      useSessionStore.getState().syncFromDaemonWorkspaces(workspaces);
+      setDaemonWorkspaces(workspaces);
+    },
     onPRsUpdate: setPRs,
     onEndpointsUpdate: setDaemonEndpoints,
     onPluginsUpdate: handlePluginsUpdate,
     onGitHubHostsUpdate: handleGitHubHostsUpdate,
     onReposUpdate: setRepoStates,
     onAuthorsUpdate: setAuthorStates,
-    onSettingsUpdate: setSettings,
+    onSettingsUpdate: (nextSettings) => {
+      useSessionStore.getState().syncNavigationSettings(nextSettings);
+      setSettings(nextSettings);
+    },
     onSettingError: setSettingError,
     onWorktreesUpdate: setWorktrees,
     onSessionExited: handleSessionExited,

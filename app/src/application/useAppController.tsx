@@ -115,13 +115,11 @@ export function useAppController({
   const workspaceRuntime = useSessionWorkspaceController(sessions, activeSessionId);
   const {
     getActivePaneIdForSession,
-    setActivePane,
     prepareClosePaneFocus,
     clearPreparedClosePaneFocus,
     removeWorkspaceRef,
     getWorkspaceLeafDropSnapshot,
     focusWorkspaceLeaf,
-    focusSessionPane,
     typeInSessionPaneViaUI,
     isSessionPaneInputFocused,
     scrollSessionPaneToTop,
@@ -140,7 +138,6 @@ export function useAppController({
 
   const appSessions = useAppSessions({
     activeSessionId,
-    settings,
     daemonEndpoints,
     sessions,
     daemonSessions,
@@ -166,15 +163,12 @@ export function useAppController({
   } = attentionQueue;
 
   const navigation = useAppNavigation({
-    sessions,
     activeSessionId,
     daemonSessions,
     daemonWorkspaces,
     workspaceViews,
     unmutedEnrichedSessions,
     attentionQueue,
-    setActivePane,
-    focusSessionPane,
   });
   const {
     view,

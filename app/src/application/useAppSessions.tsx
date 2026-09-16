@@ -1,9 +1,8 @@
 import { useEffect, useMemo } from 'react';
-import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useSessionStore } from '../store/sessions';
 import { normalizeSessionAgent } from '../types/sessionAgent';
 import { normalizeSessionState } from '../types/sessionState';
-import { getAgentExecutableSettings } from '../utils/agentAvailability';
+import { sessionAttentionFields } from '../navigation/sessionNavigation';
 import {
   buildWorkspaceViewModels,
   filterSessionsRepresentedInWorkspaceLayouts,
@@ -11,7 +10,6 @@ import {
 import { AppContentProps } from './appSupport';
 interface Options {
   activeSessionId: string | null;
-  settings: AppContentProps['settings'];
   daemonEndpoints: AppContentProps['daemonEndpoints'];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   daemonSessions: AppContentProps['daemonSessions'];
@@ -20,35 +18,12 @@ interface Options {
 }
 export function useAppSessions({
   activeSessionId,
-  settings,
   daemonEndpoints,
   sessions,
   daemonSessions,
   daemonWorkspaces,
   connect,
 }: Options) {
-  const { hasReceivedInitialState } = useDaemonApi();
-  const { setLauncherConfig, syncFromDaemonSessions, syncFromDaemonWorkspaces } = useSessionStore();
-  useEffect(() => {
-    setLauncherConfig({
-      executables: getAgentExecutableSettings(settings),
-    });
-  }, [settings, setLauncherConfig]);
-
-  useEffect(() => {
-    if (!hasReceivedInitialState) {
-      return;
-    }
-    syncFromDaemonSessions(daemonSessions);
-  }, [daemonSessions, hasReceivedInitialState, syncFromDaemonSessions]);
-
-  useEffect(() => {
-    if (!hasReceivedInitialState) {
-      return;
-    }
-    syncFromDaemonWorkspaces(daemonWorkspaces);
-  }, [daemonWorkspaces, hasReceivedInitialState, syncFromDaemonWorkspaces]);
-
   const endpointById = useMemo(
     () => new Map(daemonEndpoints.map((endpoint) => [endpoint.id, endpoint])),
     [daemonEndpoints],
@@ -64,13 +39,13 @@ export function useAppSessions({
     const endpoint = endpointId ? endpointById.get(endpointId) : undefined;
     return {
       ...s,
+      ...sessionAttentionFields(daemonSession),
       state: paneState || normalizeSessionState(rawState),
       endpointId,
       endpointName: endpoint?.name,
       endpointStatus: endpoint?.status,
       branch: daemonSession?.branch ?? s.branch,
       isWorktree: daemonSession?.is_worktree ?? s.isWorktree,
-      chiefOfStaff: daemonSession?.chief_of_staff ?? false,
       delegatedFromChief: daemonSession?.delegated_from_chief ?? false,
       dispatcher_session_id: daemonSession?.dispatcher_session_id,
       dispatcher_member: daemonSession?.dispatcher_member,
@@ -78,15 +53,9 @@ export function useAppSessions({
       ticketUnread: daemonSession?.ticket_unread ?? false,
       seedId: daemonSession?.seed_id,
       nudgeFiresAt: daemonSession?.nudge_fires_at,
-      turnOwed: daemonSession?.turn_owed ?? false,
-      turnOpenedAt: daemonSession?.turn_opened_at,
-      turnSnoozedUntil: daemonSession?.turn_snoozed_until,
       activity: daemonSession?.activity,
       activityAt: daemonSession?.activity_at,
-      pinnedAt: daemonSession?.pinned_at,
-      crewMember: daemonSession?.crew_member,
       contextWindowCap: daemonSession?.context_window_cap,
-      parentSessionId: daemonSession?.parent_session_id,
       autoSettleFiresAt: daemonSession?.auto_settle_fires_at,
       autoSettleHeld: daemonSession?.auto_settle_held ?? false,
       autoSettleDismissArmed: daemonSession?.auto_settle_dismiss_armed ?? false,

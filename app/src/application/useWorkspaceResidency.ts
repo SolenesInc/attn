@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useAppView } from '../hooks/useAppView';
+import type { AppView } from '../navigation/sessionNavigation';
 import {
   computeWarmWorkspaceIds,
   DEFAULT_WARM_WORKSPACE_LIMIT,
@@ -15,7 +15,7 @@ type EnrichedSession = ReturnType<typeof useAppSessions>['enrichedLocalSessions'
 interface Options {
   workspaceViews: WorkspaceWithSessions<EnrichedSession>[];
   activeWorkspaceId: string | null;
-  view: ReturnType<typeof useAppView>['view'];
+  view: AppView;
   visibleGridTiles: ReturnType<typeof useAppGrid>['visibleGridTiles'];
 }
 export function useWorkspaceResidency({

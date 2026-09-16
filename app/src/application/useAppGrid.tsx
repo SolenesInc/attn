@@ -11,7 +11,7 @@ import {
   persistExcludedGridSessions,
   readExcludedGridSessions,
 } from '../components/grid/gridMembership';
-import type { useAppView } from '../hooks/useAppView';
+import type { AppView, StateUpdate } from '../navigation/sessionNavigation';
 import type { Session } from '../store/sessions';
 import { type UISessionState } from '../types/sessionState';
 interface Options {
@@ -23,7 +23,7 @@ interface Options {
     automation?: { definition_id: string };
   }) => boolean;
   cancelPendingSelection: () => void;
-  setView: ReturnType<typeof useAppView>['setView'];
+  setView: (view: StateUpdate<AppView>) => void;
 }
 export function useAppGrid({
   unmutedEnrichedSessions,

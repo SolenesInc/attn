@@ -2,15 +2,14 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
+import { useSessionStore, type Session } from './store/sessions';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 import type { TerminalLayoutNode } from './types/workspace';
 import { WARM_WORKSPACE_LIMIT_STORAGE_KEY } from './utils/terminalVirtualization';
 
 
-const mockUseSessionStore = vi.fn();
 const mockUseDaemonStore = vi.fn();
 const mockUseDaemonSocket = vi.fn();
-const mockSetActiveSession = vi.fn();
 const SHOW_SESSIONLESS_KEY = 'attn.sidebar.showSessionless';
 
 let mockDaemonWorkspaces: Array<Record<string, unknown>>;
@@ -152,14 +151,6 @@ vi.mock('./hooks/useUIScale', () => ({
 }));
 vi.mock('./hooks/useOpenPR', () => ({ useOpenPR: () => vi.fn() }));
 vi.mock('./hooks/usePRsNeedingAttention', () => ({ usePRsNeedingAttention: () => ({ needsAttention: [] }) }));
-vi.mock('./store/sessions', async () => {
-  const { selectorStoreMock } = await import('./test/mocks/selectorStore');
-  const useSessionStore = Object.assign(
-    selectorStoreMock(() => mockUseSessionStore()),
-    { getState: () => mockUseSessionStore() },
-  );
-  return { useSessionStore };
-});
 vi.mock('./store/daemonSessions', async () => {
   const { selectorStoreMock } = await import('./test/mocks/selectorStore');
   return { useDaemonStore: selectorStoreMock(() => mockUseDaemonStore()) };
@@ -190,6 +181,7 @@ const TILE_LAYOUT_JSON = JSON.stringify({
 describe('tile-only (sessionless) workspace selection and render', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useSessionStore.setState(useSessionStore.getInitialState(), true);
     localStorage.clear();
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
     localStorage.setItem(SHOW_SESSIONLESS_KEY, '1');
@@ -229,7 +221,7 @@ describe('tile-only (sessionless) workspace selection and render', () => {
       },
     ];
 
-    mockUseSessionStore.mockReturnValue({
+    useSessionStore.setState({
       sessions: [{
         id: 's1',
         label: 'working-session',
@@ -245,17 +237,14 @@ describe('tile-only (sessionless) workspace selection and render', () => {
         },
       }],
       activeSessionId: 's1',
+      view: 'session',
       connect: vi.fn(async () => {}),
       connected: true,
       launcherConfig: { executables: {} },
       createSession: vi.fn(async () => 's1'),
       closeSession: vi.fn(),
-      setActiveSession: mockSetActiveSession,
       takeSessionSpawnArgs: vi.fn(() => null),
       reloadSession: vi.fn(async () => {}),
-      setLauncherConfig: vi.fn(),
-      syncFromDaemonSessions: vi.fn(),
-      syncFromDaemonWorkspaces: vi.fn(),
     });
 
     mockUseDaemonStore.mockReturnValue({
@@ -334,7 +323,7 @@ describe('tile-only (sessionless) workspace selection and render', () => {
 
     await userEvent.click(screen.getByTestId('focus-pane-s1'));
 
-    expect(mockSetActiveSession).toHaveBeenCalledWith('s1');
+    expect(useSessionStore.getState().focusRequest?.sessionId).toBe('s1');
   });
 
   it('keeps the sidebar expanded for a failed pane whose session is no longer live', async () => {
@@ -380,8 +369,8 @@ describe('tile-only (sessionless) workspace selection and render', () => {
   });
 
   it('uses sessions loaded after mount when an existing-session deep link arrives', async () => {
-    const loadedStore = mockUseSessionStore();
-    mockUseSessionStore.mockReturnValue({
+    const loadedStore = useSessionStore.getState();
+    useSessionStore.setState({
       ...loadedStore,
       sessions: [],
       activeSessionId: null,
@@ -390,7 +379,7 @@ describe('tile-only (sessionless) workspace selection and render', () => {
 
     await waitFor(() => expect(mockOpenUrlListener).not.toBeNull());
 
-    mockUseSessionStore.mockReturnValue(loadedStore);
+    useSessionStore.setState(loadedStore);
     rerender(<App />);
     await screen.findByTestId('workspace-ws-session');
 
@@ -398,7 +387,7 @@ describe('tile-only (sessionless) workspace selection and render', () => {
       mockOpenUrlListener?.(['attn://spawn?cwd=%2Ftmp%2Frepo']);
     });
 
-    expect(mockSetActiveSession).toHaveBeenCalledWith('s1');
+    expect(useSessionStore.getState().focusRequest?.sessionId).toBe('s1');
   });
 
   it('keeps visible grid workspaces mounted even when they are cold and idle', async () => {
@@ -438,7 +427,7 @@ describe('tile-only (sessionless) workspace selection and render', () => {
         },
       },
     ];
-    const sessions = ['one', 'two', 'three'].map((name, index) => {
+    const sessions: Session[] = ['one', 'two', 'three'].map((name, index) => {
       const sessionId = `s${index + 1}`;
       const paneId = `pane-${name}`;
       const workspaceId = `ws-${name}`;
@@ -457,10 +446,11 @@ describe('tile-only (sessionless) workspace selection and render', () => {
         },
       };
     });
-    mockUseSessionStore.mockReturnValue({
-      ...mockUseSessionStore(),
+    useSessionStore.setState({
+      ...useSessionStore.getState(),
       sessions,
       activeSessionId: 's1',
+      view: 'session',
     });
     mockUseDaemonStore.mockReturnValue({
       ...mockUseDaemonStore(),

@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useSavedFlash } from '../components/useSavedFlash';
 import type { useDaemonApi } from '../contexts/DaemonApiContext';
-import type { useAppView } from '../hooks/useAppView';
+import type { AppView } from '../navigation/sessionNavigation';
 import type { DaemonWorkspace } from '../hooks/useDaemonSocket';
 import type { Session } from '../store/sessions';
 import {
@@ -17,7 +17,7 @@ interface Options {
   getPaneSize: (sessionId: string, paneId: string) => { cols: number; rows: number } | null;
   activeSessionId: string | null;
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
-  view: ReturnType<typeof useAppView>['view'];
+  view: AppView;
   settings: Record<string, string>;
   sendSupportSnapshot: ReturnType<typeof useDaemonApi>['sendSupportSnapshot'];
   getPaneText: (sessionId: string, paneId: string) => string;
