@@ -38,7 +38,6 @@ export function useAppActionItems() {
     toggleGardenFrame,
     setShortcutEditorOpen,
     delegationChainRef,
-    actionMenuReturnFocusRef,
     setSeedPopoverRequest,
     setUsagePopoverRequest,
   } = useAppPanelsContext();
@@ -222,7 +221,7 @@ export function useAppActionItems() {
             keywords: ['role', 'orchestrator', 'builder', 'parent', 'children', 'agent', 'session'],
             icon: <SessionRoleIcon role={activeSession.delegation_role} />,
             run: () =>
-              delegationChainRef.current?.open(activeSession.id, actionMenuReturnFocusRef.current),
+              delegationChainRef.current?.open(activeSession.id),
           },
         ]
       : [];
@@ -342,7 +341,6 @@ export function useAppActionItems() {
     ];
   }, [
     delegationChainRef,
-    actionMenuReturnFocusRef,
     setSeedPopoverRequest,
     setUsagePopoverRequest,
     setContextCapPromptSession,

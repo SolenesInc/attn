@@ -159,9 +159,7 @@ export function useSidebarDrag({
       };
 
       const finish = () => {
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', onUp);
-        window.removeEventListener('pointercancel', onCancel);
+        removeListeners();
         if (activeGestureCleanup.current === onCancel) activeGestureCleanup.current = null;
         const drag = reorderDragRef.current;
         if (drag) {
@@ -192,9 +190,7 @@ export function useSidebarDrag({
       };
 
       activeGestureCleanup.current = onCancel;
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', onUp);
-      window.addEventListener('pointercancel', onCancel);
+      const removeListeners = listenForPointerGesture(onMove, onUp, onCancel);
     },
     [
       onWorkspaceReorder,
@@ -282,9 +278,7 @@ export function useSidebarDrag({
       };
 
       const finish = () => {
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', onUp);
-        window.removeEventListener('pointercancel', onCancel);
+        removeListeners();
         if (activeGestureCleanup.current === onCancel) activeGestureCleanup.current = null;
       };
 
@@ -310,9 +304,7 @@ export function useSidebarDrag({
       };
 
       activeGestureCleanup.current = onCancel;
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', onUp);
-      window.addEventListener('pointercancel', onCancel);
+      const removeListeners = listenForPointerGesture(onMove, onUp, onCancel);
     },
     [onSessionDragStart, onSessionDragEnd, cancelActiveGesture],
   );
@@ -337,5 +329,20 @@ export function useSidebarDrag({
     handleHeaderClickCapture,
     handleSessionPointerDown,
     handleSessionClickCapture,
+  };
+}
+
+function listenForPointerGesture(
+  onMove: (event: PointerEvent) => void,
+  onUp: (event: PointerEvent) => void,
+  onCancel: () => void,
+) {
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+  window.addEventListener('pointercancel', onCancel);
+  return () => {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    window.removeEventListener('pointercancel', onCancel);
   };
 }

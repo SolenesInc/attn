@@ -179,7 +179,6 @@ export function useAppController({
   const {
     view,
     setView,
-    requestTerminalFocus,
     selectAgent,
     selectAgentPane,
     cancelPendingSelection,
@@ -227,7 +226,7 @@ export function useAppController({
   const appAppearance = useAppAppearance({ settings });
   const { increaseScale, decreaseScale, resetScale } = appAppearance;
 
-  const appPanels = useAppPanels({ sessions, requestTerminalFocus });
+  const appPanels = useAppPanels({ sessions });
   const {
     settingsOpen,
     setSettingsOpen,
@@ -239,7 +238,6 @@ export function useAppController({
     actionMenuOpen,
     setActionMenuOpen,
     delegationChainRef,
-    actionMenuReturnFocusRef,
     sessionsOpen,
     setSessionsOpen,
     openLedger,
@@ -408,16 +406,13 @@ export function useAppController({
         devicePixelRatio: window.devicePixelRatio,
       },
     };
-    actionMenuReturnFocusRef.current =
-      delegationChainRef.current?.dismiss() ??
-      (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    delegationChainRef.current?.prepareCommand();
     setActionMenuOpen(true);
   }, [
     actionMenuOpen,
     actionMenuBlocked,
     actionMenuOriginRef,
     setActionMenuOpen,
-    actionMenuReturnFocusRef,
     delegationChainRef,
     activeSessionId,
     sessions,

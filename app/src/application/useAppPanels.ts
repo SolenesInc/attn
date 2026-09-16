@@ -10,16 +10,14 @@ import { useSessionStore } from '../store/sessions';
 
 interface Options {
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
-  requestTerminalFocus: () => void;
 }
-export function useAppPanels({ sessions, requestTerminalFocus }: Options) {
+export function useAppPanels({ sessions }: Options) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsModalRef = useRef<SettingsModalHandle>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const delegationChainRef = useRef<DelegationChainHandle>(null);
-  const actionMenuReturnFocusRef = useRef<HTMLElement | null>(null);
   const [seedPopoverRequest, setSeedPopoverRequest] = useState<{
     sessionId: string;
     nonce: number;
@@ -50,9 +48,9 @@ export function useAppPanels({ sessions, requestTerminalFocus }: Options) {
     setSidebarState((state) => ({ ...state, collapsed }));
   }, []);
   const toggleSidebarCollapse = useCallback(() => {
-    if (delegationChainRef.current?.dismiss()) requestTerminalFocus();
+    delegationChainRef.current?.dismiss('sidebar-collapse');
     setSidebarState((state) => ({ ...state, collapsed: !state.collapsed }));
-  }, [requestTerminalFocus]);
+  }, []);
 
   const openDockPanels = dockState.openPanels;
   const dockPanelStack = dockState.stack;
@@ -99,7 +97,6 @@ export function useAppPanels({ sessions, requestTerminalFocus }: Options) {
     actionMenuOpen,
     setActionMenuOpen,
     delegationChainRef,
-    actionMenuReturnFocusRef,
     seedPopoverRequest,
     setSeedPopoverRequest,
     usagePopoverRequest,
