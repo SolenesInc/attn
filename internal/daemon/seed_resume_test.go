@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"reflect"
@@ -280,6 +281,53 @@ func TestSeedResumeReclaimsParkedSeedFromItsLastExecution(t *testing.T) {
 	}
 	if resumed.Status != garden.StatusGrowing || resumed.TenderSession != leafID || resumed.LastExecutionID != leafID {
 		t.Fatalf("resumed seed = %+v", resumed)
+	}
+}
+
+func TestSeedResumeRollsBackWhenSeedChangesAfterSpawn(t *testing.T) {
+	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
+	leafID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
+	writeCodexRolloutFixture(t, "codex-racing-resume")
+	d.persistResumeSessionID(leafID, "codex-racing-resume")
+	move(t, d, leafID, seedID, garden.VerbPark, "", "")
+	d.handleUnregister(drainedConn(t), &protocol.UnregisterMessage{ID: leafID})
+	d.waitForSessionTeardown(leafID)
+
+	changed := false
+	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
+		if opts.ID != leafID || changed {
+			return
+		}
+		changed = true
+		editSeed(t, d, seedID, "changed during launch")
+	}
+
+	client := newInternalWSClient()
+	d.handleSeedResume(client, &protocol.SeedResumeMessage{
+		Cmd: protocol.CmdSeedResume, RequestID: protocol.Ptr("resume-race"), SeedID: seedID,
+	})
+	message := <-client.send
+	var reply protocol.SeedResumeResultMessage
+	if err := json.Unmarshal(message.payload, &reply); err != nil {
+		t.Fatalf("decode seed resume response: %v", err)
+	}
+	if reply.Success || reply.RequestID != "resume-race" ||
+		!strings.Contains(protocol.Deref(reply.Error), "changed while its conversation was resuming") {
+		t.Fatalf("seed resume response = %+v, want post-spawn revision conflict", reply)
+	}
+	d.waitForSessionTeardown(leafID)
+	if session := d.store.Get(leafID); session != nil {
+		t.Fatalf("rollback left session registered: %+v", session)
+	}
+	if workspace := d.store.GetWorkspace(reopenWorkspaceID(leafID)); workspace != nil {
+		t.Fatalf("rollback left workspace registered: %+v", workspace)
+	}
+	seed, _, readErr := d.readSeed(seedID)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if seed.Body != "changed during launch" || seed.Status != garden.StatusDormant || seed.TenderSession != "" {
+		t.Fatalf("rollback overwrote the concurrent seed change: %+v", seed)
 	}
 }
 

@@ -37,16 +37,30 @@ func writeClaudeTranscriptFixture(t *testing.T, sessionID string) {
 
 func TestSessionLifecycleLocksStayBounded(t *testing.T) {
 	d := newDaemonForTest(t)
-	if first, second := d.sessionLifecycleLockFor("session-stable"), d.sessionLifecycleLockFor("session-stable"); first != second {
+	first, second := d.sessionLifecycleLockFor("session-stable"), d.sessionLifecycleLockFor("session-stable")
+	if first.entry != second.entry {
 		t.Fatal("same session mapped to different lifecycle locks")
 	}
-
-	locks := make(map[*sync.Mutex]struct{})
-	for i := 0; i < sessionLifecycleLockStripeCount*10; i++ {
-		locks[d.sessionLifecycleLockFor(fmt.Sprintf("session-%d", i))] = struct{}{}
+	first.Lock()
+	first.Unlock()
+	second.Lock()
+	second.Unlock()
+	left, right := d.sessionLifecycleLockFor("session-left"), d.sessionLifecycleLockFor("session-right")
+	if left.entry == right.entry {
+		t.Fatal("different sessions shared a lifecycle lock")
 	}
-	if len(locks) > sessionLifecycleLockStripeCount {
-		t.Fatalf("lifecycle lock count = %d, want at most %d", len(locks), sessionLifecycleLockStripeCount)
+	left.Lock()
+	left.Unlock()
+	right.Lock()
+	right.Unlock()
+
+	for i := 0; i < 640; i++ {
+		lease := d.sessionLifecycleLockFor(fmt.Sprintf("session-%d", i))
+		lease.Lock()
+		lease.Unlock()
+	}
+	if len(d.sessionLifecycleLocks) != 0 {
+		t.Fatalf("lifecycle lock count = %d, want 0 after all leases released", len(d.sessionLifecycleLocks))
 	}
 }
 

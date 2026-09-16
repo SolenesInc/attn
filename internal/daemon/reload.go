@@ -49,17 +49,46 @@ func (d *Daemon) clearReloading(sessionID string) {
 	delete(d.reloadingSessions, sessionID)
 }
 
-const sessionLifecycleLockStripeCount = 64
+type sessionLifecycleLockEntry struct {
+	lock sync.Mutex
+	refs int
+}
+
+type sessionLifecycleLockLease struct {
+	d         *Daemon
+	sessionID string
+	entry     *sessionLifecycleLockEntry
+}
+
+func (l *sessionLifecycleLockLease) Lock() {
+	l.entry.lock.Lock()
+}
+
+func (l *sessionLifecycleLockLease) Unlock() {
+	l.entry.lock.Unlock()
+	l.d.sessionLifecycleLocksMu.Lock()
+	defer l.d.sessionLifecycleLocksMu.Unlock()
+	l.entry.refs--
+	if l.entry.refs == 0 && l.d.sessionLifecycleLocks[l.sessionID] == l.entry {
+		delete(l.d.sessionLifecycleLocks, l.sessionID)
+	}
+}
 
 // sessionLifecycleLockFor serializes each session's close, reload and continuation
-// composites. Fixed stripes bound memory while allowing unrelated work in parallel.
-func (d *Daemon) sessionLifecycleLockFor(sessionID string) *sync.Mutex {
-	var hash uint64 = 14695981039346656037
-	for i := 0; i < len(sessionID); i++ {
-		hash ^= uint64(sessionID[i])
-		hash *= 1099511628211
+// composites. Leases keep an entry alive until its final waiter releases it.
+func (d *Daemon) sessionLifecycleLockFor(sessionID string) *sessionLifecycleLockLease {
+	d.sessionLifecycleLocksMu.Lock()
+	defer d.sessionLifecycleLocksMu.Unlock()
+	if d.sessionLifecycleLocks == nil {
+		d.sessionLifecycleLocks = make(map[string]*sessionLifecycleLockEntry)
 	}
-	return &d.sessionLifecycleLocks[hash%sessionLifecycleLockStripeCount]
+	entry := d.sessionLifecycleLocks[sessionID]
+	if entry == nil {
+		entry = &sessionLifecycleLockEntry{}
+		d.sessionLifecycleLocks[sessionID] = entry
+	}
+	entry.refs++
+	return &sessionLifecycleLockLease{d: d, sessionID: sessionID, entry: entry}
 }
 
 func (d *Daemon) sessionHasLiveWorker(sessionID string) bool {
@@ -497,7 +526,7 @@ type preparedPluginRoleReload struct {
 	sessionID string
 	opts      ptybackend.SpawnOptions
 	plugin    *preparedPluginReload
-	lock      *sync.Mutex
+	lock      *sessionLifecycleLockLease
 	completed bool
 }
 

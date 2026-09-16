@@ -196,7 +196,8 @@ type Daemon struct {
 	prepareSessionTeardownHook        func(string) error
 	teardownMu                        sync.Mutex
 	tearingDown                       map[string]chan struct{}
-	sessionLifecycleLocks             [sessionLifecycleLockStripeCount]sync.Mutex
+	sessionLifecycleLocksMu           sync.Mutex
+	sessionLifecycleLocks             map[string]*sessionLifecycleLockEntry
 	spawnLocksMu                      sync.Mutex
 	spawnLocks                        map[string]*spawnLock
 	sessionInputOnce                  sync.Once
@@ -1820,7 +1821,7 @@ func (d *Daemon) removePTYSession(sessionID string) error {
 type sessionTeardown struct {
 	session          *protocol.Session
 	driverRun        store.AgentDriverReportCursor
-	lifecycleLock    *sync.Mutex
+	lifecycleLock    *sessionLifecycleLockLease
 	lifecycleRelease sync.Once
 }
 

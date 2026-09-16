@@ -712,11 +712,22 @@ func (d *Daemon) reopenSessionRuntime(
 ) (*sessionRuntimeReopened, error) {
 	lifecycleLock := d.sessionLifecycleLockFor(plan.SessionID)
 	lifecycleLock.Lock()
-	defer lifecycleLock.Unlock()
+	locked := true
+	unlock := func() {
+		if locked {
+			lifecycleLock.Unlock()
+			locked = false
+		}
+	}
+	defer unlock()
+	fail := func(cause error) (*sessionRuntimeReopened, error) {
+		unlock()
+		return nil, rollback.fail(cause)
+	}
 
 	entry := d.store.SessionLedgerEntry(plan.SessionID)
 	if entry == nil {
-		return nil, rollback.fail(fmt.Errorf("session %s is not in the ledger", plan.SessionID))
+		return fail(fmt.Errorf("session %s is not in the ledger", plan.SessionID))
 	}
 	if d.store.Get(plan.SessionID) != nil && d.sessionHasLiveWorker(plan.SessionID) {
 		return &sessionRuntimeReopened{
@@ -725,7 +736,7 @@ func (d *Daemon) reopenSessionRuntime(
 	}
 	intent, ok := d.store.LaunchIntent(plan.SessionID)
 	if !ok && !plan.FreshConversation {
-		return nil, rollback.fail(fmt.Errorf("session %s has no stored launch intent", plan.SessionID))
+		return fail(fmt.Errorf("session %s has no stored launch intent", plan.SessionID))
 	}
 
 	if strings.TrimSpace(plan.Directory) == "" {
@@ -733,10 +744,10 @@ func (d *Daemon) reopenSessionRuntime(
 	}
 	directory, err := validateDelegationDirectory(plan.Directory)
 	if err != nil {
-		return nil, rollback.fail(err)
+		return fail(err)
 	}
 	if strings.TrimSpace(entry.Agent) == "" {
-		return nil, rollback.fail(fmt.Errorf("session %s saved no agent to start", plan.SessionID))
+		return fail(fmt.Errorf("session %s saved no agent to start", plan.SessionID))
 	}
 	if strings.TrimSpace(plan.Title) == "" {
 		plan.Title = entry.Label
@@ -752,7 +763,7 @@ func (d *Daemon) reopenSessionRuntime(
 	// The store refuses a spawn that would re-register a closed row.
 	lifted, reopened, err := d.store.ReopenSession(plan.SessionID)
 	if err != nil {
-		return nil, rollback.fail(err)
+		return fail(err)
 	}
 	if reopened {
 		rollback.onSessionReopened(plan.SessionID, lifted)
@@ -777,7 +788,7 @@ func (d *Daemon) reopenSessionRuntime(
 			Directory: directory,
 		})
 		if d.store.GetWorkspace(workspaceID) == nil {
-			return nil, rollback.fail(fmt.Errorf("create reopen workspace"))
+			return fail(fmt.Errorf("create reopen workspace"))
 		}
 		rollback.onWorkspaceCreated(workspaceID)
 	}
@@ -792,7 +803,7 @@ func (d *Daemon) reopenSessionRuntime(
 		Title:       protocol.Ptr(plan.Title),
 	})
 	if err != nil {
-		return nil, rollback.fail(fmt.Errorf("create reopen pane: %w", err))
+		return fail(fmt.Errorf("create reopen pane: %w", err))
 	}
 	if paneCreated {
 		rollback.onPaneCreated(plan.SessionID)
@@ -820,10 +831,10 @@ func (d *Daemon) reopenSessionRuntime(
 	spawnClient := newInternalWSClient()
 	d.handleSpawnSessionWithPolicyForeground(spawnClient, spawn, policy)
 	if _, err := readInternalActionResult(spawnClient); err != nil {
-		return nil, rollback.fail(fmt.Errorf("spawn reopened session: %w", err))
+		return fail(fmt.Errorf("spawn reopened session: %w", err))
 	}
 	if session := d.store.Get(plan.SessionID); session == nil {
-		return nil, rollback.fail(fmt.Errorf("reopened session was not persisted"))
+		return fail(fmt.Errorf("reopened session was not persisted"))
 	}
 	if !reopened {
 		rollback.onSessionSpawned(plan.SessionID)
@@ -831,7 +842,7 @@ func (d *Daemon) reopenSessionRuntime(
 
 	if afterSpawn != nil {
 		if err := afterSpawn(); err != nil {
-			return nil, rollback.fail(err)
+			return fail(err)
 		}
 	}
 	rollback.abandon()
