@@ -20,7 +20,7 @@ In order:
 1. **Task and outcome.** What to build and what done looks like, in a few sentences.
 2. **Decisions and open questions.** The choices the user might still change, each with its reason. Open questions, split into those that block work and those the implementer may decide.
 3. **Design.** The parts below.
-4. **Execution.** The children, which changes belong to each PR, and their order.
+4. **Execution.** For a plot, the children, which changes belong to each pull request, and their order. A single seed says so in one line. Work delivered without pull requests names its delivery step instead.
 5. **Completion.** How the implementer proves the outcome: the checks the repository's verification guidance requires for the affected surfaces, from targeted tests to running-app evidence and a recording when the change is visible, and where that evidence is recorded. Name the documented exemption when one applies.
 
 ## Design
