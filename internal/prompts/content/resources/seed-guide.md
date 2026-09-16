@@ -36,9 +36,10 @@ parallel. The children's states record progress, so the plan needs no checklist.
 
 Write the parent for an implementer starting fresh and a user reviewing the
 direction: the goal, the decisions the user might change, the design, and how
-the children together complete it. The `attn-workflow` skill's Planning
-reference defines the design a plan body must show; follow it when that skill
-is installed.
+the children together complete it. The design shows ownership, interfaces,
+behavior and state, each as the smallest picture that explains it rather than
+prose alone. The `attn-workflow` skill's Planning reference gives each part's
+required form with examples; follow it when that skill is installed.
 
 Example: move session search to the daemon while preserving its behavior.
 The endpoint child records a contract that the app child needs before starting.
@@ -48,7 +49,7 @@ The endpoint child records a contract that the app child needs before starting.
 ```json
 {
   "title": "Search moves to the daemon",
-  "body": "Move session search from the app to the daemon.\n\n## Search behavior\nPreserve the current matching, ordering and keyboard behavior in app/src.\n\n## Ownership\ninternal/daemon owns searching session data. app/src sends queries and renders results. Keep the client index until the app uses daemon results.\n\n## Completion\nBoth children are complete, with endpoint tests and running-app evidence on their logs.",
+  "body": "Move session search from the app to the daemon.\n\n## Search behavior\nPreserve the current matching, ordering and keyboard behavior in app/src.\n\n## Decisions\nKeep the client index until the app uses daemon results. Open: whether ranking moves to the daemon too; the endpoint tender may decide.\n\n## Design\nOwnership:\n\n    internal/daemon/search.go   matches and orders sessions\n    app/src/search/             sends queries and renders results\n\nInterfaces:\n\n    SearchSessions{query} -> {sessions: [{id, title, rank}]}\n\nBehavior:\n\n    app    -> daemon: SearchSessions{query}\n    daemon -> app:    ranked sessions; a newer query supersedes an older reply\n\nState: none added; each query reads the daemon's live session set.\n\n## Execution\nThe endpoint child lands first and records the contract; the app child follows in its own pull request.\n\n## Completion\nBoth children are complete, with endpoint tests and running-app evidence on their logs.",
   "children": [
     {
       "title": "Daemon search endpoint",
@@ -57,7 +58,7 @@ The endpoint child records a contract that the app child needs before starting.
     },
     {
       "title": "App calls the endpoint",
-      "body": "Route session search in app/src through the daemon, then remove the obsolete client index. Read the parent plot's Search behavior and Ownership sections and the Daemon search endpoint seed's recorded API contract. Preserve keyboard selection and prevent stale results when queries overlap. Verify search, rapid query changes and keyboard navigation in the running app; record the results and a recording on this seed."
+      "body": "Route session search in app/src through the daemon, then remove the obsolete client index. Read the parent plot's Search behavior and Design sections and the Daemon search endpoint seed's recorded API contract. Preserve keyboard selection and prevent stale results when queries overlap. Verify search, rapid query changes and keyboard navigation in the running app; record the results and a recording on this seed."
     }
   ]
 }
