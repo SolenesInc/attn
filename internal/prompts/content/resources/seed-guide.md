@@ -35,20 +35,10 @@ Use `blocks` only when one child needs another's result. Otherwise leave them
 parallel. The children's states record progress, so the plan needs no checklist.
 
 Write the parent for an implementer starting fresh and a user reviewing the
-direction. Put the choices the user might change first. Include what the work
-needs:
-
-- The goal and how the children together complete it.
-- The proposed shape in repository terms. Show ownership, interfaces and data
-  when they cross boundaries.
-- Shared decisions and their reasons, constraints, and unresolved questions.
-  Say which questions block work and which the tender can decide.
-
-Use short prose and the smallest picture that explains the design: a call tree
-for control flow, a file tree for ownership, or a sequence diagram for messages
-between processes. Show changed code structure as a diff when that is clearer.
-Put each picture next to the explanation; show separate production and test
-wiring when the distinction matters.
+direction: the goal, the decisions the user might change, the design, and how
+the children together complete it. The `attn-workflow` skill's Planning
+reference defines the design a plan body must show; follow it when that skill
+is installed.
 
 Example: move session search to the daemon while preserving its behavior.
 The endpoint child records a contract that the app child needs before starting.
