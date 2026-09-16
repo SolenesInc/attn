@@ -390,8 +390,8 @@ mod platform {
     use objc2_app_kit::{
         NSApplication, NSEvent, NSEventModifierFlags, NSEventType, NSMenu, NSView, NSWindow,
     };
-    use objc2_web_kit::WKWebView;
     use objc2_foundation::{NSPoint, NSProcessInfo, NSString};
+    use objc2_web_kit::WKWebView;
     use serde_json::Value;
     use std::sync::mpsc;
     use std::time::Duration;
