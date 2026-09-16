@@ -254,6 +254,7 @@ try {
     await expect(page.locator("#output")).toContainText("Keep this concurrent agent edit.");
     await expect(page.locator("#feedback-list")).toContainText("explain what to inspect first");
     assert.equal(cli("draft", "get", forkID).files[source].text, "Keep this concurrent maintainer edit.\n");
+    await expect(page.locator(".workspace")).not.toHaveAttribute("aria-busy", "true");
     let requests = 0;
     page.on("request", () => requests++);
     const idleBefore = execFileSync("ps", ["-p", String(server.pid), "-o", "rss=", "-o", "time="], { encoding: "utf8" }).trim();

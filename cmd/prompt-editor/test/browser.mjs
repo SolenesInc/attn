@@ -167,6 +167,7 @@ try {
   await page.getByLabel("Full source text", { exact: true }).fill(diffEditedText);
   await expect(page.locator("#source")).toHaveValue(diffEditedText);
   await expect(page.locator("#source-diff")).toContainText("while reading its diff");
+  const catalogRefresh = page.waitForRequest((request) => request.url().endsWith("/api/catalog"));
   await page.locator("#review-save").click();
   await expect(page.locator("#global-status")).toHaveText("Checkout sources");
   assert.equal(await fs.readFile(wake, "utf8"), diffEditedText);
@@ -194,6 +195,8 @@ try {
   if (artifacts) await page.screenshot({ path: path.join(artifacts, "narrow-full-comparison.png"), fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.locator("#review-close").click();
+  await catalogRefresh;
+  await expect(page.locator(".workspace")).not.toHaveAttribute("aria-busy", "true");
   let requests = 0;
   page.on("request", () => requests++);
   await expect(page.locator("#output")).toContainText("Write a complete work prompt while reading its diff");

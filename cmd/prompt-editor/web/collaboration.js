@@ -1,4 +1,4 @@
-export function collaborate({ state, $, api, selectEvent, selectSource, renderNavigation, schedulePreview, status }) {
+export function collaborate({ state, $, api, selectEvent, selectSource, renderNavigation, schedulePreview, status, work }) {
     let draft = null;
     let review = null;
     let scenarios = {};
@@ -159,7 +159,8 @@ export function collaborate({ state, $, api, selectEvent, selectSource, renderNa
         contextLabel();
     }
     async function flush() {
-        clearTimeout(timer);
+        timer?.();
+        timer = undefined;
         if (flushing)
             return flushing;
         flushing = (async () => {
@@ -186,7 +187,7 @@ export function collaborate({ state, $, api, selectEvent, selectSource, renderNa
             flushing = null;
             status();
             if ([...pending.keys()].some((path) => !blocked.has(path)))
-                timer = setTimeout(flush, 100);
+                timer = work.schedule(() => { timer = undefined; void flush(); }, 100);
         });
         return flushing;
     }
@@ -195,8 +196,8 @@ export function collaborate({ state, $, api, selectEvent, selectSource, renderNa
             return;
         const previous = pending.get(path);
         pending.set(path, { text, expect: previous?.expect || draft.files[path]?.revision || state.catalog.sources[path].revision });
-        clearTimeout(timer);
-        timer = setTimeout(flush, 200);
+        timer?.();
+        timer = work.schedule(() => { timer = undefined; void flush(); }, 200);
         contextLabel();
     }
     async function refreshShared() {
@@ -483,8 +484,11 @@ export function collaborate({ state, $, api, selectEvent, selectSource, renderNa
     const events = new EventSource("/api/events");
     function queueRefresh() {
         if (!initialized) { refreshPending = true; return; }
-        clearTimeout(refreshTimer);
-        refreshTimer = setTimeout(() => refreshShared().catch(showError), 90);
+        refreshTimer?.();
+        refreshTimer = work.schedule(() => {
+            refreshTimer = undefined;
+            void refreshShared().catch(showError);
+        }, 90);
     }
     events.onmessage = queueRefresh;
     events.addEventListener("ready", queueRefresh);
