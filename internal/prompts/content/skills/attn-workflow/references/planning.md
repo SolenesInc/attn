@@ -60,7 +60,9 @@ model SpawnSessionMessage {
 }
 ```
 
-Name the protocol, schema or migration steps a wire or storage change requires.
+    new wire fields: edit main.tsp, make generate-types, bump ProtocolVersion and PROTOCOL_VERSION
+
+Name the protocol, schema or migration steps a wire or storage change requires, as above.
 
 ### Behavior
 
