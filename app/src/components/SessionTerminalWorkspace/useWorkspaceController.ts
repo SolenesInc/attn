@@ -808,6 +808,8 @@ export function useWorkspaceController(
     ) {
       return;
     }
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
     setPaneReadyFocusRequest((token) => token + 1);
   }, []);
 
