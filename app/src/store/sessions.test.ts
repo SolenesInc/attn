@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useSessionStore, isSessionReloading } from './sessions';
 import { WorkspaceLayoutPaneKind, WorkspaceLayoutPaneStatus, WorkspaceStatus } from '../types/generated';
 import { createAgentHistory } from '../navigation/agentHistory';
+import type { TerminalLayoutNode } from '../types/workspace';
 
 const { mockPtyReload } = vi.hoisted(() => ({
   mockPtyReload: vi.fn(),
@@ -168,6 +169,59 @@ describe('sessions store', () => {
     expect(session.workspace).toMatchObject({
       agents: [{ id: 'pane-a', runtimeId: 'runtime-a', title: "Session", sessionId: 'session-1' }],
     });
+  });
+
+  it('syncFromDaemonSessions drops the source layout when a session moves to another workspace', () => {
+    const sourceLayout = {
+      agents: [
+        { id: 'pane-source', runtimeId: 'source-session', title: 'Source', sessionId: 'source-session' },
+        { id: 'pane-moved', runtimeId: 'moved-session', title: 'Moved', sessionId: 'moved-session' },
+      ],
+      layoutTree: {
+        type: 'split' as const,
+        splitId: 'root',
+        direction: 'vertical' as const,
+        ratio: 0.5,
+        children: [
+          { type: 'pane' as const, paneId: 'pane-source' },
+          { type: 'pane' as const, paneId: 'pane-moved' },
+        ] as [TerminalLayoutNode, TerminalLayoutNode],
+      },
+    };
+    const targetLayout = {
+      agents: [{ id: 'pane-moved', runtimeId: 'moved-session', title: 'Moved', sessionId: 'moved-session' }],
+      layoutTree: { type: 'pane' as const, paneId: 'pane-moved' },
+    };
+    const movedSession = {
+      id: 'moved-session',
+      label: 'Moved',
+      state: 'working' as const,
+      cwd: '/tmp/source',
+      workspaceId: 'workspace-source',
+      agent: 'codex' as const,
+      transcriptMatched: false,
+      daemonActivePaneId: 'pane-moved',
+      workspace: sourceLayout,
+    };
+    useSessionStore.setState({
+      sessions: [movedSession],
+      daemonWorkspaceLayouts: {
+        'workspace-target': { workspace: targetLayout, daemonActivePaneId: 'pane-moved' },
+      },
+    });
+
+    useSessionStore.getState().syncFromDaemonSessions([
+      { id: 'moved-session', label: 'Moved', agent: 'codex', directory: '/tmp/target', workspace_id: 'workspace-target', state: 'working' },
+    ]);
+    expect(useSessionStore.getState().sessions[0].workspace).toEqual(targetLayout);
+    expect(useSessionStore.getState().sessions[0].daemonActivePaneId).toBe('pane-moved');
+
+    useSessionStore.setState({ sessions: [movedSession], daemonWorkspaceLayouts: {} });
+    useSessionStore.getState().syncFromDaemonSessions([
+      { id: 'moved-session', label: 'Moved', agent: 'codex', directory: '/tmp/target', workspace_id: 'workspace-target', state: 'working' },
+    ]);
+    expect(useSessionStore.getState().sessions[0].workspace).toEqual({ agents: [], layoutTree: null });
+    expect(useSessionStore.getState().sessions[0].daemonActivePaneId).toBe('');
   });
 
   it('syncFromDaemonSessions removes closed ready workspace sessions and restores recent selection', () => {

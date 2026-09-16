@@ -1,0 +1,4 @@
+kind: fixed
+area: terminal
+change: A terminal no longer goes silent when another session moves between workspaces; the app keeps its output stream attached until the last view of that terminal closes.
+symptom: Typing landed in the shell and the resize reached the daemon, but the pane rendered nothing new until the app was restarted.
