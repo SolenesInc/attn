@@ -168,14 +168,17 @@ func (d *Daemon) reloadSessionForClient(sessionID string, cols, rows int) error 
 	if sessionID == "" {
 		return errors.New("session not found")
 	}
-	session := d.store.Get(sessionID)
-	if session == nil {
-		return errors.New("session not found")
-	}
 
 	lock := d.sessionLifecycleLockFor(sessionID)
 	lock.Lock()
 	defer lock.Unlock()
+	if d.sessionTeardownInFlight(sessionID) {
+		return errors.New("session is closing")
+	}
+	session := d.store.Get(sessionID)
+	if session == nil {
+		return errors.New("session not found")
+	}
 
 	if d.sessionHasLiveWorker(sessionID) {
 		opts, err := d.buildReloadSpawnOptions(session)

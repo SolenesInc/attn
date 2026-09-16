@@ -459,7 +459,8 @@ func (d *Daemon) continuationForSeedForeground(seed garden.Seed) *seedContinuati
 		DirectoryState:    inspectContinuationDirectory(execution),
 		HandoverPlacement: handoverNeedsPlacement,
 	}
-	if live := d.gardenSession(execution.SessionID); live != nil {
+	if live := d.gardenSession(execution.SessionID); live != nil &&
+		(strings.TrimSpace(protocol.Deref(live.EndpointID)) != "" || d.sessionHasLiveWorker(live.ID)) {
 		continuation.SessionLive = true
 		continuation.ResumeAvailable = true
 		if execution.HostKind == garden.HostLocal && continuation.DirectoryState == directoryPresent {
