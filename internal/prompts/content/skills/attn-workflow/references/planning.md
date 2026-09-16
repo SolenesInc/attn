@@ -9,7 +9,7 @@ Read the `attn` skill's garden guidance and run `attn seed guide` for seed and p
 1. **Find the work.** Read the relevant implementation seed or plot, its notes, and any children. Reuse existing work and preserve its scope and decisions. If the work has no implementation seed, plant one to hold the plan.
 2. **Investigate the approach.** Start from the user's request, relevant conversation, and any vision referenced by the work or supplied by the user. Read vision seeds with `attn seed show <id>`. Read enough code to identify the components, entry points, state, interfaces, and ownership involved. Trace production and test paths where they differ. Propose an approach from your findings. Ask about choices or assumptions that could change the plan.
 3. **Write the plan.** Put the plan in the seed or plot body in the shape below. If there is a vision seed, reference its ID; do not overwrite its body with the implementation plan.
-4. **Organize execution.** Use a plot when the work has distinct pieces to scope and track separately, even within one PR. Use a single seed for one coherent task. Add or reuse child seeds for each unit of work, with an outcome, scope, and verification; refer to the parent plan without repeating it. Explain which changes belong in each PR. Add `blocks` links only for actual prerequisites; otherwise leave children independent.
+4. **Organize execution.** Use a plot when the work has distinct pieces to scope and track separately, even within one PR. Use a single seed for one coherent task. Add or reuse child seeds for each unit of work, with an outcome, scope, and verification; refer to the parent plan without repeating it. When delivery is by pull request, explain which changes belong in each one. Add `blocks` links only for actual prerequisites; otherwise leave children independent.
 
 ## The plan body
 
@@ -27,7 +27,7 @@ In order:
 
 The design shows how the proposed system works. Each part below is required. When a part does not apply, say so in one line with the reason, for example `Interfaces: unchanged; the change is internal to one package.` In-memory state counts as state: a selection held until launch still has an owner, mutators and a lifecycle across failures and restarts. A part answered with prose alone is incomplete; show it.
 
-Scale each picture to the change: enough that the reader can judge the design without reconstructing it from the code, no more. Use names from the codebase. Put each picture beside the explanation it supports, in a fenced text block so it reads in the terminal and in the Garden. Keep pictures narrow; split a wide one into smaller views. Show separate production and test wiring when the distinction matters.
+Scale each picture to the change: enough that the reader can judge the design without reconstructing it from the code, no more. Use names from the codebase. Put each picture beside the explanation it supports, in a fenced or indented code block so it reads in the terminal and in the Garden. Keep pictures narrow; split a wide one into smaller views. Show separate production and test wiring when the distinction matters.
 
 ### Ownership
 
