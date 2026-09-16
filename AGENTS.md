@@ -110,6 +110,17 @@ covering changed behavior, latency, and keyboard flow.
 Before requesting approval or merging, remeasure every receipt in the final PR
 description and verify each value independently against the exact head.
 
+## Documentation
+
+Docs define product vocabulary, explain intended behavior and tell people how
+to use, run and test attn. Keep the glossary to short definitions. Put product
+rules in the relevant feature docs.
+
+Do not write implementation notes anywhere. The code must explain how it works.
+If it needs a prose explanation of its wiring or control flow, make the code
+clearer. Delete existing implementation descriptions when editing docs; do not
+move them to another file. Favor clarity over preserving every detail.
+
 ## Task-specific guidance
 
 Read the relevant entry when the task touches its subject; unrelated entries
@@ -123,7 +134,7 @@ need no up-front reading.
 | Event publishing, projections, consumers, or retention                                 | [Event bus](docs/maintainer-contracts.md#event-bus)                                                                                                                                                            |
 | Native VT builds, ABI, or pin updates                                                  | [Native VT library](docs/maintainer-contracts.md#native-vt-library)                                                                                                                                            |
 | Agent-facing content in `internal/prompts/content/**`, its Go definitions, or CLI help | [Prompt authoring](docs/prompt-authoring.md): run `go run ./cmd/prompt-editor context EVENT_OR_SOURCE --json` and read complete affected compositions before and after edits; `refresh` reloads Go definitions |
-| Domain names or rules                                                                  | [Glossary](docs/glossary.md); update definitions with implementation                                                                                                                                           |
+| Product vocabulary                                                                    | [Glossary](docs/glossary.md); update definitions when meanings change                                                                                                                                         |
 | Branches, PRs, merges, or waiting on reviews                                           | [Working with next](docs/working-with-next.md)                                                                                                                                                                 |
 | Changelog fragments, releases, hotfixes, or syncing `main` into `next`                 | [Making a release](docs/making-a-release.md)                                                                                                                                                                   |
 | Installing, launching, or verifying profiles                                           | [Profiles](docs/profiles.md)                                                                                                                                                                                   |

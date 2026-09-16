@@ -2,128 +2,124 @@
 
 ## Sessions
 
-- Session: attn runtime hosting an agent through a PTY.
-- Session selection: navigation may wait for a session's pane to arrive. Only the latest request may complete; another session, pane, history move, Home, grid, or sessionless workspace cancels the earlier request.
-- Agent conversation: provider history and resume target; can change within one session.
+- Session: an agent and its terminals, with history that survives restarts.
+- Agent conversation: the provider's chat history. A session can start a new conversation.
 - Run: one prompt and response.
-- Prompt: starts a run.
-- Parked: a run that ended with the harness's background work still running; held working for at most the parked tripwire, then settled.
-- Session input: ordered delivery to a live session with evidence of receipt.
-- Input evidence: deferred = untouched; placed = adapter-owned; taken = reading begun; indeterminate = uncertain.
-- Quiet window: automated input waits 30s after the user's last keystroke in a pane; mouse and focus reports are not keystrokes. The session input lane owns the retry: every deferred delivery is re-run there when the window closes, recomputing its prompt, so a deferral is never a drop. A closed lane refuses both, so nothing armed against a stopped daemon or a replaced session runtime can still place.
-- Agent mailbox: durable agent-addressed notification queue, separate from the app-wide user notification feed. Producers write here before asking for terminal input.
-- Mailbox item: one durable notification. `attn agent inbox` reads a bounded FIFO batch and writes each item's exact read receipt. Domain views such as `attn seed show` can write the same receipt.
-- Inbox doorbell: one generic terminal prompt for a session with unread mailbox items. A safe paste plus Enter completes the attempt; prompt-submit hooks do not hold the input lane. Another doorbell may follow a cooldown while unread items remain. A shell pane never gets one: it has no agent to read it, so its items wait for `attn agent inbox`.
-- Peer message: stored agent-to-agent body read through the agent mailbox. `attn agent inbox <message-id>` remains a single-message compatibility view.
-- Turn: attention owed to an agent; viewing it does not settle it.
-- Auto-settle: closes a turn after proven user-conversation input and uninterrupted working time.
-- Standing dismissal: suppresses the next auto-settle for the current working stretch.
-- Queue: sidebar ordering by owed turns. Pinning excludes an agent/workspace without settling turns.
-- Satellite: shell pane attached to an agent. Orphan: satellite without a live parent.
-- Sliver: a pane or tile suspended to a thin strip showing its name and state, when the workspace cannot give every leaf its minimum size or a drag pushes one below it. The victim is the smallest unfocused leaf, never the focused one; it expands on its own when room returns.
-- Pinned sliver: folded by a drag; stays folded until clicked or a drag gives its side room. Boundaries beside a sliver resize its visible neighbors.
-- Activity: generated status line. Activity cursor: transcript position already summarized.
-- Session usage: token and price receipt for one session's native conversation and native subagents. A visible delegation is another session with its own receipt.
-- Presence: watching = home visible; present = recent input elsewhere in app; away = neither.
-- Recoverable: runtime gone, conversation restorable. Reaped: unrestorable session removed.
-- Closed session: a session the user or an agent ended. The row and everything it owns stay in the ledger, marked with when it closed, who closed it and, for an agent close, why. It leaves the sidebar, the queue and every other live surface at once; the Sessions surface, `attn session list --closed` and `attn session show` are how it is read back. Distinct from Reaped, which deletes. Garden Resume runs a closed tender under its own id again and lifts the close to do it; a resume that then fails puts the close back exactly, closed_at included.
-- Agent close: a close an agent asks for with `attn agent close`, rather than the user closing a session in the app. A session may close itself and the sessions it dispatched (the Garden dispatch document names its dispatcher); the chief of staff may close any. The chief and crew-bound sessions refuse every closer, including themselves. A reason is required, and it is what the ledger row and the tended seed's log carry.
-- Final cost: a closed session's per-model token totals. Closing keeps the totals and drops the per-observation usage behind them, keeping only the observation ids. A closed run's cost can be read, not corrected: an amendment to one of those observations is refused rather than added, so reopening a session and replaying or revising its transcript cannot inflate the total.
-- Reopen: brings a closed session back under its own id, into its original workspace when it still exists and a new one named after the session when it does not. A verdict says whether it can come back and, when it cannot, why and what is offered instead: recreating a worktree whose directory is gone, fetching a branch that only lives on a remote, or starting fresh in the same place, elsewhere, or on the default branch. Reading a verdict never writes to a repository, and the two actions that do run only when named. `attn session show` explains one row's verdict; `attn session list --reopen` judges a whole page in one call, which is how the Sessions list of the ledger surface reads its verdicts, and a session that closes while the surface is open arrives already judged. Reopening keeps the final cost as it was: the totals stay, the cost cursor stays where the close left it, and accounting resumes after it.
-- Session ledger: the durable record of the sessions a daemon ran, live and closed together, newest first. Each daemon keeps its own, so an outpost's sessions are read on the outpost.
-- Ledger surface: the app's one panel for sessions and worktrees (⌘⇧L; Ctrl+Alt+L on Linux, or the two dock buttons), two lists that `[` and `]` switch. Every row reads the same way: a glyph, a title, a meta line, a stamp and a primary verb, with the rest behind `.` and the nth on 1–9. A typed filter (`repo:`, `ws:`, `7d`, `from:`/`to:`, `dir:`, words) narrows either list; a side inspector explains the selected row. The Sessions list reads the local daemon's ledger a page at a time; the Worktrees list reads the worktree registry. Sessions are always named by title, never by id.
-- Session repository: the repository a session ran in, recorded on the row: the main repository for a worktree, the checkout itself otherwise. Rows written before it was recorded read empty and are invisible under a repository filter until the session runs again.
-- Resume: copies history into a new session. Reload: reopens a recoverable session's own history.
-- Launch prompt: opening message sent to a newly started agent.
-- Session pull request: a pull request an agent opened from inside a session, reported by the tool-use hook, by a harness driver, or by `attn pr record`. Distinct from the PR inbox, which tracks pull requests waiting on the user. The daemon refreshes its status on the PR heat cadence and stops once it merges or closes.
-- Provenance line: the small line under a session's name saying where the session came from and what it produced. Carries the automation that launched it and the session pull request it opened, side by side.
+- Parked run: a finished response whose background work is still running.
+- Quiet window: time after the user's last keystroke when automated input must wait.
+- Agent mailbox: notifications addressed to an agent.
+- Inbox doorbell: a prompt telling an agent it has unread mailbox items.
+- Peer message: a message from one agent to another.
+- Turn: attention owed to an agent. Viewing the agent does not settle it.
+- Auto-settle: closes a turn after the user's response and a period of uninterrupted agent work.
+- Standing dismissal: suppresses the next auto-settle during the agent's current stretch of work.
+- Queue: agents ordered by attention owed. Pinning an agent or workspace excludes it without settling its turns.
+- Satellite: a shell pane attached to an agent.
+- Orphan: a satellite without a live parent.
+- Sliver: a pane or tile folded into a thin strip to make room.
+- Pinned sliver: a pane or tile the user folded. It stays folded until the user expands it.
+- Activity: a generated summary of what an agent is doing.
+- Session usage: token counts and cost for a conversation and its native subagents. Delegated agents have separate sessions and usage.
+- Recoverable session: a stopped session whose conversation can be restored.
+- Reaped session: an unrestorable session removed from attn.
+- Closed session: a session the user or an agent ended. Its history remains in the ledger.
+- Final cost: a closed session's token totals and cost.
+- Reopen: brings a closed session back under its original identity.
+- Resume: copies a conversation into a new session.
+- Reload: restores a recoverable session's own conversation.
+- Session ledger: a daemon's record of its live and closed sessions.
+- Ledger panel: the app's searchable lists of sessions and worktrees.
+- Session repository: the repository where a session ran.
+- Launch prompt: the opening message sent to a new agent.
+- Session pull request: a PR an agent opened during a session.
+- PR inbox: pull requests waiting on the user.
+- Provenance line: shows where a session came from and what it produced.
 
 ## Garden and crew
 
-- Garden: home daemon's work tracker, shared across workspaces.
-- Seed: work item with stable `s-...` id, title, body, and state. Slug: readable, non-unique name.
-- Plot: seed with children; its body is the plan. Packet: reusable plot template.
-- Plant/tend/park/harvest/wither/replant: create/claim/pause/complete/abandon/reopen.
-- Seed states: planted/open, growing/claimed, dormant/paused, harvested/done, withered/abandoned.
-- Seed outcome: completion and required verification defined by the body. Harvest when both are complete.
-- Harvest condition: a seed armed to harvest when a named session pull request merges. The daemon settles it on the pull request refresh; a pull request closed without merging clears the condition instead of closing the seed.
-- Tender: seed claimant; one at a time.
-- Execution: last observed session, native conversation, agent, directory, host, repository, and branch for a seed.
-- Resume: reopen the exact saved conversation and directory. Handover: start a new agent on the same seed, then transfer its tender.
-- Send to Chief: transfer a seed and its execution receipt to the Chief with optional guidance.
-- Edges: blocks orders work; part-of contains it; discovered-from records origin.
-- Ready: claimable open seed, excluding plots, parked/blocked/held work, gates, packets, and packet descendants.
-- Stale: open without recent activity; age alone never closes work.
-- Review Garden: user-started pass over growing seeds without an active agent that may need a decision.
-- Garden advisor: configurable tool-free classifier for Review Garden. It explains evidence and recommends an action; it never moves a seed.
-- Keep growing: resolve one review item without changing the seed; seven quiet days must pass before it qualifies again.
-- Artifact: owned file under `<Notebook>/seeds/<seed-id>/`, retained across session/workspace/seed lifecycles.
-- Linked artifact: reference to an external file, Notebook document, or URL.
-- Note: seed log entry. Handoff: note for the next tender. Watch: a session's subscription to a seed and its current descendants. Explicit watch and new delegation create the same subscription. Meaningful seed changes ring the current tender and covering watchers, deduplicated; the session that caused a successful change is excluded. Recipients are resolved when the bell consumer first successfully records the event as handled, so an earlier role change routes the bell to the new party. A queued bell remains only while its recipient is still either the tender or covered by a watch; losing all qualifying roles discards it instead of transferring it. Separate child subscriptions remain. Dispatch records retain ownership and history; they do not grant notifications. Existing dispatch subscriptions are converted once on upgrade; recovery never restores removed subscriptions.
-- Delegation preferences: optional, daemon-local choices for already-authorized delegations. A role describes the work, instructions, and stopping point; its choices select a harness, provider, model, and effort. An alternative has a condition, and a separate fallback covers unmatched work. Preferences do not grant delegation authority. Starter roles are editable templates; adding missing presets preserves existing roles and leaves model selections to the user. Verify produces evidence for an assigned revision and environment; Orchestrator judges its sufficiency and repeats checks only when changes or evidence gaps warrant it.
-- Dispatch-at-plot: delegation bound to an existing seed as its tender.
-- Session delegation role: the optional role name, built-in identity and icon accepted at launch. The launch journal owns this snapshot; settings edits and role deletion do not relabel existing agents. The sidebar shows its icon and the agent header shows its name. Related agents without a role use a branch cue. The delegation chain follows dispatcher links within one endpoint and is available from those cues or the Action menu. A sidebar row has one hover card combining the full title and chain, without a separate dispatcher subtitle. The chain takes keyboard focus on opening; hover closes when the pointer leaves, while click and the Action menu pin it. Hover ownership follows the specific trigger: leaving a sidebar row cannot close a chain newly opened from the same agent's header. Removing that trigger dismisses its chain; focus returns to the active terminal if the saved target is gone and navigation has not changed. Escape dismisses the card and restores focus without reopening under a stationary pointer. Changing the active session or view, or opening a blocking surface, dismisses the chain without reclaiming focus from the new destination.
-- Ticket: archived pre-Garden work item; user tickets and their history remain permanently.
-- Crew member: durable named identity with a charter. Day: its current session.
-- `attn`: reserved member name the daemon takes when it moves a seed by itself, such as fulfilling a harvest condition. No crew home may claim it.
-- Member home: charter/handoff directory. Registry: index of member files. Binding: member's active session.
-- Awareness dirs: working context directories. Priming: launch guidance.
-- Wake: start a day. Sleep request: ask it to file a handoff and stop.
-- Nap: replace a day using its handoff. Sleep: no live day. Heartbeat: refresh current context.
-- Wake limit: cap on autonomous starts.
+- Garden: the home daemon's work tracker, shared across workspaces.
+- Seed: a work item with an ID, title, body and state.
+- Slug: a readable name derived from a seed's title. Slugs need not be unique.
+- Plot: a seed with child seeds. Its body holds their shared plan.
+- Packet: a reusable plot template.
+- Plant: create a seed.
+- Tend: claim a seed.
+- Park: pause work and release the claim.
+- Harvest: mark work complete.
+- Wither: abandon work.
+- Replant: reopen completed or abandoned work.
+- Seed states: planted means open, growing means claimed, dormant means paused, harvested means done, and withered means abandoned.
+- Seed outcome: the result and verification required before harvesting.
+- Harvest condition: an instruction to harvest a seed when its PR merges.
+- Tender: the agent or person claiming a seed. A seed has one tender at a time.
+- Execution: the saved conversation and working location for a seed.
+- Garden resume: reopens the seed's saved conversation in its saved directory.
+- Handover: starts a new agent on the same seed and transfers the claim.
+- Edge: a relationship between seeds. `blocks` orders work, `part-of` groups it, and `discovered-from` records its origin.
+- Ready seed: open work an agent can claim now.
+- Stale seed: work without recent activity. Age alone does not close it.
+- Review Garden: a user-started review of growing seeds without an active agent.
+- Garden advisor: a model that recommends actions during Review Garden. It cannot change a seed's state.
+- Keep growing: dismisses a review item while leaving the seed open.
+- Artifact: a file owned by a seed.
+- Linked artifact: a reference to a file, Notebook document or URL.
+- Note: an entry in a seed's log.
+- Handoff: a note for the next tender.
+- Watch: a subscription to updates about a seed and its descendants.
+- Delegation preferences: saved roles and model choices for delegating work. They do not authorize delegation.
+- Session delegation role: optional role identity captured at launch. Later settings changes do not relabel the agent.
+- Delegation chain: an agent's dispatchers and delegates.
+- Ticket: an archived work item from before the Garden.
+- Crew member: an agent with a permanent charter.
+- Chief of staff: the agent coordinating work across workspaces.
+- Day: a crew member's current session.
+- Member home: the directory holding a crew member's charter and handoff.
+- Wake: starts a crew member's day.
+- Sleep: a crew member has no active day.
+- Nap: replaces the current day using its handoff.
+- Heartbeat: refreshes a crew member's working context.
+
+See [delegation preferences](delegation-preferences.md) for role settings.
 
 ## Knowledge
 
-- Notebook: profile-wide durable markdown; files are authoritative.
-- Journal: dated work history. Knowledge base: lasting knowledge.
-- Note title: first H1 outside fenced code; filename fallback. Frontmatter `title` is ignored.
-- Chief of staff: coordinates work across workspaces.
+- Notebook: a profile's collection of Markdown documents.
+- Journal: a dated record of work.
+- Knowledge base: knowledge worth keeping across sessions.
 
-## Apps and events
+## Apps
 
-- App: named automation in the shared runtime. Plugin: integration with its own supervised process.
-- Version: immutable app build. Applying: build and select a version. Serving history: versions served.
-- View: app React component. Tile: one mounted instance. Command: named view action.
-- Event bus: ordered domain-fact log. Fact: recorded change. Subject: changed entity.
-- Consumer: fact reader. Cursor: reading progress; durable cursors survive restarts, ephemeral readers start at head.
-- Projection: fact-to-app traffic. Snapshot projection: whole-list update.
-- Retention floor: oldest protected cursor. Pin alarm: warning of stalled reading.
-- Document store: app JSON data. Namespace: owner isolation. Collection: document group.
-- Document id: key within a collection. Revision: write count. Expectation: required revision, zero means absent.
-- Declaration: queryable field types. Query: retrieval criteria. After cursor: pagination anchor.
-- Live query: subscription delivering complete replacement results.
+- App: a named automation running in attn.
+- Plugin: an installed integration that adds capabilities to attn.
+- Version: a saved app build.
+- View: an app's visual interface.
+- Tile: an open instance of a view.
+- Command: a named action available in a view.
 
 ## Daemons and permissions
 
-- Home: owns fleet Garden/crew. Outpost: enrolled daemon owning local sessions. Uplink: requests home.
-- Enrollment: recorded home relationship. Hub: dialing side. Endpoint: SSH target. Remote: dialed machine.
-- Parked endpoint: binary/protocol mismatch awaiting Sync.
-- Client token: profile protocol credential. Browser host token: trusted WebView identity.
-- HTTP bearer: operator credential for exposed WebSockets.
-- Headless task: model run the daemon starts on its own, with no session and no PTY.
-- Background agents (Settings): configuration for Session activity, Garden advisor, and Chief launches. Chief launches are sessions; the other two run as headless tasks.
-- Settings autosave: selections commit immediately; text commits on blur, Enter, navigation, or close. The daemon acknowledges persistence by request id. Failed drafts remain editable and retryable. The modal owns draft state across section changes; section components render and edit that state without resetting it on navigation.
-- Headless tasks switch: `ATTN_HEADLESS_TASKS` / `headless_tasks.enabled`; off refuses every headless task before it spawns. The environment wins.
-- Settings snapshot for that switch: `headless_tasks.enabled` is the effective value, `.stored` the setting alone, `.override` the raw environment value when it decides.
-- State marker: `<!-- attn:state=waiting_input|idle -->` in an agent's last assistant message. With the switch off it is the stop verdict, so no model runs; without one the stop settles on hook evidence. Transcript readers strip it from messages; a marker-only message is never shown.
-- Auto mode: which reviewer answers a pi approval. On = the Guardian, off = the user's card. `/auto` toggles it; it changes nothing else.
-- Reviewer: what answers one approval. Exactly one per session, never both in sequence.
-- Guardian: the model reviewer. Its model and reasoning come from daemon launch defaults or an in-memory `/security` override; an unset model follows the coding model. Overrides survive daemon restart but reset when the agent reloads. It retains its conversation across model changes, may run read-only sandboxed commands, and its rejection goes back to the agent as text.
-- Approval policy: what an unmatched command does — `untrusted` asks, `on-request` runs it sandboxed and asks only for escalation, `never` never asks.
-- Prefix rule: a command prefix, one token per argument, no wildcards. Its decision says allow, prompt or forbidden; its sandbox treatment independently says inherit or bypass. `match`/`not_match` examples are checked when rules load.
-- Repository rules: version-controlled prefix rules in a checkout's `.attn/rules.json`, merged with daemon-owned and shipped rules when a session launches. Strictest matching behavior wins. Repository and daemon-owned rules support the same decision and sandbox combinations; launching a session in a checkout accepts its rules without a separate trust prompt.
-- Sandbox mode: `read-only`, `workspace-write` or `danger-full-access`; what a bash command runs under. `/security` still governs the file tools and the deny lists.
-- Host approval: a decision about one network host, taken while the proxy holds the connection open.
-- Config: the daemon's policy/environment snapshot, handed to a session at launch.
-- Proposal: a requested config change. Promotion: the user applies it. Denial: a refused call, recorded in the ledger.
-- Environment template: initial environment context copied into config.
+- Home: the daemon that owns the Garden and crew.
+- Outpost: an enrolled daemon that runs sessions on another machine.
+- Enrollment: an outpost's relationship with its home.
+- Endpoint: a remote connection target.
+- Parked endpoint: a connection waiting for compatible app and daemon versions.
+- Headless task: a model call without an interactive session or terminal.
+- Auto mode: lets the Guardian answer pi approval requests.
+- Reviewer: the user or model deciding whether an operation may proceed.
+- Guardian: the model reviewer for auto mode.
+- Approval policy: determines which operations require approval.
+- Sandbox mode: determines which resources an operation can access.
+- Prefix rule: a permission rule matching the start of a command.
+- Repository rules: permission rules saved with a repository.
+- Host approval: permission to contact a network host.
 
 ## Worktrees
 
-- Worktree registry: the daemon's stored view of every git worktree of every tracked repository. Git is the truth; a background refresh reconciles the rows. Nothing on a request path runs git.
-- Worktree sweep: the hourly background pass that reclaims worktrees whose work has landed. It decides from stored state only and removes a worktree solely when every gate passes: idle 14 days, clean, no stashes, nothing unpushed past what merged, no live session, no open seed, and merged.
-- Merged signal: which rung proved the branch landed — `pull_request` (a merged PR recorded for it), `ancestor` (its head is an ancestor of the integration branch), or `tree` (its exact tree already appears on integration history, which is how a squash or rebase merge reads).
-- Integration branch: the branch a repository's work actually merges into, resolved from where its merged pull requests targeted, with `origin/HEAD` as the fallback.
-- Kept reason: why the sweep left a worktree alone — pinned, dirty, stashed, unpushed, detached, a live session, an open seed, or simply not idle yet. Every kept worktree carries one.
-- Keep pin: a per-worktree "never reclaim this" the user sets and clears. It outranks every other gate and survives refreshes.
-- Sweep log: the durable record of every worktree removal and why it happened, whether the sweep decided it or the user did. It outlives the rows themselves, which is the only place a removal can be inspected afterwards.
+- Worktree registry: attn's inventory of worktrees.
+- Worktree sweep: automatic cleanup of inactive worktrees whose work has merged.
+- Integration branch: the branch a repository merges work into.
+- Kept reason: why the sweep left a worktree alone.
+- Keep pin: the user's instruction to preserve a worktree.
+- Sweep log: a record of worktree removals and their reasons.
+
+See [worktree sweep](worktree-sweep.md) for cleanup rules.

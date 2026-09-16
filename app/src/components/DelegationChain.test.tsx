@@ -67,6 +67,25 @@ describe('delegation chain', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('keeps a pinned trigger attached across callback updates and uses the latest callback', () => {
+    const first = vi.fn();
+    const latest = vi.fn();
+    const content = (onOpen: () => void) => (
+      <DelegationChainProvider sessions={sessions} onSelectSession={vi.fn()}>
+        <DelegationChainTrigger session={sessions[1]} variant="header" onOpen={onOpen} />
+      </DelegationChainProvider>
+    );
+    const { rerender } = render(content(first));
+    const trigger = screen.getByTestId('delegation-chain-trigger-build');
+    fireEvent.click(trigger);
+    const popup = screen.getByRole('dialog');
+    rerender(content(latest));
+    expect(screen.getByRole('dialog')).toBe(popup);
+    fireEvent.click(trigger);
+    expect(first).toHaveBeenCalledOnce();
+    expect(latest).toHaveBeenCalledOnce();
+  });
+
   it('consumes Escape from a hover card and restores the terminal', async () => {
     setup();
     const terminal = screen.getByLabelText('Terminal');
@@ -81,7 +100,7 @@ describe('delegation chain', () => {
     expect(receiveKey).not.toHaveBeenCalled();
   });
 
-  it('opens from the action controller and navigates with arrows and clicks', () => {
+  it('opens from the action controller and navigates with arrows and clicks', async () => {
     const { ref, onSelect } = setup();
     act(() => ref.current?.open('build'));
     const popup = screen.getByRole('dialog');
@@ -93,7 +112,7 @@ describe('delegation chain', () => {
     const reviewer = within(popup).getByRole('button', { name: /Review behavior/ });
     expect(reviewer).toHaveFocus();
     fireEvent.click(reviewer);
-    expect(onSelect).toHaveBeenCalledExactlyOnceWith('review');
+    await waitFor(() => expect(onSelect).toHaveBeenCalledExactlyOnceWith('review'));
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
@@ -211,6 +230,7 @@ describe('delegation chain', () => {
     fireEvent.pointerEnter(row, { clientX: 80, clientY: 40 });
     if (dismissFirst) fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
     fireEvent.pointerOut(row, { clientX: 180, clientY: 40, relatedTarget: header });
+    fireEvent.pointerEnter(header, { clientX: 180, clientY: 40, relatedTarget: row });
     fireEvent(row, new PointerEvent('pointerleave', { clientX: 180, clientY: 40, relatedTarget: header }));
     act(() => vi.runOnlyPendingTimers());
     expect(within(screen.getByRole('dialog')).getByRole('button', { name: /Build navigator/ })).toHaveFocus();

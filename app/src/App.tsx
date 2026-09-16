@@ -1170,7 +1170,6 @@ function AppContent({
   const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const delegationChainRef = useRef<DelegationChainHandle>(null);
-  const actionMenuReturnFocusRef = useRef<HTMLElement | null>(null);
   const [seedPopoverRequest, setSeedPopoverRequest] = useState<{ sessionId: string; nonce: number }>();
   const [usagePopoverRequest, setUsagePopoverRequest] = useState<{ sessionId: string; nonce: number }>();
   const [sessionsOpen, setSessionsOpen] = useState(false);
@@ -1563,9 +1562,9 @@ function AppContent({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const toggleSidebarCollapse = useCallback(() => {
-    if (delegationChainRef.current?.dismiss()) requestTerminalFocus();
+    delegationChainRef.current?.dismiss('sidebar-collapse');
     setSidebarCollapsed((prev) => !prev);
-  }, [requestTerminalFocus]);
+  }, []);
 
 
   const prevSessionCountRef = useRef(sessions.length);
@@ -2108,8 +2107,7 @@ function AppContent({
       visibility: document.visibilityState,
       window: { width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
     };
-    actionMenuReturnFocusRef.current = delegationChainRef.current?.dismiss()
-      ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    delegationChainRef.current?.prepareCommand();
     setActionMenuOpen(true);
   }, [
     actionMenuOpen,
@@ -2698,7 +2696,7 @@ function AppContent({
       description: 'Navigate this agent’s dispatcher, peers, and delegates',
       keywords: ['role', 'orchestrator', 'builder', 'parent', 'children', 'agent', 'session'],
       icon: <SessionRoleIcon role={activeSession.delegation_role} />,
-      run: () => delegationChainRef.current?.open(activeSession.id, actionMenuReturnFocusRef.current),
+      run: () => delegationChainRef.current?.open(activeSession.id),
     }] : [];
     const sessionPinItems: ActionMenuItem[] = activeSession && activeSessionQueueEligible && !activeSession.chiefOfStaff
       ? [{
