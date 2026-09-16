@@ -42,21 +42,36 @@ func TestSessionLifecycleLocksStayBounded(t *testing.T) {
 		t.Fatal("same session mapped to different lifecycle locks")
 	}
 	first.Lock()
+	if first.entry == nil {
+		t.Fatal("acquired lifecycle lock has no entry")
+	}
 	first.Unlock()
 	second.Lock()
+	if second.entry == nil {
+		t.Fatal("acquired lifecycle lock has no entry")
+	}
 	second.Unlock()
 	left, right := d.sessionLifecycleLockFor("session-left"), d.sessionLifecycleLockFor("session-right")
 	if left.entry == right.entry {
 		t.Fatal("different sessions shared a lifecycle lock")
 	}
 	left.Lock()
+	if left.entry == nil {
+		t.Fatal("acquired lifecycle lock has no entry")
+	}
 	left.Unlock()
 	right.Lock()
+	if right.entry == nil {
+		t.Fatal("acquired lifecycle lock has no entry")
+	}
 	right.Unlock()
 
 	for i := 0; i < 640; i++ {
 		lease := d.sessionLifecycleLockFor(fmt.Sprintf("session-%d", i))
 		lease.Lock()
+		if lease.entry == nil {
+			t.Fatal("acquired lifecycle lock has no entry")
+		}
 		lease.Unlock()
 	}
 	if len(d.sessionLifecycleLocks) != 0 {
