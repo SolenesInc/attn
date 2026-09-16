@@ -27,13 +27,11 @@ function NotebookSurfaceTestWrapper({ children }: { children: ReactNode }) {
   return <NotebookSurfaceProvider value={testSurfaceValue}>{children}</NotebookSurfaceProvider>;
 }
 
-// The stub mounts its input immediately but announces readiness only when the test says so,
-// like a real pane whose renderer is still initializing.
-const pendingReady = vi.hoisted(() => [] as Array<() => void>);
+const deferredReadyAnnouncements = vi.hoisted(() => [] as Array<() => void>);
 vi.mock('../GhosttyTerminal', async () => {
   const React = await import('react');
   return {
-    GhosttyTerminal: React.forwardRef(function MockTerminal(
+    GhosttyTerminal: React.forwardRef(function DeferredReadyTerminal(
       props: { onReady?: (handle: unknown) => void; runtimeLogMeta?: { paneId?: string } },
       ref,
     ) {
@@ -52,7 +50,7 @@ vi.mock('../GhosttyTerminal', async () => {
       const onReadyRef = React.useRef(props.onReady);
       onReadyRef.current = props.onReady;
       React.useEffect(() => {
-        pendingReady.push(() => onReadyRef.current?.(handle));
+        deferredReadyAnnouncements.push(() => onReadyRef.current?.(handle));
       }, [handle]);
       return <div ref={nodeRef} tabIndex={-1} data-testid={`mock-terminal-${paneId}`} />;
     }),
@@ -96,12 +94,12 @@ function renderWorkspace() {
 
 function announceReady() {
   act(() => {
-    for (const announce of pendingReady.splice(0)) announce();
+    for (const announce of deferredReadyAnnouncements.splice(0)) announce();
   });
 }
 
 afterEach(() => {
-  pendingReady.length = 0;
+  deferredReadyAnnouncements.length = 0;
 });
 
 describe('SessionTerminalWorkspace pane readiness focus', () => {
