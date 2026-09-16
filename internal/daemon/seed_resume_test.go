@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"encoding/json"
 	"errors"
 	"path/filepath"
 	"reflect"
@@ -78,14 +77,17 @@ func delegateBoundSeed(t *testing.T, d *Daemon, backend *fakeSpawnBackend, sourc
 func TestSeedResumeRespawnsClosedTender(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	leafID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
-
-	d.unregisterSession(leafID, syscall.SIGTERM)
-	if d.store.Get(leafID) != nil {
-		t.Fatalf("session %s still registered after close", leafID)
-	}
 	writeCodexRolloutFixture(t, "codex-conv-xyz")
 	d.persistResumeSessionID(leafID, "codex-conv-xyz")
 
+	d.handleUnregister(drainedConn(t), &protocol.UnregisterMessage{ID: leafID})
+	d.waitForSessionTeardown(leafID)
+	if d.store.Get(leafID) != nil {
+		t.Fatalf("session %s still registered after close", leafID)
+	}
+	if got := d.store.GetResumeSessionID(leafID); got != "codex-conv-xyz" {
+		t.Fatalf("ledger resume id after close = %q, want codex-conv-xyz", got)
+	}
 	before, _, err := d.readSeed(seedID)
 	if err != nil {
 		t.Fatalf("readSeed before: %v", err)
@@ -196,6 +198,7 @@ func TestAFailedResumeReturnsTheTenderToTheLedger(t *testing.T) {
 func TestSeedResumeAlreadyRunningFocusesInsteadOfSpawning(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	leafID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
+	backend.sessionIDs = append(backend.sessionIDs, leafID)
 
 	before := spawnCount(backend)
 	outcome, err := d.resumeSeed(seedID)
@@ -214,7 +217,8 @@ func TestSeedResumeRefusesWhenTranscriptGoneWithoutCreatingAnything(t *testing.T
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	leafID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "claude")
 
-	d.unregisterSession(leafID, syscall.SIGTERM)
+	d.handleUnregister(drainedConn(t), &protocol.UnregisterMessage{ID: leafID})
+	d.waitForSessionTeardown(leafID)
 	d.persistResumeSessionID(leafID, leafID)
 	// An empty tool home makes claude's transcript lookup find nothing for the
 	// mirrored id, which is what leaves it unresumable.
@@ -260,7 +264,8 @@ func TestSeedResumeReclaimsParkedSeedFromItsLastExecution(t *testing.T) {
 	if protocol.Deref(parked.LastExecutionID) != leafID {
 		t.Fatalf("last_execution_id = %q, want %q", protocol.Deref(parked.LastExecutionID), leafID)
 	}
-	d.unregisterSession(leafID, syscall.SIGTERM)
+	d.handleUnregister(drainedConn(t), &protocol.UnregisterMessage{ID: leafID})
+	d.waitForSessionTeardown(leafID)
 
 	outcome, err := d.resumeSeed(seedID)
 	if err != nil {
@@ -309,48 +314,6 @@ func TestSeedResumeBindingIsAtomicWhenTheSeedChangesDuringLaunch(t *testing.T) {
 	}
 }
 
-func TestSeedResumeUsesSeedIdentityWithoutDispatch(t *testing.T) {
-	for _, agent := range []string{"claude", "copilot"} {
-		t.Run(agent, func(t *testing.T) {
-			d := newGardenDaemon(t)
-			backend := &fakeSpawnBackend{}
-			d.ptyBackend = backend
-			resumeID := agent + "-external-conversation"
-			if agent == "claude" {
-				writeClaudeTranscriptFixture(t, resumeID)
-			}
-			cwd := t.TempDir()
-			canonicalCwd, err := validateDelegationDirectory(cwd)
-			if err != nil {
-				t.Fatalf("validate fixture cwd: %v", err)
-			}
-			seed := plant(t, d, protocol.SeedPlantMessage{
-				Title: "resume external " + agent, ResumeSessionID: protocol.Ptr(resumeID),
-				ResumeCwd: protocol.Ptr(cwd), ResumeAgent: protocol.Ptr(agent),
-			})
-			if _, ok := d.gardenDispatch(resumeID); ok {
-				t.Fatal("fixture unexpectedly has a dispatch record")
-			}
-
-			outcome, err := d.resumeSeed(seed.ID)
-			if err != nil {
-				t.Fatalf("resumeSeed: %v", err)
-			}
-			if outcome.SessionID != resumeID || outcome.AlreadyRunning {
-				t.Fatalf("outcome = %+v, want new session %s", outcome, resumeID)
-			}
-			spawn := resumeSpawnForSession(t, backend, resumeID, 0)
-			if spawn.Agent != agent || spawn.ResumeSessionID != resumeID {
-				t.Fatalf("spawn = %+v, want agent=%s resume=%s", spawn, agent, resumeID)
-			}
-			dispatch, ok := d.gardenDispatch(resumeID)
-			if !ok || dispatch.Crown != seed.ID || dispatch.Cwd != canonicalCwd || dispatch.Agent != agent || dispatch.Resume != resumeID {
-				t.Fatalf("resume did not bind the recovered session: %+v ok=%v", dispatch, ok)
-			}
-		})
-	}
-}
-
 func TestSeedResumeValidation(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -374,7 +337,7 @@ func TestSeedResumeValidation(t *testing.T) {
 		},
 		{
 			name:    "tender attn never launched",
-			message: "original directory was not saved",
+			message: "no longer in the ledger",
 			setup: func(t *testing.T, d *Daemon) (string, string) {
 				seed := plant(t, d, protocol.SeedPlantMessage{
 					SourceSessionID: protocol.Ptr("sess-a"), Title: "held by a ghost",
@@ -387,7 +350,7 @@ func TestSeedResumeValidation(t *testing.T) {
 		},
 		{
 			name:    "directory is gone",
-			message: "does-not-exist",
+			message: "no longer in the ledger",
 			setup: func(t *testing.T, d *Daemon) (string, string) {
 				seed := plant(t, d, protocol.SeedPlantMessage{
 					SourceSessionID: protocol.Ptr("sess-a"), Title: "worktree removed",
@@ -439,33 +402,5 @@ func TestSeedResumeRollsBackPaneWhenSpawnFails(t *testing.T) {
 	}
 	if ws := d.store.GetWorkspace("workspace-ghost-session"); ws != nil {
 		t.Fatalf("workspace survived a failed resume: %+v", ws)
-	}
-}
-
-func TestHandleSeedResumeReplyEnvelope(t *testing.T) {
-	d := newGardenDaemon(t)
-	d.ptyBackend = &fakeSpawnBackend{}
-	resumeID := "copilot-envelope-external"
-	seed := plant(t, d, protocol.SeedPlantMessage{
-		Title: "external envelope", ResumeSessionID: protocol.Ptr(resumeID),
-		ResumeCwd: protocol.Ptr(t.TempDir()), ResumeAgent: protocol.Ptr("copilot"),
-	})
-
-	client := newInternalWSClient()
-	d.handleSeedResume(client, &protocol.SeedResumeMessage{
-		Cmd:       protocol.CmdSeedResume,
-		RequestID: protocol.Ptr("req-1"),
-		SeedID:    seed.ID,
-	})
-	msg := <-client.send
-	var reply protocol.SeedResumeResultMessage
-	if err := json.Unmarshal(msg.payload, &reply); err != nil {
-		t.Fatalf("unmarshal reply: %v", err)
-	}
-	if reply.Event != protocol.EventSeedResumeResult || reply.RequestID != "req-1" {
-		t.Fatalf("reply envelope = %+v", reply)
-	}
-	if !reply.Success || protocol.Deref(reply.SessionID) != resumeID {
-		t.Fatalf("reply = %+v, want success session=%s", reply, resumeID)
 	}
 }

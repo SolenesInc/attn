@@ -53,13 +53,19 @@ vi.mock('./components/Sidebar', () => ({
     selectedWorkspaceId,
     onSelectWorkspace,
     onSelectGridLayout,
+    collapsed,
   }: {
     visualOrder: Array<{ id: string; sessions: unknown[] }>;
     selectedWorkspaceId: string | null;
     onSelectWorkspace: (id: string) => void;
     onSelectGridLayout?: (layout: { mode: 'auto' }) => void;
+    collapsed: boolean;
   }) => (
-    <div data-testid="sidebar" data-selected-workspace={selectedWorkspaceId ?? ''}>
+    <div
+      data-testid="sidebar"
+      data-collapsed={collapsed ? '1' : '0'}
+      data-selected-workspace={selectedWorkspaceId ?? ''}
+    >
       {visualOrder.map((workspace) => (
         <button
           key={workspace.id}
@@ -315,6 +321,45 @@ describe('tile-only (sessionless) workspace selection and render', () => {
     await userEvent.click(screen.getByTestId('focus-pane-s1'));
 
     expect(mockSetActiveSession).toHaveBeenCalledWith('s1');
+  });
+
+  it('keeps the sidebar expanded for a failed pane whose session is no longer live', async () => {
+    mockDaemonWorkspaces = [{
+      id: 'ws-failed',
+      title: 'Failed automation',
+      directory: '/tmp/repo',
+      status: 'idle',
+      layout: {
+        active_pane_id: 'pane-failed',
+        layout_json: JSON.stringify({ type: 'pane', pane_id: 'pane-failed' }),
+        panes: [{
+          workspace_id: 'ws-failed',
+          pane_id: 'pane-failed',
+          kind: 'agent',
+          runtime_id: 'closed-session',
+          session_id: 'closed-session',
+          title: 'Failed automation',
+          status: 'failed',
+          error: 'launch failed',
+        }],
+      },
+    }];
+    mockUseSessionStore.mockReturnValue({
+      ...mockUseSessionStore(),
+      sessions: [],
+      activeSessionId: null,
+    });
+    mockUseDaemonStore.mockReturnValue({
+      ...mockUseDaemonStore(),
+      daemonSessions: [],
+    });
+
+    render(<App />);
+
+    await screen.findByTestId('workspace-ws-failed');
+    await waitFor(() => {
+      expect(screen.getByTestId('sidebar').getAttribute('data-collapsed')).toBe('0');
+    });
   });
 
   it('uses sessions loaded after mount when an existing-session deep link arrives', async () => {

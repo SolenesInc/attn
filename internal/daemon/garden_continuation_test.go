@@ -112,6 +112,7 @@ func TestSeedContinuationResumesAPluginTenderByCapability(t *testing.T) {
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "plugin work"})
 	move(t, d, "sess-snipe", seed.ID, garden.VerbTend, "", "")
 	d.persistResumeSessionID("sess-snipe", "snipe-conv-3")
+	d.store.SetLaunchIntent("sess-snipe", store.LaunchIntent{})
 	d.closeSession("sess-snipe", store.SessionClose{By: store.SessionClosedByUser})
 
 	tended, _, err := d.readSeed(seed.ID)

@@ -460,6 +460,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       for (const pane of agentPanes) {
         if (pane.status && pane.status !== 'ready') continue;
         const paneSession = sessionById.get(pane.sessionId);
+        if (!paneSession) continue;
         panes.push({
           paneId: pane.id,
           runtimeId: pane.runtimeId,
@@ -1080,6 +1081,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
         const paneStatus = agentPane.status || 'ready';
         const isPaneStarting = paneStatus === 'spawning';
         const isPaneFailed = paneStatus === 'failed';
+        const isPaneWaitingForSession = !paneSession && paneStatus === 'ready';
         const nudgeMode = paneSession?.state
           ? deriveNudgeMode({
               ticketUnread: paneSession.ticketUnread,
@@ -1151,7 +1153,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
                   }}
                 />
               </span>
-              {onRenameSession ? (
+              {onRenameSession && paneSession ? (
                 <button
                   type="button"
                   className="workspace-pane-rename-btn"
@@ -1233,10 +1235,14 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
                   onDismiss={() => setStaleBuildDismissed((prev) => new Set(prev).add(agentPane.sessionId))}
                 />
               ) : null}
-              {isPaneStarting || isPaneFailed ? (
-                <div className={`workspace-pane-status workspace-pane-status--${paneStatus}`}>
+              {isPaneStarting || isPaneFailed || isPaneWaitingForSession ? (
+                <div className={`workspace-pane-status workspace-pane-status--${isPaneWaitingForSession ? 'spawning' : paneStatus}`}>
                   <span className="workspace-pane-status-spinner" aria-hidden="true" />
-                  <span>{isPaneFailed ? (agentPane.error || 'Session failed to start') : `Starting ${paneTitle}...`}</span>
+                  <span>{isPaneFailed
+                    ? (agentPane.error || 'Session failed to start')
+                    : isPaneWaitingForSession
+                      ? `Waiting for ${paneTitle}...`
+                      : `Starting ${paneTitle}...`}</span>
                 </div>
               ) : !terminalsLive ? (
                 <div className="workspace-pane-virtualized" aria-hidden="true" data-testid={`pane-virtualized-${agentPane.id}`} />

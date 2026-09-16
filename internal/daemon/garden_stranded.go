@@ -115,8 +115,7 @@ func (d *Daemon) replantStrandedTicket(ticket *store.Ticket) (string, error) {
 		seed := garden.Seed{
 			ID: seedID, Title: title, Body: body, Status: garden.StatusWithered,
 			StepSlug: garden.StepSlug(title), Edges: []garden.Edge{}, Vars: []garden.Var{},
-			Reason:          "recovered from legacy ticket " + ticket.ID,
-			ResumeSessionID: ticket.ResumeSessionID, ResumeCwd: ticket.Cwd, ResumeAgent: ticket.LastAgentID,
+			Reason: "recovered from legacy ticket " + ticket.ID,
 		}
 		seedBody, err := seed.Encode()
 		if err != nil {

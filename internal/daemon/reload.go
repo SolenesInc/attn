@@ -49,18 +49,18 @@ func (d *Daemon) clearReloading(sessionID string) {
 	delete(d.reloadingSessions, sessionID)
 }
 
-// reloadLockFor serializes reloadSessionAgent's kill→remove→spawn composite: two concurrent
-// reloads interleave and the Spawn loser's "already exists" tears down the fresh agent.
-func (d *Daemon) reloadLockFor(sessionID string) *sync.Mutex {
-	d.reloadLocksMu.Lock()
-	defer d.reloadLocksMu.Unlock()
-	if d.reloadLocks == nil {
-		d.reloadLocks = make(map[string]*sync.Mutex)
+// sessionLifecycleLockFor serializes each session's close, reload and continuation
+// composites so their kill/remove/spawn phases cannot cross.
+func (d *Daemon) sessionLifecycleLockFor(sessionID string) *sync.Mutex {
+	d.sessionLifecycleLocksMu.Lock()
+	defer d.sessionLifecycleLocksMu.Unlock()
+	if d.sessionLifecycleLocks == nil {
+		d.sessionLifecycleLocks = make(map[string]*sync.Mutex)
 	}
-	lock := d.reloadLocks[sessionID]
+	lock := d.sessionLifecycleLocks[sessionID]
 	if lock == nil {
 		lock = &sync.Mutex{}
-		d.reloadLocks[sessionID] = lock
+		d.sessionLifecycleLocks[sessionID] = lock
 	}
 	return lock
 }
@@ -101,7 +101,7 @@ func (d *Daemon) reloadSessionAgent(sessionID string) {
 	if sessionID == "" || d.ptyBackend == nil || d.store == nil {
 		return
 	}
-	lock := d.reloadLockFor(sessionID)
+	lock := d.sessionLifecycleLockFor(sessionID)
 	lock.Lock()
 	defer lock.Unlock()
 
@@ -147,7 +147,7 @@ func (d *Daemon) reloadSessionForClient(sessionID string, cols, rows int) error 
 		return errors.New("session not found")
 	}
 
-	lock := d.reloadLockFor(sessionID)
+	lock := d.sessionLifecycleLockFor(sessionID)
 	lock.Lock()
 	defer lock.Unlock()
 
@@ -545,7 +545,7 @@ func (d *Daemon) preparePluginRoleReload(sessionID string, desiredChief bool) (*
 		return nil, true, err
 	}
 
-	lock := d.reloadLockFor(sessionID)
+	lock := d.sessionLifecycleLockFor(sessionID)
 	lock.Lock()
 	if !d.sessionHasLiveWorker(sessionID) {
 		lock.Unlock()

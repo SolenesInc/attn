@@ -497,35 +497,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         workspace: workspaceByID.get(session.workspaceId)?.workspace ?? session.workspace,
         daemonActivePaneId: workspaceByID.get(session.workspaceId)?.daemonActivePaneId ?? session.daemonActivePaneId,
       }));
-      const existingIDs = new Set(sessions.map((session) => session.id));
-
-      for (const workspace of daemonWorkspaces) {
-        if (!workspace.layout) {
-          continue;
-        }
-        const snapshot = workspaceByID.get(workspace.id);
-        if (!snapshot) {
-          continue;
-        }
-        for (const pane of snapshot.workspace.agents) {
-          if (existingIDs.has(pane.sessionId) || pane.status === 'ready') {
-            continue;
-          }
-          existingIDs.add(pane.sessionId);
-          sessions.push({
-            id: pane.sessionId,
-            label: pane.title || workspace.title,
-            state: pane.status === 'failed' ? 'unknown' : 'launching',
-            cwd: workspace.directory,
-            workspaceId: workspace.id,
-            agent: 'codex',
-            endpointId: workspace.endpoint_id,
-            transcriptMatched: true,
-            workspace: snapshot.workspace,
-            daemonActivePaneId: snapshot.daemonActivePaneId,
-          });
-        }
-      }
 
       return { sessions, daemonWorkspaceLayouts };
     });

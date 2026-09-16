@@ -196,8 +196,8 @@ type Daemon struct {
 	prepareSessionTeardownHook        func(string) error
 	teardownMu                        sync.Mutex
 	tearingDown                       map[string]chan struct{}
-	reloadLocksMu                     sync.Mutex
-	reloadLocks                       map[string]*sync.Mutex
+	sessionLifecycleLocksMu           sync.Mutex
+	sessionLifecycleLocks             map[string]*sync.Mutex
 	spawnLocksMu                      sync.Mutex
 	spawnLocks                        map[string]*spawnLock
 	sessionInputOnce                  sync.Once
@@ -1819,8 +1819,17 @@ func (d *Daemon) removePTYSession(sessionID string) error {
 }
 
 type sessionTeardown struct {
-	session   *protocol.Session
-	driverRun store.AgentDriverReportCursor
+	session          *protocol.Session
+	driverRun        store.AgentDriverReportCursor
+	lifecycleLock    *sync.Mutex
+	lifecycleRelease sync.Once
+}
+
+func (t *sessionTeardown) releaseLifecycle() {
+	if t == nil || t.lifecycleLock == nil {
+		return
+	}
+	t.lifecycleRelease.Do(t.lifecycleLock.Unlock)
 }
 
 func (d *Daemon) terminateSession(sessionID string, sig syscall.Signal) {
@@ -1898,6 +1907,8 @@ func (d *Daemon) unregisterSession(sessionID string, sig syscall.Signal) *protoc
 }
 
 func (d *Daemon) prepareSessionTeardown(sessionID string) (*sessionTeardown, error) {
+	lifecycleLock := d.sessionLifecycleLockFor(sessionID)
+	lifecycleLock.Lock()
 	session := d.store.Get(sessionID)
 	if session == nil && d.hubManager != nil {
 		session = d.hubManager.RemoteSession(sessionID)
@@ -1911,22 +1922,25 @@ func (d *Daemon) prepareSessionTeardown(sessionID string) (*sessionTeardown, err
 	if d.prepareSessionTeardownHook != nil {
 		if err := d.prepareSessionTeardownHook(sessionID); err != nil {
 			d.clearForcedStopClassification(sessionID)
+			lifecycleLock.Unlock()
 			return nil, err
 		}
 	}
 	driverRun, err := d.store.PrepareSessionTeardown(sessionID, time.Now())
 	if err != nil {
 		d.clearForcedStopClassification(sessionID)
+		lifecycleLock.Unlock()
 		return nil, err
 	}
-	return &sessionTeardown{session: session, driverRun: driverRun}, nil
+	return &sessionTeardown{session: session, driverRun: driverRun, lifecycleLock: lifecycleLock}, nil
 }
 
 func (d *Daemon) commitSessionUnregister(sessionID string, closed store.SessionClose) {
 	d.closeSession(sessionID, closed)
 }
 
-func (d *Daemon) cancelSessionTeardown(sessionID string) {
+func (d *Daemon) cancelSessionTeardown(sessionID string, teardown *sessionTeardown) {
+	defer teardown.releaseLifecycle()
 	d.clearForcedStopClassification(sessionID)
 	if err := d.store.CancelSessionTeardown(sessionID); err != nil {
 		d.logf("cancel session teardown failed for %s: %v", sessionID, err)
@@ -1984,11 +1998,13 @@ func (d *Daemon) terminateSessionAsync(sessionID string, sig syscall.Signal, tea
 	}
 	if done := d.tearingDown[sessionID]; done != nil {
 		d.teardownMu.Unlock()
+		teardown.releaseLifecycle()
 		return done
 	}
 	done := make(chan struct{})
 	d.tearingDown[sessionID] = done
 	d.teardownMu.Unlock()
+	teardown.releaseLifecycle()
 
 	go func() {
 		defer func() {
@@ -2668,8 +2684,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSeedArtifactTransfer(conn, msg.(*protocol.SeedArtifactTransferMessage))
 	case protocol.CmdSeedEdit: // wire: seed_edit
 		d.handleSeedEdit(conn, msg.(*protocol.SeedEditMessage))
-	case protocol.CmdSeedSetResume: // wire: seed_set_resume
-		d.handleSeedSetResume(conn, msg.(*protocol.SeedSetResumeMessage))
 	case protocol.CmdSeedTransition: // wire: seed_transition
 		d.handleSeedTransition(conn, msg.(*protocol.SeedTransitionMessage))
 	case protocol.CmdSeedNote: // wire: seed_note

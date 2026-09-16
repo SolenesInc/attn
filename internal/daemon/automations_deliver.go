@@ -337,9 +337,6 @@ func (d *Daemon) automationSessionIsLive(sessionID string) bool {
 func (d *Daemon) automationResumeSessionID(req automation.WorkRequest) (string, error) {
 	resumeID := strings.TrimSpace(d.store.GetResumeSessionID(req.IDs.SessionID))
 	if resumeID == "" {
-		resumeID = strings.TrimSpace(d.gardenDispatchResume(req.IDs.SessionID))
-	}
-	if resumeID == "" {
 		return "", errors.New("reviewer continuity cannot resume the stopped session without a recorded transcript")
 	}
 	driver := agentdriver.Get(req.Launch.Agent)
@@ -650,8 +647,8 @@ func (d *Daemon) ensureAutomationSession(_ context.Context, req automation.WorkR
 	if err != nil {
 		return err
 	}
-	if existing := d.store.Get(req.IDs.SessionID); existing != nil {
-		if filepath.Clean(existing.Directory) != filepath.Clean(directory) || existing.WorkspaceID != req.IDs.WorkspaceID || string(existing.Agent) != req.Launch.Agent {
+	if existing := d.store.SessionLedgerEntry(req.IDs.SessionID); existing != nil {
+		if filepath.Clean(existing.Directory) != filepath.Clean(directory) || existing.WorkspaceID != req.IDs.WorkspaceID || existing.Agent != req.Launch.Agent {
 			return fmt.Errorf("persisted session does not match automation snapshot")
 		}
 	}
@@ -666,17 +663,36 @@ func (d *Daemon) ensureAutomationSession(_ context.Context, req automation.WorkR
 	}
 	if continuationRun != nil {
 		if d.canStartWithdrawnUndeliveredReviewer(continuationRun, req.IDs.SessionID) {
-			return d.startAutomationSession(req, directory, inputPath, "")
+			return d.startAutomationSession(req, directory, inputPath)
 		}
-		resumeID, err := d.automationResumeSessionID(req)
-		if err != nil {
-			return err
-		}
-		return d.startAutomationSession(req, directory, inputPath, resumeID)
+		return d.continueAutomationSession(req, directory, inputPath)
 	}
-	return d.startAutomationSession(req, directory, inputPath, "")
+	return d.startAutomationSession(req, directory, inputPath)
 }
-func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, inputPath, resumeID string) error {
+
+func (d *Daemon) continueAutomationSession(req automation.WorkRequest, directory, inputPath string) error {
+	if _, err := d.automationResumeSessionID(req); err != nil {
+		return err
+	}
+	intent, ok := d.store.LaunchIntent(req.IDs.SessionID)
+	if !ok {
+		return errors.New("reviewer continuity cannot restore the stopped session without its ledger launch intent")
+	}
+	if err := intent.UnattendedLaunch.WithLegacyDefaults().Validate(); err != nil {
+		return fmt.Errorf("reviewer continuity ledger launch contract is invalid: %w", err)
+	}
+	label, prompt := d.automationSessionLaunch(req, directory, inputPath)
+	_, err := d.reopenSessionRuntime(sessionReopenPlan{
+		SessionID: req.IDs.SessionID, Directory: directory, Title: label,
+		WorkspaceID: req.IDs.WorkspaceID, InitialPrompt: prompt,
+	}, d.newDelegationRollback(), nil)
+	if err != nil {
+		return err
+	}
+	return d.verifyUnattendedLaunch(req)
+}
+
+func (d *Daemon) automationSessionLaunch(req automation.WorkRequest, directory, inputPath string) (string, string) {
 	pullRequest, pullRequestErr := automation.ParsePullRequestInput(req.Context)
 	var pullRequestTarget *automation.PullRequestInput
 	if pullRequestErr == nil {
@@ -691,11 +707,13 @@ func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, i
 	if _, reviewLabel, _, ok := automationReviewNames(req); ok {
 		label = reviewLabel
 	}
+	return label, prompt
+}
+
+func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, inputPath string) error {
+	label, prompt := d.automationSessionLaunch(req, directory, inputPath)
 	client := newInternalWSClient()
 	message := &protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: req.IDs.SessionID, Cwd: directory, WorkspaceID: req.IDs.WorkspaceID, Agent: req.Launch.Agent, Cols: 80, Rows: 24, Label: protocol.Ptr(label), InitialPrompt: protocol.Ptr(prompt), Model: protocol.Ptr(req.Launch.Model), Effort: protocol.Ptr(req.Launch.Effort), Executable: protocol.Ptr(req.Launch.Executable)}
-	if resumeID != "" {
-		message.ResumeSessionID = protocol.Ptr(resumeID)
-	}
 	d.handleSpawnSessionWithPolicy(client, message, internalSpawnPolicy{unattendedLaunch: req.Launch})
 	if _, err := readInternalActionResult(client); err != nil {
 		return err
@@ -703,7 +721,7 @@ func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, i
 	return d.verifyUnattendedLaunch(req)
 }
 func (d *Daemon) canStartWithdrawnUndeliveredReviewer(origin *store.AutomationRun, sessionID string) bool {
-	return origin != nil && origin.State == store.AutomationRunStateCancelled && origin.CancelReason == store.AutomationCancelReasonReviewWithdrawn && d.store.Get(sessionID) == nil
+	return origin != nil && origin.State == store.AutomationRunStateCancelled && origin.CancelReason == store.AutomationCancelReasonReviewWithdrawn && d.store.SessionLedgerEntry(sessionID) == nil
 }
 func (d *Daemon) automationContinuationOrigin(req automation.WorkRequest) (*store.AutomationRun, error) {
 	if req.ContinuityKey == "" {

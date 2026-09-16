@@ -650,7 +650,9 @@ export function Sidebar({
     };
   };
 
-  const isWorkspaceVisible = (workspace: SidebarWorkspace) => workspace.pinned || !isSessionless(workspace) || showSessionless;
+  const isWorkspaceVisible = (workspace: SidebarWorkspace) => (
+    workspace.pinned || !isSessionless(workspace) || workspace.hasUnresolvedAgentPanes || showSessionless
+  );
   // Queue mode renders every ordinary agent as a flat row in a band, so drawing
   // its workspace group too would show the same agent twice.
   const isTreeWorkspace = (workspace: SidebarWorkspace) => (
@@ -662,7 +664,7 @@ export function Sidebar({
   });
   const visibleMutedWorkspaces = mutedWorkspaces
     .map((workspace) => withoutChiefRow(withoutAutomationRows(workspace)))
-    .filter((workspace) => workspace.children.length > 0);
+    .filter((workspace) => workspace.children.length > 0 || workspace.hasUnresolvedAgentPanes);
   const visibleVisualOrder = visualOrder.filter(isWorkspaceVisible);
   const visibleVisualIndexByWorkspaceId = new Map(
     visibleVisualOrder.map((workspace, index) => [workspace.id, index]),
@@ -1244,7 +1246,9 @@ export function Sidebar({
                   <span
                     className="workspace-neutral-indicator"
                     data-testid="workspace-neutral-indicator"
-                    title="Tile-only workspace — no active session"
+                    title={workspace.hasUnresolvedAgentPanes
+                      ? 'Workspace has a pane without an active session'
+                      : 'Tile-only workspace — no active session'}
                   />
                 ) : (
                   <StateIndicator state={(workspace.status as UISessionState | undefined) || 'idle'} size="md" seed={workspace.id} />

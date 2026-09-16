@@ -9,29 +9,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/victorarias/attn/internal/garden"
-	seedEvents "github.com/victorarias/attn/internal/garden/events"
 )
-
-func TestRecoveredSeedWithResumeIdentityIncludesItsSemanticEvent(t *testing.T) {
-	events, err := recoveredGardenSeedEvents(garden.Seed{
-		ID: "s-7k3f9m", Title: "Recovered conversation", Status: garden.StatusPlanted,
-		PlanterSession: "planter", ResumeSessionID: "native-session", ResumeCwd: t.TempDir(), ResumeAgent: "codex",
-	}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var configured int
-	for _, event := range events {
-		if event.Name == seedEvents.NameResumeIdentityConfigured {
-			configured++
-		}
-	}
-	if configured != 1 {
-		t.Fatalf("recovered resume identity events = %d, want 1", configured)
-	}
-}
 
 func TestGardenSeedEventHandlingHasOneDaemonEntryPoint(t *testing.T) {
 	entries, err := os.ReadDir(".")

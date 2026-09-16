@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "311"
+const ProtocolVersion = "312"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -141,7 +141,6 @@ const (
 	CmdSeedArtifactTransfer                  = "seed_artifact_transfer"
 	CmdSeedArtifactTarget                    = "seed_artifact_target"
 	CmdSeedEdit                              = "seed_edit"
-	CmdSeedSetResume                         = "seed_set_resume"
 	CmdSeedTransition                        = "seed_transition"
 	CmdSeedNote                              = "seed_note"
 	CmdSeedNotes                             = "seed_notes"
@@ -1335,13 +1334,6 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdSeedEdit:
 		var msg SeedEditMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSeedSetResume:
-		var msg SeedSetResumeMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}

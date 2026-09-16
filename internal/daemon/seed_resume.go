@@ -79,7 +79,8 @@ func (d *Daemon) resumeSeedFromReviewForeground(
 	if _, err := garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: actor}, d.sessionExists); err != nil {
 		return nil, err
 	}
-	if existing := d.gardenSession(sessionID); existing != nil {
+	if existing := d.gardenSession(sessionID); existing != nil &&
+		(execution.HostKind == garden.HostRemote || d.sessionHasLiveWorker(sessionID)) {
 		if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionForeground(
 			seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", d.sessionExists, expectedRev); err != nil {
 			return nil, err
@@ -108,8 +109,6 @@ func (d *Daemon) resumeSeedFromReviewForeground(
 	reopened, err := d.reopenSessionRuntime(sessionReopenPlan{
 		SessionID:   sessionID,
 		Directory:   execution.Cwd,
-		Agent:       execution.Agent,
-		ResumeID:    execution.Resume,
 		Title:       seed.Title,
 		WorkspaceID: reopenWorkspaceID(sessionID),
 	}, d.newDelegationRollback(), afterSpawn)

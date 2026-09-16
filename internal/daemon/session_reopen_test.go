@@ -3,6 +3,7 @@ package daemon
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -42,6 +44,8 @@ type reopenSession struct {
 	ClosedBy   string
 	Reason     string
 	CostCursor string
+	NoIntent   bool
+	Intent     *store.LaunchIntent
 }
 
 // Registers a session the way the app does, then closes it into the ledger.
@@ -63,6 +67,13 @@ func closeReopenSession(t *testing.T, d *Daemon, session reopenSession) {
 		entry.MainRepo = protocol.Ptr(session.Repo)
 	}
 	d.store.Add(entry)
+	if !session.NoIntent {
+		intent := store.LaunchIntent{ApprovalRoute: launchcontract.ApprovalRouteUser}
+		if session.Intent != nil {
+			intent = *session.Intent
+		}
+		d.store.SetLaunchIntent(session.ID, intent)
+	}
 	if session.Resume != "" {
 		d.persistResumeSessionID(session.ID, session.Resume)
 	}
@@ -167,6 +178,59 @@ func TestReopeningASessionWithNoLedgerRowSaysWhereToLookInstead(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q is missing %q", err, want)
 		}
+	}
+}
+
+func TestReopenVerdictOffersOnlyFreshStartWithoutItsLaunchContract(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	backend := reopenDaemonWithBackend(t, d)
+	closeReopenSession(t, d, reopenSession{
+		ID: "missing-contract", Directory: t.TempDir(), Agent: "codex", NoIntent: true,
+	})
+
+	verdict := decidedReopenVerdict(t, d, "missing-contract")
+	wantReopenVerdict(t, verdict, false, []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshSamePlace})
+	if !strings.Contains(verdict.Reason, "launch contract") {
+		t.Fatalf("reason = %q, want the missing launch contract named", verdict.Reason)
+	}
+	if _, err := d.reopenSession("missing-contract", protocol.SessionReopenActionStartFreshSamePlace, ""); err != nil {
+		t.Fatal(err)
+	}
+	spawn, ok := backend.LastSpawn()
+	if !ok || spawn.ResumeSessionID != "" {
+		t.Fatalf("fresh spawn = %+v, %v; want a new conversation", spawn, ok)
+	}
+}
+
+func TestReopenReplaysTheLedgerLaunchContract(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	backend := reopenDaemonWithBackend(t, d)
+	autoMode := false
+	intent := store.LaunchIntent{
+		AutoMode:      &autoMode,
+		ApprovalRoute: launchcontract.ApprovalRouteUser,
+		Executable:    "/opt/codex",
+		Model:         "gpt-ledger",
+		Effort:        "high",
+	}
+	writeCodexRolloutFixture(t, "codex-ledger-conversation")
+	closeReopenSession(t, d, reopenSession{
+		ID: "ledger-contract", Directory: t.TempDir(), Agent: "codex",
+		Resume: "codex-ledger-conversation", Intent: &intent,
+	})
+
+	if _, err := d.reopenSession("ledger-contract", protocol.SessionReopenActionReopen, ""); err != nil {
+		t.Fatal(err)
+	}
+	spawn, ok := backend.LastSpawn()
+	if !ok {
+		t.Fatal("backend Spawn not called")
+	}
+	if spawn.ResumeSessionID != "codex-ledger-conversation" || spawn.Executable != "/opt/codex" || spawn.Model != "gpt-ledger" || spawn.Effort != "high" {
+		t.Fatalf("spawn = %+v, want the saved transcript, executable, model and effort", spawn)
+	}
+	if got, ok := d.store.LaunchIntent("ledger-contract"); !ok || !reflect.DeepEqual(got, intent) {
+		t.Fatalf("launch intent after reopen = %+v, %v; want %+v", got, ok, intent)
 	}
 }
 

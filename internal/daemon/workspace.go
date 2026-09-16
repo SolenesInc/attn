@@ -505,8 +505,8 @@ func (d *Daemon) handleUnregisterWorkspace(client *wsClient, msg *protocol.Unreg
 	for _, sid := range memberIDs {
 		teardown, err := d.prepareSessionTeardown(sid)
 		if err != nil {
-			for preparedID := range teardowns {
-				d.cancelSessionTeardown(preparedID)
+			for preparedID, prepared := range teardowns {
+				d.cancelSessionTeardown(preparedID, prepared)
 			}
 			d.sendCommandError(client, protocol.CmdUnregisterWorkspace, err.Error())
 			return
@@ -521,6 +521,9 @@ func (d *Daemon) handleUnregisterWorkspace(client *wsClient, msg *protocol.Unreg
 
 	snapshot, removed := d.workspaces.unregister(id)
 	if !removed {
+		for sid, teardown := range teardowns {
+			d.terminateSessionAsync(sid, syscall.SIGTERM, teardown)
+		}
 		return
 	}
 	d.tearDownRemovedWorkspace(snapshot)
@@ -583,7 +586,20 @@ func (d *Daemon) workspaceHasPendingSpawn(workspaceID string) bool {
 }
 
 func (d *Daemon) workspaceHasSessionlessContent(workspaceID string) bool {
-	return d.workspaceLayoutHasTiles(workspaceID)
+	layout := d.store.GetWorkspaceLayout(workspaceID)
+	if layout == nil {
+		return false
+	}
+	if len(workspacelayout.TileIDs(layout.Layout)) > 0 {
+		return true
+	}
+	for _, pane := range layout.Panes {
+		if (pane.Status == workspacelayout.PaneStatusSpawning || pane.Status == workspacelayout.PaneStatusFailed) &&
+			workspacelayout.HasPane(layout.Layout, pane.PaneID) {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *Daemon) listLocalWorkspaces() []protocol.Workspace {

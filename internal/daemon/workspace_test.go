@@ -701,6 +701,56 @@ func TestLoadWorkspacesFromStore_PreservesPendingSpawnAcrossRestart(t *testing.T
 	}
 }
 
+func TestLoadWorkspacesFromStore_PreservesFailedPaneAcrossRestart(t *testing.T) {
+	d := newDaemonForTest(t)
+	d.store.AddWorkspace(&protocol.Workspace{ID: "ws-failed", Title: "failed", Directory: "/repo/failed"})
+	layout := workspacelayout.DefaultWorkspaceLayout("ws-failed", "pane-failed", "s-failed")
+	layout.Panes[0].Status = workspacelayout.PaneStatusFailed
+	layout.Panes[0].Error = "launch failed"
+	if err := d.store.SaveWorkspaceLayout(layout); err != nil {
+		t.Fatalf("SaveWorkspaceLayout() error = %v", err)
+	}
+
+	d.workspaces = newWorkspaceRegistry()
+	d.loadWorkspacesFromStore()
+
+	if workspace := d.store.GetWorkspace("ws-failed"); workspace == nil {
+		t.Fatal("failed-pane workspace was removed during restart load")
+	}
+	if _, ok := d.workspaces.snapshot("ws-failed"); !ok {
+		t.Fatal("failed-pane workspace missing after restart load")
+	}
+}
+
+func TestFailedPaneWorkspaceSurvivesFinalSessionDissociation(t *testing.T) {
+	d := newDaemonForTest(t)
+	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
+		Cmd: protocol.CmdRegisterWorkspace, ID: "ws-failed", Title: "failed", Directory: "/repo/failed",
+	})
+	now := string(protocol.TimestampNow())
+	d.store.Add(&protocol.Session{
+		ID: "s-failed", Label: "failed", Agent: protocol.SessionAgentCodex, Directory: "/repo/failed",
+		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	d.associateSessionWithWorkspace("s-failed", "ws-failed")
+	layout := workspacelayout.DefaultWorkspaceLayout("ws-failed", "pane-failed", "s-failed")
+	layout.Panes[0].Status = workspacelayout.PaneStatusFailed
+	layout.Panes[0].Error = "launch failed"
+	if err := d.store.SaveWorkspaceLayout(layout); err != nil {
+		t.Fatalf("SaveWorkspaceLayout() error = %v", err)
+	}
+
+	d.store.Remove("s-failed")
+	d.dissociateSessionFromWorkspace("s-failed")
+
+	if _, ok := d.workspaces.snapshot("ws-failed"); !ok {
+		t.Fatal("failed-pane workspace was removed after its session left")
+	}
+	if stored := d.store.GetWorkspace("ws-failed"); stored == nil {
+		t.Fatal("failed-pane workspace was removed from durable state")
+	}
+}
+
 func TestAssociateSessionWithWorkspace_PersistsToStore(t *testing.T) {
 	d := newDaemonForTest(t)
 	now := string(protocol.TimestampNow())

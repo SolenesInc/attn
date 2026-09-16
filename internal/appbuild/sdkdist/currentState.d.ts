@@ -255,9 +255,6 @@ export interface Seed {
     readonly plot_progress?: SeedPlotProgress;
     readonly ready: boolean;
     readonly reason?: string;
-    readonly resume_agent?: string;
-    readonly resume_cwd?: string;
-    readonly resume_session_id?: string;
     readonly rev: number;
     readonly state_changed_at: string;
     readonly state_changed_at_exact: boolean;

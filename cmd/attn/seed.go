@@ -47,8 +47,6 @@ func runSeed() {
 		runSeedHandover(args)
 	case "send-to-chief":
 		runSeedSendToChief(args)
-	case "set-resume":
-		runSeedSetResume(args)
 	case "export":
 		runSeedExport(args)
 	case "tend", "park", "harvest", "wither", "replant":
@@ -88,11 +86,10 @@ The garden lives at the home daemon. On an outpost every command here refuses,
 naming the home to run it on.
 
 commands:
-  plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [resume flags] [flags]
+  plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [flags]
         plant a seed and print its id, slug and title. -m takes markdown, or - to read stdin —
         if the seed gains children, that body is the plot's plan. --part-of
-        plants it under a plot. --resume-session-id, --cwd and --agent
-        together make a dead conversation resumable without a dispatch record.
+        plants it under a plot.
 
   plot [-f <path>] [--json]
         plant a whole plot in one move from a JSON payload (-f, or stdin):
@@ -149,10 +146,6 @@ commands:
   edit <id> -m <body>
         replace the seed's markdown body without moving its state or claim.
         - reads stdin; an explicit empty -m clears the body.
-
-  set-resume <id> (--resume-session-id <id> --cwd <path> --agent <name> | --clear)
-        set or clear the seed-owned fallback used when attn has no dispatch
-        record for the conversation. The three identity fields move together.
 
   send-to-chief <id> [-m "<optional guidance>"]
         give this seed to the Chief to decide its next working context. The
@@ -224,11 +217,7 @@ commands:
 flags:
   --part-of <plot>   plant under a plot (plant)
   --discovered-from <seed>  record the seed this work came from (plant)
-  --resume-session-id <id>  agent-native conversation id (plant, set-resume)
-  --cwd <path>        directory to reopen in (plant, set-resume)
-  --agent <name>      agent driver to reopen with (plant, set-resume)
-  --clear             remove the fallback identity (set-resume), or the
-                      harvest condition (harvest --when-merged)
+  --clear             remove the harvest condition (harvest --when-merged)
   --when-merged       harvest the seed when its pull request merges, instead
                       of harvesting it now (harvest)
   --plot <plot>      scope a ready answer to one plot
@@ -337,9 +326,6 @@ type seedFlags struct {
 	copy           *bool
 	to             *string
 	reference      *bool
-	resumeID       *string
-	cwd            *string
-	agent          *string
 	clear          *bool
 	whenMerged     *bool
 	force          *bool
@@ -374,10 +360,7 @@ func newSeedFlags(verb string) *seedFlags {
 		copy:           fs.Bool("copy", false, "copy a local file into seed ownership"),
 		to:             fs.String("to", "", "destination for a detached managed artifact"),
 		reference:      fs.Bool("reference", false, "operate on an old linked path association"),
-		resumeID:       fs.String("resume-session-id", "", "agent-native conversation id"),
-		cwd:            fs.String("cwd", "", "directory to reopen in"),
-		agent:          fs.String("agent", "", "agent driver to reopen with"),
-		clear:          fs.Bool("clear", false, "remove what the verb set: the resume identity, or the harvest condition"),
+		clear:          fs.Bool("clear", false, "remove the harvest condition"),
 		whenMerged:     fs.Bool("when-merged", false, "harvest the seed when its pull request merges"),
 		force:          fs.Bool("force", false, "act even though somebody else still holds the seed"),
 	}
@@ -480,7 +463,6 @@ func runSeedPlant(args []string) {
 	}
 	result, err := seedClient().SeedPlant(
 		f.sessionID(), positionals[0], f.text("plant"), strings.TrimSpace(*f.partOf), strings.TrimSpace(*f.discoveredFrom), strings.TrimSpace(*f.member),
-		strings.TrimSpace(*f.resumeID), strings.TrimSpace(*f.cwd), strings.TrimSpace(*f.agent),
 	)
 	if err != nil {
 		seedFail("plant", err)
@@ -888,25 +870,6 @@ func runSeedEdit(args []string) {
 	fmt.Printf("updated %s at revision %d\n", result.Seed.ID, result.Seed.Rev)
 }
 
-func runSeedSetResume(args []string) {
-	f := newSeedFlags("set-resume")
-	positionals := f.parse("set-resume", args)
-	if len(positionals) != 1 {
-		seedFail("set-resume", fmt.Errorf("needs exactly one seed id, got %d", len(positionals)))
-	}
-	result, err := seedClient().SeedSetResume(
-		positionals[0], strings.TrimSpace(*f.resumeID), strings.TrimSpace(*f.cwd), strings.TrimSpace(*f.agent), *f.clear,
-	)
-	if err != nil {
-		seedFail("set-resume", err)
-	}
-	if *f.json {
-		writeJSON(result.Seed)
-		return
-	}
-	fprintSeed(os.Stdout, result.Seed)
-}
-
 func runSeedHandover(args []string) {
 	seedFail("handover", errors.New("retired: use `attn delegate --seed <id> --handover --cwd <path>` with an explicit checkout choice inside Git"))
 }
@@ -1146,9 +1109,6 @@ func fprintSeed(out io.Writer, seed protocol.Seed, watching ...bool) {
 	}
 	if seed.Reason != nil && *seed.Reason != "" {
 		fmt.Fprintf(w, "reason\t%s\n", *seed.Reason)
-	}
-	if resumeID := protocol.Deref(seed.ResumeSessionID); resumeID != "" {
-		fmt.Fprintf(w, "resume\t%s in %s on %s\n", resumeID, protocol.Deref(seed.ResumeCwd), protocol.Deref(seed.ResumeAgent))
 	}
 	if condition := seed.HarvestWhen; condition != nil {
 		fmt.Fprintf(w, "harvests when\t%s merges\n", pullRequestLabel(condition.PullRequest))

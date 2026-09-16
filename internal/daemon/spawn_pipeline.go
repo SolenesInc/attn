@@ -193,20 +193,6 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 			d.logf("spawn: self-resume target %s has no transcript yet; fresh-spawning instead", msg.ID)
 			req.resumeSessionID = ""
 		}
-	} else if !req.hasPluginDriver && req.resumeSessionID == "" && protocol.Deref(msg.ResumePicker) {
-		mirroredResumeID := d.gardenDispatchResume(msg.ID)
-		if mirroredResumeID == "" {
-			mirroredResumeID = d.store.GetTicketResumeSessionID(msg.ID)
-		}
-		if ticketResumeID := mirroredResumeID; ticketResumeID != "" {
-			// Claude writes its transcript lazily, so a mirrored id can point at a
-			// transcript that does not exist and `claude -r <dead-id>` would exit non-zero.
-			if agentdriver.ResumeAvailable(req.driver, ticketResumeID) {
-				req.resumeSessionID = ticketResumeID
-			} else {
-				d.logf("spawn: resume target %s for session %s is not resumable (no transcript yet); using resume picker", ticketResumeID, msg.ID)
-			}
-		}
 	}
 	configuredExecutable := strings.TrimSpace(protocol.Deref(msg.Executable))
 	if configuredExecutable == "" {

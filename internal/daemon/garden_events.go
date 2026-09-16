@@ -124,16 +124,6 @@ func recoveredGardenSeedEvents(seed garden.Seed, notes []garden.Note) ([]store.B
 		}
 		occurrences = append(occurrences, linked)
 	}
-	if strings.TrimSpace(seed.ResumeSessionID) != "" {
-		configured, err := events.Occur(
-			gardenSeedEventModel, gardenSeedEventVocabulary.ResumeIdentityConfigured, seed.ID,
-			events.CausePayload{CausedBySessionID: seed.PlanterSession},
-		)
-		if err != nil {
-			return nil, err
-		}
-		occurrences = append(occurrences, configured)
-	}
 	var lifecycle garden.Verb
 	switch seed.Status {
 	case garden.StatusGrowing:

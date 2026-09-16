@@ -182,7 +182,7 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID string, teardown *sess
 	committed := false
 	defer func() {
 		if !committed {
-			d.cancelSessionTeardown(oldSessionID)
+			d.cancelSessionTeardown(oldSessionID, teardown)
 		}
 	}()
 	if err := d.validateCrewMemberPaths(member); err != nil {

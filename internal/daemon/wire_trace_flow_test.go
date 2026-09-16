@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 func runDaemonSocketCommand(t *testing.T, fn func(conn net.Conn)) {
@@ -51,6 +52,11 @@ func TestWireTraceFlowGolden(t *testing.T) {
 			Agent: protocol.Ptr(protocol.SessionAgentClaude), WorkspaceID: "workspace-1",
 		})
 	})
+	layout := d.store.GetWorkspaceLayout("workspace-1")
+	layout.Panes[0].Status = workspacelayout.PaneStatusReady
+	if err := d.store.SaveWorkspaceLayout(*layout); err != nil {
+		t.Fatalf("mark registered pane ready: %v", err)
+	}
 	runDaemonSocketCommand(t, func(conn net.Conn) {
 		d.handleTodos(conn, &protocol.TodosMessage{
 			ID: "sess-1", Todos: []string{"write the migration"},

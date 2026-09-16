@@ -1,0 +1,4 @@
+kind: fixed
+area: automations
+change: Review automations continue a closed reviewer from the session ledger after its runtime finishes closing, preserving the transcript and launch contract.
+symptom: A new review occurrence could fail with "session is closing" after the reviewer session was closed.

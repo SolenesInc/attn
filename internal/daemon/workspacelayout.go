@@ -33,14 +33,6 @@ func (d *Daemon) ensureWorkspaceLayout(workspaceID string) (*workspacelayout.Wor
 	return &normalized, nil
 }
 
-func (d *Daemon) workspaceLayoutHasTiles(workspaceID string) bool {
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil {
-		return false
-	}
-	return len(workspacelayout.TileIDs(snapshot.Layout)) > 0
-}
-
 func (d *Daemon) currentOrEmptyWorkspaceLayout(workspaceID string) (*workspacelayout.WorkspaceLayout, error) {
 	if d.store.GetWorkspace(workspaceID) == nil {
 		return nil, fmt.Errorf("workspace not found: %s", workspaceID)
@@ -1137,7 +1129,7 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 		d.store.RemoveWorkspaceLayout(msg.WorkspaceID)
 	} else if err := d.store.SaveWorkspaceLayout(normalized); err != nil {
 		if teardown != nil {
-			d.cancelSessionTeardown(sessionID)
+			d.cancelSessionTeardown(sessionID, teardown)
 		}
 		d.sendWorkspaceLayoutActionResult(client, protocol.CmdWorkspaceLayoutClosePane, msg.WorkspaceID, protocol.Ptr(msg.PaneID), err)
 		return
@@ -1160,6 +1152,9 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 			emptyLayout, err := protocolWorkspaceLayout(normalized)
 			if err != nil {
 				d.logf("workspace empty layout update failed for workspace %s: %v", msg.WorkspaceID, err)
+				if teardown != nil {
+					d.terminateSessionAsync(sessionID, syscall.SIGTERM, teardown)
+				}
 				return
 			}
 			d.broadcastWorkspaceLayoutSnapshotUpdated(emptyLayout)

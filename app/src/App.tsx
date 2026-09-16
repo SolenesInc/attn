@@ -1566,20 +1566,6 @@ function AppContent({
     setSidebarCollapsed((prev) => !prev);
   }, []);
 
-
-  const prevSessionCountRef = useRef(sessions.length);
-  useEffect(() => {
-    const prevCount = prevSessionCountRef.current;
-    const currentCount = sessions.length;
-    prevSessionCountRef.current = currentCount;
-
-    if (currentCount === 0) {
-      setSidebarCollapsed(true);
-    } else if (prevCount === 0 && currentCount > 0) {
-      setSidebarCollapsed(false);
-    }
-  }, [sessions.length]);
-
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [locationPickerPurpose, setLocationPickerPurpose] = useState<LocationPickerPurpose>('workspace');
   const [locationPickerSessionDirection, setLocationPickerSessionDirection] = useState<TerminalSplitDirection>('vertical');
@@ -2652,12 +2638,29 @@ function AppContent({
     () => buildWorkspaceViewModels(daemonWorkspaces, visibleEnrichedSessions),
     [daemonWorkspaces, visibleEnrichedSessions],
   );
+  const agentSurfaceCount = sessions.length
+    + workspaceViews.filter((workspace) => workspace.hasUnresolvedAgentPanes).length;
+  const prevAgentSurfaceCountRef = useRef(agentSurfaceCount);
+  useEffect(() => {
+    const prevCount = prevAgentSurfaceCountRef.current;
+    prevAgentSurfaceCountRef.current = agentSurfaceCount;
+
+    if (agentSurfaceCount === 0) {
+      setSidebarCollapsed(true);
+    } else if (prevCount === 0) {
+      setSidebarCollapsed(false);
+    }
+  }, [agentSurfaceCount]);
   const unmutedWorkspaceViews = useMemo(
-    () => workspaceViews.filter((workspace) => !workspace.muted && (workspace.pinned || workspace.sessions.length > 0)),
+    () => workspaceViews.filter((workspace) => !workspace.muted && (
+      workspace.pinned || workspace.sessions.length > 0 || workspace.hasUnresolvedAgentPanes
+    )),
     [workspaceViews],
   );
   const mutedWorkspaceViews = useMemo(
-    () => workspaceViews.filter((workspace) => workspace.muted && (workspace.pinned || workspace.sessions.length > 0)),
+    () => workspaceViews.filter((workspace) => workspace.muted && (
+      workspace.pinned || workspace.sessions.length > 0 || workspace.hasUnresolvedAgentPanes
+    )),
     [workspaceViews],
   );
   const unmutedEnrichedSessions = useMemo(
@@ -2986,7 +2989,12 @@ function AppContent({
   }, []);
   const sidebarWorkspaceViews = useMemo(
     () => workspaceViews.filter(
-      (workspace) => !workspace.muted && (workspace.pinned || workspace.sessions.length > 0 || showSessionlessWorkspaces),
+      (workspace) => !workspace.muted && (
+        workspace.pinned
+        || workspace.sessions.length > 0
+        || workspace.hasUnresolvedAgentPanes
+        || showSessionlessWorkspaces
+      ),
     ),
     [workspaceViews, showSessionlessWorkspaces],
   );
@@ -3145,19 +3153,24 @@ function AppContent({
     clearWorkspaceDragHoverTimer();
   }, [clearWorkspaceDragHoverTimer]);
 
-  const sessionlessWorkspaceStateById = useMemo(() => {
+  const daemonWorkspaceStateById = useMemo(() => {
     const map = new Map<string, TerminalWorkspaceState>();
+    const unresolvedWorkspaceIds = new Set(
+      workspaceViews
+        .filter((workspace) => workspace.hasUnresolvedAgentPanes)
+        .map((workspace) => workspace.id),
+    );
     for (const workspace of daemonWorkspaces) {
       if (!workspace.layout) {
         continue;
       }
       const { workspace: state } = workspaceSnapshotFromDaemonWorkspace(workspace.layout);
-      if (state.layoutTree && state.agents.length === 0) {
+      if (state.layoutTree && (state.agents.length === 0 || unresolvedWorkspaceIds.has(workspace.id))) {
         map.set(workspace.id, state);
       }
     }
     return map;
-  }, [daemonWorkspaces]);
+  }, [daemonWorkspaces, workspaceViews]);
 
 
   const visualWorkspaces = sidebarWorkspaceViews;
@@ -3877,7 +3890,7 @@ function AppContent({
           <div className="terminal-main-area">
             {workspaceViews.map((workspace) => {
               const workspaceState = terminalStateForWorkspaceSessions(workspace.sessions)
-                ?? sessionlessWorkspaceStateById.get(workspace.id)
+                ?? daemonWorkspaceStateById.get(workspace.id)
                 ?? null;
               if (!workspaceState) {
                 return null;

@@ -4650,11 +4650,6 @@ model Seed {
   "template": boolean;
   "gate": boolean;
   "vars": SeedVar[];
-  // Optional fallback for reopening a conversation that has no garden dispatch
-  // record. These three fields are written and cleared as one identity.
-  "resume_session_id"?: string;
-  "resume_cwd"?: string;
-  "resume_agent"?: string;
   // Detailed reads only. Garden snapshots omit this filesystem-sensitive
   // projection so opening the Garden never stats every saved directory.
   "continuation"?: SeedContinuation;
@@ -4694,7 +4689,7 @@ model SeedHarvestCondition {
 
 model SeedContinuation {
   "execution_id": string;
-  // execution | legacy
+  // execution
   "source": string;
   "session_live": boolean;
   "native_conversation_id"?: string;
@@ -4762,9 +4757,6 @@ model SeedPlantMessage {
   "discovered_from"?: string;
   // The crew member planting, free-string until the crew primitive lands.
   "member"?: string;
-  "resume_session_id"?: string;
-  "resume_cwd"?: string;
-  "resume_agent"?: string;
 }
 
 model SeedPlantResult {
@@ -4900,21 +4892,6 @@ model SeedEditMessage {
 }
 
 model SeedEditResult {
-  "seed": Seed;
-}
-
-// Set or clear the seed-owned fallback identity used when no dispatch record
-// survives. The identity is atomic: all three values, or clear=true.
-model SeedSetResumeMessage {
-  "cmd": "seed_set_resume";
-  "seed_id": string;
-  "resume_session_id"?: string;
-  "resume_cwd"?: string;
-  "resume_agent"?: string;
-  "clear"?: boolean;
-}
-
-model SeedSetResumeResult {
   "seed": Seed;
 }
 
@@ -6381,7 +6358,6 @@ model Response {
   seed_search_result?: SeedSearchResult;
   seed_show_result?: SeedShowResult;
   seed_edit_result?: SeedEditResult;
-  seed_set_resume_result?: SeedSetResumeResult;
   seed_artifact_transfer_result?: SeedArtifactTransferResult;
   seed_transition_result?: SeedTransitionResult;
   seed_send_to_chief_result?: SeedSendToChiefResult;

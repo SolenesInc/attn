@@ -973,6 +973,27 @@ func TestChangedHeadContinuationKeepsContractAndIdentityChecks(t *testing.T) {
 }
 
 func TestStoppedContinuationResumesRecordedReviewerWithPinnedContract(t *testing.T) {
+	fixture := setupStoppedAutomationContinuation(t)
+	fixture.d.closeSession(fixture.origin.SessionID, store.SessionClose{By: store.SessionClosedByUser})
+	if err := fixture.d.ensureAutomationSession(context.Background(), fixture.req, fixture.directory); err != nil {
+		t.Fatal(err)
+	}
+	spawn, ok := fixture.backend.LastSpawn()
+	if !ok || spawn.ResumeSessionID != "codex-rollout-1" || spawn.UnattendedLaunch != fixture.req.Launch {
+		t.Fatalf("resume spawn=%#v ok=%v", spawn, ok)
+	}
+}
+
+type stoppedAutomationContinuationFixture struct {
+	d         *Daemon
+	backend   *automationResumeBackend
+	origin    *store.AutomationRun
+	req       automation.WorkRequest
+	directory string
+}
+
+func setupStoppedAutomationContinuation(t *testing.T) stoppedAutomationContinuationFixture {
+	t.Helper()
 	d := newEnrolledDaemon(t, "")
 	setupDelegationGarden(t, d)
 	backend := &automationResumeBackend{fakeSpawnBackend: &fakeSpawnBackend{}}
@@ -1004,12 +1025,79 @@ func TestStoppedContinuationResumesRecordedReviewerWithPinnedContract(t *testing
 		Prompt: "Review locally", Context: json.RawMessage(`{}`), Launch: testAutomationLaunch("codex"),
 		IDs: automation.DeliveryIDs{SeedID: origin.SeedID, SessionID: origin.SessionID, WorkspaceID: origin.WorkspaceID, PaneID: origin.PaneID},
 	}
-	if err := d.ensureAutomationSession(context.Background(), req, directory); err != nil {
+	d.store.SetLaunchIntent(origin.SessionID, store.LaunchIntent{
+		ApprovalRoute:    launchcontract.ApprovalRouteReviewer,
+		Executable:       req.Launch.Executable,
+		Model:            req.Launch.Model,
+		Effort:           req.Launch.Effort,
+		UnattendedLaunch: req.Launch,
+	})
+	return stoppedAutomationContinuationFixture{
+		d: d, backend: backend, origin: origin, req: req, directory: directory,
+	}
+}
+
+func TestStoppedContinuationWaitsForClosingRuntimeBeforeReopening(t *testing.T) {
+	fixture := setupStoppedAutomationContinuation(t)
+	killEntered := make(chan struct{})
+	releaseKill := make(chan struct{})
+	fixture.backend.onKill = func() {
+		close(killEntered)
+		<-releaseKill
+	}
+
+	closing, err := fixture.d.beginSessionClose(
+		fixture.origin.SessionID,
+		store.SessionClose{By: store.SessionClosedByUser},
+		nil,
+	)
+	if err != nil {
 		t.Fatal(err)
 	}
-	spawn, ok := backend.LastSpawn()
-	if !ok || spawn.ResumeSessionID != "codex-rollout-1" || spawn.UnattendedLaunch != req.Launch {
+	fixture.d.finishSessionClose(fixture.origin.SessionID, closing)
+	<-killEntered
+
+	started := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		close(started)
+		done <- fixture.d.ensureAutomationSession(context.Background(), fixture.req, fixture.directory)
+	}()
+	<-started
+	select {
+	case err := <-done:
+		t.Fatalf("continuation completed before the closing runtime exited: %v", err)
+	default:
+	}
+	if got := spawnCount(fixture.backend.fakeSpawnBackend); got != 0 {
+		t.Fatalf("spawn calls before teardown completed = %d, want 0", got)
+	}
+
+	close(releaseKill)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	fixture.d.waitForSessionTeardown(fixture.origin.SessionID)
+	spawn, ok := fixture.backend.LastSpawn()
+	if !ok || spawn.ResumeSessionID != "codex-rollout-1" || spawn.UnattendedLaunch != fixture.req.Launch {
 		t.Fatalf("resume spawn=%#v ok=%v", spawn, ok)
+	}
+}
+
+func TestStoppedContinuationKeepsTheLedgerContractAcrossDefinitionChanges(t *testing.T) {
+	fixture := setupStoppedAutomationContinuation(t)
+	original := fixture.req.Launch
+	fixture.d.closeSession(fixture.origin.SessionID, store.SessionClose{By: store.SessionClosedByUser})
+	fixture.req.Launch.Model = "new-definition-model"
+	fixture.req.Launch.Effort = "low"
+	fixture.req.Launch.Executable = "/new/definition/codex"
+
+	if err := fixture.d.ensureAutomationSession(context.Background(), fixture.req, fixture.directory); err != nil {
+		t.Fatal(err)
+	}
+	spawn, ok := fixture.backend.LastSpawn()
+	if !ok || spawn.UnattendedLaunch != original {
+		t.Fatalf("resume spawn=%#v ok=%v, want ledger contract %#v", spawn, ok, original)
 	}
 }
 

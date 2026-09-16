@@ -1036,7 +1036,6 @@ func (d *Daemon) recoverLegacyTicketSeeds(ctx context.Context, job *jobs.Job, ru
 			seed := garden.Seed{
 				ID: seedID, Title: title, Body: body, StepSlug: garden.StepSlug(title),
 				Edges: []garden.Edge{}, Vars: []garden.Var{},
-				ResumeSessionID: strings.TrimSpace(ticket.ResumeSessionID), ResumeCwd: strings.TrimSpace(ticket.Cwd), ResumeAgent: strings.TrimSpace(ticket.LastAgentID),
 			}
 			if ticket.Status == store.TicketStatusDone {
 				seed.Status = garden.StatusHarvested
