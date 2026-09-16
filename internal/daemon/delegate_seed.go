@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,6 +14,16 @@ import (
 )
 
 func (d *Daemon) bindDelegationAssignment(operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID, cwd, agent string, fromChief, createSeed bool) (string, error) {
+	var bound string
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "bind delegated seed protection", func(context.Context) error {
+		var err error
+		bound, err = d.bindDelegationAssignmentForeground(operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID, cwd, agent, fromChief, createSeed)
+		return err
+	})
+	return bound, err
+}
+
+func (d *Daemon) bindDelegationAssignmentForeground(operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID, cwd, agent string, fromChief, createSeed bool) (string, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", err
 	}
@@ -151,6 +162,16 @@ func (d *Daemon) bindDelegationAssignment(operationID, sessionID, plannerSession
 
 // A home without Garden support may launch locally; a failed binding must surface.
 func (d *Daemon) bindDelegationSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent string, fromChief bool) (string, error) {
+	var seedID string
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "bind delegation seed protection", func(context.Context) error {
+		var err error
+		seedID, err = d.bindDelegationSeedForeground(sessionID, plannerSessionID, brief, name, crown, cwd, agent, fromChief)
+		return err
+	})
+	return seedID, err
+}
+
+func (d *Daemon) bindDelegationSeedForeground(sessionID, plannerSessionID, brief, name, crown, cwd, agent string, fromChief bool) (string, error) {
 	seedID, err := d.bindDelegatedSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent, fromChief)
 	switch {
 	case err == nil:
@@ -232,9 +253,9 @@ func (d *Daemon) plantDelegatedSeed(sessionID, plannerSessionID, brief, name str
 // take-over through garden.Transition is the race backstop behind it.
 func (d *Daemon) tendDispatchedSeed(sessionID, plannerSessionID, seedID string) error {
 	actor := garden.Tender{Session: sessionID, Member: d.resolveTenderMember("", sessionID)}
-	if _, _, err := d.applySeedTransitionAs(seedID, garden.VerbTend, garden.Ask{
+	if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionForeground(seedID, garden.VerbTend, garden.Ask{
 		Actor: actor, CauseSession: plannerSessionID, DirectlyNotifiedSession: sessionID,
-	}, d.dispatchSessionLive(plannerSessionID)); err != nil {
+	}, "", d.dispatchSessionLive(plannerSessionID), 0); err != nil {
 		return fmt.Errorf("tend %s as session %s: %w", seedID, sessionID, err)
 	}
 	return nil

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"time"
@@ -62,6 +63,16 @@ func (d *Daemon) worktreeListResult(mainRepo string, limit int) *protocol.Worktr
 }
 
 func (d *Daemon) setWorktreeKeep(path string, keep bool) (*protocol.Worktree, error) {
+	var result *protocol.Worktree
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "set worktree keep", func(context.Context) error {
+		var err error
+		result, err = d.setWorktreeKeepForeground(path, keep)
+		return err
+	})
+	return result, err
+}
+
+func (d *Daemon) setWorktreeKeepForeground(path string, keep bool) (*protocol.Worktree, error) {
 	path = git.CanonicalizePath(path)
 	if !d.store.SetWorktreePin(path, keep, time.Now()) {
 		return nil, &worktreeNotFoundError{path: path}

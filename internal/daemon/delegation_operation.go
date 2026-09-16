@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -16,6 +17,16 @@ import (
 )
 
 func (d *Daemon) startDelegation(msg *protocol.DelegateMessage) (*protocol.DelegationOperation, error) {
+	var operation *protocol.DelegationOperation
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "accept delegation", func(context.Context) error {
+		var err error
+		operation, err = d.startDelegationForeground(msg)
+		return err
+	})
+	return operation, err
+}
+
+func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*protocol.DelegationOperation, error) {
 	requestID := strings.TrimSpace(msg.RequestID)
 	if requestID == "" {
 		requestID = uuid.NewString()
@@ -98,6 +109,12 @@ func (d *Daemon) startDelegation(msg *protocol.DelegateMessage) (*protocol.Deleg
 }
 
 func (d *Daemon) runDelegationOperation(id string) {
+	d.runWorktreeForeground("prepare delegation", func() {
+		d.runDelegationOperationForeground(id)
+	})
+}
+
+func (d *Daemon) runDelegationOperationForeground(id string) {
 	if !d.beginDelegationRun(id) {
 		return
 	}
@@ -176,7 +193,7 @@ func (d *Daemon) runDelegationOperation(id string) {
 		d.finishDelegationFailure(id, fmt.Errorf("record resolved delegation: %w", err))
 		return
 	}
-	result, launchErr := d.delegateOperation(runtime, id, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned, record.WorktreeToken, record.ChiefSessionID, resolved)
+	result, launchErr := d.delegateOperationForeground(runtime, id, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned, record.WorktreeToken, record.ChiefSessionID, resolved)
 	if launchErr != nil {
 		d.finishDelegationFailure(id, launchErr)
 		return

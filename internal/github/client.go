@@ -2,6 +2,7 @@ package github
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -113,6 +114,10 @@ func (c *Client) IsAvailable() bool {
 }
 
 func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error) {
+	return c.doRequestContext(context.Background(), method, path, body)
+}
+
+func (c *Client) doRequestContext(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
 	if !c.selfLimiter.Allow() {
 		return nil, ErrSelfRateLimited
 	}
@@ -128,7 +133,7 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 		bodyReader = bytes.NewReader(jsonBody)
 	}
 
-	req, err := http.NewRequest(method, url, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -142,6 +147,9 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		if cause := context.Cause(ctx); cause != nil {
+			return nil, cause
+		}
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
@@ -694,10 +702,14 @@ type MergedPullRequest struct {
 const mergedPullRequestPageLimit = 3
 
 func (c *Client) ListMergedPullRequests(repo string) ([]MergedPullRequest, error) {
+	return c.ListMergedPullRequestsContext(context.Background(), repo)
+}
+
+func (c *Client) ListMergedPullRequestsContext(ctx context.Context, repo string) ([]MergedPullRequest, error) {
 	var merged []MergedPullRequest
 	for page := 1; page <= mergedPullRequestPageLimit; page++ {
 		path := fmt.Sprintf("/repos/%s/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=%d", repo, page)
-		body, err := c.doRequest("GET", path, nil)
+		body, err := c.doRequestContext(ctx, "GET", path, nil)
 		if err != nil {
 			return nil, fmt.Errorf("list merged pull requests: %w", err)
 		}

@@ -139,8 +139,11 @@ func receiptFacts(t *testing.T, repo string, now time.Time) *repositoryFacts {
 		}
 	}
 	facts.integrationBranch = resolveIntegrationRef(repo, base)
+	if resolved, err := git.Output(git.OpMetadata, repo, "rev-parse", facts.integrationBranch+"^{commit}"); err == nil {
+		facts.integrationSHA = strings.TrimSpace(string(resolved))
+	}
 
-	if hashes, err := git.TreeHashesOnHistory(repo, facts.integrationBranch); err == nil {
+	if hashes, err := git.TreeHashesOnHistory(repo, facts.integrationSHA); err == nil {
 		facts.treeHashes = hashes
 	}
 	if stashes, err := git.StashCountsByBranch(repo); err == nil {

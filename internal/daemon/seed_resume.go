@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -21,6 +22,19 @@ func (d *Daemon) resumeSeed(seedID string) (*seedResumeOutcome, error) {
 }
 
 func (d *Daemon) resumeSeedFromReview(
+	seedID string,
+	review *protocol.SeedReviewActionContext,
+) (*seedResumeOutcome, error) {
+	var outcome *seedResumeOutcome
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "resume seed session", func(context.Context) error {
+		var err error
+		outcome, err = d.resumeSeedFromReviewForeground(seedID, review)
+		return err
+	})
+	return outcome, err
+}
+
+func (d *Daemon) resumeSeedFromReviewForeground(
 	seedID string,
 	review *protocol.SeedReviewActionContext,
 ) (*seedResumeOutcome, error) {
@@ -49,7 +63,7 @@ func (d *Daemon) resumeSeedFromReview(
 	if garden.Closed(seed.Status) {
 		return nil, fmt.Errorf("%s is %s; replant it before resuming its agent", seed.ID, seed.Status)
 	}
-	continuation := d.continuationForSeed(seed)
+	continuation := d.continuationForSeedForeground(seed)
 	if continuation == nil {
 		if tender := strings.TrimSpace(seed.TenderSession); tender != "" {
 			return nil, fmt.Errorf("%s was tended by session %s, but no continuation was saved", seedID, tender)
@@ -66,8 +80,8 @@ func (d *Daemon) resumeSeedFromReview(
 		return nil, err
 	}
 	if existing := d.gardenSession(sessionID); existing != nil {
-		if _, _, _, err := d.applySeedTransitionDetailedAtRevision(
-			seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", expectedRev); err != nil {
+		if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionForeground(
+			seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", d.sessionExists, expectedRev); err != nil {
 			return nil, err
 		}
 		if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {

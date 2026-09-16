@@ -1,8 +1,11 @@
 package git
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -173,11 +176,27 @@ func ListRemotes(repoDir string) ([]string, error) {
 
 // `git worktree add` errors hard on an unknown start ref.
 func RefExists(repoDir, ref string) bool {
+	exists, _ := RefExistsContext(context.Background(), repoDir, ref)
+	return exists
+}
+
+func RefExistsContext(ctx context.Context, repoDir, ref string) (bool, error) {
 	resolvedDir, err := ResolveRepoDir(repoDir)
 	if err != nil {
-		return false
+		return false, err
 	}
-	return runGitNoOutput(OpMetadata, resolvedDir, "rev-parse", "--verify", "--quiet", ref+"^{commit}") == nil
+	err = NoOutputContext(ctx, OpMetadata, resolvedDir, "rev-parse", "--verify", "--quiet", ref+"^{commit}")
+	if cause := context.Cause(ctx); cause != nil {
+		return false, cause
+	}
+	if err == nil {
+		return true, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, err
 }
 
 func FetchRemoteBranch(repoDir, remote, branch string) error {
@@ -305,23 +324,33 @@ func GetHeadCommitInfo(repoDir string) (hash string, time string) {
 // GetDefaultBranch is the branch new worktrees start from: `git config
 // attn.baseBranch` when set, else origin/HEAD, else main or master.
 func GetDefaultBranch(repoDir string) (string, error) {
-	if out, err := runGitOutput(OpMetadata, repoDir, "config", "--get", "attn.baseBranch"); err == nil {
+	return GetDefaultBranchContext(context.Background(), repoDir)
+}
+
+func GetDefaultBranchContext(ctx context.Context, repoDir string) (string, error) {
+	if out, err := OutputContext(ctx, OpMetadata, repoDir, "config", "--get", "attn.baseBranch"); err == nil {
 		if branch := strings.TrimSpace(string(out)); branch != "" {
 			return branch, nil
 		}
+	} else if cause := context.Cause(ctx); cause != nil {
+		return "", cause
 	}
-	out, err := runGitOutput(OpMetadata, repoDir, "symbolic-ref", "refs/remotes/origin/HEAD")
+	out, err := OutputContext(ctx, OpMetadata, repoDir, "symbolic-ref", "refs/remotes/origin/HEAD")
 	if err == nil {
 		ref := strings.TrimSpace(string(out))
 		parts := strings.Split(ref, "/")
 		if len(parts) > 0 {
 			return parts[len(parts)-1], nil
 		}
+	} else if cause := context.Cause(ctx); cause != nil {
+		return "", cause
 	}
 
 	for _, branch := range []string{"main", "master"} {
-		if err := runGitNoOutput(OpMetadata, repoDir, "rev-parse", "--verify", branch); err == nil {
+		if err := NoOutputContext(ctx, OpMetadata, repoDir, "rev-parse", "--verify", branch); err == nil {
 			return branch, nil
+		} else if cause := context.Cause(ctx); cause != nil {
+			return "", cause
 		}
 	}
 

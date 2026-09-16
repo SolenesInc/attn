@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -264,7 +265,7 @@ func (r *delegationRollback) abandon() {
 // reused or adopted worktree must never be pushed here.
 func (r *delegationRollback) onWorktreeCreated(path string) {
 	r.undo = append(r.undo, func() error {
-		if err := r.d.doDeleteWorktree(path, nil, deleteWorktreeOptions{}); err != nil {
+		if err := r.d.doDeleteWorktreeForeground(path, nil, deleteWorktreeOptions{}); err != nil {
 			return fmt.Errorf("rollback worktree %s: %v", path, err)
 		}
 		return nil
@@ -495,11 +496,11 @@ func (d *Daemon) createDelegationWorktree(baseDirectory, inferredRepo string, re
 		err          error
 	)
 	if protocol.Deref(request.ExistingBranch) {
-		worktreePath, err = d.doCreateWorktreeFromBranch(&protocol.CreateWorktreeFromBranchMessage{
+		worktreePath, err = d.doCreateWorktreeFromBranchForeground(&protocol.CreateWorktreeFromBranchMessage{
 			Cmd: protocol.CmdCreateWorktreeFromBranch, MainRepo: repo, Branch: branch, Path: request.Path,
 		})
 	} else {
-		worktreePath, err = d.doCreateWorktree(&protocol.CreateWorktreeMessage{
+		worktreePath, err = d.doCreateWorktreeForeground(&protocol.CreateWorktreeMessage{
 			Cmd:          protocol.CmdCreateWorktree,
 			MainRepo:     repo,
 			Branch:       branch,
@@ -523,6 +524,16 @@ func (d *Daemon) createDelegationWorktree(baseDirectory, inferredRepo string, re
 }
 
 func (d *Daemon) delegate(msg *protocol.DelegateMessage) (*protocol.DelegateResult, error) {
+	var result *protocol.DelegateResult
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "delegate", func(context.Context) error {
+		var err error
+		result, err = d.delegateForeground(msg)
+		return err
+	})
+	return result, err
+}
+
+func (d *Daemon) delegateForeground(msg *protocol.DelegateMessage) (*protocol.DelegateResult, error) {
 	resolved, err := d.resolveDelegationPreferences(msg)
 	if err != nil {
 		return nil, err
@@ -532,10 +543,20 @@ func (d *Daemon) delegate(msg *protocol.DelegateMessage) (*protocol.DelegateResu
 	if err != nil {
 		return nil, err
 	}
-	return d.delegateOperation(runtime, "", sessionID, "", false, "", "", resolved)
+	return d.delegateOperationForeground(runtime, "", sessionID, "", false, "", "", resolved)
 }
 
 func (d *Daemon) delegateResolved(msg *resolvedDelegationLaunch) (*protocol.DelegateResult, error) {
+	var result *protocol.DelegateResult
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "delegate resolved", func(context.Context) error {
+		var err error
+		result, err = d.delegateResolvedForeground(msg)
+		return err
+	})
+	return result, err
+}
+
+func (d *Daemon) delegateResolvedForeground(msg *resolvedDelegationLaunch) (*protocol.DelegateResult, error) {
 	resolved, err := d.resolveDelegationPreferences(msg.preferenceRequest())
 	if err != nil {
 		return nil, err
@@ -545,7 +566,7 @@ func (d *Daemon) delegateResolved(msg *resolvedDelegationLaunch) (*protocol.Dele
 	if msg.Handover != nil {
 		operationID = "legacy-" + sessionID
 	}
-	return d.delegateOperation(msg, operationID, sessionID, "", false, "", "", resolved)
+	return d.delegateOperationForeground(msg, operationID, sessionID, "", false, "", "", resolved)
 }
 
 func (d *Daemon) spawnDelegatedRuntime(msg *resolvedDelegationLaunch, sessionID, workspaceID, directory, name, agent, model, effort, seedID string, guidance string) error {
@@ -572,12 +593,12 @@ func (d *Daemon) spawnDelegatedRuntime(msg *resolvedDelegationLaunch, sessionID,
 		spawnMsg.Effort = protocol.Ptr(effort)
 	}
 	spawnClient := newInternalWSClient()
-	d.handleSpawnSession(spawnClient, spawnMsg)
+	d.handleSpawnSessionWithPolicyForeground(spawnClient, spawnMsg, internalSpawnPolicy{})
 	_, err := readInternalActionResult(spawnClient)
 	return err
 }
 
-func (d *Daemon) delegateOperation(msg *resolvedDelegationLaunch, operationID, reservedSessionID, ownedWorktreePath string, worktreeOwned bool, worktreeToken, initiatingChiefSessionID string, resolved *delegationprefs.Resolved) (*protocol.DelegateResult, error) {
+func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, operationID, reservedSessionID, ownedWorktreePath string, worktreeOwned bool, worktreeToken, initiatingChiefSessionID string, resolved *delegationprefs.Resolved) (*protocol.DelegateResult, error) {
 	guidance := ""
 	if resolved != nil {
 		if err := d.ensureDelegationWorkflowSkill(resolved); err != nil {
@@ -700,7 +721,7 @@ func (d *Daemon) delegateOperation(msg *resolvedDelegationLaunch, operationID, r
 		if msg.Handover != nil {
 			seedID = strings.TrimSpace(msg.Handover.SeedID)
 			if handover != nil && !handover.alreadyBound {
-				if _, err := d.bindSeedHandover(msg, operationID, sessionID, existing.Directory, agent, delegatedByChief); err != nil {
+				if _, err := d.bindSeedHandoverForeground(msg, operationID, sessionID, existing.Directory, agent, delegatedByChief); err != nil {
 					return nil, fmt.Errorf("bind seed handover: %w", err)
 				}
 			}
@@ -708,9 +729,9 @@ func (d *Daemon) delegateOperation(msg *resolvedDelegationLaunch, operationID, r
 			seedID = bound
 		} else {
 			if msg.Assignment.Kind == "" {
-				seedID, err = d.bindDelegationSeed(sessionID, sourceSessionID, brief, existing.Label, seedID, existing.Directory, agent, delegatedByChief)
+				seedID, err = d.bindDelegationSeedForeground(sessionID, sourceSessionID, brief, existing.Label, seedID, existing.Directory, agent, delegatedByChief)
 			} else {
-				seedID, err = d.bindDelegationAssignment(operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, existing.Label, seedID, existing.Directory, agent, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew)
+				seedID, err = d.bindDelegationAssignmentForeground(operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, existing.Label, seedID, existing.Directory, agent, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew)
 			}
 			if err != nil {
 				return nil, err
@@ -922,15 +943,15 @@ func (d *Daemon) delegateOperation(msg *resolvedDelegationLaunch, operationID, r
 	if handover != nil {
 		seedID = strings.TrimSpace(msg.Handover.SeedID)
 		if !handover.alreadyBound {
-			if _, err := d.bindSeedHandover(msg, operationID, sessionID, directory, agent, delegatedByChief); err != nil {
+			if _, err := d.bindSeedHandoverForeground(msg, operationID, sessionID, directory, agent, delegatedByChief); err != nil {
 				return nil, fmt.Errorf("bind seed handover: %w", err)
 			}
 		}
 	} else {
 		if msg.Assignment.Kind == "" {
-			seedID, err = d.bindDelegationSeed(sessionID, sourceSessionID, brief, name, seedID, directory, agent, delegatedByChief)
+			seedID, err = d.bindDelegationSeedForeground(sessionID, sourceSessionID, brief, name, seedID, directory, agent, delegatedByChief)
 		} else {
-			seedID, err = d.bindDelegationAssignment(operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, name, seedID, directory, agent, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew)
+			seedID, err = d.bindDelegationAssignmentForeground(operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, name, seedID, directory, agent, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew)
 		}
 		if err != nil {
 			return nil, err
