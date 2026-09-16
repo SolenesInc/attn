@@ -331,6 +331,47 @@ func TestSeedResumeRollsBackWhenSeedChangesAfterSpawn(t *testing.T) {
 	}
 }
 
+func TestSeedResumeRollbackPreservesWorkerlessActiveLedgerRow(t *testing.T) {
+	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
+	leafID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
+	writeCodexRolloutFixture(t, "codex-workerless-resume")
+	d.persistResumeSessionID(leafID, "codex-workerless-resume")
+	move(t, d, leafID, seedID, garden.VerbPark, "", "")
+	prior := d.store.Get(leafID)
+	if prior == nil || d.sessionHasLiveWorker(leafID) {
+		t.Fatalf("fixture session = %+v, live=%v; want workerless active row", prior, d.sessionHasLiveWorker(leafID))
+	}
+
+	changed := false
+	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
+		if opts.ID != leafID || changed {
+			return
+		}
+		changed = true
+		editSeed(t, d, seedID, "changed during workerless launch")
+	}
+
+	client := newInternalWSClient()
+	d.handleSeedResume(client, &protocol.SeedResumeMessage{
+		Cmd: protocol.CmdSeedResume, RequestID: protocol.Ptr("resume-workerless"), SeedID: seedID,
+	})
+	message := <-client.send
+	var reply protocol.SeedResumeResultMessage
+	if err := json.Unmarshal(message.payload, &reply); err != nil {
+		t.Fatalf("decode seed resume response: %v", err)
+	}
+	if reply.Success || !strings.Contains(protocol.Deref(reply.Error), "changed while its conversation was resuming") {
+		t.Fatalf("seed resume response = %+v, want post-spawn revision conflict", reply)
+	}
+	got := d.store.Get(leafID)
+	if !reflect.DeepEqual(got, prior) {
+		t.Fatalf("active ledger row after rollback = %+v, want %+v", got, prior)
+	}
+	if !backend.WasKilledAndRemoved(leafID) {
+		t.Fatal("rollback did not stop the replacement runtime")
+	}
+}
+
 func TestSeedResumeBindingIsAtomicWhenTheSeedChangesDuringLaunch(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedWire := plant(t, d, protocol.SeedPlantMessage{Title: "racing resume", Body: protocol.Ptr("old body")})

@@ -729,12 +729,14 @@ func (d *Daemon) reopenSessionRuntime(
 	if entry == nil {
 		return fail(fmt.Errorf("session %s is not in the ledger", plan.SessionID))
 	}
-	if d.store.Get(plan.SessionID) != nil && d.sessionHasLiveWorker(plan.SessionID) {
+	priorSession := d.store.Get(plan.SessionID)
+	if priorSession != nil && d.sessionHasLiveWorker(plan.SessionID) {
 		return &sessionRuntimeReopened{
 			SessionID: plan.SessionID, WorkspaceID: entry.WorkspaceID, AlreadyRunning: true,
 		}, nil
 	}
 	intent, ok := d.store.LaunchIntent(plan.SessionID)
+	priorIntent, hadPriorIntent := intent, ok
 	if !ok && !plan.FreshConversation {
 		return fail(fmt.Errorf("session %s has no stored launch intent", plan.SessionID))
 	}
@@ -836,7 +838,9 @@ func (d *Daemon) reopenSessionRuntime(
 	if session := d.store.Get(plan.SessionID); session == nil {
 		return fail(fmt.Errorf("reopened session was not persisted"))
 	}
-	if !reopened {
+	if priorSession != nil {
+		rollback.onSessionRespawned(priorSession, priorIntent, hadPriorIntent)
+	} else if !reopened {
 		rollback.onSessionSpawned(plan.SessionID)
 	}
 
@@ -854,6 +858,36 @@ func (r *delegationRollback) onSessionReopened(sessionID string, closed store.Se
 	r.undo = append(r.undo, func() error {
 		r.d.terminateSession(sessionID, syscall.SIGTERM)
 		r.d.restoreSessionClose(sessionID, closed)
+		return nil
+	})
+}
+
+func (r *delegationRollback) onSessionRespawned(
+	prior *protocol.Session,
+	priorIntent store.LaunchIntent,
+	hadPriorIntent bool,
+) {
+	r.undo = append(r.undo, func() error {
+		if err := r.d.terminateSessionRuntimeChecked(prior.ID, syscall.SIGTERM); err != nil {
+			return err
+		}
+		r.d.closePluginDriverSession(prior.ID, "launch_failed", nil, "")
+		if err := r.d.store.AddCheckedUnlessTeardown(prior); err != nil {
+			return err
+		}
+		if hadPriorIntent {
+			r.d.store.SetLaunchIntent(prior.ID, priorIntent)
+		} else {
+			r.d.store.ClearLaunchIntent(prior.ID)
+		}
+		if r.d.workspaces != nil {
+			if prior.WorkspaceID == "" {
+				r.d.workspaces.dissociateSession(prior.ID)
+			} else {
+				r.d.workspaces.associateSession(prior.ID, prior.WorkspaceID, prior.Label)
+			}
+		}
+		r.d.publishFact(FactSessionReregistered, prior.ID, nil)
 		return nil
 	})
 }

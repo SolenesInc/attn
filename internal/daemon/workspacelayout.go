@@ -1114,7 +1114,11 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 	normalized := workspacelayout.NormalizeWorkspaceLayout(*snapshot)
 	layoutEmpty := workspacelayout.LayoutEmpty(normalized.Layout)
 	var teardown *sessionTeardown
-	if strings.TrimSpace(sessionID) != "" {
+	trackedSession := d.store.Get(sessionID) != nil || d.sessionHasLiveWorker(sessionID)
+	if !trackedSession && d.hubManager != nil {
+		trackedSession = d.hubManager.RemoteSession(sessionID) != nil
+	}
+	if strings.TrimSpace(sessionID) != "" && trackedSession {
 		var err error
 		teardown, err = d.prepareSessionTeardown(sessionID)
 		if err != nil {

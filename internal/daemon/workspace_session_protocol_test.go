@@ -125,6 +125,37 @@ func TestWorkspaceLayoutClosePaneKeepsVisibleStateWhenTeardownPreparationFails(t
 	}
 }
 
+func TestWorkspaceLayoutCloseFailedPlaceholderDoesNotCreateTeardown(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d.ptyBackend = &fakeSpawnBackend{}
+	client := newWorkspaceProtocolTestClient()
+	workspaceID := "workspace-failed-placeholder"
+	sessionID := "session-failed-placeholder"
+	paneID := "pane-failed-placeholder"
+	cwd := t.TempDir()
+
+	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
+		Cmd: protocol.CmdRegisterWorkspace, ID: workspaceID, Title: "Failed placeholder", Directory: cwd,
+	})
+	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
+		Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: workspaceID,
+		PaneID: protocol.Ptr(paneID), SessionID: sessionID,
+	})
+	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
+	d.setWorkspacePaneStatusForSession(sessionID, workspacelayout.PaneStatusFailed, "launch failed")
+
+	d.handleWorkspaceLayoutClosePane(client, &protocol.WorkspaceLayoutClosePaneMessage{
+		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: paneID,
+	})
+	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, true)
+	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil {
+		t.Fatalf("failed placeholder layout survived close: %+v", snapshot)
+	}
+	if err := d.store.AddCheckedUnlessTeardown(&protocol.Session{ID: sessionID, Label: "retry"}); err != nil {
+		t.Fatalf("closing failed placeholder blocked session retry: %v", err)
+	}
+}
+
 func TestWorkspaceSessionProtocolBareSpawnEnsuresLayoutPane(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &fakeSpawnBackend{}
