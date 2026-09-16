@@ -3,8 +3,10 @@ package daemon
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -31,6 +33,57 @@ func TestWorktreeMaintenanceForegroundPreemptsObservation(t *testing.T) {
 	}
 	if err := <-finished; !errors.Is(err, errWorktreeSweepPreempted) {
 		t.Fatalf("sweep error = %v, want preemption", err)
+	}
+}
+
+func TestWorktreeMaintenanceForegroundPreemptsBlockedOriginLookup(t *testing.T) {
+	fakeBin := t.TempDir()
+	startedFIFO := filepath.Join(t.TempDir(), "git-started")
+	if err := syscall.Mkfifo(startedFIFO, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	releaseFIFO := filepath.Join(t.TempDir(), "git-release")
+	if err := syscall.Mkfifo(releaseFIFO, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fakeGit := filepath.Join(fakeBin, "git")
+	script := "#!/bin/sh\nif [ \"$1\" = remote ] && [ \"$2\" = get-url ] && [ \"$3\" = origin ]; then\n  printf x > \"$ATTN_GIT_STARTED_FIFO\"\n  read ignored < \"$ATTN_GIT_RELEASE_FIFO\"\nfi\nexit 1\n"
+	if err := os.WriteFile(fakeGit, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("ATTN_GIT_STARTED_FIFO", startedFIFO)
+	t.Setenv("ATTN_GIT_RELEASE_FIFO", releaseFIFO)
+
+	started := make(chan error, 1)
+	go func() {
+		fifo, err := os.Open(startedFIFO)
+		if err == nil {
+			defer fifo.Close()
+			_, err = io.ReadFull(fifo, make([]byte, 1))
+		}
+		started <- err
+	}()
+
+	d := sweepDaemon(t)
+	repo := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	finished := make(chan error, 1)
+	go func() {
+		finished <- d.worktreeMaintenance.RunSweep(ctx, func(lease *worktreeSweepLease) error {
+			return d.refreshMergedPullRequestsContext(lease.Context(), repo, time.Now())
+		})
+	}()
+	if err := <-started; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.worktreeMaintenance.RunForeground(context.Background(), "test foreground", func(context.Context) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-finished; !errors.Is(err, errWorktreeSweepPreempted) {
+		t.Fatalf("blocked origin lookup error = %v, want preemption cause", err)
 	}
 }
 

@@ -1,6 +1,10 @@
 package git
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"testing"
+)
 
 func TestOriginHostOwnerRepo(t *testing.T) {
 	t.Parallel()
@@ -15,6 +19,17 @@ func TestOriginHostOwnerRepo(t *testing.T) {
 	}
 	if got := OriginOwnerRepo(dir); got != "owner/name" {
 		t.Errorf("OriginOwnerRepo() = %q, want %q", got, "owner/name")
+	}
+}
+
+func TestOriginHostOwnerRepoContextReturnsCancellationCause(t *testing.T) {
+	cause := errors.New("foreground preempted sweep")
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(cause)
+
+	_, _, err := OriginHostOwnerRepoContext(ctx, t.TempDir())
+	if !errors.Is(err, cause) {
+		t.Fatalf("error = %v, want cancellation cause", err)
 	}
 }
 

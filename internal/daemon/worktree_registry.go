@@ -231,7 +231,13 @@ func (d *Daemon) sessionActivityByWorktree(liveSessions map[string][]string) map
 }
 
 func (d *Daemon) refreshMergedPullRequestsContext(ctx context.Context, repo string, now time.Time) error {
-	host, ownerRepo := git.OriginHostOwnerRepo(repo)
+	host, ownerRepo, err := git.OriginHostOwnerRepoContext(ctx, repo)
+	if err != nil {
+		if cause := context.Cause(ctx); cause != nil {
+			return cause
+		}
+		return nil
+	}
 	if host == "" || ownerRepo == "" {
 		return nil
 	}

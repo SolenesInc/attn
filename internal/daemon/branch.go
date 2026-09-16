@@ -88,7 +88,7 @@ func (d *Daemon) handleCreateWorktreeFromBranchWS(client *wsClient, msg *protoco
 }
 
 func (d *Daemon) handleListBranchesWS(client *wsClient, msg *protocol.ListBranchesMessage) {
-	go d.runWorktreeForeground("list branches", func() {
+	go d.runWorktreeForeground("list branches", func(context.Context) {
 		branches, err := git.ListBranchesWithCommits(msg.MainRepo)
 		result := protocol.BranchesResultMessage{
 			Event:   protocol.EventBranchesResult,
@@ -107,7 +107,7 @@ func (d *Daemon) handleListBranchesWS(client *wsClient, msg *protocol.ListBranch
 }
 
 func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfoMessage) {
-	go d.runWorktreeForeground("get repository info", func() {
+	go d.runWorktreeForeground("get repository info", func(ctx context.Context) {
 		repo := git.CanonicalizePath(msg.Repo)
 
 		currentBranch, err := git.GetCurrentBranch(repo)
@@ -123,7 +123,7 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 
 		commitHash, commitTime := git.GetHeadCommitInfo(repo)
 
-		defaultBranch, _ := d.coordinator().DefaultBranch(repo)
+		defaultBranch, _ := git.GetDefaultBranchContext(ctx, repo)
 		if defaultBranch == "" {
 			defaultBranch = "main"
 		}
@@ -147,8 +147,8 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 }
 
 func (d *Daemon) handleGetDefaultBranchWS(client *wsClient, msg *protocol.GetDefaultBranchMessage) {
-	go d.runWorktreeForeground("get default branch", func() {
-		branch, err := d.coordinator().DefaultBranch(msg.Repo)
+	go d.runWorktreeForeground("get default branch", func(ctx context.Context) {
+		branch, err := git.GetDefaultBranchContext(ctx, msg.Repo)
 		result := &protocol.WebSocketEvent{
 			Event:   protocol.EventGetDefaultBranchResult,
 			Success: protocol.Ptr(err == nil),
@@ -163,7 +163,7 @@ func (d *Daemon) handleGetDefaultBranchWS(client *wsClient, msg *protocol.GetDef
 }
 
 func (d *Daemon) handleFetchRemotesWS(client *wsClient, msg *protocol.FetchRemotesMessage) {
-	go d.runWorktreeForeground("fetch remotes", func() {
+	go d.runWorktreeForeground("fetch remotes", func(context.Context) {
 		err := git.FetchRemotes(msg.Repo)
 		result := &protocol.WebSocketEvent{
 			Event:   protocol.EventFetchRemotesResult,
@@ -180,7 +180,7 @@ func (d *Daemon) handleFetchRemotesWS(client *wsClient, msg *protocol.FetchRemot
 }
 
 func (d *Daemon) handleListRemoteBranchesWS(client *wsClient, msg *protocol.ListRemoteBranchesMessage) {
-	go d.runWorktreeForeground("list remote branches", func() {
+	go d.runWorktreeForeground("list remote branches", func(context.Context) {
 		branches, err := git.ListRemoteBranches(msg.Repo)
 		result := &protocol.WebSocketEvent{
 			Event:   protocol.EventListRemoteBranchesResult,
@@ -200,7 +200,7 @@ func (d *Daemon) handleListRemoteBranchesWS(client *wsClient, msg *protocol.List
 }
 
 func (d *Daemon) handleEnsureRepoWS(client *wsClient, msg *protocol.EnsureRepoMessage) {
-	go d.runWorktreeForeground("ensure repository", func() {
+	go d.runWorktreeForeground("ensure repository", func(context.Context) {
 		result := &protocol.WebSocketEvent{
 			Event:      protocol.EventEnsureRepoResult,
 			TargetPath: protocol.Ptr(msg.TargetPath),

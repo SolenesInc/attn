@@ -21,9 +21,9 @@ type worktreeSweepLease struct {
 	ctx         context.Context
 }
 
-func (d *Daemon) runWorktreeForeground(operation string, run func()) {
-	_ = d.worktreeMaintenance.RunForeground(context.Background(), operation, func(context.Context) error {
-		run()
+func (d *Daemon) runWorktreeForeground(operation string, run func(context.Context)) {
+	_ = d.worktreeMaintenance.RunForeground(context.Background(), operation, func(ctx context.Context) error {
+		run(ctx)
 		return nil
 	})
 }

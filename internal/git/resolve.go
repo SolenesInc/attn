@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -80,11 +81,17 @@ func OriginOwnerRepo(path string) string {
 }
 
 func OriginHostOwnerRepo(path string) (host, ownerRepo string) {
-	out, err := runGitOutput(OpMetadata, path, "remote", "get-url", "origin")
+	host, ownerRepo, _ = OriginHostOwnerRepoContext(context.Background(), path)
+	return host, ownerRepo
+}
+
+func OriginHostOwnerRepoContext(ctx context.Context, path string) (host, ownerRepo string, err error) {
+	out, err := OutputContext(ctx, OpMetadata, path, "remote", "get-url", "origin")
 	if err != nil {
-		return "", ""
+		return "", "", err
 	}
-	return hostOwnerRepoFromRemote(strings.TrimSpace(string(out)))
+	host, ownerRepo = hostOwnerRepoFromRemote(strings.TrimSpace(string(out)))
+	return host, ownerRepo, nil
 }
 
 func hostOwnerRepoFromRemote(remote string) (host, ownerRepo string) {

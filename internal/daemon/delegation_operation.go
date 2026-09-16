@@ -109,7 +109,7 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 }
 
 func (d *Daemon) runDelegationOperation(id string) {
-	d.runWorktreeForeground("prepare delegation", func() {
+	d.runWorktreeForeground("prepare delegation", func(context.Context) {
 		d.runDelegationOperationForeground(id)
 	})
 }
