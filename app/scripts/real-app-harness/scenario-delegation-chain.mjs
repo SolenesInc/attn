@@ -14,11 +14,12 @@ import { MOCK_AGENT_MODEL, writeMockAgentFixture } from './mockAgent.mjs';
 const options = parseCommonArgs(process.argv.slice(2));
 const profile = currentHarnessProfile();
 if (!profile) throw new Error('Delegation chain verification requires a named profile');
+// Hover and :focus need an active page, which WebKit ties to a key window.
 process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
 const runner = createScenarioRunner(options, { scenarioId: 'DelegationChain', tier: 'local', prefix: 'delegation-chain', allowRealAgents: false });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
-const driver = createWindowDriver({ appPath: options.appPath });
+const driver = createWindowDriver({ appPath: options.appPath, client });
 const created = [];
 const popup = '.delegation-chain-popover';
 const runAttn = args => execFileSync(appDaemonInTree(options.appPath), args, { encoding: 'utf8', env: profileCliEnv(profile) });
@@ -140,11 +141,11 @@ try {
     await driver.clickWindow(headerTarget.x, headerTarget.y);
     await waitForChainFocus(builder, 'click focuses the current agent');
     await hold();
-    await driver.activateApp();
     await driver.pressKey('Escape');
     await waitForSelector(`${header}:focus`, 'Escape restores the header trigger');
   });
   await runner.step('native_action_menu_arrows_enter_and_escape', async () => {
+    await driver.activateApp();
     await pressShortcutKeys(client, driver, 'ui.actionMenu');
     await waitForSelector('.action-menu input:focus', 'native action menu shortcut');
     await driver.typeText('delegation chain');

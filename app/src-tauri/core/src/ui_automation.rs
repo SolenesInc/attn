@@ -12,6 +12,7 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Listener, LogicalPosition, LogicalSize, Manager, Runtime};
 
+use crate::native_input;
 use crate::profile;
 
 const REQUEST_EVENT: &str = "attn://ui-automation/request";
@@ -373,6 +374,39 @@ fn handle_request<R: Runtime>(
                     &format!(
                         "request err id={} action=capture_native_window_screenshot error={}",
                         request_id, error
+                    ),
+                );
+                AutomationSocketResponse {
+                    id: request_id,
+                    ok: false,
+                    result: None,
+                    error: Some(error),
+                }
+            }
+        };
+    }
+
+    if native_input::ACTIONS.contains(&request.action.as_str()) {
+        let payload = request.payload.unwrap_or(Value::Null);
+        return match native_input::inject(app, &request.action, &payload) {
+            Ok(result) => {
+                append_log(
+                    app,
+                    &format!("request ok id={} action={}", request_id, request.action),
+                );
+                AutomationSocketResponse {
+                    id: request_id,
+                    ok: true,
+                    result: Some(result),
+                    error: None,
+                }
+            }
+            Err(error) => {
+                append_log(
+                    app,
+                    &format!(
+                        "request err id={} action={} error={}",
+                        request_id, request.action, error
                     ),
                 );
                 AutomationSocketResponse {

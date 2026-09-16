@@ -206,13 +206,17 @@ A new scenario file lands with a catalog entry, or with its verdict added here.
 ## Writing scenarios
 
 - Exercise actual app actions/order; update scenarios when product flows change.
-- Pressing native keys (`driver.press*`, `driver.typeText`, `pressShortcutKeys`)
-  needs `process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0'` before the launch: macOS
-  makes the always-on-top window non-focusable, so a keystroke reaches nothing.
-  The macOS driver reads the launched app's own environment and fails the press
-  when it says otherwise, and `alwaysOnTopSweep.test.mjs` fails a scenario that
-  neither opts out nor states why it need not. Clicks, drags and `driver.menu`
-  reach the window either way.
+- Build the driver with the automation client: `createWindowDriver({ appPath,
+  client })`. Keys, text, clicks, drags and pointer moves then become NSEvents
+  the app sends to its own window (`native_key`, `native_text`, `native_mouse`),
+  so a run never activates attn, never moves the real pointer, and works while
+  the window is parked. A window that never becomes key has limits WebKit
+  sets: it delivers no mouse moves (no hover, no `pointermove`), matches no
+  `:focus`, and reports `document.hasFocus()` false; assert focus through
+  `dom_active_element` instead. A scenario whose subject needs those calls
+  `driver.activateApp()` and sets `ATTN_HARNESS_ALWAYS_ON_TOP=0`, and
+  `focusFreeSweep.test.mjs` fails such a file unless it states why. Scroll and
+  `driver.menu` still go through macOS.
 - The mock agent is the default agent. An armed scenario launches `mockAgent.mjs`
   for `claude` and `codex`: the tripwire pins both `ATTN_<AGENT>_EXECUTABLE` at it
   and `launchFreshAppAndConnect` writes the matching `<agent>_executable` setting,

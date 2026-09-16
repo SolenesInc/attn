@@ -10,14 +10,12 @@ import { currentHarnessProfile } from './harnessProfile.mjs';
 import { createWindowDriver, delay } from './platform.mjs';
 import { captureWebKitPids, snapshot, readProcessTable, readLiveDaemonPid, readAppFootprint } from './perfMeasure.mjs';
 import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
-
-process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
 const options = parseCommonArgs(process.argv.slice(2));
 if (!currentHarnessProfile()) throw new Error('Agent settings verification requires a named profile');
 const runner = createScenarioRunner(options, { scenarioId: 'AgentSettings', tier: 'local', prefix: 'agent-settings', allowRealAgents: false });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
-const driver = createWindowDriver({ appPath: options.appPath });
+const driver = createWindowDriver({ appPath: options.appPath, client });
 const root = '[data-testid="settings-section-agents"]';
 const click = selector => client.request('dom_click', { selector });
 const type = (selector, text) => client.request('dom_type', { selector, text });

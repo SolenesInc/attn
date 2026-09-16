@@ -97,12 +97,6 @@ async function main() {
   }
   requireFish4();
 
-  // HID clicks land at absolute screen positions, so the default 20px-visible
-  // window park would put every click off-window.
-  if (process.env.ATTN_HARNESS_PARK_VISIBLE_PX === undefined) {
-    process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '800';
-  }
-
   const runner = createScenarioRunner(options, {
     scenarioId: 'TERMINAL-CONTEXT-MENU',
     tier: 'tier1-local-shell',
@@ -115,7 +109,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   const savedClipboard = readClipboard();
   let sessionId = null;
 
@@ -191,8 +185,6 @@ async function main() {
         paneId: pane.paneId,
         cell: { row: outputRow, col: 2 },
       });
-
-      await driver.activateApp();
       target = windowRelativePoint(
         cellRect.centerX,
         cellRect.centerY,

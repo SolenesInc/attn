@@ -58,7 +58,6 @@ async function dismissPicker(client, description, timeoutMs = 10_000) {
 }
 
 async function selectTerminalAgent(driver, client) {
-  await driver.activateApp();
   await driver.pressKey('t', { option: true });
   const startedAt = Date.now();
   let lastState = null;
@@ -87,7 +86,6 @@ async function waitForStateSession(client, sessionId, description, timeoutMs = 2
 }
 
 async function summonPicker(client, driver, shortcutId, title) {
-  await driver.activateApp();
   await pressShortcutKeys(client, driver, shortcutId);
   const picker = await waitForPicker(client, title);
   await dismissPicker(client, `${shortcutId} picker to close`);
@@ -152,9 +150,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver({
-    appPath: options.appPath,
-  });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   const createdSessionIds = [];
   let seedSessionId = null;
   let seedWorkspaceId = null;
@@ -173,8 +169,6 @@ async function main() {
 
   try {
     await runner.step('launch_app', async () => {
-      process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
-      process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
       await launchFreshAppAndConnect(client, observer);
     });
 
@@ -213,7 +207,6 @@ async function main() {
     await runner.step('cmd_t_creates_a_workspace_of_its_own', async () => {
       const cwd = path.join(runner.sessionDir, 'cmd-t-workspace');
       fs.mkdirSync(cwd, { recursive: true });
-      await driver.activateApp();
       await pressShortcutKeys(client, driver, 'session.newWorkspace');
       await waitForPicker(client, 'New Workspace Location');
       await selectTerminalAgent(driver, client);

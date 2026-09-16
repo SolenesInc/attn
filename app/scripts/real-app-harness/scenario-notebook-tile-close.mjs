@@ -101,7 +101,7 @@ async function main() {
   const { runId, runDir, sessionDir } = createRunContext(options, 'notebook-tile-close');
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   let sessionId = null;
 
   console.log(`[RealAppHarness] runDir=${runDir}`);
@@ -109,8 +109,6 @@ async function main() {
   console.log(`[RealAppHarness] wsUrl=${options.wsUrl}`);
 
   try {
-    process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
-    process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
     await launchFreshAppAndConnect(client, observer);
     await closeExistingSessions(client, options.sessionRootDir);
 
@@ -139,8 +137,6 @@ async function main() {
       throw new Error(`Could not resolve workspace id for session ${sessionId}: ${JSON.stringify(workspace)}`);
     }
     const terminalPaneId = pane.paneId;
-
-    await driver.activateApp();
     await driver.pressKey('n', { command: true, option: true });
     const docked = await waitForWorkspaceUi(
       client,
@@ -153,11 +149,8 @@ async function main() {
     console.log(`[RealAppHarness] docked notebook tile=${tileId}`);
 
     await waitForFinder(client, true, 'fresh notebook tile auto-opens its finder');
-    await driver.activateApp();
     await driver.pressKeyCode(53);
     await waitForFinder(client, false, 'Esc dismisses the finder, leaving focus in the tile');
-
-    await driver.activateApp();
     await driver.pressKey('w', { command: true });
 
     const afterClose = await waitForWorkspaceUi(

@@ -203,7 +203,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   const profile = currentHarnessProfile();
   const attnBin = resolveAttnBin();
   const dataDir = dataDirForProfile(profile);
@@ -233,9 +233,6 @@ async function main() {
 
   try {
     await runner.step('launch_app_with_queue_mode', async () => {
-      process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
-      // macOS makes an always-on-top window non-focusable: native keys land nowhere.
-      process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
       await launchFreshAppAndConnect(client, observer);
       await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
     });
@@ -288,7 +285,6 @@ async function main() {
 
     await runner.step('a_row_opens_from_the_keyboard', async () => {
       await client.request('select_session', { sessionId: beta.sessionId });
-      await driver.activateApp();
 
       const focused = await client.request('dom_focus', {
         selector: `[data-testid="queue-select-${alpha.sessionId}"]`,
@@ -680,8 +676,6 @@ async function main() {
       // The packaged app's native menu can swallow an accelerator before the DOM
       // ever sees it, which no unit or e2e test can catch.
       await client.request('select_session', { sessionId: beta.sessionId });
-      await driver.activateApp();
-      await driver.clickWindow(0.5, 0.5);
       await pressShortcutKeys(client, driver, 'session.settle');
       await waitForTurns(client, [alpha.sessionId], 'beta settled by shortcut before the restart');
 
@@ -726,8 +720,6 @@ async function main() {
       // One press is not enough: the daemon reclassifies every session after the
       // restart, so a settled agent can legitimately open a fresh turn.
       await client.request('select_session', { sessionId: alpha.sessionId });
-      await driver.activateApp();
-      await driver.clickWindow(0.5, 0.5);
       const emptied = await pollFor(async () => {
         const queue = await queueState(client);
         if (turnIds(queue).length === 0) return queue;
@@ -798,8 +790,6 @@ async function main() {
     });
 
     await runner.step('home_the_user_walked_to_keeps_them', async () => {
-      await driver.activateApp();
-      await driver.clickWindow(0.5, 0.5);
       await pressShortcutKeys(client, driver, 'session.goToDashboard');
       const home = await pollFor(async () => {
         const current = await client.request('get_state');

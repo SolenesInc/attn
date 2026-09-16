@@ -36,7 +36,7 @@ async function main() {
 
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const client = new UiAutomationClient({ appPath: options.appPath });
-  const driver = createWindowDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
 
   console.log(`[RealAppHarness] runDir=${runDir}`);
   console.log(`[RealAppHarness] sessionDir=${sessionDir}`);

@@ -197,8 +197,6 @@ async function main() {
     return;
   }
 
-  process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
-
   const runner = createScenarioRunner(options, {
     scenarioId: 'TERMINAL-INPUT',
     tier: 'tier1-local-shell',

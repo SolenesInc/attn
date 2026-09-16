@@ -60,11 +60,6 @@ async function waitForActiveSession(client, sessionId, description, timeoutMs = 
   throw new Error(`Timed out waiting for ${description}. Last state:\n${JSON.stringify(lastState, null, 2)}`);
 }
 
-async function focusAppForNativeShortcut(driver) {
-  await driver.activateApp();
-  await driver.clickWindow(0.5, 0.5);
-}
-
 async function closeExistingSessions(client, sessionRootDir) {
   const initial = await client.request('get_state');
   const harnessSessions = (initial.sessions || []).filter((session) => session.cwd?.startsWith(sessionRootDir));
@@ -231,9 +226,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver({
-    appPath: options.appPath,
-  });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   const createdSessionIds = [];
 
   runner.log('run context', { runDir: runner.runDir, sessionDir: runner.sessionDir, wsUrl: options.wsUrl });
@@ -250,8 +243,6 @@ async function main() {
 
   try {
     await runner.step('launch_app', async () => {
-      process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
-      process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
       await launchFreshAppAndConnect(client, observer);
       await closeExistingSessions(client, options.sessionRootDir);
     });
@@ -310,7 +301,6 @@ async function main() {
     });
 
     await runner.step('assert_cmd_number_shortcuts', async () => {
-      await focusAppForNativeShortcut(driver);
       await pressShortcutKeys(client, driver, 'workspace.select1');
       await waitForActiveSession(client, workspaceA.sessionId, 'Cmd+1 selecting first workspace session');
       await assertWorkspaceVisible(client, workspaceA.sessionId, workspaceB.sessionId, 3);

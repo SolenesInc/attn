@@ -266,11 +266,6 @@ async function main() {
     return;
   }
 
-  if (process.env.ATTN_HARNESS_PARK_VISIBLE_PX === undefined) {
-    process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '0';
-  }
-  process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
-
   const runner = createScenarioRunner(options, {
     scenarioId: 'TERMINAL-ANNOTATIONS',
     tier: 'tier2-local-fake-agent',
@@ -283,7 +278,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   const cwd = path.join(runner.sessionDir, 'annotated');
   let sessionId = null;
   let paneId = null;

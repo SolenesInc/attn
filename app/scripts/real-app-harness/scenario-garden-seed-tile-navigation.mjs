@@ -41,7 +41,6 @@ function squash(text) {
 }
 
 let marks = 0;
-let nativeInputUnavailable = false;
 
 async function runInPane(client, pane, command, expected, timeoutMs = 30_000) {
   const mark = `mark${++marks}x`;
@@ -94,26 +93,8 @@ function tileBodySelector(seedID) {
 }
 
 async function pressEscape(client, driver, seedID) {
-  if (!nativeInputUnavailable) {
-    try {
-      await driver.activateApp();
-      await client.request('dom_focus', { selector: tileBodySelector(seedID) });
-      await driver.pressKeyCode(53);
-      return;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes('display was off or the screen was locked')) throw error;
-      nativeInputUnavailable = true;
-      console.warn('[RealAppHarness] Native input unavailable; using the packaged DOM key bridge for Escape.');
-    }
-  }
-
   await client.request('dom_focus', { selector: tileBodySelector(seedID) });
-  await client.request('dom_terminal_key', {
-    selector: tileBodySelector(seedID),
-    key: 'Escape',
-    code: 'Escape',
-  });
+  await driver.pressKeyCode(53);
 }
 
 async function escapeTo(client, driver, fromSeedID, toSeedID) {
@@ -121,14 +102,7 @@ async function escapeTo(client, driver, fromSeedID, toSeedID) {
   try {
     return await awaitSeedTile(client, toSeedID);
   } catch (error) {
-    if (nativeInputUnavailable) throw error;
-    const frontmost = await driver.frontmostBundleId().catch(() => '(unknown)');
-    throw new Error(
-      `${error.message}\n\nA native Escape on ${fromSeedID} did not unwind the trail to ${toSeedID}. `
-      + `This scenario needs native keyboard input: grant Accessibility permission to the process `
-      + `running it and keep attn frontmost. Frontmost app was "${frontmost}" `
-      + `(expected "${driver.bundleId}").`,
-    );
+    throw new Error(`${error.message}\n\nA native Escape on ${fromSeedID} did not unwind the trail to ${toSeedID}.`);
   }
 }
 
@@ -141,7 +115,7 @@ async function main() {
 
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver(options);
-  const driver = createWindowDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   const runner = createScenarioRunner(options, {
     scenarioId: 'GardenSeedTileNavigation',
     tier: 'local',
@@ -153,11 +127,8 @@ async function main() {
   let children = [];
   let nestedLeaf = null;
   try {
-    process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
-    process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
     await launchFreshAppAndConnect(client, observer);
     pane = await runner.step('open_session', () => openPane(client, observer, runner));
-    await driver.activateApp();
 
     await runner.step('plant_and_open_the_plot', async () => {
       const payload = path.join(runner.sessionDir, 'plot.json');

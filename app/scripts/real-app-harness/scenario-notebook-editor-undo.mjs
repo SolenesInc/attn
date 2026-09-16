@@ -55,6 +55,22 @@ async function domSelectorPresent(client, selector) {
   }
 }
 
+const isEditorContent = (active) => typeof active?.className === 'string'
+  && active.className.split(' ').includes('cm-content');
+
+async function waitForActiveElement(client, predicate, description, timeoutMs = 10_000) {
+  const startedAt = Date.now();
+  let last = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    last = await client.request('dom_active_element', {}).catch(() => null);
+    if (predicate(last)) {
+      return last;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  throw new Error(`Timed out waiting for ${description}. Last active element: ${JSON.stringify(last)}`);
+}
+
 async function waitForDomSelector(client, selector, present, description, timeoutMs = 10_000) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
@@ -101,7 +117,6 @@ async function waitForFileContent(filePath, predicate, description, timeoutMs = 
 // press count is not guaranteed; retry rather than asserting an exact count.
 async function pressUntilFileMatches(driver, filePath, key, modifiers, predicate, description, maxPresses = 5) {
   for (let attempt = 1; attempt <= maxPresses; attempt += 1) {
-    await driver.activateApp();
     await driver.pressKey(key, modifiers);
     try {
       return await waitForFileContent(filePath, predicate, `${description} (press ${attempt}/${maxPresses})`, 3_000);
@@ -151,7 +166,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   let sessionId = null;
   let probeFilePath = null;
 
@@ -168,8 +183,6 @@ async function main() {
   });
 
   try {
-    process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
-    process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
       await closeExistingSessions(client, options.sessionRootDir);
@@ -213,7 +226,6 @@ async function main() {
     });
 
     const docked = await runner.step('dock_notebook_tile', async () => {
-      await driver.activateApp();
       await pressShortcutKeys(client, driver, 'notebook.openTile');
 
       let result;
@@ -243,7 +255,6 @@ async function main() {
     });
 
     await runner.step('esc_dismisses_the_finder', async () => {
-      await driver.activateApp();
       await driver.pressKeyCode(53);
       await waitForDomSelector(client, FINDER_SELECTOR, false, 'Esc dismisses the finder');
     });
@@ -251,13 +262,11 @@ async function main() {
     // Esc must leave focus inside the tile: on <body> the tile-scoped keydown
     // never fires and Cmd+P cannot re-summon.
     await runner.step('cmdp_resummons_the_finder_after_esc', async () => {
-      await driver.activateApp();
       await pressShortcutKeys(client, driver, 'file.open');
       await waitForDomSelector(client, FINDER_SELECTOR, true, 'native Cmd+P re-summons the finder after Esc');
     });
 
     await runner.step('finder_opens_the_probe_note_in_the_editor', async () => {
-      await driver.activateApp();
       await driver.typeText(probeBasename);
       // Pressing Enter before the probe row renders is a no-op (pick(undefined)).
       await waitForDomSelector(
@@ -276,27 +285,22 @@ async function main() {
       });
     });
 
-    // Opening a note via the finder does NOT focus the editor, so click into the
-    // note body and confirm CodeMirror's `.cm-focused` before typing.
+    // The finder does not focus the editor. `.cm-focused` would also need
+    // document.hasFocus(), which a window that never becomes key cannot give.
     await runner.step('focus_editor_with_native_click', async () => {
-      await driver.activateApp();
-      const focusedSelector = '.terminal-wrapper.active .cm-editor.cm-focused';
       let editorFocused = false;
       for (let attempt = 0; attempt < 2 && !editorFocused; attempt++) {
         await driver.clickWindow(0.85, 0.85);
-        try {
-          await waitForDomSelector(client, focusedSelector, true, 'native click focuses the CodeMirror editor', 5_000);
-          editorFocused = true;
-        } catch { /* WebKitGTK may not move DOM focus on a synthetic click; fall back below. */ }
+        editorFocused = await waitForActiveElement(client, isEditorContent, 'native click focuses the CodeMirror editor', 5_000)
+          .then(() => true, () => false);
       }
       if (!editorFocused) {
         await client.request('dom_focus', { selector: EDITOR_SELECTOR });
-        await waitForDomSelector(client, focusedSelector, true, 'DOM focus reaches the CodeMirror editor', 5_000);
+        await waitForActiveElement(client, isEditorContent, 'DOM focus reaches the CodeMirror editor', 5_000);
       }
     });
 
     await runner.step('type_probe_text_and_autosave', async () => {
-      await driver.activateApp();
       await driver.typeText(PROBE_SUFFIX);
       await waitForFileContent(
         probeFilePath,
