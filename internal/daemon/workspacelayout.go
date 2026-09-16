@@ -1221,7 +1221,9 @@ func (d *Daemon) reconcileWorkspaceLayoutsWithPTYBackend(ctx context.Context) {
 		for _, pane := range snapshot.Panes {
 			sessionID := strings.TrimSpace(pane.SessionID)
 			if pane.Kind == workspacelayout.PaneKindAgent && sessionID != "" &&
-				(d.store.Get(sessionID) != nil || pane.Status == workspacelayout.PaneStatusSpawning) {
+				(d.store.Get(sessionID) != nil ||
+					pane.Status == workspacelayout.PaneStatusSpawning ||
+					pane.Status == workspacelayout.PaneStatusFailed) {
 				nextPanes = append(nextPanes, pane)
 				continue
 			}

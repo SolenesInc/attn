@@ -49,20 +49,17 @@ func (d *Daemon) clearReloading(sessionID string) {
 	delete(d.reloadingSessions, sessionID)
 }
 
+const sessionLifecycleLockStripeCount = 64
+
 // sessionLifecycleLockFor serializes each session's close, reload and continuation
-// composites so their kill/remove/spawn phases cannot cross.
+// composites. Fixed stripes bound memory while allowing unrelated work in parallel.
 func (d *Daemon) sessionLifecycleLockFor(sessionID string) *sync.Mutex {
-	d.sessionLifecycleLocksMu.Lock()
-	defer d.sessionLifecycleLocksMu.Unlock()
-	if d.sessionLifecycleLocks == nil {
-		d.sessionLifecycleLocks = make(map[string]*sync.Mutex)
+	var hash uint64 = 14695981039346656037
+	for i := 0; i < len(sessionID); i++ {
+		hash ^= uint64(sessionID[i])
+		hash *= 1099511628211
 	}
-	lock := d.sessionLifecycleLocks[sessionID]
-	if lock == nil {
-		lock = &sync.Mutex{}
-		d.sessionLifecycleLocks[sessionID] = lock
-	}
-	return lock
+	return &d.sessionLifecycleLocks[hash%sessionLifecycleLockStripeCount]
 }
 
 func (d *Daemon) sessionHasLiveWorker(sessionID string) bool {

@@ -2436,7 +2436,7 @@ function AppContent({
     [closeSession, daemonSessions, enrichedLocalSessions, removeWorkspaceRef, sendUnregisterSession, showError]
   );
 
-  const handleClosePane = useCallback((sessionId: string, paneId: string) => {
+  const handleClosePane = useCallback((sessionId: string, paneId: string, workspaceIdHint?: string) => {
     const closeProtection = sessionCloseProtectionHint(daemonSessions, sessionId);
     if (closeProtection) {
       showError(closeProtection);
@@ -2447,7 +2447,7 @@ function AppContent({
     const fallbackSessionId = session?.workspace.agents.find((pane) => (
       pane.id === fallbackPaneId && pane.id !== paneId
     ))?.sessionId;
-    const workspaceId = sessions.find((session) => session.id === sessionId)?.workspaceId;
+    const workspaceId = sessions.find((session) => session.id === sessionId)?.workspaceId ?? workspaceIdHint;
     if (!workspaceId) {
       return Promise.reject(new Error(`Cannot close pane ${paneId}: session ${sessionId} has no workspace`));
     }
@@ -3985,7 +3985,7 @@ function AppContent({
                     onClosePane={(paneId) => {
                       const paneSessionId = workspaceState.agents.find((pane) => pane.id === paneId)?.sessionId;
                       if (paneSessionId) {
-                        void handleClosePane(paneSessionId, paneId).catch(console.error);
+                        void handleClosePane(paneSessionId, paneId, workspace.id).catch(console.error);
                       }
                     }}
                     onRenameSession={sendRenameSession}

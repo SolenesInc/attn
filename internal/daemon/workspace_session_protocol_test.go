@@ -482,7 +482,7 @@ func waitForPTYOutput(t *testing.T, stream ptybackend.Stream, marker string) {
 	}
 }
 
-func TestWorkspaceLayoutStartupReconcileRemovesOrphanButKeepsPendingSpawn(t *testing.T) {
+func TestWorkspaceLayoutStartupReconcileRemovesOrphanButKeepsUnresolvedPanes(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &fakeSpawnBackend{}
 	client := newWorkspaceProtocolTestClient()
@@ -495,6 +495,7 @@ func TestWorkspaceLayoutStartupReconcileRemovesOrphanButKeepsPendingSpawn(t *tes
 	}{
 		{workspaceID: "workspace-orphan", sessionID: "session-gone", status: workspacelayout.PaneStatusReady},
 		{workspaceID: "workspace-pending", sessionID: "session-pending", status: workspacelayout.PaneStatusSpawning},
+		{workspaceID: "workspace-failed", sessionID: "session-failed", status: workspacelayout.PaneStatusFailed},
 	} {
 		d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
 			Cmd: protocol.CmdRegisterWorkspace, ID: fixture.workspaceID, Title: fixture.workspaceID, Directory: cwd,
@@ -518,6 +519,9 @@ func TestWorkspaceLayoutStartupReconcileRemovesOrphanButKeepsPendingSpawn(t *tes
 	}
 	if pending := d.store.GetWorkspaceLayout("workspace-pending"); pending == nil || !workspacelayout.HasPane(pending.Layout, "pane-session-pending") {
 		t.Fatalf("valid pending spawn was removed: %+v", pending)
+	}
+	if failed := d.store.GetWorkspaceLayout("workspace-failed"); failed == nil || !workspacelayout.HasPane(failed.Layout, "pane-session-failed") {
+		t.Fatalf("failed pane was removed: %+v", failed)
 	}
 }
 

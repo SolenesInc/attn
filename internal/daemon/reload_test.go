@@ -35,6 +35,21 @@ func writeClaudeTranscriptFixture(t *testing.T, sessionID string) {
 	}
 }
 
+func TestSessionLifecycleLocksStayBounded(t *testing.T) {
+	d := newDaemonForTest(t)
+	if first, second := d.sessionLifecycleLockFor("session-stable"), d.sessionLifecycleLockFor("session-stable"); first != second {
+		t.Fatal("same session mapped to different lifecycle locks")
+	}
+
+	locks := make(map[*sync.Mutex]struct{})
+	for i := 0; i < sessionLifecycleLockStripeCount*10; i++ {
+		locks[d.sessionLifecycleLockFor(fmt.Sprintf("session-%d", i))] = struct{}{}
+	}
+	if len(locks) > sessionLifecycleLockStripeCount {
+		t.Fatalf("lifecycle lock count = %d, want at most %d", len(locks), sessionLifecycleLockStripeCount)
+	}
+}
+
 type fakeReloadBackend struct {
 	mu        sync.Mutex
 	liveIDs   []string

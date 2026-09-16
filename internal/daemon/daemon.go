@@ -196,8 +196,7 @@ type Daemon struct {
 	prepareSessionTeardownHook        func(string) error
 	teardownMu                        sync.Mutex
 	tearingDown                       map[string]chan struct{}
-	sessionLifecycleLocksMu           sync.Mutex
-	sessionLifecycleLocks             map[string]*sync.Mutex
+	sessionLifecycleLocks             [sessionLifecycleLockStripeCount]sync.Mutex
 	spawnLocksMu                      sync.Mutex
 	spawnLocks                        map[string]*spawnLock
 	sessionInputOnce                  sync.Once
