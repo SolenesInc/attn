@@ -30,6 +30,7 @@ function renderLonePane(props: Partial<React.ComponentProps<typeof SessionTermin
       workspaceSessions={[{ id: 'sess-1', label: GENERATED_NAME, agent: 'claude', cwd: '/tmp/project' }]}
       workspace={loneAgentWorkspace()}
       activePaneId="pane-1"
+      selectedSessionId="sess-1"
       fontSize={13}
       enabled
       isActiveSession

@@ -10,7 +10,7 @@ export function useFocusedLeaf(
   const invalid =
     focusedLeafId !== null &&
     (!leafIds.has(focusedLeafId) ||
-      Boolean(focusedSessionId && selectedSessionId && focusedSessionId !== selectedSessionId));
+      (focusedSessionId !== undefined && focusedSessionId !== selectedSessionId));
   if (invalid) setFocusedLeafId(null);
   return [invalid ? null : focusedLeafId, setFocusedLeafId] as const;
 }

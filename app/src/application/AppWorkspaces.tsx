@@ -45,6 +45,9 @@ export function AppWorkspaces() {
   } = useWorkspaceRuntimeContext();
   const { warmWorkspaceIds } = useWorkspaceResidencyContext();
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const selectedAgentId = useSessionStore((state) =>
+    state.selectedSessionlessWorkspaceId ? null : state.activeSessionId,
+  );
   const sessions = useSessionStore((state) => state.sessions);
   const {
     presentationBySessionId,
@@ -143,7 +146,7 @@ export function AppWorkspaces() {
                   pullRequests: entry.pullRequests,
                 }))}
                 delegationSessions={delegationSessions}
-                selectedSessionId={activeSessionId}
+                selectedSessionId={selectedAgentId}
                 seedTargetSessions={daemonSessions.map((session) => ({
                   sessionId: session.id,
                   label: session.label || session.id,

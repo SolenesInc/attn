@@ -97,6 +97,7 @@ vi.mock('./components/SessionTerminalWorkspace', () => ({
     workspaceId,
     workspace,
     isActiveSession,
+    selectedSessionId,
     terminalsLive,
     onFocusPane,
     onClosePane,
@@ -104,6 +105,7 @@ vi.mock('./components/SessionTerminalWorkspace', () => ({
     workspaceId: string;
     workspace: { agents: unknown[]; layoutTree: TerminalLayoutNode | null };
     isActiveSession: boolean;
+    selectedSessionId?: string | null;
     terminalsLive?: boolean;
     onFocusPane?: (paneId: string) => void;
     onClosePane?: (paneId: string) => void;
@@ -112,6 +114,7 @@ vi.mock('./components/SessionTerminalWorkspace', () => ({
       <div
         data-testid={`workspace-${workspaceId}`}
         data-active={isActiveSession ? '1' : '0'}
+        data-selected-session={selectedSessionId ?? ''}
         data-live={terminalsLive === false ? '0' : '1'}
         data-agent-count={workspace.agents.length}
         data-tile-ids={collectTileIds(workspace.layoutTree).join(',')}
@@ -316,6 +319,25 @@ describe('tile-only (sessionless) workspace selection and render', () => {
     expect(screen.getByTestId('sidebar').getAttribute('data-selected-workspace')).toBe('ws-tiles');
     expect(mockSendWorkspaceSelected).toHaveBeenLastCalledWith('ws-tiles');
     expect(screen.getByTestId('workspace-ws-tiles').getAttribute('data-tile-ids')).toBe('tile-readme');
+  });
+
+  it('takes the session selection away from every workspace while a tile-only workspace is selected', async () => {
+    render(<App />);
+    const sessionWorkspace = await screen.findByTestId('workspace-ws-session');
+    expect(sessionWorkspace.getAttribute('data-selected-session')).toBe('s1');
+
+    await userEvent.click(screen.getByTestId('select-ws-tiles'));
+
+    await waitFor(() => {
+      expect(sessionWorkspace.getAttribute('data-selected-session')).toBe('');
+    });
+    expect(useSessionStore.getState().activeSessionId).toBe('s1');
+
+    await userEvent.click(screen.getByTestId('select-ws-session'));
+
+    await waitFor(() => {
+      expect(sessionWorkspace.getAttribute('data-selected-session')).toBe('s1');
+    });
   });
 
   it('routes an already-active pane focus through the shared session selector', async () => {
