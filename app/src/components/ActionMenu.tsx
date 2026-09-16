@@ -67,7 +67,9 @@ export function ActionMenu({ isOpen, actions, onClose }: ActionMenuProps) {
       <FocusTrap focusTrapOptions={{
         allowOutsideClick: true,
         escapeDeactivates: false,
-        setReturnFocus: (previous) => (document.activeElement === document.body ? previous : false),
+        setReturnFocus: (previous: HTMLElement | SVGElement) => (
+          document.activeElement === document.body ? previous : false
+        ),
       }}>
         <div
           className="action-menu"
