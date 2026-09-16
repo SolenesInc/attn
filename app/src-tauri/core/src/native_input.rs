@@ -454,9 +454,7 @@ mod platform {
         NSProcessInfo::processInfo().systemUptime()
     }
 
-    // A window that never became key still has itself as first responder, and
-    // NSResponder's keyDown goes nowhere from there.
-    fn focus_webview(target: &Target) {
+    fn make_webview_first_responder(target: &Target) {
         let already = target.window.firstResponder().is_some_and(|responder| {
             Retained::as_ptr(&responder).cast::<NSView>() == Retained::as_ptr(&target.view)
         });
@@ -489,12 +487,10 @@ mod platform {
         .ok_or_else(|| format!("AppKit refused a key event for keyCode {}", stroke.key_code))
     }
 
-    // Nil-target menu actions resolve through the key window's first responder,
-    // which a window that is never key does not provide.
-    fn name_menu_responder(menu: &NSMenu, view: &NSView) {
+    fn route_menu_actions_to(menu: &NSMenu, view: &NSView) {
         for item in menu.itemArray().iter() {
             if let Some(submenu) = item.submenu() {
-                name_menu_responder(&submenu, view);
+                route_menu_actions_to(&submenu, view);
                 continue;
             }
             let Some(action) = item.action() else {
@@ -513,28 +509,30 @@ mod platform {
         }
     }
 
-    // Mirrors NSApplication.sendEvent: a chord goes to the first responder's
-    // performKeyEquivalent, then the main menu; anything else is a plain keyDown.
-    // The window skips that first step while it is not key, so the webview is asked.
+    fn dispatch_key_equivalent(target: &Target, down: &NSEvent) -> Option<&'static str> {
+        let main_menu = NSApplication::sharedApplication(target.mtm).mainMenu()?;
+        route_menu_actions_to(&main_menu, &target.view);
+        if target.view.performKeyEquivalent(down) {
+            Some("webview")
+        } else if main_menu.performKeyEquivalent(down) {
+            Some("menu")
+        } else {
+            None
+        }
+    }
+
     fn send_key(target: &Target, stroke: &KeyStroke) -> Result<&'static str, String> {
-        focus_webview(target);
+        make_webview_first_responder(target);
         let down = key_event(target, NSEventType::KeyDown, stroke)?;
         let up = key_event(target, NSEventType::KeyUp, stroke)?;
         let chord = stroke.modifiers.command || stroke.modifiers.control;
-        let main_menu = NSApplication::sharedApplication(target.mtm).mainMenu();
-        if chord {
-            if let Some(menu) = &main_menu {
-                name_menu_responder(menu, &target.view);
-            }
-        }
-        let handled_by = if chord && target.view.performKeyEquivalent(&down) {
-            "webview"
-        } else if chord && main_menu.is_some_and(|menu| menu.performKeyEquivalent(&down)) {
-            "menu"
-        } else {
-            target.window.sendEvent(&down);
-            "responder"
-        };
+        let handled_by = chord
+            .then(|| dispatch_key_equivalent(target, &down))
+            .flatten()
+            .unwrap_or_else(|| {
+                target.window.sendEvent(&down);
+                "responder"
+            });
         target.window.sendEvent(&up);
         Ok(handled_by)
     }
@@ -598,7 +596,6 @@ mod platform {
     ) -> Result<(), String> {
         let point = window_point(target, relative);
         let event = mouse_event(target, kind, point, modifiers, click_count)?;
-        // The webview's tracking area reports mouse moves only in a key window.
         if kind == NSEventType::MouseMoved {
             target.view.mouseMoved(&event);
         } else {
