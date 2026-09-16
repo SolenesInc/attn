@@ -192,8 +192,6 @@ async function main() {
     },
   });
 
-  // The pointer leg needs an active page: WebKit delivers mouse moves only to
-  // a key window.
   process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
 
   const client = new UiAutomationClient({ appPath: options.appPath });

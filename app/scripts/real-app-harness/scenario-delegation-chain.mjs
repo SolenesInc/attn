@@ -14,7 +14,6 @@ import { MOCK_AGENT_MODEL, writeMockAgentFixture } from './mockAgent.mjs';
 const options = parseCommonArgs(process.argv.slice(2));
 const profile = currentHarnessProfile();
 if (!profile) throw new Error('Delegation chain verification requires a named profile');
-// Hover and :focus need an active page, which WebKit ties to a key window.
 process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
 const runner = createScenarioRunner(options, { scenarioId: 'DelegationChain', tier: 'local', prefix: 'delegation-chain', allowRealAgents: false });
 const client = new UiAutomationClient(options);

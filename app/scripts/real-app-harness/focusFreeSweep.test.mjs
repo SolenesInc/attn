@@ -16,8 +16,6 @@ const FOREGROUND_METHODS = new Set(['activateApp']);
 const DRIVER_FACTORIES = new Set(['createWindowDriver']);
 const DRIVER_CLASSES = new Set(['MacOSDriver', 'LinuxDriver']);
 
-// Files that post input through macOS on purpose; every other file hands the
-// client to its driver so the app injects the events into its own window.
 const DRIVES_THROUGH_MACOS = {
   'macosDriver.mjs': 'the driver itself; its CGEvent path serves the probes below',
   'linuxDriver.mjs': 'the Linux driver; xdotool under Xvfb has no foreground to steal',
@@ -26,7 +24,6 @@ const DRIVES_THROUGH_MACOS = {
   'drive-wake-confirm.mjs': 'a hand-run driver for a native confirm dialog, which only macOS can reach',
 };
 
-// Files allowed to activate attn or launch it focusable, each with the reason.
 const TAKES_THE_FOREGROUND = {
   'scenario-focus-probe.mjs': 'its subject is focus theft',
   'dev-launch-focus-probe.mjs': 'its subject is focus theft',
@@ -44,8 +41,6 @@ function calledName(node, methods, functions) {
   return ts.isIdentifier(node.expression) && functions.has(node.expression.text) ? node.expression.text : null;
 }
 
-// `process.env.VAR = '0'`, or the `??=` form. Reading the parse and not the
-// source text is what keeps a comment or a string saying so from counting.
 function isOptOutAssignment(node) {
   if (!ts.isBinaryExpression(node)) return false;
   const assigns = node.operatorToken.kind === ts.SyntaxKind.EqualsToken

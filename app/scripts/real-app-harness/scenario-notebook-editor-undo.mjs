@@ -285,8 +285,6 @@ async function main() {
       });
     });
 
-    // The finder does not focus the editor. `.cm-focused` would also need
-    // document.hasFocus(), which a window that never becomes key cannot give.
     await runner.step('focus_editor_with_native_click', async () => {
       let editorFocused = false;
       for (let attempt = 0; attempt < 2 && !editorFocused; attempt++) {

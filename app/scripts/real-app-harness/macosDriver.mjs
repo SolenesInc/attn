@@ -51,8 +51,6 @@ function modifierNames(modifiers = {}) {
   return names;
 }
 
-// With a `client`, keys and pointer gestures are NSEvents the app sends to its own
-// window; without one they are CGEvents through macOS, which need attn frontmost.
 export class MacOSDriver {
   constructor({
     bundleId = null,
