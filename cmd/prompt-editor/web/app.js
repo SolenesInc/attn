@@ -27,7 +27,7 @@ const work = (() => {
   let pending = 0;
   const begin = () => {
     pending++;
-    workspace.setAttribute("aria-busy", "true");
+    if (pending === 1) workspace.setAttribute("aria-busy", "true");
     let active = true;
     return () => {
       if (!active) return;
@@ -44,8 +44,12 @@ const work = (() => {
       const timer = setTimeout(() => {
         if (!active) return;
         active = false;
-        try { callback(); }
-        finally { done(); }
+        try {
+          Promise.resolve(callback()).finally(done);
+        } catch (error) {
+          done();
+          throw error;
+        }
       }, delay);
       return () => {
         if (!active) return;
@@ -501,7 +505,7 @@ function schedulePreview() {
   renderViews();
   previewTimer = work.schedule(() => {
     previewTimer = undefined;
-    void preview(version);
+    return preview(version);
   }, 180);
 }
 async function preview(version) {

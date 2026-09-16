@@ -187,7 +187,7 @@ export function collaborate({ state, $, api, selectEvent, selectSource, renderNa
             flushing = null;
             status();
             if ([...pending.keys()].some((path) => !blocked.has(path)))
-                timer = work.schedule(() => { timer = undefined; void flush(); }, 100);
+                timer = work.schedule(() => { timer = undefined; return flush(); }, 100);
         });
         return flushing;
     }
@@ -197,7 +197,7 @@ export function collaborate({ state, $, api, selectEvent, selectSource, renderNa
         const previous = pending.get(path);
         pending.set(path, { text, expect: previous?.expect || draft.files[path]?.revision || state.catalog.sources[path].revision });
         timer?.();
-        timer = work.schedule(() => { timer = undefined; void flush(); }, 200);
+        timer = work.schedule(() => { timer = undefined; return flush(); }, 200);
         contextLabel();
     }
     async function refreshShared() {
@@ -487,7 +487,7 @@ export function collaborate({ state, $, api, selectEvent, selectSource, renderNa
         refreshTimer?.();
         refreshTimer = work.schedule(() => {
             refreshTimer = undefined;
-            void refreshShared().catch(showError);
+            return refreshShared().catch(showError);
         }, 90);
     }
     events.onmessage = queueRefresh;
