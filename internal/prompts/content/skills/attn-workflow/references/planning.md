@@ -70,6 +70,13 @@ Name the protocol, schema or migration steps a wire or storage change requires, 
 How control and data flow through the changed parts. A call tree for one process, a sequence for messages between processes, and a diff when the point is what changes in existing flow:
 
 ```text
+user   -> app:    picks Read Only in the location picker
+app    -> daemon: SpawnSessionMessage{approval_policy, sandbox_mode}
+daemon -> store:  SetLaunchIntent(session, pair)
+daemon -> pi:     launch with the pair
+```
+
+```text
 handleSpawnSession
   GetAutoModeConfig
   applyLaunchIntent        new: intent pair replaces cfg pair when set
@@ -95,6 +102,12 @@ pi    -> daemon: nothing; the switch is not durable
 Who owns each piece of state, what changes it, and its lifecycle through success, failure and recovery, including restarts of the app, daemon or agent:
 
 ```text
+preset selection (app, LocationPicker)
+  set by:      the picker control; starts from the daemon default
+  read by:     the spawn message on launch
+  on failure:  a refused launch keeps the selection for a retry
+  on restart:  starts from the daemon default; nothing persisted
+
 launch intent (daemon, store.LaunchIntent)
   set by:      spawn or delegate message, stored before the runtime spawns
   read by:     spawn pipeline; reload after daemon restart
