@@ -1101,6 +1101,55 @@ func TestStoppedContinuationWaitsForClosingRuntimeBeforeReopening(t *testing.T) 
 	}
 }
 
+func TestStoppedContinuationWaitsForWorktreeDeleteCommitBeforeReopening(t *testing.T) {
+	fixture := setupStoppedAutomationContinuation(t)
+	fixture.d.closeSession(fixture.origin.SessionID, store.SessionClose{By: store.SessionClosedByUser})
+
+	deleteEntered := make(chan struct{})
+	foregroundWaiting := make(chan error, 1)
+	releaseDelete := make(chan struct{})
+	deleteDone := make(chan error, 1)
+	go func() {
+		deleteDone <- fixture.d.worktreeMaintenance.RunSweep(context.Background(), func(lease *worktreeSweepLease) error {
+			return lease.TryDelete(func(context.Context) error { return nil }, func(context.Context) error {
+				close(deleteEntered)
+				<-lease.Context().Done()
+				foregroundWaiting <- context.Cause(lease.Context())
+				<-releaseDelete
+				return nil
+			})
+		})
+	}()
+	<-deleteEntered
+
+	continued := make(chan error, 1)
+	go func() {
+		continued <- fixture.d.ensureAutomationSession(context.Background(), fixture.req, fixture.directory)
+	}()
+	if err := <-foregroundWaiting; !errors.Is(err, errWorktreeSweepPreempted) {
+		t.Fatalf("sweep cancellation = %v, want foreground preemption", err)
+	}
+	select {
+	case err := <-continued:
+		t.Fatalf("continuation completed during the worktree delete commit: %v", err)
+	default:
+	}
+	if got := spawnCount(fixture.backend.fakeSpawnBackend); got != 0 {
+		t.Fatalf("spawn calls during the worktree delete commit = %d, want 0", got)
+	}
+
+	close(releaseDelete)
+	if err := <-deleteDone; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-continued; err != nil {
+		t.Fatal(err)
+	}
+	if got := spawnCount(fixture.backend.fakeSpawnBackend); got != 1 {
+		t.Fatalf("spawn calls after the worktree delete commit = %d, want 1", got)
+	}
+}
+
 func TestContinuationWorkReadySurvivesAnotherRestoreWinning(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	setupDelegationGarden(t, d)

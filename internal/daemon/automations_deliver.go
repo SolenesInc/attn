@@ -639,7 +639,7 @@ func (d *Daemon) ensureAutomationPane(_ context.Context, req automation.WorkRequ
 	}
 	return nil
 }
-func (d *Daemon) ensureAutomationSession(_ context.Context, req automation.WorkRequest, directory string) error {
+func (d *Daemon) ensureAutomationSession(ctx context.Context, req automation.WorkRequest, directory string) error {
 	if err := req.Launch.Validate(); err != nil {
 		return fmt.Errorf("invalid unattended launch contract: %w", err)
 	}
@@ -665,12 +665,18 @@ func (d *Daemon) ensureAutomationSession(_ context.Context, req automation.WorkR
 		if d.canStartWithdrawnUndeliveredReviewer(continuationRun, req.IDs.SessionID) {
 			return d.startAutomationSession(req, directory, inputPath)
 		}
-		return d.continueAutomationSession(req, directory)
+		return d.continueAutomationSession(ctx, req, directory)
 	}
 	return d.startAutomationSession(req, directory, inputPath)
 }
 
-func (d *Daemon) continueAutomationSession(req automation.WorkRequest, directory string) error {
+func (d *Daemon) continueAutomationSession(ctx context.Context, req automation.WorkRequest, directory string) error {
+	return d.worktreeMaintenance.RunForeground(ctx, "continue automation session", func(context.Context) error {
+		return d.continueAutomationSessionForeground(req, directory)
+	})
+}
+
+func (d *Daemon) continueAutomationSessionForeground(req automation.WorkRequest, directory string) error {
 	if _, err := d.automationResumeSessionID(req); err != nil {
 		return err
 	}
