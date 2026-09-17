@@ -342,14 +342,14 @@ func (d *Daemon) gardenKeepsBranch(repository, branch string) bool {
 func (d *Daemon) normalizedSeedContinuation(seed garden.Seed) (garden.Dispatch, string, bool) {
 	if executionID := strings.TrimSpace(seed.LastExecutionID); executionID != "" {
 		if execution, ok := d.gardenDispatch(executionID); ok {
-			if entry := d.store.SessionLedgerEntry(executionID); entry != nil {
+			entry := d.store.SessionLedgerEntry(executionID)
+			localLedgerGone := entry == nil && execution.HostKind != garden.HostRemote
+			if entry != nil {
 				execution.SessionID = entry.ID
 				execution.Cwd = entry.Directory
 				execution.Agent = entry.Agent
 				execution.Resume = d.store.GetResumeSessionID(entry.ID)
-			} else if execution.HostKind != garden.HostRemote {
-				// Dispatches are durable execution receipts. They do not become a
-				// second source of truth after the ledger row has been reaped.
+			} else if localLedgerGone {
 				execution.Resume = ""
 			}
 			return execution, continuationSourceExecution, true

@@ -74,8 +74,6 @@ func (l *sessionLifecycleLockLease) Unlock() {
 	}
 }
 
-// sessionLifecycleLockFor serializes each session's close, reload and continuation
-// composites. Leases keep an entry alive until its final waiter releases it.
 func (d *Daemon) sessionLifecycleLockFor(sessionID string) *sessionLifecycleLockLease {
 	d.sessionLifecycleLocksMu.Lock()
 	defer d.sessionLifecycleLocksMu.Unlock()
