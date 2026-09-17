@@ -8,7 +8,7 @@ Read the `attn` skill's garden guidance and run `attn seed guide` for seed and p
 
 1. **Find the work.** Read the relevant implementation seed or plot, its notes, and any children. Reuse existing work and preserve its scope and decisions. If the work has no implementation seed, plant one to hold the plan.
 2. **Investigate the approach.** Start from the user's request, relevant conversation, and any vision referenced by the work or supplied by the user. Read vision seeds with `attn seed show <id>`. Read enough code to identify the components, entry points, state, interfaces, and ownership involved. Trace production and test paths where they differ. Propose an approach from your findings. Ask about choices or assumptions that could change the plan.
-3. **Write the plan.** Fill the skeleton below into the seed or plot body. If there is a vision seed, reference its ID; do not overwrite its body with the implementation plan.
+3. **Write the plan.** Fill the template below into the seed or plot body. If there is a vision seed, reference its ID; do not overwrite its body with the implementation plan.
 4. **Organize execution.** Use a plot when the work has distinct pieces to scope and track separately, even within one PR. Use a single seed for one coherent task. Add or reuse child seeds for each unit of work, with an outcome, scope, and verification; refer to the parent plan without repeating it. When delivery is by pull request, explain which changes belong in each one. Add `blocks` links only for actual prerequisites; otherwise leave children independent.
 
 ## The plan body
@@ -23,49 +23,9 @@ The body has five sections in this order. Each design part is required; a part t
   - **Ownership**: each file or package that changes, as a shallow file tree with one comment per entry saying what it is responsible for.
   - **Interfaces**: the types, signatures, wire messages and persisted data the change adds or alters, sketched in the codebase's language, with the schema, generation and migration steps a wire or storage change requires.
   - **Behavior**: how control and data flow through the changed parts, as a sequence for messages between processes, a call tree within one process, or pseudocode for a rule.
-  - **State**: each piece of state with its owner, what sets it, what reads it, what happens on failure and what happens on restart. In-memory state counts as state: a selection held until launch still has an owner, mutators and a lifecycle across failures and restarts.
+  - **State**: each piece of state with its owner, what sets it, what reads it, what happens on failure and what happens on restart. In-memory state counts as state and has the same entry.
 - **Execution**: for a plot, the children, which changes belong to each pull request, and their order; for a single seed, one line saying so; without pull requests, the delivery step.
 - **Completion**: the checks the repository's verification guidance requires for the affected surfaces and where the evidence is recorded, or the documented exemption when one applies.
-
-### Skeleton
-
-Copy this and replace each `<slot>`. The skeleton and the example below are the only code blocks in this reference; everything else is guidance.
-
-```markdown
-<task and outcome>
-
-## Decisions
-
-- <decision>
-
-Open: <question>
-
-## Design
-
-Ownership:
-
-    <file tree>
-
-Interfaces:
-
-    <types, signatures, messages, persisted data>
-
-Behavior:
-
-    <sequence, call tree or pseudocode>
-
-State:
-
-    <state, one entry per piece>
-
-## Execution
-
-<children and pull requests, or one line>
-
-## Completion
-
-<required checks and where the evidence goes>
-```
 
 ## Showing the design
 
@@ -85,43 +45,43 @@ Choose the smallest view that explains the point:
 - messages between processes as a sequence
 - a UI layout or state comparison as an ASCII wireframe
 
-## Example
+## Template
 
-The skeleton filled for one change: a per-session permission preset for pi, chosen at launch and switchable mid-session. The wire message and the spawn call tree exist, so their changes are diffs; the preset type, the flows and the state are new, so they are whole.
+Copy the template and replace everything in angle brackets. The bracketed content is one example plan, a per-session permission preset for pi; it shows each part's form, and it shows a diff where the shape already exists and a whole block where it is new.
 
 ````markdown
-Let a pi session choose its approval policy and sandbox mode at creation, as a
+<Let a pi session choose its approval policy and sandbox mode at creation, as a
 preset, and switch them mid-session with /permissions. The daemon's auto-mode
 config stays the default; a session can differ from it. Done when a session
 created as Read Only shows read-only in pi's status line, refuses a write until
 the agent escalates, switches on /permissions default, and relaunches as Read
-Only after a daemon restart.
+Only after a daemon restart.>
 
 ## Decisions
 
-- Presets are the user-facing unit, with Codex's names and descriptions, because
-  users already know them; the raw pair stays reachable on the CLI.
-- A mid-session switch is not durable, like Codex, so the daemon knows only the
-  launch choice and the app shows no per-session badge.
+- <Presets are the user-facing unit, with Codex's names and descriptions, because
+  users already know them; the raw pair stays reachable on the CLI.>
+- <A mid-session switch is not durable, like Codex, so the daemon knows only the
+  launch choice and the app shows no per-session badge.>
 
-Open: whether `--yolo` on a pi launch maps to the full-access preset (blocks the
-CLI child) · the picker's position beside auto mode (the app tender decides)
+Open: <whether `--yolo` on a pi launch maps to the full-access preset (blocks the
+CLI child)> · <the picker's position beside auto mode (the app tender decides)>
 
 ## Design
 
 Ownership:
 
-    internal/automode/automode.go          Preset type; Presets(); PresetFor(policy, mode)
-    internal/protocol/schema/main.tsp      approval_policy and sandbox_mode on SpawnSessionMessage
-    internal/protocol/constants.go         ProtocolVersion bump
-    app/src/hooks/useDaemonSocket.ts       PROTOCOL_VERSION bump
-    internal/daemon/spawn_pipeline.go      applies the launch intent's pair over the daemon default
-    plugins/attn-pi/approval/session.ts    /permissions picker; repaints the status line
-    app/src/components/LocationPicker.tsx  preset control beside auto mode
+    <internal/automode/automode.go          Preset type; Presets(); PresetFor(policy, mode)
+     internal/protocol/schema/main.tsp      approval_policy and sandbox_mode on SpawnSessionMessage
+     internal/protocol/constants.go         ProtocolVersion bump
+     app/src/hooks/useDaemonSocket.ts       PROTOCOL_VERSION bump
+     internal/daemon/spawn_pipeline.go      applies the launch intent's pair over the daemon default
+     plugins/attn-pi/approval/session.ts    /permissions picker; repaints the status line
+     app/src/components/LocationPicker.tsx  preset control beside auto mode>
 
 Interfaces:
 
-```go
+<```go
 type Preset struct {
     ID, Label, Description string
     ApprovalPolicy         string
@@ -139,54 +99,54 @@ func PresetFor(policy, mode string) (Preset, bool) // false when no preset match
 ```
 
 New wire fields: edit main.tsp, make generate-types, bump ProtocolVersion and
-PROTOCOL_VERSION.
+PROTOCOL_VERSION.>
 
 Behavior:
 
-    user   -> app:    picks Read Only in the location picker
-    app    -> daemon: SpawnSessionMessage{approval_policy, sandbox_mode}
-    daemon -> store:  SetLaunchIntent(session, pair)
-    daemon -> pi:     launch with the pair
+    <user   -> app:    picks Read Only in the location picker
+     app    -> daemon: SpawnSessionMessage{approval_policy, sandbox_mode}
+     daemon -> store:  SetLaunchIntent(session, pair)
+     daemon -> pi:     launch with the pair>
 
-```diff
+<```diff
  executeSpawn
    GetAutoModeConfig
 +  applyLaunchIntent          the intent pair replaces the config pair when set
    autoModeConfigForSession
    spawnSessionRuntime
-```
+```>
 
-    user  -> pi:     /permissions full-access
-    pi    -> pi:     setup.config := preset; repaint status line
-    pi    -> daemon: nothing; the switch is not durable
+    <user  -> pi:     /permissions full-access
+     pi    -> pi:     setup.config := preset; repaint status line
+     pi    -> daemon: nothing; the switch is not durable>
 
 State:
 
-    preset selection (app, LocationPicker)
-      set by:      the picker control; starts from the daemon default
-      read by:     the spawn message on launch
-      on failure:  a refused launch keeps the selection for a retry
-      on restart:  starts from the daemon default; nothing persisted
+    <preset selection (app, LocationPicker)
+       set by:      the picker control; starts from the daemon default
+       read by:     the spawn message on launch
+       on failure:  a refused launch keeps the selection for a retry
+       on restart:  starts from the daemon default; nothing persisted
 
-    launch intent (daemon, store.LaunchIntent)
-      set by:      spawn or delegate message, stored before the runtime spawns
-      read by:     spawn pipeline; reload after daemon restart
-      on failure:  a new session is removed with its intent; a relaunch restores the prior intent
-      on restart:  relaunched with the stored pair; a mid-session switch is lost
+     launch intent (daemon, store.LaunchIntent)
+       set by:      spawn or delegate message, stored before the runtime spawns
+       read by:     spawn pipeline; reload after daemon restart
+       on failure:  a new session is removed with its intent; a relaunch restores the prior intent
+       on restart:  relaunched with the stored pair; a mid-session switch is lost>
 
 ## Execution
 
-Three children, each its own pull request against next, in this order: the
+<Three children, each its own pull request against next, in this order: the
 daemon and protocol (presets, wire fields, launch intent), then pi (/permissions
 and the file-tool guard), then the app picker. The pi child blocks nothing; the
-app child waits for the daemon child's wire fields.
+app child waits for the daemon child's wire fields.>
 
 ## Completion
 
-Go tests for PresetFor and the spawn pipeline's intent merge; the pi plugin's
+<Go tests for PresetFor and the spawn pipeline's intent merge; the pi plugin's
 approval tests for the switch; a frontend test for the picker. The real-app
 harness scenario creates a Read Only session, switches it, restarts the daemon,
-and records the run; the recording and the scenario output go on the app child.
+and records the run; the recording and the scenario output go on the app child.>
 ````
 
 ## Tracking and handoff
