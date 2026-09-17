@@ -1,6 +1,7 @@
 import { AnnotatedTerminal } from '../TerminalAnnotations/AnnotatedTerminal';
 import { TerminalStaleBuildNotice } from '../TerminalStaleBuildNotice';
 import { useWorkspaceContext } from './WorkspaceContext';
+import { paneNotice } from './paneNotice';
 import type { WorkspaceAgentProps } from './workspaceTypes';
 
 export function WorkspaceAgentBody({ agentPane, paneSession, paneTitle }: WorkspaceAgentProps) {
@@ -26,10 +27,7 @@ export function WorkspaceAgentBody({ agentPane, paneSession, paneTitle }: Worksp
     sessionVisible,
     handleGhosttyTerminalReady,
   } = useWorkspaceContext();
-  const paneStatus = agentPane.status || 'ready';
-  const isPaneStarting = paneStatus === 'spawning';
-  const isPaneFailed = paneStatus === 'failed';
-  const isPaneWaitingForSession = !paneSession && paneStatus === 'ready';
+  const notice = paneNotice(agentPane, paneSession, paneTitle);
 
   return (
     <div className="workspace-pane-body">
@@ -38,18 +36,10 @@ export function WorkspaceAgentBody({ agentPane, paneSession, paneTitle }: Worksp
           onDismiss={() => setStaleBuildDismissed((prev) => new Set(prev).add(agentPane.sessionId))}
         />
       ) : null}
-      {isPaneStarting || isPaneFailed || isPaneWaitingForSession ? (
-        <div
-          className={`workspace-pane-status workspace-pane-status--${isPaneWaitingForSession ? 'spawning' : paneStatus}`}
-        >
+      {notice ? (
+        <div className={`workspace-pane-status workspace-pane-status--${notice.tone}`}>
           <span className="workspace-pane-status-spinner" aria-hidden="true" />
-          <span>
-            {isPaneFailed
-              ? agentPane.error || 'Session failed to start'
-              : isPaneWaitingForSession
-                ? `Waiting for ${paneTitle}...`
-                : `Starting ${paneTitle}...`}
-          </span>
+          <span>{notice.text}</span>
         </div>
       ) : !terminalsLive ? (
         <div
