@@ -79,6 +79,49 @@ func TestWorkspaceSessionProtocolLifecycleMatchesAppOrder(t *testing.T) {
 	}
 }
 
+func TestWorkspaceLayoutCloseFinalPanePreservesPinnedWorkspace(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d.ptyBackend = &fakeSpawnBackend{}
+	client := newWorkspaceProtocolTestClient()
+	workspaceID := "workspace-pinned"
+	sessionID := "session-pinned"
+	paneID := "pane-pinned"
+	cwd := t.TempDir()
+
+	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
+		Cmd: protocol.CmdRegisterWorkspace, ID: workspaceID, Title: "Pinned", Directory: cwd,
+	})
+	if _, errMsg := d.setWorkspacePinned(workspaceID, true); errMsg != "" {
+		t.Fatalf("pin workspace: %s", errMsg)
+	}
+	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
+		Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: workspaceID,
+		PaneID: protocol.Ptr(paneID), SessionID: sessionID,
+	})
+	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
+	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
+		Cmd: protocol.CmdSpawnSession, ID: sessionID, Cwd: cwd, Agent: protocol.AgentShellValue,
+		WorkspaceID: workspaceID, Cols: 80, Rows: 24,
+	})
+	expectSpawnResult(t, client, sessionID, true)
+
+	d.handleWorkspaceLayoutClosePane(client, &protocol.WorkspaceLayoutClosePaneMessage{
+		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: paneID,
+	})
+	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, true)
+
+	if session := d.store.Get(sessionID); session != nil {
+		t.Fatalf("session still registered after closing its pane: %+v", session)
+	}
+	if layout := d.store.GetWorkspaceLayout(workspaceID); layout != nil {
+		t.Fatalf("empty workspace layout survived close: %+v", layout)
+	}
+	workspace := d.store.GetWorkspace(workspaceID)
+	if workspace == nil || !workspace.Pinned {
+		t.Fatalf("pinned workspace was removed after closing its final pane: %+v", workspace)
+	}
+}
+
 func TestWorkspaceLayoutClosePaneKeepsVisibleStateWhenTeardownPreparationFails(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
