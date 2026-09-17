@@ -53,7 +53,7 @@ The endpoint child records a contract that the app child needs before starting.
   "children": [
     {
       "title": "Daemon search endpoint",
-      "body": "Add session search in internal/daemon. Read the parent plot's Search behavior section and trace the existing search in app/src to preserve its behavior. Follow repository protocol guidance. Test empty queries, matching, ordering and session changes. Record the query and response contract and test results on this seed for the app child. App integration belongs to that child.",
+      "body": "Add session search in internal/daemon. Read the parent plot's Search behavior, Decisions and Design sections for the SearchSessions contract, the ranking decision and the protocol files, and trace the existing search in app/src to preserve its behavior. Follow repository protocol guidance. Test empty queries, matching, ordering and session changes. Record the query and response contract and test results on this seed for the app child. App integration belongs to that child.",
       "blocks": ["app-calls-endpoint"]
     },
     {
