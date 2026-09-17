@@ -254,11 +254,11 @@ async function main() {
           && refreshingCount(current) === 0 ? current : null;
       }, 'every worktree verdict to finish', PANEL_APPEAR_TIMEOUT_MS);
 
-      const dirty = rowFor(state, fixture.worktrees.dirty);
-      runner.assert(dirty.chips.some((chip) => chip.startsWith('dirty')),
-        'the worktree with uncommitted work shows its dirty chip', dirty);
-      runner.assert(/uncommitted|untracked/.test(dirty.reason),
-        'the dirty worktree says in words why it is kept', dirty);
+      const young = rowFor(state, fixture.worktrees.dirty);
+      runner.assert(young.sweep === 'scheduled',
+        'a new worktree stays outside deep inspection until its idle floor', young);
+      runner.assert(/too young for deep inspection/.test(young.reason),
+        'the new worktree says why status has not been inspected yet', young);
 
       const merged = await poll(async () => {
         const current = await client.request('worktrees_get_state');
