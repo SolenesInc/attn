@@ -83,7 +83,7 @@ func TestDelegationGuidanceOwnsReviewAndPausesBeforeDispatch(t *testing.T) {
 			t.Errorf("planning guidance is missing %q", expected)
 		}
 	}
-	for _, expected := range []string{"### Ownership", "### Interfaces", "### Behavior", "### State", "In-memory state counts as state", "verification guidance requires for the affected surfaces"} {
+	for _, expected := range []string{"Ownership:", "Interfaces:", "Behavior:", "State:", "In-memory state counts as state", "show its change as a diff of that shape", "verification guidance requires for the affected surfaces"} {
 		if !strings.Contains(planning, expected) {
 			t.Errorf("planning design section is missing %q", expected)
 		}
