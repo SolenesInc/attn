@@ -220,7 +220,10 @@ export function useAppController({
   const appAppearance = useAppAppearance({ settings });
   const { increaseScale, decreaseScale, resetScale } = appAppearance;
 
-  const appPanels = useAppPanels({ sessions });
+  const agentSurfaceCount =
+    sessions.length +
+    workspaceViews.filter((workspace) => workspace.hasUnresolvedAgentPanes).length;
+  const appPanels = useAppPanels({ agentSurfaceCount });
   const {
     settingsOpen,
     setSettingsOpen,

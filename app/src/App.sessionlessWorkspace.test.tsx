@@ -369,8 +369,8 @@ describe('tile-only (sessionless) workspace selection and render', () => {
         }],
       },
     }];
-    mockUseSessionStore.mockReturnValue({
-      ...mockUseSessionStore(),
+    useSessionStore.setState({
+      ...useSessionStore.getState(),
       sessions: [],
       activeSessionId: null,
     });

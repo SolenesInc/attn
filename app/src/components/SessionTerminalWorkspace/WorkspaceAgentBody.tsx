@@ -29,6 +29,7 @@ export function WorkspaceAgentBody({ agentPane, paneSession, paneTitle }: Worksp
   const paneStatus = agentPane.status || 'ready';
   const isPaneStarting = paneStatus === 'spawning';
   const isPaneFailed = paneStatus === 'failed';
+  const isPaneWaitingForSession = !paneSession && paneStatus === 'ready';
 
   return (
     <div className="workspace-pane-body">
@@ -37,13 +38,17 @@ export function WorkspaceAgentBody({ agentPane, paneSession, paneTitle }: Worksp
           onDismiss={() => setStaleBuildDismissed((prev) => new Set(prev).add(agentPane.sessionId))}
         />
       ) : null}
-      {isPaneStarting || isPaneFailed ? (
-        <div className={`workspace-pane-status workspace-pane-status--${paneStatus}`}>
+      {isPaneStarting || isPaneFailed || isPaneWaitingForSession ? (
+        <div
+          className={`workspace-pane-status workspace-pane-status--${isPaneWaitingForSession ? 'spawning' : paneStatus}`}
+        >
           <span className="workspace-pane-status-spinner" aria-hidden="true" />
           <span>
             {isPaneFailed
               ? agentPane.error || 'Session failed to start'
-              : `Starting ${paneTitle}...`}
+              : isPaneWaitingForSession
+                ? `Waiting for ${paneTitle}...`
+                : `Starting ${paneTitle}...`}
           </span>
         </div>
       ) : !terminalsLive ? (

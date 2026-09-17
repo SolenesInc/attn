@@ -33,7 +33,7 @@ export function WorkspaceAgentHeader({ agentPane, paneSession, paneTitle }: Work
         paneSession={paneSession}
         paneTitle={paneTitle}
       />
-      {onRenameSession ? (
+      {onRenameSession && paneSession ? (
         <button
           type="button"
           className="workspace-pane-rename-btn"

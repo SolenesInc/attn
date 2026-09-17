@@ -6,12 +6,11 @@ import type { LedgerTab } from '../components/ledger/LedgerSurface';
 import { useDockPanels } from '../hooks/useDockPanels';
 import { useGardenPresentation } from '../hooks/useGardenPresentation';
 import { useWhatsNew } from '../hooks/useWhatsNew';
-import { useSessionStore } from '../store/sessions';
 
 interface Options {
-  sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
+  agentSurfaceCount: number;
 }
-export function useAppPanels({ sessions }: Options) {
+export function useAppPanels({ agentSurfaceCount }: Options) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsModalRef = useRef<SettingsModalHandle>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -40,7 +39,7 @@ export function useAppPanels({ sessions }: Options) {
 
   const { dockState, toggleDockPanel, openDockPanel, closeDockPanel } = useDockPanels();
 
-  const empty = sessions.length === 0;
+  const empty = agentSurfaceCount === 0;
   const [sidebarState, setSidebarState] = useState({ empty, collapsed: empty });
   if (sidebarState.empty !== empty) setSidebarState({ empty, collapsed: empty });
   const sidebarCollapsed = sidebarState.collapsed;

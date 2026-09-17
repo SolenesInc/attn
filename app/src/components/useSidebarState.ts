@@ -183,7 +183,10 @@ export function useSidebarState({
   };
 
   const isWorkspaceVisible = (workspace: SidebarWorkspace) =>
-    workspace.pinned || !isSessionless(workspace) || showSessionless;
+    workspace.pinned ||
+    !isSessionless(workspace) ||
+    workspace.hasUnresolvedAgentPanes ||
+    showSessionless;
   // Queue mode renders every ordinary agent as a flat row in a band, so drawing
   // its workspace group too would show the same agent twice.
   const isTreeWorkspace = (workspace: SidebarWorkspace) =>
@@ -194,7 +197,7 @@ export function useSidebarState({
   });
   const visibleMutedWorkspaces = mutedWorkspaces
     .map((workspace) => withoutChiefRow(withoutAutomationRows(workspace)))
-    .filter((workspace) => workspace.children.length > 0);
+    .filter((workspace) => workspace.children.length > 0 || workspace.hasUnresolvedAgentPanes);
   const visibleVisualOrder = visualOrder.filter(isWorkspaceVisible);
   const visibleVisualIndexByWorkspaceId = new Map(
     visibleVisualOrder.map((workspace, index) => [workspace.id, index]),

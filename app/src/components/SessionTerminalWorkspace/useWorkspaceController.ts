@@ -252,6 +252,7 @@ export function useWorkspaceController(
     for (const pane of agentPanes) {
       if (pane.status && pane.status !== 'ready') continue;
       const paneSession = sessionById.get(pane.sessionId);
+      if (!paneSession) continue;
       panes.push({
         paneId: pane.id,
         runtimeId: pane.runtimeId,

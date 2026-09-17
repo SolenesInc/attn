@@ -89,7 +89,7 @@ export function useSessionLifecycle({
   );
 
   const handleClosePane = useCallback(
-    (sessionId: string, paneId: string) => {
+    (sessionId: string, paneId: string, workspaceIdHint?: string) => {
       const closeProtection = sessionCloseProtectionHint(daemonSessions, sessionId);
       if (closeProtection) {
         showError(closeProtection);
@@ -100,7 +100,8 @@ export function useSessionLifecycle({
       const fallbackSessionId = session?.workspace.agents.find(
         (pane) => pane.id === fallbackPaneId && pane.id !== paneId,
       )?.sessionId;
-      const workspaceId = sessions.find((session) => session.id === sessionId)?.workspaceId;
+      const workspaceId =
+        sessions.find((session) => session.id === sessionId)?.workspaceId ?? workspaceIdHint;
       if (!workspaceId) {
         return Promise.reject(
           new Error(`Cannot close pane ${paneId}: session ${sessionId} has no workspace`),

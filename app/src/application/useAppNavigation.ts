@@ -114,7 +114,10 @@ export function useAppNavigation({
       workspaceViews.filter(
         (workspace) =>
           !workspace.muted &&
-          (workspace.pinned || workspace.sessions.length > 0 || showSessionlessWorkspaces),
+          (workspace.pinned ||
+            workspace.sessions.length > 0 ||
+            workspace.hasUnresolvedAgentPanes ||
+            showSessionlessWorkspaces),
       ),
     [workspaceViews, showSessionlessWorkspaces],
   );
@@ -143,19 +146,27 @@ export function useAppNavigation({
     }
   }, [activeWorkspaceId, sendWorkspaceSelected, view]);
 
-  const sessionlessWorkspaceStateById = useMemo(() => {
+  const daemonWorkspaceStateById = useMemo(() => {
     const map = new Map<string, TerminalWorkspaceState>();
+    const unresolvedWorkspaceIds = new Set(
+      workspaceViews
+        .filter((workspace) => workspace.hasUnresolvedAgentPanes)
+        .map((workspace) => workspace.id),
+    );
     for (const workspace of daemonWorkspaces) {
       if (!workspace.layout) {
         continue;
       }
       const { workspace: state } = workspaceSnapshotFromDaemonWorkspace(workspace.layout);
-      if (state.layoutTree && state.agents.length === 0) {
+      if (
+        state.layoutTree &&
+        (state.agents.length === 0 || unresolvedWorkspaceIds.has(workspace.id))
+      ) {
         map.set(workspace.id, state);
       }
     }
     return map;
-  }, [daemonWorkspaces]);
+  }, [daemonWorkspaces, workspaceViews]);
 
   const visualWorkspaces = sidebarWorkspaceViews;
   const visualIndexByWorkspaceId = useMemo(() => {
@@ -284,7 +295,7 @@ export function useAppNavigation({
     sidebarWorkspaceViews,
     activeWorkspaceId,
     activeWorkspaceIdRef,
-    sessionlessWorkspaceStateById,
+    daemonWorkspaceStateById,
     visualWorkspaces,
     visualIndexByWorkspaceId,
     handleSelectWorkspace,

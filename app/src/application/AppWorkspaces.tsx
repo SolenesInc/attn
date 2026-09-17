@@ -25,7 +25,7 @@ import { activePaneIdForFocusedSession, terminalStateForWorkspaceSessions } from
 export function AppWorkspaces() {
   const {
     workspaceViews,
-    sessionlessWorkspaceStateById,
+    daemonWorkspaceStateById,
     workspaceSelection,
     activeWorkspaceId,
     workspaceSelectionStyle,
@@ -93,7 +93,7 @@ export function AppWorkspaces() {
         {workspaceViews.map((workspace) => {
           const workspaceState =
             terminalStateForWorkspaceSessions(workspace.sessions) ??
-            sessionlessWorkspaceStateById.get(workspace.id) ??
+            daemonWorkspaceStateById.get(workspace.id) ??
             null;
           if (!workspaceState) {
             return null;
@@ -197,7 +197,7 @@ export function AppWorkspaces() {
                     (pane) => pane.id === paneId,
                   )?.sessionId;
                   if (paneSessionId) {
-                    void handleClosePane(paneSessionId, paneId).catch(console.error);
+                    void handleClosePane(paneSessionId, paneId, workspace.id).catch(console.error);
                   }
                 }}
                 onRenameSession={sendRenameSession}

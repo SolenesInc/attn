@@ -56,7 +56,11 @@ export function SidebarWorkspaceList() {
                   <span
                     className="workspace-neutral-indicator"
                     data-testid="workspace-neutral-indicator"
-                    title="Tile-only workspace — no active session"
+                    title={
+                      workspace.hasUnresolvedAgentPanes
+                        ? 'Workspace has a pane without an active session'
+                        : 'Tile-only workspace — no active session'
+                    }
                   />
                 ) : (
                   <StateIndicator

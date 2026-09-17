@@ -143,14 +143,18 @@ export function useAppSessions({
   const unmutedWorkspaceViews = useMemo(
     () =>
       workspaceViews.filter(
-        (workspace) => !workspace.muted && (workspace.pinned || workspace.sessions.length > 0),
+        (workspace) =>
+          !workspace.muted &&
+          (workspace.pinned || workspace.sessions.length > 0 || workspace.hasUnresolvedAgentPanes),
       ),
     [workspaceViews],
   );
   const mutedWorkspaceViews = useMemo(
     () =>
       workspaceViews.filter(
-        (workspace) => workspace.muted && (workspace.pinned || workspace.sessions.length > 0),
+        (workspace) =>
+          workspace.muted &&
+          (workspace.pinned || workspace.sessions.length > 0 || workspace.hasUnresolvedAgentPanes),
       ),
     [workspaceViews],
   );
