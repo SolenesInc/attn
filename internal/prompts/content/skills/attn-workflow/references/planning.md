@@ -35,7 +35,9 @@ Which files and packages change, and what each one is responsible for. A shallow
 
 ```text
 internal/automode/automode.go      Preset type; Presets(); PresetFor(policy, mode)
-internal/protocol/schema/main.tsp  approval_policy and sandbox_mode on SpawnSessionMessage; generated types and version constants follow
+internal/protocol/schema/main.tsp  approval_policy and sandbox_mode on SpawnSessionMessage; generated types follow
+internal/protocol/constants.go     ProtocolVersion bump
+app/src/hooks/useDaemonSocket.ts   PROTOCOL_VERSION bump
 internal/daemon/spawn_pipeline.go  applies the launch intent's pair over the daemon default
 plugins/attn-pi/approval/session.ts  /permissions picker; repaints the status line
 app/src/components/LocationPicker.tsx  preset control beside auto mode
