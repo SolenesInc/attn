@@ -15,56 +15,61 @@ Read the `attn` skill's garden guidance and run `attn seed guide` for seed and p
 
 Write for an implementer starting fresh and a user reviewing the direction. The body describes the current design; it is not a record of the conversation. Who decided what, when, and what the user authorized go in seed notes. A body that reads as meeting minutes is not a plan.
 
-Fill this skeleton. Every `<placeholder>` becomes content in the named form; a design part that does not apply becomes one line with the reason, for example `Interfaces: unchanged; the change is internal to one package.`
+The body has five sections in this order. Each design part is required; a part that does not apply becomes one line with the reason in its place.
+
+- **Task and outcome**: what to build and what done looks like, in a few sentences.
+- **Decisions**: the choices the user might still change, each with its reason, and the open questions, saying which block work and which the implementer may decide.
+- **Design**, in four parts:
+  - **Ownership**: each file or package that changes, as a shallow file tree with one comment per entry saying what it is responsible for.
+  - **Interfaces**: the types, signatures, wire messages and persisted data the change adds or alters, sketched in the codebase's language, with the schema, generation and migration steps a wire or storage change requires.
+  - **Behavior**: how control and data flow through the changed parts, as a sequence for messages between processes, a call tree within one process, or pseudocode for a rule.
+  - **State**: each piece of state with its owner, what sets it, what reads it, what happens on failure and what happens on restart. In-memory state counts as state: a selection held until launch still has an owner, mutators and a lifecycle across failures and restarts.
+- **Execution**: for a plot, the children, which changes belong to each pull request, and their order; for a single seed, one line saying so; without pull requests, the delivery step.
+- **Completion**: the checks the repository's verification guidance requires for the affected surfaces and where the evidence is recorded, or the documented exemption when one applies.
+
+### Skeleton
+
+Copy this and replace each `<slot>`. The skeleton and the example below are the only code blocks in this reference; everything else is guidance.
 
 ```markdown
-<Task and outcome: what to build and what done looks like, in a few sentences.>
+<task and outcome>
 
 ## Decisions
 
-- <A choice the user might still change, with its reason.>
+- <decision>
 
-Open: <a question that blocks work> · <a question the implementer may decide>
+Open: <question>
 
 ## Design
 
 Ownership:
 
-    <Each file or package that changes, as a shallow file tree with one comment
-     per entry saying what it is responsible for.>
+    <file tree>
 
 Interfaces:
 
-    <The types, signatures, wire messages and persisted data the change adds or
-     alters, sketched in the codebase's language. The schema, generation and
-     migration steps a wire or storage change requires.>
+    <types, signatures, messages, persisted data>
 
 Behavior:
 
-    <How control and data flow through the changed parts: a sequence for messages
-     between processes, a call tree within one, pseudocode for a rule.>
+    <sequence, call tree or pseudocode>
 
 State:
 
-    <Each piece of state, in-memory included: its owner, what sets it, what reads
-     it, what happens on failure, what happens on restart.>
+    <state, one entry per piece>
 
 ## Execution
 
-<For a plot: the children, which changes belong to each pull request, and their
-order. For a single seed: one line saying so. Without pull requests: the delivery step.>
+<children and pull requests, or one line>
 
 ## Completion
 
-<The checks the repository's verification guidance requires for the affected surfaces,
-from targeted tests to running-app evidence and a recording when the change is
-visible, and where that evidence is recorded. The documented exemption when one
-applies.>
+<required checks and where the evidence goes>
 ```
 
 ## Showing the design
 
-Each design part is required and is shown, not described. A part answered with prose alone is incomplete. In-memory state counts as state: a selection held until launch still has an owner, mutators and a lifecycle across failures and restarts.
+A design part is shown, not described. A part answered with prose alone is incomplete.
 
 When the shape already exists in the codebase, show its change as a diff of that shape: `+` and `-` lines on the file tree, the type, the call tree or the sequence. Show the whole shape when most of it is new, when a diff would hide ownership or order, or when the implementer needs a copyable target. A diff shows what changes where prose would describe it.
 
@@ -80,9 +85,9 @@ Choose the smallest view that explains the point:
 - messages between processes as a sequence
 - a UI layout or state comparison as an ASCII wireframe
 
-## A filled body
+## Example
 
-A per-session permission preset for pi, chosen at launch and switchable mid-session. The wire message and the spawn call tree exist, so their changes are diffs; the preset type, the flows and the state are new, so they are whole.
+The skeleton filled for one change: a per-session permission preset for pi, chosen at launch and switchable mid-session. The wire message and the spawn call tree exist, so their changes are diffs; the preset type, the flows and the state are new, so they are whole.
 
 ````markdown
 Let a pi session choose its approval policy and sandbox mode at creation, as a
