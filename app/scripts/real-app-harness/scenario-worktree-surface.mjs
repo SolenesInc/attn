@@ -300,6 +300,10 @@ async function main() {
       await observer.unregisterMatchingSessions((session) => session.id === delegateSession, 20_000);
       delegateSession = null;
 
+      fs.rmSync(path.join(target, '.attn-mock-agent'), { recursive: true, force: true });
+      runner.assert(gitOut(target, ['status', '--porcelain']).trim() === '',
+        'the clean-delete fixture has no changes after removing mock-agent evidence', { target });
+
       await client.request('worktrees_delete', { path: target });
       await poll(async () => {
         const current = await client.request('worktrees_get_state');
