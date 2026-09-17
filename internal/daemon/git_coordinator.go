@@ -19,9 +19,8 @@ type gitCoordinator struct {
 }
 
 var (
-	getGitStatusForDaemon     = getGitStatusForSubscription
-	getDefaultBranchForDaemon = attngit.GetDefaultBranch
-	readFileDiffForDaemon     = readFileDiff
+	getGitStatusForDaemon = getGitStatusForSubscription
+	readFileDiffForDaemon = readFileDiff
 )
 
 type gitStatusCacheKey struct {
@@ -100,10 +99,6 @@ func (c *gitCoordinator) Status(directory string, mode gitStatusMode) (*protocol
 	close(refresh.done)
 
 	return cloneGitStatusUpdate(status), refresh.duration, err
-}
-
-func (c *gitCoordinator) DefaultBranch(directory string) (string, error) {
-	return getDefaultBranchForDaemon(directory)
 }
 
 func (c *gitCoordinator) FileDiff(directory, path, baseRef, headRef string, staged bool) (fileDiffContent, error) {

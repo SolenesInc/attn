@@ -143,6 +143,10 @@ type Daemon struct {
 	sessionPaneAddMu                  sync.Mutex
 	gitCoordMu                        sync.Mutex
 	gitCoord                          *gitCoordinator
+	worktreeMaintenance               worktreeMaintenanceCoordinator
+	worktreeListStates                func(context.Context, string) ([]git.WorktreeState, error)
+	worktreeRepositoryFacts           func(context.Context, string, time.Time) (*repositoryFacts, error)
+	worktreeObserveCandidate          func(context.Context, *repositoryFacts, git.WorktreeState, time.Time) (store.WorktreeObservation, error)
 	warnings                          []protocol.DaemonWarning
 	warningsMu                        sync.RWMutex
 	legacyTicketRecoveryFinishOnce    sync.Once
@@ -1407,7 +1411,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				state = protocol.SessionStateLaunching
 			}
 
-			d.store.Add(&protocol.Session{
+			recoveredSession := &protocol.Session{
 				ID:             sessionID,
 				Label:          label,
 				Agent:          normalizeStoredSessionAgent(info.Agent, protocol.SessionAgentCodex),
@@ -1416,6 +1420,10 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				StateSince:     now,
 				StateUpdatedAt: now,
 				LastSeen:       now,
+			}
+			_ = d.worktreeMaintenance.RunForeground(context.Background(), "register recovered session", func(context.Context) error {
+				d.store.Add(recoveredSession)
+				return nil
 			})
 			report.Created++
 			report.markChanged(sessionID)
@@ -2797,6 +2805,13 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 }
 
 func (d *Daemon) handleRegister(conn net.Conn, msg *protocol.RegisterMessage) {
+	_ = d.worktreeMaintenance.RunForeground(context.Background(), "register live session", func(context.Context) error {
+		d.handleRegisterForeground(conn, msg)
+		return nil
+	})
+}
+
+func (d *Daemon) handleRegisterForeground(conn net.Conn, msg *protocol.RegisterMessage) {
 	d.logf("session registered: id=%s label=%s dir=%s", msg.ID, protocol.Deref(msg.Label), msg.Dir)
 	existing := d.store.Get(msg.ID)
 

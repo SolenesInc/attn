@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -98,9 +99,15 @@ func (d *Daemon) plantSeed(schema docstore.CollectionSchema, seed garden.Seed) (
 	if err != nil {
 		return docstore.Document{}, err
 	}
-	written, eventSeqs, err := d.store.CommitDocumentWriteWithEvents(store.DocumentWrite{
-		Schema: schema, ID: seed.ID, Body: body, Expected: &expected,
-	}, fact, events, d.gardenTime())
+	var written store.DocumentWriteResult
+	var eventSeqs []int64
+	err = d.worktreeMaintenance.RunForeground(context.Background(), "plant seed protection", func(context.Context) error {
+		var commitErr error
+		written, eventSeqs, commitErr = d.store.CommitDocumentWriteWithEvents(store.DocumentWrite{
+			Schema: schema, ID: seed.ID, Body: body, Expected: &expected,
+		}, fact, events, d.gardenTime())
+		return commitErr
+	})
 	if err != nil {
 		return docstore.Document{}, err
 	}
@@ -115,6 +122,18 @@ func (d *Daemon) plantSeed(schema docstore.CollectionSchema, seed garden.Seed) (
 }
 
 func (d *Daemon) writeSeedWithEvents(
+	schema docstore.CollectionSchema, seed garden.Seed, expected int64, occurrences ...seedEvents.Occurrence,
+) (docstore.Document, error) {
+	var written docstore.Document
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "write seed protection", func(context.Context) error {
+		var err error
+		written, err = d.writeSeedWithEventsForeground(schema, seed, expected, occurrences...)
+		return err
+	})
+	return written, err
+}
+
+func (d *Daemon) writeSeedWithEventsForeground(
 	schema docstore.CollectionSchema, seed garden.Seed, expected int64, occurrences ...seedEvents.Occurrence,
 ) (docstore.Document, error) {
 	body, err := seed.Encode()
@@ -1489,13 +1508,6 @@ func (d *Daemon) applySeedTransitionDetailedAtRevision(
 	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, d.sessionExists, expectedRev)
 }
 
-func (d *Daemon) applySeedTransitionAs(
-	id string, verb garden.Verb, ask garden.Ask, sessionLive func(string) bool,
-) (garden.Seed, docstore.Document, error) {
-	seed, doc, _, err := d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, "", sessionLive, 0)
-	return seed, doc, err
-}
-
 func (d *Daemon) applySeedTransitionDetailedAs(
 	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(string) bool,
 ) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
@@ -1506,6 +1518,20 @@ func (d *Daemon) applySeedTransitionDetailedAs(
 var errSeedRevisionMoved = errors.New("")
 
 func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
+	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(string) bool, expectedRev int64,
+) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
+	var seed garden.Seed
+	var doc docstore.Document
+	var notes seedTransitionNotes
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "move seed protection", func(context.Context) error {
+		var err error
+		seed, doc, notes, err = d.applySeedTransitionDetailedAsAtRevisionForeground(id, verb, ask, comment, sessionLive, expectedRev)
+		return err
+	})
+	return seed, doc, notes, err
+}
+
+func (d *Daemon) applySeedTransitionDetailedAsAtRevisionForeground(
 	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(string) bool, expectedRev int64,
 ) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
 	comment = strings.TrimSpace(comment)
@@ -1607,7 +1633,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 			}
 		}
 		if displaced == nil && comment == "" {
-			written, err = d.writeSeedWithEvents(*schema, next, doc.Rev, occurrences...)
+			written, err = d.writeSeedWithEventsForeground(*schema, next, doc.Rev, occurrences...)
 		} else {
 			var entries []garden.Note
 			auditIndex, commentIndex := -1, -1
@@ -1627,7 +1653,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 				})
 			}
 			var writtenNotes []protocol.SeedNote
-			written, writtenNotes, err = d.writeSeedMoveWithNotes(*schema, next, doc.Rev, occurrences, entries)
+			written, writtenNotes, err = d.writeSeedMoveWithNotesForeground(*schema, next, doc.Rev, occurrences, entries)
 			if err == nil {
 				if auditIndex >= 0 {
 					notes.Audit = &writtenNotes[auditIndex]
@@ -1667,6 +1693,23 @@ func forcedSeedMoveBody(seedID string, verb garden.Verb, actor, displaced garden
 }
 
 func (d *Daemon) writeSeedMoveWithNotes(
+	seedSchema docstore.CollectionSchema,
+	seed garden.Seed,
+	expected int64,
+	occurrences []seedEvents.Occurrence,
+	notes []garden.Note,
+) (docstore.Document, []protocol.SeedNote, error) {
+	var written docstore.Document
+	var wireNotes []protocol.SeedNote
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "write seed move", func(context.Context) error {
+		var err error
+		written, wireNotes, err = d.writeSeedMoveWithNotesForeground(seedSchema, seed, expected, occurrences, notes)
+		return err
+	})
+	return written, wireNotes, err
+}
+
+func (d *Daemon) writeSeedMoveWithNotesForeground(
 	seedSchema docstore.CollectionSchema,
 	seed garden.Seed,
 	expected int64,

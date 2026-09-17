@@ -1,13 +1,40 @@
 package github
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
+
+func TestListMergedPullRequestsContextCancelsHTTP(t *testing.T) {
+	started := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	client, err := NewClient(server.URL, "test-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cause := errors.New("sweep preempted")
+	ctx, cancel := context.WithCancelCause(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := client.ListMergedPullRequestsContext(ctx, "owner/repo")
+		done <- err
+	}()
+	<-started
+	cancel(cause)
+	if err := <-done; !errors.Is(err, cause) {
+		t.Fatalf("error = %v, want cancellation cause", err)
+	}
+}
 
 func TestNewClient_UsesProvidedToken(t *testing.T) {
 	client, err := NewClient("http://example.com", "test-token-from-env")

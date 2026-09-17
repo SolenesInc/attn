@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -440,6 +441,15 @@ func branchCanBeRecreated(execution garden.Dispatch) (string, bool, string) {
 }
 
 func (d *Daemon) continuationForSeed(seed garden.Seed) *seedContinuation {
+	var continuation *seedContinuation
+	_ = d.worktreeMaintenance.RunForeground(context.Background(), "inspect seed continuation", func(context.Context) error {
+		continuation = d.continuationForSeedForeground(seed)
+		return nil
+	})
+	return continuation
+}
+
+func (d *Daemon) continuationForSeedForeground(seed garden.Seed) *seedContinuation {
 	execution, source, ok := d.normalizedSeedContinuation(seed)
 	if !ok {
 		return nil

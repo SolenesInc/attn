@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"strings"
 
 	"github.com/victorarias/attn/internal/git"
@@ -8,6 +9,16 @@ import (
 )
 
 func (d *Daemon) doCreateWorktreeFromBranch(msg *protocol.CreateWorktreeFromBranchMessage) (string, error) {
+	var path string
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "create worktree from branch", func(context.Context) error {
+		var err error
+		path, err = d.doCreateWorktreeFromBranchForeground(msg)
+		return err
+	})
+	return path, err
+}
+
+func (d *Daemon) doCreateWorktreeFromBranchForeground(msg *protocol.CreateWorktreeFromBranchMessage) (string, error) {
 	mainRepo := git.ResolveMainRepoPath(msg.MainRepo)
 	branch := msg.Branch
 
@@ -77,7 +88,7 @@ func (d *Daemon) handleCreateWorktreeFromBranchWS(client *wsClient, msg *protoco
 }
 
 func (d *Daemon) handleListBranchesWS(client *wsClient, msg *protocol.ListBranchesMessage) {
-	go func() {
+	go d.runWorktreeForeground("list branches", func(context.Context) {
 		branches, err := git.ListBranchesWithCommits(msg.MainRepo)
 		result := protocol.BranchesResultMessage{
 			Event:   protocol.EventBranchesResult,
@@ -92,11 +103,11 @@ func (d *Daemon) handleListBranchesWS(client *wsClient, msg *protocol.ListBranch
 			}
 		}
 		d.sendToClient(client, result)
-	}()
+	})
 }
 
 func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfoMessage) {
-	go func() {
+	go d.runWorktreeForeground("get repository info", func(ctx context.Context) {
 		repo := git.CanonicalizePath(msg.Repo)
 
 		currentBranch, err := git.GetCurrentBranch(repo)
@@ -112,12 +123,12 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 
 		commitHash, commitTime := git.GetHeadCommitInfo(repo)
 
-		defaultBranch, _ := d.coordinator().DefaultBranch(repo)
+		defaultBranch, _ := git.GetDefaultBranchContext(ctx, repo)
 		if defaultBranch == "" {
 			defaultBranch = "main"
 		}
 
-		worktrees := d.doListWorktrees(repo)
+		worktrees := d.doListWorktreesForeground(repo)
 
 		d.sendToClient(client, &protocol.GetRepoInfoResultMessage{
 			Event:      protocol.EventGetRepoInfoResult,
@@ -132,12 +143,12 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 			},
 			Success: true,
 		})
-	}()
+	})
 }
 
 func (d *Daemon) handleGetDefaultBranchWS(client *wsClient, msg *protocol.GetDefaultBranchMessage) {
-	go func() {
-		branch, err := d.coordinator().DefaultBranch(msg.Repo)
+	go d.runWorktreeForeground("get default branch", func(ctx context.Context) {
+		branch, err := git.GetDefaultBranchContext(ctx, msg.Repo)
 		result := &protocol.WebSocketEvent{
 			Event:   protocol.EventGetDefaultBranchResult,
 			Success: protocol.Ptr(err == nil),
@@ -148,11 +159,11 @@ func (d *Daemon) handleGetDefaultBranchWS(client *wsClient, msg *protocol.GetDef
 			result.Branch = protocol.Ptr(branch)
 		}
 		d.sendToClient(client, result)
-	}()
+	})
 }
 
 func (d *Daemon) handleFetchRemotesWS(client *wsClient, msg *protocol.FetchRemotesMessage) {
-	go func() {
+	go d.runWorktreeForeground("fetch remotes", func(context.Context) {
 		err := git.FetchRemotes(msg.Repo)
 		result := &protocol.WebSocketEvent{
 			Event:   protocol.EventFetchRemotesResult,
@@ -165,11 +176,11 @@ func (d *Daemon) handleFetchRemotesWS(client *wsClient, msg *protocol.FetchRemot
 			d.logf("FetchRemotes succeeded for %s", msg.Repo)
 		}
 		d.sendToClient(client, result)
-	}()
+	})
 }
 
 func (d *Daemon) handleListRemoteBranchesWS(client *wsClient, msg *protocol.ListRemoteBranchesMessage) {
-	go func() {
+	go d.runWorktreeForeground("list remote branches", func(context.Context) {
 		branches, err := git.ListRemoteBranches(msg.Repo)
 		result := &protocol.WebSocketEvent{
 			Event:   protocol.EventListRemoteBranchesResult,
@@ -185,11 +196,11 @@ func (d *Daemon) handleListRemoteBranchesWS(client *wsClient, msg *protocol.List
 			result.Branches = branchList
 		}
 		d.sendToClient(client, result)
-	}()
+	})
 }
 
 func (d *Daemon) handleEnsureRepoWS(client *wsClient, msg *protocol.EnsureRepoMessage) {
-	go func() {
+	go d.runWorktreeForeground("ensure repository", func(context.Context) {
 		result := &protocol.WebSocketEvent{
 			Event:      protocol.EventEnsureRepoResult,
 			TargetPath: protocol.Ptr(msg.TargetPath),
@@ -222,5 +233,5 @@ func (d *Daemon) handleEnsureRepoWS(client *wsClient, msg *protocol.EnsureRepoMe
 			d.logf("EnsureRepo found existing repo at %s, fetched remotes", msg.TargetPath)
 		}
 		d.sendToClient(client, result)
-	}()
+	})
 }

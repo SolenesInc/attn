@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -413,7 +414,12 @@ func (d *Daemon) inspectBranchInBackground(sessionID, repo, branch string) <-cha
 			close(done)
 		}()
 		finishOperation := d.beginGitOperation(protocol.GitOperationKindInspectBranch, repo, nil)
-		inspection, err := inspectBranch(repo, branch)
+		var inspection branchInspection
+		err := d.worktreeMaintenance.RunForeground(context.Background(), "inspect reopen branch", func(context.Context) error {
+			var err error
+			inspection, err = inspectBranch(repo, branch)
+			return err
+		})
 		finishOperation(err)
 		if err != nil {
 			d.logf("reopen: inspecting branch %s in %s: %v", branch, repo, err)
@@ -497,6 +503,18 @@ type sessionReopenOutcome struct {
 }
 
 func (d *Daemon) reopenSession(
+	sessionID string, action protocol.SessionReopenAction, directory string,
+) (*sessionReopenOutcome, error) {
+	var outcome *sessionReopenOutcome
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "reopen session", func(context.Context) error {
+		var err error
+		outcome, err = d.reopenSessionForeground(sessionID, action, directory)
+		return err
+	})
+	return outcome, err
+}
+
+func (d *Daemon) reopenSessionForeground(
 	sessionID string, action protocol.SessionReopenAction, directory string,
 ) (*sessionReopenOutcome, error) {
 	sessionID = strings.TrimSpace(sessionID)
@@ -640,7 +658,7 @@ func (d *Daemon) recreateReopenWorktree(
 
 	switch action {
 	case protocol.SessionReopenActionRecreateWorktreeAndReopen:
-		return d.doCreateWorktreeFromBranch(&protocol.CreateWorktreeFromBranchMessage{
+		return d.doCreateWorktreeFromBranchForeground(&protocol.CreateWorktreeFromBranchMessage{
 			Cmd: protocol.CmdCreateWorktreeFromBranch, MainRepo: repo, Branch: branch, Path: protocol.Ptr(path),
 		})
 	case protocol.SessionReopenActionFetchRecreateAndReopen:
@@ -648,7 +666,7 @@ func (d *Daemon) recreateReopenWorktree(
 		if inspection.Remote == "" {
 			return "", fmt.Errorf("no remote carries branch %s any more", branch)
 		}
-		return d.doCreateWorktreeFromBranch(&protocol.CreateWorktreeFromBranchMessage{
+		return d.doCreateWorktreeFromBranchForeground(&protocol.CreateWorktreeFromBranchMessage{
 			Cmd:      protocol.CmdCreateWorktreeFromBranch,
 			MainRepo: repo,
 			Branch:   inspection.Remote + "/" + branch,
@@ -659,7 +677,7 @@ func (d *Daemon) recreateReopenWorktree(
 		if err != nil || strings.TrimSpace(base) == "" {
 			return "", fmt.Errorf("%s has no default branch to start from: %w", repo, err)
 		}
-		return d.doCreateWorktree(&protocol.CreateWorktreeMessage{
+		return d.doCreateWorktreeForeground(&protocol.CreateWorktreeMessage{
 			Cmd:          protocol.CmdCreateWorktree,
 			MainRepo:     repo,
 			Branch:       branch,
@@ -768,7 +786,7 @@ func (d *Daemon) reopenSessionRuntime(
 		spawn.ResumeSessionID = protocol.Ptr(resumeID)
 	}
 	spawnClient := newInternalWSClient()
-	d.handleSpawnSession(spawnClient, spawn)
+	d.handleSpawnSessionWithPolicyForeground(spawnClient, spawn, internalSpawnPolicy{})
 	if _, err := readInternalActionResult(spawnClient); err != nil {
 		return nil, rollback.fail(fmt.Errorf("spawn reopened session: %w", err))
 	}

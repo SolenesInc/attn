@@ -1,6 +1,8 @@
 package git
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,6 +28,16 @@ func TestRunGitOutputTimesOut(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("timeout error = %v, want timed out", err)
+	}
+}
+
+func TestOutputContextReturnsCancellationCause(t *testing.T) {
+	cause := errors.New("foreground preempted sweep")
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(cause)
+	_, err := OutputContext(ctx, OpMetadata, t.TempDir(), "status")
+	if !errors.Is(err, cause) {
+		t.Fatalf("error = %v, want cancellation cause", err)
 	}
 }
 

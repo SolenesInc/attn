@@ -696,6 +696,44 @@ func TestDoDeleteWorktree_ProviderErrorPreservesDaemonState(t *testing.T) {
 	}
 }
 
+func TestDoDeleteWorktree_ProviderDeleteBeforeErrorFinalizesOnce(t *testing.T) {
+	tmpDir, mainDir := initProviderTestRepo(t)
+	worktreePath := filepath.Join(tmpDir, "provider-delete-before-error")
+	runGitDaemon(t, mainDir, "worktree", "add", "-b", "feat/provider-delete-before-error", worktreePath)
+	worktreePath = git.CanonicalizePath(worktreePath)
+
+	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
+	d.registerCreatedWorktree(mainDir, worktreePath, "feat/provider-delete-before-error")
+	client, done := startPluginPipe(t, d, "delete-before-error-provider", []string{worktreeDeleteProviderSurface})
+	defer client.Close()
+
+	responseDone := respondToDeleteProviderCall(t, client, func(params worktreeDeleteProviderParams) worktreeDeleteProviderResult {
+		if err := git.DeleteWorktree(mainDir, worktreePath, true); err != nil {
+			t.Fatalf("provider delete worktree: %v", err)
+		}
+		return worktreeDeleteProviderResult{Status: providerStatusError, Error: "connection lost after delete"}
+	})
+
+	if err := d.doDeleteWorktree(worktreePath, nil, deleteWorktreeOptions{Force: true}); err != nil {
+		t.Fatalf("delete-before-error returned %v", err)
+	}
+	waitForProviderResponse(t, responseDone)
+	if wt := d.store.GetWorktree(worktreePath); wt != nil {
+		t.Fatalf("deleted worktree remains in store: %+v", wt)
+	}
+	entries, _ := d.store.WorktreeSweepLog(mainDir, 10)
+	if len(entries) != 1 {
+		t.Fatalf("deletion finalized %d times, want once", len(entries))
+	}
+
+	_ = client.Close()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("delete-before-error provider connection did not close")
+	}
+}
+
 func attachPluginTestLogger(t *testing.T, d *Daemon) string {
 	t.Helper()
 	logPath := filepath.Join(t.TempDir(), "daemon.log")

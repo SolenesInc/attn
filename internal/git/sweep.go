@@ -1,8 +1,11 @@
 package git
 
 import (
+	"context"
+	"errors"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -20,7 +23,11 @@ type WorktreeState struct {
 
 // Deliberately does NOT prune first, unlike ListWorktrees: a prunable worktree reads as stale.
 func ListWorktreeStates(repoDir string) ([]WorktreeState, error) {
-	out, err := runGitOutput(OpWorktree, repoDir, "worktree", "list", "--porcelain")
+	return ListWorktreeStatesContext(context.Background(), repoDir)
+}
+
+func ListWorktreeStatesContext(ctx context.Context, repoDir string) ([]WorktreeState, error) {
+	out, err := OutputContext(ctx, OpWorktree, repoDir, "worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +64,11 @@ func ListWorktreeStates(repoDir string) ([]WorktreeState, error) {
 
 // Untracked files count as dirty. Receipt in docs/worktree-sweep.md.
 func WorktreeDirtyCount(path string) (int, error) {
-	out, err := runGitOutput(OpStatus, CanonicalizePath(path), "status", "--porcelain", "--untracked-files=all")
+	return WorktreeDirtyCountContext(context.Background(), path)
+}
+
+func WorktreeDirtyCountContext(ctx context.Context, path string) (int, error) {
+	out, err := OutputContext(ctx, OpStatus, CanonicalizePath(path), "status", "--porcelain", "--untracked-files=all")
 	if err != nil {
 		return 0, err
 	}
@@ -70,14 +81,34 @@ func WorktreeDirtyCount(path string) (int, error) {
 
 // Any error reports false: an unresolvable ref never reads as merged.
 func IsAncestor(repoDir, commit, base string) bool {
+	merged, _ := IsAncestorContext(context.Background(), repoDir, commit, base)
+	return merged
+}
+
+func IsAncestorContext(ctx context.Context, repoDir, commit, base string) (bool, error) {
 	if commit == "" || base == "" {
-		return false
+		return false, nil
 	}
-	return runGitNoOutput(OpMetadata, repoDir, "merge-base", "--is-ancestor", commit, base) == nil
+	err := NoOutputContext(ctx, OpMetadata, repoDir, "merge-base", "--is-ancestor", commit, base)
+	if cause := context.Cause(ctx); cause != nil {
+		return false, cause
+	}
+	if err == nil {
+		return true, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, err
 }
 
 func CommitsAhead(repoDir, base, ref string) (int, error) {
-	out, err := runGitOutput(OpMetadata, repoDir, "rev-list", "--count", base+".."+ref)
+	return CommitsAheadContext(context.Background(), repoDir, base, ref)
+}
+
+func CommitsAheadContext(ctx context.Context, repoDir, base, ref string) (int, error) {
+	out, err := OutputContext(ctx, OpMetadata, repoDir, "rev-list", "--count", base+".."+ref)
 	if err != nil {
 		return 0, err
 	}
@@ -85,7 +116,11 @@ func CommitsAhead(repoDir, base, ref string) (int, error) {
 }
 
 func TreeHashesOnHistory(repoDir, base string) (map[string]bool, error) {
-	out, err := runGitOutput(OpMetadata, repoDir, "rev-list", "--format=%T", base)
+	return TreeHashesOnHistoryContext(context.Background(), repoDir, base)
+}
+
+func TreeHashesOnHistoryContext(ctx context.Context, repoDir, base string) (map[string]bool, error) {
+	out, err := OutputContext(ctx, OpMetadata, repoDir, "rev-list", "--format=%T", base)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +137,11 @@ func TreeHashesOnHistory(repoDir, base string) (map[string]bool, error) {
 }
 
 func TreeHash(repoDir, ref string) (string, error) {
-	out, err := runGitOutput(OpMetadata, repoDir, "rev-parse", ref+"^{tree}")
+	return TreeHashContext(context.Background(), repoDir, ref)
+}
+
+func TreeHashContext(ctx context.Context, repoDir, ref string) (string, error) {
+	out, err := OutputContext(ctx, OpMetadata, repoDir, "rev-parse", ref+"^{tree}")
 	if err != nil {
 		return "", err
 	}
@@ -111,7 +150,11 @@ func TreeHash(repoDir, ref string) (string, error) {
 
 // Attributed by the message git writes: "WIP on <branch>:" or "On <branch>:".
 func StashCountsByBranch(repoDir string) (map[string]int, error) {
-	out, err := runGitOutput(OpMetadata, repoDir, "stash", "list", "--format=%gs")
+	return StashCountsByBranchContext(context.Background(), repoDir)
+}
+
+func StashCountsByBranchContext(ctx context.Context, repoDir string) (map[string]int, error) {
+	out, err := OutputContext(ctx, OpMetadata, repoDir, "stash", "list", "--format=%gs")
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +182,11 @@ func StashCountsByBranch(repoDir string) (map[string]int, error) {
 }
 
 func LastCommitTime(dir string) (time.Time, error) {
-	out, err := runGitOutput(OpMetadata, dir, "log", "-1", "--format=%cI")
+	return LastCommitTimeContext(context.Background(), dir)
+}
+
+func LastCommitTimeContext(ctx context.Context, dir string) (time.Time, error) {
+	out, err := OutputContext(ctx, OpMetadata, dir, "log", "-1", "--format=%cI")
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -159,8 +206,15 @@ var idleWalkSkipDirs = map[string]bool{
 }
 
 func NewestTreeModTime(path string) (time.Time, error) {
+	return NewestTreeModTimeContext(context.Background(), path)
+}
+
+func NewestTreeModTimeContext(ctx context.Context, path string) (time.Time, error) {
 	newest := time.Time{}
 	err := filepath.WalkDir(path, func(name string, entry fs.DirEntry, err error) error {
+		if cause := context.Cause(ctx); cause != nil {
+			return cause
+		}
 		if err != nil {
 			if name == path {
 				return err

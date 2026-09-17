@@ -97,6 +97,10 @@ func runGitOutput(op Operation, dir string, args ...string) ([]byte, error) {
 	return runGitCommand(op, dir, nil, false, args...)
 }
 
+func OutputContext(ctx context.Context, op Operation, dir string, args ...string) ([]byte, error) {
+	return runGitCommandContext(ctx, op, dir, nil, false, args...)
+}
+
 func Output(op Operation, dir string, args ...string) ([]byte, error) {
 	return runGitOutput(op, dir, args...)
 }
@@ -131,9 +135,18 @@ func runGitNoOutput(op Operation, dir string, args ...string) error {
 	return err
 }
 
+func NoOutputContext(ctx context.Context, op Operation, dir string, args ...string) error {
+	_, err := runGitCommandContext(ctx, op, dir, nil, true, args...)
+	return err
+}
+
 func runGitCommand(op Operation, dir string, stdin io.Reader, combined bool, args ...string) ([]byte, error) {
 	timeout := defaultTimeout(op)
 	return runGitCommandWithTimeout(op, timeout, dir, stdin, combined, args...)
+}
+
+func runGitCommandContext(ctx context.Context, op Operation, dir string, stdin io.Reader, combined bool, args ...string) ([]byte, error) {
+	return runGitCommandWithContextAndEnv(ctx, op, defaultTimeout(op), dir, stdin, combined, nil, args...)
 }
 
 func runGitCommandWithTimeout(op Operation, timeout time.Duration, dir string, stdin io.Reader, combined bool, args ...string) ([]byte, error) {
@@ -141,7 +154,11 @@ func runGitCommandWithTimeout(op Operation, timeout time.Duration, dir string, s
 }
 
 func runGitCommandWithTimeoutAndEnv(op Operation, timeout time.Duration, dir string, stdin io.Reader, combined bool, env map[string]string, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	return runGitCommandWithContextAndEnv(context.Background(), op, timeout, dir, stdin, combined, env, args...)
+}
+
+func runGitCommandWithContextAndEnv(parent context.Context, op Operation, timeout time.Duration, dir string, stdin io.Reader, combined bool, env map[string]string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "git", args...)
@@ -165,6 +182,9 @@ func runGitCommandWithTimeoutAndEnv(op Operation, timeout time.Duration, dir str
 
 	logGitCommand(op, dir, args, duration, ctx.Err())
 
+	if cause := context.Cause(parent); cause != nil {
+		return out, cause
+	}
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return out, fmt.Errorf("git %s timed out after %s: git %s", op, timeout, strings.Join(redactGitArgs(args), " "))
 	}

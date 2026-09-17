@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -99,6 +100,20 @@ func (d *Daemon) gardenDispatchDocument(sessionID string) (garden.Dispatch, docs
 }
 
 func (d *Daemon) bindSeedHandover(
+	msg *resolvedDelegationLaunch,
+	operationID, sessionID, directory, agent string,
+	fromChief bool,
+) (*protocol.SeedNote, error) {
+	var note *protocol.SeedNote
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "handover seed protection", func(context.Context) error {
+		var err error
+		note, err = d.bindSeedHandoverForeground(msg, operationID, sessionID, directory, agent, fromChief)
+		return err
+	})
+	return note, err
+}
+
+func (d *Daemon) bindSeedHandoverForeground(
 	msg *resolvedDelegationLaunch,
 	operationID, sessionID, directory, agent string,
 	fromChief bool,

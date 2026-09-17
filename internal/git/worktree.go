@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -255,20 +256,28 @@ func ResolveMainRepoPath(repoPath string) string {
 // RepositoryRoot names a directory's repository, walking the filesystem rather
 // than git: the main repository for a worktree, the checkout itself otherwise.
 func RepositoryRoot(dir string) string {
+	root, _ := RepositoryRootContext(context.Background(), dir)
+	return root
+}
+
+func RepositoryRootContext(ctx context.Context, dir string) (string, error) {
 	current := CanonicalizePath(dir)
 	for {
+		if cause := context.Cause(ctx); cause != nil {
+			return "", cause
+		}
 		info, err := os.Lstat(filepath.Join(current, ".git"))
 		if err == nil {
 			if !info.IsDir() {
 				if main := GetMainRepoFromWorktree(current); main != "" {
-					return CanonicalizePath(main)
+					return CanonicalizePath(main), nil
 				}
 			}
-			return current
+			return current, nil
 		}
 		parent := filepath.Dir(current)
 		if parent == current {
-			return ""
+			return "", nil
 		}
 		current = parent
 	}

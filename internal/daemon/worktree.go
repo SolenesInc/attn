@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"net"
 	"os"
@@ -16,6 +17,15 @@ import (
 )
 
 func (d *Daemon) doListWorktrees(mainRepo string) []protocol.Worktree {
+	var result []protocol.Worktree
+	_ = d.worktreeMaintenance.RunForeground(context.Background(), "list worktrees", func(context.Context) error {
+		result = d.doListWorktreesForeground(mainRepo)
+		return nil
+	})
+	return result
+}
+
+func (d *Daemon) doListWorktreesForeground(mainRepo string) []protocol.Worktree {
 	storedWorktrees := d.store.ListWorktreesByRepo(mainRepo)
 
 	gitWorktrees, err := git.ListWorktrees(mainRepo)
@@ -82,6 +92,16 @@ func (d *Daemon) doListWorktrees(mainRepo string) []protocol.Worktree {
 }
 
 func (d *Daemon) doCreateWorktree(msg *protocol.CreateWorktreeMessage) (string, error) {
+	var path string
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "create worktree", func(context.Context) error {
+		var err error
+		path, err = d.doCreateWorktreeForeground(msg)
+		return err
+	})
+	return path, err
+}
+
+func (d *Daemon) doCreateWorktreeForeground(msg *protocol.CreateWorktreeMessage) (string, error) {
 	mainRepo := git.ResolveMainRepoPath(msg.MainRepo)
 
 	requestedPath := protocol.Deref(msg.Path)
@@ -214,6 +234,12 @@ func (e *deleteWorktreeError) Unwrap() error {
 }
 
 func (d *Daemon) doDeleteWorktree(path string, endpointID *string, opts deleteWorktreeOptions) (err error) {
+	return d.worktreeMaintenance.RunForeground(context.Background(), "delete worktree", func(context.Context) error {
+		return d.doDeleteWorktreeForeground(path, endpointID, opts)
+	})
+}
+
+func (d *Daemon) doDeleteWorktreeForeground(path string, endpointID *string, opts deleteWorktreeOptions) (err error) {
 	finishOperation := d.beginGitOperation(protocol.GitOperationKindDeleteWorktree, path, endpointID)
 	defer func() {
 		finishOperation(err)
@@ -249,17 +275,43 @@ func (d *Daemon) doDeleteWorktree(path string, endpointID *string, opts deleteWo
 
 	handled, err := d.dispatchWorktreeDeleteProvider(mainRepo, path, branch, opts.Force)
 	if err != nil {
+		if d.worktreeDeletionHappened(mainRepo, path) {
+			d.finalizeDeletedWorktree(path, mainRepo, branch)
+			d.recordWorktreeRemoval(wt, seeds, opts, time.Now())
+			return nil
+		}
 		return d.classifyDeleteWorktreeProviderError(path, opts.Force, err)
 	}
 	if !handled {
 		if err := git.DeleteWorktree(mainRepo, path, opts.Force); err != nil {
 			return d.classifyDeleteWorktreeGitError(path, opts.Force, err)
 		}
+	} else if !d.worktreeDeletionHappened(mainRepo, path) {
+		return &deleteWorktreeError{
+			err:  errors.New("worktree delete provider reported success but the worktree still exists"),
+			kind: deleteWorktreeFailureProviderError,
+		}
 	}
 
 	d.finalizeDeletedWorktree(path, mainRepo, branch)
 	d.recordWorktreeRemoval(wt, seeds, opts, time.Now())
 	return nil
+}
+
+func (d *Daemon) worktreeDeletionHappened(mainRepo, path string) bool {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return true
+	}
+	states, err := git.ListWorktreeStates(mainRepo)
+	if err != nil {
+		return false
+	}
+	for _, state := range states {
+		if state.Path == path {
+			return false
+		}
+	}
+	return true
 }
 
 func (d *Daemon) finalizeDeletedWorktree(path, mainRepo, branch string) {
