@@ -433,7 +433,7 @@ async function main() {
         const deadline = Date.now() + 5_000;
         let found = false;
         while (Date.now() < deadline) {
-          const dump = execFileSync(appDaemonInTree(options.appPath), ['debug', 'input', '--tail', '0'], {
+          const dump = execFileSync(appDaemonInTree(options.appPath), ['debug', 'input', '--tail', '0', '--grep', pane.runtimeId], {
             encoding: 'utf8', env: profileCliEnv(profileForAppPath(options.appPath)),
           });
           if (dump.includes(privateText)) throw new Error('Input diagnostics exposed composition text');
