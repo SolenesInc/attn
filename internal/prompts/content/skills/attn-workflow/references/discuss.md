@@ -23,12 +23,14 @@ Keep discovery proportional to the task. Investigate factual gaps you can resolv
 
 Capture decisions and the emerging plan as the discussion develops. Keep unresolved questions visible so a draft does not imply agreement.
 
-Continue until the plan is clear enough to implement and no unresolved unknown would materially change the approach. You cannot prove all unknowns are gone. Make any remaining uncertainty explicit, with a way to resolve it or the user's agreement to defer it. Then summarize:
+Continue until the plan is clear enough to implement and no unresolved unknown would materially change the approach. You cannot prove all unknowns are gone. Make any remaining uncertainty explicit, with a way to resolve it or the user's agreement to defer it. Then summarize in the conversation:
 
 - agreed decisions
 - important discoveries and the constraints they add to the plan
 - remaining open questions or assumptions, how to check them, and which must be resolved before implementation
 - recommended implementation approach
 - next step
+
+When the outcome is a plan, continue with [Planning](planning.md). The plan lives in the seed with the design detail that reference requires; this summary is for the conversation and is not the plan.
 
 Discussion and spikes do not authorize implementation of the proposed change.

@@ -83,6 +83,11 @@ func TestDelegationGuidanceOwnsReviewAndPausesBeforeDispatch(t *testing.T) {
 			t.Errorf("planning guidance is missing %q", expected)
 		}
 	}
+	for _, expected := range []string{"### Ownership", "### Interfaces", "### Behavior", "### State", "In-memory state counts as state", "verification guidance requires for the affected surfaces"} {
+		if !strings.Contains(planning, expected) {
+			t.Errorf("planning design section is missing %q", expected)
+		}
+	}
 	delegation := RenderText("attn-skill", "delegation", nil)
 	for _, expected := range []string{"mandatory checkpoint", "explicitly requests a separate Reviewer delegation", "remains the Orchestrator's responsibility", "must not add a Reviewer to a plan proactively"} {
 		if !strings.Contains(delegation, expected) {

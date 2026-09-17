@@ -35,20 +35,11 @@ Use `blocks` only when one child needs another's result. Otherwise leave them
 parallel. The children's states record progress, so the plan needs no checklist.
 
 Write the parent for an implementer starting fresh and a user reviewing the
-direction. Put the choices the user might change first. Include what the work
-needs:
-
-- The goal and how the children together complete it.
-- The proposed shape in repository terms. Show ownership, interfaces and data
-  when they cross boundaries.
-- Shared decisions and their reasons, constraints, and unresolved questions.
-  Say which questions block work and which the tender can decide.
-
-Use short prose and the smallest picture that explains the design: a call tree
-for control flow, a file tree for ownership, or a sequence diagram for messages
-between processes. Show changed code structure as a diff when that is clearer.
-Put each picture next to the explanation; show separate production and test
-wiring when the distinction matters.
+direction: the goal, the decisions the user might change, the design, and how
+the children together complete it. The design shows ownership, interfaces,
+behavior and state, each as the smallest picture that explains it rather than
+prose alone. The `attn-workflow` skill's Planning reference gives each part's
+required form with examples; follow it when that skill is installed.
 
 Example: move session search to the daemon while preserving its behavior.
 The endpoint child records a contract that the app child needs before starting.
@@ -58,16 +49,16 @@ The endpoint child records a contract that the app child needs before starting.
 ```json
 {
   "title": "Search moves to the daemon",
-  "body": "Move session search from the app to the daemon.\n\n## Search behavior\nPreserve the current matching, ordering and keyboard behavior in app/src.\n\n## Ownership\ninternal/daemon owns searching session data. app/src sends queries and renders results. Keep the client index until the app uses daemon results.\n\n## Completion\nBoth children are complete, with endpoint tests and running-app evidence on their logs.",
+  "body": "Move session search from the app to the daemon.\n\n## Search behavior\nPreserve the current matching, ordering and keyboard behavior in app/src.\n\n## Decisions\nRanking moves to the daemon with matching, so the app renders results in the order it receives them. Keep the client index until the app uses daemon results. Open: whether search also covers ended sessions; the endpoint tender may decide, and nothing waits on it.\n\n## Design\nOwnership:\n\n    internal/daemon/search.go          matches and orders sessions\n    internal/protocol/schema/main.tsp  SearchSessions message; generated types follow\n    internal/protocol/constants.go     ProtocolVersion bump\n    app/src/hooks/useDaemonSocket.ts   PROTOCOL_VERSION bump\n    app/src/search/                    sends queries and renders results\n\nInterfaces:\n\n    SearchSessions{query_id, query} -> {query_id, sessions: [{id, title, rank}]}\n\nA new wire message: schema edit, generated types and a protocol version bump.\n\nBehavior:\n\n    app    -> daemon: SearchSessions{query_id, query}\n    daemon -> app:    ranked sessions for that query_id\n\nState:\n\n    latest query_id and keyboard selection (app, search store)\n      set by:      each query; selection moves with the keyboard\n      on reply:    a reply for an older query_id is dropped\n      on failure:  the query and selection stay; the results show the error until the next query\n      on restart:  starts empty; nothing persisted\n    daemon: none added; each query reads the live session set\n\n## Execution\nThe endpoint child lands first and records the contract; the app child follows in its own pull request.\n\n## Completion\nBoth children are complete, with endpoint tests and running-app evidence on their logs.",
   "children": [
     {
       "title": "Daemon search endpoint",
-      "body": "Add session search in internal/daemon. Read the parent plot's Search behavior section and trace the existing search in app/src to preserve its behavior. Follow repository protocol guidance. Test empty queries, matching, ordering and session changes. Record the query and response contract and test results on this seed for the app child. App integration belongs to that child.",
+      "body": "Add session search in internal/daemon. Read the parent plot's Search behavior, Decisions and Design sections for the SearchSessions contract, the ranking decision and the protocol files, and trace the existing search in app/src to preserve its behavior. Follow repository protocol guidance. Test empty queries, matching, ordering and session changes. Record the query and response contract and test results on this seed for the app child. App integration belongs to that child.",
       "blocks": ["app-calls-endpoint"]
     },
     {
       "title": "App calls the endpoint",
-      "body": "Route session search in app/src through the daemon, then remove the obsolete client index. Read the parent plot's Search behavior and Ownership sections and the Daemon search endpoint seed's recorded API contract. Preserve keyboard selection and prevent stale results when queries overlap. Verify search, rapid query changes and keyboard navigation in the running app; record the results and a recording on this seed."
+      "body": "Route session search in app/src through the daemon, then remove the obsolete client index. Read the parent plot's Search behavior and Design sections and the Daemon search endpoint seed's recorded API contract. Preserve keyboard selection and prevent stale results when queries overlap. Verify search, rapid query changes and keyboard navigation in the running app; record the results and a recording on this seed."
     }
   ]
 }
