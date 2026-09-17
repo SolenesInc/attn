@@ -2,10 +2,10 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
+import { useSessionStore } from './store/sessions';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 
 
-const mockUseSessionStore = vi.fn();
 const mockUseDaemonStore = vi.fn();
 const mockUseDaemonSocket = vi.fn();
 const mockUseKeyboardShortcuts = vi.fn();
@@ -61,8 +61,10 @@ vi.mock('./hooks/useUIScale', () => ({
 }));
 vi.mock('./hooks/useOpenPR', () => ({ useOpenPR: () => vi.fn() }));
 vi.mock('./hooks/usePRsNeedingAttention', () => ({ usePRsNeedingAttention: () => ({ needsAttention: [] }) }));
-vi.mock('./store/sessions', () => ({ useSessionStore: () => mockUseSessionStore() }));
-vi.mock('./store/daemonSessions', () => ({ useDaemonStore: () => mockUseDaemonStore() }));
+vi.mock('./store/daemonSessions', async () => {
+  const { selectorStoreMock } = await import('./test/mocks/selectorStore');
+  return { useDaemonStore: selectorStoreMock(() => mockUseDaemonStore()) };
+});
 vi.mock('./hooks/useDaemonSocket', async () => {
   const React = await import('react');
   return {
@@ -109,12 +111,13 @@ function triggerCmdW() {
 describe('chief and crew sessions are protected from close', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useSessionStore.setState(useSessionStore.getInitialState(), true);
     localStorage.clear();
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
     chiefOfStaff = false;
     crewMember = undefined;
 
-    mockUseSessionStore.mockReturnValue({
+    useSessionStore.setState({
       sessions: [{
         id: 's1',
         label: 'orchestrator',
@@ -130,17 +133,14 @@ describe('chief and crew sessions are protected from close', () => {
         },
       }],
       activeSessionId: 's1',
+      view: 'session',
       connect: vi.fn(async () => {}),
       connected: true,
       launcherConfig: { executables: {} },
       createSession: vi.fn(async () => 's1'),
       closeSession: vi.fn(),
-      setActiveSession: vi.fn(),
       takeSessionSpawnArgs: vi.fn(() => null),
       reloadSession: vi.fn(async () => {}),
-      setLauncherConfig: vi.fn(),
-      syncFromDaemonSessions: vi.fn(),
-      syncFromDaemonWorkspaces: vi.fn(),
     });
 
     mockUseDaemonStore.mockImplementation(() => ({

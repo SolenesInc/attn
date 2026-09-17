@@ -86,7 +86,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   const savedClipboard = readClipboard();
   let sessionId = null;
 
@@ -107,7 +107,6 @@ async function main() {
 
   try {
     await runner.step('launch_app', async () => {
-      process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
       await launchFreshAppAndConnect(client, observer);
     });
 
@@ -165,7 +164,6 @@ async function main() {
     });
 
     await runner.step('copy_command_and_output', async () => {
-      await driver.activateApp();
       writeClipboard('block-copy-sentinel');
       await driver.pressKey('c', copyCommandChord.modifiers);
       await waitForClipboard(`echo ${token}`, `${copyCommandChord.label} copies the command`);

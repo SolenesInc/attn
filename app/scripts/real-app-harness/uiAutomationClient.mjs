@@ -120,8 +120,8 @@ export class UiAutomationClient {
   }
 
   async launchApp() {
-    // Always-on-top keeps WKWebView rAF/ResizeObserver unthrottled; probes that
-    // exercise focus-stealing set ATTN_HARNESS_ALWAYS_ON_TOP=0 to opt out.
+    // Always-on-top keeps WKWebView rAF/ResizeObserver unthrottled on a window that
+    // never takes focus; focus probes set ATTN_HARNESS_ALWAYS_ON_TOP=0 to opt out.
     const alwaysOnTop = process.env.ATTN_HARNESS_ALWAYS_ON_TOP !== '0';
     // `open` drops env, so naming these forces the spawn-style launch.
     const harnessDaemonEnv = { ...agentTripwireLaunchEnv(), ...mockGitHubLaunchEnv() };

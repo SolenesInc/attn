@@ -25,7 +25,6 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 const execFileAsync = promisify(execFile);
 
 // The surface is keyboard-first, so the shortcut opens it here rather than a click.
-process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -124,7 +123,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver();
+  const driver = createWindowDriver({ client });
   const sessions = {};
 
   runner.registerCleanup('stop_daemon', () => execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) }));

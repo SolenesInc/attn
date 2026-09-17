@@ -2,6 +2,7 @@ import { expect, test, type Locator } from '@playwright/test';
 
 async function scrollToTop(terminal: Locator) {
   await terminal.evaluate((element) => new Promise<void>((resolve) => {
+    element.setSelectionRange(0, 0);
     if (element.scrollTop === 0) {
       resolve();
       return;

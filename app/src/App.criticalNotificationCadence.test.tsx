@@ -1,10 +1,10 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { act, render } from '@testing-library/react';
 import App from './App';
+import { useSessionStore } from './store/sessions';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 import type { CriticalNotificationState } from './hooks/useDaemonSocket';
 
-const mockUseSessionStore = vi.fn();
 const mockUseDaemonStore = vi.fn();
 const mockUseDaemonSocket = vi.fn();
 
@@ -52,8 +52,10 @@ vi.mock('./hooks/useUIScale', () => ({
 }));
 vi.mock('./hooks/useOpenPR', () => ({ useOpenPR: () => vi.fn() }));
 vi.mock('./hooks/usePRsNeedingAttention', () => ({ usePRsNeedingAttention: () => ({ needsAttention: [] }) }));
-vi.mock('./store/sessions', () => ({ useSessionStore: () => mockUseSessionStore() }));
-vi.mock('./store/daemonSessions', () => ({ useDaemonStore: () => mockUseDaemonStore() }));
+vi.mock('./store/daemonSessions', async () => {
+  const { selectorStoreMock } = await import('./test/mocks/selectorStore');
+  return { useDaemonStore: selectorStoreMock(() => mockUseDaemonStore()) };
+});
 vi.mock('./hooks/useDaemonSocket', () => ({
   useDaemonSocket: (args: {
     onNotificationsUpdated?: (unread: number, critical: CriticalNotificationState) => void;
@@ -80,12 +82,13 @@ function latestCritical() {
 describe('critical notification cadence', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useSessionStore.setState(useSessionStore.getInitialState(), true);
     criticalSeen.length = 0;
     notifyCritical = null;
     localStorage.clear();
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
 
-    mockUseSessionStore.mockReturnValue({
+    useSessionStore.setState({
       sessions: [],
       activeSessionId: null,
       connect: vi.fn(async () => {}),
@@ -93,12 +96,8 @@ describe('critical notification cadence', () => {
       launcherConfig: { executables: {} },
       createSession: vi.fn(async () => 's1'),
       closeSession: vi.fn(),
-      setActiveSession: vi.fn(),
       takeSessionSpawnArgs: vi.fn(() => null),
       reloadSession: vi.fn(async () => {}),
-      setLauncherConfig: vi.fn(),
-      syncFromDaemonSessions: vi.fn(),
-      syncFromDaemonWorkspaces: vi.fn(),
     });
 
     mockUseDaemonStore.mockImplementation(() => ({

@@ -1,5 +1,6 @@
 mod browser_alerts;
 mod browser_host;
+mod native_input;
 mod native_input_diagnostics;
 mod profile;
 mod ui_automation;

@@ -35,6 +35,8 @@
 - PR inbox: pull requests waiting on the user.
 - Provenance line: shows where a session came from and what it produced.
 
+- Focus mode: one workspace pane or tile occupies the shell until the user returns to the split.
+
 ## Garden and crew
 
 - Garden: the home daemon's work tracker, shared across workspaces.

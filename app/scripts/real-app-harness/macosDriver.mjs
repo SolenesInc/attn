@@ -42,12 +42,22 @@ export function withWindowTitleArgs(args, opts = {}) {
   return [...args, '--window-title', opts.windowTitle];
 }
 
+function modifierNames(modifiers = {}) {
+  const names = [];
+  if (modifiers.command) names.push('command');
+  if (modifiers.option) names.push('option');
+  if (modifiers.shift) names.push('shift');
+  if (modifiers.control) names.push('control');
+  return names;
+}
+
 export class MacOSDriver {
   constructor({
     bundleId = null,
     appPath = defaultAppPathForProfile(),
     actionDelayMs = 250,
     keyInputGuard = null,
+    client = null,
   } = {}) {
     const resolvedBundleId = bundleId || bundleIdentifierForAppPath(appPath);
     assertProductionRunAllowed({ appPath, bundleId: resolvedBundleId });
@@ -55,6 +65,19 @@ export class MacOSDriver {
     this.appPath = appPath;
     this.actionDelayMs = actionDelayMs;
     this.keyInputGuard = keyInputGuard || createKeyInputGuard({ appPath });
+    this.client = client;
+  }
+
+  get injectsInApp() {
+    return this.client !== null;
+  }
+
+  async #inApp(action, payload, opts = {}) {
+    if (opts.windowTitle) {
+      throw new Error(`MacOSDriver targets in-app input by window label; pass windowLabel instead of windowTitle ${JSON.stringify(opts.windowTitle)}`);
+    }
+    const target = opts.windowLabel ? { window: opts.windowLabel } : {};
+    return this.client.request(action, { ...target, ...payload });
   }
 
   async launchApp() {
@@ -146,34 +169,46 @@ export class MacOSDriver {
   }
 
   async typeText(text) {
-    this.keyInputGuard.assertReaches(`typeText(${JSON.stringify(text.slice(0, 20))})`);
-    await this.runInputDriver(['text', '--text', text, '--prompt-accessibility']);
+    if (this.injectsInApp) {
+      await this.#inApp('native_text', { text });
+    } else {
+      this.keyInputGuard.assertReaches(`typeText(${JSON.stringify(text.slice(0, 20))})`);
+      await this.runInputDriver(['text', '--text', text, '--prompt-accessibility']);
+    }
     await delay(this.actionDelayMs);
   }
 
   async pressKey(key, modifiers = {}) {
-    this.keyInputGuard.assertReaches(`pressKey(${key}, ${this.serializeModifiers(modifiers) || 'no modifiers'})`);
-    await this.runInputDriver([
-      'key',
-      '--key',
-      key,
-      '--modifiers',
-      this.serializeModifiers(modifiers),
-      '--prompt-accessibility',
-    ]);
+    if (this.injectsInApp) {
+      await this.#inApp('native_key', { key, modifiers: modifierNames(modifiers) });
+    } else {
+      this.keyInputGuard.assertReaches(`pressKey(${key}, ${this.serializeModifiers(modifiers) || 'no modifiers'})`);
+      await this.runInputDriver([
+        'key',
+        '--key',
+        key,
+        '--modifiers',
+        this.serializeModifiers(modifiers),
+        '--prompt-accessibility',
+      ]);
+    }
     await delay(this.actionDelayMs);
   }
 
   async pressKeyCode(keyCode, modifiers = {}) {
-    this.keyInputGuard.assertReaches(`pressKeyCode(${keyCode}, ${this.serializeModifiers(modifiers) || 'no modifiers'})`);
-    await this.runInputDriver([
-      'keycode',
-      '--key-code',
-      String(keyCode),
-      '--modifiers',
-      this.serializeModifiers(modifiers),
-      '--prompt-accessibility',
-    ]);
+    if (this.injectsInApp) {
+      await this.#inApp('native_key', { keyCode, modifiers: modifierNames(modifiers) });
+    } else {
+      this.keyInputGuard.assertReaches(`pressKeyCode(${keyCode}, ${this.serializeModifiers(modifiers) || 'no modifiers'})`);
+      await this.runInputDriver([
+        'keycode',
+        '--key-code',
+        String(keyCode),
+        '--modifiers',
+        this.serializeModifiers(modifiers),
+        '--prompt-accessibility',
+      ]);
+    }
     await delay(this.actionDelayMs);
   }
 
@@ -182,68 +217,84 @@ export class MacOSDriver {
   }
 
   async movePointerInWindow(relativeX, relativeY, opts = {}) {
-    await this.runInputDriver(withWindowTitleArgs([
-      'move',
-      '--relative-x',
-      String(relativeX),
-      '--relative-y',
-      String(relativeY),
-      '--prompt-accessibility',
-    ], opts));
+    if (this.injectsInApp) {
+      await this.#inApp('native_mouse', { action: 'move', x: relativeX, y: relativeY }, opts);
+    } else {
+      await this.runInputDriver(withWindowTitleArgs([
+        'move',
+        '--relative-x',
+        String(relativeX),
+        '--relative-y',
+        String(relativeY),
+        '--prompt-accessibility',
+      ], opts));
+    }
     await delay(this.actionDelayMs);
   }
 
   async clickWindow(relativeX, relativeY, opts = {}) {
-    const args = [
-      'click',
-      '--relative-x',
-      String(relativeX),
-      '--relative-y',
-      String(relativeY),
-      '--prompt-accessibility',
-    ];
-    if (opts.modifiers) {
-      args.push('--modifiers', this.serializeModifiers(opts.modifiers));
+    await this.#click('click', relativeX, relativeY, opts);
+  }
+
+  async rightClickWindow(relativeX, relativeY, opts = {}) {
+    await this.#click('right_click', relativeX, relativeY, opts);
+  }
+
+  async #click(action, relativeX, relativeY, opts) {
+    if (this.injectsInApp) {
+      await this.#inApp('native_mouse', {
+        action,
+        x: relativeX,
+        y: relativeY,
+        modifiers: modifierNames(opts.modifiers),
+      }, opts);
+    } else {
+      const args = [
+        action,
+        '--relative-x',
+        String(relativeX),
+        '--relative-y',
+        String(relativeY),
+        '--prompt-accessibility',
+      ];
+      if (opts.modifiers) {
+        args.push('--modifiers', this.serializeModifiers(opts.modifiers));
+      }
+      await this.runInputDriver(withWindowTitleArgs(args, opts));
     }
-    await this.runInputDriver(withWindowTitleArgs(args, opts));
     await delay(this.actionDelayMs);
   }
 
   // Interpolated leftMouseDragged events: the shape WebKit requires for text
   // selection. Same 0..1 semantics as clickWindow.
   async dragWindow(relativeX, relativeY, toRelativeX, toRelativeY, opts = {}) {
-    const args = [
-      'drag',
-      '--relative-x',
-      String(relativeX),
-      '--relative-y',
-      String(relativeY),
-      '--to-relative-x',
-      String(toRelativeX),
-      '--to-relative-y',
-      String(toRelativeY),
-      '--prompt-accessibility',
-    ];
-    if (opts.steps !== undefined) {
-      args.push('--steps', String(opts.steps));
+    if (this.injectsInApp) {
+      await this.#inApp('native_mouse', {
+        action: 'drag',
+        x: relativeX,
+        y: relativeY,
+        toX: toRelativeX,
+        toY: toRelativeY,
+        ...(opts.steps !== undefined ? { steps: opts.steps } : {}),
+      }, opts);
+    } else {
+      const args = [
+        'drag',
+        '--relative-x',
+        String(relativeX),
+        '--relative-y',
+        String(relativeY),
+        '--to-relative-x',
+        String(toRelativeX),
+        '--to-relative-y',
+        String(toRelativeY),
+        '--prompt-accessibility',
+      ];
+      if (opts.steps !== undefined) {
+        args.push('--steps', String(opts.steps));
+      }
+      await this.runInputDriver(withWindowTitleArgs(args, opts));
     }
-    await this.runInputDriver(withWindowTitleArgs(args, opts));
-    await delay(this.actionDelayMs);
-  }
-
-  async rightClickWindow(relativeX, relativeY, opts = {}) {
-    const args = [
-      'right_click',
-      '--relative-x',
-      String(relativeX),
-      '--relative-y',
-      String(relativeY),
-      '--prompt-accessibility',
-    ];
-    if (opts.modifiers) {
-      args.push('--modifiers', this.serializeModifiers(opts.modifiers));
-    }
-    await this.runInputDriver(withWindowTitleArgs(args, opts));
     await delay(this.actionDelayMs);
   }
 
@@ -285,12 +336,7 @@ export class MacOSDriver {
   }
 
   serializeModifiers(modifiers = {}) {
-    const names = [];
-    if (modifiers.command) names.push('command');
-    if (modifiers.option) names.push('option');
-    if (modifiers.shift) names.push('shift');
-    if (modifiers.control) names.push('control');
-    return names.join(',');
+    return modifierNames(modifiers).join(',');
   }
 
   async ensureInputDriver() {

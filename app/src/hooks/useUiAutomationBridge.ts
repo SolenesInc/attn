@@ -402,15 +402,19 @@ async function captureDomScreenshotData(selector?: string) {
   document.head.appendChild(freeze);
   void document.body.offsetHeight;
 
+  const options = {
+    cacheBust: true,
+    pixelRatio: 1,
+    backgroundColor,
+    // Embedding @font-face resources fetches each font and can hang indefinitely.
+    skipFonts: true,
+    filter: isScreenshotNode,
+  };
   let dataUrl: string;
   try {
-    dataUrl = await toPng(target, {
-      cacheBust: true,
-      pixelRatio: 1,
-      backgroundColor,
-      // Embedding @font-face resources fetches each font and can hang indefinitely.
-      skipFonts: true,
-    });
+    dataUrl = await toPng(target, options);
+  } catch (error) {
+    throw new Error(await describeScreenshotFailure(target, selector ?? '#root', options, error));
   } finally {
     freeze.remove();
   }
@@ -419,6 +423,79 @@ async function captureDomScreenshotData(selector?: string) {
     bounds: rectSnapshot(target),
     pngBase64: dataUrl.replace(/^data:image\/png;base64,/, ''),
   };
+}
+
+export function isScreenshotNode(node: HTMLElement): boolean {
+  return !(node instanceof HTMLImageElement && !node.getAttribute('src'));
+}
+
+export async function describeScreenshotFailure(
+  target: HTMLElement,
+  label: string,
+  options: Parameters<typeof import('html-to-image').toSvg>[1],
+  error: unknown,
+): Promise<string> {
+  const bounds = target.getBoundingClientRect();
+  const canvases = Array.from(target.querySelectorAll('canvas'));
+  const where = `Screenshot of ${label} (${Math.round(bounds.width)}x${Math.round(bounds.height)}, ${canvases.length} canvases, visibility ${document.visibilityState})`;
+  for (const canvas of canvases) {
+    const canvasDataUrl = canvas.toDataURL();
+    if (canvasDataUrl !== 'data:,' && !(await imageLoads(canvasDataUrl))) {
+      return `${where}: the ${canvas.width}x${canvas.height} canvas image (${canvasDataUrl.length} chars) does not load`;
+    }
+  }
+  const { toSvg } = await import('html-to-image');
+  let svgDataUrl: string;
+  try {
+    svgDataUrl = await toSvg(target, options);
+  } catch (svgError) {
+    return `${where}: serializing the subtree failed: ${failureText(svgError)}; embedded images: ${describeEmbeddedImages(target)}`;
+  }
+  const xml = decodeURIComponent(svgDataUrl.slice(svgDataUrl.indexOf(',') + 1));
+  const parserError = new DOMParser()
+    .parseFromString(xml, 'image/svg+xml')
+    .querySelector('parsererror')
+    ?.textContent?.trim();
+  if (parserError) {
+    return `${where}: the serialized SVG (${xml.length} chars) does not parse: ${parserError}`;
+  }
+  return `${where}: the serialized SVG (${xml.length} chars) parses but loading it as an image failed: ${failureText(error)}`;
+}
+
+function describeEmbeddedImages(target: HTMLElement): string {
+  const images = Array.from(target.querySelectorAll('img, image')).map((element) => {
+    if (element instanceof HTMLImageElement) {
+      const state = element.complete ? `${element.naturalWidth}x${element.naturalHeight}` : 'loading';
+      const source = element.currentSrc || element.src || `(no src) ${element.outerHTML.slice(0, 160)}`;
+      return `img ${source} ${state} in ${ancestorPath(element)}`;
+    }
+    return `image ${(element as SVGImageElement).href?.baseVal || '(no href)'} in ${ancestorPath(element)}`;
+  });
+  return images.length === 0 ? 'none' : images.join(', ');
+}
+
+function ancestorPath(element: Element): string {
+  const names: string[] = [];
+  for (let node = element.parentElement; node && names.length < 5; node = node.parentElement) {
+    const className = typeof node.className === 'string' ? node.className.trim().split(/\s+/)[0] : '';
+    names.push(className ? `${node.tagName.toLowerCase()}.${className}` : node.tagName.toLowerCase());
+  }
+  return names.join(' < ');
+}
+
+function imageLoads(src: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve(true);
+    image.onerror = () => resolve(false);
+    image.src = src;
+  });
+}
+
+function failureText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error instanceof Event) return `${error.type} event`;
+  return String(error);
 }
 
 function collectVisualSnapshot(
@@ -4103,28 +4180,39 @@ export function useUiAutomationBridge({
   }, [
     activeSessionId,
     closePane,
+    connectionError,
     createSession,
     closeSession,
+    daemonReady,
     fitSessionActivePane,
     focusPane,
     injectSessionPaneBase64,
     injectSessionPaneBytes,
     typeInSessionPaneViaUI,
     isSessionPaneInputFocused,
+    isRuntimeAttached,
     getActivePaneIdForSession,
     getPaneSize,
     getPaneText,
     getPaneBlockState,
     getPanePlacementState,
+    getPaneVisibleContent,
+    getPaneVisibleStyleSummary,
+    moveWorkspaceLeafToWorkspace,
+    openAutomationsPanel,
     openDockPanel,
     openShortcutEditor,
+    openWorktreesPanel,
     presentationNotices,
+    reloadSession,
     resetSessionPaneTerminal,
     drainSessionPaneTerminal,
+    scrollSessionPaneToTop,
     selectSession,
     selectWorkspace,
     sendRuntimeInput,
     sessions,
+    setSetting,
     splitPane,
   ]);
 

@@ -93,7 +93,6 @@ async function submitPrompt(client, sessionId, paneId, text) {
 }
 
 async function pressCancelCountdown(client, driver) {
-  await driver.activateApp();
   await pressShortcutKeys(client, driver, 'session.cancelCountdown');
 }
 
@@ -183,12 +182,6 @@ async function main() {
   }
   const socketPath = socketPathForProfile(profile);
 
-  // The pointer leg drives a real cursor into the window, so the window has to
-  // sit where a pointer can reach it.
-  if (process.env.ATTN_HARNESS_PARK_VISIBLE_PX === undefined) {
-    process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '800';
-  }
-
   const runner = createScenarioRunner(options, {
     scenarioId: 'COUNTDOWN-CANCEL',
     tier: 'tier2-local-mock-agent',
@@ -199,9 +192,11 @@ async function main() {
     },
   });
 
+  process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
+
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   const note = (message, extra) => runner.log(message, extra);
 
   let agentId = null;
@@ -221,8 +216,8 @@ async function main() {
     client.request('set_setting', { key: 'auto_settle_enabled', value: 'false' }).catch(() => {}));
   try {
     await runner.step('launch_app', async () => {
-      process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
       await launchFreshAppAndConnect(client, observer);
+      await driver.activateApp();
     });
 
     await runner.step('boot_agent_owing_a_turn', async () => {
@@ -322,6 +317,7 @@ async function main() {
     });
 
     await runner.step('pointer_movement_freezes_and_extends_the_countdown', async () => {
+      await driver.activateApp();
       const logicalBounds = await getFrontWindowBounds(null, {
         appPath: options.appPath,
         client,

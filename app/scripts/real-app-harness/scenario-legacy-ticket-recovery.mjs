@@ -405,7 +405,7 @@ async function launchAndInspect(runner, world, binary, receipt) {
     launchEnv: world.env,
   });
   const observer = new DaemonObserver({ wsUrl: world.wsUrl });
-  const driver = createWindowDriver({ appPath: world.resources.appPath });
+  const driver = createWindowDriver({ appPath: world.resources.appPath, client });
   process.env.ATTN_CLIENT_TOKEN = fs.readFileSync(path.join(world.dataDir, 'client-token'), 'utf8').trim();
   try {
     await client.launchFreshApp();

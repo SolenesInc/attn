@@ -151,17 +151,6 @@ async function main() {
     return;
   }
 
-  // HID mouse clicks land at absolute screen positions, so the default
-  // 20px-visible window park would put every click off-window.
-  if (process.env.ATTN_HARNESS_PARK_VISIBLE_PX === undefined) {
-    process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '1200';
-  }
-  // Path links resolve on hover; a non-focusable always-on-top window never
-  // receives mouse-moved events on macOS, so the Cmd+click finds no link.
-  if (process.env.ATTN_HARNESS_ALWAYS_ON_TOP === undefined) {
-    process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
-  }
-
   // Tauri's fs scope allows $HOME/** and does not match dot-directories, so a
   // path under a hidden dir fails the existence check and never becomes a link.
   if (!process.env.ATTN_REAL_APP_SESSION_ROOT && !process.argv.includes('--session-root-dir')) {
@@ -180,7 +169,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   let sessionId = null;
   const { server, hits, port } = await startProbeServer();
 
@@ -389,7 +378,6 @@ async function main() {
     await runner.step('echo_paths', async () => {
       await echoPath('./alpha.md');
       await echoPath('./beta.md');
-      await driver.activateApp();
     });
 
     let alphaTileId;
@@ -492,7 +480,6 @@ async function main() {
         'OSC 8 link label rendered',
         20_000,
       );
-      await driver.activateApp();
     });
 
     await runner.step('plain_click_on_the_osc8_label_does_not_navigate', async () => {

@@ -21,7 +21,6 @@ async function poll(read, description) {
 }
 
 async function main() {
-  process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
   const options = parseCommonArgs(process.argv.slice(2));
   const profile = currentHarnessProfile();
   if (!profile) throw new Error('Crew header verification requires a named profile');
@@ -30,7 +29,7 @@ async function main() {
   });
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver(options);
-  const driver = createWindowDriver(options);
+  const driver = createWindowDriver({ ...options, client });
   const sessions = [];
   const unsettledSeeds = new Set();
   let lastHandoffAt = 0;
@@ -82,7 +81,6 @@ async function main() {
     return title === null ? !state.present : state.title === title && state;
   }, `header ${title ?? 'to clear'}`);
   const capture = async (name, sessionId) => {
-    await driver.activateApp();
     const shot = await client.request('capture_screenshot_data', {
       selector: `[data-pane-session-id="${sessionId}"] .workspace-pane-header`,
     });
@@ -149,7 +147,6 @@ async function main() {
       await header(next, null);
       run(['seed', 'tend', second, '--member', member]);
       await header(next, 'Verify upload completion');
-      await driver.activateApp();
       await client.request('dom_focus', { selector: `[data-testid="seed-chip-${next}"]` });
       await driver.pressEnter();
       await poll(async () => (await client.request('seed_document_get_state', { seedId: second })).present, 'the seed document');

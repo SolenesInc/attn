@@ -60,11 +60,6 @@ async function waitForActiveSession(client, sessionId, description, timeoutMs = 
   throw new Error(`Timed out waiting for ${description}. Last state:\n${JSON.stringify(lastState, null, 2)}`);
 }
 
-async function focusAppForNativeShortcut(driver) {
-  await driver.activateApp();
-  await driver.clickWindow(0.5, 0.5);
-}
-
 async function closeExistingSessions(client, sessionRootDir) {
   const initial = await client.request('get_state');
   const harnessSessions = (initial.sessions || []).filter((session) => session.cwd?.startsWith(sessionRootDir));
@@ -132,8 +127,10 @@ async function waitForFreshSplitPaneAttached(client, sessionId, paneId) {
 }
 
 async function assertWorkspaceVisible(client, visibleSessionId, hiddenSessionId, expectedPaneCount) {
-  const visible = await client.request('get_session_ui_state', { sessionId: visibleSessionId });
-  const hidden = await client.request('get_session_ui_state', { sessionId: hiddenSessionId });
+  const [visible, hidden] = await Promise.all([
+    client.request('get_session_ui_state', { sessionId: visibleSessionId }),
+    client.request('get_session_ui_state', { sessionId: hiddenSessionId }),
+  ]);
   if (!visible.workspace?.view?.sessionVisible) {
     throw new Error(`Expected ${visibleSessionId} workspace to be visible: ${JSON.stringify(visible, null, 2)}`);
   }
@@ -173,13 +170,14 @@ async function writeAndAssertToken(client, sessionId, pane, token) {
 }
 
 async function capturePaneTexts(client, runDir, prefix, sessionId, panes) {
-  const payload = {};
-  for (const pane of panes) {
-    payload[pane.paneId] = await client.request('read_pane_text', {
+  const entries = await Promise.all(panes.map(async (pane) => {
+    const text = await client.request('read_pane_text', {
       sessionId,
       paneId: pane.paneId,
     }).catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
-  }
+    return [pane.paneId, text];
+  }));
+  const payload = Object.fromEntries(entries);
   fs.writeFileSync(path.join(runDir, `${prefix}-pane-texts.json`), `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
 }
 
@@ -228,9 +226,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver({
-    appPath: options.appPath,
-  });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   const createdSessionIds = [];
 
   runner.log('run context', { runDir: runner.runDir, sessionDir: runner.sessionDir, wsUrl: options.wsUrl });
@@ -247,8 +243,6 @@ async function main() {
 
   try {
     await runner.step('launch_app', async () => {
-      process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
-      process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
       await launchFreshAppAndConnect(client, observer);
       await closeExistingSessions(client, options.sessionRootDir);
     });
@@ -307,7 +301,6 @@ async function main() {
     });
 
     await runner.step('assert_cmd_number_shortcuts', async () => {
-      await focusAppForNativeShortcut(driver);
       await pressShortcutKeys(client, driver, 'workspace.select1');
       await waitForActiveSession(client, workspaceA.sessionId, 'Cmd+1 selecting first workspace session');
       await assertWorkspaceVisible(client, workspaceA.sessionId, workspaceB.sessionId, 3);
@@ -423,6 +416,29 @@ async function main() {
         restoredSidebarWidth: restored.sidebarItem.bounds.width,
         restoredPaneIds: restored.panes.filter((pane) => pane.bounds?.width > 0).map((pane) => pane.paneId),
       };
+    });
+
+    await runner.step('selecting_another_workspace_clears_agent_focus_mode', async () => {
+      await client.request('dom_click', {
+        selector: `[data-testid="focus-pane-${workspaceA.firstPane.paneId}"]`,
+      });
+      await client.request('select_session', { sessionId: workspaceB.sessionId });
+      await client.request('select_session', { sessionId: workspaceA.sessionId });
+      const snapshot = await client.request('capture_structured_snapshot', { includePaneText: false });
+      const returned = snapshot.sessions.find((session) => session.id === workspaceA.sessionId);
+      runner.assert(
+        returned?.workspace?.view?.maximizedPaneId == null && returned?.sidebarItem?.bounds?.width > 0,
+        `Returning to the workspace restored stale focus mode: ${JSON.stringify(returned, null, 2)}`,
+        returned?.workspace?.view,
+      );
+      runner.assert(
+        [workspaceA.firstPane.paneId, horizontalA.paneId].every((paneId) =>
+          returned?.panes.some((pane) => pane.paneId === paneId && pane.bounds?.width > 0)),
+        `Returning to the workspace did not restore both panes: ${JSON.stringify(returned?.panes, null, 2)}`,
+        returned?.panes,
+      );
+      focusModeReceipt.returnedSidebarWidth = returned.sidebarItem.bounds.width;
+      await hold();
     });
 
     const result = await runner.finishSuccess({

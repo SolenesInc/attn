@@ -8,11 +8,18 @@ import { SidebarSettlingBar } from './SettlingIndicator';
 import { CrewWakeSun, useWakeConfirm } from './CrewWake';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { UISessionState } from '../types/sessionState';
-import { formatTurnAge, type QueueBands as QueueBandsModel, type QueueRow } from '../utils/queueBands';
+import {
+  formatTurnAge,
+  type QueueBands as QueueBandsModel,
+  type QueueRow,
+} from '../utils/queueBands';
 import { formatWakeTime } from '../utils/snoozeDurations';
 import { crewDisplayName } from '../utils/crewName';
 import { useNow, TURN_AGE_TICK_MS } from '../hooks/useNow';
-import type { AutomationProvenance as AutomationProvenanceValue, SessionDelegationRole } from '../types/generated';
+import type {
+  AutomationProvenance as AutomationProvenanceValue,
+  SessionDelegationRole,
+} from '../types/generated';
 import { SessionProvenance } from './SessionProvenance';
 import { DelegationChainTrigger } from './DelegationChain';
 import { delegatesByDispatcher } from '../utils/delegationLinks';
@@ -57,7 +64,10 @@ interface QueueBandsProps {
   /** Pinning takes this agent out and leaves its workspace and every sibling in. */
   onPinSession?: (sessionId: string, pinned: boolean) => void;
   /** The per-session menu — chief of staff, close, reload — which the workspace tree row owns when the queue is off. */
-  onOpenActions?: (session: { id: string; label: string; chiefOfStaff?: boolean }, event: ReactMouseEvent) => void;
+  onOpenActions?: (
+    session: { id: string; label: string; chiefOfStaff?: boolean },
+    event: ReactMouseEvent,
+  ) => void;
   /** Open the duration menu for a row. Offered on settled rows too: deferring a run before it finishes is why snooze exists. */
   onOpenSnooze?: (session: { id: string; label: string }, event: ReactMouseEvent) => void;
   allSessions: readonly QueueBandSessionView[];
@@ -218,20 +228,21 @@ function QueueRowView({
       data-workspace-id={row.workspaceId}
     >
       {/* A real button, so the row is reachable by Tab and pressed by Enter or Space; the settle, pin and actions controls sit above it so they stay independently clickable. */}
-      <button
-        type="button"
-        className="queue-row-select"
-        data-testid={`queue-select-${session.id}`}
-        aria-label={`Open ${session.label}`}
-        title={harnessLabel(session.agent)}
-        onClick={onSelect}
+      <QueueSessionSelection
+        session={session}
+        label={session.label}
+        testId={`queue-select-${session.id}`}
+        onSelect={onSelect}
       />
-      <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
       {/* No workspace name in a band row: the label needs every column, and the pin button's tooltip names the workspace. */}
       <span className="sidebar-session-identity">
         <span className="sidebar-session-headline">
           <HarnessIcon agent={session.agent} />
-          <SessionLabel label={session.label} session={session} hasDelegates={delegates.length > 0} />
+          <SessionLabel
+            label={session.label}
+            session={session}
+            hasDelegates={delegates.length > 0}
+          />
         </span>
         <SessionProvenance automation={session.automation} density="compact" />
       </span>
@@ -276,8 +287,9 @@ export function QueueBands({
   const snoozeHandler = (session: QueueBandSessionView) =>
     onOpenSnooze && ((event: ReactMouseEvent) => onOpenSnooze(session, event));
   const crewInOtherBands = new Set(
-    [...bands.turns, ...bands.settled, ...bands.pinned, ...bands.snoozed]
-      .flatMap((row) => row.session.crewMember ? [row.session.crewMember] : []),
+    [...bands.turns, ...bands.settled, ...bands.pinned, ...bands.snoozed].flatMap((row) =>
+      row.session.crewMember ? [row.session.crewMember] : [],
+    ),
   );
   const crewRows = buildCrewRows(crew, bands.crew, crewInOtherBands);
   const delegates = useMemo(() => delegatesByDispatcher(allSessions), [allSessions]);
@@ -302,7 +314,9 @@ export function QueueBands({
         {bands.turns.length > 0 && <span className="queue-band-count">{bands.turns.length}</span>}
       </div>
       {bands.turns.length === 0 ? (
-        <div className="queue-band-empty" data-testid="queue-empty">Nothing owed.</div>
+        <div className="queue-band-empty" data-testid="queue-empty">
+          Nothing owed.
+        </div>
       ) : (
         bands.turns.map((row) => (
           <QueueRowView
@@ -356,13 +370,17 @@ export function QueueBands({
               selected={crewRow.row ? selectedId === crewRow.row.session.id : false}
               onSelect={crewRow.row ? () => onSelectSession(crewRow.row!.session.id) : undefined}
               onWake={onWakeCrewMember && (() => onWakeCrewMember(crewRow.member))}
-              onSleep={crewRow.row && onSleepCrewMember ? () => onSleepCrewMember(crewRow.member) : undefined}
+              onSleep={
+                crewRow.row && onSleepCrewMember
+                  ? () => onSleepCrewMember(crewRow.member)
+                  : undefined
+              }
               onOpenActions={
                 crewRow.row && onOpenActions
                   ? (event) => onOpenActions(crewRow.row!.session, event)
                   : undefined
               }
-              delegates={crewRow.row ? delegates.get(crewRow.row.session.id) ?? [] : []}
+              delegates={crewRow.row ? (delegates.get(crewRow.row.session.id) ?? []) : []}
             />
           ))}
           {bands.pinned.map((row) => (
@@ -404,16 +422,7 @@ function buildCrewRows(
 
 // Waking takes two clicks. Both asleep targets — the fill button and the sun — arm on the
 // first and wake on the second, sharing one armed state; the daemon hears one `crew_wake`.
-function CrewRowView({
-  member,
-  row,
-  selected,
-  onSelect,
-  onWake,
-  onSleep,
-  onOpenActions,
-  delegates,
-}: {
+interface CrewRowProps {
   member: string;
   row?: QueueRow<QueueBandSessionView>;
   selected: boolean;
@@ -422,13 +431,24 @@ function CrewRowView({
   onSleep?: () => void;
   onOpenActions?: (event: ReactMouseEvent) => void;
   delegates: readonly QueueBandSessionView[];
-}) {
-  const awake = Boolean(row);
+}
+
+function CrewRowView(props: CrewRowProps) {
+  return props.row ? (
+    <AwakeCrewRow {...props} row={props.row} />
+  ) : (
+    <SleepingCrewRow member={props.member} selected={props.selected} onWake={props.onWake} />
+  );
+}
+
+function SleepingCrewRow({
+  member,
+  selected,
+  onWake,
+}: Pick<CrewRowProps, 'member' | 'selected' | 'onWake'>) {
   const { phase, trigger, rowRef } = useWakeConfirm(onWake);
   const armed = phase === 'armed';
-  // An awake member arrives with the daemon's label; a sleeping one has none, so the display rule names it here.
   const name = crewDisplayName(member);
-  const label = row?.session.label || name;
   const wakeLabel = armed ? `Wake ${name} — click again to confirm` : `Wake ${name}`;
   return (
     <div
@@ -436,32 +456,23 @@ function CrewRowView({
       className={`session-item queue-row queue-row--crew ${selected ? 'selected' : ''}`.trim()}
       data-testid={`queue-crew-${member}`}
       data-crew-member={member}
-      data-crew-state={awake ? 'awake' : 'asleep'}
-      data-crew-wake={awake || phase === 'rest' ? undefined : phase}
-      data-state={row?.session.state}
-      data-workspace-id={row?.workspaceId}
+      data-crew-state="asleep"
+      data-crew-wake={phase === 'rest' ? undefined : phase}
     >
       <button
         type="button"
         className="queue-row-select"
         data-testid={`queue-crew-select-${member}`}
-        aria-label={awake ? `Open ${label}` : wakeLabel}
-        title={awake ? harnessLabel(row!.session.agent) : undefined}
-        onClick={awake ? onSelect : trigger}
+        aria-label={wakeLabel}
+        onClick={trigger}
+        disabled={!onWake}
       />
-      {awake ? (
-        <StateIndicator state={row!.session.state} size="md" seed={row!.session.id} reason={row!.session.state_reason} />
-      ) : (
-        // The hollow ring is the same size as an indicator, so every crew row's label starts on the same column.
-        <span className="crew-asleep-dot" aria-hidden="true" />
-      )}
-      {awake && <HarnessIcon agent={row!.session.agent} />}
-      <SessionLabel label={label} session={row?.session} hasDelegates={delegates.length > 0} />
-      <span className="crew-row-mark" title={awake ? `${name} is awake` : `${name} is asleep`}>
-        {awake ? 'crew' : 'asleep'}
+      <span className="crew-asleep-dot" aria-hidden="true" />
+      <SessionLabel label={name} />
+      <span className="crew-row-mark" title={`${name} is asleep`}>
+        asleep
       </span>
-      {row && <DelegationChainTrigger session={row.session} hasDelegates={delegates.length > 0} />}
-      {!awake && onWake && (
+      {onWake && (
         <div className="queue-row-controls">
           {armed && <span className="crew-wake-confirm">confirm</span>}
           <button
@@ -470,16 +481,52 @@ function CrewRowView({
             data-testid={`queue-crew-wake-${member}`}
             title={armed ? `Click again to wake ${name}` : `Wake ${name} — start its day`}
             aria-label={wakeLabel}
-            onClick={(event) => {
-              event.stopPropagation();
-              trigger();
-            }}
+            onClick={trigger}
           >
             <CrewWakeSun phase={phase} />
           </button>
         </div>
       )}
-      {awake && (onSleep || onOpenActions) && (
+    </div>
+  );
+}
+
+function AwakeCrewRow({
+  member,
+  row,
+  selected,
+  onSelect,
+  onSleep,
+  onOpenActions,
+  delegates,
+}: CrewRowProps & {
+  row: QueueRow<QueueBandSessionView>;
+}) {
+  const name = crewDisplayName(member);
+  const { session } = row;
+  const label = session.label || name;
+  return (
+    <div
+      className={`session-item queue-row queue-row--crew ${selected ? 'selected' : ''}`.trim()}
+      data-testid={`queue-crew-${member}`}
+      data-crew-member={member}
+      data-crew-state="awake"
+      data-state={session.state}
+      data-workspace-id={row.workspaceId}
+    >
+      <QueueSessionSelection
+        session={session}
+        label={label}
+        testId={`queue-crew-select-${member}`}
+        onSelect={onSelect}
+      />
+      <HarnessIcon agent={session.agent} />
+      <SessionLabel label={label} session={session} hasDelegates={delegates.length > 0} />
+      <span className="crew-row-mark" title={`${name} is awake`}>
+        crew
+      </span>
+      <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
+      {(onSleep || onOpenActions) && (
         <div className="queue-row-controls">
           {onSleep && (
             <button
@@ -488,10 +535,7 @@ function CrewRowView({
               data-testid={`queue-crew-sleep-${member}`}
               title={`Ask ${name} to close its day and sleep`}
               aria-label={`Ask ${name} to sleep`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onSleep();
-              }}
+              onClick={onSleep}
             >
               ☾
             </button>
@@ -500,13 +544,10 @@ function CrewRowView({
             <button
               type="button"
               className="session-actions session-more-btn"
-              data-testid={`session-actions-${row!.session.id}`}
+              data-testid={`session-actions-${session.id}`}
               title="Session actions"
               aria-label={`Actions for ${label}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onOpenActions(event);
-              }}
+              onClick={onOpenActions}
             >
               •••
             </button>
@@ -572,5 +613,36 @@ export function QueueSnoozedSection({
         </div>
       )}
     </div>
+  );
+}
+
+function QueueSessionSelection({
+  session,
+  label,
+  testId,
+  onSelect,
+}: {
+  session: QueueBandSessionView;
+  label: string;
+  testId: string;
+  onSelect?: () => void;
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        className="queue-row-select"
+        data-testid={testId}
+        aria-label={`Open ${label}`}
+        title={harnessLabel(session.agent)}
+        onClick={onSelect}
+      />
+      <StateIndicator
+        state={session.state}
+        size="md"
+        seed={session.id}
+        reason={session.state_reason}
+      />
+    </>
   );
 }

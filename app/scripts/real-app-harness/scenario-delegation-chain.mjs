@@ -18,7 +18,7 @@ process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
 const runner = createScenarioRunner(options, { scenarioId: 'DelegationChain', tier: 'local', prefix: 'delegation-chain', allowRealAgents: false });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
-const driver = createWindowDriver({ appPath: options.appPath });
+const driver = createWindowDriver({ appPath: options.appPath, client });
 const created = [];
 const popup = '.delegation-chain-popover';
 const runAttn = args => execFileSync(appDaemonInTree(options.appPath), args, { encoding: 'utf8', env: profileCliEnv(profile) });
@@ -129,6 +129,7 @@ try {
     await waitForChainFocus(root, 'row hover accepts native arrows');
     await driver.pressKey('Escape');
     await waitForSelector(popup, 'Escape closes the hover card', { absent: true });
+    await driver.movePointerInWindow(rowTarget.x, rowTarget.y);
     runner.assert(!await exists(popup), 'dismissal does not reopen under a stationary pointer');
     const headerTarget = await nativeTarget(header);
     await driver.movePointerInWindow(headerTarget.x, headerTarget.y);
@@ -139,11 +140,11 @@ try {
     await driver.clickWindow(headerTarget.x, headerTarget.y);
     await waitForChainFocus(builder, 'click focuses the current agent');
     await hold();
-    await driver.activateApp();
     await driver.pressKey('Escape');
     await waitForSelector(`${header}:focus`, 'Escape restores the header trigger');
   });
   await runner.step('native_action_menu_arrows_enter_and_escape', async () => {
+    await driver.activateApp();
     await pressShortcutKeys(client, driver, 'ui.actionMenu');
     await waitForSelector('.action-menu input:focus', 'native action menu shortcut');
     await driver.typeText('delegation chain');

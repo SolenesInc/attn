@@ -9,8 +9,9 @@ import {
 
 export const ALWAYS_ON_TOP_VAR = 'ATTN_HARNESS_ALWAYS_ON_TOP';
 
-const OPT_OUT_FIX = `Set process.env.${ALWAYS_ON_TOP_VAR} = '0' before the app launch in this scenario, as the `
-  + 'other key-pressing scenarios do, and the window takes focus for the run.';
+const OPT_OUT_FIX = 'Pass the automation client to createWindowDriver so the app injects the keystroke into its '
+  + `own window, as the scenarios do. A probe that has to measure real focus sets process.env.${ALWAYS_ON_TOP_VAR} = '0' `
+  + 'before the app launch instead, and the window takes focus for the run.';
 
 // `ps eww -o command=` prints the executable, its arguments, then its
 // environment, so one read answers both which app this is and how it launched.

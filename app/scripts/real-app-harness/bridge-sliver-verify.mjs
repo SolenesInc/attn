@@ -15,7 +15,7 @@ async function main() {
   console.log(`[sliver-verify] runDir=${runDir}`);
   const client = new UiAutomationClient({ appPath: options.appPath });
   const bundleId = (await execFileAsync('defaults', ['read', `${options.appPath}/Contents/Info`, 'CFBundleIdentifier'])).stdout.trim();
-  const inputDriver = new MacOSDriver({ bundleId, appPath: options.appPath });
+  const inputDriver = new MacOSDriver({ bundleId, appPath: options.appPath, client });
 
   const req = (cmd, payload) => client.request(cmd, payload);
   const suspendedTitle = async () => {
