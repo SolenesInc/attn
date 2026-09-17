@@ -31,6 +31,8 @@ export interface WorkspaceViewWorkspace {
     panes?: Array<{
       pane_id?: string;
       session_id?: string;
+      kind?: string;
+      status?: string;
     }>;
   };
 }
@@ -61,6 +63,7 @@ export interface WorkspaceWithSessions<TSession extends WorkspaceViewSession = W
   children: WorkspaceChild<TSession>[];
   firstSessionId: string | null;
   focusedSessionId: string | null;
+  hasUnresolvedAgentPanes: boolean;
 }
 
 interface WorkspaceViewModelOptions {
@@ -106,6 +109,7 @@ export function buildWorkspaceViewModels<TSession extends WorkspaceViewSession>(
   const sessionsByWorkspace = new Map<string, TSession[]>();
   const sessionKeysByWorkspaceId = new Map<string, string[]>();
   const workspaceIdBySessionId = workspaceIdsBySessionId(workspaces);
+  const liveSessionIds = new Set(sessions.map((session) => session.id));
 
   for (const session of sessions) {
     const workspaceId = sessionWorkspaceId(session, workspaceIdBySessionId);
@@ -133,7 +137,7 @@ export function buildWorkspaceViewModels<TSession extends WorkspaceViewSession>(
     const key = resolveWorkspaceSessionKey(workspace, sessionKeysByWorkspaceId, consumed);
     const workspaceSessions = sessionsByWorkspace.get(key) || [];
     consumed.add(key);
-    result.push(toWorkspaceViewModel(workspace, workspaceSessions, options));
+    result.push(toWorkspaceViewModel(workspace, workspaceSessions, liveSessionIds, options));
   }
 
   return result;
@@ -177,6 +181,7 @@ function resolveWorkspaceSessionKey(
 function toWorkspaceViewModel<TSession extends WorkspaceViewSession>(
   workspace: WorkspaceViewWorkspace,
   sessions: TSession[],
+  liveSessionIds: ReadonlySet<string>,
   options: WorkspaceViewModelOptions,
 ): WorkspaceWithSessions<TSession> {
   const children = workspaceChildren(workspace, sessions);
@@ -185,6 +190,17 @@ function toWorkspaceViewModel<TSession extends WorkspaceViewSession>(
   const focusedSessionId = requestedFocus && sessions.some((session) => session.id === requestedFocus)
     ? requestedFocus
     : firstSessionId;
+  const layoutPaneIds = new Set(
+    collectLayoutLeaves(parseLayoutJSON(workspace.layout?.layout_json || ''))
+      .filter((leaf) => leaf.type === 'pane')
+      .map((leaf) => leaf.paneId),
+  );
+  const hasUnresolvedAgentPanes = (workspace.layout?.panes || []).some((pane) => (
+    pane.kind !== 'tile'
+    && (pane.status === 'spawning' || pane.status === 'failed')
+    && Boolean(pane.pane_id && layoutPaneIds.has(pane.pane_id))
+    && Boolean(pane.session_id && !liveSessionIds.has(pane.session_id))
+  ));
 
   return {
     id: workspace.id,
@@ -199,6 +215,7 @@ function toWorkspaceViewModel<TSession extends WorkspaceViewSession>(
     children,
     firstSessionId,
     focusedSessionId,
+    hasUnresolvedAgentPanes,
   };
 }
 

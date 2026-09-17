@@ -23,7 +23,7 @@ func (d *Daemon) beginSessionClose(
 	}
 	if endpointID, remote := d.sessionOwningEndpoint(sessionID); remote {
 		if err := d.forwardSessionClose(endpointID, sessionID, closed); err != nil {
-			d.cancelSessionTeardown(sessionID)
+			d.cancelSessionTeardown(sessionID, teardown)
 			return sessionCloseInFlight{}, err
 		}
 	}

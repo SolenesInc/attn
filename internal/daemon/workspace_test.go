@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -564,11 +565,16 @@ func TestRegisterWorkspace_PersistsToStoreAndUpsertsRecentLocation(t *testing.T)
 func TestUnregisterWorkspace_CascadeClosesMemberSessions(t *testing.T) {
 	d := newDaemonForTest(t)
 	now := string(protocol.TimestampNow())
+	var preparedIDs []string
+	d.prepareSessionTeardownHook = func(sessionID string) error {
+		preparedIDs = append(preparedIDs, sessionID)
+		return nil
+	}
 
 	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
 		Cmd: protocol.CmdRegisterWorkspace, ID: "ws1", Title: "ws", Directory: "/repo",
 	})
-	for _, sid := range []string{"s1", "s2"} {
+	for _, sid := range []string{"s2", "s1"} {
 		d.store.Add(&protocol.Session{
 			ID: sid, Label: sid, Agent: protocol.SessionAgentCodex, Directory: "/repo",
 			State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
@@ -580,6 +586,9 @@ func TestUnregisterWorkspace_CascadeClosesMemberSessions(t *testing.T) {
 	d.handleUnregisterWorkspace(nil, &protocol.UnregisterWorkspaceMessage{
 		Cmd: protocol.CmdUnregisterWorkspace, ID: "ws1",
 	})
+	if !slices.Equal(preparedIDs, []string{"s1", "s2"}) {
+		t.Fatalf("session teardown lock order = %v, want [s1 s2]", preparedIDs)
+	}
 
 	if d.store.Get("s1") != nil || d.store.Get("s2") != nil {
 		t.Fatal("member sessions were not removed from the store")
@@ -698,6 +707,56 @@ func TestLoadWorkspacesFromStore_PreservesPendingSpawnAcrossRestart(t *testing.T
 	}
 	if layout := d.store.GetWorkspaceLayout("ws-pending"); layout == nil {
 		t.Fatal("pending workspace layout was removed during restart load")
+	}
+}
+
+func TestLoadWorkspacesFromStore_PreservesFailedPaneAcrossRestart(t *testing.T) {
+	d := newDaemonForTest(t)
+	d.store.AddWorkspace(&protocol.Workspace{ID: "ws-failed", Title: "failed", Directory: "/repo/failed"})
+	layout := workspacelayout.DefaultWorkspaceLayout("ws-failed", "pane-failed", "s-failed")
+	layout.Panes[0].Status = workspacelayout.PaneStatusFailed
+	layout.Panes[0].Error = "launch failed"
+	if err := d.store.SaveWorkspaceLayout(layout); err != nil {
+		t.Fatalf("SaveWorkspaceLayout() error = %v", err)
+	}
+
+	d.workspaces = newWorkspaceRegistry()
+	d.loadWorkspacesFromStore()
+
+	if workspace := d.store.GetWorkspace("ws-failed"); workspace == nil {
+		t.Fatal("failed-pane workspace was removed during restart load")
+	}
+	if _, ok := d.workspaces.snapshot("ws-failed"); !ok {
+		t.Fatal("failed-pane workspace missing after restart load")
+	}
+}
+
+func TestFailedPaneWorkspaceSurvivesFinalSessionDissociation(t *testing.T) {
+	d := newDaemonForTest(t)
+	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
+		Cmd: protocol.CmdRegisterWorkspace, ID: "ws-failed", Title: "failed", Directory: "/repo/failed",
+	})
+	now := string(protocol.TimestampNow())
+	d.store.Add(&protocol.Session{
+		ID: "s-failed", Label: "failed", Agent: protocol.SessionAgentCodex, Directory: "/repo/failed",
+		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	d.associateSessionWithWorkspace("s-failed", "ws-failed")
+	layout := workspacelayout.DefaultWorkspaceLayout("ws-failed", "pane-failed", "s-failed")
+	layout.Panes[0].Status = workspacelayout.PaneStatusFailed
+	layout.Panes[0].Error = "launch failed"
+	if err := d.store.SaveWorkspaceLayout(layout); err != nil {
+		t.Fatalf("SaveWorkspaceLayout() error = %v", err)
+	}
+
+	d.store.Remove("s-failed")
+	d.dissociateSessionFromWorkspace("s-failed")
+
+	if _, ok := d.workspaces.snapshot("ws-failed"); !ok {
+		t.Fatal("failed-pane workspace was removed after its session left")
+	}
+	if stored := d.store.GetWorkspace("ws-failed"); stored == nil {
+		t.Fatal("failed-pane workspace was removed from durable state")
 	}
 }
 

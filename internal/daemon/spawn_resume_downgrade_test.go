@@ -132,6 +132,45 @@ func TestSpawnPreservesDistinctNativeResumeID(t *testing.T) {
 	}
 }
 
+func TestSpawnResumePickerIgnoresGardenReceipt(t *testing.T) {
+	d := newGardenDaemon(t)
+	backend := &fakeSpawnBackend{}
+	d.ptyBackend = backend
+
+	const sessionID = "attn-picker-with-garden-receipt"
+	cwd := t.TempDir()
+	addTestWorkspace(d, "workspace-picker", cwd)
+	if err := d.recordGardenDispatch(sessionID, "", "", cwd, "claude", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.rememberDispatchResume(sessionID, "garden-native-id"); err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	t.Setenv(toolhome.EnvVar, home)
+	seedClaudeTranscript(t, home, "garden-native-id")
+
+	since := spawnCount(backend)
+	d.handleSpawnSession(spawnTestClient(), &protocol.SpawnSessionMessage{
+		Cmd:          protocol.CmdSpawnSession,
+		ID:           sessionID,
+		Cwd:          cwd,
+		Agent:        "claude",
+		WorkspaceID:  "workspace-picker",
+		Cols:         80,
+		Rows:         24,
+		ResumePicker: protocol.Ptr(true),
+	})
+
+	spawn := resumeSpawnForSession(t, backend, sessionID, since)
+	if spawn.ResumeSessionID != "" {
+		t.Fatalf("ResumeSessionID = %q, want the native picker to choose", spawn.ResumeSessionID)
+	}
+	if !spawn.ResumePicker {
+		t.Fatal("ResumePicker = false, want true")
+	}
+}
+
 func TestSpawnReviveReentersLaunchLifecycle(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &fakeSpawnBackend{}

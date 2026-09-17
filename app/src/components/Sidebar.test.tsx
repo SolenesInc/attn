@@ -14,6 +14,7 @@ function sessionlessWorkspace(): WorkspaceWithSessions<TestSession> {
     children: [],
     firstSessionId: null,
     focusedSessionId: null,
+    hasUnresolvedAgentPanes: false,
   };
 }
 
@@ -673,6 +674,7 @@ describe('Sidebar', () => {
       children: [],
       firstSessionId: null,
       focusedSessionId: null,
+      hasUnresolvedAgentPanes: false,
     };
     const visualOrder = [emptyWorkspace, ...sidebarData.visualOrder];
     render(

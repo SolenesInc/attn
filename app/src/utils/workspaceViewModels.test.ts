@@ -89,8 +89,45 @@ describe('workspaceViewModels', () => {
         children: [],
         firstSessionId: null,
         focusedSessionId: null,
+        hasUnresolvedAgentPanes: false,
       },
     ]);
+  });
+
+  it('marks layout-owned panes whose sessions are not live without inventing a session', () => {
+    const [workspace] = buildWorkspaceViewModels(
+      [{
+        id: 'workspace-failed',
+        title: 'Failed',
+        directory: '/repo/failed',
+        layout: {
+          layout_json: JSON.stringify({ type: 'pane', pane_id: 'pane-failed' }),
+          panes: [{ pane_id: 'pane-failed', session_id: 'closed-session', kind: 'agent', status: 'failed' }],
+        },
+      }],
+      [],
+    );
+
+    expect(workspace.sessions).toEqual([]);
+    expect(workspace.children).toEqual([]);
+    expect(workspace.hasUnresolvedAgentPanes).toBe(true);
+  });
+
+  it('does not retain a ready pane after its session ledger entry disappears', () => {
+    const [workspace] = buildWorkspaceViewModels(
+      [{
+        id: 'workspace-stale',
+        title: 'Stale',
+        directory: '/repo/stale',
+        layout: {
+          layout_json: JSON.stringify({ type: 'pane', pane_id: 'pane-stale' }),
+          panes: [{ pane_id: 'pane-stale', session_id: 'missing-session', kind: 'agent', status: 'ready' }],
+        },
+      }],
+      [],
+    );
+
+    expect(workspace.hasUnresolvedAgentPanes).toBe(false);
   });
 
   it('recovers transiently missing session ownership from the workspace layout', () => {

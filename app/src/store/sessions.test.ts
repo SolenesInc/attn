@@ -706,6 +706,48 @@ describe('sessions store', () => {
     expect(session?.daemonActivePaneId).toBe('pane-session');
   });
 
+  it('keeps a failed layout pane out of the session collection across snapshot orderings', () => {
+    const failedWorkspace = {
+      id: 'workspace-failed',
+      title: 'Failed automation',
+      directory: '/tmp/failed',
+      status: WorkspaceStatus.Idle,
+      muted: false,
+      pinned: false,
+      rank: '',
+      layout: {
+        workspace_id: 'workspace-failed',
+        active_pane_id: 'pane-failed',
+        layout_json: JSON.stringify({ type: 'pane', pane_id: 'pane-failed' }),
+        panes: [{
+          workspace_id: 'workspace-failed',
+          pane_id: 'pane-failed',
+          kind: WorkspaceLayoutPaneKind.Agent,
+          title: 'Failed reviewer',
+          runtime_id: 'closed-session',
+          session_id: 'closed-session',
+          status: WorkspaceLayoutPaneStatus.Failed,
+          error: 'session is closing',
+        }],
+      },
+    };
+
+    useSessionStore.getState().syncFromDaemonWorkspaces([failedWorkspace]);
+    useSessionStore.getState().syncFromDaemonSessions([]);
+    useSessionStore.getState().syncFromDaemonWorkspaces([failedWorkspace]);
+
+    const state = useSessionStore.getState();
+    expect(state.sessions).toEqual([]);
+    expect(state.daemonWorkspaceLayouts['workspace-failed']?.workspace.agents).toEqual([{
+      id: 'pane-failed',
+      runtimeId: 'closed-session',
+      sessionId: 'closed-session',
+      title: 'Failed reviewer',
+      status: 'failed',
+      error: 'session is closing',
+    }]);
+  });
+
   it('reloadSession asks the daemon to reload with clamped geometry', async () => {
     await useSessionStore.getState().createSession('Remote', '/srv/repo', 'sess-remote', 'codex', 'ep-remote', true, 'workspace-sess-remote');
 

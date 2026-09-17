@@ -15,6 +15,7 @@ const SHOW_SESSIONLESS_KEY = 'attn.sidebar.showSessionless';
 
 let mockDaemonWorkspaces: Array<Record<string, unknown>>;
 let mockSendWorkspaceSelected: ReturnType<typeof vi.fn>;
+let mockSendWorkspaceClosePane: ReturnType<typeof vi.fn>;
 let mockOpenUrlListener: ((urls: string[]) => void) | null;
 
 function collectTileIds(node: TerminalLayoutNode | null): string[] {
@@ -53,13 +54,19 @@ vi.mock('./components/Sidebar', () => ({
     selectedWorkspaceId,
     onSelectWorkspace,
     onSelectGridLayout,
+    collapsed,
   }: {
     visualOrder: Array<{ id: string; sessions: unknown[] }>;
     selectedWorkspaceId: string | null;
     onSelectWorkspace: (id: string) => void;
     onSelectGridLayout?: (layout: { mode: 'auto' }) => void;
+    collapsed: boolean;
   }) => (
-    <div data-testid="sidebar" data-selected-workspace={selectedWorkspaceId ?? ''}>
+    <div
+      data-testid="sidebar"
+      data-collapsed={collapsed ? '1' : '0'}
+      data-selected-workspace={selectedWorkspaceId ?? ''}
+    >
       {visualOrder.map((workspace) => (
         <button
           key={workspace.id}
@@ -93,12 +100,14 @@ vi.mock('./components/SessionTerminalWorkspace', () => ({
     isActiveSession,
     terminalsLive,
     onFocusPane,
+    onClosePane,
   }: {
     workspaceId: string;
     workspace: { agents: unknown[]; layoutTree: TerminalLayoutNode | null };
     isActiveSession: boolean;
     terminalsLive?: boolean;
     onFocusPane?: (paneId: string) => void;
+    onClosePane?: (paneId: string) => void;
   }) => (
     <div>
       <div
@@ -111,12 +120,18 @@ vi.mock('./components/SessionTerminalWorkspace', () => ({
       {workspace.agents.map((agent) => {
         const pane = agent as { id: string };
         return (
-          <button
-            key={pane.id}
-            type="button"
-            data-testid={`focus-${pane.id}`}
-            onClick={() => onFocusPane?.(pane.id)}
-          />
+          <div key={pane.id}>
+            <button
+              type="button"
+              data-testid={`focus-${pane.id}`}
+              onClick={() => onFocusPane?.(pane.id)}
+            />
+            <button
+              type="button"
+              data-testid={`close-${pane.id}`}
+              onClick={() => onClosePane?.(pane.id)}
+            />
+          </div>
         );
       })}
     </div>
@@ -175,6 +190,7 @@ describe('tile-only (sessionless) workspace selection and render', () => {
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
     localStorage.setItem(SHOW_SESSIONLESS_KEY, '1');
     mockSendWorkspaceSelected = vi.fn();
+    mockSendWorkspaceClosePane = vi.fn(async () => ({ success: true }));
     mockOpenUrlListener = null;
 
     mockDaemonWorkspaces = [
@@ -265,7 +281,7 @@ describe('tile-only (sessionless) workspace selection and render', () => {
       sendEnsureRepo: vi.fn(async () => ({ success: true, path: '/tmp/repo' })),
       sendSubscribeGitStatus: fn, sendUnsubscribeGitStatus: fn,
       sendSessionSelected: fn, sendWorkspaceSelected: mockSendWorkspaceSelected,
-      sendWorkspaceClosePane: vi.fn(async () => ({ success: true })),
+      sendWorkspaceClosePane: mockSendWorkspaceClosePane,
       sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
       requestTileContent: fn,
       sendGetFileDiff: vi.fn(async () => ({ success: true, original: '', modified: '' })),
@@ -315,6 +331,48 @@ describe('tile-only (sessionless) workspace selection and render', () => {
     await userEvent.click(screen.getByTestId('focus-pane-s1'));
 
     expect(mockSetActiveSession).toHaveBeenCalledWith('s1');
+  });
+
+  it('keeps the sidebar expanded for a failed pane whose session is no longer live', async () => {
+    mockDaemonWorkspaces = [{
+      id: 'ws-failed',
+      title: 'Failed automation',
+      directory: '/tmp/repo',
+      status: 'idle',
+      layout: {
+        active_pane_id: 'pane-failed',
+        layout_json: JSON.stringify({ type: 'pane', pane_id: 'pane-failed' }),
+        panes: [{
+          workspace_id: 'ws-failed',
+          pane_id: 'pane-failed',
+          kind: 'agent',
+          runtime_id: 'closed-session',
+          session_id: 'closed-session',
+          title: 'Failed automation',
+          status: 'failed',
+          error: 'launch failed',
+        }],
+      },
+    }];
+    mockUseSessionStore.mockReturnValue({
+      ...mockUseSessionStore(),
+      sessions: [],
+      activeSessionId: null,
+    });
+    mockUseDaemonStore.mockReturnValue({
+      ...mockUseDaemonStore(),
+      daemonSessions: [],
+    });
+
+    render(<App />);
+
+    await screen.findByTestId('workspace-ws-failed');
+    await waitFor(() => {
+      expect(screen.getByTestId('sidebar').getAttribute('data-collapsed')).toBe('0');
+    });
+
+    await userEvent.click(screen.getByTestId('close-pane-failed'));
+    expect(mockSendWorkspaceClosePane).toHaveBeenCalledWith('ws-failed', 'pane-failed');
   });
 
   it('uses sessions loaded after mount when an existing-session deep link arrives', async () => {

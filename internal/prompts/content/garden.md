@@ -54,7 +54,6 @@ When attn sends an update notification, run the suggested command to read it. Re
     attn seed detach <id> --path <filename> --to <destination>    move an owned file back out without overwriting
     attn seed attach <id> --path <file> --repo <repo> | --notebook <doc-id> | --url <url>    keep a link to a document elsewhere
     attn seed export <id> [--out <path>]    the seed and its log as one markdown file
-    attn seed set-resume <id> --resume-session-id <id> --cwd <path> --agent <name>    make an ended conversation resumable from the seed; --clear forgets it
 
 A new delegation starts an ordinary watch on its seed. `unwatch` removes that subscription; separate child or ancestor watches remain. `show` and `unwatch` name the subscriptions still covering a seed and how to remove them. `watch` restores one; a new delegation starts it again. Restart or recovery does not.
 

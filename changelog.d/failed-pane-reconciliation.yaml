@@ -1,0 +1,4 @@
+kind: fixed
+area: app
+change: Failed workspace panes remain visible as layout errors without becoming purple unknown sessions or flashing in and out of the sidebar.
+symptom: A failed automation pane could repeatedly appear as an unknown session, disappear, and return.

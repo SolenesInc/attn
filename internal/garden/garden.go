@@ -64,9 +64,6 @@ type Seed struct {
 	Gate            bool   `json:"gate"`
 	Vars            []Var  `json:"vars"`
 	Reason          string `json:"reason,omitempty"`
-	ResumeSessionID string `json:"resume_session_id,omitempty"`
-	ResumeCwd       string `json:"resume_cwd,omitempty"`
-	ResumeAgent     string `json:"resume_agent,omitempty"`
 
 	HarvestWhen *HarvestCondition `json:"harvest_when,omitempty"`
 	// Flattened out of HarvestWhen by Encode: a docstore field is a top-level JSON

@@ -88,7 +88,7 @@ func (v *sessionReopenVerdict) toProtocol() *protocol.SessionReopen {
 	return out
 }
 
-func (d *Daemon) reopenExecution(entry *protocol.SessionLedgerEntry) garden.Dispatch {
+func (d *Daemon) reopenExecutionFromLedger(entry *protocol.SessionLedgerEntry) garden.Dispatch {
 	execution, _ := d.gardenDispatch(entry.ID)
 	execution.SessionID = entry.ID
 	if execution.Cwd == "" {
@@ -106,9 +106,7 @@ func (d *Daemon) reopenExecution(entry *protocol.SessionLedgerEntry) garden.Disp
 	if execution.HostKind == "" {
 		execution.HostKind = garden.HostLocal
 	}
-	if execution.Resume == "" {
-		execution.Resume = d.store.GetResumeSessionID(entry.ID)
-	}
+	execution.Resume = d.store.GetResumeSessionID(entry.ID)
 	return execution
 }
 
@@ -124,7 +122,7 @@ func (d *Daemon) reopenVerdictForEntry(entry *protocol.SessionLedgerEntry) *sess
 	verdict := &sessionReopenVerdict{
 		SessionID: entry.ID,
 		Entry:     entry,
-		Execution: d.reopenExecution(entry),
+		Execution: d.reopenExecutionFromLedger(entry),
 		Live:      protocol.Deref(entry.ClosedAt) == "",
 	}
 	verdict.DirectoryState = inspectContinuationDirectory(verdict.Execution)
@@ -137,7 +135,8 @@ func (d *Daemon) reopenVerdictForEntry(entry *protocol.SessionLedgerEntry) *sess
 	if !decideReopenHost(verdict, d.endpointInfos()) {
 		return verdict
 	}
-	d.decideReopenPlace(verdict)
+	_, hasLaunchIntent := d.store.LaunchIntent(entry.ID)
+	d.decideReopenPlace(verdict, hasLaunchIntent)
 	return verdict
 }
 
@@ -209,8 +208,12 @@ func (d *Daemon) endpointInfos() []protocol.EndpointInfo {
 	return d.hubManager.List()
 }
 
-func (d *Daemon) decideReopenPlace(verdict *sessionReopenVerdict) {
+func (d *Daemon) decideReopenPlace(verdict *sessionReopenVerdict, hasLaunchIntent bool) {
 	conversation, conversationReason := d.reopenConversation(verdict.Execution)
+	if !hasLaunchIntent {
+		conversation = false
+		conversationReason = fmt.Sprintf("session %s has no saved launch contract, so its exact agent configuration cannot be restored", verdict.SessionID)
+	}
 
 	switch verdict.DirectoryState {
 	case directoryPresent:
@@ -575,8 +578,6 @@ func (d *Daemon) performReopen(
 	plan := sessionReopenPlan{
 		SessionID:   verdict.SessionID,
 		Directory:   verdict.Execution.Cwd,
-		Agent:       strings.TrimSpace(verdict.Execution.Agent),
-		ResumeID:    strings.TrimSpace(verdict.Execution.Resume),
 		Title:       verdict.Entry.Label,
 		WorkspaceID: verdict.WorkspaceID,
 	}
@@ -586,9 +587,9 @@ func (d *Daemon) performReopen(
 	switch action {
 	case protocol.SessionReopenActionReopen:
 	case protocol.SessionReopenActionStartFreshSamePlace:
-		plan.ResumeID, plan.FreshConversation = "", true
+		plan.FreshConversation = true
 	case protocol.SessionReopenActionStartFreshElsewhere:
-		plan.ResumeID, plan.FreshConversation = "", true
+		plan.FreshConversation = true
 		if strings.TrimSpace(directory) == "" {
 			return nil, fmt.Errorf("start_fresh_elsewhere needs a directory to start in; pass --cwd <path>")
 		}
@@ -601,7 +602,7 @@ func (d *Daemon) performReopen(
 		protocol.SessionReopenActionFetchRecreateAndReopen,
 		protocol.SessionReopenActionStartFreshDefaultBranch:
 		if action == protocol.SessionReopenActionStartFreshDefaultBranch {
-			plan.ResumeID, plan.FreshConversation = "", true
+			plan.FreshConversation = true
 		}
 		path, err := d.recreateReopenWorktree(verdict, action)
 		if err != nil {
@@ -690,16 +691,16 @@ func (d *Daemon) recreateReopenWorktree(
 type sessionReopenPlan struct {
 	SessionID         string
 	Directory         string
-	Agent             string
-	ResumeID          string
 	Title             string
 	WorkspaceID       string
+	InitialPrompt     string
 	FreshConversation bool
 }
 
 type sessionRuntimeReopened struct {
-	SessionID   string
-	WorkspaceID string
+	SessionID      string
+	WorkspaceID    string
+	AlreadyRunning bool
 }
 
 func (d *Daemon) reopenSessionRuntime(
@@ -707,13 +708,47 @@ func (d *Daemon) reopenSessionRuntime(
 	rollback *delegationRollback,
 	afterSpawn func() error,
 ) (*sessionRuntimeReopened, error) {
+	lifecycleLock := d.sessionLifecycleLockFor(plan.SessionID)
+	lifecycleLock.Lock()
+	defer lifecycleLock.Unlock()
+	fail := func(cause error) (*sessionRuntimeReopened, error) {
+		return nil, rollback.fail(cause)
+	}
+
+	entry := d.store.SessionLedgerEntry(plan.SessionID)
+	if entry == nil {
+		return fail(fmt.Errorf("session %s is not in the ledger", plan.SessionID))
+	}
+	priorSession := d.store.Get(plan.SessionID)
+	if priorSession != nil && d.sessionHasLiveWorker(plan.SessionID) {
+		if afterSpawn != nil {
+			if err := afterSpawn(); err != nil {
+				return fail(err)
+			}
+		}
+		rollback.abandon()
+		return &sessionRuntimeReopened{
+			SessionID: plan.SessionID, WorkspaceID: entry.WorkspaceID, AlreadyRunning: true,
+		}, nil
+	}
+	intent, ok := d.store.LaunchIntent(plan.SessionID)
+	priorIntent, hadPriorIntent := intent, ok
+	if !ok && !plan.FreshConversation {
+		return fail(fmt.Errorf("session %s has no stored launch intent", plan.SessionID))
+	}
+
+	if strings.TrimSpace(plan.Directory) == "" {
+		plan.Directory = entry.Directory
+	}
 	directory, err := validateDelegationDirectory(plan.Directory)
 	if err != nil {
-		return nil, rollback.fail(err)
+		return fail(err)
 	}
-	agent := strings.TrimSpace(plan.Agent)
-	if agent == "" {
-		return nil, rollback.fail(fmt.Errorf("session %s saved no agent to start", plan.SessionID))
+	if strings.TrimSpace(entry.Agent) == "" {
+		return fail(fmt.Errorf("session %s saved no agent to start", plan.SessionID))
+	}
+	if strings.TrimSpace(plan.Title) == "" {
+		plan.Title = entry.Label
 	}
 	workspaceID := strings.TrimSpace(plan.WorkspaceID)
 	if workspaceID == "" {
@@ -726,7 +761,7 @@ func (d *Daemon) reopenSessionRuntime(
 	// The store refuses a spawn that would re-register a closed row.
 	lifted, reopened, err := d.store.ReopenSession(plan.SessionID)
 	if err != nil {
-		return nil, rollback.fail(err)
+		return fail(err)
 	}
 	if reopened {
 		rollback.onSessionReopened(plan.SessionID, lifted)
@@ -751,7 +786,7 @@ func (d *Daemon) reopenSessionRuntime(
 			Directory: directory,
 		})
 		if d.store.GetWorkspace(workspaceID) == nil {
-			return nil, rollback.fail(fmt.Errorf("create reopen workspace"))
+			return fail(fmt.Errorf("create reopen workspace"))
 		}
 		rollback.onWorkspaceCreated(workspaceID)
 	}
@@ -766,40 +801,48 @@ func (d *Daemon) reopenSessionRuntime(
 		Title:       protocol.Ptr(plan.Title),
 	})
 	if err != nil {
-		return nil, rollback.fail(fmt.Errorf("create reopen pane: %w", err))
+		return fail(fmt.Errorf("create reopen pane: %w", err))
 	}
 	if paneCreated {
 		rollback.onPaneCreated(plan.SessionID)
 	}
 
-	spawn := &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          plan.SessionID,
-		Cwd:         directory,
-		WorkspaceID: workspaceID,
-		Agent:       agent,
-		Cols:        80,
-		Rows:        24,
-		Label:       protocol.Ptr(plan.Title),
+	session := &protocol.Session{
+		ID: plan.SessionID, Label: plan.Title, Agent: protocol.SessionAgent(entry.Agent),
+		Directory: directory, WorkspaceID: workspaceID,
 	}
-	if resumeID := strings.TrimSpace(plan.ResumeID); resumeID != "" {
+	spawn := &protocol.SpawnSessionMessage{
+		Cmd: protocol.CmdSpawnSession, ID: session.ID, Cwd: session.Directory,
+		WorkspaceID: session.WorkspaceID, Agent: string(session.Agent), Cols: 80, Rows: 24,
+		Label: protocol.Ptr(session.Label),
+	}
+	policy := internalSpawnPolicy{}
+	if ok {
+		spawn, policy = buildStoredIntentSpawn(session, intent, 80, 24)
+	}
+	if prompt := strings.TrimSpace(plan.InitialPrompt); prompt != "" {
+		spawn.InitialPrompt = protocol.Ptr(prompt)
+	}
+	if resumeID := strings.TrimSpace(d.store.GetResumeSessionID(plan.SessionID)); !plan.FreshConversation && resumeID != "" {
 		spawn.ResumeSessionID = protocol.Ptr(resumeID)
 	}
 	spawnClient := newInternalWSClient()
-	d.handleSpawnSessionWithPolicyForeground(spawnClient, spawn, internalSpawnPolicy{})
+	d.handleSpawnSessionWithPolicyForeground(spawnClient, spawn, policy)
 	if _, err := readInternalActionResult(spawnClient); err != nil {
-		return nil, rollback.fail(fmt.Errorf("spawn reopened session: %w", err))
+		return fail(fmt.Errorf("spawn reopened session: %w", err))
 	}
 	if session := d.store.Get(plan.SessionID); session == nil {
-		return nil, rollback.fail(fmt.Errorf("reopened session was not persisted"))
+		return fail(fmt.Errorf("reopened session was not persisted"))
 	}
-	if !reopened {
+	if priorSession != nil {
+		rollback.onSessionRespawned(priorSession, priorIntent, hadPriorIntent)
+	} else if !reopened {
 		rollback.onSessionSpawned(plan.SessionID)
 	}
 
 	if afterSpawn != nil {
 		if err := afterSpawn(); err != nil {
-			return nil, rollback.fail(err)
+			return fail(err)
 		}
 	}
 	rollback.abandon()
@@ -811,6 +854,37 @@ func (r *delegationRollback) onSessionReopened(sessionID string, closed store.Se
 	r.undo = append(r.undo, func() error {
 		r.d.terminateSession(sessionID, syscall.SIGTERM)
 		r.d.restoreSessionClose(sessionID, closed)
+		r.d.dissociateSessionFromWorkspace(sessionID)
+		return nil
+	})
+}
+
+func (r *delegationRollback) onSessionRespawned(
+	prior *protocol.Session,
+	priorIntent store.LaunchIntent,
+	hadPriorIntent bool,
+) {
+	r.undo = append(r.undo, func() error {
+		if err := r.d.terminateSessionRuntimeChecked(prior.ID, syscall.SIGTERM); err != nil {
+			return err
+		}
+		r.d.closePluginDriverSession(prior.ID, "launch_failed", nil, "")
+		if err := r.d.store.AddCheckedUnlessTeardown(prior); err != nil {
+			return err
+		}
+		if hadPriorIntent {
+			r.d.store.SetLaunchIntent(prior.ID, priorIntent)
+		} else {
+			r.d.store.ClearLaunchIntent(prior.ID)
+		}
+		if r.d.workspaces != nil {
+			if prior.WorkspaceID == "" {
+				r.d.workspaces.dissociateSession(prior.ID)
+			} else {
+				r.d.workspaces.associateSession(prior.ID, prior.WorkspaceID, prior.Label)
+			}
+		}
+		r.d.publishFact(FactSessionReregistered, prior.ID, nil)
 		return nil
 	})
 }

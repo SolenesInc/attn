@@ -18,7 +18,6 @@ import (
 
 const (
 	continuationSourceExecution = "execution"
-	continuationSourceLegacy    = "legacy"
 
 	directoryPresent     = "present"
 	directoryMissing     = "missing"
@@ -34,6 +33,7 @@ const (
 type seedContinuation struct {
 	Execution         garden.Dispatch
 	Source            string
+	LedgerAvailable   bool
 	SessionLive       bool
 	DirectoryState    string
 	ResumeAvailable   bool
@@ -342,22 +342,20 @@ func (d *Daemon) gardenKeepsBranch(repository, branch string) bool {
 func (d *Daemon) normalizedSeedContinuation(seed garden.Seed) (garden.Dispatch, string, bool) {
 	if executionID := strings.TrimSpace(seed.LastExecutionID); executionID != "" {
 		if execution, ok := d.gardenDispatch(executionID); ok {
+			entry := d.store.SessionLedgerEntry(executionID)
+			localLedgerGone := entry == nil && execution.HostKind != garden.HostRemote
+			if entry != nil {
+				execution.SessionID = entry.ID
+				execution.Cwd = entry.Directory
+				execution.Agent = entry.Agent
+				execution.Resume = d.store.GetResumeSessionID(entry.ID)
+			} else if localLedgerGone {
+				execution.Resume = ""
+			}
 			return execution, continuationSourceExecution, true
 		}
 	}
-	resumeID := strings.TrimSpace(seed.ResumeSessionID)
-	cwd := strings.TrimSpace(seed.ResumeCwd)
-	agent := strings.TrimSpace(seed.ResumeAgent)
-	if resumeID == "" || cwd == "" || agent == "" {
-		return garden.Dispatch{}, "", false
-	}
-	return garden.Dispatch{
-		SessionID: resumeID,
-		Cwd:       cwd,
-		Agent:     agent,
-		Resume:    resumeID,
-		HostKind:  garden.HostLocal,
-	}, continuationSourceLegacy, true
+	return garden.Dispatch{}, "", false
 }
 
 func inspectContinuationDirectory(execution garden.Dispatch) string {
@@ -457,10 +455,12 @@ func (d *Daemon) continuationForSeedForeground(seed garden.Seed) *seedContinuati
 	continuation := &seedContinuation{
 		Execution:         execution,
 		Source:            source,
+		LedgerAvailable:   d.store.SessionLedgerEntry(execution.SessionID) != nil,
 		DirectoryState:    inspectContinuationDirectory(execution),
 		HandoverPlacement: handoverNeedsPlacement,
 	}
-	if live := d.gardenSession(execution.SessionID); live != nil {
+	if live := d.gardenSession(execution.SessionID); live != nil &&
+		(strings.TrimSpace(protocol.Deref(live.EndpointID)) != "" || d.sessionHasLiveWorker(live.ID)) {
 		continuation.SessionLive = true
 		continuation.ResumeAvailable = true
 		if execution.HostKind == garden.HostLocal && continuation.DirectoryState == directoryPresent {
@@ -475,21 +475,24 @@ func (d *Daemon) continuationForSeedForeground(seed garden.Seed) *seedContinuati
 		continuation.PlacementReason = "choose a reachable place for the new agent"
 		return continuation
 	}
+	if !continuation.LedgerAvailable {
+		continuation.ResumeReason = "the original session is no longer in the ledger"
+		d.planSeedHandoverPlacement(continuation)
+		return continuation
+	}
+	d.planSeedHandoverPlacement(continuation)
+	if _, ok := d.store.LaunchIntent(execution.SessionID); !ok {
+		continuation.ResumeReason = "the session ledger has no saved launch contract"
+		return continuation
+	}
 	if continuation.DirectoryState != directoryPresent {
 		switch continuation.DirectoryState {
 		case directoryMissing:
 			continuation.ResumeReason = fmt.Sprintf("the original directory no longer exists: %s", execution.Cwd)
-			if _, safe, reason := branchCanBeRecreated(execution); safe {
-				continuation.HandoverPlacement = handoverRecreateBranch
-			} else {
-				continuation.PlacementReason = reason
-			}
 		case directoryUnknown:
 			continuation.ResumeReason = "the original directory was not saved"
-			continuation.PlacementReason = "choose a directory for the new agent"
 		default:
 			continuation.ResumeReason = fmt.Sprintf("the original directory cannot be opened: %s", execution.Cwd)
-			continuation.PlacementReason = "the original directory could not be verified"
 		}
 		return continuation
 	}
@@ -508,6 +511,23 @@ func (d *Daemon) continuationForSeedForeground(seed garden.Seed) *seedContinuati
 	continuation.ResumeAvailable = true
 	continuation.HandoverPlacement = handoverReuseCwd
 	return continuation
+}
+
+func (d *Daemon) planSeedHandoverPlacement(continuation *seedContinuation) {
+	switch continuation.DirectoryState {
+	case directoryPresent:
+		continuation.HandoverPlacement = handoverReuseCwd
+	case directoryMissing:
+		if _, safe, reason := branchCanBeRecreated(continuation.Execution); safe {
+			continuation.HandoverPlacement = handoverRecreateBranch
+		} else {
+			continuation.PlacementReason = reason
+		}
+	case directoryUnknown:
+		continuation.PlacementReason = "choose a directory for the new agent"
+	default:
+		continuation.PlacementReason = "the original directory could not be verified"
+	}
 }
 
 func continuationToProtocol(continuation *seedContinuation) *protocol.SeedContinuation {

@@ -33,6 +33,20 @@ type automationResumeBackend struct {
 	snapshotCalls int
 }
 
+type automationRestoreRaceBackend struct {
+	*fakeSpawnBackend
+	secondCheck chan struct{}
+	checks      atomic.Int32
+}
+
+func (b *automationRestoreRaceBackend) SessionIDs(ctx context.Context) []string {
+	ids := b.fakeSpawnBackend.SessionIDs(ctx)
+	if b.checks.Add(1) == 2 {
+		close(b.secondCheck)
+	}
+	return ids
+}
+
 func writeCodexRolloutFixture(t *testing.T, resumeID string) {
 	t.Helper()
 	codexHome := t.TempDir()
@@ -973,6 +987,30 @@ func TestChangedHeadContinuationKeepsContractAndIdentityChecks(t *testing.T) {
 }
 
 func TestStoppedContinuationResumesRecordedReviewerWithPinnedContract(t *testing.T) {
+	fixture := setupStoppedAutomationContinuation(t)
+	fixture.d.closeSession(fixture.origin.SessionID, store.SessionClose{By: store.SessionClosedByUser})
+	if err := fixture.d.ensureAutomationSession(context.Background(), fixture.req, fixture.directory); err != nil {
+		t.Fatal(err)
+	}
+	spawn, ok := fixture.backend.LastSpawn()
+	if !ok || spawn.ResumeSessionID != "codex-rollout-1" || spawn.UnattendedLaunch != fixture.req.Launch {
+		t.Fatalf("resume spawn=%#v ok=%v", spawn, ok)
+	}
+	if spawn.InitialPromptFile != "" {
+		t.Fatalf("continuation resume initial prompt = %q, want durable work-ready delivery", spawn.InitialPromptFile)
+	}
+}
+
+type stoppedAutomationContinuationFixture struct {
+	d         *Daemon
+	backend   *automationResumeBackend
+	origin    *store.AutomationRun
+	req       automation.WorkRequest
+	directory string
+}
+
+func setupStoppedAutomationContinuation(t *testing.T) stoppedAutomationContinuationFixture {
+	t.Helper()
 	d := newEnrolledDaemon(t, "")
 	setupDelegationGarden(t, d)
 	backend := &automationResumeBackend{fakeSpawnBackend: &fakeSpawnBackend{}}
@@ -1004,12 +1042,245 @@ func TestStoppedContinuationResumesRecordedReviewerWithPinnedContract(t *testing
 		Prompt: "Review locally", Context: json.RawMessage(`{}`), Launch: testAutomationLaunch("codex"),
 		IDs: automation.DeliveryIDs{SeedID: origin.SeedID, SessionID: origin.SessionID, WorkspaceID: origin.WorkspaceID, PaneID: origin.PaneID},
 	}
-	if err := d.ensureAutomationSession(context.Background(), req, directory); err != nil {
+	d.store.SetLaunchIntent(origin.SessionID, store.LaunchIntent{
+		ApprovalRoute:    launchcontract.ApprovalRouteReviewer,
+		Executable:       req.Launch.Executable,
+		Model:            req.Launch.Model,
+		Effort:           req.Launch.Effort,
+		UnattendedLaunch: req.Launch,
+	})
+	return stoppedAutomationContinuationFixture{
+		d: d, backend: backend, origin: origin, req: req, directory: directory,
+	}
+}
+
+func TestStoppedContinuationWaitsForClosingRuntimeBeforeReopening(t *testing.T) {
+	fixture := setupStoppedAutomationContinuation(t)
+	killEntered := make(chan struct{})
+	releaseKill := make(chan struct{})
+	fixture.backend.onKill = func() {
+		close(killEntered)
+		<-releaseKill
+	}
+
+	closing, err := fixture.d.beginSessionClose(
+		fixture.origin.SessionID,
+		store.SessionClose{By: store.SessionClosedByUser},
+		nil,
+	)
+	if err != nil {
 		t.Fatal(err)
 	}
-	spawn, ok := backend.LastSpawn()
-	if !ok || spawn.ResumeSessionID != "codex-rollout-1" || spawn.UnattendedLaunch != req.Launch {
+	fixture.d.finishSessionClose(fixture.origin.SessionID, closing)
+	<-killEntered
+
+	started := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		close(started)
+		done <- fixture.d.ensureAutomationSession(context.Background(), fixture.req, fixture.directory)
+	}()
+	<-started
+	select {
+	case err := <-done:
+		t.Fatalf("continuation completed before the closing runtime exited: %v", err)
+	default:
+	}
+	if got := spawnCount(fixture.backend.fakeSpawnBackend); got != 0 {
+		t.Fatalf("spawn calls before teardown completed = %d, want 0", got)
+	}
+
+	close(releaseKill)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	fixture.d.waitForSessionTeardown(fixture.origin.SessionID)
+	spawn, ok := fixture.backend.LastSpawn()
+	if !ok || spawn.ResumeSessionID != "codex-rollout-1" || spawn.UnattendedLaunch != fixture.req.Launch {
 		t.Fatalf("resume spawn=%#v ok=%v", spawn, ok)
+	}
+}
+
+func TestStoppedContinuationWaitsForWorktreeDeleteCommitBeforeReopening(t *testing.T) {
+	fixture := setupStoppedAutomationContinuation(t)
+	fixture.d.closeSession(fixture.origin.SessionID, store.SessionClose{By: store.SessionClosedByUser})
+
+	deleteEntered := make(chan struct{})
+	foregroundWaiting := make(chan error, 1)
+	releaseDelete := make(chan struct{})
+	deleteDone := make(chan error, 1)
+	go func() {
+		deleteDone <- fixture.d.worktreeMaintenance.RunSweep(context.Background(), func(lease *worktreeSweepLease) error {
+			return lease.TryDelete(func(context.Context) error { return nil }, func(context.Context) error {
+				close(deleteEntered)
+				<-lease.Context().Done()
+				foregroundWaiting <- context.Cause(lease.Context())
+				<-releaseDelete
+				return nil
+			})
+		})
+	}()
+	<-deleteEntered
+
+	continued := make(chan error, 1)
+	go func() {
+		continued <- fixture.d.ensureAutomationSession(context.Background(), fixture.req, fixture.directory)
+	}()
+	if err := <-foregroundWaiting; !errors.Is(err, errWorktreeSweepPreempted) {
+		t.Fatalf("sweep cancellation = %v, want foreground preemption", err)
+	}
+	select {
+	case err := <-continued:
+		t.Fatalf("continuation completed during the worktree delete commit: %v", err)
+	default:
+	}
+	if got := spawnCount(fixture.backend.fakeSpawnBackend); got != 0 {
+		t.Fatalf("spawn calls during the worktree delete commit = %d, want 0", got)
+	}
+
+	close(releaseDelete)
+	if err := <-deleteDone; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-continued; err != nil {
+		t.Fatal(err)
+	}
+	if got := spawnCount(fixture.backend.fakeSpawnBackend); got != 1 {
+		t.Fatalf("spawn calls after the worktree delete commit = %d, want 1", got)
+	}
+}
+
+func TestContinuationWorkReadySurvivesAnotherRestoreWinning(t *testing.T) {
+	d := newEnrolledDaemon(t, "")
+	setupDelegationGarden(t, d)
+	directory, err := validateDelegationDirectory(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend := &automationRestoreRaceBackend{
+		fakeSpawnBackend: &fakeSpawnBackend{screenUnavailable: true},
+		secondCheck:      make(chan struct{}),
+	}
+	d.ptyBackend = backend
+	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.UTC)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := automation.Snapshot{
+		Prompt: "Review locally", Launch: testAutomationLaunch("claude"),
+		Location: automation.LocationSpec{Type: "directory", Path: directory}, Continuity: "singleton",
+	}
+	snapshotJSON, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _, err := d.store.ClaimScheduledAutomationRun(
+		def.ID, "scheduled:one", "singleton", def.Revision, `{}`, string(snapshotJSON), now,
+		store.AutomationRunReservation{
+			RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
+			WorkspaceID: "workspace-1", PaneID: "pane-1",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstReq := automation.WorkRequest{
+		RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: snapshot.Prompt,
+		Context: json.RawMessage(`{}`), Launch: snapshot.Launch, Location: snapshot.Location,
+		IDs: automation.DeliveryIDs{
+			SeedID: first.SeedID, SessionID: first.SessionID,
+			WorkspaceID: first.WorkspaceID, PaneID: first.PaneID,
+		},
+	}
+	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
+		t.Fatal(err)
+	}
+	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
+		Cmd: protocol.CmdRegisterWorkspace, ID: first.WorkspaceID, Title: "nightly", Directory: directory,
+	})
+	d.store.Add(&protocol.Session{
+		ID: first.SessionID, Agent: protocol.SessionAgentClaude,
+		Directory: directory, WorkspaceID: first.WorkspaceID, State: protocol.SessionStateWaitingInput,
+	})
+	writeClaudeTranscriptFixture(t, "claude-transcript-1")
+	d.store.SetResumeSessionID(first.SessionID, "claude-transcript-1")
+	d.store.SetLaunchIntent(first.SessionID, store.LaunchIntent{
+		ApprovalRoute: launchcontract.ApprovalRouteReviewer,
+		Model:         snapshot.Launch.Model, Effort: snapshot.Launch.Effort,
+		UnattendedLaunch: snapshot.Launch,
+	})
+	if err := d.recordGardenDispatch(first.SessionID, first.SeedID, "", directory, "claude", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := markAutomationRunDeliveredForTest(d.store, first.ID, `{}`, now); err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := d.store.ClaimScheduledAutomationRun(
+		def.ID, "scheduled:two", "singleton", def.Revision, `{}`, string(snapshotJSON), now.Add(time.Minute),
+		store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lifecycle := d.sessionLifecycleLockFor(first.SessionID)
+	lifecycle.Lock()
+	delivered := make(chan error, 1)
+	go func() { delivered <- d.deliverAutomationRun(context.Background(), second) }()
+	select {
+	case <-backend.secondCheck:
+	case err := <-delivered:
+		lifecycle.Unlock()
+		t.Fatalf("automation delivery ended before its second runtime check: %v", err)
+	case <-time.After(5 * time.Second):
+		lifecycle.Unlock()
+		t.Fatal("automation delivery did not reach its second runtime check")
+	}
+	backend.mu.Lock()
+	backend.sessionIDs = []string{first.SessionID}
+	backend.mu.Unlock()
+	lifecycle.Unlock()
+	if err := <-delivered; err != nil {
+		t.Fatal(err)
+	}
+	if got := spawnCount(backend.fakeSpawnBackend); got != 0 {
+		t.Fatalf("spawn calls = %d, want the concurrent restore to remain authoritative", got)
+	}
+	notes, err := d.readNotesDomain(first.SeedID)
+	if err != nil || len(notes) != 1 || !strings.Contains(notes[0].Body, second.ID) ||
+		!strings.Contains(notes[0].Body, filepath.Join("automation", "occurrences", second.ID+".json")) {
+		t.Fatalf("occurrence notes=%#v err=%v", notes, err)
+	}
+	assertOneSeedBell(t, d, first.SessionID, first.SeedID, "work.ready")
+
+	if err := d.deliverAutomationRun(context.Background(), second); err != nil {
+		t.Fatal(err)
+	}
+	if got := spawnCount(backend.fakeSpawnBackend); got != 0 {
+		t.Fatalf("spawn calls after retry = %d, want 0", got)
+	}
+	notes, err = d.readNotesDomain(first.SeedID)
+	if err != nil || len(notes) != 1 {
+		t.Fatalf("occurrence notes after retry=%#v err=%v", notes, err)
+	}
+	assertOneSeedBell(t, d, first.SessionID, first.SeedID, "work.ready")
+}
+
+func TestStoppedContinuationKeepsTheLedgerContractAcrossDefinitionChanges(t *testing.T) {
+	fixture := setupStoppedAutomationContinuation(t)
+	original := fixture.req.Launch
+	fixture.d.closeSession(fixture.origin.SessionID, store.SessionClose{By: store.SessionClosedByUser})
+	fixture.req.Launch.Model = "new-definition-model"
+	fixture.req.Launch.Effort = "low"
+	fixture.req.Launch.Executable = "/new/definition/codex"
+
+	if err := fixture.d.ensureAutomationSession(context.Background(), fixture.req, fixture.directory); err != nil {
+		t.Fatal(err)
+	}
+	spawn, ok := fixture.backend.LastSpawn()
+	if !ok || spawn.UnattendedLaunch != original {
+		t.Fatalf("resume spawn=%#v ok=%v, want ledger contract %#v", spawn, ok, original)
 	}
 }
 

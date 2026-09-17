@@ -162,7 +162,7 @@
     "checking": false,
     "directory_state": "present",
     "pane_plan": "reuse",
-    "reason": "no conversation id was saved for this session, so there is nothing to resume",
+    "reason": "session sess-1 has no saved launch contract, so its exact agent configuration cannot be restored",
     "reopenable": false,
     "workspace_id": "workspace-1",
     "workspace_plan": "reuse"

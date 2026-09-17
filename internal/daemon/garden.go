@@ -76,16 +76,6 @@ func (d *Daemon) plantSeed(schema docstore.CollectionSchema, seed garden.Seed) (
 		}
 		occurrences = append(occurrences, tended)
 	}
-	if seed.ResumeSessionID != "" {
-		configured, err := seedEvents.Occur(
-			gardenSeedEventModel, gardenSeedEventVocabulary.ResumeIdentityConfigured, seed.ID,
-			seedEvents.CausePayload{CausedBySessionID: seed.PlanterSession},
-		)
-		if err != nil {
-			return docstore.Document{}, err
-		}
-		occurrences = append(occurrences, configured)
-	}
 	for _, edge := range seed.Edges {
 		linked, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.EdgeLinked, seed.ID, seedEvents.EdgePayload{
 			EdgeKind: string(edge.Kind), TargetSeedID: edge.To, CausedBySessionID: seed.PlanterSession,
@@ -316,11 +306,6 @@ func seedToProtocol(seed garden.Seed, doc docstore.Document, ready bool) protoco
 	if seed.Reason != "" {
 		out.Reason = protocol.Ptr(seed.Reason)
 	}
-	if seed.ResumeSessionID != "" {
-		out.ResumeSessionID = protocol.Ptr(seed.ResumeSessionID)
-		out.ResumeCwd = protocol.Ptr(seed.ResumeCwd)
-		out.ResumeAgent = protocol.Ptr(seed.ResumeAgent)
-	}
 	if seed.HarvestWhen != nil {
 		condition := protocol.SeedHarvestCondition{
 			PullRequest: seed.HarvestWhen.PullRequest,
@@ -451,14 +436,6 @@ func (d *Daemon) handleSeedPlant(conn net.Conn, msg *protocol.SeedPlantMessage) 
 		Edges:          []garden.Edge{},
 		Vars:           []garden.Var{},
 	}
-	resumeID, resumeCwd, resumeAgent, err := normalizeSeedResumeIdentity(
-		protocol.Deref(msg.ResumeSessionID), protocol.Deref(msg.ResumeCwd), protocol.Deref(msg.ResumeAgent),
-	)
-	if err != nil {
-		d.sendGardenError(conn, "plant", err)
-		return
-	}
-	seed.ResumeSessionID, seed.ResumeCwd, seed.ResumeAgent = resumeID, resumeCwd, resumeAgent
 	if plot := strings.TrimSpace(protocol.Deref(msg.PartOf)); plot != "" {
 		if _, _, err := d.readSeed(plot); err != nil {
 			d.sendGardenError(conn, "plant", err)
@@ -759,89 +736,6 @@ func (d *Daemon) handleSeedEdit(conn net.Conn, msg *protocol.SeedEditMessage) {
 		Ok:             true,
 		SeedEditResult: &protocol.SeedEditResult{Seed: seedToProtocol(seed, doc, d.gardenReady()[seed.ID])},
 	})
-}
-
-func normalizeSeedResumeIdentity(sessionID, cwd, agent string) (string, string, string, error) {
-	sessionID, cwd, agent = strings.TrimSpace(sessionID), strings.TrimSpace(cwd), strings.TrimSpace(agent)
-	present := 0
-	for _, value := range []string{sessionID, cwd, agent} {
-		if value != "" {
-			present++
-		}
-	}
-	if present != 0 && present != 3 {
-		return "", "", "", fmt.Errorf("resume identity needs --resume-session-id, --cwd, and --agent together")
-	}
-	return sessionID, cwd, agent, nil
-}
-
-func (d *Daemon) handleSeedSetResume(conn net.Conn, msg *protocol.SeedSetResumeMessage) {
-	if err := d.requireHome(garden.Surface); err != nil {
-		d.sendGardenError(conn, "set-resume", err)
-		return
-	}
-	clear := protocol.Deref(msg.Clear)
-	resumeID, cwd, agent, err := normalizeSeedResumeIdentity(
-		protocol.Deref(msg.ResumeSessionID), protocol.Deref(msg.ResumeCwd), protocol.Deref(msg.ResumeAgent),
-	)
-	if err != nil {
-		d.sendGardenError(conn, "set-resume", err)
-		return
-	}
-	if clear {
-		if resumeID != "" || cwd != "" || agent != "" {
-			d.sendGardenError(conn, "set-resume", fmt.Errorf("--clear cannot be combined with resume identity fields"))
-			return
-		}
-	} else if resumeID == "" {
-		d.sendGardenError(conn, "set-resume", fmt.Errorf("nothing to set — pass --resume-session-id, --cwd, and --agent together, or --clear"))
-		return
-	}
-	seed, doc, err := d.applySeedResumeIdentity(msg.SeedID, resumeID, cwd, agent)
-	if err != nil {
-		d.sendGardenError(conn, "set-resume", err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{
-		Ok: true, SeedSetResumeResult: &protocol.SeedSetResumeResult{
-			Seed: d.seedDetailsWire(seed, doc, d.gardenReady()[seed.ID]),
-		},
-	})
-}
-
-func (d *Daemon) applySeedResumeIdentity(id, resumeID, cwd, agent string, causedBy ...string) (garden.Seed, docstore.Document, error) {
-	schema, err := d.seedsCollection()
-	if err != nil {
-		return garden.Seed{}, docstore.Document{}, err
-	}
-	const attempts = 3
-	for range attempts {
-		seed, doc, err := d.readSeed(id)
-		if err != nil {
-			return garden.Seed{}, docstore.Document{}, err
-		}
-		seed.ResumeSessionID, seed.ResumeCwd, seed.ResumeAgent = resumeID, cwd, agent
-		event := gardenSeedEventVocabulary.ResumeIdentityConfigured
-		if resumeID == "" {
-			event = gardenSeedEventVocabulary.ResumeIdentityCleared
-		}
-		occurrence, err := seedEvents.Occur(gardenSeedEventModel, event, seed.ID, seedEvents.CausePayload{
-			CausedBySessionID: firstString(causedBy),
-		})
-		if err != nil {
-			return garden.Seed{}, docstore.Document{}, err
-		}
-		written, err := d.writeSeedWithEvents(*schema, seed, doc.Rev, occurrence)
-		if err == nil {
-			return seed, written, nil
-		}
-		if !docstore.IsConflict(err) {
-			return garden.Seed{}, docstore.Document{}, err
-		}
-	}
-	return garden.Seed{}, docstore.Document{}, fmt.Errorf(
-		"%s was rewritten under all %d attempts to set its resume identity; read it again with `attn seed show %s` and retry",
-		id, attempts, id)
 }
 
 func (d *Daemon) applySeedBodyEdit(id, body string, causedBy ...string) (garden.Seed, docstore.Document, error) {
@@ -1190,14 +1084,6 @@ func (d *Daemon) rememberDispatchResume(sessionID, resumeSessionID string) error
 		d.logf("garden: recording the resume id for session %s: %v", sessionID, err)
 	}
 	return err
-}
-
-func (d *Daemon) gardenDispatchResume(sessionID string) string {
-	dispatch, ok := d.gardenDispatch(sessionID)
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(dispatch.Resume)
 }
 
 func (d *Daemon) validateDispatchCrown(crown, sourceSessionID string) error {

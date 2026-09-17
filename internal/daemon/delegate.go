@@ -274,10 +274,7 @@ func (r *delegationRollback) onWorktreeCreated(path string) {
 
 func (r *delegationRollback) onWorkspaceCreated(workspaceID string) {
 	r.undo = append(r.undo, func() error {
-		r.d.handleUnregisterWorkspace(nil, &protocol.UnregisterWorkspaceMessage{
-			Cmd: protocol.CmdUnregisterWorkspace,
-			ID:  workspaceID,
-		})
+		r.d.unregisterWorkspaceIfEmpty(workspaceID)
 		return nil
 	})
 }

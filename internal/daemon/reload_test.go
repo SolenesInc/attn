@@ -35,6 +35,50 @@ func writeClaudeTranscriptFixture(t *testing.T, sessionID string) {
 	}
 }
 
+func TestSessionLifecycleLocksStayBounded(t *testing.T) {
+	d := newDaemonForTest(t)
+	first, second := d.sessionLifecycleLockFor("session-stable"), d.sessionLifecycleLockFor("session-stable")
+	if first.entry != second.entry {
+		t.Fatal("same session mapped to different lifecycle locks")
+	}
+	first.Lock()
+	if first.entry == nil {
+		t.Fatal("acquired lifecycle lock has no entry")
+	}
+	first.Unlock()
+	second.Lock()
+	if second.entry == nil {
+		t.Fatal("acquired lifecycle lock has no entry")
+	}
+	second.Unlock()
+	left, right := d.sessionLifecycleLockFor("session-left"), d.sessionLifecycleLockFor("session-right")
+	if left.entry == right.entry {
+		t.Fatal("different sessions shared a lifecycle lock")
+	}
+	left.Lock()
+	if left.entry == nil {
+		t.Fatal("acquired lifecycle lock has no entry")
+	}
+	left.Unlock()
+	right.Lock()
+	if right.entry == nil {
+		t.Fatal("acquired lifecycle lock has no entry")
+	}
+	right.Unlock()
+
+	for i := 0; i < 640; i++ {
+		lease := d.sessionLifecycleLockFor(fmt.Sprintf("session-%d", i))
+		lease.Lock()
+		if lease.entry == nil {
+			t.Fatal("acquired lifecycle lock has no entry")
+		}
+		lease.Unlock()
+	}
+	if len(d.sessionLifecycleLocks) != 0 {
+		t.Fatalf("lifecycle lock count = %d, want 0 after all leases released", len(d.sessionLifecycleLocks))
+	}
+}
+
 type fakeReloadBackend struct {
 	mu        sync.Mutex
 	liveIDs   []string
