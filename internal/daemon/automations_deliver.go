@@ -665,12 +665,12 @@ func (d *Daemon) ensureAutomationSession(_ context.Context, req automation.WorkR
 		if d.canStartWithdrawnUndeliveredReviewer(continuationRun, req.IDs.SessionID) {
 			return d.startAutomationSession(req, directory, inputPath)
 		}
-		return d.continueAutomationSession(req, directory, inputPath)
+		return d.continueAutomationSession(req, directory)
 	}
 	return d.startAutomationSession(req, directory, inputPath)
 }
 
-func (d *Daemon) continueAutomationSession(req automation.WorkRequest, directory, inputPath string) error {
+func (d *Daemon) continueAutomationSession(req automation.WorkRequest, directory string) error {
 	if _, err := d.automationResumeSessionID(req); err != nil {
 		return err
 	}
@@ -681,10 +681,10 @@ func (d *Daemon) continueAutomationSession(req automation.WorkRequest, directory
 	if err := intent.UnattendedLaunch.WithLegacyDefaults().Validate(); err != nil {
 		return fmt.Errorf("reviewer continuity ledger launch contract is invalid: %w", err)
 	}
-	label, prompt := d.automationSessionLaunch(req, directory, inputPath)
+	label := automationSessionLabel(req, directory)
 	_, err := d.reopenSessionRuntime(sessionReopenPlan{
 		SessionID: req.IDs.SessionID, Directory: directory, Title: label,
-		WorkspaceID: req.IDs.WorkspaceID, InitialPrompt: prompt,
+		WorkspaceID: req.IDs.WorkspaceID,
 	}, d.newDelegationRollback(), nil)
 	if err != nil {
 		return err
@@ -703,11 +703,15 @@ func (d *Daemon) automationSessionLaunch(req automation.WorkRequest, directory, 
 		definitionName = definition.Name
 	}
 	prompt := automationSessionPrompt(req.Prompt, inputPath, req.IDs.SeedID, definitionName, pullRequestTarget, pullRequestErr == nil)
+	return automationSessionLabel(req, directory), prompt
+}
+
+func automationSessionLabel(req automation.WorkRequest, directory string) string {
 	label := filepath.Base(directory)
 	if _, reviewLabel, _, ok := automationReviewNames(req); ok {
 		label = reviewLabel
 	}
-	return label, prompt
+	return label
 }
 
 func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, inputPath string) error {

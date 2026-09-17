@@ -33,6 +33,20 @@ type automationResumeBackend struct {
 	snapshotCalls int
 }
 
+type automationRestoreRaceBackend struct {
+	*fakeSpawnBackend
+	secondCheck chan struct{}
+	checks      atomic.Int32
+}
+
+func (b *automationRestoreRaceBackend) SessionIDs(ctx context.Context) []string {
+	ids := b.fakeSpawnBackend.SessionIDs(ctx)
+	if b.checks.Add(1) == 2 {
+		close(b.secondCheck)
+	}
+	return ids
+}
+
 func writeCodexRolloutFixture(t *testing.T, resumeID string) {
 	t.Helper()
 	codexHome := t.TempDir()
@@ -982,6 +996,9 @@ func TestStoppedContinuationResumesRecordedReviewerWithPinnedContract(t *testing
 	if !ok || spawn.ResumeSessionID != "codex-rollout-1" || spawn.UnattendedLaunch != fixture.req.Launch {
 		t.Fatalf("resume spawn=%#v ok=%v", spawn, ok)
 	}
+	if spawn.InitialPromptFile != "" {
+		t.Fatalf("continuation resume initial prompt = %q, want durable work-ready delivery", spawn.InitialPromptFile)
+	}
 }
 
 type stoppedAutomationContinuationFixture struct {
@@ -1082,6 +1099,123 @@ func TestStoppedContinuationWaitsForClosingRuntimeBeforeReopening(t *testing.T) 
 	if !ok || spawn.ResumeSessionID != "codex-rollout-1" || spawn.UnattendedLaunch != fixture.req.Launch {
 		t.Fatalf("resume spawn=%#v ok=%v", spawn, ok)
 	}
+}
+
+func TestContinuationWorkReadySurvivesAnotherRestoreWinning(t *testing.T) {
+	d := newEnrolledDaemon(t, "")
+	setupDelegationGarden(t, d)
+	directory, err := validateDelegationDirectory(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend := &automationRestoreRaceBackend{
+		fakeSpawnBackend: &fakeSpawnBackend{screenUnavailable: true},
+		secondCheck:      make(chan struct{}),
+	}
+	d.ptyBackend = backend
+	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.UTC)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := automation.Snapshot{
+		Prompt: "Review locally", Launch: testAutomationLaunch("claude"),
+		Location: automation.LocationSpec{Type: "directory", Path: directory}, Continuity: "singleton",
+	}
+	snapshotJSON, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _, err := d.store.ClaimScheduledAutomationRun(
+		def.ID, "scheduled:one", "singleton", def.Revision, `{}`, string(snapshotJSON), now,
+		store.AutomationRunReservation{
+			RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
+			WorkspaceID: "workspace-1", PaneID: "pane-1",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstReq := automation.WorkRequest{
+		RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: snapshot.Prompt,
+		Context: json.RawMessage(`{}`), Launch: snapshot.Launch, Location: snapshot.Location,
+		IDs: automation.DeliveryIDs{
+			SeedID: first.SeedID, SessionID: first.SessionID,
+			WorkspaceID: first.WorkspaceID, PaneID: first.PaneID,
+		},
+	}
+	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
+		t.Fatal(err)
+	}
+	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
+		Cmd: protocol.CmdRegisterWorkspace, ID: first.WorkspaceID, Title: "nightly", Directory: directory,
+	})
+	d.store.Add(&protocol.Session{
+		ID: first.SessionID, Agent: protocol.SessionAgentClaude,
+		Directory: directory, WorkspaceID: first.WorkspaceID, State: protocol.SessionStateWaitingInput,
+	})
+	writeClaudeTranscriptFixture(t, "claude-transcript-1")
+	d.store.SetResumeSessionID(first.SessionID, "claude-transcript-1")
+	d.store.SetLaunchIntent(first.SessionID, store.LaunchIntent{
+		ApprovalRoute: launchcontract.ApprovalRouteReviewer,
+		Model:         snapshot.Launch.Model, Effort: snapshot.Launch.Effort,
+		UnattendedLaunch: snapshot.Launch,
+	})
+	if err := d.recordGardenDispatch(first.SessionID, first.SeedID, "", directory, "claude", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := markAutomationRunDeliveredForTest(d.store, first.ID, `{}`, now); err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := d.store.ClaimScheduledAutomationRun(
+		def.ID, "scheduled:two", "singleton", def.Revision, `{}`, string(snapshotJSON), now.Add(time.Minute),
+		store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lifecycle := d.sessionLifecycleLockFor(first.SessionID)
+	lifecycle.Lock()
+	delivered := make(chan error, 1)
+	go func() { delivered <- d.deliverAutomationRun(context.Background(), second) }()
+	select {
+	case <-backend.secondCheck:
+	case err := <-delivered:
+		lifecycle.Unlock()
+		t.Fatalf("automation delivery ended before its second runtime check: %v", err)
+	case <-time.After(5 * time.Second):
+		lifecycle.Unlock()
+		t.Fatal("automation delivery did not reach its second runtime check")
+	}
+	backend.mu.Lock()
+	backend.sessionIDs = []string{first.SessionID}
+	backend.mu.Unlock()
+	lifecycle.Unlock()
+	if err := <-delivered; err != nil {
+		t.Fatal(err)
+	}
+	if got := spawnCount(backend.fakeSpawnBackend); got != 0 {
+		t.Fatalf("spawn calls = %d, want the concurrent restore to remain authoritative", got)
+	}
+	notes, err := d.readNotesDomain(first.SeedID)
+	if err != nil || len(notes) != 1 || !strings.Contains(notes[0].Body, second.ID) ||
+		!strings.Contains(notes[0].Body, filepath.Join("automation", "occurrences", second.ID+".json")) {
+		t.Fatalf("occurrence notes=%#v err=%v", notes, err)
+	}
+	assertOneSeedBell(t, d, first.SessionID, first.SeedID, "work.ready")
+
+	if err := d.deliverAutomationRun(context.Background(), second); err != nil {
+		t.Fatal(err)
+	}
+	if got := spawnCount(backend.fakeSpawnBackend); got != 0 {
+		t.Fatalf("spawn calls after retry = %d, want 0", got)
+	}
+	notes, err = d.readNotesDomain(first.SeedID)
+	if err != nil || len(notes) != 1 {
+		t.Fatalf("occurrence notes after retry=%#v err=%v", notes, err)
+	}
+	assertOneSeedBell(t, d, first.SessionID, first.SeedID, "work.ready")
 }
 
 func TestStoppedContinuationKeepsTheLedgerContractAcrossDefinitionChanges(t *testing.T) {
