@@ -1422,10 +1422,10 @@ function AppContent({
   }, [activeSessionId]);
 
   useEffect(() => {
-    if (view === 'session' && !activeSessionId && sessions.length > 0) {
+    if (view === 'session' && !activeSessionId && !selectedSessionlessWorkspaceId && sessions.length > 0) {
       selectAgent(sessions[0].id);
     }
-  }, [activeSessionId, selectAgent, sessions, view]);
+  }, [activeSessionId, selectAgent, selectedSessionlessWorkspaceId, sessions, view]);
 
   useEffect(() => {
     if (view === 'session' && activeSessionId) {

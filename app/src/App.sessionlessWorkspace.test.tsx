@@ -118,7 +118,7 @@ vi.mock('./components/SessionTerminalWorkspace', async () => {
     terminalsLive?: boolean;
     onFocusPane?: (paneId: string) => void;
   }, ref) {
-    React.useImperativeHandle(ref, () => ({ focusLeaf: mockFocusWorkspaceLeaf }));
+    React.useImperativeHandle(ref, () => ({ focusLeaf: mockFocusWorkspaceLeaf, focusPane: vi.fn() }));
     return (
     <div>
       <div
