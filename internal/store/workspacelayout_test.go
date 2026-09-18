@@ -3,6 +3,7 @@ package store
 import (
 	"testing"
 
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
@@ -26,12 +27,12 @@ func TestWorkspaceSaveLoadRoundTrip(t *testing.T) {
 	snapshot := workspacelayout.WorkspaceLayout{
 		WorkspaceID:  "workspace-1",
 		ActivePaneID: "pane-b",
-		Layout: workspacelayout.Node{
+		Layout: layouttree.Node{
 			Type:      "split",
 			SplitID:   "root",
-			Direction: workspacelayout.DirectionVertical,
-			Ratio:     workspacelayout.DefaultSplitRatio,
-			Children: []workspacelayout.Node{
+			Direction: layouttree.DirectionVertical,
+			Ratio:     layouttree.DefaultSplitRatio,
+			Children: []layouttree.Node{
 				{Type: "pane", PaneID: "pane-a"},
 				{Type: "pane", PaneID: "pane-b"},
 			},

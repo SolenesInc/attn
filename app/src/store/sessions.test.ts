@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useSessionStore, isSessionReloading } from './sessions';
-import { WorkspaceLayoutPaneKind, WorkspaceLayoutPaneStatus, WorkspaceStatus } from '../types/generated';
+import { LayoutPaneKind, LayoutPaneStatus, WorkspaceStatus } from '../types/generated';
 import { createAgentHistory } from '../navigation/agentHistory';
 import type { TerminalLayoutNode } from '../types/workspace';
 
@@ -320,11 +320,11 @@ describe('sessions store', () => {
           {
             workspace_id: 'workspace-blip',
             pane_id: 'pane-blip',
-            kind: WorkspaceLayoutPaneKind.Agent,
+            kind: LayoutPaneKind.Agent,
             title: 'Blip',
             runtime_id: 'blip-session',
             session_id: 'blip-session',
-            status: WorkspaceLayoutPaneStatus.Ready,
+            status: LayoutPaneStatus.Ready,
           },
         ],
       },
@@ -630,8 +630,8 @@ describe('sessions store', () => {
             ],
           }),
           panes: [
-            { workspace_id: `workspace-${sessionId}`, pane_id: 'pane-session', kind: WorkspaceLayoutPaneKind.Agent, title: 'Agent', runtime_id: sessionId, session_id: sessionId, status: WorkspaceLayoutPaneStatus.Ready },
-            { workspace_id: `workspace-${sessionId}`, pane_id: 'pane-shell', kind: WorkspaceLayoutPaneKind.Agent, title: 'Shell 1', runtime_id: 'runtime-shell', session_id: 'sess-shell', status: WorkspaceLayoutPaneStatus.Ready },
+            { workspace_id: `workspace-${sessionId}`, pane_id: 'pane-session', kind: LayoutPaneKind.Agent, title: 'Agent', runtime_id: sessionId, session_id: sessionId, status: LayoutPaneStatus.Ready },
+            { workspace_id: `workspace-${sessionId}`, pane_id: 'pane-shell', kind: LayoutPaneKind.Agent, title: 'Shell 1', runtime_id: 'runtime-shell', session_id: 'sess-shell', status: LayoutPaneStatus.Ready },
           ],
         },
       },
@@ -675,7 +675,7 @@ describe('sessions store', () => {
           active_pane_id: 'missing-pane',
           layout_json: '{not-json',
           panes: [
-            { workspace_id: `workspace-${sessionId}`, pane_id: 'pane-session', kind: WorkspaceLayoutPaneKind.Agent, title: 'Agent', runtime_id: sessionId, session_id: sessionId, status: WorkspaceLayoutPaneStatus.Ready },
+            { workspace_id: `workspace-${sessionId}`, pane_id: 'pane-session', kind: LayoutPaneKind.Agent, title: 'Agent', runtime_id: sessionId, session_id: sessionId, status: LayoutPaneStatus.Ready },
           ],
         },
       },
@@ -692,7 +692,7 @@ describe('sessions store', () => {
           active_pane_id: 'pane-x',
           layout_json: '',
           panes: [
-            { workspace_id: 'workspace-unknown-session', pane_id: 'pane-x', kind: WorkspaceLayoutPaneKind.Agent, title: 'Shell X', runtime_id: 'runtime-x', status: WorkspaceLayoutPaneStatus.Ready },
+            { workspace_id: 'workspace-unknown-session', pane_id: 'pane-x', kind: LayoutPaneKind.Agent, title: 'Shell X', runtime_id: 'runtime-x', status: LayoutPaneStatus.Ready },
           ],
         },
       },
@@ -722,11 +722,11 @@ describe('sessions store', () => {
         panes: [{
           workspace_id: 'workspace-failed',
           pane_id: 'pane-failed',
-          kind: WorkspaceLayoutPaneKind.Agent,
+          kind: LayoutPaneKind.Agent,
           title: 'Failed reviewer',
           runtime_id: 'closed-session',
           session_id: 'closed-session',
-          status: WorkspaceLayoutPaneStatus.Failed,
+          status: LayoutPaneStatus.Failed,
           error: 'session is closing',
         }],
       },

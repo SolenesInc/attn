@@ -35,6 +35,11 @@
 - PR inbox: pull requests waiting on the user.
 - Provenance line: shows where a session came from and what it produced.
 
+- Setup: a named set of agents and the desktops that arrange them. Every agent belongs to one setup. Renaming keeps its identity.
+- Desktop: one arrangement of panes and tiles inside a setup. A setup always has at least one, and up to nine hold a shortcut slot.
+- Pane: an agent's place on a desktop. An agent has at most one pane.
+- Current desktop: the desktop a setup shows. Every client on that setup shares it.
+- Active pane: the pane a desktop has selected. Every client shares it.
 - Focus mode: one workspace pane or tile occupies the shell until the user returns to the split.
 
 ## Garden and crew

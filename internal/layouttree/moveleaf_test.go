@@ -1,4 +1,4 @@
-package workspacelayout
+package layouttree
 
 import (
 	"math"
@@ -29,30 +29,6 @@ func TestMoveLeafRelocatesPaneBesidePane(t *testing.T) {
 	}
 	if ids := PaneIDs(moved); len(ids) != 2 || !slices.Contains(ids, "pane-a") || !slices.Contains(ids, "pane-b") {
 		t.Fatalf("pane ids = %v, want exactly pane-a and pane-b (no duplicates)", ids)
-	}
-}
-
-func TestMoveLeafLocksDroppedRatioSoSizeSticks(t *testing.T) {
-	moved, ok := MoveLeaf(twoPaneTree(), "pane-a", "pane-b", "split-x", DirectionVertical, false, 0.4)
-	if !ok {
-		t.Fatal("MoveLeaf did not change layout")
-	}
-	if !moved.RatioLocked || math.Abs(moved.Ratio-0.4) > 1e-9 {
-		t.Fatalf("new split = {locked:%v ratio:%v}, want locked at 0.4 so the drop size survives", moved.RatioLocked, moved.Ratio)
-	}
-	if moved.RatioMode != RatioModeAutomatic {
-		t.Fatalf("new split ratio mode = %q, want automatic", moved.RatioMode)
-	}
-	normalized := NormalizeWorkspaceLayout(WorkspaceLayout{
-		WorkspaceID: "ws",
-		Layout:      moved,
-		Panes: []Pane{
-			{PaneID: "pane-a", RuntimeID: "rt-a", SessionID: "s-a", Status: PaneStatusReady},
-			{PaneID: "pane-b", RuntimeID: "rt-b", SessionID: "s-b", Status: PaneStatusReady},
-		},
-	})
-	if math.Abs(normalized.Layout.Ratio-0.4) > 1e-9 {
-		t.Fatalf("normalized ratio = %v, want 0.4 preserved", normalized.Layout.Ratio)
 	}
 }
 
@@ -200,5 +176,22 @@ func TestMoveLeafCollapsesSourceSplitWhenNested(t *testing.T) {
 	}
 	if ids := PaneIDs(moved); len(ids) != 3 {
 		t.Fatalf("pane ids = %v, want all three present exactly once", ids)
+	}
+}
+
+func TestMoveLeafLocksDroppedRatioSoSizeSticks(t *testing.T) {
+	moved, ok := MoveLeaf(twoPaneTree(), "pane-a", "pane-b", "split-x", DirectionVertical, false, 0.4)
+	if !ok {
+		t.Fatal("MoveLeaf did not change layout")
+	}
+	if !moved.RatioLocked || math.Abs(moved.Ratio-0.4) > 1e-9 {
+		t.Fatalf("new split = {locked:%v ratio:%v}, want locked at 0.4 so the drop size survives", moved.RatioLocked, moved.Ratio)
+	}
+	if moved.RatioMode != RatioModeAutomatic {
+		t.Fatalf("new split ratio mode = %q, want automatic", moved.RatioMode)
+	}
+	normalized := NormalizeLayout(moved, map[string]struct{}{"pane-a": {}, "pane-b": {}})
+	if math.Abs(normalized.Ratio-0.4) > 1e-9 {
+		t.Fatalf("normalized ratio = %v, want 0.4 preserved", normalized.Ratio)
 	}
 }

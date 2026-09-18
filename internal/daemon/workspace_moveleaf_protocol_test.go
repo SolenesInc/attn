@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
@@ -60,7 +61,7 @@ func TestWorkspaceLayoutMoveLeafRelocatesPane(t *testing.T) {
 		WorkspaceID: workspaceID,
 		LeafID:      "pane-1",
 		AnchorID:    "pane-2",
-		Edge:        protocol.WorkspaceLayoutDockEdgeBottom,
+		Edge:        protocol.LayoutDockEdgeBottom,
 		Ratio:       protocol.Ptr(0.5),
 	})
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutMoveLeaf, workspaceID, "pane-1", true)
@@ -70,7 +71,7 @@ func TestWorkspaceLayoutMoveLeafRelocatesPane(t *testing.T) {
 		t.Fatal("workspace layout missing after move")
 	}
 	layout := snapshot.Layout
-	if layout.Type != "split" || layout.Direction != workspacelayout.DirectionHorizontal {
+	if layout.Type != "split" || layout.Direction != layouttree.DirectionHorizontal {
 		t.Fatalf("root = %+v, want a horizontal split (top/bottom stack)", layout)
 	}
 	if layout.Children[0].PaneID != "pane-2" || layout.Children[1].PaneID != "pane-1" {
@@ -103,7 +104,7 @@ func TestWorkspaceLayoutMoveLeafSelfDropIsRejected(t *testing.T) {
 		WorkspaceID: workspaceID,
 		LeafID:      "pane-1",
 		AnchorID:    "pane-1",
-		Edge:        protocol.WorkspaceLayoutDockEdgeRight,
+		Edge:        protocol.LayoutDockEdgeRight,
 	})
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutMoveLeaf, workspaceID, "pane-1", false)
 
@@ -143,7 +144,7 @@ func TestWorkspaceLayoutMoveLeafToWorkspaceMovesPaneAndSessionOwnership(t *testi
 		TargetWorkspaceID: targetWorkspaceID,
 		LeafID:            "pane-source",
 		AnchorID:          protocol.Ptr("pane-target"),
-		Edge:              protocol.WorkspaceLayoutDockEdgeRight,
+		Edge:              protocol.LayoutDockEdgeRight,
 		Ratio:             protocol.Ptr(0.4),
 	})
 	expectWorkspaceLayoutMoveToWorkspaceResult(t, client, sourceWorkspaceID, targetWorkspaceID, "pane-source", "pane-source", true)
@@ -155,7 +156,7 @@ func TestWorkspaceLayoutMoveLeafToWorkspaceMovesPaneAndSessionOwnership(t *testi
 	if targetLayout == nil {
 		t.Fatal("target layout missing after move")
 	}
-	if !workspacelayout.HasPane(targetLayout.Layout, "pane-source") || !workspacelayout.HasPane(targetLayout.Layout, "pane-target") {
+	if !layouttree.HasPane(targetLayout.Layout, "pane-source") || !layouttree.HasPane(targetLayout.Layout, "pane-target") {
 		t.Fatalf("target layout = %+v, want both panes", targetLayout.Layout)
 	}
 	if session := d.store.Get("s-source"); session == nil || session.WorkspaceID != targetWorkspaceID {
@@ -197,7 +198,7 @@ func TestWorkspaceLayoutMoveLeafToWorkspaceBroadcastsLayoutBeforeSessionOwnershi
 		TargetWorkspaceID: targetWorkspaceID,
 		LeafID:            "pane-source",
 		AnchorID:          protocol.Ptr("pane-target"),
-		Edge:              protocol.WorkspaceLayoutDockEdgeRight,
+		Edge:              protocol.LayoutDockEdgeRight,
 	})
 	expectWorkspaceLayoutMoveToWorkspaceResult(t, client, sourceWorkspaceID, targetWorkspaceID, "pane-source", "pane-source", true)
 
@@ -257,7 +258,7 @@ func TestMoveLeafToNewWorkspaceCreatesWorkspace(t *testing.T) {
 	if newLayout == nil {
 		t.Fatal("new workspace layout missing after move")
 	}
-	if !workspacelayout.HasPane(newLayout.Layout, "pane-1") {
+	if !layouttree.HasPane(newLayout.Layout, "pane-1") {
 		t.Fatalf("new workspace layout = %+v, want moved pane-1", newLayout.Layout)
 	}
 	if session := d.store.Get("s-1"); session == nil || session.WorkspaceID != newWorkspaceID {
@@ -268,10 +269,10 @@ func TestMoveLeafToNewWorkspaceCreatesWorkspace(t *testing.T) {
 	if sourceLayout == nil {
 		t.Fatal("source layout torn down despite a remaining leaf")
 	}
-	if !workspacelayout.HasPane(sourceLayout.Layout, "pane-2") {
+	if !layouttree.HasPane(sourceLayout.Layout, "pane-2") {
 		t.Fatalf("source layout = %+v, want remaining pane-2", sourceLayout.Layout)
 	}
-	if workspacelayout.HasPane(sourceLayout.Layout, "pane-1") {
+	if layouttree.HasPane(sourceLayout.Layout, "pane-1") {
 		t.Fatalf("source layout = %+v, moved pane-1 should be gone", sourceLayout.Layout)
 	}
 	if d.store.GetWorkspace(sourceWorkspaceID) == nil {
@@ -309,7 +310,7 @@ func TestMoveLeafToNewWorkspaceRejectsOrphanAgentPane(t *testing.T) {
 	if got := len(d.store.ListWorkspaces()); got != workspaceCount {
 		t.Fatalf("workspace count = %d, want %d after rejected orphan move", got, workspaceCount)
 	}
-	if source := d.store.GetWorkspaceLayout(workspaceID); source == nil || !workspacelayout.HasPane(source.Layout, "pane-orphan") {
+	if source := d.store.GetWorkspaceLayout(workspaceID); source == nil || !layouttree.HasPane(source.Layout, "pane-orphan") {
 		t.Fatalf("rejected move changed source layout: %+v", source)
 	}
 }
@@ -343,7 +344,7 @@ func TestMoveLeafToNewWorkspaceTearsDownEmptySource(t *testing.T) {
 		t.Fatalf("empty source layout still exists after moving its only leaf")
 	}
 	newLayout := d.store.GetWorkspaceLayout(newWorkspaceID)
-	if newLayout == nil || !workspacelayout.HasPane(newLayout.Layout, "pane-only") {
+	if newLayout == nil || !layouttree.HasPane(newLayout.Layout, "pane-only") {
 		t.Fatalf("new workspace layout = %+v, want moved pane-only", newLayout)
 	}
 	if session := d.store.Get("s-only"); session == nil || session.WorkspaceID != newWorkspaceID {

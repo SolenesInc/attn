@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 const markdownTileIDPrefix = "tile-markdown-"
@@ -105,7 +105,7 @@ func (d *Daemon) tileFilePath(workspaceID, tileID string) (kind, path string, fo
 	if snapshot == nil {
 		return "", "", false
 	}
-	for _, leaf := range workspacelayout.TileLeaves(snapshot.Layout) {
+	for _, leaf := range layouttree.TileLeaves(snapshot.Layout) {
 		if leaf.TileID == tileID {
 			return leaf.TileKind, strings.TrimSpace(leaf.TileParams), true
 		}
@@ -306,13 +306,13 @@ func (d *Daemon) hasTileContentSubscribers(workspaceID, tileID string) bool {
 	})
 }
 
-func (d *Daemon) pruneTileContentSubscriptionsForLayout(workspaceID string, layout *workspacelayout.Node) {
+func (d *Daemon) pruneTileContentSubscriptionsForLayout(workspaceID string, layout *layouttree.Node) {
 	if d.wsHub == nil {
 		return
 	}
 	activeTileIDs := make(map[string]struct{})
 	if layout != nil {
-		for _, leaf := range workspacelayout.TileLeaves(*layout) {
+		for _, leaf := range layouttree.TileLeaves(*layout) {
 			activeTileIDs[tileContentSubscriptionKey(workspaceID, leaf.TileID)] = struct{}{}
 		}
 	}
@@ -356,7 +356,7 @@ func (d *Daemon) broadcastTileContent(workspaceID, tileID, kind, path, content s
 
 func (d *Daemon) broadcastTileContentNow(workspaceID, tileID string) {
 	kind, path, found := d.tileFilePath(workspaceID, tileID)
-	if !found || kind != string(workspacelayout.TileKindMarkdown) {
+	if !found || kind != string(layouttree.TileKindMarkdown) {
 		return
 	}
 	content, readErr := readMarkdownFile(path)
@@ -369,7 +369,7 @@ func (d *Daemon) handleWorkspaceTileContentGet(client *wsClient, msg *protocol.W
 		d.sendCommandError(client, protocol.CmdWorkspaceTileContentGet, fmt.Sprintf("tile not found: %s", msg.TileID))
 		return
 	}
-	if kind != string(workspacelayout.TileKindMarkdown) {
+	if kind != string(layouttree.TileKindMarkdown) {
 		d.sendCommandError(client, protocol.CmdWorkspaceTileContentGet, fmt.Sprintf("unsupported tile kind: %s", kind))
 		return
 	}
@@ -383,7 +383,7 @@ func (d *Daemon) handleWorkspaceTileContentGet(client *wsClient, msg *protocol.W
 			d.sendCommandError(client, protocol.CmdWorkspaceTileContentGet, fmt.Sprintf("tile not found: %s", msg.TileID))
 			return
 		}
-		if kind != string(workspacelayout.TileKindMarkdown) {
+		if kind != string(layouttree.TileKindMarkdown) {
 			d.sendCommandError(client, protocol.CmdWorkspaceTileContentGet, fmt.Sprintf("unsupported tile kind: %s", kind))
 			return
 		}
@@ -440,12 +440,12 @@ func (d *Daemon) openMarkdownTile(path, sessionID string) (workspaceID, tileID s
 	tileID = markdownTileIDForPath(path)
 	alreadyOpen := false
 	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil {
-		alreadyOpen = workspacelayout.HasTile(snapshot.Layout, tileID)
+		alreadyOpen = layouttree.HasTile(snapshot.Layout, tileID)
 		if !alreadyOpen {
 			// Layouts persisted before per-path tile ids used the fixed id
 			// "tile-markdown"; match those by kind+path.
-			for _, leaf := range workspacelayout.TileLeaves(snapshot.Layout) {
-				if leaf.TileKind == string(workspacelayout.TileKindMarkdown) && leaf.TileParams == path {
+			for _, leaf := range layouttree.TileLeaves(snapshot.Layout) {
+				if leaf.TileKind == string(layouttree.TileKindMarkdown) && leaf.TileParams == path {
 					tileID = leaf.TileID
 					alreadyOpen = true
 					break
@@ -457,7 +457,7 @@ func (d *Daemon) openMarkdownTile(path, sessionID string) (workspaceID, tileID s
 		if err := d.rebindTileSession(workspaceID, tileID, sessionID); err != nil {
 			return "", "", err
 		}
-	} else if err := d.dockTile(workspaceID, paneID, tileID, string(workspacelayout.TileKindMarkdown), path, sessionID, protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	} else if err := d.dockTile(workspaceID, paneID, tileID, string(layouttree.TileKindMarkdown), path, sessionID, protocol.LayoutDockEdgeRight, nil); err != nil {
 		return "", "", err
 	}
 	d.broadcastTileContentNow(workspaceID, tileID)
@@ -489,11 +489,11 @@ func (d *Daemon) openSeedTile(seedID, placementSessionID string) (workspaceID, t
 	defer d.openTileMu.Unlock()
 
 	tileID = seedTileIDForID(seed.ID)
-	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil && workspacelayout.HasTile(snapshot.Layout, tileID) {
+	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil && layouttree.HasTile(snapshot.Layout, tileID) {
 		if err := d.rebindTileSession(workspaceID, tileID, bindingSessionID); err != nil {
 			return "", "", err
 		}
-	} else if err := d.dockTile(workspaceID, paneID, tileID, string(workspacelayout.TileKindSeed), seed.ID, bindingSessionID, protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	} else if err := d.dockTile(workspaceID, paneID, tileID, string(layouttree.TileKindSeed), seed.ID, bindingSessionID, protocol.LayoutDockEdgeRight, nil); err != nil {
 		return "", "", err
 	}
 	return workspaceID, tileID, nil
@@ -504,10 +504,10 @@ func (d *Daemon) rebindTileSession(workspaceID, tileID, sessionID string) error 
 	if snapshot == nil {
 		return fmt.Errorf("workspace not found: %s", workspaceID)
 	}
-	if current, ok := workspacelayout.TileSessionIDByID(snapshot.Layout, tileID); ok && current == sessionID {
+	if current, ok := layouttree.TileSessionIDByID(snapshot.Layout, tileID); ok && current == sessionID {
 		return nil
 	}
-	layout, ok := workspacelayout.UpdateTileSessionID(snapshot.Layout, tileID, sessionID)
+	layout, ok := layouttree.UpdateTileSessionID(snapshot.Layout, tileID, sessionID)
 	if !ok {
 		return fmt.Errorf("tile not found: %s", tileID)
 	}
@@ -652,7 +652,7 @@ func (d *Daemon) runMarkdownContentWatcher(done <-chan struct{}) {
 func (d *Daemon) pollMarkdownOnce() {
 	for _, ref := range d.collectChangedMarkdownTiles() {
 		content, readErr := readMarkdownFile(ref.path)
-		d.broadcastTileContent(ref.workspaceID, ref.tileID, string(workspacelayout.TileKindMarkdown), ref.path, content, readErr)
+		d.broadcastTileContent(ref.workspaceID, ref.tileID, string(layouttree.TileKindMarkdown), ref.path, content, readErr)
 	}
 }
 
@@ -667,8 +667,8 @@ func (d *Daemon) collectChangedMarkdownTiles() []markdownTileRef {
 		if snapshot == nil {
 			continue
 		}
-		for _, leaf := range workspacelayout.TileLeaves(snapshot.Layout) {
-			if leaf.TileKind != string(workspacelayout.TileKindMarkdown) {
+		for _, leaf := range layouttree.TileLeaves(snapshot.Layout) {
+			if leaf.TileKind != string(layouttree.TileKindMarkdown) {
 				continue
 			}
 			if !d.hasTileContentSubscribers(workspaceID, leaf.TileID) {
