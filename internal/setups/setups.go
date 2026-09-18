@@ -87,6 +87,7 @@ const (
 	CodeSessionClosed   Code = "session_closed"
 	CodeDestinationSame Code = "destination_same"
 	CodeUnavailable     Code = "unavailable"
+	CodeInternal        Code = "internal"
 )
 
 type Error struct {

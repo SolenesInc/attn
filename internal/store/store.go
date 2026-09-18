@@ -421,6 +421,7 @@ func (s *Store) Remove(id string) {
 		return
 	}
 
+	s.unplaceSessionsLocked("Remove", "session_id = ?", id)
 	_, err := s.db.Exec("DELETE FROM sessions WHERE id = ?", id)
 	if err != nil {
 		log.Printf("[store] Remove: failed for session %s: %v", id, err)
@@ -446,6 +447,7 @@ func (s *Store) ClearSessions() {
 		return
 	}
 
+	s.unplaceSessionsLocked("ClearSessions", "1 = 1")
 	if _, err := s.db.Exec("DELETE FROM workspace_layout_panes"); err != nil {
 		log.Printf("[store] ClearSessions: failed to clear workspace layout panes: %v", err)
 	}
@@ -621,6 +623,7 @@ func (s *Store) RemoveSessionsInDirectory(directory string) {
 		return
 	}
 
+	s.unplaceSessionsLocked("RemoveSessionsInDirectory", "session_id IN (SELECT id FROM sessions WHERE directory = ?)", directory)
 	// Foreign keys are off, so owned rows go first: after the sessions are gone
 	// there is nothing left to select them by.
 	for _, table := range sessionOwnedTables {

@@ -9829,6 +9829,7 @@ type SetupErrorCode string
 const SetupErrorCodeAlreadyPlaced SetupErrorCode = "already_placed"
 const SetupErrorCodeCrossSetup SetupErrorCode = "cross_setup"
 const SetupErrorCodeDestinationSame SetupErrorCode = "destination_same"
+const SetupErrorCodeInternal SetupErrorCode = "internal"
 const SetupErrorCodeInvalid SetupErrorCode = "invalid"
 const SetupErrorCodeLastDesktop SetupErrorCode = "last_desktop"
 const SetupErrorCodeLastSetup SetupErrorCode = "last_setup"

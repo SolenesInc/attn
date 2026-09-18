@@ -693,6 +693,7 @@ enum SetupErrorCode {
   session_closed,
   destination_same,
   unavailable,
+  internal,
 }
 
 // A setup groups agents and desktops and owns one arrangement shared by every

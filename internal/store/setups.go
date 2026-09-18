@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"log"
 	"strings"
 	"time"
 
@@ -707,15 +708,23 @@ func (s *Store) SetActivePane(desktopID, paneID string) (setups.Setup, setups.De
 
 func checkPaneMembership(tx *sql.Tx, desktop setups.Desktop) error {
 	for _, pane := range desktop.Panes {
+		var persisted int
+		if err := tx.QueryRow(`SELECT count(*) FROM desktop_panes WHERE pane_id = ? AND session_id = ? AND desktop_id = ?`,
+			pane.PaneID, pane.SessionID, desktop.ID).Scan(&persisted); err != nil {
+			return err
+		}
 		var setupID, closedAt string
 		err := tx.QueryRow(`SELECT setup_id, closed_at FROM sessions WHERE id = ?`, pane.SessionID).Scan(&setupID, &closedAt)
 		if errors.Is(err, sql.ErrNoRows) {
+			if persisted == 1 {
+				continue
+			}
 			return setups.Errorf(setups.CodeNotFound, "pane %s names session %s, which does not exist", pane.PaneID, pane.SessionID)
 		}
 		if err != nil {
 			return err
 		}
-		if closedAt != "" {
+		if closedAt != "" && persisted == 0 {
 			return setups.Errorf(setups.CodeSessionClosed, "pane %s names session %s, which closed at %s", pane.PaneID, pane.SessionID, closedAt)
 		}
 		if setupID != desktop.SetupID {
@@ -835,9 +844,14 @@ func (s *Store) PlaceSession(request SessionPlacementRequest) (setups.Desktop, s
 			}
 			desktop.Tree = next.TargetLayout
 		default:
-			next, ok := layouttree.Split(desktop.Tree, anchor, paneID, newSetupEntityID("split"), request.Direction, firstChildRatio(request.NewPaneShare, false))
+			splitID := newSetupEntityID("split")
+			ratio := firstChildRatio(request.NewPaneShare, false)
+			next, ok := layouttree.Split(desktop.Tree, anchor, paneID, splitID, request.Direction, ratio)
 			if !ok {
 				return desktop, setups.Errorf(setups.CodeNotFound, "anchor pane %q does not belong to desktop %s", anchor, desktop.ID)
+			}
+			if request.NewPaneShare > 0 && request.NewPaneShare < 1 {
+				next, _ = layouttree.SetSplitRatio(next, splitID, ratio)
 			}
 			desktop.Tree = next
 		}
@@ -1023,6 +1037,44 @@ func removeSessionPlacement(tx *sql.Tx, now, sessionID string) (*setups.Desktop,
 		return nil, err
 	}
 	return &desktop, nil
+}
+
+func (s *Store) unplaceSessionsLocked(reason, where string, args ...any) {
+	rows, err := s.db.Query(`SELECT session_id FROM desktop_panes WHERE `+where, args...)
+	if err != nil {
+		log.Printf("[store] %s: listing placed sessions: %v", reason, err)
+		return
+	}
+	var sessionIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			log.Printf("[store] %s: listing placed sessions: %v", reason, err)
+			return
+		}
+		sessionIDs = append(sessionIDs, id)
+	}
+	if err := rows.Close(); err != nil {
+		log.Printf("[store] %s: listing placed sessions: %v", reason, err)
+		return
+	}
+	now := time.Now().UTC().Format(sortableTimeFormat)
+	for _, id := range sessionIDs {
+		tx, err := s.db.Begin()
+		if err != nil {
+			log.Printf("[store] %s: removing the pane of session %s: %v", reason, id, err)
+			continue
+		}
+		if _, err := removeSessionPlacement(tx, now, id); err != nil {
+			tx.Rollback()
+			log.Printf("[store] %s: removing the pane of session %s: %v", reason, id, err)
+			continue
+		}
+		if err := tx.Commit(); err != nil {
+			log.Printf("[store] %s: removing the pane of session %s: %v", reason, id, err)
+		}
+	}
 }
 
 func (s *Store) RemoveSessionPlacement(sessionID string) (*setups.Desktop, error) {

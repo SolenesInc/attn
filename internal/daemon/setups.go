@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setups"
@@ -142,12 +143,14 @@ func (d *Daemon) fillInitialSetupState(client *wsClient, event *protocol.Initial
 	}
 	_, desktops, err := d.store.SetupArrangement(selected)
 	if err != nil {
-		d.logf("initial state: reading the arrangement of setup %s: %v", selected, err)
+		d.logf("initial state: reading the arrangement of setup %s, so the client starts on no setup: %v", selected, err)
+		client.selectSetup("")
 		return
 	}
 	wire, err := protocolDesktops(desktops)
 	if err != nil {
-		d.logf("initial state: encoding the arrangement of setup %s: %v", selected, err)
+		d.logf("initial state: encoding the arrangement of setup %s, so the client starts on no setup: %v", selected, err)
+		client.selectSetup("")
 		return
 	}
 	event.SelectedSetupID = protocol.Ptr(selected)
@@ -158,10 +161,16 @@ func (d *Daemon) runSetupAction(client *wsClient, action, requestID string, run 
 	result := protocol.SetupActionResultMessage{Event: protocol.EventSetupActionResult, RequestID: requestID, Action: action}
 	fail := func(err error) {
 		result.Error = protocol.Ptr(err.Error())
-		code := protocol.SetupErrorCodeUnavailable
+		code := protocol.SetupErrorCodeInternal
 		var setupErr *setups.Error
-		if errors.As(err, &setupErr) {
+		var fenced *enrollment.FencedError
+		switch {
+		case errors.As(err, &setupErr):
 			code = protocol.SetupErrorCode(setupErr.Code)
+		case errors.As(err, &fenced):
+			code = protocol.SetupErrorCodeUnavailable
+		default:
+			d.logf("%s failed: %v", action, err)
 		}
 		result.ErrorCode = &code
 		d.sendToClient(client, result)
@@ -191,10 +200,10 @@ func (d *Daemon) runSetupAction(client *wsClient, action, requestID string, run 
 		result.PaneID = protocol.Ptr(outcome.paneID)
 	}
 	result.Success = true
+	d.sendToClient(client, result)
 	if outcome.publish != nil {
 		outcome.publish()
 	}
-	d.sendToClient(client, result)
 }
 
 func (d *Daemon) publishArrangementChanged(setupID string, change setupArrangementChange) {
@@ -242,9 +251,22 @@ func (d *Daemon) handleSetupRename(client *wsClient, msg *protocol.SetupRenameMe
 func (d *Daemon) handleSetupDelete(client *wsClient, msg *protocol.SetupDeleteMessage) {
 	d.runSetupAction(client, msg.Cmd, msg.RequestID, func() (setupActionOutcome, error) {
 		deletion, err := d.store.DeleteSetup(msg.SetupID, int64(msg.ExpectedRevision), msg.DestinationSetupID)
-		return setupActionOutcome{setup: &deletion.Destination, publish: func() {
+		if err != nil {
+			return setupActionOutcome{}, err
+		}
+		_, destination, err := d.store.SetupArrangement(deletion.Destination.ID)
+		if err != nil {
+			return setupActionOutcome{}, err
+		}
+		d.wsHub.ForEachClient(func(scoped *wsClient) {
+			if scoped.selectedSetup() == deletion.Deleted.ID {
+				scoped.selectSetup(deletion.Destination.ID)
+			}
+		})
+		return setupActionOutcome{setup: &deletion.Destination, desktops: destination, publish: func() {
 			d.publishFact(FactSetupDeleted, deletion.Deleted.ID, nil)
-		}}, err
+			d.publishArrangementChanged(deletion.Destination.ID, setupArrangementChange{DesktopIDs: desktopIDs(destination...)})
+		}}, nil
 	})
 }
 
@@ -255,7 +277,9 @@ func (d *Daemon) handleSetupSelect(client *wsClient, msg *protocol.SetupSelectMe
 			return setupActionOutcome{}, err
 		}
 		client.selectSetup(setup.ID)
-		return setupActionOutcome{setup: &setup, desktops: desktops}, nil
+		return setupActionOutcome{setup: &setup, desktops: desktops, publish: func() {
+			d.publishArrangementChanged(setup.ID, setupArrangementChange{})
+		}}, nil
 	})
 }
 

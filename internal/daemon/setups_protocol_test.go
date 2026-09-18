@@ -325,10 +325,14 @@ func TestSelectionReachesTheOtherConnectionAndSurvivesARestart(t *testing.T) {
 	if current != desktopTwo.ID {
 		t.Fatalf("after a restart the current desktop is %s, want %s", current, desktopTwo.ID)
 	}
+	restored := ""
 	for _, desktop := range initial.Desktops {
-		if desktop.ID == desktopTwo.ID && desktop.ActivePaneID != paneB {
-			t.Fatalf("after a restart the active pane is %s, want %s", desktop.ActivePaneID, paneB)
+		if desktop.ID == desktopTwo.ID {
+			restored = desktop.ActivePaneID
 		}
+	}
+	if restored != paneB {
+		t.Fatalf("after a restart desktop %s has active pane %q among %d desktops, want %s", desktopTwo.ID, restored, len(initial.Desktops), paneB)
 	}
 }
 
@@ -495,4 +499,82 @@ func TestOutpostRefusesSetupCommandsByName(t *testing.T) {
 	if live, err := w.d.store.ListSetups(false); err != nil || len(live) != 0 {
 		t.Fatalf("a refused create left %d setups (err %v)", len(live), err)
 	}
+}
+
+func TestSelectingASetupTellsEveryClientItWasUsed(t *testing.T) {
+	w := newSetupsTestDaemon(t)
+	first, _ := w.connect("")
+	work := w.mustSend(first, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "work"}).Setup
+	w.mustSend(first, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "home"})
+	second, _ := w.connect("")
+	drainClientPayloads(t, second)
+
+	w.mustSend(first, map[string]any{"cmd": protocol.CmdSetupSelect, "setup_id": work.ID})
+
+	seen := setupsChanges(t, second)
+	if len(seen) != 1 {
+		t.Fatalf("the other client saw %d setups_changed, want 1", len(seen))
+	}
+	for _, setup := range seen[0].Setups {
+		if setup.ID == work.ID && setup.LastUsedAt == nil {
+			t.Fatal("the other client was told of the selection without its last_used_at")
+		}
+	}
+}
+
+func TestDeletingASetupLandsItsClientsOnTheDestination(t *testing.T) {
+	w := newSetupsTestDaemon(t)
+	deleter, _ := w.connect("")
+	doomed := w.mustSend(deleter, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "doomed"}).Setup
+	kept := w.mustSend(deleter, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "kept"})
+	w.mustSend(deleter, map[string]any{"cmd": protocol.CmdSetupSelect, "setup_id": doomed.ID})
+	bystander, _ := w.connect(doomed.ID)
+	drainClientPayloads(t, deleter)
+
+	deleted := w.mustSend(deleter, map[string]any{
+		"cmd": protocol.CmdSetupDelete, "setup_id": doomed.ID, "expected_revision": doomed.Revision, "destination_setup_id": kept.Setup.ID,
+	})
+	if deleted.Setup.ID != kept.Setup.ID || len(deleted.Desktops) != 1 {
+		t.Fatalf("setup_delete answered %+v, want the destination and its arrangement", deleted)
+	}
+	landed := arrangementChanges(t, bystander)
+	if len(landed) != 1 || landed[0].Setup.ID != kept.Setup.ID || len(landed[0].Desktops) != 1 {
+		t.Fatalf("a client on the deleted setup was sent %+v, want the destination's whole arrangement", landed)
+	}
+
+	w.mustSend(deleter, map[string]any{
+		"cmd": protocol.CmdDesktopRename, "desktop_id": kept.Desktops[0].ID, "name": "after", "expected_revision": kept.Desktops[0].Revision,
+	})
+	if followed := arrangementChanges(t, bystander); len(followed) != 1 || followed[0].Desktops[0].Name != "after" {
+		t.Fatalf("after the delete the client was sent %+v, want changes to the destination", followed)
+	}
+}
+
+func TestTheResultReachesItsSenderBeforeTheBroadcast(t *testing.T) {
+	w := newSetupsTestDaemon(t)
+	client, _ := w.connect("")
+	data, err := json.Marshal(map[string]any{"cmd": protocol.CmdSetupCreate, "name": "attn", "request_id": "r1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.d.handleClientMessage(client, data)
+
+	payloads := drainClientPayloads(t, client)
+	if len(payloads) != 2 || eventName(t, payloads[0]) != protocol.EventSetupActionResult || eventName(t, payloads[1]) != protocol.EventSetupsChanged {
+		names := make([]string, 0, len(payloads))
+		for _, payload := range payloads {
+			names = append(names, eventName(t, payload))
+		}
+		t.Fatalf("setup_create sent %v, want setup_action_result then setups_changed", names)
+	}
+}
+
+func TestAStorageFailureIsNotReportedAsUnavailable(t *testing.T) {
+	w := newSetupsTestDaemon(t)
+	client, _ := w.connect("")
+	if err := w.d.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	result := w.send(client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "attn"})
+	wantErrorCode(t, result, protocol.SetupErrorCodeInternal)
 }
