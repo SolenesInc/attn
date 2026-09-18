@@ -39,7 +39,7 @@ func (b *EmbeddedBackend) SetStateHandler(handler func(sessionID string, obs pty
 }
 
 func (b *EmbeddedBackend) Spawn(_ context.Context, opts SpawnOptions) error {
-	if err := validateUnattendedSpawnOptions(opts); err != nil {
+	if err := validateSpawnOptions(opts); err != nil {
 		return err
 	}
 	return b.manager.Spawn(toPTYSpawnOptions(opts))

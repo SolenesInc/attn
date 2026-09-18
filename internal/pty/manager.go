@@ -72,6 +72,13 @@ type SpawnOptions struct {
 	Theme TerminalTheme
 }
 
+func (opts SpawnOptions) WorkingDirectory() string {
+	if strings.TrimSpace(opts.ExternalCWD) != "" {
+		return opts.ExternalCWD
+	}
+	return opts.CWD
+}
+
 type ViewportSnapshot struct {
 	Payload []byte
 	// Excludes scrollback and styles.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"syscall"
 
@@ -98,6 +99,24 @@ func validateUnattendedSpawnOptions(opts SpawnOptions) error {
 		if want := launchcontract.ResolveApprovalRoute(opts.YoloMode, opts.AutoApprove, launch); opts.ApprovalRoute != want {
 			return fmt.Errorf("approval route %q does not match effective launch route %q", opts.ApprovalRoute, want)
 		}
+	}
+	return nil
+}
+
+func validateSpawnOptions(opts SpawnOptions) error {
+	if strings.TrimSpace(opts.CWD) == "" {
+		return errors.New("missing cwd")
+	}
+	if err := validateUnattendedSpawnOptions(opts); err != nil {
+		return err
+	}
+	directory := toPTYSpawnOptions(opts).WorkingDirectory()
+	info, err := os.Stat(directory)
+	if err != nil {
+		return fmt.Errorf("working directory %q: %w", directory, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("working directory %q is not a directory", directory)
 	}
 	return nil
 }
