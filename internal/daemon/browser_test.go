@@ -9,6 +9,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
@@ -215,7 +216,7 @@ func TestOpenBrowserTargetsSelectedSession(t *testing.T) {
 	if snapshot == nil {
 		t.Fatal("workspace layout missing after open")
 	}
-	params, ok := workspacelayout.TileParamsByID(snapshot.Layout, browserTileID)
+	params, ok := layouttree.TileParamsByID(snapshot.Layout, browserTileID)
 	if !ok || params != "http://localhost:3000" {
 		t.Fatalf("docked browser params = (%q, %v)", params, ok)
 	}
@@ -240,7 +241,7 @@ func TestOpenBrowserRetargetsSelectedTileOnlyWorkspace(t *testing.T) {
 	if snapshot == nil {
 		t.Fatal("workspace layout missing after first open")
 	}
-	layout, removed := workspacelayout.Remove(snapshot.Layout, "pane-1")
+	layout, removed := layouttree.Remove(snapshot.Layout, "pane-1")
 	if !removed {
 		t.Fatal("session pane was not present in workspace layout")
 	}
@@ -267,7 +268,7 @@ func TestOpenBrowserRetargetsSelectedTileOnlyWorkspace(t *testing.T) {
 	if updated == nil {
 		t.Fatal("tile-only workspace disappeared")
 	}
-	params, ok := workspacelayout.TileParamsByID(updated.Layout, browserTileID)
+	params, ok := layouttree.TileParamsByID(updated.Layout, browserTileID)
 	if !ok || params != "https://example.com/retargeted" {
 		t.Fatalf("retargeted browser params = (%q, %v)", params, ok)
 	}
@@ -279,7 +280,7 @@ func TestOpenBrowserDocksIntoSelectedTileOnlyWorkspace(t *testing.T) {
 		workspaceID,
 		"pane-1",
 		"tile-notes",
-		string(workspacelayout.TileKindMarkdown),
+		string(layouttree.TileKindMarkdown),
 		"/tmp/notes.md",
 		"",
 		protocol.WorkspaceLayoutDockEdgeRight,
@@ -291,7 +292,7 @@ func TestOpenBrowserDocksIntoSelectedTileOnlyWorkspace(t *testing.T) {
 	if snapshot == nil {
 		t.Fatal("workspace layout missing")
 	}
-	layout, removed := workspacelayout.Remove(snapshot.Layout, "pane-1")
+	layout, removed := layouttree.Remove(snapshot.Layout, "pane-1")
 	if !removed {
 		t.Fatal("session pane was not present in workspace layout")
 	}
@@ -326,7 +327,7 @@ func TestBrowserWorkspaceUsesSelectedTileOnlyWorkspace(t *testing.T) {
 	if snapshot == nil {
 		t.Fatal("workspace layout missing")
 	}
-	layout, removed := workspacelayout.Remove(snapshot.Layout, "pane-1")
+	layout, removed := layouttree.Remove(snapshot.Layout, "pane-1")
 	if !removed {
 		t.Fatal("session pane was not present in workspace layout")
 	}

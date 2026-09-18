@@ -26,6 +26,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/github/mockserver"
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -1362,7 +1363,7 @@ func TestDaemon_PruneSessionsWithoutPTY_RemovesReapedWorkspaceLayout(t *testing.
 	if err := d.store.SaveWorkspaceLayout(workspacelayout.WorkspaceLayout{
 		WorkspaceID:  workspaceID,
 		ActivePaneID: "pane-stale",
-		Layout:       workspacelayout.DefaultLayout("pane-stale"),
+		Layout:       layouttree.DefaultLayout("pane-stale"),
 		Panes: []workspacelayout.Pane{{
 			PaneID:    "pane-stale",
 			RuntimeID: sessionID,
@@ -1413,14 +1414,14 @@ func TestDaemon_PruneSessionsWithoutPTY_KeepsTileOnlyWorkspace(t *testing.T) {
 	if err := d.store.SaveWorkspaceLayout(workspacelayout.WorkspaceLayout{
 		WorkspaceID:  workspaceID,
 		ActivePaneID: "pane-stale",
-		Layout: workspacelayout.Node{
+		Layout: layouttree.Node{
 			Type:      "split",
 			SplitID:   "split-stale",
-			Direction: workspacelayout.DirectionVertical,
-			Ratio:     workspacelayout.DefaultSplitRatio,
-			Children: []workspacelayout.Node{
+			Direction: layouttree.DirectionVertical,
+			Ratio:     layouttree.DefaultSplitRatio,
+			Children: []layouttree.Node{
 				{Type: "pane", PaneID: "pane-stale"},
-				{Type: "tile", TileID: markdownTileIDForPath("/tmp/notes.md"), TileKind: string(workspacelayout.TileKindMarkdown), TileParams: "/tmp/notes.md"},
+				{Type: "tile", TileID: markdownTileIDForPath("/tmp/notes.md"), TileKind: string(layouttree.TileKindMarkdown), TileParams: "/tmp/notes.md"},
 			},
 		},
 		Panes: []workspacelayout.Pane{{
@@ -2696,7 +2697,7 @@ func TestDaemon_BroadcastRawWSMessage_RoutesRemoteTileContentToSubscribedClients
 		Event:       protocol.EventWorkspaceTileContent,
 		WorkspaceID: "remote-workspace",
 		TileID:      "tile-markdown",
-		TileKind:    string(workspacelayout.TileKindMarkdown),
+		TileKind:    string(layouttree.TileKindMarkdown),
 		Path:        "/srv/repo/README.md",
 		Content:     "# Private",
 	})
@@ -2724,7 +2725,7 @@ func TestDaemon_BroadcastRawWSMessage_PrunesRemoteTileSubscriptionsAfterLayoutUp
 	d.wsHub.clients[client] = true
 	client.subscribeTileContent("remote-workspace", "tile-markdown")
 
-	layoutJSON, err := workspacelayout.EncodeLayout(workspacelayout.DefaultLayout("pane-1"))
+	layoutJSON, err := layouttree.EncodeLayout(layouttree.DefaultLayout("pane-1"))
 	if err != nil {
 		t.Fatalf("encode layout: %v", err)
 	}
@@ -2805,7 +2806,7 @@ func TestDaemon_HandleUnregisterWS_RemovesSessionPaneAndBroadcastsSessionUnregis
 	if err := d.store.SaveWorkspaceLayout(workspacelayout.WorkspaceLayout{
 		WorkspaceID:  workspaceID,
 		ActivePaneID: "pane-agent",
-		Layout:       workspacelayout.DefaultLayout("pane-agent"),
+		Layout:       layouttree.DefaultLayout("pane-agent"),
 		Panes: []workspacelayout.Pane{
 			{PaneID: "pane-agent", RuntimeID: session.ID, SessionID: session.ID, Kind: workspacelayout.PaneKindAgent, Title: workspacelayout.DefaultPaneTitle},
 			{PaneID: "pane-agent-2", RuntimeID: "sess-2", SessionID: "sess-2", Kind: workspacelayout.PaneKindAgent, Title: "Agent 2"},
@@ -2900,12 +2901,12 @@ func TestDaemon_HandleUnregisterWS_RemovesSessionPaneWithoutPromotingAnotherPane
 	if err := d.store.SaveWorkspaceLayout(workspacelayout.WorkspaceLayout{
 		WorkspaceID:  workspaceID,
 		ActivePaneID: "pane-session",
-		Layout: workspacelayout.Node{
+		Layout: layouttree.Node{
 			Type:      "split",
 			SplitID:   "split-1",
-			Direction: workspacelayout.DirectionVertical,
+			Direction: layouttree.DirectionVertical,
 			Ratio:     0.5,
-			Children: []workspacelayout.Node{
+			Children: []layouttree.Node{
 				{Type: "pane", PaneID: "pane-session"},
 				{Type: "pane", PaneID: "pane-next"},
 			},

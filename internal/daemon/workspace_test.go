@@ -9,6 +9,7 @@ import (
 	"testing"
 	"testing/synctest"
 
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
@@ -683,7 +684,7 @@ func TestLoadWorkspacesFromStore_PreservesPendingSpawnAcrossRestart(t *testing.T
 	if err := d.store.SaveWorkspaceLayout(workspacelayout.WorkspaceLayout{
 		WorkspaceID:  "ws-pending",
 		ActivePaneID: "pane-pending",
-		Layout:       workspacelayout.DefaultLayout("pane-pending"),
+		Layout:       layouttree.DefaultLayout("pane-pending"),
 		Panes: []workspacelayout.Pane{{
 			PaneID:    "pane-pending",
 			RuntimeID: "s-pending",

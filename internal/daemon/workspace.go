@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/rankkey"
 	"github.com/victorarias/attn/internal/store"
@@ -592,12 +593,12 @@ func (d *Daemon) workspaceHasSessionlessContent(workspaceID string) bool {
 	if layout == nil {
 		return false
 	}
-	if len(workspacelayout.TileIDs(layout.Layout)) > 0 {
+	if len(layouttree.TileIDs(layout.Layout)) > 0 {
 		return true
 	}
 	for _, pane := range layout.Panes {
 		if (pane.Status == workspacelayout.PaneStatusSpawning || pane.Status == workspacelayout.PaneStatusFailed) &&
-			workspacelayout.HasPane(layout.Layout, pane.PaneID) {
+			layouttree.HasPane(layout.Layout, pane.PaneID) {
 			return true
 		}
 	}

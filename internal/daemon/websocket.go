@@ -18,9 +18,9 @@ import (
 
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 type wsClient struct {
@@ -1846,7 +1846,7 @@ func (d *Daemon) broadcastRawWSMessage(payload []byte) {
 			WorkspaceLayout *protocol.WorkspaceLayout `json:"workspace_layout"`
 		}
 		if err := json.Unmarshal(payload, &msg); err == nil && msg.WorkspaceLayout != nil {
-			if layout, err := workspacelayout.DecodeLayout(msg.WorkspaceLayout.LayoutJson); err == nil {
+			if layout, err := layouttree.DecodeLayout(msg.WorkspaceLayout.LayoutJson); err == nil {
 				d.pruneTileContentSubscriptionsForLayout(msg.WorkspaceLayout.WorkspaceID, &layout)
 			}
 		}
