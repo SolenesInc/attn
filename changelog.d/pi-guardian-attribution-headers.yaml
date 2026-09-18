@@ -1,0 +1,9 @@
+kind: fixed
+area: pi
+change: >-
+  Guardian approval reviews send pi's provider attribution headers, so OpenCode
+  Go models no longer reject every review with a missing-session error.
+symptom: >-
+  With auto mode on, a pi session on an OpenCode Go model denied every approval
+  with "Automatic approval review failed: OpenAI API error (400):
+  MissingSessionID".
