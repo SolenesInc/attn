@@ -127,16 +127,44 @@ func requireRevision(entity, id string, expected, current int64) error {
 	return nil
 }
 
+func rowFound(row rowScanner, dest ...any) (bool, error) {
+	err := row.Scan(dest...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func queryColumn[T any](q queryer, query string, args ...any) ([]T, error) {
+	rows, err := q.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []T
+	for rows.Next() {
+		var value T
+		if err := rows.Scan(&value); err != nil {
+			return nil, err
+		}
+		out = append(out, value)
+	}
+	return out, rows.Err()
+}
+
 func ensureLiveSetupNameFree(tx *sql.Tx, name, exceptID string) error {
 	var holder string
-	err := tx.QueryRow(`SELECT id FROM setups WHERE name = ? AND deleted_at = '' AND id != ?`, name, exceptID).Scan(&holder)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
+	taken, err := rowFound(tx.QueryRow(`SELECT id FROM setups WHERE name = ? AND deleted_at = '' AND id != ?`, name, exceptID), &holder)
 	if err != nil {
 		return err
 	}
-	return setups.Errorf(setups.CodeNameTaken, "setup name %q is already used by %s", name, holder)
+	if taken {
+		return setups.Errorf(setups.CodeNameTaken, "setup name %q is already used by %s", name, holder)
+	}
+	return nil
 }
 
 const desktopColumns = `id, setup_id, name, COALESCE(shortcut_slot, 0), order_key, tree_json, active_pane_id, revision`
@@ -224,15 +252,8 @@ func insertDesktop(tx *sql.Tx, now, setupID, name string, slot int) (setups.Desk
 	if err := tx.QueryRow(`SELECT COALESCE(MAX(order_key), '') FROM desktops WHERE setup_id = ?`, setupID).Scan(&lastKey); err != nil {
 		return setups.Desktop{}, err
 	}
-	if slot != 0 {
-		var holder string
-		err := tx.QueryRow(`SELECT id FROM desktops WHERE setup_id = ? AND shortcut_slot = ?`, setupID, slot).Scan(&holder)
-		if err == nil {
-			return setups.Desktop{}, setups.Errorf(setups.CodeSlotTaken, "shortcut slot %d of setup %s is held by desktop %s", slot, setupID, holder)
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return setups.Desktop{}, err
-		}
+	if err := ensureShortcutSlotFree(tx, setupID, slot, ""); err != nil {
+		return setups.Desktop{}, err
 	}
 	desktop := setups.Desktop{
 		ID:           newSetupEntityID("desktop"),
@@ -256,26 +277,36 @@ func slotValue(slot int) any {
 	return slot
 }
 
+func ensureShortcutSlotFree(tx *sql.Tx, setupID string, slot int, exceptDesktopID string) error {
+	if slot == 0 {
+		return nil
+	}
+	var holder string
+	taken, err := rowFound(tx.QueryRow(`SELECT id FROM desktops WHERE setup_id = ? AND shortcut_slot = ? AND id != ?`, setupID, slot, exceptDesktopID), &holder)
+	if err != nil {
+		return err
+	}
+	if taken {
+		return setups.Errorf(setups.CodeSlotTaken, "shortcut slot %d of setup %s is held by desktop %s", slot, setupID, holder)
+	}
+	return nil
+}
+
 func lowestFreeShortcutSlot(tx *sql.Tx, setupID string) (int, error) {
-	rows, err := tx.Query(`SELECT shortcut_slot FROM desktops WHERE setup_id = ? AND shortcut_slot IS NOT NULL`, setupID)
+	slots, err := queryColumn[int](tx, `SELECT shortcut_slot FROM desktops WHERE setup_id = ? AND shortcut_slot IS NOT NULL`, setupID)
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
-	taken := make(map[int]bool)
-	for rows.Next() {
-		var slot int
-		if err := rows.Scan(&slot); err != nil {
-			return 0, err
-		}
+	taken := make(map[int]bool, len(slots))
+	for _, slot := range slots {
 		taken[slot] = true
 	}
 	for slot := setups.FirstShortcutSlot; slot <= setups.LastShortcutSlot; slot++ {
 		if !taken[slot] {
-			return slot, rows.Err()
+			return slot, nil
 		}
 	}
-	return 0, rows.Err()
+	return 0, nil
 }
 
 func bumpSetup(tx *sql.Tx, setup *setups.Setup) error {
@@ -417,6 +448,35 @@ func (s *Store) SetupArrangement(id string) (setups.Setup, []setups.Desktop, err
 	return setup, desktops, err
 }
 
+func ensureNotLastSetup(tx *sql.Tx, setup setups.Setup) error {
+	var live int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM setups WHERE deleted_at = ''`).Scan(&live); err != nil {
+		return err
+	}
+	if live <= 1 {
+		return setups.Errorf(setups.CodeLastSetup, "setup %q (%s) is the last setup and cannot be deleted", setup.Name, setup.ID)
+	}
+	return nil
+}
+
+func loadDeletionDestination(tx *sql.Tx, setup setups.Setup, destinationID string) (setups.Setup, error) {
+	if strings.TrimSpace(destinationID) == "" {
+		return setups.Setup{}, setups.Errorf(setups.CodeInvalid, "deleting setup %q needs a destination setup for its agents", setup.Name)
+	}
+	if destinationID == setup.ID {
+		return setups.Setup{}, setups.Errorf(setups.CodeDestinationSame, "setup %s cannot be its own destination", setup.ID)
+	}
+	return loadLiveSetup(tx, destinationID)
+}
+
+func deleteSetupDesktops(tx *sql.Tx, setupID string) error {
+	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id IN (SELECT id FROM desktops WHERE setup_id = ?)`, setupID); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`DELETE FROM desktops WHERE setup_id = ?`, setupID)
+	return err
+}
+
 func (s *Store) DeleteSetup(id string, expectedRevision int64, destinationID string) (SetupDeletion, error) {
 	var result SetupDeletion
 	err := s.setupsTx(func(tx *sql.Tx, now string) error {
@@ -427,45 +487,20 @@ func (s *Store) DeleteSetup(id string, expectedRevision int64, destinationID str
 		if err := requireRevision("setup", id, expectedRevision, setup.Revision); err != nil {
 			return err
 		}
-		var live int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM setups WHERE deleted_at = ''`).Scan(&live); err != nil {
+		if err := ensureNotLastSetup(tx, setup); err != nil {
 			return err
 		}
-		if live <= 1 {
-			return setups.Errorf(setups.CodeLastSetup, "setup %q (%s) is the last setup and cannot be deleted", setup.Name, setup.ID)
-		}
-		if strings.TrimSpace(destinationID) == "" {
-			return setups.Errorf(setups.CodeInvalid, "deleting setup %q needs a destination setup for its agents", setup.Name)
-		}
-		if destinationID == id {
-			return setups.Errorf(setups.CodeDestinationSame, "setup %s cannot be its own destination", id)
-		}
-		destination, err := loadLiveSetup(tx, destinationID)
+		destination, err := loadDeletionDestination(tx, setup, destinationID)
 		if err != nil {
 			return err
 		}
-		rows, err := tx.Query(`SELECT id FROM sessions WHERE setup_id = ? AND closed_at = '' ORDER BY id`, id)
-		if err != nil {
-			return err
-		}
-		for rows.Next() {
-			var sessionID string
-			if err := rows.Scan(&sessionID); err != nil {
-				rows.Close()
-				return err
-			}
-			result.MovedSessionIDs = append(result.MovedSessionIDs, sessionID)
-		}
-		if err := rows.Close(); err != nil {
+		if result.MovedSessionIDs, err = queryColumn[string](tx, `SELECT id FROM sessions WHERE setup_id = ? AND closed_at = '' ORDER BY id`, id); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(`UPDATE sessions SET setup_id = ? WHERE setup_id = ? AND closed_at = ''`, destinationID, id); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id IN (SELECT id FROM desktops WHERE setup_id = ?)`, id); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(`DELETE FROM desktops WHERE setup_id = ?`, id); err != nil {
+		if err := deleteSetupDesktops(tx, id); err != nil {
 			return err
 		}
 		setup.CurrentDesktopID = ""
@@ -559,15 +594,8 @@ func (s *Store) SetDesktopShortcutSlot(id string, slot int, expectedRevision int
 		if err := setups.ValidateShortcutSlot(slot); err != nil {
 			return err
 		}
-		if slot != 0 {
-			var holder string
-			err := tx.QueryRow(`SELECT id FROM desktops WHERE setup_id = ? AND shortcut_slot = ? AND id != ?`, desktop.SetupID, slot, id).Scan(&holder)
-			if err == nil {
-				return setups.Errorf(setups.CodeSlotTaken, "shortcut slot %d of setup %s is held by desktop %s", slot, desktop.SetupID, holder)
-			}
-			if !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
+		if err := ensureShortcutSlotFree(tx, desktop.SetupID, slot, id); err != nil {
+			return err
 		}
 		desktop.ShortcutSlot = slot
 		return nil
@@ -609,6 +637,38 @@ func (s *Store) ReorderDesktop(id, previousID, nextID string, expectedRevision i
 	})
 }
 
+func repointCurrentDesktop(setup *setups.Setup, siblings []setups.Desktop, removedID string) {
+	if setup.CurrentDesktopID != removedID {
+		return
+	}
+	for i, sibling := range siblings {
+		if sibling.ID != removedID {
+			continue
+		}
+		if i+1 < len(siblings) {
+			setup.CurrentDesktopID = siblings[i+1].ID
+		} else {
+			setup.CurrentDesktopID = siblings[i-1].ID
+		}
+	}
+}
+
+func paneSessionIDs(panes []setups.Pane) []string {
+	var ids []string
+	for _, pane := range panes {
+		ids = append(ids, pane.SessionID)
+	}
+	return ids
+}
+
+func deleteDesktop(tx *sql.Tx, id string) error {
+	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id = ?`, id); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`DELETE FROM desktops WHERE id = ?`, id)
+	return err
+}
+
 func (s *Store) DeleteDesktop(id string, expectedRevision int64) (DesktopDeletion, error) {
 	var result DesktopDeletion
 	err := s.setupsTx(func(tx *sql.Tx, _ string) error {
@@ -630,25 +690,9 @@ func (s *Store) DeleteDesktop(id string, expectedRevision int64) (DesktopDeletio
 		if len(siblings) <= 1 {
 			return setups.Errorf(setups.CodeLastDesktop, "desktop %s is the last desktop of setup %q and cannot be deleted", id, setup.Name)
 		}
-		if setup.CurrentDesktopID == id {
-			for i, sibling := range siblings {
-				if sibling.ID != id {
-					continue
-				}
-				if i+1 < len(siblings) {
-					setup.CurrentDesktopID = siblings[i+1].ID
-				} else {
-					setup.CurrentDesktopID = siblings[i-1].ID
-				}
-			}
-		}
-		for _, pane := range desktop.Panes {
-			result.UnplacedSessionID = append(result.UnplacedSessionID, pane.SessionID)
-		}
-		if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id = ?`, id); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(`DELETE FROM desktops WHERE id = ?`, id); err != nil {
+		repointCurrentDesktop(&setup, siblings, id)
+		result.UnplacedSessionID = paneSessionIDs(desktop.Panes)
+		if err := deleteDesktop(tx, id); err != nil {
 			return err
 		}
 		if err := bumpSetup(tx, &setup); err != nil {
@@ -706,86 +750,94 @@ func (s *Store) SetActivePane(desktopID, paneID string) (setups.Setup, setups.De
 	return setup, desktop, err
 }
 
+func panePersisted(tx *sql.Tx, desktopID string, pane setups.Pane) (bool, error) {
+	var count int
+	if err := tx.QueryRow(`SELECT count(*) FROM desktop_panes WHERE pane_id = ? AND session_id = ? AND desktop_id = ?`,
+		pane.PaneID, pane.SessionID, desktopID).Scan(&count); err != nil {
+		return false, err
+	}
+	return count == 1, nil
+}
+
+func checkPaneSession(tx *sql.Tx, desktop setups.Desktop, pane setups.Pane, persisted bool) (bool, error) {
+	var setupID, closedAt string
+	known, err := rowFound(tx.QueryRow(`SELECT setup_id, closed_at FROM sessions WHERE id = ?`, pane.SessionID), &setupID, &closedAt)
+	if err != nil {
+		return false, err
+	}
+	if !known {
+		if persisted {
+			return false, nil
+		}
+		return false, setups.Errorf(setups.CodeNotFound, "pane %s names session %s, which does not exist", pane.PaneID, pane.SessionID)
+	}
+	if closedAt != "" && !persisted {
+		return false, setups.Errorf(setups.CodeSessionClosed, "pane %s names session %s, which closed at %s", pane.PaneID, pane.SessionID, closedAt)
+	}
+	if setupID != desktop.SetupID {
+		return false, setups.Errorf(setups.CodeCrossSetup, "session %s belongs to setup %q, desktop %s belongs to setup %q; a layout write cannot change membership", pane.SessionID, setupID, desktop.ID, desktop.SetupID)
+	}
+	return true, nil
+}
+
+func checkPaneHolders(tx *sql.Tx, desktop setups.Desktop, pane setups.Pane) error {
+	var holderDesktop, holderPane string
+	held, err := rowFound(tx.QueryRow(`SELECT desktop_id, pane_id FROM desktop_panes WHERE session_id = ? AND pane_id != ?`, pane.SessionID, pane.PaneID), &holderDesktop, &holderPane)
+	if err != nil {
+		return err
+	}
+	if held && holderDesktop != desktop.ID {
+		return setups.Errorf(setups.CodeAlreadyPlaced, "session %s is already placed in pane %s of desktop %s", pane.SessionID, holderPane, holderDesktop)
+	}
+	var paneHolder string
+	used, err := rowFound(tx.QueryRow(`SELECT desktop_id FROM desktop_panes WHERE pane_id = ?`, pane.PaneID), &paneHolder)
+	if err != nil {
+		return err
+	}
+	if used && paneHolder != desktop.ID {
+		return setups.Errorf(setups.CodeInvalid, "pane id %s is already used on desktop %s", pane.PaneID, paneHolder)
+	}
+	return nil
+}
+
 func checkPaneMembership(tx *sql.Tx, desktop setups.Desktop) error {
 	for _, pane := range desktop.Panes {
-		var persisted int
-		if err := tx.QueryRow(`SELECT count(*) FROM desktop_panes WHERE pane_id = ? AND session_id = ? AND desktop_id = ?`,
-			pane.PaneID, pane.SessionID, desktop.ID).Scan(&persisted); err != nil {
-			return err
-		}
-		var setupID, closedAt string
-		err := tx.QueryRow(`SELECT setup_id, closed_at FROM sessions WHERE id = ?`, pane.SessionID).Scan(&setupID, &closedAt)
-		if errors.Is(err, sql.ErrNoRows) {
-			if persisted == 1 {
-				continue
-			}
-			return setups.Errorf(setups.CodeNotFound, "pane %s names session %s, which does not exist", pane.PaneID, pane.SessionID)
-		}
+		persisted, err := panePersisted(tx, desktop.ID, pane)
 		if err != nil {
 			return err
 		}
-		if closedAt != "" && persisted == 0 {
-			return setups.Errorf(setups.CodeSessionClosed, "pane %s names session %s, which closed at %s", pane.PaneID, pane.SessionID, closedAt)
-		}
-		if setupID != desktop.SetupID {
-			return setups.Errorf(setups.CodeCrossSetup, "session %s belongs to setup %q, desktop %s belongs to setup %q; a layout write cannot change membership", pane.SessionID, setupID, desktop.ID, desktop.SetupID)
-		}
-		var holderDesktop, holderPane string
-		err = tx.QueryRow(`SELECT desktop_id, pane_id FROM desktop_panes WHERE session_id = ? AND pane_id != ?`, pane.SessionID, pane.PaneID).Scan(&holderDesktop, &holderPane)
-		if err == nil && holderDesktop != desktop.ID {
-			return setups.Errorf(setups.CodeAlreadyPlaced, "session %s is already placed in pane %s of desktop %s", pane.SessionID, holderPane, holderDesktop)
-		}
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		sessionKnown, err := checkPaneSession(tx, desktop, pane, persisted)
+		if err != nil {
 			return err
 		}
-		var paneHolder string
-		err = tx.QueryRow(`SELECT desktop_id FROM desktop_panes WHERE pane_id = ?`, pane.PaneID).Scan(&paneHolder)
-		if err == nil && paneHolder != desktop.ID {
-			return setups.Errorf(setups.CodeInvalid, "pane id %s is already used on desktop %s", pane.PaneID, paneHolder)
+		if !sessionKnown {
+			continue
 		}
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if err := checkPaneHolders(tx, desktop, pane); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func writeDesktopArrangement(tx *sql.Tx, now string, desktop *setups.Desktop) error {
-	if err := layouttree.Validate(desktop.Tree); err != nil {
-		return setups.Errorf(setups.CodeInvalid, "desktop %s: %v", desktop.ID, err)
-	}
-	*desktop = setups.Settle(*desktop)
-	for i := range desktop.Panes {
-		desktop.Panes[i].DesktopID = desktop.ID
-		if desktop.Panes[i].Status == "" {
-			desktop.Panes[i].Status = setups.PaneStatusReady
-		}
-	}
-	if err := setups.CheckDesktop(*desktop); err != nil {
-		return err
-	}
-	if err := checkPaneMembership(tx, *desktop); err != nil {
-		return err
-	}
-	createdAt := make(map[string]string)
-	rows, err := tx.Query(`SELECT pane_id, created_at FROM desktop_panes WHERE desktop_id = ?`, desktop.ID)
+func paneCreationTimes(tx *sql.Tx, desktopID string) (map[string]string, error) {
+	rows, err := tx.Query(`SELECT pane_id, created_at FROM desktop_panes WHERE desktop_id = ?`, desktopID)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	defer rows.Close()
+	createdAt := make(map[string]string)
 	for rows.Next() {
 		var paneID, at string
 		if err := rows.Scan(&paneID, &at); err != nil {
-			rows.Close()
-			return err
+			return nil, err
 		}
 		createdAt[paneID] = at
 	}
-	if err := rows.Close(); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id = ?`, desktop.ID); err != nil {
-		return err
-	}
+	return createdAt, rows.Err()
+}
+
+func insertDesktopPanes(tx *sql.Tx, now string, desktop setups.Desktop, createdAt map[string]string) error {
 	for _, pane := range desktop.Panes {
 		at := createdAt[pane.PaneID]
 		if at == "" {
@@ -797,6 +849,41 @@ func writeDesktopArrangement(tx *sql.Tx, now string, desktop *setups.Desktop) er
 			pane.PaneID, desktop.ID, string(pane.Kind), pane.SessionID, pane.Title, string(pane.Status), pane.Error, at, now); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func settleForWrite(desktop setups.Desktop) setups.Desktop {
+	desktop = setups.Settle(desktop)
+	for i := range desktop.Panes {
+		desktop.Panes[i].DesktopID = desktop.ID
+		if desktop.Panes[i].Status == "" {
+			desktop.Panes[i].Status = setups.PaneStatusReady
+		}
+	}
+	return desktop
+}
+
+func writeDesktopArrangement(tx *sql.Tx, now string, desktop *setups.Desktop) error {
+	if err := layouttree.Validate(desktop.Tree); err != nil {
+		return setups.Errorf(setups.CodeInvalid, "desktop %s: %v", desktop.ID, err)
+	}
+	*desktop = settleForWrite(*desktop)
+	if err := setups.CheckDesktop(*desktop); err != nil {
+		return err
+	}
+	if err := checkPaneMembership(tx, *desktop); err != nil {
+		return err
+	}
+	createdAt, err := paneCreationTimes(tx, desktop.ID)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM desktop_panes WHERE desktop_id = ?`, desktop.ID); err != nil {
+		return err
+	}
+	if err := insertDesktopPanes(tx, now, *desktop, createdAt); err != nil {
+		return err
 	}
 	return saveDesktop(tx, now, desktop)
 }
@@ -902,38 +989,61 @@ func (s *Store) SetDesktopSplitRatio(desktopID, splitID string, ratio float64, e
 	})
 }
 
-func (s *Store) MoveLeaf(request LeafMoveRequest) (LeafMove, error) {
-	var result LeafMove
-	if request.SourceDesktopID == request.TargetDesktopID {
-		desktop, err := s.UpdateDesktopArrangement(request.SourceDesktopID, request.ExpectedSourceRevision, func(desktop setups.Desktop) (setups.Desktop, error) {
-			next, ok := layouttree.MoveLeaf(desktop.Tree, request.LeafID, request.AnchorID, newSetupEntityID("split"), request.Direction, request.Before, firstChildRatio(request.LeafShare, request.Before))
-			if !ok {
-				return desktop, setups.Errorf(setups.CodeInvalid, "leaf %q could not move beside %q on desktop %s", request.LeafID, request.AnchorID, desktop.ID)
-			}
-			desktop.Tree = next
-			return desktop, nil
-		})
-		return LeafMove{Source: desktop, Target: desktop, FinalLeafID: request.LeafID}, err
+func (s *Store) moveLeafWithinDesktop(request LeafMoveRequest) (LeafMove, error) {
+	desktop, err := s.UpdateDesktopArrangement(request.SourceDesktopID, request.ExpectedSourceRevision, func(desktop setups.Desktop) (setups.Desktop, error) {
+		next, ok := layouttree.MoveLeaf(desktop.Tree, request.LeafID, request.AnchorID, newSetupEntityID("split"), request.Direction, request.Before, firstChildRatio(request.LeafShare, request.Before))
+		if !ok {
+			return desktop, setups.Errorf(setups.CodeInvalid, "leaf %q could not move beside %q on desktop %s", request.LeafID, request.AnchorID, desktop.ID)
+		}
+		desktop.Tree = next
+		return desktop, nil
+	})
+	return LeafMove{Source: desktop, Target: desktop, FinalLeafID: request.LeafID}, err
+}
+
+func loadMoveEnds(tx *sql.Tx, request LeafMoveRequest) (setups.Desktop, setups.Desktop, error) {
+	source, err := loadDesktop(tx, request.SourceDesktopID)
+	if err != nil {
+		return setups.Desktop{}, setups.Desktop{}, err
 	}
+	target, err := loadDesktop(tx, request.TargetDesktopID)
+	if err != nil {
+		return setups.Desktop{}, setups.Desktop{}, err
+	}
+	if err := requireRevision("desktop", source.ID, request.ExpectedSourceRevision, source.Revision); err != nil {
+		return setups.Desktop{}, setups.Desktop{}, err
+	}
+	if err := requireRevision("desktop", target.ID, request.ExpectedTargetRevision, target.Revision); err != nil {
+		return setups.Desktop{}, setups.Desktop{}, err
+	}
+	if source.SetupID != target.SetupID {
+		return setups.Desktop{}, setups.Desktop{}, setups.Errorf(setups.CodeCrossSetup, "desktop %s belongs to setup %s and desktop %s to setup %s; a move between desktops cannot change membership", source.ID, source.SetupID, target.ID, target.SetupID)
+	}
+	if _, err := loadLiveSetup(tx, source.SetupID); err != nil {
+		return setups.Desktop{}, setups.Desktop{}, err
+	}
+	return source, target, nil
+}
+
+func handOverPane(source, target *setups.Desktop, leafID, finalLeafID string) {
+	for _, pane := range source.Panes {
+		if pane.PaneID == leafID {
+			pane.PaneID = finalLeafID
+			target.Panes = append(target.Panes, pane)
+			target.ActivePaneID = finalLeafID
+		}
+	}
+	source.Panes = withoutPane(source.Panes, leafID)
+}
+
+func (s *Store) MoveLeaf(request LeafMoveRequest) (LeafMove, error) {
+	if request.SourceDesktopID == request.TargetDesktopID {
+		return s.moveLeafWithinDesktop(request)
+	}
+	var result LeafMove
 	err := s.setupsTx(func(tx *sql.Tx, now string) error {
-		source, err := loadDesktop(tx, request.SourceDesktopID)
+		source, target, err := loadMoveEnds(tx, request)
 		if err != nil {
-			return err
-		}
-		target, err := loadDesktop(tx, request.TargetDesktopID)
-		if err != nil {
-			return err
-		}
-		if err := requireRevision("desktop", source.ID, request.ExpectedSourceRevision, source.Revision); err != nil {
-			return err
-		}
-		if err := requireRevision("desktop", target.ID, request.ExpectedTargetRevision, target.Revision); err != nil {
-			return err
-		}
-		if source.SetupID != target.SetupID {
-			return setups.Errorf(setups.CodeCrossSetup, "desktop %s belongs to setup %s and desktop %s to setup %s; a move between desktops cannot change membership", source.ID, source.SetupID, target.ID, target.SetupID)
-		}
-		if _, err := loadLiveSetup(tx, source.SetupID); err != nil {
 			return err
 		}
 		moved, ok := layouttree.MoveLeafBetweenLayouts(source.Tree, target.Tree, request.LeafID, request.AnchorID, newSetupEntityID("split"), request.Direction, request.Before, firstChildRatio(request.LeafShare, request.Before), uuid.NewString())
@@ -941,14 +1051,7 @@ func (s *Store) MoveLeaf(request LeafMoveRequest) (LeafMove, error) {
 			return setups.Errorf(setups.CodeInvalid, "leaf %q could not move from desktop %s beside %q on desktop %s", request.LeafID, source.ID, request.AnchorID, target.ID)
 		}
 		source.Tree, target.Tree = moved.SourceLayout, moved.TargetLayout
-		for _, pane := range source.Panes {
-			if pane.PaneID == request.LeafID {
-				pane.PaneID = moved.FinalLeafID
-				target.Panes = append(target.Panes, pane)
-				target.ActivePaneID = moved.FinalLeafID
-			}
-		}
-		source.Panes = withoutPane(source.Panes, request.LeafID)
+		handOverPane(&source, &target, request.LeafID, moved.FinalLeafID)
 		if err := writeDesktopArrangement(tx, now, &source); err != nil {
 			return err
 		}
@@ -961,21 +1064,29 @@ func (s *Store) MoveLeaf(request LeafMoveRequest) (LeafMove, error) {
 	return result, err
 }
 
+func openSessionSetupID(tx *sql.Tx, sessionID string) (string, error) {
+	var setupID, closedAt string
+	known, err := rowFound(tx.QueryRow(`SELECT setup_id, closed_at FROM sessions WHERE id = ?`, sessionID), &setupID, &closedAt)
+	if err != nil {
+		return "", err
+	}
+	if !known {
+		return "", setups.Errorf(setups.CodeNotFound, "session %q does not exist", sessionID)
+	}
+	if closedAt != "" {
+		return "", setups.Errorf(setups.CodeSessionClosed, "session %s closed at %s; closed sessions keep their setup as history", sessionID, closedAt)
+	}
+	return setupID, nil
+}
+
 func (s *Store) AssignSessionSetup(sessionID, setupID string) error {
 	return s.setupsTx(func(tx *sql.Tx, _ string) error {
 		if _, err := loadLiveSetup(tx, setupID); err != nil {
 			return err
 		}
-		var current, closedAt string
-		err := tx.QueryRow(`SELECT setup_id, closed_at FROM sessions WHERE id = ?`, sessionID).Scan(&current, &closedAt)
-		if errors.Is(err, sql.ErrNoRows) {
-			return setups.Errorf(setups.CodeNotFound, "session %q does not exist", sessionID)
-		}
+		current, err := openSessionSetupID(tx, sessionID)
 		if err != nil {
 			return err
-		}
-		if closedAt != "" {
-			return setups.Errorf(setups.CodeSessionClosed, "session %s closed at %s; closed sessions keep their setup as history", sessionID, closedAt)
 		}
 		if current != "" && current != setupID {
 			return setups.Errorf(setups.CodeCrossSetup, "session %s already belongs to setup %s; membership changes only through a move", sessionID, current)
@@ -1001,14 +1112,11 @@ func (s *Store) SessionPlacement(sessionID string) (setups.Placement, bool, erro
 	var placement setups.Placement
 	found := false
 	err := s.setupsTx(func(tx *sql.Tx, _ string) error {
-		err := tx.QueryRow(`
+		var err error
+		found, err = rowFound(tx.QueryRow(`
 			SELECT d.setup_id, p.desktop_id, p.pane_id
 			FROM desktop_panes p JOIN desktops d ON d.id = p.desktop_id
-			WHERE p.session_id = ?`, sessionID).Scan(&placement.SetupID, &placement.DesktopID, &placement.PaneID)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		found = err == nil
+			WHERE p.session_id = ?`, sessionID), &placement.SetupID, &placement.DesktopID, &placement.PaneID)
 		return err
 	})
 	return placement, found, err
@@ -1016,12 +1124,12 @@ func (s *Store) SessionPlacement(sessionID string) (setups.Placement, bool, erro
 
 func removeSessionPlacement(tx *sql.Tx, now, sessionID string) (*setups.Desktop, error) {
 	var desktopID, paneID string
-	err := tx.QueryRow(`SELECT desktop_id, pane_id FROM desktop_panes WHERE session_id = ?`, sessionID).Scan(&desktopID, &paneID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
+	placed, err := rowFound(tx.QueryRow(`SELECT desktop_id, pane_id FROM desktop_panes WHERE session_id = ?`, sessionID), &desktopID, &paneID)
 	if err != nil {
 		return nil, err
+	}
+	if !placed {
+		return nil, nil
 	}
 	desktop, err := loadDesktop(tx, desktopID)
 	if err != nil {
@@ -1039,39 +1147,27 @@ func removeSessionPlacement(tx *sql.Tx, now, sessionID string) (*setups.Desktop,
 	return &desktop, nil
 }
 
-func (s *Store) unplaceSessionsLocked(reason, where string, args ...any) {
-	rows, err := s.db.Query(`SELECT session_id FROM desktop_panes WHERE `+where, args...)
+func (s *Store) unplaceSessionLocked(now, sessionID string) error {
+	tx, err := s.db.Begin()
 	if err != nil {
-		log.Printf("[store] %s: listing placed sessions: %v", reason, err)
-		return
+		return err
 	}
-	var sessionIDs []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			log.Printf("[store] %s: listing placed sessions: %v", reason, err)
-			return
-		}
-		sessionIDs = append(sessionIDs, id)
+	defer tx.Rollback()
+	if _, err := removeSessionPlacement(tx, now, sessionID); err != nil {
+		return err
 	}
-	if err := rows.Close(); err != nil {
+	return tx.Commit()
+}
+
+func (s *Store) unplaceSessionsLocked(reason, where string, args ...any) {
+	sessionIDs, err := queryColumn[string](s.db, `SELECT session_id FROM desktop_panes WHERE `+where, args...)
+	if err != nil {
 		log.Printf("[store] %s: listing placed sessions: %v", reason, err)
 		return
 	}
 	now := time.Now().UTC().Format(sortableTimeFormat)
 	for _, id := range sessionIDs {
-		tx, err := s.db.Begin()
-		if err != nil {
-			log.Printf("[store] %s: removing the pane of session %s: %v", reason, id, err)
-			continue
-		}
-		if _, err := removeSessionPlacement(tx, now, id); err != nil {
-			tx.Rollback()
-			log.Printf("[store] %s: removing the pane of session %s: %v", reason, id, err)
-			continue
-		}
-		if err := tx.Commit(); err != nil {
+		if err := s.unplaceSessionLocked(now, id); err != nil {
 			log.Printf("[store] %s: removing the pane of session %s: %v", reason, id, err)
 		}
 	}
@@ -1093,17 +1189,11 @@ func (s *Store) MoveSessionToSetup(sessionID, destinationSetupID string) (Sessio
 		if _, err := loadLiveSetup(tx, destinationSetupID); err != nil {
 			return err
 		}
-		var closedAt string
-		err := tx.QueryRow(`SELECT setup_id, closed_at FROM sessions WHERE id = ?`, sessionID).Scan(&move.FromSetupID, &closedAt)
-		if errors.Is(err, sql.ErrNoRows) {
-			return setups.Errorf(setups.CodeNotFound, "session %q does not exist", sessionID)
-		}
+		from, err := openSessionSetupID(tx, sessionID)
 		if err != nil {
 			return err
 		}
-		if closedAt != "" {
-			return setups.Errorf(setups.CodeSessionClosed, "session %s closed at %s; closed sessions keep their setup as history", sessionID, closedAt)
-		}
+		move.FromSetupID = from
 		if move.FromSetupID == destinationSetupID {
 			return setups.Errorf(setups.CodeDestinationSame, "session %s already belongs to setup %s", sessionID, destinationSetupID)
 		}
@@ -1120,12 +1210,9 @@ func (s *Store) GetSetupMigration() (setups.MigrationState, bool, error) {
 	var state setups.MigrationState
 	found := false
 	err := s.setupsTx(func(tx *sql.Tx, _ string) error {
-		err := tx.QueryRow(`SELECT schema_version, phase, revision, imported_groups, draft FROM setup_migration WHERE id = 1`).
-			Scan(&state.SchemaVersion, &state.Phase, &state.Revision, &state.ImportedGroups, &state.Draft)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		found = err == nil
+		var err error
+		found, err = rowFound(tx.QueryRow(`SELECT schema_version, phase, revision, imported_groups, draft FROM setup_migration WHERE id = 1`),
+			&state.SchemaVersion, &state.Phase, &state.Revision, &state.ImportedGroups, &state.Draft)
 		return err
 	})
 	return state, found, err

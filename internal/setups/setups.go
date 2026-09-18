@@ -120,6 +120,49 @@ func ValidateShortcutSlot(slot int) error {
 	return Errorf(CodeInvalid, "shortcut slot %d is outside %d-%d", slot, FirstShortcutSlot, LastShortcutSlot)
 }
 
+func checkPaneRows(desktop Desktop, inTree map[string]struct{}) (map[string]struct{}, error) {
+	sessions := make(map[string]string, len(desktop.Panes))
+	rows := make(map[string]struct{}, len(desktop.Panes))
+	for _, pane := range desktop.Panes {
+		if _, ok := inTree[pane.PaneID]; !ok {
+			return nil, Errorf(CodeInvalid, "desktop %s: pane %s has a row but no leaf in the tree", desktop.ID, pane.PaneID)
+		}
+		if _, dup := rows[pane.PaneID]; dup {
+			return nil, Errorf(CodeInvalid, "desktop %s: pane %s has two rows", desktop.ID, pane.PaneID)
+		}
+		rows[pane.PaneID] = struct{}{}
+		if pane.Kind != PaneKindAgent {
+			return nil, Errorf(CodeInvalid, "desktop %s: pane %s has kind %q, want %q", desktop.ID, pane.PaneID, pane.Kind, PaneKindAgent)
+		}
+		if strings.TrimSpace(pane.SessionID) == "" {
+			return nil, Errorf(CodeInvalid, "desktop %s: pane %s names no session", desktop.ID, pane.PaneID)
+		}
+		if other, dup := sessions[pane.SessionID]; dup {
+			return nil, Errorf(CodeAlreadyPlaced, "desktop %s: session %s is placed in panes %s and %s", desktop.ID, pane.SessionID, other, pane.PaneID)
+		}
+		sessions[pane.SessionID] = pane.PaneID
+		switch pane.Status {
+		case PaneStatusSpawning, PaneStatusReady, PaneStatusFailed:
+		default:
+			return nil, Errorf(CodeInvalid, "desktop %s: pane %s has status %q", desktop.ID, pane.PaneID, pane.Status)
+		}
+	}
+	return rows, nil
+}
+
+func checkActivePane(desktop Desktop, inTree map[string]struct{}) error {
+	if len(inTree) == 0 {
+		if desktop.ActivePaneID != "" {
+			return Errorf(CodeInvalid, "desktop %s: active pane %s is set but the desktop has no panes", desktop.ID, desktop.ActivePaneID)
+		}
+		return nil
+	}
+	if _, ok := inTree[desktop.ActivePaneID]; !ok {
+		return Errorf(CodeInvalid, "desktop %s: active pane %q does not belong to the desktop", desktop.ID, desktop.ActivePaneID)
+	}
+	return nil
+}
+
 func CheckDesktop(desktop Desktop) error {
 	if err := layouttree.Validate(desktop.Tree); err != nil {
 		return Errorf(CodeInvalid, "desktop %s: %v", desktop.ID, err)
@@ -132,47 +175,16 @@ func CheckDesktop(desktop Desktop) error {
 	for _, id := range treePanes {
 		inTree[id] = struct{}{}
 	}
-	sessions := make(map[string]string, len(desktop.Panes))
-	rows := make(map[string]struct{}, len(desktop.Panes))
-	for _, pane := range desktop.Panes {
-		if _, ok := inTree[pane.PaneID]; !ok {
-			return Errorf(CodeInvalid, "desktop %s: pane %s has a row but no leaf in the tree", desktop.ID, pane.PaneID)
-		}
-		if _, dup := rows[pane.PaneID]; dup {
-			return Errorf(CodeInvalid, "desktop %s: pane %s has two rows", desktop.ID, pane.PaneID)
-		}
-		rows[pane.PaneID] = struct{}{}
-		if pane.Kind != PaneKindAgent {
-			return Errorf(CodeInvalid, "desktop %s: pane %s has kind %q, want %q", desktop.ID, pane.PaneID, pane.Kind, PaneKindAgent)
-		}
-		if strings.TrimSpace(pane.SessionID) == "" {
-			return Errorf(CodeInvalid, "desktop %s: pane %s names no session", desktop.ID, pane.PaneID)
-		}
-		if other, dup := sessions[pane.SessionID]; dup {
-			return Errorf(CodeAlreadyPlaced, "desktop %s: session %s is placed in panes %s and %s", desktop.ID, pane.SessionID, other, pane.PaneID)
-		}
-		sessions[pane.SessionID] = pane.PaneID
-		switch pane.Status {
-		case PaneStatusSpawning, PaneStatusReady, PaneStatusFailed:
-		default:
-			return Errorf(CodeInvalid, "desktop %s: pane %s has status %q", desktop.ID, pane.PaneID, pane.Status)
-		}
+	rows, err := checkPaneRows(desktop, inTree)
+	if err != nil {
+		return err
 	}
 	for _, id := range treePanes {
 		if _, ok := rows[id]; !ok {
 			return Errorf(CodeInvalid, "desktop %s: leaf %s is in the tree but has no pane row", desktop.ID, id)
 		}
 	}
-	if len(treePanes) == 0 {
-		if desktop.ActivePaneID != "" {
-			return Errorf(CodeInvalid, "desktop %s: active pane %s is set but the desktop has no panes", desktop.ID, desktop.ActivePaneID)
-		}
-		return nil
-	}
-	if _, ok := inTree[desktop.ActivePaneID]; !ok {
-		return Errorf(CodeInvalid, "desktop %s: active pane %q does not belong to the desktop", desktop.ID, desktop.ActivePaneID)
-	}
-	return nil
+	return checkActivePane(desktop, inTree)
 }
 
 func Settle(desktop Desktop) Desktop {

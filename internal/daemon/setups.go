@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/victorarias/attn/internal/bus"
@@ -22,6 +23,16 @@ type setupActionOutcome struct {
 	desktops []setups.Desktop
 	paneID   string
 	publish  func()
+}
+
+func (o setupActionOutcome) withSetup(setup setups.Setup) setupActionOutcome {
+	o.setup = &setup
+	return o
+}
+
+func (o setupActionOutcome) withPaneID(paneID string) setupActionOutcome {
+	o.paneID = paneID
+	return o
 }
 
 func (c *wsClient) selectSetup(setupID string) {
@@ -127,6 +138,18 @@ func (d *Daemon) scopeClientToSetup(client *wsClient, requestedSetupID string) {
 	client.selectSetup("")
 }
 
+func (d *Daemon) protocolArrangement(setupID string) ([]protocol.Desktop, error) {
+	_, desktops, err := d.store.SetupArrangement(setupID)
+	if err != nil {
+		return nil, fmt.Errorf("reading the arrangement of setup %s: %w", setupID, err)
+	}
+	wire, err := protocolDesktops(desktops)
+	if err != nil {
+		return nil, fmt.Errorf("encoding the arrangement of setup %s: %w", setupID, err)
+	}
+	return wire, nil
+}
+
 func (d *Daemon) fillInitialSetupState(client *wsClient, event *protocol.InitialStateMessage) {
 	live, err := d.liveProtocolSetups()
 	if err != nil {
@@ -141,15 +164,9 @@ func (d *Daemon) fillInitialSetupState(client *wsClient, event *protocol.Initial
 	if selected == "" {
 		return
 	}
-	_, desktops, err := d.store.SetupArrangement(selected)
+	wire, err := d.protocolArrangement(selected)
 	if err != nil {
-		d.logf("initial state: reading the arrangement of setup %s, so the client starts on no setup: %v", selected, err)
-		client.selectSetup("")
-		return
-	}
-	wire, err := protocolDesktops(desktops)
-	if err != nil {
-		d.logf("initial state: encoding the arrangement of setup %s, so the client starts on no setup: %v", selected, err)
+		d.logf("initial state: %v, so the client starts on no setup", err)
 		client.selectSetup("")
 		return
 	}
@@ -286,9 +303,7 @@ func (d *Daemon) handleSetupSelect(client *wsClient, msg *protocol.SetupSelectMe
 func (d *Daemon) handleDesktopCreate(client *wsClient, msg *protocol.DesktopCreateMessage) {
 	d.runSetupAction(client, msg.Cmd, msg.RequestID, func() (setupActionOutcome, error) {
 		setup, desktop, err := d.store.CreateDesktop(msg.SetupID, protocol.Deref(msg.Name), protocol.Deref(msg.ShortcutSlot), msg.ShortcutSlot == nil)
-		outcome := d.desktopChanged(desktop)
-		outcome.setup = &setup
-		return outcome, err
+		return d.desktopChanged(desktop).withSetup(setup), err
 	})
 }
 
@@ -334,9 +349,7 @@ func (d *Daemon) handleDesktopSetCurrent(client *wsClient, msg *protocol.Desktop
 func (d *Daemon) handleDesktopSetActivePane(client *wsClient, msg *protocol.DesktopSetActivePaneMessage) {
 	d.runSetupAction(client, msg.Cmd, msg.RequestID, func() (setupActionOutcome, error) {
 		setup, desktop, err := d.store.SetActivePane(msg.DesktopID, msg.PaneID)
-		outcome := d.desktopChanged(desktop)
-		outcome.setup = &setup
-		return outcome, err
+		return d.desktopChanged(desktop).withSetup(setup), err
 	})
 }
 
@@ -363,9 +376,7 @@ func (d *Daemon) handleDesktopPlaceSession(client *wsClient, msg *protocol.Deskt
 			Title:            title,
 			Status:           setups.PaneStatusReady,
 		})
-		outcome := d.desktopChanged(desktop)
-		outcome.paneID = paneID
-		return outcome, err
+		return d.desktopChanged(desktop).withPaneID(paneID), err
 	})
 }
 
@@ -431,6 +442,22 @@ func (d *Daemon) projectSetupsChanged() {
 	})
 }
 
+func (d *Daemon) protocolDesktopByID(id string) (protocol.Desktop, bool, error) {
+	desktop, err := d.store.GetDesktop(id)
+	if err != nil {
+		var setupErr *setups.Error
+		if errors.As(err, &setupErr) && setupErr.Code == setups.CodeNotFound {
+			return protocol.Desktop{}, true, nil
+		}
+		return protocol.Desktop{}, false, fmt.Errorf("reading desktop %s: %w", id, err)
+	}
+	wire, err := protocolDesktop(desktop)
+	if err != nil {
+		return protocol.Desktop{}, false, fmt.Errorf("encoding desktop %s: %w", id, err)
+	}
+	return wire, false, nil
+}
+
 func (d *Daemon) projectSetupArrangementChanged(ev bus.Event) {
 	change, ok := decodeFact[setupArrangementChange](d, ev)
 	if !ok {
@@ -448,20 +475,14 @@ func (d *Daemon) projectSetupArrangementChanged(ev bus.Event) {
 		DeletedDesktopIds: change.DeletedDesktopIDs,
 	}
 	for _, id := range change.DesktopIDs {
-		desktop, err := d.store.GetDesktop(id)
+		wire, gone, err := d.protocolDesktopByID(id)
 		if err != nil {
-			var setupErr *setups.Error
-			if errors.As(err, &setupErr) && setupErr.Code == setups.CodeNotFound {
-				message.DeletedDesktopIds = append(message.DeletedDesktopIds, id)
-				continue
-			}
-			d.logf("arrangement projection: reading desktop %s: %v", id, err)
+			d.logf("arrangement projection: %v", err)
 			return
 		}
-		wire, err := protocolDesktop(desktop)
-		if err != nil {
-			d.logf("arrangement projection: encoding desktop %s: %v", id, err)
-			return
+		if gone {
+			message.DeletedDesktopIds = append(message.DeletedDesktopIds, id)
+			continue
 		}
 		message.Desktops = append(message.Desktops, wire)
 	}
