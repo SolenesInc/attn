@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -113,6 +114,9 @@ func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (boo
 		return false, nil
 	}
 	if err := finalizeSessionCostTx(tx, id); err != nil {
+		return false, fmt.Errorf("close session %s: %w", id, err)
+	}
+	if err := unplaceClosingSession(tx, now.UTC().Format(sortableTimeFormat), id); err != nil {
 		return false, fmt.Errorf("close session %s: %w", id, err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -626,4 +630,17 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 		}
 	}
 	return entry, nil
+}
+
+func unplaceClosingSession(tx *sql.Tx, now, id string) error {
+	if _, err := tx.Exec(`SAVEPOINT unplace_closing_session`); err != nil {
+		return err
+	}
+	if _, err := removeSessionPlacement(tx, now, id); err != nil {
+		log.Printf("[store] close session %s: its pane stays on the desktop because removing it failed: %v", id, err)
+		_, rollbackErr := tx.Exec(`ROLLBACK TO unplace_closing_session`)
+		return rollbackErr
+	}
+	_, err := tx.Exec(`RELEASE unplace_closing_session`)
+	return err
 }

@@ -18,9 +18,9 @@ import (
 
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 type wsClient struct {
@@ -51,12 +51,13 @@ type wsClient struct {
 	tileContentPending       map[string]time.Time
 	tileContentMu            sync.RWMutex
 
-	admitted      sync.Once
-	clientKind    string
-	clientVersion string
-	clientID      string
-	capabilities  map[string]struct{}
-	identityMu    sync.RWMutex
+	admitted        sync.Once
+	clientKind      string
+	clientVersion   string
+	clientID        string
+	selectedSetupID string
+	capabilities    map[string]struct{}
+	identityMu      sync.RWMutex
 
 	presence   clientPresence
 	presenceMu sync.RWMutex
@@ -766,6 +767,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Apps:                   state.Apps,
 		Crew:                   state.Crew,
 	}
+	d.fillInitialSetupState(client, event)
 	data, err := json.Marshal(event)
 	if err != nil {
 		return
@@ -986,6 +988,36 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	}
 
 	switch cmd {
+	case protocol.CmdSetupCreate:
+		d.handleSetupCreate(client, msg.(*protocol.SetupCreateMessage))
+	case protocol.CmdSetupRename:
+		d.handleSetupRename(client, msg.(*protocol.SetupRenameMessage))
+	case protocol.CmdSetupDelete:
+		d.handleSetupDelete(client, msg.(*protocol.SetupDeleteMessage))
+	case protocol.CmdSetupSelect:
+		d.handleSetupSelect(client, msg.(*protocol.SetupSelectMessage))
+	case protocol.CmdDesktopCreate:
+		d.handleDesktopCreate(client, msg.(*protocol.DesktopCreateMessage))
+	case protocol.CmdDesktopRename:
+		d.handleDesktopRename(client, msg.(*protocol.DesktopRenameMessage))
+	case protocol.CmdDesktopSetShortcutSlot:
+		d.handleDesktopSetShortcutSlot(client, msg.(*protocol.DesktopSetShortcutSlotMessage))
+	case protocol.CmdDesktopReorder:
+		d.handleDesktopReorder(client, msg.(*protocol.DesktopReorderMessage))
+	case protocol.CmdDesktopDelete:
+		d.handleDesktopDelete(client, msg.(*protocol.DesktopDeleteMessage))
+	case protocol.CmdDesktopSetCurrent:
+		d.handleDesktopSetCurrent(client, msg.(*protocol.DesktopSetCurrentMessage))
+	case protocol.CmdDesktopSetActivePane:
+		d.handleDesktopSetActivePane(client, msg.(*protocol.DesktopSetActivePaneMessage))
+	case protocol.CmdDesktopPlaceSession:
+		d.handleDesktopPlaceSession(client, msg.(*protocol.DesktopPlaceSessionMessage))
+	case protocol.CmdDesktopMoveLeaf:
+		d.handleDesktopMoveLeaf(client, msg.(*protocol.DesktopMoveLeafMessage))
+	case protocol.CmdDesktopRemoveLeaf:
+		d.handleDesktopRemoveLeaf(client, msg.(*protocol.DesktopRemoveLeafMessage))
+	case protocol.CmdDesktopSetSplitRatio:
+		d.handleDesktopSetSplitRatio(client, msg.(*protocol.DesktopSetSplitRatioMessage))
 	case protocol.CmdClientHello:
 		d.handleClientHello(client, msg.(*protocol.ClientHelloMessage))
 	case protocol.CmdDelegate:
@@ -1895,7 +1927,7 @@ func (d *Daemon) broadcastRawWSMessage(payload []byte) {
 			WorkspaceLayout *protocol.WorkspaceLayout `json:"workspace_layout"`
 		}
 		if err := json.Unmarshal(payload, &msg); err == nil && msg.WorkspaceLayout != nil {
-			if layout, err := workspacelayout.DecodeLayout(msg.WorkspaceLayout.LayoutJson); err == nil {
+			if layout, err := layouttree.DecodeLayout(msg.WorkspaceLayout.LayoutJson); err == nil {
 				d.pruneTileContentSubscriptionsForLayout(msg.WorkspaceLayout.WorkspaceID, &layout)
 			}
 		}

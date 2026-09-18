@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
@@ -35,7 +36,7 @@ type browserControlPending struct {
 type browserWorkspaceTarget struct {
 	workspaceID      string
 	anchorLeafID     string
-	layout           workspacelayout.Node
+	layout           layouttree.Node
 	remoteEndpointID string
 }
 
@@ -102,7 +103,7 @@ func browserTargetFromRemoteWorkspace(workspace *protocol.Workspace, endpointID 
 	if workspace == nil || workspace.Layout == nil {
 		return browserWorkspaceTarget{}, fmt.Errorf("remote workspace has no layout")
 	}
-	layout, err := workspacelayout.DecodeLayout(workspace.Layout.LayoutJson)
+	layout, err := layouttree.DecodeLayout(workspace.Layout.LayoutJson)
 	if err != nil {
 		return browserWorkspaceTarget{}, fmt.Errorf("decode remote workspace layout: %w", err)
 	}
@@ -192,9 +193,9 @@ func (d *Daemon) forwardRemoteBrowserOpen(target browserWorkspaceTarget, targetU
 			Cmd:          protocol.CmdWorkspaceLayoutDockTile,
 			WorkspaceID:  target.workspaceID,
 			AnchorPaneID: target.anchorLeafID,
-			Edge:         protocol.WorkspaceLayoutDockEdgeRight,
+			Edge:         protocol.LayoutDockEdgeRight,
 			TileID:       browserTileID,
-			TileKind:     string(workspacelayout.TileKindBrowser),
+			TileKind:     string(layouttree.TileKindBrowser),
 		})
 		if err != nil {
 			return err
@@ -242,11 +243,11 @@ func (d *Daemon) handleOpenBrowser(conn net.Conn, msg *protocol.OpenBrowserMessa
 	snapshot := d.store.GetWorkspaceLayout(workspaceID)
 	currentURL, browserTileExists := "", false
 	if snapshot != nil {
-		currentURL, browserTileExists = workspacelayout.TileParamsByID(snapshot.Layout, browserTileID)
+		currentURL, browserTileExists = layouttree.TileParamsByID(snapshot.Layout, browserTileID)
 		if browserTileExists {
 			browserAlreadyAtTarget := currentURL == targetURL
 			if !browserAlreadyAtTarget {
-				layout, updated := workspacelayout.UpdateTileParams(snapshot.Layout, browserTileID, targetURL)
+				layout, updated := layouttree.UpdateTileParams(snapshot.Layout, browserTileID, targetURL)
 				if !updated {
 					d.sendError(conn, "open_browser: browser tile could not be updated")
 					return
@@ -264,7 +265,7 @@ func (d *Daemon) handleOpenBrowser(conn net.Conn, msg *protocol.OpenBrowserMessa
 			return
 		}
 	}
-	if err := d.dockTile(workspaceID, target.anchorLeafID, browserTileID, string(workspacelayout.TileKindBrowser), targetURL, "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	if err := d.dockTile(workspaceID, target.anchorLeafID, browserTileID, string(layouttree.TileKindBrowser), targetURL, "", protocol.LayoutDockEdgeRight, nil); err != nil {
 		d.sendError(conn, fmt.Sprintf("open_browser: %v", err))
 		return
 	}
@@ -287,9 +288,9 @@ func (d *Daemon) sendBrowserNavigation(workspaceID, targetURL string) {
 	d.sendBrowserHostRequest(d.browserHost(), request)
 }
 
-func browserTileInWorkspace(layout workspacelayout.Node) bool {
-	for _, tile := range workspacelayout.TileLeaves(layout) {
-		if tile.TileID == browserTileID && tile.TileKind == string(workspacelayout.TileKindBrowser) {
+func browserTileInWorkspace(layout layouttree.Node) bool {
+	for _, tile := range layouttree.TileLeaves(layout) {
+		if tile.TileID == browserTileID && tile.TileKind == string(layouttree.TileKindBrowser) {
 			return true
 		}
 	}

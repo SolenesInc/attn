@@ -1,6 +1,6 @@
 // To parse this data:
 //
-//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AddEndpointMessage, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, AppApplyMessage, AppApplyResult, AppCommandInfo, AppCommandMessage, AppCommandResultMessage, AppConsumerInfo, AppInvocationInfo, AppListMessage, AppListResult, AppLogsMessage, AppLogsResult, AppReconcileGapInfo, AppReconcileReasonInfo, AppReconcileStatus, AppRegistryEntry, AppRemoveMessage, AppRemoveResult, AppRollbackMessage, AppRollbackResult, AppRuntimeInfo, AppRuntimeRestartMessage, AppRuntimeRestartResult, AppRuntimeStatusMessage, AppRuntimeStatusResult, AppSetEnabledMessage, AppSetEnabledResult, AppStallInfo, AppStatusMessage, AppStatusResult, AppSummary, AppVersionInfo, AppViewCrashMessage, AppViewInfo, AppWatchMessage, AppWatchResult, ApprovePRMessage, AppsUpdatedMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeConfigInfo, AutoModeConfigResult, AutoModeConfigResultMessage, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeHostAddMessage, AutoModeHostRemoveMessage, AutoModeLegacyDismissMessage, AutoModeNetworkInfo, AutoModePolicySetMessage, AutoModePresetInfo, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeRuleAddMessage, AutoModeRuleInfo, AutoModeRuleRemoveMessage, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BootstrapEndpointMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResponseMessage, BrowserControlResultMessage, BuiltinDelegationRole, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearSessionsMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetMessage, CrewCharterGetResult, CrewCharterGetResultMessage, CrewCharterSetMessage, CrewCharterSetResult, CrewCharterSetResultMessage, CrewDayClose, CrewHandoffDocument, CrewHandoffGetMessage, CrewHandoffGetResult, CrewHandoffGetResultMessage, CrewHandoffMessage, CrewHandoffResult, CrewHandoffSummary, CrewHandoffsGetMessage, CrewHandoffsGetResult, CrewHandoffsGetResultMessage, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewRestart, CrewRestartMessage, CrewRestartResult, CrewRestartResultMessage, CrewRestartState, CrewSetMessage, CrewSetResult, CrewSetResultMessage, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateAssignment, DelegateAssignmentKind, DelegateCheckout, DelegateCheckoutKind, DelegateHandover, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationChoice, DelegationFailure, DelegationFallback, DelegationHarness, DelegationModel, DelegationModelsMessage, DelegationModelsResultMessage, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DelegationPreferences, DelegationPreferencesChangedMessage, DelegationPreferencesGetMessage, DelegationPreferencesResultMessage, DelegationPreferencesSaveMessage, DelegationRole, DelegationRolesMessage, DelegationRolesResult, DelegationSelection, DeleteWorktreeMessage, DeleteWorktreeResultMessage, DetachSessionMessage, DirectoryEntry, DispatchWorkState, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EndpointActionResultMessage, EndpointCapabilities, EndpointInfo, EndpointStatusChangedMessage, EndpointsUpdatedMessage, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FileDiffResultMessage, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetFileDiffMessage, GetKittyImageMessage, GetPresentationRoundMessage, GetPresentationRoundResultMessage, GetPresentationsMessage, GetPresentationsResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitFileChange, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GitStatusUpdateMessage, GuardianSelection, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, ListBranchesMessage, ListEndpointsMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, ModelCapabilitySupport, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, MuteWorkspaceMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationAction, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PinSessionMessage, PinWorkspaceMessage, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, PresentAnnotation, PresentCloseMessage, PresentCloseResultMessage, PresentCommentInput, PresentFeedbackMessage, PresentFeedbackResult, PresentFile, PresentManifestView, PresentOpenMessage, PresentOpenResult, PresentSubmitRoundMessage, PresentSubmitRoundResultMessage, Presentation, PresentationAddedMessage, PresentationComment, PresentationRound, PresentationUpdatedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, PullRequestUnwatchMessage, PullRequestUnwatchResultMessage, PullRequestWatchMessage, PullRequestWatchMode, PullRequestWatchResultMessage, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, RegisterMessage, RegisterWorkspaceMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemoveEndpointMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RenameWorkspaceMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, ReviewComment, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSearchHit, SeedSearchMessage, SeedSearchResult, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionDelegationRole, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenRefreshedMessage, SessionReopenResult, SessionReopenResultMessage, SessionSelectedMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTodosUpdatedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetEndpointRemoteWebMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SetTicketStatusMessage, SetWorkspaceRankMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SubscribeGitStatusMessage, SupportInputTrace, SupportRuntimeEvidence, SupportSnapshotMessage, SupportSnapshotResultMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalPointerActivityMessage, Ticket, TicketActivity, TicketActivityKind, TicketArtifact, TicketAttachFile, TicketAttachMessage, TicketAttachResult, TicketAttachResultMessage, TicketCommentMessage, TicketCommentResult, TicketCreateMessage, TicketCreateResult, TicketEvent, TicketEventBundle, TicketEventKind, TicketInboxMessage, TicketInboxMode, TicketInboxResult, TicketListMessage, TicketListResult, TicketShowMessage, TicketShowResult, TicketStatus, TicketStatusResult, TicketSubscribeMessage, TicketSubscribeResult, TicketTakeMessage, TicketTakeResult, TicketUnsubscribeMessage, TicketUnsubscribeResult, TodosMessage, TriggerNudgeMessage, UninstallPluginMessage, UnregisterMessage, UnregisterWorkspaceMessage, UnsubscribeGitStatusMessage, UpdateEndpointMessage, WakeTurnMessage, WebSocketEvent, WorkflowActionResultMessage, WorkflowAgentCall, WorkflowAgentCallStatus, WorkflowCallUpsertMessage, WorkflowRun, WorkflowRunCancelMessage, WorkflowRunGetMessage, WorkflowRunListMessage, WorkflowRunStatus, WorkflowRunUpdatedMessage, WorkflowRunUpsertMessage, Workspace, WorkspaceLayout, WorkspaceLayoutActionResultMessage, WorkspaceLayoutAddSessionPaneMessage, WorkspaceLayoutClosePaneMessage, WorkspaceLayoutDockEdge, WorkspaceLayoutDockTileMessage, WorkspaceLayoutFocusPaneMessage, WorkspaceLayoutGetMessage, WorkspaceLayoutMessage, WorkspaceLayoutMoveLeafMessage, WorkspaceLayoutMoveLeafToNewWorkspaceMessage, WorkspaceLayoutMoveLeafToWorkspaceMessage, WorkspaceLayoutPane, WorkspaceLayoutPaneKind, WorkspaceLayoutPaneStatus, WorkspaceLayoutRenamePaneMessage, WorkspaceLayoutSetSplitRatioMessage, WorkspaceLayoutSplitDirection, WorkspaceLayoutUndockTileMessage, WorkspaceLayoutUpdateTileMessage, WorkspaceLayoutUpdatedMessage, WorkspaceRegisteredMessage, WorkspaceSelectedMessage, WorkspaceStateChangedMessage, WorkspaceStatus, WorkspaceTileContentGetMessage, WorkspaceTileContentMessage, WorkspaceUnregisteredMessage, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
+//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AddEndpointMessage, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, AppApplyMessage, AppApplyResult, AppCommandInfo, AppCommandMessage, AppCommandResultMessage, AppConsumerInfo, AppInvocationInfo, AppListMessage, AppListResult, AppLogsMessage, AppLogsResult, AppReconcileGapInfo, AppReconcileReasonInfo, AppReconcileStatus, AppRegistryEntry, AppRemoveMessage, AppRemoveResult, AppRollbackMessage, AppRollbackResult, AppRuntimeInfo, AppRuntimeRestartMessage, AppRuntimeRestartResult, AppRuntimeStatusMessage, AppRuntimeStatusResult, AppSetEnabledMessage, AppSetEnabledResult, AppStallInfo, AppStatusMessage, AppStatusResult, AppSummary, AppVersionInfo, AppViewCrashMessage, AppViewInfo, AppWatchMessage, AppWatchResult, ApprovePRMessage, AppsUpdatedMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeConfigInfo, AutoModeConfigResult, AutoModeConfigResultMessage, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeHostAddMessage, AutoModeHostRemoveMessage, AutoModeLegacyDismissMessage, AutoModeNetworkInfo, AutoModePolicySetMessage, AutoModePresetInfo, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeRuleAddMessage, AutoModeRuleInfo, AutoModeRuleRemoveMessage, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BootstrapEndpointMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResponseMessage, BrowserControlResultMessage, BuiltinDelegationRole, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearSessionsMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetMessage, CrewCharterGetResult, CrewCharterGetResultMessage, CrewCharterSetMessage, CrewCharterSetResult, CrewCharterSetResultMessage, CrewDayClose, CrewHandoffDocument, CrewHandoffGetMessage, CrewHandoffGetResult, CrewHandoffGetResultMessage, CrewHandoffMessage, CrewHandoffResult, CrewHandoffSummary, CrewHandoffsGetMessage, CrewHandoffsGetResult, CrewHandoffsGetResultMessage, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewRestart, CrewRestartMessage, CrewRestartResult, CrewRestartResultMessage, CrewRestartState, CrewSetMessage, CrewSetResult, CrewSetResultMessage, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateAssignment, DelegateAssignmentKind, DelegateCheckout, DelegateCheckoutKind, DelegateHandover, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationChoice, DelegationFailure, DelegationFallback, DelegationHarness, DelegationModel, DelegationModelsMessage, DelegationModelsResultMessage, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DelegationPreferences, DelegationPreferencesChangedMessage, DelegationPreferencesGetMessage, DelegationPreferencesResultMessage, DelegationPreferencesSaveMessage, DelegationRole, DelegationRolesMessage, DelegationRolesResult, DelegationSelection, DeleteWorktreeMessage, DeleteWorktreeResultMessage, Desktop, DesktopCreateMessage, DesktopDeleteMessage, DesktopMoveLeafMessage, DesktopPane, DesktopPlaceSessionMessage, DesktopRemoveLeafMessage, DesktopRenameMessage, DesktopReorderMessage, DesktopSetActivePaneMessage, DesktopSetCurrentMessage, DesktopSetShortcutSlotMessage, DesktopSetSplitRatioMessage, DetachSessionMessage, DirectoryEntry, DispatchWorkState, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EndpointActionResultMessage, EndpointCapabilities, EndpointInfo, EndpointStatusChangedMessage, EndpointsUpdatedMessage, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FileDiffResultMessage, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetFileDiffMessage, GetKittyImageMessage, GetPresentationRoundMessage, GetPresentationRoundResultMessage, GetPresentationsMessage, GetPresentationsResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitFileChange, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GitStatusUpdateMessage, GuardianSelection, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, LayoutDockEdge, LayoutPaneKind, LayoutPaneStatus, LayoutSplitDirection, ListBranchesMessage, ListEndpointsMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, ModelCapabilitySupport, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, MuteWorkspaceMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationAction, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PinSessionMessage, PinWorkspaceMessage, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, PresentAnnotation, PresentCloseMessage, PresentCloseResultMessage, PresentCommentInput, PresentFeedbackMessage, PresentFeedbackResult, PresentFile, PresentManifestView, PresentOpenMessage, PresentOpenResult, PresentSubmitRoundMessage, PresentSubmitRoundResultMessage, Presentation, PresentationAddedMessage, PresentationComment, PresentationRound, PresentationUpdatedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, PullRequestUnwatchMessage, PullRequestUnwatchResultMessage, PullRequestWatchMessage, PullRequestWatchMode, PullRequestWatchResultMessage, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, RegisterMessage, RegisterWorkspaceMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemoveEndpointMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RenameWorkspaceMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, ReviewComment, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSearchHit, SeedSearchMessage, SeedSearchResult, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionDelegationRole, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenRefreshedMessage, SessionReopenResult, SessionReopenResultMessage, SessionSelectedMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTodosUpdatedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetEndpointRemoteWebMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SetTicketStatusMessage, SetWorkspaceRankMessage, SettingsUpdatedMessage, SettleTurnMessage, Setup, SetupActionResultMessage, SetupArrangementChangedMessage, SetupCreateMessage, SetupDeleteMessage, SetupErrorCode, SetupRenameMessage, SetupSelectMessage, SetupsChangedMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SubscribeGitStatusMessage, SupportInputTrace, SupportRuntimeEvidence, SupportSnapshotMessage, SupportSnapshotResultMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalPointerActivityMessage, Ticket, TicketActivity, TicketActivityKind, TicketArtifact, TicketAttachFile, TicketAttachMessage, TicketAttachResult, TicketAttachResultMessage, TicketCommentMessage, TicketCommentResult, TicketCreateMessage, TicketCreateResult, TicketEvent, TicketEventBundle, TicketEventKind, TicketInboxMessage, TicketInboxMode, TicketInboxResult, TicketListMessage, TicketListResult, TicketShowMessage, TicketShowResult, TicketStatus, TicketStatusResult, TicketSubscribeMessage, TicketSubscribeResult, TicketTakeMessage, TicketTakeResult, TicketUnsubscribeMessage, TicketUnsubscribeResult, TodosMessage, TriggerNudgeMessage, UninstallPluginMessage, UnregisterMessage, UnregisterWorkspaceMessage, UnsubscribeGitStatusMessage, UpdateEndpointMessage, WakeTurnMessage, WebSocketEvent, WorkflowActionResultMessage, WorkflowAgentCall, WorkflowAgentCallStatus, WorkflowCallUpsertMessage, WorkflowRun, WorkflowRunCancelMessage, WorkflowRunGetMessage, WorkflowRunListMessage, WorkflowRunStatus, WorkflowRunUpdatedMessage, WorkflowRunUpsertMessage, Workspace, WorkspaceLayout, WorkspaceLayoutActionResultMessage, WorkspaceLayoutAddSessionPaneMessage, WorkspaceLayoutClosePaneMessage, WorkspaceLayoutDockTileMessage, WorkspaceLayoutFocusPaneMessage, WorkspaceLayoutGetMessage, WorkspaceLayoutMessage, WorkspaceLayoutMoveLeafMessage, WorkspaceLayoutMoveLeafToNewWorkspaceMessage, WorkspaceLayoutMoveLeafToWorkspaceMessage, WorkspaceLayoutPane, WorkspaceLayoutRenamePaneMessage, WorkspaceLayoutSetSplitRatioMessage, WorkspaceLayoutUndockTileMessage, WorkspaceLayoutUpdateTileMessage, WorkspaceLayoutUpdatedMessage, WorkspaceRegisteredMessage, WorkspaceSelectedMessage, WorkspaceStateChangedMessage, WorkspaceStatus, WorkspaceTileContentGetMessage, WorkspaceTileContentMessage, WorkspaceUnregisteredMessage, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
 //
 //   const activityStatusMessage = Convert.toActivityStatusMessage(json);
 //   const activityStatusResult = Convert.toActivityStatusResult(json);
@@ -222,6 +222,19 @@
 //   const delegationSelection = Convert.toDelegationSelection(json);
 //   const deleteWorktreeMessage = Convert.toDeleteWorktreeMessage(json);
 //   const deleteWorktreeResultMessage = Convert.toDeleteWorktreeResultMessage(json);
+//   const desktop = Convert.toDesktop(json);
+//   const desktopCreateMessage = Convert.toDesktopCreateMessage(json);
+//   const desktopDeleteMessage = Convert.toDesktopDeleteMessage(json);
+//   const desktopMoveLeafMessage = Convert.toDesktopMoveLeafMessage(json);
+//   const desktopPane = Convert.toDesktopPane(json);
+//   const desktopPlaceSessionMessage = Convert.toDesktopPlaceSessionMessage(json);
+//   const desktopRemoveLeafMessage = Convert.toDesktopRemoveLeafMessage(json);
+//   const desktopRenameMessage = Convert.toDesktopRenameMessage(json);
+//   const desktopReorderMessage = Convert.toDesktopReorderMessage(json);
+//   const desktopSetActivePaneMessage = Convert.toDesktopSetActivePaneMessage(json);
+//   const desktopSetCurrentMessage = Convert.toDesktopSetCurrentMessage(json);
+//   const desktopSetShortcutSlotMessage = Convert.toDesktopSetShortcutSlotMessage(json);
+//   const desktopSetSplitRatioMessage = Convert.toDesktopSetSplitRatioMessage(json);
 //   const detachSessionMessage = Convert.toDetachSessionMessage(json);
 //   const directoryEntry = Convert.toDirectoryEntry(json);
 //   const dispatchWorkState = Convert.toDispatchWorkState(json);
@@ -344,6 +357,10 @@
 //   const kittyImageResultMessage = Convert.toKittyImageResultMessage(json);
 //   const kittyPlacement = Convert.toKittyPlacement(json);
 //   const kittyPlacementsMessage = Convert.toKittyPlacementsMessage(json);
+//   const layoutDockEdge = Convert.toLayoutDockEdge(json);
+//   const layoutPaneKind = Convert.toLayoutPaneKind(json);
+//   const layoutPaneStatus = Convert.toLayoutPaneStatus(json);
+//   const layoutSplitDirection = Convert.toLayoutSplitDirection(json);
 //   const listBranchesMessage = Convert.toListBranchesMessage(json);
 //   const listEndpointsMessage = Convert.toListEndpointsMessage(json);
 //   const listPluginsMessage = Convert.toListPluginsMessage(json);
@@ -593,6 +610,15 @@
 //   const setWorkspaceRankMessage = Convert.toSetWorkspaceRankMessage(json);
 //   const settingsUpdatedMessage = Convert.toSettingsUpdatedMessage(json);
 //   const settleTurnMessage = Convert.toSettleTurnMessage(json);
+//   const setup = Convert.toSetup(json);
+//   const setupActionResultMessage = Convert.toSetupActionResultMessage(json);
+//   const setupArrangementChangedMessage = Convert.toSetupArrangementChangedMessage(json);
+//   const setupCreateMessage = Convert.toSetupCreateMessage(json);
+//   const setupDeleteMessage = Convert.toSetupDeleteMessage(json);
+//   const setupErrorCode = Convert.toSetupErrorCode(json);
+//   const setupRenameMessage = Convert.toSetupRenameMessage(json);
+//   const setupSelectMessage = Convert.toSetupSelectMessage(json);
+//   const setupsChangedMessage = Convert.toSetupsChangedMessage(json);
 //   const snoozeTurnMessage = Convert.toSnoozeTurnMessage(json);
 //   const spawnResultMessage = Convert.toSpawnResultMessage(json);
 //   const spawnSessionMessage = Convert.toSpawnSessionMessage(json);
@@ -670,7 +696,6 @@
 //   const workspaceLayoutActionResultMessage = Convert.toWorkspaceLayoutActionResultMessage(json);
 //   const workspaceLayoutAddSessionPaneMessage = Convert.toWorkspaceLayoutAddSessionPaneMessage(json);
 //   const workspaceLayoutClosePaneMessage = Convert.toWorkspaceLayoutClosePaneMessage(json);
-//   const workspaceLayoutDockEdge = Convert.toWorkspaceLayoutDockEdge(json);
 //   const workspaceLayoutDockTileMessage = Convert.toWorkspaceLayoutDockTileMessage(json);
 //   const workspaceLayoutFocusPaneMessage = Convert.toWorkspaceLayoutFocusPaneMessage(json);
 //   const workspaceLayoutGetMessage = Convert.toWorkspaceLayoutGetMessage(json);
@@ -679,11 +704,8 @@
 //   const workspaceLayoutMoveLeafToNewWorkspaceMessage = Convert.toWorkspaceLayoutMoveLeafToNewWorkspaceMessage(json);
 //   const workspaceLayoutMoveLeafToWorkspaceMessage = Convert.toWorkspaceLayoutMoveLeafToWorkspaceMessage(json);
 //   const workspaceLayoutPane = Convert.toWorkspaceLayoutPane(json);
-//   const workspaceLayoutPaneKind = Convert.toWorkspaceLayoutPaneKind(json);
-//   const workspaceLayoutPaneStatus = Convert.toWorkspaceLayoutPaneStatus(json);
 //   const workspaceLayoutRenamePaneMessage = Convert.toWorkspaceLayoutRenamePaneMessage(json);
 //   const workspaceLayoutSetSplitRatioMessage = Convert.toWorkspaceLayoutSetSplitRatioMessage(json);
-//   const workspaceLayoutSplitDirection = Convert.toWorkspaceLayoutSplitDirection(json);
 //   const workspaceLayoutUndockTileMessage = Convert.toWorkspaceLayoutUndockTileMessage(json);
 //   const workspaceLayoutUpdateTileMessage = Convert.toWorkspaceLayoutUpdateTileMessage(json);
 //   const workspaceLayoutUpdatedMessage = Convert.toWorkspaceLayoutUpdatedMessage(json);
@@ -2839,6 +2861,7 @@ export interface ClientHelloMessage {
     client_kind:         string;
     client_token?:       string;
     cmd:                 ClientHelloMessageCmd;
+    setup_id?:           string;
     version:             string;
     [property: string]: any;
 }
@@ -3854,6 +3877,213 @@ export enum ReasonKind {
     GitError = "git_error",
     NotFound = "not_found",
     ProviderError = "provider_error",
+}
+
+export interface Desktop {
+    active_pane_id: string;
+    id:             string;
+    name:           string;
+    order_key:      string;
+    panes:          PaneElement[];
+    revision:       number;
+    setup_id:       string;
+    shortcut_slot?: number;
+    tree_json:      string;
+    [property: string]: any;
+}
+
+export interface PaneElement {
+    desktop_id: string;
+    error?:     string;
+    kind:       LayoutPaneKind;
+    pane_id:    string;
+    session_id: string;
+    status:     LayoutPaneStatus;
+    title:      string;
+    [property: string]: any;
+}
+
+export enum LayoutPaneKind {
+    Agent = "agent",
+}
+
+export enum LayoutPaneStatus {
+    Failed = "failed",
+    Ready = "ready",
+    Spawning = "spawning",
+}
+
+export interface DesktopCreateMessage {
+    cmd:            DesktopCreateMessageCmd;
+    name?:          string;
+    request_id:     string;
+    setup_id:       string;
+    shortcut_slot?: number;
+    [property: string]: any;
+}
+
+export enum DesktopCreateMessageCmd {
+    DesktopCreate = "desktop_create",
+}
+
+export interface DesktopDeleteMessage {
+    cmd:               DesktopDeleteMessageCmd;
+    desktop_id:        string;
+    expected_revision: number;
+    request_id:        string;
+    [property: string]: any;
+}
+
+export enum DesktopDeleteMessageCmd {
+    DesktopDelete = "desktop_delete",
+}
+
+export interface DesktopMoveLeafMessage {
+    anchor_id?:               string;
+    cmd:                      DesktopMoveLeafMessageCmd;
+    edge:                     LayoutDockEdge;
+    expected_source_revision: number;
+    expected_target_revision: number;
+    leaf_id:                  string;
+    leaf_share?:              number;
+    request_id:               string;
+    source_desktop_id:        string;
+    target_desktop_id:        string;
+    [property: string]: any;
+}
+
+export enum DesktopMoveLeafMessageCmd {
+    DesktopMoveLeaf = "desktop_move_leaf",
+}
+
+export enum LayoutDockEdge {
+    Bottom = "bottom",
+    Left = "left",
+    Right = "right",
+    Top = "top",
+}
+
+export interface DesktopPane {
+    desktop_id: string;
+    error?:     string;
+    kind:       LayoutPaneKind;
+    pane_id:    string;
+    session_id: string;
+    status:     LayoutPaneStatus;
+    title:      string;
+    [property: string]: any;
+}
+
+export interface DesktopPlaceSessionMessage {
+    anchor_pane_id?:   string;
+    cmd:               DesktopPlaceSessionMessageCmd;
+    desktop_id:        string;
+    direction?:        LayoutSplitDirection;
+    expected_revision: number;
+    new_pane_share?:   number;
+    request_id:        string;
+    session_id:        string;
+    [property: string]: any;
+}
+
+export enum DesktopPlaceSessionMessageCmd {
+    DesktopPlaceSession = "desktop_place_session",
+}
+
+export enum LayoutSplitDirection {
+    Horizontal = "horizontal",
+    Vertical = "vertical",
+}
+
+export interface DesktopRemoveLeafMessage {
+    cmd:               DesktopRemoveLeafMessageCmd;
+    desktop_id:        string;
+    expected_revision: number;
+    leaf_id:           string;
+    request_id:        string;
+    [property: string]: any;
+}
+
+export enum DesktopRemoveLeafMessageCmd {
+    DesktopRemoveLeaf = "desktop_remove_leaf",
+}
+
+export interface DesktopRenameMessage {
+    cmd:               DesktopRenameMessageCmd;
+    desktop_id:        string;
+    expected_revision: number;
+    name:              string;
+    request_id:        string;
+    [property: string]: any;
+}
+
+export enum DesktopRenameMessageCmd {
+    DesktopRename = "desktop_rename",
+}
+
+export interface DesktopReorderMessage {
+    cmd:                  DesktopReorderMessageCmd;
+    desktop_id:           string;
+    expected_revision:    number;
+    next_desktop_id?:     string;
+    previous_desktop_id?: string;
+    request_id:           string;
+    [property: string]: any;
+}
+
+export enum DesktopReorderMessageCmd {
+    DesktopReorder = "desktop_reorder",
+}
+
+export interface DesktopSetActivePaneMessage {
+    cmd:        DesktopSetActivePaneMessageCmd;
+    desktop_id: string;
+    pane_id:    string;
+    request_id: string;
+    [property: string]: any;
+}
+
+export enum DesktopSetActivePaneMessageCmd {
+    DesktopSetActivePane = "desktop_set_active_pane",
+}
+
+export interface DesktopSetCurrentMessage {
+    cmd:        DesktopSetCurrentMessageCmd;
+    desktop_id: string;
+    request_id: string;
+    setup_id:   string;
+    [property: string]: any;
+}
+
+export enum DesktopSetCurrentMessageCmd {
+    DesktopSetCurrent = "desktop_set_current",
+}
+
+export interface DesktopSetShortcutSlotMessage {
+    cmd:               DesktopSetShortcutSlotMessageCmd;
+    desktop_id:        string;
+    expected_revision: number;
+    request_id:        string;
+    shortcut_slot?:    number;
+    [property: string]: any;
+}
+
+export enum DesktopSetShortcutSlotMessageCmd {
+    DesktopSetShortcutSlot = "desktop_set_shortcut_slot",
+}
+
+export interface DesktopSetSplitRatioMessage {
+    cmd:               DesktopSetSplitRatioMessageCmd;
+    desktop_id:        string;
+    expected_revision: number;
+    ratio:             number;
+    request_id:        string;
+    split_id:          string;
+    [property: string]: any;
+}
+
+export enum DesktopSetSplitRatioMessageCmd {
+    DesktopSetSplitRatio = "desktop_set_split_ratio",
 }
 
 export interface DetachSessionMessage {
@@ -5435,6 +5665,7 @@ export interface InitialStateMessage {
     authors?:                   AuthorElement[];
     crew?:                      Member[];
     daemon_instance_id?:        string;
+    desktops?:                  DesktopElement[];
     endpoints?:                 Endpoint[];
     event:                      InitialStateMessageEvent;
     github_hosts?:              string[];
@@ -5450,11 +5681,26 @@ export interface InitialStateMessage {
     repos?:              RepoElement[];
     seeds?:              SeedElement[];
     seeds_total?:        number;
+    selected_setup_id?:  string;
     sessions?:           SessionObject[];
     settings?:           { [key: string]: string };
+    setups?:             SetupElement[];
     source_fingerprint?: string;
     warnings?:           WarningElement[];
     workspaces?:         WorkspaceElement[];
+    [property: string]: any;
+}
+
+export interface DesktopElement {
+    active_pane_id: string;
+    id:             string;
+    name:           string;
+    order_key:      string;
+    panes:          PaneElement[];
+    revision:       number;
+    setup_id:       string;
+    shortcut_slot?: number;
+    tree_json:      string;
     [property: string]: any;
 }
 
@@ -5466,6 +5712,15 @@ export interface RepoElement {
     collapsed: boolean;
     muted:     boolean;
     repo:      string;
+    [property: string]: any;
+}
+
+export interface SetupElement {
+    current_desktop_id: string;
+    id:                 string;
+    last_used_at?:      string;
+    name:               string;
+    revision:           number;
     [property: string]: any;
 }
 
@@ -5491,32 +5746,22 @@ export interface WorkspaceElement {
 export interface Layout {
     active_pane_id: string;
     layout_json:    string;
-    panes:          PaneElement[];
+    panes:          PaneObject[];
     updated_at?:    string;
     workspace_id:   string;
     [property: string]: any;
 }
 
-export interface PaneElement {
+export interface PaneObject {
     error?:       string;
-    kind:         WorkspaceLayoutPaneKind;
+    kind:         LayoutPaneKind;
     pane_id:      string;
     runtime_id?:  string;
     session_id?:  string;
-    status:       WorkspaceLayoutPaneStatus;
+    status:       LayoutPaneStatus;
     title:        string;
     workspace_id: string;
     [property: string]: any;
-}
-
-export enum WorkspaceLayoutPaneKind {
-    Agent = "agent",
-}
-
-export enum WorkspaceLayoutPaneStatus {
-    Failed = "failed",
-    Ready = "ready",
-    Spawning = "spawning",
 }
 
 export enum WorkspaceStatus {
@@ -9696,6 +9941,119 @@ export enum SettleTurnMessageCmd {
     SettleTurn = "settle_turn",
 }
 
+export interface Setup {
+    current_desktop_id: string;
+    id:                 string;
+    last_used_at?:      string;
+    name:               string;
+    revision:           number;
+    [property: string]: any;
+}
+
+export interface SetupActionResultMessage {
+    action:      string;
+    desktops?:   DesktopElement[];
+    error?:      string;
+    error_code?: SetupErrorCode;
+    event:       SetupActionResultMessageEvent;
+    pane_id?:    string;
+    request_id:  string;
+    setup?:      SetupElement;
+    success:     boolean;
+    [property: string]: any;
+}
+
+export enum SetupErrorCode {
+    AlreadyPlaced = "already_placed",
+    CrossSetup = "cross_setup",
+    DestinationSame = "destination_same",
+    Internal = "internal",
+    Invalid = "invalid",
+    LastDesktop = "last_desktop",
+    LastSetup = "last_setup",
+    NameTaken = "name_taken",
+    NotFound = "not_found",
+    SessionClosed = "session_closed",
+    SetupDeleted = "setup_deleted",
+    SlotTaken = "slot_taken",
+    StaleRevision = "stale_revision",
+    Unavailable = "unavailable",
+}
+
+export enum SetupActionResultMessageEvent {
+    SetupActionResult = "setup_action_result",
+}
+
+export interface SetupArrangementChangedMessage {
+    deleted_desktop_ids?: string[];
+    desktops:             DesktopElement[];
+    event:                SetupArrangementChangedMessageEvent;
+    setup:                SetupElement;
+    [property: string]: any;
+}
+
+export enum SetupArrangementChangedMessageEvent {
+    SetupArrangementChanged = "setup_arrangement_changed",
+}
+
+export interface SetupCreateMessage {
+    cmd:        SetupCreateMessageCmd;
+    name:       string;
+    request_id: string;
+    [property: string]: any;
+}
+
+export enum SetupCreateMessageCmd {
+    SetupCreate = "setup_create",
+}
+
+export interface SetupDeleteMessage {
+    cmd:                  SetupDeleteMessageCmd;
+    destination_setup_id: string;
+    expected_revision:    number;
+    request_id:           string;
+    setup_id:             string;
+    [property: string]: any;
+}
+
+export enum SetupDeleteMessageCmd {
+    SetupDelete = "setup_delete",
+}
+
+export interface SetupRenameMessage {
+    cmd:               SetupRenameMessageCmd;
+    expected_revision: number;
+    name:              string;
+    request_id:        string;
+    setup_id:          string;
+    [property: string]: any;
+}
+
+export enum SetupRenameMessageCmd {
+    SetupRename = "setup_rename",
+}
+
+export interface SetupSelectMessage {
+    cmd:        SetupSelectMessageCmd;
+    request_id: string;
+    setup_id:   string;
+    [property: string]: any;
+}
+
+export enum SetupSelectMessageCmd {
+    SetupSelect = "setup_select",
+}
+
+export interface SetupsChangedMessage {
+    event:  SetupsChangedMessageEvent;
+    setups: SetupElement[];
+    [property: string]: any;
+}
+
+export enum SetupsChangedMessageEvent {
+    SetupsChanged = "setups_changed",
+}
+
 export interface SnoozeTurnMessage {
     cmd:        SnoozeTurnMessageCmd;
     session_id: string;
@@ -10650,7 +11008,7 @@ export interface Workspace {
 export interface WorkspaceLayout {
     active_pane_id: string;
     layout_json:    string;
-    panes:          PaneElement[];
+    panes:          PaneObject[];
     updated_at?:    string;
     workspace_id:   string;
     [property: string]: any;
@@ -10679,7 +11037,7 @@ export enum WorkspaceLayoutActionResultMessageEvent {
 
 export interface WorkspaceLayoutAddSessionPaneMessage {
     cmd:             WorkspaceLayoutAddSessionPaneMessageCmd;
-    direction?:      WorkspaceLayoutSplitDirection;
+    direction?:      LayoutSplitDirection;
     pane_id?:        string;
     session_id:      string;
     target_pane_id?: string;
@@ -10690,11 +11048,6 @@ export interface WorkspaceLayoutAddSessionPaneMessage {
 
 export enum WorkspaceLayoutAddSessionPaneMessageCmd {
     WorkspaceLayoutAddSessionPane = "workspace_layout_add_session_pane",
-}
-
-export enum WorkspaceLayoutSplitDirection {
-    Horizontal = "horizontal",
-    Vertical = "vertical",
 }
 
 export interface WorkspaceLayoutClosePaneMessage {
@@ -10711,7 +11064,7 @@ export enum WorkspaceLayoutClosePaneMessageCmd {
 export interface WorkspaceLayoutDockTileMessage {
     anchor_pane_id: string;
     cmd:            WorkspaceLayoutDockTileMessageCmd;
-    edge:           WorkspaceLayoutDockEdge;
+    edge:           LayoutDockEdge;
     ratio?:         number;
     tile_id:        string;
     tile_kind:      string;
@@ -10722,13 +11075,6 @@ export interface WorkspaceLayoutDockTileMessage {
 
 export enum WorkspaceLayoutDockTileMessageCmd {
     WorkspaceLayoutDockTile = "workspace_layout_dock_tile",
-}
-
-export enum WorkspaceLayoutDockEdge {
-    Bottom = "bottom",
-    Left = "left",
-    Right = "right",
-    Top = "top",
 }
 
 export interface WorkspaceLayoutFocusPaneMessage {
@@ -10765,7 +11111,7 @@ export enum WorkspaceLayoutMessageEvent {
 export interface WorkspaceLayoutMoveLeafMessage {
     anchor_id:    string;
     cmd:          WorkspaceLayoutMoveLeafMessageCmd;
-    edge:         WorkspaceLayoutDockEdge;
+    edge:         LayoutDockEdge;
     leaf_id:      string;
     ratio?:       number;
     workspace_id: string;
@@ -10779,7 +11125,7 @@ export enum WorkspaceLayoutMoveLeafMessageCmd {
 export interface WorkspaceLayoutMoveLeafToNewWorkspaceMessage {
     anchor_id?:          string;
     cmd:                 WorkspaceLayoutMoveLeafToNewWorkspaceMessageCmd;
-    edge?:               WorkspaceLayoutDockEdge;
+    edge?:               LayoutDockEdge;
     leaf_id:             string;
     ratio?:              number;
     source_workspace_id: string;
@@ -10793,7 +11139,7 @@ export enum WorkspaceLayoutMoveLeafToNewWorkspaceMessageCmd {
 export interface WorkspaceLayoutMoveLeafToWorkspaceMessage {
     anchor_id?:          string;
     cmd:                 WorkspaceLayoutMoveLeafToWorkspaceMessageCmd;
-    edge:                WorkspaceLayoutDockEdge;
+    edge:                LayoutDockEdge;
     leaf_id:             string;
     ratio?:              number;
     source_workspace_id: string;
@@ -10807,11 +11153,11 @@ export enum WorkspaceLayoutMoveLeafToWorkspaceMessageCmd {
 
 export interface WorkspaceLayoutPane {
     error?:       string;
-    kind:         WorkspaceLayoutPaneKind;
+    kind:         LayoutPaneKind;
     pane_id:      string;
     runtime_id?:  string;
     session_id?:  string;
-    status:       WorkspaceLayoutPaneStatus;
+    status:       LayoutPaneStatus;
     title:        string;
     workspace_id: string;
     [property: string]: any;
@@ -12916,6 +13262,110 @@ export class Convert {
         return JSON.stringify(uncast(value, r("DeleteWorktreeResultMessage")), null, 2);
     }
 
+    public static toDesktop(json: string): Desktop {
+        return cast(JSON.parse(json), r("Desktop"));
+    }
+
+    public static desktopToJson(value: Desktop): string {
+        return JSON.stringify(uncast(value, r("Desktop")), null, 2);
+    }
+
+    public static toDesktopCreateMessage(json: string): DesktopCreateMessage {
+        return cast(JSON.parse(json), r("DesktopCreateMessage"));
+    }
+
+    public static desktopCreateMessageToJson(value: DesktopCreateMessage): string {
+        return JSON.stringify(uncast(value, r("DesktopCreateMessage")), null, 2);
+    }
+
+    public static toDesktopDeleteMessage(json: string): DesktopDeleteMessage {
+        return cast(JSON.parse(json), r("DesktopDeleteMessage"));
+    }
+
+    public static desktopDeleteMessageToJson(value: DesktopDeleteMessage): string {
+        return JSON.stringify(uncast(value, r("DesktopDeleteMessage")), null, 2);
+    }
+
+    public static toDesktopMoveLeafMessage(json: string): DesktopMoveLeafMessage {
+        return cast(JSON.parse(json), r("DesktopMoveLeafMessage"));
+    }
+
+    public static desktopMoveLeafMessageToJson(value: DesktopMoveLeafMessage): string {
+        return JSON.stringify(uncast(value, r("DesktopMoveLeafMessage")), null, 2);
+    }
+
+    public static toDesktopPane(json: string): DesktopPane {
+        return cast(JSON.parse(json), r("DesktopPane"));
+    }
+
+    public static desktopPaneToJson(value: DesktopPane): string {
+        return JSON.stringify(uncast(value, r("DesktopPane")), null, 2);
+    }
+
+    public static toDesktopPlaceSessionMessage(json: string): DesktopPlaceSessionMessage {
+        return cast(JSON.parse(json), r("DesktopPlaceSessionMessage"));
+    }
+
+    public static desktopPlaceSessionMessageToJson(value: DesktopPlaceSessionMessage): string {
+        return JSON.stringify(uncast(value, r("DesktopPlaceSessionMessage")), null, 2);
+    }
+
+    public static toDesktopRemoveLeafMessage(json: string): DesktopRemoveLeafMessage {
+        return cast(JSON.parse(json), r("DesktopRemoveLeafMessage"));
+    }
+
+    public static desktopRemoveLeafMessageToJson(value: DesktopRemoveLeafMessage): string {
+        return JSON.stringify(uncast(value, r("DesktopRemoveLeafMessage")), null, 2);
+    }
+
+    public static toDesktopRenameMessage(json: string): DesktopRenameMessage {
+        return cast(JSON.parse(json), r("DesktopRenameMessage"));
+    }
+
+    public static desktopRenameMessageToJson(value: DesktopRenameMessage): string {
+        return JSON.stringify(uncast(value, r("DesktopRenameMessage")), null, 2);
+    }
+
+    public static toDesktopReorderMessage(json: string): DesktopReorderMessage {
+        return cast(JSON.parse(json), r("DesktopReorderMessage"));
+    }
+
+    public static desktopReorderMessageToJson(value: DesktopReorderMessage): string {
+        return JSON.stringify(uncast(value, r("DesktopReorderMessage")), null, 2);
+    }
+
+    public static toDesktopSetActivePaneMessage(json: string): DesktopSetActivePaneMessage {
+        return cast(JSON.parse(json), r("DesktopSetActivePaneMessage"));
+    }
+
+    public static desktopSetActivePaneMessageToJson(value: DesktopSetActivePaneMessage): string {
+        return JSON.stringify(uncast(value, r("DesktopSetActivePaneMessage")), null, 2);
+    }
+
+    public static toDesktopSetCurrentMessage(json: string): DesktopSetCurrentMessage {
+        return cast(JSON.parse(json), r("DesktopSetCurrentMessage"));
+    }
+
+    public static desktopSetCurrentMessageToJson(value: DesktopSetCurrentMessage): string {
+        return JSON.stringify(uncast(value, r("DesktopSetCurrentMessage")), null, 2);
+    }
+
+    public static toDesktopSetShortcutSlotMessage(json: string): DesktopSetShortcutSlotMessage {
+        return cast(JSON.parse(json), r("DesktopSetShortcutSlotMessage"));
+    }
+
+    public static desktopSetShortcutSlotMessageToJson(value: DesktopSetShortcutSlotMessage): string {
+        return JSON.stringify(uncast(value, r("DesktopSetShortcutSlotMessage")), null, 2);
+    }
+
+    public static toDesktopSetSplitRatioMessage(json: string): DesktopSetSplitRatioMessage {
+        return cast(JSON.parse(json), r("DesktopSetSplitRatioMessage"));
+    }
+
+    public static desktopSetSplitRatioMessageToJson(value: DesktopSetSplitRatioMessage): string {
+        return JSON.stringify(uncast(value, r("DesktopSetSplitRatioMessage")), null, 2);
+    }
+
     public static toDetachSessionMessage(json: string): DetachSessionMessage {
         return cast(JSON.parse(json), r("DetachSessionMessage"));
     }
@@ -13890,6 +14340,38 @@ export class Convert {
 
     public static kittyPlacementsMessageToJson(value: KittyPlacementsMessage): string {
         return JSON.stringify(uncast(value, r("KittyPlacementsMessage")), null, 2);
+    }
+
+    public static toLayoutDockEdge(json: string): LayoutDockEdge {
+        return cast(JSON.parse(json), r("LayoutDockEdge"));
+    }
+
+    public static layoutDockEdgeToJson(value: LayoutDockEdge): string {
+        return JSON.stringify(uncast(value, r("LayoutDockEdge")), null, 2);
+    }
+
+    public static toLayoutPaneKind(json: string): LayoutPaneKind {
+        return cast(JSON.parse(json), r("LayoutPaneKind"));
+    }
+
+    public static layoutPaneKindToJson(value: LayoutPaneKind): string {
+        return JSON.stringify(uncast(value, r("LayoutPaneKind")), null, 2);
+    }
+
+    public static toLayoutPaneStatus(json: string): LayoutPaneStatus {
+        return cast(JSON.parse(json), r("LayoutPaneStatus"));
+    }
+
+    public static layoutPaneStatusToJson(value: LayoutPaneStatus): string {
+        return JSON.stringify(uncast(value, r("LayoutPaneStatus")), null, 2);
+    }
+
+    public static toLayoutSplitDirection(json: string): LayoutSplitDirection {
+        return cast(JSON.parse(json), r("LayoutSplitDirection"));
+    }
+
+    public static layoutSplitDirectionToJson(value: LayoutSplitDirection): string {
+        return JSON.stringify(uncast(value, r("LayoutSplitDirection")), null, 2);
     }
 
     public static toListBranchesMessage(json: string): ListBranchesMessage {
@@ -15884,6 +16366,78 @@ export class Convert {
         return JSON.stringify(uncast(value, r("SettleTurnMessage")), null, 2);
     }
 
+    public static toSetup(json: string): Setup {
+        return cast(JSON.parse(json), r("Setup"));
+    }
+
+    public static setupToJson(value: Setup): string {
+        return JSON.stringify(uncast(value, r("Setup")), null, 2);
+    }
+
+    public static toSetupActionResultMessage(json: string): SetupActionResultMessage {
+        return cast(JSON.parse(json), r("SetupActionResultMessage"));
+    }
+
+    public static setupActionResultMessageToJson(value: SetupActionResultMessage): string {
+        return JSON.stringify(uncast(value, r("SetupActionResultMessage")), null, 2);
+    }
+
+    public static toSetupArrangementChangedMessage(json: string): SetupArrangementChangedMessage {
+        return cast(JSON.parse(json), r("SetupArrangementChangedMessage"));
+    }
+
+    public static setupArrangementChangedMessageToJson(value: SetupArrangementChangedMessage): string {
+        return JSON.stringify(uncast(value, r("SetupArrangementChangedMessage")), null, 2);
+    }
+
+    public static toSetupCreateMessage(json: string): SetupCreateMessage {
+        return cast(JSON.parse(json), r("SetupCreateMessage"));
+    }
+
+    public static setupCreateMessageToJson(value: SetupCreateMessage): string {
+        return JSON.stringify(uncast(value, r("SetupCreateMessage")), null, 2);
+    }
+
+    public static toSetupDeleteMessage(json: string): SetupDeleteMessage {
+        return cast(JSON.parse(json), r("SetupDeleteMessage"));
+    }
+
+    public static setupDeleteMessageToJson(value: SetupDeleteMessage): string {
+        return JSON.stringify(uncast(value, r("SetupDeleteMessage")), null, 2);
+    }
+
+    public static toSetupErrorCode(json: string): SetupErrorCode {
+        return cast(JSON.parse(json), r("SetupErrorCode"));
+    }
+
+    public static setupErrorCodeToJson(value: SetupErrorCode): string {
+        return JSON.stringify(uncast(value, r("SetupErrorCode")), null, 2);
+    }
+
+    public static toSetupRenameMessage(json: string): SetupRenameMessage {
+        return cast(JSON.parse(json), r("SetupRenameMessage"));
+    }
+
+    public static setupRenameMessageToJson(value: SetupRenameMessage): string {
+        return JSON.stringify(uncast(value, r("SetupRenameMessage")), null, 2);
+    }
+
+    public static toSetupSelectMessage(json: string): SetupSelectMessage {
+        return cast(JSON.parse(json), r("SetupSelectMessage"));
+    }
+
+    public static setupSelectMessageToJson(value: SetupSelectMessage): string {
+        return JSON.stringify(uncast(value, r("SetupSelectMessage")), null, 2);
+    }
+
+    public static toSetupsChangedMessage(json: string): SetupsChangedMessage {
+        return cast(JSON.parse(json), r("SetupsChangedMessage"));
+    }
+
+    public static setupsChangedMessageToJson(value: SetupsChangedMessage): string {
+        return JSON.stringify(uncast(value, r("SetupsChangedMessage")), null, 2);
+    }
+
     public static toSnoozeTurnMessage(json: string): SnoozeTurnMessage {
         return cast(JSON.parse(json), r("SnoozeTurnMessage"));
     }
@@ -16500,14 +17054,6 @@ export class Convert {
         return JSON.stringify(uncast(value, r("WorkspaceLayoutClosePaneMessage")), null, 2);
     }
 
-    public static toWorkspaceLayoutDockEdge(json: string): WorkspaceLayoutDockEdge {
-        return cast(JSON.parse(json), r("WorkspaceLayoutDockEdge"));
-    }
-
-    public static workspaceLayoutDockEdgeToJson(value: WorkspaceLayoutDockEdge): string {
-        return JSON.stringify(uncast(value, r("WorkspaceLayoutDockEdge")), null, 2);
-    }
-
     public static toWorkspaceLayoutDockTileMessage(json: string): WorkspaceLayoutDockTileMessage {
         return cast(JSON.parse(json), r("WorkspaceLayoutDockTileMessage"));
     }
@@ -16572,22 +17118,6 @@ export class Convert {
         return JSON.stringify(uncast(value, r("WorkspaceLayoutPane")), null, 2);
     }
 
-    public static toWorkspaceLayoutPaneKind(json: string): WorkspaceLayoutPaneKind {
-        return cast(JSON.parse(json), r("WorkspaceLayoutPaneKind"));
-    }
-
-    public static workspaceLayoutPaneKindToJson(value: WorkspaceLayoutPaneKind): string {
-        return JSON.stringify(uncast(value, r("WorkspaceLayoutPaneKind")), null, 2);
-    }
-
-    public static toWorkspaceLayoutPaneStatus(json: string): WorkspaceLayoutPaneStatus {
-        return cast(JSON.parse(json), r("WorkspaceLayoutPaneStatus"));
-    }
-
-    public static workspaceLayoutPaneStatusToJson(value: WorkspaceLayoutPaneStatus): string {
-        return JSON.stringify(uncast(value, r("WorkspaceLayoutPaneStatus")), null, 2);
-    }
-
     public static toWorkspaceLayoutRenamePaneMessage(json: string): WorkspaceLayoutRenamePaneMessage {
         return cast(JSON.parse(json), r("WorkspaceLayoutRenamePaneMessage"));
     }
@@ -16602,14 +17132,6 @@ export class Convert {
 
     public static workspaceLayoutSetSplitRatioMessageToJson(value: WorkspaceLayoutSetSplitRatioMessage): string {
         return JSON.stringify(uncast(value, r("WorkspaceLayoutSetSplitRatioMessage")), null, 2);
-    }
-
-    public static toWorkspaceLayoutSplitDirection(json: string): WorkspaceLayoutSplitDirection {
-        return cast(JSON.parse(json), r("WorkspaceLayoutSplitDirection"));
-    }
-
-    public static workspaceLayoutSplitDirectionToJson(value: WorkspaceLayoutSplitDirection): string {
-        return JSON.stringify(uncast(value, r("WorkspaceLayoutSplitDirection")), null, 2);
     }
 
     public static toWorkspaceLayoutUndockTileMessage(json: string): WorkspaceLayoutUndockTileMessage {
@@ -18380,6 +18902,7 @@ const typeMap: any = {
         { json: "client_kind", js: "client_kind", typ: "" },
         { json: "client_token", js: "client_token", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("ClientHelloMessageCmd") },
+        { json: "setup_id", js: "setup_id", typ: u(undefined, "") },
         { json: "version", js: "version", typ: "" },
     ], "any"),
     "CollapseRepoMessage": o([
@@ -19017,6 +19540,119 @@ const typeMap: any = {
         { json: "path", js: "path", typ: "" },
         { json: "reason_kind", js: "reason_kind", typ: u(undefined, r("ReasonKind")) },
         { json: "success", js: "success", typ: true },
+    ], "any"),
+    "Desktop": o([
+        { json: "active_pane_id", js: "active_pane_id", typ: "" },
+        { json: "id", js: "id", typ: "" },
+        { json: "name", js: "name", typ: "" },
+        { json: "order_key", js: "order_key", typ: "" },
+        { json: "panes", js: "panes", typ: a(r("PaneElement")) },
+        { json: "revision", js: "revision", typ: 0 },
+        { json: "setup_id", js: "setup_id", typ: "" },
+        { json: "shortcut_slot", js: "shortcut_slot", typ: u(undefined, 0) },
+        { json: "tree_json", js: "tree_json", typ: "" },
+    ], "any"),
+    "PaneElement": o([
+        { json: "desktop_id", js: "desktop_id", typ: "" },
+        { json: "error", js: "error", typ: u(undefined, "") },
+        { json: "kind", js: "kind", typ: r("LayoutPaneKind") },
+        { json: "pane_id", js: "pane_id", typ: "" },
+        { json: "session_id", js: "session_id", typ: "" },
+        { json: "status", js: "status", typ: r("LayoutPaneStatus") },
+        { json: "title", js: "title", typ: "" },
+    ], "any"),
+    "DesktopCreateMessage": o([
+        { json: "cmd", js: "cmd", typ: r("DesktopCreateMessageCmd") },
+        { json: "name", js: "name", typ: u(undefined, "") },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "setup_id", js: "setup_id", typ: "" },
+        { json: "shortcut_slot", js: "shortcut_slot", typ: u(undefined, 0) },
+    ], "any"),
+    "DesktopDeleteMessage": o([
+        { json: "cmd", js: "cmd", typ: r("DesktopDeleteMessageCmd") },
+        { json: "desktop_id", js: "desktop_id", typ: "" },
+        { json: "expected_revision", js: "expected_revision", typ: 0 },
+        { json: "request_id", js: "request_id", typ: "" },
+    ], "any"),
+    "DesktopMoveLeafMessage": o([
+        { json: "anchor_id", js: "anchor_id", typ: u(undefined, "") },
+        { json: "cmd", js: "cmd", typ: r("DesktopMoveLeafMessageCmd") },
+        { json: "edge", js: "edge", typ: r("LayoutDockEdge") },
+        { json: "expected_source_revision", js: "expected_source_revision", typ: 0 },
+        { json: "expected_target_revision", js: "expected_target_revision", typ: 0 },
+        { json: "leaf_id", js: "leaf_id", typ: "" },
+        { json: "leaf_share", js: "leaf_share", typ: u(undefined, 3.14) },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "source_desktop_id", js: "source_desktop_id", typ: "" },
+        { json: "target_desktop_id", js: "target_desktop_id", typ: "" },
+    ], "any"),
+    "DesktopPane": o([
+        { json: "desktop_id", js: "desktop_id", typ: "" },
+        { json: "error", js: "error", typ: u(undefined, "") },
+        { json: "kind", js: "kind", typ: r("LayoutPaneKind") },
+        { json: "pane_id", js: "pane_id", typ: "" },
+        { json: "session_id", js: "session_id", typ: "" },
+        { json: "status", js: "status", typ: r("LayoutPaneStatus") },
+        { json: "title", js: "title", typ: "" },
+    ], "any"),
+    "DesktopPlaceSessionMessage": o([
+        { json: "anchor_pane_id", js: "anchor_pane_id", typ: u(undefined, "") },
+        { json: "cmd", js: "cmd", typ: r("DesktopPlaceSessionMessageCmd") },
+        { json: "desktop_id", js: "desktop_id", typ: "" },
+        { json: "direction", js: "direction", typ: u(undefined, r("LayoutSplitDirection")) },
+        { json: "expected_revision", js: "expected_revision", typ: 0 },
+        { json: "new_pane_share", js: "new_pane_share", typ: u(undefined, 3.14) },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "session_id", js: "session_id", typ: "" },
+    ], "any"),
+    "DesktopRemoveLeafMessage": o([
+        { json: "cmd", js: "cmd", typ: r("DesktopRemoveLeafMessageCmd") },
+        { json: "desktop_id", js: "desktop_id", typ: "" },
+        { json: "expected_revision", js: "expected_revision", typ: 0 },
+        { json: "leaf_id", js: "leaf_id", typ: "" },
+        { json: "request_id", js: "request_id", typ: "" },
+    ], "any"),
+    "DesktopRenameMessage": o([
+        { json: "cmd", js: "cmd", typ: r("DesktopRenameMessageCmd") },
+        { json: "desktop_id", js: "desktop_id", typ: "" },
+        { json: "expected_revision", js: "expected_revision", typ: 0 },
+        { json: "name", js: "name", typ: "" },
+        { json: "request_id", js: "request_id", typ: "" },
+    ], "any"),
+    "DesktopReorderMessage": o([
+        { json: "cmd", js: "cmd", typ: r("DesktopReorderMessageCmd") },
+        { json: "desktop_id", js: "desktop_id", typ: "" },
+        { json: "expected_revision", js: "expected_revision", typ: 0 },
+        { json: "next_desktop_id", js: "next_desktop_id", typ: u(undefined, "") },
+        { json: "previous_desktop_id", js: "previous_desktop_id", typ: u(undefined, "") },
+        { json: "request_id", js: "request_id", typ: "" },
+    ], "any"),
+    "DesktopSetActivePaneMessage": o([
+        { json: "cmd", js: "cmd", typ: r("DesktopSetActivePaneMessageCmd") },
+        { json: "desktop_id", js: "desktop_id", typ: "" },
+        { json: "pane_id", js: "pane_id", typ: "" },
+        { json: "request_id", js: "request_id", typ: "" },
+    ], "any"),
+    "DesktopSetCurrentMessage": o([
+        { json: "cmd", js: "cmd", typ: r("DesktopSetCurrentMessageCmd") },
+        { json: "desktop_id", js: "desktop_id", typ: "" },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "setup_id", js: "setup_id", typ: "" },
+    ], "any"),
+    "DesktopSetShortcutSlotMessage": o([
+        { json: "cmd", js: "cmd", typ: r("DesktopSetShortcutSlotMessageCmd") },
+        { json: "desktop_id", js: "desktop_id", typ: "" },
+        { json: "expected_revision", js: "expected_revision", typ: 0 },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "shortcut_slot", js: "shortcut_slot", typ: u(undefined, 0) },
+    ], "any"),
+    "DesktopSetSplitRatioMessage": o([
+        { json: "cmd", js: "cmd", typ: r("DesktopSetSplitRatioMessageCmd") },
+        { json: "desktop_id", js: "desktop_id", typ: "" },
+        { json: "expected_revision", js: "expected_revision", typ: 0 },
+        { json: "ratio", js: "ratio", typ: 3.14 },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "split_id", js: "split_id", typ: "" },
     ], "any"),
     "DetachSessionMessage": o([
         { json: "cmd", js: "cmd", typ: r("DetachSessionMessageCmd") },
@@ -20011,6 +20647,7 @@ const typeMap: any = {
         { json: "authors", js: "authors", typ: u(undefined, a(r("AuthorElement"))) },
         { json: "crew", js: "crew", typ: u(undefined, a(r("Member"))) },
         { json: "daemon_instance_id", js: "daemon_instance_id", typ: u(undefined, "") },
+        { json: "desktops", js: "desktops", typ: u(undefined, a(r("DesktopElement"))) },
         { json: "endpoints", js: "endpoints", typ: u(undefined, a(r("Endpoint"))) },
         { json: "event", js: "event", typ: r("InitialStateMessageEvent") },
         { json: "github_hosts", js: "github_hosts", typ: u(undefined, a("")) },
@@ -20021,16 +20658,36 @@ const typeMap: any = {
         { json: "repos", js: "repos", typ: u(undefined, a(r("RepoElement"))) },
         { json: "seeds", js: "seeds", typ: u(undefined, a(r("SeedElement"))) },
         { json: "seeds_total", js: "seeds_total", typ: u(undefined, 0) },
+        { json: "selected_setup_id", js: "selected_setup_id", typ: u(undefined, "") },
         { json: "sessions", js: "sessions", typ: u(undefined, a(r("SessionObject"))) },
         { json: "settings", js: "settings", typ: u(undefined, m("")) },
+        { json: "setups", js: "setups", typ: u(undefined, a(r("SetupElement"))) },
         { json: "source_fingerprint", js: "source_fingerprint", typ: u(undefined, "") },
         { json: "warnings", js: "warnings", typ: u(undefined, a(r("WarningElement"))) },
         { json: "workspaces", js: "workspaces", typ: u(undefined, a(r("WorkspaceElement"))) },
+    ], "any"),
+    "DesktopElement": o([
+        { json: "active_pane_id", js: "active_pane_id", typ: "" },
+        { json: "id", js: "id", typ: "" },
+        { json: "name", js: "name", typ: "" },
+        { json: "order_key", js: "order_key", typ: "" },
+        { json: "panes", js: "panes", typ: a(r("PaneElement")) },
+        { json: "revision", js: "revision", typ: 0 },
+        { json: "setup_id", js: "setup_id", typ: "" },
+        { json: "shortcut_slot", js: "shortcut_slot", typ: u(undefined, 0) },
+        { json: "tree_json", js: "tree_json", typ: "" },
     ], "any"),
     "RepoElement": o([
         { json: "collapsed", js: "collapsed", typ: true },
         { json: "muted", js: "muted", typ: true },
         { json: "repo", js: "repo", typ: "" },
+    ], "any"),
+    "SetupElement": o([
+        { json: "current_desktop_id", js: "current_desktop_id", typ: "" },
+        { json: "id", js: "id", typ: "" },
+        { json: "last_used_at", js: "last_used_at", typ: u(undefined, "") },
+        { json: "name", js: "name", typ: "" },
+        { json: "revision", js: "revision", typ: 0 },
     ], "any"),
     "WarningElement": o([
         { json: "code", js: "code", typ: "" },
@@ -20050,17 +20707,17 @@ const typeMap: any = {
     "Layout": o([
         { json: "active_pane_id", js: "active_pane_id", typ: "" },
         { json: "layout_json", js: "layout_json", typ: "" },
-        { json: "panes", js: "panes", typ: a(r("PaneElement")) },
+        { json: "panes", js: "panes", typ: a(r("PaneObject")) },
         { json: "updated_at", js: "updated_at", typ: u(undefined, "") },
         { json: "workspace_id", js: "workspace_id", typ: "" },
     ], "any"),
-    "PaneElement": o([
+    "PaneObject": o([
         { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "kind", js: "kind", typ: r("WorkspaceLayoutPaneKind") },
+        { json: "kind", js: "kind", typ: r("LayoutPaneKind") },
         { json: "pane_id", js: "pane_id", typ: "" },
         { json: "runtime_id", js: "runtime_id", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: u(undefined, "") },
-        { json: "status", js: "status", typ: r("WorkspaceLayoutPaneStatus") },
+        { json: "status", js: "status", typ: r("LayoutPaneStatus") },
         { json: "title", js: "title", typ: "" },
         { json: "workspace_id", js: "workspace_id", typ: "" },
     ], "any"),
@@ -22729,6 +23386,58 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("SettleTurnMessageCmd") },
         { json: "session_id", js: "session_id", typ: "" },
     ], "any"),
+    "Setup": o([
+        { json: "current_desktop_id", js: "current_desktop_id", typ: "" },
+        { json: "id", js: "id", typ: "" },
+        { json: "last_used_at", js: "last_used_at", typ: u(undefined, "") },
+        { json: "name", js: "name", typ: "" },
+        { json: "revision", js: "revision", typ: 0 },
+    ], "any"),
+    "SetupActionResultMessage": o([
+        { json: "action", js: "action", typ: "" },
+        { json: "desktops", js: "desktops", typ: u(undefined, a(r("DesktopElement"))) },
+        { json: "error", js: "error", typ: u(undefined, "") },
+        { json: "error_code", js: "error_code", typ: u(undefined, r("SetupErrorCode")) },
+        { json: "event", js: "event", typ: r("SetupActionResultMessageEvent") },
+        { json: "pane_id", js: "pane_id", typ: u(undefined, "") },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "setup", js: "setup", typ: u(undefined, r("SetupElement")) },
+        { json: "success", js: "success", typ: true },
+    ], "any"),
+    "SetupArrangementChangedMessage": o([
+        { json: "deleted_desktop_ids", js: "deleted_desktop_ids", typ: u(undefined, a("")) },
+        { json: "desktops", js: "desktops", typ: a(r("DesktopElement")) },
+        { json: "event", js: "event", typ: r("SetupArrangementChangedMessageEvent") },
+        { json: "setup", js: "setup", typ: r("SetupElement") },
+    ], "any"),
+    "SetupCreateMessage": o([
+        { json: "cmd", js: "cmd", typ: r("SetupCreateMessageCmd") },
+        { json: "name", js: "name", typ: "" },
+        { json: "request_id", js: "request_id", typ: "" },
+    ], "any"),
+    "SetupDeleteMessage": o([
+        { json: "cmd", js: "cmd", typ: r("SetupDeleteMessageCmd") },
+        { json: "destination_setup_id", js: "destination_setup_id", typ: "" },
+        { json: "expected_revision", js: "expected_revision", typ: 0 },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "setup_id", js: "setup_id", typ: "" },
+    ], "any"),
+    "SetupRenameMessage": o([
+        { json: "cmd", js: "cmd", typ: r("SetupRenameMessageCmd") },
+        { json: "expected_revision", js: "expected_revision", typ: 0 },
+        { json: "name", js: "name", typ: "" },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "setup_id", js: "setup_id", typ: "" },
+    ], "any"),
+    "SetupSelectMessage": o([
+        { json: "cmd", js: "cmd", typ: r("SetupSelectMessageCmd") },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "setup_id", js: "setup_id", typ: "" },
+    ], "any"),
+    "SetupsChangedMessage": o([
+        { json: "event", js: "event", typ: r("SetupsChangedMessageEvent") },
+        { json: "setups", js: "setups", typ: a(r("SetupElement")) },
+    ], "any"),
     "SnoozeTurnMessage": o([
         { json: "cmd", js: "cmd", typ: r("SnoozeTurnMessageCmd") },
         { json: "session_id", js: "session_id", typ: "" },
@@ -23356,7 +24065,7 @@ const typeMap: any = {
     "WorkspaceLayout": o([
         { json: "active_pane_id", js: "active_pane_id", typ: "" },
         { json: "layout_json", js: "layout_json", typ: "" },
-        { json: "panes", js: "panes", typ: a(r("PaneElement")) },
+        { json: "panes", js: "panes", typ: a(r("PaneObject")) },
         { json: "updated_at", js: "updated_at", typ: u(undefined, "") },
         { json: "workspace_id", js: "workspace_id", typ: "" },
     ], "any"),
@@ -23377,7 +24086,7 @@ const typeMap: any = {
     ], "any"),
     "WorkspaceLayoutAddSessionPaneMessage": o([
         { json: "cmd", js: "cmd", typ: r("WorkspaceLayoutAddSessionPaneMessageCmd") },
-        { json: "direction", js: "direction", typ: u(undefined, r("WorkspaceLayoutSplitDirection")) },
+        { json: "direction", js: "direction", typ: u(undefined, r("LayoutSplitDirection")) },
         { json: "pane_id", js: "pane_id", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "target_pane_id", js: "target_pane_id", typ: u(undefined, "") },
@@ -23392,7 +24101,7 @@ const typeMap: any = {
     "WorkspaceLayoutDockTileMessage": o([
         { json: "anchor_pane_id", js: "anchor_pane_id", typ: "" },
         { json: "cmd", js: "cmd", typ: r("WorkspaceLayoutDockTileMessageCmd") },
-        { json: "edge", js: "edge", typ: r("WorkspaceLayoutDockEdge") },
+        { json: "edge", js: "edge", typ: r("LayoutDockEdge") },
         { json: "ratio", js: "ratio", typ: u(undefined, 3.14) },
         { json: "tile_id", js: "tile_id", typ: "" },
         { json: "tile_kind", js: "tile_kind", typ: "" },
@@ -23415,7 +24124,7 @@ const typeMap: any = {
     "WorkspaceLayoutMoveLeafMessage": o([
         { json: "anchor_id", js: "anchor_id", typ: "" },
         { json: "cmd", js: "cmd", typ: r("WorkspaceLayoutMoveLeafMessageCmd") },
-        { json: "edge", js: "edge", typ: r("WorkspaceLayoutDockEdge") },
+        { json: "edge", js: "edge", typ: r("LayoutDockEdge") },
         { json: "leaf_id", js: "leaf_id", typ: "" },
         { json: "ratio", js: "ratio", typ: u(undefined, 3.14) },
         { json: "workspace_id", js: "workspace_id", typ: "" },
@@ -23423,7 +24132,7 @@ const typeMap: any = {
     "WorkspaceLayoutMoveLeafToNewWorkspaceMessage": o([
         { json: "anchor_id", js: "anchor_id", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("WorkspaceLayoutMoveLeafToNewWorkspaceMessageCmd") },
-        { json: "edge", js: "edge", typ: u(undefined, r("WorkspaceLayoutDockEdge")) },
+        { json: "edge", js: "edge", typ: u(undefined, r("LayoutDockEdge")) },
         { json: "leaf_id", js: "leaf_id", typ: "" },
         { json: "ratio", js: "ratio", typ: u(undefined, 3.14) },
         { json: "source_workspace_id", js: "source_workspace_id", typ: "" },
@@ -23431,7 +24140,7 @@ const typeMap: any = {
     "WorkspaceLayoutMoveLeafToWorkspaceMessage": o([
         { json: "anchor_id", js: "anchor_id", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("WorkspaceLayoutMoveLeafToWorkspaceMessageCmd") },
-        { json: "edge", js: "edge", typ: r("WorkspaceLayoutDockEdge") },
+        { json: "edge", js: "edge", typ: r("LayoutDockEdge") },
         { json: "leaf_id", js: "leaf_id", typ: "" },
         { json: "ratio", js: "ratio", typ: u(undefined, 3.14) },
         { json: "source_workspace_id", js: "source_workspace_id", typ: "" },
@@ -23439,11 +24148,11 @@ const typeMap: any = {
     ], "any"),
     "WorkspaceLayoutPane": o([
         { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "kind", js: "kind", typ: r("WorkspaceLayoutPaneKind") },
+        { json: "kind", js: "kind", typ: r("LayoutPaneKind") },
         { json: "pane_id", js: "pane_id", typ: "" },
         { json: "runtime_id", js: "runtime_id", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: u(undefined, "") },
-        { json: "status", js: "status", typ: r("WorkspaceLayoutPaneStatus") },
+        { json: "status", js: "status", typ: r("LayoutPaneStatus") },
         { json: "title", js: "title", typ: "" },
         { json: "workspace_id", js: "workspace_id", typ: "" },
     ], "any"),
@@ -24069,6 +24778,57 @@ const typeMap: any = {
         "not_found",
         "provider_error",
     ],
+    "LayoutPaneKind": [
+        "agent",
+    ],
+    "LayoutPaneStatus": [
+        "failed",
+        "ready",
+        "spawning",
+    ],
+    "DesktopCreateMessageCmd": [
+        "desktop_create",
+    ],
+    "DesktopDeleteMessageCmd": [
+        "desktop_delete",
+    ],
+    "DesktopMoveLeafMessageCmd": [
+        "desktop_move_leaf",
+    ],
+    "LayoutDockEdge": [
+        "bottom",
+        "left",
+        "right",
+        "top",
+    ],
+    "DesktopPlaceSessionMessageCmd": [
+        "desktop_place_session",
+    ],
+    "LayoutSplitDirection": [
+        "horizontal",
+        "vertical",
+    ],
+    "DesktopRemoveLeafMessageCmd": [
+        "desktop_remove_leaf",
+    ],
+    "DesktopRenameMessageCmd": [
+        "desktop_rename",
+    ],
+    "DesktopReorderMessageCmd": [
+        "desktop_reorder",
+    ],
+    "DesktopSetActivePaneMessageCmd": [
+        "desktop_set_active_pane",
+    ],
+    "DesktopSetCurrentMessageCmd": [
+        "desktop_set_current",
+    ],
+    "DesktopSetShortcutSlotMessageCmd": [
+        "desktop_set_shortcut_slot",
+    ],
+    "DesktopSetSplitRatioMessageCmd": [
+        "desktop_set_split_ratio",
+    ],
     "DetachSessionMessageCmd": [
         "detach_session",
     ],
@@ -24298,14 +25058,6 @@ const typeMap: any = {
     ],
     "InitialStateMessageEvent": [
         "initial_state",
-    ],
-    "WorkspaceLayoutPaneKind": [
-        "agent",
-    ],
-    "WorkspaceLayoutPaneStatus": [
-        "failed",
-        "ready",
-        "spawning",
     ],
     "WorkspaceStatus": [
         "idle",
@@ -24885,6 +25637,43 @@ const typeMap: any = {
     "SettleTurnMessageCmd": [
         "settle_turn",
     ],
+    "SetupErrorCode": [
+        "already_placed",
+        "cross_setup",
+        "destination_same",
+        "internal",
+        "invalid",
+        "last_desktop",
+        "last_setup",
+        "name_taken",
+        "not_found",
+        "session_closed",
+        "setup_deleted",
+        "slot_taken",
+        "stale_revision",
+        "unavailable",
+    ],
+    "SetupActionResultMessageEvent": [
+        "setup_action_result",
+    ],
+    "SetupArrangementChangedMessageEvent": [
+        "setup_arrangement_changed",
+    ],
+    "SetupCreateMessageCmd": [
+        "setup_create",
+    ],
+    "SetupDeleteMessageCmd": [
+        "setup_delete",
+    ],
+    "SetupRenameMessageCmd": [
+        "setup_rename",
+    ],
+    "SetupSelectMessageCmd": [
+        "setup_select",
+    ],
+    "SetupsChangedMessageEvent": [
+        "setups_changed",
+    ],
     "SnoozeTurnMessageCmd": [
         "snooze_turn",
     ],
@@ -25027,21 +25816,11 @@ const typeMap: any = {
     "WorkspaceLayoutAddSessionPaneMessageCmd": [
         "workspace_layout_add_session_pane",
     ],
-    "WorkspaceLayoutSplitDirection": [
-        "horizontal",
-        "vertical",
-    ],
     "WorkspaceLayoutClosePaneMessageCmd": [
         "workspace_layout_close_pane",
     ],
     "WorkspaceLayoutDockTileMessageCmd": [
         "workspace_layout_dock_tile",
-    ],
-    "WorkspaceLayoutDockEdge": [
-        "bottom",
-        "left",
-        "right",
-        "top",
     ],
     "WorkspaceLayoutFocusPaneMessageCmd": [
         "workspace_layout_focus_pane",

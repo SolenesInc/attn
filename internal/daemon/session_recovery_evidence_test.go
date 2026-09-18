@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/launchcontract"
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
@@ -98,12 +99,12 @@ func saveTwoPaneLayout(workspaceID, firstSessionID, secondSessionID string) work
 	return workspacelayout.WorkspaceLayout{
 		WorkspaceID:  workspaceID,
 		ActivePaneID: "pane-" + firstSessionID,
-		Layout: workspacelayout.Node{
+		Layout: layouttree.Node{
 			Type:      "split",
 			SplitID:   "split-" + workspaceID,
-			Direction: workspacelayout.DirectionVertical,
-			Ratio:     workspacelayout.DefaultSplitRatio,
-			Children: []workspacelayout.Node{
+			Direction: layouttree.DirectionVertical,
+			Ratio:     layouttree.DefaultSplitRatio,
+			Children: []layouttree.Node{
 				{Type: "pane", PaneID: "pane-" + firstSessionID},
 				{Type: "pane", PaneID: "pane-" + secondSessionID},
 			},

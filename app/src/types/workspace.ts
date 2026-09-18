@@ -1,4 +1,4 @@
-import type { WorkspaceLayout as DaemonWorkspaceSnapshot, PaneElement } from './generated';
+import type { WorkspaceLayout as DaemonWorkspaceSnapshot } from './generated';
 
 export type TerminalSplitDirection = 'vertical' | 'horizontal';
 export type TerminalNavigationDirection = 'left' | 'right' | 'up' | 'down';
@@ -503,7 +503,7 @@ export function localWorkspaceDirectory(
   return workspace.directory ?? undefined;
 }
 
-function agentTerminalsFromPanes(panes: PaneElement[]): AgentTerminal[] {
+function agentTerminalsFromPanes(panes: DaemonWorkspaceSnapshot['panes']): AgentTerminal[] {
   return panes
     .filter((pane) => pane.kind === 'agent' && typeof pane.runtime_id === 'string' && typeof pane.session_id === 'string')
     .map((pane) => {

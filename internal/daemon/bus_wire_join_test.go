@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 type wireFixture struct {
@@ -170,6 +171,22 @@ var wireFixtures = map[string]wireFixture{
 		events:  []string{protocol.EventWorkspaceLayoutUpdated},
 		subject: (*wireWorld).workspace,
 		payload: func(w *wireWorld) any { return w.layout() },
+	},
+	FactSetupCreated: {
+		events:  []string{protocol.EventSetupsChanged},
+		subject: (*wireWorld).setup,
+	},
+	FactSetupRenamed: {
+		events:  []string{protocol.EventSetupsChanged},
+		subject: (*wireWorld).setup,
+	},
+	FactSetupDeleted: {
+		events:  []string{protocol.EventSetupsChanged},
+		subject: (*wireWorld).setup,
+	},
+	FactSetupArrangementChanged: {
+		events:  []string{protocol.EventSetupsChanged, protocol.EventSetupArrangementChanged},
+		subject: (*wireWorld).setup,
 	},
 	FactWorkspaceLayoutRepublished: {
 		events:  []string{protocol.EventWorkspaceLayout},
@@ -461,6 +478,20 @@ func (w *wireWorld) session() string      { return w.sessionID }
 func (w *wireWorld) workspace() string    { return w.workspaceID }
 func (w *wireWorld) presentation() string { return w.presentationID }
 func (w *wireWorld) worktree() string     { return w.worktreePath }
+
+func (w *wireWorld) setup() string {
+	persistent, err := store.NewWithDB(filepath.Join(w.t.TempDir(), "attn.db"))
+	if err != nil {
+		w.t.Fatalf("open the setups store: %v", err)
+	}
+	w.t.Cleanup(func() { persistent.Close() })
+	w.d.store = persistent
+	setup, _, err := persistent.CreateSetup("wire")
+	if err != nil {
+		w.t.Fatalf("seed setup: %v", err)
+	}
+	return setup.ID
+}
 
 func (w *wireWorld) gardenReview() string {
 	w.d.ensureGardenCollections()

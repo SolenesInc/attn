@@ -150,13 +150,13 @@ func TestManagerRemoteWorkspacesTrackAndClear(t *testing.T) {
 			LayoutJson:   `{"type":"pane","paneId":"pane-session"}`,
 			Panes: []protocol.WorkspaceLayoutPane{{
 				PaneID:    "pane-session",
-				Kind:      protocol.WorkspaceLayoutPaneKindAgent,
+				Kind:      protocol.LayoutPaneKindAgent,
 				Title:     "Agent",
 				RuntimeID: protocol.Ptr("sess-a"),
 				SessionID: protocol.Ptr("sess-a"),
 			}, {
 				PaneID:    "agent-2",
-				Kind:      protocol.WorkspaceLayoutPaneKindAgent,
+				Kind:      protocol.LayoutPaneKindAgent,
 				Title:     "Agent 2",
 				RuntimeID: protocol.Ptr("sess-b"),
 				SessionID: protocol.Ptr("sess-b"),
@@ -176,7 +176,7 @@ func TestManagerRemoteWorkspacesTrackAndClear(t *testing.T) {
 			LayoutJson:   `{"type":"pane","paneId":"pane-session"}`,
 			Panes: []protocol.WorkspaceLayoutPane{{
 				PaneID:    "pane-session",
-				Kind:      protocol.WorkspaceLayoutPaneKindAgent,
+				Kind:      protocol.LayoutPaneKindAgent,
 				Title:     "Agent",
 				RuntimeID: protocol.Ptr("sess-b"),
 				SessionID: protocol.Ptr("sess-b"),

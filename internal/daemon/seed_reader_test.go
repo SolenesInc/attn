@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 func readSeedDocumentResult(t *testing.T, client *wsClient) protocol.SeedDocumentGetResultMessage {
@@ -102,8 +102,8 @@ func TestOpenSeedUsesPlacementPaneAndTenderBinding(t *testing.T) {
 		t.Fatalf("open = (%q, %q), want (%q, %q)", gotWorkspace, tileID, workspaceID, seedTileIDForID(seed.ID))
 	}
 	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	leaves := workspacelayout.TileLeaves(snapshot.Layout)
-	if len(leaves) != 1 || leaves[0].TileKind != string(workspacelayout.TileKindSeed) || leaves[0].TileParams != seed.ID || leaves[0].TileSessionID != "sess-a" {
+	leaves := layouttree.TileLeaves(snapshot.Layout)
+	if len(leaves) != 1 || leaves[0].TileKind != string(layouttree.TileKindSeed) || leaves[0].TileParams != seed.ID || leaves[0].TileSessionID != "sess-a" {
 		t.Fatalf("seed tile = %+v, want seed params and tender binding", leaves)
 	}
 	move(t, d, "sess-a", seed.ID, garden.VerbPark, "", "")
@@ -111,7 +111,7 @@ func TestOpenSeedUsesPlacementPaneAndTenderBinding(t *testing.T) {
 		t.Fatalf("reopen = (%q, %v), want existing %q", reopenedTileID, err, tileID)
 	}
 	snapshot = d.store.GetWorkspaceLayout(workspaceID)
-	leaves = workspacelayout.TileLeaves(snapshot.Layout)
+	leaves = layouttree.TileLeaves(snapshot.Layout)
 	if len(leaves) != 1 || leaves[0].TileSessionID != "session-1" {
 		t.Fatalf("reopened seed tile = %+v, want refreshed fallback binding", leaves)
 	}
@@ -137,8 +137,8 @@ func TestOpenSeedWithoutPlacementCreatesAStandaloneReaderWorkspace(t *testing.T)
 	if snapshot == nil || len(snapshot.Panes) != 0 {
 		t.Fatalf("standalone layout = %+v, want no agent panes", snapshot)
 	}
-	leaves := workspacelayout.TileLeaves(snapshot.Layout)
-	if len(leaves) != 1 || leaves[0].TileID != tileID || leaves[0].TileKind != string(workspacelayout.TileKindSeed) || leaves[0].TileParams != seed.ID {
+	leaves := layouttree.TileLeaves(snapshot.Layout)
+	if len(leaves) != 1 || leaves[0].TileID != tileID || leaves[0].TileKind != string(layouttree.TileKindSeed) || leaves[0].TileParams != seed.ID {
 		t.Fatalf("standalone leaves = %+v, want the requested seed tile", leaves)
 	}
 
@@ -189,7 +189,7 @@ func TestOpenSeedWithoutPlacementResetsAReaderNavigatedToAnotherSeed(t *testing.
 	if err != nil || reopenedWorkspaceID != workspaceID || reopenedTileID != tileID {
 		t.Fatalf("reopen first seed = (%q, %q, %v), want (%q, %q)", reopenedWorkspaceID, reopenedTileID, err, workspaceID, tileID)
 	}
-	leaves := workspacelayout.TileLeaves(d.store.GetWorkspaceLayout(workspaceID).Layout)
+	leaves := layouttree.TileLeaves(d.store.GetWorkspaceLayout(workspaceID).Layout)
 	if len(leaves) != 1 || leaves[0].TileParams != first.ID {
 		t.Fatalf("reopened standalone reader = %+v, want params %s", leaves, first.ID)
 	}
@@ -210,7 +210,7 @@ func TestOpenSeedWithoutPlacementLeavesDockedCopiesAlone(t *testing.T) {
 	if readerWorkspaceID == dockedWorkspaceID {
 		t.Fatalf("placement-free open reused the docked workspace %q, want a standalone reader", dockedWorkspaceID)
 	}
-	docked := workspacelayout.TileLeaves(d.store.GetWorkspaceLayout(dockedWorkspaceID).Layout)
+	docked := layouttree.TileLeaves(d.store.GetWorkspaceLayout(dockedWorkspaceID).Layout)
 	if len(docked) != 1 || docked[0].TileSessionID != "session-1" {
 		t.Fatalf("docked tile = %+v, want its binding untouched", docked)
 	}
@@ -301,8 +301,8 @@ func TestConcurrentMarkdownAndSeedOpenPreservesBothTiles(t *testing.T) {
 		}
 	}
 	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	leaves := workspacelayout.TileLeaves(snapshot.Layout)
-	if len(leaves) != 2 || !workspacelayout.HasTile(snapshot.Layout, markdownTileIDForPath(path)) || !workspacelayout.HasTile(snapshot.Layout, seedTileIDForID(seed.ID)) {
+	leaves := layouttree.TileLeaves(snapshot.Layout)
+	if len(leaves) != 2 || !layouttree.HasTile(snapshot.Layout, markdownTileIDForPath(path)) || !layouttree.HasTile(snapshot.Layout, seedTileIDForID(seed.ID)) {
 		t.Fatalf("tiles after concurrent opens = %+v, want markdown and seed", leaves)
 	}
 }

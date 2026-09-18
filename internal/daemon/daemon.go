@@ -37,6 +37,7 @@ import (
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/jobs"
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/pathutil"
@@ -3848,7 +3849,7 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 	layout := workspacelayout.DefaultWorkspaceLayout(workspaceID, paneID, msg.Session.ID)
 	if current := d.store.GetWorkspaceLayout(workspaceID); current != nil {
 		layout = workspacelayout.NormalizeWorkspaceLayout(*current)
-		if !workspacelayout.HasPane(layout.Layout, paneID) {
+		if !layouttree.HasPane(layout.Layout, paneID) {
 			layout.Panes = append(layout.Panes, workspacelayout.Pane{
 				PaneID:    paneID,
 				RuntimeID: msg.Session.ID,
@@ -3862,15 +3863,15 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 				targetPaneID = firstWorkspaceLayoutPaneID(layout)
 			}
 			if targetPaneID == "" || layout.Layout.Type == "" {
-				layout.Layout = workspacelayout.DefaultLayout(paneID)
+				layout.Layout = layouttree.DefaultLayout(paneID)
 			} else {
-				nextLayout, _ := workspacelayout.Split(
+				nextLayout, _ := layouttree.Split(
 					layout.Layout,
 					targetPaneID,
 					paneID,
 					newWorkspaceLayoutEntityID("split"),
-					workspacelayout.DirectionVertical,
-					workspacelayout.DefaultSplitRatio,
+					layouttree.DirectionVertical,
+					layouttree.DefaultSplitRatio,
 				)
 				layout.Layout = nextLayout
 			}

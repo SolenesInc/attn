@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
@@ -20,7 +21,7 @@ func (s *Store) SaveWorkspaceLayout(snapshot workspacelayout.WorkspaceLayout) er
 		return nil
 	}
 
-	layoutJSON, err := workspacelayout.EncodeLayout(snapshot.Layout)
+	layoutJSON, err := layouttree.EncodeLayout(snapshot.Layout)
 	if err != nil {
 		return err
 	}
@@ -106,7 +107,7 @@ func (s *Store) GetWorkspaceLayout(workspaceID string) *workspacelayout.Workspac
 		return nil
 	}
 
-	layout, err := workspacelayout.DecodeLayout(layoutJSON)
+	layout, err := layouttree.DecodeLayout(layoutJSON)
 	if err != nil {
 		log.Printf("[store] GetWorkspaceLayout: failed to decode layout for workspace %s: %v", workspaceID, err)
 	}

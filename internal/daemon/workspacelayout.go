@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/rankkey"
 	"github.com/victorarias/attn/internal/store"
@@ -26,7 +27,7 @@ func (d *Daemon) ensureWorkspaceLayout(workspaceID string) (*workspacelayout.Wor
 	}
 
 	normalized := workspacelayout.NormalizeWorkspaceLayout(*current)
-	if workspacelayout.LayoutEmpty(normalized.Layout) {
+	if layouttree.LayoutEmpty(normalized.Layout) {
 		d.store.RemoveWorkspaceLayout(workspaceID)
 		return nil, fmt.Errorf("workspace has no layout leaves: %s", workspaceID)
 	}
@@ -85,7 +86,7 @@ func (d *Daemon) protocolWorkspaceLayout(workspaceID string) (*protocol.Workspac
 }
 
 func protocolWorkspaceLayout(snapshot workspacelayout.WorkspaceLayout) (*protocol.WorkspaceLayout, error) {
-	layoutJSON, err := workspacelayout.EncodeLayout(snapshot.Layout)
+	layoutJSON, err := layouttree.EncodeLayout(snapshot.Layout)
 	if err != nil {
 		return nil, err
 	}
@@ -93,12 +94,12 @@ func protocolWorkspaceLayout(snapshot workspacelayout.WorkspaceLayout) (*protoco
 	for _, pane := range snapshot.Panes {
 		next := protocol.WorkspaceLayoutPane{
 			PaneID: pane.PaneID,
-			Kind:   protocol.WorkspaceLayoutPaneKind(pane.Kind),
+			Kind:   protocol.LayoutPaneKind(pane.Kind),
 			Title:  pane.Title,
-			Status: protocol.WorkspaceLayoutPaneStatus(pane.Status),
+			Status: protocol.LayoutPaneStatus(pane.Status),
 		}
 		if next.Status == "" {
-			next.Status = protocol.WorkspaceLayoutPaneStatusReady
+			next.Status = protocol.LayoutPaneStatusReady
 		}
 		if strings.TrimSpace(pane.RuntimeID) != "" {
 			next.RuntimeID = protocol.Ptr(strings.TrimSpace(pane.RuntimeID))
@@ -256,12 +257,12 @@ func (d *Daemon) projectWorkspaceLayoutRepublished(workspaceID string) {
 	})
 }
 
-func protocolDirection(direction protocol.WorkspaceLayoutSplitDirection) workspacelayout.Direction {
+func protocolDirection(direction protocol.LayoutSplitDirection) layouttree.Direction {
 	switch direction {
-	case protocol.WorkspaceLayoutSplitDirectionHorizontal:
-		return workspacelayout.DirectionHorizontal
+	case protocol.LayoutSplitDirectionHorizontal:
+		return layouttree.DirectionHorizontal
 	default:
-		return workspacelayout.DirectionVertical
+		return layouttree.DirectionVertical
 	}
 }
 
@@ -269,16 +270,16 @@ func newWorkspaceLayoutEntityID(prefix string) string {
 	return prefix + "-" + uuid.NewString()
 }
 
-func workspaceLayoutHasLeaf(layout workspacelayout.Node, leafID string) bool {
+func workspaceLayoutHasLeaf(layout layouttree.Node, leafID string) bool {
 	if strings.TrimSpace(leafID) == "" {
 		return false
 	}
-	for _, paneID := range workspacelayout.PaneIDs(layout) {
+	for _, paneID := range layouttree.PaneIDs(layout) {
 		if paneID == leafID {
 			return true
 		}
 	}
-	for _, tileID := range workspacelayout.TileIDs(layout) {
+	for _, tileID := range layouttree.TileIDs(layout) {
 		if tileID == leafID {
 			return true
 		}
@@ -295,7 +296,7 @@ func firstWorkspaceLayoutPaneID(snapshot workspacelayout.WorkspaceLayout) string
 			return pane.PaneID
 		}
 	}
-	if tileIDs := workspacelayout.TileIDs(snapshot.Layout); len(tileIDs) > 0 {
+	if tileIDs := layouttree.TileIDs(snapshot.Layout); len(tileIDs) > 0 {
 		return tileIDs[0]
 	}
 	return ""
@@ -311,7 +312,7 @@ func (d *Daemon) handleWorkspaceLayoutFocusPane(client *wsClient, msg *protocol.
 		d.sendWorkspaceLayoutActionResult(client, protocol.CmdWorkspaceLayoutFocusPane, msg.WorkspaceID, protocol.Ptr(msg.PaneID), err)
 		return
 	}
-	if !workspacelayout.HasPane(snapshot.Layout, msg.PaneID) {
+	if !layouttree.HasPane(snapshot.Layout, msg.PaneID) {
 		d.sendWorkspaceLayoutActionResult(client, protocol.CmdWorkspaceLayoutFocusPane, msg.WorkspaceID, protocol.Ptr(msg.PaneID), fmt.Errorf("pane not found: %s", msg.PaneID))
 		return
 	}
@@ -371,7 +372,7 @@ func (d *Daemon) handleWorkspaceLayoutSetSplitRatio(client *wsClient, msg *proto
 		d.sendWorkspaceLayoutSplitActionResult(client, msg.WorkspaceID, splitID, msg.RequestID, fmt.Errorf("split_id is required"))
 		return
 	}
-	layout, ok := workspacelayout.SetSplitRatio(snapshot.Layout, splitID, msg.Ratio)
+	layout, ok := layouttree.SetSplitRatio(snapshot.Layout, splitID, msg.Ratio)
 	if !ok {
 		d.sendWorkspaceLayoutSplitActionResult(client, msg.WorkspaceID, splitID, msg.RequestID, fmt.Errorf("split not found: %s", splitID))
 		return
@@ -387,16 +388,16 @@ func (d *Daemon) handleWorkspaceLayoutSetSplitRatio(client *wsClient, msg *proto
 
 const defaultTileFraction = 0.32
 
-func dockEdgeToSplit(edge protocol.WorkspaceLayoutDockEdge) (workspacelayout.Direction, bool) {
+func dockEdgeToSplit(edge protocol.LayoutDockEdge) (layouttree.Direction, bool) {
 	switch edge {
-	case protocol.WorkspaceLayoutDockEdgeLeft:
-		return workspacelayout.DirectionVertical, true
-	case protocol.WorkspaceLayoutDockEdgeTop:
-		return workspacelayout.DirectionHorizontal, true
-	case protocol.WorkspaceLayoutDockEdgeBottom:
-		return workspacelayout.DirectionHorizontal, false
+	case protocol.LayoutDockEdgeLeft:
+		return layouttree.DirectionVertical, true
+	case protocol.LayoutDockEdgeTop:
+		return layouttree.DirectionHorizontal, true
+	case protocol.LayoutDockEdgeBottom:
+		return layouttree.DirectionHorizontal, false
 	default:
-		return workspacelayout.DirectionVertical, false
+		return layouttree.DirectionVertical, false
 	}
 }
 
@@ -404,14 +405,14 @@ func (d *Daemon) handleWorkspaceLayoutDockTile(client *wsClient, msg *protocol.W
 	params := strings.TrimSpace(protocol.Deref(msg.TileParams))
 	if params == "" {
 		if snapshot := d.store.GetWorkspaceLayout(msg.WorkspaceID); snapshot != nil {
-			params, _ = workspacelayout.TileParamsByID(snapshot.Layout, strings.TrimSpace(msg.TileID))
+			params, _ = layouttree.TileParamsByID(snapshot.Layout, strings.TrimSpace(msg.TileID))
 		}
 	}
 	err := d.dockTile(msg.WorkspaceID, msg.AnchorPaneID, msg.TileID, msg.TileKind, params, "", msg.Edge, msg.Ratio)
 	d.sendWorkspaceLayoutTileActionResult(client, protocol.CmdWorkspaceLayoutDockTile, msg.WorkspaceID, msg.TileID, err)
 }
 
-func (d *Daemon) dockTile(workspaceID, anchorPaneID, tileID, tileKind, tileParams, tileSessionID string, edge protocol.WorkspaceLayoutDockEdge, ratio *float64) error {
+func (d *Daemon) dockTile(workspaceID, anchorPaneID, tileID, tileKind, tileParams, tileSessionID string, edge protocol.LayoutDockEdge, ratio *float64) error {
 	snapshot, err := d.ensureWorkspaceLayout(workspaceID)
 	if err != nil {
 		return err
@@ -422,7 +423,7 @@ func (d *Daemon) dockTile(workspaceID, anchorPaneID, tileID, tileKind, tileParam
 	if tileID == "" || tileKind == "" {
 		return fmt.Errorf("tile_id and tile_kind are required")
 	}
-	if workspacelayout.HasPane(snapshot.Layout, tileID) {
+	if layouttree.HasPane(snapshot.Layout, tileID) {
 		return fmt.Errorf("pane already exists: %s", tileID)
 	}
 	if anchorPaneID == "" {
@@ -437,7 +438,7 @@ func (d *Daemon) dockTile(workspaceID, anchorPaneID, tileID, tileKind, tileParam
 
 	direction, before := dockEdgeToSplit(edge)
 	tileFraction := defaultTileFraction
-	if existingFraction, ok := workspacelayout.TileFractionByID(snapshot.Layout, tileID); ok && existingFraction > 0 && existingFraction < 1 {
+	if existingFraction, ok := layouttree.TileFractionByID(snapshot.Layout, tileID); ok && existingFraction > 0 && existingFraction < 1 {
 		tileFraction = existingFraction
 	}
 	if ratio != nil && *ratio > 0 && *ratio < 1 {
@@ -448,7 +449,7 @@ func (d *Daemon) dockTile(workspaceID, anchorPaneID, tileID, tileKind, tileParam
 		childZeroRatio = 1 - tileFraction
 	}
 
-	layout, ok := workspacelayout.DockTile(
+	layout, ok := layouttree.DockTile(
 		snapshot.Layout,
 		anchorPaneID,
 		direction,
@@ -483,14 +484,14 @@ func (d *Daemon) handleWorkspaceLayoutUndockTile(client *wsClient, msg *protocol
 		d.sendWorkspaceLayoutTileActionResult(client, protocol.CmdWorkspaceLayoutUndockTile, msg.WorkspaceID, tileID, fmt.Errorf("tile_id is required"))
 		return
 	}
-	layout, ok := workspacelayout.UndockTile(snapshot.Layout, tileID)
+	layout, ok := layouttree.UndockTile(snapshot.Layout, tileID)
 	if !ok {
 		d.sendWorkspaceLayoutTileActionResult(client, protocol.CmdWorkspaceLayoutUndockTile, msg.WorkspaceID, tileID, fmt.Errorf("tile not found: %s", tileID))
 		return
 	}
 	snapshot.Layout = layout
 	normalized := workspacelayout.NormalizeWorkspaceLayout(*snapshot)
-	if workspacelayout.LayoutEmpty(normalized.Layout) {
+	if layouttree.LayoutEmpty(normalized.Layout) {
 		d.store.RemoveWorkspaceLayout(msg.WorkspaceID)
 		d.sendWorkspaceLayoutTileActionResult(client, protocol.CmdWorkspaceLayoutUndockTile, msg.WorkspaceID, tileID, nil)
 		if d.unregisterWorkspaceIfEmpty(msg.WorkspaceID) {
@@ -533,7 +534,7 @@ func (d *Daemon) handleWorkspaceLayoutUpdateTile(client *wsClient, msg *protocol
 		return
 	}
 	var tileKind string
-	for _, tile := range workspacelayout.TileLeaves(snapshot.Layout) {
+	for _, tile := range layouttree.TileLeaves(snapshot.Layout) {
 		if tile.TileID == tileID {
 			tileKind = tile.TileKind
 			break
@@ -559,7 +560,7 @@ func (d *Daemon) handleWorkspaceLayoutUpdateTile(client *wsClient, msg *protocol
 			d.sendWorkspaceLayoutTileActionResultWithRequest(client, protocol.CmdWorkspaceLayoutUpdateTile, msg.WorkspaceID, tileID, requestID, err)
 			return
 		}
-		if tileKind == string(workspacelayout.TileKindMarkdown) {
+		if tileKind == string(layouttree.TileKindMarkdown) {
 			d.sendWorkspaceLayoutTileActionResultWithRequest(client, protocol.CmdWorkspaceLayoutUpdateTile, msg.WorkspaceID, tileID, requestID, nil)
 			return
 		}
@@ -570,7 +571,7 @@ func (d *Daemon) handleWorkspaceLayoutUpdateTile(client *wsClient, msg *protocol
 	}
 
 	switch tileKind {
-	case string(workspacelayout.TileKindBrowser):
+	case string(layouttree.TileKindBrowser):
 		tileParams, err = validateBrowserURL(tileParams)
 		if err != nil {
 			d.sendWorkspaceLayoutTileActionResultWithRequest(
@@ -583,8 +584,8 @@ func (d *Daemon) handleWorkspaceLayoutUpdateTile(client *wsClient, msg *protocol
 			)
 			return
 		}
-	case string(workspacelayout.TileKindNotebook):
-	case string(workspacelayout.TileKindSeed):
+	case string(layouttree.TileKindNotebook):
+	case string(layouttree.TileKindSeed):
 		if err := d.requireHome(garden.Surface); err != nil {
 			d.sendWorkspaceLayoutTileActionResultWithRequest(
 				client, protocol.CmdWorkspaceLayoutUpdateTile, msg.WorkspaceID,
@@ -610,7 +611,7 @@ func (d *Daemon) handleWorkspaceLayoutUpdateTile(client *wsClient, msg *protocol
 		)
 		return
 	}
-	layout, ok := workspacelayout.UpdateTileParams(snapshot.Layout, tileID, tileParams)
+	layout, ok := layouttree.UpdateTileParams(snapshot.Layout, tileID, tileParams)
 	if !ok {
 		d.sendWorkspaceLayoutTileActionResultWithRequest(
 			client,
@@ -748,7 +749,7 @@ func (d *Daemon) handleSetWorkspaceRank(client *wsClient, msg *protocol.SetWorks
 	d.sendWorkspaceLayoutActionResult(client, protocol.CmdSetWorkspaceRank, workspaceID, nil, nil)
 }
 
-func (d *Daemon) moveLeaf(workspaceID, leafID, anchorID string, edge protocol.WorkspaceLayoutDockEdge, ratio *float64) error {
+func (d *Daemon) moveLeaf(workspaceID, leafID, anchorID string, edge protocol.LayoutDockEdge, ratio *float64) error {
 	snapshot, err := d.ensureWorkspaceLayout(workspaceID)
 	if err != nil {
 		return err
@@ -760,7 +761,7 @@ func (d *Daemon) moveLeaf(workspaceID, leafID, anchorID string, edge protocol.Wo
 	}
 
 	direction, before := dockEdgeToSplit(edge)
-	leafFraction := workspacelayout.DefaultSplitRatio
+	leafFraction := layouttree.DefaultSplitRatio
 	if ratio != nil && *ratio > 0 && *ratio < 1 {
 		leafFraction = *ratio
 	}
@@ -769,7 +770,7 @@ func (d *Daemon) moveLeaf(workspaceID, leafID, anchorID string, edge protocol.Wo
 		childZeroRatio = 1 - leafFraction
 	}
 
-	layout, ok := workspacelayout.MoveLeaf(
+	layout, ok := layouttree.MoveLeaf(
 		snapshot.Layout,
 		leafID,
 		anchorID,
@@ -790,7 +791,7 @@ func (d *Daemon) moveLeaf(workspaceID, leafID, anchorID string, edge protocol.Wo
 	return nil
 }
 
-func (d *Daemon) moveLeafToWorkspace(sourceWorkspaceID, targetWorkspaceID, leafID, anchorID string, edge protocol.WorkspaceLayoutDockEdge, ratio *float64) (string, error) {
+func (d *Daemon) moveLeafToWorkspace(sourceWorkspaceID, targetWorkspaceID, leafID, anchorID string, edge protocol.LayoutDockEdge, ratio *float64) (string, error) {
 	sourceWorkspaceID = strings.TrimSpace(sourceWorkspaceID)
 	targetWorkspaceID = strings.TrimSpace(targetWorkspaceID)
 	leafID = strings.TrimSpace(leafID)
@@ -840,7 +841,7 @@ func (d *Daemon) moveLeafToWorkspace(sourceWorkspaceID, targetWorkspaceID, leafI
 	}
 
 	direction, before := dockEdgeToSplit(edge)
-	leafFraction := workspacelayout.DefaultSplitRatio
+	leafFraction := layouttree.DefaultSplitRatio
 	if ratio != nil && *ratio > 0 && *ratio < 1 {
 		leafFraction = *ratio
 	}
@@ -849,7 +850,7 @@ func (d *Daemon) moveLeafToWorkspace(sourceWorkspaceID, targetWorkspaceID, leafI
 		childZeroRatio = 1 - leafFraction
 	}
 
-	move, ok := workspacelayout.MoveLeafBetweenLayouts(
+	move, ok := layouttree.MoveLeafBetweenLayouts(
 		source.Layout,
 		target.Layout,
 		leafID,
@@ -882,7 +883,7 @@ func (d *Daemon) moveLeafToWorkspace(sourceWorkspaceID, targetWorkspaceID, leafI
 
 	sourceNormalized := workspacelayout.NormalizeWorkspaceLayout(*source)
 	targetNormalized := workspacelayout.NormalizeWorkspaceLayout(*target)
-	sourceEmpty := workspacelayout.LayoutEmpty(sourceNormalized.Layout)
+	sourceEmpty := layouttree.LayoutEmpty(sourceNormalized.Layout)
 
 	if err := d.store.SaveWorkspaceLayout(targetNormalized); err != nil {
 		return "", err
@@ -988,10 +989,10 @@ func (d *Daemon) addWorkspaceSessionPaneLocked(msg *protocol.WorkspaceLayoutAddS
 			return protocol.Ptr(paneID), false, fmt.Errorf("pane already exists: %s", paneID)
 		}
 	}
-	if workspacelayout.HasPane(snapshot.Layout, paneID) {
+	if layouttree.HasPane(snapshot.Layout, paneID) {
 		return protocol.Ptr(paneID), false, fmt.Errorf("pane already exists: %s", paneID)
 	}
-	if workspacelayout.HasTile(snapshot.Layout, paneID) {
+	if layouttree.HasTile(snapshot.Layout, paneID) {
 		return protocol.Ptr(paneID), false, fmt.Errorf("tile already exists: %s", paneID)
 	}
 	title := strings.TrimSpace(protocol.Deref(msg.Title))
@@ -1012,24 +1013,24 @@ func (d *Daemon) addWorkspaceSessionPaneLocked(msg *protocol.WorkspaceLayoutAddS
 		if targetPaneID != "" {
 			return protocol.Ptr(targetPaneID), false, fmt.Errorf("cannot target pane in empty layout")
 		}
-		snapshot.Layout = workspacelayout.DefaultLayout(paneID)
+		snapshot.Layout = layouttree.DefaultLayout(paneID)
 	} else {
 		if targetPaneID == "" {
 			targetPaneID = snapshot.ActivePaneID
 		}
-		if !workspacelayout.HasPane(snapshot.Layout, targetPaneID) {
+		if !layouttree.HasPane(snapshot.Layout, targetPaneID) {
 			targetPaneID = firstWorkspaceLayoutPaneID(*snapshot)
 		}
 		if targetPaneID == "" {
 			return nil, false, fmt.Errorf("workspace has no target pane")
 		}
-		layout, changed := workspacelayout.Split(
+		layout, changed := layouttree.Split(
 			snapshot.Layout,
 			targetPaneID,
 			paneID,
 			newWorkspaceLayoutEntityID("split"),
 			protocolDirection(protocol.Deref(msg.Direction)),
-			workspacelayout.DefaultSplitRatio,
+			layouttree.DefaultSplitRatio,
 		)
 		if !changed {
 			return protocol.Ptr(targetPaneID), false, fmt.Errorf("pane not found: %s", targetPaneID)
@@ -1088,11 +1089,11 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 		return
 	}
 
-	layout, _ := workspacelayout.Remove(snapshot.Layout, msg.PaneID)
+	layout, _ := layouttree.Remove(snapshot.Layout, msg.PaneID)
 	snapshot.Layout = layout
 	snapshot.Panes = nextPanes
 	normalized := workspacelayout.NormalizeWorkspaceLayout(*snapshot)
-	layoutEmpty := workspacelayout.LayoutEmpty(normalized.Layout)
+	layoutEmpty := layouttree.LayoutEmpty(normalized.Layout)
 	var teardown *sessionTeardown
 	trackedSession := d.store.Get(sessionID) != nil || d.sessionHasLiveWorker(sessionID)
 	if !trackedSession && d.hubManager != nil {
@@ -1162,7 +1163,7 @@ func (d *Daemon) removeWorkspaceLayoutPaneForSession(sessionID string) {
 		return
 	}
 
-	layout, _ := workspacelayout.Remove(snapshot.Layout, paneID)
+	layout, _ := layouttree.Remove(snapshot.Layout, paneID)
 	nextPanes := make([]workspacelayout.Pane, 0, len(snapshot.Panes))
 	for _, pane := range snapshot.Panes {
 		if pane.PaneID != paneID {
@@ -1172,7 +1173,7 @@ func (d *Daemon) removeWorkspaceLayoutPaneForSession(sessionID string) {
 	snapshot.Layout = layout
 	snapshot.Panes = nextPanes
 	normalized := workspacelayout.NormalizeWorkspaceLayout(*snapshot)
-	if workspacelayout.LayoutEmpty(normalized.Layout) {
+	if layouttree.LayoutEmpty(normalized.Layout) {
 		d.store.RemoveWorkspaceLayout(workspaceID)
 	} else {
 		if err := d.store.SaveWorkspaceLayout(normalized); err != nil {
@@ -1212,7 +1213,7 @@ func (d *Daemon) reconcileWorkspaceLayoutsWithPTYBackend(ctx context.Context) {
 				continue
 			}
 			if pane.Kind == workspacelayout.PaneKindAgent {
-				snapshot.Layout, _ = workspacelayout.Remove(snapshot.Layout, pane.PaneID)
+				snapshot.Layout, _ = layouttree.Remove(snapshot.Layout, pane.PaneID)
 			}
 			changed = true
 		}
@@ -1220,7 +1221,7 @@ func (d *Daemon) reconcileWorkspaceLayoutsWithPTYBackend(ctx context.Context) {
 		if changed {
 			snapshot.Panes = nextPanes
 			normalized := workspacelayout.NormalizeWorkspaceLayout(*snapshot)
-			if workspacelayout.LayoutEmpty(normalized.Layout) {
+			if layouttree.LayoutEmpty(normalized.Layout) {
 				d.store.RemoveWorkspaceLayout(workspace.ID)
 			} else if err := d.store.SaveWorkspaceLayout(normalized); err != nil {
 				d.logf("workspace layout reconcile save failed for session %s: %v", workspace.ID, err)

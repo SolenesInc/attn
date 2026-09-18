@@ -53,6 +53,11 @@ const (
 	FactWorkspaceLayoutChanged      = "workspace.layout.changed"
 	FactWorkspaceLayoutRepublished  = "workspace.layout.republished"
 
+	FactSetupCreated            = "setup.created"
+	FactSetupRenamed            = "setup.renamed"
+	FactSetupDeleted            = "setup.deleted"
+	FactSetupArrangementChanged = "setup.arrangement.changed"
+
 	FactPRAppeared       = "pr.appeared"
 	FactPRUpdated        = "pr.updated"
 	FactPRDisappeared    = "pr.disappeared"
@@ -277,6 +282,14 @@ func buildWireProjections() []projection {
 		{
 			filter: bus.Filter{FactWorkspaceLayoutRepublished},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectWorkspaceLayoutRepublished(ev.Subject) },
+		},
+		{
+			filter: bus.Filter{FactSetupCreated, FactSetupRenamed, FactSetupDeleted, FactSetupArrangementChanged},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectSetupsChanged() },
+		},
+		{
+			filter: bus.Filter{FactSetupArrangementChanged},
+			apply:  func(d *Daemon, ev bus.Event) { d.projectSetupArrangementChanged(ev) },
 		},
 		{
 			filter: bus.Filter{"garden.seed.*"},

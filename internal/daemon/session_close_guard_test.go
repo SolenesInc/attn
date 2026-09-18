@@ -3,6 +3,7 @@ package daemon
 import (
 	"testing"
 
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
@@ -13,12 +14,12 @@ func addCloseGuardWorkspaceLayout(t *testing.T, d *Daemon, workspaceID, protecte
 	if err := d.store.SaveWorkspaceLayout(workspacelayout.WorkspaceLayout{
 		WorkspaceID:  workspaceID,
 		ActivePaneID: protectedPaneID,
-		Layout: workspacelayout.Node{
+		Layout: layouttree.Node{
 			Type:      "split",
 			SplitID:   "split-1",
-			Direction: workspacelayout.DirectionVertical,
+			Direction: layouttree.DirectionVertical,
 			Ratio:     0.5,
-			Children: []workspacelayout.Node{
+			Children: []layouttree.Node{
 				{Type: "pane", PaneID: protectedPaneID},
 				{Type: "pane", PaneID: otherPaneID},
 			},

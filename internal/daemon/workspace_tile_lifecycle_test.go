@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 func setupSessionWorkspaceWithTile(t *testing.T) (d *Daemon, client *wsClient, workspaceID, sessionID, paneID string) {
@@ -50,7 +50,7 @@ func setupSessionWorkspaceWithTile(t *testing.T) (d *Daemon, client *wsClient, w
 	if err := os.WriteFile(file, []byte("# Notes\n"), 0o644); err != nil {
 		t.Fatalf("write tile file: %v", err)
 	}
-	if err := d.dockTile(workspaceID, paneID, markdownTileIDForPath(file), string(workspacelayout.TileKindMarkdown), file, "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	if err := d.dockTile(workspaceID, paneID, markdownTileIDForPath(file), string(layouttree.TileKindMarkdown), file, "", protocol.LayoutDockEdgeRight, nil); err != nil {
 		t.Fatalf("dock tile: %v", err)
 	}
 	return d, client, workspaceID, sessionID, paneID
@@ -68,10 +68,10 @@ func assertTileOnlyWorkspaceAlive(t *testing.T, d *Daemon, workspaceID, sessionI
 	if snapshot == nil {
 		t.Fatal("workspace layout was removed even though a docked tile remained")
 	}
-	if tiles := workspacelayout.TileIDs(snapshot.Layout); len(tiles) != 1 || !strings.HasPrefix(tiles[0], markdownTileIDPrefix) {
+	if tiles := layouttree.TileIDs(snapshot.Layout); len(tiles) != 1 || !strings.HasPrefix(tiles[0], markdownTileIDPrefix) {
 		t.Fatalf("layout tiles = %v, want a single %s* tile", tiles, markdownTileIDPrefix)
 	}
-	if panes := workspacelayout.PaneIDs(snapshot.Layout); len(panes) != 0 {
+	if panes := layouttree.PaneIDs(snapshot.Layout); len(panes) != 0 {
 		t.Fatalf("layout panes = %v, want none after the session pane closed", panes)
 	}
 	if _, registered := d.workspaces.snapshot(workspaceID); !registered {
@@ -105,7 +105,7 @@ func TestUndockingLastTileTearsDownSessionlessWorkspace(t *testing.T) {
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, true)
 	assertTileOnlyWorkspaceAlive(t, d, workspaceID, sessionID)
 
-	tileID := workspacelayout.TileIDs(d.store.GetWorkspaceLayout(workspaceID).Layout)[0]
+	tileID := layouttree.TileIDs(d.store.GetWorkspaceLayout(workspaceID).Layout)[0]
 	cap := captureBroadcasts(d)
 	d.handleWorkspaceLayoutUndockTile(client, &protocol.WorkspaceLayoutUndockTileMessage{
 		Cmd:         protocol.CmdWorkspaceLayoutUndockTile,
@@ -154,7 +154,7 @@ func TestTileOnlyWorkspaceSurvivesStartupReap(t *testing.T) {
 		t.Fatal("tile-only workspace was not re-registered after restart")
 	}
 	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil || len(workspacelayout.TileIDs(snapshot.Layout)) != 1 {
+	if snapshot == nil || len(layouttree.TileIDs(snapshot.Layout)) != 1 {
 		t.Fatalf("tile-only layout lost across restart: %+v", snapshot)
 	}
 }

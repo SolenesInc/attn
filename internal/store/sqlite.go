@@ -1247,6 +1247,53 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{148, "durable Garden seed event handling", ``},
 	{149, "index delegation session identity", `CREATE INDEX IF NOT EXISTS idx_delegation_operations_session ON delegation_operations(session_id)`},
 	{150, "durable pull request readiness watches", ``},
+	{151, "create setups, desktops and their panes beside the workspace tables", `
+		CREATE TABLE IF NOT EXISTS setups (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			current_desktop_id TEXT NOT NULL DEFAULT '',
+			last_used_at TEXT NOT NULL DEFAULT '',
+			revision INTEGER NOT NULL DEFAULT 1,
+			created_at TEXT NOT NULL,
+			deleted_at TEXT NOT NULL DEFAULT ''
+		);
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_setups_live_name ON setups(name) WHERE deleted_at = '';
+		CREATE TABLE IF NOT EXISTS desktops (
+			id TEXT PRIMARY KEY,
+			setup_id TEXT NOT NULL,
+			name TEXT NOT NULL DEFAULT '',
+			shortcut_slot INTEGER,
+			order_key TEXT NOT NULL,
+			tree_json TEXT NOT NULL DEFAULT '',
+			active_pane_id TEXT NOT NULL DEFAULT '',
+			revision INTEGER NOT NULL DEFAULT 1,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_desktops_setup ON desktops(setup_id, order_key);
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_desktops_shortcut_slot
+			ON desktops(setup_id, shortcut_slot) WHERE shortcut_slot IS NOT NULL;
+		CREATE TABLE IF NOT EXISTS desktop_panes (
+			pane_id TEXT PRIMARY KEY,
+			desktop_id TEXT NOT NULL,
+			kind TEXT NOT NULL,
+			session_id TEXT NOT NULL UNIQUE,
+			title TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'ready',
+			error TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_desktop_panes_desktop ON desktop_panes(desktop_id);
+		CREATE TABLE IF NOT EXISTS setup_migration (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			schema_version INTEGER NOT NULL,
+			phase TEXT NOT NULL,
+			revision INTEGER NOT NULL DEFAULT 1,
+			imported_groups TEXT NOT NULL DEFAULT '',
+			draft TEXT NOT NULL DEFAULT ''
+		);
+	`},
 }
 
 const migration99SQL = `
@@ -1834,6 +1881,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 151 {
+			if err := applyMigration151(tx, m.sql); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else if m.version == 138 {
 			if _, err := tx.Exec(m.sql); err != nil {
 				tx.Rollback()
@@ -2273,6 +2325,23 @@ func applyMigration131(tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+func applyMigration151(tx *sql.Tx, migrationSQL string) error {
+	if _, err := tx.Exec(migrationSQL); err != nil {
+		return err
+	}
+	hasSetupID, err := columnExists(tx, "sessions", "setup_id")
+	if err != nil {
+		return err
+	}
+	if !hasSetupID {
+		if _, err := tx.Exec(`ALTER TABLE sessions ADD COLUMN setup_id TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_sessions_setup_id ON sessions(setup_id)`)
+	return err
 }
 
 func applyMigration132(tx *sql.Tx, migrationSQL string) error {

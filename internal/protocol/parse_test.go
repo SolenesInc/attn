@@ -312,7 +312,7 @@ func TestParseWorkspaceLayoutDockTile(t *testing.T) {
 	if msg.AnchorPaneID != "pane-a" || msg.TileID != "tile-md" || msg.TileKind != "markdown" {
 		t.Errorf("fields = %q/%q/%q, want pane-a/tile-md/markdown", msg.AnchorPaneID, msg.TileID, msg.TileKind)
 	}
-	if msg.Edge != WorkspaceLayoutDockEdgeRight {
+	if msg.Edge != LayoutDockEdgeRight {
 		t.Errorf("edge = %q, want right", msg.Edge)
 	}
 	if msg.Ratio == nil || *msg.Ratio != 0.3 {
@@ -372,7 +372,7 @@ func TestParseWorkspaceLayoutMoveLeafToWorkspace(t *testing.T) {
 	if msg.SourceWorkspaceID != "ws1" || msg.TargetWorkspaceID != "ws2" || msg.LeafID != "pane-a" || Deref(msg.AnchorID) != "pane-b" {
 		t.Errorf("fields = %q/%q/%q/%q, want ws1/ws2/pane-a/pane-b", msg.SourceWorkspaceID, msg.TargetWorkspaceID, msg.LeafID, Deref(msg.AnchorID))
 	}
-	if msg.Edge != WorkspaceLayoutDockEdgeLeft {
+	if msg.Edge != LayoutDockEdgeLeft {
 		t.Errorf("edge = %q, want left", msg.Edge)
 	}
 	if msg.Ratio == nil || *msg.Ratio != 0.32 {

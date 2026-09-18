@@ -1,9 +1,8 @@
-package workspacelayout
+package layouttree
 
 import (
 	"fmt"
 	"reflect"
-	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -323,34 +322,23 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 			},
 
 			"normalize": func(t *rapid.T) {
-				snapshot := WorkspaceLayout{
-					WorkspaceID:  "ws",
-					ActivePaneID: rapid.SampledFrom(append([]string{"", "gone"}, m.leafIDs()...)).Draw(t, "active"),
-					Layout:       m.tree,
-					Panes:        modelPanes(m),
+				panes := make(map[string]struct{}, len(m.panes))
+				for _, id := range m.paneIDs() {
+					panes[id] = struct{}{}
 				}
-				normalized := NormalizeWorkspaceLayout(snapshot)
-				again := NormalizeWorkspaceLayout(normalized)
+				normalized := NormalizeLayout(m.tree, panes)
+				again := NormalizeLayout(normalized, panes)
 				if !reflect.DeepEqual(normalized, again) {
 					t.Fatalf("normalization is not idempotent:\nonce: %+v\ntwice: %+v", normalized, again)
 				}
-
-				panes := PaneIDs(normalized.Layout)
-				if normalized.ActivePaneID == "" {
-					if len(panes) > 0 {
-						t.Fatalf("no active pane, but the layout holds %v", panes)
-					}
-				} else if !slices.Contains(panes, normalized.ActivePaneID) {
-					t.Fatalf("active pane %q is not in the layout %v", normalized.ActivePaneID, panes)
-				}
-				if len(normalized.Panes) != len(panes) {
-					t.Fatalf("layout holds %d panes but the record carries %d", len(panes), len(normalized.Panes))
-				}
-				m.tree = normalized.Layout
+				m.tree = normalized
 			},
 
 			"": func(t *rapid.T) {
 				checkWellFormed(t, m.tree, "root")
+				if err := Validate(m.tree); err != nil {
+					t.Fatalf("a tree built only from transforms must validate: %v", err)
+				}
 
 				panes := PaneIDs(m.tree)
 				tiles := TileIDs(m.tree)
@@ -407,21 +395,6 @@ func TestLayoutOperationsDoNotModifyTheirInput(t *testing.T) {
 			t.Fatalf("UpdateTileSessionID wrote through its input:\n got: %+v\nwant: %+v", tree, before)
 		}
 	})
-}
-
-func modelPanes(m *layoutModel) []Pane {
-	panes := make([]Pane, 0, len(m.panes))
-	for _, id := range m.paneIDs() {
-		panes = append(panes, Pane{
-			PaneID:    id,
-			RuntimeID: "rt-" + id,
-			SessionID: "sess-" + id,
-			Kind:      PaneKindAgent,
-			Title:     DefaultPaneTitle,
-			Status:    PaneStatusReady,
-		})
-	}
-	return panes
 }
 
 func sameIDs(got, want []string) bool {

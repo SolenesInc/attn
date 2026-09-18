@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -155,7 +156,7 @@ func TestWorkspaceLayoutClosePaneKeepsVisibleStateWhenTeardownPreparationFails(t
 	if d.store.Get(sessionID) == nil {
 		t.Fatal("failed close removed the session")
 	}
-	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot == nil || !workspacelayout.HasPane(snapshot.Layout, paneID) {
+	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot == nil || !layouttree.HasPane(snapshot.Layout, paneID) {
 		t.Fatalf("failed close removed the pane: %+v", snapshot)
 	}
 	if d.hasForcedStopMark(sessionID) {
@@ -597,10 +598,10 @@ func TestWorkspaceLayoutStartupReconcileRemovesOrphanButKeepsUnresolvedPanes(t *
 	if orphan := d.store.GetWorkspaceLayout("workspace-orphan"); orphan != nil {
 		t.Fatalf("orphan layout survived startup reconciliation: %+v", orphan)
 	}
-	if pending := d.store.GetWorkspaceLayout("workspace-pending"); pending == nil || !workspacelayout.HasPane(pending.Layout, "pane-session-pending") {
+	if pending := d.store.GetWorkspaceLayout("workspace-pending"); pending == nil || !layouttree.HasPane(pending.Layout, "pane-session-pending") {
 		t.Fatalf("valid pending spawn was removed: %+v", pending)
 	}
-	if failed := d.store.GetWorkspaceLayout("workspace-failed"); failed == nil || !workspacelayout.HasPane(failed.Layout, "pane-session-failed") {
+	if failed := d.store.GetWorkspaceLayout("workspace-failed"); failed == nil || !layouttree.HasPane(failed.Layout, "pane-session-failed") {
 		t.Fatalf("failed pane was removed: %+v", failed)
 	}
 }
@@ -753,7 +754,7 @@ func TestWorkspaceLayoutSetSplitRatioPersistsLockedRatio(t *testing.T) {
 		PaneID:       protocol.Ptr("pane-2"),
 		SessionID:    "session-2",
 		TargetPaneID: protocol.Ptr("pane-1"),
-		Direction:    protocol.Ptr(protocol.WorkspaceLayoutSplitDirectionVertical),
+		Direction:    protocol.Ptr(protocol.LayoutSplitDirectionVertical),
 	})
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, "pane-2", true)
 
@@ -795,7 +796,7 @@ func TestWorkspaceLayoutSetSplitRatioPersistsLockedRatio(t *testing.T) {
 	if !split.RatioLocked {
 		t.Fatalf("split should be locked after set ratio")
 	}
-	if split.RatioMode != workspacelayout.RatioModePreferred {
+	if split.RatioMode != layouttree.RatioModePreferred {
 		t.Fatalf("split ratio mode = %q, want preferred", split.RatioMode)
 	}
 	if split.Ratio < 0.29 || split.Ratio > 0.31 {
@@ -828,7 +829,7 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		PaneID:       protocol.Ptr("pane-2"),
 		SessionID:    "session-2",
 		TargetPaneID: protocol.Ptr("pane-1"),
-		Direction:    protocol.Ptr(protocol.WorkspaceLayoutSplitDirectionVertical),
+		Direction:    protocol.Ptr(protocol.LayoutSplitDirectionVertical),
 	})
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, "pane-2", true)
 
@@ -836,17 +837,17 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		Cmd:          protocol.CmdWorkspaceLayoutDockTile,
 		WorkspaceID:  workspaceID,
 		AnchorPaneID: "pane-1",
-		Edge:         protocol.WorkspaceLayoutDockEdgeRight,
+		Edge:         protocol.LayoutDockEdgeRight,
 		TileID:       "pane-2",
 		TileKind:     "markdown",
 	})
 	expectWorkspaceLayoutActionResultIDs(t, client, protocol.CmdWorkspaceLayoutDockTile, workspaceID, "", "", "pane-2", false)
 	afterCollision := d.store.GetWorkspaceLayout(workspaceID)
-	if !workspacelayout.HasPane(afterCollision.Layout, "pane-2") || workspacelayout.HasTile(afterCollision.Layout, "pane-2") {
+	if !layouttree.HasPane(afterCollision.Layout, "pane-2") || layouttree.HasTile(afterCollision.Layout, "pane-2") {
 		t.Fatalf("pane id collision mutated layout: %+v", afterCollision.Layout)
 	}
 
-	if err := d.dockTile(workspaceID, "pane-1", "tile-md", "markdown", "/tmp/notes.md", "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	if err := d.dockTile(workspaceID, "pane-1", "tile-md", "markdown", "/tmp/notes.md", "", protocol.LayoutDockEdgeRight, nil); err != nil {
 		t.Fatalf("dockTile: %v", err)
 	}
 
@@ -854,10 +855,10 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 	if snapshot == nil {
 		t.Fatal("workspace layout missing after docking tile")
 	}
-	if !workspacelayout.HasTile(snapshot.Layout, "tile-md") {
+	if !layouttree.HasTile(snapshot.Layout, "tile-md") {
 		t.Fatalf("tile not present after dock: %+v", snapshot.Layout)
 	}
-	if ids := workspacelayout.PaneIDs(snapshot.Layout); len(ids) != 2 {
+	if ids := layouttree.PaneIDs(snapshot.Layout); len(ids) != 2 {
 		t.Fatalf("pane ids = %v, want the two agent panes only", ids)
 	}
 	if len(snapshot.Panes) != 2 {
@@ -873,19 +874,19 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 	})
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, "tile-md", false)
 	afterPaneCollision := d.store.GetWorkspaceLayout(workspaceID)
-	if len(afterPaneCollision.Panes) != 2 || !workspacelayout.HasTile(afterPaneCollision.Layout, "tile-md") {
+	if len(afterPaneCollision.Panes) != 2 || !layouttree.HasTile(afterPaneCollision.Layout, "tile-md") {
 		t.Fatalf("tile id collision mutated layout: %+v", afterPaneCollision)
 	}
 
-	encoded, err := workspacelayout.EncodeLayout(snapshot.Layout)
+	encoded, err := layouttree.EncodeLayout(snapshot.Layout)
 	if err != nil {
 		t.Fatalf("EncodeLayout: %v", err)
 	}
-	decoded, err := workspacelayout.DecodeLayout(encoded)
+	decoded, err := layouttree.DecodeLayout(encoded)
 	if err != nil {
 		t.Fatalf("DecodeLayout: %v", err)
 	}
-	if !workspacelayout.HasTile(decoded, "tile-md") {
+	if !layouttree.HasTile(decoded, "tile-md") {
 		t.Fatal("tile lost across layout JSON reload")
 	}
 
@@ -893,16 +894,16 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		Cmd:          protocol.CmdWorkspaceLayoutDockTile,
 		WorkspaceID:  workspaceID,
 		AnchorPaneID: "pane-2",
-		Edge:         protocol.WorkspaceLayoutDockEdgeBottom,
+		Edge:         protocol.LayoutDockEdgeBottom,
 		TileID:       "tile-md",
 		TileKind:     "markdown",
 	})
 	expectWorkspaceLayoutActionResultIDs(t, client, protocol.CmdWorkspaceLayoutDockTile, workspaceID, "", "", "tile-md", true)
 	moved := d.store.GetWorkspaceLayout(workspaceID)
-	if ids := workspacelayout.TileIDs(moved.Layout); len(ids) != 1 {
+	if ids := layouttree.TileIDs(moved.Layout); len(ids) != 1 {
 		t.Fatalf("tile ids after move = %v, want exactly one", ids)
 	}
-	if params, ok := workspacelayout.TileParamsByID(moved.Layout, "tile-md"); !ok || params != "/tmp/notes.md" {
+	if params, ok := layouttree.TileParamsByID(moved.Layout, "tile-md"); !ok || params != "/tmp/notes.md" {
 		t.Fatalf("tile params after move = (%q, %v), want (%q, true)", params, ok, "/tmp/notes.md")
 	}
 
@@ -915,7 +916,7 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 	})
 	expectWorkspaceLayoutActionResultIDsAndRequestID(t, client, protocol.CmdWorkspaceLayoutUpdateTile, workspaceID, "", "", "tile-md", "request-reject-markdown-update", false)
 	unchanged := d.store.GetWorkspaceLayout(workspaceID)
-	if params, ok := workspacelayout.TileParamsByID(unchanged.Layout, "tile-md"); !ok || params != "/tmp/notes.md" {
+	if params, ok := layouttree.TileParamsByID(unchanged.Layout, "tile-md"); !ok || params != "/tmp/notes.md" {
 		t.Fatalf("markdown tile params = (%q, %v), want (%q, true)", params, ok, "/tmp/notes.md")
 	}
 
@@ -932,7 +933,7 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 			t.Fatalf("plant seed %s: %v", seed.ID, err)
 		}
 	}
-	if err := d.dockTile(workspaceID, "pane-1", "tile-seed", string(workspacelayout.TileKindSeed), "s-0jd001", "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	if err := d.dockTile(workspaceID, "pane-1", "tile-seed", string(layouttree.TileKindSeed), "s-0jd001", "", protocol.LayoutDockEdgeRight, nil); err != nil {
 		t.Fatalf("dock seed tile: %v", err)
 	}
 	d.handleWorkspaceLayoutUpdateTile(client, &protocol.WorkspaceLayoutUpdateTileMessage{
@@ -944,7 +945,7 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 	})
 	expectWorkspaceLayoutActionResultIDsAndRequestID(t, client, protocol.CmdWorkspaceLayoutUpdateTile, workspaceID, "", "", "tile-seed", "request-update-seed", true)
 	seedUpdated := d.store.GetWorkspaceLayout(workspaceID)
-	if params, ok := workspacelayout.TileParamsByID(seedUpdated.Layout, "tile-seed"); !ok || params != "s-new002" {
+	if params, ok := layouttree.TileParamsByID(seedUpdated.Layout, "tile-seed"); !ok || params != "s-new002" {
 		t.Fatalf("seed tile params = (%q, %v), want (%q, true)", params, ok, "s-new002")
 	}
 	d.handleWorkspaceLayoutUpdateTile(client, &protocol.WorkspaceLayoutUpdateTileMessage{
@@ -955,7 +956,7 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		RequestID:   "request-reject-missing-seed",
 	})
 	expectWorkspaceLayoutActionResultIDsAndRequestID(t, client, protocol.CmdWorkspaceLayoutUpdateTile, workspaceID, "", "", "tile-seed", "request-reject-missing-seed", false)
-	if params, ok := workspacelayout.TileParamsByID(d.store.GetWorkspaceLayout(workspaceID).Layout, "tile-seed"); !ok || params != "s-new002" {
+	if params, ok := layouttree.TileParamsByID(d.store.GetWorkspaceLayout(workspaceID).Layout, "tile-seed"); !ok || params != "s-new002" {
 		t.Fatalf("missing seed retarget changed params = (%q, %v), want (%q, true)", params, ok, "s-new002")
 	}
 
@@ -969,7 +970,7 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		RequestID:     "request-retarget-unknown-session",
 	})
 	expectWorkspaceLayoutActionResultIDsAndRequestID(t, client, protocol.CmdWorkspaceLayoutUpdateTile, workspaceID, "", "", "tile-md", "request-retarget-unknown-session", false)
-	if sessionID, ok := workspacelayout.TileSessionIDByID(d.store.GetWorkspaceLayout(workspaceID).Layout, "tile-md"); ok && sessionID == "session-unknown" {
+	if sessionID, ok := layouttree.TileSessionIDByID(d.store.GetWorkspaceLayout(workspaceID).Layout, "tile-md"); ok && sessionID == "session-unknown" {
 		t.Fatalf("dangling session binding persisted: %q", sessionID)
 	}
 
@@ -983,14 +984,14 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 	})
 	expectWorkspaceLayoutActionResultIDsAndRequestID(t, client, protocol.CmdWorkspaceLayoutUpdateTile, workspaceID, "", "", "tile-md", "request-retarget-markdown", true)
 	retargeted := d.store.GetWorkspaceLayout(workspaceID)
-	if sessionID, ok := workspacelayout.TileSessionIDByID(retargeted.Layout, "tile-md"); !ok || sessionID != "session-2" {
+	if sessionID, ok := layouttree.TileSessionIDByID(retargeted.Layout, "tile-md"); !ok || sessionID != "session-2" {
 		t.Fatalf("markdown tile session = (%q, %v), want (%q, true)", sessionID, ok, "session-2")
 	}
-	if params, ok := workspacelayout.TileParamsByID(retargeted.Layout, "tile-md"); !ok || params != "/tmp/notes.md" {
+	if params, ok := layouttree.TileParamsByID(retargeted.Layout, "tile-md"); !ok || params != "/tmp/notes.md" {
 		t.Fatalf("markdown tile params after retarget = (%q, %v), want unchanged %q", params, ok, "/tmp/notes.md")
 	}
 
-	if err := d.dockTile(workspaceID, "pane-2", "tile-browser", "browser", "https://example.com/", "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	if err := d.dockTile(workspaceID, "pane-2", "tile-browser", "browser", "https://example.com/", "", protocol.LayoutDockEdgeRight, nil); err != nil {
 		t.Fatalf("dock browser tile: %v", err)
 	}
 	d.handleWorkspaceLayoutUpdateTile(client, &protocol.WorkspaceLayoutUpdateTileMessage{
@@ -1002,7 +1003,7 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 	})
 	expectWorkspaceLayoutActionResultIDsAndRequestID(t, client, protocol.CmdWorkspaceLayoutUpdateTile, workspaceID, "", "", "tile-browser", "request-update-browser", true)
 	updated := d.store.GetWorkspaceLayout(workspaceID)
-	if params, ok := workspacelayout.TileParamsByID(updated.Layout, "tile-browser"); !ok || params != "https://example.com/docs" {
+	if params, ok := layouttree.TileParamsByID(updated.Layout, "tile-browser"); !ok || params != "https://example.com/docs" {
 		t.Fatalf("browser tile params = (%q, %v), want (%q, true)", params, ok, "https://example.com/docs")
 	}
 	d.handleWorkspaceLayoutUpdateTile(client, &protocol.WorkspaceLayoutUpdateTileMessage{
@@ -1015,10 +1016,10 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 	})
 	expectWorkspaceLayoutActionResultIDsAndRequestID(t, client, protocol.CmdWorkspaceLayoutUpdateTile, workspaceID, "", "", "tile-browser", "request-retarget-and-update-browser", true)
 	combined := d.store.GetWorkspaceLayout(workspaceID)
-	if sessionID, ok := workspacelayout.TileSessionIDByID(combined.Layout, "tile-browser"); !ok || sessionID != "session-2" {
+	if sessionID, ok := layouttree.TileSessionIDByID(combined.Layout, "tile-browser"); !ok || sessionID != "session-2" {
 		t.Fatalf("browser tile session after combined update = (%q, %v), want (%q, true) — params save clobbered the rebind", sessionID, ok, "session-2")
 	}
-	if params, ok := workspacelayout.TileParamsByID(combined.Layout, "tile-browser"); !ok || params != "https://example.com/combined" {
+	if params, ok := layouttree.TileParamsByID(combined.Layout, "tile-browser"); !ok || params != "https://example.com/combined" {
 		t.Fatalf("browser tile params after combined update = (%q, %v), want (%q, true)", params, ok, "https://example.com/combined")
 	}
 
@@ -1031,14 +1032,14 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 	})
 	expectWorkspaceLayoutActionResultIDsAndRequestID(t, client, protocol.CmdWorkspaceLayoutUpdateTile, workspaceID, "", "", "tile-browser", "request-reject-browser-file-url", false)
 	afterRejectedURL := d.store.GetWorkspaceLayout(workspaceID)
-	if params, ok := workspacelayout.TileParamsByID(afterRejectedURL.Layout, "tile-browser"); !ok || params != "https://example.com/combined" {
+	if params, ok := layouttree.TileParamsByID(afterRejectedURL.Layout, "tile-browser"); !ok || params != "https://example.com/combined" {
 		t.Fatalf("browser tile params after rejected URL = (%q, %v), want (%q, true)", params, ok, "https://example.com/combined")
 	}
 
-	if err := d.dockTile(workspaceID, "pane-1", "tile-notebook", string(workspacelayout.TileKindNotebook), "", "", protocol.WorkspaceLayoutDockEdgeLeft, nil); err != nil {
+	if err := d.dockTile(workspaceID, "pane-1", "tile-notebook", string(layouttree.TileKindNotebook), "", "", protocol.LayoutDockEdgeLeft, nil); err != nil {
 		t.Fatalf("dock notebook tile: %v", err)
 	}
-	if params, ok := workspacelayout.TileParamsByID(d.store.GetWorkspaceLayout(workspaceID).Layout, "tile-notebook"); !ok || params != "" {
+	if params, ok := layouttree.TileParamsByID(d.store.GetWorkspaceLayout(workspaceID).Layout, "tile-notebook"); !ok || params != "" {
 		t.Fatalf("fresh notebook tile params = (%q, %v), want empty", params, ok)
 	}
 	d.handleWorkspaceLayoutUpdateTile(client, &protocol.WorkspaceLayoutUpdateTileMessage{
@@ -1049,7 +1050,7 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		RequestID:   "request-update-notebook",
 	})
 	expectWorkspaceLayoutActionResultIDsAndRequestID(t, client, protocol.CmdWorkspaceLayoutUpdateTile, workspaceID, "", "", "tile-notebook", "request-update-notebook", true)
-	if params, ok := workspacelayout.TileParamsByID(d.store.GetWorkspaceLayout(workspaceID).Layout, "tile-notebook"); !ok || params != "/notes/knowledge/decisions.md" {
+	if params, ok := layouttree.TileParamsByID(d.store.GetWorkspaceLayout(workspaceID).Layout, "tile-notebook"); !ok || params != "/notes/knowledge/decisions.md" {
 		t.Fatalf("notebook tile params after update = (%q, %v), want the opened path", params, ok)
 	}
 
@@ -1060,10 +1061,10 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 	})
 	expectWorkspaceLayoutActionResultIDs(t, client, protocol.CmdWorkspaceLayoutUndockTile, workspaceID, "", "", "tile-md", true)
 	after := d.store.GetWorkspaceLayout(workspaceID)
-	if workspacelayout.HasTile(after.Layout, "tile-md") {
+	if layouttree.HasTile(after.Layout, "tile-md") {
 		t.Fatal("tile still present after undock")
 	}
-	if ids := workspacelayout.PaneIDs(after.Layout); len(ids) != 2 {
+	if ids := layouttree.PaneIDs(after.Layout); len(ids) != 2 {
 		t.Fatalf("pane ids after undock = %v, want the two agent panes intact", ids)
 	}
 
@@ -1099,14 +1100,14 @@ func TestWorkspaceLayoutDockTileMessageParamsField(t *testing.T) {
 		Cmd:          protocol.CmdWorkspaceLayoutDockTile,
 		WorkspaceID:  workspaceID,
 		AnchorPaneID: "pane-1",
-		Edge:         protocol.WorkspaceLayoutDockEdgeRight,
+		Edge:         protocol.LayoutDockEdgeRight,
 		TileID:       "tile-notebook",
-		TileKind:     string(workspacelayout.TileKindNotebook),
+		TileKind:     string(layouttree.TileKindNotebook),
 		TileParams:   protocol.Ptr("/notes/knowledge/decisions.md"),
 	})
 	expectWorkspaceLayoutActionResultIDs(t, client, protocol.CmdWorkspaceLayoutDockTile, workspaceID, "", "", "tile-notebook", true)
 	fresh := d.store.GetWorkspaceLayout(workspaceID)
-	if params, ok := workspacelayout.TileParamsByID(fresh.Layout, "tile-notebook"); !ok || params != "/notes/knowledge/decisions.md" {
+	if params, ok := layouttree.TileParamsByID(fresh.Layout, "tile-notebook"); !ok || params != "/notes/knowledge/decisions.md" {
 		t.Fatalf("fresh tile params = (%q, %v), want (%q, true)", params, ok, "/notes/knowledge/decisions.md")
 	}
 
@@ -1114,18 +1115,18 @@ func TestWorkspaceLayoutDockTileMessageParamsField(t *testing.T) {
 		Cmd:          protocol.CmdWorkspaceLayoutDockTile,
 		WorkspaceID:  workspaceID,
 		AnchorPaneID: "pane-1",
-		Edge:         protocol.WorkspaceLayoutDockEdgeBottom,
+		Edge:         protocol.LayoutDockEdgeBottom,
 		TileID:       "tile-notebook",
-		TileKind:     string(workspacelayout.TileKindNotebook),
+		TileKind:     string(layouttree.TileKindNotebook),
 	})
 	expectWorkspaceLayoutActionResultIDs(t, client, protocol.CmdWorkspaceLayoutDockTile, workspaceID, "", "", "tile-notebook", true)
 	moved := d.store.GetWorkspaceLayout(workspaceID)
-	if params, ok := workspacelayout.TileParamsByID(moved.Layout, "tile-notebook"); !ok || params != "/notes/knowledge/decisions.md" {
+	if params, ok := layouttree.TileParamsByID(moved.Layout, "tile-notebook"); !ok || params != "/notes/knowledge/decisions.md" {
 		t.Fatalf("moved tile params = (%q, %v), want unchanged (%q, true)", params, ok, "/notes/knowledge/decisions.md")
 	}
 }
 
-func firstSplitID(node workspacelayout.Node) string {
+func firstSplitID(node layouttree.Node) string {
 	if node.Type == "split" {
 		return node.SplitID
 	}
@@ -1137,7 +1138,7 @@ func firstSplitID(node workspacelayout.Node) string {
 	return ""
 }
 
-func findSplit(node workspacelayout.Node, splitID string) *workspacelayout.Node {
+func findSplit(node layouttree.Node, splitID string) *layouttree.Node {
 	if node.Type == "split" && node.SplitID == splitID {
 		found := node
 		return &found
