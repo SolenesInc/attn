@@ -952,18 +952,21 @@ func (s *Store) AssignSessionSetup(sessionID, setupID string) error {
 		if _, err := loadLiveSetup(tx, setupID); err != nil {
 			return err
 		}
-		var current string
-		err := tx.QueryRow(`SELECT setup_id FROM sessions WHERE id = ?`, sessionID).Scan(&current)
+		var current, closedAt string
+		err := tx.QueryRow(`SELECT setup_id, closed_at FROM sessions WHERE id = ?`, sessionID).Scan(&current, &closedAt)
 		if errors.Is(err, sql.ErrNoRows) {
 			return setups.Errorf(setups.CodeNotFound, "session %q does not exist", sessionID)
 		}
 		if err != nil {
 			return err
 		}
+		if closedAt != "" {
+			return setups.Errorf(setups.CodeSessionClosed, "session %s closed at %s; closed sessions keep their setup as history", sessionID, closedAt)
+		}
 		if current != "" && current != setupID {
 			return setups.Errorf(setups.CodeCrossSetup, "session %s already belongs to setup %s; membership changes only through a move", sessionID, current)
 		}
-		_, err = tx.Exec(`UPDATE sessions SET setup_id = ? WHERE id = ?`, setupID, sessionID)
+		_, err = tx.Exec(`UPDATE sessions SET setup_id = ? WHERE id = ? AND closed_at = ''`, setupID, sessionID)
 		return err
 	})
 }
@@ -1055,7 +1058,7 @@ func (s *Store) MoveSessionToSetup(sessionID, destinationSetupID string) (Sessio
 		if move.SourceDesktop, err = removeSessionPlacement(tx, now, sessionID); err != nil {
 			return err
 		}
-		_, err = tx.Exec(`UPDATE sessions SET setup_id = ? WHERE id = ?`, destinationSetupID, sessionID)
+		_, err = tx.Exec(`UPDATE sessions SET setup_id = ? WHERE id = ? AND closed_at = ''`, destinationSetupID, sessionID)
 		return err
 	})
 	return move, err

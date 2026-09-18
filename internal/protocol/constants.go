@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "312"
+const ProtocolVersion = "313"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -295,6 +295,30 @@ const (
 	CmdSetWorkspaceRank                      = "set_workspace_rank"
 	CmdSetChiefOfStaff                       = "set_chief_of_staff"
 	CmdSetSessionContextWindowCap            = "set_session_context_window_cap"
+)
+
+const (
+	CmdSetupCreate            = "setup_create"
+	CmdSetupRename            = "setup_rename"
+	CmdSetupDelete            = "setup_delete"
+	CmdSetupSelect            = "setup_select"
+	CmdDesktopCreate          = "desktop_create"
+	CmdDesktopRename          = "desktop_rename"
+	CmdDesktopSetShortcutSlot = "desktop_set_shortcut_slot"
+	CmdDesktopReorder         = "desktop_reorder"
+	CmdDesktopDelete          = "desktop_delete"
+	CmdDesktopSetCurrent      = "desktop_set_current"
+	CmdDesktopSetActivePane   = "desktop_set_active_pane"
+	CmdDesktopPlaceSession    = "desktop_place_session"
+	CmdDesktopMoveLeaf        = "desktop_move_leaf"
+	CmdDesktopRemoveLeaf      = "desktop_remove_leaf"
+	CmdDesktopSetSplitRatio   = "desktop_set_split_ratio"
+)
+
+const (
+	EventSetupActionResult       = "setup_action_result"
+	EventSetupsChanged           = "setups_changed"
+	EventSetupArrangementChanged = "setup_arrangement_changed"
 )
 
 // First group is agent-reachable over the unix socket and records proposals
@@ -2351,6 +2375,111 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 		var msg RenameWorkspaceMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, fmt.Errorf("unmarshal rename_workspace: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdSetupCreate:
+		var msg SetupCreateMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal setup_create: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdSetupRename:
+		var msg SetupRenameMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal setup_rename: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdSetupDelete:
+		var msg SetupDeleteMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal setup_delete: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdSetupSelect:
+		var msg SetupSelectMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal setup_select: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDesktopCreate:
+		var msg DesktopCreateMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal desktop_create: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDesktopRename:
+		var msg DesktopRenameMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal desktop_rename: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDesktopSetShortcutSlot:
+		var msg DesktopSetShortcutSlotMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal desktop_set_shortcut_slot: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDesktopReorder:
+		var msg DesktopReorderMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal desktop_reorder: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDesktopDelete:
+		var msg DesktopDeleteMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal desktop_delete: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDesktopSetCurrent:
+		var msg DesktopSetCurrentMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal desktop_set_current: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDesktopSetActivePane:
+		var msg DesktopSetActivePaneMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal desktop_set_active_pane: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDesktopPlaceSession:
+		var msg DesktopPlaceSessionMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal desktop_place_session: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDesktopMoveLeaf:
+		var msg DesktopMoveLeafMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal desktop_move_leaf: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDesktopRemoveLeaf:
+		var msg DesktopRemoveLeafMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal desktop_remove_leaf: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDesktopSetSplitRatio:
+		var msg DesktopSetSplitRatioMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal desktop_set_split_ratio: %w", err)
 		}
 		return peek.Cmd, &msg, nil
 

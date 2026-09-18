@@ -94,12 +94,12 @@ func protocolWorkspaceLayout(snapshot workspacelayout.WorkspaceLayout) (*protoco
 	for _, pane := range snapshot.Panes {
 		next := protocol.WorkspaceLayoutPane{
 			PaneID: pane.PaneID,
-			Kind:   protocol.WorkspaceLayoutPaneKind(pane.Kind),
+			Kind:   protocol.LayoutPaneKind(pane.Kind),
 			Title:  pane.Title,
-			Status: protocol.WorkspaceLayoutPaneStatus(pane.Status),
+			Status: protocol.LayoutPaneStatus(pane.Status),
 		}
 		if next.Status == "" {
-			next.Status = protocol.WorkspaceLayoutPaneStatusReady
+			next.Status = protocol.LayoutPaneStatusReady
 		}
 		if strings.TrimSpace(pane.RuntimeID) != "" {
 			next.RuntimeID = protocol.Ptr(strings.TrimSpace(pane.RuntimeID))
@@ -259,9 +259,9 @@ func (d *Daemon) projectWorkspaceLayoutRepublished(workspaceID string) {
 	})
 }
 
-func protocolDirection(direction protocol.WorkspaceLayoutSplitDirection) layouttree.Direction {
+func protocolDirection(direction protocol.LayoutSplitDirection) layouttree.Direction {
 	switch direction {
-	case protocol.WorkspaceLayoutSplitDirectionHorizontal:
+	case protocol.LayoutSplitDirectionHorizontal:
 		return layouttree.DirectionHorizontal
 	default:
 		return layouttree.DirectionVertical
@@ -390,13 +390,13 @@ func (d *Daemon) handleWorkspaceLayoutSetSplitRatio(client *wsClient, msg *proto
 
 const defaultTileFraction = 0.32
 
-func dockEdgeToSplit(edge protocol.WorkspaceLayoutDockEdge) (layouttree.Direction, bool) {
+func dockEdgeToSplit(edge protocol.LayoutDockEdge) (layouttree.Direction, bool) {
 	switch edge {
-	case protocol.WorkspaceLayoutDockEdgeLeft:
+	case protocol.LayoutDockEdgeLeft:
 		return layouttree.DirectionVertical, true
-	case protocol.WorkspaceLayoutDockEdgeTop:
+	case protocol.LayoutDockEdgeTop:
 		return layouttree.DirectionHorizontal, true
-	case protocol.WorkspaceLayoutDockEdgeBottom:
+	case protocol.LayoutDockEdgeBottom:
 		return layouttree.DirectionHorizontal, false
 	default:
 		return layouttree.DirectionVertical, false
@@ -415,7 +415,7 @@ func (d *Daemon) handleWorkspaceLayoutDockTile(client *wsClient, msg *protocol.W
 }
 
 // An empty tileSessionID preserves any existing binding.
-func (d *Daemon) dockTile(workspaceID, anchorPaneID, tileID, tileKind, tileParams, tileSessionID string, edge protocol.WorkspaceLayoutDockEdge, ratio *float64) error {
+func (d *Daemon) dockTile(workspaceID, anchorPaneID, tileID, tileKind, tileParams, tileSessionID string, edge protocol.LayoutDockEdge, ratio *float64) error {
 	snapshot, err := d.ensureWorkspaceLayout(workspaceID)
 	if err != nil {
 		return err
@@ -768,7 +768,7 @@ func (d *Daemon) handleSetWorkspaceRank(client *wsClient, msg *protocol.SetWorks
 	d.sendWorkspaceLayoutActionResult(client, protocol.CmdSetWorkspaceRank, workspaceID, nil, nil)
 }
 
-func (d *Daemon) moveLeaf(workspaceID, leafID, anchorID string, edge protocol.WorkspaceLayoutDockEdge, ratio *float64) error {
+func (d *Daemon) moveLeaf(workspaceID, leafID, anchorID string, edge protocol.LayoutDockEdge, ratio *float64) error {
 	snapshot, err := d.ensureWorkspaceLayout(workspaceID)
 	if err != nil {
 		return err
@@ -811,7 +811,7 @@ func (d *Daemon) moveLeaf(workspaceID, leafID, anchorID string, edge protocol.Wo
 	return nil
 }
 
-func (d *Daemon) moveLeafToWorkspace(sourceWorkspaceID, targetWorkspaceID, leafID, anchorID string, edge protocol.WorkspaceLayoutDockEdge, ratio *float64) (string, error) {
+func (d *Daemon) moveLeafToWorkspace(sourceWorkspaceID, targetWorkspaceID, leafID, anchorID string, edge protocol.LayoutDockEdge, ratio *float64) (string, error) {
 	sourceWorkspaceID = strings.TrimSpace(sourceWorkspaceID)
 	targetWorkspaceID = strings.TrimSpace(targetWorkspaceID)
 	leafID = strings.TrimSpace(leafID)

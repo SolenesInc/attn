@@ -440,6 +440,7 @@ func TestSetupIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {
 	if _, err := s.CloseSession("closed-agent", SessionClose{}, time.Now()); err != nil {
 		t.Fatalf("closing closed-agent: %v", err)
 	}
+	wantCode(t, s.AssignSessionSetup("closed-agent", work.ID), setups.CodeSessionClosed)
 
 	_, _, err := s.CreateSetup("  Home ")
 	wantCode(t, err, setups.CodeNameTaken)

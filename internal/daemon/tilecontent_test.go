@@ -106,7 +106,7 @@ func TestWorkspaceTileContentGetReturnsFile(t *testing.T) {
 	if err := os.WriteFile(file, []byte("# Title\n\nBody."), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.dockTile(workspaceID, "pane-1", markdownTileIDForPath(file), string(layouttree.TileKindMarkdown), file, "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	if err := d.dockTile(workspaceID, "pane-1", markdownTileIDForPath(file), string(layouttree.TileKindMarkdown), file, "", protocol.LayoutDockEdgeRight, nil); err != nil {
 		t.Fatalf("dockTile: %v", err)
 	}
 
@@ -130,7 +130,7 @@ func TestWorkspaceTileContentGetReturnsFile(t *testing.T) {
 func TestWorkspaceTileContentGetMissingFileReportsError(t *testing.T) {
 	d, client, workspaceID := setupMarkdownWorkspace(t)
 	missing := filepath.Join(t.TempDir(), "nope.md")
-	if err := d.dockTile(workspaceID, "pane-1", markdownTileIDForPath(missing), string(layouttree.TileKindMarkdown), missing, "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	if err := d.dockTile(workspaceID, "pane-1", markdownTileIDForPath(missing), string(layouttree.TileKindMarkdown), missing, "", protocol.LayoutDockEdgeRight, nil); err != nil {
 		t.Fatalf("dockTile: %v", err)
 	}
 	d.handleWorkspaceTileContentGet(client, &protocol.WorkspaceTileContentGetMessage{
@@ -150,7 +150,7 @@ func TestWorkspaceTileContentGetRejectsUnsupportedTileKind(t *testing.T) {
 	if err := os.WriteFile(file, []byte("must not be returned"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.dockTile(workspaceID, "pane-1", "tile-future", "future", file, "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	if err := d.dockTile(workspaceID, "pane-1", "tile-future", "future", file, "", protocol.LayoutDockEdgeRight, nil); err != nil {
 		t.Fatalf("dockTile: %v", err)
 	}
 	d.handleWorkspaceTileContentGet(client, &protocol.WorkspaceTileContentGetMessage{
@@ -171,7 +171,7 @@ func TestWorkspaceTileContentReloadOnlyReachesSubscribedClients(t *testing.T) {
 		if err := os.WriteFile(file, []byte("# Private"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if err := d.dockTile(workspaceID, "pane-1", markdownTileIDForPath(file), string(layouttree.TileKindMarkdown), file, "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+		if err := d.dockTile(workspaceID, "pane-1", markdownTileIDForPath(file), string(layouttree.TileKindMarkdown), file, "", protocol.LayoutDockEdgeRight, nil); err != nil {
 			t.Fatalf("dockTile: %v", err)
 		}
 
@@ -201,12 +201,12 @@ func TestBroadcastTileContentDropsStaleRetargetedRead(t *testing.T) {
 		oldFile := filepath.Join(t.TempDir(), "old.md")
 		newFile := filepath.Join(t.TempDir(), "new.md")
 		tileID := markdownTileIDForPath(oldFile)
-		if err := d.dockTile(workspaceID, "pane-1", tileID, string(layouttree.TileKindMarkdown), oldFile, "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+		if err := d.dockTile(workspaceID, "pane-1", tileID, string(layouttree.TileKindMarkdown), oldFile, "", protocol.LayoutDockEdgeRight, nil); err != nil {
 			t.Fatalf("dock old tile: %v", err)
 		}
 		d.wsHub.clients[client] = true
 		client.subscribeTileContent(workspaceID, tileID)
-		if err := d.dockTile(workspaceID, "pane-1", tileID, string(layouttree.TileKindMarkdown), newFile, "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+		if err := d.dockTile(workspaceID, "pane-1", tileID, string(layouttree.TileKindMarkdown), newFile, "", protocol.LayoutDockEdgeRight, nil); err != nil {
 			t.Fatalf("retarget tile: %v", err)
 		}
 
@@ -223,10 +223,10 @@ func TestBroadcastTileContentDropsStaleRetargetedRead(t *testing.T) {
 func TestDockTileMovePreservesExistingFraction(t *testing.T) {
 	d, _, workspaceID := setupMarkdownWorkspace(t)
 	fraction := 0.41
-	if err := d.dockTile(workspaceID, "pane-1", markdownTileIDForPath("/tmp/README.md"), string(layouttree.TileKindMarkdown), "/tmp/README.md", "", protocol.WorkspaceLayoutDockEdgeRight, &fraction); err != nil {
+	if err := d.dockTile(workspaceID, "pane-1", markdownTileIDForPath("/tmp/README.md"), string(layouttree.TileKindMarkdown), "/tmp/README.md", "", protocol.LayoutDockEdgeRight, &fraction); err != nil {
 		t.Fatalf("dockTile: %v", err)
 	}
-	if err := d.dockTile(workspaceID, "pane-1", markdownTileIDForPath("/tmp/README.md"), string(layouttree.TileKindMarkdown), "/tmp/README.md", "", protocol.WorkspaceLayoutDockEdgeBottom, nil); err != nil {
+	if err := d.dockTile(workspaceID, "pane-1", markdownTileIDForPath("/tmp/README.md"), string(layouttree.TileKindMarkdown), "/tmp/README.md", "", protocol.LayoutDockEdgeBottom, nil); err != nil {
 		t.Fatalf("re-dock tile: %v", err)
 	}
 
@@ -246,7 +246,7 @@ func TestCollectChangedMarkdownTilesSkipsUnsubscribedTiles(t *testing.T) {
 	if err := os.WriteFile(file, []byte("# Idle"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.dockTile(workspaceID, "pane-1", markdownTileIDForPath(file), string(layouttree.TileKindMarkdown), file, "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	if err := d.dockTile(workspaceID, "pane-1", markdownTileIDForPath(file), string(layouttree.TileKindMarkdown), file, "", protocol.LayoutDockEdgeRight, nil); err != nil {
 		t.Fatalf("dockTile: %v", err)
 	}
 
@@ -282,7 +282,7 @@ func TestUndockingTilePrunesContentSubscription(t *testing.T) {
 	if err := os.WriteFile(file, []byte("# Close"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.dockTile(workspaceID, "pane-1", markdownTileIDForPath(file), string(layouttree.TileKindMarkdown), file, "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	if err := d.dockTile(workspaceID, "pane-1", markdownTileIDForPath(file), string(layouttree.TileKindMarkdown), file, "", protocol.LayoutDockEdgeRight, nil); err != nil {
 		t.Fatalf("dockTile: %v", err)
 	}
 	d.wsHub.clients[client] = true
@@ -305,7 +305,7 @@ func TestCollectChangedMarkdownTilesDetectsEdits(t *testing.T) {
 	if err := os.WriteFile(file, []byte("v1"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.dockTile(workspaceID, "pane-1", markdownTileIDForPath(file), string(layouttree.TileKindMarkdown), file, "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	if err := d.dockTile(workspaceID, "pane-1", markdownTileIDForPath(file), string(layouttree.TileKindMarkdown), file, "", protocol.LayoutDockEdgeRight, nil); err != nil {
 		t.Fatalf("dockTile: %v", err)
 	}
 	d.wsHub.clients[client] = true
@@ -545,7 +545,7 @@ func TestOpenMarkdownReusesLegacyFixedIDTile(t *testing.T) {
 	if err := os.WriteFile(file, []byte("# Legacy"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.dockTile(workspaceID, "pane-1", "tile-markdown", string(layouttree.TileKindMarkdown), file, "session-0", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	if err := d.dockTile(workspaceID, "pane-1", "tile-markdown", string(layouttree.TileKindMarkdown), file, "session-0", protocol.LayoutDockEdgeRight, nil); err != nil {
 		t.Fatalf("dock legacy tile: %v", err)
 	}
 

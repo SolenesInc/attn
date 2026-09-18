@@ -283,7 +283,7 @@ func TestOpenBrowserDocksIntoSelectedTileOnlyWorkspace(t *testing.T) {
 		string(layouttree.TileKindMarkdown),
 		"/tmp/notes.md",
 		"",
-		protocol.WorkspaceLayoutDockEdgeRight,
+		protocol.LayoutDockEdgeRight,
 		nil,
 	); err != nil {
 		t.Fatal(err)

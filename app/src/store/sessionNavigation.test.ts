@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { useSessionStore, type DaemonSessionSnapshot } from './sessions';
 import type { DaemonWorkspace } from '../hooks/useDaemonSocket';
 import {
-  WorkspaceLayoutPaneKind,
-  WorkspaceLayoutPaneStatus,
+  LayoutPaneKind,
+  LayoutPaneStatus,
   WorkspaceStatus,
 } from '../types/generated';
 
@@ -34,11 +34,11 @@ const workspace = (id: string): DaemonWorkspace => ({
       {
         workspace_id: `workspace-${id}`,
         pane_id: `pane-${id}`,
-        kind: WorkspaceLayoutPaneKind.Agent,
+        kind: LayoutPaneKind.Agent,
         runtime_id: id,
         session_id: id,
         title: id,
-        status: WorkspaceLayoutPaneStatus.Ready,
+        status: LayoutPaneStatus.Ready,
       },
     ],
   },

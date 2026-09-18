@@ -457,7 +457,7 @@ func (d *Daemon) openMarkdownTile(path, sessionID string) (workspaceID, tileID s
 		if err := d.rebindTileSession(workspaceID, tileID, sessionID); err != nil {
 			return "", "", err
 		}
-	} else if err := d.dockTile(workspaceID, paneID, tileID, string(layouttree.TileKindMarkdown), path, sessionID, protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	} else if err := d.dockTile(workspaceID, paneID, tileID, string(layouttree.TileKindMarkdown), path, sessionID, protocol.LayoutDockEdgeRight, nil); err != nil {
 		return "", "", err
 	}
 	d.broadcastTileContentNow(workspaceID, tileID)
@@ -493,7 +493,7 @@ func (d *Daemon) openSeedTile(seedID, placementSessionID string) (workspaceID, t
 		if err := d.rebindTileSession(workspaceID, tileID, bindingSessionID); err != nil {
 			return "", "", err
 		}
-	} else if err := d.dockTile(workspaceID, paneID, tileID, string(layouttree.TileKindSeed), seed.ID, bindingSessionID, protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	} else if err := d.dockTile(workspaceID, paneID, tileID, string(layouttree.TileKindSeed), seed.ID, bindingSessionID, protocol.LayoutDockEdgeRight, nil); err != nil {
 		return "", "", err
 	}
 	return workspaceID, tileID, nil

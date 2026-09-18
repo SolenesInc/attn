@@ -193,7 +193,7 @@ func (d *Daemon) forwardRemoteBrowserOpen(target browserWorkspaceTarget, targetU
 			Cmd:          protocol.CmdWorkspaceLayoutDockTile,
 			WorkspaceID:  target.workspaceID,
 			AnchorPaneID: target.anchorLeafID,
-			Edge:         protocol.WorkspaceLayoutDockEdgeRight,
+			Edge:         protocol.LayoutDockEdgeRight,
 			TileID:       browserTileID,
 			TileKind:     string(layouttree.TileKindBrowser),
 		})
@@ -265,7 +265,7 @@ func (d *Daemon) handleOpenBrowser(conn net.Conn, msg *protocol.OpenBrowserMessa
 			return
 		}
 	}
-	if err := d.dockTile(workspaceID, target.anchorLeafID, browserTileID, string(layouttree.TileKindBrowser), targetURL, "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	if err := d.dockTile(workspaceID, target.anchorLeafID, browserTileID, string(layouttree.TileKindBrowser), targetURL, "", protocol.LayoutDockEdgeRight, nil); err != nil {
 		d.sendError(conn, fmt.Sprintf("open_browser: %v", err))
 		return
 	}

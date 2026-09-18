@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WorkspaceLayoutPaneKind, WorkspaceLayoutPaneStatus } from './generated';
+import { LayoutPaneKind, LayoutPaneStatus } from './generated';
 import {
   applyRatioOverrides,
   collectPreferredSplitIds,
@@ -254,7 +254,7 @@ describe('docked tiles', () => {
         ],
       }),
       panes: [
-        { pane_id: 'pane-a', workspace_id: 'ws', kind: WorkspaceLayoutPaneKind.Agent, title: 'A', status: WorkspaceLayoutPaneStatus.Ready, runtime_id: 'r', session_id: 's' },
+        { pane_id: 'pane-a', workspace_id: 'ws', kind: LayoutPaneKind.Agent, title: 'A', status: LayoutPaneStatus.Ready, runtime_id: 'r', session_id: 's' },
       ],
     });
     expect(findTileByKind(snapshot.workspace.layoutTree, 'markdown')?.tileId).toBe('tile-md');
@@ -293,7 +293,7 @@ describe('docked tiles', () => {
         ],
       }),
       panes: [
-        { pane_id: 'pane-a', workspace_id: 'ws', kind: WorkspaceLayoutPaneKind.Agent, title: 'A', status: WorkspaceLayoutPaneStatus.Ready, runtime_id: 'r', session_id: 's' },
+        { pane_id: 'pane-a', workspace_id: 'ws', kind: LayoutPaneKind.Agent, title: 'A', status: LayoutPaneStatus.Ready, runtime_id: 'r', session_id: 's' },
       ],
     });
     expect(snapshot.workspace.layoutTree).toBeNull();

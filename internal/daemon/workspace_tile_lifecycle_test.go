@@ -50,7 +50,7 @@ func setupSessionWorkspaceWithTile(t *testing.T) (d *Daemon, client *wsClient, w
 	if err := os.WriteFile(file, []byte("# Notes\n"), 0o644); err != nil {
 		t.Fatalf("write tile file: %v", err)
 	}
-	if err := d.dockTile(workspaceID, paneID, markdownTileIDForPath(file), string(layouttree.TileKindMarkdown), file, "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	if err := d.dockTile(workspaceID, paneID, markdownTileIDForPath(file), string(layouttree.TileKindMarkdown), file, "", protocol.LayoutDockEdgeRight, nil); err != nil {
 		t.Fatalf("dock tile: %v", err)
 	}
 	return d, client, workspaceID, sessionID, paneID

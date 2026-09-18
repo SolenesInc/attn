@@ -61,7 +61,7 @@ func TestWorkspaceLayoutMoveLeafRelocatesPane(t *testing.T) {
 		WorkspaceID: workspaceID,
 		LeafID:      "pane-1",
 		AnchorID:    "pane-2",
-		Edge:        protocol.WorkspaceLayoutDockEdgeBottom,
+		Edge:        protocol.LayoutDockEdgeBottom,
 		Ratio:       protocol.Ptr(0.5),
 	})
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutMoveLeaf, workspaceID, "pane-1", true)
@@ -104,7 +104,7 @@ func TestWorkspaceLayoutMoveLeafSelfDropIsRejected(t *testing.T) {
 		WorkspaceID: workspaceID,
 		LeafID:      "pane-1",
 		AnchorID:    "pane-1",
-		Edge:        protocol.WorkspaceLayoutDockEdgeRight,
+		Edge:        protocol.LayoutDockEdgeRight,
 	})
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutMoveLeaf, workspaceID, "pane-1", false)
 
@@ -144,7 +144,7 @@ func TestWorkspaceLayoutMoveLeafToWorkspaceMovesPaneAndSessionOwnership(t *testi
 		TargetWorkspaceID: targetWorkspaceID,
 		LeafID:            "pane-source",
 		AnchorID:          protocol.Ptr("pane-target"),
-		Edge:              protocol.WorkspaceLayoutDockEdgeRight,
+		Edge:              protocol.LayoutDockEdgeRight,
 		Ratio:             protocol.Ptr(0.4),
 	})
 	expectWorkspaceLayoutMoveToWorkspaceResult(t, client, sourceWorkspaceID, targetWorkspaceID, "pane-source", "pane-source", true)
@@ -198,7 +198,7 @@ func TestWorkspaceLayoutMoveLeafToWorkspaceBroadcastsLayoutBeforeSessionOwnershi
 		TargetWorkspaceID: targetWorkspaceID,
 		LeafID:            "pane-source",
 		AnchorID:          protocol.Ptr("pane-target"),
-		Edge:              protocol.WorkspaceLayoutDockEdgeRight,
+		Edge:              protocol.LayoutDockEdgeRight,
 	})
 	expectWorkspaceLayoutMoveToWorkspaceResult(t, client, sourceWorkspaceID, targetWorkspaceID, "pane-source", "pane-source", true)
 
