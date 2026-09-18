@@ -80,7 +80,7 @@ func NormalizeLayout[P any](node Node, panesByID map[string]P) Node {
 	if empty {
 		return fallbackLayout(panesByID)
 	}
-	return rebalanceSplitChains(normalized)
+	return Rebalance(normalized)
 }
 
 func fallbackLayout[P any](panesByID map[string]P) Node {
@@ -95,13 +95,13 @@ func fallbackLayout[P any](panesByID map[string]P) Node {
 	return DefaultLayout(paneIDs[0])
 }
 
-func rebalanceSplitChains(node Node) Node {
+func Rebalance(node Node) Node {
 	if node.Type != "split" || len(node.Children) < 2 {
 		return node
 	}
 
-	firstChild := rebalanceSplitChains(node.Children[0])
-	secondChild := rebalanceSplitChains(node.Children[1])
+	firstChild := Rebalance(node.Children[0])
+	secondChild := Rebalance(node.Children[1])
 	node.Children = []Node{firstChild, secondChild}
 
 	if node.RatioLocked {
