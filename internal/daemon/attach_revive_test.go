@@ -3,9 +3,12 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
@@ -229,5 +232,120 @@ func TestAttachReviveRespawnsUnattendedSessionWithContract(t *testing.T) {
 	intent, ok := d.store.LaunchIntent("recoverable")
 	if !ok || intent.UnattendedLaunch != spec {
 		t.Fatalf("persisted launch intent = %+v, %v; want unattended contract %+v", intent, ok, spec)
+	}
+}
+
+func TestAttachReviveMissingWorkingDirectoryDoesNotBlockFollowingBrowse(t *testing.T) {
+	root := t.TempDir()
+	d := NewForTesting(filepath.Join(root, "test.sock"))
+	t.Cleanup(func() { _ = d.store.Close() })
+	backend, err := ptybackend.NewWorker(ptybackend.WorkerBackendConfig{
+		DataRoot:         filepath.Join(root, "workers"),
+		DaemonInstanceID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		BinaryPath:       "/bin/false",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.ptyBackend = backend
+
+	missing := filepath.Join(root, "missing")
+	browseRoot := filepath.Join(root, "browse")
+	if err := os.MkdirAll(filepath.Join(browseRoot, "child"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	addTestWorkspace(d, "workspace", root)
+	now := string(protocol.TimestampNow())
+	d.store.Add(&protocol.Session{
+		ID:             "recoverable",
+		Label:          "recoverable",
+		Agent:          protocol.SessionAgentCodex,
+		Directory:      missing,
+		WorkspaceID:    "workspace",
+		State:          protocol.SessionStateRecoverable,
+		StateSince:     now,
+		StateUpdatedAt: now,
+		LastSeen:       now,
+	})
+	intent := store.LaunchIntent{Executable: "/opt/codex", Model: "gpt-test", Effort: "high"}
+	d.store.SetLaunchIntent("recoverable", intent)
+	exitScreen := store.SessionExitScreen{SessionID: "recoverable", Text: "previous process exited", Cols: 80, Rows: 24, ExitCode: 1}
+	if err := d.store.SaveSessionExitScreen(exitScreen, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	client := spawnTestClient()
+	client.recv = make(chan []byte, 2)
+	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	pumpDone := make(chan struct{})
+	go func() {
+		d.wsMsgPump(client)
+		close(pumpDone)
+	}()
+
+	attach, err := json.Marshal(protocol.AttachSessionMessage{
+		Cmd:          protocol.CmdAttachSession,
+		ID:           "recoverable",
+		AttachPolicy: protocol.Ptr(protocol.AttachPolicyRevive),
+		Cols:         protocol.Ptr(80),
+		Rows:         protocol.Ptr(24),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	browse, err := json.Marshal(protocol.BrowseDirectoryMessage{
+		Cmd:       protocol.CmdBrowseDirectory,
+		InputPath: browseRoot + string(os.PathSeparator),
+		RequestID: protocol.Ptr("browse-after-failed-revive"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.recv <- attach
+	client.recv <- browse
+	close(client.recv)
+
+	var attachResult protocol.AttachResultMessage
+	var browseResult protocol.BrowseDirectoryResultMessage
+	deadline := time.After(2 * time.Second)
+	for attachResult.Event == "" || browseResult.Event == "" {
+		select {
+		case outbound := <-client.send:
+			var envelope struct {
+				Event string `json:"event"`
+			}
+			if err := json.Unmarshal(outbound.payload, &envelope); err != nil {
+				t.Fatal(err)
+			}
+			switch envelope.Event {
+			case protocol.EventAttachResult:
+				if err := json.Unmarshal(outbound.payload, &attachResult); err != nil {
+					t.Fatal(err)
+				}
+			case protocol.EventBrowseDirectoryResult:
+				if err := json.Unmarshal(outbound.payload, &browseResult); err != nil {
+					t.Fatal(err)
+				}
+			}
+		case <-deadline:
+			t.Fatal("following browse did not complete after failed revive")
+		}
+	}
+	<-pumpDone
+
+	if attachResult.Success || attachResult.Error == nil || !strings.Contains(*attachResult.Error, missing) {
+		t.Fatalf("attach result = %+v, want missing working directory", attachResult)
+	}
+	if !browseResult.Success || len(browseResult.Entries) != 1 || browseResult.Entries[0].Name != "child" {
+		t.Fatalf("browse result = %+v, want child directory", browseResult)
+	}
+	if session := d.store.Get("recoverable"); session == nil || session.State != protocol.SessionStateRecoverable || session.Directory != missing {
+		t.Fatalf("session after failed revive = %+v", session)
+	}
+	if got, ok := d.store.LaunchIntent("recoverable"); !ok || !reflect.DeepEqual(got, intent) {
+		t.Fatalf("launch intent after failed revive = %+v, %v; want %+v", got, ok, intent)
+	}
+	if got := d.store.GetSessionExitScreen("recoverable"); got == nil || got.Text != exitScreen.Text || got.ExitCode != exitScreen.ExitCode {
+		t.Fatalf("exit screen after failed revive = %+v, want %+v", got, exitScreen)
 	}
 }

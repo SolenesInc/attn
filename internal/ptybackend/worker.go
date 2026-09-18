@@ -558,7 +558,7 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 	if b.kind == workerRuntimeSharedHost {
 		return b.spawnShared(ctx, opts)
 	}
-	if err := validateUnattendedSpawnOptions(opts); err != nil {
+	if err := validateSpawnOptions(opts); err != nil {
 		return err
 	}
 	if err := validateSessionID(opts.ID); err != nil {
@@ -591,12 +591,13 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 	b.mu.Unlock()
 	spawnReady := false
 	var workerProc *os.Process
+	var workerWait <-chan error
 	defer func() {
 		if spawnReady {
 			return
 		}
 		if workerProc != nil {
-			b.stopSpawnedWorkerProcess(workerProc, sessionID)
+			b.stopSpawnedWorkerProcess(workerProc, workerWait, sessionID)
 		}
 		b.mu.Lock()
 		delete(b.sessions, sessionID)
@@ -689,6 +690,11 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 	}
 	workerProc = cmd.Process
 	session.WorkerPID = workerProc.Pid
+	waitCh := make(chan error, 1)
+	workerWait = waitCh
+	go func() {
+		waitCh <- cmd.Wait()
+	}()
 
 	deadline := time.Now().Add(spawnReadyTimeout)
 	var lastErr error
@@ -696,21 +702,18 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if workerProc != nil && !pidAlive(workerProc.Pid) {
-			waitErr := cmd.Wait()
+		select {
+		case waitErr := <-workerWait:
 			workerProc = nil
 			if waitErr != nil {
 				return fmt.Errorf("worker exited before ready: %w", waitErr)
 			}
 			return errors.New("worker exited before ready")
+		default:
 		}
 		_, err := b.callInfo(ctx, session)
 		if err == nil {
 			spawnReady = true
-			if workerProc != nil {
-				b.reapWorkerProcess(cmd, sessionID)
-				workerProc = nil
-			}
 			b.startPoller(session)
 			b.startMonitor(session)
 			b.cfg.Logf("worker backend spawn ready: session=%s socket=%s", sessionID, session.SocketPath)
@@ -719,13 +722,14 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 		lastErr = err
 		time.Sleep(spawnReadyPollInterval)
 	}
-	if workerProc != nil && !pidAlive(workerProc.Pid) {
-		waitErr := cmd.Wait()
+	select {
+	case waitErr := <-workerWait:
 		workerProc = nil
 		if waitErr != nil {
 			return fmt.Errorf("worker exited before ready: %w", waitErr)
 		}
 		return errors.New("worker exited before ready")
+	default:
 	}
 	return fmt.Errorf("worker did not become ready: %w", lastErr)
 }
@@ -2083,7 +2087,7 @@ func (b *WorkerBackend) canReclaimOwnershipMismatch(entry ptyworker.RegistryEntr
 	return !pidAlive(entry.OwnerPID)
 }
 
-func (b *WorkerBackend) stopSpawnedWorkerProcess(proc *os.Process, sessionID string) {
+func (b *WorkerBackend) stopSpawnedWorkerProcess(proc *os.Process, wait <-chan error, sessionID string) {
 	if proc == nil {
 		return
 	}
@@ -2100,24 +2104,11 @@ func (b *WorkerBackend) stopSpawnedWorkerProcess(proc *os.Process, sessionID str
 			_ = proc.Kill()
 		}
 	}
-	waitDone := make(chan struct{})
-	go func() {
-		_, _ = proc.Wait()
-		close(waitDone)
-	}()
 	select {
-	case <-waitDone:
+	case <-wait:
 	case <-time.After(spawnWaitTimeout):
-		_ = proc.Release()
 	}
 	b.cfg.Logf("worker backend spawn cleanup: terminated unready worker: session=%s pid=%d", sessionID, proc.Pid)
-}
-
-func (b *WorkerBackend) reapWorkerProcess(cmd *exec.Cmd, sessionID string) {
-	if cmd == nil || cmd.Process == nil {
-		return
-	}
-	b.reapWorkerPID(cmd.Process.Pid, sessionID)
 }
 
 func (b *WorkerBackend) workerPIDForSession(session *workerSession) int {
