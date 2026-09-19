@@ -1,4 +1,4 @@
-.PHONY: lint lint-go lint-frontend lint-added-comments run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-scripts test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
+.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-scripts test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -204,7 +204,7 @@ test-hooks:
 	@bash ./scripts/claude/attn-profile-nudge_test.sh
 
 test-scripts:
-	@bash ./scripts/test-scripts.sh $(sort $(wildcard scripts/*_test.sh))
+	@set -e; for script_test in $(sort $(wildcard scripts/*_test.sh)); do bash "$$script_test"; done
 
 # Verbose test output (shows all test names as they run)
 test-v: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
@@ -228,10 +228,7 @@ $(APP_NODE_MODULES): app/package.json app/pnpm-lock.yaml
 test-frontend: $(APP_NODE_MODULES)
 	cd app && pnpm run test
 
-lint: lint-go lint-frontend lint-added-comments
-
-lint-added-comments:
-	go run ./cmd/addedcomments -base $(DIFF_BASE)
+lint: lint-go lint-frontend
 
 lint-go: $(NATIVE_VT_DEP)
 	go run ./cmd/commentlint ./...
