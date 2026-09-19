@@ -323,6 +323,14 @@ func TestPullRequestWatchReviewerChangeClearsUnreadResult(t *testing.T) {
 	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
 		t.Fatalf("stale reviewer result remains unread: %+v, %v", unread, err)
 	}
+	if entry := onlySessionPullRequest(t, d, "s1"); protocol.Deref(entry.ReviewStatus) != prreadiness.ReviewWaiting {
+		t.Fatalf("old reviewer verdict survived reviewer change: %+v", entry)
+	}
+	host.readyErr = errors.New("review API unavailable")
+	d.refreshSessionPullRequests(time.Now().Add(protocol.HeatHotInterval))
+	if entry := onlySessionPullRequest(t, d, "s1"); protocol.Deref(entry.ReviewStatus) != prreadiness.ReviewWaiting {
+		t.Fatalf("failed fetch restored old reviewer verdict: %+v", entry)
+	}
 }
 
 func TestPullRequestWatchSharesFetchAndKeepsHotCadence(t *testing.T) {
@@ -488,8 +496,144 @@ func TestPullRequestWatchReportsHumanFeedbackAfterReady(t *testing.T) {
 	}}
 	d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
 	unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
-	if err != nil || len(unread) != 1 || !strings.Contains(unread[0].Item.Prompt, "Please check the retry path") {
+	if err != nil || len(unread) != 2 || !strings.Contains(unread[1].Item.Prompt, "Please check the retry path") {
 		t.Fatalf("feedback delivery = %+v, %v", unread, err)
+	}
+}
+
+func TestPullRequestWatchRetainsUnreadFeedbackUntilRead(t *testing.T) {
+	for _, checks := range []string{prreadiness.ChecksPending, prreadiness.ChecksGreen} {
+		t.Run(checks, func(t *testing.T) {
+			d := newPRDaemonForTest(t, "s1")
+			watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
+			now := time.Now()
+			ready := watchedReadiness("sha-1", checks, "COMMENTED")
+			ready.Evidence.Comments = []prreadiness.Comment{{
+				ID: "first", Author: "human", Body: "Keep the retry guard.", CreatedAt: now.Add(time.Second),
+			}}
+			host := &fakePRHost{readiness: ready}
+			serveHost(d, "github.com", host)
+			assertFeedback := func(want int) {
+				t.Helper()
+				unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
+				if err != nil {
+					t.Fatal(err)
+				}
+				first, second := 0, 0
+				for _, delivery := range unread {
+					first += strings.Count(delivery.Item.Prompt, "Keep the retry guard.")
+					second += strings.Count(delivery.Item.Prompt, "Also keep the timeout guard.")
+				}
+				if first != 1 || second != want-1 {
+					t.Fatalf("unread feedback first=%d second=%d, want 1 and %d: %+v", first, second, want-1, unread)
+				}
+			}
+			d.refreshSessionPullRequests(now)
+			assertFeedback(1)
+			d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
+			assertFeedback(1)
+			ready.Evidence.Comments = append(ready.Evidence.Comments, prreadiness.Comment{
+				ID: "second", Author: "human", Body: "Also keep the timeout guard.", CreatedAt: now.Add(time.Second),
+			})
+			d.refreshSessionPullRequests(now.Add(2 * protocol.HeatHotInterval))
+			assertFeedback(2)
+			host.readiness = watchedReadiness("sha-2", prreadiness.ChecksPending, "")
+			host.readiness.Evidence.Comments = ready.Evidence.Comments
+			d.refreshSessionPullRequests(now.Add(3 * protocol.HeatHotInterval))
+			assertFeedback(2)
+			if _, _, err := d.store.ReadAgentMailbox("s1", 20, now.Add(4*protocol.HeatHotInterval)); err != nil {
+				t.Fatal(err)
+			}
+			d.refreshSessionPullRequests(now.Add(5 * protocol.HeatHotInterval))
+			if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
+				t.Fatalf("read feedback reappeared: %+v, %v", unread, err)
+			}
+		})
+	}
+}
+
+func TestPullRequestWatchRetriesFeedbackEnqueueAfterRestart(t *testing.T) {
+	d := newDaemonForTest(t)
+	stopDaemonBackground(t, d)
+	dbPath := filepath.Join(t.TempDir(), "watch.db")
+	persistent, err := store.NewWithDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = d.store.Close()
+	d.store = persistent
+	t.Cleanup(func() { _ = d.store.Close() })
+	registerSessionForPRTest(t, d, "s1")
+	watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
+	direct, err := store.OpenDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer direct.Close()
+	if _, err := direct.Exec(`CREATE TRIGGER reject_second_feedback BEFORE INSERT ON agent_mailbox_items
+		WHEN NEW.prompt LIKE '%second feedback%' BEGIN SELECT RAISE(FAIL, 'injected enqueue failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	ready := watchedReadiness("sha-1", prreadiness.ChecksPending, "")
+	ready.Evidence.Comments = []prreadiness.Comment{
+		{ID: "first", Author: "human", Body: "first feedback", CreatedAt: now.Add(time.Second)},
+		{ID: "second", Author: "human", Body: "second feedback", CreatedAt: now.Add(time.Second)},
+	}
+	serveHost(d, "github.com", &fakePRHost{readiness: ready})
+	d.refreshSessionPullRequests(now)
+	watch := d.store.PullRequestWatches()[0]
+	if watch.LastSuccessAt != "" || len(watch.FeedbackSeenIDs) != 0 {
+		t.Fatalf("failed enqueue advanced the cursor: %+v", watch)
+	}
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 {
+		t.Fatalf("first comment was not durably queued: %+v, %v", unread, err)
+	}
+	if _, err := direct.Exec("DROP TRIGGER reject_second_feedback"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	d.store, err = store.NewWithDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
+	unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
+	if err != nil || len(unread) != 2 {
+		t.Fatalf("retry lost or duplicated feedback: %+v, %v", unread, err)
+	}
+	if watch := d.store.PullRequestWatches()[0]; len(watch.FeedbackSeenIDs) != 2 || watch.LastSuccessAt == "" {
+		t.Fatalf("successful retry did not advance the cursor: %+v", watch)
+	}
+}
+
+func TestPullRequestWatchExplicitStopClearsFeedback(t *testing.T) {
+	url := "https://github.com/victorarias/attn/pull/71"
+	for name, command := range map[string]any{
+		"unwatch":         protocol.PullRequestUnwatchMessage{Cmd: protocol.CmdPullRequestUnwatch, ID: "s1", URL: url},
+		"forget":          protocol.PullRequestForgetMessage{Cmd: protocol.CmdPullRequestForget, ID: "s1", URL: url},
+		"reviewer change": protocol.PullRequestWatchMessage{Cmd: protocol.CmdPullRequestWatch, ID: "s1", URL: url, Reviewer: "another-reviewer"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := newPRDaemonForTest(t, "s1")
+			watchPRForRefresh(t, d, "s1", url)
+			now := time.Now()
+			ready := watchedReadiness("sha-1", prreadiness.ChecksPending, "")
+			ready.Evidence.Comments = []prreadiness.Comment{{ID: "human", Author: "human", Body: "feedback", CreatedAt: now.Add(time.Second)}}
+			serveHost(d, "github.com", &fakePRHost{readiness: ready})
+			d.refreshSessionPullRequests(now)
+			if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 {
+				t.Fatalf("feedback was not queued: %+v, %v", unread, err)
+			}
+			if response := sendPRCommand(t, d, command); !response.Ok {
+				t.Fatalf("command failed: %+v", response)
+			}
+			if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
+				t.Fatalf("explicit stop left feedback: %+v, %v", unread, err)
+			}
+		})
 	}
 }
 

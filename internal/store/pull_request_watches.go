@@ -41,7 +41,12 @@ func (s *Store) WatchPullRequest(sessionID, prID, reviewer string, at time.Time)
 	if err != nil && err != sql.ErrNoRows {
 		return false, err
 	}
-	_, err = s.db.Exec(`
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	_, err = tx.Exec(`
 		INSERT INTO pull_request_watches (session_id, pr_id, reviewer, created_at, feedback_seen_at)
 		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(session_id, pr_id) DO UPDATE SET
@@ -60,7 +65,10 @@ func (s *Store) WatchPullRequest(sessionID, prID, reviewer string, at time.Time)
 	if err != nil {
 		return false, err
 	}
-	return true, err
+	if _, err := tx.Exec(`UPDATE session_pull_requests SET review_status = 'waiting' WHERE session_id = ? AND pr_id = ?`, sessionID, prID); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
 }
 
 func (s *Store) UnwatchPullRequest(sessionID, prID string) (bool, error) {

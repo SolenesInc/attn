@@ -204,7 +204,7 @@ func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) er
 }
 
 func (d *Daemon) clearPullRequestWatchInbox(sessionID, prID string) error {
-	if _, err := d.store.DeleteUnreadMaintenanceMailboxItem(sessionID, pullRequestWatchCoalesceKey(prID)); err != nil {
+	if err := d.store.DeleteUnreadMaintenanceMailboxItemsBySource(sessionID, prID); err != nil {
 		return fmt.Errorf("clear pull request watch inbox item %s: %w", prID, err)
 	}
 	d.refreshAgentMailboxUnread(sessionID)

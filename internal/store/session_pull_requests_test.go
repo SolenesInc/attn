@@ -36,6 +36,38 @@ func recordPR(t *testing.T, s *Store, sessionID, prID string, number int, at tim
 	return recorded
 }
 
+func TestPullRequestWatchReviewerResetIsAtomic(t *testing.T) {
+	s := newSessionPRStore(t)
+	now := time.Now()
+	prID := "github.com:victorarias/attn#71"
+	recordPR(t, s, "s1", prID, 71, now)
+	if _, err := s.WatchPullRequest("s1", prID, "first-reviewer", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateSessionPullRequestReviewStatus("s1", prID, "approved"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`CREATE TRIGGER reject_review_reset BEFORE UPDATE OF review_status ON session_pull_requests
+		BEGIN SELECT RAISE(FAIL, 'injected verdict reset failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if changed, err := s.WatchPullRequest("s1", prID, "second-reviewer", now.Add(time.Second)); err == nil || changed {
+		t.Fatalf("failed reset changed the watch: changed=%v err=%v", changed, err)
+	}
+	if watch, found := s.PullRequestWatch("s1", prID); !found || watch.Reviewer != "first-reviewer" {
+		t.Fatalf("failed reset replaced the reviewer: %+v", watch)
+	}
+	if _, err := s.db.Exec("DROP TRIGGER reject_review_reset"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.WatchPullRequest("s1", prID, "second-reviewer", now.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if pr, found := s.SessionPullRequestByID(prID); !found || pr.ReviewStatus != "waiting" {
+		t.Fatalf("successful reset retained the old verdict: %+v", pr)
+	}
+}
+
 func TestSessionPullRequestsComeBackNewestFirst(t *testing.T) {
 	s := newSessionPRStore(t)
 	base := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
