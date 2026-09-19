@@ -157,3 +157,20 @@ func TestBlockFormToolMarkersAreExempt(t *testing.T) {
 		t.Fatalf("findings = %#v, want %#v", got, want)
 	}
 }
+
+func TestANewCgoPreambleIsNotProse(t *testing.T) {
+	diff := `--- /dev/null
++++ b/internal/ghosttyvt/fresh.go
+@@ -0,0 +1,7 @@
++package ghosttyvt
++
++/*
++#include <stdint.h>
++static int one(void) { return 1; }
++*/
++import "C"
+`
+	if got := FindInUnifiedDiff(diff); len(got) != 0 {
+		t.Fatalf("findings = %#v, want none", got)
+	}
+}

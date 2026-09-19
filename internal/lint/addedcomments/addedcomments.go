@@ -13,6 +13,8 @@ type Finding struct {
 	Text string
 }
 
+const cgoPreambleOpener = "/*"
+
 var extensions = map[string]bool{
 	".go": true, ".rs": true,
 	".ts": true, ".tsx": true, ".js": true, ".jsx": true, ".mjs": true, ".cjs": true,
@@ -39,7 +41,7 @@ func Checked(file string) bool {
 
 func IsComment(line string) bool {
 	text := strings.TrimSpace(line)
-	return comment.MatchString(text) && !goDirective.MatchString(text) && !toolMarker.MatchString(text)
+	return comment.MatchString(text) && text != cgoPreambleOpener && !goDirective.MatchString(text) && !toolMarker.MatchString(text)
 }
 
 func count(group string) int {
