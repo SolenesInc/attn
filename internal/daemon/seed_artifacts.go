@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -21,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
+	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/protocol"
 	"golang.org/x/sys/unix"
@@ -449,7 +451,7 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 				return nil, err
 			}
 			if operation == "move" {
-				tracked, display, trackErr := gitTrackedSource(source)
+				tracked, display, trackErr := d.gitTrackedSource(source)
 				if trackErr != nil {
 					return nil, trackErr
 				}
@@ -881,34 +883,59 @@ func syncDirectory(path string) error {
 	return dir.Sync()
 }
 
-func gitTrackedSource(source string) (bool, string, error) {
+func (d *Daemon) gitTrackedSource(source string) (bool, string, error) {
 	resolvedSource, err := filepath.EvalSymlinks(source)
 	if err != nil {
 		return false, source, fmt.Errorf("resolve source for Git tracking check: %w", err)
 	}
 	dir := filepath.Dir(resolvedSource)
-	rootRaw, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
-	if err != nil {
-		if _, ok := err.(*exec.ExitError); ok {
-			return false, source, nil
+	result, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskSeedArtifact, Lane: gitInteractive, Effect: gitRead, Scope: dir}, func(ctx context.Context, client *attngit.Client) (struct {
+		tracked bool
+		display string
+	}, error) {
+		rootRaw, rootErr := client.Output(ctx, attngit.OpMetadata, dir, "rev-parse", "--show-toplevel")
+		if rootErr != nil {
+			var exit *exec.ExitError
+			if errors.As(rootErr, &exit) {
+				return struct {
+					tracked bool
+					display string
+				}{display: source}, nil
+			}
+			return struct {
+				tracked bool
+				display string
+			}{}, fmt.Errorf("check source repository: %w", rootErr)
 		}
-		return false, source, fmt.Errorf("check source repository: %w", err)
-	}
-	root := strings.TrimSpace(string(rootRaw))
-	rel, err := filepath.Rel(root, resolvedSource)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return false, source, nil
-	}
-	display := filepath.ToSlash(rel)
-	cmd := exec.Command("git", "-C", root, "ls-files", "--error-unmatch", "--", ":(literal)"+display)
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		return true, display, nil
-	} else if exit, ok := err.(*exec.ExitError); ok && exit.ExitCode() == 1 {
-		return false, display, nil
-	} else {
-		return false, display, fmt.Errorf("check whether %s is tracked by Git: %w: %s", display, err, strings.TrimSpace(string(output)))
-	}
+		root := strings.TrimSpace(string(rootRaw))
+		rel, relErr := filepath.Rel(root, resolvedSource)
+		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return struct {
+				tracked bool
+				display string
+			}{display: source}, nil
+		}
+		display := filepath.ToSlash(rel)
+		output, trackErr := client.Combined(ctx, attngit.OpMetadata, root, "ls-files", "--error-unmatch", "--", ":(literal)"+display)
+		if trackErr == nil {
+			return struct {
+				tracked bool
+				display string
+			}{tracked: true, display: display}, nil
+		}
+		var exit *exec.ExitError
+		if errors.As(trackErr, &exit) && exit.ExitCode() == 1 {
+			return struct {
+				tracked bool
+				display string
+			}{display: display}, nil
+		}
+		return struct {
+			tracked bool
+			display string
+		}{}, fmt.Errorf("check whether %s is tracked by Git: %w: %s", display, trackErr, strings.TrimSpace(string(output)))
+	})
+	return result.tracked, result.display, err
 }
 
 func (d *Daemon) detachLegacyArtifactReference(seedID, authorSession string, legacy garden.ArtifactReference) error {

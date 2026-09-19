@@ -77,7 +77,8 @@ func TestLegacySeedUsesItsDocumentUpdateAsConservativeStateEvidence(t *testing.T
 
 func TestObservedExecutionDistinguishesLocalNonGitAndRemoteHosts(t *testing.T) {
 	localDir := t.TempDir()
-	local := observedGardenExecution(&protocol.Session{
+	d := &Daemon{}
+	local := d.observedGardenExecution(&protocol.Session{
 		ID: "local", Directory: localDir, Agent: protocol.SessionAgentCopilot,
 	}, "native-local", time.Now())
 	if local.HostKind != garden.HostLocal || local.Cwd != localDir || local.Agent != "copilot" ||
@@ -85,7 +86,7 @@ func TestObservedExecutionDistinguishesLocalNonGitAndRemoteHosts(t *testing.T) {
 		t.Fatalf("local non-Git execution = %+v", local)
 	}
 
-	remote := observedGardenExecution(&protocol.Session{
+	remote := d.observedGardenExecution(&protocol.Session{
 		ID: "remote", Directory: "/srv/work", Agent: protocol.SessionAgentClaude,
 		EndpointID: protocol.Ptr("outpost-a"), MainRepo: protocol.Ptr("/srv/repo"), Branch: protocol.Ptr("feature/a"),
 	}, "native-remote", time.Now())

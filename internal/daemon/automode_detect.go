@@ -1,13 +1,26 @@
 package daemon
 
 import (
+	"context"
 	"strings"
 
 	"github.com/victorarias/attn/internal/automode"
+	attngit "github.com/victorarias/attn/internal/git"
 )
 
 func (d *Daemon) detectAutoModeEnvironment(cwd string) map[string][]string {
-	detected, identities := automode.DetectFromRepo(cwd)
+	type detection struct {
+		slots      map[string][]string
+		identities []string
+	}
+	detectedResult, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskAutoMode, Lane: gitInteractive, Effect: gitRead, Scope: cwd}, func(ctx context.Context, client *attngit.Client) (detection, error) {
+		slots, identities := automode.DetectFromRepoWithGit(ctx, client, cwd)
+		return detection{slots: slots, identities: identities}, nil
+	})
+	if err != nil {
+		return nil
+	}
+	detected, identities := detectedResult.slots, detectedResult.identities
 	if detected == nil {
 		return nil
 	}
@@ -80,13 +93,15 @@ func (d *Daemon) autoModeConfigForSession(
 	cfg automode.Config, cwd string,
 ) (automode.Config, automode.RepositoryRules, error) {
 	cfg.Environment = cfg.Environment.WithDetected(d.detectAutoModeEnvironment(cwd))
-	return autoModeConfigWithRepositoryRules(cfg, cwd)
+	return d.autoModeConfigWithRepositoryRules(cfg, cwd)
 }
 
-func autoModeConfigWithRepositoryRules(
+func (d *Daemon) autoModeConfigWithRepositoryRules(
 	cfg automode.Config, cwd string,
 ) (automode.Config, automode.RepositoryRules, error) {
-	repository, err := automode.LoadRepositoryRules(cwd)
+	repository, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskAutoMode, Lane: gitInteractive, Effect: gitRead, Scope: cwd}, func(ctx context.Context, client *attngit.Client) (automode.RepositoryRules, error) {
+		return automode.LoadRepositoryRulesWithGit(ctx, client, cwd)
+	})
 	if err != nil {
 		return automode.Config{}, automode.RepositoryRules{}, err
 	}

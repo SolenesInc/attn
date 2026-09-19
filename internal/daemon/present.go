@@ -1,9 +1,9 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/victorarias/attn/internal/prompts"
 	"net"
 	"strconv"
 	"strings"
@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/bus"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/present"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -82,12 +83,12 @@ func manifestToView(m *present.Manifest, annotations map[string][]present.Resolv
 	return view
 }
 
-func roundToProto(r *store.PresentationRound, repoDir string) (*protocol.PresentationRound, error) {
+func roundToProto(ctx context.Context, client *attngit.Client, r *store.PresentationRound, repoDir string) (*protocol.PresentationRound, error) {
 	m, err := present.ParseManifest([]byte(r.ManifestYAML))
 	if err != nil {
 		return nil, fmt.Errorf("parse stored manifest for round %s: %w", r.ID, err)
 	}
-	annotations, _ := present.ResolveAnnotations(m, repoDir, r.HeadSHA)
+	annotations, _ := present.ResolveAnnotationsWithGit(ctx, client, m, repoDir, r.HeadSHA)
 	out := &protocol.PresentationRound{
 		ID:             r.ID,
 		PresentationID: r.PresentationID,
@@ -125,13 +126,25 @@ func (d *Daemon) handlePresentOpen(conn net.Conn, msg *protocol.PresentOpenMessa
 		d.sendError(conn, "present open: "+err.Error())
 		return
 	}
-	baseSHA, headSHA, err := present.Pin(m)
+	type pinnedPresentation struct {
+		baseSHA string
+		headSHA string
+		issues  []present.AnchorIssue
+	}
+	pinned, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskPresent, Lane: gitInteractive, Effect: gitRead, Scope: m.Frame.Repo}, func(ctx context.Context, client *attngit.Client) (pinnedPresentation, error) {
+		baseSHA, headSHA, runErr := present.PinWithGit(ctx, client, m)
+		if runErr != nil {
+			return pinnedPresentation{}, runErr
+		}
+		_, issues := present.ResolveAnnotationsWithGit(ctx, client, m, m.Frame.Repo, headSHA)
+		return pinnedPresentation{baseSHA: baseSHA, headSHA: headSHA, issues: issues}, nil
+	})
 	if err != nil {
 		d.sendError(conn, "present open: "+err.Error())
 		return
 	}
 
-	_, issues := present.ResolveAnnotations(m, m.Frame.Repo, headSHA)
+	baseSHA, headSHA, issues := pinned.baseSHA, pinned.headSHA, pinned.issues
 	var warnings []string
 	var errMessages []string
 	for _, issue := range issues {
@@ -259,7 +272,13 @@ func (d *Daemon) handlePresentFeedback(conn net.Conn, msg *protocol.PresentFeedb
 	if round.Verdict != nil {
 		verdict = *round.Verdict
 	}
-	markdown := present.RenderFeedback(pres.RepoPath, pres.Title, round.Seq, round.BaseSHA, round.HeadSHA, submittedAt, verdict, feedbackComments)
+	markdown, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskPresent, Lane: gitInteractive, Effect: gitRead, Scope: pres.RepoPath}, func(ctx context.Context, client *attngit.Client) (string, error) {
+		return present.RenderFeedbackWithGit(ctx, client, pres.RepoPath, pres.Title, round.Seq, round.BaseSHA, round.HeadSHA, submittedAt, verdict, feedbackComments), nil
+	})
+	if err != nil {
+		d.sendError(conn, "present feedback: "+err.Error())
+		return
+	}
 	if pres.Status == "closed" && round.SubmittedAt == nil {
 		markdown += "\nPresentation closed without review.\n"
 	}
@@ -333,7 +352,22 @@ func (d *Daemon) handleGetPresentationRound(client *wsClient, msg *protocol.GetP
 		return
 	}
 
-	protoRound, err := roundToProto(round, pres.RepoPath)
+	type roundGitView struct {
+		round   *protocol.PresentationRound
+		headSHA string
+		stats   map[string][2]int
+		changed []protocol.PresentFile
+	}
+	view, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskPresent, Lane: gitInteractive, Effect: gitRead, Scope: pres.RepoPath}, func(ctx context.Context, client *attngit.Client) (roundGitView, error) {
+		protoRound, runErr := roundToProto(ctx, client, round, pres.RepoPath)
+		if runErr != nil {
+			return roundGitView{}, runErr
+		}
+		head, _ := client.Output(ctx, attngit.OpMetadata, pres.RepoPath, "rev-parse", "HEAD")
+		stats := presentFileStatsAdmitted(ctx, client, pres.RepoPath, round.BaseSHA, round.HeadSHA)
+		changed, _ := presentChangedFilesAdmitted(ctx, client, pres.RepoPath, round.BaseSHA, round.HeadSHA, stats)
+		return roundGitView{round: protoRound, headSHA: strings.TrimSpace(string(head)), stats: stats, changed: changed}, nil
+	})
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 		d.sendToClient(client, result)
@@ -342,17 +376,17 @@ func (d *Daemon) handleGetPresentationRound(client *wsClient, msg *protocol.GetP
 
 	protoPres := presentationToProto(pres)
 	result.Presentation = &protoPres
-	result.Round = protoRound
+	result.Round = view.round
 	result.Comments = make([]protocol.PresentationComment, len(comments))
 	for i, c := range comments {
 		result.Comments[i] = commentToProto(c)
 	}
 
-	if headSHA, err := attngit.Output(attngit.OpMetadata, pres.RepoPath, "rev-parse", "HEAD"); err == nil {
-		result.RepoHeadSHA = protocol.Ptr(strings.TrimSpace(string(headSHA)))
+	if view.headSHA != "" {
+		result.RepoHeadSHA = protocol.Ptr(view.headSHA)
 	}
 
-	stats := d.presentFileStats(pres.RepoPath, round.BaseSHA, round.HeadSHA)
+	stats := view.stats
 	if len(stats) > 0 {
 		for i := range result.Round.Manifest.Files {
 			path := result.Round.Manifest.Files[i].Path
@@ -363,24 +397,22 @@ func (d *Daemon) handleGetPresentationRound(client *wsClient, msg *protocol.GetP
 		}
 	}
 
-	if changed, err := d.presentChangedFiles(pres.RepoPath, round.BaseSHA, round.HeadSHA, stats); err == nil {
-		result.Round.ChangedFiles = changed
-	}
+	result.Round.ChangedFiles = view.changed
 
 	result.Success = true
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) presentFileStats(repoDir, baseSHA, headSHA string) map[string][2]int {
-	out, err := attngit.Output(attngit.OpDiff, repoDir, "diff", "--numstat", baseSHA+".."+headSHA)
+func presentFileStatsAdmitted(ctx context.Context, client *attngit.Client, repoDir, baseSHA, headSHA string) map[string][2]int {
+	out, err := client.Output(ctx, attngit.OpDiff, repoDir, "diff", "--numstat", baseSHA+".."+headSHA)
 	if err != nil {
 		return nil
 	}
 	return parsePresentNumstat(string(out))
 }
 
-func (d *Daemon) presentChangedFiles(repoDir, baseSHA, headSHA string, stats map[string][2]int) ([]protocol.PresentFile, error) {
-	out, err := attngit.Output(attngit.OpDiff, repoDir, "diff", "--name-only", "-z", baseSHA+".."+headSHA)
+func presentChangedFilesAdmitted(ctx context.Context, client *attngit.Client, repoDir, baseSHA, headSHA string, stats map[string][2]int) ([]protocol.PresentFile, error) {
+	out, err := client.Output(ctx, attngit.OpDiff, repoDir, "diff", "--name-only", "-z", baseSHA+".."+headSHA)
 	if err != nil {
 		return nil, err
 	}

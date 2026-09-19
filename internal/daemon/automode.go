@@ -41,7 +41,7 @@ func (d *Daemon) handleAutoModeShow(conn net.Conn, msg *protocol.AutoModeShowMes
 	globalRules := autoModeRuleInfos(cfg.Rules)
 	repository := automode.RepositoryRules{Rules: []automode.Rule{}}
 	if cwd := strings.TrimSpace(protocol.Deref(msg.Cwd)); cwd != "" {
-		cfg, repository, err = autoModeConfigWithRepositoryRules(cfg, cwd)
+		cfg, repository, err = d.autoModeConfigWithRepositoryRules(cfg, cwd)
 		if err != nil {
 			d.sendError(conn, err.Error())
 			return

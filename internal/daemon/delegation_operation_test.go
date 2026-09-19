@@ -578,7 +578,7 @@ func TestDelegationRestartResumesPreviouslyOwnedWorktreeWithMatchingMarker(t *te
 	}
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "feat/owned", path)
 	const ownerToken = "matching-owner-token"
-	if err := writeDelegationWorktreeOwner(path, ownerToken); err != nil {
+	if err := d.writeDelegationWorktreeOwner(path, ownerToken); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.store.MarkDelegationWorktreeOwned(record.Operation.OperationID, path, ownerToken, time.Now()); err != nil {
@@ -617,7 +617,7 @@ func TestDelegationRestartLeavesOwnedWorktreeWhenAnotherSessionOccupiesIt(t *tes
 	}
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "feat/occupied", path)
 	const ownerToken = "occupied-owner-token"
-	if err := writeDelegationWorktreeOwner(path, ownerToken); err != nil {
+	if err := d.writeDelegationWorktreeOwner(path, ownerToken); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.store.MarkDelegationWorktreeOwned(record.Operation.OperationID, path, ownerToken, time.Now()); err != nil {

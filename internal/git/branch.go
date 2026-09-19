@@ -53,7 +53,7 @@ func (c *Client) ListBranches(ctx context.Context, repoDir string) ([]string, er
 		return nil, nil
 	}
 
-	worktrees, err := c.ListWorktrees(ctx, repoDir)
+	worktrees, err := c.ObserveWorktrees(ctx, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("listing worktrees: %w", err)
 	}
@@ -92,7 +92,7 @@ func (c *Client) ListBranchesWithCommits(ctx context.Context, repoDir string) ([
 		return nil, nil
 	}
 
-	worktrees, err := c.ListWorktrees(ctx, repoDir)
+	worktrees, err := c.ObserveWorktrees(ctx, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("listing worktrees: %w", err)
 	}

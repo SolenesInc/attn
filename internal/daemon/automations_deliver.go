@@ -469,7 +469,7 @@ func (d *Daemon) ensureAutomationOccurrenceNote(req automation.WorkRequest) erro
 	}
 	return nil
 }
-func (d *Daemon) prepareAutomationLocation(_ context.Context, req automation.WorkRequest) (automation.PreparedLocation, error) {
+func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.WorkRequest) (automation.PreparedLocation, error) {
 	if req.Location.Type == "directory" {
 		directory, err := validateDelegationDirectory(req.Location.Path)
 		if err != nil {
@@ -528,15 +528,23 @@ func (d *Daemon) prepareAutomationLocation(_ context.Context, req automation.Wor
 	mainRepo := ""
 	if override, ok := req.Location.RepositorySources.Overrides[identity]; ok {
 		source = override
-		mainRepo, err = attngit.ValidateLocalClone(source.Path, identity)
+		type overrideInfo struct {
+			mainRepo  string
+			remoteURL string
+		}
+		override, gitErr := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred, Effect: gitRead, Scope: source.Path}, func(runCtx context.Context, client *attngit.Client) (overrideInfo, error) {
+			mainRepo, runErr := client.ValidateLocalClone(runCtx, source.Path, identity)
+			if runErr != nil {
+				return overrideInfo{}, runErr
+			}
+			remoteURL, runErr := client.Output(runCtx, attngit.OpMetadata, mainRepo, "remote", "get-url", "origin")
+			return overrideInfo{mainRepo: mainRepo, remoteURL: string(remoteURL)}, runErr
+		})
+		mainRepo, err = override.mainRepo, gitErr
 		if err != nil {
 			return automation.PreparedLocation{}, fmt.Errorf("local repository override: %w", err)
 		}
-		remoteURL, remoteErr := attngit.Output(attngit.OpMetadata, mainRepo, "remote", "get-url", "origin")
-		if remoteErr != nil {
-			return automation.PreparedLocation{}, fmt.Errorf("read local repository origin: %w", remoteErr)
-		}
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(string(remoteURL))), "https://") && authorization == "" {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(override.remoteURL)), "https://") && authorization == "" {
 			return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: fmt.Errorf("GitHub host %s is not authenticated", pr.Host)}
 		}
 	} else {
@@ -549,12 +557,17 @@ func (d *Daemon) prepareAutomationLocation(_ context.Context, req automation.Wor
 		}
 		target := filepath.Join(root, "automation", "repos", attngit.RepositoryCacheKey(identity), "repo")
 		cloneURL := "https://" + identity + ".git"
-		mainRepo, _, err = attngit.EnsureManagedClone(cloneURL, target, identity, authorization)
+		mainRepo, err = gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred, Effect: gitWrite, Scope: target}, func(runCtx context.Context, client *attngit.Client) (string, error) {
+			mainRepo, _, runErr := client.EnsureManagedClone(runCtx, cloneURL, target, identity, authorization)
+			return mainRepo, runErr
+		})
 		if err != nil {
 			return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: fmt.Errorf("managed repository cache: %w", err)}
 		}
 	}
-	if err := attngit.EnsurePullRequestRevision(mainRepo, "origin", pr.Number, pr.HeadSHA, authorization); err != nil {
+	if err := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskAutomation, Lane: gitDeferred, Effect: gitWrite, Scope: mainRepo}, func(runCtx context.Context, client *attngit.Client) error {
+		return client.EnsurePullRequestRevision(runCtx, mainRepo, "origin", pr.Number, pr.HeadSHA, authorization)
+	}); err != nil {
 		return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: err}
 	}
 	repoName := pr.Repository
@@ -585,7 +598,10 @@ func (d *Daemon) prepareAutomationLocation(_ context.Context, req automation.Wor
 		}
 		sessionPersisted = true
 	}
-	if _, err := attngit.EnsureAutomationSessionWorktree(mainRepo, worktree, pr.HeadSHA, authorization, sessionPersisted); err != nil {
+	if err := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskAutomation, Lane: gitDeferred, Effect: gitWrite, Scope: mainRepo}, func(runCtx context.Context, client *attngit.Client) error {
+		_, runErr := client.EnsureAutomationSessionWorktree(runCtx, mainRepo, worktree, pr.HeadSHA, authorization, sessionPersisted)
+		return runErr
+	}); err != nil {
 		return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: err}
 	}
 	resolved, _ := json.Marshal(automation.ResolvedLocation{
@@ -665,9 +681,7 @@ func (d *Daemon) ensureAutomationSession(ctx context.Context, req automation.Wor
 }
 
 func (d *Daemon) continueAutomationSession(ctx context.Context, req automation.WorkRequest, directory string) error {
-	return d.worktreeMaintenance.RunForeground(ctx, "continue automation session", func(context.Context) error {
-		return d.continueAutomationSessionForeground(req, directory)
-	})
+	return d.continueAutomationSessionForeground(req, directory)
 }
 
 func (d *Daemon) continueAutomationSessionForeground(req automation.WorkRequest, directory string) error {

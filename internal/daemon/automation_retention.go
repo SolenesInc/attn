@@ -152,7 +152,9 @@ func (d *Daemon) automationRunCleanupSafety(run store.AutomationRun) (automation
 		}
 		return automationRunCleanupOK, statErr
 	}
-	clean, err := git.IsWorktreeClean(worktree)
+	clean, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred, Effect: gitRead, Scope: worktree}, func(ctx context.Context, client *git.Client) (bool, error) {
+		return client.IsWorktreeClean(ctx, worktree)
+	})
 	if err != nil {
 		return automationRunCleanupOK, err
 	}
@@ -190,7 +192,11 @@ func (d *Daemon) removeAutomationRunWorktree(run store.AutomationRun) error {
 		}
 		return err
 	}
-	return git.DeleteWorktree(resolved.MainRepository, resolved.Worktree, false)
+	return d.gitExecution().Run(context.Background(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred, Effect: gitWrite, Scope: resolved.MainRepository}, func(ctx context.Context, client *git.Client) error {
+		return d.worktreeMaintenance.RunForeground(ctx, "remove automation worktree", func(protectedCtx context.Context) error {
+			return client.DeleteWorktree(protectedCtx, resolved.MainRepository, resolved.Worktree, false)
+		})
+	})
 }
 
 func (d *Daemon) removeAutomationOccurrenceArtifact(runID string) error {

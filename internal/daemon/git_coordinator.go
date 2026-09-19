@@ -1,26 +1,13 @@
 package daemon
 
 import (
+	"context"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
-)
-
-type gitCoordinator struct {
-	mu sync.Mutex
-
-	statusActive map[gitStatusCacheKey]*gitStatusRefresh
-
-	fileDiffActive map[fileDiffCacheKey]*fileDiffRefresh
-}
-
-var (
-	getGitStatusForDaemon = getGitStatusForSubscription
-	readFileDiffForDaemon = readFileDiff
 )
 
 type gitStatusCacheKey struct {
@@ -28,11 +15,14 @@ type gitStatusCacheKey struct {
 	mode      gitStatusMode
 }
 
-type gitStatusRefresh struct {
-	done     chan struct{}
+type gitStatusResult struct {
 	status   *protocol.GitStatusUpdateMessage
-	err      error
 	duration time.Duration
+}
+
+type gitStatusReader struct {
+	executor gitExecutor
+	calls    *sharedCalls[gitStatusCacheKey, gitStatusResult]
 }
 
 type fileDiffCacheKey struct {
@@ -48,124 +38,119 @@ type fileDiffContent struct {
 	modified string
 }
 
-type fileDiffRefresh struct {
-	done    chan struct{}
-	content fileDiffContent
-	err     error
+type fileDiffReader struct {
+	executor gitExecutor
+	calls    *sharedCalls[fileDiffCacheKey, fileDiffContent]
 }
 
-func newGitCoordinator() *gitCoordinator {
-	return &gitCoordinator{
-		statusActive:   make(map[gitStatusCacheKey]*gitStatusRefresh),
-		fileDiffActive: make(map[fileDiffCacheKey]*fileDiffRefresh),
+var (
+	getGitStatusForDaemon = getGitStatusForSubscription
+	readFileDiffForDaemon = readFileDiffCoordinated
+)
+
+func newGitStatusReader(executor gitExecutor) *gitStatusReader {
+	return &gitStatusReader{executor: executor, calls: newSharedCalls[gitStatusCacheKey, gitStatusResult](context.Background())}
+}
+
+func newFileDiffReader(executor gitExecutor) *fileDiffReader {
+	return &fileDiffReader{executor: executor, calls: newSharedCalls[fileDiffCacheKey, fileDiffContent](context.Background())}
+}
+
+func (d *Daemon) statusReader() *gitStatusReader {
+	d.gitReaderMu.Lock()
+	defer d.gitReaderMu.Unlock()
+	if d.gitStatus == nil {
+		d.gitStatus = newGitStatusReader(d.gitExecution())
 	}
+	return d.gitStatus
 }
 
-func (d *Daemon) coordinator() *gitCoordinator {
-	d.gitCoordMu.Lock()
-	defer d.gitCoordMu.Unlock()
-	if d.gitCoord == nil {
-		d.gitCoord = newGitCoordinator()
+func (d *Daemon) diffReader() *fileDiffReader {
+	d.gitReaderMu.Lock()
+	defer d.gitReaderMu.Unlock()
+	if d.fileDiff == nil {
+		d.fileDiff = newFileDiffReader(d.gitExecution())
 	}
-	return d.gitCoord
+	return d.fileDiff
 }
 
-func (c *gitCoordinator) Status(directory string, mode gitStatusMode) (*protocol.GitStatusUpdateMessage, time.Duration, error) {
+func (r *gitStatusReader) Status(ctx context.Context, directory string, mode gitStatusMode) (*protocol.GitStatusUpdateMessage, time.Duration, error) {
 	key := gitStatusCacheKey{directory: directory, mode: mode}
-
-	c.mu.Lock()
-	if refresh, ok := c.statusActive[key]; ok {
-		done := refresh.done
-		c.mu.Unlock()
-		<-done
-		return cloneGitStatusUpdate(refresh.status), refresh.duration, refresh.err
-	}
-
-	refresh := &gitStatusRefresh{done: make(chan struct{})}
-	c.statusActive[key] = refresh
-	c.mu.Unlock()
-
-	started := time.Now()
-	status, err := getGitStatusForDaemon(directory, mode)
-	refresh.duration = time.Since(started)
-	refresh.status = status
-	refresh.err = err
-
-	c.mu.Lock()
-	if c.statusActive[key] == refresh {
-		delete(c.statusActive, key)
-	}
-	c.mu.Unlock()
-	close(refresh.done)
-
-	return cloneGitStatusUpdate(status), refresh.duration, err
+	result, err := r.calls.Do(ctx, key, func(callCtx context.Context) (gitStatusResult, error) {
+		started := time.Now()
+		status, runErr := getGitStatusForDaemon(callCtx, r.executor, directory, mode)
+		return gitStatusResult{status: status, duration: time.Since(started)}, runErr
+	})
+	return cloneGitStatusUpdate(result.status), result.duration, err
 }
 
-func (c *gitCoordinator) FileDiff(directory, path, baseRef, headRef string, staged bool) (fileDiffContent, error) {
+func (r *fileDiffReader) FileDiff(ctx context.Context, directory, path, baseRef, headRef string, staged bool) (fileDiffContent, error) {
 	key := fileDiffCacheKey{directory: directory, path: path, baseRef: baseRef, headRef: headRef, staged: staged}
-
-	c.mu.Lock()
-	if refresh, ok := c.fileDiffActive[key]; ok {
-		done := refresh.done
-		c.mu.Unlock()
-		<-done
-		return refresh.content, refresh.err
-	}
-
-	refresh := &fileDiffRefresh{done: make(chan struct{})}
-	c.fileDiffActive[key] = refresh
-	c.mu.Unlock()
-
-	refresh.content, refresh.err = readFileDiffForDaemon(directory, path, baseRef, headRef, staged)
-
-	c.mu.Lock()
-	if c.fileDiffActive[key] == refresh {
-		delete(c.fileDiffActive, key)
-	}
-	c.mu.Unlock()
-	close(refresh.done)
-
-	return refresh.content, refresh.err
+	return r.calls.Do(ctx, key, func(callCtx context.Context) (fileDiffContent, error) {
+		return readFileDiffForDaemon(callCtx, r.executor, key)
+	})
 }
 
 func readFileDiff(directory, path, baseRef, headRef string, staged bool) (fileDiffContent, error) {
-	content := fileDiffContent{}
-
-	origOutput, origErr := attngit.Output(attngit.OpDiff, directory, "show", baseRef+":"+path)
-	if origErr == nil {
-		content.original = string(origOutput)
+	executor, err := newDirectGitExecutor()
+	if err != nil {
+		return fileDiffContent{}, err
 	}
+	defer executor.Close(nil)
+	return readFileDiffCoordinated(context.Background(), executor, fileDiffCacheKey{
+		directory: directory,
+		path:      path,
+		baseRef:   baseRef,
+		headRef:   headRef,
+		staged:    staged,
+	})
+}
 
-	if headRef != "" {
-		headOutput, err := attngit.Output(attngit.OpDiff, directory, "show", headRef+":"+path)
-		if err != nil {
-			content.modified = ""
+func readFileDiffCoordinated(ctx context.Context, executor gitExecutor, key fileDiffCacheKey) (fileDiffContent, error) {
+	content, err := gitValue(ctx, executor, gitTask{Kind: gitTaskFileDiff, Lane: gitInteractive, Effect: gitRead, Scope: key.directory}, func(runCtx context.Context, client *attngit.Client) (fileDiffContent, error) {
+		content := fileDiffContent{}
+		origOutput, origErr := client.Output(runCtx, attngit.OpDiff, key.directory, "show", key.baseRef+":"+key.path)
+		if origErr == nil {
+			content.original = string(origOutput)
+		}
+		if key.headRef != "" {
+			headOutput, headErr := client.Output(runCtx, attngit.OpDiff, key.directory, "show", key.headRef+":"+key.path)
+			if headErr == nil {
+				content.modified = string(headOutput)
+			}
 			return content, nil
 		}
-		content.modified = string(headOutput)
-		return content, nil
-	}
-
-	if staged {
-		stagedOutput, err := attngit.Output(attngit.OpDiff, directory, "show", ":"+path)
-		if err != nil {
-			return fileDiffContent{}, err
+		if key.staged {
+			stagedOutput, stagedErr := client.Output(runCtx, attngit.OpDiff, key.directory, "show", ":"+key.path)
+			if stagedErr != nil {
+				return fileDiffContent{}, stagedErr
+			}
+			content.modified = string(stagedOutput)
 		}
-		content.modified = string(stagedOutput)
 		return content, nil
+	})
+	if err != nil || key.headRef != "" || key.staged {
+		return content, err
 	}
-
-	filePath := filepath.Join(directory, path)
-	modified, err := os.ReadFile(filePath)
+	modified, err := os.ReadFile(filepath.Join(key.directory, key.path))
 	if err != nil {
 		if os.IsNotExist(err) {
-			content.modified = ""
 			return content, nil
 		}
 		return fileDiffContent{}, err
 	}
 	content.modified = string(modified)
 	return content, nil
+}
+
+func testDirectGitExecutorConfig() gitExecutorConfig {
+	return gitExecutorConfig{
+		MaxActive:            2,
+		MaxDeferredActive:    1,
+		InteractiveBurst:     1,
+		MaxQueuedInteractive: 8,
+		MaxQueuedDeferred:    8,
+	}
 }
 
 func cloneGitStatusUpdate(status *protocol.GitStatusUpdateMessage) *protocol.GitStatusUpdateMessage {

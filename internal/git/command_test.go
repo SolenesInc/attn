@@ -76,6 +76,25 @@ func TestClientCancellationStopsRunningGitChild(t *testing.T) {
 	}
 }
 
+func TestClientCloneDepthOneUsesSuppliedEnvironment(t *testing.T) {
+	fakeBin := t.TempDir()
+	fakeGit := filepath.Join(fakeBin, "git")
+	if err := os.WriteFile(fakeGit, []byte("#!/bin/sh\nprintf '%s|%s' \"$ATTN_PLUGIN_TEST\" \"$*\"\n"), 0o755); err != nil {
+		t.Fatalf("write fake git: %v", err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	environment := append(os.Environ(),
+		"ATTN_PLUGIN_TEST=from-plugin-environment",
+	)
+	out, err := NewClient().CloneDepthOne(context.Background(), "https://example.test/plugin.git", "/tmp/plugin", environment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(out); got != "from-plugin-environment|clone --depth 1 https://example.test/plugin.git /tmp/plugin" {
+		t.Fatalf("clone output = %q", got)
+	}
+}
+
 func TestRunGitOutputLogsSlowCommand(t *testing.T) {
 	fakeBin := t.TempDir()
 	fakeGit := filepath.Join(fakeBin, "git")

@@ -140,8 +140,11 @@ type Daemon struct {
 	branchInspectionsRunning          map[string]chan struct{}
 	branchInspectionsMu               sync.Mutex
 	sessionPaneAddMu                  sync.Mutex
-	gitCoordMu                        sync.Mutex
-	gitCoord                          *gitCoordinator
+	gitReaderMu                       sync.Mutex
+	gitStatus                         *gitStatusReader
+	fileDiff                          *fileDiffReader
+	gitExecMu                         sync.Mutex
+	gitExec                           gitExecutor
 	worktreeMaintenance               worktreeMaintenanceCoordinator
 	worktreeListStates                func(context.Context, string) ([]git.WorktreeState, error)
 	worktreeRepositoryFacts           func(context.Context, string, time.Time) (*repositoryFacts, error)
@@ -626,7 +629,6 @@ func New(socketPath string) *Daemon {
 		debugLogging:        logger != nil && logger.DebugEnabled(),
 		ghRegistry:          github.NewClientRegistry(),
 		hubManager:          nil,
-		gitCoord:            newGitCoordinator(),
 		warnings:            startupWarnings,
 		workflowDirty:       make(map[string]bool),
 		workflowEngineConn:  make(map[string]workflowEngineSink),
@@ -647,6 +649,7 @@ func New(socketPath string) *Daemon {
 		workspaces:          newWorkspaceRegistry(),
 		spawnLocks:          make(map[string]*spawnLock),
 	}
+	d.wireGitExecution(productionGitExecutorConfig)
 	d.delegationWaitsForFirstTurn = true
 	d.ticketReconcileExec = d.execTicketReconcileClassifier
 	d.ensureEventBus()
@@ -669,7 +672,6 @@ func NewForTesting(socketPath string) *Daemon {
 		logger:              nil,
 		ghRegistry:          github.NewClientRegistry(),
 		hubManager:          nil,
-		gitCoord:            newGitCoordinator(),
 		ptyBackend:          ptybackend.NewEmbedded(manager),
 		transcriptWatch:     make(map[string]*transcriptWatcher),
 		pendingInitialWS:    make(map[*wsClient]struct{}),
@@ -689,6 +691,7 @@ func NewForTesting(socketPath string) *Daemon {
 		spawnLocks:          make(map[string]*spawnLock),
 		jobQueue:            jobs.New(jobs.Options{}),
 	}
+	d.wireGitExecution(productionGitExecutorConfig)
 	d.ensureEventBus()
 	return d
 }
@@ -712,7 +715,6 @@ func NewWithGitHubClient(socketPath string, ghClient github.GitHubClient) *Daemo
 		logger:              nil,
 		ghRegistry:          registry,
 		hubManager:          nil,
-		gitCoord:            newGitCoordinator(),
 		ptyBackend:          ptybackend.NewEmbedded(manager),
 		transcriptWatch:     make(map[string]*transcriptWatcher),
 		pendingInitialWS:    make(map[*wsClient]struct{}),
@@ -732,6 +734,7 @@ func NewWithGitHubClient(socketPath string, ghClient github.GitHubClient) *Daemo
 		spawnLocks:          make(map[string]*spawnLock),
 		jobQueue:            jobs.New(jobs.Options{}),
 	}
+	d.wireGitExecution(productionGitExecutorConfig)
 	d.ensureEventBus()
 	return d
 }
@@ -1656,6 +1659,7 @@ func sessionStateFromRecoveredInfo(info ptybackend.SessionInfo) (protocol.Sessio
 func (d *Daemon) Stop() {
 	d.log("daemon stopping")
 	close(d.done)
+	d.closeGitExecution(ErrGitExecutorClosed)
 	d.sessionInputs().stopRetries()
 	d.stopNotebookWatcher()
 	d.stopFsWatchers()
@@ -2799,17 +2803,14 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 }
 
 func (d *Daemon) handleRegister(conn net.Conn, msg *protocol.RegisterMessage) {
-	_ = d.worktreeMaintenance.RunForeground(context.Background(), "register live session", func(context.Context) error {
-		d.handleRegisterForeground(conn, msg)
-		return nil
-	})
+	d.handleRegisterForeground(conn, msg)
 }
 
 func (d *Daemon) handleRegisterForeground(conn net.Conn, msg *protocol.RegisterMessage) {
 	d.logf("session registered: id=%s label=%s dir=%s", msg.ID, protocol.Deref(msg.Label), msg.Dir)
 	existing := d.store.Get(msg.ID)
 
-	branchInfo, _ := git.GetBranchInfo(msg.Dir)
+	branchInfo, _ := d.readBranchInfo(context.Background(), gitTaskSessionIdentity, gitInteractive, msg.Dir)
 
 	nowStr := string(protocol.TimestampNow())
 	agent := normalizeStoredSessionAgent(string(protocol.Deref(msg.Agent)), protocol.SessionAgentClaude)
@@ -2857,9 +2858,14 @@ func (d *Daemon) handleRegisterForeground(conn net.Conn, msg *protocol.RegisterM
 		d.releaseCrewBindingIfSession(msg.ID)
 	}
 	session.WorkspaceID = workspaceID
-	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
+	var persistErr error
+	_ = d.worktreeMaintenance.RunForeground(context.Background(), "register live session", func(context.Context) error {
+		persistErr = d.store.AddCheckedUnlessTeardown(session)
+		return persistErr
+	})
+	if persistErr != nil {
 		d.releaseCrewBindingIfSession(session.ID)
-		d.sendError(conn, err.Error())
+		d.sendError(conn, persistErr.Error())
 		return
 	}
 	existingWS := d.store.GetWorkspace(workspaceID)
@@ -4051,7 +4057,7 @@ func (d *Daemon) checkAllBranches() {
 
 	d.coalesceSnapshots(func() {
 		for _, session := range sessions {
-			info, err := git.GetBranchInfo(session.Directory)
+			info, err := d.readBranchInfo(context.Background(), gitTaskSessionIdentity, gitDeferred, session.Directory)
 			if err != nil {
 				continue
 			}

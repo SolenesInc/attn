@@ -28,16 +28,25 @@ const (
 
 type commandRunner interface {
 	run(context.Context, Operation, time.Duration, string, io.Reader, bool, map[string]string, ...string) ([]byte, error)
+	runWithEnvironment(context.Context, Operation, time.Duration, string, []string, ...string) ([]byte, error)
 }
 
 type execCommandRunner struct{}
 
 type Client struct {
-	runner commandRunner
+	runner   commandRunner
+	observer func(Operation)
 }
 
 func NewClient() *Client {
 	return &Client{runner: execCommandRunner{}}
+}
+
+func (c *Client) WithCommandObserver(observer func(Operation)) *Client {
+	if c == nil {
+		return nil
+	}
+	return &Client{runner: c.runner, observer: observer}
 }
 
 var defaultClient = NewClient()
@@ -170,6 +179,9 @@ func (c *Client) run(ctx context.Context, op Operation, timeout time.Duration, d
 	if c == nil || c.runner == nil {
 		return nil, errors.New("git client has no command runner")
 	}
+	if c.observer != nil {
+		c.observer(op)
+	}
 	return c.runner.run(ctx, op, timeout, dir, stdin, combined, env, args...)
 }
 
@@ -196,6 +208,31 @@ func (execCommandRunner) run(parent context.Context, op Operation, timeout time.
 	}
 	duration := time.Since(started)
 
+	logGitCommand(op, dir, args, duration, ctx.Err())
+
+	if cause := context.Cause(parent); cause != nil {
+		return out, cause
+	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return out, fmt.Errorf("git %s timed out after %s: git %s", op, timeout, strings.Join(redactGitArgs(args), " "))
+	}
+	return out, err
+}
+
+func (execCommandRunner) runWithEnvironment(parent context.Context, op Operation, timeout time.Duration, dir string, environment []string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
+
+	commandArgs := append([]string{"git"}, args...)
+	cmd := exec.CommandContext(ctx, "/usr/bin/env", commandArgs...)
+	cmd.Dir = dir
+	if environment != nil {
+		cmd.Env = append([]string{}, environment...)
+	}
+
+	started := time.Now()
+	out, err := cmd.CombinedOutput()
+	duration := time.Since(started)
 	logGitCommand(op, dir, args, duration, ctx.Err())
 
 	if cause := context.Cause(parent); cause != nil {

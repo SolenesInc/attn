@@ -107,7 +107,8 @@ func TestAcceptedDelegationBasePinsTheRequestedRef(t *testing.T) {
 		Kind: protocol.DelegateCheckoutKindNewWorktree, Branch: "feature/pinned-base", From: protocol.Ptr("HEAD"),
 	}
 
-	got, err := resolveAcceptedDelegationBase(&msg)
+	d := &Daemon{}
+	got, err := d.resolveAcceptedDelegationBase(&msg)
 	if err != nil {
 		t.Fatal(err)
 	}

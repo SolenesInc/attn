@@ -95,7 +95,7 @@ func (d *Daemon) dispatchWorktreeCreateProvider(mainRepo, branch, startingFrom, 
 	if len(providers) == 0 {
 		return "", "", false, nil
 	}
-	preExisting, err := currentWorktreePathSet(mainRepo)
+	preExisting, err := d.currentWorktreePathSet(mainRepo)
 	if err != nil {
 		return "", "", false, fmt.Errorf("list worktrees before provider create: %w", err)
 	}
@@ -127,7 +127,7 @@ func (d *Daemon) dispatchWorktreeCreateProvider(mainRepo, branch, startingFrom, 
 			d.logf("worktree provider plugin=%s surface=%s status=error main_repo=%s branch=%s starting_from=%s requested_path=%s error=%s", provider.PluginName, worktreeCreateProviderSurface, mainRepo, branch, startingFrom, requestedPath, providerLogValue(result.Error))
 			return "", "", false, providerOperationError(provider.PluginName, worktreeCreateProviderSurface, result.Error)
 		case providerStatusHandled:
-			path, createdBranch, err := validateCreatedProviderWorktree(mainRepo, result, preExisting)
+			path, createdBranch, err := d.validateCreatedProviderWorktree(mainRepo, result, preExisting)
 			if err != nil {
 				d.logf("worktree provider plugin=%s surface=%s status=invalid_result main_repo=%s branch=%s starting_from=%s requested_path=%s error=%s", provider.PluginName, worktreeCreateProviderSurface, mainRepo, branch, startingFrom, requestedPath, providerLogValue(err.Error()))
 				return "", "", false, fmt.Errorf("worktree provider %q returned invalid create result: %w", provider.PluginName, err)
@@ -174,7 +174,7 @@ func (d *Daemon) dispatchWorktreeDeleteProvider(mainRepo, path, branch string, f
 			d.logf("worktree provider plugin=%s surface=%s status=error main_repo=%s path=%s branch=%s error=%s", provider.PluginName, worktreeDeleteProviderSurface, mainRepo, path, branch, providerLogValue(result.Error))
 			return false, providerOperationError(provider.PluginName, worktreeDeleteProviderSurface, result.Error)
 		case providerStatusHandled:
-			if err := validateDeletedProviderWorktree(mainRepo, path); err != nil {
+			if err := d.validateDeletedProviderWorktree(mainRepo, path); err != nil {
 				d.logf("worktree provider plugin=%s surface=%s status=invalid_result main_repo=%s path=%s branch=%s error=%s", provider.PluginName, worktreeDeleteProviderSurface, mainRepo, path, branch, providerLogValue(err.Error()))
 				return false, fmt.Errorf("worktree provider %q returned invalid delete result: %w", provider.PluginName, err)
 			}
@@ -219,7 +219,7 @@ func providerLogValue(value string) string {
 	return value[:500] + "...(truncated)"
 }
 
-func validateCreatedProviderWorktree(mainRepo string, result worktreeCreateProviderResult, preExisting map[string]bool) (string, string, error) {
+func (d *Daemon) validateCreatedProviderWorktree(mainRepo string, result worktreeCreateProviderResult, preExisting map[string]bool) (string, string, error) {
 	path := git.CanonicalizePath(strings.TrimSpace(result.Path))
 	if path == "" {
 		return "", "", fmt.Errorf("handled create result is missing path")
@@ -233,7 +233,9 @@ func validateCreatedProviderWorktree(mainRepo string, result worktreeCreateProvi
 		return "", "", fmt.Errorf("handled create result is missing branch")
 	}
 
-	worktrees, err := git.ListWorktrees(mainRepo)
+	worktrees, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive, Effect: gitRead, Scope: mainRepo}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
+		return client.ObserveWorktrees(ctx, mainRepo)
+	})
 	if err != nil {
 		return "", "", fmt.Errorf("list worktrees: %w", err)
 	}
@@ -250,8 +252,10 @@ func validateCreatedProviderWorktree(mainRepo string, result worktreeCreateProvi
 	return "", "", fmt.Errorf("created path %q is not a worktree of %q", path, mainRepo)
 }
 
-func currentWorktreePathSet(mainRepo string) (map[string]bool, error) {
-	worktrees, err := git.ListWorktrees(mainRepo)
+func (d *Daemon) currentWorktreePathSet(mainRepo string) (map[string]bool, error) {
+	worktrees, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive, Effect: gitRead, Scope: mainRepo}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
+		return client.ObserveWorktrees(ctx, mainRepo)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -262,9 +266,11 @@ func currentWorktreePathSet(mainRepo string) (map[string]bool, error) {
 	return paths, nil
 }
 
-func validateDeletedProviderWorktree(mainRepo, path string) error {
+func (d *Daemon) validateDeletedProviderWorktree(mainRepo, path string) error {
 	expectedPath := git.CanonicalizePath(path)
-	worktrees, err := git.ListWorktrees(mainRepo)
+	worktrees, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive, Effect: gitRead, Scope: mainRepo}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
+		return client.ObserveWorktrees(ctx, mainRepo)
+	})
 	if err != nil {
 		return fmt.Errorf("list worktrees: %w", err)
 	}

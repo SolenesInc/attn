@@ -338,9 +338,15 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		}
 	}
 
-	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.existingSession, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID)
+	branchInfo, _ := d.readBranchInfo(context.Background(), gitTaskSessionIdentity, gitInteractive, req.cwd)
+	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.existingSession, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID, branchInfo)
 	session := plan.launchSession
-	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
+	var persistErr error
+	_ = d.worktreeMaintenance.RunForeground(context.Background(), "register spawned session", func(context.Context) error {
+		persistErr = d.store.AddCheckedUnlessTeardown(session)
+		return persistErr
+	})
+	if persistErr != nil {
 		if req.hasPluginDriver {
 			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
 		}
@@ -348,7 +354,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			d.clearChiefOfStaffIfSession(msg.ID)
 		}
 		plan.rollback(d, msg.ID)
-		return &spawnOutcome{err: fmt.Errorf("persist session launch intent: %w", err)}
+		return &spawnOutcome{err: fmt.Errorf("persist session launch intent: %w", persistErr)}
 	}
 	plan.priorIntent, plan.hadPriorIntent = d.store.LaunchIntent(session.ID)
 	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
@@ -506,12 +512,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 }
 
 func (d *Daemon) runSpawnPipeline(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) *spawnRejection {
-	var result *spawnRejection
-	_ = d.worktreeMaintenance.RunForeground(context.Background(), "spawn session", func(context.Context) error {
-		result = d.runSpawnPipelineForeground(msg, policy)
-		return nil
-	})
-	return result
+	return d.runSpawnPipelineForeground(msg, policy)
 }
 
 func (d *Daemon) runSpawnPipelineForeground(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) *spawnRejection {

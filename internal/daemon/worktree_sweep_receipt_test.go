@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -38,7 +39,7 @@ func TestWorktreeSweepReceipt(t *testing.T) {
 			if state.Path == repo {
 				continue
 			}
-			observation, _ := observeWorktree(facts, state, now)
+			observation, _ := observeWorktreeWithClient(context.Background(), git.NewClient(), facts, state, now)
 			row := &store.Worktree{
 				Path: state.Path, Branch: observation.Branch, MainRepo: repo,
 				HeadSHA: observation.HeadSHA, Detached: observation.Detached,
@@ -137,7 +138,10 @@ func receiptFacts(t *testing.T, repo string, now time.Time) *repositoryFacts {
 			base = fallback
 		}
 	}
-	facts.integrationBranch = resolveIntegrationRef(repo, base)
+	facts.integrationBranch = base
+	if git.RefExists(repo, "origin/"+base) {
+		facts.integrationBranch = "origin/" + base
+	}
 	if resolved, err := git.Output(git.OpMetadata, repo, "rev-parse", facts.integrationBranch+"^{commit}"); err == nil {
 		facts.integrationSHA = strings.TrimSpace(string(resolved))
 	}

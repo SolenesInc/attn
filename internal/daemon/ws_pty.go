@@ -196,7 +196,7 @@ func (d *Daemon) sendSpawnFailure(client *wsClient, sessionID string, err error)
 	})
 }
 
-func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, label string, existing *protocol.Session, isShell, pluginReportsNoState bool, parentSessionID string) *protocol.Session {
+func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, label string, existing *protocol.Session, isShell, pluginReportsNoState bool, parentSessionID string, branchInfo *git.BranchInfo) *protocol.Session {
 	nowStr := string(protocol.TimestampNow())
 	state := protocol.SessionStateLaunching
 	if isShell {
@@ -224,7 +224,7 @@ func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, labe
 	} else if existing != nil {
 		session.EndpointID = existing.EndpointID
 	}
-	if branchInfo, _ := git.GetBranchInfo(cwd); branchInfo != nil {
+	if branchInfo != nil {
 		if branchInfo.Branch != "" {
 			session.Branch = protocol.Ptr(branchInfo.Branch)
 		}

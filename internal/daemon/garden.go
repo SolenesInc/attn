@@ -1033,8 +1033,15 @@ func (d *Daemon) dispatchesCollection() (*docstore.CollectionSchema, error) {
 }
 
 func (d *Daemon) recordGardenDispatch(sessionID, crown, dispatcherSession, cwd, agent string, fromChief bool) error {
+	observed := d.observeGardenDispatchExecution(sessionID, cwd, agent)
+	return d.worktreeMaintenance.RunForeground(context.Background(), "write seed dispatch protection", func(context.Context) error {
+		return d.recordGardenDispatchObserved(sessionID, crown, dispatcherSession, fromChief, observed)
+	})
+}
+
+func (d *Daemon) observeGardenDispatchExecution(sessionID, cwd, agent string) garden.Dispatch {
 	sessionID = strings.TrimSpace(sessionID)
-	observed := observedGardenExecution(&protocol.Session{
+	observed := d.observedGardenExecution(&protocol.Session{
 		ID: sessionID, Directory: cwd, Agent: protocol.SessionAgent(agent),
 	}, "", d.gardenTime())
 	if session := d.gardenSession(sessionID); session != nil {
@@ -1042,8 +1049,12 @@ func (d *Daemon) recordGardenDispatch(sessionID, crown, dispatcherSession, cwd, 
 		if d.store.Get(sessionID) != nil {
 			resumeID = d.store.GetResumeSessionID(sessionID)
 		}
-		observed = observedGardenExecution(session, resumeID, d.gardenTime())
+		observed = d.observedGardenExecution(session, resumeID, d.gardenTime())
 	}
+	return observed
+}
+
+func (d *Daemon) recordGardenDispatchObserved(sessionID, crown, dispatcherSession string, fromChief bool, observed garden.Dispatch) error {
 	_, err := d.updateGardenDispatch(sessionID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
 		next := mergeGardenExecution(current, observed)
 		if wanted := strings.TrimSpace(crown); wanted != "" {

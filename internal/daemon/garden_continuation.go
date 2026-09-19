@@ -95,12 +95,36 @@ func snapshotGardenExecution(session *protocol.Session, resumeID string, now tim
 	return execution
 }
 
-func observedGardenExecution(session *protocol.Session, resumeID string, now time.Time) garden.Dispatch {
+func (d *Daemon) observedGardenExecution(session *protocol.Session, resumeID string, now time.Time) garden.Dispatch {
 	execution := snapshotGardenExecution(session, resumeID, now)
 	if execution.HostKind != garden.HostLocal || execution.Cwd == "" {
 		return execution
 	}
-	checkoutRoot, err := attngit.GetRepoRoot(execution.Cwd)
+	observed, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskGarden, Lane: gitDeferred, Effect: gitRead, Scope: execution.Cwd}, func(ctx context.Context, client *attngit.Client) (struct {
+		checkoutRoot string
+		mainRepo     string
+		branch       string
+	}, error) {
+		checkoutRoot, rootErr := client.GetRepoRoot(ctx, execution.Cwd)
+		if rootErr != nil {
+			return struct {
+				checkoutRoot string
+				mainRepo     string
+				branch       string
+			}{}, rootErr
+		}
+		info, _ := client.GetBranchInfo(ctx, execution.Cwd)
+		branch := ""
+		if info != nil {
+			branch = info.Branch
+		}
+		return struct {
+			checkoutRoot string
+			mainRepo     string
+			branch       string
+		}{checkoutRoot: checkoutRoot, mainRepo: client.ResolveMainRepoPath(ctx, checkoutRoot), branch: branch}, nil
+	})
+	checkoutRoot := observed.checkoutRoot
 	if err != nil || checkoutRoot == "" {
 		execution.Branch = strings.TrimSpace(protocol.Deref(session.Branch))
 		return execution
@@ -110,9 +134,9 @@ func observedGardenExecution(session *protocol.Session, resumeID string, now tim
 	if rel, relErr := filepath.Rel(canonicalRoot, canonicalCwd); relErr == nil && rel != "." && rel != "" && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		execution.RepositorySubdir = rel
 	}
-	execution.RepositoryRoot = attngit.ResolveMainRepoPath(checkoutRoot)
-	if info, infoErr := attngit.GetBranchInfo(execution.Cwd); infoErr == nil && info != nil {
-		execution.Branch = strings.TrimSpace(info.Branch)
+	execution.RepositoryRoot = observed.mainRepo
+	if observed.branch != "" {
+		execution.Branch = strings.TrimSpace(observed.branch)
 	}
 	if execution.Branch == "" {
 		execution.Branch = strings.TrimSpace(protocol.Deref(session.Branch))
@@ -249,7 +273,7 @@ func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garde
 		resumeID = d.store.GetResumeSessionID(session.ID)
 	}
 	startedAt := d.gardenTime()
-	observed := observedGardenExecution(session, resumeID, startedAt)
+	observed := d.observedGardenExecution(session, resumeID, startedAt)
 	return d.updateGardenDispatch(session.ID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
 		if capturedAt, err := time.Parse(time.RFC3339Nano, current.CapturedAt); err == nil && capturedAt.After(startedAt) {
 			return current, false, nil
@@ -402,7 +426,7 @@ func savedWorktreeRoot(execution garden.Dispatch) (string, bool) {
 	return root, true
 }
 
-func branchCanBeRecreated(execution garden.Dispatch) (string, bool, string) {
+func (d *Daemon) branchCanBeRecreated(execution garden.Dispatch) (string, bool, string) {
 	repo := strings.TrimSpace(execution.RepositoryRoot)
 	branch := strings.TrimSpace(execution.Branch)
 	if repo == "" || branch == "" {
@@ -420,14 +444,30 @@ func branchCanBeRecreated(execution garden.Dispatch) (string, bool, string) {
 	if _, err := os.Stat(repo); err != nil {
 		return "", false, "the saved repository is unavailable"
 	}
-	if !attngit.RefExists(repo, branch) {
-		return "", false, "the saved branch no longer exists"
-	}
-	worktrees, err := attngit.ListWorktrees(repo)
+	inspection, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskGarden, Lane: gitInteractive, Effect: gitRead, Scope: repo}, func(ctx context.Context, client *attngit.Client) (struct {
+		exists    bool
+		worktrees []attngit.WorktreeEntry
+	}, error) {
+		exists, refErr := client.RefExists(ctx, repo, branch)
+		if refErr != nil || !exists {
+			return struct {
+				exists    bool
+				worktrees []attngit.WorktreeEntry
+			}{exists: exists}, refErr
+		}
+		worktrees, listErr := client.ObserveWorktrees(ctx, repo)
+		return struct {
+			exists    bool
+			worktrees []attngit.WorktreeEntry
+		}{exists: exists, worktrees: worktrees}, listErr
+	})
 	if err != nil {
 		return "", false, "the saved repository could not be inspected"
 	}
-	for _, worktree := range worktrees {
+	if !inspection.exists {
+		return "", false, "the saved branch no longer exists"
+	}
+	for _, worktree := range inspection.worktrees {
 		if strings.TrimSpace(worktree.Branch) == branch {
 			return "", false, "the saved branch is already checked out"
 		}
@@ -436,12 +476,7 @@ func branchCanBeRecreated(execution garden.Dispatch) (string, bool, string) {
 }
 
 func (d *Daemon) continuationForSeed(seed garden.Seed) *seedContinuation {
-	var continuation *seedContinuation
-	_ = d.worktreeMaintenance.RunForeground(context.Background(), "inspect seed continuation", func(context.Context) error {
-		continuation = d.continuationForSeedForeground(seed)
-		return nil
-	})
-	return continuation
+	return d.continuationForSeedForeground(seed)
 }
 
 func (d *Daemon) continuationForSeedForeground(seed garden.Seed) *seedContinuation {
@@ -515,7 +550,7 @@ func (d *Daemon) planSeedHandoverPlacement(continuation *seedContinuation) {
 	case directoryPresent:
 		continuation.HandoverPlacement = handoverReuseCwd
 	case directoryMissing:
-		if _, safe, reason := branchCanBeRecreated(continuation.Execution); safe {
+		if _, safe, reason := d.branchCanBeRecreated(continuation.Execution); safe {
 			continuation.HandoverPlacement = handoverRecreateBranch
 		} else {
 			continuation.PlacementReason = reason

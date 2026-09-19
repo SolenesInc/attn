@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/victorarias/attn/internal/git"
@@ -9,17 +10,10 @@ import (
 )
 
 func (d *Daemon) doCreateWorktreeFromBranch(msg *protocol.CreateWorktreeFromBranchMessage) (string, error) {
-	var path string
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "create worktree from branch", func(context.Context) error {
-		var err error
-		path, err = d.doCreateWorktreeFromBranchForeground(msg)
-		return err
-	})
-	return path, err
-}
-
-func (d *Daemon) doCreateWorktreeFromBranchForeground(msg *protocol.CreateWorktreeFromBranchMessage) (string, error) {
-	mainRepo := git.ResolveMainRepoPath(msg.MainRepo)
+	mainRepo, err := d.resolveMainRepo(context.Background(), gitTaskWorktreeMutation, gitInteractive, msg.MainRepo)
+	if err != nil {
+		return "", err
+	}
 	branch := msg.Branch
 
 	localBranch := branch
@@ -50,16 +44,20 @@ func (d *Daemon) doCreateWorktreeFromBranchForeground(msg *protocol.CreateWorktr
 		return providerPath, nil
 	}
 
-	if isRemote {
-		createdBranch, err := git.CreateWorktreeFromRemoteBranch(mainRepo, branch, path)
-		if err != nil {
-			return "", err
-		}
-		localBranch = createdBranch
-	} else {
-		if err := git.CreateWorktreeFromBranch(mainRepo, branch, path); err != nil {
-			return "", err
-		}
+	err = d.gitExecution().Run(context.Background(), gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: mainRepo}, func(ctx context.Context, client *git.Client) error {
+		return d.worktreeMaintenance.RunForeground(ctx, "create worktree from branch", func(protectedCtx context.Context) error {
+			if isRemote {
+				createdBranch, createErr := client.CreateWorktreeFromRemoteBranch(protectedCtx, mainRepo, branch, path)
+				if createErr == nil {
+					localBranch = createdBranch
+				}
+				return createErr
+			}
+			return client.CreateWorktreeFromBranch(protectedCtx, mainRepo, branch, path)
+		})
+	})
+	if err != nil {
+		return "", err
 	}
 
 	d.registerCreatedWorktree(mainRepo, path, localBranch)
@@ -88,8 +86,10 @@ func (d *Daemon) handleCreateWorktreeFromBranchWS(client *wsClient, msg *protoco
 }
 
 func (d *Daemon) handleListBranchesWS(client *wsClient, msg *protocol.ListBranchesMessage) {
-	go d.runWorktreeForeground("list branches", func(context.Context) {
-		branches, err := git.ListBranchesWithCommits(msg.MainRepo)
+	go func() {
+		branches, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskBranch, Lane: gitInteractive, Effect: gitRead, Scope: msg.MainRepo}, func(ctx context.Context, client *git.Client) ([]git.BranchWithCommit, error) {
+			return client.ListBranchesWithCommits(ctx, msg.MainRepo)
+		})
 		result := protocol.BranchesResultMessage{
 			Event:   protocol.EventBranchesResult,
 			Success: err == nil,
@@ -103,14 +103,29 @@ func (d *Daemon) handleListBranchesWS(client *wsClient, msg *protocol.ListBranch
 			}
 		}
 		d.sendToClient(client, result)
-	})
+	}()
 }
 
 func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfoMessage) {
-	go d.runWorktreeForeground("get repository info", func(ctx context.Context) {
+	go func() {
 		repo := git.CanonicalizePath(msg.Repo)
-
-		currentBranch, err := git.GetCurrentBranch(repo)
+		type repoInfo struct {
+			currentBranch string
+			commitHash    string
+			commitTime    string
+			defaultBranch string
+			worktrees     []git.WorktreeEntry
+		}
+		info, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive, Effect: gitRead, Scope: repo}, func(ctx context.Context, client *git.Client) (repoInfo, error) {
+			currentBranch, runErr := client.GetCurrentBranch(ctx, repo)
+			if runErr != nil {
+				return repoInfo{}, runErr
+			}
+			commitHash, commitTime := client.GetHeadCommitInfo(ctx, repo)
+			defaultBranch, _ := client.GetDefaultBranch(ctx, repo)
+			worktrees, _ := client.ObserveWorktrees(ctx, repo)
+			return repoInfo{currentBranch: currentBranch, commitHash: commitHash, commitTime: commitTime, defaultBranch: defaultBranch, worktrees: worktrees}, nil
+		})
 		if err != nil {
 			d.sendToClient(client, &protocol.GetRepoInfoResultMessage{
 				Event:      protocol.EventGetRepoInfoResult,
@@ -121,34 +136,32 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 			return
 		}
 
-		commitHash, commitTime := git.GetHeadCommitInfo(repo)
-
-		defaultBranch, _ := git.GetDefaultBranchContext(ctx, repo)
-		if defaultBranch == "" {
-			defaultBranch = "main"
+		if info.defaultBranch == "" {
+			info.defaultBranch = "main"
 		}
-
-		worktrees := d.doListWorktreesForeground(repo)
+		worktrees := d.reconcileListedWorktrees(repo, info.worktrees)
 
 		d.sendToClient(client, &protocol.GetRepoInfoResultMessage{
 			Event:      protocol.EventGetRepoInfoResult,
 			EndpointID: msg.EndpointID,
 			Info: &protocol.RepoInfo{
 				Repo:              repo,
-				CurrentBranch:     currentBranch,
-				CurrentCommitHash: commitHash,
-				CurrentCommitTime: commitTime,
-				DefaultBranch:     defaultBranch,
+				CurrentBranch:     info.currentBranch,
+				CurrentCommitHash: info.commitHash,
+				CurrentCommitTime: info.commitTime,
+				DefaultBranch:     info.defaultBranch,
 				Worktrees:         worktrees,
 			},
 			Success: true,
 		})
-	})
+	}()
 }
 
 func (d *Daemon) handleGetDefaultBranchWS(client *wsClient, msg *protocol.GetDefaultBranchMessage) {
-	go d.runWorktreeForeground("get default branch", func(ctx context.Context) {
-		branch, err := git.GetDefaultBranchContext(ctx, msg.Repo)
+	go func() {
+		branch, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskBranch, Lane: gitInteractive, Effect: gitRead, Scope: msg.Repo}, func(ctx context.Context, client *git.Client) (string, error) {
+			return client.GetDefaultBranch(ctx, msg.Repo)
+		})
 		result := &protocol.WebSocketEvent{
 			Event:   protocol.EventGetDefaultBranchResult,
 			Success: protocol.Ptr(err == nil),
@@ -159,12 +172,14 @@ func (d *Daemon) handleGetDefaultBranchWS(client *wsClient, msg *protocol.GetDef
 			result.Branch = protocol.Ptr(branch)
 		}
 		d.sendToClient(client, result)
-	})
+	}()
 }
 
 func (d *Daemon) handleFetchRemotesWS(client *wsClient, msg *protocol.FetchRemotesMessage) {
-	go d.runWorktreeForeground("fetch remotes", func(context.Context) {
-		err := git.FetchRemotes(msg.Repo)
+	go func() {
+		err := d.gitExecution().Run(context.Background(), gitTask{Kind: gitTaskBranch, Lane: gitInteractive, Effect: gitWrite, Scope: msg.Repo}, func(ctx context.Context, client *git.Client) error {
+			return client.FetchRemotes(ctx, msg.Repo)
+		})
 		result := &protocol.WebSocketEvent{
 			Event:   protocol.EventFetchRemotesResult,
 			Success: protocol.Ptr(err == nil),
@@ -176,12 +191,14 @@ func (d *Daemon) handleFetchRemotesWS(client *wsClient, msg *protocol.FetchRemot
 			d.logf("FetchRemotes succeeded for %s", msg.Repo)
 		}
 		d.sendToClient(client, result)
-	})
+	}()
 }
 
 func (d *Daemon) handleListRemoteBranchesWS(client *wsClient, msg *protocol.ListRemoteBranchesMessage) {
-	go d.runWorktreeForeground("list remote branches", func(context.Context) {
-		branches, err := git.ListRemoteBranches(msg.Repo)
+	go func() {
+		branches, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskBranch, Lane: gitInteractive, Effect: gitRead, Scope: msg.Repo}, func(ctx context.Context, client *git.Client) ([]string, error) {
+			return client.ListRemoteBranches(ctx, msg.Repo)
+		})
 		result := &protocol.WebSocketEvent{
 			Event:   protocol.EventListRemoteBranchesResult,
 			Success: protocol.Ptr(err == nil),
@@ -196,31 +213,31 @@ func (d *Daemon) handleListRemoteBranchesWS(client *wsClient, msg *protocol.List
 			result.Branches = branchList
 		}
 		d.sendToClient(client, result)
-	})
+	}()
 }
 
 func (d *Daemon) handleEnsureRepoWS(client *wsClient, msg *protocol.EnsureRepoMessage) {
-	go d.runWorktreeForeground("ensure repository", func(context.Context) {
+	go func() {
 		result := &protocol.WebSocketEvent{
 			Event:      protocol.EventEnsureRepoResult,
 			TargetPath: protocol.Ptr(msg.TargetPath),
 		}
 
-		cloned, err := git.EnsureRepo(msg.CloneURL, msg.TargetPath)
+		cloned, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskBranch, Lane: gitInteractive, Effect: gitWrite, Scope: msg.TargetPath}, func(ctx context.Context, client *git.Client) (bool, error) {
+			cloned, runErr := client.EnsureRepo(ctx, msg.CloneURL, msg.TargetPath)
+			if runErr != nil {
+				return false, runErr
+			}
+			if runErr = client.FetchRemotes(ctx, msg.TargetPath); runErr != nil {
+				return cloned, fmt.Errorf("repo exists but fetch failed: %w", runErr)
+			}
+			return cloned, nil
+		})
 		if err != nil {
 			result.Success = protocol.Ptr(false)
 			result.Error = protocol.Ptr(err.Error())
 			result.Cloned = protocol.Ptr(false)
 			d.logf("EnsureRepo failed for %s: %v", msg.TargetPath, err)
-			d.sendToClient(client, result)
-			return
-		}
-
-		if err := git.FetchRemotes(msg.TargetPath); err != nil {
-			result.Success = protocol.Ptr(false)
-			result.Error = protocol.Ptr("repo exists but fetch failed: " + err.Error())
-			result.Cloned = protocol.Ptr(cloned)
-			d.logf("FetchRemotes failed for %s after ensure: %v", msg.TargetPath, err)
 			d.sendToClient(client, result)
 			return
 		}
@@ -233,5 +250,5 @@ func (d *Daemon) handleEnsureRepoWS(client *wsClient, msg *protocol.EnsureRepoMe
 			d.logf("EnsureRepo found existing repo at %s, fetched remotes", msg.TargetPath)
 		}
 		d.sendToClient(client, result)
-	})
+	}()
 }

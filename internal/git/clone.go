@@ -2,10 +2,21 @@ package git
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 )
+
+func (c *Client) CloneDepthOne(ctx context.Context, source, target string, environment []string) ([]byte, error) {
+	if c == nil || c.runner == nil {
+		return nil, errors.New("git client has no command runner")
+	}
+	if c.observer != nil {
+		c.observer(OpClone)
+	}
+	return c.runner.runWithEnvironment(ctx, OpClone, defaultTimeout(OpClone), "", environment, "clone", "--depth", "1", source, target)
+}
 
 func Clone(cloneURL, targetPath string) error {
 	return defaultClient.Clone(context.Background(), cloneURL, targetPath)

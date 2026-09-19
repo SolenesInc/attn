@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -25,13 +24,7 @@ func (d *Daemon) resumeSeedFromReview(
 	seedID string,
 	review *protocol.SeedReviewActionContext,
 ) (*seedResumeOutcome, error) {
-	var outcome *seedResumeOutcome
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "resume seed session", func(context.Context) error {
-		var err error
-		outcome, err = d.resumeSeedFromReviewForeground(seedID, review)
-		return err
-	})
-	return outcome, err
+	return d.resumeSeedFromReviewForeground(seedID, review)
 }
 
 func (d *Daemon) resumeSeedFromReviewForeground(
@@ -160,7 +153,7 @@ func (d *Daemon) bindResumedSeed(
 	if session == nil {
 		return fmt.Errorf("resumed session %s is not tracked", sessionID)
 	}
-	dispatch = mergeGardenExecution(dispatch, observedGardenExecution(session, resumeID, d.gardenTime()))
+	dispatch = mergeGardenExecution(dispatch, d.observedGardenExecution(session, resumeID, d.gardenTime()))
 	dispatch.SessionID = sessionID
 	dispatch.Crown = seed.ID
 	dispatch.SupersededBy = ""

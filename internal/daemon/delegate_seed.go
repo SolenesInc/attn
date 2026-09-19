@@ -9,21 +9,21 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
 
 func (d *Daemon) bindDelegationAssignment(operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID, cwd, agent string, fromChief, createSeed bool) (string, error) {
+	observed := d.observeGardenDispatchExecution(sessionID, cwd, agent)
 	var bound string
 	err := d.worktreeMaintenance.RunForeground(context.Background(), "bind delegated seed protection", func(context.Context) error {
 		var err error
-		bound, err = d.bindDelegationAssignmentForeground(operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID, cwd, agent, fromChief, createSeed)
+		bound, err = d.bindDelegationAssignmentForeground(operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID, observed, fromChief, createSeed)
 		return err
 	})
 	return bound, err
 }
 
-func (d *Daemon) bindDelegationAssignmentForeground(operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID, cwd, agent string, fromChief, createSeed bool) (string, error) {
+func (d *Daemon) bindDelegationAssignmentForeground(operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID string, observed garden.Dispatch, fromChief, createSeed bool) (string, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", err
 	}
@@ -89,7 +89,7 @@ func (d *Daemon) bindDelegationAssignmentForeground(operationID, sessionID, plan
 	if err != nil {
 		return "", err
 	}
-	dispatch := observedGardenExecution(&protocol.Session{ID: sessionID, Directory: cwd, Agent: protocol.SessionAgent(agent)}, "", d.gardenTime())
+	dispatch := observed
 	dispatch.Crown = seed.ID
 	dispatch.DispatcherSession = strings.TrimSpace(plannerSessionID)
 	dispatch.DispatcherMember = d.crewMembersBySession()[dispatch.DispatcherSession]
@@ -161,17 +161,18 @@ func (d *Daemon) bindDelegationAssignmentForeground(operationID, sessionID, plan
 }
 
 func (d *Daemon) bindDelegationSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent string, fromChief bool) (string, error) {
+	observed := d.observeGardenDispatchExecution(sessionID, cwd, agent)
 	var seedID string
 	err := d.worktreeMaintenance.RunForeground(context.Background(), "bind delegation seed protection", func(context.Context) error {
 		var err error
-		seedID, err = d.bindDelegationSeedForeground(sessionID, plannerSessionID, brief, name, crown, cwd, agent, fromChief)
+		seedID, err = d.bindDelegationSeedForeground(sessionID, plannerSessionID, brief, name, crown, observed, fromChief)
 		return err
 	})
 	return seedID, err
 }
 
-func (d *Daemon) bindDelegationSeedForeground(sessionID, plannerSessionID, brief, name, crown, cwd, agent string, fromChief bool) (string, error) {
-	seedID, err := d.bindDelegatedSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent, fromChief)
+func (d *Daemon) bindDelegationSeedForeground(sessionID, plannerSessionID, brief, name, crown string, observed garden.Dispatch, fromChief bool) (string, error) {
+	seedID, err := d.bindDelegatedSeedObserved(sessionID, plannerSessionID, brief, name, crown, observed, fromChief)
 	switch {
 	case err == nil:
 		d.logf("delegate: bound seed %q to session %s", seedID, sessionID)
@@ -182,13 +183,24 @@ func (d *Daemon) bindDelegationSeedForeground(sessionID, plannerSessionID, brief
 }
 
 func (d *Daemon) bindDelegatedSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent string, fromChief bool) (string, error) {
+	observed := d.observeGardenDispatchExecution(sessionID, cwd, agent)
+	var seedID string
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "bind delegated seed protection", func(context.Context) error {
+		var err error
+		seedID, err = d.bindDelegatedSeedObserved(sessionID, plannerSessionID, brief, name, crown, observed, fromChief)
+		return err
+	})
+	return seedID, err
+}
+
+func (d *Daemon) bindDelegatedSeedObserved(sessionID, plannerSessionID, brief, name, crown string, observed garden.Dispatch, fromChief bool) (string, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", err
 	}
 	if bound, ok := d.gardenDispatchCrown(sessionID); ok {
 		return bound, nil
 	}
-	if err := d.recordGardenDispatch(sessionID, "", plannerSessionID, cwd, agent, fromChief); err != nil {
+	if err := d.recordGardenDispatchObserved(sessionID, "", plannerSessionID, fromChief, observed); err != nil {
 		return "", fmt.Errorf("preserve session %s before binding it: %w", sessionID, err)
 	}
 	seedID := strings.TrimSpace(crown)
@@ -201,7 +213,7 @@ func (d *Daemon) bindDelegatedSeed(sessionID, plannerSessionID, brief, name, cro
 	} else if err := d.tendDispatchedSeed(sessionID, plannerSessionID, seedID); err != nil {
 		return "", err
 	}
-	if err := d.recordGardenDispatch(sessionID, seedID, plannerSessionID, cwd, agent, fromChief); err != nil {
+	if err := d.recordGardenDispatchObserved(sessionID, seedID, plannerSessionID, fromChief, observed); err != nil {
 		return "", fmt.Errorf("bind %s to session %s: %w", seedID, sessionID, err)
 	}
 	return seedID, nil

@@ -1,11 +1,10 @@
 package daemon
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -34,55 +33,7 @@ type diffStats struct {
 	Deletions int
 }
 
-func walkUntrackedDir(repoDir, dirPath string) []protocol.GitFileChange {
-	var files []protocol.GitFileChange
-	fullPath := filepath.Join(repoDir, dirPath)
-
-	var filePaths []string
-	filepath.WalkDir(fullPath, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if !d.IsDir() {
-			relPath, err := filepath.Rel(repoDir, path)
-			if err == nil {
-				filePaths = append(filePaths, relPath)
-			}
-		}
-		return nil
-	})
-
-	if len(filePaths) == 0 {
-		return files
-	}
-
-	ignoredOutput, err := attngit.OutputWithStdin(attngit.OpStatus, repoDir, strings.NewReader(strings.Join(filePaths, "\n")), "check-ignore", "--stdin")
-	if err != nil && len(ignoredOutput) == 0 && strings.Contains(err.Error(), "timed out") {
-		return files
-	}
-
-	ignoredSet := make(map[string]bool)
-	if len(ignoredOutput) > 0 {
-		for _, path := range strings.Split(strings.TrimSpace(string(ignoredOutput)), "\n") {
-			if path != "" {
-				ignoredSet[path] = true
-			}
-		}
-	}
-
-	for _, path := range filePaths {
-		if !ignoredSet[path] {
-			files = append(files, protocol.GitFileChange{
-				Path:   path,
-				Status: "untracked",
-			})
-		}
-	}
-
-	return files
-}
-
-func parseGitStatusPorcelain(output string, repoDir string) (staged, unstaged, untracked []protocol.GitFileChange) {
+func parseGitStatusPorcelain(output string, _ string) (staged, unstaged, untracked []protocol.GitFileChange) {
 	entries := strings.Split(output, "\x00")
 
 	for _, entry := range entries {
@@ -99,15 +50,10 @@ func parseGitStatusPorcelain(output string, repoDir string) (staged, unstaged, u
 		}
 
 		if indexStatus == '?' && worktreeStatus == '?' {
-			if strings.HasSuffix(path, "/") {
-				files := walkUntrackedDir(repoDir, path)
-				untracked = append(untracked, files...)
-			} else {
-				untracked = append(untracked, protocol.GitFileChange{
-					Path:   path,
-					Status: "untracked",
-				})
-			}
+			untracked = append(untracked, protocol.GitFileChange{
+				Path:   path,
+				Status: "untracked",
+			})
 			continue
 		}
 
@@ -171,15 +117,28 @@ func parseGitDiffNumstat(output string) map[string]diffStats {
 	return result
 }
 
-func getGitStatusForSubscription(dir string, mode gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
-	return getGitStatusWithOptions(dir, gitStatusOptions{
-		mode:         mode,
-		fullTimeout:  gitStatusFullBudget,
-		includeStats: false,
+func getGitStatusForSubscription(ctx context.Context, executor gitExecutor, dir string, mode gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
+	return gitValue(ctx, executor, gitTask{Kind: gitTaskStatus, Lane: gitInteractive, Effect: gitRead, Scope: dir}, func(runCtx context.Context, client *attngit.Client) (*protocol.GitStatusUpdateMessage, error) {
+		return getGitStatusWithOptionsAdmitted(runCtx, client, dir, gitStatusOptions{
+			mode:         mode,
+			fullTimeout:  gitStatusFullBudget,
+			includeStats: false,
+		})
 	})
 }
 
 func getGitStatusWithOptions(dir string, opts gitStatusOptions) (*protocol.GitStatusUpdateMessage, error) {
+	executor, err := newDirectGitExecutor()
+	if err != nil {
+		return nil, err
+	}
+	defer executor.Close(nil)
+	return gitValue(context.Background(), executor, gitTask{Kind: gitTaskStatus, Lane: gitInteractive, Effect: gitRead, Scope: dir}, func(ctx context.Context, client *attngit.Client) (*protocol.GitStatusUpdateMessage, error) {
+		return getGitStatusWithOptionsAdmitted(ctx, client, dir, opts)
+	})
+}
+
+func getGitStatusWithOptionsAdmitted(ctx context.Context, client *attngit.Client, dir string, opts gitStatusOptions) (*protocol.GitStatusUpdateMessage, error) {
 	mode := opts.mode
 	if mode == "" {
 		mode = gitStatusModeFull
@@ -190,7 +149,7 @@ func getGitStatusWithOptions(dir string, opts gitStatusOptions) (*protocol.GitSt
 		statusArgs = []string{"status", "--porcelain", "-z", "--untracked-files=no"}
 	}
 
-	statusOutput, err := runGitStatusCommandForDaemon(dir, opts.fullTimeout, statusArgs...)
+	statusOutput, err := runGitStatusCommandForDaemon(ctx, client, dir, opts.fullTimeout, statusArgs...)
 	limited := mode == gitStatusModeTrackedOnly
 	var limitedReason *string
 	if limited {
@@ -198,7 +157,7 @@ func getGitStatusWithOptions(dir string, opts gitStatusOptions) (*protocol.GitSt
 	}
 	if err != nil && mode == gitStatusModeFull && isGitStatusTimeout(err) {
 		statusArgs = []string{"status", "--porcelain", "-z", "--untracked-files=no"}
-		statusOutput, err = runGitStatusCommandForDaemon(dir, opts.fullTimeout, statusArgs...)
+		statusOutput, err = runGitStatusCommandForDaemon(ctx, client, dir, opts.fullTimeout, statusArgs...)
 		mode = gitStatusModeTrackedOnly
 		limited = true
 		limitedReason = protocol.Ptr("Untracked files hidden because full git status was slow.")
@@ -218,7 +177,7 @@ func getGitStatusWithOptions(dir string, opts gitStatusOptions) (*protocol.GitSt
 	staged, unstaged, untracked := parseGitStatusPorcelain(string(statusOutput), dir)
 
 	if opts.includeStats && len(unstaged) > 0 {
-		numstatOutput, _ := attngit.Output(attngit.OpDiff, dir, "diff", "--numstat")
+		numstatOutput, _ := client.Output(ctx, attngit.OpDiff, dir, "diff", "--numstat")
 		stats := parseGitDiffNumstat(string(numstatOutput))
 
 		for i := range unstaged {
@@ -230,7 +189,7 @@ func getGitStatusWithOptions(dir string, opts gitStatusOptions) (*protocol.GitSt
 	}
 
 	if opts.includeStats && len(staged) > 0 {
-		numstatOutput, _ := attngit.Output(attngit.OpDiff, dir, "diff", "--numstat", "--cached")
+		numstatOutput, _ := client.Output(ctx, attngit.OpDiff, dir, "diff", "--numstat", "--cached")
 		stats := parseGitDiffNumstat(string(numstatOutput))
 
 		for i := range staged {
@@ -253,11 +212,11 @@ func getGitStatusWithOptions(dir string, opts gitStatusOptions) (*protocol.GitSt
 	}, nil
 }
 
-func runGitStatusCommand(dir string, timeout time.Duration, args ...string) ([]byte, error) {
+func runGitStatusCommand(ctx context.Context, client *attngit.Client, dir string, timeout time.Duration, args ...string) ([]byte, error) {
 	if timeout > 0 {
-		return attngit.OutputWithTimeout(attngit.OpStatus, timeout, dir, args...)
+		return client.OutputWithTimeout(ctx, attngit.OpStatus, timeout, dir, args...)
 	}
-	return attngit.Output(attngit.OpStatus, dir, args...)
+	return client.Output(ctx, attngit.OpStatus, dir, args...)
 }
 
 func isGitStatusTimeout(err error) bool {

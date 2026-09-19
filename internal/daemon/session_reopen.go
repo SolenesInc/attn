@@ -363,7 +363,7 @@ func (d *Daemon) reopenBranchWarning(execution garden.Dispatch) string {
 	if saved == "" {
 		return ""
 	}
-	info, err := attngit.GetBranchInfo(execution.Cwd)
+	info, err := d.readBranchInfo(context.Background(), gitTaskReopen, gitInteractive, execution.Cwd)
 	if err != nil || info == nil {
 		return ""
 	}
@@ -413,12 +413,7 @@ func (d *Daemon) inspectBranchInBackground(sessionID, repo, branch string) <-cha
 			close(done)
 		}()
 		finishOperation := d.beginGitOperation(protocol.GitOperationKindInspectBranch, repo, nil)
-		var inspection branchInspection
-		err := d.worktreeMaintenance.RunForeground(context.Background(), "inspect reopen branch", func(context.Context) error {
-			var err error
-			inspection, err = inspectBranch(repo, branch)
-			return err
-		})
+		inspection, err := d.inspectBranch(context.Background(), repo, branch)
 		finishOperation(err)
 		if err != nil {
 			d.logf("reopen: inspecting branch %s in %s: %v", branch, repo, err)
@@ -454,41 +449,52 @@ func (d *Daemon) forgetBranchInspections(repo string) {
 	}
 }
 
-func inspectBranch(repo, branch string) (branchInspection, error) {
+func (d *Daemon) inspectBranch(ctx context.Context, repo, branch string) (branchInspection, error) {
 	if _, err := os.Stat(repo); err != nil {
 		return branchInspection{State: branchStateGone, RepoMissing: true}, nil
 	}
-	inspection := branchInspection{State: branchStateGone}
-	if attngit.RefExists(repo, branch) {
-		inspection.State = branchStateLocal
-	} else {
-		remotes, err := attngit.ListRemotes(repo)
+	return gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskReopen, Lane: gitDeferred, Effect: gitRead, Scope: repo}, func(runCtx context.Context, client *attngit.Client) (branchInspection, error) {
+		inspection := branchInspection{State: branchStateGone}
+		exists, err := client.RefExists(runCtx, repo, branch)
 		if err != nil {
-			return branchInspection{}, fmt.Errorf("read remotes of %s: %w", repo, err)
+			return branchInspection{}, err
 		}
-		for _, remote := range remotes {
-			if attngit.RefExists(repo, remote+"/"+branch) {
+		if exists {
+			inspection.State = branchStateLocal
+		} else {
+			remotes, listErr := client.ListRemotes(runCtx, repo)
+			if listErr != nil {
+				return branchInspection{}, fmt.Errorf("read remotes of %s: %w", repo, listErr)
+			}
+			for _, remote := range remotes {
+				remoteExists, refErr := client.RefExists(runCtx, repo, remote+"/"+branch)
+				if refErr != nil {
+					return branchInspection{}, refErr
+				}
+				if !remoteExists {
+					continue
+				}
 				inspection.State = branchStateRemoteOnly
 				inspection.Remote = remote
 				break
 			}
 		}
-	}
-	worktrees, err := attngit.ObserveWorktrees(repo)
-	if err != nil {
-		return branchInspection{}, fmt.Errorf("read worktrees of %s: %w", repo, err)
-	}
-	for _, worktree := range worktrees {
-		if strings.TrimSpace(worktree.Branch) != branch {
-			continue
+		worktrees, err := client.ObserveWorktrees(runCtx, repo)
+		if err != nil {
+			return branchInspection{}, fmt.Errorf("read worktrees of %s: %w", repo, err)
 		}
-		if worktree.Prunable {
-			inspection.StaleRegistration = true
-			continue
+		for _, worktree := range worktrees {
+			if strings.TrimSpace(worktree.Branch) != branch {
+				continue
+			}
+			if worktree.Prunable {
+				inspection.StaleRegistration = true
+				continue
+			}
+			inspection.AlreadyCheckedOut = true
 		}
-		inspection.AlreadyCheckedOut = true
-	}
-	return inspection, nil
+		return inspection, nil
+	})
 }
 
 type sessionReopenOutcome struct {
@@ -503,13 +509,7 @@ type sessionReopenOutcome struct {
 func (d *Daemon) reopenSession(
 	sessionID string, action protocol.SessionReopenAction, directory string,
 ) (*sessionReopenOutcome, error) {
-	var outcome *sessionReopenOutcome
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "reopen session", func(context.Context) error {
-		var err error
-		outcome, err = d.reopenSessionForeground(sessionID, action, directory)
-		return err
-	})
-	return outcome, err
+	return d.reopenSessionForeground(sessionID, action, directory)
 }
 
 func (d *Daemon) reopenSessionForeground(
@@ -643,14 +643,18 @@ func (d *Daemon) recreateReopenWorktree(
 	defer d.forgetBranchInspections(repo)
 
 	if inspection, known := d.branchInspection(verdict.SessionID, repo, branch); known && inspection.StaleRegistration {
-		if err := attngit.PruneWorktrees(repo); err != nil {
+		if err := d.gitExecution().Run(context.Background(), gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: repo}, func(ctx context.Context, client *attngit.Client) error {
+			return d.worktreeMaintenance.RunForeground(ctx, "prune stale reopen worktree", func(protectedCtx context.Context) error {
+				return client.PruneWorktrees(protectedCtx, repo)
+			})
+		}); err != nil {
 			return "", fmt.Errorf("clear the stale worktree registration in %s: %w", repo, err)
 		}
 	}
 
 	switch action {
 	case protocol.SessionReopenActionRecreateWorktreeAndReopen:
-		return d.doCreateWorktreeFromBranchForeground(&protocol.CreateWorktreeFromBranchMessage{
+		return d.doCreateWorktreeFromBranch(&protocol.CreateWorktreeFromBranchMessage{
 			Cmd: protocol.CmdCreateWorktreeFromBranch, MainRepo: repo, Branch: branch, Path: protocol.Ptr(path),
 		})
 	case protocol.SessionReopenActionFetchRecreateAndReopen:
@@ -658,18 +662,20 @@ func (d *Daemon) recreateReopenWorktree(
 		if inspection.Remote == "" {
 			return "", fmt.Errorf("no remote carries branch %s any more", branch)
 		}
-		return d.doCreateWorktreeFromBranchForeground(&protocol.CreateWorktreeFromBranchMessage{
+		return d.doCreateWorktreeFromBranch(&protocol.CreateWorktreeFromBranchMessage{
 			Cmd:      protocol.CmdCreateWorktreeFromBranch,
 			MainRepo: repo,
 			Branch:   inspection.Remote + "/" + branch,
 			Path:     protocol.Ptr(path),
 		})
 	default:
-		base, err := attngit.GetDefaultBranch(repo)
+		base, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskReopen, Lane: gitInteractive, Effect: gitRead, Scope: repo}, func(ctx context.Context, client *attngit.Client) (string, error) {
+			return client.GetDefaultBranch(ctx, repo)
+		})
 		if err != nil || strings.TrimSpace(base) == "" {
 			return "", fmt.Errorf("%s has no default branch to start from: %w", repo, err)
 		}
-		return d.doCreateWorktreeForeground(&protocol.CreateWorktreeMessage{
+		return d.doCreateWorktree(&protocol.CreateWorktreeMessage{
 			Cmd:          protocol.CmdCreateWorktree,
 			MainRepo:     repo,
 			Branch:       branch,

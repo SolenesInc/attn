@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -17,13 +16,7 @@ import (
 )
 
 func (d *Daemon) startDelegation(msg *protocol.DelegateMessage) (*protocol.DelegationOperation, error) {
-	var operation *protocol.DelegationOperation
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "accept delegation", func(context.Context) error {
-		var err error
-		operation, err = d.startDelegationForeground(msg)
-		return err
-	})
-	return operation, err
+	return d.startDelegationForeground(msg)
 }
 
 func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*protocol.DelegationOperation, error) {
@@ -94,7 +87,7 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 			parentSeedID, _ = d.gardenDispatchCrown(sourceID)
 		}
 	}
-	baseCommit, err := resolveAcceptedDelegationBase(msg)
+	baseCommit, err := d.resolveAcceptedDelegationBase(msg)
 	if err != nil {
 		return nil, err
 	}
@@ -109,9 +102,7 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 }
 
 func (d *Daemon) runDelegationOperation(id string) {
-	d.runWorktreeForeground("prepare delegation", func(context.Context) {
-		d.runDelegationOperationForeground(id)
-	})
+	d.runDelegationOperationForeground(id)
 }
 
 func (d *Daemon) runDelegationOperationForeground(id string) {

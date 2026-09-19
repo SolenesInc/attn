@@ -188,24 +188,49 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 				kept++
 				continue
 			}
-			deleteErr := lease.TryDelete(
-				func(finalCtx context.Context) error {
-					return d.finalWorktreeSweepCheck(finalCtx, candidate)
-				},
-				func(context.Context) error {
-					if d.removeSweptWorktree(wt, verdict, now) {
+			d.captureGardenExecutionsInDirectory(wt.Path)
+			seeds := d.seedsForWorktree(wt)
+			handled, providerErr := d.dispatchWorktreeDeleteProvider(wt.MainRepo, wt.Path, wt.Branch, false)
+			if providerErr != nil {
+				d.recordSweptWorktreeFailure(wt, providerErr, now)
+				kept++
+				continue
+			}
+			if handled {
+				d.completeSweptWorktreeRemoval(wt, seeds, verdict, now)
+				removed++
+				continue
+			}
+			deleteBranch := wt.Branch != "" && !d.gardenKeepsBranch(wt.MainRepo, wt.Branch)
+			var branchDeleteErr error
+			deleteErr := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitDeferred, Effect: gitWrite, Scope: wt.MainRepo}, func(_ context.Context, client *attngit.Client) error {
+				return lease.TryDelete(
+					func(finalCtx context.Context) error {
+						return d.finalWorktreeSweepCheckAdmitted(finalCtx, client, candidate)
+					},
+					func(commitCtx context.Context) error {
+						if err := client.DeleteWorktree(commitCtx, wt.MainRepo, wt.Path, false); err != nil {
+							return err
+						}
+						if deleteBranch {
+							branchDeleteErr = client.DeleteBranch(commitCtx, wt.MainRepo, wt.Branch, true)
+						}
 						return nil
-					}
-					return errors.New("automatic worktree deletion failed")
-				},
-			)
+					},
+				)
+			})
 			if errors.Is(deleteErr, errWorktreeSweepPreempted) {
 				return refreshed, removed, kept, deleteErr
 			}
 			if deleteErr != nil {
+				d.recordSweptWorktreeFailure(wt, deleteErr, now)
 				kept++
 				continue
 			}
+			if branchDeleteErr != nil {
+				d.logf("worktree sweep: worktree removed but branch %s remains: %v", wt.Branch, branchDeleteErr)
+			}
+			d.completeSweptWorktreeRemoval(wt, seeds, verdict, now)
 			removed++
 		}
 	}
@@ -219,7 +244,7 @@ func (d *Daemon) observeWorktreeCandidateContext(ctx context.Context, facts *rep
 	if d.worktreeObserveCandidate != nil {
 		return d.worktreeObserveCandidate(ctx, facts, state, now)
 	}
-	return observeWorktreeContext(ctx, facts, state, now)
+	return d.observeWorktreeContext(ctx, facts, state, now)
 }
 
 func cheapWorktreeSweepVerdict(wt *store.Worktree, state attngit.WorktreeState, facts sweepContext, now time.Time, idleFor time.Duration) (sweepVerdict, bool) {
@@ -249,8 +274,8 @@ func cheapWorktreeSweepVerdict(wt *store.Worktree, state attngit.WorktreeState, 
 	return sweepVerdict{}, false
 }
 
-func (d *Daemon) finalWorktreeSweepCheck(ctx context.Context, candidate worktreeSweepCandidate) error {
-	states, err := d.listWorktreeStatesContext(ctx, candidate.repo)
+func (d *Daemon) finalWorktreeSweepCheckAdmitted(ctx context.Context, client *attngit.Client, candidate worktreeSweepCandidate) error {
+	states, err := client.ListWorktreeStates(ctx, candidate.repo)
 	if err != nil {
 		return err
 	}
@@ -384,23 +409,20 @@ func (d *Daemon) recordSweepVerdict(wt *store.Worktree, verdict sweepVerdict, no
 	}
 }
 
-func (d *Daemon) removeSweptWorktree(wt *store.Worktree, verdict sweepVerdict, now time.Time) bool {
-	err := d.doDeleteWorktreeForeground(wt.Path, nil, deleteWorktreeOptions{
-		RemovalAction: "removed", RemovalReason: verdict.Reason,
-	})
-	if err != nil {
-		d.logf("worktree sweep: removing %s: %v", wt.Path, err)
-		entry := store.WorktreeSweepLogEntry{
-			Path: wt.Path, MainRepo: wt.MainRepo, Branch: wt.Branch,
-			Action: "failed", Reason: err.Error(),
-		}
-		entry.ID = d.store.AppendWorktreeSweepLog(entry, now)
-		d.publishFact(FactWorktreeSwept, wt.Path, protocolSweepEntry(entry))
-		return false
+func (d *Daemon) recordSweptWorktreeFailure(wt *store.Worktree, err error, now time.Time) {
+	d.logf("worktree sweep: removing %s: %v", wt.Path, err)
+	entry := store.WorktreeSweepLogEntry{
+		Path: wt.Path, MainRepo: wt.MainRepo, Branch: wt.Branch,
+		Action: "failed", Reason: err.Error(),
 	}
+	entry.ID = d.store.AppendWorktreeSweepLog(entry, now)
+	d.publishFact(FactWorktreeSwept, wt.Path, protocolSweepEntry(entry))
+}
 
+func (d *Daemon) completeSweptWorktreeRemoval(wt *store.Worktree, seeds []string, verdict sweepVerdict, now time.Time) {
+	d.finalizeDeletedWorktree(wt.Path)
+	d.recordWorktreeRemoval(wt, seeds, deleteWorktreeOptions{RemovalAction: "removed", RemovalReason: verdict.Reason}, now)
 	d.logf("worktree sweep: reclaimed %s (%s)", wt.Path, verdict.Reason)
-	return true
 }
 
 func (d *Daemon) recordWorktreeRemoval(

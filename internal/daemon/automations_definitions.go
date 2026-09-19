@@ -53,7 +53,9 @@ func (d *Daemon) validateAutomationSpec(raw string) (automation.DefinitionSpec, 
 		return spec, nil, fmt.Errorf("agent %q does not support automation automatic approval", spec.Launch.Driver)
 	}
 	for identity, source := range spec.Location.RepositorySources.Overrides {
-		if _, err := attngit.ValidateLocalClone(source.Path, identity); err != nil {
+		if _, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitInteractive, Effect: gitRead, Scope: source.Path}, func(ctx context.Context, client *attngit.Client) (string, error) {
+			return client.ValidateLocalClone(ctx, source.Path, identity)
+		}); err != nil {
 			return spec, nil, fmt.Errorf("repository override %s: %w", identity, err)
 		}
 	}
