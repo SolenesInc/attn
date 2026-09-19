@@ -767,7 +767,7 @@ describe('CrewPanel', () => {
 
   it('renders complete dated handoffs and opens seed links through the panel callback', async () => {
     const onOpenSeed = vi.fn();
-    const body = '# Full handoff\n\nA paragraph at the end that must not be truncated.\n\n[Open the seed](s-work11)\n';
+    const body = '# Full handoff\n\nA paragraph at the end that must not be truncated.\n\n[Open the seed](s-w0rk11)\n';
     const sendCrewHandoffGet = vi.fn().mockResolvedValue({
       member: 'trellis',
       handoff: { filename: '2026-09-01T21-37Z-trellis.md', occurred_at: '2026-09-01T21:37:00Z', content: body, token: 'letter' },
@@ -788,7 +788,7 @@ describe('CrewPanel', () => {
     expect(screen.getByText('A paragraph at the end that must not be truncated.')).toBeInTheDocument();
     expect(screen.getAllByText(/Sep 1, 2026/)).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: 'Open the seed' }));
-    expect(onOpenSeed).toHaveBeenCalledWith('s-work11', undefined);
+    expect(onOpenSeed).toHaveBeenCalledWith('s-w0rk11', undefined);
   });
 
   it('places a handoff seed beside the selected member current day', async () => {
@@ -806,7 +806,7 @@ describe('CrewPanel', () => {
           handoff: {
             filename: '2026-09-01T21-37Z-trellis.md',
             occurred_at: '2026-09-01T21:37:00Z',
-            content: '[Open the seed](s-work11)',
+            content: '[Open the seed](s-w0rk11)',
             token: 'letter',
           },
         }),
@@ -814,7 +814,7 @@ describe('CrewPanel', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Open the seed' }));
-    expect(onOpenSeed).toHaveBeenCalledWith('s-work11', 'session-trellis');
+    expect(onOpenSeed).toHaveBeenCalledWith('s-w0rk11', 'session-trellis');
   });
 
   it('shows one handoff read failure and retries to an honest empty history', async () => {
