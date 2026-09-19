@@ -274,7 +274,6 @@ func TestReconcileGroundTruthSilentWhenPROpen(t *testing.T) {
 	}
 }
 
-// Callers arm d.ticketReconcilePRFetch (or seed tracked PRs) first.
 func runGroundTruthReconcile(t *testing.T, d *Daemon, ticketID, whatsLeft string) string {
 	t.Helper()
 
@@ -323,8 +322,6 @@ func runGroundTruthReconcile(t *testing.T, d *Daemon, ticketID, whatsLeft string
 	return comments[0]
 }
 
-// Merged PRs vanish from the is:open poller sweep, so absence + targeted lookup
-// is the only path that fires against live data.
 func TestReconcileGroundTruthLooksUpUntrackedMergedRef(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 

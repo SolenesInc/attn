@@ -11,14 +11,10 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// A bounded "go look" trigger, never event content: the daemon signals, it never
-// streams a ticket's content into the PTY.
 var ticketNudgePrompt = prompts.RenderText("session", "legacy-ticket-nudge", prompts.Values{})
 
 const legacyTicketMailboxCoalesceKey = "legacy-ticket"
 
-// Busy delegation tickets in the production event history had a median inter-event gap
-// of 9m49s (440 gaps across 67 tickets), so ten minutes sits just past the burst cadence.
 const defaultTicketBundleWindow = 10 * time.Minute
 const ticketWatchLeaseWindow = 5 * time.Second
 
@@ -103,8 +99,6 @@ func (d *Daemon) notifyTicketObservers(ticketID string) {
 	}
 }
 
-// The unread event is the durable delivery: neither a failed wake nor its
-// warning advances the cursor.
 func (d *Daemon) notifySleepingTicketMember(identity, ticketID string) {
 	memberID, ok := store.ParseTicketMemberIdentity(identity)
 	if !ok {
@@ -178,8 +172,6 @@ func (d *Daemon) notifyUnreadTicketSession(sessionID string, now time.Time) {
 	d.notifyUnreadTicketSessionLocked(sessionID, now)
 }
 
-// Unread scan, attention read, deadline calculation and timer arm stay in one critical
-// section, or a stale calculation re-arms after a concurrent consume advanced the clock.
 func (d *Daemon) notifyUnreadTicketSessionLocked(sessionID string, now time.Time) {
 	if d.store == nil {
 		return

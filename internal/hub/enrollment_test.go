@@ -117,7 +117,6 @@ func TestEnrollRemote_UnansweredCheckDoesNotBlockTheSync(t *testing.T) {
 }
 
 func TestEnrollRemote_SkippedWhenTheDialerIsNotAHome(t *testing.T) {
-	// The shim refuses everything: reaching ssh at all would be the bug.
 	script := "#!/bin/sh\nexit 3\n"
 	log, err := enrollWithShim(t, script, "")
 	if err != nil {

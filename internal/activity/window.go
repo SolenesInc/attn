@@ -7,8 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-// Clip budgets per event kind, in characters. Thinking is the longest content type
-// (measured: p95 3,520 chars, max 20,443), so it gets the largest budget.
 const (
 	ClipThinking   = 600
 	ClipAssistant  = 400
@@ -17,8 +15,6 @@ const (
 	ClipToolResult = 150
 )
 
-// Tripwires set past the observed maximum. Measured across 617 active 3-minute
-// windows: 64 events and 12,408 rendered chars at the maximum.
 const (
 	MaxEvents = 200
 	MaxChars  = 32000
@@ -55,8 +51,6 @@ func (r Report) String() string {
 
 func (w Window) Empty() bool { return len(w.Events) == 0 }
 
-// MaxPages bounds how far Read walks to reach the end of a delta. A tripwire:
-// the largest measured delta across a working day is well under one page.
 const MaxPages = 50
 
 var ErrDeltaTooLarge = fmt.Errorf("activity: delta exceeds %d pages of %d events", MaxPages, MaxEvents)
@@ -91,7 +85,6 @@ func tail(events []transcript.Event, n int) []transcript.Event {
 	return append(events[:0], events[len(events)-n:]...)
 }
 
-// A full scan measured 1.37s on the largest live transcript.
 func SeedCursor(path string) (string, error) {
 	return transcript.HeadCursor(path)
 }

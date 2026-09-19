@@ -72,7 +72,6 @@ func TestCurrentArtifactsProjectsAttachMinusDetach(t *testing.T) {
 
 	cases := []struct {
 		name string
-		// log is newest first, the order every garden read hands notes over in.
 		log  []Note
 		want []ArtifactReference
 	}{

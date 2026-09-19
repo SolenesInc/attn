@@ -88,8 +88,6 @@ func (b *EmbeddedBackend) Attach(_ context.Context, sessionID, subscriberID stri
 			subscriberID,
 			send,
 			onDrop,
-			// Placements ride the byte stream so a set stays ordered behind the
-			// output it was measured on.
 			onPlacements,
 			onResize,
 		)

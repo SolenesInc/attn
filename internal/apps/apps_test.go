@@ -98,8 +98,6 @@ func TestDerivedIdentities(t *testing.T) {
 	}
 }
 
-// Nothing links the build's shell script to this constant, so a rename there produces a
-// daemon that cannot find its runtime.
 func TestRuntimeHostBinaryNameMatchesTheBuild(t *testing.T) {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {

@@ -485,12 +485,8 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 			}
 		}
 
-		// Read after connecting, not before: a host whose daemon has never run has
-		// no token to read yet, and reaching here means it is up.
 		clientToken := m.remoteClientToken(ctx, record.SSHTarget, profile)
 
-		// Until this hello passes, the remote daemon refuses every gated command.
-		// publishConnectionAndSendHello holds writeMu so ForwardEndpointCommand cannot write first.
 		connected := false
 		consumeErr := m.publishConnectionAndSendHello(ctx, id, conn, cmd, clientToken)
 		if consumeErr == nil {
@@ -553,8 +549,6 @@ func versionMismatchStatus(e *VersionMismatchError) (string, string) {
 	)
 }
 
-// sendClientHello declares this connection's capabilities: without workspace_sessions the
-// remote refuses gated commands; binary_pty_output is absent because the relay is text.
 func sendClientHello(ctx context.Context, conn *websocket.Conn, clientToken string) error {
 	payload, err := json.Marshal(protocol.ClientHelloMessage{
 		Cmd:         protocol.CmdClientHello,
@@ -1042,8 +1036,6 @@ func (e *ParkedEndpointError) Error() string {
 	return fmt.Sprintf("endpoint %s is parked: %s", who, detail)
 }
 
-// parkedErrorLocked returns the refusal for a held-back endpoint; callers hold m.mu. The
-// check is on status, not the connection: a binary_mismatch endpoint keeps a live socket.
 func parkedErrorLocked(endpointID string, runtime *endpointRuntime) error {
 	if !parkedStatuses[runtime.info.Status] {
 		return nil
@@ -1168,7 +1160,6 @@ type sessionCloseWaiter struct {
 	answer     chan error
 }
 
-// Tripwire: the outpost answers from the handler that commits, before it kills anything.
 const sessionCloseAckTimeout = 15 * time.Second
 
 func (m *Manager) ForwardSessionClose(ctx context.Context, endpointID, sessionID string, payload []byte) error {
@@ -1211,7 +1202,6 @@ func (m *Manager) forgetSessionCloseWaiter(sessionID string, forget *sessionClos
 	m.sessionCloses[sessionID] = remaining
 }
 
-// The endpoint answers one session at a time, so a refusal ends that close alone.
 func (m *Manager) answerSessionClose(endpointID, sessionID string, accepted bool, reason string) {
 	var answer error
 	if !accepted {
@@ -1239,12 +1229,8 @@ func (m *Manager) answerSessionClose(endpointID, sessionID string, accepted bool
 	answerSessionCloseWaiters(answered, answer)
 }
 
-// Tripwire: the owner answers from the handler that writes the label, so a
-// healthy round trip is one websocket hop each way.
 const sessionRenameAckTimeout = 10 * time.Second
 
-// rename_result carries no request id, so one rename per session is in flight
-// at a time; a second is refused rather than handed another label's verdict.
 func (m *Manager) ForwardSessionRename(ctx context.Context, endpointID, sessionID string, payload []byte) error {
 	waiter := &sessionCloseWaiter{endpointID: endpointID, answer: make(chan error, 1)}
 	m.mu.Lock()
@@ -1537,8 +1523,6 @@ func sessionsMatch(left, right protocol.Session) bool {
 		protocol.Deref(left.StateReason) == protocol.Deref(right.StateReason) &&
 		protocol.Deref(left.TurnOwed) == protocol.Deref(right.TurnOwed) &&
 		protocol.Deref(left.TurnOpenedAt) == protocol.Deref(right.TurnOpenedAt) &&
-		// Without this a remote agent snoozed on its own daemon changes nothing the hub
-		// compares, so the re-broadcast is suppressed and the row never moves.
 		protocol.Deref(left.TurnSnoozedUntil) == protocol.Deref(right.TurnSnoozedUntil) &&
 		protocol.Deref(left.PinnedAt) == protocol.Deref(right.PinnedAt) &&
 		protocol.Deref(left.ParentSessionID) == protocol.Deref(right.ParentSessionID) &&
@@ -1862,8 +1846,6 @@ func (m *Manager) SetEndpointRemoteWeb(ctx context.Context, endpointID string, e
 	}
 }
 
-// Holds runtime.writeMu from before the connection becomes visible until after the hello
-// write, so a forwarded command either sees the old connection or blocks on writeMu.
 func (m *Manager) publishConnectionAndSendHello(ctx context.Context, id string, conn *websocket.Conn, cmd *exec.Cmd, clientToken string) error {
 	m.mu.Lock()
 	runtime, ok := m.runtimes[id]

@@ -4,8 +4,6 @@ import (
 	"time"
 )
 
-// ErrStaleMarkdownAnnotationSave marks a benignly stale save. Same value as
-// ErrStaleAnnotationSave, so errors.Is against either name matches.
 var ErrStaleMarkdownAnnotationSave = ErrStaleAnnotationSave
 
 type MarkdownAnnotationDraft struct {

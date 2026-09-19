@@ -66,8 +66,6 @@ func (c *Codex) BuildCommand(opts SpawnOpts) *exec.Cmd {
 		args = append(args, "resume")
 	}
 
-	// Codex 0.153.4 drops earlier -c overrides when they straddle resume.
-	// Keep hook definitions and launch overrides together after the subcommand.
 	for _, override := range opts.ConfigOverrides {
 		if strings.TrimSpace(override) == "" {
 			continue
@@ -82,7 +80,6 @@ func (c *Codex) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	}
 	args = append(args, codexContextWindowCapArgs(opts.AutoCompactWindow)...)
 	if effort := strings.TrimSpace(opts.Effort); effort != "" {
-		// No dedicated effort flag; -c values are parsed as TOML, hence the quotes.
 		args = append(args, "-c", `model_reasoning_effort="`+effort+`"`)
 	}
 	if opts.YoloMode {
@@ -145,8 +142,6 @@ func (c *Codex) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest
 		return result, nil
 	}
 
-	// Rooted at WorkDir (NOT CWD) so the working tree stays clean and cleanup is
-	// deterministic.
 	lastMsgPath := ""
 	if f, err := os.CreateTemp(headlessTempDir(request.WorkDir), "codex-last-msg-*.txt"); err == nil {
 		lastMsgPath = f.Name()
@@ -200,8 +195,6 @@ func addCodexOutputSchema(args []string, schemaPath string) []string {
 	return append(args, prompt)
 }
 
-// SECURITY BOUNDARY: the OS sandbox, not an approval prompt, confines a headless run.
-// "workspace-write" re-enables ONLY the sandbox mode and the shell tool.
 func buildCodexHeadlessArgs(request HeadlessTaskRequest, lastMsgPath string, window int) []string {
 	serverName := strings.TrimSpace(request.MCPServerName)
 	if serverName == "" {
@@ -227,7 +220,6 @@ func buildCodexHeadlessArgs(request HeadlessTaskRequest, lastMsgPath string, win
 		"--skip-git-repo-check",
 		"--sandbox", sandboxMode,
 	}
-	// An empty "-m" makes codex reject the run; omitting it uses codex's default.
 	if model := strings.TrimSpace(request.Model); model != "" {
 		args = append(args, "-m", model)
 	}
@@ -275,8 +267,6 @@ func codexFeatureLocks() []string {
 	}
 }
 
-// The context-window cap moves codex's auto-compaction threshold; the value is
-// a TOML integer, so it is unquoted.
 func codexContextWindowCapArgs(window int) []string {
 	if window <= 0 {
 		return nil
@@ -302,8 +292,6 @@ func tomlStringArray(values []string) string {
 	return "[" + strings.Join(quoted, ",") + "]"
 }
 
-// codexFinalText prefers the --output-last-message file over stdout: the live
-// `codex exec --json` stream is not the on-disk transcript envelope.
 func codexFinalText(lastMsgPath string, stdout []byte) string {
 	if lastMsgPath != "" {
 		if b, err := os.ReadFile(lastMsgPath); err == nil {
@@ -315,8 +303,6 @@ func codexFinalText(lastMsgPath string, stdout []byte) string {
 	return parseCodexFinalText(stdout)
 }
 
-// parseCodexFinalText scans `codex exec --json` stdout for the LAST
-// agent_message item: {"type":"item.completed","item":{"type":"agent_message","text":"..."}}
 func parseCodexFinalText(stdout []byte) string {
 	last := ""
 	for _, raw := range bytes.Split(stdout, []byte("\n")) {
@@ -372,8 +358,6 @@ func codexHeadlessArgs(request HeadlessTaskRequest, window int) []string {
 	return args
 }
 
-// `codex exec` has no system-prompt flag, so SystemPrompt is folded into the
-// prompt; a split prompt would otherwise lose its invariant half.
 func codexPrompt(request HeadlessTaskRequest) string {
 	system := strings.TrimSpace(request.SystemPrompt)
 	if system == "" {

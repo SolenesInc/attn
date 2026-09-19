@@ -174,7 +174,6 @@ func ListRemotes(repoDir string) ([]string, error) {
 	return remotes, nil
 }
 
-// `git worktree add` errors hard on an unknown start ref.
 func RefExists(repoDir, ref string) bool {
 	exists, _ := RefExistsContext(context.Background(), repoDir, ref)
 	return exists
@@ -214,8 +213,6 @@ func FetchRemoteBranch(repoDir, remote, branch string) error {
 	return nil
 }
 
-// Recovery may run after the PR ref advanced, so an already-present snapshot is
-// never replaced with the moving FETCH_HEAD.
 func EnsurePullRequestRevision(repoDir, remote string, number int, expectedSHA, authorization string) error {
 	resolvedDir, err := ResolveRepoDir(repoDir)
 	if err != nil {
@@ -321,8 +318,6 @@ func GetHeadCommitInfo(repoDir string) (hash string, time string) {
 	return "", ""
 }
 
-// GetDefaultBranch is the branch new worktrees start from: `git config
-// attn.baseBranch` when set, else origin/HEAD, else main or master.
 func GetDefaultBranch(repoDir string) (string, error) {
 	return GetDefaultBranchContext(context.Background(), repoDir)
 }

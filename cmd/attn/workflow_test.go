@@ -23,7 +23,6 @@ type fakeWorkflowClient struct {
 	runUpserts  []protocol.WorkflowRun
 	callUpserts []protocol.WorkflowAgentCall
 
-	// Forces WorkflowRunGet's reported status, to drive the cancel watcher.
 	getStatusOverride map[string]protocol.WorkflowRunStatus
 }
 
@@ -102,7 +101,6 @@ func (f *fakeWorkflowClient) WorkflowRunCancel(runID string) (*protocol.Workflow
 	return f.hydrateLocked(runID), nil
 }
 
-// Caller holds f.mu. Returns nil when the run is absent.
 func (f *fakeWorkflowClient) hydrateLocked(runID string) *protocol.WorkflowRun {
 	run, ok := f.runs[runID]
 	if !ok {
@@ -377,7 +375,6 @@ func TestWorkflowCancelWatcherInterruptsRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Fast poll interval so the watcher trips quickly once the fake reports canceled.
 	stopWatcher := startCancelWatcher(ctx, cancel, fake, runID, 5*time.Millisecond)
 	defer stopWatcher()
 

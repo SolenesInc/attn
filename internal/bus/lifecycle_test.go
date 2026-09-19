@@ -114,8 +114,6 @@ func TestUnregisterInterruptsAConsumerParkedInRetryBackoff(t *testing.T) {
 		Store:        s,
 		Log:          func(string, ...interface{}) {},
 		PollInterval: 5 * time.Millisecond,
-		// A retry sleep far longer than any correct run needs: if Unregister waits for
-		// the timer, this test hangs to its tripwire instead of passing slowly.
 		RetryBase:    time.Hour,
 		RetryCap:     time.Hour,
 		TrimInterval: time.Hour,

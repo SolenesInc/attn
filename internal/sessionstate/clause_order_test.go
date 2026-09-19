@@ -97,8 +97,6 @@ func TestClauseOrder(t *testing.T) {
 			wantReason: ReasonBackgroundParked,
 		},
 		{
-			// Measured 2026-07-27: three sessions produced ten `unknown`s this way, and in every one
-			// the user, not the background task, resumed the turn.
 			why: "the harness saying the agent is parked at its prompt outranks an " +
 				"outstanding background task: the task is a guess about whether " +
 				"anyone is waited on, and this is the harness answering it directly",

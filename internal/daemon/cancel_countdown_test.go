@@ -14,7 +14,6 @@ func TestCancelCountdown_StopsBothCountdownsOnOneSession(t *testing.T) {
 	d.nudgeWindowOverride = time.Hour
 	t.Cleanup(d.stopNudgeCountdowns)
 	t.Cleanup(d.stopAutoSettleTimers)
-	// Windows long enough that the real timers never race the hand-fires below.
 	d.store.SetSetting(SettingAutoSettleEnabled, "true")
 	d.store.SetSetting(SettingAutoSettleArmSeconds, "3600")
 	d.store.SetSetting(SettingAutoSettleCountdownSeconds, "3600")
@@ -78,8 +77,6 @@ func TestCancelCountdown_NudgeStaysCancelledAcrossSelectionChange(t *testing.T) 
 
 		d.setSelectedSession(agentID)
 		d.setSelectedSession(chiefID)
-		// synctest.Wait returns once the resume goroutine has finished and every other bubble
-		// goroutine is parked, so "no timer" is about the settled daemon, not a 50ms window.
 		synctest.Wait()
 
 		if currentNudgeTimer(d, agentID) != nil {

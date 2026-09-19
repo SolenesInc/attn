@@ -10,8 +10,6 @@ import (
 )
 
 const (
-	// shellForegroundPollInterval: one ioctl per second per shell pane; the
-	// resolver ticks at the same rate, so polling faster buys nothing.
 	shellForegroundPollInterval = time.Second
 
 	shellCommandDetailLimit = 80
@@ -60,7 +58,6 @@ func (a *shellSignalArbiter) ObserveOutput(chunk []byte, now time.Time) []Observ
 		return nil
 	}
 	var out []Observation
-	// Marker handling shares claim state with the poller, so hold the lock across it.
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.seg.Feed(chunk, func(seg feedSegment) {
@@ -74,7 +71,6 @@ func (a *shellSignalArbiter) ObserveOutput(chunk []byte, now time.Time) []Observ
 	return out
 }
 
-// observeMarker folds one marker into the merged claim. Caller holds mu.
 func (a *shellSignalArbiter) observeMarker(m *osc133Marker, now time.Time) (Observation, bool) {
 	switch m.Kind {
 	case osc133PreExec:
@@ -107,7 +103,6 @@ func (a *shellSignalArbiter) bindPromptVerdict() {
 	}
 }
 
-// emit applies the change-or-keepalive rule. Caller holds mu.
 func (a *shellSignalArbiter) emit(claim, detail string, now time.Time) (Observation, bool) {
 	if claim == a.lastClaim && now.Sub(a.lastEmit) < heartbeatKeepalive {
 		return Observation{}, false
@@ -115,8 +110,6 @@ func (a *shellSignalArbiter) emit(claim, detail string, now time.Time) (Observat
 	return a.emitEdge(claim, detail, now), true
 }
 
-// emitEdge emits unconditionally, still feeding the dedup state so a level
-// restate right after an edge stays suppressed. Caller holds mu.
 func (a *shellSignalArbiter) emitEdge(claim, detail string, now time.Time) Observation {
 	a.lastClaim = claim
 	a.lastEmit = now
@@ -157,8 +150,6 @@ func (s *Session) childProcessGroup() int {
 	return pid
 }
 
-// foregroundProcessGroup reads which group owns the terminal's foreground. Takes
-// writeMu for the same reason resize does: Fd() must not race the ptmx close.
 func (s *Session) foregroundProcessGroup() (int, bool) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()

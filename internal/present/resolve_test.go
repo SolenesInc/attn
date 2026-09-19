@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// resolveTestRepo creates a one-commit repo with a single file whose content
-// is exactly lines, so tests can assert resolution against known line numbers.
 func resolveTestRepo(t *testing.T, path string, lines []string) (dir, headSHA string) {
 	t.Helper()
 	dir = t.TempDir()
@@ -181,7 +179,7 @@ func TestResolveAnnotations_AnchorDerivedOverlapErrorsAndDrops(t *testing.T) {
 	m := &Manifest{Files: []FileEntry{
 		{Path: "a.go", Annotations: []AnnotationEntry{
 			{Start: 1, End: 3, Note: "range note"},
-			{Anchor: "func Foo", Note: "anchor note"}, // resolves to line 2, inside the range above
+			{Anchor: "func Foo", Note: "anchor note"},
 		}},
 	}}
 
@@ -204,7 +202,7 @@ func TestResolveAnnotations_NoAnnotationsSkipsFileEntirely(t *testing.T) {
 
 	m := &Manifest{Files: []FileEntry{
 		{Path: "a.go"},
-		{Path: "does-not-exist.go"}, // no annotations: must not be looked up at all
+		{Path: "does-not-exist.go"},
 	}}
 
 	resolved, issues := ResolveAnnotations(m, dir, headSHA)

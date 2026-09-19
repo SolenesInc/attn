@@ -71,8 +71,6 @@ func runCorpus(args []string) error {
 		}
 		cursor, seen := cursors[session.ID]
 		if !seen {
-			// Cold start: seed at head and capture nothing. Reading from byte 0 yields a
-			// capped whole-transcript read, an input production never sees.
 			head, err := activity.SeedCursor(path)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "skip %s: %v\n", session.ID, err)
@@ -84,8 +82,6 @@ func runCorpus(args []string) error {
 		}
 		window, err := activity.Read(path, string(session.Agent), cursor)
 		if err != nil {
-			// A mismatched cursor means the transcript was rewritten (Claude compaction does
-			// this): re-seed at head, exactly as the daemon will.
 			head, seedErr := activity.SeedCursor(path)
 			if seedErr != nil {
 				fmt.Fprintf(os.Stderr, "skip %s: %v\n", session.ID, err)

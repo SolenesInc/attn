@@ -33,8 +33,6 @@ func newTestRunner(t *testing.T, tune func(*Options)) (*Runner, *memStore, *fake
 	return r, store, clock
 }
 
-// Stop must be registered on the bubble's own T, whose cleanups run inside the
-// bubble alongside the dispatch goroutines it joins.
 func newBubbleRunner(t *testing.T, tune func(*Options)) (*Runner, *memStore) {
 	t.Helper()
 	store := newMemStore()
@@ -720,8 +718,6 @@ func TestRetentionTrimsCompletedJobsAndKeepsDeadOnes(t *testing.T) {
 		r, store := newBubbleRunner(t, func(o *Options) {
 			o.MaxAttempts = 1
 			o.Retention = 24 * time.Hour
-			// The hourly retention ticker really fires inside a bubble (48 times over
-			// the window below), so it is parked past it.
 			o.TrimInterval = 30 * 24 * time.Hour
 		})
 		mustRegister(t, r, "ok", func(context.Context, *Job) (any, error) { return nil, nil })

@@ -13,22 +13,17 @@ const (
 	SlotChoice = "choice"
 )
 
-// Slot is one question the Guardian's security policy asks about this machine.
-// TestEverySlotIsReadByARuleThatExists fails on a slot no policy rule reads.
 type Slot struct {
-	ID      string   `json:"id"`
-	Label   string   `json:"label"`
-	Kind    string   `json:"kind"`
-	Choices []string `json:"choices,omitempty"`
-	Detail  string   `json:"detail"`
-	Unset   string   `json:"unset"`
-	// Detected slots are filled from the session at launch; a user value wins.
+	ID       string   `json:"id"`
+	Label    string   `json:"label"`
+	Kind     string   `json:"kind"`
+	Choices  []string `json:"choices,omitempty"`
+	Detail   string   `json:"detail"`
+	Unset    string   `json:"unset"`
 	Detected bool     `json:"detected,omitempty"`
 	ReadBy   []string `json:"read_by"`
 }
 
-// Slots is the environment's whole schema, in render order. environment.ts
-// mirrors it; both sides pin the same ordered ids so neither moves alone.
 func Slots() []Slot {
 	return []Slot{
 		{

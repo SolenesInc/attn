@@ -28,8 +28,6 @@ func fsUnwatch(t *testing.T, d *Daemon, client *wsClient, requestID, root string
 	return res
 }
 
-// assertNoFsChangedForRoot drains and re-queues other events so a later assertion
-// in the same test still sees them.
 func assertNoFsChangedForRoot(t *testing.T, ch chan outboundMessage, root, origin string, wait time.Duration) {
 	t.Helper()
 	deadline := time.After(wait)

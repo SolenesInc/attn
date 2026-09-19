@@ -29,8 +29,6 @@ func DefaultRoot(home, profile string) string {
 	return base + "-" + p
 }
 
-// Lives under .attn/, which CleanPath rejects, so it is written with direct
-// filesystem I/O, not the Store APIs.
 func TicketsDir(root string) string {
 	return filepath.Join(root, machineDir, "tickets")
 }
@@ -43,13 +41,10 @@ func TicketArtifactsDir(root, ticketID string) string {
 	return filepath.Join(root, "tickets", ticketID)
 }
 
-// SeedArtifactsDir is filesystem-canonical storage, intentionally outside the
-// Markdown-only Store APIs. Direct visible regular files are the membership.
 func SeedArtifactsDir(root, seedID string) string {
 	return filepath.Join(root, "seeds", seedID)
 }
 
-// SeedArtifactTransfersDir holds recovery receipts, never artifact membership.
 func SeedArtifactTransfersDir(root string) string {
 	return filepath.Join(root, machineDir, "seed-artifact-transfers")
 }
@@ -59,7 +54,6 @@ func CleanPath(p string) (string, error) {
 	if trimmed == "" {
 		return "", fmt.Errorf("notebook: empty path")
 	}
-	// Anchor at "/" and Clean so any ".." is neutralized to within the root.
 	rel := strings.TrimPrefix(path.Clean("/"+strings.TrimPrefix(trimmed, "/")), "/")
 	if rel == "" || rel == "." {
 		return "", fmt.Errorf("notebook: %q is the root, not a file", p)

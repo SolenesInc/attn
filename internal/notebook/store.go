@@ -15,14 +15,12 @@ import (
 	"time"
 )
 
-// Writes serialize under mu and apply atomically; reads do not take the lock.
 type Store struct {
 	root string
 	mu   sync.Mutex
 }
 
 func NewStore(root string) *Store {
-	// Clean the root: a trailing slash would break abs's HasPrefix containment test.
 	if root != "" {
 		root = filepath.Clean(root)
 	}
@@ -171,8 +169,6 @@ func (s *Store) appendToNote(rel, entry string, newDoc func() Document) (hash st
 	return hash, err
 }
 
-// The read-check-write is one critical section under the store lock, so two
-// callers racing the same marker can never both write.
 func (s *Store) appendToNoteOnce(rel, dedupeMarker, entry string, newDoc func() Document) (written bool, hash string, err error) {
 	abs, err := s.abs(rel)
 	if err != nil {
@@ -206,8 +202,6 @@ func (s *Store) appendToNoteOnce(rel, dedupeMarker, entry string, newDoc func() 
 	return true, Hash(out), nil
 }
 
-// Bounds the leading bytes List reads per file: it must never load a whole
-// (possibly oversized, externally-written) body.
 const listFrontmatterScanLimit = 64 << 10
 
 func (s *Store) List(prefix string) ([]Entry, error) {
@@ -219,7 +213,6 @@ func (s *Store) List(prefix string) ([]Entry, error) {
 				if p == s.root {
 					return fs.SkipAll
 				}
-				// Subtree vanished mid-walk (the root is externally syncable); treat as empty.
 				return nil
 			}
 			return err
@@ -246,8 +239,6 @@ func (s *Store) List(prefix string) ([]Entry, error) {
 		if ierr != nil {
 			return nil
 		}
-		// A note can be a symlink pointing outside the root; without this check
-		// List would expose an outside file's frontmatter over the websocket.
 		if err := s.checkWithinResolvedRoot(p); err != nil {
 			return nil
 		}
@@ -292,7 +283,6 @@ func (s *Store) Backlinks(target string) ([]Entry, error) {
 			continue
 		}
 		if e.Size > MaxFileSize {
-			// Oversized = externally-synced file; skip rather than pull its whole body in.
 			continue
 		}
 		content, _, rerr := s.Read(e.Path)
@@ -342,8 +332,6 @@ func (s *Store) checkWithinResolvedRoot(abs string) error {
 	return EnsureWithinResolvedRoot(s.root, abs)
 }
 
-// abs must already be lexically contained. Residual TOCTOU accepted for a
-// single-user local app.
 func EnsureWithinResolvedRoot(root, abs string) error {
 	realRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
@@ -381,8 +369,6 @@ func readPrefix(path string, limit int64) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(f, limit))
 }
 
-// The temp name is dot-prefixed so a watcher never treats the transient swap
-// file as a change to a real path.
 func writeAtomic(absPath string, content []byte) error {
 	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
 		return err

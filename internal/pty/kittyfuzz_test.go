@@ -9,8 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
 
-// fuzzKittyMaxInput: real transmissions chunk at 4 KiB; 64 KiB clears any single
-// escape a seed can grow into, without walking the segmenter to its 72 MiB tripwire.
 const fuzzKittyMaxInput = 64 << 10
 
 const (
@@ -24,8 +22,6 @@ func FuzzKittyWireMirrorShipping(f *testing.F) {
 	fuzzKittyWireMirror(f, 0)
 }
 
-// Measured on the pin in ghostty-vt.pin: 15m / 38.1M execs green, then the deferred-wrap
-// class 97s into the next soak, then 15m / 42.5M execs green again with its tripwire in.
 func FuzzKittyWireMirror(f *testing.F) {
 	fuzzKittyWireMirror(f, mirrorStorageLimit)
 }
@@ -106,8 +102,6 @@ func FuzzKittySegmenterFraming(f *testing.F) {
 		rebuilt := make([]byte, 0, len(data))
 		for start := 0; start < len(data); start += size {
 			chunk := data[start:min(start+size, len(data))]
-			// A copy per chunk: an emission may alias the chunk, and the
-			// segmenter is allowed to reuse its own buffer afterwards.
 			seg.Feed(append([]byte(nil), chunk...), func(e feedSegment) {
 				rebuilt = append(rebuilt, e.Bytes...)
 			})

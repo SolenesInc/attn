@@ -17,8 +17,6 @@ func newSessionStateReasons() *sessionStateReasons {
 	return &sessionStateReasons{reasons: make(map[string]string)}
 }
 
-// Reports whether the reason changed: it is recomputed every resolver tick and
-// almost never moves, so the delta is what keeps the tick off the wire.
 func (r *sessionStateReasons) set(sessionID, reason string) bool {
 	if r == nil || strings.TrimSpace(sessionID) == "" {
 		return false

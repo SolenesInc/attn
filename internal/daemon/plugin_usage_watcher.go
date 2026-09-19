@@ -9,7 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-// A plugin harness has no Go driver to discover its transcript; the driver reports the path instead.
 type pluginUsageWatcher struct {
 	sessionID string
 	path      string
@@ -45,7 +44,6 @@ func (d *Daemon) ensurePluginUsageWatcher(sessionID, agent, path string) {
 	go d.runPluginUsageWatcher(watcher, tracker)
 }
 
-// pi's session file appears only at the first assistant flush; a path reported before then counts from byte zero.
 func (d *Daemon) seedPluginUsageBaseline(sessionID, path string) {
 	if d.store == nil {
 		return
@@ -72,7 +70,6 @@ func (d *Daemon) runPluginUsageWatcher(w *pluginUsageWatcher, tracker *sessionUs
 		case <-ticker.C:
 		}
 
-		// Movement gate: an idle session's transcript is stat'd, never opened, so it adds no file reads.
 		info, err := os.Stat(w.path)
 		if err != nil {
 			continue
@@ -86,7 +83,6 @@ func (d *Daemon) runPluginUsageWatcher(w *pluginUsageWatcher, tracker *sessionUs
 	}
 }
 
-// A transcript that never appeared has nothing to reconcile; skip it or a stillborn session never completes.
 func (d *Daemon) reconcilePluginUsageOnStop(path string, seen bool, tracker *sessionUsageTracker) {
 	if !seen {
 		if _, err := os.Stat(path); err != nil {

@@ -67,8 +67,6 @@ type SpawnOptions struct {
 	ContextWindowCap        int
 	UnattendedLaunch        launchcontract.UnattendedLaunchSpec
 
-	// Set explicitly, or a spawn under a non-default theme briefly answers with
-	// built-in defaults.
 	Theme TerminalTheme
 }
 
@@ -81,7 +79,6 @@ func (opts SpawnOptions) WorkingDirectory() string {
 
 type ViewportSnapshot struct {
 	Payload []byte
-	// Excludes scrollback and styles.
 	Text    string
 	HasText bool
 	Cols    uint16
@@ -93,23 +90,19 @@ type ScreenSnapshotInfo struct {
 	Cols    uint16
 	Rows    uint16
 	Running bool
-	Screen  *ViewportSnapshot // nil when the terminal has produced no frame
+	Screen  *ViewportSnapshot
 }
 
 type AttachInfo struct {
-	LastSeq    uint32
-	Cols       uint16
-	Rows       uint16
-	PID        int
-	Running    bool
-	ExitCode   *int
-	ExitSignal *string
-	// Snapshot geometry is Cols/Rows.
-	GhosttySnapshot []byte
-	// A worker outlives an install, so a snapshot can reach a client built
-	// against a different libghostty-vt; the format is how it declines.
-	GhosttySnapshotFormat string
-	// Rows are SCREEN-space, captured atomically with the dump and LastSeq.
+	LastSeq                    uint32
+	Cols                       uint16
+	Rows                       uint16
+	PID                        int
+	Running                    bool
+	ExitCode                   *int
+	ExitSignal                 *string
+	GhosttySnapshot            []byte
+	GhosttySnapshotFormat      string
 	GhosttyBlocks              []AttachBlockData
 	GhosttyPlacements          []KittyPlacement
 	GhosttyScrollbackTruncated bool
@@ -146,7 +139,6 @@ type Manager struct {
 	onExit        func(ExitInfo)
 	onState       func(sessionID string, obs Observation)
 
-	// Test-only seam for deterministic overlap; never set in production.
 	testHookAfterSpawnReserve func()
 }
 
@@ -320,8 +312,6 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 		removeShellOverlay(overlayDir)
 		return fmt.Errorf("ghostty terminal theme failed: %w", err)
 	}
-	// A replacement worker under the same session id gets a different epoch,
-	// which stops a client redrawing the dead worker's pixels.
 	session.kittyEpoch = mintKittyEpoch()
 	session.wireFeed = newWireFeeder(gt, session.kittyEpoch, m.logf, kittyLimit)
 
@@ -441,7 +431,6 @@ func (m *Manager) Input(sessionID string, data []byte) error {
 	return session.input(data)
 }
 
-// xpixel/ypixel are the pane's total device pixels, 0 when unavailable.
 func (m *Manager) Resize(sessionID string, cols, rows, xpixel, ypixel uint16) (bool, error) {
 	session, err := m.getSession(sessionID)
 	if err != nil {
@@ -585,8 +574,6 @@ func buildSpawnCommand(opts SpawnOptions, agent, shellPath, attnPath string, env
 	return exec.Command(shellPath, "-l", "-c", postLoginExecCommand(env, args))
 }
 
-// Restores the launch PATH after login startup, in case a profile prepends a
-// stale attn. Exec'd, so the PTY stays attached to the real child.
 func postLoginExecCommand(env []string, args []string) string {
 	cmdline := "exec " + shellJoin(args)
 	for _, entry := range env {
@@ -697,25 +684,18 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 			logf("pty spawn: failed to capture login shell env from %s: %v", loginShell, err)
 		}
 	}
-	// Cached login-shell data can carry a parent agent's one-shot launch pins.
 	env = filterEnvKeys(env, launchKeys...)
 	env = MergeEnvironment(env, launchEnv)
 	env = filterEnvKeys(env, "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_EXTERNAL_ENV", "ATTN_PTY_DAEMON_ENV")
 
-	// Strip CLAUDECODE after all merges: ReadLoginShellEnv re-captures it from
-	// the inherited environment, and spawned sessions then think they're nested.
 	env = filterEnvKeys(env, "CLAUDECODE")
 
-	// An agent runner's NO_COLOR would otherwise disable colors in every PTY.
 	env = filterEnvKeys(env, "NO_COLOR")
 
-	// TUIs gate OSC 8 hyperlink emission on TERM_PROGRAM.
 	env = filterEnvKeys(env, "TERM_PROGRAM_VERSION")
 	env = MergeEnvironment(env, []string{"TERM=xterm-256color", "TERM_PROGRAM=ghostty"})
 	env = launchenv.WithActiveAttnFirst(env, wrapperPath)
 	if agent == "shell" {
-		// An inherited managed-session identity would make ordinary shell
-		// commands report against another session.
 		env = filterEnvKeys(env, "ATTN_SESSION_ID", "ATTN_AGENT")
 	}
 	if agent != "shell" {
@@ -751,8 +731,6 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 		env = MergeEnvironment(env, opts.ExternalEnv)
 	}
 	env = filterEnvKeys(env, "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_EXTERNAL_ENV", "ATTN_PTY_DAEMON_ENV")
-	// Routing is the final overlay: no login-shell or plugin variable may
-	// redirect the session to another attn daemon.
 	env = MergeEnvironment(env, opts.DaemonEnv)
 	return env
 }
@@ -776,7 +754,6 @@ func configuredExecutableForAgent(opts SpawnOptions, agent string) string {
 	}
 }
 
-// Typically ~130ms; callers should cache the result.
 func ReadLoginShellEnv(shellPath string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), shellEnvTimeout)
 	defer cancel()

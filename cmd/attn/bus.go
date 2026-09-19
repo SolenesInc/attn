@@ -15,8 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Reads and writes the profile database directly rather than going through daemon IPC:
-// the enabled bit is database-only BY DESIGN, so the kill switch works with no daemon.
 func runBus() {
 	if len(os.Args) < 3 || os.Args[2] == "-h" || os.Args[2] == "--help" {
 		writeBusHelp(os.Stdout)
@@ -85,16 +83,12 @@ commands:
 }
 
 type busStatusJSON struct {
-	Earliest int64 `json:"earliest"`
-	Head     int64 `json:"head"`
-	// Bytes counts the event text — name, subject, payload, source, stamp — not the
-	// database file, which is shared with every other table.
-	Rows     int64  `json:"rows"`
-	Bytes    int64  `json:"bytes"`
-	OldestAt string `json:"oldest_at,omitempty"`
-	NewestAt string `json:"newest_at,omitempty"`
-	// False when the snapshot came from the database rather than the daemon that owns the
-	// delivery loops, which makes each consumer `live` field meaningless.
+	Earliest          int64               `json:"earliest"`
+	Head              int64               `json:"head"`
+	Rows              int64               `json:"rows"`
+	Bytes             int64               `json:"bytes"`
+	OldestAt          string              `json:"oldest_at,omitempty"`
+	NewestAt          string              `json:"newest_at,omitempty"`
 	Delivering        bool                `json:"delivering"`
 	RetentionSeconds  float64             `json:"retention_seconds"`
 	SurgeRatePerHour  float64             `json:"surge_rate_per_hour"`
@@ -132,9 +126,8 @@ type busConsumerReport struct {
 	Stalled             string `json:"stalled,omitempty"`
 	OldestUnreadAt      string `json:"oldest_unread_at,omitempty"`
 	HoldsRetentionFloor bool   `json:"holds_retention_floor"`
-	// The flag beside it is what tells "0 bytes held" from "not measured".
-	PinAlarm    bool  `json:"pin_alarm"`
-	PinnedBytes int64 `json:"pinned_bytes"`
+	PinAlarm            bool   `json:"pin_alarm"`
+	PinnedBytes         int64  `json:"pinned_bytes"`
 }
 
 type busHealthReport struct {
@@ -216,8 +209,6 @@ func runBusStatus(args []string) {
 	s, closeStore := openBusStore()
 	defer closeStore()
 
-	// The retention-pin tripwire comes from this process environment because it must draw
-	// the line where the daemon draws it, or this table and a notification disagree.
 	b := bus.New(bus.Options{
 		Store:       daemon.NewBusStore(s),
 		Compactable: daemon.CompactableFacts,
@@ -242,8 +233,6 @@ func runBusStatus(args []string) {
 	writeBusStatus(os.Stdout, status, time.Now())
 }
 
-// A real log carries ~50 producer classes and the tail is noise. --json never
-// truncates.
 const busProducerLines = 15
 
 func writeBusStatus(w io.Writer, s bus.Status, now time.Time) {
@@ -370,8 +359,6 @@ func runBusTrim(args []string) {
 	}
 	fmt.Printf("removed %d event(s); log now holds %d of %d, weighing %s\n",
 		removed, after, before, humanBytes(bytes))
-	// Also what a clean log prints, so a failed pass has to exit non-zero for a
-	// script to tell the two apart.
 	if passErr != nil {
 		fmt.Fprintf(os.Stderr, "bus trim: %v\n", passErr)
 		os.Exit(1)
@@ -422,8 +409,6 @@ func runBusSetEnabled(args []string, enabled bool) {
 	fmt.Printf("consumer %q %sd\n", name, verb)
 }
 
-// Keeps bus logging off stdout, so it never lands in the middle of --json output
-// someone is parsing.
 func busStderrLog(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 }

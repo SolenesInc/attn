@@ -9,8 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// handleTicketComment posts a comment on any ticket by id, authored as the calling
-// session. Comment authorship is not a participation source (store.UnreadTicketEvents).
 func (d *Daemon) handleTicketComment(conn net.Conn, msg *protocol.TicketCommentMessage) {
 	sourceSessionID := strings.TrimSpace(msg.SourceSessionID)
 	if sourceSessionID == "" {

@@ -474,7 +474,6 @@ func TestEvidenceIsNotRecordedForAnUnknownSession(t *testing.T) {
 	}
 }
 
-// Not a synctest bubble: the removal parks on a mutex, and a mutex wait is invisible to one.
 func TestEvidenceDoesNotLeakWhenRemovalRacesTheWrite(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-evidence-race"
@@ -636,7 +635,6 @@ func stateChangesSince(t *testing.T, d *Daemon, cursor int64) (int, int64) {
 	return count, cursor
 }
 
-// Measured over 8.4 production days before the gate: session.state.changed was 73.7% of the whole bus log (233,497 of 316,721 facts), and 81.6% of consecutive facts for one session landed within a second of the previous one.
 func TestTheEvidenceTickIsSilentWhileTheTurnKeepsRunning(t *testing.T) {
 	d := newTraceDaemon(t)
 	t.Cleanup(d.stopEventBus)

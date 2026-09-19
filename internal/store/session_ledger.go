@@ -12,18 +12,14 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Every other closed_by is the id of the session that closed this one.
 const SessionClosedByUser = "user"
 
-// One terminal page: 20 rows plus a header and the notice fit 80x24 unscrolled.
 const SessionLedgerDefaultLimit = 20
 
-// A tripwire, not a budget: the busiest measured afternoon closed 10 sessions in 3.5h.
 const SessionLedgerMaxLimit = 1000
 
 var ErrSessionClosed = errors.New("session is closed")
 
-// Only agent closes carry a reason.
 type SessionClose struct {
 	By     string
 	Reason string
@@ -125,7 +121,6 @@ func (s *Store) CloseSession(id string, closed SessionClose, now time.Time) (boo
 	return true, nil
 }
 
-// The usage is the row's whole size: a measured 109 KB mean against ~14 KB of ids.
 func finalizeSessionCostTx(tx *sql.Tx, id string) error {
 	var raw string
 	if err := tx.QueryRow("SELECT session_cost_json FROM sessions WHERE id = ?", id).Scan(&raw); err != nil {
@@ -153,7 +148,6 @@ type SessionCloseRecord struct {
 	Reason string
 }
 
-// ReopenSession hands back the close it lifted; pass it to RestoreSessionClose to undo.
 func (s *Store) ReopenSession(id string) (SessionCloseRecord, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -193,7 +187,6 @@ func (s *Store) ReopenSession(id string) (SessionCloseRecord, bool, error) {
 	return lifted, true, nil
 }
 
-// The cost the close finalized stays finalized through a reopen; only the mark returns.
 func (s *Store) RestoreSessionClose(id string, closed SessionCloseRecord) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -550,7 +543,6 @@ func ledgerInstant(entry protocol.SessionLedgerEntry) string {
 	return entry.LastSeen
 }
 
-// The map backing's closed_at predicate: a closed session leaves s.sessions for here.
 type sessionCloseMark struct {
 	At      string
 	By      string

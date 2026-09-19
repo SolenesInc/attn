@@ -221,8 +221,6 @@ func TestSeedResumeRefusesWhenTranscriptGoneWithoutCreatingAnything(t *testing.T
 	d.handleUnregister(drainedConn(t), &protocol.UnregisterMessage{ID: leafID})
 	d.waitForSessionTeardown(leafID)
 	d.persistResumeSessionID(leafID, leafID)
-	// An empty tool home makes claude's transcript lookup find nothing for the
-	// mirrored id, which is what leaves it unresumable.
 	t.Setenv(toolhome.EnvVar, t.TempDir())
 	before, _, err := d.readSeed(seedID)
 	if err != nil {

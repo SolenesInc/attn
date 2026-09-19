@@ -80,8 +80,6 @@ func (d *Daemon) handleSessionTranscript(conn net.Conn, msg *protocol.SessionTra
 	})
 }
 
-// Exact identities only: a broad cwd/newest fallback would return a neighboring
-// session's conversation.
 func (d *Daemon) inspectableTranscriptPath(session *protocol.Session) string {
 	if session == nil {
 		return ""

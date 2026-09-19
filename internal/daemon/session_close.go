@@ -40,8 +40,6 @@ func (d *Daemon) beginSessionClose(
 	return sessionCloseInFlight{teardown: teardown}, nil
 }
 
-// finishSessionClose kills the runtime. Split from beginSessionClose so a caller
-// can answer its requester before the session it is closing dies.
 func (d *Daemon) finishSessionClose(sessionID string, closing sessionCloseInFlight) {
 	if closing.teardown != nil {
 		d.terminateSessionAsync(sessionID, syscall.SIGTERM, closing.teardown)

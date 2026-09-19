@@ -66,8 +66,6 @@ func (d *DurableJournal) Err() error {
 	return d.lastErr
 }
 
-// In-daemon twin of callFromEntry (cmd/attn/workflow_ipcjournal.go); the two must
-// stay behaviorally consistent.
 func rowFromEntry(runID string, e JournalEntry) *store.WorkflowAgentCallRow {
 	return &store.WorkflowAgentCallRow{
 		RunID:         runID,
@@ -85,8 +83,6 @@ func rowFromEntry(runID string, e JournalEntry) *store.WorkflowAgentCallRow {
 	}
 }
 
-// entryFromRow must stay lossless for all six JournalEntry fields: IsCacheHit
-// depends on Ordinal+PromptHash+SchemaHash, and replay uses Result/Status.
 func entryFromRow(row *store.WorkflowAgentCallRow) JournalEntry {
 	return JournalEntry{
 		Ordinal:    row.Ordinal,

@@ -91,7 +91,6 @@ func TestReadFileDiff_HeadRefFileDoesNotExist(t *testing.T) {
 	}
 }
 
-// Boundary-bound: the fixture repository and handleGetFileDiff shell out to git.
 func TestHandleGetFileDiff_EchoesRequestID(t *testing.T) {
 	dir, _, shaV1, shaV2 := fileDiffTestRepo(t, "src/file.ts", "v1", "v2")
 
@@ -155,8 +154,6 @@ func TestParseGitDiffNumstat(t *testing.T) {
 	}
 }
 
-// The scheduler tests run inside synctest bubbles at production intervals;
-// getGitStatusForDaemon is stubbed and the send channel buffered, so it fits in a bubble.
 func TestGitStatusSchedulerCoalescesDirtyRefreshes(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var calls atomic.Int32

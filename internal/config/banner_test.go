@@ -17,7 +17,6 @@ func TestPrintProfileBanner_NoopForDefault(t *testing.T) {
 
 func TestPrintProfileBanner_MentionsProfileSocketAndPort(t *testing.T) {
 	t.Setenv("ATTN_PROFILE", "dev")
-	// Let ATTN_WS_PORT fall through to the profile default.
 	t.Setenv("ATTN_WS_PORT", "")
 	var buf bytes.Buffer
 	PrintProfileBanner(&buf)
@@ -37,8 +36,6 @@ func TestPrintProfileBanner_MentionsProfileSocketAndPort(t *testing.T) {
 }
 
 func TestCollapseHome(t *testing.T) {
-	// Pure formula test: pass home explicitly instead of redirecting the
-	// real HOME env var (see collapseHomeRelativeTo).
 	home := "/Users/victor"
 	cases := map[string]string{
 		"/Users/victor":                     "~",

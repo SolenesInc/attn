@@ -10,8 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Receipt: on 2026-09-01, spawn to the harness's first report took 2.6s for
-// claude, 4.6s for codex and 2.1s to 4.9s for pi. 90s is a tripwire.
 const delegationFirstTurnTimeout = 90 * time.Second
 
 const seedNoteExitScreenMaxBytes = garden.MaxNoteBytes / 2
@@ -65,8 +63,6 @@ func (w *launchWatch) settle(outcome launchOutcome) {
 	}
 }
 
-// The worker replays `working` for every spawn and a hook's `working` on top of
-// it is only observed, so any report from the harness itself is the signal.
 func harnessReportedState(source string) bool {
 	switch source {
 	case stateSourceHook, stateSourceStopHook, stateSourceHookNotify, stateSourceHookStopFailure,

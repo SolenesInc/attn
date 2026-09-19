@@ -43,9 +43,6 @@ func TestAssistantWindowFactProjectsOneSessionInvalidation(t *testing.T) {
 	}
 }
 
-// These run against the REAL sqlBusStore, not the in-memory fake internal/bus uses, so the SQLite adapter's semantics are what is under test.
-
-// Inside a bubble the bus's safety-net poll is the slowest thing that can still deliver, so a condition still false after it is false for good.
 func requireBus(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	time.Sleep(2 * bus.DefaultPollInterval)

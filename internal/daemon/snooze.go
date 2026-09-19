@@ -12,17 +12,12 @@ import (
 	"github.com/victorarias/attn/internal/statetrace"
 )
 
-// Snooze suppresses turns as they would OPEN, not at read like the
-// shell/chief/pinned/muted exclusions.
-
 const snoozeWakeKind = "session_snooze_wake"
 
 type snoozeWakePayload struct {
 	Deadline time.Time `json:"deadline"`
 }
 
-// The client owns the arithmetic: "tomorrow" needs a timezone and locale a
-// remote endpoint's daemon does not share.
 func (d *Daemon) handleSnoozeTurn(msg *protocol.SnoozeTurnMessage) {
 	if d == nil || d.store == nil || msg == nil {
 		return
@@ -102,8 +97,6 @@ func (d *Daemon) finishSnoozeWake(sessionID string, at time.Time, cause string) 
 	d.broadcastSessionStateChanged(sessionID)
 }
 
-// Stamps a woken turn with the deadline — unless membership (`opened > settled`)
-// would read it as already closed and silently lose the agent.
 func (d *Daemon) turnOpensAtOnWake(sessionID string, deadline time.Time) time.Time {
 	if deadline.After(d.store.TurnStamps(sessionID).SettledAt) {
 		return deadline
@@ -269,7 +262,6 @@ func (d *Daemon) reconcileSnoozeWakeJobs() {
 	}
 }
 
-// Leaves a lapsed deadline off while the overdue wake job catches up.
 func (d *Daemon) decorateSessionWithSnooze(session *protocol.Session) {
 	if session == nil || d.store == nil {
 		return

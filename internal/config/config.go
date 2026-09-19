@@ -19,8 +19,6 @@ var binaryName string
 
 func init() {
 	binaryName = filepath.Base(os.Args[0])
-	// No loadConfig() here: package init runs before any TestMain, so an eager
-	// load would trip attnDir()'s go-test backstop. Loading is lazy instead.
 }
 
 func BinaryName() string {
@@ -42,7 +40,6 @@ var (
 	configMu     sync.RWMutex
 )
 
-// Callers that read loadedConfig (DBPath, SocketPath) must call this first.
 func ensureConfigLoaded() {
 	configMu.RLock()
 	loaded := configLoaded
@@ -121,8 +118,6 @@ func normalizeProfileForDerivation(profile string) string {
 	return p
 }
 
-// Single source of truth: Makefile, Rust build, and harness derive from this
-// via `attn profile resolve`.
 func BundleIdentifierForProfile(profile string) string {
 	p := normalizeProfileForDerivation(profile)
 	if p == "" {
@@ -131,7 +126,6 @@ func BundleIdentifierForProfile(profile string) string {
 	return "com.attn.manager." + p
 }
 
-// Must match the Tauri productName.
 func AppNameForProfile(profile string) string {
 	p := normalizeProfileForDerivation(profile)
 	if p == "" {
@@ -181,8 +175,6 @@ func AppDaemonBinaryInTree(appPath string) string {
 	return filepath.Join(appPath, "bin", "attn")
 }
 
-// ~/.local/bin/attn has a bin/ and no install tree, so resources/ must exist
-// before a tree counts as one.
 func InstallResourcesDir(executable string) string {
 	binDir := filepath.Dir(executable)
 	parent := filepath.Dir(binDir)
@@ -198,8 +190,6 @@ func InstallResourcesDir(executable string) string {
 	return ""
 }
 
-// A distinct scheme per bundle, so macOS never cross-routes a spawn deep link
-// to the wrong app.
 func DeepLinkSchemeForProfile(profile string) string {
 	p := normalizeProfileForDerivation(profile)
 	if p == "" {
@@ -220,8 +210,6 @@ func ValidateProfileName(name string) error {
 	return nil
 }
 
-// Lowercase+trim (a mixed-case form splits data dirs on the remote); the literal
-// "default" maps to "" (else it builds ~/.attn-default while reusing port 9849).
 func NormalizeProfileName(name string) (string, error) {
 	if err := ValidateProfileName(name); err != nil {
 		return "", err
@@ -241,8 +229,6 @@ func attnDir() string {
 	return defaultAttnDir(Profile())
 }
 
-// Presence-only check backstopping the 2026-07-18 production-DB loss: set
-// ATTN_DATA_DIR to a temp dir, never redirect HOME.
 func requireExplicitDataDirUnderTest() {
 	if testing.Testing() && strings.TrimSpace(os.Getenv("ATTN_DATA_DIR")) == "" {
 		panic("config: ATTN_DATA_DIR is not set under go test — tests must never resolve the real data dir. " +
@@ -251,8 +237,6 @@ func requireExplicitDataDirUnderTest() {
 	}
 }
 
-// ATTN_DB_PATH/ATTN_SOCKET_PATH/ATTN_CONFIG_PATH/ATTN_PLUGIN_DIR outrank the attnDir()
-// chokepoint, so an inherited one could still route test I/O at the real database.
 func ScopeTestEnvironment(dataDir string) {
 	if !testing.Testing() {
 		panic("config.ScopeTestEnvironment is test-only")
@@ -299,8 +283,6 @@ func AppsDir() string {
 	return filepath.Join(attnDir(), "apps")
 }
 
-// Deliberately bypasses the attnDir() chokepoint — no ATTN_DATA_DIR override,
-// no go-test backstop — so cross-profile probing works; tests must never write through this path.
 func DataDirForProfile(profile string) string {
 	home, err := os.UserHomeDir()
 	base := "/tmp/.attn"
@@ -317,7 +299,6 @@ func DataDirForProfile(profile string) string {
 	return base + "-" + p
 }
 
-// Same chokepoint bypass as DataDirForProfile; tests must never write here.
 func SocketPathForProfile(profile string) string {
 	return filepath.Join(DataDirForProfile(profile), "attn.sock")
 }
@@ -354,8 +335,6 @@ func SocketPath() string {
 	return filepath.Join(attnDir(), "attn.sock")
 }
 
-// A runtime root (socket/PID/workers) split from the profile's data dir while
-// still using its default DB lets an auxiliary daemon reap live sessions.
 func ValidateDaemonIsolation(socketPath string) error {
 	socketDir, err := comparableDaemonIsolationPath(filepath.Dir(strings.TrimSpace(socketPath)))
 	if err != nil {
@@ -393,7 +372,6 @@ func comparableDaemonIsolationPath(path string) (string, error) {
 	return CanonicalRuntimePath(path)
 }
 
-// Routing checks must compare through this, never raw env/config strings (which may be CWD-relative).
 func CanonicalRuntimePath(path string) (string, error) {
 	trimmed := strings.TrimSpace(path)
 	if trimmed == "" {
@@ -427,7 +405,6 @@ func CanonicalRuntimePath(path string) (string, error) {
 	}
 }
 
-// Bypasses the attnDir() chokepoint; tests must never write through this path.
 func StatePath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -440,7 +417,6 @@ func StatePath() string {
 	return filepath.Join(home, "."+binaryName+"-state"+suffix+".json")
 }
 
-// Tauri's app_local_data_dir: automation manifest, debug JSONL, WebKit state.
 func AppLocalDataDirForProfile(profile string) string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -457,8 +433,6 @@ func AppLocalDataDir() string {
 	return AppLocalDataDirForProfile(Profile())
 }
 
-// Outside every tree clean removes, and ".attn.locks" cannot collide with a
-// profile's "~/.attn-<name>" data dir: profile names carry no dot.
 func AppLockPathForProfile(profile string) string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -475,8 +449,6 @@ func LogPath() string {
 	return filepath.Join(attnDir(), "daemon.log")
 }
 
-// Default profile → 9849, "dev" → 29849, any other named profile a stable hash-derived
-// port in [20000,29848]. The e2e port 19849 sits outside that range.
 func WSPort() string {
 	port := strings.TrimSpace(os.Getenv("ATTN_WS_PORT"))
 	if port != "" {
@@ -506,14 +478,11 @@ func profileFNV(profile string) uint32 {
 	return h.Sum32()
 }
 
-// Reserves 29849 for "dev" so future named profiles never collide with it.
 func derivedProfilePort(profile string) string {
 	port := 20000 + int(profileFNV(profile)%9849)
 	return fmt.Sprintf("%d", port)
 }
 
-// default → 19849, named profiles hash into [30000,30999] — disjoint from prod
-// 9849, dev 29849, the real-profile band [20000,29848], and Vite 1420/1421.
 func E2EDaemonPortForProfile(profile string) string {
 	p := normalizeProfileForDerivation(profile)
 	if p == "" {
@@ -522,7 +491,6 @@ func E2EDaemonPortForProfile(profile string) string {
 	return fmt.Sprintf("%d", 30000+int(profileFNV(p)%1000))
 }
 
-// named profiles hash into [31000,31999]; strictPort makes collisions fail loudly.
 func E2EVitePortForProfile(profile string) string {
 	p := normalizeProfileForDerivation(profile)
 	if p == "" {
@@ -531,7 +499,6 @@ func E2EVitePortForProfile(profile string) string {
 	return fmt.Sprintf("%d", 31000+int(profileFNV(p)%1000))
 }
 
-// named profiles hash into [32000,32999]; the harness serves GitHub from here.
 func MockGitHubPortForProfile(profile string) string {
 	p := normalizeProfileForDerivation(profile)
 	if p == "" {
@@ -552,8 +519,6 @@ func WSAuthToken() string {
 	return strings.TrimSpace(os.Getenv("ATTN_WS_AUTH_TOKEN"))
 }
 
-// The Tauri shell creates this file with owner-only permissions before it
-// starts or connects to the daemon.
 func BrowserHostToken() string {
 	if token := strings.TrimSpace(os.Getenv("ATTN_BROWSER_HOST_TOKEN")); token != "" {
 		return token
@@ -608,7 +573,6 @@ func PprofAddr() (addr string, enabled bool) {
 	case "1", "on", "true", "yes":
 		return fmt.Sprintf("127.0.0.1:%d", DefaultPprofPort), true
 	}
-	// Force loopback so the endpoint can never be exposed off the machine.
 	portPart := raw
 	if i := strings.LastIndex(portPart, ":"); i >= 0 {
 		portPart = portPart[i+1:]

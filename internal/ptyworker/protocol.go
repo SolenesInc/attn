@@ -17,8 +17,6 @@ const (
 
 const MinCompatibleRPCMinor = 0
 
-// snapshot, set_theme, kitty_image and upgrade were added without an RPC version
-// bump: an older worker rejects them with ErrBadRequest ("unknown method").
 const (
 	MethodHello          = "hello"
 	MethodInfo           = "info"
@@ -43,9 +41,7 @@ const (
 	EventExit              = "exit"
 	EventTeardownEscalated = "teardown_escalated"
 	EventResize            = "resize"
-	// Carries the FULL placement set as of the chunk stamped Seq, the empty set
-	// included: that is how a client learns the last image is gone.
-	EventKittyPlacements = "kitty_placements"
+	EventKittyPlacements   = "kitty_placements"
 )
 
 const (
@@ -99,12 +95,9 @@ type EventEnvelope struct {
 	StateDetail     *string `json:"state_detail,omitempty"`
 	StateObservedAt *string `json:"state_observed_at,omitempty"`
 
-	// An absent array on EventKittyPlacements is the empty set.
 	Placements []KittyPlacement `json:"placements,omitempty"`
 }
 
-// Viewport row and column are screen-relative on the worker's grid; a client
-// maps them by adding its own scrollback length.
 type KittyPlacement struct {
 	ImageID         uint32 `json:"image_id"`
 	PlacementID     uint32 `json:"placement_id"`
@@ -185,11 +178,8 @@ type HelloParams struct {
 	RPCMinor         int    `json:"rpc_minor"`
 	DaemonInstanceID string `json:"daemon_instance_id"`
 	ControlToken     string `json:"control_token"`
-	// Empty for a host-level call. Dedicated workers ignore this field.
-	SessionID string `json:"session_id,omitempty"`
-	// Shared hosts use this to choose between a native snapshot and portable VT
-	// replay. Dedicated workers ignore it, preserving the legacy handshake.
-	SnapshotFormat string `json:"snapshot_format,omitempty"`
+	SessionID        string `json:"session_id,omitempty"`
+	SnapshotFormat   string `json:"snapshot_format,omitempty"`
 }
 
 type HelloResult struct {
@@ -198,9 +188,7 @@ type HelloResult struct {
 	RPCMinor         int    `json:"rpc_minor"`
 	DaemonInstanceID string `json:"daemon_instance_id"`
 	SessionID        string `json:"session_id"`
-	// An absent format reads as a mismatch: those are exactly the workers a
-	// libghostty-vt bump strands.
-	SnapshotFormat string `json:"snapshot_format,omitempty"`
+	SnapshotFormat   string `json:"snapshot_format,omitempty"`
 }
 
 type InfoResult struct {
@@ -233,21 +221,17 @@ type AttachResult struct {
 	ExitCode   *int    `json:"exit_code,omitempty"`
 	ExitSignal *string `json:"exit_signal,omitempty"`
 
-	GhosttySnapshot       []byte `json:"ghostty_snapshot,omitempty"`
-	GhosttySnapshotFormat string `json:"ghostty_snapshot_format,omitempty"`
-	// Rows are SCREEN-space in GhosttySnapshot, captured atomically with it.
+	GhosttySnapshot            []byte           `json:"ghostty_snapshot,omitempty"`
+	GhosttySnapshotFormat      string           `json:"ghostty_snapshot_format,omitempty"`
 	GhosttyBlocks              []AttachBlock    `json:"ghostty_blocks,omitempty"`
 	GhosttyPlacements          []KittyPlacement `json:"ghostty_placements,omitempty"`
 	GhosttyScrollbackTruncated bool             `json:"ghostty_scrollback_truncated,omitempty"`
 }
 
-// A worker never resolves its own replacement: after an install os.Executable()
-// can point at a path that was replaced underneath it.
 type UpgradeParams struct {
 	Executable string `json:"executable"`
 }
 
-// Sent BEFORE the exec, because the exec ends the connection.
 type UpgradeResult struct {
 	ChildPID   int `json:"child_pid"`
 	DumpBytes  int `json:"dump_bytes"`
@@ -255,18 +239,16 @@ type UpgradeResult struct {
 }
 
 type ScreenSnapshotResult struct {
-	LastSeq        uint32 `json:"last_seq"`
-	Cols           uint16 `json:"cols"`
-	Rows           uint16 `json:"rows"`
-	Running        bool   `json:"running"`
-	ScreenSnapshot []byte `json:"screen_snapshot,omitempty"`
-	// A pointer so an old worker's omission differs from a blank viewport.
-	ScreenText *string `json:"screen_text,omitempty"`
-	ScreenCols uint16  `json:"screen_cols,omitempty"`
-	ScreenRows uint16  `json:"screen_rows,omitempty"`
+	LastSeq        uint32  `json:"last_seq"`
+	Cols           uint16  `json:"cols"`
+	Rows           uint16  `json:"rows"`
+	Running        bool    `json:"running"`
+	ScreenSnapshot []byte  `json:"screen_snapshot,omitempty"`
+	ScreenText     *string `json:"screen_text,omitempty"`
+	ScreenCols     uint16  `json:"screen_cols,omitempty"`
+	ScreenRows     uint16  `json:"screen_rows,omitempty"`
 }
 
-// EndRow is exclusive; Pending marks the single open block.
 type AttachBlock struct {
 	ID             uint64  `json:"id"`
 	Pending        bool    `json:"pending,omitempty"`
@@ -288,7 +270,6 @@ type InputParams struct {
 	Data string `json:"data"`
 }
 
-// XPixel/YPixel are the pane's total size in device pixels, 0 when unreported.
 type ResizeParams struct {
 	Cols   uint16 `json:"cols"`
 	Rows   uint16 `json:"rows"`
@@ -297,8 +278,7 @@ type ResizeParams struct {
 }
 
 type ResizeResult struct {
-	OK bool `json:"ok"`
-	// Pointers distinguish fields omitted by workers predating their capability.
+	OK            bool  `json:"ok"`
 	Changed       *bool `json:"changed,omitempty"`
 	StreamOrdered *bool `json:"stream_ordered,omitempty"`
 }
@@ -318,8 +298,6 @@ type KittyImageParams struct {
 	ImageID uint32 `json:"image_id"`
 }
 
-// Data is base64'd RAW PIXELS (Width*Height*bpp). Generation pairs with ImageID:
-// a retransmitted id replaces the pixels, so an id-only cache serves stale ones.
 type KittyImageResult struct {
 	ImageID    uint32 `json:"image_id"`
 	Width      uint32 `json:"width"`
@@ -329,8 +307,6 @@ type KittyImageResult struct {
 	Data       string `json:"data"`
 }
 
-// Spelled out rather than passed through as ghostty's enum ordinal: this RPC
-// crosses a version boundary, and a pin bump can renumber the layouts.
 const (
 	kittyFormatRGB       = "rgb"
 	kittyFormatRGBA      = "rgba"

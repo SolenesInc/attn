@@ -19,8 +19,6 @@ const (
 	ManifestName = "attn-app.toml"
 )
 
-// Manifest is `attn-app.toml`, parsed. The JSON tags are load-bearing: the
-// marshalled form is the declaration snapshot frozen into the version row.
 type Manifest struct {
 	Name        string       `toml:"name" json:"name"`
 	Description string       `toml:"description" json:"description,omitempty"`
@@ -99,8 +97,6 @@ func ParseManifest(text string) (Manifest, error) {
 	m.Description = strings.TrimSpace(m.Description)
 	m.Entrypoint = strings.TrimSpace(m.Entrypoint)
 
-	// The api gate runs before the rest: newer syntax reads as an error here, and
-	// "unknown table [tiles]" is a worse answer than "this app wants app api 2".
 	if err := m.checkAPIVersion(); err != nil {
 		return Manifest{}, err
 	}
@@ -177,8 +173,6 @@ func (m Manifest) checkAPIVersion() error {
 	return nil
 }
 
-// checkSubscriptions validates the event patterns and refuses a duplicate: every pattern is
-// one key of the generated `Handlers` type, so two blocks would collapse into one slot.
 func (m Manifest) checkSubscriptions() error {
 	seen := map[string]bool{}
 	for _, block := range m.Subscribe {
@@ -370,8 +364,6 @@ func (m Manifest) CommandNames() []string {
 	return out
 }
 
-// DeclaredCommands reads the command names back out of a frozen declaration — the serving
-// version's contract. Every name is validated: it arrived over the wire and becomes a key.
 func DeclaredCommands(declaration string) ([]string, error) {
 	var snapshot struct {
 		Commands []Command `json:"commands"`
@@ -389,8 +381,6 @@ func DeclaredCommands(declaration string) ([]string, error) {
 	return out, nil
 }
 
-// DeclaredViews reads the views back out of a frozen declaration. Trust boundary: a view
-// name becomes a path segment of the bundle URL and of the `app:<app>/<view>` tile kind.
 func DeclaredViews(declaration string) ([]View, error) {
 	var snapshot struct {
 		Views []View `json:"views"`

@@ -113,7 +113,7 @@ func TestSpawnPreservesDistinctNativeResumeID(t *testing.T) {
 	workspaceID, cwd := seedReloadableClaudeSession(t, d, sessionID)
 	nativeID := "claude-native-xyz"
 	d.persistResumeSessionID(sessionID, nativeID)
-	t.Setenv(toolhome.EnvVar, t.TempDir()) // no transcript on disk
+	t.Setenv(toolhome.EnvVar, t.TempDir())
 
 	since := spawnCount(backend)
 	d.handleSpawnSession(spawnTestClient(), &protocol.SpawnSessionMessage{

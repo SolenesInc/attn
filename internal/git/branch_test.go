@@ -64,7 +64,7 @@ func TestRefExists(t *testing.T) {
 	}{
 		{"HEAD", true},
 		{"main", true},
-		{"origin/main", false}, // no remote configured
+		{"origin/main", false},
 		{"does-not-exist", false},
 	}
 	for _, tc := range cases {
@@ -113,7 +113,7 @@ func TestListBranchesWithCommits(t *testing.T) {
 	runGit(t, mainDir, "init")
 	runGit(t, mainDir, "config", "user.email", "test@test.com")
 	runGit(t, mainDir, "config", "user.name", "Test")
-	runGit(t, mainDir, "checkout", "-b", "main") // Ensure branch is named 'main'
+	runGit(t, mainDir, "checkout", "-b", "main")
 
 	writeFile(t, mainDir, "file1.txt", "initial")
 	runGit(t, mainDir, "add", "file1.txt")
@@ -136,7 +136,6 @@ func TestListBranchesWithCommits(t *testing.T) {
 		t.Fatalf("ListBranchesWithCommits failed: %v", err)
 	}
 
-	// Only feature-b: main is current and feature-a is checked out in a worktree.
 	if len(branches) != 1 {
 		t.Fatalf("Expected 1 branch, got %d: %+v", len(branches), branches)
 	}

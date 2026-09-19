@@ -61,8 +61,6 @@ func remoteShellEnvScript(profile string) string {
 	if value := strings.TrimSpace(os.Getenv("ATTN_REMOTE_PATH_PREFIX")); value != "" {
 		assignments = append(assignments, "export PATH="+shellQuote(value)+`:"$PATH"`)
 	}
-	// Deliberately not an ATTN_REMOTE_ name: one export governs both ends, "0"
-	// included, which disables the protocol on the remote as it does locally.
 	if value := strings.TrimSpace(os.Getenv("ATTN_KITTY_STORAGE_LIMIT")); value != "" {
 		assignments = append(assignments, "export ATTN_KITTY_STORAGE_LIMIT="+shellQuote(value))
 	}
@@ -91,8 +89,6 @@ func remoteAttnCommand(profile string, args ...string) string {
 	return bin
 }
 
-// runSSHExit keeps the exit code runSSH collapses: a remote `attn` answers refusals in
-// exit codes, which must be told apart from "this binary has no such command".
 func runSSHExit(ctx context.Context, target, profile, script string) (stdout, stderr string, exitCode int, err error) {
 	var errBuf bytes.Buffer
 	cmd := exec.CommandContext(ctx, "ssh", append(sshBaseArgs(target), remoteShellCommand(profile, script))...)

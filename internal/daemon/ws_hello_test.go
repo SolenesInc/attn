@@ -226,8 +226,6 @@ func TestClientHelloWithAnotherProfilesTokenIsRefused(t *testing.T) {
 	}
 }
 
-// Start() binds the unix socket before the WebSocket port, so waitForSocket returning
-// does not mean the port answers. The pause is backoff; an unpaced loop eats a core.
 func dialWhenListening(t *testing.T, ctx context.Context, url string) *websocket.Conn {
 	t.Helper()
 	for {

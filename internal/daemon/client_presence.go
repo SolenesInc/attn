@@ -33,7 +33,6 @@ type clientPresence struct {
 	FirstReportAt    time.Time
 }
 
-// Unreported is unknown, not zero, which would read as fresh input forever.
 func (p clientPresence) idleFor() (time.Duration, bool) {
 	if p.IdleSeconds < 0 {
 		return 0, false
@@ -128,8 +127,6 @@ func (d *Daemon) notePresence(tier PresenceTier, now time.Time) {
 	}
 }
 
-// The stamp is seeded at daemon start: a zero would read as an absence stretching
-// back to the epoch and put every crew member to bed the moment the daemon came up.
 func (d *Daemon) UserAwayFor(now time.Time) time.Duration {
 	if d.PresenceTier() != PresenceAway {
 		return 0

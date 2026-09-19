@@ -11,14 +11,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The close frame travels the same TCP stream as the backlog, so a wedged client never
-// reads it (measured: on a 10 KB/s link the client read nothing for ~45s after hang-up).
 const (
-	// evictionCloseGrace bounds the close-frame attempt before the transport is
-	// aborted. Tripwire: a writable socket takes microseconds.
-	evictionCloseGrace = 1 * time.Second
-	// evictionMemoryTTL: reconnect backoff caps at 5s and the circuit breaker
-	// resets at 30s, so this is two orders of magnitude past a same-visit return.
+	evictionCloseGrace     = 1 * time.Second
 	evictionMemoryTTL      = 10 * time.Minute
 	maxRememberedEvictions = 16
 )
@@ -80,8 +74,6 @@ func (h *wsHub) pruneEvictionsLocked(now time.Time) {
 	}
 }
 
-// Callers hold h.mu, so the hang-up runs on its own goroutine. The channel closes BEFORE
-// the record is filed, or a hello here takes it and queues the notice to the dying conn.
 func (h *wsHub) evict(client *wsClient, reason string) {
 	record := evictionRecord{
 		at:          time.Now(),
@@ -93,8 +85,6 @@ func (h *wsHub) evict(client *wsClient, reason string) {
 	go client.hangUp(websocket.StatusPolicyViolation, reason, evictionCloseGrace)
 }
 
-// Attempts the close frame, then aborts the transport: SO_LINGER 0 sends a RST, the only
-// thing that reaches the peer without queuing behind the backlog.
 func (c *wsClient) hangUp(code websocket.StatusCode, reason string, grace time.Duration) {
 	closed := make(chan struct{})
 	go func() {
@@ -121,8 +111,6 @@ func (c *wsClient) abortTransport() {
 	_ = c.rawConn.Close()
 }
 
-// rawConnKey carries the accepted connection down to the handler, the only way to
-// reach it: the WebSocket handshake hijacks the conn behind a wrapper.
 type rawConnKey struct{}
 
 func withRawConn(ctx context.Context, conn net.Conn) context.Context {

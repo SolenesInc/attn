@@ -74,7 +74,6 @@ func runAppApply(args []string) {
 	printApplied(result, res)
 }
 
-// A refused apply's artifact stays behind on purpose: the CLI cannot tell a refusal from a commit whose response was lost, so deleting it would sometimes delete the bundle a live version points at.
 func applyApp(dir string, progress *os.File) (*protocol.AppApplyResult, appbuild.Result, error) {
 	res, err := appbuild.Build(context.Background(), appbuild.Options{
 		Dir:      dir,
@@ -113,7 +112,6 @@ func printApplied(result *protocol.AppApplyResult, res appbuild.Result) {
 		fmt.Printf("  was on version %d\n", *result.PreviousVersionID)
 	}
 	fmt.Printf("  artifact %s\n", result.ArtifactPath)
-	// There is no bundle size cap — nothing measured would justify a number — so naming each artifact's size is what apply owes an author instead.
 	if len(res.ViewBytes) > 0 {
 		fmt.Printf("    %s  %d bytes\n", appbuild.ArtifactName, res.BundleBytes)
 		for _, v := range res.ViewBytes {
@@ -184,7 +182,6 @@ func runAppRollback(args []string) {
 	fmt.Printf("  artifact %s\n", result.ArtifactPath)
 }
 
-// 200ms: an editor's save is several filesystem events (write, rename, attribute change) plus a formatter's, past the tail of that burst and under the point a person notices a delay.
 const devDebounce = 200 * time.Millisecond
 
 func runAppDev(args []string) {
@@ -233,7 +230,6 @@ func runAppDev(args []string) {
 			if !devRelevant(event.Name) {
 				continue
 			}
-			// Watch new directories too, or edits inside one silently stop rebuilding.
 			if event.Op&fsnotify.Create != 0 {
 				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
 					_ = watchAppTree(watcher, event.Name)
@@ -292,7 +288,6 @@ func devInvocationLine(inv protocol.AppInvocationInfo) string {
 	return line
 }
 
-// Also drops the generated file the build rewrites: a manifest edit changes it, so without this each rebuild triggers another.
 func devRelevant(path string) bool {
 	base := filepath.Base(path)
 	switch base {
@@ -304,7 +299,6 @@ func devRelevant(path string) bool {
 			return false
 		}
 	}
-	// Editors write through temporary files; reacting rebuilds a half-written tree.
 	return !strings.HasSuffix(base, "~") && !strings.HasPrefix(base, ".#")
 }
 

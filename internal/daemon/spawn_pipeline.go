@@ -63,8 +63,6 @@ type spawnRejection struct {
 	err          error
 }
 
-// command error to. A rejection carries one or the other and never both, so
-// reading `err` alone silently turns "missing workspace_id" into success.
 func (r *spawnRejection) reason() error {
 	if r == nil {
 		return nil
@@ -180,15 +178,11 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 		d.logf("spawn: explicit resume target %s for session %s is not resumable; using resume picker", req.resumeSessionID, msg.ID)
 		req.resumeSessionID = ""
 	}
-	// Only a driver that can resume is handed the stored id: a spawn-only driver
-	// relaunches fresh, and would otherwise be refused for an id nobody asked for.
 	if req.existingSession != nil && req.hasPluginDriver && req.resumeSessionID == "" && req.pluginDriver.Capabilities["resume"] {
 		req.resumeSessionID = d.store.GetResumeSessionID(msg.ID)
 	}
 	if req.existingSession != nil && !req.hasPluginDriver {
 		req.resumeSessionID = agentdriver.ResolveSpawnResumeSessionID(req.driver, req.existingSession.ID, req.resumeSessionID, d.store.GetResumeSessionID(msg.ID))
-		// Claude writes its transcript lazily, so a session that booted but was never
-		// prompted has nothing on disk and `claude --resume <id>` exits non-zero.
 		if req.resumeSessionID == msg.ID && !agentdriver.ResumeAvailable(req.driver, req.resumeSessionID) {
 			d.logf("spawn: self-resume target %s has no transcript yet; fresh-spawning instead", msg.ID)
 			req.resumeSessionID = ""
@@ -317,8 +311,6 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			}
 			params.AutoMode = &cfg
 		}
-		// A relaunch of a known session or an explicit conversation id resumes; a
-		// driver without the capability relaunches fresh and refuses the explicit ask.
 		resume := req.pluginDriver.Capabilities["resume"] && (req.existingSession != nil || params.ResumeSessionID != "")
 		result, err := d.resolvePluginDriverLaunch(req.pluginDriver, params, resume)
 		if err != nil {
@@ -346,8 +338,6 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		}
 	}
 
-	// Persist the complete launch intent before creating the worker: a daemon death
-	// after Spawn otherwise leaves a worker with no durable session row to recover.
 	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.existingSession, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID)
 	session := plan.launchSession
 	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
@@ -367,8 +357,6 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		intent.ApprovalPolicy, intent.SandboxMode = effectiveSpawnPolicyPair(msg)
 	}
 	d.store.SetLaunchIntent(session.ID, intent)
-	// After the already-live no-op returns, before the runtime whose first
-	// UserPromptSubmit can beat commitSpawn.
 	d.rememberSessionTitleInitialPrompt(msg.ID, req.initialPrompt)
 	priorExit := d.store.GetSessionExitScreen(msg.ID)
 	if err := d.store.DeleteSessionExitScreen(msg.ID); err != nil {
@@ -394,15 +382,11 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: err}
 	}
-	// Codex reports no permission mode to the daemon at any point, so without this
-	// its guardian would be invisible — the arrangement the dwell exists for.
 	d.recordReviewerEvidence(msg.ID, plan.spawnOpts.ApprovalRoute.ReviewerInLoop())
 	if strings.TrimSpace(req.initialPrompt) != "" {
 		d.maybeGenerateSessionTitleFromPrompt(msg.ID, req.initialPrompt, sessionInputOrigin{})
 	}
 	if plan.spawnOpts.InitialPromptFile != "" {
-		// The spawned wrapper removes the file after reading it. Keep a fallback
-		// for failures between PTY spawn and wrapper startup.
 		plan.cleanupInitialPromptOnReturn = false
 		time.AfterFunc(5*time.Minute, plan.cleanupInitialPrompt)
 	}
@@ -428,8 +412,6 @@ func (d *Daemon) removeSessionRuntime(sessionID string) error {
 
 func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	msg, session := req.msg, plan.launchSession
-	// A state transition or a rename (auto-title included) can land between
-	// executeSpawn's persist and this commit; the upsert must not rewind them.
 	if current := d.store.Get(session.ID); current != nil {
 		session.State = current.State
 		session.StateSince = current.StateSince

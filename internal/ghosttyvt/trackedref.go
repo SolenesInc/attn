@@ -19,12 +19,10 @@ import "C"
 
 import "sync/atomic"
 
-// Block-table tests assert this returns to baseline at teardown, so a missed Free on any retirement path is a red test, not a native leak.
 var liveTrackedRefs atomic.Int64
 
 func LiveTrackedRefs() int { return int(liveTrackedRefs.Load()) }
 
-// The handle stays freeable after the owning Terminal dies; it just reports no value.
 type TrackedRef struct {
 	ref C.GhosttyTrackedGridRef
 }
@@ -49,7 +47,6 @@ func trackLocked(term C.GhosttyTerminal, tag C.GhosttyPointTag, x, y int) *Track
 	return &TrackedRef{ref: ref}
 }
 
-// Callers must synchronize with Terminal writes externally.
 func (r *TrackedRef) ScreenPoint() (x, y int, ok bool) {
 	if r.ref == nil {
 		return 0, 0, false
@@ -70,7 +67,6 @@ func (r *TrackedRef) Free() {
 	liveTrackedRefs.Add(-1)
 }
 
-// SCREEN-space cell: scrollback + active area, 0-indexed from the top of retained scrollback — the space AttachBlockData rows resolve in.
 func (t *Terminal) TrackPoint(x, y int) *TrackedRef {
 	t.mu.Lock()
 	defer t.mu.Unlock()

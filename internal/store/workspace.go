@@ -16,8 +16,6 @@ func (s *Store) AddWorkspace(ws *protocol.Workspace) {
 		return
 	}
 	createdAt := time.Now().UTC().Format(sortableTimeFormat)
-	// rank is written on INSERT only: on re-register the stored rank is the durable
-	// ordering authority and must survive, like title.
 	if _, err := s.db.Exec(`
 		INSERT INTO workspaces (id, title, directory, muted, pinned, created_at, rank)
 		VALUES (?, ?, ?, COALESCE(?, 0), COALESCE(?, 0), ?, ?)
@@ -30,8 +28,6 @@ func (s *Store) AddWorkspace(ws *protocol.Workspace) {
 	}
 }
 
-// Member sessions are NOT cascaded: the daemon closes them with the right signal
-// before calling this.
 func (s *Store) RemoveWorkspace(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

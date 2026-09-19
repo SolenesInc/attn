@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// Timestamp is a string representation of time in RFC3339Nano format.
 type Timestamp string
 
 func (t Timestamp) Time() time.Time {

@@ -17,8 +17,6 @@ func TestEnsureClientTokenMintsOnceAndKeepsItOwnerOnly(t *testing.T) {
 		t.Fatalf("token = %q (%d chars), want 64 hex chars", first, len(first))
 	}
 
-	// A restart must reuse it: a fresh token would strand every client that is
-	// already holding the old one.
 	second, err := EnsureClientToken(dir)
 	if err != nil {
 		t.Fatalf("EnsureClientToken() second call error = %v", err)

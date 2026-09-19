@@ -50,7 +50,6 @@ func (d *Daemon) trackedRepositoriesContext(ctx context.Context) ([]string, erro
 	for _, repo := range d.store.ListWorktreeRepos() {
 		add(repo)
 	}
-	// A session in a worktree resolves to its own root, which is not a repository.
 	for _, session := range d.store.List("") {
 		if repo := strings.TrimSpace(protocol.Deref(session.MainRepo)); repo != "" {
 			add(repo)
@@ -80,7 +79,6 @@ func (d *Daemon) trackedRepositoriesContext(ctx context.Context) ([]string, erro
 	return repos, nil
 }
 
-// False means the rows are stale and no verdict on them may be acted on.
 func (d *Daemon) refreshRepositoryWorktrees(repo string, now time.Time) bool {
 	return d.refreshRepositoryWorktreesContext(context.Background(), repo, now)
 }
@@ -184,14 +182,12 @@ func (d *Daemon) repositoryFactsContext(ctx context.Context, repo string, now ti
 		return nil, context.Cause(ctx)
 	}
 	if err != nil {
-		// Not an error: the pull request record still answers rung 1.
 		d.logf("worktree refresh: %s: tree hashes for %s: %v", repo, facts.integrationBranch, err)
 		treeHashes = nil
 	}
 	stashes, stashErr := git.StashCountsByBranchContext(ctx, repo)
 	finish(stashErr)
 	if stashErr != nil {
-		// A missing stash map reads as no stash, and that gate is all that keeps a removal off it.
 		return nil, fmt.Errorf("%w for %s: %v", errWorktreeStashCounts, repo, stashErr)
 	}
 	facts.treeHashes = treeHashes
@@ -288,7 +284,6 @@ func (d *Daemon) refreshMergedPullRequestsContext(ctx context.Context, repo stri
 func modalBaseBranch(counts map[string]int) (string, bool) {
 	best, bestCount := "", 0
 	for branch, count := range counts {
-		// Ties break on the name so the resolved branch does not flip between passes.
 		if count > bestCount || (count == bestCount && branch < best) {
 			best, bestCount = branch, count
 		}
@@ -406,7 +401,6 @@ func observeWorktreeContext(ctx context.Context, facts *repositoryFacts, state g
 	}
 	unpushed, err := commitsBeyondTheMergeContext(ctx, facts, state, observation.MergedSignal)
 	if err != nil {
-		// An uncounted commit reads as no commit, and this count is what keeps the sweep off it.
 		observation.Error = err.Error()
 		return observation, err
 	}
@@ -418,7 +412,6 @@ func observeWorktreeContext(ctx context.Context, facts *repositoryFacts, state g
 	return observation, nil
 }
 
-// No patch-id probe: it writes a loose object per branch into the user's repository.
 func mergedSignalContext(ctx context.Context, facts *repositoryFacts, state git.WorktreeState) (store.MergedSignal, error) {
 	if _, merged := facts.mergedBranches[state.Branch]; merged && state.Branch != "" {
 		return store.MergedSignalPullRequest, nil
@@ -474,7 +467,6 @@ func commitsBeyondTheMergeContext(ctx context.Context, facts *repositoryFacts, s
 	}
 	beyond, err := git.CommitsAheadContext(ctx, facts.repo, record.HeadSHA, state.Branch)
 	if err != nil {
-		// Every commit past the integration branch: more than the merge left.
 		return ahead, nil
 	}
 	return beyond, nil

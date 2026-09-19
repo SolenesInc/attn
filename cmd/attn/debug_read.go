@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-// Matches the leading "[2006-01-02 15:04:05]" internal/logging writes on every
-// line; a line without one is a continuation (see filterSinceLines).
 var daemonLogTimestampPattern = regexp.MustCompile(`^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]`)
 
 const daemonLogTimestampLayout = "2006-01-02 15:04:05"
@@ -31,8 +29,6 @@ func filterDiagnosticKind(lines []string, kind string) []string {
 	return result
 }
 
-// readLinesFile reads every line without bufio.Scanner's default token size limit,
-// which some diagnostic lines (an incident record's ring buffer) exceed.
 func readLinesFile(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {

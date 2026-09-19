@@ -6,8 +6,6 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// The backstop subprocess test re-execs this binary with ATTN_DATA_DIR unset
-	// to prove config.DataDir() panics; do not set it back here.
 	if os.Getenv("ATTN_TEST_DATADIR_BACKSTOP_HELPER") == "1" {
 		os.Exit(m.Run())
 	}

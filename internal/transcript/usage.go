@@ -8,9 +8,8 @@ import (
 )
 
 type TokenUsage struct {
-	Key   string
-	Model string
-	// sessioncost.PurposeAgent or PurposeGuardian; empty reads as the agent's own.
+	Key                          string
+	Model                        string
 	Purpose                      string
 	InputTokens                  int64
 	OutputTokens                 int64
@@ -132,8 +131,6 @@ func extractClaudeUsage(line []byte) (TokenUsage, bool) {
 		}
 		return usage, true
 	}
-	// Claude transcripts sometimes zero the top-level counters while retaining the
-	// request in iterations, so iterations are the authority; adding both doubles.
 	for _, iteration := range entry.Message.Usage.Iterations {
 		if !addClaudeUsage(&usage, iteration) {
 			return TokenUsage{}, false
@@ -219,8 +216,6 @@ func (e *UsageExtractor) extractCodexUsage(line []byte, sourceKey string) (Token
 	if last.InputTokens < 0 || last.CachedInputTokens < 0 || last.OutputTokens < 0 || last.CachedInputTokens > last.InputTokens {
 		return TokenUsage{}, false
 	}
-	// Captured Codex totals equal input_tokens + output_tokens; the reported
-	// reasoning_output_tokens is an output breakdown, so pricing it again would double-charge.
 	return TokenUsage{
 		Key:             "codex:" + strings.TrimSpace(sourceKey),
 		Model:           e.codexModel,

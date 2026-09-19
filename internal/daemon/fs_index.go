@@ -76,8 +76,6 @@ func skippedDirName(name string) bool {
 	return name == ".git"
 }
 
-// The cap applies AFTER extension filtering, or unasked-for files exhaust it. The Stat is
-// load-bearing: WalkDir's skip-and-continue makes a bad root a silent zero-file success.
 func indexRoot(root string, cap int, extensions []string) ([]string, bool, error) {
 	info, err := os.Stat(root)
 	if err != nil {
@@ -94,7 +92,6 @@ func indexRoot(root string, cap int, extensions []string) ([]string, bool, error
 }
 
 func indexRootViaGit(root string, cap int, extensions []string) (files []string, truncated bool, ok bool) {
-	// -z: NUL-separated, so odd bytes come back verbatim, not git-quoted.
 	out, err := git.Output(git.OpMetadata, root,
 		"ls-files", "-z", "--cached", "--others", "--exclude-standard")
 	if err != nil {
@@ -124,8 +121,6 @@ func indexRootViaGit(root string, cap int, extensions []string) (files []string,
 	return files, truncated, true
 }
 
-// Skips .git, node_modules and every non-regular entry — a FIFO or socket would be
-// advertised as openable when fs_read rejects it. A walk error skips that entry/subtree.
 func indexRootViaWalk(root string, cap int, extensions []string) ([]string, bool, error) {
 	var files []string
 	truncated := false

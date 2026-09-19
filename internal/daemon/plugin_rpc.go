@@ -270,8 +270,6 @@ func (p *pluginConnection) request(ctx context.Context, method string, params in
 	return p.jsonrpcPeer.request(ctx, fmt.Sprintf("plugin %q", p.name), method, params, result)
 }
 
-// The check timestamp is deliberately not part of the moved answer: it advances
-// every poll, so gating on it would publish 5,760 empty facts a day per plugin.
 func (p *pluginConnection) setHealth(status, message string, at time.Time) bool {
 	p.healthMu.Lock()
 	defer p.healthMu.Unlock()
@@ -461,8 +459,6 @@ func (d *Daemon) handlePluginConnection(conn net.Conn, reader *bufio.Reader, hel
 		return
 	}
 	defer func() {
-		// NoteDisconnected must run before unregister frees the name, or a replacement's
-		// NoteConnected cannot cancel the grace and this defer arms it under a healthy peer.
 		d.ensurePluginSupervisor().NoteDisconnected(plugin.name, plugin.generation)
 		registry.unregister(plugin)
 		d.armPluginDriverSilenceWatch(plugin.name)
@@ -509,8 +505,6 @@ func (d *Daemon) handlePluginMethod(plugin *pluginConnection, msg jsonRPCMessage
 		return
 	}
 
-	// Intercepted rather than run through the auto-reply contract below: the
-	// classifier LLM call must not block this synchronous read-loop goroutine.
 	if msg.Method == "attn.classify_stop" {
 		d.handlePluginClassifyStop(plugin, msg)
 		return
@@ -583,8 +577,6 @@ func (d *Daemon) checkPluginHealth(plugin *pluginConnection) {
 	d.reportPluginHealth(plugin, now, "healthy", result.Message)
 }
 
-// Publish only verdicts that moved: each fact rebuilds the plugins catalog off
-// disk, so a steady plugin must stay silent while attn is idle.
 func (d *Daemon) reportPluginHealth(plugin *pluginConnection, at time.Time, status, message string) {
 	if !plugin.setHealth(status, message, at) {
 		return

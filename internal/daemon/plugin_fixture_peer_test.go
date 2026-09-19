@@ -12,8 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// attn is a full-duplex JSON-RPC peer, so one reader routes by shape — a method is
-// a request, a bare id a response. A peer assuming its response came next loses one.
 type pluginFixturePeer struct {
 	t       *testing.T
 	conn    net.Conn
@@ -21,9 +19,7 @@ type pluginFixturePeer struct {
 	nextID  int
 }
 
-// Takes over reading conn; nothing else may read from it.
 func newPluginFixturePeer(t *testing.T, conn net.Conn) *pluginFixturePeer {
-	// Id 1 is the hello the fixture writes before handing the socket over.
 	return &pluginFixturePeer{t: t, conn: conn, decoder: json.NewDecoder(conn), nextID: 1}
 }
 
@@ -174,8 +170,6 @@ func (p *pluginFixturePeer) write(message jsonRPCMessage) error {
 	return json.NewEncoder(p.conn).Encode(message)
 }
 
-// The ordering the end-to-end fixture used to fail on: under CI load the daemon
-// wrote driver.session_closed before answering the report the fixture awaited.
 func TestPluginFixturePeerAnswersRequestArrivingBeforeItsResponse(t *testing.T) {
 	closeLog := filepath.Join(t.TempDir(), "driver-close.jsonl")
 	t.Setenv("ATTN_DRIVER_FIXTURE_CLOSE_LOG", closeLog)

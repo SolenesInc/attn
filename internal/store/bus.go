@@ -295,8 +295,6 @@ func (s *Store) GetBusConsumer(name string) (BusConsumer, bool, error) {
 	}
 }
 
-// SaveBusConsumer creates or updates a registration. An existing row keeps its
-// cursor and enabled bit: startup must not rewind or silently re-enable one.
 func (s *Store) SaveBusConsumer(c BusConsumer, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -396,8 +394,6 @@ func (s *Store) SetAppBusConsumerEnabled(appName string, enabled bool, now time.
 	return true, true, tx.Commit()
 }
 
-// DeleteBusConsumer removes a registration; deleting a row that is not there is success.
-// While an abandoned row exists and is enabled it holds the cursor floor down.
 func (s *Store) DeleteBusConsumer(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -490,8 +486,6 @@ func (s *Store) TrimBusEvents(cutoff time.Time) (int, error) {
 	return int(n), nil
 }
 
-// CompactBusEvents keeps only the newest fact per subject among the named names, at or below
-// the cursor floor. An empty name list compacts nothing, not everything.
 func (s *Store) CompactBusEvents(names []string, floor int64) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -533,8 +527,6 @@ type BusProducer struct {
 	Recent   []int64
 }
 
-// BusProducers reports every fact class with its totals and per-cutoff counts, loudest first.
-// Measured on a copy of production: 209ms at 945k rows, which is why nothing polls it.
 func (s *Store) BusProducers(cutoffs []time.Time) ([]BusProducer, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

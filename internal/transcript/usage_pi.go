@@ -8,10 +8,8 @@ import (
 	"github.com/victorarias/attn/internal/sessioncost"
 )
 
-// The custom entry attn's Guardian appends after every judgement it makes.
 const piGuardianUsageCustomType = "attn-guardian-usage"
 
-// Format: @earendil-works/pi-coding-agent docs/session-format.md.
 type piUsageFields struct {
 	Input      int64 `json:"input"`
 	Output     int64 `json:"output"`
@@ -73,10 +71,9 @@ func piTokenUsage(id, model, purpose string, fields piUsageFields) (TokenUsage, 
 		cost = 0
 	}
 	usage := TokenUsage{
-		Key:     "pi:" + id,
-		Model:   strings.TrimSpace(model),
-		Purpose: purpose,
-		// pi's input already excludes cache reads; its cache-write age is unknown, so that stays unclassified.
+		Key:                          "pi:" + id,
+		Model:                        strings.TrimSpace(model),
+		Purpose:                      purpose,
 		InputTokens:                  fields.Input,
 		OutputTokens:                 fields.Output,
 		CacheReadTokens:              fields.CacheRead,

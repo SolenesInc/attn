@@ -25,8 +25,6 @@ func runDaemonSocketCommand(t *testing.T, fn func(conn net.Conn)) {
 	<-done
 }
 
-// Pins how many times the handlers reach the broadcaster and in what order: a fact
-// published from the wrong place, twice, or not at all is invisible per producer.
 func TestWireTraceFlowGolden(t *testing.T) {
 	dir := t.TempDir()
 	d := NewForTesting(filepath.Join(dir, "test.sock"))

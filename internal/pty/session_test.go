@@ -132,8 +132,6 @@ func TestNextCoalescedReadLoneReadReturnsImmediately(t *testing.T) {
 	reads := make(chan ptyRead, 1)
 	reads <- ptyRead{data: []byte("x")}
 
-	// A huge window proves no timer wait happens on the interactive path:
-	// the test would time out if a lone read were held for coalescing.
 	data, err := nextCoalescedRead(reads, 100, time.Minute)
 	if err != nil {
 		t.Fatalf("nextCoalescedRead() error = %v", err)

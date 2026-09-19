@@ -63,7 +63,6 @@ func TestWakeTurnClearsTheDeadlineOnlyOnce(t *testing.T) {
 	}
 }
 
-// Both branches, because a daemon without a database is a supported store.
 func TestWakeTurnAtClearsOnlyTheDeadlineItFired(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -192,8 +191,6 @@ func TestSnoozedSessionsListsLiveDeadlines(t *testing.T) {
 	}
 }
 
-// Pinned against the real SQLite path: the stored deadline is the only thing
-// that makes a snooze survive a restart.
 func TestSnoozeSurvivesReopeningTheDatabase(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "snooze.db")
 	s, err := newSeededStore(dbPath)

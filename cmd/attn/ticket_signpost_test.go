@@ -44,7 +44,6 @@ func TestEveryTicketWriteVerbSignposts(t *testing.T) {
 			t.Errorf("ticketSignposts covers %q but runTicket never routes it to a signpost", verb)
 		}
 	}
-	// The legacy read verbs keep serving tickets that predate the garden.
 	for _, read := range []string{"list", "show", "inbox"} {
 		if _, ok := ticketSignposts[read]; ok {
 			t.Errorf("%q is a read verb and must not signpost", read)

@@ -53,8 +53,6 @@ func TestCreateTicketWithUniqueSlugFallsBackPastSequentialRange(t *testing.T) {
 		}
 	}
 
-	// The hex suffix is all digits about 6% of the time — its fixed width, not its
-	// non-numeric-ness, is what separates it from the walk.
 	var ids []string
 	for i := range 2 {
 		created, err := d.createTicketWithUniqueSlug(

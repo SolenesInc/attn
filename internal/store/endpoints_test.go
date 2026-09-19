@@ -109,7 +109,6 @@ func TestAddEndpointNormalizesProfileCase(t *testing.T) {
 }
 
 func TestAddEndpointMapsDefaultProfileToEmpty(t *testing.T) {
-	// "default" is the human label for the empty profile, but hub helpers would build attn-default / ~/.attn-default on the remote while WSPortForProfile still returns 9849, colliding with any real default-profile daemon.
 	s := New()
 	for _, input := range []string{"default", "DEFAULT", "  default  "} {
 		t.Run(input, func(t *testing.T) {
@@ -188,7 +187,6 @@ func TestEndpointMigration34BackfillsBlankProfile(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "legacy.db")
 
-	// SQLite cannot drop the profile column, so reset the schema_migrations row for 34 and the column instead, mimicking an upgrade from a pre-34 release.
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		t.Fatalf("open: %v", err)

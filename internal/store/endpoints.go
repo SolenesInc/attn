@@ -10,8 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/config"
 )
 
-// Not protocol.TimestampNow(): created_at is ORDER BY'd as text, and local-zone
-// rendering with a stripped fraction ordered rows wrongly. UTC, fixed width.
 func endpointStamp() string { return time.Now().UTC().Format(sortableTimeFormat) }
 
 type EndpointRecord struct {

@@ -310,7 +310,6 @@ func TestASubscriptionStaysCurrentUnderContention(t *testing.T) {
 	}
 }
 
-// net.Pipe gives no buffer, so the daemon blocks in Write until this test reads.
 func TestABurstOfWritesCollapsesIntoAFewDeliveries(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)

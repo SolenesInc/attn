@@ -10,13 +10,10 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Receipt: an 80x24 pi launch error renders to 198 bytes of viewport text and a
-// fully painted 400x120 viewport of 3-byte glyphs to 142,920. 256KiB is a tripwire.
 const exitScreenMaxBytes = 256 * 1024
 
 const exitScreenSnapshotTimeout = modelCaptureSnapshotTimeout
 
-// Runs before the worker is removed: that removal is what discards the screen.
 func (d *Daemon) captureExitScreen(info ptybackend.ExitInfo) {
 	if d.store == nil || d.store.Get(info.ID) == nil {
 		return
@@ -42,7 +39,6 @@ func (d *Daemon) captureExitScreen(info ptybackend.ExitInfo) {
 	d.logf("exit screen kept: session=%s code=%d signal=%q text_bytes=%d", info.ID, info.ExitCode, info.Signal, len(rec.Text))
 }
 
-// The error that killed a process is at the bottom, so the tail survives.
 func clampExitScreenText(text string) string {
 	if len(text) <= exitScreenMaxBytes {
 		return text
@@ -54,8 +50,6 @@ func clampExitScreenText(text string) string {
 	return fmt.Sprintf("[exit screen truncated: %d bytes rendered, attn keeps the last %d]\n%s", len(text), exitScreenMaxBytes, tail)
 }
 
-// A failed respawn leaves the dead process as the last one, so its receipt
-// stays unless the attempt itself produced a newer exit.
 func (d *Daemon) restoreExitScreen(sessionID string, prior *store.SessionExitScreen) {
 	if prior == nil || d.store.GetSessionExitScreen(sessionID) != nil {
 		return

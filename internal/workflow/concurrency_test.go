@@ -66,8 +66,6 @@ func boomOrEchoStub() AgentStub {
 	})
 }
 
-// In a synctest bubble synctest.Wait returns when every goroutine is durably blocked, so
-// the reading is "exactly capN, and no more are coming" rather than a poll.
 func assertCapSaturatedAndBounded(t *testing.T, script string, capN, wantLive int) RunResult {
 	t.Helper()
 	var result RunResult

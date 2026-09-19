@@ -10,7 +10,6 @@ var ghPRCreatePattern = regexp.MustCompile(`\bgh\s+pr\s+create\b`)
 
 var pullRequestURLPattern = regexp.MustCompile(`https://[A-Za-z0-9][A-Za-z0-9.-]*/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/pull/[0-9]+`)
 
-// PullRequestCreated returns the URLs a `gh pr create` printed, in order.
 func PullRequestCreated(toolName string, toolInput, toolResponse json.RawMessage) []string {
 	if !isShellTool(toolName) {
 		return nil
@@ -19,8 +18,6 @@ func PullRequestCreated(toolName string, toolInput, toolResponse json.RawMessage
 		return nil
 	}
 
-	// Every harness shapes tool_response differently (an object with stdout, a bare
-	// string, a list of blocks), and a pull request URL survives JSON encoding intact.
 	var urls []string
 	seen := map[string]bool{}
 	for _, url := range pullRequestURLPattern.FindAllString(string(toolResponse), -1) {
@@ -52,7 +49,6 @@ func shellCommand(toolInput json.RawMessage) string {
 		if json.Unmarshal(raw, &text) == nil {
 			return text
 		}
-		// Codex's exec form is an argv list: `["bash", "-lc", "gh pr create …"]`.
 		var argv []string
 		if json.Unmarshal(raw, &argv) == nil {
 			return strings.Join(argv, " ")

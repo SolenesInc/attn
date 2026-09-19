@@ -16,8 +16,6 @@ func newAutoSettleDaemon(t *testing.T) (*Daemon, string) {
 	return d, seedAutoSettleSession(t, d, t.TempDir())
 }
 
-// A synctest bubble's clock starts at 2000-01-01, so a turn opened outside it is stamped
-// decades ahead of every settle made inside: build the daemon outside, call this inside.
 func seedAutoSettleSession(t *testing.T, d *Daemon, dir string) string {
 	t.Helper()
 	id := "session"
@@ -562,8 +560,6 @@ func TestAutoSettleSettingsSurfaceEffectiveDefaults(t *testing.T) {
 	}
 }
 
-// A goroutine blocked on a sync.Mutex is not durably blocked, so a bubble has no
-// instant at which to call the race staged; this hook stands in for it.
 func TestAutoSettle_ConcurrentApprovalKeepsTheTurn(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {

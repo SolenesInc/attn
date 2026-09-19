@@ -24,8 +24,6 @@ var daemonSendHelpers = map[string]bool{
 	"broadcastRawWSMessage": true,
 }
 
-// Adding an entry is a design decision, not a formality: it says this traffic is
-// not a state change any consumer could subscribe to.
 var wireSenderExceptions = map[string]string{
 	"buildWireProjections": "the projection table itself",
 

@@ -13,8 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 )
 
-// The shadow must stay SQL-only: a Go re-implementation would test our understanding of SQLite instead of the machinery on top of it.
-
 const modelField = "n"
 
 func modelDeclaration() docstore.CollectionSchema {
@@ -25,7 +23,6 @@ func modelDeclaration() docstore.CollectionSchema {
 	}
 }
 
-// The sweep is every arrangement of this alphabet, so one more entry multiplies the whole run.
 var modelBodies = []string{
 	`{"n":1}`,
 	`{"n":2}`,
@@ -35,8 +32,6 @@ var modelBodies = []string{
 	`{"n":[1]}`,
 }
 
-// Receipt (2026-08-04): 3 documents = 85,536 checks in 1.1s, 4 = 855,360 in 13.5s, and every
-// mutation this harness was falsified against is caught at three. ATTN_DOCSTORE_SWEEP raises it.
 var modelIDs = sweepIDs()
 
 func sweepIDs() []string {
@@ -55,7 +50,6 @@ func sweepIDs() []string {
 	return ids
 }
 
-// Built once: a store per corpus would run all the migrations again and dominate the sweep.
 type modelWorld struct {
 	t      *testing.T
 	s      *Store
@@ -96,7 +90,6 @@ func (w *modelWorld) createShadow() {
 	}
 }
 
-// Declared fields get a prefix so a collection may declare a field called `id`.
 func shadowColumn(field string) string {
 	if field == docstore.FieldCreatedAt || field == docstore.FieldUpdatedAt {
 		return field
@@ -115,7 +108,6 @@ func (w *modelWorld) loadCorpus(bodies []string) {
 	w.refillShadow()
 }
 
-// One INSERT ... SELECT: no stored value passes through Go, which keeps the two paths independent.
 func (w *modelWorld) refillShadow() {
 	w.t.Helper()
 	w.anchors = map[string]*docstore.Document{}
@@ -159,7 +151,6 @@ func (w *modelWorld) naiveOrder(q docstore.Query) []string {
 	return w.scanIDs(stmt, args)
 }
 
-// Never share these mappings with the compiler: a wrong one must show as a disagreement, not cancel out.
 func naiveOp(t *testing.T, op docstore.Op) string {
 	t.Helper()
 	switch op {
@@ -245,7 +236,6 @@ func naivePage(matching, everything []string, q docstore.Query) []string {
 	return append([]string{}, out...)
 }
 
-// A cursor naming a document that is not there stays a nil anchor, so the cache must remember the miss.
 func (w *modelWorld) anchorFor(after string) (*docstore.Document, error) {
 	if after == "" {
 		return nil, nil
@@ -515,7 +505,6 @@ func sameIDs(a, b []string) bool {
 	return true
 }
 
-// Big enough that the planner prefers the index: the only regime where it can disagree with its column.
 const (
 	largeCorpusSize  = 4000
 	largeQueriesEach = 400
@@ -533,7 +522,6 @@ func largeDeclaration() docstore.CollectionSchema {
 	}
 }
 
-// Values repeat heavily so tie groups are long, which is what the cursor's tuple comparison exists for.
 func largeBody(rng *rand.Rand) string {
 	fields := []string{}
 	switch rng.Intn(8) {
@@ -613,7 +601,6 @@ func TestALargeRandomCorpusAgreesWithTheDumbQuery(t *testing.T) {
 			ids := make([]string, largeCorpusSize)
 			bodies := make([]string, largeCorpusSize)
 			for i := range ids {
-				// Zero-padded so lexicographic order — the tiebreaker the compiler appends — matches write order.
 				ids[i] = fmt.Sprintf("doc-%05d", i)
 				bodies[i] = largeBody(rng)
 			}
@@ -632,7 +619,6 @@ func TestALargeRandomCorpusAgreesWithTheDumbQuery(t *testing.T) {
 				}
 			}
 
-			// Without this the unindexed comparison is vacuous: the planner may never choose an index.
 			if indexed == 0 {
 				t.Fatalf("not one of %d queries reached an index, so the unindexed comparison checked nothing; the corpus is too small or the declaration lost its indexes", largeQueriesEach)
 			}

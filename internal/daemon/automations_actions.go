@@ -132,8 +132,6 @@ func (d *Daemon) actionAutomationValidate(msg *protocol.AutomationValidateMessag
 	return result
 }
 
-// actionAutomationApply is the one apply path for both transports. The socket/CLI path
-// omits expected_id/expected_revision, so no guard is enforced; the WS editor sends both.
 func (d *Daemon) actionAutomationApply(ctx context.Context, msg *protocol.AutomationApplyMessage) protocol.AutomationApplyResultMessage {
 	result := protocol.AutomationApplyResultMessage{
 		Event:     protocol.EventAutomationApplyResult,

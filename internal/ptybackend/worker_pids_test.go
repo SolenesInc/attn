@@ -10,7 +10,7 @@ func TestWorkerBackend_WorkerPIDs(t *testing.T) {
 		sessions: map[string]*workerSession{
 			"spawned":     {WorkerPID: 4242},
 			"also":        {WorkerPID: 99},
-			"not-spawned": {WorkerPID: 0}, // no live worker yet → omitted
+			"not-spawned": {WorkerPID: 0},
 		},
 	}
 

@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// The marker is emitted right after the script installs its signal traps: without waiting,
-// kill() races the child's startup and the shell exits to the raw signal, silently passing.
 func waitForKillReady(t *testing.T, s *Session, marker string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -216,8 +214,6 @@ func TestManagerKill_InteractiveShellExitsBeforeTERMGrace(t *testing.T) {
 				t.Fatalf("getSession() error: %v", err)
 			}
 
-			// The marker must come from the shell itself: the tty echoes the typed
-			// command before the shell has finished starting.
 			const marker = "__INTERACTIVE_SHELL_READY__"
 			ready := make(chan struct{})
 			var once sync.Once

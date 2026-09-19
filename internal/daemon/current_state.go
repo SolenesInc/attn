@@ -83,8 +83,6 @@ func (d *Daemon) currentStateProjection() currentStateProjection {
 	}
 }
 
-// The bus position is captured before the projection is assembled, so every mutation at
-// or below it is already visible and any later one still has a fact.
 type appCurrentStateSnapshot struct {
 	AsOfSeq     int64                       `json:"asOfSeq"`
 	Sessions    []protocol.Session          `json:"sessions"`

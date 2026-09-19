@@ -27,8 +27,6 @@ type hostResourceSample struct {
 	Threads       int    `json:"threads"`
 }
 
-// This opt-in experiment records process counters; time is the measured input,
-// never a correctness assertion. PTY replies and stream markers are barriers.
 func TestSharedHostResourceExperiment(t *testing.T) {
 	probe, binary := os.Getenv("ATTN_RESOURCE_PROBE"), os.Getenv("ATTN_TEST_PTY_HOST")
 	if runtime.GOOS != "darwin" || probe == "" || binary == "" {

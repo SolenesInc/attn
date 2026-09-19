@@ -23,8 +23,6 @@ func TestClaudeBuildCommand_DeniesListAgentsKeepsSendMessage(t *testing.T) {
 	}
 }
 
-// Everything after "--" is the initial prompt, so a flag appended past it would
-// be typed at the agent instead of read by it.
 func TestClaudeBuildCommand_DenyPrecedesInitialPrompt(t *testing.T) {
 	cmd := (&Claude{}).BuildCommand(SpawnOpts{
 		SessionID:     "sess-1",

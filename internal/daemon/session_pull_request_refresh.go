@@ -28,7 +28,6 @@ const (
 	sessionPullRequestClosed = "closed"
 )
 
-// The registry hands out a concrete *github.Client; this narrow view is the test seam.
 type sessionPRHost interface {
 	FetchPullRequestSnapshot(repo string, number int) (*github.PullRequestSnapshot, error)
 	FetchPullRequestReviewStatus(repo string, number int) (string, error)
@@ -230,7 +229,6 @@ func (d *Daemon) fetchSessionPullRequestStatus(host sessionPRHost, group *sessio
 		return store.SessionPullRequestStatus{}, err
 	}
 
-	// A closed pull request reports mergeable_state "unknown", which would erase a real result.
 	status := group.previous
 	status.Title = snapshot.Title
 	status.Draft = snapshot.Draft
@@ -349,7 +347,6 @@ func (d *Daemon) unsubscribeSessionPullRequestFacts() {
 	}
 }
 
-// Runs inside the bus fan-out: no nested publish.
 func (d *Daemon) reheatSessionPullRequest(event bus.Event) {
 	if d.store == nil {
 		return

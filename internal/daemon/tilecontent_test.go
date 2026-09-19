@@ -700,8 +700,6 @@ func TestOpenMarkdownWSUnknownSessionFails(t *testing.T) {
 	}
 }
 
-// The sleep buys a real filesystem nanosecond: the change detector compares mtime,
-// and fake time would land both writes inside one mtime tick.
 func TestCollectChangedMarkdownTilesTracksMultipleTiles(t *testing.T) {
 	d, client, workspaceID := setupMarkdownWorkspace(t)
 	d.wsHub.clients[client] = true

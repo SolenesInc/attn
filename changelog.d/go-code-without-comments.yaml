@@ -1,0 +1,3 @@
+kind: internal
+area: build
+change: Go code carries no prose comments; Git history holds the reasons and receipts.

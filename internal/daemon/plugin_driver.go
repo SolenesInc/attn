@@ -33,31 +33,27 @@ type pluginDriverRegisterParams struct {
 type pluginDriverRegisterResult struct {
 	OK         bool              `json:"ok"`
 	ActiveRuns []activePluginRun `json:"active_runs,omitempty"`
-	// Lets a restarted driver bring the profile's network proxy back up before reuse.
-	AutoMode *automode.Config `json:"auto_mode,omitempty"`
+	AutoMode   *automode.Config  `json:"auto_mode,omitempty"`
 }
 
 type activePluginRun struct {
 	SessionID string          `json:"session_id"`
 	RunID     string          `json:"run_id"`
 	Metadata  json.RawMessage `json:"metadata,omitempty"`
-	// Plain number, not omitempty: a driver must be able to tell "the cursor is
-	// zero" from "this daemon does not send cursors".
-	Seq uint64 `json:"seq"`
+	Seq       uint64          `json:"seq"`
 }
 
 type pluginDriverSpawnParams struct {
-	Agent         string          `json:"agent"`
-	SessionID     string          `json:"session_id"`
-	RunID         string          `json:"run_id"`
-	CWD           string          `json:"cwd"`
-	Label         string          `json:"label,omitempty"`
-	Yolo          bool            `json:"yolo,omitempty"`
-	Model         string          `json:"model,omitempty"`
-	Effort        string          `json:"effort,omitempty"`
-	InitialPrompt string          `json:"initial_prompt,omitempty"`
-	Metadata      json.RawMessage `json:"metadata,omitempty"`
-	// The agent-native conversation to pick up; set on driver.resume only.
+	Agent           string                    `json:"agent"`
+	SessionID       string                    `json:"session_id"`
+	RunID           string                    `json:"run_id"`
+	CWD             string                    `json:"cwd"`
+	Label           string                    `json:"label,omitempty"`
+	Yolo            bool                      `json:"yolo,omitempty"`
+	Model           string                    `json:"model,omitempty"`
+	Effort          string                    `json:"effort,omitempty"`
+	InitialPrompt   string                    `json:"initial_prompt,omitempty"`
+	Metadata        json.RawMessage           `json:"metadata,omitempty"`
 	ResumeSessionID string                    `json:"resume_session_id,omitempty"`
 	Instructions    *pluginLaunchInstructions `json:"instructions,omitempty"`
 	AutoMode        *automode.Config          `json:"auto_mode,omitempty"`
@@ -70,13 +66,11 @@ type pluginDriverSpawnResult struct {
 }
 
 type pluginReportStateParams struct {
-	SessionID string `json:"session_id"`
-	RunID     string `json:"run_id"`
-	Seq       uint64 `json:"seq"`
-	State     string `json:"state"`
-	// Applied unconditionally this would restamp state_since and re-open a settled
-	// turn on every reconnect.
-	OnlyIfUnknown bool `json:"only_if_unknown,omitempty"`
+	SessionID     string `json:"session_id"`
+	RunID         string `json:"run_id"`
+	Seq           uint64 `json:"seq"`
+	State         string `json:"state"`
+	OnlyIfUnknown bool   `json:"only_if_unknown,omitempty"`
 }
 
 type pluginReportStopParams struct {
@@ -87,12 +81,11 @@ type pluginReportStopParams struct {
 }
 
 type pluginReportMetadataParams struct {
-	SessionID string          `json:"session_id"`
-	RunID     string          `json:"run_id"`
-	Seq       uint64          `json:"seq"`
-	Metadata  json.RawMessage `json:"metadata"`
-	// The agent-native conversation id the daemon keeps as the session's resume identity.
-	ResumeSessionID string `json:"resume_session_id,omitempty"`
+	SessionID       string          `json:"session_id"`
+	RunID           string          `json:"run_id"`
+	Seq             uint64          `json:"seq"`
+	Metadata        json.RawMessage `json:"metadata"`
+	ResumeSessionID string          `json:"resume_session_id,omitempty"`
 }
 
 type pluginDriverSessionClosedParams struct {
@@ -295,7 +288,6 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		result := pluginDriverRegisterResult{OK: true, ActiveRuns: runs}
 		driver, registered := d.ensurePluginRegistry().driver(normalizePluginAgent(params.Agent))
 		if registered && driver.Capabilities["auto_mode"] && d.store != nil {
-			// Failure here isn't fatal: the driver still registers and catches up at the next spawn.
 			if cfg, err := d.store.GetAutoModeConfig(); err != nil {
 				d.logf("automode: register for %s carried no config: %v", plugin.name, err)
 			} else {
@@ -493,8 +485,6 @@ func (d *Daemon) authorizePluginSessionReport(plugin *pluginConnection, sessionI
 	return nil
 }
 
-// Must not block: handlePluginMethod runs on the plugin connection's synchronous
-// read loop, and the classifier call can take 30+ seconds.
 func (d *Daemon) handlePluginClassifyStop(plugin *pluginConnection, msg jsonRPCMessage) {
 	var params pluginClassifyStopParams
 	if err := json.Unmarshal(msg.Params, &params); err != nil {
@@ -541,8 +531,6 @@ func validatePluginReportCursor(runID string, seq uint64) error {
 }
 
 func (d *Daemon) applyPluginReportedState(params pluginReportStateParams) bool {
-	// Before the ordering check, not after: a report the cursor discards is still a
-	// driver speaking for this session, which is all the silence alarm asks.
 	d.notePluginDriverReport(params.SessionID)
 	state := strings.TrimSpace(params.State)
 	if params.OnlyIfUnknown {
@@ -648,8 +636,6 @@ func (d *Daemon) queueReportDuringPluginLaunch(plugin *pluginConnection, session
 	return true
 }
 
-// The launch replays queued reports before the queued exit whatever their
-// order, so the launch watch is claimed here, under the mutex, in arrival order.
 func (d *Daemon) queueExitDuringPluginLaunch(info ptybackend.ExitInfo) bool {
 	d.pluginDriverMu.Lock()
 	launch, ok := d.pluginLaunching[info.ID]
@@ -766,8 +752,6 @@ func (d *Daemon) notifyPluginDriverSessionClosed(pluginName, sessionID, runID, r
 }
 
 func (d *Daemon) resolvePluginDriverLaunch(reg pluginDriverRegistration, params pluginDriverSpawnParams, resume bool) (pluginDriverSpawnResult, error) {
-	// A driver that reads auto mode takes yolo as the full-access pair in
-	// AutoMode; handing it a flag it never advertised is what the refusal stops.
 	if params.Yolo && !reg.Capabilities["yolo"] && reg.Capabilities["auto_mode"] {
 		params.Yolo = false
 	}

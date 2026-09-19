@@ -254,7 +254,6 @@ func executePRCommand(args []string, stdout, stderr io.Writer) int {
 		return prWaitExitUsage
 	}
 
-	// Progress must never contaminate a JSON result on stdout.
 	progress := stdout
 	if opts.JSON {
 		progress = stderr
@@ -587,8 +586,6 @@ type prGraphQLComment struct {
 	Author       prGraphQLAuthor `json:"author"`
 }
 
-// GitHub nulls an inline comment's line once its hunk is outdated; originalLine is
-// then the only anchor left.
 func (c prGraphQLComment) location() string {
 	if c.Path == "" {
 		return ""
@@ -717,15 +714,12 @@ func parsePRSnapshot(output []byte, opts prWaitOptions) (*prReadiness, error) {
 	sort.Slice(result.Checks, func(i, j int) bool { return result.Checks[i].Name < result.Checks[j].Name })
 	result.CheckState = summarizePRChecks(result.Checks)
 
-	// Inline comments come from the reviews that carry them, not reviewThreads: a
-	// reply to an old thread falls outside any newest-N slice of threads.
 	var latest time.Time
 	for _, review := range pr.Reviews.Nodes {
 		state := strings.ToUpper(review.State)
 		if strings.EqualFold(review.Author.Login, opts.Reviewer) && review.SubmittedAt.After(result.LatestReviewAt) {
 			result.LatestReviewAt = review.SubmittedAt
 		}
-		// A review with no text of its own is GitHub's wrapper around an inline comment.
 		if strings.TrimSpace(review.BodyText) != "" && !isTrackedReviewerVerdict(review.Author.Login, state, opts) {
 			result.Comments = appendPRComment(result.Comments, prGraphQLComment{
 				ID: review.ID, CreatedAt: review.SubmittedAt, Author: review.Author,
@@ -866,8 +860,6 @@ func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prW
 			for _, comment := range observation.Comments {
 				baseline[comment.ID] = true
 			}
-			// The baseline goes into the cursor: without it a wait that times out reports
-			// nothing and the next call re-baselines, swallowing what landed in between.
 			cursor.CommentIDs = append(cursor.CommentIDs, prCommentIDs(observation.Comments)...)
 			reviewBaseline = observation.LatestReviewAt
 			observation.Comments = nil
@@ -885,8 +877,6 @@ func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prW
 		if observation.State != "open" {
 			events = append(events, outcomeClosed)
 		}
-		// A failing check is a condition, not an occurrence: without the same-failure
-		// check a second wait returns instantly with nothing new.
 		if observation.CheckState == checksFailed && !cursor.sameFailure(observation.HeadSHA, observation.Checks) {
 			events = append(events, outcomeChecksFailed)
 		}

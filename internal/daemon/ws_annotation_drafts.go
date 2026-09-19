@@ -11,7 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Submit statuses on the wire (plain strings in the protocol).
 const (
 	annotationSubmitStatusDelivered = "delivered"
 	annotationSubmitStatusNoted     = "noted"

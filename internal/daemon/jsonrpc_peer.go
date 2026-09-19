@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-// Ids are per-direction; a frame with a method is a call, one without is an answer.
-// Correlation is by the id's raw JSON text, so a child must echo the id verbatim.
 type jsonrpcPeer struct {
 	conn   net.Conn
 	reader *bufio.Reader
@@ -73,7 +71,6 @@ func (p *jsonrpcPeer) sendContext(ctx context.Context, msg jsonRPCMessage) error
 		hasDeadline = true
 	}
 	if err != nil {
-		// A failed write may have emitted a partial frame; the stream cannot be reused.
 		_ = p.conn.Close()
 		return err
 	}

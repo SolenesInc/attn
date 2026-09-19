@@ -20,8 +20,6 @@ type handoffFile struct {
 	HandedOverAt time.Time        `json:"handed_over_at"`
 }
 
-// HandoffPaths names the two files an upgrade leaves for the image that takes over. They sit
-// beside the registry, not in it: Recover globs registry/*.json and would delete one mid-swap.
 func HandoffPaths(registryPath, sessionID string) (jsonPath, dumpPath string) {
 	base := filepath.Join(filepath.Dir(filepath.Dir(registryPath)), "handoff", sessionID)
 	return base + ".json", base + ".vt"
@@ -33,8 +31,6 @@ func RemoveHandoff(registryPath, sessionID string) {
 	_ = os.Remove(dumpPath)
 }
 
-// upgrade captures the session, writes the handoff, and replaces this process image. It
-// returns only on failure, and the caller must have answered the RPC: the exec ends every conn.
 func (r *Runtime) upgrade(executable string, state pty.HandoffState, listenerFD int) error {
 	jsonPath, dumpPath := HandoffPaths(r.cfg.RegistryPath, r.cfg.SessionID)
 	if err := os.MkdirAll(filepath.Dir(jsonPath), 0700); err != nil {
@@ -75,11 +71,9 @@ func (r *Runtime) upgrade(executable string, state pty.HandoffState, listenerFD 
 		_ = os.Remove(dumpPath)
 		return fmt.Errorf("exec %s: %w", executable, err)
 	}
-	return nil // unreachable: a successful Exec never returns.
+	return nil
 }
 
-// dupListener returns the listening socket's descriptor with CLOEXEC cleared, so it survives
-// the exec. SetUnlinkOnClose(false) keeps the socket file in place.
 func dupListener(l net.Listener) (int, error) {
 	unixListener, ok := l.(*net.UnixListener)
 	if !ok {
@@ -91,7 +85,6 @@ func dupListener(l net.Listener) (int, error) {
 		return 0, err
 	}
 	defer file.Close()
-	// dup(2) returns a descriptor without CLOEXEC; File() sets it on its own.
 	fd, err := syscall.Dup(int(file.Fd()))
 	if err != nil {
 		return 0, err
@@ -133,8 +126,6 @@ func adoptListener(fd int) (net.Listener, error) {
 	return listener, nil
 }
 
-// handleUpgrade runs the swap for one RPC. The order is what makes it safe: stop accepting,
-// capture, flush the result, exec. Past the capture there is no way back — a failed exec dies.
 func (r *Runtime) handleUpgrade(c *connCtx, reqID string, params UpgradeParams) {
 	executable := strings.TrimSpace(params.Executable)
 	if executable == "" {
@@ -151,8 +142,6 @@ func (r *Runtime) handleUpgrade(c *connCtx, reqID string, params UpgradeParams) 
 		return
 	}
 
-	// The listener crosses as a descriptor rather than being rebound: measured, rebinding leaves
-	// a ~12ms hole where a daemon dial fails, and inheriting leaves none (0 in 2483 connects).
 	listenerFD, err := r.pauseAccept()
 	if err != nil {
 		c.sendError(reqID, ErrInternal, fmt.Sprintf("stop accepting for upgrade: %v", err))
@@ -169,13 +158,9 @@ func (r *Runtime) handleUpgrade(c *connCtx, reqID string, params UpgradeParams) 
 		DumpBytes:  len(state.VTDump),
 		BlockCount: len(state.Blocks),
 	})
-	// The exec ends every connection, so the result has to be on the wire
-	// before it: closing the send queue drains it, and sendDone says when.
 	c.closeSend()
 	<-c.sendDone
 
-	// Past this point there is no session in this image to hand back: the manager
-	// gave it away and the PTY file is closed.
 	err = r.upgrade(executable, state, listenerFD)
 	r.logf("worker upgrade: exec failed session=%s child=%d err=%v; the session cannot be resumed, exiting",
 		r.cfg.SessionID, state.ChildPID, err)

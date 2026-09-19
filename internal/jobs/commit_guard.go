@@ -2,8 +2,6 @@ package jobs
 
 import "sync"
 
-// Enter immediately before the single durable write and Leave by defer after; between them
-// Cancel waits instead of cancelling. Enter returning false means the run was already fenced.
 type CommitGuard struct {
 	mu         sync.Mutex
 	cancelled  bool
@@ -26,8 +24,6 @@ func (g *CommitGuard) Leave() {
 	g.committing = false
 }
 
-// Called by the runner Cancel: true means the context may be cancelled, false
-// means a committing run the caller must wait for.
 func (g *CommitGuard) tryFence() (mayCancel bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()

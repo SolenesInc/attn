@@ -38,8 +38,6 @@ func newGardenDaemon(t *testing.T) *Daemon {
 	t.Cleanup(d.stopEventBus)
 	d.ensureGardenCollections()
 	now := string(protocol.TimestampNow())
-	// The workspace is left off the stored record on purpose: a fixture that stamps the
-	// column hides every reader that never asks the live registry.
 	d.store.Add(&protocol.Session{
 		ID: "sess-a", Label: "a",
 		State: "idle", StateSince: now, StateUpdatedAt: now, LastSeen: now,

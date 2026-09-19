@@ -13,15 +13,9 @@ const (
 	kittyResyncReverseScroll     = "kitty_layout_reverse_scroll"
 	kittyResyncUndescribedImage  = "kitty_undescribed_image"
 	kittyResyncStampWithoutDelta = "kitty_stamp_without_delta"
-	// DECLRMM (DEC mode 69) was on: a margin-box scroll moves text without moving rows, so
-	// no SU goes out. Measured at da5ddcb; a tripwire — no A4-sweep emitter enables DECLRMM.
-	kittyResyncMarginMode = "kitty_layout_margin_mode"
-	// The placement scrolled further than one SU can express, so the client's history would
-	// come out short. Re-probed at da5ddcb over 645 shapes: none reached this.
-	kittyResyncScrollClamped = "kitty_layout_scroll_clamped"
-	// The cursor sat in the LAST COLUMN, where a dispatch may consume a pending-wrap bit
-	// CursorPos cannot see (measured at d760ee9; gone at da5ddcb over 336 shapes).
-	kittyResyncPendingWrap = "kitty_layout_pending_wrap"
+	kittyResyncMarginMode        = "kitty_layout_margin_mode"
+	kittyResyncScrollClamped     = "kitty_layout_scroll_clamped"
+	kittyResyncPendingWrap       = "kitty_layout_pending_wrap"
 )
 
 type kittyPlacementKey struct {
@@ -39,23 +33,15 @@ func (d kittyPlacementDelta) empty() bool {
 	return len(d.Added) == 0 && len(d.Removed) == 0 && len(d.Updated) == 0
 }
 
-// wireFeeder splits PTY output into plain runs and kitty APCs, feeds all of it to the
-// terminal, and returns what the wire carries instead. Every method is called under replayMu.
 type wireFeeder struct {
 	term   *ghosttyvt.Terminal
 	blocks *blockFeeder
 	seg    feedSegmenter
 
-	// Assembly buffer, reused across calls; the slice feed hands out is valid
-	// only until the next feed.
 	wire []byte
 
-	// Ghostty's kitty stamp as of the last change this feeder ACCOUNTED for; a difference
-	// against the terminal's own stamp is exactly the undescribed kind. Raw, no epoch.
 	generation uint64
 
-	// Offset folded into every generation handed out; must match
-	// Session.kittyEpoch. See mintKittyEpoch.
 	epoch uint64
 
 	placements []ghosttyvt.KittyPlacement
@@ -85,8 +71,6 @@ func newWireFeeder(term *ghosttyvt.Terminal, epoch uint64, logf LogFunc, kittyLi
 	}
 }
 
-// The returned slice is the INPUT slice when no rewriting was needed, otherwise the
-// feeder's assembly buffer, valid until the next feed. Empty means the chunk was held.
 func (f *wireFeeder) feed(data []byte) ([]byte, string) {
 	f.deltas = f.deltas[:0]
 	f.resync = ""
@@ -95,8 +79,6 @@ func (f *wireFeeder) feed(data []byte) ([]byte, string) {
 		return nil, ""
 	}
 
-	// Every emitted slice other than the passthrough case aliases a buffer the
-	// segmenter may rewrite before Feed returns, so it is copied on the spot.
 	whole := false
 	first := true
 	f.seg.Feed(data, func(seg feedSegment) {
@@ -111,8 +93,6 @@ func (f *wireFeeder) feed(data []byte) ([]byte, string) {
 		case feedSegKittyAPC:
 			f.writeAPC(seg.Bytes)
 		case feedSegOSC133:
-			// Write before mark() so the block-table pin lands on Ghostty's
-			// post-marker cursor.
 			f.wire = append(f.wire, seg.Bytes...)
 			f.blocks.write(seg.Bytes)
 			f.blocks.mark(seg.Marker)
@@ -132,17 +112,11 @@ func (f *wireFeeder) feed(data []byte) ([]byte, string) {
 	return f.wire, f.resync
 }
 
-// wireST is always 7-bit: a raw 0x9c is a stray UTF-8 continuation byte to the client.
-// Wherever the two streams differ, BOTH sides get an ESC-led no-op at that position.
 var wireST = []byte{0x1b, '\\'}
 
-// writeAPC feeds one complete kitty APC to the terminal and appends what the wire needs.
-// Ordering is the contract: end the pending decode on both sides BEFORE anything is measured.
 func (f *wireFeeder) writeAPC(apc []byte) {
 	f.settleUnaccounted()
 
-	// Ending a decode is a GRID event (a replacement character on the last column commits
-	// the deferred wrap), so it happens before the pin. From ground ghostty treats ST as a no-op.
 	f.term.Write(wireST)
 	f.wire = append(f.wire, wireST...)
 
@@ -174,22 +148,16 @@ func (f *wireFeeder) writeAPC(apc []byte) {
 		return
 	}
 
-	// The tracked pair reports cursor movement relative to CONTENT; taking the viewport
-	// movement back out leaves the scroll. Holds on both screens and inside a scroll region.
 	scrolled := (row - movedRow) + (landed - anchor)
 	if scrolled < 0 {
 		f.failResync(kittyResyncReverseScroll)
 		return
 	}
-	// On the alternate screen an anchor at row 0 only means the pin was CLAMPED there, and
-	// the scroll amount is unrecoverable: fitting and scrolling the top row away both read 0.
 	if anchor == 0 && f.term.AltScreenActive() {
 		f.failResync(kittyResyncAnchorClamped)
 		return
 	}
 
-	// One SU carries at most a screen's worth of rows (ghostty clamps to the
-	// scroll region), so a taller scroll would leave the client's history short.
 	if _, screenRows := f.term.Size(); scrolled > screenRows {
 		f.failResync(kittyResyncScrollClamped)
 		return
@@ -221,8 +189,6 @@ type kittyTransmission struct {
 	payload uint64
 }
 
-// stored says whether ghostty's kitty generation moved on this escape. Measured: it stays
-// put on an over-limit transmission and every intermediate m=1 escape; eviction is invisible.
 func (f *wireFeeder) noteTransmission(apc []byte, stored bool) {
 	ask, more, ok := parseKittyTransmission(apc)
 	if !ok {
@@ -254,8 +220,6 @@ func (f *wireFeeder) noteTransmission(apc []byte, stored bool) {
 	)
 }
 
-// parseKittyTransmission reads the keys a refusal check needs out of one complete APC. It
-// treats what it does not recognize as absent; kitty's default action `t` is assumed.
 func parseKittyTransmission(apc []byte) (t kittyTransmission, more bool, ok bool) {
 	body := apc
 	body = bytes.TrimPrefix(body, []byte("\x1b_G"))
@@ -291,7 +255,6 @@ func parseKittyTransmission(apc []byte) (t kittyTransmission, more bool, ok bool
 	if action != 't' && action != 'T' {
 		return kittyTransmission{}, false, false
 	}
-	// Ghostty stores decoded RGBA whatever the wire format was.
 	t.ask = width * height * 4
 	return t, more, true
 }
@@ -327,8 +290,6 @@ func (f *wireFeeder) observe() {
 	}
 }
 
-// settleUnaccounted closes the books on kitty state changes no writeAPC accounted for. It
-// must run at the entry of every writeAPC, or a described APC absorbs an undescribed move.
 func (f *wireFeeder) settleUnaccounted() bool {
 	stamped := f.term.KittyGeneration()
 	if stamped == f.generation {
@@ -362,8 +323,6 @@ func (f *wireFeeder) failResync(reason string) {
 	}
 }
 
-// changedPlacements reports the active screen's whole placement set when this feed moved
-// it. No copy needed: observe REPLACES the set rather than mutating it.
 func (f *wireFeeder) changedPlacements() ([]ghosttyvt.KittyPlacement, bool) {
 	if len(f.deltas) == 0 {
 		return nil, false
@@ -375,8 +334,6 @@ func (f *wireFeeder) snapshotBlocks() []AttachBlockData {
 	return f.blocks.snapshotBlocks()
 }
 
-// snapshotPlacements reads fresh from the terminal, not from the last observation: a resize
-// reflows under the same lock. The bool says whether this feeder holds ANY placement.
 func (f *wireFeeder) snapshotPlacements() ([]ghosttyvt.KittyPlacement, bool) {
 	if len(f.placements) == 0 {
 		return nil, false
@@ -384,20 +341,14 @@ func (f *wireFeeder) snapshotPlacements() ([]ghosttyvt.KittyPlacement, bool) {
 	return f.readPlacements(), true
 }
 
-// restoreBlocks seeds the block table from a handoff snapshot. Caller holds
-// replayMu; the VT dump must already be replayed, or there are no rows to pin.
 func (f *wireFeeder) restoreBlocks(blocks []AttachBlockData) {
 	f.blocks.restore(blocks)
 }
 
-// close frees the native refs the block table holds; must run before the
-// terminal itself is closed.
 func (f *wireFeeder) close() {
 	f.blocks.close()
 }
 
-// trackedRows resolves where the cursor's cell ended up and where it is now, in rows from
-// the top of history. Both read AFTER the write so they share one coordinate frame.
 func trackedRows(before, after *ghosttyvt.TrackedRef) (anchor, landed int, ok bool) {
 	if before == nil || after == nil {
 		return 0, 0, false

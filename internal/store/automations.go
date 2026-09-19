@@ -152,8 +152,6 @@ func githubReviewPayloadHead(payloadJSON string) string {
 	return strings.ToLower(strings.TrimSpace(payload.HeadSHA))
 }
 
-// githubReviewCycleStatus treats a legacy cycle-only occurrence with no readable head as
-// covering the cycle: old data must not replay because the head cannot be recovered.
 func githubReviewCycleStatus(q automationReviewQueryer, definitionID, subjectKey string, cycle int, headSHA string) (hasOccurrence, hasPending, matchesHead bool, err error) {
 	base := githubReviewOccurrenceBase(subjectKey, cycle)
 	prefix := base + ":"
@@ -206,8 +204,6 @@ func (s *Store) UpsertAutomationDefinition(id, name, specJSON string, now time.T
 	defer tx.Rollback()
 	var revision, oldEnabled int
 	var oldSpec, deletedAt string
-	// Deliberately not filtered by deleted_at='': a soft-deleted row must be found here too,
-	// so applying the same id resurrects it instead of colliding with the PRIMARY KEY.
 	err = tx.QueryRow(`SELECT revision, spec_json, enabled, deleted_at FROM automation_definitions WHERE id=?`, id).Scan(&revision, &oldSpec, &oldEnabled, &deletedAt)
 	enabled := true
 	activation := err == sql.ErrNoRows
@@ -454,8 +450,6 @@ func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID, co
 	}
 }
 
-// AutomationSessionHasContinuityBinding checks ACTIVE bindings across all definitions: a
-// bound thread's shared worktree is keyed on session id alone.
 func (s *Store) AutomationSessionHasContinuityBinding(sessionID string) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -656,8 +650,6 @@ func (s *Store) ClaimScheduledAutomationRun(definitionID, occurrenceKey, continu
 		}
 	}
 	now := formatTicketTime(observedAt)
-	// subject_key is recorded as continuityKey (not always ""): binding
-	// lookups elsewhere key off of it for a scheduled singleton's history.
 	if _, err = tx.Exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES(?,?, 'schedule',?,?,?,?,?)`, ids.OccurrenceID, definitionID, occurrenceKey, continuityKey, now, payloadJSON, now); err != nil {
 		return nil, false, err
 	}

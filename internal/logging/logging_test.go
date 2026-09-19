@@ -92,8 +92,6 @@ func TestLogger_DebugEnabled(t *testing.T) {
 }
 
 func TestLogger_DebugEnabledAccessor(t *testing.T) {
-	// The PTY hot-path gating (daemon + worker) reads this flag to decide
-	// whether to build log args at all, so it must track the DEBUG env exactly.
 	originalDebug := os.Getenv("DEBUG")
 	restore := func() {
 		if originalDebug != "" {

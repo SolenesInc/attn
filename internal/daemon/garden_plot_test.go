@@ -253,8 +253,6 @@ func plantAt(t *testing.T, d *Daemon, title string, at time.Time) string {
 	return id
 }
 
-// The dispatch record is written before the runtime spawns because the launch
-// primer reads it: a delegate must launch already knowing its plot.
 func TestGardenPlot_DelegationDispatchesAtACrown(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	t.Cleanup(d.stopEventBus)

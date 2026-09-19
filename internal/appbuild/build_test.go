@@ -561,7 +561,6 @@ func TestBuild_ViewLeavesTheSDKSpecifierUnresolved(t *testing.T) {
 	}
 }
 
-// React's production build exports `jsxDEV` as `undefined`; `--production` is the only thing that selects the other runtime (tsconfig's "jsx": "react-jsx" and a NODE_ENV define do not).
 func TestBuild_ViewLinksAgainstTheProductionJSXRuntime(t *testing.T) {
 	t.Parallel()
 	env := newBuildEnv(t, "jsx-app")

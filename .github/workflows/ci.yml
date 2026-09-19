@@ -308,9 +308,6 @@ jobs:
       - name: Staticcheck
         run: go tool staticcheck ./...
 
-      - name: Lint comments
-        run: go run ./cmd/commentlint ./...
-
       - name: Test
         run: ./scripts/test-go.sh
 

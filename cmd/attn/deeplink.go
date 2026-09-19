@@ -18,8 +18,6 @@ func launchDeepLink(deepLink string) error {
 	return launchProfileApp(config.Profile(), deepLink)
 }
 
-// The second process hands its argv to the running instance and exits; with no
-// instance running it becomes the app, so it must outlive this command.
 func launchProfileApp(profile string, args ...string) error {
 	executable := config.AppExecutableForProfile(profile)
 	if _, err := os.Stat(executable); err != nil {

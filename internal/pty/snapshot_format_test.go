@@ -9,8 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
 
-// A pty-worker outlives an install, so its bytes can reach a client whose decoder is a
-// different build.
 func TestInfoStampsSnapshotFormat(t *testing.T) {
 	newSession := func() *Session {
 		return &Session{

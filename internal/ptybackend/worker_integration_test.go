@@ -170,8 +170,6 @@ gotOutput:
 		t.Fatalf("snapshot geometry = %dx%d, want non-zero", snap.Screen.Cols, snap.Screen.Rows)
 	}
 
-	// Read the OSC11 reply off the script's own stdin: fish, the default login
-	// shell here, disables kernel echo, so the attached stream never shows it.
 	if err := backend.SetTheme(context.Background(), sessionID, pty.TerminalTheme{Background: "#ff00ff"}); err != nil {
 		t.Fatalf("SetTheme() error: %v", err)
 	}

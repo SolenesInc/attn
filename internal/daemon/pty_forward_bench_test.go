@@ -8,7 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-// sink keeps the compiler from optimizing the encode away across iterations.
 var sink outboundMessage
 
 func benchEncodePtyOutput(b *testing.B, chunk []byte, legacyClient bool) {

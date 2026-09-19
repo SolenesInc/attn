@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// An identity that is neither assignee nor author becomes a participant by subscribing,
-// and is served the backlog too, since subscribing does not advance the cursor.
 func TestTicketSubscriptionMakesParticipant(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })

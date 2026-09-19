@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-// Advances only to what a wait REPORTED: advancing to everything a poll saw
-// loses events permanently.
 type prWaitCursor struct {
 	CommentIDs    []string  `json:"comment_ids,omitempty"`
 	VerdictAt     time.Time `json:"verdict_at,omitempty"`
@@ -21,8 +19,6 @@ type prWaitCursor struct {
 	UpdatedAt     time.Time `json:"updated_at,omitempty"`
 }
 
-// MarshalJSON keeps zero timestamps out of the encoded cursor — `omitempty`
-// does not apply to time.Time, and an encoded zero verdict_at reads as a bug.
 func (c prWaitCursor) MarshalJSON() ([]byte, error) {
 	type payload struct {
 		CommentIDs    []string   `json:"comment_ids,omitempty"`
@@ -53,7 +49,6 @@ func (c prWaitCursor) seenComments() map[string]bool {
 	return seen
 }
 
-// Check order comes from the API, so compare as a set.
 func (c prWaitCursor) sameFailure(head string, checks []prCheck) bool {
 	if c.FailureHead != head {
 		return false
@@ -65,14 +60,10 @@ func (c prWaitCursor) sameFailure(head string, checks []prCheck) bool {
 	return strings.Join(names, "\n") == strings.Join(previous, "\n")
 }
 
-// Comment surfaces are queried newest-100, so an ID older than that window can
-// never come back as unseen.
 const prCursorFileLimit = 500
 
 const prCursorMaxAge = 30 * 24 * time.Hour
 
-// Every segment is a legal filename without escaping: owner/repo cannot contain
-// a slash, host is a domain.
 func cursorPath(dir string, opts prWaitOptions) string {
 	host := opts.Host
 	if host == "" {

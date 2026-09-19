@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// Some kinds are declared ahead of their verbs, so a body written by a later attn stays readable.
 const (
 	EdgeBlocks         = "blocks"
 	EdgePartOf         = "part-of"
@@ -134,7 +133,6 @@ func reaches(seeds []Seed, start, kind, target string) []string {
 	return walk(start)
 }
 
-// sessionLive feeds Tender.Holds, the same rule `tend` claims under, so a seed offered here is one `tend` accepts.
 func Ready(seeds []Seed, sessionLive func(sessionID string) bool) []Seed {
 	graph := readiness(seeds)
 	ready := make([]Seed, 0, len(seeds))
@@ -147,7 +145,6 @@ func Ready(seeds []Seed, sessionLive func(sessionID string) bool) []Seed {
 	return ready
 }
 
-// Unblocks wants the graph as it stands after the close.
 func Unblocks(seeds []Seed, closedID string) []Seed {
 	closed, ok := find(seeds, closedID)
 	if !ok || !Closed(closed.Status) {
@@ -179,7 +176,6 @@ func readiness(seeds []Seed) readinessGraph {
 	return readinessGraph{index: byID(seeds), blocked: blockedIDs(seeds), parents: parentIDs(seeds)}
 }
 
-// Every readiness rule but the tender's hold, which is the caller's business.
 func (g readinessGraph) open(seed Seed) bool {
 	switch {
 	case Closed(seed.Status), seed.Status == StatusDormant:
@@ -209,7 +205,6 @@ func Blockers(seeds []Seed, id string) []string {
 
 func InPlot(seeds []Seed, crownID string) []Seed {
 	inside := map[string]bool{crownID: true}
-	// Repeat until nothing new joins: a child may be listed before its parent.
 	for grew := true; grew; {
 		grew = false
 		for _, seed := range seeds {
@@ -317,7 +312,6 @@ func Tree(seeds []Seed) []TreeRow {
 	placed := map[string]bool{}
 	var place func(seed Seed, depth int)
 	place = func(seed Seed, depth int) {
-		// A stored cycle would otherwise recurse forever.
 		if placed[seed.ID] {
 			return
 		}

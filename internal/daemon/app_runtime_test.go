@@ -100,8 +100,6 @@ func startFakeAppRuntime(t *testing.T, d *Daemon, handler func(*fakeAppRuntime, 
 	}
 	go runtime.serve(reader)
 
-	// The daemon publishes the connection from the same goroutine that answered
-	// hello, so an answered hello does not yet mean appRuntimeConnected() is set.
 	waitFor(t, "the daemon to adopt the app runtime", func() bool {
 		return d.appRuntimeConnected() != nil
 	})
@@ -163,15 +161,11 @@ func (f *fakeAppRuntime) serve(reader *bufio.Reader) {
 		f.mu.Lock()
 		f.dispatches = append(f.dispatches, req)
 		f.mu.Unlock()
-		// Announced here rather than inside the goroutine so the daemon sees dispatches
-		// in arrival order, as the real host single loop guarantees.
 		f.sendRaw(jsonRPCMessage{
 			JSONRPC: "2.0",
 			Method:  appRuntimeEnteredMethod,
 			Params:  mustMarshalHandlerParams(f.t, appRuntimeHandlerParams{Dispatch: req.Dispatch, App: req.App}),
 		})
-		// On its own goroutine: a handler that calls back into the daemon would
-		// otherwise deadlock against this loop, the only reader of the answer.
 		go func(id json.RawMessage, req appDispatchRequest) {
 			result := appDispatchResult{OK: true}
 			if f.handler != nil {
@@ -348,8 +342,6 @@ func newAppDaemon(t *testing.T) *Daemon {
 	if err := d.eventBus.Start(); err != nil {
 		t.Fatalf("start the event bus: %v", err)
 	}
-	// Registered first so it runs LAST: a sidecar or a parked handler released by a
-	// later cleanup has to be gone before the bus stops waiting on it.
 	t.Cleanup(d.stopEventBus)
 	return d
 }
@@ -554,8 +546,6 @@ func TestCancelledDeliveryReturnsPromptlyAndRecordsNothing(t *testing.T) {
 
 	entered := make(chan struct{})
 	release := make(chan struct{})
-	// LIFO cleanup: registered after the harness own so it runs FIRST, or a failing
-	// assert below leaves the handler parked forever (#793).
 	t.Cleanup(func() { close(release) })
 	startFakeAppRuntime(t, d, func(_ *fakeAppRuntime, _ appDispatchRequest) error {
 		close(entered)
@@ -588,8 +578,6 @@ func TestRemovingAnAppWithAnInFlightDispatchReturnsPromptly(t *testing.T) {
 
 	entered := make(chan struct{})
 	release := make(chan struct{})
-	// LIFO: this has to run FIRST, so a failed assert releases the handler instead
-	// of reading as a hang (#793).
 	t.Cleanup(func() {
 		select {
 		case <-release:
@@ -633,8 +621,6 @@ func TestALateAnswerWithNobodyWaitingIsDropped(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer clientConn.Close()
 	defer serverConn.Close()
-	// net.Pipe is unbuffered: the far end has to be drained or the peer write
-	// blocks.
 	go func() { _, _ = io.Copy(io.Discard, clientConn) }()
 	peer := newJSONRPCPeer(serverConn, bufio.NewReader(serverConn))
 
@@ -841,8 +827,6 @@ func TestHandlerResolutionPrefersTheMostSpecificSubscription(t *testing.T) {
 	}
 }
 
-// bus.ParseFilter reads an empty expression as All, so an app with no
-// subscriptions needs its own nothing-matches pattern.
 func TestAppWithNoSubscriptionsSubscribesToNothing(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "quiet", appbuild.Manifest{})
@@ -992,8 +976,6 @@ func TestParkedRuntimeIsVisibleOnEveryAppAndRevivable(t *testing.T) {
 	}
 }
 
-// Measured on a broken host before the split: three parkings and three critical
-// notifications in five and a half minutes.
 func TestDispatchLeavesAParkedRuntimeParked(t *testing.T) {
 	d := newAppDaemon(t)
 	d.appRuntimeSupervise = supervise.Options{GiveUpAfter: 1}
@@ -1004,8 +986,6 @@ func TestDispatchLeavesAParkedRuntimeParked(t *testing.T) {
 	if err := d.ensureAppRuntime(); err != nil {
 		t.Fatalf("ensure runtime: %v", err)
 	}
-	// Wait on the notification, not on the phase: the supervisor sets PhaseParked under its
-	// lock and releases it before running the OnGiveUp sink that writes this.
 	waitFor(t, "the crash-looping runtime to be parked", func() bool {
 		return len(appNotifications(t, d, notificationKindAppRuntimeParked)) > 0
 	})

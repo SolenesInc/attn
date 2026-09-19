@@ -160,7 +160,6 @@ func (d *Daemon) registerTaskWithFailureRenderer(
 	return nil
 }
 
-// Runs on the job runner's goroutine, so it must not block or panic.
 func (d *Daemon) notifyTaskTerminalFailure(t *jobs.Job) {
 	if t == nil || d.store == nil {
 		return

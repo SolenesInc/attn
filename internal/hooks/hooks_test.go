@@ -71,8 +71,6 @@ func TestGenerateCodexConfigOverrides_PostToolUseRecordsEdits(t *testing.T) {
 	if !strings.Contains(overrides, "hooks.PostToolUse=[{ matcher = \"*\", hooks = [{ type = \"command\", command = \"'/tmp/attn' '_hook-tool-use'\"") {
 		t.Fatalf("codex PostToolUse should run _hook-tool-use: %q", overrides)
 	}
-	// Codex only runs a hook whose recorded hash matches, so the trust entry has to
-	// move with the command.
 	if !strings.Contains(overrides, "post_tool_use") {
 		t.Fatalf("codex overrides should trust the post_tool_use hook: %q", overrides)
 	}

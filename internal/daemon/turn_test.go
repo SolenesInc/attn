@@ -228,8 +228,6 @@ func TestASettleSurvivesAnAgentRepaintingSlowerThanTheHeartbeatTTL(t *testing.T)
 		t.Fatal("settle did not close the turn")
 	}
 
-	// Claude repaints its title every ~1.92s while a `/compact` runs, past the 1.5s
-	// heartbeat TTL.
 	const repaint = 1920 * time.Millisecond
 	base := time.Now()
 	for tick := 1; tick <= 30; tick++ {

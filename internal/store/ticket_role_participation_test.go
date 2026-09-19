@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// The participant rule as migration 82 defined it: a faithful pre-99 fixture,
-// not the current rule.
 const migration82View = `
 	DROP VIEW IF EXISTS ticket_participants;
 	CREATE VIEW ticket_participants (ticket_id, identity) AS

@@ -397,8 +397,6 @@ location:
 	}
 }
 
-// encoding/json's omitempty does not omit a zero-value struct, so
-// TriggerSpec.Schedule must stay a pointer.
 func TestCanonicalJSONOmitsScheduleForNonScheduledTriggers(t *testing.T) {
 	dir := t.TempDir()
 	manual := strings.ReplaceAll(`api_version: attn.dev/automations/v1alpha1

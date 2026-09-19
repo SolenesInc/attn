@@ -51,7 +51,6 @@ func TestFsIndexListsDotFilesButNotGitOrNodeModules(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A FIFO: not a symlink, but fs_read cannot open it either.
 	if err := syscall.Mkfifo(filepath.Join(root, "pipe.fifo"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -108,8 +107,6 @@ func TestIndexRootTruncatesAtInjectedCap(t *testing.T) {
 	}
 }
 
-// resolveFsRoot only canonicalizes the deepest existing ancestor and WalkDir's
-// error-recovery branch swallows the error: the walk "succeeds" with zero files.
 func TestFsIndexRejectsNonexistentAndNonDirectoryRoots(t *testing.T) {
 	d := newFsDaemon(t)
 	base := t.TempDir()
@@ -160,8 +157,6 @@ func TestFsIndexWithExplicitRootDeniedForUntrustedClient(t *testing.T) {
 	}
 }
 
-// The cap counts only files that survive the extension filter: capping before it
-// truncates a large repository on files nobody asked for.
 func TestIndexRootAppliesCapAfterExtensionFilter(t *testing.T) {
 	root := t.TempDir()
 	for i := range 40 {

@@ -78,7 +78,6 @@ type sliceLine struct {
 		Content json.RawMessage `json:"content"`
 	} `json:"message"`
 
-	// Codex event_msg and response_item envelopes carry their records here.
 	Payload json.RawMessage `json:"payload"`
 
 	Data struct {
@@ -125,8 +124,6 @@ func (h *humanTurns) add(text string) {
 	}
 }
 
-// `permissive` also takes user-role lines with no provenance and is used whenever `strict`
-// saw nothing — the read for transcripts predating the `origin` field.
 type sliceBuilder struct {
 	opts SliceOptions
 

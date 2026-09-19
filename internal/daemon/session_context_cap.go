@@ -21,8 +21,6 @@ func (d *Daemon) handleSetSessionContextWindowCap(client *wsClient, msg *protoco
 	d.sendToClient(client, result)
 }
 
-// The cap only reaches the agent at launch, so a changed pin kicks off a
-// resume-preserving reload: a running process cannot be re-capped, its respawn can.
 func (d *Daemon) setSessionContextWindowCap(sessionID string, cap int) error {
 	if d == nil || d.store == nil {
 		return fmt.Errorf("store unavailable")
@@ -40,8 +38,6 @@ func (d *Daemon) setSessionContextWindowCap(sessionID string, cap int) error {
 			return fmt.Errorf("context window cap must be 0 (no cap) or between %d and %d tokens; got %d", contextWindowCapMin, contextWindowCapMax, cap)
 		}
 	}
-	// Only the built-in claude/codex launch paths carry the cap to the agent;
-	// a shell or plugin driver would store a pin that silently never applies.
 	switch normalizeSpawnAgent(string(session.Agent)) {
 	case string(protocol.SessionAgentClaude), string(protocol.SessionAgentCodex):
 	default:

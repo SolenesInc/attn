@@ -11,8 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Workflow methods lazy-init their maps and guard the nil wsHub, so this bare
-// construction exercises the production paths with no live socket.
 func newWorkflowTestDaemon(t *testing.T) *Daemon {
 	t.Helper()
 	return &Daemon{store: store.New()}

@@ -53,8 +53,6 @@ func TestWhereRejectsAnExpressionWithNoOperator(t *testing.T) {
 	}
 }
 
-// The parser advances the loop index from inside a closure; Go 1.22's
-// per-iteration loop variable is what could silently break that.
 func TestQueryFlagsConsumeTheirValues(t *testing.T) {
 	query, opts := parseDocQueryFlags("query", "app/approval-gate", "requests", []string{
 		"--where", "status=pending",

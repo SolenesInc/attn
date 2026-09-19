@@ -5,8 +5,6 @@ type AssistantMessage struct {
 	Content string
 }
 
-// Oversize messages are dropped whole: truncating their text would invalidate
-// stored offsets.
 type AssistantWindowLimits struct {
 	MaxMessages     int
 	MaxMessageChars int

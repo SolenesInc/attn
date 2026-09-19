@@ -231,8 +231,6 @@ func TestSendTaskRetryWSResultNilRunner(t *testing.T) {
 	}
 }
 
-// Outside a synctest bubble: this runs the real hub (`go d.wsHub.run()`), whose
-// loop has no exit path.
 func TestTasksChangedBroadcastReachesClient(t *testing.T) {
 	d := newNotebookDaemon(t)
 	client := &wsClient{send: make(chan outboundMessage, 8)}

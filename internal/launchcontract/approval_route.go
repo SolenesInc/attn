@@ -1,7 +1,5 @@
 package launchcontract
 
-// The empty value is reserved for launch records written before this field was
-// persisted; it must never be interpreted from a later global setting.
 type ApprovalRoute string
 
 const (
@@ -23,7 +21,6 @@ func (r ApprovalRoute) ReviewerInLoop() bool {
 	return r == ApprovalRouteReviewer
 }
 
-// Call it after unattended policy has replaced the attended flags.
 func ResolveApprovalRoute(yoloMode, autoApprove bool, unattended UnattendedLaunchSpec) ApprovalRoute {
 	if !unattended.IsZero() {
 		return ApprovalRouteReviewer

@@ -55,8 +55,6 @@ func (l execPluginProcessLauncher) Start(manifest pluginManifest, env []string, 
 	}
 	cmd.Dir = manifest.Dir
 	cmd.Env = env
-	// Group leadership is what lets the reaper sweep whatever the driver spawned,
-	// without touching the daemon's other children.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	process, err := supervise.StartCommand(cmd, log)
 	if err != nil {
@@ -64,8 +62,6 @@ func (l execPluginProcessLauncher) Start(manifest pluginManifest, env []string, 
 	}
 	if l.registryDir != "" {
 		pid := cmd.Process.Pid
-		// The path carries the pid so a restart's fresh record and the old process's
-		// removal (in Wait, which can straddle the respawn) never touch the same file.
 		path := filepath.Join(l.registryDir, fmt.Sprintf("%s-%d.json", manifest.Name, pid))
 		if err := procreap.WriteEntry(path, procreap.NewEntry(manifest.Name, pid, pid, cmd.Args)); err == nil {
 			return &reapRegisteredProcess{Process: process, pid: pid, registryPath: path}, nil

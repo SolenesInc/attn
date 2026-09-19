@@ -253,7 +253,6 @@ type applyTransaction struct {
 	Draft sharedDraft          `json:"draft"`
 }
 
-// A journal makes interrupted multi-file applies recoverable before another client writes.
 func (e *editor) recoverApply(root *os.Root) error {
 	var tx applyTransaction
 	err := readJSON(root, "apply.json", &tx)

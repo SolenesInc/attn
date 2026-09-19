@@ -22,8 +22,6 @@ func readFileTrim(path string) (string, error) {
 	return strings.TrimSpace(string(b)), nil
 }
 
-// sameDir resolves symlinks first: macOS maps /var -> /private/var, which `pwd`
-// reports but t.TempDir() does not.
 func sameDir(a, b string) bool {
 	ra, err := filepath.EvalSymlinks(a)
 	if err != nil {
@@ -314,8 +312,6 @@ func TestBuildClaudeHeadlessArgsWritableAddsEditAndBashAndExtraServers(t *testin
 }
 
 func TestBuildCodexHeadlessArgsOmitsModelWhenEmpty(t *testing.T) {
-	// No Model means codex must NOT receive "-m" at all: an empty "-m" makes codex
-	// reject the run as "model is invalid or unavailable".
 	argv := buildCodexHeadlessArgs(HeadlessTaskRequest{
 		Prompt:           "ping",
 		MCPServerName:    "attn_workflow_result",

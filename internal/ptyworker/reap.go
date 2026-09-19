@@ -31,8 +31,6 @@ type ReapResult struct {
 	Err       error
 }
 
-// Reap before removing a data dir: deleting it destroys the registry surviving workers are
-// found through. Shutdown goes over each worker's control socket, so no PID can be reused.
 func ReapDataDir(dataDir string) []ReapResult {
 	paths, err := filepath.Glob(filepath.Join(dataDir, "workers", "*", "registry", "*.json"))
 	if err != nil {
@@ -47,8 +45,6 @@ func ReapDataDir(dataDir string) []ReapResult {
 			continue
 		}
 		res := reapEntry(entry, path)
-		// Only once the worker is provably gone. ReapUnidentified means it may
-		// still be running, and a live worker mid-swap needs its handoff.
 		if res.Outcome == ReapRemoved || res.Outcome == ReapAlreadyGone || res.Outcome == ReapSignalled {
 			RemoveHandoff(path, entry.SessionID)
 		}
@@ -75,8 +71,6 @@ func reapEntry(entry RegistryEntry, registryPath string) ReapResult {
 		res.Err = err
 	}
 
-	// Signal only a process still positively identifiable as this worker: the registry path is
-	// unique per session per data dir, so finding it in the argv rules out a recycled PID.
 	if !processHasArg(entry.WorkerPID, registryPath) {
 		res.Outcome = ReapUnidentified
 		return res
@@ -170,7 +164,6 @@ func waitForExit(pid int, timeout time.Duration) bool {
 	return !ProcessAlive(pid)
 }
 
-// An unreadable argv must read as "not identified" rather than "probably fine".
 func processHasArg(pid int, want string) bool {
 	if want == "" {
 		return false

@@ -13,8 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// syncConn never blocks, so a handler runs wholly in the caller's goroutine. A net.Pipe
-// would let the test read doorbell side effects before notifyTicketObservers ran.
 type syncConn struct{ buf bytes.Buffer }
 
 func (c *syncConn) Read([]byte) (int, error)         { return 0, io.EOF }

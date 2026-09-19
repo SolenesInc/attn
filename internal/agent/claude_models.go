@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-// ClaudeModelInfo preserves unknown effort support separately from false.
 type ClaudeModelInfo struct {
 	Value                 string   `json:"value"`
 	ResolvedModel         string   `json:"resolvedModel,omitempty"`
@@ -22,8 +21,6 @@ type ClaudeModelInfo struct {
 	SupportedEffortLevels []string `json:"supportedEffortLevels,omitempty"`
 }
 
-// DiscoverModels reads the CLI initialization catalog, like SDK supportedModels().
-// It sends no user message; callers decide when discovery is enabled.
 func (c *Claude) DiscoverModels(ctx context.Context, executable, workDir string) ([]ClaudeModelInfo, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
@@ -50,7 +47,6 @@ func (c *Claude) DiscoverModels(ctx context.Context, executable, workDir string)
 		return nil, fmt.Errorf("Claude model discovery stdin: %w", err)
 	}
 	defer stdin.Close()
-	// Closing our pipe unblocks decoding even if a descendant retained stdout.
 	cmd.Cancel = func() error {
 		_ = stdout.Close()
 		return cmd.Process.Kill()

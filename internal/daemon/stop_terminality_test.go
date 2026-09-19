@@ -127,8 +127,6 @@ func TestStopIsNonTerminal_LegacyHookClassifies(t *testing.T) {
 	}
 }
 
-// Boundary-bound: runs a started daemon, a real unix listener and a real client;
-// the yielded-stop siblings bubble because they drive handleStop directly.
 func TestDaemon_StopCommand_BackgroundWork_StaysWorking(t *testing.T) {
 	useFreeWSPort(t)
 
@@ -157,7 +155,6 @@ func TestDaemon_StopCommand_BackgroundWork_StaysWorking(t *testing.T) {
 	waitForResolvedState(t, d, "bg-session", protocol.SessionStateWorking)
 }
 
-// Boundary-bound: started daemon and a real socket, as above.
 func TestDaemon_StopCommand_PendingCron_Settles(t *testing.T) {
 	useFreeWSPort(t)
 
@@ -236,8 +233,6 @@ func yieldedStopDaemon(t *testing.T, d *Daemon, verdict string) (*Daemon, *recor
 		BackgroundTasks: tasksWithStatuses("running"),
 	})
 
-	// The judgment is dispatched async on the retry loop handleStop owns; run it out
-	// or the verdict is never coming.
 	settleStopClassification(t)
 	if e, ok := d.evidenceTable().snapshot("yielded"); !ok || e.LastClassifier == nil {
 		t.Fatalf("yield verdict never landed as evidence (classifier calls: %d)", len(judge.Texts()))
@@ -313,8 +308,6 @@ func TestDaemon_YieldedStop_DoneVerdictSettles(t *testing.T) {
 	})
 }
 
-// Nothing applies a state at the moment a source speaks, so reading the store
-// straight after the socket call asserts on the resolve tick timing.
 func waitForResolvedState(t *testing.T, d *Daemon, sessionID string, want protocol.SessionState) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)

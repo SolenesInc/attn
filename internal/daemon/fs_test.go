@@ -16,9 +16,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Boundary-bound, the whole paced set here: the real hub's loop has no exit path
-// and the fsnotify watcher parks in kqueue — neither can end a synctest bubble.
-
 func newFsDaemon(t *testing.T) *Daemon {
 	t.Helper()
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -377,8 +374,6 @@ func TestFsReadAssetOversize(t *testing.T) {
 	}
 }
 
-// Fails if maxAssetBytes is raised without re-deriving the cap, or if the base64
-// envelope math is wrong.
 func TestFsReadAssetMaxSizeFitsMessageCap(t *testing.T) {
 	d := newFsDaemon(t)
 	root := d.store.GetSetting(SettingNotebookRoot)
@@ -404,8 +399,6 @@ func TestFsReadAssetMaxSizeFitsMessageCap(t *testing.T) {
 	}
 }
 
-// Tested directly rather than through a real long path: macOS's PATH_MAX (1024)
-// makes a real >4 KiB path uncreatable, but the check must hold past that.
 func TestAssetMessageFitsRejectsLongPath(t *testing.T) {
 	longPath := strings.Repeat("d/", 4096) + "x.png"
 	if fits, err := assetMessageFits("a1", longPath, "image/png", maxAssetBytes); err != nil {
@@ -570,8 +563,6 @@ func TestFsCommandsRejectInvalidRoots(t *testing.T) {
 	}
 }
 
-// fsdoc.Store permits symlinked roots, so the data-dir exclusion cannot be
-// lexical: a root that symlinks into config.DataDir() reaches attn.db.
 func TestFsCommandsRejectSymlinkedRootIntoDataDir(t *testing.T) {
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
 	if err := os.MkdirAll(config.DataDir(), 0o755); err != nil {
@@ -636,8 +627,6 @@ func TestFsCommandsRejectSymlinkedRootIntoDataDir(t *testing.T) {
 	}
 }
 
-// t.TempDir() lives under /var/folders, reached via a /private symlink, so this
-// is the real canonicalize-both-sides path.
 func TestFsCommandsAcceptLegitimateSymlinkedRoot(t *testing.T) {
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
 	if err := os.MkdirAll(config.DataDir(), 0o755); err != nil {

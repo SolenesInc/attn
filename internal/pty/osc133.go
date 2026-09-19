@@ -1,8 +1,5 @@
 package pty
 
-// Semantics-identical port of app/src/utils/terminalOsc133.ts. Parity is enforced by the shared
-// corpus testdata/osc133_segmenter_corpus.json, consumed here AND by a frontend parity test.
-
 import (
 	"net/url"
 	"strconv"
@@ -35,7 +32,6 @@ func osc133MarkerFromPayload(payload string) *osc133Marker {
 		for _, part := range strings.Split(rest, ";") {
 			switch {
 			case strings.HasPrefix(part, "cmdline_url="):
-				// Percent-decode without treating '+' as space: url.PathUnescape, not QueryUnescape.
 				if dec, err := url.PathUnescape(part[len("cmdline_url="):]); err == nil {
 					c := dec
 					cmdline = &c
@@ -63,7 +59,6 @@ func osc133MarkerFromPayload(payload string) *osc133Marker {
 	}
 }
 
-// Mirrors JS parseInt(s, 10), keeping exit-code parsing byte-for-byte with the client parser.
 func parseInt10Prefix(s string) (int32, bool) {
 	i := 0
 	for i < len(s) && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r' || s[i] == '\f' || s[i] == '\v') {

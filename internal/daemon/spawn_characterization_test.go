@@ -321,7 +321,6 @@ func TestSpawnCharacterizationAlreadyLivePluginRespawnSkipsPluginPrep(t *testing
 		requireDone(t, secondSpawnDone, "the already-live spawn never returned")
 		expectSpawnResult(t, client, msg.ID, true)
 
-		// The probe reports only once its own 250ms read deadline expires, and a settled bubble is where nothing else moves the clock.
 		time.Sleep(spawnProbeReadDeadline)
 		synctest.Wait()
 		select {

@@ -49,8 +49,6 @@ func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMe
 	d.finishSessionClose(msg.ID, closing)
 }
 
-// A forwarding hub waits on this, named by session. The broadcast cannot answer
-// it: that rides the bus, and it says nothing when the close is refused.
 func (d *Daemon) answerSessionClose(client *wsClient, sessionID string, refusal error) {
 	answer := &protocol.SessionCloseResultMessage{
 		Event:     protocol.EventSessionCloseResult,

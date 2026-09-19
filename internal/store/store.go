@@ -25,7 +25,6 @@ type Store struct {
 	db     *sql.DB
 	dbPath string
 
-	// BackupNow refuses when false: VACUUM INTO an in-memory fallback writes empty snapshots and rotation prunes the real ones.
 	durable bool
 
 	sessions               map[string]*protocol.Session
@@ -53,7 +52,6 @@ type SessionTeardownIntent struct {
 	DriverRun   AgentDriverReportCursor
 }
 
-// Seq is the run's report cursor: a replacement driver must continue from it, because applyState discards anything that does not advance it.
 type ActiveAgentDriverRun struct {
 	TranscriptPath string
 	SessionID      string
@@ -64,18 +62,15 @@ type ActiveAgentDriverRun struct {
 }
 
 type LaunchIntent struct {
-	YoloMode bool `json:"yolo_mode,omitempty"`
-	// nil means "follow the promoted config", not off.
-	AutoMode *bool `json:"auto_mode,omitempty"`
-	// Empty means "follow the promoted config" for that half of the pair.
-	ApprovalPolicy string                       `json:"approval_policy,omitempty"`
-	SandboxMode    string                       `json:"sandbox_mode,omitempty"`
-	ApprovalRoute  launchcontract.ApprovalRoute `json:"approval_route,omitempty"`
-	Executable     string                       `json:"executable,omitempty"`
-	Model          string                       `json:"model,omitempty"`
-	Effort         string                       `json:"effort,omitempty"`
-	ChiefOfStaff   bool                         `json:"chief_of_staff,omitempty"`
-	// Zero value means attended.
+	YoloMode         bool                                `json:"yolo_mode,omitempty"`
+	AutoMode         *bool                               `json:"auto_mode,omitempty"`
+	ApprovalPolicy   string                              `json:"approval_policy,omitempty"`
+	SandboxMode      string                              `json:"sandbox_mode,omitempty"`
+	ApprovalRoute    launchcontract.ApprovalRoute        `json:"approval_route,omitempty"`
+	Executable       string                              `json:"executable,omitempty"`
+	Model            string                              `json:"model,omitempty"`
+	Effort           string                              `json:"effort,omitempty"`
+	ChiefOfStaff     bool                                `json:"chief_of_staff,omitempty"`
 	UnattendedLaunch launchcontract.UnattendedLaunchSpec `json:"unattended_launch,omitzero"`
 }
 
@@ -199,7 +194,6 @@ func (s *Store) AddCheckedUnlessTeardown(session *protocol.Session) error {
 	return s.addCheckedLocked(session, true)
 }
 
-// A closed row is refused, not overwritten: reopening clears the close first.
 func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool) error {
 	if s.db == nil {
 		if _, closing := s.teardownIntents[session.ID]; rejectTeardown && closing {
@@ -215,7 +209,6 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 		if stored.LastModelRequestAt == nil && stored.StateUpdatedAt != "" {
 			stored.LastModelRequestAt = protocol.Ptr(stored.StateUpdatedAt)
 		}
-		// pinned_at, the context-window cap and the activity pair are absent from the SQLite upsert below; carry the stored values so the memory branch cannot clear what their own writers own.
 		if existing := s.sessions[session.ID]; existing != nil {
 			if existing.LastModelRequestAt != nil {
 				stored.LastModelRequestAt = protocol.Ptr(protocol.Deref(existing.LastModelRequestAt))
@@ -261,7 +254,6 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	if lastModelRequestAt == "" {
 		lastModelRequestAt = session.StateUpdatedAt
 	}
-	// pinned_at is deliberately absent from the column list and the conflict update: leaving it out is what makes a respawn unable to clear the pin.
 	_, err = s.db.Exec(`
 		INSERT INTO sessions
 		(id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, todos, last_seen)
@@ -310,7 +302,6 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	return nil
 }
 
-// Get answers about live sessions only: a closed one is reachable through the ledger.
 func (s *Store) Get(id string) *protocol.Session {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -399,8 +390,6 @@ func (s *Store) Get(id string) *protocol.Session {
 	return &session
 }
 
-// Rows here exist only for their session and are deleted by hand in every
-// session-removal path, because this store runs with foreign keys off.
 var sessionOwnedTables = []string{
 	"session_annotation_drafts",
 	"session_pull_requests",
@@ -621,8 +610,6 @@ func (s *Store) RemoveSessionsInDirectory(directory string) {
 		return
 	}
 
-	// Foreign keys are off, so owned rows go first: after the sessions are gone
-	// there is nothing left to select them by.
 	for _, table := range sessionOwnedTables {
 		if _, err := s.db.Exec("DELETE FROM "+table+
 			" WHERE session_id IN (SELECT id FROM sessions WHERE directory = ?)", directory); err != nil {
@@ -1088,7 +1075,6 @@ func (s *Store) CancelSessionTeardown(id string) error {
 	return tx.Commit()
 }
 
-// A live session must not carry the mark, or a later genuine crash would be misread as a clean close.
 func (s *Store) ClearSessionIntentionalClose(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1119,7 +1105,6 @@ func (s *Store) GetAgentMetadata(id string) string {
 	return strings.TrimSpace(metadata)
 }
 
-// Session lifetime in this store is authoritative during plugin recovery; private plugin state may only reconnect records returned here.
 func (s *Store) ListAgentDriverRuns(pluginName string) []ActiveAgentDriverRun {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1217,7 +1202,6 @@ func (s *Store) ListActiveAgentDriverRuns() []ActiveAgentDriverRun {
 	return runs
 }
 
-// Not a launch fact: pi only learns where its harness writes once the session has started.
 func (s *Store) SetAgentDriverTranscriptPath(id, runID, path string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -2297,7 +2281,6 @@ func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
 			raw = append(raw, &cloned)
 		}
 	} else {
-		// Pre-truncating here (e.g. by last_seen) would hide old-but-frequent locations.
 		rows, err := s.db.Query(`
 			SELECT path, last_seen, use_count
 			FROM recent_locations`)

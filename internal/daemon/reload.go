@@ -20,8 +20,6 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-// Backstop only: the killed worker's exit normally consumes the flag within milliseconds,
-// and a never-arriving exit must not wedge it and suppress an unrelated exit.
 const reloadStuckFlagGrace = 5 * time.Second
 
 func (d *Daemon) markReloading(sessionID string) {
@@ -146,8 +144,6 @@ func (d *Daemon) reloadSessionAgent(sessionID string) {
 
 	opts, err := d.buildReloadSpawnOptions(session)
 	if err != nil {
-		// Never respawn with defaulted launch flags: a chief that kept stale guidance
-		// beats one that silently lost yolo/executable.
 		d.logf("reload: cannot reconstruct launch params for %s: %v; aborting (live worker preserved)", sessionID, err)
 		return
 	}
@@ -223,16 +219,12 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 		defer pluginReload.abort()
 	}
 	ctx := context.Background()
-	// Mark BEFORE kill, so the worker's async exit is suppressed however quickly it
-	// fires relative to the kill returning.
 	d.markReloading(sessionID)
 	d.sessionInputs().fenceSession(sessionID)
 
 	if killErr := d.ptyBackend.Kill(ctx, sessionID, syscall.SIGTERM); killErr != nil {
 		d.logf("reload: kill returned error for %s (continuing): %v", sessionID, killErr)
 	}
-	// Remove synchronously first: the suppressed exit deliberately does NOT remove
-	// the backend entry, and Spawn rejects a still-present id.
 	if removeErr := d.ptyBackend.Remove(ctx, sessionID); removeErr != nil {
 		d.logf("reload: remove returned error for %s (continuing): %v", sessionID, removeErr)
 	}
@@ -257,12 +249,8 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 	}
 	d.sessionInputs().forgetSession(sessionID)
 
-	// Do NOT clear the flag here — the killed worker's exit consumes it, and the
-	// AfterFunc backstop covers an exit that never arrives.
 	time.AfterFunc(reloadStuckFlagGrace, func() { d.clearReloading(sessionID) })
 	intent := launchIntentFromSpawnOptions(opts, d.isChiefOfStaffSession(sessionID))
-	// SpawnOptions does not carry the auto mode choice, so rewriting the intent from
-	// it alone would drop the launcher's override on every reload.
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
 		intent.AutoMode = prior.AutoMode
 		intent.ApprovalPolicy, intent.SandboxMode = prior.ApprovalPolicy, prior.SandboxMode
@@ -338,8 +326,6 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 	}
 	driver := agentdriver.Get(agent)
 	resumeSessionID := agentdriver.ResolveSpawnResumeSessionID(driver, sessionID, "", d.store.GetResumeSessionID(sessionID))
-	// Claude writes its transcript lazily on the first turn, so a chief promoted before it ever
-	// took one has a resume id pointing at no file; a fresh launch reuses --session-id.
 	if resumeSessionID != "" && !agentdriver.ResumeAvailable(driver, resumeSessionID) {
 		d.logf("reload: resume target %s for session %s is not resumable (no transcript yet); fresh-spawning instead", resumeSessionID, sessionID)
 		resumeSessionID = ""
@@ -427,8 +413,6 @@ func (p *preparedPluginReload) commit() error {
 	return nil
 }
 
-// pluginReloadCapabilityError mirrors spawn: any resumable driver reloads, and only
-// a chief needs launch_instructions, since that is the guidance a reload refreshes.
 func pluginReloadCapabilityError(reg pluginDriverRegistration, isChief bool) error {
 	if !reg.Capabilities["resume"] {
 		return fmt.Errorf("agent %q requires the resume capability to reload", reg.Agent)
@@ -439,8 +423,6 @@ func pluginReloadCapabilityError(reg pluginDriverRegistration, isChief bool) err
 	return nil
 }
 
-// preparePluginReload resolves the replacement plugin command BEFORE the live worker is
-// killed, so an unavailable plugin or bad metadata leaves the current runtime untouched.
 func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend.SpawnOptions, isChief bool) (*preparedPluginReload, error) {
 	reg, ok := d.ensurePluginRegistry().driver(string(session.Agent))
 	if !ok {
@@ -549,8 +531,6 @@ func (p *preparedPluginRoleReload) execute() error {
 	return p.d.executePreparedSessionReload(p.sessionID, p.opts, p.plugin)
 }
 
-// preparePluginRoleReload runs driver.resume BEFORE a chief-role change is
-// persisted, so a failure leaves both the role and the live worker untouched.
 func (d *Daemon) preparePluginRoleReload(sessionID string, desiredChief bool) (*preparedPluginRoleReload, bool, error) {
 	session := d.store.Get(sessionID)
 	if session == nil {

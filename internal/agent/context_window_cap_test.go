@@ -43,8 +43,6 @@ func TestClaudeBuildEnv_ContextWindowCap(t *testing.T) {
 	})
 }
 
-// Claude Code copies each settings file's `env` block over its own environment, and
-// the generated --settings is applied after the user's, so the cap must appear there.
 func TestClaudeGenerateHooksConfig_ContextWindowCap(t *testing.T) {
 	parseEnv := func(t *testing.T, content string) map[string]string {
 		t.Helper()

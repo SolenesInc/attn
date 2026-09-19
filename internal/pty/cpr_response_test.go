@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// fish blocks its prompt redraw until the reattach SIGWINCH's CPR+DA1 are BOTH answered,
-// so the daemon answers both from its read loop even while a client is attached.
 func TestDaemonAnswersCPRAndDA1FromReadLoop(t *testing.T) {
 	const cols, rows = 80, 24
 

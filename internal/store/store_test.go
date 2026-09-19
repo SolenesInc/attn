@@ -232,8 +232,6 @@ func TestStore_ListAgentDriverRunsFiltersByOwnerAndIncludesMetadata(t *testing.T
 		t.Fatal("ApplyAgentDriverState failed")
 	}
 
-	// Seq is the run's report cursor: a driver process that replaces the one which opened the
-	// run has to continue from it, or every report it makes is discarded as stale.
 	if got := s.ListAgentDriverRuns("attn-example"); !reflect.DeepEqual(got, []ActiveAgentDriverRun{
 		{SessionID: "session-a", RunID: "run-a", Metadata: `{"native":"one"}`, Seq: 4},
 		{SessionID: "session-b", RunID: "run-b"},

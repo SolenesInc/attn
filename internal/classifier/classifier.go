@@ -17,13 +17,10 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 )
 
-// Deliberately not a protocol state — the daemon files it as classifier evidence.
 const VerdictParked = "parked"
 
 const ClaudeVerdictSchema = `{"type":"object","properties":{"verdict":{"type":"string","enum":["WAITING","DONE","PARKED"]}},"required":["verdict"],"additionalProperties":false}`
 
-// Lives beside the template so the "[harness facts]" marker and the prompt rule
-// that reads it cannot drift apart.
 func ComposeYieldInput(lastMessage string, runningBackgroundTasks int) string {
 	return fmt.Sprintf(
 		"%s\n\n[harness facts] The turn yielded with %d background process(es) still running; the harness will resume the agent when one exits.",
@@ -32,7 +29,6 @@ func ComposeYieldInput(lastMessage string, runningBackgroundTasks int) string {
 	)
 }
 
-// 2 leaves room for the structured-output turn after the answer.
 const ClaudeMaxTurns = 2
 
 const DefaultClaudeClassifierModel = "haiku"
@@ -42,8 +38,6 @@ var verdictLineRegex = regexp.MustCompile(`(?i)^\s*(?:VERDICT\s*[:=]\s*)?(WAITIN
 const classifierLogSnippetMaxChars = 600
 
 const (
-	// The cost here is latency, not tokens. Measured end to end through the CLI at low
-	// effort: gpt-5.6-luna 3.9s against 9.3s for the claude/haiku path.
 	defaultCodexClassifierModel   = "gpt-5.6-luna"
 	defaultCodexReasoningEffort   = "low"
 	defaultCodexClassifierTimeout = 30 * time.Second
@@ -259,15 +253,9 @@ func runCodexClassifierAttempt(ctx context.Context, executable, model, reasoning
 	args := []string{
 		"exec",
 		"--json",
-		// A persisted rollout is a decoy cwd-based transcript discovery can resolve instead
-		// of the real conversation: the classifier would classify its own prior verdict.
 		"--ephemeral",
 		"--output-last-message", lastMessagePath,
-		// Codex otherwise refuses `exec` outside a trusted git repo, so a turn that
-		// ends in an untrusted dir (e.g. /tmp) is misclassified as unknown.
 		"--skip-git-repo-check",
-		// The classifier must not inherit the user's MCP servers or agent settings.
-		// Auth is read separately.
 		"--ignore-user-config",
 		"-m", model,
 		"-c", fmt.Sprintf("%s=%q", codexConfigReasoningEffortKey, reasoningEffort),
@@ -357,8 +345,6 @@ func ClassifyWithCopilot(text string, timeout time.Duration) (string, error) {
 		"--no-color",
 		"--no-custom-instructions",
 	}
-	// An isolated cwd keeps classifier runs out of Copilot's cwd-based transcript
-	// discovery.
 	workDir, err := os.MkdirTemp("", "attn-copilot-classifier-*")
 	if err == nil {
 		defer os.RemoveAll(workDir)

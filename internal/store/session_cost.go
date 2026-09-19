@@ -12,19 +12,16 @@ import (
 )
 
 type SessionCostObservation struct {
-	ObservationID string `json:"observation_id"`
-	Model         string `json:"model"`
-	// Empty on every observation recorded before purposes existed, which the
-	// ledger key reads as the agent's own traffic.
-	Purpose string            `json:"purpose,omitempty"`
-	Usage   sessioncost.Usage `json:"usage"`
+	ObservationID string            `json:"observation_id"`
+	Model         string            `json:"model"`
+	Purpose       string            `json:"purpose,omitempty"`
+	Usage         sessioncost.Usage `json:"usage"`
 }
 
 func (o SessionCostObservation) ledgerKey() sessioncost.LedgerKey {
 	return sessioncost.NewLedgerKey(o.Model, o.Purpose)
 }
 
-// Finalized observations are counted into Ledger already: correcting one is refused.
 type SessionCostState struct {
 	Initialized           bool                              `json:"initialized,omitempty"`
 	Cursor                string                            `json:"cursor,omitempty"`
@@ -110,8 +107,6 @@ func (s *Store) InitializeSessionCostTracking(sessionID string) error {
 	})
 }
 
-// InitializeSessionCostSources records one discovery pass atomically. An
-// uninitialized resumed session baselines every source from the same snapshot.
 func (s *Store) InitializeSessionCostSources(sessionID string, cursors map[string]string) error {
 	return s.updateSessionCost(sessionID, func(state *SessionCostState) {
 		if state.Sources == nil {

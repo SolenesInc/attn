@@ -633,8 +633,6 @@ func TestParseMessageRejectsRetiredAutoModeCommands(t *testing.T) {
 	}
 }
 
-// The app reads a rule pattern as a list of alternatives per token, so a plain token
-// arrives as a one-entry list rather than a bare string.
 func TestAutoModeConfigResultRoundTripsARule(t *testing.T) {
 	result := AutoModeConfigResultMessage{
 		Event:     EventAutoModeConfigResult,

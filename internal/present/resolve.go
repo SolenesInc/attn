@@ -18,7 +18,7 @@ type AnchorIssue struct {
 	Path    string
 	Index   int
 	Message string
-	Warning bool // false = error
+	Warning bool
 }
 
 func ResolveAnnotations(m *Manifest, repoDir, headSHA string) (map[string][]ResolvedAnnotation, []AnchorIssue) {
@@ -145,8 +145,6 @@ func commentsOf(a AnnotationEntry) []string {
 	return a.Thread
 }
 
-// Shells out directly: internal/present stays self-contained and never imports
-// internal/daemon.
 func headFileLines(repoDir, headSHA, path string) ([]string, error) {
 	out, err := git.Output(git.OpDiff, repoDir, "show", headSHA+":"+path)
 	if err != nil {

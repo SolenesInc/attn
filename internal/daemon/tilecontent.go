@@ -31,14 +31,10 @@ func seedTileIDForID(seedID string) string {
 	return seedTileIDPrefix + seedID
 }
 
-// Polling, not per-file OS watches: editors' atomic saves routinely break those.
 const markdownPollInterval = 750 * time.Millisecond
 
-// Catches same-size rewrites that preserve the modification time.
 const markdownHashPollInterval = 5 * time.Second
 
-// encoding/json can expand a byte to six, so 1 MiB of raw preview leaves room
-// beneath the remote relay's 8 MiB message limit.
 const maxMarkdownBytes = 1 << 20
 
 type tileContentSig struct {
@@ -333,7 +329,6 @@ func (d *Daemon) pruneTileContentSubscriptionsForWorkspace(workspaceID string) {
 	d.pruneTileContentSubscriptionsForLayout(workspaceID, &snapshot.Layout)
 }
 
-// File bodies must not fan out to unrelated web or relay clients.
 func (d *Daemon) broadcastTileContent(workspaceID, tileID, kind, path, content string, readErr error) {
 	if !d.tileStillPointsTo(workspaceID, tileID, kind, path) {
 		return
@@ -413,13 +408,10 @@ func (d *Daemon) openMarkdownTile(path, sessionID string) (workspaceID, tileID s
 	if path == "" {
 		return "", "", fmt.Errorf("path is required")
 	}
-	// The tile id is sha256 of the absolute path: reject relative paths (they would
-	// resolve against the daemon's cwd) and Clean so /a/./b.md and /a//b.md agree.
 	if !filepath.IsAbs(path) {
 		return "", "", fmt.Errorf("path must be absolute: %s", path)
 	}
 	path = filepath.Clean(path)
-	// This is the only place recents are pruned — the opener never stats its list.
 	if _, statErr := os.Stat(path); statErr != nil {
 		d.store.DeleteFileActivity(path)
 		return "", "", fmt.Errorf("file not found: %s", path)
@@ -432,8 +424,6 @@ func (d *Daemon) openMarkdownTile(path, sessionID string) (workspaceID, tileID s
 		return "", "", fmt.Errorf("no workspace found for session %s", sessionID)
 	}
 
-	// Serialize check-then-dock: layout snapshots are last-write-wins, so a second
-	// unserialized dock silently drops the first tile.
 	d.openTileMu.Lock()
 	defer d.openTileMu.Unlock()
 
@@ -442,8 +432,6 @@ func (d *Daemon) openMarkdownTile(path, sessionID string) (workspaceID, tileID s
 	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil {
 		alreadyOpen = workspacelayout.HasTile(snapshot.Layout, tileID)
 		if !alreadyOpen {
-			// Layouts persisted before per-path tile ids used the fixed id
-			// "tile-markdown"; match those by kind+path.
 			for _, leaf := range workspacelayout.TileLeaves(snapshot.Layout) {
 				if leaf.TileKind == string(workspacelayout.TileKindMarkdown) && leaf.TileParams == path {
 					tileID = leaf.TileID
@@ -558,8 +546,6 @@ func (d *Daemon) openSentFilesEnabled() bool {
 	return parseBooleanSetting(raw)
 }
 
-// Answers OK regardless: the hook must never see an error it could surface into
-// the agent's transcript.
 func (d *Daemon) handleOpenSentFiles(conn net.Conn, msg *protocol.OpenSentFilesMessage) {
 	if !d.openSentFilesEnabled() {
 		d.sendOK(conn)

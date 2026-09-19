@@ -1,8 +1,5 @@
 package hooks
 
-// A tool, not a test: asserts nothing and skips unless ATTN_HOOKLOG_SCRIPT points at
-// a logger script. Run with -run TestPrintCodexHookOverridesForManualCapture -v.
-
 import (
 	"fmt"
 	"os"

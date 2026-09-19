@@ -1,7 +1,5 @@
 package workflow
 
-// Carries the engine's pathStack across every await / .then boundary: without it an agent()
-// call after an await reads an empty path. Exited restores the pre-Resumed state.
 type pathContextTracker struct {
 	stack *pathStack
 
@@ -12,8 +10,6 @@ func newPathContextTracker(stack *pathStack) *pathContextTracker {
 	return &pathContextTracker{stack: stack}
 }
 
-// Returns a value-type stackState, not a pointer into the live stack, so the
-// bound context is immune to later mutation.
 func (t *pathContextTracker) Grab() interface{} {
 	return t.stack.captureState()
 }

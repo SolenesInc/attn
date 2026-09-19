@@ -9,19 +9,16 @@ import (
 )
 
 type WorktreeEntry struct {
-	Path   string
-	Branch string
-	// Registered but its directory is gone; `git worktree add` refuses until a prune.
+	Path     string
+	Branch   string
 	Prunable bool
 }
 
-// ListWorktrees prunes before reading, so it returns what git will still honour.
 func ListWorktrees(repoDir string) ([]WorktreeEntry, error) {
 	_ = PruneWorktrees(repoDir)
 	return ObserveWorktrees(repoDir)
 }
 
-// ObserveWorktrees reads registrations as they are, stale ones included, and writes nothing.
 func ObserveWorktrees(repoDir string) ([]WorktreeEntry, error) {
 	out, err := runGitOutput(OpWorktree, repoDir, "worktree", "list", "--porcelain")
 	if err != nil {
@@ -52,7 +49,6 @@ func ObserveWorktrees(repoDir string) ([]WorktreeEntry, error) {
 	return worktrees, nil
 }
 
-// PruneWorktrees drops the registrations whose directory is gone.
 func PruneWorktrees(repoDir string) error {
 	return runGitNoOutput(OpWorktree, repoDir, "worktree", "prune")
 }
@@ -75,8 +71,6 @@ func CreateWorktreeFromPoint(repoDir, branch, path, startingFrom string) error {
 	return nil
 }
 
-// An existing worktree is evidence: a different repository, revision, or dirty
-// state is reported and never reset or removed.
 func EnsureDetachedWorktreeAtRevision(repoDir, path, revision string) (bool, error) {
 	return EnsureDetachedWorktreeAtRevisionWithHTTPAuthorization(repoDir, path, revision, "")
 }
@@ -85,8 +79,6 @@ func EnsureDetachedWorktreeAtRevisionWithHTTPAuthorization(repoDir, path, revisi
 	return ensureDetachedWorktreeAtRevision(repoDir, path, revision, authorization, false)
 }
 
-// A previously persisted stable session may modify, commit or switch its
-// checkout, which recovery must not read as corrupt.
 func EnsureAutomationSessionWorktree(repoDir, path, revision, authorization string, sessionPersisted bool) (bool, error) {
 	return ensureDetachedWorktreeAtRevision(repoDir, path, revision, authorization, sessionPersisted)
 }
@@ -129,8 +121,6 @@ func ensureDetachedWorktreeAtRevision(repoDir, path, revision, authorization str
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return false, fmt.Errorf("create automation worktree parent: %w", err)
 	}
-	// A daemon death after Git wrote worktree metadata leaves this exact absent path
-	// registered as prunable. Prune only after proving the target is absent.
 	_ = runGitNoOutput(OpWorktree, repoDir, "worktree", "prune", "--expire", "now")
 	remoteURL := ""
 	if authorization != "" {
@@ -189,7 +179,6 @@ func DeleteWorktree(repoDir, path string, force bool) error {
 		return fmt.Errorf("git worktree remove failed: %s", out)
 	}
 
-	// Always prune, or the worktree reappears in subsequent list operations.
 	_ = runGitNoOutput(OpWorktree, repoDir, "worktree", "prune")
 
 	return nil
@@ -223,8 +212,6 @@ func GetMainRepoFromWorktree(worktreePath string) string {
 	return gitdir[:idx]
 }
 
-// Untracked files count as changes, so a worktree where an agent only created
-// files is dirty.
 func IsWorktreeClean(path string) (bool, error) {
 	out, err := runGitOutput(OpStatus, CanonicalizePath(path), "status", "--porcelain", "--untracked-files=all")
 	if err != nil {
@@ -253,8 +240,6 @@ func ResolveMainRepoPath(repoPath string) string {
 	return filepath.Clean(expanded)
 }
 
-// RepositoryRoot names a directory's repository, walking the filesystem rather
-// than git: the main repository for a worktree, the checkout itself otherwise.
 func RepositoryRoot(dir string) string {
 	root, _ := RepositoryRootContext(context.Background(), dir)
 	return root

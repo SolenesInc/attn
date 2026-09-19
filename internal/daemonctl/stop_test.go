@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-// Not a real test: re-exec'd as a subprocess so a *different* process holds the pid
-// file's flock. Unset ATTN_STOP_TEST_HELPER_MODE makes it a no-op.
 func TestStopHelperProcess(t *testing.T) {
 	mode := os.Getenv("ATTN_STOP_TEST_HELPER_MODE")
 	if mode == "" {
@@ -43,8 +41,6 @@ func TestStopHelperProcess(t *testing.T) {
 			fmt.Fprintln(os.Stderr, "helper: missing ATTN_STOP_TEST_HELPER_READYPATH")
 			os.Exit(1)
 		}
-		// Deliberately never writes pid-file content: this models the window between
-		// acquiring the flock and publishing it.
 		if err := os.WriteFile(readyPath, []byte("ready"), 0644); err != nil {
 			fmt.Fprintf(os.Stderr, "helper: write ready file: %v\n", err)
 			os.Exit(1)
@@ -74,13 +70,9 @@ func TestStopHelperProcess(t *testing.T) {
 		os.Exit(1)
 	}
 
-	// time.Sleep waits on a runtime timer, so unlike a bare `select {}` the
-	// scheduler does not call it a deadlock.
 	time.Sleep(time.Hour)
 }
 
-// The subprocess is reaped as soon as it exits, so a helper killed by Stop never
-// lingers as a zombie that processGoneWithin's kill(pid, 0) reads as still alive.
 func spawnStopHelper(t *testing.T, pidPath string, mode string, extraEnv ...string) *exec.Cmd {
 	t.Helper()
 	cmd := exec.Command(os.Args[0], "-test.run=^TestStopHelperProcess$")

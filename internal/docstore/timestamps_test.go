@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// A stamp lives in a TEXT column and is ordered and filtered as text, so the
-// encoding carries the whole meaning of "before".
 func raggedInstants() []time.Time {
 	base := time.Date(2026, 8, 5, 10, 0, 0, 0, time.UTC)
 	return []time.Time{
@@ -35,8 +33,6 @@ func TestStoredStampsSortAsTextInTimeOrder(t *testing.T) {
 	}
 }
 
-// Fixed width is what makes the text order hold: a stamp with no fraction ends
-// in 'Z', which sorts above '.' and above every digit.
 func TestEveryStoredStampIsTheSameWidth(t *testing.T) {
 	for _, at := range raggedInstants() {
 		got := at.Format(TimeFormat)

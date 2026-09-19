@@ -145,7 +145,6 @@ func TestAutomationDeleteRetiresReviewEdgesBindingsAndFencesProviderCursors(t *t
 		t.Fatal(err)
 	}
 
-	// observedAt must be after automationApply's own enable fence (set from the real wall clock), or the observation is rejected before the edge exists.
 	const subject = "github.com/owner/repo#42"
 	observedAt := time.Now()
 	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", nil, observedAt); err != nil {

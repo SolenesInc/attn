@@ -109,8 +109,6 @@ func (c *Client) AppWatch(name string, stop <-chan struct{}, onInvocation func(p
 	if err := json.NewEncoder(conn).Encode(protocol.AppWatchMessage{Cmd: protocol.CmdAppWatch, Name: name}); err != nil {
 		return fmt.Errorf("send app_watch: %w", err)
 	}
-	// Closing the connection is what unblocks the decode below; a net.Conn has no
-	// cancellable read short of a deadline nobody would pick.
 	if stop != nil {
 		done := make(chan struct{})
 		defer close(done)

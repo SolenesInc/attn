@@ -71,7 +71,6 @@ func TestTheWebSocketAnswersSessionListWithAPageAndItsFacets(t *testing.T) {
 	if len(ids) != 2 || !slices.Contains(ids, "live-one") || !slices.Contains(ids, "closed-one") {
 		t.Fatalf("entries = %v, want live and closed together", ids)
 	}
-	// The app draws its filter choices from these; the socket door must carry them.
 	if reply.Result.Facets == nil || len(reply.Result.Facets.Workspaces) != 2 {
 		t.Errorf("facets = %+v, want a workspace choice per session", reply.Result.Facets)
 	}
@@ -101,8 +100,6 @@ func TestAPagedSessionListLeavesTheFacetsBehind(t *testing.T) {
 	if second.Result == nil || len(second.Result.Entries) != 1 {
 		t.Fatalf("second page = %+v, want the next row", second.Result)
 	}
-	// The choices belong to the query, not the page: re-sending them would only
-	// make the app redraw filters the user is already looking at.
 	if second.Result.Facets != nil {
 		t.Errorf("facets on a paged read = %+v, want none", second.Result.Facets)
 	}

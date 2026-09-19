@@ -7,7 +7,6 @@ import (
 	"strings"
 )
 
-// -ww stops ps trimming comm to the terminal width.
 func processExecutable(pid int) (string, error) {
 	out, err := exec.Command("ps", "-ww", "-p", strconv.Itoa(pid), "-o", "comm=").Output()
 	if err != nil {

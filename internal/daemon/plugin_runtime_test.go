@@ -181,8 +181,6 @@ func TestDaemon_StartInstalledPlugins_RestartsCleanExitWithNewGeneration(t *test
 
 	d := NewForTesting(sockPath)
 	d.pluginDir = pluginDir
-	// Isolate process launching from the daemon's asynchronous login-shell env prewarm
-	// so every generation resolves the same fake bun fixture.
 	d.pluginSupervisor = newPluginSupervisor(
 		execPluginProcessLauncher{},
 		nil,
@@ -343,8 +341,6 @@ func TestReapStrandedPluginRuntimesKillsThemAndRetiresTheirRecords(t *testing.T)
 		t.Fatalf("start stranded runtime: %v", err)
 	}
 	pid := cmd.Process.Pid
-	// A stranded runtime is init's child, not ours. Waiting here keeps the test
-	// process from holding it as a zombie, which answers signal 0.
 	exited := make(chan struct{})
 	go func() {
 		_ = cmd.Wait()

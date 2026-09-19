@@ -12,8 +12,6 @@ type TurnStamps struct {
 	SnoozedUntil time.Time
 }
 
-// The guard is a TEXT comparison, so the stored encoding must sort in time order within a
-// second — sortableTimeFormat, not RFC3339Nano, whose stripped fractions broke it (migration 95).
 func (s *Store) OpenTurnIfClosed(id string, now time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -68,8 +66,6 @@ func (s *Store) SettleTurn(id string, now time.Time) bool {
 	return err == nil && updated == 1
 }
 
-// Settles the open turn and records the deadline in ONE statement: split, a
-// broadcast could observe a turn both open and suppressed.
 func (s *Store) SnoozeTurn(id string, until, now time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -100,13 +96,10 @@ func (s *Store) WakeTurn(id string) bool {
 	return s.clearSnooze(id, nil)
 }
 
-// Clears only the exact deadline given, so stale work cannot clobber a later
-// snooze.
 func (s *Store) WakeTurnAt(id string, deadline time.Time) bool {
 	return s.clearSnooze(id, &deadline)
 }
 
-// Clears the exact deadline and reopens a closed turn in one store mutation.
 func (s *Store) WakeTurnAtAndOpenIfClosed(id string, deadline, openedAt time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -245,5 +238,4 @@ func (s *Store) setTurnStampsLocked(id string, stamps TurnStamps) {
 	s.turnStamps[id] = stamps
 }
 
-// parseTurnStamp decodes any RFC3339 spelling (pre-migration-95 stamps included).
 func parseTurnStamp(value string) time.Time { return parseStoreTime(value) }

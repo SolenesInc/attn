@@ -606,11 +606,8 @@ func TestSessionInput_QuietWindowReleasesTheComposerWithoutAPrompt(t *testing.T)
 	})
 }
 
-// A watcher returns at the top of its poll select: 20 runs stopped under 10us.
 const quiesceWatcherTripwire = 20 * transcriptPollInterval
 
-// A channel made inside a bubble is fatal to send on from outside it, and the
-// store's pool is shared, so no watcher may query it during one.
 func quiesceTranscriptWatchers(t *testing.T, d *Daemon) {
 	t.Helper()
 	d.watchersMu.Lock()
@@ -632,7 +629,6 @@ func quiesceTranscriptWatchers(t *testing.T, d *Daemon) {
 	}
 }
 
-// Leaving the bubble while a resend is still placing is a synctest deadlock.
 func settleResend(t *testing.T) {
 	t.Helper()
 	synctest.Wait()

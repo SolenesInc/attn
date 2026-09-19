@@ -20,7 +20,6 @@ const (
 	DefaultRetryCap     = 2 * time.Minute
 )
 
-// LogFunc must never be log.Printf: the daemon's background stderr is discarded.
 type LogFunc func(format string, args ...interface{})
 
 type Event struct {
@@ -64,7 +63,6 @@ type Store interface {
 	PendingBytes(above int64) (int64, error)
 }
 
-// An error stalls the consumer and redelivers the event; handlers must tolerate redelivery.
 type Handler func(ctx context.Context, ev Event) error
 
 type Gap struct {
@@ -74,7 +72,6 @@ type Gap struct {
 	Missed   int64
 }
 
-// PreDrain may durably move the cursor; the bus re-reads the registration after it returns.
 type PreDrain func(ctx context.Context, consumer Consumer, gap *Gap) error
 
 type Options struct {
@@ -115,9 +112,8 @@ type Bus struct {
 	ephemeral map[int]*ephemeralSub
 	nextSubID int
 	started   bool
-	// stopped is set before Stop cancels, so a registration racing shutdown does not add to wg.
-	stopped  bool
-	retiring map[string]struct{}
+	stopped   bool
+	retiring  map[string]struct{}
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -136,8 +132,7 @@ type durable struct {
 	done     chan struct{}
 	launched bool
 
-	mu sync.Mutex
-	// filter shares the position's lock: SetFilter changes it while the delivery loop reads it.
+	mu       sync.Mutex
 	filter   Filter
 	cursor   int64
 	enabled  bool
@@ -174,7 +169,6 @@ func New(opts Options) *Bus {
 		b.log = func(string, ...interface{}) {}
 	}
 	b.ctx, b.cancel = context.WithCancel(context.Background())
-	// Mark at construction, not Start: an unplaced mark replays the whole log on first write.
 	if b.store != nil {
 		b.markHead()
 	}
@@ -213,13 +207,11 @@ func (b *Bus) publish(ev Event, payload any) (int64, error) {
 
 	seq, err := b.store.Append(ev, now)
 	if err != nil {
-		// A failed append must not silence the wire.
 		b.fanoutEphemeral(ev)
 		return 0, fmt.Errorf("bus: appending %s: %w", ev.Name, err)
 	}
 	ev.Seq = seq
 
-	// Read the log forward rather than deliver the event in hand: a fact appended by another transaction may sit below this seq unannounced.
 	b.announceLocked(&ev)
 	b.wakeDurables()
 	return seq, nil
@@ -330,7 +322,6 @@ func (b *Bus) register(name string, filter Filter, pre PreDrain, h Handler) erro
 			return fmt.Errorf("bus: consumer %s already registered", name)
 		}
 	}
-	// A name being unregistered stays claimed until its row is gone: resuming a cursor from a row about to be deleted leaves a loop retrying a vanished registration forever.
 	if _, retiring := b.retiring[name]; retiring {
 		return fmt.Errorf("bus: consumer %s is being unregistered; retry once it is gone", name)
 	}
@@ -355,7 +346,6 @@ func (b *Bus) register(name string, filter Filter, pre PreDrain, h Handler) erro
 	return nil
 }
 
-// Cancel, wait for the loop to exit, then delete the row: deleting first leaves a live loop retrying a vanished registration forever.
 func (b *Bus) Unregister(name string) error {
 	b.mu.Lock()
 	var (
@@ -396,7 +386,6 @@ func (b *Bus) Unregister(name string) error {
 	return nil
 }
 
-// Unregister-then-Register would delete the cursor, silently skipping everything published meanwhile.
 func (b *Bus) SetFilter(name string, filter Filter) error {
 	b.mu.Lock()
 	var found *durable
@@ -411,7 +400,6 @@ func (b *Bus) SetFilter(name string, filter Filter) error {
 	if found == nil {
 		return fmt.Errorf("bus: consumer %s is not registered, so its filter cannot be changed", name)
 	}
-	// Persist first, then swap what the loop reads: the other order leaves the loop filtering by a rule no restart would reproduce.
 	if b.store != nil && started {
 		existing, ok, err := b.store.GetConsumer(name)
 		if err != nil {
@@ -459,7 +447,6 @@ func (b *Bus) newDurable(name string, filter Filter, pre PreDrain, h Handler) *d
 	}
 }
 
-// Caller holds b.mu, which orders the WaitGroup increment against Stop.
 func (b *Bus) launchLocked(d *durable) {
 	if b.stopped || b.ctx.Err() != nil {
 		close(d.done)
@@ -474,7 +461,6 @@ func (b *Bus) launchLocked(d *durable) {
 	}()
 }
 
-// fn runs inline on the publishing goroutine holding publishMu: it must be cheap and must not publish back onto the bus (deadlock).
 func (b *Bus) Subscribe(filter Filter, fn func(Event)) func() {
 	if fn == nil {
 		return func() {}
@@ -605,7 +591,6 @@ func (b *Bus) deliver(d *durable) {
 
 func (b *Bus) drain(d *durable) error {
 	prepare := func() (bool, error) {
-		// The enabled bit is the kill switch and lives only in the database; never cache it.
 		rec, ok, err := b.store.GetConsumer(d.name)
 		if err != nil {
 			return false, fmt.Errorf("reading registration: %w", err)
@@ -745,7 +730,6 @@ func (b *Bus) reconcileGap(d *durable, gap Gap) error {
 }
 
 func (b *Bus) advance(d *durable, seq int64) error {
-	// A handler in flight when Unregister landed has no cursor to move; erroring would stall a consumer nobody serves.
 	if d.isRetired() {
 		return nil
 	}
@@ -812,8 +796,6 @@ func (b *Bus) Trim() (int, error) {
 	return removed + compacted, failed
 }
 
-// Compacting above the cursor floor punches holes that reconcileGap misreads as trimmed history.
-// floor punches holes that reconcileGap misreads as trimmed history.
 func (b *Bus) compact() (int, error) {
 	if len(b.compactable) == 0 {
 		return 0, nil
@@ -901,7 +883,6 @@ func (d *durable) setEnabled(enabled bool) {
 	d.mu.Unlock()
 }
 
-// retire makes a late result from an in-flight handler a no-op rather than a failure.
 func (d *durable) retire() {
 	d.mu.Lock()
 	d.retired = true
@@ -969,7 +950,6 @@ func pinAlarmAgeOrDefault(v time.Duration) time.Duration {
 
 const RetentionEnv = "ATTN_BUS_RETENTION"
 
-// The daemon's hourly pass and `attn bus trim` read one database; a window they disagree about makes the CLI remove rows the daemon would have kept.
 func RetentionFromEnv(log LogFunc) time.Duration {
 	if log == nil {
 		log = func(string, ...interface{}) {}
@@ -995,7 +975,6 @@ func RetentionFromEnv(log LogFunc) time.Duration {
 
 const PinAlarmAgeEnv = "ATTN_BUS_PIN_ALARM_AGE"
 
-// The daemon raising the alarm and the CLI reading the same database must draw the line in the same place.
 func PinAlarmAgeFromEnv(log LogFunc) time.Duration {
 	if log == nil {
 		log = func(string, ...interface{}) {}
@@ -1013,7 +992,6 @@ func PinAlarmAgeFromEnv(log LogFunc) time.Duration {
 	if age <= 0 {
 		log("bus: %s=%q — the retention-pin alarm is off; a stuck consumer will grow the log unannounced",
 			PinAlarmAgeEnv, raw)
-		// Negative is the off switch inside the bus; zero would read as "unset".
 		return -1
 	}
 	log("bus: retention-pin alarm set to %s by %s (default %s)", age, PinAlarmAgeEnv, DefaultPinAlarmAge)

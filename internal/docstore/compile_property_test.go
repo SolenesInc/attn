@@ -69,7 +69,6 @@ var (
 	badOps = []Op{"like", "", "= 1 OR 1", "EQ", "<>"}
 )
 
-// The list is closed on purpose: adding one is the review step that catches an accidental splice.
 var sqlKeywords = map[string]bool{
 	"SELECT": true, "FROM": true, "WHERE": true,
 	"AND": true, "OR": true, "IS": true, "NOT": true, "NULL": true,
@@ -224,8 +223,6 @@ func TestCompiledSQLIsBuiltOnlyFromDerivedIdentifiers(t *testing.T) {
 		}
 	})
 
-	// Tripwire against a vacuous property: one in five is far below what the generators
-	// produce and far above zero.
 	if compiles*5 < attempts {
 		t.Fatalf("only %d of %d generated queries compiled; the generators refuse too much to be checking anything",
 			compiles, attempts)

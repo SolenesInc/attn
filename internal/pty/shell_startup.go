@@ -10,9 +10,8 @@ import (
 )
 
 type shellPaneLaunch struct {
-	command *exec.Cmd
-	env     []string
-	// A path, not a closure, so an in-place worker upgrade can hand it over.
+	command    *exec.Cmd
+	env        []string
 	overlayDir string
 }
 
@@ -32,8 +31,6 @@ var shellStartupStrategies = map[string]shellStartupStrategy{
 	"fish": prepareFishShellPaneLaunch,
 }
 
-// A plain cmd.Env is not enough: login and interactive rc files run after exec and may
-// prepend an old attn installation.
 func prepareShellPaneLaunch(shellPath string, env []string) (shellPaneLaunch, error) {
 	for _, name := range shellNames(shellPath) {
 		if strategy, ok := shellStartupStrategies[name]; ok {
@@ -63,7 +60,6 @@ func prepareFishShellPaneLaunch(shellPath string, env []string) (shellPaneLaunch
 		return shellPaneLaunch{}, fmt.Errorf("launch environment is missing PATH")
 	}
 	return shellPaneLaunch{
-		// fish runs -C commands after config.fish, so this is the last startup action.
 		command: exec.Command(shellPath, "-l", "-C", "set -gx PATH "+shellQuote(path)),
 		env:     env,
 	}, nil
@@ -115,8 +111,6 @@ func prepareZshShellPaneLaunch(shellPath string, env []string) (shellPaneLaunch,
 	}, nil
 }
 
-// Sourced from the startup overlay behind a POSIX-safe interpreter guard, so a different
-// shell parsing the overlay never sees zsh/bash-only syntax.
 const (
 	zshIntegrationFile  = "attn-osc133.zsh"
 	bashIntegrationFile = "attn-osc133.bash"
@@ -270,7 +264,6 @@ export PATH
 unset attn_startup_file
 `
 	if file == ".zshrc" {
-		// After the user's rc so their config cannot clobber the hooks; the guard stays POSIX.
 		content += `if [ -n "${ZSH_VERSION-}" ] && [ -z "${ATTN_NO_SHELL_INTEGRATION-}" ] && [ -r "$ATTN_SHELL_INIT_DIR/` + zshIntegrationFile + `" ]; then
   . "$ATTN_SHELL_INIT_DIR/` + zshIntegrationFile + `"
 fi
@@ -339,8 +332,6 @@ func preparePOSIXShellPaneLaunch(shellPath string, env []string) (shellPaneLaunc
 }
 
 func posixStartupOverlay(bash bool) string {
-	// bash (and macOS's /bin/sh) cache "~"'s home during startup and never re-derive it after
-	// this script reassigns HOME; forking one throwaway external command flushes that cache.
 	const warmup = `if [ -x /usr/bin/true ]; then
   /usr/bin/true
 fi

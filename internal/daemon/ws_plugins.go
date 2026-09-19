@@ -45,7 +45,6 @@ func (d *Daemon) handleInstallPluginWS(client *wsClient, msg *protocol.InstallPl
 	var manifest plugins.Manifest
 	var err error
 	if link {
-		// Refuse before LinkPath touches the checkout: it runs bun install there.
 		var name string
 		name, err = plugins.SourceName(source)
 		if err != nil {
@@ -256,8 +255,6 @@ func (d *Daemon) pluginsUpdatedMessage() *protocol.PluginsUpdatedMessage {
 		case !item.Installed:
 			info.RuntimeState = pluginRuntimeStateStopped
 		case runtimePhase == pluginPhaseParked:
-			// Parked is not degraded: nothing is being retried, so it must not read as
-			// a plugin that is still coming back on its own.
 			info.RuntimeState = pluginRuntimeStateParked
 		case healthStatus == "unhealthy" || runtimePhase == pluginPhaseBackoff:
 			info.RuntimeState = pluginRuntimeStateDegraded

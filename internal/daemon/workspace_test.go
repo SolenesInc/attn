@@ -454,7 +454,6 @@ func TestRecomputeWorkspaceStatus_SuppressesNoChangeBroadcast(t *testing.T) {
 	})
 	d.associateSessionWithWorkspace("s1", "ws1")
 
-	// Force the cached workspace status to idle so the next recompute is a no-op.
 	d.recomputeWorkspaceStatus("ws1")
 
 	cap := captureBroadcasts(d)
@@ -534,7 +533,7 @@ func TestListLocalWorkspaces_IncludesRegistered(t *testing.T) {
 
 func TestRegisterWorkspace_PersistsToStoreAndUpsertsRecentLocation(t *testing.T) {
 	d := newDaemonForTest(t)
-	dir := t.TempDir() // Real path so GetRecentLocations doesn't filter it out.
+	dir := t.TempDir()
 	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
 		Cmd:       protocol.CmdRegisterWorkspace,
 		ID:        "ws1",
@@ -598,8 +597,6 @@ func TestUnregisterWorkspace_CascadeClosesMemberSessions(t *testing.T) {
 	}
 
 	events := cap.snapshot()
-	// Each session leaves twice over: once as a ledger row that closed, once as a
-	// live session that is gone.
 	if len(events) != 5 {
 		t.Fatalf("expected 5 broadcasts (2 session_closed + 2 session_unregistered + 1 workspace_unregistered), got %d: %+v", len(events), events)
 	}
@@ -620,7 +617,6 @@ func TestLoadWorkspacesFromStore_RebuildsRegistryAndReassociates(t *testing.T) {
 	d := newDaemonForTest(t)
 	now := string(protocol.TimestampNow())
 
-	// Seed the store directly, simulating state persisted before a daemon restart.
 	d.store.AddWorkspace(&protocol.Workspace{ID: "ws1", Title: "ws", Directory: "/repo"})
 	d.store.Add(&protocol.Session{
 		ID: "s1", Label: "s1", Agent: protocol.SessionAgentCodex, Directory: "/repo",

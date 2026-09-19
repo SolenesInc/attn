@@ -16,8 +16,6 @@ func fakeClaudeClassifierCLI(t *testing.T, stdout string, exitCode int) (argsPat
 	dir := t.TempDir()
 	argsPath = filepath.Join(dir, "args.log")
 	scriptPath := filepath.Join(dir, "claude")
-	// Args are recorded NUL-separated: the prompt and the schema are multi-line, so a
-	// newline separator would shred them.
 	script := fmt.Sprintf(`#!/bin/sh
 for arg in "$@"; do
   printf '%%s\034' "$arg" >> '%s'

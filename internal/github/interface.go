@@ -6,7 +6,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// GitHubClient defines the interface for all GitHub operations
 type GitHubClient interface {
 	Host() string
 	IsAvailable() bool
@@ -18,5 +17,4 @@ type GitHubClient interface {
 	GetRateLimit(resource string) *RateLimitInfo
 }
 
-// Ensure Client implements the interface
 var _ GitHubClient = (*Client)(nil)

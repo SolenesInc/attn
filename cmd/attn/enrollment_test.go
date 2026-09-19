@@ -31,8 +31,6 @@ func TestEnrollmentStatus_OutpostShowsTheRefusalItWouldGive(t *testing.T) {
 	writeEnrollmentStatus(&out, enrollment.Status{DaemonID: testDaemonID, HomeDaemonID: testHomeID})
 
 	rendered := out.String()
-	// The point of showing the fence's own words here is that whoever runs a
-	// garden command next has already read what it will say, and how to undo it.
 	for _, want := range []string{
 		"outpost of " + testHomeID,
 		"refused here",

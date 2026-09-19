@@ -21,8 +21,6 @@ import (
 	"github.com/victorarias/attn/internal/workflow"
 )
 
-// Cancellation is COOPERATIVE VIA POLLING: the request/response socket client cannot read
-// unsolicited control frames, so the engine polls workflow_run_get at this interval.
 const cancelPollInterval = 1 * time.Second
 
 func runWorkflow() {
@@ -83,8 +81,6 @@ type workflowRunArgs struct {
 	runID      string
 }
 
-// Go's flag package stops at the first non-flag token, so the positional script
-// is lifted out of argv before parsing.
 func parseWorkflowRunArgs(argv []string, envSession string) (workflowRunArgs, error) {
 	script, rest, err := extractScriptArg(argv)
 	if err != nil {
@@ -226,8 +222,6 @@ func runWorkflowRun(argv []string) {
 	os.Exit(exitCode)
 }
 
-// The store's ON CONFLICT upsert replaces every column, so the initial write
-// must carry the FULL header.
 func buildInitialWorkflowRun(parsed workflowRunArgs, runID, scriptHash, argsJSON string) *protocol.WorkflowRun {
 	now := string(protocol.TimestampNow())
 	run := &protocol.WorkflowRun{
@@ -298,8 +292,6 @@ func runWorkflowEngine(c workflowClient, parsed workflowRunArgs, runID, source, 
 	return workflowResultExitCode(final.Status)
 }
 
-// The ON CONFLICT upsert replaces EVERY column, so the terminal write must
-// carry the full header. Falls back to a synthesized run on a get failure.
 func finishWorkflowRun(c workflowClient, runID string, result workflow.RunResult) *protocol.WorkflowRun {
 	run := loadRunForFinalize(c, runID)
 	run.Status = mapRunStatus(result)
@@ -454,7 +446,6 @@ func detachWorkflowChild(c workflowClient, parsed workflowRunArgs, runID, script
 	if parsed.resume != "" {
 		childArgs = append(childArgs, "--resume", parsed.resume)
 	}
-	// A temp file, not argv: arbitrary JSON hits quoting traps.
 	if strings.TrimSpace(argsJSON) != "" {
 		f, err := os.CreateTemp("", "attn-workflow-args-*.json")
 		if err != nil {
@@ -476,7 +467,6 @@ func detachWorkflowChild(c workflowClient, parsed workflowRunArgs, runID, script
 	return cmd.Start()
 }
 
-// workflowResultOutput is frozen: field order is part of the agent-facing contract.
 type workflowResultOutput struct {
 	Status       string          `json:"status"`
 	Result       json.RawMessage `json:"result,omitempty"`

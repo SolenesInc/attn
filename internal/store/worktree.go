@@ -61,8 +61,7 @@ type Worktree struct {
 
 	SweepStatus WorktreeSweepStatus `json:"sweep_status,omitempty"`
 	SweepReason string              `json:"sweep_reason,omitempty"`
-	// The date the row becomes eligible while scheduled; the date it went once removed.
-	SweepAt string `json:"sweep_at,omitempty"`
+	SweepAt     string              `json:"sweep_at,omitempty"`
 }
 
 func (w *Worktree) Pinned() bool { return w != nil && w.PinnedAt != "" }
@@ -421,8 +420,7 @@ type MergedBranch struct {
 	MergedAt string `json:"merged_at,omitempty"`
 	Number   int    `json:"number,omitempty"`
 	URL      string `json:"url,omitempty"`
-	// The tip that merged. A branch past it carries commits the merge misses.
-	HeadSHA string `json:"head_sha,omitempty"`
+	HeadSHA  string `json:"head_sha,omitempty"`
 }
 
 func (s *Store) RecordRepoMergedBranches(mainRepo string, branches []MergedBranch, now time.Time) {

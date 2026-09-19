@@ -9,11 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// read_at holds '' while unread and a sortableTimeFormat stamp once read;
-// parseStoreTime decodes a blank or garbage value to the zero time.
-
-// A closed set: an unrecognized value must resolve to one of these rather than
-// reach the app unstyled.
 type NotificationSeverity string
 
 const (
@@ -115,8 +110,6 @@ func (s *Store) UnreadNotificationCount() (int, error) {
 	return n, nil
 }
 
-// Count and title come from one statement so the ambient surface never mixes
-// two instants.
 func (s *Store) UnreadCriticalNotifications() (int, string, error) {
 	if s.db == nil {
 		return 0, "", fmt.Errorf("store: no database")

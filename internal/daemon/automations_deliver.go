@@ -219,8 +219,6 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	if inserted {
 		announceGardenSeedEvents(d, []int64{seq})
 	}
-	// No unit-test coverage: pinned live by scenario-automation-surface.mjs
-	// leg2_run_now_and_navigable.
 	d.broadcastAutomationsChanged(run.DefinitionID)
 	return nil
 }
@@ -585,8 +583,6 @@ func (d *Daemon) prepareAutomationLocation(_ context.Context, req automation.Wor
 			}
 			return automation.PreparedLocation{}, fmt.Errorf("inspect reviewer continuity worktree: %w", err)
 		}
-		// A delivered origin proves this stable session owned the worktree: preserve
-		// its commits, branch switch, and local changes when resuming.
 		sessionPersisted = true
 	}
 	if _, err := attngit.EnsureAutomationSessionWorktree(mainRepo, worktree, pr.HeadSHA, authorization, sessionPersisted); err != nil {
@@ -657,8 +653,6 @@ func (d *Daemon) ensureAutomationSession(ctx context.Context, req automation.Wor
 		return err
 	}
 	if d.automationSessionIsLive(req.IDs.SessionID) {
-		// Worker recovery adopted the original launch; do not spawn the stable
-		// session ID a second time.
 		return d.verifyUnattendedLaunch(req)
 	}
 	if continuationRun != nil {
@@ -860,8 +854,6 @@ func stripANSIForPromptMatch(data []byte) string {
 	return string(out)
 }
 
-// Applying the definition IS the user's authorization for that directory; exact
-// screen matching keeps other prompts out.
 func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest) error {
 	if req.Launch.Agent != string(protocol.SessionAgentCodex) {
 		return nil

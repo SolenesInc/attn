@@ -14,9 +14,6 @@ import (
 	"unsafe"
 )
 
-// Invoked synchronously by libghostty-vt during vt_write, so it MUST NOT call back
-// into vt_write on the same terminal.
-
 //export goWritePty
 func goWritePty(term C.GhosttyTerminal, userdata unsafe.Pointer, data *C.uint8_t, length C.size_t) {
 	if userdata == nil || length == 0 {

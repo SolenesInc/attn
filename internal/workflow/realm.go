@@ -16,7 +16,6 @@ type Meta struct {
 	Model       string
 }
 
-// goja's New() installs no fs, net, process, require, crypto, performance, setTimeout or console, and nothing else is injected, so the realm exposes only the host surface plus the shims below.
 func installDeterminismBans(vm *goja.Runtime) error {
 	throw := func(api, substitute string) func(goja.FunctionCall) goja.Value {
 		return func(goja.FunctionCall) goja.Value {
@@ -52,7 +51,6 @@ func installDeterminismBans(vm *goja.Runtime) error {
 		}
 	}
 
-	// Belt-and-suspenders: performance/crypto are absent in this build, so these are no-ops today.
 	for _, name := range []string{"performance", "crypto"} {
 		if v := vm.Get(name); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
 			if err := vm.Set(name, goja.Undefined()); err != nil {
@@ -64,7 +62,6 @@ func installDeterminismBans(vm *goja.Runtime) error {
 	return nil
 }
 
-// In JS so instance prototype/inheritance is preserved exactly.
 func banArglessNewDate(vm *goja.Runtime) error {
 	banMsg := (&ErrDeterminismBan{
 		API:        "new Date()",
@@ -74,8 +71,6 @@ func banArglessNewDate(vm *goja.Runtime) error {
 	if err := vm.Set("__wfDateBanMsg", banMsg); err != nil {
 		return err
 	}
-	// The IIFE captures the ban thrower so the text survives dropping the temporary global.
-	// A plain `Date()` call ignores its args per spec and returns the current time, so it is banned with OR without args.
 	const shim = `(function(){
 		var OrigDate = Date;
 		function WfDate() {
@@ -106,11 +101,9 @@ func banArglessNewDate(vm *goja.Runtime) error {
 	if _, err := vm.RunString(shim); err != nil {
 		return err
 	}
-	// Safe to drop: __wfThrowDateBan stays reachable through WfDate's closure.
 	return vm.Set("__wfDateBanMsg", goja.Undefined())
 }
 
-// goja does not parse ES module syntax, and `export const meta = {...}` is authoring sugar.
 func stripExport(src string) string {
 	var b strings.Builder
 	for _, line := range strings.Split(src, "\n") {
@@ -127,7 +120,6 @@ func stripExport(src string) string {
 	return b.String()
 }
 
-// `meta` must be the FIRST statement and its initializer a PURE object literal; src must already have `export` stripped.
 func parseMeta(src string) (*Meta, error) {
 	body, err := topLevelStatements(src)
 	if err != nil {
@@ -206,7 +198,6 @@ func parseMeta(src string) (*Meta, error) {
 	return m, nil
 }
 
-// Parsed inside the same async wrapper the engine runs, so top-level await/return parse.
 func topLevelStatements(src string) ([]ast.Statement, error) {
 	wrapped := "(async function __wf__(){\n" + src + "\n})()"
 	prog, err := parser.ParseFile(nil, "workflow.js", wrapped, 0)
@@ -251,7 +242,6 @@ func findMetaDecl(body []ast.Statement) (int, *ast.Binding) {
 	return -1, nil
 }
 
-// goja parses a string literal and a bareword identifier both as StringLiteral.
 func literalKey(e ast.Expression) (string, bool) {
 	switch k := e.(type) {
 	case *ast.StringLiteral:

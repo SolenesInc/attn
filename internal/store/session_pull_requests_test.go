@@ -228,7 +228,6 @@ func TestSessionPullRequestByIDTakesTheFreshestRowAcrossSessions(t *testing.T) {
 		t.Fatalf("row = %+v, want the merged status", rec)
 	}
 
-	// A row a session forgot leaves the other one answering for the pull request.
 	if _, err := s.ForgetSessionPullRequest("s2", prID); err != nil {
 		t.Fatalf("forget: %v", err)
 	}

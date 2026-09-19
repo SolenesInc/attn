@@ -1,5 +1,3 @@
-// Invariant: a generated key never ends in '0' — a trailing '0' is a numeric no-op
-// (0.v == 0.v0) that would break "byte order == numeric order".
 package rankkey
 
 import (
@@ -43,7 +41,6 @@ func Between(a, b string) (string, error) {
 		}
 
 		if db-da >= 2 {
-			// >= da+1 >= 1, so never the trailing minimum digit.
 			out.WriteByte(digits[(da+db)/2])
 			return out.String(), nil
 		}
@@ -54,7 +51,6 @@ func Between(a, b string) (string, error) {
 		for i++; ; i++ {
 			da = digitAt(a, i, 0)
 			if da+1 < base {
-				// Midpoint of (da, base): >= da+1 >= 1, so never the minimum digit.
 				out.WriteByte(digits[(da+base)/2])
 				return out.String(), nil
 			}

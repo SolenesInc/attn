@@ -108,8 +108,6 @@ func initTestRepo(t *testing.T) string {
 	}
 	runGit("add", ".")
 	runGit("commit", "-m", "initial")
-	// CanonicalizePath resolves symlinks (macOS /var -> /private/var) so the path
-	// matches what git reports for worktree listing comparisons.
 	return git.CanonicalizePath(dir)
 }
 

@@ -38,7 +38,6 @@ func TestBusStatusRenderingCountsWhatItLeavesOut(t *testing.T) {
 		Name: "session.state.changed", Events: 800, Share: 0.8, Subjects: 4,
 		RecentPerHour: 40, BaselinePerHour: 33,
 	}}
-	// One more class than the table shows, each holding 10 events.
 	for i := 0; i < busProducerLines; i++ {
 		producers = append(producers, bus.Producer{
 			Name: fmt.Sprintf("quiet.%d", i), Events: 10, Share: 0.01, Subjects: 2,
@@ -144,8 +143,6 @@ func TestBusStatusJSONCarriesBothSustainedWindows(t *testing.T) {
 	}
 }
 
-// Matched on the name starting the line, so the marker column and the health
-// sentences below cannot stand in for the row.
 func producerRow(t *testing.T, out, name string) string {
 	t.Helper()
 	for _, line := range strings.Split(out, "\n") {

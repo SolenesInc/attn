@@ -19,9 +19,7 @@ type Hook struct {
 
 type SettingsConfig struct {
 	Hooks map[string][]HookEntry `json:"hooks"`
-	// Claude Code copies every settings file's `env` block over the parent's environment, so a
-	// knob only in the spawn environment loses; this file is passed with --settings and wins.
-	Env map[string]string `json:"env,omitempty"`
+	Env   map[string]string      `json:"env,omitempty"`
 }
 
 type sessionStartHookSpecificOutput struct {
@@ -128,8 +126,6 @@ func Generate(sessionID, socketPath, wrapperPath string, env map[string]string) 
 					},
 				},
 			},
-			// "permission_prompt" fires ~6s after a permission request and "idle_prompt" exactly 60s
-			// after an unanswered turn settles — too slow to lead a transition, so it is evidence only.
 			"Notification": {
 				{
 					Matcher: "*",
@@ -152,7 +148,6 @@ func Generate(sessionID, socketPath, wrapperPath string, env map[string]string) 
 					},
 				},
 			},
-			// The two compaction hooks carry identical payloads, so the edge is named on the command line.
 			"PreCompact": {
 				{
 					Matcher: "*",

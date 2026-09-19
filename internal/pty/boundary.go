@@ -76,7 +76,7 @@ func isCompleteEscape(seq []byte) bool {
 			}
 		}
 		return false
-	case ']': // OSC, terminated by BEL or ST (ESC \\\)
+	case ']':
 		for i := 2; i < len(seq); i++ {
 			if seq[i] == 0x07 {
 				return true
@@ -86,7 +86,7 @@ func isCompleteEscape(seq []byte) bool {
 			}
 		}
 		return false
-	case 'P', '^', '_': // DCS/PM/APC terminated by ST
+	case 'P', '^', '_':
 		for i := 2; i < len(seq); i++ {
 			if seq[i] == 0x1b && i+1 < len(seq) && seq[i+1] == '\\' {
 				return true

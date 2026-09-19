@@ -235,8 +235,6 @@ func (d *Daemon) activeSessionInLinkedWorktree(directory string) (string, bool) 
 	return root, len(occupants) > 0
 }
 
-// delegationRollback unwinds newest first: a session stops before its pane is removed,
-// the pane before its workspace, the workspace before the worktree it points at.
 type delegationRollback struct {
 	d    *Daemon
 	undo []func() error
@@ -256,13 +254,10 @@ func (r *delegationRollback) fail(cause error) error {
 	return cause
 }
 
-// Only correct when EVERY pending compensation must not be performed; not a
-// general "skip cleanup".
 func (r *delegationRollback) abandon() {
 	r.undo = nil
 }
 
-// reused or adopted worktree must never be pushed here.
 func (r *delegationRollback) onWorktreeCreated(path string) {
 	r.undo = append(r.undo, func() error {
 		if err := r.d.doDeleteWorktreeForeground(path, nil, deleteWorktreeOptions{}); err != nil {
@@ -334,8 +329,6 @@ func verifyDelegationWorktreeOwner(worktreePath, token string) error {
 	return nil
 }
 
-// The member sessions are the authority on the repository, not the workspace's stored
-// Directory: a dragged-out pane inherits that wholesale and can name another repo.
 func (d *Daemon) delegationWorktreeRepo(workspaceID string) (string, error) {
 	seen := map[string]struct{}{}
 	var repos []string
@@ -380,7 +373,6 @@ func automaticDelegationBranch(label, sessionID string) string {
 	return "delegate/" + slug + "-" + suffix
 }
 
-// A nil worktree request is an explicit opt-out.
 func (d *Daemon) applyDefaultDelegationWorktree(msg *resolvedDelegationLaunch, placement, workspaceID, directory, sessionID, label string) error {
 	if msg.Worktree == nil {
 		return nil
@@ -433,8 +425,6 @@ func (d *Daemon) createDelegationWorktree(baseDirectory, inferredRepo string, re
 		repo = strings.TrimSpace(inferredRepo)
 	}
 	if repo == "" {
-		// Never call git with an empty directory: it would run in the daemon's own
-		// working directory and could resolve to an unrelated repository.
 		if baseDirectory == "" {
 			return "", false, fmt.Errorf("cannot determine which repository the worktree belongs to; pass --repo")
 		}
@@ -464,8 +454,6 @@ func (d *Daemon) createDelegationWorktree(baseDirectory, inferredRepo string, re
 			return expectedPath, true, nil
 		}
 		if operationID != "" && ownedPath != "" && git.CanonicalizePath(ownedPath) == expectedPath {
-			// Git creation and SQLite ownership cannot be one transaction: never adopt or
-			// delete an ambiguous path without proof.
 			return "", false, fmt.Errorf("worktree %s appeared while delegation preparation was interrupted; ownership cannot be proven, so it was left untouched", expectedPath)
 		}
 		return "", false, fmt.Errorf("worktree %s already exists; creation cannot be reinterpreted as checkout reuse", expectedPath)
@@ -820,8 +808,6 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 		return nil, fmt.Errorf("unsupported placement %q", placement)
 	}
 
-	// A workspace places the pane, never the checkout: without a worktree or an
-	// explicit --cwd, the agent stays in the source session's checkout.
 	if !explicitLaunch && msg.Worktree == nil && strings.TrimSpace(msg.Cwd) == "" {
 		directory = source.Directory
 	}
@@ -910,8 +896,6 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 		}
 		directory = validatedDirectory
 	}
-	// Keep the occupancy check and session registration indivisible. The stored
-	// session becomes the durable reservation seen by the next launch.
 	d.delegationCheckoutMu.Lock()
 	checkoutLocked := true
 	defer func() {
@@ -924,8 +908,6 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 		predecessorID = strings.TrimSpace(msg.PreviousTenderSession)
 	}
 	if worktreeRoot, occupants := d.activeSessionInCheckout(directory, predecessorID, sessionID); len(occupants) > 0 && !protocol.Deref(msg.AllowWorktreeReuse) {
-		// Once another active session occupies the worktree it must not be rolled back,
-		// even if this operation created it.
 		rollback.abandon()
 		return nil, fmt.Errorf("checkout %s is used by active Attn session %s; pass --allow-worktree-reuse only when sharing it is intentional", worktreeRoot, strings.Join(occupants, ", "))
 	}
@@ -1045,8 +1027,6 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 	if session.Branch != nil && strings.TrimSpace(*session.Branch) != "" {
 		result.Branch = protocol.Ptr(strings.TrimSpace(*session.Branch))
 	}
-	// Everything built so far stays on a failure here: the dead pane is the
-	// evidence, and undoing it would leave nothing to read.
 	rollback.abandon()
 	if err := d.confirmDelegatedLaunch(operationID, sessionID, agent, watch, result); err != nil {
 		return nil, err

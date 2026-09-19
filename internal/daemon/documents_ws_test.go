@@ -19,8 +19,6 @@ func newWSSubscriber() *wsSubscriber {
 	return &wsSubscriber{client: &wsClient{send: make(chan outboundMessage, 256)}}
 }
 
-// A tripwire on a deadlock, not a wait for something slow: every assertion here
-// is woken by a real write.
 func (s *wsSubscriber) nextEvent(t *testing.T) map[string]any {
 	t.Helper()
 	select {
@@ -321,8 +319,6 @@ func undefineTestCollection(t *testing.T, d *Daemon) {
 	}
 }
 
-// The loop ends on its own goroutine, so the registry count moving is the only
-// signal that it did.
 func waitForSubscriptionCount(t *testing.T, d *Daemon, want int) {
 	t.Helper()
 	waitFor(t, fmt.Sprintf("the daemon to hold %d live subscriptions", want), func() bool {

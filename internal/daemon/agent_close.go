@@ -13,10 +13,8 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// A harvest reason and a close reason answer the same question, so one number.
 const agentCloseReasonMaxChars = garden.MaxReasonChars
 
-// Past any real tender's seeds: a session holding 100 is broken, not busy.
 const agentCloseTendedSeedLimit = 100
 
 func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage) {
@@ -147,7 +145,6 @@ func (d *Daemon) agentCloseCandidates() []*protocol.Session {
 	return candidates
 }
 
-// One hop: walking the dispatch chain makes a mistaken close unbounded.
 func (d *Daemon) agentCloseRule(caller, target *protocol.Session) (protocol.AgentCloseRule, error) {
 	if caller.ID == target.ID {
 		return protocol.AgentCloseRuleSelf, nil

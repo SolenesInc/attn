@@ -21,8 +21,6 @@ const (
 	crewLifecycleTimeout  = 60 * time.Second
 )
 
-// Assumed prompt-cache lifetimes, per vendor policy — no API reports one. An unnamed
-// harness gets the hour: too short costs ~$1.80/h in heartbeats, too long one ~$3.00.
 const (
 	crewCacheTTLClaude  = 3600
 	crewCacheTTLCodex   = 1800
@@ -31,8 +29,6 @@ const (
 
 const crewHeartbeatLeadDefault = 300
 
-// Receipt, measured 2026-08-14 over 12.4 days of the production event log: gaps between
-// user-caused facts run continuously to 7,556s and then jump to 18,468s.
 const crewAwayDefault = 9000
 
 const (

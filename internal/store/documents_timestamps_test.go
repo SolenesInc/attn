@@ -9,9 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 )
 
-// created_at and updated_at are TEXT columns, so every sort and every "changed
-// since" filter on them is a text comparison.
-
 var raggedSeconds = []struct {
 	id     string
 	offset time.Duration

@@ -8,9 +8,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// A session's PTY master is held as a POLLABLE file: creackpty hands back a blocking
-// master, on which SetReadDeadline fails outright.
-
 func pollablePTMX(f *os.File) (*os.File, error) {
 	fd, err := syscall.Dup(int(f.Fd()))
 	if err != nil {
@@ -25,8 +22,6 @@ func pollablePTMX(f *os.File) (*os.File, error) {
 	return out, nil
 }
 
-// adoptPTMX wraps an fd inherited across an in-place upgrade. O_NONBLOCK survives execve,
-// so this only re-asserts it and hands the fd to the poller.
 func adoptPTMX(fd int) (*os.File, error) {
 	if err := syscall.SetNonblock(fd, true); err != nil {
 		return nil, fmt.Errorf("set adopted pty master non-blocking: %w", err)
@@ -34,8 +29,6 @@ func adoptPTMX(fd int) (*os.File, error) {
 	return os.NewFile(uintptr(fd), "ptmx"), nil
 }
 
-// withPTMXFd runs fn on the master's raw descriptor without disturbing the poller
-// registration, which File.Fd() is entitled to drop. Callers hold writeMu.
 func (s *Session) withPTMXFd(fn func(fd uintptr) error) error {
 	conn, err := s.ptmx.SyscallConn()
 	if err != nil {

@@ -14,7 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
-// Cells are 8x16 px, so a 16x32 image is exactly two cells by two.
 func kittyPlaceRGB(id uint32, w, h int) string {
 	pix := make([]byte, w*h*3)
 	for i := range pix {
@@ -33,8 +32,6 @@ func kittyPayloadFile(t *testing.T, payload string) string {
 	return path
 }
 
-// The child blocks on a newline: without that handshake it can emit and finish
-// before the attach lands.
 func releaseAndReadPlacements(t *testing.T, stream Stream, release func() error) OutputEvent {
 	t.Helper()
 	if err := release(); err != nil {

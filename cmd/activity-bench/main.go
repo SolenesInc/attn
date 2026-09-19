@@ -49,7 +49,6 @@ windows carry source code and conversations and are not committed.
 `)
 }
 
-// defaultDir holds real transcript excerpts, so it is gitignored on purpose.
 const defaultDir = ".activity-bench"
 
 func ensureDir(dir string) error {

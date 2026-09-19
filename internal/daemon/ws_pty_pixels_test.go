@@ -163,8 +163,6 @@ func TestPtyResizeLeavesPixelsAbsentWhenNoneWereReported(t *testing.T) {
 }
 
 func TestPtyResizeDropsPixelsTheKernelCannotHold(t *testing.T) {
-	// ws_xpixel is uint16: 70000 would truncate to 4464 and read as a real
-	// measurement all the way down to the emitter.
 	d, backend, capture := newResizeDaemon(t)
 
 	d.handlePtyResize(nil, &protocol.PtyResizeMessage{

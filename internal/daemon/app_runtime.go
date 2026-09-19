@@ -18,22 +18,15 @@ import (
 )
 
 const (
-	// Also the reserved app name in internal/apps: `attn app logs runtime` must
-	// mean one thing.
 	appRuntimeChildName = "runtime"
 
-	// The build, this daemon and the hub remote install all have to agree on it.
 	appRuntimeBinaryName = apps.RuntimeHostBinaryName
 
-	// Bump it here and in apphost/src/index.ts together —
-	// TestAppRuntimeAPIVersionMatchesTheHost fails when only one moves.
 	appRuntimeAPIVersion = 5
 )
 
 const appRuntimeHostOverride = "ATTN_APP_RUNTIME_HOST"
 
-// No PATH search: a daemon launched by the macOS app has a minimal PATH and
-// would find a different binary, or a stranger.
 func resolveAppRuntimeHost() (string, error) {
 	if override := strings.TrimSpace(os.Getenv(appRuntimeHostOverride)); override != "" {
 		if _, err := os.Stat(override); err != nil {
@@ -67,16 +60,12 @@ func appRuntimeHostCandidates(executable, profile string) []string {
 	if resources := config.InstallResourcesDir(executable); resources != "" {
 		candidates = append(candidates, filepath.Join(resources, "app-runtime", appRuntimeBinaryName))
 	}
-	// A named profile looks for its own copy first — profile-isolated daemons on a
-	// remote share one `~/.local/bin`; the unsuffixed name stays last.
 	if profile != "" {
 		candidates = append(candidates, filepath.Join(binDir, apps.RuntimeHostBinaryNameForProfile(profile)))
 	}
 	return append(candidates, filepath.Join(binDir, appRuntimeBinaryName))
 }
 
-// Not under appsDir: everything there is named after an app, and `log` would
-// collide with an app called log.
 func appRuntimeLogDir(socketPath string) string {
 	return filepath.Join(filepath.Dir(socketPath), "app-runtime-log")
 }
@@ -85,8 +74,6 @@ func AppRuntimeLogPath(socketPath string) string {
 	return filepath.Join(appRuntimeLogDir(socketPath), appRuntimeChildName+".log")
 }
 
-// Duplicated in apphost/src/index.ts; the parity test is
-// TestAppLogTagMatchesTheHost.
 func appRuntimeAppTag(app string) string { return "[app " + app + "] " }
 
 const appRuntimeSelfTag = "[runtime] "
@@ -108,8 +95,6 @@ func (d *Daemon) ensureAppRuntimeSupervisor() *supervise.Supervisor {
 	return d.appRuntimeSupervisor
 }
 
-// Lives in the constructor because every way to reach the supervisor goes through
-// ensureAppRuntimeSupervisor, so no caller can outrun the restore.
 func (d *Daemon) adoptPersistedParkLocked(supervisor *supervise.Supervisor) {
 	if d.store == nil {
 		return
@@ -140,8 +125,6 @@ func (d *Daemon) adoptPersistedParkLocked(supervisor *supervise.Supervisor) {
 		park.ParkedAt.Format(time.RFC3339), park.RestartAttempt, exit.String())
 }
 
-// Building it unconditionally would report a stopped runtime where the truth is
-// that none was ever started.
 func (d *Daemon) restoreAppRuntimePark() {
 	if d.store == nil {
 		return
@@ -152,14 +135,10 @@ func (d *Daemon) restoreAppRuntimePark() {
 	d.ensureAppRuntimeSupervisor()
 }
 
-// Doubles as un-park: supervise.Ensure resets the restart counter, which is what
-// `attn app runtime restart` needs after a crash loop.
 func (d *Daemon) ensureAppRuntime() error {
 	return d.startAppRuntime(true)
 }
 
-// Reviving here would make parking unreachable: the bus retries a failing delivery
-// forever. Measured on a broken host: three parkings in five and a half minutes.
 func (d *Daemon) startAppRuntimeForDispatch() error {
 	return d.startAppRuntime(false)
 }
@@ -169,8 +148,6 @@ func (d *Daemon) startAppRuntime(revive bool) error {
 	if err != nil {
 		return err
 	}
-	// exec refuses to chdir into a directory that is not there, so a daemon with no
-	// apps would fail to start the runtime for an unrelated reason.
 	if err := os.MkdirAll(d.appsDir, 0o755); err != nil {
 		return fmt.Errorf("creating the app artifact directory %s to start the runtime in: %w", d.appsDir, err)
 	}
@@ -189,7 +166,6 @@ func (d *Daemon) startAppRuntime(revive bool) error {
 		return supervisor.EnsureUnlessParked(appRuntimeChildName, start)
 	}
 	err = supervisor.Ensure(appRuntimeChildName, start)
-	// Keeping the durable record would re-park on the next daemon start.
 	d.forgetAppRuntimePark()
 	return err
 }
@@ -208,8 +184,6 @@ func (d *Daemon) forgetAppRuntimePark() {
 	}
 }
 
-// The daemon may itself be running inside an agent session whose CLAUDE_CODE_*
-// variables would leak into app code.
 func (d *Daemon) appRuntimeEnv(generation uint64) []string {
 	return d.pluginCommandEnv(
 		"ATTN_SOCKET_PATH="+d.socketPath,
@@ -238,8 +212,6 @@ func (d *Daemon) appRuntimeSnapshot() (supervise.Snapshot, bool) {
 
 const notificationKindAppRuntimeParked = "app_runtime_parked"
 
-// Persisting comes first: a daemon that dies between the two writes should come
-// back parked and silent rather than running and about to crash-loop.
 func (d *Daemon) recordAppRuntimeParked(_ string, snapshot supervise.Snapshot) {
 	detail := ""
 	if snapshot.LastExit != nil {
@@ -268,8 +240,6 @@ func (d *Daemon) recordAppRuntimeParked(_ string, snapshot supervise.Snapshot) {
 	d.publishFact(FactNotificationCreated, record.ID, nil)
 }
 
-// A park that lived only in memory made every daemon restart lazy-start the same
-// broken host and raise a second critical notification for one outage.
 func (d *Daemon) persistAppRuntimePark(snapshot supervise.Snapshot) {
 	park := store.SupervisedPark{
 		Child:          appRuntimeChildName,
@@ -297,12 +267,8 @@ func (d *Daemon) appNow() time.Time {
 	return time.Now()
 }
 
-// A tripwire, not a budget: a scaffolded handler doing real document work measured
-// 0–1ms warm (receipt in the plan doc).
 const appDispatchTimeout = 60 * time.Second
 
-// Artifact is an absolute path, and that is the whole hot-reload story: versions
-// are content-addressed and `import()` caches by path.
 type appDispatchRequest struct {
 	Dispatch    string           `json:"dispatch"`
 	App         string           `json:"app"`
@@ -359,16 +325,12 @@ type appReconcileGap struct {
 	Missed   int64 `json:"missed"`
 }
 
-// A handler that returned nothing carries no payload, which is different from
-// one that returned null.
 type appCommandDispatchResult struct {
 	OK      bool            `json:"ok"`
 	Error   string          `json:"error,omitempty"`
 	Payload json.RawMessage `json:"payload,omitempty"`
 }
 
-// Why an app cannot address another app documents: the namespace is resolved
-// from the record here — the wire has no namespace field for an app to fill in.
 type appDispatch struct {
 	id          string
 	app         string
@@ -394,8 +356,6 @@ func (d *Daemon) releaseAppDispatch(id string) {
 	delete(d.appDispatches, id)
 }
 
-// An id no longer in flight is a handler that used its context after returning,
-// and is refused rather than served against whatever app is running now.
 func (d *Daemon) lookupAppDispatch(id string) (*appDispatch, error) {
 	d.appDispatchMu.Lock()
 	defer d.appDispatchMu.Unlock()

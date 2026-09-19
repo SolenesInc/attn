@@ -14,8 +14,6 @@ func promptEcho(call AgentCall) (json.RawMessage, error) {
 	return b, nil
 }
 
-// With temporal ordinals, resume assigned a logical call a different ordinal whenever
-// subagent timing differed, missing the journal and re-running live (paid) calls.
 func TestResumeR1PostAwaitPipelineIsFullCacheHit(t *testing.T) {
 	script := `
 		const out = await pipeline(["X", "Y", "Z"], async (v, item, i) => {

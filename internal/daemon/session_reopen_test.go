@@ -16,8 +16,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// A repository with an `origin` remote it was cloned from, so a branch can be
-// local, only on the remote, or gone from both.
 func newReopenRepo(t *testing.T) (repo, origin, root string) {
 	t.Helper()
 	root = t.TempDir()
@@ -48,7 +46,6 @@ type reopenSession struct {
 	Intent     *store.LaunchIntent
 }
 
-// Registers a session the way the app does, then closes it into the ledger.
 func closeReopenSession(t *testing.T, d *Daemon, session reopenSession) {
 	t.Helper()
 	now := protocol.TimestampNow().String()
@@ -92,8 +89,6 @@ func closeReopenSession(t *testing.T, d *Daemon, session reopenSession) {
 	}
 }
 
-// The verdict once every branch check it started has landed. Waits on the
-// inspection itself, never on a clock.
 func decidedReopenVerdict(t *testing.T, d *Daemon, sessionID string) *sessionReopenVerdict {
 	t.Helper()
 	verdict, found := d.reopenVerdict(sessionID)
@@ -136,9 +131,6 @@ func wantReopenVerdict(
 		t.Error("a verdict that refuses a reopen carries no reason; an agent cannot act on that")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// The session row
 
 func TestReopenVerdictSendsALiveSessionBackToItsPane(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
@@ -234,9 +226,6 @@ func TestReopenReplaysTheLedgerLaunchContract(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// The host
-
 func TestReopenVerdictSendsARemoteSessionToItsOwnDaemon(t *testing.T) {
 	endpoints := []protocol.EndpointInfo{
 		{ID: "outpost-7", Name: "big-linux", Status: "connected"},
@@ -278,9 +267,6 @@ func TestALocalSessionIsDecidedHere(t *testing.T) {
 		t.Fatalf("a local session stopped at the host check: %q", verdict.Reason)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// The conversation and the agent
 
 func TestReopenVerdictOffersAFreshStartWhenTheConversationIsGone(t *testing.T) {
 	cases := map[string]struct {
@@ -327,9 +313,6 @@ func TestReopenVerdictNamesAnAgentThatIsNotInstalled(t *testing.T) {
 		t.Errorf("reason = %q, want the missing agent named", verdict.Reason)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// The directory
 
 func TestReopenVerdictReopensAPresentDirectory(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
@@ -500,8 +483,6 @@ func TestReopenVerdictLabelsAGoneBranchThatWasMerged(t *testing.T) {
 	}
 }
 
-// A closed session whose worktree directory somebody deleted, leaving git's
-// registration behind — how this arrives in practice.
 func closedWorktreeWithDeletedDirectory(
 	t *testing.T, sessionID, branch string, pushed bool,
 ) (*Daemon, string, string) {
@@ -524,9 +505,6 @@ func closedWorktreeWithDeletedDirectory(
 	}
 	return d, repo, worktree
 }
-
-// ---------------------------------------------------------------------------
-// Workspace and pane
 
 func TestReopenVerdictLandsInTheOriginalWorkspaceWhenItIsStillThere(t *testing.T) {
 	d := newEnrolledDaemon(t, "")

@@ -97,8 +97,6 @@ func TestLaunchIntentSpawnFailurePersistsNothing(t *testing.T) {
 func TestLaunchIntentReloadStoreFallback(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
-	// fakeSpawnBackend has no SessionLaunchParamsProvider, modeling a daemon after
-	// restart whose worker registry is unavailable.
 	d.ptyBackend = &fakeSpawnBackend{}
 	now := string(protocol.TimestampNow())
 	session := &protocol.Session{

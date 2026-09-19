@@ -94,8 +94,6 @@ func haltedTurnCases() []haltedTurnCase {
 	}
 }
 
-// Halting a turn is the one ending no agent reports: measured on claude 2.1.220, codex
-// 0.146.0 and copilot 1.0.77, none emit Stop — each writes a transcript line instead.
 func TestTheWatcherSettlesATurnTheUserHalted(t *testing.T) {
 	for _, tc := range haltedTurnCases() {
 		t.Run(tc.name, func(t *testing.T) {

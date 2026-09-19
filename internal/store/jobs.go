@@ -8,8 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 )
 
-// TEXT stamps are compared as text, so the fraction must be fixed-width and the time UTC.
-// RFC3339Nano strips trailing zeros, which delayed whole-second claims until migration 94.
 const sortableTimeFormat = docstore.TimeFormat
 
 type rowScanner interface {
@@ -93,8 +91,6 @@ func (s *Store) GetJob(id string) (*JobRecord, bool, error) {
 	return rec, true, nil
 }
 
-// GetJobByUniqueKey returns the row a kind coalesces onto. An empty key matches
-// nothing — treating "" as a key would collapse distinct jobs.
 func (s *Store) GetJobByUniqueKey(kind, uniqueKey string) (*JobRecord, bool, error) {
 	if s.db == nil {
 		return nil, false, fmt.Errorf("store: no database")
@@ -167,7 +163,6 @@ func (s *Store) RecoverRunningJobs(now time.Time) (int, error) {
 	return int(n), nil
 }
 
-// Dead jobs stay: a failure notification points at them.
 func (s *Store) TrimDoneJobs(cutoff time.Time) (int, error) {
 	if s.db == nil {
 		return 0, fmt.Errorf("store: no database")
@@ -215,8 +210,6 @@ func scanJobRow(sc rowScanner) (*JobRecord, error) {
 	return &rec, nil
 }
 
-// parseStoreTime decodes any RFC3339 form (pre-migration-94 stamps included).
-// Garbage yields the zero time, which the queue treats as "eligible now".
 func parseStoreTime(s string) time.Time {
 	t, err := docstore.ParseTime(s)
 	if err != nil {

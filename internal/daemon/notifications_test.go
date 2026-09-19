@@ -9,7 +9,7 @@ import (
 )
 
 func TestNotifyTaskTerminalFailurePersistsNotification(t *testing.T) {
-	d := &Daemon{store: store.New()} // nil wsHub: broadcast is a guarded no-op
+	d := &Daemon{store: store.New()}
 	d.taskFailureRenderers = map[string]taskFailureRenderer{reconcileKind: d.renderReconcileFailure}
 
 	d.notifyTaskTerminalFailure(&jobs.Job{

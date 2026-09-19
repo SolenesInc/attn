@@ -18,7 +18,6 @@ const (
 	DesiredStopped DesiredState = "stopped"
 )
 
-// Phase strings are reported verbatim on attn's wire.
 type Phase string
 
 const (
@@ -44,7 +43,6 @@ const DisconnectGrace = 5 * time.Second
 
 const StableConnection = 60 * time.Second
 
-// Tripwire, not a receipt: at the pinned backoff ten restarts cost 121.75s of waiting.
 const DefaultGiveUpAfter = 10
 
 type Exit struct {
@@ -85,7 +83,6 @@ type Snapshot struct {
 	LastExit       *Exit
 }
 
-// ParkedAt is the moment the give-up happened, never the moment it was restored.
 type Park struct {
 	ParkedAt       time.Time
 	RestartAttempt int
@@ -97,7 +94,6 @@ type Process interface {
 	Kill() error
 }
 
-// Log is closed once StartFunc returns: the launcher must hand it to the child, not keep it.
 type StartRequest struct {
 	Name       string
 	Generation uint64
@@ -123,14 +119,12 @@ func (realClock) AfterFunc(delay time.Duration, fn func()) Timer {
 }
 
 type Options struct {
-	Clock  Clock
-	LogDir string
-	// GiveUpAfter overrides DefaultGiveUpAfter. A negative value never parks.
+	Clock       Clock
+	LogDir      string
 	GiveUpAfter int
-	// OnChange and OnGiveUp are called without the supervisor lock held.
-	OnChange func(name string)
-	OnGiveUp func(name string, snapshot Snapshot)
-	Logf     func(format string, args ...any)
+	OnChange    func(name string)
+	OnGiveUp    func(name string, snapshot Snapshot)
+	Logf        func(format string, args ...any)
 }
 
 type child struct {
@@ -195,8 +189,6 @@ func (s *Supervisor) Ensure(name string, start StartFunc) error {
 	return s.ensure(name, start, true)
 }
 
-// Ensure resets the restart budget, so a hot path calling it would make the give-up tripwire unreachable.
-// it would make the give-up tripwire unreachable.
 func (s *Supervisor) EnsureUnlessParked(name string, start StartFunc) error {
 	return s.ensure(name, start, false)
 }
@@ -265,7 +257,6 @@ func (s *Supervisor) ensure(name string, start StartFunc, revive bool) error {
 	return err
 }
 
-// Reset the budget: without it a stop-then-start revives a parked child with none left, making the way back from parked a door that opens once.
 func (s *Supervisor) Stop(name string) {
 	s.mu.Lock()
 	c := s.children[name]
@@ -394,7 +385,6 @@ func snapshotOf(c *child) Snapshot {
 	return snapshot
 }
 
-// Deep copy: the supervisor keeps mutating its copy and ExitCode is a pointer.
 func copyExit(from *Exit) *Exit {
 	if from == nil {
 		return nil
@@ -572,7 +562,6 @@ func (s *Supervisor) reportGiveUp(name string, snapshot Snapshot) {
 	}
 }
 
-// Keeps a name usable as a log file name, so it can never write outside LogDir.
 func validateName(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return errors.New("supervise: child name is required")

@@ -21,7 +21,6 @@ type WorktreeState struct {
 	Prunable bool
 }
 
-// Deliberately does NOT prune first, unlike ListWorktrees: a prunable worktree reads as stale.
 func ListWorktreeStates(repoDir string) ([]WorktreeState, error) {
 	return ListWorktreeStatesContext(context.Background(), repoDir)
 }
@@ -62,7 +61,6 @@ func ListWorktreeStatesContext(ctx context.Context, repoDir string) ([]WorktreeS
 	return states, nil
 }
 
-// Untracked files count as dirty. Receipt in docs/worktree-sweep.md.
 func WorktreeDirtyCount(path string) (int, error) {
 	return WorktreeDirtyCountContext(context.Background(), path)
 }
@@ -79,7 +77,6 @@ func WorktreeDirtyCountContext(ctx context.Context, path string) (int, error) {
 	return len(strings.Split(trimmed, "\n")), nil
 }
 
-// Any error reports false: an unresolvable ref never reads as merged.
 func IsAncestor(repoDir, commit, base string) bool {
 	merged, _ := IsAncestorContext(context.Background(), repoDir, commit, base)
 	return merged
@@ -127,7 +124,6 @@ func TreeHashesOnHistoryContext(ctx context.Context, repoDir, base string) (map[
 	hashes := make(map[string]bool)
 	for _, line := range strings.Split(string(out), "\n") {
 		line = strings.TrimSpace(line)
-		// rev-list --format prints a "commit <sha>" header line before each formatted line.
 		if line == "" || strings.HasPrefix(line, "commit ") {
 			continue
 		}
@@ -148,7 +144,6 @@ func TreeHashContext(ctx context.Context, repoDir, ref string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// Attributed by the message git writes: "WIP on <branch>:" or "On <branch>:".
 func StashCountsByBranch(repoDir string) (map[string]int, error) {
 	return StashCountsByBranchContext(context.Background(), repoDir)
 }

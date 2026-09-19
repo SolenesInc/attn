@@ -1,10 +1,6 @@
 package sessioncost
 
-// Built-in prices are standard global API list prices in USD per million
-// tokens.
 var builtInRateCards = map[string]RateCard{
-	// Source: https://platform.claude.com/docs/en/about-claude/pricing
-	// Claude's table distinguishes 5-minute and 1-hour cache writes.
 	"claude-fable-5-1":          withCacheRead(anthropicRates(10, 50), 0.25),
 	"claude-fable-5":            anthropicRates(10, 50),
 	"claude-opus-5":             anthropicRates(5, 25),
@@ -15,14 +11,10 @@ var builtInRateCards = map[string]RateCard{
 	"claude-haiku-4-5":          anthropicRates(1, 5),
 	"claude-haiku-4-5-20251001": anthropicRates(1, 5),
 
-	// Sources checked 2026-08-15: developers.openai.com/api/docs/models/{gpt-5-codex,gpt-5.4-mini,gpt-5.5}.
-	// These models bill cache reads separately and list no cache-write charge.
 	"gpt-5-codex":  openAIRates(1.25, 10, 0.125, 0),
 	"gpt-5.4-mini": openAIRates(0.75, 4.5, 0.075, 0),
 	"gpt-5.5":      openAIRates(5, 30, 0.5, 0),
 
-	// Sources checked 2026-08-15: openai.com/index/advancing-the-price-performance-frontier-with-gpt-5-6/.
-	// GPT-5.6 cache reads cost 10% and explicit writes 125% of input.
 	"gpt-5.6-sol":   openAIRates(5, 30, 0.5, 6.25),
 	"gpt-5.6-terra": openAIRates(2, 12, 0.2, 2.5),
 	"gpt-5.6-luna":  openAIRates(0.2, 1.2, 0.02, 0.25),
@@ -40,7 +32,6 @@ func anthropicRates(input, output float64) RateCard {
 	}
 }
 
-// Fable 5.1 bills cache reads at a flat $0.25/MTok, not 10% of input (checked 2026-09-01).
 func withCacheRead(card RateCard, cacheRead float64) RateCard {
 	card.CacheReadUSDPerMTok = cacheRead
 	return card

@@ -242,8 +242,6 @@ func run(ctx context.Context, opts Options, p prober) Report {
 	return report
 }
 
-// The daemon's own mode is the one that decides what runs; this CLI's env only
-// stands in when the daemon cannot be reached or predates the field.
 func headlessTasksSummary(health daemonHealth, healthErr error) string {
 	if healthErr == nil {
 		if mode := strings.TrimSpace(health.HeadlessTasks); mode != "" {
@@ -253,8 +251,6 @@ func headlessTasksSummary(health daemonHealth, healthErr error) string {
 	return "daemon mode unavailable; this CLI resolves headless tasks " + headless.Describe()
 }
 
-// The daemon is the process that spawns, so its catalog is the truth about an
-// agent. Without it, only the built-in drivers this CLI carries can be checked.
 func checkLaunchAgent(launch Launch, agents []agentdriver.Descriptor, agentsErr error, add func(Check)) *agentdriver.Descriptor {
 	name := launch.Agent.Value
 	if agentsErr != nil {

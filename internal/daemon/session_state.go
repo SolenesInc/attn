@@ -25,8 +25,6 @@ type startupRecovery struct{}
 
 type hostExitRecovery struct{}
 
-// Commits through UpdateState, not the run cursor: advancing the cursor would
-// make the driver's own next report the one that gets discarded.
 type pluginDriverSilent struct{}
 
 func (liveSignal) isSessionStateCause()          {}
@@ -105,7 +103,6 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 		return false
 	}
 
-	// Every state write must be ordered against the auto-settle fire timer.
 	d.autoSettleFireMu.Lock()
 	var inputLane *sessionInputLane
 	if profile.syncNudge {
@@ -130,13 +127,9 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 	d.updateTranscriptWatcherState(change.sessionID, protocol.SessionState(change.state))
 	d.traceStateChange(change, statetrace.OutcomeApplied, "")
 
-	// A snooze suppresses only the turn open: the state is still committed and
-	// broadcast.
 	if attention.OpensTurn(protocol.SessionState(change.state)) &&
 		!d.snoozeSuppressesTurn(change.sessionID, protocol.SessionState(change.state)) {
 		d.store.OpenTurnIfClosed(change.sessionID, time.Now())
-		// Breaks through the tier's interval but NOT `away`: measured, generating
-		// for an empty room would cost nearly half of always-on.
 		d.enqueueSessionActivity(change.sessionID)
 	}
 
@@ -146,8 +139,6 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 	if profile.syncNudge {
 		d.syncNudgeForState(change.sessionID, change.state)
 	}
-	// After the turn open above, or a state that opens a turn and is `working`
-	// is seen half-applied.
 	d.syncAutoSettle(change.sessionID, change.state)
 	if profile.broadcast {
 		d.broadcastSessionStateChanged(change.sessionID)

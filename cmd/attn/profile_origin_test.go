@@ -9,8 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
-// Keeps every config-path lookup in this package inside a temp dir, so no test can
-// resolve production ~/.attn. See AGENTS.md "Test safety".
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "attn-cmd-test")
 	if err != nil {

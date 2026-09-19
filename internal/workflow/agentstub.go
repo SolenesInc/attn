@@ -8,8 +8,6 @@ import (
 	"sync"
 )
 
-// Isolation/Model/AgentType are NOT part of the journal cache identity, so a
-// resumed cache-hit never re-creates a worktree.
 type AgentCall struct {
 	Ordinal   OrdinalPath
 	Prompt    string
@@ -20,8 +18,6 @@ type AgentCall struct {
 }
 
 type AgentStub interface {
-	// An error models a terminal subagent failure: the engine resolves the promise to
-	// null and journals "errored", never rejects. A live driver MUST honor ctx.
 	Run(ctx context.Context, call AgentCall) (json.RawMessage, error)
 }
 

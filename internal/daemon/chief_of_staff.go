@@ -54,8 +54,6 @@ func (d *Daemon) delegatedFromChiefSessionIDs() map[string]bool {
 	return delegated
 }
 
-// Set only when true and cleared otherwise, so it round-trips as an omitted
-// boolean.
 func (d *Daemon) decorateDelegatedFromChief(session *protocol.Session, delegatedFromChief map[string]bool) {
 	if session == nil {
 		return
@@ -120,8 +118,6 @@ func (d *Daemon) nudgeChiefOfStaff(attemptKey, prompt string) bool {
 	return true
 }
 
-// The role must be set BEFORE ptyBackend.Spawn: the agent's notebook-guide query can fire
-// before the session row exists, and it is what pulls the chief guidance in.
 func (d *Daemon) maybeAssignChiefOnSpawn(sessionID, agent string, requested bool, existingSession *protocol.Session) bool {
 	if !requested || existingSession != nil || d.store == nil {
 		return false
@@ -237,8 +233,6 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 	abortPrepared = false
 
 	d.publishFact(FactSessionChiefRoleChanged, sessionID, nil)
-	// ChiefGuidance is injected only at agent-launch, so a live promotion re-runs it. The
-	// reload is destructive, so fire it ONLY on a real role change.
 	if roleChanged {
 		newChiefSessionID := ""
 		if msg.ChiefOfStaff {

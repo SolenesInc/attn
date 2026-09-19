@@ -45,13 +45,10 @@ func (s *Store) GetSessionActivity(id string) SessionActivity {
 	return SessionActivity{Line: line, At: parseActivityStamp(at), Cursor: cursor}
 }
 
-// The three columns are absent from the session upsert, so this is their only writer: a respawn
-// or a re-add cannot clear a line. An empty line clears the activity and the cursor with it.
 func (s *Store) UpdateSessionActivity(id, line string, at time.Time, cursor string) bool {
 	return s.updateSessionActivity(id, nil, line, at, cursor)
 }
 
-// The check and write share the store lock with TransitionSessionConversation, so an executor straddling a transition cannot restore the cleared old state.
 func (s *Store) UpdateSessionActivityForConversation(id, resumeID, line string, at time.Time, cursor string) bool {
 	resumeID = strings.TrimSpace(resumeID)
 	return s.updateSessionActivity(id, &resumeID, line, at, cursor)
@@ -104,7 +101,6 @@ func (s *Store) updateSessionActivity(id string, resumeID *string, line string, 
 	return err == nil && updated == 1
 }
 
-// A separate door because an empty line means "forget this line" in UpdateSessionActivity and "nothing generated yet" here.
 func (s *Store) SetSessionActivityCursor(id, cursor string) bool {
 	return s.setSessionActivityCursor(id, nil, cursor)
 }
@@ -151,7 +147,6 @@ func (s *Store) setSessionActivityCursor(id string, resumeID *string, cursor str
 	return err == nil && updated == 1
 }
 
-// Both present or both absent, never a line without the stamp that lets a client age it out.
 func applyActivity(session *protocol.Session, line, stamp string) {
 	if line == "" || stamp == "" {
 		session.Activity, session.ActivityAt = nil, nil

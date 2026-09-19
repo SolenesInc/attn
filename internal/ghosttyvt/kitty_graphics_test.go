@@ -31,8 +31,6 @@ func rgbPixels(w, h int) []byte {
 	return pix
 }
 
-// Cells are 8x16 px in this package, so a 16x32 image is exactly 2x2 cells:
-// every grid number below is an exact expectation, not a rounding artifact.
 func TestKittyPlacementGeometry(t *testing.T) {
 	term := newKittyT(t, 20, 8, kittyStorageLimit)
 	term.Write([]byte("ab"))
@@ -309,8 +307,6 @@ func TestKittyVirtualPlacementHasNoCursorGeometry(t *testing.T) {
 	}
 }
 
-// The generation is NOT zero here: applying the zero storage limit deletes every image,
-// and that deletion is itself a stamped storage mutation.
 func TestKittyObservationIsEmptyWhenDisabled(t *testing.T) {
 	term := newKittyT(t, 20, 8, 0)
 	disabledGen := term.KittyGeneration()
@@ -328,8 +324,6 @@ func TestKittyObservationIsEmptyWhenDisabled(t *testing.T) {
 	}
 }
 
-// Without the sys decode hook ghostty rejects f=100 outright. The translucent
-// pixel is the one that changes value if the decoder ever premultiplies.
 func TestKittyPNGTransmissionDecodesToStraightAlphaRGBA(t *testing.T) {
 	term := newKittyT(t, 20, 8, kittyStorageLimit)
 	if pngDecoderRC != 0 {
@@ -385,7 +379,7 @@ func craftedPNG(t *testing.T, w, h uint32) []byte {
 	t.Helper()
 	ihdr := binary.BigEndian.AppendUint32(nil, w)
 	ihdr = binary.BigEndian.AppendUint32(ihdr, h)
-	ihdr = append(ihdr, 8, 6, 0, 0, 0) // bit depth 8, colour type 6 (RGBA), no interlace
+	ihdr = append(ihdr, 8, 6, 0, 0, 0)
 
 	var idat bytes.Buffer
 	zw := zlib.NewWriter(&idat)
@@ -419,8 +413,6 @@ func encodeWidePNG(t *testing.T, w int) []byte {
 	return buf.Bytes()
 }
 
-// ghosttyMaxDimension is ghostty's own max_dimension at the pinned native ghostty
-// (ab0b9da); written out so this test cannot follow the constant it is checking.
 const ghosttyMaxDimension = 10000
 
 func TestKittyPNGOversizedIsRejectedByTheDecodeHook(t *testing.T) {

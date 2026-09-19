@@ -1,7 +1,5 @@
 package ghosttyvt
 
-// ColorTheme is the embedder-owned default color state. Programs may layer OSC
-// overrides on top; updating these defaults must preserve those overrides.
 type ColorTheme struct {
 	Foreground     uint32
 	Background     uint32

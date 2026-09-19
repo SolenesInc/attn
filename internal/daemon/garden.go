@@ -17,8 +17,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Measured 2026-08-12 against production ~/.attn: the largest whole list attn
-// pushes is 59 tickets, so docstore.MaxLimit is a tripwire, not a budget.
 const gardenSnapshotLimit = docstore.MaxLimit
 
 func (d *Daemon) ensureGardenCollections() {
@@ -548,7 +546,6 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedPlotResult: &result})
 }
 
-// mintAttempts receipt: at 10k seeds one crypto/rand mint collides with p~1e-5, so three in a row is a broken random source.
 func (d *Daemon) mintAndPlant(schema docstore.CollectionSchema, seed garden.Seed) (garden.Seed, docstore.Document, error) {
 	seed = d.initializeSeedLifecycle(seed)
 	const mintAttempts = 3
@@ -581,8 +578,6 @@ func (d *Daemon) mintSeedID() (string, error) {
 }
 
 func (d *Daemon) mintUnplantedSeedID(schema docstore.CollectionSchema) (string, error) {
-	// Tripwire: at ten thousand seeds a single mint collides with probability
-	// ~1e-5, so three in a row is a broken random source.
 	const mintAttempts = 3
 	for range mintAttempts {
 		id, err := d.mintSeedID()
@@ -1302,7 +1297,6 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 			return
 		}
 		result := &protocol.SeedTransitionResult{Seed: d.seedTransitionWire(seed, doc)}
-		// No ring here: fulfilHarvestWhen already rang the tenders this close freed.
 		if garden.Closed(seed.Status) {
 			_, result.Unblocked = d.seedUnblocked(seed.ID)
 		}
@@ -1325,8 +1319,6 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 	if garden.Closed(seed.Status) {
 		_, result.Unblocked = d.seedUnblocked(seed.ID)
 	}
-	// Mirrored before the response: a caller that harvests and then reads the board
-	// must not see the ticket mid-flight.
 	d.mirrorSeedMoveOntoTicket(sessionID, seed.ID, verb, protocol.Deref(msg.Reason))
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedTransitionResult: result})
 }
@@ -1400,7 +1392,6 @@ func (d *Daemon) applySeedTransitionDetailedAs(
 	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, sessionLive, 0)
 }
 
-// Wrapped into the revision refusal so a caller that can re-read tells it apart.
 var errSeedRevisionMoved = errors.New("")
 
 func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
@@ -1436,8 +1427,6 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionForeground(
 	}
 	d.gardenWatchMu.Lock()
 	defer d.gardenWatchMu.Unlock()
-	// A conflict means the seed moved between read and write; re-reading turns a
-	// lost race into the honest answer. Tripwire: two agents contending is one retry.
 	const attempts = 3
 	for range attempts {
 		seed, doc, err := d.readSeed(id)

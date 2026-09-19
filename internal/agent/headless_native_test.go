@@ -59,8 +59,6 @@ func TestClaudeHeadlessArgsUsesFileToolsAndDropsMCPPin(t *testing.T) {
 		"json",
 		"claude-test",
 		"compact the context file",
-		// Hermetic MCP: --strict-mcp-config with NO --mcp-config loads zero MCP servers;
-		// without it the user's claude.ai account connectors attach and can sink the run.
 		"--strict-mcp-config",
 	)
 	assertContainsNone(t, "Claude native args", args,
@@ -112,8 +110,6 @@ func TestClaudeHeadlessArgsReplacesSystemPromptWhenAsked(t *testing.T) {
 	})
 	assertContainsAll(t, "Claude system-prompt args", args,
 		"--system-prompt", "You are a terse classifier.")
-	// --system-prompt REPLACES; --append-system-prompt (the interactive-launch flag)
-	// adds. Emitting the wrong one loses the whole saving silently.
 	assertContainsNone(t, "Claude system-prompt args", args, "--append-system-prompt")
 	if args[len(args)-1] != "classify this" {
 		t.Fatalf("prompt must stay last, got %q:\n%v", args[len(args)-1], args)
@@ -122,8 +118,6 @@ func TestClaudeHeadlessArgsReplacesSystemPromptWhenAsked(t *testing.T) {
 	plain := claudeHeadlessArgs(HeadlessTaskRequest{Model: "claude-test", Prompt: "compact"})
 	assertContainsNone(t, "Claude default system prompt", plain, "--system-prompt")
 
-	// A tool-less run drops the tool definitions from the billed prefix, unless it
-	// asks for a schema: --disallowedTools also disables StructuredOutput.
 	toolless := claudeHeadlessArgs(HeadlessTaskRequest{
 		Model: "claude-test", Prompt: "classify", DisableTools: true,
 	})

@@ -211,8 +211,6 @@ func TestTenderDisplayName_WritesAMemberAsANameAndLeavesASessionAlone(t *testing
 	}
 }
 
-// internal/pty/manager.go strips ATTN_SESSION_ID from a shell pane, so a person
-// in a pane claims with --member and carries no session at all.
 func TestTendRefusesAnotherMemberWhenNeitherCarriesASession(t *testing.T) {
 	held := Seed{ID: "s-abc123", Status: StatusGrowing, TenderMember: "trellis"}
 

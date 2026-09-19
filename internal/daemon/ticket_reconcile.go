@@ -20,11 +20,9 @@ import (
 )
 
 const (
-	// The sweep's claim-crash repair keys on this prefix.
 	ticketReconcileCommentPrefix = "🩺 Reconciliation"
 
-	defaultTicketReconcileModel = "haiku"
-	// Measured: ~$0.07 over ~2 haiku turns, so 4 turns / $0.20 leaves margin.
+	defaultTicketReconcileModel        = "haiku"
 	defaultTicketReconcileMaxTurns     = 4
 	defaultTicketReconcileMaxBudgetUSD = "0.20"
 	defaultTicketReconcileTimeout      = 5 * time.Minute
@@ -36,7 +34,6 @@ const (
 
 	ticketReconcileConcurrency = 2
 
-	// Must exceed the classifier timeout: repair must never fire on a run still in flight.
 	defaultTicketReconcileSweepInterval = 5 * time.Minute
 	defaultTicketReconcileGrace         = 15 * time.Minute
 	ticketReconcileSweepClaimCap        = 3
@@ -63,8 +60,6 @@ const ticketReconcileVerdictSchema = `{
 	"additionalProperties": false
 }`
 
-// Captured synchronously at the seam: the session row may be deleted moments later, so
-// the async runner must never re-read it.
 type ticketReconcileInputs struct {
 	TicketID       string
 	Title          string
@@ -158,8 +153,6 @@ func ticketReconcileGrace() time.Duration {
 	return defaultTicketReconcileGrace
 }
 
-// Called from both handlePTYExit and dropSessionRecord — a user close fires both, and
-// the set-if-unset claim dedupes.
 func (d *Daemon) reconcileTicketsOnSessionEnd(sessionID, state string) {
 	if d.store == nil {
 		return
@@ -172,9 +165,7 @@ func (d *Daemon) reconcileTicketsOnSessionEnd(sessionID, state string) {
 	if len(tickets) == 0 {
 		return
 	}
-	// Read before dropSessionRecord deletes the row.
 	session := d.store.Get(sessionID)
-	// nil still lets the crash marking below run; only the verdict needs a model.
 	runner := d.headlessJobQueue(reconcileKind)
 
 	intentionalClose := d.sessionCloseWasIntentional(sessionID)
@@ -244,8 +235,6 @@ func (d *Daemon) reconcileCloseContext(sessionID, state string, column store.Tic
 	return fmt.Sprintf("%s (%s, last runtime state %s) while the ticket was %s", source, how, state, column)
 }
 
-// Either source suffices: the teardown tombstone survives the in-memory mark's
-// 30s TTL, session removal, and a daemon restart.
 func (d *Daemon) sessionCloseWasIntentional(sessionID string) bool {
 	if d.hasForcedStopMark(sessionID) {
 		return true
@@ -253,7 +242,6 @@ func (d *Daemon) sessionCloseWasIntentional(sessionID string) bool {
 	return d.store != nil && d.store.SessionCloseIntentional(sessionID)
 }
 
-// Peeks, never consumes: stop-time classification suppression owns the consume.
 func (d *Daemon) hasForcedStopMark(sessionID string) bool {
 	d.forcedStopMu.Lock()
 	defer d.forcedStopMu.Unlock()
@@ -284,7 +272,6 @@ func (d *Daemon) reconcileJobHandler(ctx context.Context, job *jobs.Job) (_ any,
 	}
 	in, err := reconcileInputsFromJob(job)
 	if err != nil {
-		// Garbled inputs can never run into health; retire (nil) to avoid a hot loop.
 		d.logf("ticket reconcile %s: %v", jobSubject(job), err)
 		return nil, nil
 	}
@@ -292,8 +279,6 @@ func (d *Daemon) reconcileJobHandler(ctx context.Context, job *jobs.Job) (_ any,
 	if willClassify && d.headlessTaskRefused(reconcileKind) {
 		return nil, nil
 	}
-	// The replant into the garden waits for this: a replant mid-classification would move
-	// the status and make the verdict drop itself. Skipped on a retryable error.
 	defer func() {
 		if retErr == nil {
 			d.replantStrandedTicketByID(in.TicketID)
@@ -385,8 +370,6 @@ func renderTicketReconcileComment(in ticketReconcileInputs, verdict *ticketRecon
 	return strings.Join(lines, "\n")
 }
 
-// Always Claude Code headless regardless of the judged agent's CLI — the one CLI with
-// enforceable turn/dollar caps and schema-enforced output.
 func (d *Daemon) execTicketReconcileClassifier(ctx context.Context, in ticketReconcileInputs) (agentdriver.HeadlessTaskResult, error) {
 	slice, err := transcript.ExtractConversationSlice(in.TranscriptPath, transcript.DefaultSliceOptions())
 	if err != nil {
@@ -549,8 +532,6 @@ func (d *Daemon) ticketReconcileSweepPass(now time.Time) {
 	}
 }
 
-// A row with NO backend runtime reads as LIVE, conservatively: CLI-registered and remote
-// sessions never have a daemon PTY.
 func (d *Daemon) reconcileSessionLive(sessionID string) bool {
 	if d.store == nil || d.store.Get(sessionID) == nil {
 		return false
@@ -567,7 +548,7 @@ func (d *Daemon) reconcileSessionLive(sessionID string) bool {
 		if prober, ok := d.ptyBackend.(ptybackend.SessionLivenessProber); ok {
 			alive, err := prober.SessionLikelyAlive(ctx, sessionID)
 			if err != nil {
-				return true // unknown must never read as dead
+				return true
 			}
 			return alive
 		}

@@ -7,17 +7,11 @@ import (
 	"time"
 )
 
-// Bubble rules: build the daemon outside, stop subsystems and seed timestamps inside
-// (clock starts 2000-01-01), drain every goroutine, and let no real fd in.
-
-// Call ABOVE synctest.Test with the outer T: store.New's goroutine reads as a deadlock inside.
 func newBubbleDaemon(t *testing.T) *Daemon {
 	t.Helper()
 	return NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 }
 
-// Call INSIDE the bubble with the bubble T — rule 2. Mirrors Daemon.Stop
-// subsystem list, minus what only a started daemon owns.
 func stopDaemonBackground(t *testing.T, d *Daemon) {
 	t.Helper()
 	t.Cleanup(func() {
@@ -64,8 +58,6 @@ func requireOutbound(t *testing.T, client *wsClient, what string) outboundMessag
 	}
 }
 
-// handleStop's goroutine retries for claudeTranscriptRetryWindow (2s) and is still
-// sleeping when the body returns; sleeping past its window retires it.
 func settleStopClassification(t *testing.T) {
 	t.Helper()
 	time.Sleep(4 * time.Second)

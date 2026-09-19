@@ -11,8 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Unix socket paths are length-limited (notably on macOS) and t.TempDir()'s path
-// is long enough to blow the limit.
 func shortTempDir(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "attn-")

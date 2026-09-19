@@ -45,9 +45,7 @@ func TestDocumentsOverARealSocket(t *testing.T) {
 		t.Fatalf("query answered as of seq %d; two writes have landed", read.AsOfSeq)
 	}
 
-	// Written from inside the callback so it lands while the read loop is running.
 	var windows []client.DocWindow
-	// The seq travels over a channel rather than a variable the loop would race.
 	putSeq := make(chan int, 1)
 	err = c.DocSubscribe(q, nil, func(w client.DocWindow) bool {
 		windows = append(windows, w)

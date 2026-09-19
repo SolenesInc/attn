@@ -15,7 +15,6 @@ import (
 
 const defaultWorktreeListLimit = 20
 
-// A tripwire, not a budget. Receipt in docs/worktree-sweep.md.
 const maxWorktreeListLimit = 5000
 
 func (d *Daemon) worktreeListResult(mainRepo string, limit int) *protocol.WorktreeListResult {
@@ -39,7 +38,6 @@ func (d *Daemon) worktreeListResult(mainRepo string, limit int) *protocol.Worktr
 		rows = rows[:limit]
 	}
 
-	// Required arrays: a nil slice marshals to null and the panel dies iterating it.
 	result := &protocol.WorktreeListResult{
 		Worktrees:    make([]protocol.Worktree, 0, len(rows)),
 		Repositories: make([]protocol.WorktreeRepository, 0),

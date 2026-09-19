@@ -12,7 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Without it, a record the store's row cap has since trimmed is re-imported and trimmed forever.
 const settingAutoModeDenialCursor = "automode_denial_ledger_cursor"
 
 func autoModeDenialLedgerPath() string {
@@ -34,7 +33,6 @@ func (d *Daemon) reconcileAutoModeDenialLedger() autoModeLedgerReconcile {
 	if d.store == nil {
 		return autoModeLedgerReconcile{}
 	}
-	// The cursor is read, compared and written across the whole pass: two concurrent readers would import the same records.
 	autoModeLedgerMu.Lock()
 	defer autoModeLedgerMu.Unlock()
 
@@ -79,7 +77,6 @@ func (d *Daemon) reconcileAutoModeDenialLedger() autoModeLedgerReconcile {
 			Rule:      record.Rule,
 		}, record.At); err != nil {
 			d.logf("automode: importing a denial from the ledger: %v", err)
-			// Leave the cursor where it was so this record is tried again.
 			return out
 		}
 		out.Imported++
@@ -98,7 +95,6 @@ func (d *Daemon) reconcileAutoModeDenialLedger() autoModeLedgerReconcile {
 	return out
 }
 
-// Dedup key across both arrival paths: the relay stores the session's own timestamp verbatim.
 func autoModeDenialKey(sessionID, signature string, at time.Time) string {
 	return fmt.Sprintf("%s|%s|%s", sessionID, at.UTC().Format(time.RFC3339Nano), signature)
 }

@@ -447,8 +447,6 @@ func TestSeedQueuedAgentMailboxItemsRestoresTheDrainAfterRestart(t *testing.T) {
 	}
 }
 
-// Live verification on 2026-08-10 found the cap sitting at the unix frame limit, where an
-// oversize message closed the connection and reached the sender as a bare "EOF".
 func TestAgentMsgSizeRefusalsSurviveTheSocket(t *testing.T) {
 	useFreeWSPort(t)
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")

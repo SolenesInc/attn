@@ -8,11 +8,8 @@ import (
 	"time"
 )
 
-// A workflow parked on `await agent("x")` is blocked on `<-el.jobs` rather than inside goja, where
-// the watchdog's vm.Interrupt cannot reach it, and inside AgentStub.Run.
 func TestCancelWhileAwaitingLiveAgentSettlesAndTearsDownAgent(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		// blockingStub is NEVER released here, so the only way Run can return is by honoring ctx.Done().
 		stub := newBlockingStub(echoPrompt)
 		eng := New(Config{Stub: stub, WatchdogTimeout: 30 * time.Second})
 

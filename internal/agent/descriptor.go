@@ -1,7 +1,5 @@
 package agent
 
-// Descriptor is the daemon's answer to "which agents can you spawn": the facts
-// a launch is checked against, for built-in and plugin-provided agents alike.
 type Descriptor struct {
 	Name       string `json:"name"`
 	Plugin     string `json:"plugin,omitempty"`

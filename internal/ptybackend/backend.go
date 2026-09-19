@@ -13,11 +13,10 @@ import (
 )
 
 const (
-	OutputEventKindOutput = "output"
-	OutputEventKindDesync = "desync"
-	OutputEventKindExit   = "exit"
-	OutputEventKindResize = "resize"
-	// Placement positions only mean anything in order against the same-seq bytes.
+	OutputEventKindOutput     = "output"
+	OutputEventKindDesync     = "desync"
+	OutputEventKindExit       = "exit"
+	OutputEventKindResize     = "resize"
 	OutputEventKindPlacements = "kitty_placements"
 )
 
@@ -45,18 +44,14 @@ type SpawnOptions struct {
 	ExternalCommand   []string
 	ExternalEnv       []string
 	ExternalCWD       string
-	// Every runtime reapplies this after login-shell and plugin environment.
-	DaemonEnv   []string
-	LifecycleID string
+	DaemonEnv         []string
+	LifecycleID       string
 
-	// Skips the ~130ms readLoginShellEnv in workers.
 	LoginShellEnv []string
 
 	WorkflowGuidanceEnabled bool
 
-	// Yolo overrides AutoApprove.
-	AutoApprove bool
-	// Empty only for legacy callers predating route recording.
+	AutoApprove           bool
 	ApprovalRoute         launchcontract.ApprovalRoute
 	TrustWorkingDirectory bool
 
@@ -64,11 +59,8 @@ type SpawnOptions struct {
 
 	Effort string
 
-	// In tokens.
 	ContextWindowCap int
 
-	// When set, this is the sole source for agent, executable, approval, trust,
-	// model, effort, and recovery policy across all paths.
 	UnattendedLaunch launchcontract.UnattendedLaunchSpec
 }
 
@@ -122,37 +114,33 @@ func validateSpawnOptions(opts SpawnOptions) error {
 }
 
 type AttachInfo struct {
-	LastSeq         uint32
-	Cols            uint16
-	Rows            uint16
-	PID             int
-	Running         bool
-	ExitCode        *int
-	ExitSignal      *string
-	GhosttySnapshot []byte
-	// Empty when absent, and from an old worker that does not send it.
-	GhosttySnapshotFormat string
-	// Rows are SCREEN-space, captured atomically with the snapshot and LastSeq.
+	LastSeq                    uint32
+	Cols                       uint16
+	Rows                       uint16
+	PID                        int
+	Running                    bool
+	ExitCode                   *int
+	ExitSignal                 *string
+	GhosttySnapshot            []byte
+	GhosttySnapshotFormat      string
 	GhosttyBlocks              []pty.AttachBlockData
 	GhosttyPlacements          []pty.KittyPlacement
 	GhosttyScrollbackTruncated bool
 }
 
-// Zero preserves mixed-version full attaches.
 type AttachOptions struct {
 	OmitReplay bool
 }
 
 type OutputEvent struct {
-	Kind   string
-	Data   []byte
-	Seq    uint32
-	Reason string
-	Cols   uint16
-	Rows   uint16
-	XPixel uint16
-	YPixel uint16
-	// An empty set is how a client learns the last image is gone.
+	Kind       string
+	Data       []byte
+	Seq        uint32
+	Reason     string
+	Cols       uint16
+	Rows       uint16
+	XPixel     uint16
+	YPixel     uint16
 	Placements []pty.KittyPlacement
 }
 
@@ -169,7 +157,6 @@ type SessionInfo struct {
 	Running bool
 	State   string
 
-	// Evidence, not a state claim.
 	LastSignal    pty.Observation
 	HasLastSignal bool
 
@@ -205,11 +192,8 @@ type Backend interface {
 	Spawn(ctx context.Context, opts SpawnOptions) error
 	Attach(ctx context.Context, sessionID, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error)
 	Input(ctx context.Context, sessionID string, data []byte) error
-	// xpixel/ypixel are total device pixels, 0 when unknown.
 	Resize(ctx context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (ResizeResult, error)
-	// Best-effort: a worker predating the method returns nil.
 	SetTheme(ctx context.Context, sessionID string, theme pty.TerminalTheme) error
-	// Returns nil only after the child process has exited.
 	Kill(ctx context.Context, sessionID string, sig syscall.Signal) error
 	Remove(ctx context.Context, sessionID string) error
 	SessionIDs(ctx context.Context) []string
@@ -226,10 +210,7 @@ type SessionInfoProvider interface {
 	SessionInfo(ctx context.Context, sessionID string) (SessionInfo, error)
 }
 
-// Authoritative after a daemon restart; the durable launch intent is the fallback.
 type SessionLaunchParams struct {
-	// False when the worker predates launch-param recording: the daemon must
-	// abort the reload rather than respawn with defaults.
 	Recorded          bool
 	YoloMode          bool
 	ApprovalRoute     launchcontract.ApprovalRoute
@@ -254,24 +235,18 @@ type ScreenSnapshotProvider interface {
 	ScreenSnapshot(ctx context.Context, sessionID string) (pty.ScreenSnapshotInfo, error)
 }
 
-// Optional; on error the caller drops that placement's render.
 type KittyImageProvider interface {
 	KittyImage(ctx context.Context, sessionID string, imageID uint32) (pty.KittyImage, error)
 }
 
-// A worker outlives an install, so after a ghostty bump it and the daemon stop
-// agreeing about the grid. known=false is "not yet known", not a verdict.
 type TerminalBuildProvider interface {
 	SessionTerminalBuild(sessionID string) (format string, known bool)
 }
 
-// Optional. A shared runtime can keep an older terminal model alive and replay
-// it portably when the daemon no longer understands its native snapshot.
 type TerminalBuildCompatibilityProvider interface {
 	SessionCanReplayWithFormat(sessionID, format string) bool
 }
 
-// Replaces the worker process image in place: same pid, same PTY, same child.
 type WorkerUpgrader interface {
 	UpgradeWorker(ctx context.Context, sessionID string) error
 }

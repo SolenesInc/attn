@@ -49,7 +49,6 @@ func (s *Store) RecordFileActivity(path, source, sessionID string) {
 		path, source, session, time.Now().Format(time.RFC3339))
 }
 
-// Rows are never stat'd here — dead files are pruned when opening them fails.
 func (s *Store) GetRecentFiles(limit int, root string) []protocol.FileActivity {
 	if limit <= 0 {
 		limit = 20
@@ -61,7 +60,6 @@ func (s *Store) GetRecentFiles(limit int, root string) []protocol.FileActivity {
 		return nil
 	}
 
-	// Pre-truncating by last_at would hide old-but-frequent files.
 	rows, err := s.db.Query(`SELECT path, source, session_id, last_at, count FROM file_activity`)
 	if err != nil {
 		return nil
@@ -126,7 +124,6 @@ func (s *Store) GetRecentFiles(limit int, root string) []protocol.FileActivity {
 	return all
 }
 
-// Only matches paths inside root, so /repo never claims /repo-other.
 func workspacePrefix(root string) string {
 	root = strings.TrimSpace(root)
 	if root == "" || root == "/" {

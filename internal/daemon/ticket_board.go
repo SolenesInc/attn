@@ -45,7 +45,6 @@ func (d *Daemon) handleTicketList(conn net.Conn, msg *protocol.TicketListMessage
 	})
 }
 
-// Unlike ticket_inbox, this never advances the unread cursor.
 func (d *Daemon) handleTicketShow(conn net.Conn, msg *protocol.TicketShowMessage) {
 	ticketID := strings.TrimSpace(msg.TicketID)
 	if ticketID == "" {
@@ -72,7 +71,6 @@ func (d *Daemon) handleTicketShow(conn net.Conn, msg *protocol.TicketShowMessage
 	})
 }
 
-// Nothing projects these to the wire (see factsWithoutWire); they stay the durable record.
 func (d *Daemon) publishTicketFact(name, ticketID string) {
 	if strings.TrimSpace(ticketID) == "" {
 		d.logf("bus: %s published without a ticket id", name)

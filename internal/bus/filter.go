@@ -6,8 +6,6 @@ type Filter []string
 
 var All = Filter{"*"}
 
-// An empty expression means All, so a consumer row written without a filter
-// still receives events.
 func ParseFilter(expr string) Filter {
 	var out Filter
 	for _, part := range strings.Split(expr, ",") {
@@ -40,8 +38,6 @@ func (f Filter) Matches(name string) bool {
 	return false
 }
 
-// Exported so the app runtime resolves which declared subscription a fact came
-// from with the very rule that delivered it, rather than a copy free to drift.
 func MatchPattern(pattern, name string) bool { return matchPattern(pattern, name) }
 
 func matchPattern(pattern, name string) bool {
@@ -49,8 +45,6 @@ func matchPattern(pattern, name string) bool {
 	case pattern == "*" || pattern == "":
 		return true
 	case strings.HasSuffix(pattern, ".*"):
-		// "session.*" matches "session.state.changed" but not "sessions.updated"
-		// and not the bare name "session": the dot is part of the prefix.
 		return strings.HasPrefix(name, pattern[:len(pattern)-1])
 	default:
 		return pattern == name

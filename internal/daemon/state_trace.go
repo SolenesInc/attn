@@ -32,8 +32,6 @@ func (d *Daemon) stateTraceRecorder() *statetrace.Recorder {
 	return d.stateTrace
 }
 
-// The single write path into the trace. An observation for a session with no
-// store row is logged, never ringed: it would leak a map entry per stale id.
 func (d *Daemon) recordStateObservation(sessionID string, obs statetrace.Observation) {
 	if strings.TrimSpace(sessionID) == "" {
 		return
@@ -44,8 +42,6 @@ func (d *Daemon) recordStateObservation(sessionID string, obs statetrace.Observa
 	if obs.ObservedAt.IsZero() {
 		obs.ObservedAt = obs.RecordedAt
 	}
-	// The liveness check must stay inside the recorder's lock (RecordIf): checked
-	// before it, a racing removal mints a ring that is never forgotten again.
 	d.stateTraceRecorder().RecordIf(sessionID, obs, func() bool {
 		live := d.store != nil && d.store.Get(sessionID) != nil
 		if hook := stateTraceRecordGateHook; hook != nil {
@@ -161,8 +157,6 @@ func (d *Daemon) stateExplainResult(session *protocol.Session) *protocol.StateEx
 	return result
 }
 
-// handleHookNotification records Claude's Notification hook. Evidence, not a
-// command: it lands ~6s after the event, so the resolver weighs it.
 func (d *Daemon) handleHookNotification(conn net.Conn, msg *protocol.HookNotificationMessage) {
 	kind := strings.TrimSpace(msg.NotificationType)
 	if kind == "" {

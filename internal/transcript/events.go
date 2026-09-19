@@ -18,10 +18,8 @@ import (
 )
 
 const (
-	EventKindUser      = "user"
-	EventKindAssistant = "assistant"
-	// Roughly twice the volume of assistant prose; a consumer that wants only what
-	// the user saw must skip this kind.
+	EventKindUser       = "user"
+	EventKindAssistant  = "assistant"
 	EventKindThinking   = "thinking"
 	EventKindToolCall   = "tool_call"
 	EventKindToolResult = "tool_result"
@@ -75,8 +73,6 @@ func HeadCursor(path string) (string, error) {
 	if !hasCompleteRecord {
 		return "", nil
 	}
-	// Past the last complete record, not the file's end: a half-written final line
-	// must stay unread until its writer appends the newline.
 	info, err := f.Stat()
 	if err != nil {
 		return "", err
@@ -368,8 +364,6 @@ func parseEventLine(agent string, line []byte) parsedEventLine {
 	return parsed
 }
 
-// The marker is addressed to the classifier, which reads the raw transcript;
-// the message list is for the user, so the text loses it and a marker-only entry vanishes.
 func withoutStateMarkers(events []Event) []Event {
 	kept := events[:0]
 	for _, event := range events {
@@ -423,8 +417,6 @@ func parseCodexEvent(envelope eventEnvelope) []Event {
 		case "agent_message":
 			return textEvent(envelope.Timestamp, EventKindAssistant, "assistant", payload.Message)
 		case "agent_reasoning":
-			// The sibling "reasoning" response_item carries only encrypted_content, so
-			// this is the only usable signal — and some rollouts omit it entirely.
 			return textEvent(envelope.Timestamp, EventKindThinking, "assistant", payload.Text)
 		}
 		if strings.Contains(payload.Type, "error") || payload.Error != "" {

@@ -12,7 +12,6 @@ func TestFilterMatching(t *testing.T) {
 		{Filter{}, "anything.at.all", true},
 		{Filter{"session.*"}, "session.state.changed", true},
 		{Filter{"session.*"}, "session.registered", true},
-		// The dot is part of the prefix, so a sibling domain does not leak in.
 		{Filter{"session.*"}, "sessions.updated", false},
 		{Filter{"session.*"}, "session", false},
 		{Filter{"ticket.commented"}, "ticket.commented", true},
@@ -37,8 +36,6 @@ func TestParseFilterRoundTrip(t *testing.T) {
 	if f.String() != "session.*,ticket.commented" {
 		t.Fatalf("String() = %q", f.String())
 	}
-	// A consumer row written without a filter must not be a consumer that
-	// receives nothing.
 	if got := ParseFilter(""); !got.Matches("whatever.happened") {
 		t.Fatalf("empty expression should mean All, got %v", got)
 	}

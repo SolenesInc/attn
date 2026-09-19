@@ -37,7 +37,7 @@ func TestReadLinesFile_MissingFile(t *testing.T) {
 }
 
 func TestReadLinesFile_LongLine(t *testing.T) {
-	longLine := strings.Repeat("x", 200*1024) // 200KiB, well past 64KiB
+	longLine := strings.Repeat("x", 200*1024)
 	path := filepath.Join(t.TempDir(), "long.jsonl")
 	content := "short line 1\n" + longLine + "\nshort line 2\n"
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {

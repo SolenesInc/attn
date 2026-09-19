@@ -32,7 +32,6 @@ func newToxiProxy(t *testing.T, upstream string) *toxiProxy {
 	}
 	listen := fmt.Sprintf("127.0.0.1:%d", port)
 
-	// Both loggers: left at its default the proxy traces every toxic to stdout.
 	silent := zerolog.New(io.Discard)
 	api := toxiproxy.NewServer(toxiproxy.NewMetricsContainer(prometheus.NewRegistry()), silent)
 	p := toxiproxy.NewProxy(api, "attn-ws", listen, upstream)
@@ -62,20 +61,14 @@ func (p *toxiProxy) healDownstream(name string) {
 	}
 }
 
-// Eviction sizing receipt, at 4 KB a message: the throttled link drains 2.5 msg/s against a
-// 200 msg/s flood, so 256 slots fill in ~1.3s while the healthy client stays 3 orders under.
 const (
 	slowLinkRateKBPerSec = 10
 	floodMessageBytes    = 4 << 10
 	floodInterval        = 5 * time.Millisecond
 )
 
-// A tripwire: the daemon offers the close frame evictionCloseGrace (1s) then aborts
-// the socket, so a working eviction lands in milliseconds.
 const evictionDeathBudget = 5 * time.Second
 
-// Measured through this proxy: after the daemon aborts with SO_LINGER 0 the throttled client
-// still reads for another 65 seconds before a plain EOF — a userspace hop forwards no reset.
 func TestWebSocketSlowClientIsEvictedOverADegradedLink(t *testing.T) {
 	wsPort := useFreeWSPort(t)
 

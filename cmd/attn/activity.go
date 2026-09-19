@@ -11,7 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// `attn activity` reports why there are no activity lines — the feature off, no agent chosen, or nobody watching — and forgets a line that is wrong.
 func runActivity() {
 	args := os.Args[2:]
 	if len(args) == 0 {

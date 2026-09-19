@@ -244,20 +244,14 @@ type HeadlessTaskRequest struct {
 
 	AllowedTools []string
 
-	// Empty AllowedTools falls back to the provider default set; only this runs with no
-	// tools. Uncallable but not free: the definitions still ship in the billed prefix.
 	DisableTools bool
 
-	// Claude: IGNORED (dontAsk is not fs-sandboxed, writes anywhere already).
 	ExtraWritableRoots []string
 
-	// MaxTurns and MaxBudgetUSD are Claude-only. Codex and Claude both honor OutputSchema.
 	MaxTurns     int
 	MaxBudgetUSD string
 	OutputSchema json.RawMessage
 
-	// REPLACES the agent CLI's own system prompt. Measured on claude-haiku-4-5, tool-less,
-	// with a --json-schema answer: the billed prefix drops from ~49.8K tokens to ~37.0K.
 	SystemPrompt string
 }
 
@@ -331,8 +325,6 @@ type TranscriptFinder interface {
 	BootstrapBytes() int64
 }
 
-// TranscriptUsageSourceProvider finds the native conversations whose usage belongs to one
-// attn session. Its resolver keeps provider-specific discovery state for the watcher lifetime.
 type TranscriptUsageSourceProvider interface {
 	NewTranscriptUsageSourceResolver(rootPath string) transcript.UsageSourceResolver
 }

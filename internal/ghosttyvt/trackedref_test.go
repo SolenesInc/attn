@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// PlainText emits one line per grid row (unwrap=false), so the slice index IS
-// the SCREEN-space y coordinate.
 func screenLines(t *Terminal) []string {
 	lines := strings.Split(t.PlainText(), "\n")
 	for i, l := range lines {
@@ -98,8 +96,6 @@ func TestSpikeTrackedRefFollowsScrollPruneReflow(t *testing.T) {
 		t.Fatalf("after reflow: y=%d text=%q", y2, got)
 	}
 
-	// Pruning is page-granular and lazy (probe: with cap=50 it fires between
-	// ~1k and ~5k rows), so feed enough to guarantee the marked page is gone.
 	feedLines(term, 200, 8000)
 	if _, y3, ok := ref.ScreenPoint(); ok {
 		got := screenLines(term)[y3]

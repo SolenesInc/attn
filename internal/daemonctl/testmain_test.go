@@ -7,8 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/config"
 )
 
-// Scopes every test in this package to a temp data dir so none can resolve
-// config.DataDir() to the real ~/.attn.
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "attn-test-data-*")
 	if err != nil {

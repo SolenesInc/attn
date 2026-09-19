@@ -15,8 +15,6 @@ const (
 	markdownAnnotationTypeGlobal   = "global"
 )
 
-// Orphanhood is client-derived and non-persisted, so it travels in the submit
-// message rather than being read back.
 func formatMarkdownAnnotationPayload(source annotationDocumentSource, anns []protocol.MarkdownAnnotation, orphaned map[string]bool) string {
 	var anchored, globals []protocol.MarkdownAnnotation
 	for _, a := range anns {

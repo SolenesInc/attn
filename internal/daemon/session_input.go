@@ -12,8 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// sessionInput owns safe placement and taken receipts for one live session.
-
 type sessionInputStage uint8
 
 const (
@@ -235,13 +233,10 @@ const (
 	sessionInputPasteEnd   = "\x1b[201~"
 )
 
-// Claude Code 2.1.x receipt: 0ms failed, 50ms submitted; 150ms adds load margin.
 var sessionInputSubmitDelay = 150 * time.Millisecond
 
-// Claude Code 2.1.228 receipt: warm 181/187ms, fresh 1.06s; 3s is the tripwire.
 var sessionInputTakenWindow = 3 * time.Second
 
-// Receipt (daemon.log, 9h, 5,588 keystrokes): p99 gap 3s, p99.5 12s; 30s is the tripwire.
 var sessionInputQuietWindow = 30 * time.Second
 
 type sessionInputQuietError struct{ retryAfter time.Duration }
@@ -257,8 +252,6 @@ type sessionInputRetry struct {
 	resend func()
 }
 
-// A collision clears when the placed prompt is taken, so it waits a take's own
-// span. Read once: tests move sessionInputTakenWindow.
 var sessionInputComposerRetry = sessionInputTakenWindow
 
 func sessionInputRetryDelay(err error) (time.Duration, bool) {
@@ -389,8 +382,6 @@ func (m *sessionInputModule) forgetSuperseded(sessionID string, current sessionI
 	}
 }
 
-// Closed in place before it is dropped: a callback resuming mid-drain finds a
-// closed lane, not a fresh one built for the replacement runtime.
 func (m *sessionInputModule) forgetSession(sessionID string) {
 	lane := m.closeLane(sessionID)
 	if lane == nil {
@@ -407,7 +398,6 @@ func (m *sessionInputModule) fenceSession(sessionID string) {
 	m.closeLane(sessionID)
 }
 
-// Never call from a resend: it waits for every resend the lane has in flight.
 func (m *sessionInputModule) closeLane(sessionID string) *sessionInputLane {
 	m.mu.Lock()
 	lane := m.lanes[sessionID]
@@ -445,8 +435,6 @@ func (m *sessionInputModule) armRetryLocked(lane *sessionInputLane, delivery ses
 	lane.retries[key] = entry
 }
 
-// A stopped timer may already be running its callback: it resends only while it
-// still owns its slot on an open lane, and is counted until it returns.
 func (m *sessionInputModule) fireRetry(sessionID, key string, self *sessionInputRetry) {
 	m.mu.Lock()
 	lane := m.lanes[sessionID]
@@ -468,8 +456,6 @@ func (m *sessionInputModule) fireRetry(sessionID, key string, self *sessionInput
 	self.resend()
 }
 
-// Every live lane is closed under its own lock before the wait, and a lane born
-// later is born closed, so no resend can start once this returns.
 func (m *sessionInputModule) stopRetries() {
 	m.mu.Lock()
 	m.stopped = true

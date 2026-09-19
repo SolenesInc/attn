@@ -48,8 +48,6 @@ func runAppLogs(args []string) {
 		fmt.Fprintln(os.Stderr, "       attn app logs runtime   # the whole shared log")
 		os.Exit(2)
 	}
-	// `runtime` is not an app and never can be — internal/apps reserves it — so the
-	// name check has to let it through here.
 	if name != appRuntimeName {
 		if err := apps.ValidateName(name); err != nil {
 			appFail("logs", err)

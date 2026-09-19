@@ -9,7 +9,6 @@ const ContinuationMaxBytes = 65 << 20
 type Options struct {
 	ScrollbackBytes int
 
-	// The zero value disables the kitty protocol entirely (the library's own default is 10MB).
 	KittyImageStorageLimit uint64
 }
 

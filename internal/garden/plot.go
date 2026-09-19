@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// Ready, Blocked, Growing and Dormant do NOT partition the open set — a planted seed
-// whose plot-mate holds the only open path is in none — so Total is carried.
 type Progress struct {
 	Total    int
 	Done     int
@@ -47,8 +45,6 @@ func PlotProgress(seeds []Seed, crownID string, ready map[string]bool) Progress 
 	return p
 }
 
-// Measured 2026-08-14 on production ticket activity: 276 gaps, p50 0.3h, p99 45h,
-// max 356h. A week is a tripwire ~3.7x past the p99.
 const DefaultStaleWindow = 7 * 24 * time.Hour
 
 func Stale(seeds []Seed, lastMoved map[string]time.Time, window time.Duration, now time.Time) []Seed {
@@ -80,7 +76,6 @@ type PlotSpec struct {
 	Children []PlotChildSpec `json:"children"`
 }
 
-// Refuses unknown keys: a typo'd "block" would silently plant an unsequenced plot.
 func ParsePlotSpec(raw []byte) (PlotSpec, error) {
 	var spec PlotSpec
 	decoder := json.NewDecoder(strings.NewReader(string(raw)))
