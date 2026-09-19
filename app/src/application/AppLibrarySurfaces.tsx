@@ -1,4 +1,3 @@
-import { CrewPanel } from '../components/CrewPanel';
 import { GardenFrame } from '../components/GardenFrame';
 import { NotebookBrowser } from '../components/NotebookBrowser';
 import { NotificationsPanel } from '../components/NotificationsPanel';
@@ -13,7 +12,6 @@ import {
   useAppSessionsContext,
   useAppShell,
   useChiefOfStaffContext,
-  useCrewPanelContext,
   useNavigationContext,
   useSessionLaunchContext,
   useSessionLifecycleContext,
@@ -71,7 +69,6 @@ export function AppLibrarySurfaces() {
   const { handleSelectSession } = useNavigationContext();
   const {
     handleOpenSeedTile,
-    handleOpenSeedFromCrew,
     handleOpenMarkdownArtifact,
     checkArtifactPath,
     handleResumeSeed,
@@ -79,10 +76,7 @@ export function AppLibrarySurfaces() {
     handleSendSeedToChief,
   } = useAppGardenActionsContext();
   const { handleReopenSession } = useSessionLifecycleContext();
-  const { sessionCloseNotice, sessionVerdictNotice, notificationsChangeSignal, daemonSessions } =
-    useAppInputs();
-  const crew = useDaemonStore((state) => state.crew);
-  const { crewPanel, handleCloseCrew } = useCrewPanelContext();
+  const { sessionCloseNotice, sessionVerdictNotice, notificationsChangeSignal } = useAppInputs();
   const { notebookBrowserListFiles, notebookRootChangeSignal } = useAppNotebookSurfaceContext();
   const { notebookChiefActive } = useAppSessionsContext();
   const seeds = useDaemonStore((state) => state.seeds);
@@ -166,17 +160,6 @@ export function AppLibrarySurfaces() {
         retryReviewItem={sendSeedReviewRetry}
         keepReviewItem={sendSeedReviewKeep}
         draftReviewHandover={sendSeedReviewDraft}
-      />
-      <CrewPanel
-        isOpen={crewPanel.open}
-        initialMember={crewPanel.member}
-        members={crew}
-        sessions={daemonSessions}
-        seeds={seeds}
-        seedsTotal={seedsTotal}
-        preserveStateOnOpen={crewPanel.preserveStateOnOpen}
-        onClose={handleCloseCrew}
-        onOpenSeed={handleOpenSeedFromCrew}
       />
       <NotificationsPanel
         open={notificationsPanelOpen}
