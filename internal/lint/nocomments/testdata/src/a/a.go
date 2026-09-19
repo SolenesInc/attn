@@ -37,3 +37,7 @@ func ExampleTwo() {
 	// unordered output:
 	// x
 }
+
+func outputImpostor() {
+	// Output: // want "comment found"
+}

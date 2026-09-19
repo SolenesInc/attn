@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/token"
 	"regexp"
+	"strings"
 
 	"golang.org/x/tools/go/analysis"
 )
@@ -25,8 +26,9 @@ func run(pass *analysis.Pass) (any, error) {
 			continue
 		}
 		preamble := cgoPreamble(file)
+		exampleOutputs := exampleOutputGroups(file)
 		for _, group := range file.Comments {
-			if group == preamble {
+			if group == preamble || exampleOutputs[group] {
 				continue
 			}
 			if prose := firstProse(group); prose != nil {
@@ -38,15 +40,32 @@ func run(pass *analysis.Pass) (any, error) {
 }
 
 func firstProse(group *ast.CommentGroup) *ast.Comment {
-	if outputPrefix.MatchString(group.Text()) {
-		return nil
-	}
 	for _, c := range group.List {
 		if !directive.MatchString(c.Text) {
 			return c
 		}
 	}
 	return nil
+}
+
+func exampleOutputGroups(file *ast.File) map[*ast.CommentGroup]bool {
+	groups := map[*ast.CommentGroup]bool{}
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv != nil || fn.Body == nil || !strings.HasPrefix(fn.Name.Name, "Example") || len(fn.Type.Params.List) != 0 || fn.Type.Results != nil {
+			continue
+		}
+		var last *ast.CommentGroup
+		for _, group := range file.Comments {
+			if fn.Body.Pos() < group.Pos() && group.End() < fn.Body.End() {
+				last = group
+			}
+		}
+		if last != nil && outputPrefix.MatchString(last.Text()) {
+			groups[last] = true
+		}
+	}
+	return groups
 }
 
 func cgoPreamble(file *ast.File) *ast.CommentGroup {
