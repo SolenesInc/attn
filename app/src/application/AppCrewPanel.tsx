@@ -2,7 +2,6 @@ import { CrewPanel } from '../components/CrewPanel';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useAppGardenActionsContext, useAppInputs, useCrewPanelContext } from './AppContexts';
 
-// Lives inside the view stack so it covers the content area and leaves the sidebar in place.
 export function AppCrewPanel() {
   const { daemonSessions } = useAppInputs();
   const crew = useDaemonStore((state) => state.crew);

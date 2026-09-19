@@ -3,6 +3,7 @@ import {
   handleCrewDaemonEvent,
   type CrewCharterGetOutcome,
   type CrewCharterSetOutcome,
+  type CrewHandoffGetOutcome,
   type CrewHandoffsGetOutcome,
   type CrewMutationOutcome,
 } from './daemonCrewEvents';
@@ -773,6 +774,7 @@ function requestTileContentsForWorkspaces(ws: WebSocket, workspaces: DaemonWorks
 const ATTACH_RETRY_TIMEOUT_MS = 3_000;
 const ATTACH_RETRY_DELAY_MS = 150;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const MODEL_DISCOVERY_TIMEOUT_MS = 70_000;
 const SESSION_REOPEN_TIMEOUT_MS = 120_000;
 // Bus status is one aggregate pass over the whole event log. Measured on a copy of production, 209ms
 // at 945k rows — so 30s is roughly a hundred times the worst real log.
@@ -3177,7 +3179,7 @@ export function useDaemonSocket({
   const sendDelegationPreferencesSave = useCallback((preferences: DelegationPreferences, installWorkflowSkill = false): Promise<DelegationSettingsState> =>
     sendRequest('delegation_preferences_save', { preferences, ...(installWorkflowSkill ? { install_workflow_skill: true } : {}) }, 'Saving delegation preferences timed out'), [sendRequest]);
   const sendDelegationModels = useCallback((harness: string): Promise<DelegationModelCatalog> =>
-    sendRequest('delegation_models', { harness }, 'Discovering models timed out', 70_000), [sendRequest]);
+    sendRequest('delegation_models', { harness }, 'Discovering models timed out', MODEL_DISCOVERY_TIMEOUT_MS), [sendRequest]);
 
   const sendAutoModeGet = useCallback((): Promise<AutoModeState> => {
     return sendRequest<AutoModeState>(
@@ -4799,6 +4801,7 @@ export function useDaemonSocket({
         effort: options.effort,
       },
       `Saving ${crewDisplayName(options.member)}'s launch settings timed out`,
+      MODEL_DISCOVERY_TIMEOUT_MS,
     )
   ), [sendRequest]);
 
@@ -4827,6 +4830,14 @@ export function useDaemonSocket({
       'crew_handoffs_get',
       { member },
       `Reading ${crewDisplayName(member)}'s handoffs timed out`,
+    )
+  ), [sendRequest]);
+
+  const sendCrewHandoffGet = useCallback((member: string, filename: string): Promise<CrewHandoffGetOutcome> => (
+    sendRequest(
+      'crew_handoff_get',
+      { member, filename },
+      `Reading ${crewDisplayName(member)}'s handoff ${filename} timed out`,
     )
   ), [sendRequest]);
 
@@ -5504,6 +5515,7 @@ export function useDaemonSocket({
     sendCrewCharterGet,
     sendCrewCharterSet,
     sendCrewHandoffsGet,
+    sendCrewHandoffGet,
     sendCrewRestart,
     sendTaskList,
     sendTaskRetry,

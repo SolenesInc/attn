@@ -24,7 +24,6 @@ export function waitForAutomationDom({ selector, absent = false, textIncludes, f
     }
     function check() {
       const element = document.querySelector(selector);
-      // activeElement, not :focus: the app window need not be key for a scenario to run beside the user.
       const matches = absent ? !element : Boolean(element
         && (textIncludes === undefined || element.textContent?.includes(textIncludes))
         && (!focused || document.activeElement === element));

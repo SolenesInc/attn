@@ -44,6 +44,7 @@ function api(overrides: Record<string, unknown> = {}): DaemonApi {
     sendCrewCharterGet: vi.fn().mockResolvedValue({ member: 'trellis', charter: { content: '# Trellis\n', token: 'charter-1' } }),
     sendCrewCharterSet: vi.fn().mockResolvedValue({ member: 'trellis', conflict: false, charter: { content: '# Trellis\n', token: 'charter-2' } }),
     sendCrewHandoffsGet: vi.fn().mockResolvedValue({ member: 'trellis', handoffs: [] }),
+    sendCrewHandoffGet: vi.fn().mockRejectedValue(new Error('no handoff body in this fixture')),
     sendDelegationPreferencesGet: vi.fn().mockResolvedValue({
       preferences: { enabled: false, revision: 0, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
       templates: [],
@@ -128,7 +129,7 @@ afterEach(() => {
 });
 
 describe('CrewPanel', () => {
-  it('keeps member, tab and seed filter when a workspace seed returns to Crew', async () => {
+  it('keeps member, tab, seed filter and search when a workspace seed returns to Crew', async () => {
     const planted = seed({ id: 's-g9yxwv', title: 'Artifact presence comes from the daemon', planter_member: 'keel' });
     const onOpenSeed = vi.fn();
     const members = [member('alder', 2), member('keel', 3, { binding_session: 'session-keel' })];
@@ -138,6 +139,7 @@ describe('CrewPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /Keel/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Seeds' }));
     fireEvent.click(screen.getByRole('button', { name: /Planted/ }));
+    fireEvent.change(screen.getByLabelText('Find a seed'), { target: { value: 'Artifact presence' } });
     fireEvent.click(screen.getByRole('button', { name: /Artifact presence comes from the daemon/ }));
     expect(onOpenSeed).toHaveBeenCalledWith(planted.id, 'session-keel');
 
@@ -148,6 +150,7 @@ describe('CrewPanel', () => {
     expect(screen.getByRole('heading', { name: 'Keel' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Seeds' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('button', { name: /^Planted/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Find a seed')).toHaveValue('Artifact presence');
   });
 
   it('opens direct member details on launch settings after returning from a seed', async () => {
@@ -393,10 +396,33 @@ describe('CrewPanel', () => {
     await waitFor(() => expect(screen.getByRole('option', { name: 'openai / Astra' })).toBeInTheDocument());
     fireEvent.change(model, { target: { value: 'openai/gpt-6-astra' } });
     await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText('Reasoning effort'), { target: { value: 'high' } });
+    const effort = screen.getByLabelText('Reasoning effort');
+    fireEvent.change(effort, { target: { value: 'hig' } });
+    fireEvent.change(effort, { target: { value: 'high' } });
+    expect(sendCrewSet).toHaveBeenCalledTimes(1);
+    fireEvent.blur(effort);
 
     await waitFor(() => expect(sendCrewSet).toHaveBeenLastCalledWith({
       member: 'keel', expectedRevision: 6, agent: '', model: 'openai/gpt-6-astra', effort: 'high',
+    }));
+    expect(sendCrewSet).toHaveBeenCalledTimes(2);
+  });
+
+  it('commits a typed model id on Enter as one write and keeps the draft over roster pushes', async () => {
+    const sendCrewSet = vi.fn().mockResolvedValue({ success: true, conflict: false });
+    const members = [member('keel', 6)];
+    const { rerenderPanel } = renderPanel({ daemon: api({ sendCrewSet }), members });
+    const model = await screen.findByLabelText('Model');
+    await waitFor(() => expect(model).toBeEnabled());
+    fireEvent.change(model, { target: { value: '__custom' } });
+    const custom = screen.getByTestId('crew-custom-model');
+    fireEvent.change(custom, { target: { value: 'gpt-7' } });
+    await act(async () => { rerenderPanel([member('keel', 7)]); });
+    expect(custom).toHaveValue('gpt-7');
+    expect(sendCrewSet).not.toHaveBeenCalled();
+    fireEvent.keyDown(custom, { key: 'Enter' });
+    await waitFor(() => expect(sendCrewSet).toHaveBeenCalledExactlyOnceWith({
+      member: 'keel', expectedRevision: 7, agent: '', model: 'gpt-7', effort: '',
     }));
   });
 
@@ -626,6 +652,34 @@ describe('CrewPanel', () => {
     expect(screen.getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
   });
 
+  it('lets the user leave after a charter save failure has been shown, keeping the edit for later', async () => {
+    const sendCrewCharterSet = vi.fn().mockRejectedValue(new Error('WebSocket not connected'));
+    renderPanel({ daemon: api({
+      sendCrewCharterGet: vi.fn().mockResolvedValue({ member: 'trellis', charter: { content: 'old', token: 'old' } }),
+      sendCrewCharterSet,
+    }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
+    const editor = await screen.findByTestId('crew-charter-editor');
+    fireEvent.change(editor, { target: { value: 'offline edit' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Launch settings' }));
+    await screen.findByText('WebSocket not connected');
+    expect(screen.getByRole('button', { name: 'Charter' })).toHaveAttribute('aria-current', 'page');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Launch settings' }));
+    expect(screen.getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
+    expect(screen.getByTestId('crew-charter-editor')).toHaveValue('offline edit');
+    expect(screen.getByText('The charter was not saved. Your edit is still here.')).toBeInTheDocument();
+    expect(sendCrewCharterSet).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders no roster or member content while closed', () => {
+    renderPanel({ isOpen: false });
+    expect(screen.queryByRole('region', { name: 'Crew roster' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Crew roster')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Harness')).not.toBeInTheDocument();
+  });
+
   it('returns the authoritative charter on conflict and requires an explicit choice', async () => {
     const sendCrewCharterSet = vi.fn().mockResolvedValue({
       member: 'trellis', conflict: true, charter: { content: 'external edit', token: 'external' },
@@ -648,15 +702,23 @@ describe('CrewPanel', () => {
   it('renders complete dated handoffs and opens seed links through the panel callback', async () => {
     const onOpenSeed = vi.fn();
     const body = '# Full handoff\n\nA paragraph at the end that must not be truncated.\n\n[Open the seed](s-work11)\n';
+    const sendCrewHandoffGet = vi.fn().mockResolvedValue({
+      member: 'trellis',
+      handoff: { filename: '2026-09-01T21-37Z-trellis.md', occurred_at: '2026-09-01T21:37:00Z', content: body, token: 'letter' },
+    });
     renderPanel({
       onOpenSeed,
-      daemon: api({ sendCrewHandoffsGet: vi.fn().mockResolvedValue({
-        member: 'trellis',
-        handoffs: [{ filename: '2026-09-01T21-37Z-trellis.md', occurred_at: '2026-09-01T21:37:00Z', content: body, token: 'letter' }],
-      }) }),
+      daemon: api({
+        sendCrewHandoffsGet: vi.fn().mockResolvedValue({
+          member: 'trellis',
+          handoffs: [{ filename: '2026-09-01T21-37Z-trellis.md', occurred_at: '2026-09-01T21:37:00Z' }],
+        }),
+        sendCrewHandoffGet,
+      }),
     });
     fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
     expect(await screen.findByRole('heading', { name: 'Full handoff' })).toBeInTheDocument();
+    expect(sendCrewHandoffGet).toHaveBeenCalledExactlyOnceWith('trellis', '2026-09-01T21-37Z-trellis.md');
     expect(screen.getByText('A paragraph at the end that must not be truncated.')).toBeInTheDocument();
     expect(screen.getAllByText(/Sep 1, 2026/)).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: 'Open the seed' }));
@@ -668,15 +730,21 @@ describe('CrewPanel', () => {
     renderPanel({
       onOpenSeed,
       members: [member('trellis', 4, { binding_session: 'session-trellis' })],
-      daemon: api({ sendCrewHandoffsGet: vi.fn().mockResolvedValue({
-        member: 'trellis',
-        handoffs: [{
-          filename: '2026-09-01T21-37Z-trellis.md',
-          occurred_at: '2026-09-01T21:37:00Z',
-          content: '[Open the seed](s-work11)',
-          token: 'letter',
-        }],
-      }) }),
+      daemon: api({
+        sendCrewHandoffsGet: vi.fn().mockResolvedValue({
+          member: 'trellis',
+          handoffs: [{ filename: '2026-09-01T21-37Z-trellis.md', occurred_at: '2026-09-01T21:37:00Z' }],
+        }),
+        sendCrewHandoffGet: vi.fn().mockResolvedValue({
+          member: 'trellis',
+          handoff: {
+            filename: '2026-09-01T21-37Z-trellis.md',
+            occurred_at: '2026-09-01T21:37:00Z',
+            content: '[Open the seed](s-work11)',
+            token: 'letter',
+          },
+        }),
+      }),
     });
     fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Open the seed' }));
@@ -705,7 +773,11 @@ describe('CrewPanel', () => {
     const sendCrewHandoffsGet = vi.fn()
       .mockReturnValueOnce(older.promise)
       .mockReturnValueOnce(newer.promise);
-    const daemon = api({ sendCrewHandoffsGet });
+    const sendCrewHandoffGet = vi.fn().mockResolvedValue({
+      member: 'trellis',
+      handoff: { filename: '2026-09-02T09-00Z-trellis.md', occurred_at: '2026-09-02T09:00:00Z', content: '# Newer reconnect result\n', token: 'newer' },
+    });
+    const daemon = api({ sendCrewHandoffsGet, sendCrewHandoffGet });
     const members = [member('trellis', 4)];
     const { rerenderPanel } = renderPanel({ daemon, members });
     fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
@@ -716,21 +788,47 @@ describe('CrewPanel', () => {
     await waitFor(() => expect(sendCrewHandoffsGet).toHaveBeenCalledTimes(2));
     await act(async () => newer.resolve({
       member: 'trellis',
-      handoffs: [{
-        filename: '2026-09-02T09-00Z-trellis.md', occurred_at: '2026-09-02T09:00:00Z',
-        content: '# Newer reconnect result\n', token: 'newer',
-      }],
+      handoffs: [{ filename: '2026-09-02T09-00Z-trellis.md', occurred_at: '2026-09-02T09:00:00Z' }],
     }));
     expect(await screen.findByRole('heading', { name: 'Newer reconnect result' })).toBeInTheDocument();
 
     await act(async () => older.resolve({
       member: 'trellis',
-      handoffs: [{
-        filename: '2026-09-01T09-00Z-trellis.md', occurred_at: '2026-09-01T09:00:00Z',
-        content: '# Obsolete delayed result\n', token: 'older',
-      }],
+      handoffs: [{ filename: '2026-09-01T09-00Z-trellis.md', occurred_at: '2026-09-01T09:00:00Z' }],
     }));
     expect(screen.getByRole('heading', { name: 'Newer reconnect result' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Obsolete delayed result' })).not.toBeInTheDocument();
+    expect(sendCrewHandoffGet).toHaveBeenCalledExactlyOnceWith('trellis', '2026-09-02T09-00Z-trellis.md');
+  });
+
+  it('reads one letter at a time and retries a failed letter without reloading the history', async () => {
+    const sendCrewHandoffsGet = vi.fn().mockResolvedValue({
+      member: 'trellis',
+      handoffs: [
+        { filename: '2026-09-02T09-00Z-trellis.md', occurred_at: '2026-09-02T09:00:00Z' },
+        { filename: '2026-09-01T09-00Z-trellis.md', occurred_at: '2026-09-01T09:00:00Z' },
+      ],
+    });
+    const sendCrewHandoffGet = vi.fn()
+      .mockResolvedValueOnce({ member: 'trellis', handoff: { filename: '2026-09-02T09-00Z-trellis.md', occurred_at: '2026-09-02T09:00:00Z', content: '# Latest letter\n', token: 'a' } })
+      .mockRejectedValueOnce(new Error('the older letter is unreadable'))
+      .mockResolvedValueOnce({ member: 'trellis', handoff: { filename: '2026-09-01T09-00Z-trellis.md', occurred_at: '2026-09-01T09:00:00Z', content: '# Older letter\n', token: 'b' } })
+      .mockResolvedValue({ member: 'trellis', handoff: { filename: '2026-09-02T09-00Z-trellis.md', occurred_at: '2026-09-02T09:00:00Z', content: '# Latest letter\n', token: 'a' } });
+    renderPanel({ daemon: api({ sendCrewHandoffsGet, sendCrewHandoffGet }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
+    expect(await screen.findByRole('heading', { name: 'Latest letter' })).toBeInTheDocument();
+    expect(sendCrewHandoffGet).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId('crew-handoff-1'));
+    expect(await screen.findByText('the older letter is unreadable')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Latest letter' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('crew-handoff-letter-retry'));
+    expect(await screen.findByRole('heading', { name: 'Older letter' })).toBeInTheDocument();
+    expect(sendCrewHandoffGet).toHaveBeenCalledTimes(3);
+    expect(sendCrewHandoffsGet).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId('crew-handoff-0'));
+    expect(await screen.findByRole('heading', { name: 'Latest letter' })).toBeInTheDocument();
+    expect(sendCrewHandoffGet).toHaveBeenCalledTimes(4);
   });
 });

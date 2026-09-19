@@ -111,7 +111,6 @@ func (d *Daemon) crewRestart(name, requestID string, expectedSessionID *string, 
 		return d.resumeCrewRestart(member, doc.Rev)
 	}
 
-	// A failed turnover with a filed letter needs no second letter or prompt.
 	if member.Restart != nil && member.Restart.State == crew.RestartFailed && member.Restart.SessionID == visibleSessionID && member.Restart.LetterPath != "" {
 		candidate := member
 		retry := *member.Restart
@@ -291,8 +290,6 @@ func crewRestartDayChanged(memberID, expected, current string) error {
 	return fmt.Errorf("%s's day changed before the restart was applied: expected session %s, current session %s; refresh the roster and try again", crew.DisplayName(memberID), sessionOrAsleep(expected), sessionOrAsleep(current))
 }
 
-// ensureCrewRestartRequest repairs either side of a daemon crash. Its stable
-// item id recognizes a read receipt too, so repair never asks twice.
 func (d *Daemon) ensureCrewRestartRequest(memberID string, restart crew.Restart) error {
 	delivery, _, err := d.store.EnqueueMaintenancePromptOnce(
 		crewRestartMailboxID(memberID, restart.RequestID), restart.SessionID, restart.RequestID,

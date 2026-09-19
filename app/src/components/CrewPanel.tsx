@@ -1,5 +1,5 @@
 import FocusTrap from 'focus-trap-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type InputHTMLAttributes, type KeyboardEvent } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useCrewCharterAutosave, type CrewCharterAutosave, type CrewCharterEdit } from '../hooks/useCrewCharterAutosave';
 import { useCrewLaunchAutosave, type CrewLaunchSelection } from '../hooks/useCrewLaunchAutosave';
@@ -7,7 +7,7 @@ import { useEscapeStack } from '../hooks/useEscapeStack';
 import { useDelegationModelCatalog } from '../hooks/useDelegationModelCatalog';
 import type { DaemonSession } from '../hooks/useDaemonSocket';
 import type { Seed } from '../hooks/useDaemonSocket';
-import type { CrewHandoffDocument, CrewMember, DelegationHarness, DelegationModel } from '../types/generated';
+import type { CrewHandoffDocument, CrewHandoffSummary, CrewMember, DelegationHarness, DelegationModel } from '../types/generated';
 import { crewDisplayName } from '../utils/crewName';
 import { MarkdownReader } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
@@ -28,10 +28,19 @@ interface CrewPanelProps {
 
 type CrewTab = 'launch' | 'charter' | 'handoffs' | 'seeds';
 
+interface HandoffLetter {
+  state: 'loading' | 'ready' | 'error';
+  filename: string;
+  document?: CrewHandoffDocument;
+  error?: string;
+  request: number;
+}
+
 interface HandoffLoad {
   state: 'loading' | 'ready' | 'error';
-  handoffs: CrewHandoffDocument[];
+  handoffs: CrewHandoffSummary[];
   selected?: string;
+  letter?: HandoffLetter;
   error?: string;
   request: number;
   connectionGeneration: number;
@@ -109,6 +118,31 @@ function CharterTab({ member, edit, autosave }: {
   );
 }
 
+function CommitOnBlurInput({ value, onCommit, onKeyDown, ...rest }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> & {
+  value: string;
+  onCommit: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [editing, setEditing] = useState(false);
+  const shown = editing ? draft : value;
+  const commit = () => {
+    setEditing(false);
+    if (draft !== value) onCommit(draft);
+  };
+  return (
+    <input
+      {...rest}
+      value={shown}
+      onChange={(event) => { setEditing(true); setDraft(event.target.value); }}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        onKeyDown?.(event);
+        if (event.key === 'Enter') { event.preventDefault(); commit(); }
+      }}
+    />
+  );
+}
+
 function handoffDate(value: Date): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
@@ -117,12 +151,34 @@ function handoffDate(value: Date): string {
   }).format(date);
 }
 
-function HandoffsTab({ member, load, selected, onSelect, onRefresh, onOpenSeed }: {
+function HandoffLetterReader({ member, letter, onRetry, onOpenSeed }: {
+  member: CrewMember;
+  letter?: HandoffLetter;
+  onRetry: () => void;
+  onOpenSeed: (seedId: string) => void;
+}) {
+  const source = useMemo(() => seedMarkdownSource(`crew-handoff-${member.id}-${letter?.filename ?? ''}`), [letter?.filename, member.id]);
+  if (!letter || letter.state === 'loading') return <div className="crew-document-state">Loading letter…</div>;
+  if (letter.state === 'error' || !letter.document) {
+    return <div className="crew-document-state is-error" role="alert"><span>{letter.error ?? 'The letter could not be read.'}</span><button type="button" data-testid="crew-handoff-letter-retry" onClick={onRetry}>Retry</button></div>;
+  }
+  return (
+    <MarkdownReader
+      content={letter.document.content}
+      source={source}
+      allowLocalTargets={false}
+      onOpenSeed={onOpenSeed}
+    />
+  );
+}
+
+function HandoffsTab({ member, load, selected, onSelect, onRefresh, onRetryLetter, onOpenSeed }: {
   member: CrewMember;
   load?: HandoffLoad;
   selected?: string;
   onSelect: (filename: string) => void;
   onRefresh: () => void;
+  onRetryLetter: (filename: string) => void;
   onOpenSeed: (seedId: string) => void;
 }) {
   if (!load || load.state === 'loading') return <div className="crew-document-state">Loading handoffs…</div>;
@@ -162,10 +218,10 @@ function HandoffsTab({ member, load, selected, onSelect, onRefresh, onOpenSeed }
         </nav>
         <article className="crew-handoff-reader" data-testid="crew-handoff-reader">
           <div className="crew-handoff-date"><span>{handoffDate(handoff.occurred_at)}</span><code>{handoff.filename}</code></div>
-          <MarkdownReader
-            content={handoff.content}
-            source={seedMarkdownSource(`crew-handoff-${member.id}-${handoff.filename}`)}
-            allowLocalTargets={false}
+          <HandoffLetterReader
+            member={member}
+            letter={load.letter?.filename === handoff.filename ? load.letter : undefined}
+            onRetry={() => onRetryLetter(handoff.filename)}
             onOpenSeed={onOpenSeed}
           />
         </article>
@@ -257,6 +313,7 @@ export function CrewPanel({
     sendCrewCharterGet,
     sendCrewCharterSet,
     sendCrewHandoffsGet,
+    sendCrewHandoffGet,
     sendDelegationPreferencesGet,
     sendDelegationModels,
   } = useDaemonApi();
@@ -264,6 +321,7 @@ export function CrewPanel({
   const [filter, setFilter] = useState('');
   const [tab, setTab] = useState<CrewTab>('launch');
   const [seedFilter, setSeedFilter] = useState<CrewSeedFilter>('tending');
+  const [seedQuery, setSeedQuery] = useState('');
   const [harnesses, setHarnesses] = useState<DelegationHarness[]>([]);
   const [catalogError, setCatalogError] = useState('');
   const [catalogLoading, setCatalogLoading] = useState(false);
@@ -274,6 +332,7 @@ export function CrewPanel({
   const [handoffLoads, setHandoffLoads] = useState<Record<string, HandoffLoad>>({});
   const handoffLoadsRef = useRef(handoffLoads);
   const handoffRequest = useRef(0);
+  const handoffLetterRequest = useRef(0);
   const [navigationPending, setNavigationPending] = useState(false);
   const navigationSequence = useRef(0);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -304,7 +363,8 @@ export function CrewPanel({
 
   const navigate = useCallback((action: () => void) => {
     const sequence = ++navigationSequence.current;
-    if (!selectedRosterMember || tab !== 'charter' || !charterEdit?.acknowledged || charterEdit.state === 'saved') {
+    if (!selectedRosterMember || tab !== 'charter' || !charterEdit?.acknowledged
+      || charterEdit.state === 'saved' || charterEdit.state === 'error' || charterEdit.state === 'conflict') {
       action();
       return;
     }
@@ -317,6 +377,11 @@ export function CrewPanel({
   }, [charterAutosave, charterEdit?.state, selectedRosterMember, tab]);
 
   const requestClose = useCallback(() => navigate(onClose), [navigate, onClose]);
+  const memberBindingSession = selectedRosterMember?.binding_session;
+  const openMemberSeed = useCallback(
+    (seedId: string) => navigate(() => onOpenSeed(seedId, memberBindingSession)),
+    [memberBindingSession, navigate, onOpenSeed],
+  );
 
   useEscapeStack(requestClose, isOpen && !confirming);
   useEscapeStack(() => setConfirming(false), isOpen && confirming);
@@ -370,6 +435,31 @@ export function CrewPanel({
     handoffLoadsRef.current = handoffLoads;
   }, [handoffLoads]);
 
+  const loadHandoffLetter = useCallback((memberId: string, filename: string) => {
+    const request = ++handoffLetterRequest.current;
+    setHandoffLoads((current) => current[memberId] ? ({
+      ...current,
+      [memberId]: { ...current[memberId], letter: { state: 'loading', filename, request } },
+    }) : current);
+    void sendCrewHandoffGet(memberId, filename).then((result) => {
+      if (result.member !== memberId || result.handoff.filename !== filename) {
+        throw new Error(`Handoff response named ${result.member}/${result.handoff.filename}, expected ${memberId}/${filename}`);
+      }
+      setHandoffLoads((current) => current[memberId]?.letter?.request !== request ? current : ({
+        ...current,
+        [memberId]: { ...current[memberId], letter: { state: 'ready', filename, document: result.handoff, request } },
+      }));
+    }).catch((error) => {
+      setHandoffLoads((current) => current[memberId]?.letter?.request !== request ? current : ({
+        ...current,
+        [memberId]: {
+          ...current[memberId],
+          letter: { state: 'error', filename, error: error instanceof Error ? error.message : String(error), request },
+        },
+      }));
+    });
+  }, [sendCrewHandoffGet]);
+
   const loadHandoffs = useCallback((memberId: string, force = false) => {
     const existing = handoffLoadsRef.current[memberId];
     if (!force && existing && existing.state !== 'error'
@@ -381,6 +471,7 @@ export function CrewPanel({
         state: 'loading',
         handoffs: current[memberId]?.handoffs ?? [],
         selected: current[memberId]?.selected,
+        letter: force ? undefined : current[memberId]?.letter,
         request,
         connectionGeneration,
       },
@@ -423,6 +514,14 @@ export function CrewPanel({
     if (tab === 'charter') void charterAutosave.load(selectedRosterMember.id);
     if (tab === 'handoffs') loadHandoffs(selectedRosterMember.id);
   }, [charterAutosave, isOpen, loadHandoffs, selectedRosterMember, tab]);
+
+  const selectedHandoffLoad = selectedRosterMember ? handoffLoads[selectedRosterMember.id] : undefined;
+  useEffect(() => {
+    if (!isOpen || tab !== 'handoffs' || !selectedRosterMember || selectedHandoffLoad?.state !== 'ready') return;
+    const { selected, letter } = selectedHandoffLoad;
+    if (!selected || letter?.filename === selected) return;
+    loadHandoffLetter(selectedRosterMember.id, selected);
+  }, [isOpen, loadHandoffLetter, selectedHandoffLoad, selectedRosterMember, tab]);
 
   const visibleMembers = useMemo(() => {
     const query = filter.trim().toLowerCase();
@@ -525,7 +624,7 @@ export function CrewPanel({
             </div>
             <button ref={closeRef} type="button" className="crew-close" data-testid="crew-panel-close" disabled={navigationPending} onClick={requestClose}>Close <kbd>Esc</kbd></button>
           </header>
-          <div className="crew-panel-shell">
+          {isOpen && <div className="crew-panel-shell">
             <aside className="crew-roster" aria-label="Crew roster">
               <div className="crew-roster-heading"><span>Members</span><span>{members.length}</span></div>
               {members.length > 5 && (
@@ -655,25 +754,25 @@ export function CrewPanel({
                       {manualModel[member.id] && (
                         <label className="crew-custom-model">
                           <span>Exact model ID</span>
-                          <input
+                          <CommitOnBlurInput
                             data-testid="crew-custom-model"
                             autoFocus
                             value={selection.model}
                             placeholder="Model ID from the harness"
-                            onChange={(event) => updateSelection({ model: event.target.value, effort: '' })}
+                            onCommit={(model) => updateSelection({ model, effort: '' })}
                           />
                         </label>
                       )}
 
                       <label>
                         <span>Reasoning effort</span>
-                        <input
+                        <CommitOnBlurInput
                           data-testid="crew-effort"
                           list={`crew-efforts-${member.id}`}
                           value={selection.effort}
                           placeholder="Harness default"
                           disabled={!effectiveAgent || harness?.effort_pin === false || selectedModel?.effort_support === 'unsupported'}
-                          onChange={(event) => updateSelection({ effort: event.target.value })}
+                          onCommit={(effort) => updateSelection({ effort })}
                         />
                         <datalist id={`crew-efforts-${member.id}`}>
                           {selectedModel?.effort_levels?.map((level) => <option key={level} value={level} />)}
@@ -744,7 +843,8 @@ export function CrewPanel({
                         [member.id]: { ...current[member.id], selected: filename },
                       }))}
                       onRefresh={() => loadHandoffs(member.id, true)}
-                      onOpenSeed={(seedId) => navigate(() => onOpenSeed(seedId, member.binding_session))}
+                      onRetryLetter={(filename) => loadHandoffLetter(member.id, filename)}
+                      onOpenSeed={openMemberSeed}
                     />
                   )}
                   {tab === 'seeds' && (
@@ -754,13 +854,15 @@ export function CrewPanel({
                       seedsTotal={seedsTotal}
                       filter={seedFilter}
                       onFilterChange={setSeedFilter}
-                      onOpenSeed={(seedId) => navigate(() => onOpenSeed(seedId, member.binding_session))}
+                      query={seedQuery}
+                      onQueryChange={setSeedQuery}
+                      onOpenSeed={openMemberSeed}
                     />
                   )}
                 </>
               )}
             </main>
-          </div>
+          </div>}
 
           {confirming && member && edit && (
             <div className="crew-confirm-backdrop">

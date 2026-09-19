@@ -66,8 +66,6 @@ func startFakeAppRuntime(t *testing.T, d *Daemon, handler func(*fakeAppRuntime, 
 func startConfiguredAppRuntime(t *testing.T, d *Daemon, handlers fakeAppRuntimeHandlers) *fakeAppRuntime {
 	t.Helper()
 	serverConn, clientConn := net.Pipe()
-	// Connecting can immediately drain an owed reconcile; install every handler
-	// before the daemon can dispatch work to this runtime.
 	runtime := &fakeAppRuntime{
 		fakeAppRuntimeHandlers: handlers,
 		t:                      t,

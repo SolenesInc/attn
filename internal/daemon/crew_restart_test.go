@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -468,5 +470,43 @@ func TestCrewRestart_AnOutpostCannotOwnTheLifecycle(t *testing.T) {
 	result := crewRestartCall(t, d, "keel", "outpost-restart")
 	if result.Ok || !strings.Contains(protocol.Deref(result.Error), home) {
 		t.Fatalf("outpost restart result = ok:%t error:%q", result.Ok, protocol.Deref(result.Error))
+	}
+}
+
+func TestCrewRestart_TeardownFailureAfterFilingKeepsTheLetterForRetry(t *testing.T) {
+	d, _, _ := newWakeableDaemon(t)
+	woken, err := d.crewWake("keel", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	if result := crewRestartCall(t, d, "keel", "restart-teardown"); !result.Ok {
+		t.Fatalf("restart: %v", protocol.Deref(result.Error))
+	}
+	d.prepareSessionTeardownHook = func(string) error { return errors.New("tombstone write failed") }
+	filesBefore := handoffFiles(t, d, "keel")
+
+	failedHandoff := crewHandoffCall(t, d, woken.SessionID, "The letter filed before teardown broke.")
+	if failedHandoff.Ok {
+		t.Fatal("handoff reported success after teardown preparation failed")
+	}
+	filesAfter := handoffFiles(t, d, "keel")
+	if len(filesAfter) != len(filesBefore)+1 {
+		t.Fatalf("handoff files before/after = %d/%d, want one filed letter", len(filesBefore), len(filesAfter))
+	}
+	failed := memberByID(t, crewList(t, d), "keel")
+	if failed.Restart == nil || failed.Restart.State != protocol.CrewRestartStateFailed {
+		t.Fatalf("failed restart = %+v", failed.Restart)
+	}
+	if got := protocol.Deref(failed.Restart.LetterPath); got == "" || !slices.Contains(filesAfter, filepath.Base(got)) || slices.Contains(filesBefore, filepath.Base(got)) {
+		t.Fatalf("restart letter = %q, want the newly filed letter among %v", got, filesAfter)
+	}
+
+	d.prepareSessionTeardownHook = nil
+	retried := crewRestartCall(t, d, "keel", "restart-retry")
+	if !retried.Ok || retried.CrewRestartResult.Restart.State != protocol.CrewRestartStateCompleted {
+		t.Fatalf("retried restart = %+v error=%v", retried.CrewRestartResult, protocol.Deref(retried.Error))
+	}
+	if len(handoffFiles(t, d, "keel")) != len(filesAfter) {
+		t.Fatal("retry wrote a second handoff letter")
 	}
 }

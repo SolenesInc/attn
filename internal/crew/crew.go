@@ -58,8 +58,6 @@ const (
 	RestartCompleted RestartState = "completed"
 )
 
-// Restart follows one user request from durable delivery through the member's
-// own filed handoff and the successor launch. The member record owns reconnects.
 type Restart struct {
 	RequestID          string       `json:"request_id"`
 	SessionID          string       `json:"session_id"`

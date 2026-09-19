@@ -2540,6 +2540,48 @@ type CrewHandoffDocument struct {
 	Token string `json:"token"`
 }
 
+type CrewHandoffGetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Filename corresponds to the JSON schema field "filename".
+	Filename string `json:"filename"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type CrewHandoffGetResult struct {
+	// Handoff corresponds to the JSON schema field "handoff".
+	Handoff CrewHandoffDocument `json:"handoff"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+}
+
+type CrewHandoffGetResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Handoff corresponds to the JSON schema field "handoff".
+	Handoff *CrewHandoffDocument `json:"handoff,omitempty,omitzero"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member *string `json:"member,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
 type CrewHandoffMessage struct {
 	// Close corresponds to the JSON schema field "close".
 	Close *CrewDayClose `json:"close,omitempty,omitzero"`
@@ -2574,6 +2616,14 @@ type CrewHandoffResult struct {
 	SessionID *string `json:"session_id,omitempty,omitzero"`
 }
 
+type CrewHandoffSummary struct {
+	// Filename corresponds to the JSON schema field "filename".
+	Filename string `json:"filename"`
+
+	// OccurredAt corresponds to the JSON schema field "occurred_at".
+	OccurredAt time.Time `json:"occurred_at"`
+}
+
 type CrewHandoffsGetMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -2587,7 +2637,7 @@ type CrewHandoffsGetMessage struct {
 
 type CrewHandoffsGetResult struct {
 	// Handoffs corresponds to the JSON schema field "handoffs".
-	Handoffs []CrewHandoffDocument `json:"handoffs"`
+	Handoffs []CrewHandoffSummary `json:"handoffs"`
 
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
@@ -2601,7 +2651,7 @@ type CrewHandoffsGetResultMessage struct {
 	Event string `json:"event"`
 
 	// Handoffs corresponds to the JSON schema field "handoffs".
-	Handoffs []CrewHandoffDocument `json:"handoffs,omitempty,omitzero"`
+	Handoffs []CrewHandoffSummary `json:"handoffs,omitempty,omitzero"`
 
 	// Member corresponds to the JSON schema field "member".
 	Member *string `json:"member,omitempty,omitzero"`
@@ -7242,6 +7292,10 @@ type Response struct {
 	// CrewCharterSetResult corresponds to the JSON schema field
 	// "crew_charter_set_result".
 	CrewCharterSetResult *CrewCharterSetResult `json:"crew_charter_set_result,omitempty,omitzero"`
+
+	// CrewHandoffGetResult corresponds to the JSON schema field
+	// "crew_handoff_get_result".
+	CrewHandoffGetResult *CrewHandoffGetResult `json:"crew_handoff_get_result,omitempty,omitzero"`
 
 	// CrewHandoffResult corresponds to the JSON schema field "crew_handoff_result".
 	CrewHandoffResult *CrewHandoffResult `json:"crew_handoff_result,omitempty,omitzero"`

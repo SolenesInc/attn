@@ -485,7 +485,7 @@ func (d *Daemon) openSeedTile(seedID, placementSessionID string) (workspaceID, t
 	tileID = seedTileIDForID(seed.ID)
 	if placementSessionID == "" {
 		for _, candidateID := range d.store.WorkspaceLayoutIDs() {
-			if snapshot := d.store.GetWorkspaceLayout(candidateID); snapshot != nil && workspacelayout.HasTile(snapshot.Layout, tileID) {
+			if snapshot := d.store.GetWorkspaceLayout(candidateID); snapshot != nil && isStandaloneSeedReader(snapshot, tileID) {
 				if err := d.rebindTileSession(candidateID, tileID, bindingSessionID); err != nil {
 					return "", "", err
 				}
@@ -741,4 +741,8 @@ func (d *Daemon) collectChangedMarkdownTiles() []markdownTileRef {
 		}
 	}
 	return changed
+}
+
+func isStandaloneSeedReader(snapshot *workspacelayout.WorkspaceLayout, tileID string) bool {
+	return len(snapshot.Panes) == 0 && snapshot.Layout.Type == "tile" && snapshot.Layout.TileID == tileID
 }

@@ -170,6 +170,30 @@ func TestOpenSeedWithoutPlacementCreatesAStandaloneReaderWorkspace(t *testing.T)
 	}
 }
 
+func TestOpenSeedWithoutPlacementLeavesDockedCopiesAlone(t *testing.T) {
+	d := newGardenDaemon(t)
+	_, _, dockedWorkspaceID := setupMarkdownWorkspaceOn(t, d)
+	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "Docked and read"})
+	if _, _, err := d.openSeedTile(seed.ID, "session-1"); err != nil {
+		t.Fatalf("dock into the placement workspace: %v", err)
+	}
+
+	readerWorkspaceID, tileID, err := d.openSeedTile(seed.ID, "")
+	if err != nil {
+		t.Fatalf("openSeedTile without placement: %v", err)
+	}
+	if readerWorkspaceID == dockedWorkspaceID {
+		t.Fatalf("placement-free open reused the docked workspace %q, want a standalone reader", dockedWorkspaceID)
+	}
+	docked := workspacelayout.TileLeaves(d.store.GetWorkspaceLayout(dockedWorkspaceID).Layout)
+	if len(docked) != 1 || docked[0].TileSessionID != "session-1" {
+		t.Fatalf("docked tile = %+v, want its binding untouched", docked)
+	}
+	if again, againTile, err := d.openSeedTile(seed.ID, ""); err != nil || again != readerWorkspaceID || againTile != tileID {
+		t.Fatalf("second placement-free open = (%q, %q, %v), want the same standalone reader", again, againTile, err)
+	}
+}
+
 func TestOpenSeedNamesUnknownID(t *testing.T) {
 	d := newGardenDaemon(t)
 	setupMarkdownWorkspaceOn(t, d)

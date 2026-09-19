@@ -484,8 +484,6 @@ func (d *Daemon) handleCrewSetWS(client *wsClient, msg *protocol.CrewSetMessage)
 	d.sendToClient(client, result)
 }
 
-// crewSet is shared by IPC and WS. expected_revision opts into strict CAS;
-// omission reapplies the patch to the latest record after an ordinary race.
 func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bool, error) {
 	if err := d.requireHome(crew.Surface); err != nil {
 		return nil, false, err

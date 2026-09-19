@@ -1,4 +1,4 @@
-import type { CrewCharterDocument, CrewHandoffDocument, CrewMember, CrewRestart } from '../types/generated';
+import type { CrewCharterDocument, CrewHandoffDocument, CrewHandoffSummary, CrewMember, CrewRestart } from '../types/generated';
 import { pendingRequestKey, settlePendingRequest, type PendingRequests } from './daemonPendingRequests';
 
 export interface CrewMutationOutcome {
@@ -18,7 +18,8 @@ interface CrewMutationEvent {
   member?: CrewMember;
   restart?: CrewRestart;
   charter?: CrewCharterDocument;
-  handoffs?: CrewHandoffDocument[];
+  handoffs?: CrewHandoffSummary[];
+  handoff?: CrewHandoffDocument;
 }
 
 export interface CrewCharterGetOutcome {
@@ -34,7 +35,12 @@ export interface CrewCharterSetOutcome {
 
 export interface CrewHandoffsGetOutcome {
   member: string;
-  handoffs: CrewHandoffDocument[];
+  handoffs: CrewHandoffSummary[];
+}
+
+export interface CrewHandoffGetOutcome {
+  member: string;
+  handoff: CrewHandoffDocument;
 }
 
 function settleCrewMutation(
@@ -77,6 +83,14 @@ export function handleCrewDaemonEvent(event: CrewMutationEvent, pending: Pending
         ? { member: result.member, handoffs: result.handoffs }
         : undefined
     ), 'The daemon returned no handoff history');
+    return true;
+  }
+  if (event.event === 'crew_handoff_get_result') {
+    settlePendingRequest(pending, 'crew_handoff_get', event, (result) => (
+      result.member && result.handoff
+        ? { member: result.member, handoff: result.handoff }
+        : undefined
+    ), 'The daemon returned no handoff');
     return true;
   }
   if (event.event === 'crew_set_result') {

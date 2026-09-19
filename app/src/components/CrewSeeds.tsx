@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { Seed } from '../hooks/useDaemonSocket';
 import type { CrewMember } from '../types/generated';
 import { crewDisplayName } from '../utils/crewName';
@@ -13,8 +13,6 @@ export function seedsTendedByMember(seeds: Seed[], member: CrewMember): Seed[] {
 }
 
 export function seedsPlantedByMember(seeds: Seed[], memberId: string): Seed[] {
-  // planter_session has no durable crew attribution on the roster. Using the
-  // current binding would rewrite history, so this list uses explicit identity.
   return seeds.filter((seed) => seed.planter_member === memberId);
 }
 
@@ -40,6 +38,8 @@ export function CrewSeeds({
   seedsTotal,
   filter,
   onFilterChange,
+  query,
+  onQueryChange,
   onOpenSeed,
 }: {
   member: CrewMember;
@@ -47,9 +47,10 @@ export function CrewSeeds({
   seedsTotal: number;
   filter: CrewSeedFilter;
   onFilterChange: (filter: CrewSeedFilter) => void;
+  query: string;
+  onQueryChange: (query: string) => void;
   onOpenSeed: (seedId: string) => void;
 }) {
-  const [query, setQuery] = useState('');
   const tended = useMemo(() => seedsTendedByMember(seeds, member), [member, seeds]);
   const planted = useMemo(() => seedsPlantedByMember(seeds, member.id), [member.id, seeds]);
   const rows = filter === 'tending' ? tended : planted;
@@ -106,7 +107,7 @@ export function CrewSeeds({
             className="crew-seed-search"
             data-testid="crew-seed-search"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => onQueryChange(event.target.value)}
             placeholder="Find a seed…"
             aria-label="Find a seed"
           />

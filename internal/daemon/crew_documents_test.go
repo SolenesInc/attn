@@ -150,12 +150,24 @@ func TestCrewHandoffs_ReadsCompleteNewestFirstHistoryAndRealDates(t *testing.T) 
 	if err != nil {
 		t.Fatalf("read handoffs: %v", err)
 	}
-	if len(result.Handoffs) != 2 || result.Handoffs[0].Filename != filename || result.Handoffs[0].Content != body {
+	if len(result.Handoffs) != 2 || result.Handoffs[0].Filename != filename {
 		t.Fatalf("handoffs = %+v", result.Handoffs)
 	}
 	wantDate := time.Date(2026, 9, 1, 21, 37, 0, 0, time.UTC)
-	if !result.Handoffs[0].OccurredAt.Equal(wantDate) || result.Handoffs[0].Token == "" {
-		t.Fatalf("latest handoff date/token = %s/%q", result.Handoffs[0].OccurredAt, result.Handoffs[0].Token)
+	if !result.Handoffs[0].OccurredAt.Equal(wantDate) {
+		t.Fatalf("latest handoff date = %s", result.Handoffs[0].OccurredAt)
+	}
+	letter, err := d.crewHandoffGet("trellis", filename)
+	if err != nil {
+		t.Fatalf("read handoff: %v", err)
+	}
+	if letter.Handoff.Filename != filename || letter.Handoff.Content != body || letter.Handoff.Token == "" || !letter.Handoff.OccurredAt.Equal(wantDate) {
+		t.Fatalf("handoff = %+v", letter.Handoff)
+	}
+	for _, bad := range []string{"", "../charter.md", "notes.txt", "2026-09-01T21-37Z-other.md", "missing-2026.md"} {
+		if _, err := d.crewHandoffGet("trellis", bad); err == nil {
+			t.Fatalf("handoff %q was readable", bad)
+		}
 	}
 }
 

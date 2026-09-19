@@ -139,7 +139,7 @@ func (d *Daemon) crewHandoffsGet(name string) (*protocol.CrewHandoffsGetResult, 
 	}
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
-		return &protocol.CrewHandoffsGetResult{Member: member.ID, Handoffs: []protocol.CrewHandoffDocument{}}, nil
+		return &protocol.CrewHandoffsGetResult{Member: member.ID, Handoffs: []protocol.CrewHandoffSummary{}}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading %s's handoff history: %w", crew.DisplayName(member.ID), err)
@@ -147,31 +147,55 @@ func (d *Daemon) crewHandoffsGet(name string) (*protocol.CrewHandoffsGetResult, 
 
 	names := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+		if entry.IsDir() {
+			continue
+		}
+		if _, err := crewHandoffTime(entry.Name()); err != nil {
+			d.logf("crew: %s's handoffs dir holds %q, which is not a filed letter; skipping it", crew.DisplayName(member.ID), entry.Name())
+			continue
+		}
+		if err := d.validateCrewLetterPath(member, filepath.Join(dir, entry.Name())); err != nil {
+			d.logf("crew: skipping %s's handoff %q: %v", crew.DisplayName(member.ID), entry.Name(), err)
 			continue
 		}
 		names = append(names, entry.Name())
 	}
 	crew.SortHandoffNames(names)
-	handoffs := make([]protocol.CrewHandoffDocument, 0, len(names))
+	handoffs := make([]protocol.CrewHandoffSummary, 0, len(names))
 	for _, filename := range names {
-		path := filepath.Join(dir, filename)
-		if err := d.validateCrewLetterPath(member, path); err != nil {
-			return nil, err
-		}
-		occurredAt, err := crewHandoffTime(filename)
-		if err != nil {
-			return nil, fmt.Errorf("reading %s's handoff history: %w", crew.DisplayName(member.ID), err)
-		}
-		content, token, err := fsdoc.NewStore(dir).ReadWithLimit(filename, crew.MaxHandoffBytes)
-		if err != nil {
-			return nil, fmt.Errorf("reading %s's handoff %s: %w", crew.DisplayName(member.ID), filename, err)
-		}
-		handoffs = append(handoffs, protocol.CrewHandoffDocument{
-			Filename: filename, OccurredAt: occurredAt, Content: string(content), Token: token,
-		})
+		occurredAt, _ := crewHandoffTime(filename)
+		handoffs = append(handoffs, protocol.CrewHandoffSummary{Filename: filename, OccurredAt: occurredAt})
 	}
 	return &protocol.CrewHandoffsGetResult{Member: member.ID, Handoffs: handoffs}, nil
+}
+
+func (d *Daemon) crewHandoffGet(name, filename string) (*protocol.CrewHandoffGetResult, error) {
+	member, err := d.crewDocumentMember(name)
+	if err != nil {
+		return nil, err
+	}
+	dir, err := d.validateCrewHandoffsDir(member)
+	if err != nil {
+		return nil, err
+	}
+	filename = strings.TrimSpace(filename)
+	if filename == "" || filename != filepath.Base(filename) {
+		return nil, fmt.Errorf("handoff %q is not a filename in %s's handoff history", filename, crew.DisplayName(member.ID))
+	}
+	occurredAt, err := crewHandoffTime(filename)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s's handoff %s: %w", crew.DisplayName(member.ID), filename, err)
+	}
+	if err := d.validateCrewLetterPath(member, filepath.Join(dir, filename)); err != nil {
+		return nil, err
+	}
+	content, token, err := fsdoc.NewStore(dir).ReadWithLimit(filename, crew.MaxHandoffFileBytes)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s's handoff %s: %w", crew.DisplayName(member.ID), filename, err)
+	}
+	return &protocol.CrewHandoffGetResult{Member: member.ID, Handoff: protocol.CrewHandoffDocument{
+		Filename: filename, OccurredAt: occurredAt, Content: string(content), Token: token,
+	}}, nil
 }
 
 func (d *Daemon) handleCrewCharterGet(conn net.Conn, msg *protocol.CrewCharterGetMessage) {
@@ -199,6 +223,15 @@ func (d *Daemon) handleCrewHandoffsGet(conn net.Conn, msg *protocol.CrewHandoffs
 		return
 	}
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewHandoffsGetResult: result})
+}
+
+func (d *Daemon) handleCrewHandoffGet(conn net.Conn, msg *protocol.CrewHandoffGetMessage) {
+	result, err := d.crewHandoffGet(msg.Member, msg.Filename)
+	if err != nil {
+		d.sendCrewError(conn, "read handoff", err)
+		return
+	}
+	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewHandoffGetResult: result})
 }
 
 func crewDocumentRequestID(value *string) (string, error) {
@@ -256,6 +289,23 @@ func (d *Daemon) handleCrewHandoffsGetWS(client *wsClient, msg *protocol.CrewHan
 		response.Error = protocol.Ptr(err.Error())
 	} else {
 		response.Member, response.Handoffs = protocol.Ptr(result.Member), result.Handoffs
+	}
+	d.sendToClient(client, response)
+}
+
+func (d *Daemon) handleCrewHandoffGetWS(client *wsClient, msg *protocol.CrewHandoffGetMessage) {
+	requestID, err := crewDocumentRequestID(msg.RequestID)
+	var result *protocol.CrewHandoffGetResult
+	if err == nil {
+		result, err = d.crewHandoffGet(msg.Member, msg.Filename)
+	}
+	response := protocol.CrewHandoffGetResultMessage{
+		Event: protocol.EventCrewHandoffGetResult, RequestID: requestID, Success: err == nil,
+	}
+	if err != nil {
+		response.Error = protocol.Ptr(err.Error())
+	} else {
+		response.Member, response.Handoff = protocol.Ptr(result.Member), &result.Handoff
 	}
 	d.sendToClient(client, response)
 }

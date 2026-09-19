@@ -159,6 +159,7 @@ const (
 	CmdCrewCharterGet                        = "crew_charter_get"
 	CmdCrewCharterSet                        = "crew_charter_set"
 	CmdCrewHandoffsGet                       = "crew_handoffs_get"
+	CmdCrewHandoffGet                        = "crew_handoff_get"
 	CmdCrewWake                              = "crew_wake"
 	CmdCrewSleep                             = "crew_sleep"
 	CmdCrewSet                               = "crew_set"
@@ -364,6 +365,7 @@ const (
 	EventCrewCharterGetResult            = "crew_charter_get_result"
 	EventCrewCharterSetResult            = "crew_charter_set_result"
 	EventCrewHandoffsGetResult           = "crew_handoffs_get_result"
+	EventCrewHandoffGetResult            = "crew_handoff_get_result"
 	EventCrewWakeResult                  = "crew_wake_result"
 	EventCrewSleepResult                 = "crew_sleep_result"
 	EventCrewSetResult                   = "crew_set_result"
@@ -1266,6 +1268,13 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdCrewHandoffsGet:
 		var msg CrewHandoffsGetMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdCrewHandoffGet:
+		var msg CrewHandoffGetMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}

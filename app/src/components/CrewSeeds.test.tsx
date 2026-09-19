@@ -97,6 +97,8 @@ describe('CrewSeeds', () => {
         seedsTotal={2}
         filter="planted"
         onFilterChange={vi.fn()}
+        query=""
+        onQueryChange={vi.fn()}
         onOpenSeed={onOpenSeed}
       />,
     );
@@ -114,29 +116,29 @@ describe('CrewSeeds', () => {
     const alder = member('alder', 'day-current');
     const claimed = seed({ id: 's-live', title: 'Live claim', status: 'growing', tender_session: 'day-current' });
     const view = render(
-      <CrewSeeds member={alder} seeds={[claimed]} seedsTotal={1} filter="tending" onFilterChange={vi.fn()} onOpenSeed={vi.fn()} />,
+      <CrewSeeds member={alder} seeds={[claimed]} seedsTotal={1} filter="tending" onFilterChange={vi.fn()} query="" onQueryChange={vi.fn()} onOpenSeed={vi.fn()} />,
     );
     expect(screen.getByRole('button', { name: /Live claim/ })).toBeInTheDocument();
 
     view.rerender(
-      <CrewSeeds member={alder} seeds={[{ ...claimed, status: 'dormant', tender_session: '' }]} seedsTotal={1} filter="tending" onFilterChange={vi.fn()} onOpenSeed={vi.fn()} />,
+      <CrewSeeds member={alder} seeds={[{ ...claimed, status: 'dormant', tender_session: '' }]} seedsTotal={1} filter="tending" onFilterChange={vi.fn()} query="" onQueryChange={vi.fn()} onOpenSeed={vi.fn()} />,
     );
     expect(screen.getByText("Alder isn't tending a seed.")).toBeInTheDocument();
 
     view.rerender(
-      <CrewSeeds member={alder} seeds={[{ ...claimed, status: 'planted', tender_session: '', planter_member: 'alder' }]} seedsTotal={1} filter="planted" onFilterChange={vi.fn()} onOpenSeed={vi.fn()} />,
+      <CrewSeeds member={alder} seeds={[{ ...claimed, status: 'planted', tender_session: '', planter_member: 'alder' }]} seedsTotal={1} filter="planted" onFilterChange={vi.fn()} query="" onQueryChange={vi.fn()} onOpenSeed={vi.fn()} />,
     );
     expect(screen.getByRole('button', { name: /Live claim/ })).toBeInTheDocument();
   });
 
   it('keeps honest empty and capped states', () => {
     const { rerender } = render(
-      <CrewSeeds member={member('keel')} seeds={[]} seedsTotal={0} filter="planted" onFilterChange={vi.fn()} onOpenSeed={vi.fn()} />,
+      <CrewSeeds member={member('keel')} seeds={[]} seedsTotal={0} filter="planted" onFilterChange={vi.fn()} query="" onQueryChange={vi.fn()} onOpenSeed={vi.fn()} />,
     );
     expect(screen.getByText('No seeds were explicitly planted by Keel.')).toBeInTheDocument();
 
     rerender(
-      <CrewSeeds member={member('keel')} seeds={alderSnapshot} seedsTotal={481} filter="planted" onFilterChange={vi.fn()} onOpenSeed={vi.fn()} />,
+      <CrewSeeds member={member('keel')} seeds={alderSnapshot} seedsTotal={481} filter="planted" onFilterChange={vi.fn()} query="" onQueryChange={vi.fn()} onOpenSeed={vi.fn()} />,
     );
     expect(screen.getByText('Showing matches in the newest 4 of 481 seeds.')).toBeInTheDocument();
     expect(screen.getByText('No seeds in this Garden snapshot are explicitly planted by Keel.')).toBeInTheDocument();

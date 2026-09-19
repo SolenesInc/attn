@@ -22,7 +22,6 @@ export function disarmNativePointerWitness(): void {
   witness = null;
 }
 
-// One trusted mouseup acknowledges OS delivery, even when it hit the wrong element.
 export function armNativePointerWitness(selector: string): void {
   if (!document.querySelector(selector)) throw new Error(`Native pointer target not found: ${selector}`);
   disarmNativePointerWitness();

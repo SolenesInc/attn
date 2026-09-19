@@ -44,6 +44,8 @@ const wakeReceipt = path.join(awakeHome, 'wake-received');
 let firstSession = '';
 let successor = '';
 let linkedSeed = '';
+const plantedSeeds = new Set();
+let membersRegistered = false;
 let crewPlot = '';
 let crewChild = '';
 let asleepHeld = '';
@@ -61,6 +63,10 @@ const crewMember = (id) => json(['crew', 'list', '--json']).find((member) => mem
 const click = (selector) => client.request('dom_click', { selector });
 const select = (selector, value) => client.request('dom_select', { selector, value });
 const type = (selector, text) => client.request('dom_type', { selector, text });
+const typeAndCommit = async (selector, text) => {
+  await type(selector, text);
+  await client.request('dom_key', { selector, key: 'Enter' });
+};
 const panelText = async () => (await client.request('dom_text', { selector: '[data-testid="crew-panel"]' })).text;
 const hold = () => process.env.ATTN_HARNESS_RECORD === '1' ? delay(1200) : Promise.resolve();
 const waitForDom = (selector, condition = {}, timeoutMs = 30_000) => client.request(
@@ -68,7 +74,8 @@ const waitForDom = (selector, condition = {}, timeoutMs = 30_000) => client.requ
   { selector, timeoutMs, ...condition },
   { timeoutMs: timeoutMs + 1_000 },
 );
-const waitForCrew = (member, predicate, description, timeoutMs = 30_000) => observer.waitForMessage(
+const settled = (promise) => { promise.catch(() => {}); return promise; };
+const waitForCrew = (member, predicate, description, timeoutMs = 30_000) => settled(observer.waitForMessage(
   (message) => {
     if (message.event !== 'crew_updated') return null;
     const current = (message.members || []).find((entry) => entry.id === member);
@@ -76,11 +83,11 @@ const waitForCrew = (member, predicate, description, timeoutMs = 30_000) => obse
   },
   description,
   timeoutMs,
-);
+));
 
 function waitForFileSignal(file, description, timeoutMs = 30_000) {
   if (fs.existsSync(file)) return Promise.resolve();
-  return new Promise((resolve, reject) => {
+  return settled(new Promise((resolve, reject) => {
     const watcher = fs.watch(path.dirname(file), (_event, name) => {
       if (name !== path.basename(file) || !fs.existsSync(file)) return;
       clearTimeout(timer);
@@ -91,7 +98,7 @@ function waitForFileSignal(file, description, timeoutMs = 30_000) {
       watcher.close();
       reject(new Error(`timed out waiting for ${description}: ${file}`));
     }, timeoutMs);
-  });
+  }));
 }
 
 // The window parks off-screen beside the user's work; a capture by window id
@@ -174,16 +181,35 @@ runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('restore_queue_mode', () => (
   client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' }).catch(() => {})
 ));
-// Cleanups run last-registered first: the successor closes while the app still answers.
-runner.registerCleanup('close_successor', () => (successor ? client.request('close_session', { sessionId: successor }) : undefined));
+// Cleanups run last-registered first: sessions close and seeds settle while the app still answers.
+runner.registerCleanup('remove_member_homes', () => {
+  for (const home of [awakeHome, asleepHome, historyHome]) fs.rmSync(home, { recursive: true, force: true });
+});
+runner.registerCleanup('delete_members', () => {
+  if (!membersRegistered) return;
+  for (const member of [awake, asleep, history]) runAttn(['doc', 'delete', 'core/crew', 'members', member]);
+});
+runner.registerCleanup('close_crew_days', async () => {
+  for (const sessionId of [successor, firstSession].filter(Boolean)) {
+    await client.request('close_session', { sessionId }).catch(() => {});
+  }
+});
 runner.registerCleanup('archive_crew_files', () => {
-  fs.chmodSync(historyHome, 0o755);
+  if (fs.existsSync(historyHome)) fs.chmodSync(historyHome, 0o755);
   const handoffs = path.join(awakeHome, 'handoffs');
   if (!fs.existsSync(handoffs)) return;
   for (const name of fs.readdirSync(handoffs)) {
     fs.renameSync(path.join(handoffs, name), path.join(runner.runDir, `restart-${name}`));
   }
 });
+runner.registerCleanup('settle_seeds', () => {
+  for (const id of plantedSeeds) runAttn(['seed', 'wither', id, '--force', '-m', 'Harness fixture cleanup']);
+});
+const plant = (args) => {
+  const seed = json(['seed', 'plant', ...args, '--json']);
+  plantedSeeds.add(seed.id);
+  return seed;
+};
 
 try {
   const webkitBaseline = await captureWebKitPids();
@@ -216,9 +242,10 @@ try {
   });
   await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
   runAttn(['crew', 'set', awake, '--cwd', awakeHome, '--agent', 'codex']);
+  membersRegistered = true;
   runAttn(['crew', 'set', asleep, '--cwd', asleepHome]);
   runAttn(['crew', 'set', history, '--cwd', historyHome]);
-  linkedSeed = json(['seed', 'plant', 'Crew charter history link receipt', '-m', 'Opened from a full handoff letter.', '--json']).id;
+  linkedSeed = plant(['Crew charter history link receipt', '-m', 'Opened from a full handoff letter.']).id;
   fs.writeFileSync(
     path.join(historyHome, 'handoffs', '2026-08-31T18-05Z-trellis.md'),
     `# Linked handoff\n\nContinue from [Crew charter history link receipt](${linkedSeed}).\n`,
@@ -243,12 +270,12 @@ try {
     'Crew opens from the dashboard without a placement session', dashboardSessions);
   const workspaceIdle = await sampleIdle(webkitBaseline);
 
-  const plot = json(['seed', 'plant', `Crew verification plot ${memberSuffix}`, '-m', 'The planted list opens this plot in the native workspace tile.', '--member', awake, '--session', firstSession, '--json']);
+  const plot = plant([`Crew verification plot ${memberSuffix}`, '-m', 'The planted list opens this plot in the native workspace tile.', '--member', awake, '--session', firstSession]);
   crewPlot = plot.id;
-  const child = json(['seed', 'plant', `Crew planted navigation ${memberSuffix}`, '-m', 'The plot link navigates this same native tile.', '--part-of', crewPlot, '--member', awake, '--session', firstSession, '--json']);
+  const child = plant([`Crew planted navigation ${memberSuffix}`, '-m', 'The plot link navigates this same native tile.', '--part-of', crewPlot, '--member', awake, '--session', firstSession]);
   crewChild = child.id;
   json(['seed', 'tend', crewChild, '--session', firstSession, '--json']);
-  const held = json(['seed', 'plant', `Crew asleep claim ${memberSuffix}`, '-m', 'A permanent member claim remains visible between days.', '--member', asleep, '--json']);
+  const held = plant([`Crew asleep claim ${memberSuffix}`, '-m', 'A permanent member claim remains visible between days.', '--member', asleep]);
   asleepHeld = held.id;
   json(['seed', 'tend', asleepHeld, '--member', asleep, '--json']);
 
@@ -286,7 +313,7 @@ try {
     runner.assert((await panelText()).includes('Tending 1'), 'the current day session claim appears once even with member attribution');
     await click('[data-testid="crew-seed-filter-planted"]');
     await waitForDom(`[data-testid="crew-seed-${crewPlot}"]`);
-    const livePlant = json(['seed', 'plant', `Crew live planting update ${memberSuffix}`, '--member', awake, '--session', firstSession, '--json']);
+    const livePlant = plant([`Crew live planting update ${memberSuffix}`, '--member', awake, '--session', firstSession]);
     await waitForDom(`[data-testid="crew-seed-${livePlant.id}"]`);
     const plantedText = await panelText();
     runner.assert(
@@ -454,7 +481,7 @@ try {
       'the full launch selection to be acknowledged',
     );
     await select('[data-testid="crew-model"]', 'crew-claude');
-    await type('[data-testid="crew-effort"]', 'high');
+    await typeAndCommit('[data-testid="crew-effort"]', 'high');
     const saved = await fullSave;
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Saved' });
     runner.writeJson('saved-next-wake.json', saved);
@@ -466,7 +493,7 @@ try {
     const stopped = await stopDaemon(profile);
     runner.assert(Number.isInteger(stopped), 'the scenario stopped its isolated daemon by captured pid', { stopped });
     await disconnected;
-    await type('[data-testid="crew-effort"]', 'low');
+    await typeAndCommit('[data-testid="crew-effort"]', 'low');
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Not saved' });
     runner.assert((await panelText()).includes('WebSocket not connected'), 'the panel explains the transport failure');
     await screenshot('08-save-disconnected.png');
@@ -495,12 +522,11 @@ try {
       'the successor launch',
       45_000,
     );
-    const successorReceipt = waitForFileSignal(wakeReceipt, 'the successor mock launch');
+    const successorReceipt = waitForFileSignal(wakeReceipt, 'the successor mock launch', 45_000);
     fs.writeFileSync(path.join(awakeHome, 'continue-restart'), 'continue\n');
-    const completed = await completedEvent;
+    const [completed] = await Promise.all([completedEvent, successorReceipt]);
     successor = completed.binding_session;
     await observer.waitForSession({ id: successor, timeoutMs: 30_000 });
-    await successorReceipt;
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'New day started' });
     const bound = [...observer.sessionsById.values()].filter((session) => session.crew_member === awake);
     runner.assert(bound.length === 1 && bound[0].id === successor, 'exactly one live session owns the member binding', { bound, completed });

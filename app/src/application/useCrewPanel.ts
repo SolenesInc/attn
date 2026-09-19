@@ -7,8 +7,6 @@ interface CrewPanelState {
   preserveStateOnOpen?: boolean;
 }
 
-// Manage crew is a library surface: one panel, opened for a member or for the
-// roster, that hands focus back to whatever opened it.
 export function useCrewPanel() {
   const [crewPanel, setCrewPanel] = useState<CrewPanelState>({
     open: false,

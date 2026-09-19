@@ -53,6 +53,7 @@
 - Seed states: planted means open, growing means claimed, dormant means paused, harvested means done, and withered means abandoned.
 - Seed outcome: the result and verification required before harvesting.
 - Harvest condition: an instruction to harvest a seed when its PR merges. A PR closed without merging clears it instead of closing the seed.
+- Tender: the agent or person claiming a seed. A seed has one tender at a time.
 - Member claim: a tender recorded as a crew member with no session. It belongs to the permanent member and stays held while the member is asleep.
 - Session claim: a tender recorded as a session. It counts as a crew member's work only while that session is the member's current day.
 - Execution: the saved conversation and working location for a seed.

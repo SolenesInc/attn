@@ -390,6 +390,20 @@ describe('useDaemonSocket crew', () => {
     await expect(read!).resolves.toEqual({ member: 'keel', handoffs: [] });
   });
 
+  it('correlates one handoff body read', async () => {
+    const { ws, result } = await renderWithCrew([member('keel')]);
+    let read: ReturnType<typeof result.current.sendCrewHandoffGet>;
+    act(() => { read = result.current.sendCrewHandoffGet('keel', '2026-09-01T21-37Z-keel.md'); });
+    const sent = JSON.parse(ws.sent[ws.sent.length - 1]);
+    expect(sent).toMatchObject({ cmd: 'crew_handoff_get', member: 'keel', filename: '2026-09-01T21-37Z-keel.md' });
+
+    const handoff = { filename: '2026-09-01T21-37Z-keel.md', occurred_at: '2026-09-01T21:37:00Z', content: '# Letter\n', token: 'letter' };
+    act(() => {
+      ws.emit({ event: 'crew_handoff_get_result', request_id: sent.request_id, success: true, member: 'keel', handoff });
+    });
+    await expect(read!).resolves.toEqual({ member: 'keel', handoff });
+  });
+
   it('reuses the caller restart identity and ignores another request result', async () => {
     const { ws, result } = await renderWithCrew([member('keel', 'sess-keel')]);
     let restarted: ReturnType<typeof result.current.sendCrewRestart>;

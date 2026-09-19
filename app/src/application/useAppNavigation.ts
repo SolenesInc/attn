@@ -203,8 +203,6 @@ export function useAppNavigation({
     [focusWorkspaceLeaf, handleSelectWorkspace, setSelectedTile],
   );
 
-  // A tile the daemon just opened may not be in workspace state yet; the
-  // selection waits for it so the leaf exists when it receives focus.
   const [pendingTileSelection, setPendingTileSelection] = useState<{
     workspaceId: string;
     tileId: string;

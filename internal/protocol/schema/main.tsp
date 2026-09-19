@@ -6350,6 +6350,7 @@ model Response {
   crew_charter_get_result?: CrewCharterGetResult;
   crew_charter_set_result?: CrewCharterSetResult;
   crew_handoffs_get_result?: CrewHandoffsGetResult;
+  crew_handoff_get_result?: CrewHandoffGetResult;
   crew_wake_result?: CrewWakeResult;
   crew_sleep_result?: CrewSleepResult;
   crew_set_result?: CrewSetResult;
@@ -6578,8 +6579,14 @@ model CrewCharterSetResultMessage {
   charter?: CrewCharterDocument;
 }
 
-// One complete filed handoff. occurred_at comes from the canonical filename;
-// content is never shortened for this read-only history view.
+// One filed handoff in the member's history. occurred_at comes from the
+// canonical filename; the body is read separately with crew_handoff_get.
+model CrewHandoffSummary {
+  filename: string;
+  occurred_at: utcDateTime;
+}
+
+// One complete filed handoff. content is never shortened for this read-only view.
 model CrewHandoffDocument {
   filename: string;
   occurred_at: utcDateTime;
@@ -6595,7 +6602,7 @@ model CrewHandoffsGetMessage {
 
 model CrewHandoffsGetResult {
   member: string;
-  handoffs: CrewHandoffDocument[];
+  handoffs: CrewHandoffSummary[];
 }
 
 model CrewHandoffsGetResultMessage {
@@ -6604,7 +6611,28 @@ model CrewHandoffsGetResultMessage {
   success: boolean;
   error?: string;
   member?: string;
-  handoffs?: CrewHandoffDocument[];
+  handoffs?: CrewHandoffSummary[];
+}
+
+model CrewHandoffGetMessage {
+  cmd: "crew_handoff_get";
+  member: string;
+  filename: string;
+  request_id?: string;
+}
+
+model CrewHandoffGetResult {
+  member: string;
+  handoff: CrewHandoffDocument;
+}
+
+model CrewHandoffGetResultMessage {
+  event: "crew_handoff_get_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  member?: string;
+  handoff?: CrewHandoffDocument;
 }
 
 // Start a member's day: launch a session bound to it, in the member's own cwd,
@@ -7656,6 +7684,7 @@ alias DaemonEvent =
   | CrewCharterGetResultMessage
   | CrewCharterSetResultMessage
   | CrewHandoffsGetResultMessage
+  | CrewHandoffGetResultMessage
   | CrewWakeResultMessage
   | CrewSleepResultMessage
   | CrewSetResultMessage

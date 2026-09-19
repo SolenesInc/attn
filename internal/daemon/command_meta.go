@@ -78,6 +78,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdCrewCharterGet:                        commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdCrewCharterSet:                        commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdCrewHandoffsGet:                       commandMetadata(ScopeHubLocal, false, true),
+	protocol.CmdCrewHandoffGet:                        commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdCrewWake:                              commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdCrewSleep:                             commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdCrewSet:                               commandMetadata(ScopeHubLocal, false, true),

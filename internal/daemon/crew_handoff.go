@@ -88,13 +88,14 @@ func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.
 		return nil, fmt.Errorf("this session is not living a crew member's day, so it has no day-line to close. A crew handoff is a member's own letter to its successor; the note you write for whoever tends a piece of work next is `attn seed note <id> -m \"…\" --handoff`")
 	}
 	var restart *crew.Restart
+	var filedLetter string
 	if member.Restart != nil && member.Restart.SessionID == sessionID &&
 		(member.Restart.State == crew.RestartQueued || member.Restart.State == crew.RestartRequested || member.Restart.State == crew.RestartFailed) {
 		copy := *member.Restart
 		restart = &copy
 		defer func() {
 			if err != nil {
-				d.failCrewRestart(member.ID, restart.RequestID, sessionID, "", err)
+				d.failCrewRestart(member.ID, restart.RequestID, sessionID, filedLetter, err)
 				return
 			}
 			if result == nil {
@@ -115,6 +116,7 @@ func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.
 	if err != nil {
 		return nil, err
 	}
+	filedLetter = path
 
 	if retry && close == "" {
 		close = protocol.CrewDayCloseNap
@@ -298,8 +300,6 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 	spawnMsg.ID = uuid.NewString()
 	spawnMsg.Label = protocol.Ptr(crew.DisplayName(member.ID))
 	spawnMsg.InitialPrompt = protocol.Ptr(crewNapPrompt)
-	// A wake override lasts for its named day. The successor keeps route and
-	// approval controls from that day, then returns to the member's launch pins.
 	previousAgent := spawnMsg.Agent
 	spawnMsg.Agent = member.LaunchAgent()
 	spawnMsg.Model = d.crewWakeModel(member, spawnMsg.Agent)

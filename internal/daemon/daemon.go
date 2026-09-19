@@ -2720,6 +2720,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleCrewCharterSet(conn, msg.(*protocol.CrewCharterSetMessage))
 	case protocol.CmdCrewHandoffsGet: // wire: crew_handoffs_get
 		d.handleCrewHandoffsGet(conn, msg.(*protocol.CrewHandoffsGetMessage))
+	case protocol.CmdCrewHandoffGet: // wire: crew_handoff_get
+		d.handleCrewHandoffGet(conn, msg.(*protocol.CrewHandoffGetMessage))
 	case protocol.CmdCrewWake: // wire: crew_wake
 		d.handleCrewWake(conn, msg.(*protocol.CrewWakeMessage))
 	case protocol.CmdCrewSleep: // wire: crew_sleep
