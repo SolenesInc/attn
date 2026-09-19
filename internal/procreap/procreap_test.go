@@ -269,8 +269,8 @@ set -m
 sleep 300 &
 echo $! > `+childPIDFile+`
 set +m
-touch "$READY_FILE"
 trap 'kill $(cat `+childPIDFile+`) 2>/dev/null; exit 0' TERM
+touch "$READY_FILE"
 while true; do sleep 0.05; done
 `)
 	deadline := time.Now().Add(5 * time.Second)

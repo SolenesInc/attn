@@ -1,4 +1,4 @@
-.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
+.PHONY: lint lint-go lint-frontend lint-added-comments run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-scripts test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -191,36 +191,20 @@ $(GOTESTSUM):
 verify-ghostty-vt-wasm:
 	bash ./app/scripts/ensure-ghostty-vt-wasm.sh
 
-test: $(NATIVE_VT_DEP) test-hooks test-scripts verify-ghostty-vt-wasm
-	./scripts/test-go.sh
+DIFF_BASE ?= origin/next
+test: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
+	@if [ -n "$(FORCE)" ]; then verdict=changed; else verdict="$$(go run ./cmd/go-test-inputs -base $(DIFF_BASE))" || exit 1; fi; \
+	case "$$verdict" in \
+		changed) ./scripts/test-go.sh ;; \
+		unchanged) echo "make test: skipped the Go suite. FORCE=1 runs it." ;; \
+		*) echo "make test: go-test-inputs answered '$$verdict'" >&2; exit 1 ;; \
+	esac
 
-# Repository Claude Code hooks are shell, so they are invisible to the Go suite
-# and would otherwise rot unnoticed.
 test-hooks:
 	@bash ./scripts/claude/attn-profile-nudge_test.sh
 
-# Same blind spot for the shell an agent runs by hand.
 test-scripts:
-	@bash ./scripts/test-git_test.sh
-	@bash ./scripts/source-fingerprint_test.sh
-	@bash ./scripts/pr-evidence_test.sh
-	@bash ./scripts/ci-acceptance_test.sh
-	@bash ./scripts/pre-commit_test.sh
-	@bash ./scripts/ci-retry_test.sh
-	@bash ./scripts/ci-flake-report_test.sh
-	@bash ./scripts/app-acceptance_test.sh
-	@bash ./scripts/app-acceptance-gate_test.sh
-	@bash ./scripts/candidate-gate_test.sh
-	@bash ./scripts/changelog-gate_test.sh
-	@bash ./scripts/main-route_test.sh
-	@bash ./scripts/release_test.sh
-	@bash ./scripts/release-tag-gate_test.sh
-	@bash ./scripts/workflow-job-gate_test.sh
-	@bash ./scripts/release-after-acceptance_test.sh
-	@bash ./scripts/release-health_test.sh
-	@bash ./scripts/publish-release_test.sh
-	@bash ./scripts/sync-main-to-next_test.sh
-	@bash ./scripts/make-fresh-checkout_test.sh
+	@bash ./scripts/test-scripts.sh $(sort $(wildcard scripts/*_test.sh))
 
 # Verbose test output (shows all test names as they run)
 test-v: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
@@ -244,7 +228,10 @@ $(APP_NODE_MODULES): app/package.json app/pnpm-lock.yaml
 test-frontend: $(APP_NODE_MODULES)
 	cd app && pnpm run test
 
-lint: lint-go lint-frontend
+lint: lint-go lint-frontend lint-added-comments
+
+lint-added-comments:
+	go run ./cmd/addedcomments -base $(DIFF_BASE)
 
 lint-go: $(NATIVE_VT_DEP)
 	go run ./cmd/commentlint ./...

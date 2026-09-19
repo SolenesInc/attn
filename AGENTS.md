@@ -47,6 +47,8 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 - Diagnose before fixing. If the cause is unknown, propose instrumentation.
 - Do not commit spikes.
 - Do not add prose comments to code. Prefer self-explanatory code over comments.
+  `make lint` rejects Go, Rust, TypeScript and JavaScript comment lines added since
+  `origin/next` (`DIFF_BASE` overrides).
 - Align with the user before adding a bus event or changing an existing event's name, subject, payload, semantics, or compatibility behavior.
 - Remote outposts are temporarily incomplete: Garden and crew remain home-only
   until the generic uplink exists, and other cross-daemon flows may be
@@ -87,7 +89,13 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 | Go + frontend           | `make test-all`          |
 | Go + frontend + browser | `make test-harness`      |
 | Frontend dev server     | `pnpm --dir app run dev` |
+| Shell script tests      | `make test-scripts`      |
+| Hook tests              | `make test-hooks`        |
 | Lint                    | `make lint`              |
+
+`make test` skips the Go suite when nothing it reads changed since `origin/next`;
+`FORCE=1` runs it and `DIFF_BASE=<ref>` compares against another branch. Nothing else
+runs the script and hook tests: run them after changing a script or a hook.
 
 These targets fetch the native VT library and install `app/node_modules` as needed.
 Prefer fast integration tests; do not copy production code into tests or test

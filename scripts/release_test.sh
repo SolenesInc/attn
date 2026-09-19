@@ -2,11 +2,14 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$root/scripts/lib/test-git.sh"
 release_script="$root/scripts/release.sh"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-release-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 mkdir -p "$work/bin"
+source "$root/scripts/lib/prebuilt-go-run.sh"
+install_prebuilt_go_run "$root" "$work/bin" release-train changelog-check
 cat >"$work/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -83,6 +86,7 @@ setup_fixture() {
   git init -q --bare "$fixture_origin"
   git --git-dir="$fixture_origin" config receive.shallowUpdate true
   git clone -q "$root" "$fixture_repo"
+  borrow_clone_objects "$fixture_origin" "$fixture_repo"
   git -C "$fixture_repo" config user.name 'Release Test'
   git -C "$fixture_repo" config user.email 'release@example.com'
   cp "$root/scripts/compile-changelog.sh" "$fixture_repo/scripts/compile-changelog.sh"
@@ -119,6 +123,7 @@ setup_hotfix_fixture() {
   git init -q --bare "$fixture_origin"
   git --git-dir="$fixture_origin" config receive.shallowUpdate true
   git clone -q "$root" "$fixture_repo"
+  borrow_clone_objects "$fixture_origin" "$fixture_repo"
   git -C "$fixture_repo" config user.name 'Release Test'
   git -C "$fixture_repo" config user.email 'release@example.com'
   cp "$root/scripts/compile-changelog.sh" "$fixture_repo/scripts/compile-changelog.sh"
@@ -157,7 +162,6 @@ EOF
 }
 
 export PATH="$work/bin:$PATH"
-export GOCACHE="$work/go-cache"
 export FAKE_GH_LOG="$work/gh.log"
 export FAKE_PR_BODY="$work/pr-body.md"
 export FAKE_CLAUDE_ARGC="$work/claude-argc.txt"

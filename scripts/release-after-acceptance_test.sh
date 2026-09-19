@@ -8,6 +8,8 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/attn-release-after-acceptance-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 mkdir -p "$work/bin"
+source "$root/scripts/lib/prebuilt-go-run.sh"
+install_prebuilt_go_run "$root" "$work/bin" release-train changelog-check
 cat >"$work/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -141,7 +143,6 @@ chmod +x "$work/bin/git"
 export PATH="$work/bin:$PATH"
 export REAL_GIT="$real_git"
 export GITHUB_REPOSITORY=example/attn
-export GOCACHE="$work/go-cache"
 export FAKE_GH_LOG="$work/gh.log"
 export FAKE_ACCEPTANCE_CONCLUSION=success
 export FAKE_TAG_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -162,6 +163,37 @@ export FAKE_RELEASE_RUN_CONCLUSION=success
 export FAKE_ATOMIC_REJECT=0
 export FAKE_ATOMIC_RACE_TAG=0
 
+template_origin="$work/template-origin.git"
+template_repo="$work/template-repo"
+git init -q --bare "$template_origin"
+git --git-dir="$template_origin" config receive.shallowUpdate true
+git clone -q --depth 1 "file://$root" "$template_repo"
+git -C "$template_repo" config user.name 'Release Test'
+git -C "$template_repo" config user.email 'release@example.com'
+cp "$root/cmd/release-train/main.go" "$template_repo/cmd/release-train/main.go"
+git -C "$template_repo" switch -q -C main
+git -C "$template_repo" add cmd/release-train/main.go
+find "$template_repo/changelog.d" -type f -name '*.yaml' -delete
+git -C "$template_repo" add -A changelog.d
+git -C "$template_repo" commit -q --allow-empty -m 'release fixture baseline'
+baseline_sha="$(git -C "$template_repo" rev-parse HEAD)"
+(cd "$template_repo" && go run ./cmd/release-train version set v99.98.97 >/dev/null)
+version=99.98.97
+mkdir -p "$template_repo/.github"
+cat >"$template_repo/.github/release-candidate.yml" <<EOF
+version: $version
+kind: promotion
+source_sha: $baseline_sha
+main_sha: $baseline_sha
+EOF
+git -C "$template_repo" add -A
+git -C "$template_repo" commit -q -m 'release: accepted main fixture'
+candidate_sha="$(git -C "$template_repo" rev-parse HEAD)"
+candidate_tag="v$version"
+git -C "$template_repo" remote set-url origin "$template_origin"
+git -C "$template_repo" push -q -u origin main
+git --git-dir="$template_origin" symbolic-ref HEAD refs/heads/main
+
 setup_fixture() {
   local name="$1"
   fixture_origin="$work/$name-origin.git"
@@ -181,38 +213,14 @@ setup_fixture() {
   export FAKE_ATOMIC_REJECT=0
   export FAKE_ATOMIC_RACE_TAG=0
 
-	  git init -q --bare "$fixture_origin"
-	  git --git-dir="$fixture_origin" config receive.shallowUpdate true
-	  git clone -q --depth 1 "file://$root" "$fixture_repo"
-	  git -C "$fixture_repo" config user.name 'Release Test'
-	  git -C "$fixture_repo" config user.email 'release@example.com'
-	  cp "$root/cmd/release-train/main.go" "$fixture_repo/cmd/release-train/main.go"
-	  git -C "$fixture_repo" switch -q -C main
-	  git -C "$fixture_repo" add cmd/release-train/main.go
-	  find "$fixture_repo/changelog.d" -type f -name '*.yaml' -delete
-	  git -C "$fixture_repo" add -A changelog.d
-	  git -C "$fixture_repo" commit -q --allow-empty -m 'release fixture baseline'
-	  baseline_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
-
-	  (cd "$fixture_repo" && go run ./cmd/release-train version set v99.98.97 >/dev/null)
-	  version=99.98.97
-  mkdir -p "$fixture_repo/.github"
-  cat >"$fixture_repo/.github/release-candidate.yml" <<EOF
-version: $version
-kind: promotion
-source_sha: $baseline_sha
-main_sha: $baseline_sha
-EOF
-  git -C "$fixture_repo" add -A
-  git -C "$fixture_repo" commit -q -m 'release: accepted main fixture'
-	  candidate_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
-	  candidate_tag="v$version"
-	  export FAKE_EXPECTED_SHA="$candidate_sha"
-	  export FAKE_EXPECTED_TAG="$candidate_tag"
-	  git -C "$fixture_repo" remote set-url origin "$fixture_origin"
-	  git -C "$fixture_repo" push -q -u origin main
-	  git --git-dir="$fixture_origin" symbolic-ref HEAD refs/heads/main
-	  export FAKE_ORIGIN="$fixture_origin"
+  cp -R "$template_origin" "$fixture_origin"
+  git clone -q --shared "$template_repo" "$fixture_repo"
+  git -C "$fixture_repo" config user.name 'Release Test'
+  git -C "$fixture_repo" config user.email 'release@example.com'
+  git -C "$fixture_repo" remote set-url origin "$fixture_origin"
+  export FAKE_EXPECTED_SHA="$candidate_sha"
+  export FAKE_EXPECTED_TAG="$candidate_tag"
+  export FAKE_ORIGIN="$fixture_origin"
 }
 
 run_release_after_acceptance() (
