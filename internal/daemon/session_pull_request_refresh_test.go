@@ -377,6 +377,26 @@ func TestPullRequestWatchStoresEachReviewersStatus(t *testing.T) {
 	}
 }
 
+func TestPullRequestWatchDoesNotShareReviewerStatusWithUnwatchedSession(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	registerSessionForPRTest(t, d, "s2")
+	url := "https://github.com/victorarias/attn/pull/71"
+	recordPRForRefresh(t, d, "s2", url)
+	watchPRForRefresh(t, d, "s1", url)
+	host := &fakePRHost{readiness: watchedReadiness("sha-1", prreadiness.ChecksGreen, "COMMENTED")}
+	serveHost(d, "github.com", host)
+	now := time.Now()
+	d.refreshSessionPullRequests(now)
+	d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
+
+	if got := storedPullRequest(t, d, "s1").ReviewStatus; got != prreadiness.ReviewApproved {
+		t.Fatalf("watched review status = %q", got)
+	}
+	if got := storedPullRequest(t, d, "s2").ReviewStatus; got != "" {
+		t.Fatalf("unwatched review status = %q, want empty", got)
+	}
+}
+
 func TestPullRequestUnwatchScopesOneRecipient(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	registerSessionForPRTest(t, d, "s2")

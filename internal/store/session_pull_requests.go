@@ -258,6 +258,25 @@ func (s *Store) UpdateSessionPullRequestStatus(prID string, status SessionPullRe
 	return err
 }
 
+func (s *Store) UpdateSessionPullRequestSharedStatus(prID string, status SessionPullRequestStatus, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return errors.New("store has no database")
+	}
+
+	stamp := at.Format(time.RFC3339Nano)
+	_, err := s.db.Exec(`
+		UPDATE session_pull_requests
+		SET title = ?, draft = ?, state = ?, ci_status = ?,
+			mergeable_state = ?, head_sha = ?, head_branch = ?,
+			status_fetched_at = ?, status_checked_at = ?
+		WHERE pr_id = ?`,
+		status.Title, status.Draft, status.State, status.CIStatus,
+		status.MergeableState, status.HeadSHA, status.HeadBranch, stamp, stamp, prID)
+	return err
+}
+
 func (s *Store) UpdateSessionPullRequestReviewStatus(sessionID, prID, reviewStatus string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
