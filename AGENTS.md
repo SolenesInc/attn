@@ -42,6 +42,16 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 
 ## Working rules
 
+Before introducing a wrapper, interface, configuration option, fallback, cache,
+or coordination layer, name the current requirement it serves. Search existing
+code and platform capabilities first. If the justification is hypothetical future
+flexibility, leave it out. An abstraction earns its place by removing complexity
+from today's code; moving complexity behind a new name does not count. Preserve
+the full requested behavior.
+
+During design and review, ask: what could we remove from this design and still
+satisfy the full requirement?
+
 - Run tests when making changes.
 - Make protocol bumps and DB migrations as needed by the changes.
 - Diagnose before fixing. If the cause is unknown, propose instrumentation.
@@ -61,19 +71,18 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 
 ## PR posture
 
+- Review for unnecessary machinery as well as correctness. For each new layer,
+  option, fallback, or duplicated state, check what current requirement it serves.
+  When proposing simplification, name what can be removed, what replaces it, and
+  why the full behavior is preserved. Fewer lines alone are not evidence of a
+  better design.
 - Codex reviews every PR as `chatgpt-codex-connector[bot]`. It reviews each push on
-  its own; comment `@codex review` only when a head has waited without one. Never
-  merge unless Victor asks.
-- Match the review to the head: the review body names its `Reviewed commit`, and
-  findings on an older commit are history. A review with findings is feedback to
-  address, not a pass. A 👍 reaction on the PR is a clean review for that push only;
-  👀 is activity; silence, a timeout, or the "Codex can review" help text is not a pass.
+  its own. A 👍 reaction on the PR is a clean review for the latest push.
+  👀 reaction means Codex is reviewing.
 - Read reviews, inline comments, review threads with `isResolved`, and PR reactions
   through the API (GraphQL for threads). `gh pr view` misses reactions and thread state.
 - Address each finding with a change and a test, reply on the thread with what
-  changed, and resolve it. When no change is needed, reply with the reason and leave
-  the thread open for Victor.
-- A fix is a new head: wait for CI and a fresh Codex review on it before handing back.
+  changed, and resolve it. When no change is needed, reply with the reason.
 - Do not ignore React Doctor warnings and errors. Don't dismiss them as irrelevant.
   The bar to assume they are not applicable must be very high. Ask the user for approval
   to ignore them. Do not silently bypass it.
@@ -138,7 +147,7 @@ need no up-front reading.
 | Event publishing, projections, consumers, or retention                                 | [Event bus](docs/maintainer-contracts.md#event-bus)                                                                                                                                                            |
 | Native VT builds, ABI, or pin updates                                                  | [Native VT library](docs/maintainer-contracts.md#native-vt-library)                                                                                                                                            |
 | Agent-facing content in `internal/prompts/content/**`, its Go definitions, or CLI help | [Prompt authoring](docs/prompt-authoring.md): run `go run ./cmd/prompt-editor context EVENT_OR_SOURCE --json` and read complete affected compositions before and after edits; `refresh` reloads Go definitions |
-| Product vocabulary                                                                    | [Glossary](docs/glossary.md); update definitions when meanings change                                                                                                                                         |
+| Product vocabulary                                                                     | [Glossary](docs/glossary.md); update definitions when meanings change                                                                                                                                          |
 | Branches, PRs, merges, or waiting on reviews                                           | [Working with next](docs/working-with-next.md)                                                                                                                                                                 |
 | Changelog fragments, releases, hotfixes, or syncing `main` into `next`                 | [Making a release](docs/making-a-release.md)                                                                                                                                                                   |
 | Installing, launching, or verifying profiles                                           | [Profiles](docs/profiles.md)                                                                                                                                                                                   |
