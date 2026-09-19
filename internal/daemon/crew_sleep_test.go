@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -133,5 +134,31 @@ func TestCrewSleep_QueuesWhileWakingAndWakesOnIdleWithoutPromptHook(t *testing.T
 	}
 	if unread, err := d.store.UnreadAgentMailboxDeliveries(woken.SessionID); err != nil || len(unread) != 1 || unread[0].Item.NotifiedAt == "" {
 		t.Fatalf("unread inbox after first prompt = %v, %v", unread, err)
+	}
+}
+
+func TestCrewSleep_ADeadDayWithARestartPendingFailsTheRestart(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	runtime := &crewRuntimeBackend{fakeSpawnBackend: backend, running: make(map[string]bool)}
+	d.ptyBackend = runtime
+	woken, err := d.crewWake("alder", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	if _, err := d.setCrewRestart("alder", &crew.Restart{RequestID: "sleep-instead", SessionID: woken.SessionID, State: crew.RestartQueued}); err != nil {
+		t.Fatalf("seed pending restart: %v", err)
+	}
+	runtime.running[woken.SessionID] = false
+
+	resp := crewSleepCall(t, d, "alder")
+	if !resp.Ok || !resp.CrewSleepResult.AlreadyAsleep {
+		t.Fatalf("sleep = %+v / %v", resp.CrewSleepResult, protocol.Deref(resp.Error))
+	}
+	member := memberByID(t, crewList(t, d), "alder")
+	if member.Restart == nil || member.Restart.State != protocol.CrewRestartStateFailed || !strings.Contains(protocol.Deref(member.Restart.Error), "put to sleep") {
+		t.Fatalf("restart = %+v, want failed because the user chose sleep", member.Restart)
+	}
+	if len(spawnedSessions(t, backend)) != 1 {
+		t.Fatalf("spawns = %d, want no wake", len(spawnedSessions(t, backend)))
 	}
 }

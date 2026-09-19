@@ -354,8 +354,16 @@ func (d *Daemon) releaseExitedCrewBinding(sessionID string) {
 		d.logf("crew: releasing exited session %s from %s: %v", sessionID, crew.DisplayName(member.ID), err)
 		return
 	}
-	if released {
-		d.noteCrewExitedSession(member.ID, sessionID)
+	if !released {
+		return
+	}
+	d.noteCrewExitedSession(member.ID, sessionID)
+	restart, pending := pendingCrewRestartFor(member, sessionID)
+	if !pending || restart.LetterPath != "" || member.LetterSession == sessionID {
+		return
+	}
+	if _, err := d.crewRestart(member.ID, restart.RequestID, nil, nil); err != nil {
+		d.logf("crew: restarting %s after session %s exited: %v", crew.DisplayName(member.ID), sessionID, err)
 	}
 }
 

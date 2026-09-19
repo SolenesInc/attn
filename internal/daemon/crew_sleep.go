@@ -69,6 +69,11 @@ func (d *Daemon) crewSleep(name string) (*protocol.CrewSleepResult, error) {
 			return nil, fmt.Errorf("release %s's exited session %s: %w", crew.DisplayName(member.ID), shortSessionID(sessionID), err)
 		}
 		d.noteCrewExitedSession(member.ID, sessionID)
+		if restart, pending := pendingCrewRestartFor(member, sessionID); pending {
+			if err := d.failCrewRestart(member.ID, restart.RequestID, sessionID, "", fmt.Errorf("session %s exited before the restart ran and %s was put to sleep", shortSessionID(sessionID), crew.DisplayName(member.ID))); err != nil {
+				return nil, err
+			}
+		}
 		return &protocol.CrewSleepResult{
 			Member:        member.ID,
 			AlreadyAsleep: true,

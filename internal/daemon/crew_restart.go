@@ -221,6 +221,9 @@ func (d *Daemon) resumeCrewRestart(member crew.Member, revision int64) (*protoco
 		return d.wakeForCrewRestart(member, *restart, "")
 	}
 
+	if member.BindingSession == "" {
+		return d.wakeForCrewRestart(member, *restart, restart.SessionID)
+	}
 	letter, hasLetter, letterErr := d.crewRestartFiledLetter(member, *restart)
 	liveSuccessor := false
 	if member.BindingSession != "" {
@@ -396,6 +399,15 @@ func (d *Daemon) crewRestartResultCurrent(memberID string) (*protocol.CrewRestar
 		return nil, err
 	}
 	return d.crewRestartResult(member, doc.Rev), nil
+}
+
+func pendingCrewRestartFor(member crew.Member, sessionID string) (crew.Restart, bool) {
+	restart := member.Restart
+	if restart == nil || restart.SessionID != sessionID ||
+		(restart.State != crew.RestartQueued && restart.State != crew.RestartRequested) {
+		return crew.Restart{}, false
+	}
+	return *restart, true
 }
 
 func (d *Daemon) failCrewRestart(memberID, requestID, sessionID, letter string, cause error) error {

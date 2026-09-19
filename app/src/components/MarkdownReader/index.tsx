@@ -30,6 +30,7 @@ import { AnnotationLayer, type AnnotationLayerHandle } from './annotations/Annot
 import { useAnnotations } from './annotations/useAnnotations';
 import { markdownDocumentPath, type MarkdownDocumentSource } from './documentSource';
 import { tilePathBasename } from '../../utils/tilePresentation';
+import { isSeedId } from '../../utils/seedId';
 import type { SeedArtifact, SeedArtifactTargetResult } from '../../types/generated';
 import { useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
 import './MarkdownReader.css';
@@ -326,7 +327,7 @@ function readerComponents(
         );
       }
       if (target.kind === 'seed') {
-        if (onOpenSeed) {
+        if (onOpenSeed && isSeedId(decodedSeedTargetName(target.value))) {
           return <SeedNavigationLink target={target.value} onOpenSeed={onOpenSeed}>{children}</SeedNavigationLink>;
         }
         return <SeedArtifactLink target={target.value}>{children}</SeedArtifactLink>;

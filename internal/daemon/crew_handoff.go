@@ -87,31 +87,35 @@ func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.
 	if !bound {
 		return nil, fmt.Errorf("this session is not living a crew member's day, so it has no day-line to close. A crew handoff is a member's own letter to its successor; the note you write for whoever tends a piece of work next is `attn seed note <id> -m \"…\" --handoff`")
 	}
-	var restart *crew.Restart
 	var filedLetter string
-	if member.Restart != nil && member.Restart.SessionID == sessionID &&
-		(member.Restart.State == crew.RestartQueued || member.Restart.State == crew.RestartRequested || member.Restart.State == crew.RestartFailed) {
-		copy := *member.Restart
-		restart = &copy
-		defer func() {
-			if err != nil {
-				d.failCrewRestart(member.ID, restart.RequestID, sessionID, filedLetter, err)
-				return
-			}
-			if result == nil {
-				return
-			}
-			if result.NapError != nil {
-				d.failCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, errors.New(*result.NapError))
-				return
-			}
-			if protocol.Deref(result.Outcome) != protocol.CrewDayCloseNap || result.SessionID == nil {
-				d.failCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, errors.New("the day ended without starting a successor"))
-				return
-			}
-			d.completeCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, *result.SessionID)
-		}()
-	}
+	defer func() {
+		current, _, readErr := d.crewMember(member.ID)
+		if readErr != nil {
+			d.logf("crew: settling %s's restart after the handoff: %v", crew.DisplayName(member.ID), readErr)
+			return
+		}
+		restart := current.Restart
+		if restart == nil || restart.SessionID != sessionID ||
+			(restart.State != crew.RestartQueued && restart.State != crew.RestartRequested && restart.State != crew.RestartFailed) {
+			return
+		}
+		if err != nil {
+			d.failCrewRestart(member.ID, restart.RequestID, sessionID, filedLetter, err)
+			return
+		}
+		if result == nil {
+			return
+		}
+		if result.NapError != nil {
+			d.failCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, errors.New(*result.NapError))
+			return
+		}
+		if protocol.Deref(result.Outcome) != protocol.CrewDayCloseNap || result.SessionID == nil {
+			d.failCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, errors.New("the day ended without starting a successor"))
+			return
+		}
+		d.completeCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, *result.SessionID)
+	}()
 	path, err := d.crewLetterForHandoff(member, sessionID, note, retry)
 	if err != nil {
 		return nil, err

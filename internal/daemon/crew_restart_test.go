@@ -560,3 +560,87 @@ func TestCrewRestart_TeardownFailureAfterFilingKeepsTheLetterForRetry(t *testing
 		t.Fatal("retry wrote a second handoff letter")
 	}
 }
+
+func TestCrewRestart_ADayThatExitsWithARestartPendingWakesTheSuccessor(t *testing.T) {
+	for _, state := range []crew.RestartState{crew.RestartQueued, crew.RestartRequested} {
+		t.Run(string(state), func(t *testing.T) {
+			d, backend, _ := newWakeableDaemon(t)
+			runtime := &crewRuntimeBackend{fakeSpawnBackend: backend, running: make(map[string]bool)}
+			d.ptyBackend = runtime
+			woken, err := d.crewWake("alder", "")
+			if err != nil {
+				t.Fatalf("wake: %v", err)
+			}
+			if _, err := d.setCrewRestart("alder", &crew.Restart{RequestID: "exited-day", SessionID: woken.SessionID, State: state}); err != nil {
+				t.Fatalf("seed pending restart: %v", err)
+			}
+			runtime.running[woken.SessionID] = false
+
+			d.releaseExitedCrewBinding(woken.SessionID)
+
+			member := memberByID(t, crewList(t, d), "alder")
+			if member.Restart == nil || member.Restart.State != protocol.CrewRestartStateCompleted || member.Restart.RequestID != "exited-day" {
+				t.Fatalf("restart after the day exited = %+v, want completed", member.Restart)
+			}
+			successor := protocol.Deref(member.BindingSession)
+			if successor == "" || successor == woken.SessionID || protocol.Deref(member.Restart.SuccessorSessionID) != successor {
+				t.Fatalf("binding/successor = %q/%q, want a fresh day", successor, protocol.Deref(member.Restart.SuccessorSessionID))
+			}
+			if len(spawnedSessions(t, backend)) != 2 {
+				t.Fatalf("spawns = %d, want the wake and the successor", len(spawnedSessions(t, backend)))
+			}
+		})
+	}
+}
+
+func TestCrewRestart_ADayThatExitsMidHandoffLeavesTheRestartToTheHandoff(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	runtime := &crewRuntimeBackend{fakeSpawnBackend: backend, running: make(map[string]bool)}
+	d.ptyBackend = runtime
+	woken, err := d.crewWake("alder", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	if _, err := d.setCrewRestart("alder", &crew.Restart{RequestID: "mid-handoff", SessionID: woken.SessionID, State: crew.RestartRequested}); err != nil {
+		t.Fatalf("seed pending restart: %v", err)
+	}
+	d.recordCrewLetter("alder", woken.SessionID, filepath.Join(t.TempDir(), "letter.md"))
+	runtime.running[woken.SessionID] = false
+
+	d.releaseExitedCrewBinding(woken.SessionID)
+
+	member := memberByID(t, crewList(t, d), "alder")
+	if member.Restart == nil || member.Restart.State != protocol.CrewRestartStateRequested {
+		t.Fatalf("restart = %+v, want still requested while the handoff settles it", member.Restart)
+	}
+	if protocol.Deref(member.BindingSession) != "" || len(spawnedSessions(t, backend)) != 1 {
+		t.Fatalf("binding/spawns = %q/%d, want released with no wake", protocol.Deref(member.BindingSession), len(spawnedSessions(t, backend)))
+	}
+}
+
+func TestCrewRestart_ReconcileWakesAPendingRestartWhoseDayWasAlreadyReleased(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	runtime := &crewRuntimeBackend{fakeSpawnBackend: backend, running: make(map[string]bool)}
+	d.ptyBackend = runtime
+	woken, err := d.crewWake("alder", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	runtime.running[woken.SessionID] = false
+	if _, err := d.releaseCrewBinding("alder", woken.SessionID); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	if _, err := d.setCrewRestart("alder", &crew.Restart{RequestID: "released-day", SessionID: woken.SessionID, State: crew.RestartQueued}); err != nil {
+		t.Fatalf("seed pending restart: %v", err)
+	}
+
+	d.reconcileCrewRestarts()
+
+	member := memberByID(t, crewList(t, d), "alder")
+	if member.Restart == nil || member.Restart.State != protocol.CrewRestartStateCompleted {
+		t.Fatalf("reconciled restart = %+v, want completed by a wake", member.Restart)
+	}
+	if protocol.Deref(member.BindingSession) == "" || len(spawnedSessions(t, backend)) != 2 {
+		t.Fatalf("binding/spawns = %q/%d, want a fresh day", protocol.Deref(member.BindingSession), len(spawnedSessions(t, backend)))
+	}
+}

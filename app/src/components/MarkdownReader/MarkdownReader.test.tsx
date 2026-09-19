@@ -175,6 +175,33 @@ describe('MarkdownReader link sanitization', () => {
     expect(onOpenSeed).toHaveBeenCalledWith('s-rnaq01');
   });
 
+  it('keeps artifact links on the artifact path when seed navigation is enabled', async () => {
+    const onOpenSeed = vi.fn();
+    const resolveTarget = vi.fn(async (_seedId: string, target: string) => ({
+      relative_target: target,
+      path: '/notebook/seeds/s-7k3f9m/report.pdf',
+    }));
+    render(
+      <DaemonApiProvider api={seedReaderApi(resolveTarget)}>
+        <MarkdownReader
+          content={'[report](report.pdf) [work](s-rnaq01)'}
+          source={seedMarkdownSource('s-7k3f9m')}
+          onOpenSeed={onOpenSeed}
+        />
+      </DaemonApiProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'report' }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('open_safe_seed_artifact_target', {
+      path: '/notebook/seeds/s-7k3f9m/report.pdf',
+    }));
+    expect(resolveTarget).toHaveBeenCalledWith('s-7k3f9m', 'report.pdf', 'link');
+    expect(onOpenSeed).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'work' }));
+    expect(onOpenSeed).toHaveBeenCalledWith('s-rnaq01');
+  });
+
   it('keeps a linked seed image and its target as sibling keyboard controls', async () => {
     const user = userEvent.setup();
     const resolveTarget = vi.fn(async (_seedId: string, target: string, purpose: string) => (

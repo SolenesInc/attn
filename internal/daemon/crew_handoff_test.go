@@ -727,3 +727,32 @@ func TestCrewHandoff_ACodexMembersSuccessorComesBackOnCodex(t *testing.T) {
 		t.Fatal("the codex successor's priming does not carry the letter just filed")
 	}
 }
+
+func TestCrewHandoff_ARestartRecordedDuringTheNapIsSettledByTheSuccessor(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	woken, err := d.crewWake("keel", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	backend.mu.Lock()
+	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
+		if opts.ID == woken.SessionID {
+			return
+		}
+		if _, err := d.setCrewRestart("keel", &crew.Restart{RequestID: "mid-nap", SessionID: woken.SessionID, State: crew.RestartQueued}); err != nil {
+			t.Errorf("record restart during the nap: %v", err)
+		}
+	}
+	backend.mu.Unlock()
+
+	resp := crewHandoffCall(t, d, woken.SessionID, "Filed while a restart landed.")
+	if !resp.Ok {
+		t.Fatalf("handoff: %v", protocol.Deref(resp.Error))
+	}
+	successor := protocol.Deref(resp.CrewHandoffResult.SessionID)
+	member := memberByID(t, crewList(t, d), "keel")
+	if member.Restart == nil || member.Restart.RequestID != "mid-nap" || member.Restart.State != protocol.CrewRestartStateCompleted ||
+		protocol.Deref(member.Restart.SuccessorSessionID) != successor {
+		t.Fatalf("restart after the nap = %+v, want completed by successor %s", member.Restart, successor)
+	}
+}
