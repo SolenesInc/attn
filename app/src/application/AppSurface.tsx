@@ -25,6 +25,7 @@ import {
 import { AppDashboard } from './AppDashboard';
 import { AppDock } from './AppDock';
 import { AppGrid } from './AppGrid';
+import { AppCrewPanel } from './AppCrewPanel';
 import { AppLibrarySurfaces } from './AppLibrarySurfaces';
 import { AppNavigationMenus } from './AppNavigationMenus';
 import { AppPreferences } from './AppPreferences';
@@ -122,6 +123,7 @@ export function AppSurface() {
                     </div>
                     <AppDock />
                   </div>
+                  <AppCrewPanel />
                 </div>
               </div>
 

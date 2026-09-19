@@ -299,10 +299,11 @@ func TestAnAutoDisableNotificationReportsHowLongAttnTried(t *testing.T) {
 		clock := newAppTestClock(d)
 		d.appAutoDisableWait = window
 		reconcilingApp(t, d, "greeter")
-		runtime := startFakeAppRuntime(t, d, nil)
-		runtime.reconcile = func(*fakeAppRuntime, appReconcileRequest) error {
-			return errors.New("TypeError: snapshot.sessions is not iterable")
-		}
+		startConfiguredAppRuntime(t, d, fakeAppRuntimeHandlers{
+			reconcile: func(*fakeAppRuntime, appReconcileRequest) error {
+				return errors.New("TypeError: snapshot.sessions is not iterable")
+			},
+		})
 
 		if err := appReconcilePreDrain(t, d, "greeter"); err == nil {
 			t.Fatal("a throwing reconcile reported success")

@@ -9,6 +9,7 @@ import {
   useAppAppearanceContext,
   useAppErrorsContext,
   useAppGardenActionsContext,
+  useCrewPanelContext,
   useAppInputs,
   useAppPanelsContext,
   useAppSessionsContext,
@@ -35,8 +36,10 @@ export function AppWorkspaces() {
     selectAgentPane,
     handleNavigateOutOfSession,
     handleCloseTile,
+    crewSeedTile,
     activeWorkspaceIdRef,
   } = useNavigationContext();
+  const { handleBackToCrew } = useCrewPanelContext();
   const {
     getActivePaneIdForSession,
     setWorkspaceRef,
@@ -155,6 +158,10 @@ export function AppWorkspaces() {
                 gardenSeeds={seeds}
                 onOpenSeed={handleOpenSeedTile}
                 onRevealSeedInGarden={handleRevealSeedInGarden}
+                backToCrewTileId={
+                  crewSeedTile?.workspaceId === workspace.id ? crewSeedTile.tileId : undefined
+                }
+                onBackToCrew={handleBackToCrew}
                 seedPopoverRequest={seedPopoverRequest}
                 usagePopoverRequest={usagePopoverRequest}
                 annotationApi={annotationApi}

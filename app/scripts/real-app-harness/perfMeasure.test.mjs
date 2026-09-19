@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
 import {
   appPids,
   assertDaemonRestartDoesNotHostSession,
   parseFootprint,
   parseGraphicsRegions,
   parseVmmapSummary,
+  readProcessTable,
 } from './perfMeasure.mjs';
 
 describe('assertDaemonRestartDoesNotHostSession', () => {
@@ -35,6 +39,35 @@ describe('assertDaemonRestartDoesNotHostSession', () => {
 
   it('allows another profile daemon', () => {
     expect(() => assertDaemonRestartDoesNotHostSession('review', hosted)).not.toThrow();
+  });
+});
+
+describe('readProcessTable', () => {
+  it('retains the final process in a table larger than the measured developer snapshot', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-process-table-'));
+    // 2026-09-10: the developer machine returned 1,109,240 bytes across 1,212 processes.
+    const observedBytes = 1_109_240;
+    const observedProcesses = 1_212;
+    const argument = 'fixture ';
+    const command = `node ${argument.repeat(Math.ceil(observedBytes / observedProcesses / argument.length))}`;
+    const rows = Array.from({ length: observedProcesses }, (_, index) => `${index + 1} 0 0.0 512 node ${command}\n`);
+    const tailPid = observedProcesses + 1;
+    rows.push(`${tailPid} 1 0.5 1024 node node --last-process\n`);
+    const table = rows.join('');
+    expect(Buffer.byteLength(table)).toBeGreaterThan(observedBytes);
+    fs.writeFileSync(path.join(directory, 'ps.data'), table);
+    fs.writeFileSync(path.join(directory, 'ps'), '#!/bin/sh\nexec /bin/cat "$0.data"\n', { mode: 0o755 });
+    vi.stubEnv('PATH', `${directory}${path.delimiter}${process.env.PATH || ''}`);
+    try {
+      const processes = await readProcessTable();
+      expect(processes).toHaveLength(rows.length);
+      expect(processes.at(-1)).toEqual({
+        pid: tailPid, ppid: 1, cpuPct: 0.5, rssKb: 1024, comm: 'node', command: 'node --last-process',
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
 

@@ -7,6 +7,7 @@ interface Overlays {
   actionMenuOpen: boolean;
   sessionsOpen: boolean;
   notebookOpen: boolean;
+  crewPanelOpen: boolean;
   gardenHoldsWindow: boolean;
   chiefTransferOpen: boolean;
   contextCapOpen: boolean;
@@ -28,7 +29,7 @@ export function appOverlayPolicy(overlays: Overlays) {
     overlays.prLauncherOpen,
     overlays.diagnosticCaptureOpen,
   ].some(Boolean);
-  const libraryOpen = overlays.sessionsOpen || overlays.notebookOpen;
+  const libraryOpen = overlays.sessionsOpen || overlays.notebookOpen || overlays.crewPanelOpen;
   const navigationCaptured = [
     overlays.locationPickerOpen,
     overlays.whatsNewOpen,

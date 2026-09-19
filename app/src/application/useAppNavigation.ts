@@ -3,6 +3,7 @@ import { controlBrowserHost } from '../browser/host';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentNavigation } from '../hooks/useAgentNavigation';
 import { useWorkspaceSelectionController } from '../hooks/useWorkspaceSelectionController';
+import type { useSessionWorkspaceController } from '../hooks/useSessionWorkspaceController';
 import { useSessionStore, type TerminalWorkspaceState } from '../store/sessions';
 import { workspaceSnapshotFromDaemonWorkspace } from '../types/workspace';
 import { dispatcherOf } from '../utils/delegationLinks';
@@ -28,6 +29,7 @@ interface Options {
   workspaceViews: ReturnType<typeof useAppSessions>['workspaceViews'];
   unmutedEnrichedSessions: ReturnType<typeof useAppSessions>['unmutedEnrichedSessions'];
   attentionQueue: ReturnType<typeof useAttentionQueue>;
+  focusWorkspaceLeaf: ReturnType<typeof useSessionWorkspaceController>['focusWorkspaceLeaf'];
 }
 export function useAppNavigation({
   activeSessionId,
@@ -36,6 +38,7 @@ export function useAppNavigation({
   workspaceViews,
   unmutedEnrichedSessions,
   attentionQueue,
+  focusWorkspaceLeaf,
 }: Options) {
   const {
     view,
@@ -191,19 +194,58 @@ export function useAppNavigation({
     [handleSelectSession, selectSessionlessWorkspace, sidebarWorkspaceViews, workspaceViews],
   );
 
-  const handleSelectTile = useCallback(
+  const selectTile = useCallback(
     (workspaceId: string, tileId: string) => {
       handleSelectWorkspace(workspaceId);
       setSelectedTile({ workspaceId, tileId });
+      window.requestAnimationFrame(() => focusWorkspaceLeaf(workspaceId, tileId));
     },
-    [handleSelectWorkspace, setSelectedTile],
+    [focusWorkspaceLeaf, handleSelectWorkspace, setSelectedTile],
   );
+
+  const [pendingTileSelection, setPendingTileSelection] = useState<{
+    workspaceId: string;
+    tileId: string;
+  } | null>(null);
+  const [crewSeedTile, setCrewSeedTile] = useState<{ workspaceId: string; tileId: string } | null>(
+    null,
+  );
+  const tileExists = useCallback(
+    (workspaceId: string, tileId: string) =>
+      workspaceViews.some(
+        (workspace) =>
+          workspace.id === workspaceId &&
+          workspace.children.some((child) => child.kind === 'tile' && child.tile.tileId === tileId),
+      ),
+    [workspaceViews],
+  );
+
+  const handleSelectTile = useCallback(
+    (workspaceId: string, tileId: string) => {
+      if (!tileExists(workspaceId, tileId)) {
+        setPendingTileSelection({ workspaceId, tileId });
+        return;
+      }
+      setPendingTileSelection(null);
+      selectTile(workspaceId, tileId);
+    },
+    [selectTile, tileExists],
+  );
+
+  useEffect(() => {
+    if (!pendingTileSelection) return;
+    if (!tileExists(pendingTileSelection.workspaceId, pendingTileSelection.tileId)) return;
+    setPendingTileSelection(null);
+    selectTile(pendingTileSelection.workspaceId, pendingTileSelection.tileId);
+  }, [pendingTileSelection, selectTile, tileExists]);
 
   const handleCloseTile = useCallback(
     (workspaceId: string, tileId: string) => {
-      setSelectedTile((current) =>
-        current?.workspaceId === workspaceId && current.tileId === tileId ? null : current,
-      );
+      const clearIfClosed = <T extends { workspaceId: string; tileId: string } | null>(current: T) =>
+        current?.workspaceId === workspaceId && current.tileId === tileId ? null : current;
+      setPendingTileSelection(clearIfClosed);
+      setCrewSeedTile(clearIfClosed);
+      setSelectedTile(clearIfClosed);
       void sendWorkspaceUndockTile(workspaceId, tileId).catch(() => {});
     },
     [sendWorkspaceUndockTile, setSelectedTile],
@@ -303,6 +345,8 @@ export function useAppNavigation({
     handleCloseTile,
     handleReloadTile,
     selectedTile,
+    crewSeedTile,
+    setCrewSeedTile,
     handleWorkspaceReorder,
     handleSelectWorkspaceByIndex,
     handlePrevWorkspace,

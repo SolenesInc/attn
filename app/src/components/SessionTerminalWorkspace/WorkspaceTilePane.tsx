@@ -24,6 +24,8 @@ export function WorkspaceTilePane({
     seedTargetSessions,
     gardenSeeds,
     onRevealSeedInGarden,
+    backToCrewTileId,
+    onBackToCrew,
     enabled,
     isActiveSession,
     isSessionViewVisible,
@@ -105,6 +107,7 @@ export function WorkspaceTilePane({
           onUpdateTile?.(tileLeaf.tileId, tileLeaf.tileParams ?? '', sessionId)
         }
         onRevealSeedInGarden={onRevealSeedInGarden}
+        onBackToCrew={tileLeaf.tileId === backToCrewTileId ? onBackToCrew : undefined}
         onHeaderPointerDown={(event) => beginLeafDrag(tileLeaf.tileId, event)}
         onRequestContent={onRequestTileContent ?? noRequestContent}
         bodyRef={tileBodyRefFor(tileLeaf.tileId)}

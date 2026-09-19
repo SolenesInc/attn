@@ -17,6 +17,9 @@ const HandoffStampLayout = "2006-01-02T15-04Z"
 // filed letters, the largest is 6,601 bytes. The refusal names both numbers.
 const MaxHandoffBytes = 64000
 
+// MaxHandoffFileBytes is MaxHandoffBytes plus the newline FileHandoff appends.
+const MaxHandoffFileBytes = MaxHandoffBytes + 1
+
 func HandoffFileName(member string, at time.Time) string {
 	return at.UTC().Format(HandoffStampLayout) + "-" + member + ".md"
 }

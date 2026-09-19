@@ -166,6 +166,9 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactSessionRegistered},
 			apply: func(d *Daemon, ev bus.Event) {
 				d.projectSessionEvent(protocol.EventSessionRegistered, ev.Subject)
+				if d.crewMemberBoundTo(ev.Subject) != "" {
+					d.projectCrewRoster()
+				}
 				d.projectGardenSeeds()
 			},
 		},

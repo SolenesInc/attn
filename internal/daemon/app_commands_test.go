@@ -75,10 +75,11 @@ func mustFail(t *testing.T, result protocol.AppCommandResultMessage, wants ...st
 func TestAppCommandRunsTheHandlerAndAnswersTheCaller(t *testing.T) {
 	d := newAppDaemon(t)
 	version := installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
-	runtime := startFakeAppRuntime(t, d, nil)
-	runtime.command = func(_ *fakeAppRuntime, req appCommandRequest) (json.RawMessage, error) {
-		return json.RawMessage(`{"approved":"tk-1"}`), nil
-	}
+	runtime := startConfiguredAppRuntime(t, d, fakeAppRuntimeHandlers{
+		command: func(_ *fakeAppRuntime, req appCommandRequest) (json.RawMessage, error) {
+			return json.RawMessage(`{"approved":"tk-1"}`), nil
+		},
+	})
 
 	result := newAppCommandCaller().invoke(t, d, "reviewer", "approve", `{"id":"tk-1"}`)
 
@@ -176,10 +177,11 @@ func TestAppCommandRefusesAPayloadOverTheLimit(t *testing.T) {
 func TestAppCommandRefusesAnAnswerOverTheLimit(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
-	runtime := startFakeAppRuntime(t, d, nil)
-	runtime.command = func(*fakeAppRuntime, appCommandRequest) (json.RawMessage, error) {
-		return json.RawMessage(`{"note":"` + strings.Repeat("x", appCommandPayloadLimit) + `"}`), nil
-	}
+	startConfiguredAppRuntime(t, d, fakeAppRuntimeHandlers{
+		command: func(*fakeAppRuntime, appCommandRequest) (json.RawMessage, error) {
+			return json.RawMessage(`{"note":"` + strings.Repeat("x", appCommandPayloadLimit) + `"}`), nil
+		},
+	})
 
 	result := newAppCommandCaller().invoke(t, d, "reviewer", "approve", "")
 
@@ -204,10 +206,11 @@ func TestAppCommandRefusesAPayloadThatIsNotJSON(t *testing.T) {
 func TestAppCommandCarriesAThrownHandlerBackToTheCaller(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
-	runtime := startFakeAppRuntime(t, d, nil)
-	runtime.command = func(*fakeAppRuntime, appCommandRequest) (json.RawMessage, error) {
-		return nil, errTest("Error: approve needs an id")
-	}
+	startConfiguredAppRuntime(t, d, fakeAppRuntimeHandlers{
+		command: func(*fakeAppRuntime, appCommandRequest) (json.RawMessage, error) {
+			return nil, errTest("Error: approve needs an id")
+		},
+	})
 
 	mustFail(t, newAppCommandCaller().invoke(t, d, "reviewer", "approve", ""), "approve needs an id")
 
@@ -224,11 +227,12 @@ func TestAppCommandAbandonsAHandlerThatNeverReturns(t *testing.T) {
 	d.appDispatchWait = 300 * time.Millisecond
 	d.appPingWait = 50 * time.Millisecond
 	installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
-	runtime := startFakeAppRuntime(t, d, nil)
-	runtime.command = func(f *fakeAppRuntime, _ appCommandRequest) (json.RawMessage, error) {
-		f.freezeLoop()
-		select {}
-	}
+	startConfiguredAppRuntime(t, d, fakeAppRuntimeHandlers{
+		command: func(f *fakeAppRuntime, _ appCommandRequest) (json.RawMessage, error) {
+			f.freezeLoop()
+			select {}
+		},
+	})
 
 	result := newAppCommandCaller().invoke(t, d, "reviewer", "approve", "")
 

@@ -73,6 +73,9 @@ export function useAppGardenActionsContext() {
 export function useAppNotebookSurfaceContext() {
   return useRequiredContext(LibrariesContext).appNotebookSurface;
 }
+export function useCrewPanelContext() {
+  return useRequiredContext(LibrariesContext).crewPanel;
+}
 
 export const ShellContext = createContext<ReturnType<typeof useAppController>['shell'] | null>(
   null,

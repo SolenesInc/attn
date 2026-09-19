@@ -372,6 +372,28 @@
   flex: 0 0 auto;
 }
 
+.workspace-dock-tile-back-crew {
+  height: 24px;
+  padding: 2px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.workspace-dock-tile-back-crew:hover {
+  border-color: var(--color-border-hover);
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+}
+
+.workspace-dock-tile-back-crew-icon {
+  display: none;
+}
+
 .workspace-dock-tile-focus-action {
   display: inline-flex;
   align-items: center;
@@ -443,6 +465,20 @@
 }
 
 @container (max-width: 480px) {
+  .workspace-dock-tile-back-crew {
+    width: 28px;
+    padding: 0;
+  }
+
+  .workspace-dock-tile-back-crew-icon {
+    display: inline;
+    font-size: 15px;
+  }
+
+  .workspace-dock-tile-back-crew-label {
+    display: none;
+  }
+
   .workspace-dock-tile-title {
     min-width: 72px;
   }

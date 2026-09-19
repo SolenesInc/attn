@@ -54,6 +54,7 @@ func crewRecipient() Recipient {
 		On("wake", "user_message", "crew_wake.go: today's first message.", Use("crew.wake", "content/crew/wake.md")),
 		On("successor", "user_message", "crew_handoff.go: successor after a nap.", Use("crew.successor", "content/crew/successor.md")),
 		On("sleep-requested", "user_message", "crew_sleep.go: user requested closure.", Use("crew.sleep-requested", "content/crew/sleep-requested.md")),
+		On("restart-requested", "user_message", "crew_restart.go: user requested a handoff and successor.", Use("crew.restart-requested", "content/crew/restart-requested.md")),
 		On("heartbeat", "user_message", "crew_lifecycle.go: keep the context cache warm.", Use("crew.heartbeat", "content/crew/heartbeat.md")),
 		On("sleep-away", "user_message", "crew_lifecycle.go: close after the user has been away.", Use("crew.sleep-away", "content/crew/sleep-away.md")),
 	}}

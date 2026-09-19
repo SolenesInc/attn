@@ -32,6 +32,11 @@ import type { BlockStateSnapshot, PlacementStateSnapshot } from '../components/G
 import { isPresentWindowAction } from './usePresentAutomationBridge';
 import { waitForAutomationDom } from './uiAutomationDom';
 import {
+  armNativePointerWitness,
+  disarmNativePointerWitness,
+  waitForNativePointerWitness,
+} from './nativePointerWitness';
+import {
   afterFramePaints,
   nextAnimationFrame,
   settleBeforeBridgeRequest,
@@ -2381,8 +2386,18 @@ export function useUiAutomationBridge({
           selector: typeof payload.selector === 'string' ? payload.selector : '',
           absent: payload.absent === true,
           textIncludes: typeof payload.textIncludes === 'string' ? payload.textIncludes : undefined,
+          focused: payload.focused === true,
           timeoutMs: typeof payload.timeoutMs === 'number' ? payload.timeoutMs : NaN,
         });
+      case 'dom_bounds': {
+        const selector = typeof payload.selector === 'string' ? payload.selector : null;
+        if (!selector) throw new Error('dom_bounds requires selector');
+        const element = document.querySelector(selector);
+        if (!(element instanceof HTMLElement)) {
+          throw new Error(`dom_bounds selector not found in DOM: ${selector}`);
+        }
+        return { bounds: rectSnapshot(element) };
+      }
       case 'dom_text': {
         const selector = typeof payload.selector === 'string' ? payload.selector : null;
         if (!selector) throw new Error('dom_text requires selector');
@@ -3320,6 +3335,17 @@ export function useUiAutomationBridge({
       }
       case 'get_annotation_state': {
         return annotationSurfaceState();
+      }
+      case 'arm_native_pointer_witness': {
+        const selector = typeof payload.selector === 'string' ? payload.selector : '';
+        if (!selector) throw new Error('arm_native_pointer_witness requires selector');
+        armNativePointerWitness(selector);
+        return { armed: true };
+      }
+      case 'wait_native_pointer_witness': {
+        const receipt = await waitForNativePointerWitness();
+        await settleUi();
+        return receipt;
       }
       case 'drag_pane_selection': {
         const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
@@ -4262,6 +4288,7 @@ export function useUiAutomationBridge({
     });
 
     return () => {
+      disarmNativePointerWitness();
       void unlistenPromise.then((unlisten) => unlisten());
     };
   }, []);

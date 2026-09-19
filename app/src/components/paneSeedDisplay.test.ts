@@ -40,9 +40,9 @@ describe('tendedSeeds', () => {
     expect(tendedSeeds([memberClaim, sessionClaim], 'sess-new', 'fern')).toEqual([memberClaim]);
   });
 
-  it('does not lend member claims to ordinary sessions or an absent session', () => {
+  it('does not lend member claims to ordinary sessions and keeps them while the member sleeps', () => {
     expect(tendedSeeds([memberClaim, sessionClaim], SESSION)).toEqual([sessionClaim]);
-    expect(tendedSeeds([memberClaim], '', 'fern')).toEqual([]);
+    expect(tendedSeeds([memberClaim], '', 'fern')).toEqual([memberClaim]);
   });
 
   it('drops a member claim when its tender is cleared on release', () => {

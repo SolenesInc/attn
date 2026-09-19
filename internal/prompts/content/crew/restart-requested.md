@@ -1,0 +1,1 @@
+[attn] The user is asking you to hand off this day and start a fresh one. Finish what you need to settle, write your handoff letter in your own words, and file it with `attn handoff --nap -m "<your letter>"`. This is consented turnover, so file it last; your successor starts only after the letter lands and its launch succeeds.

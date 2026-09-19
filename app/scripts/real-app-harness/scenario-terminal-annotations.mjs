@@ -568,7 +568,11 @@ async function main() {
         typed.viewport.width,
         typed.viewport.height,
       );
+      await client.request('arm_native_pointer_witness', { selector: '.terminal-container.ghostty-terminal' });
       await driver.clickWindow(outsideWindow.relativeX, outsideWindow.relativeY);
+      const outsideReceipt = await client.request('wait_native_pointer_witness', {});
+      runner.assert(outsideReceipt.matches,
+        `Native terminal click landed elsewhere: ${JSON.stringify({ outside, outsideWindow, outsideReceipt })}`);
 
       const afterOutside = await client.request('get_annotation_state', {});
       runner.assert(
@@ -589,7 +593,11 @@ async function main() {
         afterOutside.viewport.width,
         afterOutside.viewport.height,
       );
+      await client.request('arm_native_pointer_witness', { selector: '.anno-popup-quote' });
       await driver.clickWindow(quoteWindow.relativeX, quoteWindow.relativeY);
+      const quoteReceipt = await client.request('wait_native_pointer_witness', {});
+      runner.assert(quoteReceipt.matches,
+        `Native editor click landed elsewhere: ${JSON.stringify({ quoteWindow, quoteReceipt })}`);
       let refocused = await client.request('get_annotation_state', {});
       runner.assert(
         refocused.commentFocused && refocused.popupDraft === comment,

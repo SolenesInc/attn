@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "id": "crew-restart-requested",
+  "recipient": "crew",
+  "event": "restart-requested",
+  "description": "User asks an awake member to file its handoff and start a successor.",
+  "values": {}
+}

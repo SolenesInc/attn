@@ -189,6 +189,7 @@ describe('agent navigation', () => {
         turn_owed: turnOwed[id],
         turn_opened_at: id === 's1' ? '2026-08-03T09:00:00Z' : '2026-08-03T10:00:00Z',
       })),
+      crew: [],
       setDaemonSessions: vi.fn(),
       prs: [], setPRs: vi.fn(),
       repoStates: [], setRepoStates: vi.fn(),

@@ -32,6 +32,8 @@ function SidebarExpanded() {
     crew,
     onWakeCrewMember,
     onSleepCrewMember,
+    onManageCrew,
+    openCrewMemberActions,
     onSettleTurn,
     onOpenSnooze,
     onWakeTurn,
@@ -86,6 +88,8 @@ function SidebarExpanded() {
           crew={crew}
           onWakeCrewMember={onWakeCrewMember}
           onSleepCrewMember={onSleepCrewMember}
+          onManageCrew={onManageCrew}
+          onOpenCrewMemberActions={openCrewMemberActions}
           selectedId={selectedId}
           onSelectSession={onSelectSession}
           onSettleTurn={(id) => onSettleTurn?.(id)}

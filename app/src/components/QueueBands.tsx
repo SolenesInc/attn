@@ -56,6 +56,8 @@ interface QueueBandsProps {
   /** Start a sleeping member's day. Resolves once its session exists. */
   onWakeCrewMember?: (member: string) => void;
   onSleepCrewMember?: (member: string) => void;
+  onManageCrew?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onOpenCrewMemberActions?: (member: string, event: ReactMouseEvent<HTMLButtonElement>) => void;
   selectedId: string | null;
   onSelectSession: (id: string) => void;
   onSettleTurn: (id: string) => void;
@@ -273,6 +275,8 @@ export function QueueBands({
   crew,
   onWakeCrewMember,
   onSleepCrewMember,
+  onManageCrew,
+  onOpenCrewMemberActions,
   selectedId,
   onSelectSession,
   onSettleTurn,
@@ -360,6 +364,11 @@ export function QueueBands({
           <div className="queue-band-header">
             <span>Pinned</span>
             <span className="queue-band-count">{bands.pinned.length + crewRows.length}</span>
+            {crewRows.length > 0 && onManageCrew && (
+              <button type="button" className="queue-band-manage" data-testid="manage-crew" onClick={onManageCrew}>
+                Manage crew
+              </button>
+            )}
           </div>
           {/* A member is pin-shaped but is not a pin: nobody put it here and there is no unpin. */}
           {crewRows.map((crewRow) => (
@@ -381,6 +390,9 @@ export function QueueBands({
                   : undefined
               }
               delegates={crewRow.row ? (delegates.get(crewRow.row.session.id) ?? []) : []}
+              onOpenMemberActions={
+                onOpenCrewMemberActions && ((event) => onOpenCrewMemberActions(crewRow.member, event))
+              }
             />
           ))}
           {bands.pinned.map((row) => (
@@ -430,6 +442,7 @@ interface CrewRowProps {
   onWake?: () => void;
   onSleep?: () => void;
   onOpenActions?: (event: ReactMouseEvent) => void;
+  onOpenMemberActions?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   delegates: readonly QueueBandSessionView[];
 }
 
@@ -437,7 +450,12 @@ function CrewRowView(props: CrewRowProps) {
   return props.row ? (
     <AwakeCrewRow {...props} row={props.row} />
   ) : (
-    <SleepingCrewRow member={props.member} selected={props.selected} onWake={props.onWake} />
+    <SleepingCrewRow
+      member={props.member}
+      selected={props.selected}
+      onWake={props.onWake}
+      onOpenMemberActions={props.onOpenMemberActions}
+    />
   );
 }
 
@@ -445,7 +463,8 @@ function SleepingCrewRow({
   member,
   selected,
   onWake,
-}: Pick<CrewRowProps, 'member' | 'selected' | 'onWake'>) {
+  onOpenMemberActions,
+}: Pick<CrewRowProps, 'member' | 'selected' | 'onWake' | 'onOpenMemberActions'>) {
   const { phase, trigger, rowRef } = useWakeConfirm(onWake);
   const armed = phase === 'armed';
   const name = crewDisplayName(member);
@@ -472,19 +491,36 @@ function SleepingCrewRow({
       <span className="crew-row-mark" title={`${name} is asleep`}>
         asleep
       </span>
-      {onWake && (
+      {(onWake || onOpenMemberActions) && (
         <div className="queue-row-controls">
           {armed && <span className="crew-wake-confirm">confirm</span>}
-          <button
-            type="button"
-            className="queue-row-wake"
-            data-testid={`queue-crew-wake-${member}`}
-            title={armed ? `Click again to wake ${name}` : `Wake ${name} — start its day`}
-            aria-label={wakeLabel}
-            onClick={trigger}
-          >
-            <CrewWakeSun phase={phase} />
-          </button>
+          {onWake && (
+            <button
+              type="button"
+              className="queue-row-wake"
+              data-testid={`queue-crew-wake-${member}`}
+              title={armed ? `Click again to wake ${name}` : `Wake ${name} — start its day`}
+              aria-label={wakeLabel}
+              onClick={trigger}
+            >
+              <CrewWakeSun phase={phase} />
+            </button>
+          )}
+          {onOpenMemberActions && (
+            <button
+              type="button"
+              className="session-action-btn session-more-btn"
+              data-testid={`crew-actions-${member}`}
+              title={`Actions for ${name}`}
+              aria-label={`Actions for ${name}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenMemberActions(event);
+              }}
+            >
+              •••
+            </button>
+          )}
         </div>
       )}
     </div>

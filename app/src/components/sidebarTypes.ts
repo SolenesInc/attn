@@ -70,6 +70,8 @@ export interface SidebarProps {
   crew?: CrewMemberView[];
   onWakeCrewMember?: (member: string) => void;
   onSleepCrewMember?: (member: string) => void;
+  onManageCrew?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onOpenCrewMemberDetails?: (member: string, returnFocus: HTMLElement) => void;
   onSettleTurn?: (id: string) => void;
   onOpenSnooze?: (session: { id: string; label: string }, event: ReactMouseEvent) => void;
   onWakeTurn?: (id: string) => void;

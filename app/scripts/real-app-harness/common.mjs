@@ -286,6 +286,10 @@ export async function writeDaemonSettings(entries, { wsUrl = defaultWSURLForProf
         if (data.event !== 'settings_updated') {
           return;
         }
+        if (data.success === false && wanted.has(data.changed_key)) {
+          settle(new Error(data.error || `daemon refused setting ${data.changed_key}`));
+          return;
+        }
         outstanding = unwritten(data.settings);
         if (outstanding.length === 0) settle();
       });
