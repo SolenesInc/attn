@@ -93,7 +93,7 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 | Hook tests              | `make test-hooks`        |
 | Lint                    | `make lint`              |
 
-`make test` skips the Go suite when nothing it reads changed since `origin/next`;
+`make test` skips the Go suite when only `docs/`, root Markdown and `app/src` changed since `origin/next`;
 `FORCE=1` runs it and `DIFF_BASE=<ref>` compares against another branch. Nothing else
 runs the script and hook tests: run them after changing a script or a hook.
 

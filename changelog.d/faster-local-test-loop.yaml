@@ -1,3 +1,3 @@
 kind: internal
 area: build
-change: make test runs only the Go suite and skips it when no Go input changed, CI no longer runs the shell script tests, and make lint rejects added comment lines.
+change: make test runs only the Go suite and skips it when only docs and app/src changed, CI no longer runs the shell script tests, and make lint rejects added comment lines.

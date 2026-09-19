@@ -192,13 +192,13 @@ verify-ghostty-vt-wasm:
 	bash ./app/scripts/ensure-ghostty-vt-wasm.sh
 
 DIFF_BASE ?= origin/next
+GO_SUITE_IGNORES := ^(docs/|[^/]*\.md$$|app/src/)
+GO_SUITE_READS := ^app/src/(hooks/useDaemonSocket\.ts$$|ghostty/testdata/)
 test: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
-	@if [ -n "$(FORCE)" ]; then verdict=changed; else verdict="$$(go run ./cmd/go-test-inputs -base $(DIFF_BASE))" || exit 1; fi; \
-	case "$$verdict" in \
-		changed) ./scripts/test-go.sh ;; \
-		unchanged) echo "make test: skipped the Go suite. FORCE=1 runs it." ;; \
-		*) echo "make test: go-test-inputs answered '$$verdict'" >&2; exit 1 ;; \
-	esac
+	@changed="$$(git diff --name-only "$$(git merge-base HEAD $(DIFF_BASE))" && git ls-files --others --exclude-standard)" || changed=unknown; \
+	if [ -z "$(FORCE)" ] && ! printf '%s' "$$changed" | grep -qE '$(GO_SUITE_READS)' && ! printf '%s' "$$changed" | grep -qvE '$(GO_SUITE_IGNORES)'; then \
+		echo "make test: skipped the Go suite, only docs and app/src changed since $(DIFF_BASE). FORCE=1 runs it."; \
+	else ./scripts/test-go.sh; fi
 
 test-hooks:
 	@bash ./scripts/claude/attn-profile-nudge_test.sh
