@@ -85,28 +85,40 @@ func (e *editor) snapshot() (catalogSnapshot, error) {
 		return catalogSnapshot{}, err
 	}
 	snapshot := catalogSnapshot{Manifest: data, Sources: map[string]source{}}
+	paths, err := registeredSourcePaths(manifest)
+	if err != nil {
+		return snapshot, err
+	}
+	for _, path := range paths {
+		text, err := e.root.ReadFile(path)
+		if err != nil {
+			return snapshot, err
+		}
+		snapshot.Sources[path] = source{string(text), revision(text)}
+	}
+	return snapshot, nil
+}
+
+func registeredSourcePaths(manifest prompts.Manifest) ([]string, error) {
+	seen := map[string]bool{}
+	var paths []string
+	var err error
 	for _, r := range manifest.Recipients {
 		for _, event := range r.Events {
 			visitNode(event.Body, func(n prompts.Node) {
-				if err != nil || n.Source == "" {
+				if err != nil || n.Source == "" || seen[n.Source] {
 					return
 				}
 				if !fs.ValidPath(n.Source) || !strings.HasPrefix(n.Source, "content/") || !strings.HasSuffix(n.Source, ".md") {
 					err = fmt.Errorf("unregistered source path: %s", n.Source)
 					return
 				}
-				if _, exists := snapshot.Sources[n.Source]; exists {
-					return
-				}
-				var text []byte
-				text, err = e.root.ReadFile(n.Source)
-				if err == nil {
-					snapshot.Sources[n.Source] = source{string(text), revision(text)}
-				}
+				seen[n.Source] = true
+				paths = append(paths, n.Source)
 			})
 		}
 	}
-	return snapshot, err
+	return paths, err
 }
 
 func (e *editor) freshness(snapshot catalogSnapshot) error {

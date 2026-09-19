@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing/fstest"
@@ -152,12 +153,11 @@ func (e *editor) readBase(ctx context.Context, commit string) (*baseRevision, er
 		return nil, err
 	}
 	base := &baseRevision{Commit: commit, catalogView: catalogView{Sources: map[string]source{}, Fields: map[string][]prompts.Field{}}}
-	for name, file := range files {
-		if strings.HasPrefix(name, "content/") && strings.HasSuffix(name, ".md") {
-			base.Sources[name] = source{string(file.Data), revision(file.Data)}
-		}
-	}
 	manifest, ok := files[prompts.ManifestPath]
+	for _, name := range baseSourcePaths(files, manifest) {
+		file := files[name]
+		base.Sources[name] = source{string(file.Data), revision(file.Data)}
+	}
 	if !ok {
 		base.Unavailable = "Composed comparison unavailable: this revision has no catalog manifest."
 	} else {
@@ -171,6 +171,23 @@ func (e *editor) readBase(ctx context.Context, commit string) (*baseRevision, er
 	}
 	e.cachedBase = base
 	return base, nil
+}
+
+func baseSourcePaths(files fstest.MapFS, manifest *fstest.MapFile) []string {
+	if manifest != nil {
+		if parsed, err := prompts.ParseManifest(manifest.Data); err == nil {
+			if registered, err := registeredSourcePaths(parsed); err == nil {
+				return slices.DeleteFunc(registered, func(name string) bool { return files[name] == nil })
+			}
+		}
+	}
+	var committed []string
+	for name := range files {
+		if strings.HasPrefix(name, "content/") && strings.HasSuffix(name, ".md") {
+			committed = append(committed, name)
+		}
+	}
+	return committed
 }
 
 func readGitPrompts(ctx context.Context, repo, commit string) (fstest.MapFS, error) {
