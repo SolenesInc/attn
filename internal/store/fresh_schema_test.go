@@ -89,3 +89,35 @@ func schemaFingerprint(t *testing.T, db *sql.DB) []string {
 	}
 	return out
 }
+
+func TestPlacingTheSchemaNeverReplacesAnExistingDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "attn.db")
+	db, err := OpenDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE written_by_the_first_opener (id INTEGER)`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	image, err := migratedSchemaImage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	linkUnlessPresent(path, image)
+
+	db, err = OpenDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var name string
+	if err := db.QueryRow(`SELECT name FROM sqlite_master WHERE name = 'written_by_the_first_opener'`).Scan(&name); err != nil {
+		t.Fatalf("the first opener's table is gone: %v", err)
+	}
+	leftovers, err := filepath.Glob(path + ".schema-*")
+	if err != nil || len(leftovers) != 0 {
+		t.Fatalf("staged schema files left behind: %v %v", leftovers, err)
+	}
+}

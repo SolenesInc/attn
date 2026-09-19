@@ -1323,10 +1323,8 @@ func OpenDB(dbPath string) (*sql.DB, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, err
 	}
-	fresh := dbPath == ":memory:"
-	if !fresh {
-		_, err := os.Stat(dbPath)
-		fresh = errors.Is(err, os.ErrNotExist)
+	if dbPath != ":memory:" {
+		placeMigratedSchema(dbPath)
 	}
 
 	db, err := sql.Open("sqlite3", sqliteDSN(dbPath))
@@ -1342,7 +1340,7 @@ func OpenDB(dbPath string) (*sql.DB, error) {
 		db.SetMaxIdleConns(sqliteFileConnectionPoolSize)
 	}
 
-	if fresh {
+	if dbPath == ":memory:" {
 		if err := copyMigratedSchema(db); err != nil {
 			db.Close()
 			return nil, err
@@ -1399,6 +1397,31 @@ func buildMigratedSchemaImage() ([]byte, error) {
 		return err
 	})
 	return image, err
+}
+
+func placeMigratedSchema(dbPath string) {
+	if _, err := os.Stat(dbPath); !errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	if image, err := migratedSchemaImage(); err == nil {
+		linkUnlessPresent(dbPath, image)
+	}
+}
+
+func linkUnlessPresent(path string, content []byte) {
+	staged, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".schema-*")
+	if err != nil {
+		return
+	}
+	defer os.Remove(staged.Name())
+	_, err = staged.Write(content)
+	if err == nil {
+		err = staged.Chmod(0o644)
+	}
+	if closeErr := staged.Close(); err != nil || closeErr != nil {
+		return
+	}
+	_ = os.Link(staged.Name(), path)
 }
 
 func copyMigratedSchema(dst *sql.DB) error {
