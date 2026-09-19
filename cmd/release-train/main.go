@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"errors"
 	"flag"
@@ -335,7 +337,11 @@ func renderFragments(root string) (string, error) {
 		}
 	}
 	sort.Strings(names)
-	introductions, err := fragmentIntroductions(root)
+	paths := make([]string, len(names))
+	for i, name := range names {
+		paths[i] = "changelog.d/" + name
+	}
+	introductions, err := fragmentIntroductions(root, paths)
 	if err != nil {
 		return "", err
 	}
@@ -359,19 +365,53 @@ func renderFragments(root string) (string, error) {
 	return out.String(), nil
 }
 
-func fragmentIntroductions(root string) (map[string]string, error) {
-	out, err := gitOutput(root, "log", "-z", "--diff-filter=A", "--format=%x01%s", "--name-only", "--", "changelog.d")
+func fragmentIntroductions(root string, paths []string) (map[string]string, error) {
+	subjects := map[string]string{}
+	if len(paths) == 0 {
+		return subjects, nil
+	}
+	wanted := map[string]bool{}
+	for _, path := range paths {
+		wanted[path] = true
+	}
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	args := append([]string{"--literal-pathspecs", "log", "-z", "--diff-filter=A", "--format=%x01%s", "--name-only", "--"}, paths...)
+	command := exec.CommandContext(ctx, "git", args...)
+	command.Dir = root
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	stdout, err := command.StdoutPipe()
 	if err != nil {
 		return nil, err
 	}
-	subjects := map[string]string{}
-	for _, commit := range strings.Split(string(out), "\x01")[1:] {
-		subject, paths, _ := strings.Cut(commit, "\x00")
-		for _, path := range strings.Split(strings.TrimPrefix(paths, "\n"), "\x00") {
-			if _, seen := subjects[path]; path != "" && !seen {
-				subjects[path] = strings.TrimSpace(subject)
+	if err := command.Start(); err != nil {
+		return nil, err
+	}
+	fields := bufio.NewReader(stdout)
+	subject := ""
+	for len(subjects) < len(wanted) {
+		field, readErr := fields.ReadString(0)
+		field = strings.TrimSuffix(field, "\x00")
+		if _, after, isSubject := strings.Cut(field, "\x01"); isSubject {
+			subject = strings.TrimSpace(after)
+		} else if path := strings.TrimPrefix(field, "\n"); wanted[path] {
+			if _, seen := subjects[path]; !seen {
+				subjects[path] = subject
 			}
 		}
+		if readErr != nil {
+			break
+		}
+	}
+	foundEveryPath := len(subjects) == len(wanted)
+	stop()
+	if err := command.Wait(); err != nil && !foundEveryPath {
+		message := strings.TrimSpace(stderr.String())
+		if message == "" {
+			message = err.Error()
+		}
+		return nil, fmt.Errorf("git log for changelog fragments: %s", message)
 	}
 	return subjects, nil
 }
