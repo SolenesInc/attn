@@ -136,9 +136,9 @@ type Daemon struct {
 	repoVisibilityKnown               map[string]string
 	repoVisibilityPending             map[string]bool
 	repoVisibilityMu                  sync.Mutex
-	branchInspections                 map[string]branchInspection
-	branchInspectionsRunning          map[string]chan struct{}
-	branchInspectionsMu               sync.Mutex
+	reopenGitMu                       sync.Mutex
+	reopenBranches                    *sharedCalls[reopenBranchKey, branchInspection]
+	reopenInspect                     func(context.Context, *git.Client, string, string) (branchInspection, error)
 	sessionPaneAddMu                  sync.Mutex
 	gitReaderMu                       sync.Mutex
 	gitStatus                         *gitStatusReader

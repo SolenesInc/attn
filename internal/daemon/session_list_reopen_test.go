@@ -1,14 +1,17 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/bus"
+	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -74,6 +77,17 @@ func TestAPageCarriesAVerdictForEveryClosedRowWhenItAsks(t *testing.T) {
 		t.Fatalf("the page carries %d verdicts, want one for each of the two closed rows: %+v",
 			len(page.Reopen), page.Reopen)
 	}
+	closedIDs := make([]string, 0, 2)
+	for _, entry := range page.Entries {
+		if protocol.Deref(entry.ClosedAt) != "" {
+			closedIDs = append(closedIDs, entry.ID)
+		}
+	}
+	for i, sessionID := range closedIDs {
+		if page.Reopen[i].SessionID != sessionID {
+			t.Errorf("verdict %d is for %s, want row-order session %s", i, page.Reopen[i].SessionID, sessionID)
+		}
+	}
 	for _, sessionID := range []string{"paged-one", "paged-two"} {
 		if verdict := listedVerdict(t, page, sessionID); len(verdict.Actions) == 0 {
 			t.Errorf("%s is offered no action at all: %+v", sessionID, verdict)
@@ -91,15 +105,9 @@ func TestAListedVerdictIsTheOneAShowWouldGive(t *testing.T) {
 	t.Cleanup(d.stopEventBus)
 	repo, _, root := newReopenRepo(t)
 	closeWorktreeRow(t, d, repo, root, "agreed", "feat/agreed")
-	sessionListResult(t, d, protocol.SessionListMessage{
-		Closed: protocol.Ptr(true), Reopen: protocol.Ptr(true),
-	})
-	waitForBranchInspection(t, d, repo, "feat/agreed")
-
 	listed := listedVerdict(t, sessionListResult(t, d, protocol.SessionListMessage{
 		Closed: protocol.Ptr(true), Reopen: protocol.Ptr(true),
 	}), "agreed")
-	waitForBranchInspection(t, d, repo, "feat/agreed")
 	shown := sessionShowResult(t, d, "agreed").Reopen
 
 	if shown == nil {
@@ -128,15 +136,15 @@ func TestAPageWithoutTheAskCarriesNoVerdicts(t *testing.T) {
 	if len(page.Reopen) != 0 {
 		t.Errorf("the page carries %d verdicts nobody asked for: %+v", len(page.Reopen), page.Reopen)
 	}
-	d.branchInspectionsMu.Lock()
-	inspections := len(d.branchInspections) + len(d.branchInspectionsRunning)
-	d.branchInspectionsMu.Unlock()
-	if inspections != 0 {
-		t.Errorf("an unasked page started %d branch inspections, want none", inspections)
+	d.reopenGitMu.Lock()
+	shared := d.reopenBranches
+	d.reopenGitMu.Unlock()
+	if shared != nil {
+		t.Error("an unasked page initialized reopen branch inspection state")
 	}
 }
 
-func TestReadingAPageTwiceInspectsNothingTheSecondTime(t *testing.T) {
+func TestReadingAPageTwiceRetainsNoCompletedBranchInspection(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	t.Cleanup(d.stopEventBus)
 	repo, _, root := newReopenRepo(t)
@@ -144,15 +152,14 @@ func TestReadingAPageTwiceInspectsNothingTheSecondTime(t *testing.T) {
 
 	page := protocol.SessionListMessage{Closed: protocol.Ptr(true), Reopen: protocol.Ptr(true)}
 	sessionListResult(t, d, page)
-	waitForBranchInspection(t, d, repo, "feat/twice")
-
 	sessionListResult(t, d, page)
 
-	d.branchInspectionsMu.Lock()
-	running := len(d.branchInspectionsRunning)
-	d.branchInspectionsMu.Unlock()
-	if running != 0 {
-		t.Errorf("reading the page again started %d inspections, want the stored answer reused", running)
+	shared := d.reopenBranchSharedCalls()
+	shared.mu.Lock()
+	active := len(shared.active)
+	shared.mu.Unlock()
+	if active != 0 {
+		t.Errorf("completed page reads left %d branch inspections cached", active)
 	}
 }
 
@@ -173,40 +180,71 @@ func TestRowsOnTheSameBranchShareOneInspection(t *testing.T) {
 		t.Fatalf("delete the shared worktree directory: %v", err)
 	}
 
-	sessionListResult(t, d, protocol.SessionListMessage{
-		Closed: protocol.Ptr(true), Reopen: protocol.Ptr(true),
-	})
-	waitForBranchInspection(t, d, repo, "feat/shared")
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var inspections atomic.Int32
+	d.reopenGitMu.Lock()
+	d.reopenInspect = func(context.Context, *attngit.Client, string, string) (branchInspection, error) {
+		if inspections.Add(1) == 1 {
+			close(started)
+		}
+		<-release
+		return branchInspection{State: branchStateLocal}, nil
+	}
+	d.reopenGitMu.Unlock()
+	joined := make(chan int, 3)
+	shared := d.reopenBranchSharedCalls()
+	shared.mu.Lock()
+	shared.joinObserver = func(_ reopenBranchKey, waiters int) { joined <- waiters }
+	shared.mu.Unlock()
 
-	d.branchInspectionsMu.Lock()
-	keys := len(d.branchInspections)
-	d.branchInspectionsMu.Unlock()
-	if keys != 1 {
-		t.Errorf("three rows on one branch left %d inspections behind, want the one they share", keys)
+	type pageResult struct {
+		page *protocol.SessionListResult
+		err  error
+	}
+	done := make(chan pageResult, 1)
+	go func() {
+		page, err := d.sessionLedgerPage(&protocol.SessionListMessage{
+			Closed: protocol.Ptr(true), Reopen: protocol.Ptr(true),
+		}, false)
+		done <- pageResult{page: page, err: err}
+	}()
+	<-started
+	maxWaiters := 0
+	for maxWaiters < 3 {
+		select {
+		case waiters := <-joined:
+			maxWaiters = max(maxWaiters, waiters)
+		case <-time.After(5 * time.Second):
+			t.Fatal("three rows did not join their shared branch inspection")
+		}
+	}
+	close(release)
+	result := <-done
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	if len(result.page.Reopen) != 3 {
+		t.Fatalf("page returned %d verdicts, want three", len(result.page.Reopen))
+	}
+	if got := inspections.Load(); got != 1 {
+		t.Errorf("three rows started %d branch inspections, want one in-flight call", got)
 	}
 }
 
-func TestAPageAnswersBeforeTheBranchCheckAndSharpensAfterIt(t *testing.T) {
+func TestAPageReturnsACompleteBranchVerdict(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	t.Cleanup(d.stopEventBus)
 	repo, _, root := newReopenRepo(t)
 	closeWorktreeRow(t, d, repo, root, "sharpening", "feat/sharpening")
 
-	first := listedVerdict(t, sessionListResult(t, d, protocol.SessionListMessage{
+	verdict := listedVerdict(t, sessionListResult(t, d, protocol.SessionListMessage{
 		Closed: protocol.Ptr(true), Reopen: protocol.Ptr(true),
 	}), "sharpening")
-	if !first.Checking {
-		t.Errorf("the first page said checking=false before any inspection ran: %+v", first)
+	if verdict.Checking {
+		t.Errorf("the synchronous page returned a preliminary verdict: %+v", verdict)
 	}
-	waitForBranchInspection(t, d, repo, "feat/sharpening")
-
-	second := listedVerdict(t, sessionListResult(t, d, protocol.SessionListMessage{
-		Closed: protocol.Ptr(true), Reopen: protocol.Ptr(true),
-	}), "sharpening")
-	if second.Checking {
-		t.Errorf("the page is still checking after its inspection landed: %+v", second)
-	}
-	if state := protocol.Deref(second.BranchState); state != branchStateLocal {
+	if state := protocol.Deref(verdict.BranchState); state != branchStateLocal {
 		t.Errorf("branch_state = %q, want %q once the check landed", state, branchStateLocal)
 	}
 }
