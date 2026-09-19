@@ -388,6 +388,9 @@ func describeCorpus(bodies []string) string {
 }
 
 func TestEverySmallCorpusAgreesWithTheDumbQuery(t *testing.T) {
+	if raceEnabled {
+		t.Skip("one goroutine: the race detector has nothing to watch here")
+	}
 	w := newModelWorld(t)
 	queries := modelQueries()
 
@@ -600,6 +603,9 @@ func largeQuery(rng *rand.Rand, ids []string, schema docstore.CollectionSchema) 
 }
 
 func TestALargeRandomCorpusAgreesWithTheDumbQuery(t *testing.T) {
+	if raceEnabled {
+		t.Skip("one goroutine: the race detector has nothing to watch here")
+	}
 	for _, seed := range []int64{20260804, 7, 991, 40409, 1234567} {
 		t.Run(fmt.Sprintf("seed-%d", seed), func(t *testing.T) {
 			rng := rand.New(rand.NewSource(seed))
@@ -660,6 +666,9 @@ func (w *modelWorld) usesAnIndex(q docstore.Query) bool {
 const movingSteps = 300
 
 func TestAMovingCorpusAgreesWithTheDumbQuery(t *testing.T) {
+	if raceEnabled {
+		t.Skip("one goroutine: the race detector has nothing to watch here")
+	}
 	for _, seed := range []int64{20260804, 31337} {
 		t.Run(fmt.Sprintf("seed-%d", seed), func(t *testing.T) {
 			rng := rand.New(rand.NewSource(seed))
